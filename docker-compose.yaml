@@ -58,6 +58,7 @@ services:
       PORT: ${APP_PORT:-23000}
       DSN: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-claude_code_hub}
       REDIS_URL: redis://redis:6379
+      AUTO_MIGRATE: ${AUTO_MIGRATE:-true}
       ENABLE_RATE_LIMIT: ${ENABLE_RATE_LIMIT:-true}
       SESSION_TTL: ${SESSION_TTL:-300}
       # 设置时区为上海
@@ -65,7 +66,3 @@ services:
     ports:
       - "${APP_PORT:-23000}:${APP_PORT:-23000}"
     restart: unless-stopped
-
-# volumes 配置已移除,改用本地目录映射
-# 数据存储在 ./data/postgres 和 ./data/redis 目录
-# 重建容器时数据不会丢失,可直接备份 ./data 目录
