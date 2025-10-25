@@ -151,6 +151,41 @@ export async function hasPriceTable(): Promise<boolean> {
 }
 
 /**
+ * 根据供应商类型获取可选择的模型列表
+ * @param providerType - 供应商类型 ('claude' 或 'codex')
+ * @returns 模型名称列表（已排序）
+ */
+export async function getAvailableModelsByProviderType(
+  providerType: "claude" | "codex"
+): Promise<string[]> {
+  try {
+    // 权限检查：只有管理员可以查看
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return [];
+    }
+
+    const allPrices = await findAllLatestPrices();
+
+    // 供应商类型到 litellm_provider 的映射
+    const targetProvider = providerType === "claude" ? "anthropic" : "openai";
+
+    // 过滤聊天模型并返回模型名称
+    return allPrices
+      .filter(
+        (price) =>
+          price.priceData.litellm_provider === targetProvider &&
+          price.priceData.mode === "chat" // 仅聊天模型
+      )
+      .map((price) => price.modelName)
+      .sort(); // 字母排序
+  } catch (error) {
+    logger.error("获取可用模型列表失败:", error);
+    return [];
+  }
+}
+
+/**
  * 获取指定模型的最新价格
  */
 

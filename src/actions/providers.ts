@@ -153,6 +153,7 @@ export async function addProvider(data: {
   group_tag?: string | null;
   provider_type?: string;
   model_redirects?: Record<string, string> | null;
+  allowed_models?: string[] | null;
   limit_5h_usd?: number | null;
   limit_weekly_usd?: number | null;
   limit_monthly_usd?: number | null;

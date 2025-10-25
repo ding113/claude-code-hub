@@ -52,6 +52,9 @@ export interface ProviderChainItem {
     afterGroupFilter?: number; // 分组筛选后数量
     groupFilterApplied: boolean; // 是否应用了分组筛选
 
+    // --- 模型白名单过滤 ---
+    afterModelFilter?: number; // 模型白名单筛选后数量
+
     // --- 健康检查过滤 ---
     beforeHealthCheck: number; // 健康检查前数量
     afterHealthCheck: number; // 健康检查后数量
@@ -59,7 +62,12 @@ export interface ProviderChainItem {
       // 被过滤的供应商
       id: number;
       name: string;
-      reason: "circuit_open" | "rate_limited" | "excluded" | "type_mismatch";
+      reason:
+        | "circuit_open"
+        | "rate_limited"
+        | "excluded"
+        | "type_mismatch"
+        | "model_not_allowed";
       details?: string; // 额外信息（如费用：$15.2/$15）
     }>;
 

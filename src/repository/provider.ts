@@ -20,6 +20,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     groupTag: providerData.group_tag,
     providerType: providerData.provider_type,
     modelRedirects: providerData.model_redirects,
+    allowedModels: providerData.allowed_models,
     limit5hUsd: providerData.limit_5h_usd != null ? providerData.limit_5h_usd.toString() : null,
     limitWeeklyUsd:
       providerData.limit_weekly_usd != null ? providerData.limit_weekly_usd.toString() : null,
@@ -44,6 +45,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     groupTag: providers.groupTag,
     providerType: providers.providerType,
     modelRedirects: providers.modelRedirects,
+    allowedModels: providers.allowedModels,
     limit5hUsd: providers.limit5hUsd,
     limitWeeklyUsd: providers.limitWeeklyUsd,
     limitMonthlyUsd: providers.limitMonthlyUsd,
@@ -77,6 +79,7 @@ export async function findProviderList(
       groupTag: providers.groupTag,
       providerType: providers.providerType,
       modelRedirects: providers.modelRedirects,
+      allowedModels: providers.allowedModels,
       limit5hUsd: providers.limit5hUsd,
       limitWeeklyUsd: providers.limitWeeklyUsd,
       limitMonthlyUsd: providers.limitMonthlyUsd,
@@ -117,6 +120,7 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       groupTag: providers.groupTag,
       providerType: providers.providerType,
       modelRedirects: providers.modelRedirects,
+      allowedModels: providers.allowedModels,
       limit5hUsd: providers.limit5hUsd,
       limitWeeklyUsd: providers.limitWeeklyUsd,
       limitMonthlyUsd: providers.limitMonthlyUsd,
@@ -161,6 +165,8 @@ export async function updateProvider(
   if (providerData.provider_type !== undefined) dbData.providerType = providerData.provider_type;
   if (providerData.model_redirects !== undefined)
     dbData.modelRedirects = providerData.model_redirects;
+  if (providerData.allowed_models !== undefined)
+    dbData.allowedModels = providerData.allowed_models;
   if (providerData.limit_5h_usd !== undefined)
     dbData.limit5hUsd =
       providerData.limit_5h_usd != null ? providerData.limit_5h_usd.toString() : null;
@@ -193,6 +199,7 @@ export async function updateProvider(
       groupTag: providers.groupTag,
       providerType: providers.providerType,
       modelRedirects: providers.modelRedirects,
+      allowedModels: providers.allowedModels,
       limit5hUsd: providers.limit5hUsd,
       limitWeeklyUsd: providers.limitWeeklyUsd,
       limitMonthlyUsd: providers.limitMonthlyUsd,

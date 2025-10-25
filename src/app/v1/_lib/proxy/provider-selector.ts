@@ -274,6 +274,24 @@ export class ProxyProviderResolver {
       return null;
     }
 
+    // 检查模型白名单（如果设置了 allowedModels）
+    const requestedModel = session.getCurrentModel();
+    if (
+      requestedModel &&
+      provider.allowedModels &&
+      provider.allowedModels.length > 0 &&
+      !provider.allowedModels.includes(requestedModel)
+    ) {
+      logger.debug("ProviderSelector: Session provider does not support requested model", {
+        sessionId: session.sessionId,
+        providerId: provider.id,
+        providerName: provider.name,
+        requestedModel,
+        allowedModels: provider.allowedModels,
+      });
+      return null;
+    }
+
     logger.info("ProviderSelector: Reusing provider", {
       providerName: provider.name,
       providerId: provider.id,
@@ -337,13 +355,59 @@ export class ProxyProviderResolver {
       return { provider: null, context };
     }
 
+    // Step 0.5: 模型白名单过滤
+    let modelFilteredProviders = enabledProviders;
+    const requestedModel = session?.getCurrentModel();
+
+    if (requestedModel) {
+      const preModelFilterCount = enabledProviders.length;
+      modelFilteredProviders = enabledProviders.filter((provider) => {
+        // 如果供应商没有设置 allowedModels（null 或空数组），则允许所有模型
+        if (!provider.allowedModels || provider.allowedModels.length === 0) {
+          return true;
+        }
+
+        // 如果设置了 allowedModels，检查请求的模型是否在白名单中
+        const allowed = provider.allowedModels.includes(requestedModel);
+
+        if (!allowed) {
+          context.filteredProviders!.push({
+            id: provider.id,
+            name: provider.name,
+            reason: "model_not_allowed",
+            details: `模型 ${requestedModel} 不在白名单中`,
+          });
+        }
+
+        return allowed;
+      });
+
+      context.afterModelFilter = modelFilteredProviders.length;
+
+      if (modelFilteredProviders.length < preModelFilterCount) {
+        logger.debug("ProviderSelector: Model whitelist filter applied", {
+          requestedModel,
+          beforeFilter: preModelFilterCount,
+          afterFilter: modelFilteredProviders.length,
+          filteredOut: preModelFilterCount - modelFilteredProviders.length,
+        });
+      }
+    }
+
+    if (modelFilteredProviders.length === 0) {
+      logger.warn("ProviderSelector: No providers support the requested model", {
+        requestedModel,
+      });
+      return { provider: null, context };
+    }
+
     // Step 1: 用户分组过滤（如果用户指定了分组）
-    let candidateProviders = enabledProviders;
+    let candidateProviders = modelFilteredProviders;
     const userGroup = session?.authState?.user?.providerGroup;
 
     if (userGroup) {
       context.userGroup = userGroup;
-      const groupFiltered = enabledProviders.filter((p) => p.groupTag === userGroup);
+      const groupFiltered = modelFilteredProviders.filter((p) => p.groupTag === userGroup);
 
       if (groupFiltered.length > 0) {
         candidateProviders = groupFiltered;
