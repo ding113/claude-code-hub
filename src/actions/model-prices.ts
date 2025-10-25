@@ -174,8 +174,7 @@ export async function getAvailableModelsByProviderType(
     return allPrices
       .filter(
         (price) =>
-          price.priceData.litellm_provider === targetProvider &&
-          price.priceData.mode === "chat" // 仅聊天模型
+          price.priceData.litellm_provider === targetProvider && price.priceData.mode === "chat" // 仅聊天模型
       )
       .map((price) => price.modelName)
       .sort(); // 字母排序

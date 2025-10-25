@@ -165,8 +165,7 @@ export async function updateProvider(
   if (providerData.provider_type !== undefined) dbData.providerType = providerData.provider_type;
   if (providerData.model_redirects !== undefined)
     dbData.modelRedirects = providerData.model_redirects;
-  if (providerData.allowed_models !== undefined)
-    dbData.allowedModels = providerData.allowed_models;
+  if (providerData.allowed_models !== undefined) dbData.allowedModels = providerData.allowed_models;
   if (providerData.limit_5h_usd !== undefined)
     dbData.limit5hUsd =
       providerData.limit_5h_usd != null ? providerData.limit_5h_usd.toString() : null;
