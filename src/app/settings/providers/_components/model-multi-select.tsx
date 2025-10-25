@@ -3,11 +3,7 @@ import { useState, useEffect } from "react";
 import { Check, ChevronsUpDown, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Command,
   CommandEmpty,
@@ -135,9 +131,7 @@ export function ModelMultiSelect({
                         onCheckedChange={() => toggleModel(model)}
                       />
                       <span className="font-mono text-sm flex-1">{model}</span>
-                      {selectedModels.includes(model) && (
-                        <Check className="h-4 w-4 text-primary" />
-                      )}
+                      {selectedModels.includes(model) && <Check className="h-4 w-4 text-primary" />}
                     </CommandItem>
                   ))}
                 </CommandGroup>
