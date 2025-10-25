@@ -244,6 +244,19 @@ export function ProviderListItem({ item, currentUser, healthStatus }: ProviderLi
             {item.lastCallModel && item.lastCallTime ? ` - ${item.lastCallModel}` : ""}
           </span>
         </div>
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-foreground/80">模型白名单:</span>
+          {item.allowedModels && item.allowedModels.length > 0 ? (
+            <div className="flex items-center gap-1">
+              <Badge variant="outline" className="font-mono text-xs h-4 px-1.5">
+                {item.allowedModels.length} 个模型
+              </Badge>
+              <span className="text-muted-foreground">已启用</span>
+            </div>
+          ) : (
+            <span className="text-green-600">✓ 允许所有模型</span>
+          )}
+        </div>
       </div>
 
       {/* 内容区改为上下结构 */}

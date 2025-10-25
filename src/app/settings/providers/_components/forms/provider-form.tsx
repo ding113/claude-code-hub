@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -27,6 +28,7 @@ import type { ProviderDisplay } from "@/types/provider";
 import { validateNumericField, isValidUrl } from "@/lib/utils/validation";
 import { PROVIDER_DEFAULTS } from "@/lib/constants/provider.constants";
 import { toast } from "sonner";
+import { ModelMultiSelect } from "../model-multi-select";
 
 type Mode = "create" | "edit";
 
@@ -67,6 +69,9 @@ export function ProviderForm({ mode, onSuccess, provider }: ProviderFormProps) {
   const [limitConcurrentSessions, setLimitConcurrentSessions] = useState<number | null>(
     isEdit ? (provider?.limitConcurrentSessions ?? null) : null
   );
+  const [allowedModels, setAllowedModels] = useState<string[]>(
+    isEdit && provider?.allowedModels ? provider.allowedModels : []
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -104,6 +109,7 @@ export function ProviderForm({ mode, onSuccess, provider }: ProviderFormProps) {
             key?: string;
             provider_type?: string;
             model_redirects?: Record<string, string> | null;
+            allowed_models?: string[] | null;
             priority?: number;
             weight?: number;
             cost_multiplier?: number;
@@ -121,6 +127,7 @@ export function ProviderForm({ mode, onSuccess, provider }: ProviderFormProps) {
             url: url.trim(),
             provider_type: providerType,
             model_redirects: parsedModelRedirects,
+            allowed_models: allowedModels.length > 0 ? allowedModels : null,
             priority: priority,
             weight: weight,
             cost_multiplier: costMultiplier,
@@ -149,6 +156,7 @@ export function ProviderForm({ mode, onSuccess, provider }: ProviderFormProps) {
             key: key.trim(),
             provider_type: providerType,
             model_redirects: parsedModelRedirects,
+            allowed_models: allowedModels.length > 0 ? allowedModels : null,
             // 使用配置的默认值：默认不启用、权重=1
             is_enabled: PROVIDER_DEFAULTS.IS_ENABLED,
             weight: weight,
@@ -178,6 +186,7 @@ export function ProviderForm({ mode, onSuccess, provider }: ProviderFormProps) {
           setKey("");
           setProviderType("claude");
           setModelRedirects("");
+          setAllowedModels([]);
           setPriority(0);
           setWeight(1);
           setCostMultiplier(1.0);
@@ -283,6 +292,55 @@ export function ProviderForm({ mode, onSuccess, provider }: ProviderFormProps) {
             />
             <p className="text-xs text-muted-foreground">
               用于重写请求中的模型名称，例如将 gpt-5 重定向为 gpt-5-codex
+            </p>
+          </div>
+        </div>
+
+        {/* 模型白名单配置 */}
+        <div className="space-y-4 pt-2 border-t">
+          <div className="space-y-1">
+            <div className="text-sm font-medium">模型白名单</div>
+            <p className="text-xs text-muted-foreground">
+              限制此供应商可以处理的模型。默认情况下，供应商可以处理该类型下的所有模型。
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="allowed-models">
+              允许的模型
+              <span className="text-xs text-muted-foreground ml-1">(可选)</span>
+            </Label>
+
+            <ModelMultiSelect
+              providerType={providerType as "claude" | "codex"}
+              selectedModels={allowedModels}
+              onChange={setAllowedModels}
+              disabled={isPending}
+            />
+
+            {allowedModels.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-2 p-2 bg-muted/50 rounded-md">
+                {allowedModels.slice(0, 5).map((model) => (
+                  <Badge key={model} variant="outline" className="font-mono text-xs">
+                    {model}
+                  </Badge>
+                ))}
+                {allowedModels.length > 5 && (
+                  <Badge variant="secondary" className="text-xs">
+                    +{allowedModels.length - 5} 更多
+                  </Badge>
+                )}
+              </div>
+            )}
+
+            <p className="text-xs text-muted-foreground">
+              {allowedModels.length === 0 ? (
+                <span className="text-green-600">✓ 允许所有模型（推荐）</span>
+              ) : (
+                <span>
+                  仅允许选中的 {allowedModels.length} 个模型。其他模型的请求不会调度到此供应商。
+                </span>
+              )}
             </p>
           </div>
         </div>
