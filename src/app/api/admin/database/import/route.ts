@@ -21,6 +21,7 @@ const MAX_FILE_SIZE = 500 * 1024 * 1024;
  * Body: multipart/form-data
  *   - file: 备份文件 (.dump)
  *   - cleanFirst: 'true' | 'false' (是否清除现有数据)
+ *   - skipLogs: 'true' | 'false' (是否跳过日志数据导入)
  *
  * 响应: text/event-stream (SSE 格式的进度流)
  */
@@ -65,6 +66,7 @@ export async function POST(request: Request) {
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
     const cleanFirst = formData.get("cleanFirst") === "true";
+    const skipLogs = formData.get("skipLogs") === "true";
 
     if (!file) {
       return Response.json({ error: "缺少备份文件" }, { status: 400 });
@@ -97,6 +99,7 @@ export async function POST(request: Request) {
       filename: file.name,
       fileSize: file.size,
       cleanFirst,
+      skipLogs,
       user: session.user.name,
     });
 
@@ -118,7 +121,7 @@ export async function POST(request: Request) {
     request.signal.addEventListener("abort", abortCleanup);
 
     // 9. 执行 pg_restore，返回 SSE 流
-    const stream = executePgRestore(tempFilePath, cleanFirst);
+    const stream = executePgRestore(tempFilePath, cleanFirst, skipLogs);
 
     // 10. 包装流以确保临时文件和锁的清理
     const cleanupStream = new TransformStream({

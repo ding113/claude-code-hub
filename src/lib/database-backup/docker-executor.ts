@@ -5,38 +5,43 @@ import { getDatabaseConfig } from "./db-config";
 /**
  * 执行 pg_dump 导出数据库
  *
+ * @param excludeLogs 是否排除日志数据（保留表结构但不导出 message_request 数据）
  * @returns ReadableStream 数据流
  */
-export function executePgDump(): ReadableStream<Uint8Array> {
+export function executePgDump(excludeLogs = false): ReadableStream<Uint8Array> {
   const dbConfig = getDatabaseConfig();
 
-  const pgProcess = spawn(
-    "pg_dump",
-    [
-      "-h",
-      dbConfig.host,
-      "-p",
-      dbConfig.port.toString(),
-      "-U",
-      dbConfig.user,
-      "-d",
-      dbConfig.database,
-      "-Fc", // Custom format (compressed)
-      "-v", // Verbose
-    ],
-    {
-      env: {
-        ...process.env,
-        PGPASSWORD: dbConfig.password,
-      },
-    }
-  );
+  const args = [
+    "-h",
+    dbConfig.host,
+    "-p",
+    dbConfig.port.toString(),
+    "-U",
+    dbConfig.user,
+    "-d",
+    dbConfig.database,
+    "-Fc", // Custom format (compressed)
+    "-v", // Verbose
+  ];
+
+  // 排除日志数据（保留表结构但不导出数据）
+  if (excludeLogs) {
+    args.push("--exclude-table-data=message_request");
+  }
+
+  const pgProcess = spawn("pg_dump", args, {
+    env: {
+      ...process.env,
+      PGPASSWORD: dbConfig.password,
+    },
+  });
 
   logger.info({
     action: "pg_dump_start",
     host: dbConfig.host,
     port: dbConfig.port,
     database: dbConfig.database,
+    excludeLogs,
   });
 
   return new ReadableStream({
@@ -167,7 +172,8 @@ function analyzeRestoreErrors(errors: string[]): {
 
 export function executePgRestore(
   filePath: string,
-  cleanFirst: boolean
+  cleanFirst: boolean,
+  skipLogs = false
 ): ReadableStream<Uint8Array> {
   const dbConfig = getDatabaseConfig();
 
@@ -188,6 +194,11 @@ export function executePgRestore(
     args.push("--clean", "--if-exists", "--no-owner");
   }
 
+  // 跳过日志数据导入（保留表结构但不导入 message_request 数据）
+  if (skipLogs) {
+    args.push("--exclude-table-data=message_request");
+  }
+
   // 直接指定文件路径（比 stdin 更高效，避免额外的流处理）
   args.push(filePath);
 
@@ -204,6 +215,7 @@ export function executePgRestore(
     port: dbConfig.port,
     database: dbConfig.database,
     cleanFirst,
+    skipLogs,
     filePath,
   });
 

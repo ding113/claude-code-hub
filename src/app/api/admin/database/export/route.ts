@@ -6,7 +6,10 @@ import { getSession } from "@/lib/auth";
 /**
  * 导出数据库备份
  *
- * GET /api/admin/database/export
+ * GET /api/admin/database/export?excludeLogs=true
+ *
+ * Query Parameters:
+ *   - excludeLogs: 'true' | 'false' (是否排除日志数据，默认 false)
  *
  * 响应: application/octet-stream (pg_dump custom format)
  */
@@ -46,20 +49,26 @@ export async function GET(request: Request) {
       return Response.json({ error: "数据库连接不可用，请检查数据库服务状态" }, { status: 503 });
     }
 
-    // 4. 执行 pg_dump
-    const stream = executePgDump();
+    // 4. 解析查询参数
+    const url = new URL(request.url);
+    const excludeLogs = url.searchParams.get("excludeLogs") === "true";
 
-    // 5. 生成文件名（带时间戳）
+    // 5. 执行 pg_dump
+    const stream = executePgDump(excludeLogs);
+
+    // 6. 生成文件名（带时间戳和标记）
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, -5);
-    const filename = `backup_${timestamp}.dump`;
+    const suffix = excludeLogs ? "_no-logs" : "";
+    const filename = `backup_${timestamp}${suffix}.dump`;
 
     logger.info({
       action: "database_export_initiated",
       filename,
+      excludeLogs,
       user: session.user.name,
     });
 
-    // 6. 监听请求取消（用户关闭浏览器）
+    // 7. 监听请求取消（用户关闭浏览器）
     request.signal.addEventListener("abort", () => {
       if (lockId) {
         releaseBackupLock(lockId, "export").catch((err) => {
@@ -73,7 +82,7 @@ export async function GET(request: Request) {
       }
     });
 
-    // 7. 包装流以确保锁的释放
+    // 8. 包装流以确保锁的释放
     const cleanupStream = new TransformStream({
       transform(chunk, controller) {
         controller.enqueue(chunk);
@@ -93,7 +102,7 @@ export async function GET(request: Request) {
       },
     });
 
-    // 8. 返回流式响应
+    // 9. 返回流式响应
     return new Response(stream.pipeThrough(cleanupStream), {
       status: 200,
       headers: {

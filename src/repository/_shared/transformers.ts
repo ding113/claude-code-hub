@@ -88,6 +88,11 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     id: dbSettings?.id ?? 0,
     siteTitle: dbSettings?.siteTitle ?? "Claude Code Hub",
     allowGlobalUsageView: dbSettings?.allowGlobalUsageView ?? true,
+    currencyDisplay: dbSettings?.currencyDisplay ?? 'USD',
+    enableAutoCleanup: dbSettings?.enableAutoCleanup ?? false,
+    cleanupRetentionDays: dbSettings?.cleanupRetentionDays ?? 30,
+    cleanupSchedule: dbSettings?.cleanupSchedule ?? '0 2 * * *',
+    cleanupBatchSize: dbSettings?.cleanupBatchSize ?? 10000,
     createdAt: dbSettings?.createdAt ? new Date(dbSettings.createdAt) : new Date(),
     updatedAt: dbSettings?.updatedAt ? new Date(dbSettings.updatedAt) : new Date(),
   };

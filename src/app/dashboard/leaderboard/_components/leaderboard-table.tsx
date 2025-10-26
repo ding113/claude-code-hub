@@ -12,7 +12,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Trophy, Medal, Award } from "lucide-react";
 import type { LeaderboardEntry } from "@/repository/leaderboard";
-import { formatCurrency } from "@/lib/utils/currency";
 
 interface LeaderboardTableProps {
   data: LeaderboardEntry[];
@@ -97,7 +96,7 @@ export function LeaderboardTable({ data, period }: LeaderboardTableProps) {
                       {entry.totalTokens.toLocaleString()}
                     </TableCell>
                     <TableCell className="text-right font-mono font-semibold">
-                      {formatCurrency(entry.totalCost)}
+                      {(entry as any).totalCostFormatted || entry.totalCost}
                     </TableCell>
                   </TableRow>
                 );

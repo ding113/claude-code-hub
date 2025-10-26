@@ -71,6 +71,13 @@
       "when": 1761404190737,
       "tag": "0009_many_amazoness",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1761455319449,
+      "tag": "0010_unusual_bloodscream",
+      "breakpoints": true
     }
   ]
 }

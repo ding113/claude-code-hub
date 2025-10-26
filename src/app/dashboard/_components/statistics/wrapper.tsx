@@ -5,11 +5,13 @@ import { useQuery } from "@tanstack/react-query";
 import { UserStatisticsChart } from "./chart";
 import { getUserStatistics } from "@/actions/statistics";
 import type { TimeRange, UserStatisticsData } from "@/types/statistics";
+import type { CurrencyCode } from "@/lib/utils";
 import { DEFAULT_TIME_RANGE } from "@/types/statistics";
 import { toast } from "sonner";
 
 interface StatisticsWrapperProps {
   initialData?: UserStatisticsData;
+  currencyCode?: CurrencyCode;
 }
 
 const STATISTICS_REFRESH_INTERVAL = 5000; // 5秒刷新一次
@@ -26,7 +28,7 @@ async function fetchStatistics(timeRange: TimeRange): Promise<UserStatisticsData
  * 统计组件包装器
  * 处理时间范围状态管理和数据获取
  */
-export function StatisticsWrapper({ initialData }: StatisticsWrapperProps) {
+export function StatisticsWrapper({ initialData, currencyCode = 'USD' }: StatisticsWrapperProps) {
   const [timeRange, setTimeRange] = React.useState<TimeRange>(
     initialData?.timeRange ?? DEFAULT_TIME_RANGE
   );
@@ -55,5 +57,11 @@ export function StatisticsWrapper({ initialData }: StatisticsWrapperProps) {
     return <div className="text-center py-8 text-muted-foreground">暂无统计数据</div>;
   }
 
-  return <UserStatisticsChart data={data} onTimeRangeChange={handleTimeRangeChange} />;
+  return (
+    <UserStatisticsChart
+      data={data}
+      onTimeRangeChange={handleTimeRangeChange}
+      currencyCode={currencyCode}
+    />
+  );
 }

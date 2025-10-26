@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { PROVIDER_LIMITS, PROVIDER_DEFAULTS } from "@/lib/constants/provider.constants";
 import { USER_LIMITS, USER_DEFAULTS } from "@/lib/constants/user.constants";
+import { CURRENCY_CONFIG } from "@/lib/utils/currency";
 
 /**
  * 用户创建数据验证schema
@@ -203,6 +204,12 @@ export const UpdateProviderSchema = z
 export const UpdateSystemSettingsSchema = z.object({
   siteTitle: z.string().min(1, "站点标题不能为空").max(128, "站点标题不能超过128个字符"),
   allowGlobalUsageView: z.boolean(),
+  currencyDisplay: z
+    .enum(
+      Object.keys(CURRENCY_CONFIG) as [keyof typeof CURRENCY_CONFIG, ...Array<keyof typeof CURRENCY_CONFIG>],
+      { message: "不支持的货币类型" }
+    )
+    .optional(),
 });
 
 // 导出类型推断

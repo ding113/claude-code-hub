@@ -15,7 +15,9 @@ export {
   toDecimal,
   costToNumber,
   sumCosts,
+  CURRENCY_CONFIG,
 } from "./currency";
+export type { CurrencyCode } from "./currency";
 
 // 成本计算
 export { calculateRequestCost } from "./cost-calculation";

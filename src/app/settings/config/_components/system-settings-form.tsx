@@ -5,18 +5,30 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { saveSystemSettings } from "@/actions/system-config";
 import { toast } from "sonner";
+import { CURRENCY_CONFIG } from "@/lib/utils";
 import type { SystemSettings } from "@/types/system-config";
+import type { CurrencyCode } from "@/lib/utils";
 
 interface SystemSettingsFormProps {
-  initialSettings: Pick<SystemSettings, "siteTitle" | "allowGlobalUsageView">;
+  initialSettings: Pick<SystemSettings, "siteTitle" | "allowGlobalUsageView" | "currencyDisplay">;
 }
 
 export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps) {
   const [siteTitle, setSiteTitle] = useState(initialSettings.siteTitle);
   const [allowGlobalUsageView, setAllowGlobalUsageView] = useState(
     initialSettings.allowGlobalUsageView
+  );
+  const [currencyDisplay, setCurrencyDisplay] = useState<CurrencyCode>(
+    initialSettings.currencyDisplay
   );
   const [isPending, startTransition] = useTransition();
 
@@ -32,6 +44,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
       const result = await saveSystemSettings({
         siteTitle,
         allowGlobalUsageView,
+        currencyDisplay,
       });
 
       if (!result.ok) {
@@ -42,9 +55,14 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
       if (result.data) {
         setSiteTitle(result.data.siteTitle);
         setAllowGlobalUsageView(result.data.allowGlobalUsageView);
+        setCurrencyDisplay(result.data.currencyDisplay);
       }
 
-      toast.success("系统设置已更新");
+      toast.success("系统设置已更新，页面将刷新以应用货币显示变更");
+      // 刷新页面以应用货币显示变更
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
     });
   };
 
@@ -63,6 +81,32 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         />
         <p className="text-xs text-muted-foreground">
           用于设置浏览器标签页标题以及系统默认显示名称。
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="currency-display">货币显示单位</Label>
+        <Select
+          value={currencyDisplay}
+          onValueChange={(value) => setCurrencyDisplay(value as CurrencyCode)}
+          disabled={isPending}
+        >
+          <SelectTrigger id="currency-display">
+            <SelectValue placeholder="选择货币单位" />
+          </SelectTrigger>
+          <SelectContent>
+            {(Object.keys(CURRENCY_CONFIG) as CurrencyCode[]).map((code) => {
+              const config = CURRENCY_CONFIG[code];
+              return (
+                <SelectItem key={code} value={code}>
+                  {config.symbol} {config.name} ({code})
+                </SelectItem>
+              );
+            })}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          修改后，系统所有页面和 API 接口的金额显示将使用对应的货币符号（仅修改符号，不进行汇率转换）。
         </p>
       </div>
 

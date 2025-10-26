@@ -209,6 +209,16 @@ export const systemSettings = pgTable('system_settings', {
   id: serial('id').primaryKey(),
   siteTitle: varchar('site_title', { length: 128 }).notNull().default('Claude Code Hub'),
   allowGlobalUsageView: boolean('allow_global_usage_view').notNull().default(false),
+
+  // 货币显示配置
+  currencyDisplay: varchar('currency_display', { length: 10 }).notNull().default('USD'),
+
+  // 日志清理配置
+  enableAutoCleanup: boolean('enable_auto_cleanup').default(false),
+  cleanupRetentionDays: integer('cleanup_retention_days').default(30),
+  cleanupSchedule: varchar('cleanup_schedule', { length: 50 }).default('0 2 * * *'),
+  cleanupBatchSize: integer('cleanup_batch_size').default(10000),
+
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 });

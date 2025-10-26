@@ -7,6 +7,7 @@ import { SettingsPageHeader } from "../_components/settings-page-header";
 import { DatabaseStatusDisplay } from "./_components/database-status";
 import { DatabaseExport } from "./_components/database-export";
 import { DatabaseImport } from "./_components/database-import";
+import { LogCleanupPanel } from "./_components/log-cleanup-panel";
 import {
   Collapsible,
   CollapsibleContent,
@@ -21,7 +22,7 @@ export default function SettingsDataPage() {
     <>
       <SettingsPageHeader
         title="数据管理"
-        description="管理数据库的备份与恢复，支持完整数据导入导出。"
+        description="管理数据库的备份与恢复，支持完整数据导入导出和日志清理。"
       />
 
       <Section
@@ -29,6 +30,13 @@ export default function SettingsDataPage() {
         description="查看当前数据库的连接状态和基本信息。"
       >
         <DatabaseStatusDisplay />
+      </Section>
+
+      <Section
+        title="日志清理"
+        description="清理历史日志数据以释放数据库存储空间，统计数据将被保留。"
+      >
+        <LogCleanupPanel />
       </Section>
 
       <Section
@@ -66,6 +74,10 @@ export default function SettingsDataPage() {
           <CollapsibleContent className="pt-4">
             <div className="prose prose-sm dark:prose-invert max-w-none">
               <ul className="text-sm text-muted-foreground space-y-2">
+                <li>
+                  <strong>日志清理</strong>: 物理删除历史日志数据，不可恢复。
+                  统计数据（statistics 表）将被保留。建议清理前先导出数据库备份。
+                </li>
                 <li>
                   <strong>备份格式</strong>: 使用 PostgreSQL custom format (.dump)，
                   自动压缩且能够兼容不同版本的数据库结构。

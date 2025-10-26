@@ -5,6 +5,7 @@ import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn, Decimal, formatCurrency, toDecimal } from "@/lib/utils";
+import type { CurrencyCode } from "@/lib/utils";
 import { ChartConfig, ChartContainer, ChartLegend, ChartTooltip } from "@/components/ui/chart";
 
 import type { UserStatisticsData, TimeRange } from "@/types/statistics";
@@ -44,13 +45,18 @@ const getUserColor = (index: number) => USER_COLOR_PALETTE[index % USER_COLOR_PA
 export interface UserStatisticsChartProps {
   data: UserStatisticsData;
   onTimeRangeChange?: (timeRange: TimeRange) => void;
+  currencyCode?: CurrencyCode;
 }
 
 /**
  * 用户统计图表组件
  * 展示用户的消费金额和API调用次数
  */
-export function UserStatisticsChart({ data, onTimeRangeChange }: UserStatisticsChartProps) {
+export function UserStatisticsChart({
+  data,
+  onTimeRangeChange,
+  currencyCode = 'USD',
+}: UserStatisticsChartProps) {
   const [activeChart, setActiveChart] = React.useState<"cost" | "calls">("cost");
 
   // 用户选择状态(仅 Admin 用 users 模式时启用)
@@ -309,7 +315,7 @@ export function UserStatisticsChart({ data, onTimeRangeChange }: UserStatisticsC
             >
               <span className="text-muted-foreground text-xs">总消费金额</span>
               <span className="text-lg leading-none font-bold sm:text-3xl">
-                {formatCurrency(visibleTotals.cost)}
+                {formatCurrency(visibleTotals.cost, currencyCode)}
               </span>
             </button>
             <button
@@ -335,7 +341,7 @@ export function UserStatisticsChart({ data, onTimeRangeChange }: UserStatisticsC
           >
             <span className="text-muted-foreground text-xs">总消费金额</span>
             <span className="text-lg leading-none font-bold sm:text-xl">
-              {formatCurrency(visibleTotals.cost)}
+              {formatCurrency(visibleTotals.cost, currencyCode)}
             </span>
           </button>
           <button
@@ -391,7 +397,7 @@ export function UserStatisticsChart({ data, onTimeRangeChange }: UserStatisticsC
               tickMargin={8}
               tickFormatter={(value) => {
                 if (activeChart === "cost") {
-                  return formatCurrency(value);
+                  return formatCurrency(value, currencyCode);
                 }
                 return Number(value).toLocaleString();
               }}
@@ -448,7 +454,7 @@ export function UserStatisticsChart({ data, onTimeRangeChange }: UserStatisticsC
                                 </div>
                                 <span className="ml-auto font-mono flex-shrink-0">
                                   {activeChart === "cost"
-                                    ? formatCurrency(value)
+                                    ? formatCurrency(value, currencyCode)
                                     : value.toLocaleString()}
                                 </span>
                               </div>
@@ -535,7 +541,7 @@ export function UserStatisticsChart({ data, onTimeRangeChange }: UserStatisticsC
                           {/* 下方：数据值 */}
                           <div className="text-xs font-bold text-foreground">
                             {activeChart === "cost"
-                              ? formatCurrency(userTotal.cost)
+                              ? formatCurrency(userTotal.cost, currencyCode)
                               : userTotal.calls.toLocaleString()}
                           </div>
                         </div>

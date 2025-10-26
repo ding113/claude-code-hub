@@ -29,6 +29,10 @@ export async function register() {
       const { ensurePriceTable } = await import("@/lib/price-sync/seed-initializer");
       await ensurePriceTable();
 
+      // 初始化日志清理任务队列（如果启用）
+      const { scheduleAutoCleanup } = await import("@/lib/log-cleanup/cleanup-queue");
+      await scheduleAutoCleanup();
+
       logger.info("Application ready");
     }
   }

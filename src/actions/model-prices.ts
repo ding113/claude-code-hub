@@ -27,18 +27,13 @@ function isPriceDataEqual(data1: ModelPriceData, data2: ModelPriceData): boolean
 }
 
 /**
- * 上传并更新模型价格表
+ * 价格表处理核心逻辑（内部函数，无权限检查）
+ * 用于系统初始化和 Web UI 上传
  */
-export async function uploadPriceTable(
+export async function processPriceTableInternal(
   jsonContent: string
 ): Promise<ActionResult<PriceUpdateResult>> {
   try {
-    // 权限检查：只有管理员可以上传价格表
-    const session = await getSession();
-    if (!session || session.user.role !== "admin") {
-      return { ok: false, error: "无权限执行此操作" };
-    }
-
     // 解析JSON内容
     let priceTable: PriceTableJson;
     try {
@@ -107,10 +102,26 @@ export async function uploadPriceTable(
 
     return { ok: true, data: result };
   } catch (error) {
-    logger.error("上传价格表失败:", error);
-    const message = error instanceof Error ? error.message : "上传失败，请稍后重试";
+    logger.error("处理价格表失败:", error);
+    const message = error instanceof Error ? error.message : "处理失败，请稍后重试";
     return { ok: false, error: message };
   }
+}
+
+/**
+ * 上传并更新模型价格表（Web UI 入口，包含权限检查）
+ */
+export async function uploadPriceTable(
+  jsonContent: string
+): Promise<ActionResult<PriceUpdateResult>> {
+  // 权限检查：只有管理员可以上传价格表
+  const session = await getSession();
+  if (!session || session.user.role !== "admin") {
+    return { ok: false, error: "无权限执行此操作" };
+  }
+
+  // 调用核心逻辑
+  return processPriceTableInternal(jsonContent);
 }
 
 /**

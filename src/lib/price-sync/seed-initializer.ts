@@ -54,11 +54,10 @@ export async function initializePriceTableFromSeed(): Promise<boolean> {
     }
 
     // 动态导入以避免循环依赖
-    const { uploadPriceTable } = await import("@/actions/model-prices");
+    // 直接调用内部函数，无需权限检查（系统启动时的自动初始化）
+    const { processPriceTableInternal } = await import("@/actions/model-prices");
 
-    // 使用现有的上传逻辑导入种子数据
-    // 注意：这里跳过权限检查，因为是系统启动时的自动初始化
-    const result = await uploadPriceTable(seedJson);
+    const result = await processPriceTableInternal(seedJson);
 
     if (!result.ok) {
       logger.error("❌ Failed to initialize price table from seed:", { error: result.error });

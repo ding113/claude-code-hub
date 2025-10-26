@@ -11,6 +11,33 @@ Decimal.set({
 
 export const COST_SCALE = 15;
 
+/**
+ * 支持的货币代码
+ */
+export type CurrencyCode = 'USD' | 'CNY' | 'EUR' | 'JPY' | 'GBP' | 'HKD' | 'TWD' | 'KRW' | 'SGD';
+
+/**
+ * 货币配置
+ * - symbol: 货币符号
+ * - name: 货币名称
+ * - locale: 地区代码（用于数字格式化）
+ */
+export const CURRENCY_CONFIG: Record<CurrencyCode, {
+  symbol: string;
+  name: string;
+  locale: string;
+}> = {
+  USD: { symbol: '$', name: '美元', locale: 'en-US' },
+  CNY: { symbol: '¥', name: '人民币', locale: 'zh-CN' },
+  EUR: { symbol: '€', name: '欧元', locale: 'de-DE' },
+  JPY: { symbol: '¥', name: '日元', locale: 'ja-JP' },
+  GBP: { symbol: '£', name: '英镑', locale: 'en-GB' },
+  HKD: { symbol: 'HK$', name: '港币', locale: 'zh-HK' },
+  TWD: { symbol: 'NT$', name: '新台币', locale: 'zh-TW' },
+  KRW: { symbol: '₩', name: '韩元', locale: 'ko-KR' },
+  SGD: { symbol: 'S$', name: '新加坡元', locale: 'en-SG' },
+} as const;
+
 export type DecimalInput = Numeric | null | undefined;
 
 export function toDecimal(value: DecimalInput): Decimal | null {
@@ -56,13 +83,27 @@ export function sumCosts(values: DecimalInput[]): Decimal {
   }, new Decimal(0));
 }
 
-export function formatCurrency(value: DecimalInput, fractionDigits = 2): string {
+/**
+ * 格式化货币显示
+ * @param value - 金额数值
+ * @param currencyCode - 货币代码（默认 USD）
+ * @param fractionDigits - 小数位数（默认 2）
+ * @returns 格式化后的货币字符串（如 "$100.00" 或 "¥100.00"）
+ */
+export function formatCurrency(
+  value: DecimalInput,
+  currencyCode: CurrencyCode = 'USD',
+  fractionDigits = 2
+): string {
   const decimal = toDecimal(value) ?? new Decimal(0);
-  const formatted = decimal.toDecimalPlaces(fractionDigits).toNumber().toLocaleString("en-US", {
+  const config = CURRENCY_CONFIG[currencyCode];
+
+  const formatted = decimal.toDecimalPlaces(fractionDigits).toNumber().toLocaleString(config.locale, {
     minimumFractionDigits: fractionDigits,
     maximumFractionDigits: fractionDigits,
   });
-  return `$${formatted}`;
+
+  return `${config.symbol}${formatted}`;
 }
 
 export { Decimal };

@@ -26,6 +26,7 @@ export async function fetchSystemSettings(): Promise<ActionResult<SystemSettings
 export async function saveSystemSettings(formData: {
   siteTitle: string;
   allowGlobalUsageView: boolean;
+  currencyDisplay?: string;
 }): Promise<ActionResult<SystemSettings>> {
   try {
     const session = await getSession();
@@ -37,6 +38,7 @@ export async function saveSystemSettings(formData: {
     const updated = await updateSystemSettings({
       siteTitle: validated.siteTitle.trim(),
       allowGlobalUsageView: validated.allowGlobalUsageView,
+      currencyDisplay: validated.currencyDisplay,
     });
 
     revalidatePath("/settings/config");

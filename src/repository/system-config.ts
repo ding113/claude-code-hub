@@ -77,6 +77,11 @@ function createFallbackSettings(): SystemSettings {
     id: 0,
     siteTitle: DEFAULT_SITE_TITLE,
     allowGlobalUsageView: false,
+    currencyDisplay: 'USD',
+    enableAutoCleanup: false,
+    cleanupRetentionDays: 30,
+    cleanupSchedule: '0 2 * * *',
+    cleanupBatchSize: 10000,
     createdAt: now,
     updatedAt: now,
   };
@@ -92,6 +97,11 @@ export async function getSystemSettings(): Promise<SystemSettings> {
         id: systemSettings.id,
         siteTitle: systemSettings.siteTitle,
         allowGlobalUsageView: systemSettings.allowGlobalUsageView,
+        currencyDisplay: systemSettings.currencyDisplay,
+        enableAutoCleanup: systemSettings.enableAutoCleanup,
+        cleanupRetentionDays: systemSettings.cleanupRetentionDays,
+        cleanupSchedule: systemSettings.cleanupSchedule,
+        cleanupBatchSize: systemSettings.cleanupBatchSize,
         createdAt: systemSettings.createdAt,
         updatedAt: systemSettings.updatedAt,
       })
@@ -107,12 +117,18 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       .values({
         siteTitle: DEFAULT_SITE_TITLE,
         allowGlobalUsageView: false,
+        currencyDisplay: 'USD',
       })
       .onConflictDoNothing()
       .returning({
         id: systemSettings.id,
         siteTitle: systemSettings.siteTitle,
         allowGlobalUsageView: systemSettings.allowGlobalUsageView,
+        currencyDisplay: systemSettings.currencyDisplay,
+        enableAutoCleanup: systemSettings.enableAutoCleanup,
+        cleanupRetentionDays: systemSettings.cleanupRetentionDays,
+        cleanupSchedule: systemSettings.cleanupSchedule,
+        cleanupBatchSize: systemSettings.cleanupBatchSize,
         createdAt: systemSettings.createdAt,
         updatedAt: systemSettings.updatedAt,
       });
@@ -127,6 +143,11 @@ export async function getSystemSettings(): Promise<SystemSettings> {
         id: systemSettings.id,
         siteTitle: systemSettings.siteTitle,
         allowGlobalUsageView: systemSettings.allowGlobalUsageView,
+        currencyDisplay: systemSettings.currencyDisplay,
+        enableAutoCleanup: systemSettings.enableAutoCleanup,
+        cleanupRetentionDays: systemSettings.cleanupRetentionDays,
+        cleanupSchedule: systemSettings.cleanupSchedule,
+        cleanupBatchSize: systemSettings.cleanupBatchSize,
         createdAt: systemSettings.createdAt,
         updatedAt: systemSettings.updatedAt,
       })
@@ -156,18 +177,45 @@ export async function updateSystemSettings(
   const current = await getSystemSettings();
 
   try {
+    // 构建更新对象，只更新提供的字段
+    const updates: Partial<typeof systemSettings.$inferInsert> = {
+      siteTitle: payload.siteTitle,
+      allowGlobalUsageView: payload.allowGlobalUsageView,
+      updatedAt: new Date(),
+    };
+
+    // 添加货币显示配置字段（如果提供）
+    if (payload.currencyDisplay !== undefined) {
+      updates.currencyDisplay = payload.currencyDisplay;
+    }
+
+    // 添加日志清理配置字段（如果提供）
+    if (payload.enableAutoCleanup !== undefined) {
+      updates.enableAutoCleanup = payload.enableAutoCleanup;
+    }
+    if (payload.cleanupRetentionDays !== undefined) {
+      updates.cleanupRetentionDays = payload.cleanupRetentionDays;
+    }
+    if (payload.cleanupSchedule !== undefined) {
+      updates.cleanupSchedule = payload.cleanupSchedule;
+    }
+    if (payload.cleanupBatchSize !== undefined) {
+      updates.cleanupBatchSize = payload.cleanupBatchSize;
+    }
+
     const [updated] = await db
       .update(systemSettings)
-      .set({
-        siteTitle: payload.siteTitle,
-        allowGlobalUsageView: payload.allowGlobalUsageView,
-        updatedAt: new Date(),
-      })
+      .set(updates)
       .where(eq(systemSettings.id, current.id))
       .returning({
         id: systemSettings.id,
         siteTitle: systemSettings.siteTitle,
         allowGlobalUsageView: systemSettings.allowGlobalUsageView,
+        currencyDisplay: systemSettings.currencyDisplay,
+        enableAutoCleanup: systemSettings.enableAutoCleanup,
+        cleanupRetentionDays: systemSettings.cleanupRetentionDays,
+        cleanupSchedule: systemSettings.cleanupSchedule,
+        cleanupBatchSize: systemSettings.cleanupBatchSize,
         createdAt: systemSettings.createdAt,
         updatedAt: systemSettings.updatedAt,
       });

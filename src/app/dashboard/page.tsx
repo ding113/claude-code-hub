@@ -5,6 +5,7 @@ import { UserKeyManager } from "./_components/user/user-key-manager";
 import { getUsers } from "@/actions/users";
 import { getUserStatistics } from "@/actions/statistics";
 import { hasPriceTable } from "@/actions/model-prices";
+import { getSystemSettings } from "@/repository/system-config";
 import { ListErrorBoundary } from "@/components/error-boundary";
 import { StatisticsWrapper } from "./_components/statistics";
 import { OverviewPanel } from "@/components/customs/overview-panel";
@@ -19,18 +20,22 @@ export default async function DashboardPage() {
     redirect("/settings/prices?required=true");
   }
 
-  const [users, session, statistics] = await Promise.all([
+  const [users, session, statistics, systemSettings] = await Promise.all([
     getUsers(),
     getSession(),
     getUserStatistics(DEFAULT_TIME_RANGE),
+    getSystemSettings(),
   ]);
 
   return (
     <div className="space-y-6">
-      <OverviewPanel />
+      <OverviewPanel currencyCode={systemSettings.currencyDisplay} />
 
       <div>
-        <StatisticsWrapper initialData={statistics.ok ? statistics.data : undefined} />
+        <StatisticsWrapper
+          initialData={statistics.ok ? statistics.data : undefined}
+          currencyCode={systemSettings.currencyDisplay}
+        />
       </div>
 
       <Section title="客户端" description="用户和密钥管理">

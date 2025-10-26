@@ -21,6 +21,7 @@ import { formatCurrency } from "@/lib/utils/currency";
 import { cn } from "@/lib/utils";
 import type { OverviewData } from "@/actions/overview";
 import type { ActiveSessionInfo } from "@/types/session";
+import type { CurrencyCode } from "@/lib/utils";
 import Link from "next/link";
 
 const REFRESH_INTERVAL = 5000; // 5秒刷新一次
@@ -66,7 +67,13 @@ function getStatusIcon(status: "in_progress" | "completed" | "error", statusCode
 /**
  * 简洁的 Session 列表项
  */
-function SessionListItem({ session }: { session: ActiveSessionInfo }) {
+function SessionListItem({
+  session,
+  currencyCode = 'USD',
+}: {
+  session: ActiveSessionInfo;
+  currencyCode?: CurrencyCode;
+}) {
   const statusInfo = getStatusIcon(session.status, session.statusCode);
   const StatusIcon = statusInfo.icon;
 
@@ -130,7 +137,9 @@ function SessionListItem({ session }: { session: ActiveSessionInfo }) {
             </span>
           )}
           {session.costUsd && (
-            <span className="font-medium">${parseFloat(session.costUsd).toFixed(4)}</span>
+            <span className="font-medium">
+              {formatCurrency(session.costUsd, currencyCode, 4)}
+            </span>
           )}
         </div>
       </div>
@@ -138,12 +147,16 @@ function SessionListItem({ session }: { session: ActiveSessionInfo }) {
   );
 }
 
+interface OverviewPanelProps {
+  currencyCode?: CurrencyCode;
+}
+
 /**
  * 概览面板
  * 左侧：4个指标卡片
  * 右侧：简洁的活跃 Session 列表
  */
-export function OverviewPanel() {
+export function OverviewPanel({ currencyCode = 'USD' }: OverviewPanelProps) {
   const router = useRouter();
 
   const { data, isLoading } = useQuery<OverviewData, Error>({
@@ -185,7 +198,7 @@ export function OverviewPanel() {
           />
           <MetricCard
             title="今日消耗"
-            value={formatCurrency(metrics.todayCost)}
+            value={formatCurrency(metrics.todayCost, currencyCode)}
             description="总费用"
             icon={DollarSign}
           />
@@ -239,7 +252,11 @@ export function OverviewPanel() {
             ) : (
               <div className="divide-y">
                 {metrics.recentSessions.map((session) => (
-                  <SessionListItem key={session.sessionId} session={session} />
+                  <SessionListItem
+                    key={session.sessionId}
+                    session={session}
+                    currencyCode={currencyCode}
+                  />
                 ))}
               </div>
             )}

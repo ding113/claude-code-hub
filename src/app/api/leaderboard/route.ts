@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
 import { findDailyLeaderboard, findMonthlyLeaderboard } from "@/repository/leaderboard";
+import { getSystemSettings } from "@/repository/system-config";
+import { formatCurrency } from "@/lib/utils";
 import { unstable_cache } from "next/cache";
 
 /**
@@ -23,21 +25,27 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 生成缓存 key（包含日期以确保每天/每月自动刷新）
+    // 获取系统配置（货币显示单位）
+    const systemSettings = await getSystemSettings();
+
+    // 生成缓存 key（包含日期和货币配置以确保每天/每月/货币变化时自动刷新）
     const now = new Date();
     const cacheKey =
       period === "daily"
-        ? `leaderboard:daily:${now.toISOString().split("T")[0]}`
-        : `leaderboard:monthly:${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+        ? `leaderboard:daily:${now.toISOString().split("T")[0]}:${systemSettings.currencyDisplay}`
+        : `leaderboard:monthly:${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}:${systemSettings.currencyDisplay}`;
 
     // 使用 Next.js unstable_cache 进行缓存
     const getCachedLeaderboard = unstable_cache(
       async () => {
-        if (period === "daily") {
-          return await findDailyLeaderboard();
-        } else {
-          return await findMonthlyLeaderboard();
-        }
+        const rawData =
+          period === "daily" ? await findDailyLeaderboard() : await findMonthlyLeaderboard();
+
+        // 格式化金额字段
+        return rawData.map((entry) => ({
+          ...entry,
+          totalCostFormatted: formatCurrency(entry.totalCost, systemSettings.currencyDisplay),
+        }));
       },
       [cacheKey],
       {
