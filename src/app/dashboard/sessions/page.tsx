@@ -77,13 +77,22 @@ export default function ActiveSessionsPage() {
         <>
           {/* 活跃 Session 区域 */}
           <Section title="活跃 Session（最近 5 分钟）">
-            <ActiveSessionsTable sessions={activeSessions} isLoading={isLoading} currencyCode={currencyCode} />
+            <ActiveSessionsTable
+              sessions={activeSessions}
+              isLoading={isLoading}
+              currencyCode={currencyCode}
+            />
           </Section>
 
           {/* 非活跃 Session 区域 */}
           {inactiveSessions.length > 0 && (
             <Section title="非活跃 Session（超过 5 分钟，仅供查看）">
-              <ActiveSessionsTable sessions={inactiveSessions} isLoading={isLoading} inactive currencyCode={currencyCode} />
+              <ActiveSessionsTable
+                sessions={inactiveSessions}
+                isLoading={isLoading}
+                inactive
+                currencyCode={currencyCode}
+              />
             </Section>
           )}
         </>

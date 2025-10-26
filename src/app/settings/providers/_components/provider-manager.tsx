@@ -20,10 +20,20 @@ interface ProviderManagerProps {
   currencyCode?: CurrencyCode;
 }
 
-export function ProviderManager({ providers, currentUser, healthStatus, currencyCode = "USD" }: ProviderManagerProps) {
+export function ProviderManager({
+  providers,
+  currentUser,
+  healthStatus,
+  currencyCode = "USD",
+}: ProviderManagerProps) {
   return (
     <div className="space-y-4">
-      <ProviderList providers={providers} currentUser={currentUser} healthStatus={healthStatus} currencyCode={currencyCode} />
+      <ProviderList
+        providers={providers}
+        currentUser={currentUser}
+        healthStatus={healthStatus}
+        currencyCode={currencyCode}
+      />
     </div>
   );
 }

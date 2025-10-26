@@ -54,7 +54,13 @@ function getStatusIcon(status: "in_progress" | "completed" | "error", statusCode
 /**
  * 简洁的 Session 列表项
  */
-function SessionListItem({ session, currencyCode = "USD" }: { session: ActiveSessionInfo; currencyCode?: CurrencyCode }) {
+function SessionListItem({
+  session,
+  currencyCode = "USD",
+}: {
+  session: ActiveSessionInfo;
+  currencyCode?: CurrencyCode;
+}) {
   const statusInfo = getStatusIcon(session.status, session.statusCode);
   const StatusIcon = statusInfo.icon;
 
@@ -168,7 +174,11 @@ export function ActiveSessionsPanel({ currencyCode = "USD" }: { currencyCode?: C
         ) : (
           <div className="divide-y">
             {data.map((session) => (
-              <SessionListItem key={session.sessionId} session={session} currencyCode={currencyCode} />
+              <SessionListItem
+                key={session.sessionId}
+                session={session}
+                currencyCode={currencyCode}
+              />
             ))}
           </div>
         )}

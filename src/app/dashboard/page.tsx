@@ -40,7 +40,11 @@ export default async function DashboardPage() {
 
       <Section title="客户端" description="用户和密钥管理">
         <ListErrorBoundary>
-          <UserKeyManager users={users} currentUser={session?.user} currencyCode={systemSettings.currencyDisplay} />
+          <UserKeyManager
+            users={users}
+            currentUser={session?.user}
+            currencyCode={systemSettings.currencyDisplay}
+          />
         </ListErrorBoundary>
       </Section>
     </div>

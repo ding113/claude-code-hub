@@ -32,7 +32,11 @@ export function UserKeyManager({ users, currentUser, currencyCode = "USD" }: Use
     return (
       <div className="space-y-3">
         <div className="bg-card text-card-foreground border border-border rounded-xl p-4">
-          <KeyListHeader activeUser={activeUser} currentUser={currentUser} currencyCode={currencyCode} />
+          <KeyListHeader
+            activeUser={activeUser}
+            currentUser={currentUser}
+            currencyCode={currencyCode}
+          />
           <KeyList
             keys={activeUser?.keys || []}
             currentUser={currentUser}
@@ -59,7 +63,11 @@ export function UserKeyManager({ users, currentUser, currencyCode = "USD" }: Use
 
         {/* 右侧：当前用户的 Key 列表 */}
         <div className="md:col-span-2 bg-card text-card-foreground border border-border rounded-xl p-4">
-          <KeyListHeader activeUser={activeUser} currentUser={currentUser} currencyCode={currencyCode} />
+          <KeyListHeader
+            activeUser={activeUser}
+            currentUser={currentUser}
+            currencyCode={currencyCode}
+          />
           <KeyList
             keys={activeUser?.keys || []}
             currentUser={currentUser}

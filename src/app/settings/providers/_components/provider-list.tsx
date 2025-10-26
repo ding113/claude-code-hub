@@ -21,7 +21,12 @@ interface ProviderListProps {
   currencyCode?: CurrencyCode;
 }
 
-export function ProviderList({ providers, currentUser, healthStatus, currencyCode = "USD" }: ProviderListProps) {
+export function ProviderList({
+  providers,
+  currentUser,
+  healthStatus,
+  currencyCode = "USD",
+}: ProviderListProps) {
   if (providers.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 px-4">

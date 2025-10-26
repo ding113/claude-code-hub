@@ -42,7 +42,12 @@ interface ProviderListItemProps {
   currencyCode?: CurrencyCode;
 }
 
-export function ProviderListItem({ item, currentUser, healthStatus, currencyCode = "USD" }: ProviderListItemProps) {
+export function ProviderListItem({
+  item,
+  currentUser,
+  healthStatus,
+  currencyCode = "USD",
+}: ProviderListItemProps) {
   const router = useRouter();
   const [openEdit, setOpenEdit] = useState(false);
   const [resetPending, startResetTransition] = useTransition();
@@ -228,8 +233,8 @@ export function ProviderListItem({ item, currentUser, healthStatus, currencyCode
         <div className="flex items-center gap-2">
           <span className="font-medium text-foreground/80">今日用量:</span>
           <span className="tabular-nums">
-            {formatCurrency(parseFloat(item.todayTotalCostUsd || "0"), currencyCode)} ({item.todayCallCount ?? 0}{" "}
-            次调用)
+            {formatCurrency(parseFloat(item.todayTotalCostUsd || "0"), currencyCode)} (
+            {item.todayCallCount ?? 0} 次调用)
           </span>
         </div>
         <div className="flex items-center gap-2">

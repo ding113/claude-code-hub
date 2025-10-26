@@ -13,9 +13,6 @@ export async function GET() {
     return NextResponse.json(settings);
   } catch (error) {
     console.error("Failed to fetch system settings:", error);
-    return NextResponse.json(
-      { error: "获取系统设置失败" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "获取系统设置失败" }, { status: 500 });
   }
 }

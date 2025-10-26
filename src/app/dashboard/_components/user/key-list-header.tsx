@@ -81,7 +81,11 @@ interface KeyListHeaderProps {
   currencyCode?: CurrencyCode;
 }
 
-export function KeyListHeader({ activeUser, currentUser, currencyCode = "USD" }: KeyListHeaderProps) {
+export function KeyListHeader({
+  activeUser,
+  currentUser,
+  currencyCode = "USD",
+}: KeyListHeaderProps) {
   const [openAdd, setOpenAdd] = useState(false);
   const [keyResult, setKeyResult] = useState<{ generatedKey: string; name: string } | null>(null);
   const [copied, setCopied] = useState(false);
