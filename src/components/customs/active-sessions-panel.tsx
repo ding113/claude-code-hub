@@ -8,6 +8,8 @@ import { getActiveSessions } from "@/actions/active-sessions";
 import { cn } from "@/lib/utils";
 import type { ActiveSessionInfo } from "@/types/session";
 import Link from "next/link";
+import type { CurrencyCode } from "@/lib/utils/currency";
+import { formatCurrency } from "@/lib/utils/currency";
 
 const REFRESH_INTERVAL = 5000; // 5秒刷新一次
 
@@ -52,7 +54,7 @@ function getStatusIcon(status: "in_progress" | "completed" | "error", statusCode
 /**
  * 简洁的 Session 列表项
  */
-function SessionListItem({ session }: { session: ActiveSessionInfo }) {
+function SessionListItem({ session, currencyCode = "USD" }: { session: ActiveSessionInfo; currencyCode?: CurrencyCode }) {
   const statusInfo = getStatusIcon(session.status, session.statusCode);
   const StatusIcon = statusInfo.icon;
 
@@ -116,7 +118,7 @@ function SessionListItem({ session }: { session: ActiveSessionInfo }) {
             </span>
           )}
           {session.costUsd && (
-            <span className="font-medium">${parseFloat(session.costUsd).toFixed(4)}</span>
+            <span className="font-medium">{formatCurrency(session.costUsd, currencyCode, 4)}</span>
           )}
         </div>
       </div>
@@ -128,7 +130,7 @@ function SessionListItem({ session }: { session: ActiveSessionInfo }) {
  * 活跃 Session 面板
  * 显示最近 5 分钟内的活跃 session 列表（简洁文字+图标形式）
  */
-export function ActiveSessionsPanel() {
+export function ActiveSessionsPanel({ currencyCode = "USD" }: { currencyCode?: CurrencyCode }) {
   const router = useRouter();
 
   const { data = [], isLoading } = useQuery<ActiveSessionInfo[], Error>({
@@ -166,7 +168,7 @@ export function ActiveSessionsPanel() {
         ) : (
           <div className="divide-y">
             {data.map((session) => (
-              <SessionListItem key={session.sessionId} session={session} />
+              <SessionListItem key={session.sessionId} session={session} currencyCode={currencyCode} />
             ))}
           </div>
         )}

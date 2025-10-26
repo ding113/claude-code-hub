@@ -9,6 +9,16 @@ import { getSessionDetails } from "@/actions/active-sessions";
 import { useState, useEffect } from "react";
 import { Section } from "@/components/section";
 import { Badge } from "@/components/ui/badge";
+import { useQuery } from "@tanstack/react-query";
+import { formatCurrency, type CurrencyCode } from "@/lib/utils/currency";
+
+async function fetchSystemSettings(): Promise<{ currencyDisplay: CurrencyCode }> {
+  const response = await fetch("/api/system-settings");
+  if (!response.ok) {
+    throw new Error("获取系统设置失败");
+  }
+  return response.json();
+}
 
 /**
  * Session Messages 详情页面
@@ -29,6 +39,13 @@ export default function SessionMessagesPage() {
   const [error, setError] = useState<string | null>(null);
   const [copiedMessages, setCopiedMessages] = useState(false);
   const [copiedResponse, setCopiedResponse] = useState(false);
+
+  const { data: systemSettings } = useQuery({
+    queryKey: ["system-settings"],
+    queryFn: fetchSystemSettings,
+  });
+
+  const currencyCode = systemSettings?.currencyDisplay || "USD";
 
   useEffect(() => {
     const fetchDetails = async () => {
@@ -404,7 +421,7 @@ export default function SessionMessagesPage() {
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-muted-foreground">总费用</span>
                       <code className="text-lg font-mono font-semibold text-green-600">
-                        ${parseFloat(sessionStats.totalCostUsd).toFixed(6)}
+                        {formatCurrency(sessionStats.totalCostUsd, currencyCode, 6)}
                       </code>
                     </div>
                   </CardContent>

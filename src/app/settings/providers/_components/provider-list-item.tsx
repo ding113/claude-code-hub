@@ -26,6 +26,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { resetProviderCircuit } from "@/actions/providers";
 import { toast } from "sonner";
+import type { CurrencyCode } from "@/lib/utils/currency";
+import { formatCurrency } from "@/lib/utils/currency";
 
 interface ProviderListItemProps {
   item: ProviderDisplay;
@@ -37,9 +39,10 @@ interface ProviderListItemProps {
     circuitOpenUntil: number | null;
     recoveryMinutes: number | null;
   };
+  currencyCode?: CurrencyCode;
 }
 
-export function ProviderListItem({ item, currentUser, healthStatus }: ProviderListItemProps) {
+export function ProviderListItem({ item, currentUser, healthStatus, currencyCode = "USD" }: ProviderListItemProps) {
   const router = useRouter();
   const [openEdit, setOpenEdit] = useState(false);
   const [resetPending, startResetTransition] = useTransition();
@@ -225,7 +228,7 @@ export function ProviderListItem({ item, currentUser, healthStatus }: ProviderLi
         <div className="flex items-center gap-2">
           <span className="font-medium text-foreground/80">今日用量:</span>
           <span className="tabular-nums">
-            ${parseFloat(item.todayTotalCostUsd || "0").toFixed(2)} ({item.todayCallCount ?? 0}{" "}
+            {formatCurrency(parseFloat(item.todayTotalCostUsd || "0"), currencyCode)} ({item.todayCallCount ?? 0}{" "}
             次调用)
           </span>
         </div>

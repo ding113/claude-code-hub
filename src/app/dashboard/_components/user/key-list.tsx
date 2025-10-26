@@ -7,7 +7,7 @@ import { KeyActions } from "./key-actions";
 import type { UserKeyDisplay } from "@/types/user";
 import type { User } from "@/types/user";
 import { format } from "timeago.js";
-import { formatCurrency } from "@/lib/utils/currency";
+import { formatCurrency, type CurrencyCode } from "@/lib/utils/currency";
 import Link from "next/link";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
@@ -23,9 +23,10 @@ interface KeyListProps {
   keys: UserKeyDisplay[];
   currentUser?: User;
   keyOwnerUserId: number; // 这些Key所属的用户ID
+  currencyCode?: CurrencyCode;
 }
 
-export function KeyList({ keys, currentUser, keyOwnerUserId }: KeyListProps) {
+export function KeyList({ keys, currentUser, keyOwnerUserId, currencyCode = "USD" }: KeyListProps) {
   const [copiedKeyId, setCopiedKeyId] = useState<number | null>(null);
   const [expandedKeys, setExpandedKeys] = useState<Set<number>>(new Set());
   const canDeleteKeys = keys.length > 1;
@@ -92,7 +93,7 @@ export function KeyList({ keys, currentUser, keyOwnerUserId }: KeyListProps) {
                             {stat.callCount}
                           </TableCell>
                           <TableCell className="text-xs py-1.5 text-right font-mono">
-                            {formatCurrency(stat.totalCost)}
+                            {formatCurrency(stat.totalCost, currencyCode)}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -135,7 +136,7 @@ export function KeyList({ keys, currentUser, keyOwnerUserId }: KeyListProps) {
     TableColumnTypes.number<UserKeyDisplay>("todayUsage", "今日消耗", {
       render: (value) => {
         const amount = typeof value === "number" ? value : 0;
-        return formatCurrency(amount);
+        return formatCurrency(amount, currencyCode);
       },
     }),
     TableColumnTypes.text<UserKeyDisplay>("lastUsedAt", "最后使用", {

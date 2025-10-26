@@ -3,6 +3,7 @@ import { Globe } from "lucide-react";
 import type { ProviderDisplay } from "@/types/provider";
 import type { User } from "@/types/user";
 import { ProviderListItem } from "./provider-list-item";
+import type { CurrencyCode } from "@/lib/utils/currency";
 
 interface ProviderListProps {
   providers: ProviderDisplay[];
@@ -17,9 +18,10 @@ interface ProviderListProps {
       recoveryMinutes: number | null;
     }
   >;
+  currencyCode?: CurrencyCode;
 }
 
-export function ProviderList({ providers, currentUser, healthStatus }: ProviderListProps) {
+export function ProviderList({ providers, currentUser, healthStatus, currencyCode = "USD" }: ProviderListProps) {
   if (providers.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 px-4">
@@ -40,6 +42,7 @@ export function ProviderList({ providers, currentUser, healthStatus }: ProviderL
           item={provider}
           currentUser={currentUser}
           healthStatus={healthStatus[provider.id]}
+          currencyCode={currencyCode}
         />
       ))}
     </div>

@@ -14,11 +14,14 @@ import { Eye } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import type { ActiveSessionInfo } from "@/types/session";
+import type { CurrencyCode } from "@/lib/utils/currency";
+import { formatCurrency } from "@/lib/utils/currency";
 
 interface ActiveSessionsTableProps {
   sessions: ActiveSessionInfo[];
   isLoading: boolean;
   inactive?: boolean; // 标记是否为非活跃 session
+  currencyCode?: CurrencyCode;
 }
 
 function formatDuration(durationMs: number | undefined): string {
@@ -39,6 +42,7 @@ export function ActiveSessionsTable({
   sessions,
   isLoading,
   inactive = false,
+  currencyCode = "USD",
 }: ActiveSessionsTableProps) {
   // 按开始时间降序排序（最新的在前）
   const sortedSessions = [...sessions].sort((a, b) => b.startTime - a.startTime);
@@ -114,7 +118,7 @@ export function ActiveSessionsTable({
                     {session.outputTokens?.toLocaleString() || "-"}
                   </TableCell>
                   <TableCell className="text-right font-mono text-xs">
-                    {session.costUsd ? `$${parseFloat(session.costUsd).toFixed(6)}` : "-"}
+                    {session.costUsd ? formatCurrency(session.costUsd, currencyCode, 6) : "-"}
                   </TableCell>
                   <TableCell className="text-right font-mono text-xs">
                     {formatDuration(session.durationMs)}

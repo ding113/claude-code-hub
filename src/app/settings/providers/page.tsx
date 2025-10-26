@@ -5,14 +5,16 @@ import { AddProviderDialog } from "./_components/add-provider-dialog";
 import { SchedulingRulesDialog } from "./_components/scheduling-rules-dialog";
 import { SettingsPageHeader } from "../_components/settings-page-header";
 import { getSession } from "@/lib/auth";
+import { getSystemSettings } from "@/repository/system-config";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsProvidersPage() {
-  const [providers, session, healthStatus] = await Promise.all([
+  const [providers, session, healthStatus, systemSettings] = await Promise.all([
     getProviders(),
     getSession(),
     getProvidersHealthStatus(),
+    getSystemSettings(),
   ]);
 
   return (
@@ -33,6 +35,7 @@ export default async function SettingsProvidersPage() {
           providers={providers}
           currentUser={session?.user}
           healthStatus={healthStatus}
+          currencyCode={systemSettings.currencyDisplay}
         />
       </Section>
     </>

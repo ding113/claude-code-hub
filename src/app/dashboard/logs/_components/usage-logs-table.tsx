@@ -17,6 +17,8 @@ import { ProviderChainPopover } from "./provider-chain-popover";
 import { ErrorDetailsDialog } from "./error-details-dialog";
 import { formatProviderSummary } from "@/lib/utils/provider-chain-formatter";
 import { ModelDisplayWithRedirect } from "./model-display-with-redirect";
+import type { CurrencyCode } from "@/lib/utils/currency";
+import { formatCurrency } from "@/lib/utils/currency";
 
 /**
  * 格式化时间显示
@@ -66,6 +68,7 @@ interface UsageLogsTableProps {
   onPageChange: (page: number) => void;
   isPending: boolean;
   newLogIds?: Set<number>; // 新增记录 ID 集合（用于动画高亮）
+  currencyCode?: CurrencyCode;
 }
 
 export function UsageLogsTable({
@@ -76,6 +79,7 @@ export function UsageLogsTable({
   onPageChange,
   isPending,
   newLogIds,
+  currencyCode = "USD",
 }: UsageLogsTableProps) {
   const totalPages = Math.ceil(total / pageSize);
 
@@ -181,7 +185,7 @@ export function UsageLogsTable({
                     {log.cacheReadInputTokens?.toLocaleString() || "-"}
                   </TableCell>
                   <TableCell className="text-right font-mono text-xs">
-                    {log.costUsd ? `$${parseFloat(log.costUsd).toFixed(6)}` : "-"}
+                    {log.costUsd ? formatCurrency(log.costUsd, currencyCode, 6) : "-"}
                   </TableCell>
                   <TableCell className="text-right font-mono text-xs">
                     {formatDuration(log.durationMs)}

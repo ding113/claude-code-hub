@@ -16,7 +16,7 @@ import { UserActions } from "./user-actions";
 import type { UserDisplay } from "@/types/user";
 import type { User } from "@/types/user";
 import { FormErrorBoundary } from "@/components/form-error-boundary";
-import { formatCurrency } from "@/lib/utils/currency";
+import { formatCurrency, type CurrencyCode } from "@/lib/utils/currency";
 import { useQuery } from "@tanstack/react-query";
 import { getProxyStatus } from "@/actions/proxy-status";
 import type { ProxyStatusResponse } from "@/types/proxy-status";
@@ -78,9 +78,10 @@ function StatusSpinner() {
 interface KeyListHeaderProps {
   activeUser: UserDisplay | null;
   currentUser?: User;
+  currencyCode?: CurrencyCode;
 }
 
-export function KeyListHeader({ activeUser, currentUser }: KeyListHeaderProps) {
+export function KeyListHeader({ activeUser, currentUser, currencyCode = "USD" }: KeyListHeaderProps) {
   const [openAdd, setOpenAdd] = useState(false);
   const [keyResult, setKeyResult] = useState<{ generatedKey: string; name: string } | null>(null);
   const [copied, setCopied] = useState(false);
@@ -195,8 +196,8 @@ export function KeyListHeader({ activeUser, currentUser }: KeyListHeaderProps) {
           <div className="mt-1">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
               <div>
-                今日用量 {activeUser ? formatCurrency(totalTodayUsage) : "-"} /{" "}
-                {activeUser ? formatCurrency(activeUser.dailyQuota) : "-"}
+                今日用量 {activeUser ? formatCurrency(totalTodayUsage, currencyCode) : "-"} /{" "}
+                {activeUser ? formatCurrency(activeUser.dailyQuota, currencyCode) : "-"}
               </div>
               {proxyStatusContent}
             </div>

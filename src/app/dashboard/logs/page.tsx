@@ -6,6 +6,7 @@ import { UsageLogsView } from "./_components/usage-logs-view";
 import { ActiveSessionsPanel } from "@/components/customs/active-sessions-panel";
 import { getUsers } from "@/actions/users";
 import { getProviders } from "@/actions/providers";
+import { getSystemSettings } from "@/repository/system-config";
 
 export const dynamic = "force-dynamic";
 
@@ -22,13 +23,13 @@ export default async function UsageLogsPage({
   const isAdmin = session.user.role === "admin";
 
   // 只有 admin 才需要获取用户和供应商列表
-  const [users, providers, resolvedSearchParams] = isAdmin
-    ? await Promise.all([getUsers(), getProviders(), searchParams])
-    : [[], [], await searchParams];
+  const [users, providers, resolvedSearchParams, systemSettings] = isAdmin
+    ? await Promise.all([getUsers(), getProviders(), searchParams, getSystemSettings()])
+    : [[], [], await searchParams, await getSystemSettings()];
 
   return (
     <div className="space-y-6">
-      <ActiveSessionsPanel />
+      <ActiveSessionsPanel currencyCode={systemSettings.currencyDisplay} />
 
       <Section
         title="使用记录"
@@ -40,6 +41,7 @@ export default async function UsageLogsPage({
             users={users}
             providers={providers}
             searchParams={resolvedSearchParams}
+            currencyCode={systemSettings.currencyDisplay}
           />
         </Suspense>
       </Section>

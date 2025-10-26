@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { getAllSessions } from "@/actions/active-sessions";
 import { ActiveSessionsTable } from "./_components/active-sessions-table";
 import type { ActiveSessionInfo } from "@/types/session";
+import type { CurrencyCode } from "@/lib/utils/currency";
 
 const REFRESH_INTERVAL = 3000; // 3秒刷新一次
 
@@ -21,6 +22,14 @@ async function fetchAllSessions(): Promise<{
     throw new Error(result.error || "获取 session 列表失败");
   }
   return result.data;
+}
+
+async function fetchSystemSettings(): Promise<{ currencyDisplay: CurrencyCode }> {
+  const response = await fetch("/api/system-settings");
+  if (!response.ok) {
+    throw new Error("获取系统设置失败");
+  }
+  return response.json();
 }
 
 /**
@@ -38,8 +47,14 @@ export default function ActiveSessionsPage() {
     refetchInterval: REFRESH_INTERVAL,
   });
 
+  const { data: systemSettings } = useQuery({
+    queryKey: ["system-settings"],
+    queryFn: fetchSystemSettings,
+  });
+
   const activeSessions = data?.active || [];
   const inactiveSessions = data?.inactive || [];
+  const currencyCode = systemSettings?.currencyDisplay || "USD";
 
   return (
     <div className="space-y-6">
@@ -62,13 +77,13 @@ export default function ActiveSessionsPage() {
         <>
           {/* 活跃 Session 区域 */}
           <Section title="活跃 Session（最近 5 分钟）">
-            <ActiveSessionsTable sessions={activeSessions} isLoading={isLoading} />
+            <ActiveSessionsTable sessions={activeSessions} isLoading={isLoading} currencyCode={currencyCode} />
           </Section>
 
           {/* 非活跃 Session 区域 */}
           {inactiveSessions.length > 0 && (
             <Section title="非活跃 Session（超过 5 分钟，仅供查看）">
-              <ActiveSessionsTable sessions={inactiveSessions} isLoading={isLoading} inactive />
+              <ActiveSessionsTable sessions={inactiveSessions} isLoading={isLoading} inactive currencyCode={currencyCode} />
             </Section>
           )}
         </>

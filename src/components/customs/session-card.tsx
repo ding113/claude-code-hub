@@ -5,10 +5,13 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { ActiveSessionInfo } from "@/types/session";
 import Link from "next/link";
+import type { CurrencyCode } from "@/lib/utils/currency";
+import { formatCurrency } from "@/lib/utils/currency";
 
 interface SessionCardProps {
   session: ActiveSessionInfo;
   className?: string;
+  currencyCode?: CurrencyCode;
 }
 
 /**
@@ -57,7 +60,7 @@ function getStatusConfig(status: "in_progress" | "completed" | "error", statusCo
  * Session信息卡片
  * 用于概览面板的横向滚动展示
  */
-export function SessionCard({ session, className }: SessionCardProps) {
+export function SessionCard({ session, className, currencyCode = "USD" }: SessionCardProps) {
   const statusConfig = getStatusConfig(session.status, session.statusCode);
 
   return (
@@ -119,7 +122,7 @@ export function SessionCard({ session, className }: SessionCardProps) {
             </div>
             {session.costUsd && (
               <span className="font-mono font-medium">
-                ${parseFloat(session.costUsd).toFixed(4)}
+                {formatCurrency(session.costUsd, currencyCode, 4)}
               </span>
             )}
           </div>

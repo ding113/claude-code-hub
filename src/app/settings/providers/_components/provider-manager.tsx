@@ -2,6 +2,7 @@
 import { ProviderList } from "./provider-list";
 import type { ProviderDisplay } from "@/types/provider";
 import type { User } from "@/types/user";
+import type { CurrencyCode } from "@/lib/utils/currency";
 
 interface ProviderManagerProps {
   providers: ProviderDisplay[];
@@ -16,12 +17,13 @@ interface ProviderManagerProps {
       recoveryMinutes: number | null;
     }
   >;
+  currencyCode?: CurrencyCode;
 }
 
-export function ProviderManager({ providers, currentUser, healthStatus }: ProviderManagerProps) {
+export function ProviderManager({ providers, currentUser, healthStatus, currencyCode = "USD" }: ProviderManagerProps) {
   return (
     <div className="space-y-4">
-      <ProviderList providers={providers} currentUser={currentUser} healthStatus={healthStatus} />
+      <ProviderList providers={providers} currentUser={currentUser} healthStatus={healthStatus} currencyCode={currencyCode} />
     </div>
   );
 }

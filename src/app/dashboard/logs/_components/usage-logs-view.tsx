@@ -11,6 +11,8 @@ import { UsageLogsTable } from "./usage-logs-table";
 import type { UsageLogsResult } from "@/repository/usage-logs";
 import type { UserDisplay } from "@/types/user";
 import type { ProviderDisplay } from "@/types/provider";
+import type { CurrencyCode } from "@/lib/utils/currency";
+import { formatCurrency } from "@/lib/utils/currency";
 
 /**
  * 将 Date 对象格式化为 datetime-local 格式的字符串
@@ -30,6 +32,7 @@ interface UsageLogsViewProps {
   users: UserDisplay[];
   providers: ProviderDisplay[];
   searchParams: { [key: string]: string | string[] | undefined };
+  currencyCode?: CurrencyCode;
 }
 
 export function UsageLogsView({
@@ -37,6 +40,7 @@ export function UsageLogsView({
   users,
   providers,
   searchParams,
+  currencyCode = "USD",
 }: UsageLogsViewProps) {
   const router = useRouter();
   const params = useSearchParams();
@@ -192,7 +196,7 @@ export function UsageLogsView({
             <CardHeader className="pb-3">
               <CardDescription>总消耗金额</CardDescription>
               <CardTitle className="text-3xl font-mono">
-                ${data.summary.totalCost.toFixed(4)}
+                {formatCurrency(data.summary.totalCost, currencyCode)}
               </CardTitle>
             </CardHeader>
           </Card>
@@ -310,6 +314,7 @@ export function UsageLogsView({
               onPageChange={handlePageChange}
               isPending={isPending}
               newLogIds={newLogIds}
+              currencyCode={currencyCode}
             />
           )}
         </CardContent>

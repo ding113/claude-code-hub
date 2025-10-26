@@ -5,13 +5,15 @@ import { KeyListHeader } from "./key-list-header";
 import { KeyList } from "./key-list";
 import type { UserDisplay } from "@/types/user";
 import type { User } from "@/types/user";
+import type { CurrencyCode } from "@/lib/utils/currency";
 
 interface UserKeyManagerProps {
   users: UserDisplay[];
   currentUser?: User;
+  currencyCode?: CurrencyCode;
 }
 
-export function UserKeyManager({ users, currentUser }: UserKeyManagerProps) {
+export function UserKeyManager({ users, currentUser, currencyCode = "USD" }: UserKeyManagerProps) {
   // 普通用户默认选择自己，管理员选择第一个用户
   const getInitialUser = () => {
     if (currentUser?.role === "user") {
@@ -30,11 +32,12 @@ export function UserKeyManager({ users, currentUser }: UserKeyManagerProps) {
     return (
       <div className="space-y-3">
         <div className="bg-card text-card-foreground border border-border rounded-xl p-4">
-          <KeyListHeader activeUser={activeUser} currentUser={currentUser} />
+          <KeyListHeader activeUser={activeUser} currentUser={currentUser} currencyCode={currencyCode} />
           <KeyList
             keys={activeUser?.keys || []}
             currentUser={currentUser}
             keyOwnerUserId={activeUser?.id || 0}
+            currencyCode={currencyCode}
           />
         </div>
       </div>
@@ -56,11 +59,12 @@ export function UserKeyManager({ users, currentUser }: UserKeyManagerProps) {
 
         {/* 右侧：当前用户的 Key 列表 */}
         <div className="md:col-span-2 bg-card text-card-foreground border border-border rounded-xl p-4">
-          <KeyListHeader activeUser={activeUser} currentUser={currentUser} />
+          <KeyListHeader activeUser={activeUser} currentUser={currentUser} currencyCode={currencyCode} />
           <KeyList
             keys={activeUser?.keys || []}
             currentUser={currentUser}
             keyOwnerUserId={activeUser?.id || 0}
+            currencyCode={currencyCode}
           />
         </div>
       </div>
