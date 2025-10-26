@@ -28,7 +28,7 @@ async function fetchStatistics(timeRange: TimeRange): Promise<UserStatisticsData
  * 统计组件包装器
  * 处理时间范围状态管理和数据获取
  */
-export function StatisticsWrapper({ initialData, currencyCode = 'USD' }: StatisticsWrapperProps) {
+export function StatisticsWrapper({ initialData, currencyCode = "USD" }: StatisticsWrapperProps) {
   const [timeRange, setTimeRange] = React.useState<TimeRange>(
     initialData?.timeRange ?? DEFAULT_TIME_RANGE
   );

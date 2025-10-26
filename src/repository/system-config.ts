@@ -77,10 +77,10 @@ function createFallbackSettings(): SystemSettings {
     id: 0,
     siteTitle: DEFAULT_SITE_TITLE,
     allowGlobalUsageView: false,
-    currencyDisplay: 'USD',
+    currencyDisplay: "USD",
     enableAutoCleanup: false,
     cleanupRetentionDays: 30,
-    cleanupSchedule: '0 2 * * *',
+    cleanupSchedule: "0 2 * * *",
     cleanupBatchSize: 10000,
     createdAt: now,
     updatedAt: now,
@@ -117,7 +117,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       .values({
         siteTitle: DEFAULT_SITE_TITLE,
         allowGlobalUsageView: false,
-        currencyDisplay: 'USD',
+        currencyDisplay: "USD",
       })
       .onConflictDoNothing()
       .returning({

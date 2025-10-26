@@ -43,21 +43,21 @@ export function AutoCleanupForm({ settings, onSuccess }: AutoCleanupFormProps) {
     defaultValues: {
       enableAutoCleanup: settings.enableAutoCleanup ?? false,
       cleanupRetentionDays: settings.cleanupRetentionDays ?? 30,
-      cleanupSchedule: settings.cleanupSchedule ?? '0 2 * * *',
+      cleanupSchedule: settings.cleanupSchedule ?? "0 2 * * *",
       cleanupBatchSize: settings.cleanupBatchSize ?? 10000,
     },
   });
 
-  const enableAutoCleanup = watch('enableAutoCleanup');
+  const enableAutoCleanup = watch("enableAutoCleanup");
 
   const onSubmit = async (data: AutoCleanupFormData) => {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch('/api/admin/system-config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
+      const response = await fetch("/api/admin/system-config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           siteTitle: settings.siteTitle,
           allowGlobalUsageView: settings.allowGlobalUsageView,
@@ -67,14 +67,14 @@ export function AutoCleanupForm({ settings, onSuccess }: AutoCleanupFormProps) {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || '保存失败');
+        throw new Error(error.error || "保存失败");
       }
 
-      toast.success('自动清理配置已保存');
+      toast.success("自动清理配置已保存");
       onSuccess?.();
     } catch (error) {
-      console.error('Save error:', error);
-      toast.error(error instanceof Error ? error.message : '保存配置失败');
+      console.error("Save error:", error);
+      toast.error(error instanceof Error ? error.message : "保存配置失败");
     } finally {
       setIsSubmitting(false);
     }
@@ -86,14 +86,12 @@ export function AutoCleanupForm({ settings, onSuccess }: AutoCleanupFormProps) {
       <div className="flex items-center justify-between">
         <div className="space-y-0.5">
           <Label htmlFor="enableAutoCleanup">启用自动清理</Label>
-          <p className="text-sm text-muted-foreground">
-            定时自动清理历史日志数据
-          </p>
+          <p className="text-sm text-muted-foreground">定时自动清理历史日志数据</p>
         </div>
         <Switch
           id="enableAutoCleanup"
           checked={enableAutoCleanup}
-          onCheckedChange={(checked) => setValue('enableAutoCleanup', checked)}
+          onCheckedChange={(checked) => setValue("enableAutoCleanup", checked)}
         />
       </div>
 
@@ -110,13 +108,11 @@ export function AutoCleanupForm({ settings, onSuccess }: AutoCleanupFormProps) {
               type="number"
               min={1}
               max={365}
-              {...register('cleanupRetentionDays', { valueAsNumber: true })}
+              {...register("cleanupRetentionDays", { valueAsNumber: true })}
               placeholder="30"
             />
             {errors.cleanupRetentionDays && (
-              <p className="text-sm text-destructive">
-                {errors.cleanupRetentionDays.message}
-              </p>
+              <p className="text-sm text-destructive">{errors.cleanupRetentionDays.message}</p>
             )}
             <p className="text-xs text-muted-foreground">
               超过此天数的日志将被自动清理（范围：1-365 天）
@@ -131,13 +127,11 @@ export function AutoCleanupForm({ settings, onSuccess }: AutoCleanupFormProps) {
             <Input
               id="cleanupSchedule"
               type="text"
-              {...register('cleanupSchedule')}
+              {...register("cleanupSchedule")}
               placeholder="0 2 * * *"
             />
             {errors.cleanupSchedule && (
-              <p className="text-sm text-destructive">
-                {errors.cleanupSchedule.message}
-              </p>
+              <p className="text-sm text-destructive">{errors.cleanupSchedule.message}</p>
             )}
             <p className="text-xs text-muted-foreground">
               Cron 表达式，默认：0 2 * * *（每天凌晨 2 点）
@@ -156,13 +150,11 @@ export function AutoCleanupForm({ settings, onSuccess }: AutoCleanupFormProps) {
               type="number"
               min={1000}
               max={100000}
-              {...register('cleanupBatchSize', { valueAsNumber: true })}
+              {...register("cleanupBatchSize", { valueAsNumber: true })}
               placeholder="10000"
             />
             {errors.cleanupBatchSize && (
-              <p className="text-sm text-destructive">
-                {errors.cleanupBatchSize.message}
-              </p>
+              <p className="text-sm text-destructive">{errors.cleanupBatchSize.message}</p>
             )}
             <p className="text-xs text-muted-foreground">
               每批删除的记录数（范围：1000-100000，推荐 10000）
@@ -179,7 +171,7 @@ export function AutoCleanupForm({ settings, onSuccess }: AutoCleanupFormProps) {
             保存中...
           </>
         ) : (
-          '保存配置'
+          "保存配置"
         )}
       </Button>
     </form>

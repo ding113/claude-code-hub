@@ -1,8 +1,8 @@
-import { NextRequest } from 'next/server';
-import { getSession } from '@/lib/auth';
-import { cleanupLogs, CleanupConditions } from '@/lib/log-cleanup/service';
-import { logger } from '@/lib/logger';
-import { z } from 'zod';
+import { NextRequest } from "next/server";
+import { getSession } from "@/lib/auth";
+import { cleanupLogs, CleanupConditions } from "@/lib/log-cleanup/service";
+import { logger } from "@/lib/logger";
+import { z } from "zod";
 
 /**
  * 清理请求参数校验 schema
@@ -13,10 +13,12 @@ const cleanupRequestSchema = z.object({
   userIds: z.array(z.number()).optional(),
   providerIds: z.array(z.number()).optional(),
   statusCodes: z.array(z.number()).optional(),
-  statusCodeRange: z.object({
-    min: z.number(),
-    max: z.number(),
-  }).optional(),
+  statusCodeRange: z
+    .object({
+      min: z.number(),
+      max: z.number(),
+    })
+    .optional(),
   onlyBlocked: z.boolean().optional(),
   dryRun: z.boolean().optional(),
 });
@@ -49,9 +51,9 @@ export async function POST(request: NextRequest) {
   try {
     // 1. 验证管理员权限
     const session = await getSession();
-    if (!session || session.user.role !== 'admin') {
-      logger.warn({ action: 'log_cleanup_unauthorized' });
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!session || session.user.role !== "admin") {
+      logger.warn({ action: "log_cleanup_unauthorized" });
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // 2. 解析请求参数
@@ -70,7 +72,7 @@ export async function POST(request: NextRequest) {
     };
 
     logger.info({
-      action: 'manual_log_cleanup_initiated',
+      action: "manual_log_cleanup_initiated",
       user: session.user.name,
       conditions,
       dryRun: validated.dryRun,
@@ -80,7 +82,7 @@ export async function POST(request: NextRequest) {
     const result = await cleanupLogs(
       conditions,
       { dryRun: validated.dryRun },
-      { type: 'manual', user: session.user.name }
+      { type: "manual", user: session.user.name }
     );
 
     return Response.json({
@@ -90,17 +92,16 @@ export async function POST(request: NextRequest) {
       durationMs: result.durationMs,
       error: result.error,
     });
-
   } catch (error) {
     logger.error({
-      action: 'manual_log_cleanup_error',
+      action: "manual_log_cleanup_error",
       error: error instanceof Error ? error.message : String(error),
     });
 
     if (error instanceof z.ZodError) {
       return Response.json(
         {
-          error: '请求参数格式错误',
+          error: "请求参数格式错误",
           details: error.issues,
         },
         { status: 400 }
@@ -109,7 +110,7 @@ export async function POST(request: NextRequest) {
 
     return Response.json(
       {
-        error: '清理日志失败',
+        error: "清理日志失败",
         details: error instanceof Error ? error.message : String(error),
       },
       { status: 500 }

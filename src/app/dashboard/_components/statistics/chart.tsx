@@ -55,7 +55,7 @@ export interface UserStatisticsChartProps {
 export function UserStatisticsChart({
   data,
   onTimeRangeChange,
-  currencyCode = 'USD',
+  currencyCode = "USD",
 }: UserStatisticsChartProps) {
   const [activeChart, setActiveChart] = React.useState<"cost" | "calls">("cost");
 

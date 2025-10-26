@@ -69,7 +69,7 @@ function getStatusIcon(status: "in_progress" | "completed" | "error", statusCode
  */
 function SessionListItem({
   session,
-  currencyCode = 'USD',
+  currencyCode = "USD",
 }: {
   session: ActiveSessionInfo;
   currencyCode?: CurrencyCode;
@@ -137,9 +137,7 @@ function SessionListItem({
             </span>
           )}
           {session.costUsd && (
-            <span className="font-medium">
-              {formatCurrency(session.costUsd, currencyCode, 4)}
-            </span>
+            <span className="font-medium">{formatCurrency(session.costUsd, currencyCode, 4)}</span>
           )}
         </div>
       </div>
@@ -156,7 +154,7 @@ interface OverviewPanelProps {
  * 左侧：4个指标卡片
  * 右侧：简洁的活跃 Session 列表
  */
-export function OverviewPanel({ currencyCode = 'USD' }: OverviewPanelProps) {
+export function OverviewPanel({ currencyCode = "USD" }: OverviewPanelProps) {
   const router = useRouter();
 
   const { data, isLoading } = useQuery<OverviewData, Error>({

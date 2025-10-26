@@ -206,7 +206,10 @@ export const UpdateSystemSettingsSchema = z.object({
   allowGlobalUsageView: z.boolean(),
   currencyDisplay: z
     .enum(
-      Object.keys(CURRENCY_CONFIG) as [keyof typeof CURRENCY_CONFIG, ...Array<keyof typeof CURRENCY_CONFIG>],
+      Object.keys(CURRENCY_CONFIG) as [
+        keyof typeof CURRENCY_CONFIG,
+        ...Array<keyof typeof CURRENCY_CONFIG>,
+      ],
       { message: "不支持的货币类型" }
     )
     .optional(),

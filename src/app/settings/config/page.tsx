@@ -26,10 +26,7 @@ export default async function SettingsConfigPage() {
         />
       </Section>
 
-      <Section
-        title="自动日志清理"
-        description="定时自动清理历史日志数据，释放数据库存储空间。"
-      >
+      <Section title="自动日志清理" description="定时自动清理历史日志数据，释放数据库存储空间。">
         <AutoCleanupForm settings={settings} />
       </Section>
     </>

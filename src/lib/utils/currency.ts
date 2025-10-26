@@ -14,7 +14,7 @@ export const COST_SCALE = 15;
 /**
  * 支持的货币代码
  */
-export type CurrencyCode = 'USD' | 'CNY' | 'EUR' | 'JPY' | 'GBP' | 'HKD' | 'TWD' | 'KRW' | 'SGD';
+export type CurrencyCode = "USD" | "CNY" | "EUR" | "JPY" | "GBP" | "HKD" | "TWD" | "KRW" | "SGD";
 
 /**
  * 货币配置
@@ -22,20 +22,23 @@ export type CurrencyCode = 'USD' | 'CNY' | 'EUR' | 'JPY' | 'GBP' | 'HKD' | 'TWD'
  * - name: 货币名称
  * - locale: 地区代码（用于数字格式化）
  */
-export const CURRENCY_CONFIG: Record<CurrencyCode, {
-  symbol: string;
-  name: string;
-  locale: string;
-}> = {
-  USD: { symbol: '$', name: '美元', locale: 'en-US' },
-  CNY: { symbol: '¥', name: '人民币', locale: 'zh-CN' },
-  EUR: { symbol: '€', name: '欧元', locale: 'de-DE' },
-  JPY: { symbol: '¥', name: '日元', locale: 'ja-JP' },
-  GBP: { symbol: '£', name: '英镑', locale: 'en-GB' },
-  HKD: { symbol: 'HK$', name: '港币', locale: 'zh-HK' },
-  TWD: { symbol: 'NT$', name: '新台币', locale: 'zh-TW' },
-  KRW: { symbol: '₩', name: '韩元', locale: 'ko-KR' },
-  SGD: { symbol: 'S$', name: '新加坡元', locale: 'en-SG' },
+export const CURRENCY_CONFIG: Record<
+  CurrencyCode,
+  {
+    symbol: string;
+    name: string;
+    locale: string;
+  }
+> = {
+  USD: { symbol: "$", name: "美元", locale: "en-US" },
+  CNY: { symbol: "¥", name: "人民币", locale: "zh-CN" },
+  EUR: { symbol: "€", name: "欧元", locale: "de-DE" },
+  JPY: { symbol: "¥", name: "日元", locale: "ja-JP" },
+  GBP: { symbol: "£", name: "英镑", locale: "en-GB" },
+  HKD: { symbol: "HK$", name: "港币", locale: "zh-HK" },
+  TWD: { symbol: "NT$", name: "新台币", locale: "zh-TW" },
+  KRW: { symbol: "₩", name: "韩元", locale: "ko-KR" },
+  SGD: { symbol: "S$", name: "新加坡元", locale: "en-SG" },
 } as const;
 
 export type DecimalInput = Numeric | null | undefined;
@@ -92,16 +95,19 @@ export function sumCosts(values: DecimalInput[]): Decimal {
  */
 export function formatCurrency(
   value: DecimalInput,
-  currencyCode: CurrencyCode = 'USD',
+  currencyCode: CurrencyCode = "USD",
   fractionDigits = 2
 ): string {
   const decimal = toDecimal(value) ?? new Decimal(0);
   const config = CURRENCY_CONFIG[currencyCode];
 
-  const formatted = decimal.toDecimalPlaces(fractionDigits).toNumber().toLocaleString(config.locale, {
-    minimumFractionDigits: fractionDigits,
-    maximumFractionDigits: fractionDigits,
-  });
+  const formatted = decimal
+    .toDecimalPlaces(fractionDigits)
+    .toNumber()
+    .toLocaleString(config.locale, {
+      minimumFractionDigits: fractionDigits,
+      maximumFractionDigits: fractionDigits,
+    });
 
   return `${config.symbol}${formatted}`;
 }

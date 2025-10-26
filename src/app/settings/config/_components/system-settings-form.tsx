@@ -106,7 +106,8 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">
-          修改后，系统所有页面和 API 接口的金额显示将使用对应的货币符号（仅修改符号，不进行汇率转换）。
+          修改后，系统所有页面和 API
+          接口的金额显示将使用对应的货币符号（仅修改符号，不进行汇率转换）。
         </p>
       </div>
 
