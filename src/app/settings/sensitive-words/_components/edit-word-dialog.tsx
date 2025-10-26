@@ -68,7 +68,7 @@ export function EditWordDialog({ word, open, onOpenChange }: EditWordDialogProps
       } else {
         toast.error(result.error);
       }
-    } catch (error) {
+    } catch {
       toast.error("更新敏感词失败");
     } finally {
       setIsSubmitting(false);

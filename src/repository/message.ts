@@ -1,7 +1,6 @@
 "use server";
 
 import { db } from "@/drizzle/db";
-import { logger } from "@/lib/logger";
 import { messageRequest, users, keys as keysTable, providers } from "@/drizzle/schema";
 import { eq, isNull, and, desc, sql } from "drizzle-orm";
 import type { MessageRequest, CreateMessageRequestData } from "@/types/message";

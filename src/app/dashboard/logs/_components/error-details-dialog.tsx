@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, ArrowRight, CheckCircle, ChevronRight, ExternalLink, Loader2, Monitor } from "lucide-react";
+import { AlertCircle, ArrowRight, CheckCircle, ExternalLink, Loader2, Monitor } from "lucide-react";
 import type { ProviderChainItem } from "@/types/message";
 import { hasSessionMessages } from "@/actions/active-sessions";
 import { formatProviderTimeline } from "@/lib/utils/provider-chain-formatter";
@@ -30,22 +30,8 @@ interface ErrorDetailsDialogProps {
   messagesCount?: number | null; // Messages 数量
 }
 
-const reasonLabels: Record<string, string> = {
-  session_reuse: "会话复用",
-  initial_selection: "首次选择",
-  concurrent_limit_failed: "并发限制",
-  retry_success: "重试成功",
-  retry_failed: "重试失败",
-};
-
 const blockedByLabels: Record<string, string> = {
   sensitive_word: '敏感词拦截',
-};
-
-const circuitStateLabels: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
-  closed: { label: '正常', variant: 'default' },
-  open: { label: '熔断', variant: 'destructive' },
-  'half-open': { label: '半开', variant: 'secondary' },
 };
 
 export function ErrorDetailsDialog({
@@ -74,7 +60,7 @@ export function ErrorDetailsDialog({
   if (blockedReason) {
     try {
       parsedBlockedReason = JSON.parse(blockedReason);
-    } catch (e) {
+    } catch {
       // 解析失败，忽略
     }
   }

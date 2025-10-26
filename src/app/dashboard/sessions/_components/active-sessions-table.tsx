@@ -35,24 +35,6 @@ function formatDuration(durationMs: number | undefined): string {
   }
 }
 
-function getStatusBadge(status: "in_progress" | "completed" | "error", statusCode?: number) {
-  if (status === "in_progress") {
-    return (
-      <Badge variant="default" className="bg-blue-500">
-        进行中
-      </Badge>
-    );
-  } else if (status === "error" || (statusCode && statusCode >= 400)) {
-    return <Badge variant="destructive">错误</Badge>;
-  } else {
-    return (
-      <Badge variant="outline" className="text-green-600 border-green-600">
-        完成
-      </Badge>
-    );
-  }
-}
-
 export function ActiveSessionsTable({
   sessions,
   isLoading,

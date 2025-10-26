@@ -68,7 +68,6 @@ ${first.name} (优先级 ${first.priority}, 权重 ${first.weight})`;
 
     // 优先级候选
     if (ctx.candidatesAtPriority && ctx.candidatesAtPriority.length > 0) {
-      const names = ctx.candidatesAtPriority.map((c) => c.name).join("、");
       desc += `优先级${ctx.selectedPriority}候选${ctx.candidatesAtPriority.length}个，`;
       desc += `加权随机选择${first.name}`;
     }

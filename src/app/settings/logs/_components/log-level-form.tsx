@@ -61,7 +61,7 @@ export function LogLevelForm() {
 
         setCurrentLevel(selectedLevel);
         toast.success(`日志级别已设置为: ${selectedLevel.toUpperCase()}`);
-      } catch (error) {
+      } catch {
         toast.error('设置日志级别失败');
       }
     });

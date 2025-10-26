@@ -1,5 +1,4 @@
 import type { ProxySession } from "./session";
-import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit";
 
 export class ProxyRateLimitGuard {

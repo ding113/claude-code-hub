@@ -59,7 +59,7 @@ export function AddWordDialog() {
       } else {
         toast.error(result.error);
       }
-    } catch (error) {
+    } catch {
       toast.error("创建敏感词失败");
     } finally {
       setIsSubmitting(false);

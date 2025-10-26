@@ -11,7 +11,6 @@ import {
   index
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
-import { logger } from '@/lib/logger';
 
 // Users table
 export const users = pgTable('users', {

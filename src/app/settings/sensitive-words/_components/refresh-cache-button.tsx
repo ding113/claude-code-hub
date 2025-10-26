@@ -31,7 +31,7 @@ export function RefreshCacheButton({ stats }: RefreshCacheButtonProps) {
       } else {
         toast.error(result.error);
       }
-    } catch (error) {
+    } catch {
       toast.error("刷新缓存失败");
     } finally {
       setIsRefreshing(false);

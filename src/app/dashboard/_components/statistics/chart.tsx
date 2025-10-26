@@ -466,7 +466,7 @@ export function UserStatisticsChart({
                 );
               }}
             />
-            {visibleUsers.map((user, index) => {
+            {visibleUsers.map((user) => {
               const originalIndex = data.users.findIndex((u) => u.id === user.id);
               const color = getUserColor(originalIndex);
               return (

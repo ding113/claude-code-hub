@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { logger } from "@/lib/logger";
 
 /**
  * 环境变量验证schema

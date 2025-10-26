@@ -4,7 +4,7 @@ import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, Copy, Download, Check, Monitor, AlertCircle, Hash } from "lucide-react";
+import { ArrowLeft, Copy, Download, Check, Monitor, Hash } from "lucide-react";
 import { getSessionDetails } from "@/actions/active-sessions";
 import { useState, useEffect } from "react";
 import { Section } from "@/components/section";

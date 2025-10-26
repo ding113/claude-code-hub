@@ -62,7 +62,7 @@ export async function createSensitiveWordAction(data: {
     if (data.matchType === "regex") {
       try {
         new RegExp(data.word);
-      } catch (error) {
+      } catch {
         return {
           ok: false,
           error: "无效的正则表达式",
@@ -121,7 +121,7 @@ export async function updateSensitiveWordAction(
     if (updates.word && updates.matchType === "regex") {
       try {
         new RegExp(updates.word);
-      } catch (error) {
+      } catch {
         return {
           ok: false,
           error: "无效的正则表达式",

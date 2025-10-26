@@ -210,7 +210,7 @@ export class SessionManager {
       logger.debug("SessionManager: Using client-provided session", { sessionId: clientSessionId });
       // 刷新 TTL（滑动窗口）
       if (redis && redis.status === "ready") {
-        await this.refreshSessionTTL(clientSessionId, keyId).catch((err) => {
+        await this.refreshSessionTTL(clientSessionId).catch((err) => {
           logger.error("SessionManager: Failed to refresh TTL", { error: err });
         });
       }
@@ -243,7 +243,7 @@ export class SessionManager {
 
         if (existingSessionId) {
           // 找到已有 session，刷新 TTL
-          await this.refreshSessionTTL(existingSessionId, keyId);
+          await this.refreshSessionTTL(existingSessionId);
           logger.trace("SessionManager: Reusing session via hash", {
             sessionId: existingSessionId,
             hash: contentHash,
@@ -304,7 +304,7 @@ export class SessionManager {
   /**
    * 刷新 session TTL（滑动窗口）
    */
-  private static async refreshSessionTTL(sessionId: string, _keyId: number): Promise<void> {
+  private static async refreshSessionTTL(sessionId: string): Promise<void> {
     const redis = getRedisClient();
     if (!redis || redis.status !== "ready") return;
 
