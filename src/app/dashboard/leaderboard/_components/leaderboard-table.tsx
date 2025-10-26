@@ -96,7 +96,9 @@ export function LeaderboardTable({ data, period }: LeaderboardTableProps) {
                       {entry.totalTokens.toLocaleString()}
                     </TableCell>
                     <TableCell className="text-right font-mono font-semibold">
-                      {"totalCostFormatted" in entry ? (entry as { totalCostFormatted: string }).totalCostFormatted : entry.totalCost}
+                      {"totalCostFormatted" in entry
+                        ? (entry as { totalCostFormatted: string }).totalCostFormatted
+                        : entry.totalCost}
                     </TableCell>
                   </TableRow>
                 );
