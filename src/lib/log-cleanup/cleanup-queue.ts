@@ -12,9 +12,7 @@ import { getSystemSettings } from "@/repository/system-config";
 export const cleanupQueue = new Queue("log-cleanup", {
   redis: {
     // 使用 REDIS_URL 环境变量（统一配置）
-    ...(process.env.REDIS_URL
-      ? { url: process.env.REDIS_URL }
-      : { host: "localhost", port: 6379 }),
+    ...(process.env.REDIS_URL ? { url: process.env.REDIS_URL } : { host: "localhost", port: 6379 }),
     // ioredis 快速失败配置
     maxRetriesPerRequest: 3, // 最多重试 3 次
     enableOfflineQueue: false, // 快速失败，不排队
