@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
-import { findDailyLeaderboard, findMonthlyLeaderboard } from "@/repository/leaderboard";
+import { getLeaderboardWithCache } from "@/lib/redis";
 import { getSystemSettings } from "@/repository/system-config";
 import { formatCurrency } from "@/lib/utils";
-import { unstable_cache } from "next/cache";
 
 /**
  * 获取排行榜数据
  * GET /api/leaderboard?period=daily|monthly
  *
  * 无需认证，公开访问
- * 缓存时间：5 分钟
+ * 实时计算 + Redis 乐观缓存（60 秒 TTL）
  */
 export async function GET(request: NextRequest) {
   try {
@@ -28,37 +27,18 @@ export async function GET(request: NextRequest) {
     // 获取系统配置（货币显示单位）
     const systemSettings = await getSystemSettings();
 
-    // 生成缓存 key（包含日期和货币配置以确保每天/每月/货币变化时自动刷新）
-    const now = new Date();
-    const cacheKey =
-      period === "daily"
-        ? `leaderboard:daily:${now.toISOString().split("T")[0]}:${systemSettings.currencyDisplay}`
-        : `leaderboard:monthly:${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}:${systemSettings.currencyDisplay}`;
+    // 使用 Redis 乐观缓存获取数据
+    const rawData = await getLeaderboardWithCache(period, systemSettings.currencyDisplay);
 
-    // 使用 Next.js unstable_cache 进行缓存
-    const getCachedLeaderboard = unstable_cache(
-      async () => {
-        const rawData =
-          period === "daily" ? await findDailyLeaderboard() : await findMonthlyLeaderboard();
-
-        // 格式化金额字段
-        return rawData.map((entry) => ({
-          ...entry,
-          totalCostFormatted: formatCurrency(entry.totalCost, systemSettings.currencyDisplay),
-        }));
-      },
-      [cacheKey],
-      {
-        revalidate: 300, // 5 分钟缓存
-        tags: [`leaderboard-${period}`],
-      }
-    );
-
-    const data = await getCachedLeaderboard();
+    // 格式化金额字段
+    const data = rawData.map((entry) => ({
+      ...entry,
+      totalCostFormatted: formatCurrency(entry.totalCost, systemSettings.currencyDisplay),
+    }));
 
     return NextResponse.json(data, {
       headers: {
-        "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
+        "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120",
       },
     });
   } catch (error) {
