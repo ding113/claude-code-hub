@@ -33,15 +33,17 @@ export async function findLatestPriceByModel(modelName: string): Promise<ModelPr
  */
 export async function findAllLatestPrices(): Promise<ModelPrice[]> {
   const query = sql`
-    WITH latest_prices AS (
-      SELECT
-        model_name,
-        MAX(created_at) as max_created_at
-      FROM model_prices
-      WHERE model_name ILIKE 'claude-%'
-      GROUP BY model_name
+    WITH used_models AS (
+      SELECT DISTINCT LOWER(model) AS model
+      FROM message_request
+      WHERE deleted_at IS NULL
+        AND model IS NOT NULL
+        AND model != ''
     ),
-    latest_records AS (
+    usage_stats AS (
+      SELECT COUNT(*) AS used_count FROM used_models
+    ),
+    latest_prices AS (
       SELECT
         mp.id,
         mp.model_name,
@@ -50,19 +52,24 @@ export async function findAllLatestPrices(): Promise<ModelPrice[]> {
         mp.updated_at,
         ROW_NUMBER() OVER (PARTITION BY mp.model_name ORDER BY mp.id DESC) as rn
       FROM model_prices mp
-      INNER JOIN latest_prices lp
-        ON mp.model_name = lp.model_name
-        AND mp.created_at = lp.max_created_at
     )
     SELECT
-      id,
-      model_name as "modelName",
-      price_data as "priceData",
-      created_at as "createdAt",
-      updated_at as "updatedAt"
-    FROM latest_records
-    WHERE rn = 1
-    ORDER BY model_name
+      lp.id,
+      lp.model_name AS "modelName",
+      lp.price_data AS "priceData",
+      lp.created_at AS "createdAt",
+      lp.updated_at AS "updatedAt"
+    FROM latest_prices lp
+    CROSS JOIN usage_stats us
+    WHERE lp.rn = 1
+      AND (
+        (us.used_count = 0 AND lp.model_name ILIKE '%claude%')
+        OR (us.used_count > 0 AND EXISTS (
+          SELECT 1 FROM used_models um
+          WHERE um.model = LOWER(lp.model_name)
+        ))
+      )
+    ORDER BY lp.model_name
   `;
 
   const result = await db.execute(query);

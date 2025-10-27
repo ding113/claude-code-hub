@@ -54,7 +54,7 @@ export async function uploadPriceTable(
     }
 
     const entries = Object.entries(priceTable).filter(([modelName]) =>
-      typeof modelName === "string" && modelName.toLowerCase().startsWith("claude-")
+      typeof modelName === "string" && modelName.length > 0
     );
 
     const result: PriceUpdateResult = {
@@ -108,7 +108,8 @@ export async function uploadPriceTable(
 }
 
 /**
- * 获取所有模型的最新价格，仅包含 claude 系列
+ * 获取所有模型的最新价格
+ * 如果尚无调用记录，默认返回包含 “claude” 的模型
  */
 export async function getModelPrices(): Promise<ModelPrice[]> {
   try {
