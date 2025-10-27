@@ -258,6 +258,7 @@ export function transformCodexStreamResponseToOpenAI(
       // → finish_reason + usage + [DONE]
       const response = data.response as Record<string, unknown> | undefined;
       const usage = response?.usage as Record<string, unknown> | undefined;
+      const usagePayload = buildUsagePayload(usage);
 
       const finishReason = codexState.hasToolCall ? "tool_calls" : "stop";
 
@@ -273,22 +274,7 @@ export function transformCodexStreamResponseToOpenAI(
             finish_reason: finishReason,
           },
         ],
-        usage: {
-          prompt_tokens: (usage?.input_tokens as number) || 0,
-          completion_tokens: (usage?.output_tokens as number) || 0,
-          total_tokens:
-            (usage?.total_tokens as number) ||
-            ((usage?.input_tokens as number) || 0) + ((usage?.output_tokens as number) || 0),
-          ...(usage &&
-          (usage.output_tokens_details as Record<string, unknown> | undefined)?.reasoning_tokens
-            ? {
-                completion_tokens_details: {
-                  reasoning_tokens: (usage.output_tokens_details as Record<string, unknown>)
-                    .reasoning_tokens as number,
-                },
-              }
-            : {}),
-        },
+        usage: usagePayload,
       });
 
       // 最后发送 [DONE]
@@ -447,22 +433,7 @@ export function transformCodexNonStreamResponseToOpenAI(
 
   // 设置 usage
   const usage = responseData.usage as Record<string, unknown> | undefined;
-  openaiResponse.usage = {
-    prompt_tokens: (usage?.input_tokens as number) || 0,
-    completion_tokens: (usage?.output_tokens as number) || 0,
-    total_tokens:
-      (usage?.total_tokens as number) ||
-      ((usage?.input_tokens as number) || 0) + ((usage?.output_tokens as number) || 0),
-    ...(usage &&
-    (usage.output_tokens_details as Record<string, unknown> | undefined)?.reasoning_tokens
-      ? {
-          completion_tokens_details: {
-            reasoning_tokens: (usage.output_tokens_details as Record<string, unknown>)
-              .reasoning_tokens as number,
-          },
-        }
-      : {}),
-  };
+  openaiResponse.usage = buildUsagePayload(usage);
 
   logger.debug("[Codex→OpenAI] Non-stream response transformation completed", {
     hasContent: !!contentText,
@@ -472,4 +443,50 @@ export function transformCodexNonStreamResponseToOpenAI(
   });
 
   return openaiResponse;
+}
+
+function buildUsagePayload(usage?: Record<string, unknown>): Record<string, unknown> {
+  const inputTokens = (usage?.input_tokens as number) || 0;
+  const outputTokens = (usage?.output_tokens as number) || 0;
+  const totalTokens =
+    (usage?.total_tokens as number) || inputTokens + outputTokens;
+
+  const payload: Record<string, unknown> = {
+    prompt_tokens: inputTokens,
+    completion_tokens: outputTokens,
+    total_tokens: totalTokens,
+  };
+
+  const outputTokenDetails = usage?.output_tokens_details as Record<string, unknown> | undefined;
+  if (outputTokenDetails && typeof outputTokenDetails.reasoning_tokens === "number") {
+    payload.completion_tokens_details = {
+      reasoning_tokens: outputTokenDetails.reasoning_tokens,
+    };
+  }
+
+  if (typeof usage?.cache_creation_input_tokens === "number") {
+    payload.cache_creation_input_tokens = usage.cache_creation_input_tokens;
+  }
+
+  if (typeof usage?.cache_read_input_tokens === "number") {
+    payload.cache_read_input_tokens = usage.cache_read_input_tokens;
+  }
+
+  const cacheCreationDetails =
+    (usage?.cache_creation_input_token_details as Record<string, unknown>) ||
+    (usage?.cache_creation_input_tokens_details as Record<string, unknown>) ||
+    undefined;
+  if (cacheCreationDetails) {
+    payload.cache_creation_input_token_details = cacheCreationDetails;
+  }
+
+  const cacheReadDetails =
+    (usage?.cache_read_input_token_details as Record<string, unknown>) ||
+    (usage?.cache_read_input_tokens_details as Record<string, unknown>) ||
+    undefined;
+  if (cacheReadDetails) {
+    payload.cache_read_input_token_details = cacheReadDetails;
+  }
+
+  return payload;
 }
