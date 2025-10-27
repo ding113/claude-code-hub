@@ -1,0 +1,172 @@
+name: Claude CI Auto-Fix
+
+# 当 CI 失败时自动触发修复
+on:
+  workflow_run:
+    # 指定要监听的 CI Workflow 名称（根据你的项目调整）
+    workflows: ["CI", "Test", "Build", "Lint"]
+    types:
+      - completed
+
+permissions:
+  contents: write          # 创建分支和提交代码
+  pull-requests: write     # 创建修复 PR
+  actions: read            # 读取 CI 日志
+  issues: write            # 评论通知
+  id-token: write          # OIDC 认证
+
+jobs:
+  auto-fix:
+    # 触发条件：
+    # 1. CI 失败
+    # 2. 关联到 PR
+    # 3. 不是 Claude 自己创建的修复分支（避免循环）
+    if: |
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.pull_requests[0] &&
+      !startsWith(github.event.workflow_run.head_branch, 'claude-ci-fix-')
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+          fetch-depth: 0
+
+      - name: Get CI failure details
+        id: failure_details
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // 获取失败的 Workflow Run 详情
+            const run = await github.rest.actions.getWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: ${{ github.event.workflow_run.id }}
+            });
+
+            // 获取所有 Jobs
+            const jobs = await github.rest.actions.listJobsForWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: ${{ github.event.workflow_run.id }}
+            });
+
+            // 筛选失败的 Jobs
+            const failedJobs = jobs.data.jobs.filter(job => job.conclusion === 'failure');
+
+            // 获取失败 Jobs 的日志
+            let errorLogs = [];
+            for (const job of failedJobs) {
+              try {
+                const logs = await github.rest.actions.downloadJobLogsForWorkflowRun({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  job_id: job.id
+                });
+
+                // 提取最后 5000 行日志（避免过长）
+                const logLines = logs.data.split('\n');
+                const relevantLogs = logLines.slice(-5000).join('\n');
+
+                errorLogs.push({
+                  jobName: job.name,
+                  logs: relevantLogs
+                });
+              } catch (error) {
+                console.log(`Failed to get logs for job ${job.name}: ${error.message}`);
+              }
+            }
+
+            return {
+              runUrl: run.data.html_url,
+              workflowName: run.data.name,
+              failedJobs: failedJobs.map(j => j.name),
+              errorLogs: errorLogs,
+              prNumber: ${{ github.event.workflow_run.pull_requests[0].number }},
+              headBranch: '${{ github.event.workflow_run.head_branch }}'
+            };
+
+      - name: Fix CI failures with Claude
+        uses: anthropics/claude-code-action@v1
+        env:
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+          prompt: |
+            REPO: ${{ github.repository }}
+            CI WORKFLOW: ${{ fromJSON(steps.failure_details.outputs.result).workflowName }}
+            FAILED RUN: ${{ fromJSON(steps.failure_details.outputs.result).runUrl }}
+            PR NUMBER: ${{ fromJSON(steps.failure_details.outputs.result).prNumber }}
+            BRANCH: ${{ fromJSON(steps.failure_details.outputs.result).headBranch }}
+            FAILED JOBS: ${{ join(fromJSON(steps.failure_details.outputs.result).failedJobs, ', ') }}
+
+            ## 任务：自动修复 CI 失败
+
+            CI 构建失败了，请分析错误日志并尝试自动修复。
+
+            ### 错误日志：
+            ```
+            ${{ toJSON(fromJSON(steps.failure_details.outputs.result).errorLogs) }}
+            ```
+
+            ### 修复策略：
+
+            1. **分析错误类型**：
+               - ESLint/Prettier 错误 → 运行 `npm run lint:fix` 或 `pnpm lint:fix`
+               - TypeScript 类型错误 → 修复类型定义
+               - 测试失败 → 分析并修复测试或代码
+               - 构建失败 → 检查依赖和配置
+
+            2. **执行修复**：
+               - 使用 Read 工具查看相关文件
+               - 使用 Edit 工具修复问题
+               - 如果是格式化问题，运行相应的 lint/format 命令
+               - 使用 Bash(npm:*) 或 Bash(pnpm:*) 运行修复命令
+
+            3. **验证修复**：
+               - 如果可能，运行相关的测试或 lint 命令验证修复
+               - 确保修复不会引入新问题
+
+            4. **提交修复**：
+               - 使用 git 命令创建新分支：`claude-ci-fix-${{ fromJSON(steps.failure_details.outputs.result).prNumber }}-${{ github.run_id }}`
+               - 提交修复：`git add . && git commit -m "fix: auto-fix CI failures in ${{ fromJSON(steps.failure_details.outputs.result).workflowName }}"`
+               - 推送分支：`git push origin <branch-name>`
+               - 使用 `gh pr create` 创建 PR，指向原始分支
+
+            5. **PR 描述模板**：
+               ```
+               ## 🤖 自动修复 CI 失败
+
+               此 PR 由 Claude AI 自动创建，用于修复 CI 失败。
+
+               **原始 PR**: #${{ fromJSON(steps.failure_details.outputs.result).prNumber }}
+               **失败的 CI**: [${{ fromJSON(steps.failure_details.outputs.result).workflowName }}](${{ fromJSON(steps.failure_details.outputs.result).runUrl }})
+               **失败的 Jobs**: ${{ join(fromJSON(steps.failure_details.outputs.result).failedJobs, ', ') }}
+
+               ### 修复内容：
+               [描述你做了什么修复]
+
+               ### 验证：
+               [说明如何验证修复是否有效]
+
+               ---
+               🤖 由 Claude Code 自动生成
+               ```
+
+            ### 重要提示：
+            - 只修复明显且安全的问题（lint、格式化、简单类型错误）
+            - 如果错误复杂或需要业务逻辑判断，在 PR 中说明无法自动修复
+            - 确保不会破坏现有功能
+            - 所有修复都应该是保守和安全的
+
+          claude_args: |
+            --max-turns 999
+            --allowedTools "Read,Write,Edit,Bash(git:*),Bash(gh:*),Bash(npm:*),Bash(pnpm:*),Bash(yarn:*),Bash(bun:*),Bash(npx:*)"
+
+          use_commit_signing: true
+          track_progress: true  # CI 修复需要进度追踪
