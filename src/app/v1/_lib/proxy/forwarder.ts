@@ -299,7 +299,7 @@ export class ProxyForwarder {
     }
 
     const headerProcessor = HeaderProcessor.createForProxy({
-      blacklist: [],
+      blacklist: ["content-length"], // 删除原始 Content-Length，让 fetch 自动计算（转换请求后长度变化）
       overrides,
     });
 
