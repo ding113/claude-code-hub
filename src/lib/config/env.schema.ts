@@ -26,6 +26,7 @@ export const EnvSchema = z.object({
   DEBUG_MODE: z.coerce.boolean().default(false),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   TZ: z.string().default("Asia/Shanghai"),
+  ENABLE_MULTI_PROVIDER_TYPES: z.coerce.boolean().default(false),
 });
 
 /**

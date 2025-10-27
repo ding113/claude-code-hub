@@ -5,7 +5,7 @@ on:
   pull_request:
     branches:
       - main # 稳定版本分支
-      - dev  # 开发版本分支
+      - dev # 开发版本分支
     types: [opened, synchronize, reopened]
 
 env:

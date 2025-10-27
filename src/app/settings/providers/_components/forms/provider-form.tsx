@@ -268,13 +268,22 @@ export function ProviderForm({ mode, onSuccess, provider }: ProviderFormProps) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="claude">Claude (Anthropic Messages API)</SelectItem>
-                <SelectItem value="codex">Codex (Response API)</SelectItem>
-                <SelectItem value="gemini-cli">Gemini CLI</SelectItem>
-                <SelectItem value="openai-compatible">OpenAI Compatible</SelectItem>
+                <SelectItem value="codex" disabled>
+                  Codex (Response API) - 功能开发中
+                </SelectItem>
+                <SelectItem value="gemini-cli" disabled>
+                  Gemini CLI - 功能开发中
+                </SelectItem>
+                <SelectItem value="openai-compatible" disabled>
+                  OpenAI Compatible - 功能开发中
+                </SelectItem>
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              选择供应商的 API 格式类型。系统将自动进行格式转换，支持不同格式之间的互相调用。
+              选择供应商的 API 格式类型。
+              <span className="text-amber-600 ml-1">
+                注：除 Claude 外的其他类型功能正在开发中，暂不可用
+              </span>
             </p>
           </div>
 
