@@ -2,16 +2,17 @@
 
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
-import { Skeleton } from "@/components/ui/skeleton";
-
-/**
- * 文档目录项
- */
-interface TocItem {
-  id: string;
-  text: string;
-  level: number;
-}
+import { Menu } from "lucide-react";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { TocNav, type TocItem } from "./_components/toc-nav";
+import { QuickLinks } from "./_components/quick-links";
 
 const headingClasses = {
   h2: "scroll-m-20 text-2xl font-semibold leading-snug text-foreground",
@@ -28,7 +29,10 @@ function CodeBlock({ code, language }: CodeBlockProps) {
   return (
     <pre
       data-language={language}
-      className="group relative my-5 overflow-x-auto rounded-md bg-black px-4 py-5 font-mono text-[13px] text-white"
+      className="group relative my-5 overflow-x-auto rounded-md bg-black px-3 py-4 sm:px-4 sm:py-5 font-mono text-[11px] sm:text-[13px] text-white"
+      role="region"
+      aria-label={`代码示例 - ${language}`}
+      tabIndex={0}
     >
       <code className="block whitespace-pre leading-relaxed">{code.trim()}</code>
     </pre>
@@ -1017,6 +1021,8 @@ curl -I ${resolvedOrigin}`}
 /**
  * 文档页面
  * 使用客户端组件渲染静态文档内容，并提供目录导航
+ * 支持桌面端（sticky sidebar）和移动端（drawer）
+ * 提供完整的无障碍支持（ARIA 标签、键盘导航、skip links）
  */
 export default function UsageDocPage() {
   const [activeId, setActiveId] = useState<string>("");
@@ -1026,6 +1032,7 @@ export default function UsageDocPage() {
     () => (typeof window !== "undefined" && window.location.origin) || ""
   );
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   useEffect(() => {
     setServiceOrigin(window.location.origin);
@@ -1082,82 +1089,102 @@ export default function UsageDocPage() {
         top: offsetTop,
         behavior: "smooth",
       });
+      // 移动端点击后关闭 Sheet
+      setSheetOpen(false);
     }
   };
 
   return (
-    <div className="relative flex gap-8">
-      {/* 左侧主文档 */}
-      <div className="flex-1">
-        {/* 文档容器 */}
-        <div className="relative bg-card rounded-xl shadow-sm border p-8 md:p-12">
-          {/* 文档内容 */}
-          <UsageDocContent origin={serviceOrigin} />
-        </div>
-      </div>
+    <>
+      {/* Skip Links - 无障碍支持 */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+      >
+        跳转到主要内容
+      </a>
+      <a
+        href="#toc-navigation"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-40 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+      >
+        跳转到目录导航
+      </a>
 
-      {/* 右侧目录导航 */}
-      <aside className="hidden lg:block w-64 shrink-0">
-        <div className="sticky top-24 space-y-4">
-          <div className="bg-card rounded-lg border p-4">
-            <h4 className="font-semibold text-sm mb-3">本页导航</h4>
-            <nav className="space-y-1">
-              {!tocReady && (
-                <div className="space-y-2">
-                  {Array.from({ length: 5 }).map((_, index) => (
-                    <Skeleton key={index} className="h-5 w-full" />
-                  ))}
-                </div>
-              )}
-              {tocReady && tocItems.length === 0 && (
-                <p className="text-xs text-muted-foreground">本页暂无可用章节</p>
-              )}
-              {tocReady &&
-                tocItems.length > 0 &&
-                tocItems.map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => scrollToSection(item.id)}
-                    className={cn(
-                      "block w-full text-left text-sm px-3 py-1.5 rounded-md transition-colors",
-                      item.level === 3 && "pl-6 text-xs",
-                      activeId === item.id
-                        ? "bg-primary/10 text-primary font-medium"
-                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                    )}
-                  >
-                    {item.text}
-                  </button>
-                ))}
-            </nav>
+      <div className="relative flex gap-6 lg:gap-8">
+        {/* 左侧主文档 */}
+        <div className="flex-1 min-w-0">
+          {/* 文档容器 */}
+          <div className="relative bg-card rounded-xl shadow-sm border p-4 sm:p-6 md:p-8 lg:p-12">
+            {/* 文档内容 */}
+            <main id="main-content" role="main" aria-label="文档内容">
+              <UsageDocContent origin={serviceOrigin} />
+            </main>
           </div>
+        </div>
 
-          {/* 快速操作 */}
-          <div className="bg-card rounded-lg border p-4">
-            <h4 className="font-semibold text-sm mb-3">快速链接</h4>
-            <div className="space-y-2">
-              {isLoggedIn && (
-                <a
-                  href="/dashboard"
-                  className="block text-sm text-muted-foreground hover:text-primary transition-colors"
-                >
-                  返回仪表盘
-                </a>
-              )}
-              <a
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault();
-                  window.scrollTo({ top: 0, behavior: "smooth" });
-                }}
-                className="block text-sm text-muted-foreground hover:text-primary transition-colors"
-              >
-                回到顶部
-              </a>
+        {/* 右侧目录导航 - 桌面端 */}
+        <aside
+          id="toc-navigation"
+          className="hidden lg:block w-64 shrink-0"
+          aria-label="页面导航"
+        >
+          <div className="sticky top-24 space-y-4">
+            <div className="bg-card rounded-lg border p-4">
+              <h4 className="font-semibold text-sm mb-3">本页导航</h4>
+              <TocNav
+                tocItems={tocItems}
+                activeId={activeId}
+                tocReady={tocReady}
+                onItemClick={scrollToSection}
+              />
+            </div>
+
+            {/* 快速操作 */}
+            <div className="bg-card rounded-lg border p-4">
+              <h4 className="font-semibold text-sm mb-3">快速链接</h4>
+              <QuickLinks isLoggedIn={isLoggedIn} />
             </div>
           </div>
-        </div>
-      </aside>
-    </div>
+        </aside>
+
+        {/* 移动端浮动导航按钮 */}
+        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+          <SheetTrigger asChild>
+            <Button
+              variant="default"
+              size="icon"
+              className="fixed bottom-6 right-6 z-40 lg:hidden shadow-lg"
+              aria-label="打开目录导航"
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="right" className="w-[85vw] sm:w-[400px] overflow-y-auto">
+            <SheetHeader>
+              <SheetTitle>文档导航</SheetTitle>
+            </SheetHeader>
+            <div className="mt-6 space-y-6">
+              <div>
+                <h4 className="font-semibold text-sm mb-3">本页导航</h4>
+                <TocNav
+                  tocItems={tocItems}
+                  activeId={activeId}
+                  tocReady={tocReady}
+                  onItemClick={scrollToSection}
+                />
+              </div>
+
+              <div className="border-t pt-4">
+                <h4 className="font-semibold text-sm mb-3">快速链接</h4>
+                <QuickLinks
+                  isLoggedIn={isLoggedIn}
+                  onBackToTop={() => setSheetOpen(false)}
+                />
+              </div>
+            </div>
+          </SheetContent>
+        </Sheet>
+      </div>
+    </>
   );
 }
