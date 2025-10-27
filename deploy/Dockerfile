@@ -41,6 +41,8 @@ RUN apt-get update && \
 COPY --from=build --chown=node:node /app/public ./public
 COPY --from=build --chown=node:node /app/drizzle ./drizzle
 COPY --from=build --chown=node:node /app/.next/standalone ./
+# Server Actions live inside .next/server; copy it or Next.js cannot resolve action IDs.
+COPY --from=build --chown=node:node /app/.next/server ./.next/server
 COPY --from=build --chown=node:node /app/.next/static ./.next/static
 
 USER node

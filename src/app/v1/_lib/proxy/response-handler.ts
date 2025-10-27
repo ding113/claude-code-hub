@@ -297,14 +297,39 @@ export class ProxyResponseHandler {
         tracker.endRequest(messageContext.user.id, messageContext.id);
 
         for (const event of parsedEvents) {
+          // Codex API: 监听 response.completed 事件（官方格式）
+          if (
+            event.event === "response.completed" &&
+            typeof event.data === "object" &&
+            event.data !== null
+          ) {
+            const eventData = event.data as Record<string, unknown>;
+            // Codex API 的 usage 在 response.usage 路径下
+            const responseObj = eventData.response as Record<string, unknown> | undefined;
+            if (responseObj?.usage) {
+              const usageMetrics = extractUsageMetrics(responseObj.usage);
+              if (usageMetrics) {
+                usageForCost = usageMetrics;
+                logger.debug("[ResponseHandler] Captured usage from Codex response.completed", {
+                  usage: usageMetrics,
+                });
+              }
+            }
+          }
+
+          // Claude API: 监听 message_delta 事件（向后兼容）
           if (
             event.event === "message_delta" &&
             typeof event.data === "object" &&
             event.data !== null
           ) {
-            const usageMetrics = extractUsageMetrics((event.data as Record<string, unknown>).usage);
+            const eventData = event.data as Record<string, unknown>;
+            const usageMetrics = extractUsageMetrics(eventData.usage);
             if (usageMetrics) {
               usageForCost = usageMetrics;
+              logger.debug("[ResponseHandler] Captured usage from Claude message_delta", {
+                usage: usageMetrics,
+              });
             }
           }
         }
