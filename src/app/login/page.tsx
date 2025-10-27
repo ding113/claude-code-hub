@@ -136,7 +136,11 @@ function LoginPageContent() {
               </div>
 
               <div className="space-y-2 flex flex-col items-center">
-                <Button type="submit" className="w-full max-w-full" disabled={loading || !apiKey.trim()}>
+                <Button
+                  type="submit"
+                  className="w-full max-w-full"
+                  disabled={loading || !apiKey.trim()}
+                >
                   {loading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
