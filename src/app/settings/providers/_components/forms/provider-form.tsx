@@ -37,9 +37,15 @@ interface ProviderFormProps {
   mode: Mode;
   onSuccess?: () => void;
   provider?: ProviderDisplay; // edit 模式需要，create 可空
+  enableMultiProviderTypes: boolean;
 }
 
-export function ProviderForm({ mode, onSuccess, provider }: ProviderFormProps) {
+export function ProviderForm({
+  mode,
+  onSuccess,
+  provider,
+  enableMultiProviderTypes,
+}: ProviderFormProps) {
   const isEdit = mode === "edit";
   const [isPending, startTransition] = useTransition();
 
@@ -268,22 +274,24 @@ export function ProviderForm({ mode, onSuccess, provider }: ProviderFormProps) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="claude">Claude (Anthropic Messages API)</SelectItem>
-                <SelectItem value="codex" disabled>
-                  Codex (Response API) - 功能开发中
+                <SelectItem value="codex" disabled={!enableMultiProviderTypes}>
+                  Codex (Response API){!enableMultiProviderTypes && " - 功能开发中"}
                 </SelectItem>
-                <SelectItem value="gemini-cli" disabled>
-                  Gemini CLI - 功能开发中
+                <SelectItem value="gemini-cli" disabled={!enableMultiProviderTypes}>
+                  Gemini CLI{!enableMultiProviderTypes && " - 功能开发中"}
                 </SelectItem>
-                <SelectItem value="openai-compatible" disabled>
-                  OpenAI Compatible - 功能开发中
+                <SelectItem value="openai-compatible" disabled={!enableMultiProviderTypes}>
+                  OpenAI Compatible{!enableMultiProviderTypes && " - 功能开发中"}
                 </SelectItem>
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
               选择供应商的 API 格式类型。
-              <span className="text-amber-600 ml-1">
-                注：除 Claude 外的其他类型功能正在开发中，暂不可用
-              </span>
+              {!enableMultiProviderTypes && (
+                <span className="text-amber-600 ml-1">
+                  注：除 Claude 外的其他类型功能正在开发中，暂不可用
+                </span>
+              )}
             </p>
           </div>
 

@@ -40,6 +40,7 @@ interface ProviderListItemProps {
     recoveryMinutes: number | null;
   };
   currencyCode?: CurrencyCode;
+  enableMultiProviderTypes: boolean;
 }
 
 export function ProviderListItem({
@@ -47,6 +48,7 @@ export function ProviderListItem({
   currentUser,
   healthStatus,
   currencyCode = "USD",
+  enableMultiProviderTypes,
 }: ProviderListItemProps) {
   const router = useRouter();
   const [openEdit, setOpenEdit] = useState(false);
@@ -203,6 +205,7 @@ export function ProviderListItem({
                     <ProviderForm
                       mode="edit"
                       provider={item}
+                      enableMultiProviderTypes={enableMultiProviderTypes}
                       onSuccess={() => {
                         setOpenEdit(false);
                         // 刷新页面数据以同步所有字段

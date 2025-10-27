@@ -6,6 +6,7 @@ import { SchedulingRulesDialog } from "./_components/scheduling-rules-dialog";
 import { SettingsPageHeader } from "../_components/settings-page-header";
 import { getSession } from "@/lib/auth";
 import { getSystemSettings } from "@/repository/system-config";
+import { getEnvConfig } from "@/lib/config/env.schema";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,9 @@ export default async function SettingsProvidersPage() {
     getSystemSettings(),
   ]);
 
+  // 读取多供应商类型支持配置
+  const enableMultiProviderTypes = getEnvConfig().ENABLE_MULTI_PROVIDER_TYPES;
+
   return (
     <>
       <SettingsPageHeader title="供应商管理" description="配置 API 服务商并维护可用状态。" />
@@ -27,7 +31,7 @@ export default async function SettingsProvidersPage() {
         actions={
           <div className="flex gap-2">
             <SchedulingRulesDialog />
-            <AddProviderDialog />
+            <AddProviderDialog enableMultiProviderTypes={enableMultiProviderTypes} />
           </div>
         }
       >
@@ -36,6 +40,7 @@ export default async function SettingsProvidersPage() {
           currentUser={session?.user}
           healthStatus={healthStatus}
           currencyCode={systemSettings.currencyDisplay}
+          enableMultiProviderTypes={enableMultiProviderTypes}
         />
       </Section>
     </>

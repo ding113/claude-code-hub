@@ -19,6 +19,7 @@ interface ProviderListProps {
     }
   >;
   currencyCode?: CurrencyCode;
+  enableMultiProviderTypes: boolean;
 }
 
 export function ProviderList({
@@ -26,6 +27,7 @@ export function ProviderList({
   currentUser,
   healthStatus,
   currencyCode = "USD",
+  enableMultiProviderTypes,
 }: ProviderListProps) {
   if (providers.length === 0) {
     return (
@@ -48,6 +50,7 @@ export function ProviderList({
           currentUser={currentUser}
           healthStatus={healthStatus[provider.id]}
           currencyCode={currencyCode}
+          enableMultiProviderTypes={enableMultiProviderTypes}
         />
       ))}
     </div>

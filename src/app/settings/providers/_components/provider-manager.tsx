@@ -18,6 +18,7 @@ interface ProviderManagerProps {
     }
   >;
   currencyCode?: CurrencyCode;
+  enableMultiProviderTypes: boolean;
 }
 
 export function ProviderManager({
@@ -25,6 +26,7 @@ export function ProviderManager({
   currentUser,
   healthStatus,
   currencyCode = "USD",
+  enableMultiProviderTypes,
 }: ProviderManagerProps) {
   return (
     <div className="space-y-4">
@@ -33,6 +35,7 @@ export function ProviderManager({
         currentUser={currentUser}
         healthStatus={healthStatus}
         currencyCode={currencyCode}
+        enableMultiProviderTypes={enableMultiProviderTypes}
       />
     </div>
   );

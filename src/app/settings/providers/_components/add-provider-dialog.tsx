@@ -7,7 +7,11 @@ import { ServerCog } from "lucide-react";
 import { ProviderForm } from "./forms/provider-form";
 import { FormErrorBoundary } from "@/components/form-error-boundary";
 
-export function AddProviderDialog() {
+interface AddProviderDialogProps {
+  enableMultiProviderTypes: boolean;
+}
+
+export function AddProviderDialog({ enableMultiProviderTypes }: AddProviderDialogProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   return (
@@ -21,6 +25,7 @@ export function AddProviderDialog() {
         <FormErrorBoundary>
           <ProviderForm
             mode="create"
+            enableMultiProviderTypes={enableMultiProviderTypes}
             onSuccess={() => {
               setOpen(false);
               // 刷新页面数据以显示新添加的服务商
