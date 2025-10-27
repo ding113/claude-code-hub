@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
 import { isDevelopment } from "@/lib/config/env.schema";
+import { validateKey } from "@/lib/auth";
 
 const PUBLIC_PATHS = [
   "/login",
@@ -13,7 +14,7 @@ const PUBLIC_PATHS = [
 
 const API_PROXY_PATH = "/v1";
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const method = request.method;
   const pathname = request.nextUrl.pathname;
 
@@ -41,6 +42,18 @@ export function middleware(request: NextRequest) {
     url.pathname = "/login";
     url.searchParams.set("from", pathname);
     return NextResponse.redirect(url);
+  }
+
+  // 验证 key 的完整权限（包括 canLoginWebUi、isEnabled、expiresAt 等）
+  const session = await validateKey(authToken.value);
+  if (!session) {
+    // Key 无效或权限不足，清除 cookie 并重定向到登录页
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    url.searchParams.set("from", pathname);
+    const response = NextResponse.redirect(url);
+    response.cookies.delete("auth-token");
+    return response;
   }
 
   return NextResponse.next();
