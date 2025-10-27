@@ -11,8 +11,6 @@ import { ProxyForwarder } from "../proxy/forwarder";
 import { ProxyResponseHandler } from "../proxy/response-handler";
 import { ProxyErrorHandler } from "../proxy/error-handler";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
-import { RequestTransformer } from "./transformers/request";
-import { adaptForCodexCLI } from "./codex-cli-adapter";
 import type { ChatCompletionRequest } from "./types/compatible";
 
 /**
@@ -87,42 +85,22 @@ export async function handleChatCompletions(c: Context): Promise<Response> {
       }
 
       try {
-        let responseRequest = RequestTransformer.transform(openAIRequest);
+        // 新架构：保持 OpenAI 格式，由 Forwarder 层根据 provider 类型进行转换
+        // 这样可以支持多种 provider 类型（claude/codex/gemini-cli/openai-compatible）
 
-        logger.debug("[ChatCompletions] Transformed to Response API:", {
-          model: responseRequest.model,
-          inputCount: responseRequest.input?.length,
-          hasReasoning: !!responseRequest.reasoning,
-          hasTools: !!responseRequest.tools,
-          toolsCount: responseRequest.tools?.length,
-          temperature: responseRequest.temperature,
-          max_output_tokens: responseRequest.max_output_tokens,
-          stream: responseRequest.stream,
+        logger.debug("[ChatCompletions] Keeping OpenAI format for provider-level conversion:", {
+          model: openAIRequest.model,
+          messageCount: openAIRequest.messages.length,
+          hasTools: !!openAIRequest.tools,
+          stream: openAIRequest.stream,
         });
 
-        // 开发模式：输出完整转换后请求
-        if (process.env.NODE_ENV === "development") {
-          logger.debug("[ChatCompletions] Full Response API request:", {
-            request: JSON.stringify(responseRequest, null, 2),
-          });
-        }
+        // 直接使用 OpenAI 请求格式
+        session.request.message = openAIRequest as unknown as Record<string, unknown>;
+        session.request.model = openAIRequest.model;
 
-        // 适配 Codex CLI (注入 instructions)
-        if (process.env.NODE_ENV === "development") {
-          logger.debug("[ChatCompletions] Before adaptForCodexCLI:", {
-            request: JSON.stringify(responseRequest, null, 2),
-          });
-        }
-        responseRequest = adaptForCodexCLI(responseRequest);
-        if (process.env.NODE_ENV === "development") {
-          logger.debug("[ChatCompletions] After adaptForCodexCLI:", {
-            request: JSON.stringify(responseRequest, null, 2),
-          });
-        }
-
-        // 更新 session（替换为 Response API 格式）
-        session.request.message = responseRequest as unknown as Record<string, unknown>;
-        session.request.model = responseRequest.model;
+        // 设置原始格式为 OpenAI（用于响应转换）
+        session.setOriginalFormat("openai");
 
         // 验证转换结果（仅在开发环境）
         if (process.env.NODE_ENV === "development") {
@@ -195,8 +173,8 @@ export async function handleChatCompletions(c: Context): Promise<Response> {
       return rateLimited;
     }
 
-    // 5. 供应商选择（指定 Codex 类型）
-    const providerUnavailable = await ProxyProviderResolver.ensure(session, "codex");
+    // 5. 供应商选择（根据模型自动匹配）
+    const providerUnavailable = await ProxyProviderResolver.ensure(session);
     if (providerUnavailable) {
       return providerUnavailable;
     }

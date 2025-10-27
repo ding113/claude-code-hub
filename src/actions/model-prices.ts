@@ -47,16 +47,9 @@ export async function processPriceTableInternal(
       return { ok: false, error: "价格表必须是一个JSON对象" };
     }
 
-    // 扩展支持：Claude + OpenAI 模型
+    // 导入所有模型（不限制模型名称前缀）
     const entries = Object.entries(priceTable).filter(([modelName]) => {
-      if (typeof modelName !== "string") return false;
-      const lowerName = modelName.toLowerCase();
-      return (
-        lowerName.startsWith("claude-") ||
-        lowerName.startsWith("gpt-") ||
-        lowerName.startsWith("o1-") ||
-        lowerName.startsWith("o3-") // OpenAI 推理模型
-      );
+      return typeof modelName === "string" && modelName.trim().length > 0;
     });
 
     const result: PriceUpdateResult = {
@@ -163,12 +156,16 @@ export async function hasPriceTable(): Promise<boolean> {
 
 /**
  * 根据供应商类型获取可选择的模型列表
- * @param providerType - 供应商类型 ('claude' 或 'codex')
+ * @param providerType - 供应商类型
  * @returns 模型名称列表（已排序）
+ *
+ * 注意：返回所有聊天模型，不区分 provider。
+ * 理由：
+ * - 非 Anthropic 提供商允许任意模型（符合业务需求）
+ * - 用户可以通过手动输入添加任何模型
+ * - 避免维护复杂的 provider 映射关系
  */
-export async function getAvailableModelsByProviderType(
-  providerType: "claude" | "codex"
-): Promise<string[]> {
+export async function getAvailableModelsByProviderType(): Promise<string[]> {
   try {
     // 权限检查：只有管理员可以查看
     const session = await getSession();
@@ -178,15 +175,11 @@ export async function getAvailableModelsByProviderType(
 
     const allPrices = await findAllLatestPrices();
 
-    // 供应商类型到 litellm_provider 的映射
-    const targetProvider = providerType === "claude" ? "anthropic" : "openai";
-
-    // 过滤聊天模型并返回模型名称
+    // 简化逻辑：返回所有聊天模型
+    // 非 Anthropic 提供商本来就允许任意模型，精确过滤意义不大
+    // 用户可以通过手动输入添加任何模型（见 ModelMultiSelect 组件）
     return allPrices
-      .filter(
-        (price) =>
-          price.priceData.litellm_provider === targetProvider && price.priceData.mode === "chat" // 仅聊天模型
-      )
+      .filter((price) => price.priceData.mode === "chat") // 仅聊天模型
       .map((price) => price.modelName)
       .sort(); // 字母排序
   } catch (error) {

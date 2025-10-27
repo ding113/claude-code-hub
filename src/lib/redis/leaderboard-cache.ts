@@ -79,7 +79,7 @@ export async function getLeaderboardWithCache(
     }
 
     // 2. 缓存未命中，尝试获取计算锁（SET NX EX 10 秒）
-    const locked = await redis.set(lockKey, "1", "NX", "EX", 10);
+    const locked = await redis.set(lockKey, "1", "EX", 10, "NX");
 
     if (locked === "OK") {
       // 获得锁，查询数据库

@@ -12,9 +12,9 @@ import { SessionManager } from "@/lib/session-manager";
 import { SessionTracker } from "@/lib/session-tracker";
 import type { ProxySession } from "./session";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
-import { ResponseTransformer } from "../codex/transformers/response";
-import { StreamTransformer } from "../codex/transformers/stream";
-import type { ResponseObject } from "../codex/types/response";
+import { defaultRegistry } from "../converters";
+import type { Format, TransformState } from "../converters/types";
+import { mapClientFormatToTransformer, mapProviderTypeToTransformer } from "./format-mapper";
 
 export type UsageMetrics = {
   input_tokens?: number;
@@ -47,24 +47,40 @@ export class ProxyResponseHandler {
     const responseForLog = response.clone();
     const statusCode = response.status;
 
-    // 检查是否需要格式转换（OpenAI 请求 + Codex 供应商）
-    const needsTransform = session.originalFormat === "openai" && session.providerType === "codex";
+    // 检查是否需要格式转换
+    const fromFormat: Format | null = provider.providerType
+      ? mapProviderTypeToTransformer(provider.providerType)
+      : null;
+    const toFormat: Format = mapClientFormatToTransformer(session.originalFormat);
+    const needsTransform = fromFormat !== toFormat && fromFormat && toFormat;
     let finalResponse = response;
 
-    if (needsTransform) {
+    if (needsTransform && defaultRegistry.hasResponseTransformer(fromFormat, toFormat)) {
       try {
         // 克隆一份用于转换
         const responseForTransform = response.clone();
         const responseText = await responseForTransform.text();
-        const responseData = JSON.parse(responseText) as ResponseObject;
+        const responseData = JSON.parse(responseText) as Record<string, unknown>;
 
-        // 转换为 OpenAI 格式
-        const openAIResponse = ResponseTransformer.transform(responseData);
+        // 使用转换器注册表进行转换
+        const transformed = defaultRegistry.transformNonStreamResponse(
+          session.context,
+          fromFormat,
+          toFormat,
+          session.request.model || "",
+          session.request.message, // original request
+          session.request.message, // transformed request (same as original if no transform)
+          responseData
+        );
 
-        logger.debug("[ResponseHandler] Transformed Response API → OpenAI format (non-stream)");
+        logger.debug("[ResponseHandler] Transformed non-stream response", {
+          from: fromFormat,
+          to: toFormat,
+          model: session.request.model,
+        });
 
         // 构建新的响应
-        finalResponse = new Response(JSON.stringify(openAIResponse), {
+        finalResponse = new Response(JSON.stringify(transformed), {
           status: response.status,
           statusText: response.statusText,
           headers: new Headers(response.headers),
@@ -185,55 +201,45 @@ export class ProxyResponseHandler {
       return response;
     }
 
-    // 检查是否需要格式转换（OpenAI 请求 + Codex 供应商）
-    const needsTransform = session.originalFormat === "openai" && session.providerType === "codex";
+    // 检查是否需要格式转换
+    const fromFormat: Format | null = provider.providerType
+      ? mapProviderTypeToTransformer(provider.providerType)
+      : null;
+    const toFormat: Format = mapClientFormatToTransformer(session.originalFormat);
+    const needsTransform = fromFormat !== toFormat && fromFormat && toFormat;
     let processedStream: ReadableStream<Uint8Array> = response.body;
 
-    if (needsTransform) {
-      logger.debug("[ResponseHandler] Transforming Response API → OpenAI format (stream)");
+    if (needsTransform && defaultRegistry.hasResponseTransformer(fromFormat, toFormat)) {
+      logger.debug("[ResponseHandler] Transforming stream response", {
+        from: fromFormat,
+        to: toFormat,
+        model: session.request.model,
+      });
 
       // 创建转换流
-      const streamTransformer = new StreamTransformer();
+      const transformState: TransformState = {}; // 状态对象，用于在多个 chunk 之间保持状态
       const transformStream = new TransformStream<Uint8Array, Uint8Array>({
         transform(chunk, controller) {
           try {
             const decoder = new TextDecoder();
             const text = decoder.decode(chunk, { stream: true });
 
-            // 解析并转换 SSE 事件
-            const lines = text.split("\n");
-            for (const line of lines) {
-              if (line.startsWith("data: ")) {
-                const dataStr = line.slice(6).trim();
-                if (dataStr === "[DONE]") {
-                  // 结束事件
-                  controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
-                } else {
-                  try {
-                    const event = JSON.parse(dataStr);
-                    const transformedChunks = streamTransformer.transform(event);
+            // 使用转换器注册表转换 chunk
+            const transformedChunks = defaultRegistry.transformStreamResponse(
+              session.context,
+              fromFormat,
+              toFormat,
+              session.request.model || "",
+              session.request.message, // original request
+              session.request.message, // transformed request (same as original if no transform)
+              text,
+              transformState
+            );
 
-                    // transformedChunks 可能是 null, single chunk, 或 array of chunks
-                    if (transformedChunks === null) {
-                      // 跳过此事件
-                    } else if (Array.isArray(transformedChunks)) {
-                      // 多个 chunks
-                      for (const transformedChunk of transformedChunks) {
-                        const chunkStr = `data: ${JSON.stringify(transformedChunk)}\n\n`;
-                        controller.enqueue(new TextEncoder().encode(chunkStr));
-                      }
-                    } else {
-                      // 单个 chunk
-                      const chunkStr = `data: ${JSON.stringify(transformedChunks)}\n\n`;
-                      controller.enqueue(new TextEncoder().encode(chunkStr));
-                    }
-                  } catch {
-                    // 忽略解析错误的行
-                  }
-                }
-              } else if (line.trim() === "") {
-                // 保留空行（SSE 分隔符）
-                controller.enqueue(new TextEncoder().encode("\n"));
+            // transformedChunks 是字符串数组
+            for (const transformedChunk of transformedChunks) {
+              if (transformedChunk) {
+                controller.enqueue(new TextEncoder().encode(transformedChunk));
               }
             }
           } catch (error) {

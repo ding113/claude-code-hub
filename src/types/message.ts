@@ -45,6 +45,7 @@ export interface ProviderChainItem {
     totalProviders: number; // 系统总供应商数
     enabledProviders: number; // 启用的供应商数
     targetType: "claude" | "codex"; // 目标类型
+    requestedModel?: string; // 请求的模型名称（用于追踪）
 
     // --- 用户分组筛选 ---
     userGroup?: string; // 用户分组（如果有）
@@ -61,7 +62,7 @@ export interface ProviderChainItem {
       // 被过滤的供应商
       id: number;
       name: string;
-      reason: "circuit_open" | "rate_limited" | "excluded" | "type_mismatch" | "model_not_allowed";
+      reason: "circuit_open" | "rate_limited" | "excluded" | "type_mismatch" | "model_not_allowed" | "disabled";
       details?: string; // 额外信息（如费用：$15.2/$15）
     }>;
 

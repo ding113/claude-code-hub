@@ -6,6 +6,9 @@ import { ProxyError } from "./errors";
 import { ModelRedirector } from "./model-redirector";
 import { logger } from "@/lib/logger";
 import type { ProxySession } from "./session";
+import { defaultRegistry } from "../converters";
+import type { Format } from "../converters/types";
+import { mapClientFormatToTransformer, mapProviderTypeToTransformer } from "./format-mapper";
 
 const MAX_RETRY_ATTEMPTS = 3;
 
@@ -111,6 +114,40 @@ export class ProxyForwarder {
     const wasRedirected = ModelRedirector.apply(session, provider);
     if (wasRedirected) {
       logger.debug("ProxyForwarder: Model redirected", { providerId: provider.id });
+    }
+
+    // 请求格式转换（基于 client 格式和 provider 类型）
+    const fromFormat: Format = mapClientFormatToTransformer(session.originalFormat);
+    const toFormat: Format | null = provider.providerType
+      ? mapProviderTypeToTransformer(provider.providerType)
+      : null;
+
+    if (fromFormat !== toFormat && fromFormat && toFormat) {
+      try {
+        const transformed = defaultRegistry.transformRequest(
+          fromFormat,
+          toFormat,
+          session.request.model || "",
+          session.request.message,
+          true // 假设所有请求都是流式的
+        );
+
+        logger.debug("ProxyForwarder: Request format transformed", {
+          from: fromFormat,
+          to: toFormat,
+          model: session.request.model,
+        });
+
+        // 更新 session 中的请求体
+        session.request.message = transformed;
+      } catch (error) {
+        logger.error("ProxyForwarder: Request transformation failed", {
+          from: fromFormat,
+          to: toFormat,
+          error,
+        });
+        // 转换失败时继续使用原始请求
+      }
     }
 
     const processedHeaders = ProxyForwarder.buildHeaders(session, provider);

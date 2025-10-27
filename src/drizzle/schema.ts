@@ -75,12 +75,28 @@ export const providers = pgTable('providers', {
   costMultiplier: numeric('cost_multiplier', { precision: 10, scale: 4 }).default('1.0'),
   groupTag: varchar('group_tag', { length: 50 }),
 
-  // Codex 支持：供应商类型和模型重定向
-  providerType: varchar('provider_type', { length: 20 }).notNull().default('claude'),
+  // 供应商类型：扩展支持 4 种类型
+  // - claude: Anthropic 提供商
+  // - codex: Codex CLI (Response API)
+  // - gemini-cli: Gemini CLI
+  // - openai-compatible: OpenAI Compatible API
+  providerType: varchar('provider_type', { length: 20 })
+    .notNull()
+    .default('claude')
+    .$type<'claude' | 'codex' | 'gemini-cli' | 'openai-compatible'>(),
+
+  // 模型重定向：将请求的模型名称重定向到另一个模型
   modelRedirects: jsonb('model_redirects').$type<Record<string, string>>(),
 
-  // 模型白名单：限制供应商可调度的模型列表（null/空数组 = 允许所有模型）
+  // 模型列表：双重语义
+  // - Anthropic 提供商：白名单（管理员限制可调度的模型，可选）
+  // - 非 Anthropic 提供商：声明列表（提供商声称支持的模型，可选）
+  // - null 或空数组：Anthropic 允许所有 claude 模型，非 Anthropic 允许任意模型
   allowedModels: jsonb('allowed_models').$type<string[] | null>().default(null),
+
+  // 加入 Claude 调度池：仅对非 Anthropic 提供商有效
+  // 启用后，如果该提供商配置了重定向到 claude-* 模型，可以加入 claude 调度池
+  joinClaudePool: boolean('join_claude_pool').default(false),
 
   // 金额限流配置
   limit5hUsd: numeric('limit_5h_usd', { precision: 10, scale: 2 }),

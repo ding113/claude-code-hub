@@ -2,8 +2,8 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -24,11 +24,12 @@ import {
   AlertDialogTitle as AlertTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import type { ProviderDisplay } from "@/types/provider";
+import type { ProviderDisplay, ProviderType } from "@/types/provider";
 import { validateNumericField, isValidUrl } from "@/lib/utils/validation";
 import { PROVIDER_DEFAULTS } from "@/lib/constants/provider.constants";
 import { toast } from "sonner";
 import { ModelMultiSelect } from "../model-multi-select";
+import { ModelRedirectEditor } from "../model-redirect-editor";
 
 type Mode = "create" | "edit";
 
@@ -45,11 +46,11 @@ export function ProviderForm({ mode, onSuccess, provider }: ProviderFormProps) {
   const [name, setName] = useState(isEdit ? (provider?.name ?? "") : "");
   const [url, setUrl] = useState(isEdit ? (provider?.url ?? "") : "");
   const [key, setKey] = useState(""); // 编辑时留空代表不更新
-  const [providerType, setProviderType] = useState<string>(
+  const [providerType, setProviderType] = useState<ProviderType>(
     isEdit ? (provider?.providerType ?? "claude") : "claude"
   );
-  const [modelRedirects, setModelRedirects] = useState<string>(
-    isEdit && provider?.modelRedirects ? JSON.stringify(provider.modelRedirects, null, 2) : ""
+  const [modelRedirects, setModelRedirects] = useState<Record<string, string>>(
+    isEdit && provider?.modelRedirects ? provider.modelRedirects : {}
   );
   const [priority, setPriority] = useState<number>(isEdit ? (provider?.priority ?? 0) : 0);
   const [weight, setWeight] = useState<number>(isEdit ? (provider?.weight ?? 1) : 1);
@@ -72,6 +73,9 @@ export function ProviderForm({ mode, onSuccess, provider }: ProviderFormProps) {
   const [allowedModels, setAllowedModels] = useState<string[]>(
     isEdit && provider?.allowedModels ? provider.allowedModels : []
   );
+  const [joinClaudePool, setJoinClaudePool] = useState<boolean>(
+    isEdit && provider?.joinClaudePool ? provider.joinClaudePool : false
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,20 +89,9 @@ export function ProviderForm({ mode, onSuccess, provider }: ProviderFormProps) {
       return;
     }
 
-    // 验证模型重定向 JSON 格式（如果填写了）
-    let parsedModelRedirects: Record<string, string> | null = null;
-    if (modelRedirects.trim()) {
-      try {
-        parsedModelRedirects = JSON.parse(modelRedirects);
-        if (typeof parsedModelRedirects !== "object" || parsedModelRedirects === null) {
-          toast.error("模型重定向必须是一个有效的 JSON 对象");
-          return;
-        }
-      } catch {
-        toast.error("模型重定向 JSON 格式不正确");
-        return;
-      }
-    }
+    // 处理模型重定向（空对象转为 null）
+    const parsedModelRedirects =
+      Object.keys(modelRedirects).length > 0 ? modelRedirects : null;
 
     startTransition(async () => {
       try {
@@ -107,9 +100,10 @@ export function ProviderForm({ mode, onSuccess, provider }: ProviderFormProps) {
             name?: string;
             url?: string;
             key?: string;
-            provider_type?: string;
+            provider_type?: ProviderType;
             model_redirects?: Record<string, string> | null;
             allowed_models?: string[] | null;
+            join_claude_pool?: boolean;
             priority?: number;
             weight?: number;
             cost_multiplier?: number;
@@ -128,6 +122,7 @@ export function ProviderForm({ mode, onSuccess, provider }: ProviderFormProps) {
             provider_type: providerType,
             model_redirects: parsedModelRedirects,
             allowed_models: allowedModels.length > 0 ? allowedModels : null,
+            join_claude_pool: joinClaudePool,
             priority: priority,
             weight: weight,
             cost_multiplier: costMultiplier,
@@ -157,6 +152,7 @@ export function ProviderForm({ mode, onSuccess, provider }: ProviderFormProps) {
             provider_type: providerType,
             model_redirects: parsedModelRedirects,
             allowed_models: allowedModels.length > 0 ? allowedModels : null,
+            join_claude_pool: joinClaudePool,
             // 使用配置的默认值：默认不启用、权重=1
             is_enabled: PROVIDER_DEFAULTS.IS_ENABLED,
             weight: weight,
@@ -185,8 +181,9 @@ export function ProviderForm({ mode, onSuccess, provider }: ProviderFormProps) {
           setUrl("");
           setKey("");
           setProviderType("claude");
-          setModelRedirects("");
+          setModelRedirects({});
           setAllowedModels([]);
+          setJoinClaudePool(false);
           setPriority(0);
           setWeight(1);
           setCostMultiplier(1.0);
@@ -262,38 +259,72 @@ export function ProviderForm({ mode, onSuccess, provider }: ProviderFormProps) {
               供应商类型
               <span className="text-xs text-muted-foreground ml-1">(决定调度策略)</span>
             </Label>
-            <Select value={providerType} onValueChange={setProviderType} disabled={isPending}>
+            <Select
+              value={providerType}
+              onValueChange={(value) => setProviderType(value as ProviderType)}
+              disabled={isPending}
+            >
               <SelectTrigger id={isEdit ? "edit-provider-type" : "provider-type"}>
                 <SelectValue placeholder="选择供应商类型" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="claude">Claude (默认)</SelectItem>
-                <SelectItem value="codex">Codex (OpenAI 推理模型)</SelectItem>
+                <SelectItem value="claude">Claude (Anthropic Messages API)</SelectItem>
+                <SelectItem value="codex">Codex (Response API)</SelectItem>
+                <SelectItem value="gemini-cli">Gemini CLI</SelectItem>
+                <SelectItem value="openai-compatible">OpenAI Compatible</SelectItem>
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              Claude 类型使用 Anthropic API，Codex 类型使用 OpenAI Response API
+              选择供应商的 API 格式类型。系统将自动进行格式转换，支持不同格式之间的互相调用。
             </p>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor={isEdit ? "edit-model-redirects" : "model-redirects"}>
+            <Label>
               模型重定向配置
-              <span className="text-xs text-muted-foreground ml-1">(JSON 格式，可选)</span>
+              <span className="text-xs text-muted-foreground ml-1">(可选)</span>
             </Label>
-            <Textarea
-              id={isEdit ? "edit-model-redirects" : "model-redirects"}
+            <ModelRedirectEditor
               value={modelRedirects}
-              onChange={(e) => setModelRedirects(e.target.value)}
-              placeholder={'{\n  "gpt-5": "gpt-5-codex",\n  "o1-mini": "o1-mini-2024"\n}'}
+              onChange={setModelRedirects}
               disabled={isPending}
-              rows={4}
-              className="font-mono text-xs"
             />
-            <p className="text-xs text-muted-foreground">
-              用于重写请求中的模型名称，例如将 gpt-5 重定向为 gpt-5-codex
-            </p>
           </div>
+
+          {/* joinClaudePool 开关 - 仅非 Claude 供应商显示 */}
+          {providerType !== "claude" && (() => {
+            // 检查是否有重定向到 Claude 模型的映射
+            const hasClaudeRedirects = Object.values(modelRedirects).some((target) =>
+              target.startsWith("claude-")
+            );
+
+            if (!hasClaudeRedirects) return null;
+
+            return (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor={isEdit ? "edit-join-claude-pool" : "join-claude-pool"}>
+                      加入 Claude 调度池
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      启用后，此供应商将与 Claude 类型供应商一起参与负载均衡调度
+                    </p>
+                  </div>
+                  <Switch
+                    id={isEdit ? "edit-join-claude-pool" : "join-claude-pool"}
+                    checked={joinClaudePool}
+                    onCheckedChange={setJoinClaudePool}
+                    disabled={isPending}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  仅当模型重定向配置中存在映射到 claude-* 模型时可用。启用后，当用户请求 claude-*
+                  模型时，此供应商也会参与调度选择。
+                </p>
+              </div>
+            );
+          })()}
         </div>
 
         {/* 模型白名单配置 */}
@@ -312,7 +343,7 @@ export function ProviderForm({ mode, onSuccess, provider }: ProviderFormProps) {
             </Label>
 
             <ModelMultiSelect
-              providerType={providerType as "claude" | "codex"}
+              providerType={providerType as "claude" | "codex" | "gemini-cli" | "openai-compatible"}
               selectedModels={allowedModels}
               onChange={setAllowedModels}
               disabled={isPending}

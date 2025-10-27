@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { Check, ChevronsUpDown, Loader2 } from "lucide-react";
+import { Check, ChevronsUpDown, Loader2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -13,10 +13,12 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { getAvailableModelsByProviderType } from "@/actions/model-prices";
 
 interface ModelMultiSelectProps {
-  providerType: "claude" | "codex";
+  providerType: "claude" | "codex" | "gemini-cli" | "openai-compatible";
   selectedModels: string[];
   onChange: (models: string[]) => void;
   disabled?: boolean;
@@ -31,12 +33,14 @@ export function ModelMultiSelect({
   const [open, setOpen] = useState(false);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  // 新增：手动输入自定义模型的状态
+  const [customModel, setCustomModel] = useState("");
 
   // 当供应商类型变化时，重新加载模型列表
   useEffect(() => {
     async function loadModels() {
       setLoading(true);
-      const models = await getAvailableModelsByProviderType(providerType);
+      const models = await getAvailableModelsByProviderType();
       setAvailableModels(models);
       setLoading(false);
     }
@@ -53,6 +57,22 @@ export function ModelMultiSelect({
 
   const selectAll = () => onChange(availableModels);
   const clearAll = () => onChange([]);
+
+  // 新增：手动添加自定义模型
+  const handleAddCustomModel = () => {
+    const trimmed = customModel.trim();
+    if (!trimmed) return;
+
+    if (selectedModels.includes(trimmed)) {
+      // 已存在，清空输入框
+      setCustomModel("");
+      return;
+    }
+
+    // 添加到选中列表
+    onChange([...selectedModels, trimmed]);
+    setCustomModel("");
+  };
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -84,14 +104,14 @@ export function ModelMultiSelect({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[400px] h-[400px] p-0"
+        className="w-[400px] h-[500px] p-0 flex flex-col"
         align="start"
         onWheel={(e) => e.stopPropagation()}
         onTouchMove={(e) => e.stopPropagation()}
       >
-        <Command shouldFilter={true} className="flex flex-col h-full">
+        <Command shouldFilter={true} className="flex-1">
           <CommandInput placeholder="搜索模型名称..." />
-          <CommandList className="flex-1 max-h-[300px] overflow-y-auto">
+          <CommandList className="flex-1 max-h-[250px] overflow-y-auto">
             <CommandEmpty>{loading ? "加载中..." : "未找到模型"}</CommandEmpty>
 
             {!loading && (
@@ -144,6 +164,37 @@ export function ModelMultiSelect({
             )}
           </CommandList>
         </Command>
+
+        {/* 新增：手动输入区域 */}
+        <div className="border-t p-3 space-y-2">
+          <Label className="text-xs font-medium">手动添加模型</Label>
+          <div className="flex gap-2">
+            <Input
+              placeholder="输入模型名称（如 gpt-5-turbo）"
+              value={customModel}
+              onChange={(e) => setCustomModel(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleAddCustomModel();
+                }
+              }}
+              disabled={disabled}
+              className="font-mono text-sm flex-1"
+            />
+            <Button
+              size="sm"
+              onClick={handleAddCustomModel}
+              disabled={disabled || !customModel.trim()}
+              type="button"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            支持添加任意模型名称（不限于价格表中的模型）
+          </p>
+        </div>
       </PopoverContent>
     </Popover>
   );

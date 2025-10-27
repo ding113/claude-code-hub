@@ -3,6 +3,8 @@ import type { Provider } from "@/types/provider";
 import type { User } from "@/types/user";
 import type { Key } from "@/types/key";
 import type { ProviderChainItem } from "@/types/message";
+import type { ClientFormat } from "./format-mapper";
+import type { ProviderType } from "@/types/provider";
 
 export interface AuthState {
   user: User | null;
@@ -41,6 +43,7 @@ export class ProxySession {
   readonly headerLog: string;
   readonly request: ProxyRequestPayload;
   readonly userAgent: string | null; // User-Agent（用于客户端类型分析）
+  readonly context: Context; // Hono Context（用于转换器）
   userName: string;
   authState: AuthState | null;
   provider: Provider | null;
@@ -49,9 +52,9 @@ export class ProxySession {
   // Session ID（用于会话粘性和并发限流）
   sessionId: string | null;
 
-  // Codex 支持：记录原始请求格式和供应商类型
-  originalFormat: "response" | "openai" | "claude" = "claude";
-  providerType: "claude" | "codex" | null = null;
+  // 请求格式追踪：记录原始请求格式和供应商类型
+  originalFormat: ClientFormat = "claude";
+  providerType: ProviderType | null = null;
 
   // 模型重定向追踪：保存原始模型名（重定向前）
   private originalModelName: string | null = null;
@@ -70,6 +73,7 @@ export class ProxySession {
     headerLog: string;
     request: ProxyRequestPayload;
     userAgent: string | null;
+    context: Context;
   }) {
     this.startTime = init.startTime;
     this.method = init.method;
@@ -78,6 +82,7 @@ export class ProxySession {
     this.headerLog = init.headerLog;
     this.request = init.request;
     this.userAgent = init.userAgent;
+    this.context = init.context;
     this.userName = "unknown";
     this.authState = null;
     this.provider = null;
@@ -116,6 +121,7 @@ export class ProxySession {
       headerLog,
       request,
       userAgent,
+      context: c,
     });
   }
 
@@ -129,14 +135,14 @@ export class ProxySession {
   setProvider(provider: Provider | null): void {
     this.provider = provider;
     if (provider) {
-      this.providerType = (provider.providerType as "claude" | "codex") || "claude";
+      this.providerType = provider.providerType as ProviderType;
     }
   }
 
   /**
    * 设置原始请求格式（从路由层调用）
    */
-  setOriginalFormat(format: "response" | "openai" | "claude"): void {
+  setOriginalFormat(format: ClientFormat): void {
     this.originalFormat = format;
   }
 

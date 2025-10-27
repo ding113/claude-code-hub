@@ -1,3 +1,6 @@
+// 供应商类型枚举
+export type ProviderType = 'claude' | 'codex' | 'gemini-cli' | 'openai-compatible';
+
 export interface Provider {
   id: number;
   name: string;
@@ -13,12 +16,18 @@ export interface Provider {
   costMultiplier: number;
   groupTag: string | null;
 
-  // Codex 支持：供应商类型和模型重定向
-  providerType: string;
+  // 供应商类型：扩展支持 4 种类型
+  providerType: ProviderType;
   modelRedirects: Record<string, string> | null;
 
-  // 模型白名单：限制供应商可调度的模型列表（null/空数组 = 允许所有模型）
+  // 模型列表：双重语义
+  // - Anthropic 提供商：白名单（管理员限制可调度的模型，可选）
+  // - 非 Anthropic 提供商：声明列表（提供商声称支持的模型，可选）
+  // - null 或空数组：Anthropic 允许所有 claude 模型，非 Anthropic 允许任意模型
   allowedModels: string[] | null;
+
+  // 加入 Claude 调度池：仅对非 Anthropic 提供商有效
+  joinClaudePool: boolean;
 
   // 金额限流配置
   limit5hUsd: number | null;
@@ -53,11 +62,13 @@ export interface ProviderDisplay {
   priority: number;
   costMultiplier: number;
   groupTag: string | null;
-  // Codex 支持：供应商类型和模型重定向
-  providerType: string;
+  // 供应商类型
+  providerType: ProviderType;
   modelRedirects: Record<string, string> | null;
-  // 模型白名单：限制供应商可调度的模型列表（null/空数组 = 允许所有模型）
+  // 模型列表（双重语义）
   allowedModels: string[] | null;
+  // 加入 Claude 调度池
+  joinClaudePool: boolean;
   // 金额限流配置
   limit5hUsd: number | null;
   limitWeeklyUsd: number | null;
@@ -91,10 +102,11 @@ export interface CreateProviderData {
   cost_multiplier?: number;
   group_tag?: string | null;
 
-  // Codex 支持：供应商类型和模型重定向
-  provider_type?: string;
+  // 供应商类型和模型配置
+  provider_type?: ProviderType;
   model_redirects?: Record<string, string> | null;
   allowed_models?: string[] | null;
+  join_claude_pool?: boolean;
 
   // 金额限流配置
   limit_5h_usd?: number | null;
@@ -127,10 +139,11 @@ export interface UpdateProviderData {
   cost_multiplier?: number;
   group_tag?: string | null;
 
-  // Codex 支持：供应商类型和模型重定向
-  provider_type?: string;
+  // 供应商类型和模型配置
+  provider_type?: ProviderType;
   model_redirects?: Record<string, string> | null;
   allowed_models?: string[] | null;
+  join_claude_pool?: boolean;
 
   // 金额限流配置
   limit_5h_usd?: number | null;

@@ -8,17 +8,98 @@ import { logger } from "@/lib/logger";
 import type { ProxySession } from "./session";
 import type { ProviderChainItem } from "@/types/message";
 
+/**
+ * 检查供应商是否支持指定模型（用于调度器匹配）
+ *
+ * 核心逻辑：
+ * 1. Claude 模型请求 (claude-*)：
+ *    - Anthropic 提供商：根据 allowedModels 白名单判断
+ *    - 非 Anthropic 提供商 + joinClaudePool：检查模型重定向是否指向 claude-* 模型
+ *    - 非 Anthropic 提供商（未加入 Claude 调度池）：不支持
+ *
+ * 2. 非 Claude 模型请求 (gpt-*, gemini-*, 或其他任意模型)：
+ *    - Anthropic 提供商：不支持（仅支持 Claude 模型）
+ *    - 非 Anthropic 提供商（codex, gemini-cli, openai-compatible）：
+ *      a. 如果未设置 allowedModels（null 或空数组）：接受任意模型
+ *      b. 如果设置了 allowedModels：检查模型是否在声明列表中，或有模型重定向配置
+ *      注意：allowedModels 是声明性列表（用户可填写任意字符串），用于调度器匹配，不是真实模型校验
+ *
+ * @param provider - 供应商信息
+ * @param requestedModel - 用户请求的模型名称
+ * @returns 是否支持该模型（用于调度器筛选）
+ */
+function providerSupportsModel(provider: Provider, requestedModel: string): boolean {
+  const isClaudeModel = requestedModel.startsWith('claude-');
+  const isClaudeProvider = provider.providerType === 'claude';
+
+  // Case 1: Claude 模型请求
+  if (isClaudeModel) {
+    // 1a. Anthropic 提供商
+    if (isClaudeProvider) {
+      // 未设置 allowedModels 或为空数组：允许所有 claude 模型
+      if (!provider.allowedModels || provider.allowedModels.length === 0) {
+        return true;
+      }
+      // 检查白名单
+      return provider.allowedModels.includes(requestedModel);
+    }
+
+    // 1b. 非 Anthropic 提供商 + joinClaudePool
+    if (provider.joinClaudePool) {
+      const redirectedModel = provider.modelRedirects?.[requestedModel];
+      // 检查是否重定向到 claude 模型
+      return redirectedModel?.startsWith('claude-') || false;
+    }
+
+    // 1c. 其他情况：非 Anthropic 提供商且未加入 Claude 调度池
+    return false;
+  }
+
+  // Case 2: 非 Claude 模型请求（gpt-*, gemini-*, etc.）
+  // 2a. Anthropic 提供商不支持非 Claude 模型
+  if (isClaudeProvider) {
+    return false;
+  }
+
+  // 2b. 非 Anthropic 提供商（codex, gemini-cli, openai-compatible）
+  // allowedModels 是声明列表，用于调度器匹配提供商
+  // 用户可以手动填写任意模型名称（不限于真实模型），用于声明该提供商"支持"哪些模型
+
+  // 未设置 allowedModels 或为空数组：接受任意模型（由上游提供商判断）
+  if (!provider.allowedModels || provider.allowedModels.length === 0) {
+    return true;
+  }
+
+  // 检查声明列表
+  if (provider.allowedModels.includes(requestedModel)) {
+    return true;
+  }
+
+  // 检查模型重定向
+  if (provider.modelRedirects?.[requestedModel]) {
+    return true;
+  }
+
+  // 不在声明列表中且无重定向配置
+  return false;
+}
+
 export class ProxyProviderResolver {
   static async ensure(
     session: ProxySession,
-    targetProviderType: "claude" | "codex" = "claude"
+    _deprecatedTargetProviderType?: "claude" | "codex" // 废弃参数，保留向后兼容
   ): Promise<Response | null> {
+    // 忽略废弃的 targetProviderType 参数
+    if (_deprecatedTargetProviderType) {
+      logger.warn('[ProviderSelector] targetProviderType parameter is deprecated and will be ignored');
+    }
+
     // 最大重试次数（避免无限循环）
     const MAX_RETRIES = 3;
     const excludedProviders: number[] = [];
 
     // === 会话复用 ===
-    const reusedProvider = await ProxyProviderResolver.findReusable(session, targetProviderType);
+    const reusedProvider = await ProxyProviderResolver.findReusable(session);
     if (reusedProvider) {
       session.setProvider(reusedProvider);
 
@@ -30,7 +111,8 @@ export class ProxyProviderResolver {
         decisionContext: {
           totalProviders: 0, // 复用不需要筛选
           enabledProviders: 0,
-          targetType: targetProviderType,
+          targetType: reusedProvider.providerType as "claude" | "codex",
+          requestedModel: session.getCurrentModel() || '',
           groupFilterApplied: false,
           beforeHealthCheck: 0,
           afterHealthCheck: 0,
@@ -53,8 +135,7 @@ export class ProxyProviderResolver {
     if (!session.provider) {
       const { provider, context } = await ProxyProviderResolver.pickRandomProvider(
         session,
-        excludedProviders,
-        targetProviderType
+        excludedProviders
       );
       session.setProvider(provider);
       session.setLastSelectionContext(context); // 保存用于后续记录
@@ -108,7 +189,8 @@ export class ProxyProviderResolver {
               : {
                   totalProviders: 0,
                   enabledProviders: 0,
-                  targetType: targetProviderType,
+                  targetType: session.provider.providerType as "claude" | "codex",
+                  requestedModel: session.getCurrentModel() || '',
                   groupFilterApplied: false,
                   beforeHealthCheck: 0,
                   afterHealthCheck: 0,
@@ -127,8 +209,7 @@ export class ProxyProviderResolver {
           const { provider: fallbackProvider, context: retryContext } =
             await ProxyProviderResolver.pickRandomProvider(
               session,
-              excludedProviders,
-              targetProviderType
+              excludedProviders
             );
 
           if (!fallbackProvider) {
@@ -167,7 +248,8 @@ export class ProxyProviderResolver {
           decisionContext: successContext || {
             totalProviders: 0,
             enabledProviders: 0,
-            targetType: targetProviderType,
+            targetType: session.provider.providerType as "claude" | "codex",
+            requestedModel: session.getCurrentModel() || '',
             groupFilterApplied: false,
             beforeHealthCheck: 0,
             afterHealthCheck: 0,
@@ -211,15 +293,12 @@ export class ProxyProviderResolver {
 
   /**
    * 公开方法：选择供应商（支持排除列表，用于重试场景）
-   * 供应商类型从 session.providerType 自动读取，确保重试时类型一致
    */
   static async pickRandomProviderWithExclusion(
     session: ProxySession,
     excludeIds: number[]
   ): Promise<Provider | null> {
-    // 从 session 读取供应商类型，避免参数传递和类型不一致
-    const targetProviderType = session.providerType || "claude";
-    const { provider } = await this.pickRandomProvider(session, excludeIds, targetProviderType);
+    const { provider } = await this.pickRandomProvider(session, excludeIds);
     return provider;
   }
 
@@ -227,8 +306,7 @@ export class ProxyProviderResolver {
    * 查找可复用的供应商（基于 session）
    */
   private static async findReusable(
-    session: ProxySession,
-    targetProviderType: "claude" | "codex"
+    session: ProxySession
   ): Promise<Provider | null> {
     if (!session.shouldReuseProvider() || !session.sessionId) {
       return null;
@@ -264,30 +342,17 @@ export class ProxyProviderResolver {
       return null;
     }
 
-    // 检查供应商类型是否匹配
-    if (provider.providerType !== targetProviderType) {
-      logger.debug("ProviderSelector: Provider type mismatch", {
-        providerId: provider.id,
-        actual: provider.providerType,
-        expected: targetProviderType,
-      });
-      return null;
-    }
-
-    // 检查模型白名单（如果设置了 allowedModels）
+    // 检查模型支持（使用新的模型匹配逻辑）
     const requestedModel = session.getCurrentModel();
-    if (
-      requestedModel &&
-      provider.allowedModels &&
-      provider.allowedModels.length > 0 &&
-      !provider.allowedModels.includes(requestedModel)
-    ) {
+    if (requestedModel && !providerSupportsModel(provider, requestedModel)) {
       logger.debug("ProviderSelector: Session provider does not support requested model", {
         sessionId: session.sessionId,
         providerId: provider.id,
         providerName: provider.name,
+        providerType: provider.providerType,
         requestedModel,
         allowedModels: provider.allowedModels,
+        joinClaudePool: provider.joinClaudePool,
       });
       return null;
     }
@@ -302,19 +367,20 @@ export class ProxyProviderResolver {
 
   private static async pickRandomProvider(
     session?: ProxySession,
-    excludeIds: number[] = [], // 排除已失败的供应商
-    targetProviderType: "claude" | "codex" = "claude" // 目标供应商类型
+    excludeIds: number[] = [] // 排除已失败的供应商
   ): Promise<{
     provider: Provider | null;
     context: NonNullable<ProviderChainItem["decisionContext"]>;
   }> {
     const allProviders = await findProviderList();
+    const requestedModel = session?.getCurrentModel() || '';
 
     // === 初始化决策上下文 ===
     const context: NonNullable<ProviderChainItem["decisionContext"]> = {
       totalProviders: allProviders.length,
       enabledProviders: 0,
-      targetType: targetProviderType,
+      targetType: requestedModel.startsWith('claude-') ? 'claude' : 'codex', // 根据模型名推断
+      requestedModel, // 新增：记录请求的模型
       groupFilterApplied: false,
       beforeHealthCheck: 0,
       afterHealthCheck: 0,
@@ -325,89 +391,66 @@ export class ProxyProviderResolver {
       excludedProviderIds: excludeIds.length > 0 ? excludeIds : undefined,
     };
 
-    // Step 0: 第一层过滤 - 排除已禁用、类型不匹配和黑名单中的供应商
-    const enabledProviders = allProviders.filter(
-      (provider) =>
-        provider.isEnabled &&
-        provider.providerType === targetProviderType &&
-        !excludeIds.includes(provider.id)
-    );
+    // Step 1: 基础过滤 + 模型匹配（新逻辑）
+    const enabledProviders = allProviders.filter((provider) => {
+      // 1a. 基础过滤
+      if (!provider.isEnabled || excludeIds.includes(provider.id)) {
+        return false;
+      }
 
-    context.enabledProviders = allProviders.filter(
-      (p) => p.isEnabled && p.providerType === targetProviderType
-    ).length;
+      // 1b. 模型匹配（新逻辑）
+      if (!requestedModel) {
+        // 没有模型信息时，只选择 Anthropic 提供商（向后兼容）
+        return provider.providerType === 'claude';
+      }
 
-    // 记录被排除的供应商
-    for (const id of excludeIds) {
-      const p = allProviders.find((x) => x.id === id);
-      if (p) {
+      return providerSupportsModel(provider, requestedModel);
+    });
+
+    context.enabledProviders = enabledProviders.length;
+
+    // 记录被过滤的供应商
+    for (const p of allProviders) {
+      if (!enabledProviders.includes(p)) {
+        let reason: "circuit_open" | "rate_limited" | "excluded" | "type_mismatch" | "model_not_allowed" | "disabled" = 'disabled';
+        let details = '';
+
+        if (!p.isEnabled) {
+          reason = 'disabled';
+          details = '供应商已禁用';
+        } else if (excludeIds.includes(p.id)) {
+          reason = 'excluded';
+          details = '已在前序尝试中失败';
+        } else if (requestedModel && !providerSupportsModel(p, requestedModel)) {
+          reason = 'model_not_allowed';
+          details = `不支持模型 ${requestedModel}`;
+        }
+
         context.filteredProviders!.push({
           id: p.id,
           name: p.name,
-          reason: "excluded",
-          details: "已在前序尝试中失败",
+          reason,
+          details,
         });
       }
     }
 
     if (enabledProviders.length === 0) {
-      logger.warn("ProviderSelector: No enabled providers after exclusion filter");
-      return { provider: null, context };
-    }
-
-    // Step 0.5: 模型白名单过滤
-    let modelFilteredProviders = enabledProviders;
-    const requestedModel = session?.getCurrentModel();
-
-    if (requestedModel) {
-      const preModelFilterCount = enabledProviders.length;
-      modelFilteredProviders = enabledProviders.filter((provider) => {
-        // 如果供应商没有设置 allowedModels（null 或空数组），则允许所有模型
-        if (!provider.allowedModels || provider.allowedModels.length === 0) {
-          return true;
-        }
-
-        // 如果设置了 allowedModels，检查请求的模型是否在白名单中
-        const allowed = provider.allowedModels.includes(requestedModel);
-
-        if (!allowed) {
-          context.filteredProviders!.push({
-            id: provider.id,
-            name: provider.name,
-            reason: "model_not_allowed",
-            details: `模型 ${requestedModel} 不在白名单中`,
-          });
-        }
-
-        return allowed;
-      });
-
-      context.afterModelFilter = modelFilteredProviders.length;
-
-      if (modelFilteredProviders.length < preModelFilterCount) {
-        logger.debug("ProviderSelector: Model whitelist filter applied", {
-          requestedModel,
-          beforeFilter: preModelFilterCount,
-          afterFilter: modelFilteredProviders.length,
-          filteredOut: preModelFilterCount - modelFilteredProviders.length,
-        });
-      }
-    }
-
-    if (modelFilteredProviders.length === 0) {
-      logger.warn("ProviderSelector: No providers support the requested model", {
+      logger.warn('ProviderSelector: No providers support the requested model', {
         requestedModel,
+        totalProviders: allProviders.length,
+        excludedCount: excludeIds.length,
       });
       return { provider: null, context };
     }
 
-    // Step 1: 用户分组过滤（如果用户指定了分组）
-    let candidateProviders = modelFilteredProviders;
+    // Step 2: 用户分组过滤（如果用户指定了分组）
+    let candidateProviders = enabledProviders;
     const userGroup = session?.authState?.user?.providerGroup;
 
     if (userGroup) {
       context.userGroup = userGroup;
-      const groupFiltered = modelFilteredProviders.filter((p) => p.groupTag === userGroup);
+      const groupFiltered = enabledProviders.filter((p) => p.groupTag === userGroup);
 
       if (groupFiltered.length > 0) {
         candidateProviders = groupFiltered;
@@ -428,7 +471,7 @@ export class ProxyProviderResolver {
 
     context.beforeHealthCheck = candidateProviders.length;
 
-    // Step 2: 过滤超限供应商（健康度过滤）
+    // Step 3: 过滤超限供应商（健康度过滤）
     const healthyProviders = await this.filterByLimits(candidateProviders);
     context.afterHealthCheck = healthyProviders.length;
 
@@ -463,7 +506,7 @@ export class ProxyProviderResolver {
       return { provider: fallback, context };
     }
 
-    // Step 3: 优先级分层（只选择最高优先级的供应商）
+    // Step 4: 优先级分层（只选择最高优先级的供应商）
     const topPriorityProviders = this.selectTopPriority(healthyProviders);
     const priorities = [...new Set(healthyProviders.map((p) => p.priority || 0))].sort(
       (a, b) => a - b
@@ -471,7 +514,7 @@ export class ProxyProviderResolver {
     context.priorityLevels = priorities;
     context.selectedPriority = Math.min(...healthyProviders.map((p) => p.priority || 0));
 
-    // Step 4: 成本排序 + 加权选择 + 计算概率
+    // Step 5: 成本排序 + 加权选择 + 计算概率
     const totalWeight = topPriorityProviders.reduce((sum, p) => sum + p.weight, 0);
     context.candidatesAtPriority = topPriorityProviders.map((p) => ({
       id: p.id,
@@ -485,7 +528,7 @@ export class ProxyProviderResolver {
 
     // 详细的选择日志
     logger.info("ProviderSelector: Selection decision", {
-      targetProviderType,
+      requestedModel,
       totalProviders: allProviders.length,
       enabledCount: enabledProviders.length,
       excludedIds: excludeIds,

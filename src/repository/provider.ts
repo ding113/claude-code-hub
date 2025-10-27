@@ -21,6 +21,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     providerType: providerData.provider_type,
     modelRedirects: providerData.model_redirects,
     allowedModels: providerData.allowed_models,
+    joinClaudePool: providerData.join_claude_pool ?? false,
     limit5hUsd: providerData.limit_5h_usd != null ? providerData.limit_5h_usd.toString() : null,
     limitWeeklyUsd:
       providerData.limit_weekly_usd != null ? providerData.limit_weekly_usd.toString() : null,
@@ -46,6 +47,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     providerType: providers.providerType,
     modelRedirects: providers.modelRedirects,
     allowedModels: providers.allowedModels,
+    joinClaudePool: providers.joinClaudePool,
     limit5hUsd: providers.limit5hUsd,
     limitWeeklyUsd: providers.limitWeeklyUsd,
     limitMonthlyUsd: providers.limitMonthlyUsd,
@@ -80,6 +82,7 @@ export async function findProviderList(
       providerType: providers.providerType,
       modelRedirects: providers.modelRedirects,
       allowedModels: providers.allowedModels,
+      joinClaudePool: providers.joinClaudePool,
       limit5hUsd: providers.limit5hUsd,
       limitWeeklyUsd: providers.limitWeeklyUsd,
       limitMonthlyUsd: providers.limitMonthlyUsd,
@@ -121,6 +124,7 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       providerType: providers.providerType,
       modelRedirects: providers.modelRedirects,
       allowedModels: providers.allowedModels,
+      joinClaudePool: providers.joinClaudePool,
       limit5hUsd: providers.limit5hUsd,
       limitWeeklyUsd: providers.limitWeeklyUsd,
       limitMonthlyUsd: providers.limitMonthlyUsd,
@@ -166,6 +170,7 @@ export async function updateProvider(
   if (providerData.model_redirects !== undefined)
     dbData.modelRedirects = providerData.model_redirects;
   if (providerData.allowed_models !== undefined) dbData.allowedModels = providerData.allowed_models;
+  if (providerData.join_claude_pool !== undefined) dbData.joinClaudePool = providerData.join_claude_pool;
   if (providerData.limit_5h_usd !== undefined)
     dbData.limit5hUsd =
       providerData.limit_5h_usd != null ? providerData.limit_5h_usd.toString() : null;
@@ -199,6 +204,7 @@ export async function updateProvider(
       providerType: providers.providerType,
       modelRedirects: providers.modelRedirects,
       allowedModels: providers.allowedModels,
+      joinClaudePool: providers.joinClaudePool,
       limit5hUsd: providers.limit5hUsd,
       limitWeeklyUsd: providers.limitWeeklyUsd,
       limitMonthlyUsd: providers.limitMonthlyUsd,

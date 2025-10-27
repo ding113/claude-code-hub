@@ -9,7 +9,7 @@ import {
 } from "@/repository/provider";
 import { revalidatePath } from "next/cache";
 import { logger } from "@/lib/logger";
-import { type ProviderDisplay } from "@/types/provider";
+import { type ProviderDisplay, type ProviderType } from "@/types/provider";
 import { maskKey } from "@/lib/utils/validation";
 import { getSession } from "@/lib/auth";
 import { CreateProviderSchema, UpdateProviderSchema } from "@/lib/validation/schemas";
@@ -111,6 +111,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         providerType: provider.providerType,
         modelRedirects: provider.modelRedirects,
         allowedModels: provider.allowedModels,
+        joinClaudePool: provider.joinClaudePool,
         limit5hUsd: provider.limit5hUsd,
         limitWeeklyUsd: provider.limitWeeklyUsd,
         limitMonthlyUsd: provider.limitMonthlyUsd,
@@ -151,9 +152,10 @@ export async function addProvider(data: {
   priority?: number;
   cost_multiplier?: number;
   group_tag?: string | null;
-  provider_type?: string;
+  provider_type?: ProviderType;
   model_redirects?: Record<string, string> | null;
   allowed_models?: string[] | null;
+  join_claude_pool?: boolean;
   limit_5h_usd?: number | null;
   limit_weekly_usd?: number | null;
   limit_monthly_usd?: number | null;
@@ -220,8 +222,10 @@ export async function editProvider(
     priority?: number;
     cost_multiplier?: number;
     group_tag?: string | null;
-    provider_type?: string;
+    provider_type?: ProviderType;
     model_redirects?: Record<string, string> | null;
+    allowed_models?: string[] | null;
+    join_claude_pool?: boolean;
     limit_5h_usd?: number | null;
     limit_weekly_usd?: number | null;
     limit_monthly_usd?: number | null;
