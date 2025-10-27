@@ -9,6 +9,7 @@ import type { ProxySession } from "./session";
 import { defaultRegistry } from "../converters";
 import type { Format } from "../converters/types";
 import { mapClientFormatToTransformer, mapProviderTypeToTransformer } from "./format-mapper";
+import { isOfficialCodexClient, sanitizeCodexRequest } from "../codex/utils/request-sanitizer";
 
 const MAX_RETRY_ATTEMPTS = 3;
 
@@ -147,6 +148,45 @@ export class ProxyForwarder {
           error,
         });
         // 转换失败时继续使用原始请求
+      }
+    }
+
+    // Codex 请求清洗（即使格式相同也要执行，除非是官方客户端）
+    // 目的：确保非官方客户端的请求也能通过 Codex 供应商的校验
+    // - 替换 instructions 为官方完整 prompt
+    // - 删除不支持的参数（max_tokens, temperature 等）
+    if (toFormat === "codex") {
+      const isOfficialClient = isOfficialCodexClient(session.userAgent);
+
+      if (!isOfficialClient) {
+        logger.info("[ProxyForwarder] Non-official Codex client detected, sanitizing request", {
+          userAgent: session.userAgent || "N/A",
+          providerId: provider.id,
+          providerName: provider.name,
+        });
+
+        try {
+          const sanitized = sanitizeCodexRequest(
+            session.request.message as Record<string, unknown>,
+            session.request.model || "gpt-5-codex"
+          );
+          session.request.message = sanitized;
+
+          logger.debug("[ProxyForwarder] Codex request sanitized successfully", {
+            hasInstructions: !!sanitized.instructions,
+            instructionsLength: (sanitized.instructions as string)?.length || 0,
+          });
+        } catch (error) {
+          logger.error("[ProxyForwarder] Failed to sanitize Codex request, using original", {
+            error,
+          });
+          // 清洗失败时继续使用原始请求（降级策略）
+        }
+      } else {
+        logger.debug("[ProxyForwarder] Official Codex client detected, skipping sanitization", {
+          userAgent: session.userAgent,
+          providerId: provider.id,
+        });
       }
     }
 
