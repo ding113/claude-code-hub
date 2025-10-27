@@ -220,6 +220,21 @@ export const UpdateSystemSettingsSchema = z.object({
       { message: "不支持的货币类型" }
     )
     .optional(),
+  // 日志清理配置（可选）
+  enableAutoCleanup: z.boolean().optional(),
+  cleanupRetentionDays: z.coerce
+    .number()
+    .int("保留天数必须是整数")
+    .min(1, "保留天数不能少于1天")
+    .max(365, "保留天数不能超过365天")
+    .optional(),
+  cleanupSchedule: z.string().min(1, "执行时间不能为空").optional(),
+  cleanupBatchSize: z.coerce
+    .number()
+    .int("批量大小必须是整数")
+    .min(1000, "批量大小不能少于1000")
+    .max(100000, "批量大小不能超过100000")
+    .optional(),
 });
 
 // 导出类型推断

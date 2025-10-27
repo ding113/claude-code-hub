@@ -27,6 +27,10 @@ export async function saveSystemSettings(formData: {
   siteTitle: string;
   allowGlobalUsageView: boolean;
   currencyDisplay?: string;
+  enableAutoCleanup?: boolean;
+  cleanupRetentionDays?: number;
+  cleanupSchedule?: string;
+  cleanupBatchSize?: number;
 }): Promise<ActionResult<SystemSettings>> {
   try {
     const session = await getSession();
@@ -39,6 +43,10 @@ export async function saveSystemSettings(formData: {
       siteTitle: validated.siteTitle.trim(),
       allowGlobalUsageView: validated.allowGlobalUsageView,
       currencyDisplay: validated.currencyDisplay,
+      enableAutoCleanup: validated.enableAutoCleanup,
+      cleanupRetentionDays: validated.cleanupRetentionDays,
+      cleanupSchedule: validated.cleanupSchedule,
+      cleanupBatchSize: validated.cleanupBatchSize,
     });
 
     revalidatePath("/settings/config");
