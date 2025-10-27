@@ -274,8 +274,8 @@ export function ProviderForm({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="claude">Claude (Anthropic Messages API)</SelectItem>
-                <SelectItem value="codex" disabled={!enableMultiProviderTypes}>
-                  Codex (Response API){!enableMultiProviderTypes && " - 功能开发中"}
+                <SelectItem value="codex">
+                  Codex (Response API)
                 </SelectItem>
                 <SelectItem value="gemini-cli" disabled={!enableMultiProviderTypes}>
                   Gemini CLI{!enableMultiProviderTypes && " - 功能开发中"}
@@ -289,7 +289,7 @@ export function ProviderForm({
               选择供应商的 API 格式类型。
               {!enableMultiProviderTypes && (
                 <span className="text-amber-600 ml-1">
-                  注：除 Claude 外的其他类型功能正在开发中，暂不可用
+                  注：Gemini CLI 和 OpenAI Compatible 类型功能正在开发中，暂不可用
                 </span>
               )}
             </p>
