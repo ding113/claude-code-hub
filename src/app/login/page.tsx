@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Key, Loader2, AlertTriangle } from "lucide-react";
+import { Key, Loader2, AlertTriangle, Book } from "lucide-react";
 
 export default function LoginPage() {
   return (
@@ -151,6 +151,17 @@ function LoginPageContent() {
                 </p>
               </div>
             </form>
+
+            {/* 文档页入口 */}
+            <div className="mt-6 pt-6 border-t">
+              <a
+                href="/usage-doc"
+                className="flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Book className="h-4 w-4" />
+                查看使用文档
+              </a>
+            </div>
           </CardContent>
         </Card>
       </div>

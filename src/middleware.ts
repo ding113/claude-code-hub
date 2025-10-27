@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
 import { isDevelopment } from "@/lib/config/env.schema";
 
-const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/auth/logout", "/_next", "/favicon.ico"];
+const PUBLIC_PATHS = ["/login", "/usage-doc", "/api/auth/login", "/api/auth/logout", "/_next", "/favicon.ico"];
 
 const API_PROXY_PATH = "/v1";
 
