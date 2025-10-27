@@ -169,4 +169,5 @@ jobs:
             --allowedTools "Read,Write,Edit,Bash(git:*),Bash(gh:*),Bash(npm:*),Bash(pnpm:*),Bash(yarn:*),Bash(bun:*),Bash(npx:*)"
 
           use_commit_signing: true
-          track_progress: true  # CI 修复需要进度追踪
+          # workflow_run 事件不支持 track_progress,禁用以确保正常执行
+          track_progress: false
