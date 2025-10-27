@@ -223,12 +223,7 @@ export function transformOpenAIRequestToCodex(
       const textType = role === "assistant" ? "output_text" : "input_text";
 
       // 步骤 4: 如果是第一条用户消息且需要注入强制 prompt
-      if (
-        role === "user" &&
-        !processedFirstMessage &&
-        extractedInstructions &&
-        !isOfficial
-      ) {
+      if (role === "user" && !processedFirstMessage && extractedInstructions && !isOfficial) {
         // 注入强制 prompt（参考 CLIProxyAPI:87-92）
         output.input.push({
           type: "message",
@@ -286,12 +281,7 @@ export function transformOpenAIRequestToCodex(
       }
 
       // 步骤 4: 如果是第一条用户消息且需要注入强制 prompt
-      if (
-        role === "user" &&
-        !processedFirstMessage &&
-        extractedInstructions &&
-        !isOfficial
-      ) {
+      if (role === "user" && !processedFirstMessage && extractedInstructions && !isOfficial) {
         // 在内容前插入强制 prompt
         const injectedContent = [
           {
