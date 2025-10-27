@@ -313,18 +313,16 @@ export function transformOpenAIRequestToCodex(
     }
   }
 
-  // 如果有自定义 instructions 但没有用户消息，需要设置 instructions 字段
-  // （参考 CLIProxyAPI 的逻辑：如果是官方 instructions 或没有消息，直接设置 instructions）
-  if (extractedInstructions) {
-    if (isOfficial) {
-      // 官方 instructions 直接设置
-      output.instructions = extractedInstructions;
-    } else if (nonSystemMessages.length === 0) {
-      // 没有消息时，使用默认 prompt + 用户 instructions
-      const defaultInstructions = getDefaultInstructions(model);
-      output.instructions = `${defaultInstructions}\n\n${extractedInstructions}`;
-    }
-    // 否则已经通过消息注入了
+  // 步骤 8: 设置 instructions 字段（参考 CLIProxyAPI:codex_openai-responses_request.go:101）
+  // ⚠️ 关键修复：Codex API 强制要求此字段，必须无条件设置
+  // 参考：https://github.com/router-for-me/CLIProxyAPI/blob/main/internal/translator/codex/openai/responses/codex_openai-responses_request.go#L101
+  if (isOfficial && extractedInstructions) {
+    // 官方 instructions 直接使用（如 Codex CLI 原生 prompt）
+    output.instructions = extractedInstructions;
+  } else {
+    // 非官方或没有 instructions：使用默认 prompt
+    // 注意：用户的自定义 instructions 已经通过消息注入到第一条用户消息中（步骤 4）
+    output.instructions = getDefaultInstructions(model);
   }
 
   // 步骤 5: 转换 tools
@@ -364,6 +362,9 @@ export function transformOpenAIRequestToCodex(
   logger.debug("[OpenAI→Codex] Request transformation completed", {
     inputCount: output.input.length,
     hasInstructions: !!output.instructions,
+    instructionsPreview: output.instructions
+      ? output.instructions.slice(0, 100) + "..."
+      : "N/A",
     hasTools: !!output.tools,
     toolsCount: output.tools?.length || 0,
     forceInjected: !isOfficial && !!extractedInstructions && processedFirstMessage,
