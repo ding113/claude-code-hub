@@ -1,6 +1,7 @@
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 import { getSystemSettings, updateSystemSettings } from "@/repository/system-config";
+import { UpdateSystemSettingsSchema } from "@/lib/validation/schemas";
 import { z } from "zod";
 
 /**
@@ -48,23 +49,13 @@ export async function POST(req: Request) {
     const body = await req.json();
 
     // 验证请求数据
-    const schema = z.object({
-      siteTitle: z.string().min(1, "站点标题不能为空").max(128, "站点标题不能超过128个字符"),
-      allowGlobalUsageView: z.boolean(),
-      currencyDisplay: z.string().optional(),
-      enableAutoCleanup: z.boolean().optional(),
-      cleanupRetentionDays: z.number().int().min(1).max(365).optional(),
-      cleanupSchedule: z.string().min(1).optional(),
-      cleanupBatchSize: z.number().int().min(1000).max(100000).optional(),
-    });
-
-    const validated = schema.parse(body);
+    const validated = UpdateSystemSettingsSchema.parse(body);
 
     // 更新系统设置
     const updated = await updateSystemSettings({
       siteTitle: validated.siteTitle.trim(),
       allowGlobalUsageView: validated.allowGlobalUsageView,
-      currencyDisplay: validated.currencyDisplay as any,
+      currencyDisplay: validated.currencyDisplay,
       enableAutoCleanup: validated.enableAutoCleanup,
       cleanupRetentionDays: validated.cleanupRetentionDays,
       cleanupSchedule: validated.cleanupSchedule,
@@ -79,7 +70,7 @@ export async function POST(req: Request) {
     return Response.json(updated);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      const firstError = error.errors[0];
+      const firstError = error.issues[0];
       return Response.json(
         { error: firstError.message || "数据验证失败" },
         { status: 400 }
