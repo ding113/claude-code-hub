@@ -1,6 +1,10 @@
 import { getRedisClient } from "./client";
 import { logger } from "@/lib/logger";
-import { findDailyLeaderboard, findMonthlyLeaderboard, LeaderboardEntry } from "@/repository/leaderboard";
+import {
+  findDailyLeaderboard,
+  findMonthlyLeaderboard,
+  LeaderboardEntry,
+} from "@/repository/leaderboard";
 
 /**
  * 排行榜周期类型

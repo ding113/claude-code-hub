@@ -165,9 +165,7 @@ export class ToolNameMapper {
  * @param request - 原始请求体（Claude format）
  * @returns 反向映射（缩短名称 → 原始名称）
  */
-export function buildReverseMapFromRequest(
-  request: Record<string, unknown>
-): Map<string, string> {
+export function buildReverseMapFromRequest(request: Record<string, unknown>): Map<string, string> {
   const reverseMap = new Map<string, string>();
 
   // 从 tools 字段提取工具名称
@@ -197,9 +195,7 @@ export function buildReverseMapFromRequest(
  * @param request - 原始请求体（Claude format）
  * @returns 正向映射（原始名称 → 缩短名称）
  */
-export function buildForwardMapFromRequest(
-  request: Record<string, unknown>
-): Map<string, string> {
+export function buildForwardMapFromRequest(request: Record<string, unknown>): Map<string, string> {
   const forwardMap = new Map<string, string>();
 
   // 从 tools 字段提取工具名称

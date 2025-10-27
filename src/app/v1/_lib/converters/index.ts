@@ -32,7 +32,11 @@ import "./gemini-cli-to-openai";
 
 // 导出核心类型和注册表
 export { defaultRegistry, registerTransformer, TransformerRegistry } from "./registry";
-export { ToolNameMapper, buildForwardMapFromRequest, buildReverseMapFromRequest } from "./tool-name-mapper";
+export {
+  ToolNameMapper,
+  buildForwardMapFromRequest,
+  buildReverseMapFromRequest,
+} from "./tool-name-mapper";
 export type {
   Format,
   RequestTransform,

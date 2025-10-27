@@ -189,7 +189,7 @@ export function transformClaudeStreamResponseToCodex(
 
       if (deltaType === "thinking_delta") {
         // → response.reasoning_summary_text.delta
-        const thinking = delta.thinking as string || "";
+        const thinking = (delta.thinking as string) || "";
 
         output = buildSSE("response.reasoning_summary_text.delta", {
           type: "response.reasoning_summary_text.delta",
@@ -198,7 +198,7 @@ export function transformClaudeStreamResponseToCodex(
         });
       } else if (deltaType === "text_delta") {
         // → response.output_text.delta
-        const text = delta.text as string || "";
+        const text = (delta.text as string) || "";
 
         output = buildSSE("response.output_text.delta", {
           type: "response.output_text.delta",
@@ -207,7 +207,7 @@ export function transformClaudeStreamResponseToCodex(
         });
       } else if (deltaType === "input_json_delta") {
         // → response.function_call_arguments.delta
-        const partialJson = delta.partial_json as string || "";
+        const partialJson = (delta.partial_json as string) || "";
 
         output = buildSSE("response.function_call_arguments.delta", {
           type: "response.function_call_arguments.delta",
@@ -250,8 +250,8 @@ export function transformClaudeStreamResponseToCodex(
       const delta = (data.delta as Record<string, unknown>) || {};
       const usage = (data.usage as Record<string, unknown>) || {};
 
-      state.stopReason = delta.stop_reason as string || "end_turn";
-      state.stopSequence = delta.stop_sequence as string || null;
+      state.stopReason = (delta.stop_reason as string) || "end_turn";
+      state.stopSequence = (delta.stop_sequence as string) || null;
       state.finalUsage = usage;
 
       // 不输出，等待 message_stop
@@ -343,7 +343,7 @@ export function transformClaudeNonStreamResponseToCodex(
       switch (blockType) {
         case "thinking": {
           // 转换为 reasoning
-          const thinkingText = block.thinking as string || "";
+          const thinkingText = (block.thinking as string) || "";
 
           outputItems.push({
             type: "reasoning",
@@ -359,7 +359,7 @@ export function transformClaudeNonStreamResponseToCodex(
 
         case "text": {
           // 转换为 message
-          const text = block.text as string || "";
+          const text = (block.text as string) || "";
 
           outputItems.push({
             type: "message",
@@ -378,7 +378,7 @@ export function transformClaudeNonStreamResponseToCodex(
           // 转换为 function_call
           const toolUseId = block.id as string;
           let toolName = block.name as string;
-          const input = block.input as Record<string, unknown> || {};
+          const input = (block.input as Record<string, unknown>) || {};
 
           // 应用工具名称映射
           const mappedName = toolNameMap.get(toolName);
@@ -406,11 +406,12 @@ export function transformClaudeNonStreamResponseToCodex(
 
   logger.debug("[Claude→Codex] Non-stream response transformation completed", {
     outputItemCount: outputItems.length,
-    stopReason: codexResponse.response &&
+    stopReason:
+      codexResponse.response &&
       typeof codexResponse.response === "object" &&
       "stop_reason" in codexResponse.response
-      ? (codexResponse.response as Record<string, unknown>).stop_reason
-      : "unknown",
+        ? (codexResponse.response as Record<string, unknown>).stop_reason
+        : "unknown",
   });
 
   return codexResponse;

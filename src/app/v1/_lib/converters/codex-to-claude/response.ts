@@ -361,10 +361,8 @@ export function transformCodexNonStreamResponseToClaude(
     stop_reason: null,
     stop_sequence: null,
     usage: {
-      input_tokens:
-        (responseData.usage as Record<string, unknown>)?.input_tokens || 0,
-      output_tokens:
-        (responseData.usage as Record<string, unknown>)?.output_tokens || 0,
+      input_tokens: (responseData.usage as Record<string, unknown>)?.input_tokens || 0,
+      output_tokens: (responseData.usage as Record<string, unknown>)?.output_tokens || 0,
     },
   };
 

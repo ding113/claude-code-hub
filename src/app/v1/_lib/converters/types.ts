@@ -10,7 +10,7 @@ import type { Context } from "hono";
 /**
  * API 格式类型
  */
-export type Format = 'claude' | 'codex' | 'gemini-cli' | 'openai-compatible';
+export type Format = "claude" | "codex" | "gemini-cli" | "openai-compatible";
 
 /**
  * 请求转换函数类型
@@ -89,7 +89,7 @@ export interface TransformState {
   /** 当前内容块索引 */
   currentIndex?: number;
   /** 当前内容块类型 */
-  currentBlockType?: 'text' | 'thinking' | 'tool_use';
+  currentBlockType?: "text" | "thinking" | "tool_use";
   /** 其他自定义状态 */
   [key: string]: unknown;
 }

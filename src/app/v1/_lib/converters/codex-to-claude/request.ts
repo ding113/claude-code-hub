@@ -64,20 +64,22 @@ interface ClaudeRequest {
   max_tokens: number;
   messages: Array<{
     role: string;
-    content: string | Array<{
-      type: string;
-      text?: string;
-      source?: {
-        type: string;
-        media_type?: string;
-        data?: string;
-        url?: string;
-      };
-      id?: string;
-      name?: string;
-      input?: Record<string, unknown>;
-      tool_use_id?: string;
-    }>;
+    content:
+      | string
+      | Array<{
+          type: string;
+          text?: string;
+          source?: {
+            type: string;
+            media_type?: string;
+            data?: string;
+            url?: string;
+          };
+          id?: string;
+          name?: string;
+          input?: Record<string, unknown>;
+          tool_use_id?: string;
+        }>;
   }>;
   system?: string | Array<{ type: string; text: string }>;
   tools?: Array<{

@@ -21,14 +21,16 @@ interface OpenAIChatCompletionRequest {
   model?: string;
   messages?: Array<{
     role: string;
-    content?: string | Array<{
-      type: string;
-      text?: string;
-      image_url?: {
-        url: string;
-        detail?: string;
-      };
-    }>;
+    content?:
+      | string
+      | Array<{
+          type: string;
+          text?: string;
+          image_url?: {
+            url: string;
+            detail?: string;
+          };
+        }>;
     tool_calls?: Array<{
       id: string;
       type: string;
@@ -48,12 +50,14 @@ interface OpenAIChatCompletionRequest {
       parameters?: Record<string, unknown>;
     };
   }>;
-  tool_choice?: string | {
-    type: string;
-    function?: {
-      name: string;
-    };
-  };
+  tool_choice?:
+    | string
+    | {
+        type: string;
+        function?: {
+          name: string;
+        };
+      };
   max_tokens?: number;
   temperature?: number;
   top_p?: number;
@@ -69,21 +73,23 @@ interface ClaudeRequest {
   max_tokens: number;
   messages: Array<{
     role: string;
-    content: string | Array<{
-      type: string;
-      text?: string;
-      source?: {
-        type: string;
-        media_type?: string;
-        data?: string;
-        url?: string;
-      };
-      id?: string;
-      name?: string;
-      input?: Record<string, unknown>;
-      tool_use_id?: string;
-      content?: string | Array<unknown>;
-    }>;
+    content:
+      | string
+      | Array<{
+          type: string;
+          text?: string;
+          source?: {
+            type: string;
+            media_type?: string;
+            data?: string;
+            url?: string;
+          };
+          id?: string;
+          name?: string;
+          input?: Record<string, unknown>;
+          tool_use_id?: string;
+          content?: string | Array<unknown>;
+        }>;
   }>;
   system?: string | Array<{ type: string; text: string }>;
   tools?: Array<{
@@ -130,10 +136,10 @@ export function transformOpenAIRequestToClaude(
   });
 
   // 1. 提取 system 消息（从 messages 中提取 role: "system"）
-  const systemMessages = req.messages?.filter(m => m.role === "system") || [];
+  const systemMessages = req.messages?.filter((m) => m.role === "system") || [];
   if (systemMessages.length > 0) {
     const systemText = systemMessages
-      .map(m => typeof m.content === "string" ? m.content : "")
+      .map((m) => (typeof m.content === "string" ? m.content : ""))
       .join("\n");
 
     if (systemText) {
@@ -142,7 +148,7 @@ export function transformOpenAIRequestToClaude(
   }
 
   // 2. 转换 messages（跳过 system 消息）
-  const nonSystemMessages = req.messages?.filter(m => m.role !== "system") || [];
+  const nonSystemMessages = req.messages?.filter((m) => m.role !== "system") || [];
   for (const message of nonSystemMessages) {
     const role = message.role; // "user" | "assistant" | "tool"
     const content = message.content;
@@ -271,7 +277,7 @@ export function transformOpenAIRequestToClaude(
 
   // 3. 转换 tools
   if (req.tools && Array.isArray(req.tools)) {
-    output.tools = req.tools.map(tool => ({
+    output.tools = req.tools.map((tool) => ({
       name: tool.function.name,
       description: tool.function.description,
       input_schema: tool.function.parameters || {},

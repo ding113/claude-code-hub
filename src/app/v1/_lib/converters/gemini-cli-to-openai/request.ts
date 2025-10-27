@@ -84,13 +84,15 @@ interface OpenAIRequest {
   model: string;
   messages: Array<{
     role: string;
-    content: string | Array<{
-      type: string;
-      text?: string;
-      image_url?: {
-        url: string;
-      };
-    }>;
+    content:
+      | string
+      | Array<{
+          type: string;
+          text?: string;
+          image_url?: {
+            url: string;
+          };
+        }>;
     tool_calls?: Array<{
       id: string;
       type: string;
@@ -173,7 +175,10 @@ export function transformGeminiCLIRequestToOpenAI(
   const toolCallIDs: string[] = [];
 
   // 处理 systemInstruction → system message
-  if (geminiRequest.systemInstruction?.parts && Array.isArray(geminiRequest.systemInstruction.parts)) {
+  if (
+    geminiRequest.systemInstruction?.parts &&
+    Array.isArray(geminiRequest.systemInstruction.parts)
+  ) {
     const systemTexts: string[] = [];
     for (const part of geminiRequest.systemInstruction.parts) {
       if (part.text) {
@@ -266,17 +271,17 @@ export function transformGeminiCLIRequestToOpenAI(
           // 提取响应内容
           let responseContent = "";
           if (typeof response.result !== "undefined") {
-            responseContent = typeof response.result === "string"
-              ? response.result
-              : JSON.stringify(response.result);
+            responseContent =
+              typeof response.result === "string"
+                ? response.result
+                : JSON.stringify(response.result);
           } else {
             responseContent = JSON.stringify(response);
           }
 
           // 匹配工具调用 ID（简单策略：使用最后一个）
-          const toolCallID = toolCallIDs.length > 0
-            ? toolCallIDs[toolCallIDs.length - 1]
-            : `call_${funcName}`;
+          const toolCallID =
+            toolCallIDs.length > 0 ? toolCallIDs[toolCallIDs.length - 1] : `call_${funcName}`;
 
           // 创建 tool 消息
           output.messages.push({

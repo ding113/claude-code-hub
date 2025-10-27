@@ -174,7 +174,7 @@ export function ModelMultiSelect({
               value={customModel}
               onChange={(e) => setCustomModel(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') {
+                if (e.key === "Enter") {
                   e.preventDefault();
                   handleAddCustomModel();
                 }

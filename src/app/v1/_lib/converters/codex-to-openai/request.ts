@@ -55,14 +55,16 @@ interface OpenAIChatCompletionRequest {
   model: string;
   messages: Array<{
     role: string;
-    content?: string | Array<{
-      type: string;
-      text?: string;
-      image_url?: {
-        url: string;
-        detail?: string;
-      };
-    }>;
+    content?:
+      | string
+      | Array<{
+          type: string;
+          text?: string;
+          image_url?: {
+            url: string;
+            detail?: string;
+          };
+        }>;
     tool_calls?: Array<{
       id: string;
       type: string;
@@ -81,12 +83,14 @@ interface OpenAIChatCompletionRequest {
       parameters: Record<string, unknown>;
     };
   }>;
-  tool_choice?: string | {
-    type: string;
-    function?: {
-      name: string;
-    };
-  };
+  tool_choice?:
+    | string
+    | {
+        type: string;
+        function?: {
+          name: string;
+        };
+      };
   max_tokens?: number;
   stream?: boolean;
   [key: string]: unknown;

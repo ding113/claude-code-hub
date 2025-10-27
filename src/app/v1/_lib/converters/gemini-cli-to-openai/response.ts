@@ -16,11 +16,14 @@ import { logger } from "@/lib/logger";
  * OpenAI → Gemini 转换状态
  */
 interface OpenAIToGeminiState extends TransformState {
-  toolCallsAccumulator?: Record<number, {
-    id: string;
-    name: string;
-    arguments: string;
-  }>;
+  toolCallsAccumulator?: Record<
+    number,
+    {
+      id: string;
+      name: string;
+      arguments: string;
+    }
+  >;
   contentAccumulator?: string;
   isFirstChunk?: boolean;
 }
@@ -187,9 +190,9 @@ export function transformOpenAIStreamResponseToGeminiCLI(
     // 处理 tool_calls delta
     if (delta.tool_calls && Array.isArray(delta.tool_calls)) {
       for (const toolCall of delta.tool_calls) {
-        const toolIndex = toolCall.index as number || 0;
-        const toolID = toolCall.id as string || "";
-        const toolType = toolCall.type as string || "";
+        const toolIndex = (toolCall.index as number) || 0;
+        const toolID = (toolCall.id as string) || "";
+        const toolType = (toolCall.type as string) || "";
         const func = toolCall.function as Record<string, unknown> | undefined;
 
         // 跳过非 function 类型
@@ -201,8 +204,8 @@ export function transformOpenAIStreamResponseToGeminiCLI(
           continue;
         }
 
-        const functionName = func.name as string || "";
-        const functionArgs = func.arguments as string || "";
+        const functionName = (func.name as string) || "";
+        const functionArgs = (func.arguments as string) || "";
 
         // 初始化累加器
         if (!geminiState.toolCallsAccumulator) {
@@ -241,7 +244,10 @@ export function transformOpenAIStreamResponseToGeminiCLI(
       geminiCandidate.finishReason = geminiFinishReason;
 
       // 如果有累加的 tool calls，现在输出它们
-      if (geminiState.toolCallsAccumulator && Object.keys(geminiState.toolCallsAccumulator).length > 0) {
+      if (
+        geminiState.toolCallsAccumulator &&
+        Object.keys(geminiState.toolCallsAccumulator).length > 0
+      ) {
         const parts: Array<Record<string, unknown>> = [];
 
         for (const acc of Object.values(geminiState.toolCallsAccumulator)) {
@@ -350,8 +356,8 @@ export function transformOpenAINonStreamResponseToGeminiCLI(
           if (toolCall.type === "function") {
             const func = toolCall.function as Record<string, unknown> | undefined;
             if (func) {
-              const functionName = func.name as string || "";
-              const functionArgs = func.arguments as string || "{}";
+              const functionName = (func.name as string) || "";
+              const functionArgs = (func.arguments as string) || "{}";
               const argsMap = parseArgsToMap(functionArgs);
 
               parts.push({
@@ -367,7 +373,11 @@ export function transformOpenAINonStreamResponseToGeminiCLI(
 
       // 设置 parts
       if (parts.length > 0) {
-        ((geminiResponse.response as Record<string, unknown>).candidates as Array<Record<string, unknown>>)[0].content = {
+        (
+          (geminiResponse.response as Record<string, unknown>).candidates as Array<
+            Record<string, unknown>
+          >
+        )[0].content = {
           parts,
           role: "model",
         };
@@ -376,11 +386,19 @@ export function transformOpenAINonStreamResponseToGeminiCLI(
       // 处理 finish_reason
       if (choice.finish_reason) {
         const geminiFinishReason = mapOpenAIFinishReasonToGemini(choice.finish_reason as string);
-        ((geminiResponse.response as Record<string, unknown>).candidates as Array<Record<string, unknown>>)[0].finishReason = geminiFinishReason;
+        (
+          (geminiResponse.response as Record<string, unknown>).candidates as Array<
+            Record<string, unknown>
+          >
+        )[0].finishReason = geminiFinishReason;
       }
 
       // 设置 index
-      ((geminiResponse.response as Record<string, unknown>).candidates as Array<Record<string, unknown>>)[0].index = choice.index || 0;
+      (
+        (geminiResponse.response as Record<string, unknown>).candidates as Array<
+          Record<string, unknown>
+        >
+      )[0].index = choice.index || 0;
     }
   }
 

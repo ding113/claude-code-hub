@@ -223,8 +223,8 @@ export function transformGeminiCLIStreamResponseToClaude(
       if (functionCall) {
         geminiState.usedTool = true;
 
-        const funcName = functionCall.name as string || "";
-        const args = functionCall.args as Record<string, unknown> || {};
+        const funcName = (functionCall.name as string) || "";
+        const args = (functionCall.args as Record<string, unknown>) || {};
 
         // 先关闭之前的内容块
         if (geminiState.responseType !== 0) {
@@ -290,8 +290,8 @@ export function transformGeminiCLIStreamResponseToClaude(
 
     // 提取 usage 信息
     const usageMetadata = response?.usageMetadata as Record<string, unknown> | undefined;
-    const inputTokens = usageMetadata?.promptTokenCount as number || 0;
-    const outputTokens = usageMetadata?.candidatesTokenCount as number || 0;
+    const inputTokens = (usageMetadata?.promptTokenCount as number) || 0;
+    const outputTokens = (usageMetadata?.candidatesTokenCount as number) || 0;
 
     output += buildSSE("message_delta", {
       type: "message_delta",
@@ -378,8 +378,8 @@ export function transformGeminiCLINonStreamResponseToClaude(
       // 处理 functionCall
       if (functionCall) {
         usedTool = true;
-        const funcName = functionCall.name as string || "";
-        const args = functionCall.args as Record<string, unknown> || {};
+        const funcName = (functionCall.name as string) || "";
+        const args = (functionCall.args as Record<string, unknown>) || {};
         const toolCallID = `toolu_${funcName}_${Math.random().toString(36).substring(2, 10)}`;
 
         claudeContent.push({
@@ -394,12 +394,12 @@ export function transformGeminiCLINonStreamResponseToClaude(
 
   // 提取 usage 信息
   const usageMetadata = geminiResponse.usageMetadata as Record<string, unknown> | undefined;
-  const inputTokens = usageMetadata?.promptTokenCount as number || 0;
-  const outputTokens = usageMetadata?.candidatesTokenCount as number || 0;
+  const inputTokens = (usageMetadata?.promptTokenCount as number) || 0;
+  const outputTokens = (usageMetadata?.candidatesTokenCount as number) || 0;
 
   // 构建 Claude 格式响应
-  const responseId = geminiResponse.responseId as string || "msg_gemini_1";
-  const modelVersion = geminiResponse.modelVersion as string || model;
+  const responseId = (geminiResponse.responseId as string) || "msg_gemini_1";
+  const modelVersion = (geminiResponse.modelVersion as string) || model;
   const stopReason = usedTool ? "tool_use" : "end_turn";
 
   return {

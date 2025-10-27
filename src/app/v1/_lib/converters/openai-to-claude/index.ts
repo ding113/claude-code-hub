@@ -14,12 +14,7 @@ import {
 // 注册 OpenAI Compatible → Claude 转换器
 // 请求：OpenAI → Claude（使用本模块的请求转换器）
 // 响应：Claude → OpenAI（使用本模块的响应转换器）
-registerTransformer(
-  "openai-compatible",
-  "claude",
-  transformOpenAIRequestToClaude,
-  {
-    stream: transformClaudeStreamResponseToOpenAI,
-    nonStream: transformClaudeNonStreamResponseToOpenAI,
-  }
-);
+registerTransformer("openai-compatible", "claude", transformOpenAIRequestToClaude, {
+  stream: transformClaudeStreamResponseToOpenAI,
+  nonStream: transformClaudeNonStreamResponseToOpenAI,
+});

@@ -112,11 +112,13 @@ export function transformClaudeStreamResponseToOpenAI(
         object: "chat.completion.chunk",
         created,
         model: (message.model as string) || model,
-        choices: [{
-          index: 0,
-          delta: { role: "assistant", content: "" },
-          finish_reason: null,
-        }],
+        choices: [
+          {
+            index: 0,
+            delta: { role: "assistant", content: "" },
+            finish_reason: null,
+          },
+        ],
       });
       break;
     }
@@ -140,11 +142,14 @@ export function transformClaudeStreamResponseToOpenAI(
           state.toolCalls = {};
         }
 
-        const toolCalls = state.toolCalls as Record<number, {
-          id: string;
-          type: string;
-          function: { name: string; arguments: string };
-        }>;
+        const toolCalls = state.toolCalls as Record<
+          number,
+          {
+            id: string;
+            type: string;
+            function: { name: string; arguments: string };
+          }
+        >;
 
         toolCalls[index] = {
           id: toolUseId,
@@ -161,21 +166,25 @@ export function transformClaudeStreamResponseToOpenAI(
           object: "chat.completion.chunk",
           created,
           model,
-          choices: [{
-            index: 0,
-            delta: {
-              tool_calls: [{
-                index,
-                id: toolUseId,
-                type: "function",
-                function: {
-                  name: toolName,
-                  arguments: "",
-                },
-              }],
+          choices: [
+            {
+              index: 0,
+              delta: {
+                tool_calls: [
+                  {
+                    index,
+                    id: toolUseId,
+                    type: "function",
+                    function: {
+                      name: toolName,
+                      arguments: "",
+                    },
+                  },
+                ],
+              },
+              finish_reason: null,
             },
-            finish_reason: null,
-          }],
+          ],
         });
       }
       // text 和 thinking 在 content_block_start 时不输出
@@ -189,22 +198,24 @@ export function transformClaudeStreamResponseToOpenAI(
 
       if (deltaType === "text_delta") {
         // 文本增量
-        const text = delta.text as string || "";
+        const text = (delta.text as string) || "";
 
         output = buildOpenAISSE({
           id: state.messageId,
           object: "chat.completion.chunk",
           created,
           model,
-          choices: [{
-            index: 0,
-            delta: { content: text },
-            finish_reason: null,
-          }],
+          choices: [
+            {
+              index: 0,
+              delta: { content: text },
+              finish_reason: null,
+            },
+          ],
         });
       } else if (deltaType === "thinking_delta") {
         // 思考内容（OpenAI o3 格式）
-        const thinking = delta.thinking as string || "";
+        const thinking = (delta.thinking as string) || "";
 
         if (!state.thinkingContent) {
           state.thinkingContent = "";
@@ -217,21 +228,28 @@ export function transformClaudeStreamResponseToOpenAI(
           object: "chat.completion.chunk",
           created,
           model,
-          choices: [{
-            index: 0,
-            delta: { reasoning_content: thinking },
-            finish_reason: null,
-          }],
+          choices: [
+            {
+              index: 0,
+              delta: { reasoning_content: thinking },
+              finish_reason: null,
+            },
+          ],
         });
       } else if (deltaType === "input_json_delta") {
         // Tool call arguments 增量
-        const partialJson = delta.partial_json as string || "";
+        const partialJson = (delta.partial_json as string) || "";
 
-        const toolCalls = state.toolCalls as Record<number, {
-          id: string;
-          type: string;
-          function: { name: string; arguments: string };
-        }> | undefined;
+        const toolCalls = state.toolCalls as
+          | Record<
+              number,
+              {
+                id: string;
+                type: string;
+                function: { name: string; arguments: string };
+              }
+            >
+          | undefined;
 
         if (toolCalls && toolCalls[index]) {
           toolCalls[index].function.arguments += partialJson;
@@ -242,18 +260,22 @@ export function transformClaudeStreamResponseToOpenAI(
           object: "chat.completion.chunk",
           created,
           model,
-          choices: [{
-            index: 0,
-            delta: {
-              tool_calls: [{
-                index,
-                function: {
-                  arguments: partialJson,
-                },
-              }],
+          choices: [
+            {
+              index: 0,
+              delta: {
+                tool_calls: [
+                  {
+                    index,
+                    function: {
+                      arguments: partialJson,
+                    },
+                  },
+                ],
+              },
+              finish_reason: null,
             },
-            finish_reason: null,
-          }],
+          ],
         });
       }
       break;
@@ -269,8 +291,8 @@ export function transformClaudeStreamResponseToOpenAI(
       const delta = (data.delta as Record<string, unknown>) || {};
       const usage = (data.usage as Record<string, unknown>) || {};
 
-      state.stopReason = delta.stop_reason as string || "stop";
-      state.stopSequence = delta.stop_sequence as string || null;
+      state.stopReason = (delta.stop_reason as string) || "stop";
+      state.stopSequence = (delta.stop_sequence as string) || null;
       state.finalUsage = usage;
 
       // 不输出，等待 message_stop
@@ -306,15 +328,18 @@ export function transformClaudeStreamResponseToOpenAI(
         object: "chat.completion.chunk",
         created,
         model,
-        choices: [{
-          index: 0,
-          delta: {},
-          finish_reason: finishReason,
-        }],
+        choices: [
+          {
+            index: 0,
+            delta: {},
+            finish_reason: finishReason,
+          },
+        ],
         usage: {
           prompt_tokens: (usage.input_tokens as number) || 0,
           completion_tokens: (usage.output_tokens as number) || 0,
-          total_tokens: ((usage.input_tokens as number) || 0) + ((usage.output_tokens as number) || 0),
+          total_tokens:
+            ((usage.input_tokens as number) || 0) + ((usage.output_tokens as number) || 0),
         },
       });
 
@@ -376,11 +401,11 @@ export function transformClaudeNonStreamResponseToOpenAI(
 
     switch (blockType) {
       case "text":
-        textContent += block.text as string || "";
+        textContent += (block.text as string) || "";
         break;
 
       case "thinking":
-        reasoningContent += block.thinking as string || "";
+        reasoningContent += (block.thinking as string) || "";
         break;
 
       case "tool_use":
@@ -397,7 +422,7 @@ export function transformClaudeNonStreamResponseToOpenAI(
   }
 
   // 映射 stop_reason
-  const stopReason = response.stop_reason as string || "end_turn";
+  const stopReason = (response.stop_reason as string) || "end_turn";
   let finishReason = "stop";
   switch (stopReason) {
     case "end_turn":
@@ -414,23 +439,25 @@ export function transformClaudeNonStreamResponseToOpenAI(
       break;
   }
 
-  const usage = response.usage as Record<string, unknown> || {};
+  const usage = (response.usage as Record<string, unknown>) || {};
 
   return {
     id: response.id || "",
     object: "chat.completion",
     created: Math.floor(Date.now() / 1000),
     model: response.model || model,
-    choices: [{
-      index: 0,
-      message: {
-        role: "assistant",
-        content: textContent || null,
-        ...(reasoningContent && { reasoning_content: reasoningContent }),
-        ...(toolCalls.length > 0 && { tool_calls: toolCalls }),
+    choices: [
+      {
+        index: 0,
+        message: {
+          role: "assistant",
+          content: textContent || null,
+          ...(reasoningContent && { reasoning_content: reasoningContent }),
+          ...(toolCalls.length > 0 && { tool_calls: toolCalls }),
+        },
+        finish_reason: finishReason,
       },
-      finish_reason: finishReason,
-    }],
+    ],
     usage: {
       prompt_tokens: (usage.input_tokens as number) || 0,
       completion_tokens: (usage.output_tokens as number) || 0,

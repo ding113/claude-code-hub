@@ -17,12 +17,7 @@ import {
 //
 // 注意：这里复用了 openai-to-claude/response.ts 中的响应转换器，
 // 因为 Claude → OpenAI 的响应转换逻辑是相同的（都是将 Claude 响应转为 OpenAI 格式）
-registerTransformer(
-  "claude",
-  "openai-compatible",
-  transformClaudeRequestToOpenAI,
-  {
-    stream: transformClaudeStreamResponseToOpenAI,
-    nonStream: transformClaudeNonStreamResponseToOpenAI,
-  }
-);
+registerTransformer("claude", "openai-compatible", transformClaudeRequestToOpenAI, {
+  stream: transformClaudeStreamResponseToOpenAI,
+  nonStream: transformClaudeNonStreamResponseToOpenAI,
+});

@@ -14,12 +14,7 @@ import {
 // 注册 Codex → OpenAI Compatible 转换器
 // 请求：Codex → OpenAI（使用本模块的请求转换器）
 // 响应：OpenAI → Codex（实际上是 Codex → OpenAI，使用本模块的响应转换器）
-registerTransformer(
-  "codex",
-  "openai-compatible",
-  transformCodexRequestToOpenAI,
-  {
-    stream: transformCodexStreamResponseToOpenAI,
-    nonStream: transformCodexNonStreamResponseToOpenAI,
-  }
-);
+registerTransformer("codex", "openai-compatible", transformCodexRequestToOpenAI, {
+  stream: transformCodexStreamResponseToOpenAI,
+  nonStream: transformCodexNonStreamResponseToOpenAI,
+});

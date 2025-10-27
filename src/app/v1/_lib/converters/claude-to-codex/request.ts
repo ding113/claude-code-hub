@@ -27,21 +27,23 @@ interface ClaudeRequest {
   system?: string | Array<{ type: string; text: string }>;
   messages?: Array<{
     role: string;
-    content: string | Array<{
-      type: string;
-      text?: string;
-      source?: {
-        type: string;
-        media_type?: string;
-        data?: string;
-        url?: string;
-      };
-      id?: string;
-      name?: string;
-      input?: Record<string, unknown>;
-      tool_use_id?: string;
-      content?: string | Array<unknown>;
-    }>;
+    content:
+      | string
+      | Array<{
+          type: string;
+          text?: string;
+          source?: {
+            type: string;
+            media_type?: string;
+            data?: string;
+            url?: string;
+          };
+          id?: string;
+          name?: string;
+          input?: Record<string, unknown>;
+          tool_use_id?: string;
+          content?: string | Array<unknown>;
+        }>;
   }>;
   tools?: Array<{
     name: string;
@@ -134,8 +136,7 @@ export function transformClaudeRequestToCodex(
 
   // 提取 Codex instructions（从环境变量或默认值）
   // 注意：这里简化处理，实际应该从配置中获取
-  const codexInstructions =
-    "You are Claude, a large language model trained by Anthropic.";
+  const codexInstructions = "You are Claude, a large language model trained by Anthropic.";
   output.instructions = codexInstructions;
 
   // 处理 system 消息（转换为首个 user message）
@@ -398,9 +399,7 @@ export function transformClaudeRequestToCodex(
   if (output.input.length > 0) {
     const firstItem = output.input[0];
     if (firstItem.type === "message" && firstItem.content) {
-      const firstContent = Array.isArray(firstItem.content)
-        ? firstItem.content[0]
-        : null;
+      const firstContent = Array.isArray(firstItem.content) ? firstItem.content[0] : null;
       const firstText =
         firstContent && typeof firstContent === "object" && "text" in firstContent
           ? firstContent.text

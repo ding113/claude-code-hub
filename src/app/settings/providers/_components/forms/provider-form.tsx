@@ -90,8 +90,7 @@ export function ProviderForm({ mode, onSuccess, provider }: ProviderFormProps) {
     }
 
     // 处理模型重定向（空对象转为 null）
-    const parsedModelRedirects =
-      Object.keys(modelRedirects).length > 0 ? modelRedirects : null;
+    const parsedModelRedirects = Object.keys(modelRedirects).length > 0 ? modelRedirects : null;
 
     startTransition(async () => {
       try {
@@ -292,39 +291,40 @@ export function ProviderForm({ mode, onSuccess, provider }: ProviderFormProps) {
           </div>
 
           {/* joinClaudePool 开关 - 仅非 Claude 供应商显示 */}
-          {providerType !== "claude" && (() => {
-            // 检查是否有重定向到 Claude 模型的映射
-            const hasClaudeRedirects = Object.values(modelRedirects).some((target) =>
-              target.startsWith("claude-")
-            );
+          {providerType !== "claude" &&
+            (() => {
+              // 检查是否有重定向到 Claude 模型的映射
+              const hasClaudeRedirects = Object.values(modelRedirects).some((target) =>
+                target.startsWith("claude-")
+              );
 
-            if (!hasClaudeRedirects) return null;
+              if (!hasClaudeRedirects) return null;
 
-            return (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor={isEdit ? "edit-join-claude-pool" : "join-claude-pool"}>
-                      加入 Claude 调度池
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      启用后，此供应商将与 Claude 类型供应商一起参与负载均衡调度
-                    </p>
+              return (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor={isEdit ? "edit-join-claude-pool" : "join-claude-pool"}>
+                        加入 Claude 调度池
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        启用后，此供应商将与 Claude 类型供应商一起参与负载均衡调度
+                      </p>
+                    </div>
+                    <Switch
+                      id={isEdit ? "edit-join-claude-pool" : "join-claude-pool"}
+                      checked={joinClaudePool}
+                      onCheckedChange={setJoinClaudePool}
+                      disabled={isPending}
+                    />
                   </div>
-                  <Switch
-                    id={isEdit ? "edit-join-claude-pool" : "join-claude-pool"}
-                    checked={joinClaudePool}
-                    onCheckedChange={setJoinClaudePool}
-                    disabled={isPending}
-                  />
+                  <p className="text-xs text-muted-foreground">
+                    仅当模型重定向配置中存在映射到 claude-* 模型时可用。启用后，当用户请求 claude-*
+                    模型时，此供应商也会参与调度选择。
+                  </p>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  仅当模型重定向配置中存在映射到 claude-* 模型时可用。启用后，当用户请求 claude-*
-                  模型时，此供应商也会参与调度选择。
-                </p>
-              </div>
-            );
-          })()}
+              );
+            })()}
         </div>
 
         {/* 模型白名单配置 */}

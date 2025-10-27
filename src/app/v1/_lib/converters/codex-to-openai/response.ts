@@ -134,21 +134,23 @@ export function transformCodexStreamResponseToOpenAI(
 
     case "response.reasoning_summary_text.delta": {
       // → delta.reasoning_content
-      const delta = data.delta as string || "";
+      const delta = (data.delta as string) || "";
 
       output = buildOpenAISSE({
         id: codexState.responseId,
         object: "chat.completion.chunk",
         created,
         model: codexState.model || model,
-        choices: [{
-          index: 0,
-          delta: {
-            role: "assistant",
-            reasoning_content: delta,
+        choices: [
+          {
+            index: 0,
+            delta: {
+              role: "assistant",
+              reasoning_content: delta,
+            },
+            finish_reason: null,
           },
-          finish_reason: null,
-        }],
+        ],
       });
       break;
     }
@@ -160,35 +162,39 @@ export function transformCodexStreamResponseToOpenAI(
         object: "chat.completion.chunk",
         created,
         model: codexState.model || model,
-        choices: [{
-          index: 0,
-          delta: {
-            role: "assistant",
-            reasoning_content: "\n\n",
+        choices: [
+          {
+            index: 0,
+            delta: {
+              role: "assistant",
+              reasoning_content: "\n\n",
+            },
+            finish_reason: null,
           },
-          finish_reason: null,
-        }],
+        ],
       });
       break;
     }
 
     case "response.output_text.delta": {
       // → delta.content
-      const delta = data.delta as string || "";
+      const delta = (data.delta as string) || "";
 
       output = buildOpenAISSE({
         id: codexState.responseId,
         object: "chat.completion.chunk",
         created,
         model: codexState.model || model,
-        choices: [{
-          index: 0,
-          delta: {
-            role: "assistant",
-            content: delta,
+        choices: [
+          {
+            index: 0,
+            delta: {
+              role: "assistant",
+              content: delta,
+            },
+            finish_reason: null,
           },
-          finish_reason: null,
-        }],
+        ],
       });
       break;
     }
@@ -208,8 +214,8 @@ export function transformCodexStreamResponseToOpenAI(
       }
       codexState.functionCallIndex++;
 
-      const callId = item.call_id as string || "";
-      let name = item.name as string || "";
+      const callId = (item.call_id as string) || "";
+      let name = (item.name as string) || "";
 
       // 恢复原始工具名称
       const originalName = toolNameMap.get(name);
@@ -217,29 +223,33 @@ export function transformCodexStreamResponseToOpenAI(
         name = originalName;
       }
 
-      const argumentsStr = item.arguments as string || "";
+      const argumentsStr = (item.arguments as string) || "";
 
       output = buildOpenAISSE({
         id: codexState.responseId,
         object: "chat.completion.chunk",
         created,
         model: codexState.model || model,
-        choices: [{
-          index: 0,
-          delta: {
-            role: "assistant",
-            tool_calls: [{
-              index: codexState.functionCallIndex,
-              id: callId,
-              type: "function",
-              function: {
-                name,
-                arguments: argumentsStr,
-              },
-            }],
+        choices: [
+          {
+            index: 0,
+            delta: {
+              role: "assistant",
+              tool_calls: [
+                {
+                  index: codexState.functionCallIndex,
+                  id: callId,
+                  type: "function",
+                  function: {
+                    name,
+                    arguments: argumentsStr,
+                  },
+                },
+              ],
+            },
+            finish_reason: null,
           },
-          finish_reason: null,
-        }],
+        ],
       });
       break;
     }
@@ -256,21 +266,28 @@ export function transformCodexStreamResponseToOpenAI(
         object: "chat.completion.chunk",
         created,
         model: codexState.model || model,
-        choices: [{
-          index: 0,
-          delta: {},
-          finish_reason: finishReason,
-        }],
+        choices: [
+          {
+            index: 0,
+            delta: {},
+            finish_reason: finishReason,
+          },
+        ],
         usage: {
           prompt_tokens: (usage?.input_tokens as number) || 0,
           completion_tokens: (usage?.output_tokens as number) || 0,
-          total_tokens: (usage?.total_tokens as number) ||
+          total_tokens:
+            (usage?.total_tokens as number) ||
             ((usage?.input_tokens as number) || 0) + ((usage?.output_tokens as number) || 0),
-          ...((usage && (usage.output_tokens_details as Record<string, unknown> | undefined)?.reasoning_tokens) ? {
-            completion_tokens_details: {
-              reasoning_tokens: (usage.output_tokens_details as Record<string, unknown>).reasoning_tokens as number,
-            },
-          } : {}),
+          ...(usage &&
+          (usage.output_tokens_details as Record<string, unknown> | undefined)?.reasoning_tokens
+            ? {
+                completion_tokens_details: {
+                  reasoning_tokens: (usage.output_tokens_details as Record<string, unknown>)
+                    .reasoning_tokens as number,
+                },
+              }
+            : {}),
         },
       });
 
@@ -352,7 +369,7 @@ export function transformCodexNonStreamResponseToOpenAI(
           if (summary && Array.isArray(summary)) {
             for (const summaryItem of summary) {
               if (summaryItem.type === "summary_text") {
-                reasoningText = summaryItem.text as string || "";
+                reasoningText = (summaryItem.text as string) || "";
                 break;
               }
             }
@@ -366,7 +383,7 @@ export function transformCodexNonStreamResponseToOpenAI(
           if (content && Array.isArray(content)) {
             for (const contentItem of content) {
               if (contentItem.type === "output_text") {
-                contentText = contentItem.text as string || "";
+                contentText = (contentItem.text as string) || "";
                 break;
               }
             }
@@ -376,9 +393,9 @@ export function transformCodexNonStreamResponseToOpenAI(
 
         case "function_call": {
           // 处理 function_call
-          const callId = item.call_id as string || "";
-          let name = item.name as string || "";
-          const argumentsStr = item.arguments as string || "";
+          const callId = (item.call_id as string) || "";
+          let name = (item.name as string) || "";
+          const argumentsStr = (item.arguments as string) || "";
 
           // 恢复原始工具名称
           const originalName = toolNameMap.get(name);
@@ -420,24 +437,31 @@ export function transformCodexNonStreamResponseToOpenAI(
   // 设置 finish_reason
   const finishReason = toolCalls.length > 0 ? "tool_calls" : "stop";
 
-  openaiResponse.choices = [{
-    index: 0,
-    message,
-    finish_reason: finishReason,
-  }];
+  openaiResponse.choices = [
+    {
+      index: 0,
+      message,
+      finish_reason: finishReason,
+    },
+  ];
 
   // 设置 usage
   const usage = responseData.usage as Record<string, unknown> | undefined;
   openaiResponse.usage = {
     prompt_tokens: (usage?.input_tokens as number) || 0,
     completion_tokens: (usage?.output_tokens as number) || 0,
-    total_tokens: (usage?.total_tokens as number) ||
+    total_tokens:
+      (usage?.total_tokens as number) ||
       ((usage?.input_tokens as number) || 0) + ((usage?.output_tokens as number) || 0),
-    ...((usage && (usage.output_tokens_details as Record<string, unknown> | undefined)?.reasoning_tokens) ? {
-      completion_tokens_details: {
-        reasoning_tokens: (usage.output_tokens_details as Record<string, unknown>).reasoning_tokens as number,
-      },
-    } : {}),
+    ...(usage &&
+    (usage.output_tokens_details as Record<string, unknown> | undefined)?.reasoning_tokens
+      ? {
+          completion_tokens_details: {
+            reasoning_tokens: (usage.output_tokens_details as Record<string, unknown>)
+              .reasoning_tokens as number,
+          },
+        }
+      : {}),
   };
 
   logger.debug("[Codex→OpenAI] Non-stream response transformation completed", {

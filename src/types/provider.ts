@@ -1,5 +1,5 @@
 // 供应商类型枚举
-export type ProviderType = 'claude' | 'codex' | 'gemini-cli' | 'openai-compatible';
+export type ProviderType = "claude" | "codex" | "gemini-cli" | "openai-compatible";
 
 export interface Provider {
   id: number;

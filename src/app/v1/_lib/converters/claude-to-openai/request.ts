@@ -22,21 +22,23 @@ interface ClaudeRequest {
   system?: string | Array<{ type: string; text: string }>;
   messages?: Array<{
     role: string;
-    content: string | Array<{
-      type: string;
-      text?: string;
-      source?: {
-        type: string;
-        media_type?: string;
-        data?: string;
-        url?: string;
-      };
-      id?: string;
-      name?: string;
-      input?: Record<string, unknown>;
-      tool_use_id?: string;
-      content?: string | Array<unknown>;
-    }>;
+    content:
+      | string
+      | Array<{
+          type: string;
+          text?: string;
+          source?: {
+            type: string;
+            media_type?: string;
+            data?: string;
+            url?: string;
+          };
+          id?: string;
+          name?: string;
+          input?: Record<string, unknown>;
+          tool_use_id?: string;
+          content?: string | Array<unknown>;
+        }>;
   }>;
   tools?: Array<{
     name: string;
@@ -59,14 +61,16 @@ interface OpenAIChatCompletionRequest {
   model: string;
   messages: Array<{
     role: string;
-    content?: string | Array<{
-      type: string;
-      text?: string;
-      image_url?: {
-        url: string;
-        detail?: string;
-      };
-    }>;
+    content?:
+      | string
+      | Array<{
+          type: string;
+          text?: string;
+          image_url?: {
+            url: string;
+            detail?: string;
+          };
+        }>;
     tool_calls?: Array<{
       id: string;
       type: string;
@@ -86,12 +90,14 @@ interface OpenAIChatCompletionRequest {
       parameters: Record<string, unknown>;
     };
   }>;
-  tool_choice?: string | {
-    type: string;
-    function?: {
-      name: string;
-    };
-  };
+  tool_choice?:
+    | string
+    | {
+        type: string;
+        function?: {
+          name: string;
+        };
+      };
   max_tokens?: number;
   temperature?: number;
   top_p?: number;

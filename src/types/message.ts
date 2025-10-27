@@ -62,7 +62,13 @@ export interface ProviderChainItem {
       // 被过滤的供应商
       id: number;
       name: string;
-      reason: "circuit_open" | "rate_limited" | "excluded" | "type_mismatch" | "model_not_allowed" | "disabled";
+      reason:
+        | "circuit_open"
+        | "rate_limited"
+        | "excluded"
+        | "type_mismatch"
+        | "model_not_allowed"
+        | "disabled";
       details?: string; // 额外信息（如费用：$15.2/$15）
     }>;
 

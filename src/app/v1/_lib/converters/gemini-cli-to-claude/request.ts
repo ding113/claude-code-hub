@@ -107,15 +107,17 @@ interface ClaudeRequest {
   max_tokens: number;
   messages: Array<{
     role: string;
-    content: string | Array<{
-      type: string;
-      text?: string;
-      id?: string;
-      name?: string;
-      input?: Record<string, unknown>;
-      tool_use_id?: string;
-      content?: string | Array<unknown>;
-    }>;
+    content:
+      | string
+      | Array<{
+          type: string;
+          text?: string;
+          id?: string;
+          name?: string;
+          input?: Record<string, unknown>;
+          tool_use_id?: string;
+          content?: string | Array<unknown>;
+        }>;
   }>;
   system?: Array<{ type: string; text: string }>;
   tools?: Array<{

@@ -29,8 +29,8 @@ import type { ProviderChainItem } from "@/types/message";
  * @returns 是否支持该模型（用于调度器筛选）
  */
 function providerSupportsModel(provider: Provider, requestedModel: string): boolean {
-  const isClaudeModel = requestedModel.startsWith('claude-');
-  const isClaudeProvider = provider.providerType === 'claude';
+  const isClaudeModel = requestedModel.startsWith("claude-");
+  const isClaudeProvider = provider.providerType === "claude";
 
   // Case 1: Claude 模型请求
   if (isClaudeModel) {
@@ -48,7 +48,7 @@ function providerSupportsModel(provider: Provider, requestedModel: string): bool
     if (provider.joinClaudePool) {
       const redirectedModel = provider.modelRedirects?.[requestedModel];
       // 检查是否重定向到 claude 模型
-      return redirectedModel?.startsWith('claude-') || false;
+      return redirectedModel?.startsWith("claude-") || false;
     }
 
     // 1c. 其他情况：非 Anthropic 提供商且未加入 Claude 调度池
@@ -91,7 +91,9 @@ export class ProxyProviderResolver {
   ): Promise<Response | null> {
     // 忽略废弃的 targetProviderType 参数
     if (_deprecatedTargetProviderType) {
-      logger.warn('[ProviderSelector] targetProviderType parameter is deprecated and will be ignored');
+      logger.warn(
+        "[ProviderSelector] targetProviderType parameter is deprecated and will be ignored"
+      );
     }
 
     // 最大重试次数（避免无限循环）
@@ -112,7 +114,7 @@ export class ProxyProviderResolver {
           totalProviders: 0, // 复用不需要筛选
           enabledProviders: 0,
           targetType: reusedProvider.providerType as "claude" | "codex",
-          requestedModel: session.getCurrentModel() || '',
+          requestedModel: session.getCurrentModel() || "",
           groupFilterApplied: false,
           beforeHealthCheck: 0,
           afterHealthCheck: 0,
@@ -190,7 +192,7 @@ export class ProxyProviderResolver {
                   totalProviders: 0,
                   enabledProviders: 0,
                   targetType: session.provider.providerType as "claude" | "codex",
-                  requestedModel: session.getCurrentModel() || '',
+                  requestedModel: session.getCurrentModel() || "",
                   groupFilterApplied: false,
                   beforeHealthCheck: 0,
                   afterHealthCheck: 0,
@@ -207,10 +209,7 @@ export class ProxyProviderResolver {
 
           // === 重试选择 ===
           const { provider: fallbackProvider, context: retryContext } =
-            await ProxyProviderResolver.pickRandomProvider(
-              session,
-              excludedProviders
-            );
+            await ProxyProviderResolver.pickRandomProvider(session, excludedProviders);
 
           if (!fallbackProvider) {
             // 无其他可用供应商
@@ -249,7 +248,7 @@ export class ProxyProviderResolver {
             totalProviders: 0,
             enabledProviders: 0,
             targetType: session.provider.providerType as "claude" | "codex",
-            requestedModel: session.getCurrentModel() || '',
+            requestedModel: session.getCurrentModel() || "",
             groupFilterApplied: false,
             beforeHealthCheck: 0,
             afterHealthCheck: 0,
@@ -305,9 +304,7 @@ export class ProxyProviderResolver {
   /**
    * 查找可复用的供应商（基于 session）
    */
-  private static async findReusable(
-    session: ProxySession
-  ): Promise<Provider | null> {
+  private static async findReusable(session: ProxySession): Promise<Provider | null> {
     if (!session.shouldReuseProvider() || !session.sessionId) {
       return null;
     }
@@ -373,13 +370,13 @@ export class ProxyProviderResolver {
     context: NonNullable<ProviderChainItem["decisionContext"]>;
   }> {
     const allProviders = await findProviderList();
-    const requestedModel = session?.getCurrentModel() || '';
+    const requestedModel = session?.getCurrentModel() || "";
 
     // === 初始化决策上下文 ===
     const context: NonNullable<ProviderChainItem["decisionContext"]> = {
       totalProviders: allProviders.length,
       enabledProviders: 0,
-      targetType: requestedModel.startsWith('claude-') ? 'claude' : 'codex', // 根据模型名推断
+      targetType: requestedModel.startsWith("claude-") ? "claude" : "codex", // 根据模型名推断
       requestedModel, // 新增：记录请求的模型
       groupFilterApplied: false,
       beforeHealthCheck: 0,
@@ -401,7 +398,7 @@ export class ProxyProviderResolver {
       // 1b. 模型匹配（新逻辑）
       if (!requestedModel) {
         // 没有模型信息时，只选择 Anthropic 提供商（向后兼容）
-        return provider.providerType === 'claude';
+        return provider.providerType === "claude";
       }
 
       return providerSupportsModel(provider, requestedModel);
@@ -412,17 +409,23 @@ export class ProxyProviderResolver {
     // 记录被过滤的供应商
     for (const p of allProviders) {
       if (!enabledProviders.includes(p)) {
-        let reason: "circuit_open" | "rate_limited" | "excluded" | "type_mismatch" | "model_not_allowed" | "disabled" = 'disabled';
-        let details = '';
+        let reason:
+          | "circuit_open"
+          | "rate_limited"
+          | "excluded"
+          | "type_mismatch"
+          | "model_not_allowed"
+          | "disabled" = "disabled";
+        let details = "";
 
         if (!p.isEnabled) {
-          reason = 'disabled';
-          details = '供应商已禁用';
+          reason = "disabled";
+          details = "供应商已禁用";
         } else if (excludeIds.includes(p.id)) {
-          reason = 'excluded';
-          details = '已在前序尝试中失败';
+          reason = "excluded";
+          details = "已在前序尝试中失败";
         } else if (requestedModel && !providerSupportsModel(p, requestedModel)) {
-          reason = 'model_not_allowed';
+          reason = "model_not_allowed";
           details = `不支持模型 ${requestedModel}`;
         }
 
@@ -436,7 +439,7 @@ export class ProxyProviderResolver {
     }
 
     if (enabledProviders.length === 0) {
-      logger.warn('ProviderSelector: No providers support the requested model', {
+      logger.warn("ProviderSelector: No providers support the requested model", {
         requestedModel,
         totalProviders: allProviders.length,
         excludedCount: excludeIds.length,

@@ -6,12 +6,7 @@
  */
 
 import type { Context } from "hono";
-import type {
-  Format,
-  RequestTransform,
-  ResponseTransform,
-  TransformState,
-} from "./types";
+import type { Format, RequestTransform, ResponseTransform, TransformState } from "./types";
 import { logger } from "@/lib/logger";
 
 /**
@@ -83,9 +78,7 @@ export class TransformerRegistry {
   ): Record<string, unknown> {
     const transformers = this.requests.get(from);
     if (!transformers) {
-      logger.debug(
-        `[Registry] No request transformers registered for format: ${from}`
-      );
+      logger.debug(`[Registry] No request transformers registered for format: ${from}`);
       return rawJSON;
     }
 
@@ -97,14 +90,17 @@ export class TransformerRegistry {
       return rawJSON;
     }
 
-    logger.info(`[Registry] Transforming request: ${from} → ${to}, model: ${model}, stream: ${stream}`);
+    logger.info(
+      `[Registry] Transforming request: ${from} → ${to}, model: ${model}, stream: ${stream}`
+    );
     try {
       return transformer(model, rawJSON, stream);
     } catch (error) {
-      logger.error(
-        `[Registry] Request transformation failed: ${from} → ${to}`,
-        { error, model, stream }
-      );
+      logger.error(`[Registry] Request transformation failed: ${from} → ${to}`, {
+        error,
+        model,
+        stream,
+      });
       // 转换失败时返回原始请求
       return rawJSON;
     }
@@ -156,19 +152,12 @@ export class TransformerRegistry {
     }
 
     try {
-      return transformer.stream(
-        ctx,
-        model,
-        originalRequest,
-        transformedRequest,
-        chunk,
-        state
-      );
+      return transformer.stream(ctx, model, originalRequest, transformedRequest, chunk, state);
     } catch (error) {
-      logger.error(
-        `[Registry] Stream response transformation failed: ${from} → ${to}`,
-        { error, model }
-      );
+      logger.error(`[Registry] Stream response transformation failed: ${from} → ${to}`, {
+        error,
+        model,
+      });
       // 转换失败时返回原始 chunk
       return [chunk];
     }
@@ -210,18 +199,12 @@ export class TransformerRegistry {
 
     logger.info(`[Registry] Transforming non-stream response: ${from} → ${to}, model: ${model}`);
     try {
-      return transformer.nonStream(
-        ctx,
-        model,
-        originalRequest,
-        transformedRequest,
-        response
-      );
+      return transformer.nonStream(ctx, model, originalRequest, transformedRequest, response);
     } catch (error) {
-      logger.error(
-        `[Registry] Non-stream response transformation failed: ${from} → ${to}`,
-        { error, model }
-      );
+      logger.error(`[Registry] Non-stream response transformation failed: ${from} → ${to}`, {
+        error,
+        model,
+      });
       // 转换失败时返回原始响应
       return response;
     }
