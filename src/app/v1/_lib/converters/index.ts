@@ -24,6 +24,7 @@ import "./claude-to-codex";
 
 // OpenAI Compatible 相关转换器
 import "./openai-to-claude";
+import "./openai-to-codex"; // OpenAI → Codex 转换器（新增）
 import "./claude-to-openai";
 
 // Gemini CLI 相关转换器

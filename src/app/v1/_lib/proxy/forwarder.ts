@@ -161,16 +161,19 @@ export class ProxyForwarder {
       });
     }
 
-    // 根据请求格式动态选择转发路径
+    // 根据目标格式动态选择转发路径
     let forwardUrl = session.requestUrl;
 
-    // OpenAI Compatible 请求：自动替换为 Response API 端点
-    if (session.originalFormat === "openai") {
+    // Codex 供应商：使用 Response API 端点（/v1/responses）
+    // 注意：基于 toFormat 而非 originalFormat，因为需要根据目标供应商类型选择路径
+    if (toFormat === "codex") {
       forwardUrl = new URL(session.requestUrl);
       forwardUrl.pathname = "/v1/responses";
       logger.debug("ProxyForwarder: Codex request path rewrite", {
         from: session.requestUrl.pathname,
         to: "/v1/responses",
+        originalFormat: fromFormat,
+        targetFormat: toFormat,
       });
     }
 

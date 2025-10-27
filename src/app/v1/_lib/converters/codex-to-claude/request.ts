@@ -191,14 +191,13 @@ export function transformCodexRequestToClaude(
   let instructionsText = "";
   let extractedFromSystem = false;
 
-  if (req.instructions && typeof req.instructions === "string") {
-    instructionsText = req.instructions;
-    if (instructionsText) {
-      output.messages.push({
-        role: "user",
-        content: instructionsText,
-      });
-    }
+  // 验证 instructions 必须是非空字符串（参考 ChatMock upstream.py:85-94）
+  if (typeof req.instructions === "string" && req.instructions.trim()) {
+    instructionsText = req.instructions.trim();
+    output.messages.push({
+      role: "user",
+      content: instructionsText,
+    });
   }
 
   // 如果没有 instructions，尝试从 input 中提取 system 消息
