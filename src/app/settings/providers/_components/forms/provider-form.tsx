@@ -55,11 +55,7 @@ export function ProviderForm({
   const sourceProvider = isEdit ? provider : cloneProvider;
 
   const [name, setName] = useState(
-    isEdit 
-      ? (provider?.name ?? "") 
-      : cloneProvider 
-        ? `${cloneProvider.name}_Copy` 
-        : ""
+    isEdit ? (provider?.name ?? "") : cloneProvider ? `${cloneProvider.name}_Copy` : ""
   );
   const [url, setUrl] = useState(sourceProvider?.url ?? "");
   const [key, setKey] = useState(""); // 编辑时留空代表不更新
@@ -75,9 +71,7 @@ export function ProviderForm({
     sourceProvider?.costMultiplier ?? 1.0
   );
   const [groupTag, setGroupTag] = useState<string>(sourceProvider?.groupTag ?? "");
-  const [limit5hUsd, setLimit5hUsd] = useState<number | null>(
-    sourceProvider?.limit5hUsd ?? null
-  );
+  const [limit5hUsd, setLimit5hUsd] = useState<number | null>(sourceProvider?.limit5hUsd ?? null);
   const [limitWeeklyUsd, setLimitWeeklyUsd] = useState<number | null>(
     sourceProvider?.limitWeeklyUsd ?? null
   );
@@ -87,9 +81,7 @@ export function ProviderForm({
   const [limitConcurrentSessions, setLimitConcurrentSessions] = useState<number | null>(
     sourceProvider?.limitConcurrentSessions ?? null
   );
-  const [allowedModels, setAllowedModels] = useState<string[]>(
-    sourceProvider?.allowedModels ?? []
-  );
+  const [allowedModels, setAllowedModels] = useState<string[]>(sourceProvider?.allowedModels ?? []);
   const [joinClaudePool, setJoinClaudePool] = useState<boolean>(
     sourceProvider?.joinClaudePool ?? false
   );
