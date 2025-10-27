@@ -161,18 +161,35 @@ export class ProxySession {
   }
 
   /**
-   * 获取 messages 数组长度
+   * 获取 messages 数组长度（支持 Claude 和 Codex 格式）
    */
   getMessagesLength(): number {
-    const messages = (this.request.message as Record<string, unknown>).messages;
-    return Array.isArray(messages) ? messages.length : 0;
+    const msg = this.request.message as Record<string, unknown>;
+    // Claude 格式: messages[]
+    if (Array.isArray(msg.messages)) {
+      return msg.messages.length;
+    }
+    // Codex 格式: input[]
+    if (Array.isArray(msg.input)) {
+      return msg.input.length;
+    }
+    return 0;
   }
 
   /**
-   * 获取 messages 数组
+   * 获取 messages 数组（支持 Claude 和 Codex 格式）
    */
   getMessages(): unknown {
-    return (this.request.message as Record<string, unknown>).messages;
+    const msg = this.request.message as Record<string, unknown>;
+    // Claude 格式优先
+    if (msg.messages !== undefined) {
+      return msg.messages;
+    }
+    // Codex 格式
+    if (msg.input !== undefined) {
+      return msg.input;
+    }
+    return undefined;
   }
 
   /**

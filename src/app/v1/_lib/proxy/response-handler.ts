@@ -100,7 +100,13 @@ export class ProxyResponseHandler {
 
         try {
           const parsed = JSON.parse(responseText) as Record<string, unknown>;
-          const usageValue = parsed.usage;
+          // Claude 格式: 顶级 usage
+          let usageValue = parsed.usage;
+          // Codex 格式: response.usage
+          if (!usageValue && parsed.response && typeof parsed.response === "object") {
+            const responseObj = parsed.response as Record<string, unknown>;
+            usageValue = responseObj.usage;
+          }
           if (usageValue && typeof usageValue === "object") {
             usageRecord = usageValue as Record<string, unknown>;
             usageMetrics = extractUsageMetrics(usageValue);
