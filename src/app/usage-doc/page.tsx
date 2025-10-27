@@ -3,13 +3,7 @@
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { Menu } from "lucide-react";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { TocNav, type TocItem } from "./_components/toc-nav";
 import { QuickLinks } from "./_components/quick-links";
@@ -1123,11 +1117,7 @@ export default function UsageDocPage() {
         </div>
 
         {/* 右侧目录导航 - 桌面端 */}
-        <aside
-          id="toc-navigation"
-          className="hidden lg:block w-64 shrink-0"
-          aria-label="页面导航"
-        >
+        <aside id="toc-navigation" className="hidden lg:block w-64 shrink-0" aria-label="页面导航">
           <div className="sticky top-24 space-y-4">
             <div className="bg-card rounded-lg border p-4">
               <h4 className="font-semibold text-sm mb-3">本页导航</h4>
@@ -1176,10 +1166,7 @@ export default function UsageDocPage() {
 
               <div className="border-t pt-4">
                 <h4 className="font-semibold text-sm mb-3">快速链接</h4>
-                <QuickLinks
-                  isLoggedIn={isLoggedIn}
-                  onBackToTop={() => setSheetOpen(false)}
-                />
+                <QuickLinks isLoggedIn={isLoggedIn} onBackToTop={() => setSheetOpen(false)} />
               </div>
             </div>
           </SheetContent>
