@@ -71,10 +71,7 @@ export async function POST(req: Request) {
   } catch (error) {
     if (error instanceof z.ZodError) {
       const firstError = error.issues[0];
-      return Response.json(
-        { error: firstError.message || "数据验证失败" },
-        { status: 400 }
-      );
+      return Response.json({ error: firstError.message || "数据验证失败" }, { status: 400 });
     }
 
     logger.error("更新系统配置失败", { error });
