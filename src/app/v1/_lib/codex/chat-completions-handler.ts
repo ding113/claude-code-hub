@@ -1,3 +1,11 @@
+/**
+ * OpenAI Compatible API Handler (/v1/chat/completions)
+ *
+ * 致谢：本文件中的 OpenAI 兼容层实现参考了以下开源项目：
+ * - https://github.com/router-for-me/CLIProxyAPI (MIT License)
+ * 感谢原作者的优秀工作和开源贡献！
+ */
+
 import type { Context } from "hono";
 import { logger } from "@/lib/logger";
 import { ProxySession } from "../proxy/session";

@@ -45,7 +45,7 @@
 - **🔗 决策链追踪** - 完整的供应商调用链记录，支持错误切换决策链显示
 - **🛡️ 熔断保护** - 供应商出错时自动临时熔断，避免重复调用失败的服务
 - **💰 价格同步** - 一键拉取 LiteLLM 模型价格表，自动更新价格信息
-- **🤖 OpenAI 兼容（即将到来）** - 将于下一大版本支持 Codex，包括模型重定向、价格管理
+- **🤖 OpenAI 兼容** - 支持 Codex CLI 等 OpenAI 格式的 AI 编程工具，包括模型重定向、价格管理
 
 ### 界面预览
 
@@ -393,9 +393,21 @@ server {
 4. 推送到分支 (`git push origin feature/AmazingFeature`)
 5. 开启 Pull Request
 
+## 🙏 致谢
+
+本项目的开发过程中参考和借鉴了以下优秀的开源项目：
+
+- **[zsio/claude-code-hub](https://github.com/zsio/claude-code-hub)** - 本项目的基础框架，感谢 [@zsio](https://github.com/zsio) 提供的优秀架构设计
+- **[router-for-me/CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)** - Codex CLI OpenAI 兼容层的实现参考了该项目，感谢其在 MIT 协议下的开源贡献
+
+特别感谢上述项目的作者和贡献者！
+
 ## 📄 许可证
 
 本项目采用 [MIT 许可证](LICENSE)
+
+**关于引用和参考**：
+- Codex CLI 的 OpenAI 兼容层实现参考了 [router-for-me/CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) 项目（MIT 协议）
 
 ## 🌟 Star History
 
