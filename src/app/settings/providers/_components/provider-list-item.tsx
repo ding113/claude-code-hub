@@ -4,10 +4,11 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Edit, Globe, Key, RotateCcw } from "lucide-react";
+import { Edit, Globe, Key, RotateCcw, Copy, ServerCog } from "lucide-react";
 import type { ProviderDisplay } from "@/types/provider";
 import type { User } from "@/types/user";
 import { ProviderForm } from "./forms/provider-form";
+import { AddProviderDialog } from "./add-provider-dialog";
 import { Switch } from "@/components/ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Slider } from "@/components/ui/slider";
@@ -52,6 +53,7 @@ export function ProviderListItem({
 }: ProviderListItemProps) {
   const router = useRouter();
   const [openEdit, setOpenEdit] = useState(false);
+  const [openClone, setOpenClone] = useState(false);
   const [resetPending, startResetTransition] = useTransition();
   const canEdit = currentUser?.role === "admin";
 
@@ -186,35 +188,66 @@ export function ProviderListItem({
               </Badge>
             )}
 
-            {/* 编辑按钮 - 仅管理员可见 */}
+            {/* 编辑和克隆按钮 - 仅管理员可见 */}
             {canEdit && (
-              <Dialog open={openEdit} onOpenChange={setOpenEdit}>
-                <DialogTrigger asChild>
-                  <Button
-                    type="button"
-                    aria-label="编辑服务商"
-                    variant="ghost"
-                    size="icon"
-                    className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <Edit className="h-3.5 w-3.5" />
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-                  <FormErrorBoundary>
-                    <ProviderForm
-                      mode="edit"
-                      provider={item}
-                      enableMultiProviderTypes={enableMultiProviderTypes}
-                      onSuccess={() => {
-                        setOpenEdit(false);
-                        // 刷新页面数据以同步所有字段
-                        router.refresh();
-                      }}
-                    />
-                  </FormErrorBoundary>
-                </DialogContent>
-              </Dialog>
+              <div className="flex items-center gap-1">
+                {/* 编辑按钮 */}
+                <Dialog open={openEdit} onOpenChange={setOpenEdit}>
+                  <DialogTrigger asChild>
+                    <Button
+                      type="button"
+                      aria-label="编辑服务商"
+                      variant="ghost"
+                      size="icon"
+                      className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <Edit className="h-3.5 w-3.5" />
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+                    <FormErrorBoundary>
+                      <ProviderForm
+                        mode="edit"
+                        provider={item}
+                        enableMultiProviderTypes={enableMultiProviderTypes}
+                        onSuccess={() => {
+                          setOpenEdit(false);
+                          // 刷新页面数据以同步所有字段
+                          router.refresh();
+                        }}
+                      />
+                    </FormErrorBoundary>
+                  </DialogContent>
+                </Dialog>
+                {/* 克隆按钮 */}
+                <Dialog open={openClone} onOpenChange={setOpenClone}>
+                  <DialogTrigger asChild>
+                    <Button
+                      type="button"
+                      aria-label="克隆服务商"
+                      variant="ghost"
+                      size="icon"
+                      className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+                    <FormErrorBoundary>
+                      <ProviderForm
+                        mode="create"
+                        cloneProvider={item}
+                        enableMultiProviderTypes={enableMultiProviderTypes}
+                        onSuccess={() => {
+                          setOpenClone(false);
+                          // 刷新页面数据以显示新添加的服务商
+                          router.refresh();
+                        }}
+                      />
+                    </FormErrorBoundary>
+                  </DialogContent>
+                </Dialog>
+              </div>
             )}
           </div>
         </div>
