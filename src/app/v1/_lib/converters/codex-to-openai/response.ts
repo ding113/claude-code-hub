@@ -448,8 +448,7 @@ export function transformCodexNonStreamResponseToOpenAI(
 function buildUsagePayload(usage?: Record<string, unknown>): Record<string, unknown> {
   const inputTokens = (usage?.input_tokens as number) || 0;
   const outputTokens = (usage?.output_tokens as number) || 0;
-  const totalTokens =
-    (usage?.total_tokens as number) || inputTokens + outputTokens;
+  const totalTokens = (usage?.total_tokens as number) || inputTokens + outputTokens;
 
   const payload: Record<string, unknown> = {
     prompt_tokens: inputTokens,
