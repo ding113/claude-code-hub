@@ -1,0 +1,137 @@
+name: Claude AI Assistant
+
+# 监听所有相关的 GitHub 事件
+on:
+  # PR 事件：创建、更新、编辑、标签、分配、关闭、重新打开
+  pull_request:
+    types: [opened, synchronize, edited, labeled, assigned, closed, reopened, ready_for_review]
+
+  # PR 审查事件
+  pull_request_review:
+    types: [submitted, edited]
+
+  # PR 审查评论
+  pull_request_review_comment:
+    types: [created, edited]
+
+  # Issue 事件：创建、编辑、标签、分配、关闭、重新打开
+  issues:
+    types: [opened, edited, labeled, assigned, closed, reopened]
+
+  # Issue 和 PR 评论
+  issue_comment:
+    types: [created, edited]
+
+jobs:
+  claude-assistant:
+    # 智能触发条件：状态变动自动触发 OR @ 提及触发
+    if: |
+      github.event_name == 'pull_request' ||
+      github.event_name == 'pull_request_review' ||
+      github.event_name == 'issues' ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude'))
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    # 完整权限配置
+    permissions:
+      contents: write          # 代码读写、分支创建、提交
+      pull-requests: write     # PR 全功能操作
+      issues: write            # Issue 全功能操作
+      actions: read            # 读取 CI 状态
+      id-token: write          # OIDC 认证（如果使用 Bedrock/Vertex）
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # 完整历史，便于分析
+
+      - name: Run Claude Code Assistant
+        uses: anthropics/claude-code-action@v1
+        env:
+          # 支持自定义 Base URL（代理服务）
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+        with:
+          # API 认证
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+          # 触发配置
+          trigger_phrase: "@claude"
+
+          # 智能提示：根据事件类型自动调整行为
+          prompt: |
+            REPO: ${{ github.repository }}
+            EVENT: ${{ github.event_name }}
+            ${{ github.event.pull_request.number && format('PR NUMBER: {0}', github.event.pull_request.number) || '' }}
+            ${{ github.event.issue.number && format('ISSUE NUMBER: {0}', github.event.issue.number) || '' }}
+            ACTOR: ${{ github.actor }}
+
+            你是一个全能的 GitHub 助手。根据当前事件类型，执行相应的操作：
+
+            ## 对于 PR 事件（opened, synchronize, edited）：
+            1. **代码审查**：
+               - 分析代码质量、潜在 bug、安全问题、性能问题
+               - 使用 `mcp__github_inline_comment__create_inline_comment` 添加行内评论
+               - 使用 `gh pr comment` 添加总体评论
+
+            2. **自动标签**：
+               - 分析 PR 内容，使用 `gh pr edit --add-label` 添加适当标签
+               - 标签类型：bug, enhancement, documentation, breaking-change, needs-review
+               - 优先级：priority-high, priority-medium, priority-low
+
+            3. **代码修复**（如果需要）：
+               - 如果发现明显问题且用户请求修复，直接修改代码并提交
+
+            ## 对于 Issue 事件（opened, edited）：
+            1. **自动分类和标签**：
+               - 首先运行 `gh label list` 获取可用标签
+               - 分析 Issue 类型：bug, feature-request, question, documentation
+               - 评估优先级：P1 (critical), P2 (high), P3 (medium), P4 (low)
+               - 使用 `gh issue edit --add-label` 添加标签
+
+            2. **重复检测**：
+               - 使用 `gh search issues` 查找类似 Issue
+               - 如果发现重复，添加 duplicate 标签并评论说明
+
+            3. **自动回复**：
+               - 对于问题类 Issue，提供详细解答
+               - 对于 bug 报告，确认问题并提供临时解决方案
+               - 对于功能请求，评估可行性并提供建议
+
+            ## 对于评论事件（@ 提及）：
+            1. **智能响应**：
+               - 回答用户问题
+               - 提供代码示例
+               - 解释技术细节
+               - 如果需要修复代码，直接修改并提交
+
+            2. **上下文理解**：
+               - 阅读完整的对话历史
+               - 理解 PR/Issue 的完整上下文
+               - 提供针对性的建议
+
+            ## 工具使用指南：
+            - 标签管理：`gh issue edit <number> --add-label "label1,label2"`
+            - PR 标签：`gh pr edit <number> --add-label "label1,label2"`
+            - 评论：`gh issue comment <number> --body "content"` 或 `gh pr comment <number> --body "content"`
+            - 搜索：`gh search issues "keywords" --limit 5`
+            - 查看详情：`gh issue view <number>` 或 `gh pr view <number>`
+
+            ## 重要原则：
+            - 始终保持专业和友好的语气
+            - 提供可操作的建议
+            - 如果不确定，说明不确定的原因
+            - 自动化操作（标签、分类）不需要评论说明，静默执行
+            - 只在需要与用户交互时才发表评论
+
+          # Claude 配置参数
+          claude_args: |
+            --max-turns 999
+            --allowedTools "Read,Write,Edit,Bash(gh:*),Bash(git:*),Bash(npm:*),Bash(pnpm:*),Bash(yarn:*),mcp__github_inline_comment__create_inline_comment"
+
+          # 其他配置
+          use_commit_signing: true
+          track_progress: true  # 启用进度追踪，显示任务执行状态
