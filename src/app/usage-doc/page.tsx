@@ -247,8 +247,14 @@ npm --version`}
    */
   const renderClaudeCodeConfiguration = (os: OS) => {
     const lang = os === "windows" ? "powershell" : "bash";
-    const configPath = os === "windows" ? "%USERPROFILE%\\.claude\\settings.json" : "~/.claude/settings.json";
-    const shellConfig = os === "linux" ? "~/.bashrc 或 ~/.zshrc" : os === "macos" ? "~/.zshrc 或 ~/.bash_profile" : "";
+    const configPath =
+      os === "windows" ? "%USERPROFILE%\\.claude\\settings.json" : "~/.claude/settings.json";
+    const shellConfig =
+      os === "linux"
+        ? "~/.bashrc 或 ~/.zshrc"
+        : os === "macos"
+          ? "~/.zshrc 或 ~/.bash_profile"
+          : "";
 
     return (
       <div className="space-y-4">
@@ -256,7 +262,10 @@ npm --version`}
         <div className="space-y-3">
           <p>
             根据您的操作系统，在对应位置创建{" "}
-            <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">settings.json</code> 文件：
+            <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
+              settings.json
+            </code>{" "}
+            文件：
           </p>
           <CodeBlock language={lang} code={configPath} />
           <p>添加以下配置内容：</p>
@@ -278,7 +287,9 @@ npm --version`}
             <p className="font-semibold text-foreground">重要</p>
             <p>
               请将{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">your-api-key-here</code>{" "}
+              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
+                your-api-key-here
+              </code>{" "}
               替换为您的实际 API 密钥。
             </p>
             <p>密钥获取方式：登录控制台 → 设置 → API 密钥管理 → 创建密钥</p>
@@ -301,7 +312,9 @@ $env:ANTHROPIC_AUTH_TOKEN = "your-api-key-here"`}
                 code={`[System.Environment]::SetEnvironmentVariable("ANTHROPIC_BASE_URL", "${resolvedOrigin}", [System.EnvironmentVariableTarget]::User)
 [System.Environment]::SetEnvironmentVariable("ANTHROPIC_AUTH_TOKEN", "your-api-key-here", [System.EnvironmentVariableTarget]::User)`}
               />
-              <p className="text-sm text-muted-foreground">设置后需要重新打开 PowerShell 窗口才能生效。</p>
+              <p className="text-sm text-muted-foreground">
+                设置后需要重新打开 PowerShell 窗口才能生效。
+              </p>
             </>
           ) : (
             <>
@@ -336,7 +349,10 @@ source ${shellConfig.split(" ")[0]}`}
     return (
       <div className="space-y-3">
         <p>{adminNote}执行：</p>
-        <CodeBlock language={lang} code={`npm i -g @openai/codex --registry=https://registry.npmmirror.com`} />
+        <CodeBlock
+          language={lang}
+          code={`npm i -g @openai/codex --registry=https://registry.npmmirror.com`}
+        />
         <p>验证安装：</p>
         <CodeBlock language={lang} code={`codex --version`} />
       </div>
@@ -348,7 +364,12 @@ source ${shellConfig.split(" ")[0]}`}
    */
   const renderCodexConfiguration = (os: OS) => {
     const configPath = os === "windows" ? "C:\\Users\\你的用户名\\.codex" : "~/.codex";
-    const shellConfig = os === "linux" ? "~/.bashrc 或 ~/.zshrc" : os === "macos" ? "~/.zshrc 或 ~/.bash_profile" : "";
+    const shellConfig =
+      os === "linux"
+        ? "~/.bashrc 或 ~/.zshrc"
+        : os === "macos"
+          ? "~/.zshrc 或 ~/.bash_profile"
+          : "";
 
     return (
       <div className="space-y-4">
@@ -357,12 +378,17 @@ source ${shellConfig.split(" ")[0]}`}
           <ol className="list-decimal space-y-2 pl-6">
             <li>
               打开文件资源管理器，找到{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">{configPath}</code>{" "}
+              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
+                {configPath}
+              </code>{" "}
               文件夹（不存在则创建）
             </li>
             <li>
               创建{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">config.toml</code> 文件
+              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
+                config.toml
+              </code>{" "}
+              文件
             </li>
             <li>使用文本编辑器打开，添加以下内容：</li>
           </ol>
@@ -373,7 +399,7 @@ model = "gpt-5-codex"
 model_reasoning_effort = "high"
 disable_response_storage = true
 sandbox_mode = "workspace-write"
-${os === "windows" ? 'windows_wsl_setup_acknowledged = true\n' : ''}
+${os === "windows" ? "windows_wsl_setup_acknowledged = true\n" : ""}
 [features]
 plan_tool = true
 apply_patch_freeform = true
@@ -400,7 +426,10 @@ network_access = true`}
           <ol className="list-decimal space-y-2 pl-6" start={4}>
             <li>
               创建{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">auth.json</code> 文件，添加：
+              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
+                auth.json
+              </code>{" "}
+              文件，添加：
             </li>
           </ol>
           <CodeBlock
@@ -414,11 +443,14 @@ network_access = true`}
             <ul className="list-disc space-y-2 pl-4">
               <li>
                 将{" "}
-                <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">your-api-key-here</code>{" "}
+                <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
+                  your-api-key-here
+                </code>{" "}
                 替换为您的 cch API 密钥
               </li>
               <li>
-                <strong>注意：</strong>Codex 使用 OpenAI 兼容格式，端点包含 <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">/v1</code>{" "}
+                <strong>注意：</strong>Codex 使用 OpenAI 兼容格式，端点包含{" "}
+                <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">/v1</code>{" "}
                 路径
               </li>
             </ul>
@@ -434,7 +466,9 @@ network_access = true`}
                 language="powershell"
                 code={`[System.Environment]::SetEnvironmentVariable("CCH_API_KEY", "your-api-key-here", [System.EnvironmentVariableTarget]::User)`}
               />
-              <p className="text-sm text-muted-foreground">设置后需要重新打开 PowerShell 窗口才能生效。</p>
+              <p className="text-sm text-muted-foreground">
+                设置后需要重新打开 PowerShell 窗口才能生效。
+              </p>
             </>
           ) : (
             <>
@@ -464,7 +498,10 @@ source ${shellConfig.split(" ")[0]}`}
               <p className="font-semibold text-foreground">提示</p>
               <p>
                 Linux 用户需确保已安装{" "}
-                <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">xdg-utils</code>：
+                <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
+                  xdg-utils
+                </code>
+                ：
               </p>
               <CodeBlock language="bash" code={`sudo apt-get install xdg-utils`} />
             </blockquote>
@@ -496,7 +533,8 @@ source ${shellConfig.split(" ")[0]}`}
           <ol className="list-decimal space-y-2 pl-4">
             <li>
               运行{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">droid</code> 命令
+              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">droid</code>{" "}
+              命令
             </li>
             <li>按提示通过浏览器登录 Factory 官方账号</li>
             <li>登录成功后，才能继续配置自定义模型</li>
@@ -534,14 +572,24 @@ source ${shellConfig.split(" ")[0]}`}
             <ul className="list-disc space-y-2 pl-4">
               <li>
                 将{" "}
-                <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">your-api-key-here</code>{" "}
+                <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
+                  your-api-key-here
+                </code>{" "}
                 替换为您的 cch API 密钥
               </li>
               <li>
-                <strong>Anthropic 格式：</strong>使用 <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">{resolvedOrigin}</code>（无 /v1）
+                <strong>Anthropic 格式：</strong>使用{" "}
+                <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
+                  {resolvedOrigin}
+                </code>
+                （无 /v1）
               </li>
               <li>
-                <strong>OpenAI 格式：</strong>使用 <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">{resolvedOrigin}/v1</code>（需要 /v1）
+                <strong>OpenAI 格式：</strong>使用{" "}
+                <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
+                  {resolvedOrigin}/v1
+                </code>
+                （需要 /v1）
               </li>
             </ul>
           </blockquote>
@@ -553,7 +601,8 @@ source ${shellConfig.split(" ")[0]}`}
             <li>重启 Droid</li>
             <li>
               输入{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">/model</code> 命令
+              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">/model</code>{" "}
+              命令
             </li>
             <li>
               选择 <strong>GPT-5-Codex [cch]</strong> 或 <strong>Sonnet 4.5 [cch]</strong>
@@ -579,10 +628,18 @@ source ${shellConfig.split(" ")[0]}`}
         <div className="space-y-3">
           <h4 className={headingClasses.h4}>VS Code 扩展配置</h4>
           <ol className="list-decimal space-y-2 pl-6">
-            <li>在 VS Code 扩展中搜索并安装 <strong>{config.name}</strong></li>
             <li>
-              在 <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">{configPath}</code>{" "}
-              目录下创建 <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">config.json</code>{" "}
+              在 VS Code 扩展中搜索并安装 <strong>{config.name}</strong>
+            </li>
+            <li>
+              在{" "}
+              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
+                {configPath}
+              </code>{" "}
+              目录下创建{" "}
+              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
+                config.json
+              </code>{" "}
               文件（如果没有）
             </li>
             <li>添加以下内容：</li>
@@ -596,11 +653,19 @@ source ${shellConfig.split(" ")[0]}`}
           <blockquote className="space-y-1 rounded-lg border-l-2 border-primary/50 bg-muted/40 px-4 py-3">
             <p className="font-semibold text-foreground">注意</p>
             <p>
-              是 <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">config.json</code>，不是{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">settings.json</code>
+              是{" "}
+              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
+                config.json
+              </code>
+              ，不是{" "}
+              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
+                settings.json
+              </code>
             </p>
             <p>
-              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">primaryApiKey</code>{" "}
+              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
+                primaryApiKey
+              </code>{" "}
               字段值可以为任意内容，只要存在即可
             </p>
           </blockquote>
@@ -612,15 +677,24 @@ source ${shellConfig.split(" ")[0]}`}
         <div className="space-y-3">
           <h4 className={headingClasses.h4}>VS Code 扩展配置</h4>
           <ol className="list-decimal space-y-2 pl-6">
-            <li>在 VS Code 扩展中搜索并安装 <strong>{config.name}</strong></li>
+            <li>
+              在 VS Code 扩展中搜索并安装 <strong>{config.name}</strong>
+            </li>
             <li>
               确保已按照上述步骤配置好{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">config.toml</code> 和{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">auth.json</code>
+              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
+                config.toml
+              </code>{" "}
+              和{" "}
+              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
+                auth.json
+              </code>
             </li>
             <li>
               设置环境变量{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">CCH_API_KEY</code>
+              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
+                CCH_API_KEY
+              </code>
             </li>
           </ol>
           <blockquote className="space-y-1 rounded-lg border-l-2 border-primary/50 bg-muted/40 px-4 py-3">
@@ -719,13 +793,17 @@ curl -I ${resolvedOrigin}`}
         )}
 
         <div className="space-y-3">
-          <p className="font-semibold text-foreground">{cli.id === "droid" ? "2" : "3"}. 更新 {cli.cliName}</p>
+          <p className="font-semibold text-foreground">
+            {cli.id === "droid" ? "2" : "3"}. 更新 {cli.cliName}
+          </p>
           {cli.packageName ? (
             <CodeBlock
               language={lang}
-              code={cli.id === "codex"
-                ? `npm i -g ${cli.packageName} --registry=https://registry.npmmirror.com`
-                : `npm install -g ${cli.packageName}`}
+              code={
+                cli.id === "codex"
+                  ? `npm i -g ${cli.packageName} --registry=https://registry.npmmirror.com`
+                  : `npm install -g ${cli.packageName}`
+              }
             />
           ) : (
             <p>重新运行安装脚本即可更新到最新版本。</p>
@@ -801,7 +879,8 @@ curl -I ${resolvedOrigin}`}
           📚 {CLI_CONFIGS.claudeCode.title}
         </h2>
         <p>
-          Claude Code 是 Anthropic 官方推出的 AI 编程助手，支持通过 cch 代理服务使用。本指南将帮助您在不同操作系统上完成安装和配置。
+          Claude Code 是 Anthropic 官方推出的 AI 编程助手，支持通过 cch
+          代理服务使用。本指南将帮助您在不同操作系统上完成安装和配置。
         </p>
         {(["macos", "windows", "linux"] as OS[]).map((os) =>
           renderPlatformGuide(CLI_CONFIGS.claudeCode, os)
@@ -836,10 +915,7 @@ curl -I ${resolvedOrigin}`}
         </h2>
         <p>
           Droid 是 Factory AI 开发的交互式终端 AI 编程助手，支持通过 cch 代理服务使用。
-          <strong className="text-foreground">
-            {" "}
-            使用前必须先注册并登录 Droid 官方账号。
-          </strong>
+          <strong className="text-foreground"> 使用前必须先注册并登录 Droid 官方账号。</strong>
         </p>
         {(["macos", "windows", "linux"] as OS[]).map((os) =>
           renderPlatformGuide(CLI_CONFIGS.droid, os)
@@ -918,10 +994,18 @@ curl -I ${resolvedOrigin}`}
           <p className="font-semibold text-foreground">端点配置错误</p>
           <ul className="list-disc space-y-2 pl-6">
             <li>
-              <strong>Claude Code / Droid Anthropic 模型：</strong>使用 <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">{resolvedOrigin}</code>（无 /v1）
+              <strong>Claude Code / Droid Anthropic 模型：</strong>使用{" "}
+              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
+                {resolvedOrigin}
+              </code>
+              （无 /v1）
             </li>
             <li>
-              <strong>Codex / Droid OpenAI 模型：</strong>使用 <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">{resolvedOrigin}/v1</code>（必须包含 /v1）
+              <strong>Codex / Droid OpenAI 模型：</strong>使用{" "}
+              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
+                {resolvedOrigin}/v1
+              </code>
+              （必须包含 /v1）
             </li>
           </ul>
         </div>

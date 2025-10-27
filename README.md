@@ -407,6 +407,7 @@ server {
 本项目采用 [MIT 许可证](LICENSE)
 
 **关于引用和参考**：
+
 - Codex CLI 的 OpenAI 兼容层实现参考了 [router-for-me/CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) 项目（MIT 协议）
 
 ## 🌟 Star History
