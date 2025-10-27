@@ -37,6 +37,7 @@ interface ProviderFormProps {
   mode: Mode;
   onSuccess?: () => void;
   provider?: ProviderDisplay; // edit 模式需要，create 可空
+  cloneProvider?: ProviderDisplay; // create 模式用于克隆数据
   enableMultiProviderTypes: boolean;
 }
 
@@ -44,43 +45,53 @@ export function ProviderForm({
   mode,
   onSuccess,
   provider,
+  cloneProvider,
   enableMultiProviderTypes,
 }: ProviderFormProps) {
   const isEdit = mode === "edit";
   const [isPending, startTransition] = useTransition();
 
-  const [name, setName] = useState(isEdit ? (provider?.name ?? "") : "");
-  const [url, setUrl] = useState(isEdit ? (provider?.url ?? "") : "");
+  // 获取初始数据源：编辑模式用 provider，创建模式用 cloneProvider（如果有）
+  const sourceProvider = isEdit ? provider : cloneProvider;
+
+  const [name, setName] = useState(
+    isEdit 
+      ? (provider?.name ?? "") 
+      : cloneProvider 
+        ? `${cloneProvider.name}_Copy` 
+        : ""
+  );
+  const [url, setUrl] = useState(sourceProvider?.url ?? "");
   const [key, setKey] = useState(""); // 编辑时留空代表不更新
   const [providerType, setProviderType] = useState<ProviderType>(
-    isEdit ? (provider?.providerType ?? "claude") : "claude"
+    sourceProvider?.providerType ?? "claude"
   );
   const [modelRedirects, setModelRedirects] = useState<Record<string, string>>(
-    isEdit && provider?.modelRedirects ? provider.modelRedirects : {}
+    sourceProvider?.modelRedirects ?? {}
   );
-  const [priority, setPriority] = useState<number>(isEdit ? (provider?.priority ?? 0) : 0);
-  const [weight, setWeight] = useState<number>(isEdit ? (provider?.weight ?? 1) : 1);
+  const [priority, setPriority] = useState<number>(sourceProvider?.priority ?? 0);
+  const [weight, setWeight] = useState<number>(sourceProvider?.weight ?? 1);
   const [costMultiplier, setCostMultiplier] = useState<number>(
-    isEdit ? (provider?.costMultiplier ?? 1.0) : 1.0
+    sourceProvider?.costMultiplier ?? 1.0
   );
-  const [groupTag, setGroupTag] = useState<string>(isEdit ? (provider?.groupTag ?? "") : "");
+  const [groupTag, setGroupTag] = useState<string>(sourceProvider?.groupTag ?? "");
   const [limit5hUsd, setLimit5hUsd] = useState<number | null>(
-    isEdit ? (provider?.limit5hUsd ?? null) : null
+    sourceProvider?.limit5hUsd ?? null
   );
   const [limitWeeklyUsd, setLimitWeeklyUsd] = useState<number | null>(
-    isEdit ? (provider?.limitWeeklyUsd ?? null) : null
+    sourceProvider?.limitWeeklyUsd ?? null
   );
   const [limitMonthlyUsd, setLimitMonthlyUsd] = useState<number | null>(
-    isEdit ? (provider?.limitMonthlyUsd ?? null) : null
+    sourceProvider?.limitMonthlyUsd ?? null
   );
   const [limitConcurrentSessions, setLimitConcurrentSessions] = useState<number | null>(
-    isEdit ? (provider?.limitConcurrentSessions ?? null) : null
+    sourceProvider?.limitConcurrentSessions ?? null
   );
   const [allowedModels, setAllowedModels] = useState<string[]>(
-    isEdit && provider?.allowedModels ? provider.allowedModels : []
+    sourceProvider?.allowedModels ?? []
   );
   const [joinClaudePool, setJoinClaudePool] = useState<boolean>(
-    isEdit && provider?.joinClaudePool ? provider.joinClaudePool : false
+    sourceProvider?.joinClaudePool ?? false
   );
 
   const handleSubmit = (e: React.FormEvent) => {
