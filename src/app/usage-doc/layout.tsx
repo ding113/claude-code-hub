@@ -24,7 +24,7 @@ export default async function UsageDocLayout({ children }: { children: React.Rea
         <DashboardHeader session={session} />
       ) : (
         <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <div className="container flex h-14 items-center justify-between">
+          <div className="container flex h-14 items-center justify-between px-6">
             <div className="flex items-center gap-2">
               <Book className="h-5 w-5 text-orange-500" />
               <span className="font-semibold">使用文档</span>

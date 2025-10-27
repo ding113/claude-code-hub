@@ -153,10 +153,10 @@ function LoginPageContent() {
             </form>
 
             {/* 文档页入口 */}
-            <div className="mt-6 pt-6 border-t">
+            <div className="mt-6 pt-6 border-t flex justify-center">
               <a
                 href="/usage-doc"
-                className="flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
                 <Book className="h-4 w-4" />
                 查看使用文档
