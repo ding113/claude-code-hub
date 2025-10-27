@@ -157,36 +157,44 @@ export class ProxyForwarder {
     // - 删除不支持的参数（max_tokens, temperature 等）
     if (toFormat === "codex") {
       const isOfficialClient = isOfficialCodexClient(session.userAgent);
+      const log = isOfficialClient ? logger.debug.bind(logger) : logger.info.bind(logger);
 
-      if (!isOfficialClient) {
-        logger.info("[ProxyForwarder] Non-official Codex client detected, sanitizing request", {
-          userAgent: session.userAgent || "N/A",
-          providerId: provider.id,
-          providerName: provider.name,
-        });
+      log("[ProxyForwarder] Normalizing Codex request for upstream compatibility", {
+        userAgent: session.userAgent || "N/A",
+        providerId: provider.id,
+        providerName: provider.name,
+        officialClient: isOfficialClient,
+      });
 
-        try {
-          const sanitized = sanitizeCodexRequest(
-            session.request.message as Record<string, unknown>,
-            session.request.model || "gpt-5-codex"
-          );
-          session.request.message = sanitized;
+      try {
+        const sanitized = sanitizeCodexRequest(
+          session.request.message as Record<string, unknown>,
+          session.request.model || "gpt-5-codex"
+        );
 
-          logger.debug("[ProxyForwarder] Codex request sanitized successfully", {
-            hasInstructions: !!sanitized.instructions,
-            instructionsLength: (sanitized.instructions as string)?.length || 0,
+        const instructionsLength =
+          typeof sanitized.instructions === "string" ? sanitized.instructions.length : 0;
+
+        if (!instructionsLength) {
+          logger.warn("[ProxyForwarder] Codex sanitization yielded empty instructions", {
+            providerId: provider.id,
+            officialClient: isOfficialClient,
           });
-        } catch (error) {
-          logger.error("[ProxyForwarder] Failed to sanitize Codex request, using original", {
-            error,
-          });
-          // 清洗失败时继续使用原始请求（降级策略）
         }
-      } else {
-        logger.debug("[ProxyForwarder] Official Codex client detected, skipping sanitization", {
-          userAgent: session.userAgent,
+
+        session.request.message = sanitized;
+
+        logger.debug("[ProxyForwarder] Codex request sanitized", {
+          instructionsLength,
+          hasParallelToolCalls: sanitized.parallel_tool_calls,
+          hasStoreFlag: sanitized.store,
+        });
+      } catch (error) {
+        logger.error("[ProxyForwarder] Failed to sanitize Codex request, using original", {
+          error,
           providerId: provider.id,
         });
+        // 清洗失败时继续使用原始请求（降级策略）
       }
     }
 
