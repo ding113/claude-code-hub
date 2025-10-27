@@ -4,6 +4,9 @@ import { cleanupLogs, CleanupConditions } from "@/lib/log-cleanup/service";
 import { logger } from "@/lib/logger";
 import { z } from "zod";
 
+// 需要数据库连接
+export const runtime = "nodejs";
+
 /**
  * 清理请求参数校验 schema
  */

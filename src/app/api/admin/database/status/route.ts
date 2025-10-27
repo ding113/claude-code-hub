@@ -4,6 +4,9 @@ import { logger } from "@/lib/logger";
 import { getSession } from "@/lib/auth";
 import type { DatabaseStatus } from "@/types/database-backup";
 
+// 需要数据库连接
+export const runtime = "nodejs";
+
 /**
  * 获取数据库状态信息
  *

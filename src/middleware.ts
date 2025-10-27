@@ -3,6 +3,9 @@ import { logger } from "@/lib/logger";
 import { isDevelopment } from "@/lib/config/env.schema";
 import { validateKey } from "@/lib/auth";
 
+// 使用 Node.js runtime 以支持数据库连接（postgres-js 需要 net 模块）
+export const runtime = "nodejs";
+
 const PUBLIC_PATHS = [
   "/login",
   "/usage-doc",

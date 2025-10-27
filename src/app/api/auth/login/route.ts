@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
 import { validateKey, setAuthCookie } from "@/lib/auth";
 
+// 需要数据库连接
+export const runtime = "nodejs";
+
 export async function POST(request: NextRequest) {
   try {
     const { key } = await request.json();

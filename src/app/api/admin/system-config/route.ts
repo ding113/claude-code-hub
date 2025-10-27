@@ -4,6 +4,9 @@ import { getSystemSettings, updateSystemSettings } from "@/repository/system-con
 import { UpdateSystemSettingsSchema } from "@/lib/validation/schemas";
 import { z } from "zod";
 
+// 需要数据库连接
+export const runtime = "nodejs";
+
 /**
  * GET /api/admin/system-config
  * 获取系统配置
