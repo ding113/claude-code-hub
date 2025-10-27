@@ -4,6 +4,9 @@ import { getLeaderboardWithCache } from "@/lib/redis";
 import { getSystemSettings } from "@/repository/system-config";
 import { formatCurrency } from "@/lib/utils";
 
+// 需要数据库连接
+export const runtime = "nodejs";
+
 /**
  * 获取排行榜数据
  * GET /api/leaderboard?period=daily|monthly

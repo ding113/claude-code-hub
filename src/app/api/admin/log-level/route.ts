@@ -1,6 +1,9 @@
 import { getSession } from "@/lib/auth";
 import { logger, setLogLevel, getLogLevel, type LogLevel } from "@/lib/logger";
 
+// 需要数据库连接
+export const runtime = "nodejs";
+
 /**
  * GET /api/admin/log-level
  * 获取当前日志级别

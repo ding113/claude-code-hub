@@ -3,6 +3,9 @@ import { acquireBackupLock, releaseBackupLock } from "@/lib/database-backup/back
 import { logger } from "@/lib/logger";
 import { getSession } from "@/lib/auth";
 
+// 需要数据库连接
+export const runtime = "nodejs";
+
 /**
  * 导出数据库备份
  *

@@ -10,6 +10,9 @@ import {
 import { logger } from "@/lib/logger";
 import { getSession } from "@/lib/auth";
 
+// 需要数据库连接
+export const runtime = "nodejs";
+
 // 文件大小限制（500MB）
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
 

@@ -3,6 +3,9 @@ import { getSession } from "@/lib/auth";
 import { generateLogs } from "@/lib/data-generator/generator";
 import type { GeneratorParams } from "@/lib/data-generator/types";
 
+// 需要数据库连接
+export const runtime = "nodejs";
+
 export async function POST(request: NextRequest) {
   const session = await getSession();
 

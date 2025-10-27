@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getSystemSettings } from "@/repository/system-config";
 
+// 需要数据库连接
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
