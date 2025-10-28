@@ -75,15 +75,16 @@ export const providers = pgTable('providers', {
   costMultiplier: numeric('cost_multiplier', { precision: 10, scale: 4 }).default('1.0'),
   groupTag: varchar('group_tag', { length: 50 }),
 
-  // 供应商类型：扩展支持 4 种类型
-  // - claude: Anthropic 提供商
+  // 供应商类型：扩展支持 5 种类型
+  // - claude: Anthropic 提供商（标准认证）
+  // - claude-auth: Claude 中转服务（仅 Bearer 认证，不发送 x-api-key）
   // - codex: Codex CLI (Response API)
   // - gemini-cli: Gemini CLI
   // - openai-compatible: OpenAI Compatible API
   providerType: varchar('provider_type', { length: 20 })
     .notNull()
     .default('claude')
-    .$type<'claude' | 'codex' | 'gemini-cli' | 'openai-compatible'>(),
+    .$type<'claude' | 'claude-auth' | 'codex' | 'gemini-cli' | 'openai-compatible'>(),
 
   // 模型重定向：将请求的模型名称重定向到另一个模型
   modelRedirects: jsonb('model_redirects').$type<Record<string, string>>(),

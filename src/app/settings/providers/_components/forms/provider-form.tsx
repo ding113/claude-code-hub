@@ -300,6 +300,7 @@ export function ProviderForm({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="claude">Claude (Anthropic Messages API)</SelectItem>
+                <SelectItem value="claude-auth">Claude (Anthropic Auth Token)</SelectItem>
                 <SelectItem value="codex">Codex (Response API)</SelectItem>
                 <SelectItem value="gemini-cli" disabled={!enableMultiProviderTypes}>
                   Gemini CLI{!enableMultiProviderTypes && " - 功能开发中"}

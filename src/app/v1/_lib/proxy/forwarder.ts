@@ -339,6 +339,11 @@ export class ProxyForwarder {
       "accept-encoding": "identity", // 禁用压缩：避免 undici ZlibError（代理应透传原始数据）
     };
 
+    // claude-auth: 移除 x-api-key（避免中转服务冲突）
+    if (provider.providerType === "claude-auth") {
+      delete overrides["x-api-key"];
+    }
+
     // Codex 特殊处理：强制设置 User-Agent
     // Codex 供应商检测 User-Agent，只接受 codex_cli_rs 客户端
     if (provider.providerType === "codex") {

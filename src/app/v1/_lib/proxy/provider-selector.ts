@@ -30,7 +30,7 @@ import type { ProviderChainItem } from "@/types/message";
  */
 function providerSupportsModel(provider: Provider, requestedModel: string): boolean {
   const isClaudeModel = requestedModel.startsWith("claude-");
-  const isClaudeProvider = provider.providerType === "claude";
+  const isClaudeProvider = provider.providerType === "claude" || provider.providerType === "claude-auth";
 
   // Case 1: Claude 模型请求
   if (isClaudeModel) {
