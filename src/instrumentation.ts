@@ -35,5 +35,12 @@ export async function register() {
 
       logger.info("Application ready");
     }
+    // 开发环境：仅初始化价格表（不执行数据库迁移）
+    // 这样可以加快 onboarding 流程，避免用户手动上传价格表
+    else if (process.env.NODE_ENV === "development") {
+      logger.info("Development mode: initializing price table if needed");
+      const { ensurePriceTable } = await import("@/lib/price-sync/seed-initializer");
+      await ensurePriceTable();
+    }
   }
 }
