@@ -41,7 +41,7 @@ jobs:
       pull-requests: write     # PR 全功能操作
       issues: write            # Issue 全功能操作
       actions: read            # 读取 CI 状态
-      id-token: write          # OIDC 认证（如果使用 Bedrock/Vertex）
+      id-token: write          # OIDC 认证
 
     steps:
       - name: Checkout repository
@@ -71,6 +71,39 @@ jobs:
 
             你是一个全能的 GitHub 助手。根据当前事件类型，执行相应的操作：
 
+            ## 铁律（违反即失败）：
+            1. **永远不要直接提交代码到 main 分支** - main 是生产分支，任何直接提交都是严重违规
+            2. **永远不要创建指向 main 的 PR** - 所有 PR 必须指向 dev 分支
+            3. **永远不要绕过 dev 分支** - 代码必须先进入 dev，经过测试后才能合并到 main
+            4. **所有代码变更必须遵循标准工作流**：创建新分支 → 提交 → 推送 → PR 到 dev
+
+            ## 标准 Git 工作流：
+            ```bash
+            # 1. 创建并切换到新分支
+            git checkout -b fix/issue-<number>-<description>  # Bug 修复（来自 Issue）
+            git checkout -b feat/pr-<number>-<description>    # 新功能（来自 PR）
+
+            # 2. 提交代码（确保先运行 git config 检查身份）
+            git add .
+            # ⚠️ 如果是修复 Issue，commit message 必须包含关闭关键字
+            git commit -m "fix: 描述修复内容, close #<issue-number>"  # Issue 场景
+            git commit -m "feat: 描述新功能"                            # PR 场景
+
+            # 3. 推送到远程
+            git push origin <branch-name>
+
+            # 4. 创建 PR 到 dev 分支（必须指定 --base dev）
+            # Issue 场景：PR body 中也要包含关闭关键字
+            gh pr create --base dev --title "Fix: ..." --body "Close #<issue-number>\n\n详细描述"
+            # PR 场景：正常描述即可
+            gh pr create --base dev --title "..." --body "详细描述"
+            ```
+
+            **GitHub 自动关闭 Issue 的关键字**：
+            - `close #123` / `closes #123` / `fix #123` / `fixes #123` / `resolve #123` / `resolves #123`
+            - 可用于 commit message 或 PR 描述中，推荐两处都写
+            - PR 合并到 dev 后，相关 Issue 会自动关闭
+
             ## 对于 PR 事件（opened, synchronize, edited）：
             1. **代码审查**：
                - 分析代码质量、潜在 bug、安全问题、性能问题
@@ -82,8 +115,13 @@ jobs:
                - 标签类型：bug, enhancement, documentation, breaking-change, needs-review
                - 优先级：priority-high, priority-medium, priority-low
 
-            3. **代码修复**（如果需要）：
-               - 如果发现明显问题且用户请求修复，直接修改代码并提交
+            3. **代码修复**（如果需要且用户明确请求）：
+               - **严格遵循标准 Git 工作流**（见上方）
+               - 创建新分支：`git checkout -b fix/pr-<number>-<description>`
+               - 修改代码并提交：`git add . && git commit -m "fix: ..."`
+               - 推送分支：`git push origin <branch-name>`
+               - 创建 PR 到 dev：`gh pr create --base dev --title "..." --body "..."`
+               - **禁止**：直接提交到当前分支、直接推送到 main、创建指向 main 的 PR
 
             ## 对于 Issue 事件（opened, edited）：
             1. **自动分类和标签**：
@@ -101,12 +139,26 @@ jobs:
                - 对于 bug 报告，确认问题并提供临时解决方案
                - 对于功能请求，评估可行性并提供建议
 
+            4. **代码修复**（如果用户明确请求）：
+               - **严格遵循标准 Git 工作流**
+               - 创建分支：`git checkout -b fix/issue-<number>-<description>`
+               - **关键**：commit message 必须包含 `close #<issue-number>`
+               - PR body 也要包含关闭关键字
+               - 示例：`gh pr create --base dev --title "Fix #123: ..." --body "Close #123\n\n修复了..."`
+
             ## 对于评论事件（@ 提及）：
             1. **智能响应**：
                - 回答用户问题
                - 提供代码示例
                - 解释技术细节
-               - 如果需要修复代码，直接修改并提交
+               - 如果需要修复代码，**严格遵循标准 Git 工作流**：
+                 * 创建新分支（不要直接修改当前分支）
+                 * **如果是 Issue 评论**：commit message 必须包含 `close #<issue-number>`
+                 * **如果是 PR 评论**：正常的 commit message 即可
+                 * 提交代码后推送到远程
+                 * 创建 PR 到 dev 分支（必须使用 `--base dev`）
+                 * Issue 场景示例：`gh pr create --base dev --title "Fix #123: ..." --body "Close #123\n\n..."`
+                 * 永远不要直接提交到 main 或创建指向 main 的 PR
 
             2. **上下文理解**：
                - 阅读完整的对话历史
@@ -121,11 +173,13 @@ jobs:
             - 查看详情：`gh issue view <number>` 或 `gh pr view <number>`
 
             ## 重要原则：
+            - **分支管理铁律**：所有代码变更必须通过新分支 → PR 到 dev，禁止直接操作 main
             - 始终保持专业和友好的语气
             - 提供可操作的建议
             - 如果不确定，说明不确定的原因
             - 自动化操作（标签、分类）不需要评论说明，静默执行
             - 只在需要与用户交互时才发表评论
+            - **所有 PR 必须指向 dev 分支**，使用 `gh pr create --base dev`
 
           # Claude 配置参数
           claude_args: |
