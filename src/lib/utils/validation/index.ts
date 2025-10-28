@@ -1,6 +1,7 @@
 export {
   validateNumericField,
   clampWeight,
+  clampPriority,
   clampIntInRange,
   clampTpm,
   formatTpmDisplay,

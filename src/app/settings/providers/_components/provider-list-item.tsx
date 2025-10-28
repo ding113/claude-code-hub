@@ -63,6 +63,9 @@ export function ProviderListItem({
     weight,
     setWeight,
     showWeight,
+    priority,
+    setPriority,
+    showPriority,
     limit5hInfinite,
     setLimit5hInfinite,
     limit5hValue,
@@ -85,6 +88,7 @@ export function ProviderListItem({
     showConcurrent,
     handleToggle,
     handleWeightPopover,
+    handlePriorityPopover,
     handle5hLimitPopover,
     handleWeeklyLimitPopover,
     handleMonthlyLimitPopover,
@@ -322,9 +326,36 @@ export function ProviderListItem({
           {/* 优先级 */}
           <div className="min-w-0 text-center">
             <div className="text-muted-foreground">优先级</div>
-            <div className="w-full text-center font-medium tabular-nums truncate text-foreground">
-              <span>{item.priority}</span>
-            </div>
+            {canEdit ? (
+              <Popover open={showPriority} onOpenChange={handlePriorityPopover}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="编辑优先级"
+                    className="w-full text-center font-medium tabular-nums truncate text-foreground cursor-pointer hover:text-primary/80 transition-colors"
+                  >
+                    <span>{priority}</span>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="center" side="bottom" sideOffset={6} className="w-64 p-3">
+                  <div className="mb-2 flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>调整优先级</span>
+                    <span className="font-medium text-foreground">{priority}</span>
+                  </div>
+                  <Slider
+                    min={PROVIDER_LIMITS.PRIORITY.MIN}
+                    max={PROVIDER_LIMITS.PRIORITY.MAX}
+                    step={1}
+                    value={[priority]}
+                    onValueChange={(v) => setPriority(v?.[0] ?? PROVIDER_LIMITS.PRIORITY.MIN)}
+                  />
+                </PopoverContent>
+              </Popover>
+            ) : (
+              <div className="w-full text-center font-medium tabular-nums truncate text-foreground">
+                <span>{priority}</span>
+              </div>
+            )}
           </div>
 
           {/* 权重 */}

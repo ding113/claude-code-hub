@@ -21,6 +21,17 @@ export function clampWeight(value: number): number {
 }
 
 /**
+ * 限制优先级值在有效范围内
+ */
+export function clampPriority(value: number): number {
+  if (Number.isNaN(value)) return PROVIDER_LIMITS.PRIORITY.MIN;
+  return Math.max(
+    PROVIDER_LIMITS.PRIORITY.MIN,
+    Math.min(PROVIDER_LIMITS.PRIORITY.MAX, Math.round(value))
+  );
+}
+
+/**
  * 限制整数在指定范围内
  */
 export function clampIntInRange(value: number, min: number, max: number): number {

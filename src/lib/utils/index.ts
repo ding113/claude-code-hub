@@ -29,6 +29,7 @@ export { parseSSEData } from "./sse";
 export {
   validateNumericField,
   clampWeight,
+  clampPriority,
   clampIntInRange,
   clampTpm,
   formatTpmDisplay,

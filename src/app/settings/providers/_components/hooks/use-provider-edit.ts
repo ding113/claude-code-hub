@@ -4,7 +4,7 @@ import { logger } from "@/lib/logger";
 import { toast } from "sonner";
 import { editProvider } from "@/actions/providers";
 import type { ProviderDisplay } from "@/types/provider";
-import { clampWeight } from "@/lib/utils/validation";
+import { clampWeight, clampPriority } from "@/lib/utils/validation";
 import { PROVIDER_LIMITS } from "@/lib/constants/provider.constants";
 
 export function useProviderEdit(item: ProviderDisplay, canEdit: boolean) {
@@ -17,6 +17,11 @@ export function useProviderEdit(item: ProviderDisplay, canEdit: boolean) {
   const [showWeight, setShowWeight] = useState(false);
   const [weight, setWeight] = useState<number>(clampWeight(item.weight));
   const initialWeightRef = useRef<number>(item.weight);
+
+  // 优先级编辑
+  const [showPriority, setShowPriority] = useState(false);
+  const [priority, setPriority] = useState<number>(clampPriority(item.priority));
+  const initialPriorityRef = useRef<number>(item.priority);
 
   // 5小时消费上限
   const [show5hLimit, setShow5hLimit] = useState(false);
@@ -104,6 +109,32 @@ export function useProviderEdit(item: ProviderDisplay, canEdit: boolean) {
           const msg = e instanceof Error ? e.message : "更新权重失败";
           toast.error(msg);
           setWeight(clampWeight(initialWeightRef.current));
+        });
+    }
+  };
+
+  // 优先级编辑处理
+  const handlePriorityPopover = (open: boolean) => {
+    if (!canEdit) return;
+    setShowPriority(open);
+    if (open) {
+      initialPriorityRef.current = clampPriority(priority);
+      return;
+    }
+
+    const next = clampPriority(priority);
+    if (next !== clampPriority(initialPriorityRef.current)) {
+      editProvider(item.id, { priority: next })
+        .then((res) => {
+          if (!res.ok) throw new Error(res.error);
+          // 刷新页面数据以同步所有字段
+          router.refresh();
+        })
+        .catch((e) => {
+          logger.error("更新优先级失败", { context: e });
+          const msg = e instanceof Error ? e.message : "更新优先级失败";
+          toast.error(msg);
+          setPriority(clampPriority(initialPriorityRef.current));
         });
     }
   };
@@ -235,6 +266,9 @@ export function useProviderEdit(item: ProviderDisplay, canEdit: boolean) {
     weight,
     setWeight,
     showWeight,
+    priority,
+    setPriority,
+    showPriority,
 
     // 5小时消费上限
     limit5hInfinite,
@@ -267,6 +301,7 @@ export function useProviderEdit(item: ProviderDisplay, canEdit: boolean) {
     // 处理函数
     handleToggle,
     handleWeightPopover,
+    handlePriorityPopover,
     handle5hLimitPopover,
     handleWeeklyLimitPopover,
     handleMonthlyLimitPopover,
