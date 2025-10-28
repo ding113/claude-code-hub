@@ -87,14 +87,15 @@ export function ProviderForm({
   );
 
   // 熔断器配置（以分钟为单位显示，提交时转换为毫秒）
-  const [failureThreshold, setFailureThreshold] = useState<number>(
-    sourceProvider?.circuitBreakerFailureThreshold ?? 5
+  // 允许 undefined，用户可以清空输入框，提交时使用默认值
+  const [failureThreshold, setFailureThreshold] = useState<number | undefined>(
+    sourceProvider?.circuitBreakerFailureThreshold
   );
-  const [openDurationMinutes, setOpenDurationMinutes] = useState<number>(
-    sourceProvider?.circuitBreakerOpenDuration ? sourceProvider.circuitBreakerOpenDuration / 60000 : 30
+  const [openDurationMinutes, setOpenDurationMinutes] = useState<number | undefined>(
+    sourceProvider?.circuitBreakerOpenDuration ? sourceProvider.circuitBreakerOpenDuration / 60000 : undefined
   );
-  const [halfOpenSuccessThreshold, setHalfOpenSuccessThreshold] = useState<number>(
-    sourceProvider?.circuitBreakerHalfOpenSuccessThreshold ?? 2
+  const [halfOpenSuccessThreshold, setHalfOpenSuccessThreshold] = useState<number | undefined>(
+    sourceProvider?.circuitBreakerHalfOpenSuccessThreshold
   );
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -153,9 +154,9 @@ export function ProviderForm({
             limit_weekly_usd: limitWeeklyUsd,
             limit_monthly_usd: limitMonthlyUsd,
             limit_concurrent_sessions: limitConcurrentSessions,
-            circuit_breaker_failure_threshold: failureThreshold,
-            circuit_breaker_open_duration: openDurationMinutes * 60000, // 分钟转毫秒
-            circuit_breaker_half_open_success_threshold: halfOpenSuccessThreshold,
+            circuit_breaker_failure_threshold: failureThreshold ?? 5,
+            circuit_breaker_open_duration: openDurationMinutes ? openDurationMinutes * 60000 : 1800000,
+            circuit_breaker_half_open_success_threshold: halfOpenSuccessThreshold ?? 2,
             tpm: null,
             rpm: null,
             rpd: null,
@@ -188,9 +189,9 @@ export function ProviderForm({
             limit_weekly_usd: limitWeeklyUsd,
             limit_monthly_usd: limitMonthlyUsd,
             limit_concurrent_sessions: limitConcurrentSessions ?? 0,
-            circuit_breaker_failure_threshold: failureThreshold,
-            circuit_breaker_open_duration: openDurationMinutes * 60000, // 分钟转毫秒
-            circuit_breaker_half_open_success_threshold: halfOpenSuccessThreshold,
+            circuit_breaker_failure_threshold: failureThreshold ?? 5,
+            circuit_breaker_open_duration: openDurationMinutes ? openDurationMinutes * 60000 : 1800000,
+            circuit_breaker_half_open_success_threshold: halfOpenSuccessThreshold ?? 2,
             tpm: null,
             rpm: null,
             rpd: null,
@@ -573,9 +574,12 @@ export function ProviderForm({
               <Input
                 id={isEdit ? "edit-failure-threshold" : "failure-threshold"}
                 type="number"
-                value={failureThreshold}
-                onChange={(e) => setFailureThreshold(parseInt(e.target.value) || 5)}
-                placeholder="默认: 5"
+                value={failureThreshold ?? ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFailureThreshold(val === '' ? undefined : parseInt(val));
+                }}
+                placeholder="5"
                 disabled={isPending}
                 min="1"
                 max="100"
@@ -588,9 +592,12 @@ export function ProviderForm({
               <Input
                 id={isEdit ? "edit-open-duration" : "open-duration"}
                 type="number"
-                value={openDurationMinutes}
-                onChange={(e) => setOpenDurationMinutes(parseInt(e.target.value) || 30)}
-                placeholder="默认: 30"
+                value={openDurationMinutes ?? ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setOpenDurationMinutes(val === '' ? undefined : parseInt(val));
+                }}
+                placeholder="30"
                 disabled={isPending}
                 min="1"
                 max="1440"
@@ -605,9 +612,12 @@ export function ProviderForm({
               <Input
                 id={isEdit ? "edit-success-threshold" : "success-threshold"}
                 type="number"
-                value={halfOpenSuccessThreshold}
-                onChange={(e) => setHalfOpenSuccessThreshold(parseInt(e.target.value) || 2)}
-                placeholder="默认: 2"
+                value={halfOpenSuccessThreshold ?? ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setHalfOpenSuccessThreshold(val === '' ? undefined : parseInt(val));
+                }}
+                placeholder="2"
                 disabled={isPending}
                 min="1"
                 max="10"
