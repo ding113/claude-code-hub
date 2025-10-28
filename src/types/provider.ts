@@ -35,6 +35,11 @@ export interface Provider {
   limitMonthlyUsd: number | null;
   limitConcurrentSessions: number;
 
+  // 熔断器配置（每个供应商独立配置）
+  circuitBreakerFailureThreshold: number;
+  circuitBreakerOpenDuration: number; // 毫秒
+  circuitBreakerHalfOpenSuccessThreshold: number;
+
   // 废弃（保留向后兼容，但不再使用）
   // TPM (Tokens Per Minute): 每分钟可处理的文本总量
   tpm: number | null;
@@ -74,6 +79,10 @@ export interface ProviderDisplay {
   limitWeeklyUsd: number | null;
   limitMonthlyUsd: number | null;
   limitConcurrentSessions: number;
+  // 熔断器配置
+  circuitBreakerFailureThreshold: number;
+  circuitBreakerOpenDuration: number; // 毫秒
+  circuitBreakerHalfOpenSuccessThreshold: number;
   // 废弃字段（保留向后兼容）
   tpm: number | null;
   rpm: number | null;
@@ -114,6 +123,11 @@ export interface CreateProviderData {
   limit_monthly_usd?: number | null;
   limit_concurrent_sessions?: number;
 
+  // 熔断器配置
+  circuit_breaker_failure_threshold?: number;
+  circuit_breaker_open_duration?: number; // 毫秒
+  circuit_breaker_half_open_success_threshold?: number;
+
   // 废弃字段（保留向后兼容）
   // TPM (Tokens Per Minute): 每分钟可处理的文本总量
   tpm: number | null;
@@ -150,6 +164,11 @@ export interface UpdateProviderData {
   limit_weekly_usd?: number | null;
   limit_monthly_usd?: number | null;
   limit_concurrent_sessions?: number;
+
+  // 熔断器配置
+  circuit_breaker_failure_threshold?: number;
+  circuit_breaker_open_duration?: number; // 毫秒
+  circuit_breaker_half_open_success_threshold?: number;
 
   // 废弃字段（保留向后兼容）
   // TPM (Tokens Per Minute): 每分钟可处理的文本总量

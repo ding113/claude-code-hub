@@ -28,6 +28,9 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     limitMonthlyUsd:
       providerData.limit_monthly_usd != null ? providerData.limit_monthly_usd.toString() : null,
     limitConcurrentSessions: providerData.limit_concurrent_sessions,
+    circuitBreakerFailureThreshold: providerData.circuit_breaker_failure_threshold ?? 5,
+    circuitBreakerOpenDuration: providerData.circuit_breaker_open_duration ?? 1800000,
+    circuitBreakerHalfOpenSuccessThreshold: providerData.circuit_breaker_half_open_success_threshold ?? 2,
     tpm: providerData.tpm,
     rpm: providerData.rpm,
     rpd: providerData.rpd,
@@ -52,6 +55,9 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     limitWeeklyUsd: providers.limitWeeklyUsd,
     limitMonthlyUsd: providers.limitMonthlyUsd,
     limitConcurrentSessions: providers.limitConcurrentSessions,
+    circuitBreakerFailureThreshold: providers.circuitBreakerFailureThreshold,
+    circuitBreakerOpenDuration: providers.circuitBreakerOpenDuration,
+    circuitBreakerHalfOpenSuccessThreshold: providers.circuitBreakerHalfOpenSuccessThreshold,
     tpm: providers.tpm,
     rpm: providers.rpm,
     rpd: providers.rpd,
@@ -87,6 +93,9 @@ export async function findProviderList(
       limitWeeklyUsd: providers.limitWeeklyUsd,
       limitMonthlyUsd: providers.limitMonthlyUsd,
       limitConcurrentSessions: providers.limitConcurrentSessions,
+      circuitBreakerFailureThreshold: providers.circuitBreakerFailureThreshold,
+      circuitBreakerOpenDuration: providers.circuitBreakerOpenDuration,
+      circuitBreakerHalfOpenSuccessThreshold: providers.circuitBreakerHalfOpenSuccessThreshold,
       tpm: providers.tpm,
       rpm: providers.rpm,
       rpd: providers.rpd,
@@ -183,6 +192,12 @@ export async function updateProvider(
       providerData.limit_monthly_usd != null ? providerData.limit_monthly_usd.toString() : null;
   if (providerData.limit_concurrent_sessions !== undefined)
     dbData.limitConcurrentSessions = providerData.limit_concurrent_sessions;
+  if (providerData.circuit_breaker_failure_threshold !== undefined)
+    dbData.circuitBreakerFailureThreshold = providerData.circuit_breaker_failure_threshold;
+  if (providerData.circuit_breaker_open_duration !== undefined)
+    dbData.circuitBreakerOpenDuration = providerData.circuit_breaker_open_duration;
+  if (providerData.circuit_breaker_half_open_success_threshold !== undefined)
+    dbData.circuitBreakerHalfOpenSuccessThreshold = providerData.circuit_breaker_half_open_success_threshold;
   if (providerData.tpm !== undefined) dbData.tpm = providerData.tpm;
   if (providerData.rpm !== undefined) dbData.rpm = providerData.rpm;
   if (providerData.rpd !== undefined) dbData.rpd = providerData.rpd;
@@ -210,6 +225,9 @@ export async function updateProvider(
       limitWeeklyUsd: providers.limitWeeklyUsd,
       limitMonthlyUsd: providers.limitMonthlyUsd,
       limitConcurrentSessions: providers.limitConcurrentSessions,
+      circuitBreakerFailureThreshold: providers.circuitBreakerFailureThreshold,
+      circuitBreakerOpenDuration: providers.circuitBreakerOpenDuration,
+      circuitBreakerHalfOpenSuccessThreshold: providers.circuitBreakerHalfOpenSuccessThreshold,
       tpm: providers.tpm,
       rpm: providers.rpm,
       rpd: providers.rpd,
