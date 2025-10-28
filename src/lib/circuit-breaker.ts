@@ -209,12 +209,26 @@ export function getCircuitState(providerId: number): "closed" | "open" | "half-o
 
 /**
  * 获取所有供应商的健康状态（用于监控）
+ * 会主动检查并更新过期的熔断器状态
  */
 export function getAllHealthStatus(): Record<number, ProviderHealth> {
+  const now = Date.now();
   const status: Record<number, ProviderHealth> = {};
+
   healthMap.forEach((health, providerId) => {
+    // 检查并更新过期的熔断器状态
+    if (health.circuitState === "open") {
+      if (health.circuitOpenUntil && now > health.circuitOpenUntil) {
+        // 熔断时间已过，转为半开状态
+        health.circuitState = "half-open";
+        health.halfOpenSuccessCount = 0;
+        logger.info(`[CircuitBreaker] Provider ${providerId} auto-transitioned to half-open (on status check)`);
+      }
+    }
+
     status[providerId] = { ...health };
   });
+
   return status;
 }
 

@@ -26,7 +26,7 @@ export function getRedisClient(): Redis | null {
           return null; // 停止重试，降级
         }
         const delay = Math.min(times * 200, 2000);
-        logger.warn("[Redis] Retry ${times}/5 after ${delay}ms");
+        logger.warn(`[Redis] Retry ${times}/5 after ${delay}ms`);
         return delay;
       },
     });
