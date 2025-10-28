@@ -92,7 +92,9 @@ export function ProviderForm({
     sourceProvider?.circuitBreakerFailureThreshold
   );
   const [openDurationMinutes, setOpenDurationMinutes] = useState<number | undefined>(
-    sourceProvider?.circuitBreakerOpenDuration ? sourceProvider.circuitBreakerOpenDuration / 60000 : undefined
+    sourceProvider?.circuitBreakerOpenDuration
+      ? sourceProvider.circuitBreakerOpenDuration / 60000
+      : undefined
   );
   const [halfOpenSuccessThreshold, setHalfOpenSuccessThreshold] = useState<number | undefined>(
     sourceProvider?.circuitBreakerHalfOpenSuccessThreshold
@@ -155,7 +157,9 @@ export function ProviderForm({
             limit_monthly_usd: limitMonthlyUsd,
             limit_concurrent_sessions: limitConcurrentSessions,
             circuit_breaker_failure_threshold: failureThreshold ?? 5,
-            circuit_breaker_open_duration: openDurationMinutes ? openDurationMinutes * 60000 : 1800000,
+            circuit_breaker_open_duration: openDurationMinutes
+              ? openDurationMinutes * 60000
+              : 1800000,
             circuit_breaker_half_open_success_threshold: halfOpenSuccessThreshold ?? 2,
             tpm: null,
             rpm: null,
@@ -190,7 +194,9 @@ export function ProviderForm({
             limit_monthly_usd: limitMonthlyUsd,
             limit_concurrent_sessions: limitConcurrentSessions ?? 0,
             circuit_breaker_failure_threshold: failureThreshold ?? 5,
-            circuit_breaker_open_duration: openDurationMinutes ? openDurationMinutes * 60000 : 1800000,
+            circuit_breaker_open_duration: openDurationMinutes
+              ? openDurationMinutes * 60000
+              : 1800000,
             circuit_breaker_half_open_success_threshold: halfOpenSuccessThreshold ?? 2,
             tpm: null,
             rpm: null,
@@ -574,10 +580,10 @@ export function ProviderForm({
               <Input
                 id={isEdit ? "edit-failure-threshold" : "failure-threshold"}
                 type="number"
-                value={failureThreshold ?? ''}
+                value={failureThreshold ?? ""}
                 onChange={(e) => {
                   const val = e.target.value;
-                  setFailureThreshold(val === '' ? undefined : parseInt(val));
+                  setFailureThreshold(val === "" ? undefined : parseInt(val));
                 }}
                 placeholder="5"
                 disabled={isPending}
@@ -588,14 +594,16 @@ export function ProviderForm({
               <p className="text-xs text-muted-foreground">连续失败多少次后触发熔断</p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor={isEdit ? "edit-open-duration" : "open-duration"}>熔断时长（分钟）</Label>
+              <Label htmlFor={isEdit ? "edit-open-duration" : "open-duration"}>
+                熔断时长（分钟）
+              </Label>
               <Input
                 id={isEdit ? "edit-open-duration" : "open-duration"}
                 type="number"
-                value={openDurationMinutes ?? ''}
+                value={openDurationMinutes ?? ""}
                 onChange={(e) => {
                   const val = e.target.value;
-                  setOpenDurationMinutes(val === '' ? undefined : parseInt(val));
+                  setOpenDurationMinutes(val === "" ? undefined : parseInt(val));
                 }}
                 placeholder="30"
                 disabled={isPending}
@@ -612,10 +620,10 @@ export function ProviderForm({
               <Input
                 id={isEdit ? "edit-success-threshold" : "success-threshold"}
                 type="number"
-                value={halfOpenSuccessThreshold ?? ''}
+                value={halfOpenSuccessThreshold ?? ""}
                 onChange={(e) => {
                   const val = e.target.value;
-                  setHalfOpenSuccessThreshold(val === '' ? undefined : parseInt(val));
+                  setHalfOpenSuccessThreshold(val === "" ? undefined : parseInt(val));
                 }}
                 placeholder="2"
                 disabled={isPending}

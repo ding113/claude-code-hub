@@ -198,7 +198,8 @@ export async function addProvider(data: {
       limit_concurrent_sessions: validated.limit_concurrent_sessions ?? 0,
       circuit_breaker_failure_threshold: validated.circuit_breaker_failure_threshold ?? 5,
       circuit_breaker_open_duration: validated.circuit_breaker_open_duration ?? 1800000,
-      circuit_breaker_half_open_success_threshold: validated.circuit_breaker_half_open_success_threshold ?? 2,
+      circuit_breaker_half_open_success_threshold:
+        validated.circuit_breaker_half_open_success_threshold ?? 2,
       tpm: validated.tpm ?? null,
       rpm: validated.rpm ?? null,
       rpd: validated.rpd ?? null,
