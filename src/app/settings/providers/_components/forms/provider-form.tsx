@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
 import {
   Select,
   SelectContent,
@@ -403,16 +404,30 @@ export function ProviderForm({
                 优先级
                 <span className="text-xs text-muted-foreground ml-1">(0最高)</span>
               </Label>
-              <Input
-                id={isEdit ? "edit-priority" : "priority"}
-                type="number"
-                value={priority}
-                onChange={(e) => setPriority(parseInt(e.target.value) || 0)}
-                placeholder="0"
-                disabled={isPending}
-                min="0"
-                step="1"
-              />
+              <div className="space-y-3">
+                <Slider
+                  value={[Math.min(priority, 100)]}
+                  onValueChange={(values) => setPriority(values[0])}
+                  min={0}
+                  max={100}
+                  step={1}
+                  disabled={isPending}
+                  className="w-full"
+                />
+                <Input
+                  id={isEdit ? "edit-priority" : "priority"}
+                  type="number"
+                  value={priority}
+                  onChange={(e) => setPriority(parseInt(e.target.value) || 0)}
+                  placeholder="0"
+                  disabled={isPending}
+                  min="0"
+                  step="1"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                滑块调节范围 0-100，输入框可超出此范围
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor={isEdit ? "edit-weight" : "weight"}>
@@ -519,16 +534,30 @@ export function ProviderForm({
               <Label htmlFor={isEdit ? "edit-limit-concurrent" : "limit-concurrent"}>
                 并发 Session 上限
               </Label>
-              <Input
-                id={isEdit ? "edit-limit-concurrent" : "limit-concurrent"}
-                type="number"
-                value={limitConcurrentSessions?.toString() ?? ""}
-                onChange={(e) => setLimitConcurrentSessions(validateNumericField(e.target.value))}
-                placeholder="0 表示无限制"
-                disabled={isPending}
-                min="0"
-                step="1"
-              />
+              <div className="space-y-3">
+                <Slider
+                  value={[Math.min(limitConcurrentSessions ?? 0, 10)]}
+                  onValueChange={(values) => setLimitConcurrentSessions(values[0] === 0 ? null : values[0])}
+                  min={0}
+                  max={10}
+                  step={1}
+                  disabled={isPending}
+                  className="w-full"
+                />
+                <Input
+                  id={isEdit ? "edit-limit-concurrent" : "limit-concurrent"}
+                  type="number"
+                  value={limitConcurrentSessions?.toString() ?? ""}
+                  onChange={(e) => setLimitConcurrentSessions(validateNumericField(e.target.value))}
+                  placeholder="0 表示无限制"
+                  disabled={isPending}
+                  min="0"
+                  step="1"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                滑块调节范围 0-10，输入框可超出此范围
+              </p>
             </div>
           </div>
         </div>
