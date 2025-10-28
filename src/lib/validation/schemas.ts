@@ -49,10 +49,7 @@ export const UpdateUserSchema = z.object({
  * 密钥表单数据验证schema
  */
 export const KeyFormSchema = z.object({
-  name: z
-    .string()
-    .min(1, "密钥名称不能为空")
-    .max(64, "密钥名称不能超过64个字符"),
+  name: z.string().min(1, "密钥名称不能为空").max(64, "密钥名称不能超过64个字符"),
   expiresAt: z
     .string()
     .optional()
@@ -104,7 +101,13 @@ export const CreateProviderSchema = z.object({
     .max(PROVIDER_LIMITS.WEIGHT.MAX)
     .optional()
     .default(PROVIDER_DEFAULTS.WEIGHT),
-  priority: z.number().int("优先级必须是整数").min(0, "优先级不能为负数").max(2147483647, "优先级超出整数范围").optional().default(0),
+  priority: z
+    .number()
+    .int("优先级必须是整数")
+    .min(0, "优先级不能为负数")
+    .max(2147483647, "优先级超出整数范围")
+    .optional()
+    .default(0),
   cost_multiplier: z.coerce.number().min(0, "成本倍率不能为负数").optional().default(1.0),
   group_tag: z.string().max(50, "分组标签不能超过50个字符").nullable().optional(),
   // Codex 支持:供应商类型和模型重定向
@@ -182,11 +185,18 @@ export const UpdateProviderSchema = z
       .min(PROVIDER_LIMITS.WEIGHT.MIN)
       .max(PROVIDER_LIMITS.WEIGHT.MAX)
       .optional(),
-    priority: z.number().int("优先级必须是整数").min(0, "优先级不能为负数").max(2147483647, "优先级超出整数范围").optional(),
+    priority: z
+      .number()
+      .int("优先级必须是整数")
+      .min(0, "优先级不能为负数")
+      .max(2147483647, "优先级超出整数范围")
+      .optional(),
     cost_multiplier: z.coerce.number().min(0, "成本倍率不能为负数").optional(),
     group_tag: z.string().max(50, "分组标签不能超过50个字符").nullable().optional(),
     // Codex 支持:供应商类型和模型重定向
-    provider_type: z.enum(["claude", "claude-auth", "codex", "gemini-cli", "openai-compatible"]).optional(),
+    provider_type: z
+      .enum(["claude", "claude-auth", "codex", "gemini-cli", "openai-compatible"])
+      .optional(),
     model_redirects: z.record(z.string(), z.string()).nullable().optional(),
     allowed_models: z.array(z.string()).nullable().optional(),
     join_claude_pool: z.boolean().optional(),

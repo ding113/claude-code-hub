@@ -62,11 +62,7 @@ async function getProviderConfig(providerId: number): Promise<CircuitBreakerConf
 
   // 检查内存缓存是否有效
   const now = Date.now();
-  if (
-    health.config &&
-    health.configLoadedAt &&
-    now - health.configLoadedAt < CONFIG_CACHE_TTL
-  ) {
+  if (health.config && health.configLoadedAt && now - health.configLoadedAt < CONFIG_CACHE_TTL) {
     return health.config;
   }
 
@@ -77,9 +73,12 @@ async function getProviderConfig(providerId: number): Promise<CircuitBreakerConf
     health.configLoadedAt = now;
     return config;
   } catch (error) {
-    logger.warn(`[CircuitBreaker] Failed to load config for provider ${providerId}, using default`, {
-      error: error instanceof Error ? error.message : String(error),
-    });
+    logger.warn(
+      `[CircuitBreaker] Failed to load config for provider ${providerId}, using default`,
+      {
+        error: error instanceof Error ? error.message : String(error),
+      }
+    );
     return DEFAULT_CIRCUIT_BREAKER_CONFIG;
   }
 }

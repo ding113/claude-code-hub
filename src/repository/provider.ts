@@ -30,7 +30,8 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     limitConcurrentSessions: providerData.limit_concurrent_sessions,
     circuitBreakerFailureThreshold: providerData.circuit_breaker_failure_threshold ?? 5,
     circuitBreakerOpenDuration: providerData.circuit_breaker_open_duration ?? 1800000,
-    circuitBreakerHalfOpenSuccessThreshold: providerData.circuit_breaker_half_open_success_threshold ?? 2,
+    circuitBreakerHalfOpenSuccessThreshold:
+      providerData.circuit_breaker_half_open_success_threshold ?? 2,
     tpm: providerData.tpm,
     rpm: providerData.rpm,
     rpd: providerData.rpd,
@@ -200,7 +201,8 @@ export async function updateProvider(
   if (providerData.circuit_breaker_open_duration !== undefined)
     dbData.circuitBreakerOpenDuration = providerData.circuit_breaker_open_duration;
   if (providerData.circuit_breaker_half_open_success_threshold !== undefined)
-    dbData.circuitBreakerHalfOpenSuccessThreshold = providerData.circuit_breaker_half_open_success_threshold;
+    dbData.circuitBreakerHalfOpenSuccessThreshold =
+      providerData.circuit_breaker_half_open_success_threshold;
   if (providerData.tpm !== undefined) dbData.tpm = providerData.tpm;
   if (providerData.rpm !== undefined) dbData.rpm = providerData.rpm;
   if (providerData.rpd !== undefined) dbData.rpd = providerData.rpd;

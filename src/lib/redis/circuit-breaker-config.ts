@@ -40,9 +40,7 @@ function getConfigKey(providerId: number): string {
  * @param providerId 供应商 ID
  * @returns 熔断器配置，失败时返回默认配置
  */
-export async function loadProviderCircuitConfig(
-  providerId: number
-): Promise<CircuitBreakerConfig> {
+export async function loadProviderCircuitConfig(providerId: number): Promise<CircuitBreakerConfig> {
   const redis = getRedisClient();
 
   try {
