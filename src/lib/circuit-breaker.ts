@@ -221,7 +221,9 @@ export function getAllHealthStatus(): Record<number, ProviderHealth> {
         // 熔断时间已过，转为半开状态
         health.circuitState = "half-open";
         health.halfOpenSuccessCount = 0;
-        logger.info(`[CircuitBreaker] Provider ${providerId} auto-transitioned to half-open (on status check)`);
+        logger.info(
+          `[CircuitBreaker] Provider ${providerId} auto-transitioned to half-open (on status check)`
+        );
       }
     }
 
