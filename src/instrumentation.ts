@@ -8,8 +8,7 @@ import { logger } from "@/lib/logger";
 export async function register() {
   // 仅在服务器端执行
   if (process.env.NEXT_RUNTIME === "nodejs") {
-    // 仅在生产环境自动迁移
-    // 开发环境建议手动运行 pnpm run db:migrate
+    // 生产环境: 执行完整初始化(迁移 + 价格表 + 清理任务)
     if (process.env.NODE_ENV === "production" && process.env.AUTO_MIGRATE !== "false") {
       const { checkDatabaseConnection, runMigrations } = await import("@/lib/migrate");
 
@@ -34,6 +33,16 @@ export async function register() {
       await scheduleAutoCleanup();
 
       logger.info("Application ready");
+    }
+    // 开发环境: 仅初始化价格表(不执行数据库迁移)
+    else if (process.env.NODE_ENV === "development") {
+      logger.info("Development mode: initializing price table if needed");
+
+      // 初始化价格表（如果数据库为空）
+      const { ensurePriceTable } = await import("@/lib/price-sync/seed-initializer");
+      await ensurePriceTable();
+
+      logger.info("Development environment ready");
     }
   }
 }
