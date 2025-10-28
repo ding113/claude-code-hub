@@ -397,7 +397,7 @@ export function ProviderListItem({
           <div className="min-w-0 text-center">
             <div className="text-muted-foreground">倍率</div>
             <div className="w-full text-center font-medium tabular-nums truncate text-foreground">
-              <span>{item.costMultiplier.toFixed(2)}x</span>
+              <span>{item.costMultiplier.toFixed(4)}x</span>
             </div>
           </div>
 

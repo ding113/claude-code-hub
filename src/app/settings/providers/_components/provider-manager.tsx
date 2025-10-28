@@ -1,5 +1,8 @@
 "use client";
+import { useState } from "react";
 import { ProviderList } from "./provider-list";
+import { ProviderSortSelect, type SortOption } from "./provider-sort-select";
+import { sortProviders } from "./provider-sort-utils";
 import type { ProviderDisplay } from "@/types/provider";
 import type { User } from "@/types/user";
 import type { CurrencyCode } from "@/lib/utils/currency";
@@ -28,10 +31,17 @@ export function ProviderManager({
   currencyCode = "USD",
   enableMultiProviderTypes,
 }: ProviderManagerProps) {
+  const [sortBy, setSortBy] = useState<SortOption>("created_desc");
+  
+  const sortedProviders = sortProviders(providers, sortBy);
+
   return (
     <div className="space-y-4">
+      <div className="flex justify-end">
+        <ProviderSortSelect value={sortBy} onValueChange={setSortBy} />
+      </div>
       <ProviderList
-        providers={providers}
+        providers={sortedProviders}
         currentUser={currentUser}
         healthStatus={healthStatus}
         currencyCode={currencyCode}
