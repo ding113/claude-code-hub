@@ -3,8 +3,8 @@ name: Claude CI Auto-Fix
 # 当 CI 失败时自动触发修复
 on:
   workflow_run:
-    # 指定要监听的 CI Workflow 名称（根据你的项目调整）
-    workflows: ["CI", "Test", "Build", "Lint"]
+    # 监听本项目的真实 CI Workflow 名称
+    workflows: ["Dev Branch CI/CD", "Auto Release Pipeline", "PR Build Check"]
     types:
       - completed
 
