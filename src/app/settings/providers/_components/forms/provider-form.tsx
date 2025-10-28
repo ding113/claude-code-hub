@@ -443,10 +443,10 @@ export function ProviderForm({
                 placeholder="1.0 表示官方价格"
                 disabled={isPending}
                 min="0"
-                step="0.01"
+                step="0.0001"
               />
               <p className="text-xs text-muted-foreground">
-                例如填 0.6 表示按官方价格的 60% 计费，填 1.0 表示官方价格
+                例如填 0.6 表示按官方价格的 60% 计费，填 1.0 表示官方价格（支持最多4位小数）
               </p>
             </div>
           </div>

@@ -2,7 +2,7 @@
  * 供应商配置相关常量
  */
 export const PROVIDER_LIMITS = {
-  WEIGHT: { MIN: 0, MAX: 100 },
+  WEIGHT: { MIN: 0, MAX: 2147483647 }, // 使用 INT 最大值，不再限制在 100
   LIMIT_5H_USD: { MIN: 0.01, MAX: 1000, STEP: 0.01 },
   LIMIT_WEEKLY_USD: { MIN: 0.01, MAX: 10000, STEP: 0.01 },
   LIMIT_MONTHLY_USD: { MIN: 0.01, MAX: 100000, STEP: 0.01 },
