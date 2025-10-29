@@ -245,8 +245,10 @@ npm --version`}
    */
   const renderClaudeCodeConfiguration = (os: OS) => {
     const lang = os === "windows" ? "powershell" : "bash";
+    const configDir =
+      os === "windows" ? "C:\\Users\\你的用户名\\.claude" : os === "macos" ? "~/.claude" : "~/.claude";
     const configPath =
-      os === "windows" ? "%USERPROFILE%\\.claude\\settings.json" : "~/.claude/settings.json";
+      os === "windows" ? "C:\\Users\\你的用户名\\.claude\\settings.json" : "~/.claude/settings.json";
     const shellConfig =
       os === "linux"
         ? "~/.bashrc 或 ~/.zshrc"
@@ -258,15 +260,27 @@ npm --version`}
       <div className="space-y-4">
         <h4 className={headingClasses.h4}>方法一：settings.json 配置（推荐）</h4>
         <div className="space-y-3">
-          <p>
-            根据您的操作系统，在对应位置创建{" "}
-            <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
-              settings.json
-            </code>{" "}
-            文件：
-          </p>
-          <CodeBlock language={lang} code={configPath} />
-          <p>添加以下配置内容：</p>
+          <p>配置文件路径：</p>
+          <CodeBlock language="text" code={configPath} />
+          <blockquote className="space-y-2 rounded-lg border-l-2 border-primary/50 bg-muted/40 px-4 py-3">
+            <p className="font-semibold text-foreground">路径说明</p>
+            <ul className="list-disc space-y-1 pl-4">
+              <li>
+                <strong>Windows：</strong>{" "}
+                <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
+                  C:/Users/你的用户名/.claude
+                </code>
+              </li>
+              <li>
+                <strong>Linux 或 macOS：</strong>{" "}
+                <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
+                  ~/.claude
+                </code>
+              </li>
+              <li>如果 settings.json 文件不存在，请自行创建</li>
+            </ul>
+          </blockquote>
+          <p>编辑 settings.json 文件，添加以下内容：</p>
           <CodeBlock
             language="json"
             code={`{
@@ -282,15 +296,17 @@ npm --version`}
 }`}
           />
           <blockquote className="space-y-2 rounded-lg border-l-2 border-primary/50 bg-muted/40 px-4 py-3">
-            <p className="font-semibold text-foreground">重要</p>
-            <p>
-              请将{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
-                your-api-key-here
-              </code>{" "}
-              替换为您的实际 API 密钥。
-            </p>
-            <p>密钥获取方式：登录控制台 → 设置 → API 密钥管理 → 创建密钥</p>
+            <p className="font-semibold text-foreground">重要提示</p>
+            <ul className="list-disc space-y-1 pl-4">
+              <li>
+                将{" "}
+                <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
+                  your-api-key-here
+                </code>{" "}
+                替换为您的实际 API 密钥
+              </li>
+              <li>密钥获取方式：登录控制台 → API 密钥管理 → 创建密钥</li>
+            </ul>
           </blockquote>
         </div>
 
@@ -332,6 +348,45 @@ source ${shellConfig.split(" ")[0]}`}
               />
             </>
           )}
+        </div>
+
+        <h4 className={headingClasses.h4}>验证配置</h4>
+        <div className="space-y-3">
+          <p>配置完成后，验证环境变量是否设置成功：</p>
+          {os === "windows" ? (
+            <>
+              <p>在 PowerShell 中执行：</p>
+              <CodeBlock
+                language="powershell"
+                code={`echo $env:ANTHROPIC_BASE_URL
+echo $env:ANTHROPIC_AUTH_TOKEN`}
+              />
+              <p>在 CMD 中执行：</p>
+              <CodeBlock
+                language="cmd"
+                code={`echo %ANTHROPIC_BASE_URL%
+echo %ANTHROPIC_AUTH_TOKEN%`}
+              />
+            </>
+          ) : (
+            <CodeBlock
+              language="bash"
+              code={`echo $ANTHROPIC_BASE_URL
+echo $ANTHROPIC_AUTH_TOKEN`}
+            />
+          )}
+          <p>预期输出示例：</p>
+          <CodeBlock
+            language="text"
+            code={`${resolvedOrigin}
+sk_xxxxxxxxxxxxxxxxxx`}
+          />
+          <blockquote className="space-y-2 rounded-lg border-l-2 border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20 px-4 py-3">
+            <p className="font-semibold text-foreground">注意</p>
+            <p>
+              如果输出为空或显示变量名本身，说明环境变量设置失败，请重新按照上述步骤设置。
+            </p>
+          </blockquote>
         </div>
       </div>
     );
@@ -615,13 +670,13 @@ source ${shellConfig.split(" ")[0]}`}
   /**
    * 渲染 VS Code 扩展配置
    */
-  const renderVSCodeExtension = (cli: "claudeCode" | "codex", os: OS) => {
-    const config = CLI_CONFIGS[cli].vsCodeExtension;
+  const renderVSCodeExtension = (cli: CLIConfig, os: OS) => {
+    const config = cli.vsCodeExtension;
     if (!config) return null;
 
     const configPath = config.configPath[os === "macos" ? "macos" : "windows"];
 
-    if (cli === "claudeCode") {
+    if (cli.id === "claude-code") {
       return (
         <div className="space-y-3">
           <h4 className={headingClasses.h4}>VS Code 扩展配置</h4>
@@ -840,7 +895,7 @@ curl -I ${resolvedOrigin}`}
         {/* CLI 安装 */}
         <div className="space-y-3">
           <h4 className={headingClasses.h4}>安装 {cli.cliName}</h4>
-          {cli.id === "claudeCode" && renderClaudeCodeInstallation(os)}
+          {cli.id === "claude-code" && renderClaudeCodeInstallation(os)}
           {cli.id === "codex" && renderCodexInstallation(os)}
           {cli.id === "droid" && renderDroidInstallation(os)}
         </div>
@@ -848,14 +903,14 @@ curl -I ${resolvedOrigin}`}
         {/* 连接 cch 服务配置 */}
         <div className="space-y-3">
           <h4 className={headingClasses.h4}>连接 cch 服务</h4>
-          {cli.id === "claudeCode" && renderClaudeCodeConfiguration(os)}
+          {cli.id === "claude-code" && renderClaudeCodeConfiguration(os)}
           {cli.id === "codex" && renderCodexConfiguration(os)}
           {cli.id === "droid" && renderDroidConfiguration(os)}
         </div>
 
         {/* VS Code 扩展配置 */}
-        {(cli.id === "claudeCode" || cli.id === "codex") &&
-          renderVSCodeExtension(cli.id as "claudeCode" | "codex", os)}
+        {(cli.id === "claude-code" || cli.id === "codex") &&
+          renderVSCodeExtension(cli, os)}
 
         {/* 启动与验证 */}
         {renderStartupVerification(cli, os)}
