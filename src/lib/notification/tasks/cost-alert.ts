@@ -157,9 +157,7 @@ async function checkProviderQuotas(threshold: number): Promise<CostAlertData[]> 
         limitMonth: providers.limitMonthlyUsd,
       })
       .from(providers)
-      .where(
-        sql`${providers.limitWeeklyUsd} > 0 OR ${providers.limitMonthlyUsd} > 0`
-      );
+      .where(sql`${providers.limitWeeklyUsd} > 0 OR ${providers.limitMonthlyUsd} > 0`);
 
     for (const provider of providersWithLimits) {
       const now = new Date();
@@ -223,12 +221,7 @@ async function getKeyCostSince(key: string, since: Date): Promise<number> {
       totalCost: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)::numeric`,
     })
     .from(messageRequest)
-    .where(
-      and(
-        eq(messageRequest.key, key),
-        gte(messageRequest.createdAt, since)
-      )
-    );
+    .where(and(eq(messageRequest.key, key), gte(messageRequest.createdAt, since)));
 
   return result[0]?.totalCost || 0;
 }
@@ -242,12 +235,7 @@ async function getProviderCostSince(providerId: number, since: Date): Promise<nu
       totalCost: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)::numeric`,
     })
     .from(messageRequest)
-    .where(
-      and(
-        eq(messageRequest.providerId, providerId),
-        gte(messageRequest.createdAt, since)
-      )
-    );
+    .where(and(eq(messageRequest.providerId, providerId), gte(messageRequest.createdAt, since)));
 
   return result[0]?.totalCost || 0;
 }

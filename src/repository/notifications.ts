@@ -144,10 +144,7 @@ function createFallbackSettings(): NotificationSettings {
  */
 export async function getNotificationSettings(): Promise<NotificationSettings> {
   try {
-    const [settings] = await db
-      .select()
-      .from(notificationSettings)
-      .limit(1);
+    const [settings] = await db.select().from(notificationSettings).limit(1);
 
     if (settings) {
       return {
@@ -182,10 +179,7 @@ export async function getNotificationSettings(): Promise<NotificationSettings> {
     }
 
     // 如果并发导致没有返回，重新查询一次
-    const [fallback] = await db
-      .select()
-      .from(notificationSettings)
-      .limit(1);
+    const [fallback] = await db.select().from(notificationSettings).limit(1);
 
     if (!fallback) {
       throw new Error("Failed to initialize notification settings");

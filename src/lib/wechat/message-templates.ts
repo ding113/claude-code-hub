@@ -59,12 +59,7 @@ export interface DailyLeaderboardData {
 }
 
 export function buildDailyLeaderboard(data: DailyLeaderboardData): string {
-  const lines = [
-    "## 📊 **今日用户消费排行榜**",
-    "",
-    `> 📅 统计日期: **${data.date}**`,
-    "",
-  ];
+  const lines = ["## 📊 **今日用户消费排行榜**", "", `> 📅 统计日期: **${data.date}**`, ""];
 
   if (data.entries.length === 0) {
     lines.push("暂无数据");
