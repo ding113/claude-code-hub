@@ -25,12 +25,15 @@ on:
 jobs:
   claude-assistant:
     # 智能触发条件：状态变动自动触发 OR @ 提及触发
+    # 禁止所有 bot 触发，防止无限循环
     if: |
-      github.event_name == 'pull_request' ||
-      github.event_name == 'pull_request_review' ||
-      github.event_name == 'issues' ||
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude'))
+      !endsWith(github.actor, '[bot]') && (
+        github.event_name == 'pull_request' ||
+        github.event_name == 'pull_request_review' ||
+        github.event_name == 'issues' ||
+        (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+        (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude'))
+      )
 
     runs-on: ubuntu-latest
     timeout-minutes: 30
