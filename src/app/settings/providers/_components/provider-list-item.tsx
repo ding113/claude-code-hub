@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Edit, Globe, Key, RotateCcw, Copy, ServerCog } from "lucide-react";
 import type { ProviderDisplay } from "@/types/provider";
 import type { User } from "@/types/user";
+import { getProviderTypeConfig } from "@/lib/provider-type-utils";
 import { ProviderForm } from "./forms/provider-form";
 import { AddProviderDialog } from "./add-provider-dialog";
 import { Switch } from "@/components/ui/switch";
@@ -91,6 +92,10 @@ export function ProviderListItem({
     handleConcurrentPopover,
   } = useProviderEdit(item, canEdit);
 
+  // 获取供应商类型配置
+  const typeConfig = getProviderTypeConfig(item.providerType);
+  const TypeIcon = typeConfig.icon;
+
   // 处理手动解除熔断
   const handleResetCircuit = () => {
     startResetTransition(async () => {
@@ -126,9 +131,20 @@ export function ProviderListItem({
             >
               ●
             </span>
+            {/* 供应商类型图标 */}
+            <span
+              className={`inline-flex h-5 w-5 items-center justify-center rounded-md ${typeConfig.bgColor}`}
+              title={typeConfig.description}
+            >
+              <TypeIcon className={`h-3 w-3 ${typeConfig.iconColor}`} />
+            </span>
             <h3 className="text-sm font-semibold text-foreground truncate tracking-tight">
               {item.name}
             </h3>
+            {/* 供应商类型标签 */}
+            <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal">
+              {typeConfig.label}
+            </Badge>
 
             {/* 熔断器状态徽章 */}
             {healthStatus?.circuitState === "open" && (
