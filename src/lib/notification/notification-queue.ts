@@ -10,6 +10,8 @@ import {
   DailyLeaderboardData,
   CostAlertData,
 } from "@/lib/wechat/message-templates";
+import { generateDailyLeaderboard } from "./tasks/daily-leaderboard";
+import { generateCostAlerts } from "./tasks/cost-alert";
 
 /**
  * 通知任务类型
@@ -22,7 +24,7 @@ export type NotificationJobType = "circuit-breaker" | "daily-leaderboard" | "cos
 export interface NotificationJobData {
   type: NotificationJobType;
   webhookUrl: string;
-  data: CircuitBreakerAlertData | DailyLeaderboardData | CostAlertData;
+  data?: CircuitBreakerAlertData | DailyLeaderboardData | CostAlertData; // 可选：定时任务会在执行时动态生成
 }
 
 /**
@@ -99,12 +101,41 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
         case "circuit-breaker":
           content = buildCircuitBreakerAlert(data as CircuitBreakerAlertData);
           break;
-        case "daily-leaderboard":
-          content = buildDailyLeaderboard(data as DailyLeaderboardData);
+        case "daily-leaderboard": {
+          // 动态生成排行榜数据
+          const { getNotificationSettings } = await import("@/repository/notifications");
+          const settings = await getNotificationSettings();
+          const leaderboardData = await generateDailyLeaderboard(settings.dailyLeaderboardTopN || 5);
+
+          if (!leaderboardData) {
+            logger.info({
+              action: "daily_leaderboard_no_data",
+              jobId: job.id,
+            });
+            return { success: true, skipped: true };
+          }
+
+          content = buildDailyLeaderboard(leaderboardData);
           break;
-        case "cost-alert":
-          content = buildCostAlert(data as CostAlertData);
+        }
+        case "cost-alert": {
+          // 动态生成成本预警数据
+          const { getNotificationSettings } = await import("@/repository/notifications");
+          const settings = await getNotificationSettings();
+          const alerts = await generateCostAlerts(parseFloat(settings.costAlertThreshold || "0.80"));
+
+          if (alerts.length === 0) {
+            logger.info({
+              action: "cost_alert_no_data",
+              jobId: job.id,
+            });
+            return { success: true, skipped: true };
+          }
+
+          // 发送第一个告警（后续可扩展为批量发送）
+          content = buildCostAlert(alerts[0]);
           break;
+        }
         default:
           throw new Error(`Unknown notification type: ${type}`);
       }
@@ -219,7 +250,7 @@ export async function scheduleNotifications() {
         {
           type: "daily-leaderboard",
           webhookUrl: settings.dailyLeaderboardWebhook,
-          data: {} as DailyLeaderboardData, // 占位符，实际数据在任务执行时生成
+          // data 字段省略，任务执行时动态生成
         },
         {
           repeat: {
@@ -244,7 +275,7 @@ export async function scheduleNotifications() {
         {
           type: "cost-alert",
           webhookUrl: settings.costAlertWebhook,
-          data: {} as CostAlertData, // 占位符，实际数据在任务执行时生成
+          // data 字段省略，任务执行时动态生成
         },
         {
           repeat: {
