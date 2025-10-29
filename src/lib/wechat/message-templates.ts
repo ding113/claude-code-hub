@@ -16,25 +16,23 @@ export interface CircuitBreakerAlertData {
 
 export function buildCircuitBreakerAlert(data: CircuitBreakerAlertData): string {
   const lines = [
-    "## 🚨 **供应商熔断告警**",
+    "## 🚨 供应商熔断告警",
     "",
-    `> ⚠️ 供应商 **${data.providerName}** (ID: ${data.providerId}) 已触发熔断保护`,
+    `> 供应商 **${data.providerName}** (ID: ${data.providerId}) 已触发熔断保护`,
     "",
-    "### 📊 详细信息",
-    `- **失败次数**: ${data.failureCount} 次`,
-    `- **预计恢复时间**: ${formatDateTime(data.retryAt)}`,
+    "**详细信息**",
+    `失败次数: ${data.failureCount} 次`,
+    `预计恢复: ${formatDateTime(data.retryAt)}`,
   ];
 
   if (data.lastError) {
-    lines.push(`- **最后错误**: \`${truncate(data.lastError, 100)}\``);
+    lines.push(`最后错误: \`${truncate(data.lastError, 100)}\``);
   }
 
   lines.push(
     "",
     "---",
-    `⏰ 告警时间: ${formatDateTime(new Date().toISOString())}`,
-    "",
-    "> 💡 熔断器将在预计恢复时间后自动尝试恢复服务"
+    `${formatDateTime(new Date().toISOString())} · 熔断器将在预计时间后自动恢复`
   );
 
   return lines.join("\n");
@@ -59,32 +57,29 @@ export interface DailyLeaderboardData {
 }
 
 export function buildDailyLeaderboard(data: DailyLeaderboardData): string {
-  const lines = ["## 📊 **今日用户消费排行榜**", "", `> 📅 统计日期: **${data.date}**`, ""];
+  const lines = ["## 📊 今日用户消费排行榜", "", `> 统计日期: **${data.date}**`, ""];
 
   if (data.entries.length === 0) {
     lines.push("暂无数据");
   } else {
-    lines.push("### 🏆 Top 排名");
+    lines.push("**排名情况**");
     lines.push("");
 
     data.entries.forEach((entry, index) => {
       const medal = getMedal(index);
       lines.push(
         `${medal} **${entry.userName}** (ID: ${entry.userId})`,
-        `   - 💰 消费: $${entry.totalCost.toFixed(4)}`,
-        `   - 📈 请求数: ${entry.totalRequests.toLocaleString()}`,
-        `   - 🎯 Token: ${formatTokens(entry.totalTokens)}`,
+        `消费 $${entry.totalCost.toFixed(4)} · 请求 ${entry.totalRequests.toLocaleString()} 次 · Token ${formatTokens(entry.totalTokens)}`,
         ""
       );
     });
 
     lines.push(
       "---",
-      "### 📈 今日总览",
-      `- **总请求数**: ${data.totalRequests.toLocaleString()}`,
-      `- **总消费**: $${data.totalCost.toFixed(4)}`,
+      "**今日总览**",
+      `总请求 ${data.totalRequests.toLocaleString()} 次 · 总消费 $${data.totalCost.toFixed(4)}`,
       "",
-      `⏰ 生成时间: ${formatDateTime(new Date().toISOString())}`
+      formatDateTime(new Date().toISOString())
     );
   }
 
@@ -110,21 +105,19 @@ export function buildCostAlert(data: CostAlertData): string {
   const targetTypeText = data.targetType === "user" ? "用户" : "供应商";
 
   const lines = [
-    "## ⚠️ **成本预警提醒**",
+    "## ⚠️ 成本预警提醒",
     "",
-    `> 💰 ${targetTypeText} **${data.targetName}** 的消费已达到预警阈值`,
+    `> ${targetTypeText} **${data.targetName}** 的消费已达到预警阈值`,
     "",
-    "### 📊 消费详情",
-    `- **当前消费**: $${data.currentCost.toFixed(4)}`,
-    `- **配额限制**: $${data.quotaLimit.toFixed(4)}`,
-    `- **使用比例**: ${usagePercent.toFixed(1)}% ${getUsageBar(usagePercent)}`,
-    `- **剩余额度**: $${remaining.toFixed(4)}`,
-    `- **统计周期**: ${data.period}`,
+    "**消费详情**",
+    `当前消费: $${data.currentCost.toFixed(4)}`,
+    `配额限制: $${data.quotaLimit.toFixed(4)}`,
+    `使用比例: **${usagePercent.toFixed(1)}%** ${getUsageBar(usagePercent)}`,
+    `剩余额度: $${remaining.toFixed(4)}`,
+    `统计周期: ${data.period}`,
     "",
     "---",
-    `⏰ 告警时间: ${formatDateTime(new Date().toISOString())}`,
-    "",
-    `> 💡 请注意控制消费，避免超出${data.period}配额限制`,
+    `${formatDateTime(new Date().toISOString())} · 请注意控制消费`,
   ];
 
   return lines.join("\n");

@@ -250,7 +250,6 @@ export async function scheduleNotifications() {
       const cron = `${minute} ${hour} * * *`; // 每天指定时间
 
       await queue.add(
-        "daily-leaderboard-scheduled",
         {
           type: "daily-leaderboard",
           webhookUrl: settings.dailyLeaderboardWebhook,
@@ -260,6 +259,7 @@ export async function scheduleNotifications() {
           repeat: {
             cron,
           },
+          jobId: "daily-leaderboard-scheduled", // 使用 jobId 标识，便于管理
         }
       );
 
@@ -275,7 +275,6 @@ export async function scheduleNotifications() {
       const cron = `*/${interval} * * * *`; // 每 N 分钟
 
       await queue.add(
-        "cost-alert-scheduled",
         {
           type: "cost-alert",
           webhookUrl: settings.costAlertWebhook,
@@ -285,6 +284,7 @@ export async function scheduleNotifications() {
           repeat: {
             cron,
           },
+          jobId: "cost-alert-scheduled", // 使用 jobId 标识，便于管理
         }
       );
 
