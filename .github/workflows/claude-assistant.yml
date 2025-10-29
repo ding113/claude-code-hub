@@ -188,6 +188,5 @@ jobs:
 
           # 其他配置
           use_commit_signing: true
-          # 仅在支持的 PR 事件类型下启用进度追踪 (opened, synchronize, ready_for_review, reopened)
-          # 其他事件类型不支持此功能，将自动禁用以确保 workflow 正常执行
-          track_progress: ${{ github.event_name == 'pull_request' && contains(fromJSON('["opened", "synchronize", "ready_for_review", "reopened"]'), github.event.action) }}
+          # 禁用进度追踪
+          track_progress: false
