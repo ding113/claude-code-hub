@@ -59,8 +59,8 @@ jobs:
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else
-            # 提交格式化后的代码 - 添加 [skip ci] 以避免再次触发
-            git commit -m "chore: format code (dev-${{ steps.commit.outputs.short_sha }}) [skip ci]"
+            # 提交格式化后的代码
+            git commit -m "chore: format code (dev-${{ steps.commit.outputs.short_sha }})"
             git push origin dev
           fi
 
