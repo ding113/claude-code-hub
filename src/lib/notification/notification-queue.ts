@@ -105,7 +105,9 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
           // 动态生成排行榜数据
           const { getNotificationSettings } = await import("@/repository/notifications");
           const settings = await getNotificationSettings();
-          const leaderboardData = await generateDailyLeaderboard(settings.dailyLeaderboardTopN || 5);
+          const leaderboardData = await generateDailyLeaderboard(
+            settings.dailyLeaderboardTopN || 5
+          );
 
           if (!leaderboardData) {
             logger.info({
@@ -122,7 +124,9 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
           // 动态生成成本预警数据
           const { getNotificationSettings } = await import("@/repository/notifications");
           const settings = await getNotificationSettings();
-          const alerts = await generateCostAlerts(parseFloat(settings.costAlertThreshold || "0.80"));
+          const alerts = await generateCostAlerts(
+            parseFloat(settings.costAlertThreshold || "0.80")
+          );
 
           if (alerts.length === 0) {
             logger.info({
