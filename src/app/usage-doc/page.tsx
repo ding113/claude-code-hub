@@ -246,9 +246,15 @@ npm --version`}
   const renderClaudeCodeConfiguration = (os: OS) => {
     const lang = os === "windows" ? "powershell" : "bash";
     const configDir =
-      os === "windows" ? "C:\\Users\\你的用户名\\.claude" : os === "macos" ? "~/.claude" : "~/.claude";
+      os === "windows"
+        ? "C:\\Users\\你的用户名\\.claude"
+        : os === "macos"
+          ? "~/.claude"
+          : "~/.claude";
     const configPath =
-      os === "windows" ? "C:\\Users\\你的用户名\\.claude\\settings.json" : "~/.claude/settings.json";
+      os === "windows"
+        ? "C:\\Users\\你的用户名\\.claude\\settings.json"
+        : "~/.claude/settings.json";
     const shellConfig =
       os === "linux"
         ? "~/.bashrc 或 ~/.zshrc"
@@ -383,9 +389,7 @@ sk_xxxxxxxxxxxxxxxxxx`}
           />
           <blockquote className="space-y-2 rounded-lg border-l-2 border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20 px-4 py-3">
             <p className="font-semibold text-foreground">注意</p>
-            <p>
-              如果输出为空或显示变量名本身，说明环境变量设置失败，请重新按照上述步骤设置。
-            </p>
+            <p>如果输出为空或显示变量名本身，说明环境变量设置失败，请重新按照上述步骤设置。</p>
           </blockquote>
         </div>
       </div>
@@ -909,8 +913,7 @@ curl -I ${resolvedOrigin}`}
         </div>
 
         {/* VS Code 扩展配置 */}
-        {(cli.id === "claude-code" || cli.id === "codex") &&
-          renderVSCodeExtension(cli, os)}
+        {(cli.id === "claude-code" || cli.id === "codex") && renderVSCodeExtension(cli, os)}
 
         {/* 启动与验证 */}
         {renderStartupVerification(cli, os)}
