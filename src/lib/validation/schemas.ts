@@ -49,10 +49,7 @@ export const UpdateUserSchema = z.object({
  * 密钥表单数据验证schema
  */
 export const KeyFormSchema = z.object({
-  name: z
-    .string()
-    .min(1, "密钥名称不能为空")
-    .max(64, "密钥名称不能超过64个字符"),
+  name: z.string().min(1, "密钥名称不能为空").max(64, "密钥名称不能超过64个字符"),
   expiresAt: z
     .string()
     .optional()
@@ -94,7 +91,7 @@ export const KeyFormSchema = z.object({
 export const CreateProviderSchema = z.object({
   name: z.string().min(1, "服务商名称不能为空").max(64, "服务商名称不能超过64个字符"),
   url: z.string().url("请输入有效的URL地址").max(255, "URL长度不能超过255个字符"),
-  key: z.string().min(1, "API密钥不能为空").max(255, "API密钥长度不能超过255个字符"),
+  key: z.string().min(1, "API密钥不能为空").max(1024, "API密钥长度不能超过1024个字符"),
   // 数据库字段命名：下划线
   is_enabled: z.boolean().optional().default(PROVIDER_DEFAULTS.IS_ENABLED),
   weight: z
@@ -104,12 +101,18 @@ export const CreateProviderSchema = z.object({
     .max(PROVIDER_LIMITS.WEIGHT.MAX)
     .optional()
     .default(PROVIDER_DEFAULTS.WEIGHT),
-  priority: z.number().int("优先级必须是整数").min(0, "优先级不能为负数").max(2147483647, "优先级超出整数范围").optional().default(0),
+  priority: z
+    .number()
+    .int("优先级必须是整数")
+    .min(0, "优先级不能为负数")
+    .max(2147483647, "优先级超出整数范围")
+    .optional()
+    .default(0),
   cost_multiplier: z.coerce.number().min(0, "成本倍率不能为负数").optional().default(1.0),
   group_tag: z.string().max(50, "分组标签不能超过50个字符").nullable().optional(),
   // Codex 支持:供应商类型和模型重定向
   provider_type: z
-    .enum(["claude", "codex", "gemini-cli", "openai-compatible"])
+    .enum(["claude", "claude-auth", "codex", "gemini-cli", "openai-compatible"])
     .optional()
     .default("claude"),
   model_redirects: z.record(z.string(), z.string()).nullable().optional(),
@@ -141,6 +144,25 @@ export const CreateProviderSchema = z.object({
     .max(1000, "并发Session上限不能超过1000")
     .optional()
     .default(0),
+  // 熔断器配置
+  circuit_breaker_failure_threshold: z.coerce
+    .number()
+    .int("失败阈值必须是整数")
+    .min(1, "失败阈值不能少于1次")
+    .max(100, "失败阈值不能超过100次")
+    .optional(),
+  circuit_breaker_open_duration: z.coerce
+    .number()
+    .int("熔断时长必须是整数")
+    .min(1000, "熔断时长不能少于1秒")
+    .max(86400000, "熔断时长不能超过24小时")
+    .optional(),
+  circuit_breaker_half_open_success_threshold: z.coerce
+    .number()
+    .int("恢复阈值必须是整数")
+    .min(1, "恢复阈值不能少于1次")
+    .max(10, "恢复阈值不能超过10次")
+    .optional(),
   // 废弃字段（保留向后兼容，不再验证范围）
   tpm: z.number().int().nullable().optional(),
   rpm: z.number().int().nullable().optional(),
@@ -155,7 +177,7 @@ export const UpdateProviderSchema = z
   .object({
     name: z.string().min(1).max(64).optional(),
     url: z.string().url().max(255).optional(),
-    key: z.string().min(1).max(255).optional(),
+    key: z.string().min(1).max(1024).optional(),
     is_enabled: z.boolean().optional(),
     weight: z
       .number()
@@ -163,11 +185,18 @@ export const UpdateProviderSchema = z
       .min(PROVIDER_LIMITS.WEIGHT.MIN)
       .max(PROVIDER_LIMITS.WEIGHT.MAX)
       .optional(),
-    priority: z.number().int("优先级必须是整数").min(0, "优先级不能为负数").max(2147483647, "优先级超出整数范围").optional(),
+    priority: z
+      .number()
+      .int("优先级必须是整数")
+      .min(0, "优先级不能为负数")
+      .max(2147483647, "优先级超出整数范围")
+      .optional(),
     cost_multiplier: z.coerce.number().min(0, "成本倍率不能为负数").optional(),
     group_tag: z.string().max(50, "分组标签不能超过50个字符").nullable().optional(),
     // Codex 支持:供应商类型和模型重定向
-    provider_type: z.enum(["claude", "codex", "gemini-cli", "openai-compatible"]).optional(),
+    provider_type: z
+      .enum(["claude", "claude-auth", "codex", "gemini-cli", "openai-compatible"])
+      .optional(),
     model_redirects: z.record(z.string(), z.string()).nullable().optional(),
     allowed_models: z.array(z.string()).nullable().optional(),
     join_claude_pool: z.boolean().optional(),
@@ -195,6 +224,25 @@ export const UpdateProviderSchema = z
       .int("并发Session上限必须是整数")
       .min(0, "并发Session上限不能为负数")
       .max(1000, "并发Session上限不能超过1000")
+      .optional(),
+    // 熔断器配置
+    circuit_breaker_failure_threshold: z.coerce
+      .number()
+      .int("失败阈值必须是整数")
+      .min(1, "失败阈值不能少于1次")
+      .max(100, "失败阈值不能超过100次")
+      .optional(),
+    circuit_breaker_open_duration: z.coerce
+      .number()
+      .int("熔断时长必须是整数")
+      .min(1000, "熔断时长不能少于1秒")
+      .max(86400000, "熔断时长不能超过24小时")
+      .optional(),
+    circuit_breaker_half_open_success_threshold: z.coerce
+      .number()
+      .int("恢复阈值必须是整数")
+      .min(1, "恢复阈值不能少于1次")
+      .max(10, "恢复阈值不能超过10次")
       .optional(),
     // 废弃字段（保留向后兼容，不再验证范围）
     tpm: z.number().int().nullable().optional(),

@@ -204,7 +204,7 @@ export function ProviderListItem({
                       <Edit className="h-3.5 w-3.5" />
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+                  <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
                     <FormErrorBoundary>
                       <ProviderForm
                         mode="edit"
@@ -232,7 +232,7 @@ export function ProviderListItem({
                       <Copy className="h-3.5 w-3.5" />
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+                  <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
                     <FormErrorBoundary>
                       <ProviderForm
                         mode="create"

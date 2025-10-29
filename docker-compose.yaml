@@ -50,7 +50,7 @@ services:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     env_file:
       - ./.env
     environment:

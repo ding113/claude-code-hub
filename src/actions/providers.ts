@@ -14,7 +14,11 @@ import { maskKey } from "@/lib/utils/validation";
 import { getSession } from "@/lib/auth";
 import { CreateProviderSchema, UpdateProviderSchema } from "@/lib/validation/schemas";
 import type { ActionResult } from "./types";
-import { getAllHealthStatus, resetCircuit } from "@/lib/circuit-breaker";
+import { getAllHealthStatus, resetCircuit, clearConfigCache } from "@/lib/circuit-breaker";
+import {
+  saveProviderCircuitConfig,
+  deleteProviderCircuitConfig,
+} from "@/lib/redis/circuit-breaker-config";
 
 // 获取服务商数据
 export async function getProviders(): Promise<ProviderDisplay[]> {
@@ -116,6 +120,9 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         limitWeeklyUsd: provider.limitWeeklyUsd,
         limitMonthlyUsd: provider.limitMonthlyUsd,
         limitConcurrentSessions: provider.limitConcurrentSessions,
+        circuitBreakerFailureThreshold: provider.circuitBreakerFailureThreshold,
+        circuitBreakerOpenDuration: provider.circuitBreakerOpenDuration,
+        circuitBreakerHalfOpenSuccessThreshold: provider.circuitBreakerHalfOpenSuccessThreshold,
         tpm: provider.tpm,
         rpm: provider.rpm,
         rpd: provider.rpd,
@@ -160,6 +167,9 @@ export async function addProvider(data: {
   limit_weekly_usd?: number | null;
   limit_monthly_usd?: number | null;
   limit_concurrent_sessions?: number | null;
+  circuit_breaker_failure_threshold?: number;
+  circuit_breaker_open_duration?: number;
+  circuit_breaker_half_open_success_threshold?: number;
   tpm: number | null;
   rpm: number | null;
   rpd: number | null;
@@ -186,14 +196,34 @@ export async function addProvider(data: {
       limit_weekly_usd: validated.limit_weekly_usd ?? null,
       limit_monthly_usd: validated.limit_monthly_usd ?? null,
       limit_concurrent_sessions: validated.limit_concurrent_sessions ?? 0,
+      circuit_breaker_failure_threshold: validated.circuit_breaker_failure_threshold ?? 5,
+      circuit_breaker_open_duration: validated.circuit_breaker_open_duration ?? 1800000,
+      circuit_breaker_half_open_success_threshold:
+        validated.circuit_breaker_half_open_success_threshold ?? 2,
       tpm: validated.tpm ?? null,
       rpm: validated.rpm ?? null,
       rpd: validated.rpd ?? null,
       cc: validated.cc ?? null,
     };
 
-    await createProvider(payload);
-    logger.trace("addProvider:created_success", { name: validated.name });
+    const provider = await createProvider(payload);
+    logger.trace("addProvider:created_success", { name: validated.name, providerId: provider.id });
+
+    // 同步熔断器配置到 Redis
+    try {
+      await saveProviderCircuitConfig(provider.id, {
+        failureThreshold: provider.circuitBreakerFailureThreshold,
+        openDuration: provider.circuitBreakerOpenDuration,
+        halfOpenSuccessThreshold: provider.circuitBreakerHalfOpenSuccessThreshold,
+      });
+      logger.debug("addProvider:config_synced_to_redis", { providerId: provider.id });
+    } catch (error) {
+      logger.warn("addProvider:redis_sync_failed", {
+        providerId: provider.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      // 不影响主流程，仅记录警告
+    }
 
     revalidatePath("/settings/providers");
     logger.trace("addProvider:revalidated", { path: "/settings/providers" });
@@ -230,6 +260,9 @@ export async function editProvider(
     limit_weekly_usd?: number | null;
     limit_monthly_usd?: number | null;
     limit_concurrent_sessions?: number | null;
+    circuit_breaker_failure_threshold?: number;
+    circuit_breaker_open_duration?: number;
+    circuit_breaker_half_open_success_threshold?: number;
     tpm?: number | null;
     rpm?: number | null;
     rpd?: number | null;
@@ -243,7 +276,36 @@ export async function editProvider(
     }
 
     const validated = UpdateProviderSchema.parse(data);
-    await updateProvider(providerId, validated);
+    const provider = await updateProvider(providerId, validated);
+
+    if (!provider) {
+      return { ok: false, error: "供应商不存在" };
+    }
+
+    // 同步熔断器配置到 Redis（如果配置有变化）
+    const hasCircuitConfigChange =
+      validated.circuit_breaker_failure_threshold !== undefined ||
+      validated.circuit_breaker_open_duration !== undefined ||
+      validated.circuit_breaker_half_open_success_threshold !== undefined;
+
+    if (hasCircuitConfigChange) {
+      try {
+        await saveProviderCircuitConfig(providerId, {
+          failureThreshold: provider.circuitBreakerFailureThreshold,
+          openDuration: provider.circuitBreakerOpenDuration,
+          halfOpenSuccessThreshold: provider.circuitBreakerHalfOpenSuccessThreshold,
+        });
+        // 清除内存缓存，强制下次读取最新配置
+        clearConfigCache(providerId);
+        logger.debug("editProvider:config_synced_to_redis", { providerId });
+      } catch (error) {
+        logger.warn("editProvider:redis_sync_failed", {
+          providerId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
     revalidatePath("/settings/providers");
     return { ok: true };
   } catch (error) {
@@ -262,6 +324,20 @@ export async function removeProvider(providerId: number): Promise<ActionResult> 
     }
 
     await deleteProvider(providerId);
+
+    // 删除 Redis 缓存
+    try {
+      await deleteProviderCircuitConfig(providerId);
+      // 清除内存缓存
+      clearConfigCache(providerId);
+      logger.debug("removeProvider:cache_cleared", { providerId });
+    } catch (error) {
+      logger.warn("removeProvider:cache_clear_failed", {
+        providerId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     revalidatePath("/settings/providers");
     return { ok: true };
   } catch (error) {

@@ -75,15 +75,16 @@ export const providers = pgTable('providers', {
   costMultiplier: numeric('cost_multiplier', { precision: 10, scale: 4 }).default('1.0'),
   groupTag: varchar('group_tag', { length: 50 }),
 
-  // 供应商类型：扩展支持 4 种类型
-  // - claude: Anthropic 提供商
+  // 供应商类型：扩展支持 5 种类型
+  // - claude: Anthropic 提供商（标准认证）
+  // - claude-auth: Claude 中转服务（仅 Bearer 认证，不发送 x-api-key）
   // - codex: Codex CLI (Response API)
   // - gemini-cli: Gemini CLI
   // - openai-compatible: OpenAI Compatible API
   providerType: varchar('provider_type', { length: 20 })
     .notNull()
     .default('claude')
-    .$type<'claude' | 'codex' | 'gemini-cli' | 'openai-compatible'>(),
+    .$type<'claude' | 'claude-auth' | 'codex' | 'gemini-cli' | 'openai-compatible'>(),
 
   // 模型重定向：将请求的模型名称重定向到另一个模型
   modelRedirects: jsonb('model_redirects').$type<Record<string, string>>(),
@@ -103,6 +104,11 @@ export const providers = pgTable('providers', {
   limitWeeklyUsd: numeric('limit_weekly_usd', { precision: 10, scale: 2 }),
   limitMonthlyUsd: numeric('limit_monthly_usd', { precision: 10, scale: 2 }),
   limitConcurrentSessions: integer('limit_concurrent_sessions').default(0),
+
+  // 熔断器配置（每个供应商独立配置）
+  circuitBreakerFailureThreshold: integer('circuit_breaker_failure_threshold').default(5),
+  circuitBreakerOpenDuration: integer('circuit_breaker_open_duration').default(1800000), // 30分钟（毫秒）
+  circuitBreakerHalfOpenSuccessThreshold: integer('circuit_breaker_half_open_success_threshold').default(2),
 
   // 废弃（保留向后兼容，但不再使用）
   tpm: integer('tpm').default(0),

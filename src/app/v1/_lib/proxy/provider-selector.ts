@@ -30,7 +30,8 @@ import type { ProviderChainItem } from "@/types/message";
  */
 function providerSupportsModel(provider: Provider, requestedModel: string): boolean {
   const isClaudeModel = requestedModel.startsWith("claude-");
-  const isClaudeProvider = provider.providerType === "claude";
+  const isClaudeProvider =
+    provider.providerType === "claude" || provider.providerType === "claude-auth";
 
   // Case 1: Claude 模型请求
   if (isClaudeModel) {
@@ -329,7 +330,7 @@ export class ProxyProviderResolver {
     }
 
     // 检查熔断器状态（TC-055 修复）
-    if (isCircuitOpen(provider.id)) {
+    if (await isCircuitOpen(provider.id)) {
       logger.debug("ProviderSelector: Session provider circuit is open", {
         sessionId: session.sessionId,
         providerId: provider.id,
@@ -484,7 +485,7 @@ export class ProxyProviderResolver {
     );
 
     for (const p of filteredOut) {
-      if (isCircuitOpen(p.id)) {
+      if (await isCircuitOpen(p.id)) {
         const state = getCircuitState(p.id);
         context.filteredProviders!.push({
           id: p.id,
@@ -565,7 +566,7 @@ export class ProxyProviderResolver {
     const results = await Promise.all(
       providers.map(async (p) => {
         // 0. 检查熔断器状态
-        if (isCircuitOpen(p.id)) {
+        if (await isCircuitOpen(p.id)) {
           logger.debug("ProviderSelector: Provider circuit breaker is open", { providerId: p.id });
           return null;
         }

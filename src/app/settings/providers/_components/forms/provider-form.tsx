@@ -86,6 +86,20 @@ export function ProviderForm({
     sourceProvider?.joinClaudePool ?? false
   );
 
+  // 熔断器配置（以分钟为单位显示，提交时转换为毫秒）
+  // 允许 undefined，用户可以清空输入框，提交时使用默认值
+  const [failureThreshold, setFailureThreshold] = useState<number | undefined>(
+    sourceProvider?.circuitBreakerFailureThreshold
+  );
+  const [openDurationMinutes, setOpenDurationMinutes] = useState<number | undefined>(
+    sourceProvider?.circuitBreakerOpenDuration
+      ? sourceProvider.circuitBreakerOpenDuration / 60000
+      : undefined
+  );
+  const [halfOpenSuccessThreshold, setHalfOpenSuccessThreshold] = useState<number | undefined>(
+    sourceProvider?.circuitBreakerHalfOpenSuccessThreshold
+  );
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -120,6 +134,9 @@ export function ProviderForm({
             limit_weekly_usd?: number | null;
             limit_monthly_usd?: number | null;
             limit_concurrent_sessions?: number | null;
+            circuit_breaker_failure_threshold?: number;
+            circuit_breaker_open_duration?: number;
+            circuit_breaker_half_open_success_threshold?: number;
             tpm?: number | null;
             rpm?: number | null;
             rpd?: number | null;
@@ -139,6 +156,11 @@ export function ProviderForm({
             limit_weekly_usd: limitWeeklyUsd,
             limit_monthly_usd: limitMonthlyUsd,
             limit_concurrent_sessions: limitConcurrentSessions,
+            circuit_breaker_failure_threshold: failureThreshold ?? 5,
+            circuit_breaker_open_duration: openDurationMinutes
+              ? openDurationMinutes * 60000
+              : 1800000,
+            circuit_breaker_half_open_success_threshold: halfOpenSuccessThreshold ?? 2,
             tpm: null,
             rpm: null,
             rpd: null,
@@ -171,6 +193,11 @@ export function ProviderForm({
             limit_weekly_usd: limitWeeklyUsd,
             limit_monthly_usd: limitMonthlyUsd,
             limit_concurrent_sessions: limitConcurrentSessions ?? 0,
+            circuit_breaker_failure_threshold: failureThreshold ?? 5,
+            circuit_breaker_open_duration: openDurationMinutes
+              ? openDurationMinutes * 60000
+              : 1800000,
+            circuit_breaker_half_open_success_threshold: halfOpenSuccessThreshold ?? 2,
             tpm: null,
             rpm: null,
             rpd: null,
@@ -200,6 +227,9 @@ export function ProviderForm({
           setLimitWeeklyUsd(null);
           setLimitMonthlyUsd(null);
           setLimitConcurrentSessions(null);
+          setFailureThreshold(5);
+          setOpenDurationMinutes(30);
+          setHalfOpenSuccessThreshold(2);
         }
         onSuccess?.();
       } catch (error) {
@@ -277,6 +307,7 @@ export function ProviderForm({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="claude">Claude (Anthropic Messages API)</SelectItem>
+                <SelectItem value="claude-auth">Claude (Anthropic Auth Token)</SelectItem>
                 <SelectItem value="codex">Codex (Response API)</SelectItem>
                 <SelectItem value="gemini-cli" disabled={!enableMultiProviderTypes}>
                   Gemini CLI{!enableMultiProviderTypes && " - 功能开发中"}
@@ -529,6 +560,78 @@ export function ProviderForm({
                 min="0"
                 step="1"
               />
+            </div>
+          </div>
+        </div>
+
+        {/* 熔断器配置 */}
+        <div className="space-y-4 pt-2 border-t">
+          <div className="space-y-1">
+            <div className="text-sm font-medium">熔断器配置</div>
+            <p className="text-xs text-muted-foreground">
+              供应商连续失败时自动熔断，避免影响整体服务质量
+            </p>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor={isEdit ? "edit-failure-threshold" : "failure-threshold"}>
+                失败阈值（次）
+              </Label>
+              <Input
+                id={isEdit ? "edit-failure-threshold" : "failure-threshold"}
+                type="number"
+                value={failureThreshold ?? ""}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFailureThreshold(val === "" ? undefined : parseInt(val));
+                }}
+                placeholder="5"
+                disabled={isPending}
+                min="1"
+                max="100"
+                step="1"
+              />
+              <p className="text-xs text-muted-foreground">连续失败多少次后触发熔断</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={isEdit ? "edit-open-duration" : "open-duration"}>
+                熔断时长（分钟）
+              </Label>
+              <Input
+                id={isEdit ? "edit-open-duration" : "open-duration"}
+                type="number"
+                value={openDurationMinutes ?? ""}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setOpenDurationMinutes(val === "" ? undefined : parseInt(val));
+                }}
+                placeholder="30"
+                disabled={isPending}
+                min="1"
+                max="1440"
+                step="1"
+              />
+              <p className="text-xs text-muted-foreground">熔断后多久自动进入半开状态</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={isEdit ? "edit-success-threshold" : "success-threshold"}>
+                恢复阈值（次）
+              </Label>
+              <Input
+                id={isEdit ? "edit-success-threshold" : "success-threshold"}
+                type="number"
+                value={halfOpenSuccessThreshold ?? ""}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setHalfOpenSuccessThreshold(val === "" ? undefined : parseInt(val));
+                }}
+                placeholder="2"
+                disabled={isPending}
+                min="1"
+                max="10"
+                step="1"
+              />
+              <p className="text-xs text-muted-foreground">半开状态下成功多少次后完全恢复</p>
             </div>
           </div>
         </div>
