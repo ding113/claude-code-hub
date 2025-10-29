@@ -31,12 +31,14 @@ export async function generateDailyLeaderboard(topN: number): Promise<DailyLeade
 
     // 格式化日期 (YYYY-MM-DD)
     const today = new Date();
-    const dateStr = today.toLocaleDateString("zh-CN", {
-      timeZone: "Asia/Shanghai",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).replace(/\//g, "-");
+    const dateStr = today
+      .toLocaleDateString("zh-CN", {
+        timeZone: "Asia/Shanghai",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      })
+      .replace(/\//g, "-");
 
     return {
       date: dateStr,

@@ -241,7 +241,11 @@ export async function scheduleNotifications() {
     }
 
     // 调度每日排行榜任务
-    if (settings.dailyLeaderboardEnabled && settings.dailyLeaderboardWebhook && settings.dailyLeaderboardTime) {
+    if (
+      settings.dailyLeaderboardEnabled &&
+      settings.dailyLeaderboardWebhook &&
+      settings.dailyLeaderboardTime
+    ) {
       const [hour, minute] = settings.dailyLeaderboardTime.split(":").map(Number);
       const cron = `${minute} ${hour} * * *`; // 每天指定时间
 

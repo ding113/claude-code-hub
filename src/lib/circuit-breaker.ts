@@ -176,7 +176,11 @@ async function triggerCircuitBreakerAlert(
     const { sendCircuitBreakerAlert } = await import("@/lib/notification/notifier");
 
     // 查询供应商名称
-    const provider = await db.select({ name: providers.name }).from(providers).where(eq(providers.id, providerId)).limit(1);
+    const provider = await db
+      .select({ name: providers.name })
+      .from(providers)
+      .where(eq(providers.id, providerId))
+      .limit(1);
 
     if (!provider || provider.length === 0) {
       logger.warn({
