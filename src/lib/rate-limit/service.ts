@@ -3,11 +3,7 @@ import { logger } from "@/lib/logger";
 import { SessionTracker } from "@/lib/session-tracker";
 import { CHECK_AND_TRACK_SESSION } from "@/lib/redis/lua-scripts";
 import { sumUserCostToday } from "@/repository/statistics";
-import {
-  getTimeRangeForPeriod,
-  getTTLForPeriod,
-  getSecondsUntilMidnight,
-} from "./time-utils";
+import { getTimeRangeForPeriod, getTTLForPeriod, getSecondsUntilMidnight } from "./time-utils";
 
 interface CostLimit {
   amount: number | null;
@@ -139,7 +135,6 @@ export class RateLimitService {
 
     return { allowed: true };
   }
-
 
   /**
    * 检查并发 Session 限制（仅检查，不追踪）

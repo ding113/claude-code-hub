@@ -41,9 +41,7 @@ export default async function UsersQuotaPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base">{user.name}</CardTitle>
-                <Badge variant={user.role === "admin" ? "default" : "secondary"}>
-                  {user.role}
-                </Badge>
+                <Badge variant={user.role === "admin" ? "default" : "secondary"}>{user.role}</Badge>
               </div>
               <CardDescription>{user.note || "无备注"}</CardDescription>
             </CardHeader>

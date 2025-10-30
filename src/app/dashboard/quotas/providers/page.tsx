@@ -71,7 +71,9 @@ export default async function ProvidersQuotaPage() {
                         }
                         className="h-2"
                       />
-                      <p className="text-xs text-muted-foreground">{provider.quota.cost5h.resetInfo}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {provider.quota.cost5h.resetInfo}
+                      </p>
                     </div>
                   )}
 

@@ -10,7 +10,9 @@ import { getResetInfo } from "@/lib/rate-limit/time-utils";
 
 async function getKeysWithQuotas() {
   const users = await getUsers();
-  const allKeys = users.flatMap((user) => user.keys.map((key) => ({ ...key, userName: user.name })));
+  const allKeys = users.flatMap((user) =>
+    user.keys.map((key) => ({ ...key, userName: user.name }))
+  );
 
   const keysWithQuotas = await Promise.all(
     allKeys.map(async (key) => {
@@ -67,9 +69,7 @@ export default async function KeysQuotaPage() {
                         </span>
                       </div>
                       <Progress
-                        value={
-                          (key.quota.cost5h.current / (key.quota.cost5h.limit || 1)) * 100
-                        }
+                        value={(key.quota.cost5h.current / (key.quota.cost5h.limit || 1)) * 100}
                         className="h-2"
                       />
                       <p className="text-xs text-muted-foreground">滚动窗口（过去5小时）</p>
