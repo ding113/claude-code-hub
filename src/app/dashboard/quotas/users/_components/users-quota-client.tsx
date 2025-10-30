@@ -51,9 +51,7 @@ export function UsersQuotaClient({
 
     // 搜索
     if (searchQuery) {
-      result = result.filter((user) =>
-        user.name.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+      result = result.filter((user) => user.name.toLowerCase().includes(searchQuery.toLowerCase()));
     }
 
     // 状态筛选
@@ -85,9 +83,7 @@ export function UsersQuotaClient({
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base">{user.name}</CardTitle>
-                <Badge variant={user.role === "admin" ? "default" : "secondary"}>
-                  {user.role}
-                </Badge>
+                <Badge variant={user.role === "admin" ? "default" : "secondary"}>{user.role}</Badge>
               </div>
               <CardDescription>{user.note || "无备注"}</CardDescription>
             </CardHeader>

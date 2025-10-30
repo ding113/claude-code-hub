@@ -31,10 +31,7 @@ interface ProvidersQuotaClientProps {
   typeFilter?: ProviderType | "all";
 }
 
-export function ProvidersQuotaClient({
-  providers,
-  typeFilter = "all",
-}: ProvidersQuotaClientProps) {
+export function ProvidersQuotaClient({ providers, typeFilter = "all" }: ProvidersQuotaClientProps) {
   // 筛选供应商
   const filteredProviders = useMemo(() => {
     if (typeFilter === "all") {

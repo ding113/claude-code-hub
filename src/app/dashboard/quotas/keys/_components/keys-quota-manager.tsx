@@ -45,9 +45,7 @@ export function KeysQuotaManager({ users }: KeysQuotaManagerProps) {
         const userNameMatches = user.name.toLowerCase().includes(lowerQuery);
 
         // 筛选匹配的密钥
-        const matchedKeys = user.keys.filter((key) =>
-          key.name.toLowerCase().includes(lowerQuery)
-        );
+        const matchedKeys = user.keys.filter((key) => key.name.toLowerCase().includes(lowerQuery));
 
         // 如果用户名匹配，显示所有密钥；否则只显示匹配的密钥
         if (userNameMatches) {

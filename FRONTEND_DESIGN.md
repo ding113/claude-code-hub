@@ -3,6 +3,7 @@
 ## 🎯 项目概览
 
 本功能为 Claude Code Hub 添加了完整的限额管理系统，包括：
+
 - ✅ 修正时间算法（周/月限额改为自然时间窗口）
 - ✅ 补全所有限额查询 API
 - ✅ 创建完整的前端管理页面
@@ -16,6 +17,7 @@
 ### 设计理念
 
 采用**渐进式增强**的设计思路：
+
 1. **Server Components** 处理数据获取（性能优先）
 2. **Client Components** 处理交互逻辑（体验优化）
 3. **通用组件库**实现代码复用
@@ -44,6 +46,7 @@ Page (Server Component)
 #### 1. Server/Client 分离
 
 **Server Component (page.tsx)**:
+
 ```typescript
 // ✅ 优点：
 - 数据在服务器端获取（减少客户端包大小）
@@ -52,7 +55,8 @@ Page (Server Component)
 - 数据可以直接访问数据库/内部 API
 ```
 
-**Client Component (*-client.tsx)**:
+**Client Component (\*-client.tsx)**:
+
 ```typescript
 // ✅ 优点：
 - 处理用户交互（搜索、筛选、排序）
@@ -64,6 +68,7 @@ Page (Server Component)
 #### 2. QuotaToolbar 设计
 
 **独立的客户端组件**，原因：
+
 - 包含状态（自动刷新开关、间隔设置）
 - 使用 `useTransition` 和 `router.refresh()`
 - 可在多个页面复用
@@ -72,6 +77,7 @@ Page (Server Component)
 #### 3. QuotaProgress 设计
 
 **自定义进度条组件**，原因：
+
 - Shadcn 的 `<Progress>` 不支持动态颜色
 - 需要根据使用率自动变色：
   - < 60%: 主题色（正常）
@@ -87,12 +93,13 @@ Page (Server Component)
 ### Phase 1: 时间算法修正 ✅
 
 #### 修改内容
-| 限额类型 | 原算法 | 新算法 | 重置时间 |
-|---------|--------|--------|---------|
-| 5小时 | 滚动窗口（过去5h） | 滚动窗口（过去5h） | 无固定重置（连续滑动） |
-| 周限额 | 滚动窗口（过去7天） | **自然周** | **每周一 00:00 (Asia/Shanghai)** |
-| 月限额 | 滚动窗口（过去31天） | **自然月** | **每月 1 号 00:00 (Asia/Shanghai)** |
-| 每日限额 | 滚动窗口（过去24h） | **自然日** | **每天 00:00 (Asia/Shanghai)** |
+
+| 限额类型 | 原算法               | 新算法             | 重置时间                            |
+| -------- | -------------------- | ------------------ | ----------------------------------- |
+| 5小时    | 滚动窗口（过去5h）   | 滚动窗口（过去5h） | 无固定重置（连续滑动）              |
+| 周限额   | 滚动窗口（过去7天）  | **自然周**         | **每周一 00:00 (Asia/Shanghai)**    |
+| 月限额   | 滚动窗口（过去31天） | **自然月**         | **每月 1 号 00:00 (Asia/Shanghai)** |
+| 每日限额 | 滚动窗口（过去24h）  | **自然日**         | **每天 00:00 (Asia/Shanghai)**      |
 
 #### 关键函数
 
@@ -138,44 +145,46 @@ Redis SET key:123:cost_monthly "10.123" EX 1382400  // 16 * 24 * 3600 秒
 #### 新增 API
 
 **1. `src/actions/users.ts` - `getUserLimitUsage()`**
+
 ```typescript
 return {
   rpm: {
-    current: 0,           // RPM 是动态滑动窗口，无法精确获取
+    current: 0, // RPM 是动态滑动窗口，无法精确获取
     limit: user.rpm || 60,
-    window: "per_minute"
+    window: "per_minute",
   },
   dailyCost: {
-    current: 12.34,       // 从数据库查询
+    current: 12.34, // 从数据库查询
     limit: user.dailyQuota || 100,
-    resetAt: Date         // 明天 00:00 (Asia/Shanghai)
-  }
-}
+    resetAt: Date, // 明天 00:00 (Asia/Shanghai)
+  },
+};
 ```
 
 **2. `src/actions/providers.ts` - `getProviderLimitUsage()`**
+
 ```typescript
 return {
   cost5h: {
     current: 1.23,
     limit: provider.limit5hUsd,
-    resetInfo: "滚动窗口（5 小时）"
+    resetInfo: "滚动窗口（5 小时）",
   },
   costWeekly: {
     current: 5.67,
     limit: provider.limitWeeklyUsd,
-    resetAt: Date         // 下周一 00:00
+    resetAt: Date, // 下周一 00:00
   },
   costMonthly: {
     current: 10.12,
     limit: provider.limitMonthlyUsd,
-    resetAt: Date         // 下月 1 号 00:00
+    resetAt: Date, // 下月 1 号 00:00
   },
   concurrentSessions: {
     current: 3,
-    limit: provider.limitConcurrentSessions || 0
-  }
-}
+    limit: provider.limitConcurrentSessions || 0,
+  },
+};
 ```
 
 #### 数据来源
@@ -190,7 +199,7 @@ const cost = await sumKeyCostInTimeRange(id, startTime, endTime);
 // → SELECT SUM(cost_usd) FROM message_request WHERE ...
 
 // Cache Warming（写回 Redis）
-await redis.set(`key:${id}:cost_weekly`, cost, 'EX', ttl);
+await redis.set(`key:${id}:cost_weekly`, cost, "EX", ttl);
 ```
 
 ---
@@ -200,6 +209,7 @@ await redis.set(`key:${id}:cost_weekly`, cost, 'EX', ttl);
 #### 1. QuotaToolbar (`src/components/quota/quota-toolbar.tsx`)
 
 **功能**：
+
 - ✅ 搜索框（实时过滤）
 - ✅ 筛选器（全部/警告/超限）
 - ✅ 排序器（名称/使用率）
@@ -208,13 +218,14 @@ await redis.set(`key:${id}:cost_weekly`, cost, 'EX', ttl);
 - ✅ 手动刷新按钮
 
 **技术实现**：
+
 ```typescript
 // 自动刷新
 useEffect(() => {
   if (!autoRefresh) return;
   const timer = setInterval(() => {
     startTransition(() => {
-      router.refresh();  // Next.js 15 自动重新验证 Server Components
+      router.refresh(); // Next.js 15 自动重新验证 Server Components
     });
   }, refreshInterval * 1000);
   return () => clearInterval(timer);
@@ -222,6 +233,7 @@ useEffect(() => {
 ```
 
 **配置灵活性**：
+
 ```typescript
 <QuotaToolbar
   sortOptions={[...]}        // 自定义排序选项
@@ -236,6 +248,7 @@ useEffect(() => {
 #### 2. QuotaProgress (`src/components/quota/quota-progress.tsx`)
 
 **功能**：
+
 - ✅ 自动计算使用率百分比
 - ✅ 根据使用率变色：
   - < 60%: `bg-primary`（主题色）
@@ -244,6 +257,7 @@ useEffect(() => {
   - ≥100%: `bg-red-500`（超限）
 
 **技术实现**：
+
 ```typescript
 // 直接使用 Radix UI 原语（完全控制）
 <ProgressPrimitive.Root className="...">
@@ -283,6 +297,7 @@ useEffect(() => {
 #### 用户限额页面详解
 
 **1. Server Component (page.tsx)**:
+
 ```typescript
 async function getUsersWithQuotas() {
   const users = await getUsers();
@@ -314,6 +329,7 @@ export default async function UsersQuotaPage() {
 ```
 
 **2. Client Component (users-quota-client.tsx)**:
+
 ```typescript
 export function UsersQuotaClient({
   users,
@@ -365,18 +381,20 @@ export function UsersQuotaClient({
 
 **回答**：**分离关注点**（Separation of Concerns）
 
-| 组件 | 职责 | 状态 | 复用性 |
-|-----|------|------|-------|
-| QuotaToolbar | UI控件 + 自动刷新 | 自己管理（useState） | ✅ 高（可用于所有标签页） |
-| *QuotaClient | 数据处理 + 渲染 | 接收 props | ⚠️ 中（每个页面不同） |
+| 组件          | 职责              | 状态                 | 复用性                    |
+| ------------- | ----------------- | -------------------- | ------------------------- |
+| QuotaToolbar  | UI控件 + 自动刷新 | 自己管理（useState） | ✅ 高（可用于所有标签页） |
+| \*QuotaClient | 数据处理 + 渲染   | 接收 props           | ⚠️ 中（每个页面不同）     |
 
 **当前模式**：
+
 ```
 Page → QuotaToolbar (独立状态)
     → Client (接收数据 props)
 ```
 
 **优点**：
+
 - Toolbar 可以独立复用
 - Client 逻辑更清晰（只处理数据）
 - 未来如果需要，Toolbar 可以通过回调与 Client 通信
@@ -399,7 +417,7 @@ useEffect(() => {
   if (!autoRefresh) return;
   const timer = setInterval(() => {
     startTransition(() => {
-      router.refresh();  // 重新验证 Server Components
+      router.refresh(); // 重新验证 Server Components
     });
   }, refreshInterval * 1000);
   return () => clearInterval(timer);
@@ -407,6 +425,7 @@ useEffect(() => {
 ```
 
 **为什么选择这个方案？**
+
 - ✅ 不需要 WebSocket（简单）
 - ✅ 不需要客户端轮询 API（减少请求）
 - ✅ 自动重新验证 Server Components（Next.js 15 特性）
@@ -420,15 +439,14 @@ useEffect(() => {
 const filteredUsers = useMemo(() => {
   let result = users;
   if (searchQuery) {
-    result = result.filter((user) =>
-      user.name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    result = result.filter((user) => user.name.toLowerCase().includes(searchQuery.toLowerCase()));
   }
   return result;
 }, [users, searchQuery]);
 ```
 
 **为什么不在服务器端搜索？**
+
 - 数据量不大（通常 < 100 个实体）
 - 客户端过滤响应更快（无网络延迟）
 - 简化 API 设计
@@ -436,6 +454,7 @@ const filteredUsers = useMemo(() => {
 #### 3. 筛选功能
 
 **筛选条件**：
+
 - 全部
 - 接近限额（≥60% 且 <100%）
 - 已超限（≥100%）
@@ -451,6 +470,7 @@ if (filter === "warning") {
 #### 4. 排序功能
 
 **排序选项**：
+
 - 按名称（中文拼音排序）
 - 按使用率（降序，最高在前）
 
@@ -466,14 +486,15 @@ if (sortBy === "name") {
 
 **进度条颜色分级**：
 
-| 使用率 | 颜色 | Tailwind Class | 含义 |
-|-------|------|---------------|------|
-| < 60% | 主题色 | `bg-primary` | 正常 |
-| 60-80% | 黄色 | `bg-yellow-500` | 警告 |
-| 80-100% | 橙色 | `bg-orange-500` | 危险 |
-| ≥100% | 红色 | `bg-red-500` | 超限 |
+| 使用率  | 颜色   | Tailwind Class  | 含义 |
+| ------- | ------ | --------------- | ---- |
+| < 60%   | 主题色 | `bg-primary`    | 正常 |
+| 60-80%  | 黄色   | `bg-yellow-500` | 警告 |
+| 80-100% | 橙色   | `bg-orange-500` | 危险 |
+| ≥100%   | 红色   | `bg-red-500`    | 超限 |
 
 **实现**：
+
 ```typescript
 const percentage = (current / limit) * 100;
 const isWarning = percentage >= 60 && percentage < 80;
@@ -505,12 +526,14 @@ className={cn(
 ### 2. 卡片设计
 
 **信息层次**：
+
 1. **Header**：实体名称 + 状态徽章
 2. **Description**：补充信息（备注/过期时间/优先级等）
 3. **Body**：限额进度条（多个）
 4. **Footer**：重置时间提示
 
 **视觉反馈**：
+
 - 进度条颜色变化
 - 货币格式化（$0.12 → $0.12）
 - 相对时间显示（"3小时后"）
@@ -532,6 +555,7 @@ className={cn(
 ### 4. 加载状态
 
 **自动刷新时**：
+
 ```typescript
 <Button
   variant="outline"
@@ -558,19 +582,12 @@ className={cn(
 ### 新增文件 (9个)
 
 **核心逻辑**：
+
 1. `src/lib/rate-limit/time-utils.ts` - 时间工具函数
 
-**UI 组件**：
-2. `src/components/quota/quota-toolbar.tsx` - 工具栏组件
-3. `src/components/quota/quota-progress.tsx` - 进度条组件
+**UI 组件**：2. `src/components/quota/quota-toolbar.tsx` - 工具栏组件 3. `src/components/quota/quota-progress.tsx` - 进度条组件
 
-**页面结构**：
-4. `src/app/dashboard/quotas/layout.tsx` - 标签页布局
-5. `src/app/dashboard/quotas/page.tsx` - 重定向
-6. `src/app/dashboard/quotas/users/page.tsx` - 用户限额页面
-7. `src/app/dashboard/quotas/users/_components/users-quota-client.tsx` - 用户客户端组件
-8. `src/app/dashboard/quotas/keys/page.tsx` - 密钥限额页面
-9. `src/app/dashboard/quotas/providers/page.tsx` - 供应商限额页面
+**页面结构**：4. `src/app/dashboard/quotas/layout.tsx` - 标签页布局 5. `src/app/dashboard/quotas/page.tsx` - 重定向 6. `src/app/dashboard/quotas/users/page.tsx` - 用户限额页面 7. `src/app/dashboard/quotas/users/_components/users-quota-client.tsx` - 用户客户端组件 8. `src/app/dashboard/quotas/keys/page.tsx` - 密钥限额页面 9. `src/app/dashboard/quotas/providers/page.tsx` - 供应商限额页面
 
 ### 修改文件 (4个)
 
@@ -588,11 +605,13 @@ className={cn(
 **当前状态**：只有 Users 页面拆分了 Client Component
 
 **原因**：
+
 - MVP 优先（功能已完整）
 - Keys 和 Providers 数据结构更复杂
 - 可后续优化（代码重构）
 
 **如何实现**：
+
 1. 创建 `keys-quota-client.tsx`
 2. 创建 `providers-quota-client.tsx`
 3. 复用 Users 页面的模式
@@ -602,11 +621,13 @@ className={cn(
 **功能**：多选 + 批量调整限额
 
 **未实现原因**：
+
 - 需要复杂的表单状态管理
 - 需要权限验证（防止误操作）
 - MVP 不需要
 
 **如何实现**：
+
 1. 添加复选框（Checkbox）
 2. 添加批量编辑对话框（Dialog + Form）
 3. 调用现有的 `updateUser` / `updateKey` / `updateProvider` API
@@ -616,11 +637,13 @@ className={cn(
 **功能**：显示限额使用的历史曲线
 
 **未实现原因**：
+
 - 需要额外的数据聚合查询
 - 需要图表库（如 recharts）
 - MVP 不需要
 
 **如何实现**：
+
 1. 创建 `getLimitUsageHistory` API
 2. 查询 `statistics` 表（小时聚合）
 3. 使用 `recharts` 或 `tremor` 渲染图表
@@ -630,11 +653,13 @@ className={cn(
 **功能**：接近限额时发送通知
 
 **未实现原因**：
+
 - 需要后台任务调度
 - 需要通知系统（邮件/Webhook）
 - MVP 不需要
 
 **如何实现**：
+
 1. 添加 Cron Job（定时检查）
 2. 集成通知服务（Resend / 企业微信）
 3. 用户配置告警阈值
@@ -644,12 +669,14 @@ className={cn(
 ## ✅ 测试结果
 
 ### TypeScript 类型检查
+
 ```bash
 pnpm typecheck
 # ✅ 无错误
 ```
 
 ### ESLint 检查
+
 ```bash
 pnpm lint
 # ✅ 无警告
@@ -673,17 +700,20 @@ pnpm lint
 ## 🎯 核心成果总结
 
 ### 时间算法 ✅
+
 - 5小时：滚动窗口
 - 周限额：每周一 00:00 重置
 - 月限额：每月 1 号 00:00 重置
 - 每日限额：每天 00:00 重置
 
 ### API 完整性 ✅
+
 - getUserLimitUsage ✅
 - getProviderLimitUsage ✅
 - getKeyLimitUsage（原有）✅
 
 ### 前端功能 ✅
+
 - 3个限额页面（用户/密钥/供应商）✅
 - 自动刷新（10s/30s/60s）✅
 - 搜索功能 ✅
@@ -693,6 +723,7 @@ pnpm lint
 - 响应式布局 ✅
 
 ### 代码质量 ✅
+
 - TypeScript 类型检查通过 ✅
 - ESLint 检查通过 ✅
 - 组件化设计 ✅
@@ -703,31 +734,37 @@ pnpm lint
 ## 📖 使用指南
 
 ### 启动开发服务器
+
 ```bash
 pnpm dev
 ```
 
 ### 访问限额管理
+
 1. 登录 Dashboard
 2. 点击导航栏的"限额管理"
 3. 选择标签页：用户 / 密钥 / 供应商
 
 ### 使用自动刷新
+
 1. 打开"自动刷新"开关
 2. 选择刷新间隔（默认30秒）
 3. 页面会自动更新数据
 
 ### 使用搜索功能
+
 1. 在搜索框输入关键词
 2. 实时过滤匹配的实体
 
 ### 使用筛选功能
+
 1. 选择筛选条件：
    - 全部：显示所有
    - 接近限额：使用率 ≥60%
    - 已超限：使用率 ≥100%
 
 ### 使用排序功能
+
 1. 选择排序方式：
    - 按名称：中文拼音排序
    - 按使用率：从高到低
@@ -757,16 +794,19 @@ pnpm dev
 ## 📝 后续优化建议
 
 ### 短期（1-2周）
+
 1. 为 Keys 和 Providers 页面添加客户端交互
 2. 添加键盘快捷键（如 Cmd+K 打开搜索）
 3. 优化移动端体验
 
 ### 中期（1个月）
+
 1. 添加历史趋势图表
 2. 添加导出功能（CSV/Excel）
 3. 添加批量编辑功能
 
 ### 长期（3个月）
+
 1. 添加限额告警通知
 2. 添加预测功能（基于历史数据）
 3. 添加自定义仪表盘

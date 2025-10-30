@@ -131,11 +131,7 @@ export function QuotaToolbar({
         {showAutoRefresh && (
           <>
             <div className="flex items-center gap-2">
-              <Switch
-                id="auto-refresh"
-                checked={autoRefresh}
-                onCheckedChange={setAutoRefresh}
-              />
+              <Switch id="auto-refresh" checked={autoRefresh} onCheckedChange={setAutoRefresh} />
               <Label htmlFor="auto-refresh" className="text-sm cursor-pointer">
                 自动刷新
               </Label>
@@ -159,12 +155,7 @@ export function QuotaToolbar({
           </>
         )}
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleManualRefresh}
-          disabled={isPending}
-        >
+        <Button variant="outline" size="sm" onClick={handleManualRefresh} disabled={isPending}>
           <RefreshCw className={`h-4 w-4 ${isPending ? "animate-spin" : ""}`} />
           <span className="ml-2">刷新</span>
         </Button>

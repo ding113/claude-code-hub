@@ -39,9 +39,7 @@ interface KeysQuotaClientProps {
 
 export function KeysQuotaClient({ users }: KeysQuotaClientProps) {
   // 默认展开所有用户组
-  const [openUsers, setOpenUsers] = useState<Set<number>>(
-    new Set(users.map((user) => user.id))
-  );
+  const [openUsers, setOpenUsers] = useState<Set<number>>(new Set(users.map((user) => user.id)));
 
   const weeklyReset = getResetInfo("weekly");
   const monthlyReset = getResetInfo("monthly");
@@ -123,8 +121,7 @@ export function KeysQuotaClient({ users }: KeysQuotaClientProps) {
                                 </div>
                                 <Progress
                                   value={
-                                    (key.quota.cost5h.current / (key.quota.cost5h.limit || 1)) *
-                                    100
+                                    (key.quota.cost5h.current / (key.quota.cost5h.limit || 1)) * 100
                                   }
                                   className="h-2"
                                 />
