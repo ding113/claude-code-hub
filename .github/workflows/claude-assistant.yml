@@ -25,12 +25,15 @@ on:
 jobs:
   claude-assistant:
     # 智能触发条件：状态变动自动触发 OR @ 提及触发
+    # 禁止所有 bot 触发，防止无限循环
     if: |
-      github.event_name == 'pull_request' ||
-      github.event_name == 'pull_request_review' ||
-      github.event_name == 'issues' ||
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude'))
+      !endsWith(github.actor, '[bot]') && (
+        github.event_name == 'pull_request' ||
+        github.event_name == 'pull_request_review' ||
+        github.event_name == 'issues' ||
+        (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+        (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude'))
+      )
 
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -188,6 +191,5 @@ jobs:
 
           # 其他配置
           use_commit_signing: true
-          # 仅在支持的 PR 事件类型下启用进度追踪 (opened, synchronize, ready_for_review, reopened)
-          # 其他事件类型不支持此功能，将自动禁用以确保 workflow 正常执行
-          track_progress: ${{ github.event_name == 'pull_request' && contains(fromJSON('["opened", "synchronize", "ready_for_review", "reopened"]'), github.event.action) }}
+          # 禁用进度追踪
+          track_progress: false

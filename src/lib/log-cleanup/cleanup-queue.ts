@@ -7,12 +7,68 @@ import { cleanupLogs } from "./service";
 import { getSystemSettings } from "@/repository/system-config";
 
 /**
+ * 解析 Redis URL 为 ioredis 配置对象
+ */
+function getRedisConfig() {
+  const redisUrl = process.env.REDIS_URL;
+
+  if (!redisUrl) {
+    logger.warn("[CleanupQueue] REDIS_URL not configured, using default localhost:6379");
+    return {
+      host: "localhost",
+      port: 6379,
+    };
+  }
+
+  try {
+    const url = new URL(redisUrl);
+    const config: {
+      host: string;
+      port: number;
+      password?: string;
+      db?: number;
+    } = {
+      host: url.hostname,
+      port: parseInt(url.port || "6379", 10),
+    };
+
+    // 提取密码（如果存在）
+    if (url.password) {
+      config.password = url.password;
+    }
+
+    // 提取数据库编号（如果存在）
+    const pathname = url.pathname;
+    if (pathname && pathname.length > 1) {
+      const db = parseInt(pathname.substring(1), 10);
+      if (!isNaN(db)) {
+        config.db = db;
+      }
+    }
+
+    logger.info("[CleanupQueue] Parsed REDIS_URL", {
+      host: config.host,
+      port: config.port,
+      db: config.db || 0,
+      hasPassword: !!config.password,
+    });
+
+    return config;
+  } catch (error) {
+    logger.error("[CleanupQueue] Failed to parse REDIS_URL, using default", { error });
+    return {
+      host: "localhost",
+      port: 6379,
+    };
+  }
+}
+
+/**
  * 日志清理任务队列
  */
 export const cleanupQueue = new Queue("log-cleanup", {
   redis: {
-    // 使用 REDIS_URL 环境变量（统一配置）
-    ...(process.env.REDIS_URL ? { url: process.env.REDIS_URL } : { host: "redis", port: 6379 }),
+    ...getRedisConfig(),
     // ioredis 快速失败配置
     maxRetriesPerRequest: 3, // 最多重试 3 次
     enableOfflineQueue: false, // 快速失败，不排队
