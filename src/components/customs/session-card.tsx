@@ -62,7 +62,12 @@ function getStatusConfig(status: "in_progress" | "completed" | "error", statusCo
  * Session信息卡片
  * 用于概览面板的横向滚动展示
  */
-export function SessionCard({ session, className, currencyCode = "USD", privacyContext }: SessionCardProps) {
+export function SessionCard({
+  session,
+  className,
+  currencyCode = "USD",
+  privacyContext,
+}: SessionCardProps) {
   const statusConfig = getStatusConfig(session.status, session.statusCode);
 
   // 过滤供应商名称
@@ -101,9 +106,7 @@ export function SessionCard({ session, className, currencyCode = "USD", privacyC
               {session.model || "未知"}
             </Badge>
             {displayProviderName !== "-" && (
-              <span className="text-muted-foreground truncate flex-1">
-                @ {displayProviderName}
-              </span>
+              <span className="text-muted-foreground truncate flex-1">@ {displayProviderName}</span>
             )}
           </div>
 

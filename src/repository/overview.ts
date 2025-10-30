@@ -37,7 +37,9 @@ function buildSumCostExpression(context: PrivacyFilterContext) {
  *
  * @param privacyContext 隐私过滤上下文（决定金额计算方式）
  */
-export async function getOverviewMetrics(privacyContext: PrivacyFilterContext): Promise<OverviewMetrics> {
+export async function getOverviewMetrics(
+  privacyContext: PrivacyFilterContext
+): Promise<OverviewMetrics> {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const tomorrow = new Date(today);

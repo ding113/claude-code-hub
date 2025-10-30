@@ -166,7 +166,13 @@ export function KeyListHeader({
         </div>
       </div>
     );
-  }, [proxyStatusEnabled, proxyStatusLoading, proxyStatusError, activeUserStatus, canViewProviderInfo]);
+  }, [
+    proxyStatusEnabled,
+    proxyStatusLoading,
+    proxyStatusError,
+    activeUserStatus,
+    canViewProviderInfo,
+  ]);
 
   const handleKeyCreated = (result: { generatedKey: string; name: string }) => {
     setOpenAdd(false); // 关闭表单dialog

@@ -19,7 +19,15 @@ import type { SystemSettings } from "@/types/system-config";
 import type { CurrencyCode } from "@/lib/utils";
 
 interface SystemSettingsFormProps {
-  initialSettings: Pick<SystemSettings, "siteTitle" | "allowGlobalUsageView" | "currencyDisplay" | "allowViewProviderInfo" | "nonAdminCurrencyDisplay" | "nonAdminIgnoreMultiplier">;
+  initialSettings: Pick<
+    SystemSettings,
+    | "siteTitle"
+    | "allowGlobalUsageView"
+    | "currencyDisplay"
+    | "allowViewProviderInfo"
+    | "nonAdminCurrencyDisplay"
+    | "nonAdminIgnoreMultiplier"
+  >;
 }
 
 export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps) {
@@ -192,7 +200,8 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
             非管理员忽略所有渠道商倍率
           </Label>
           <p className="text-xs text-muted-foreground mt-1">
-            开启后，非管理员看到的所有金额按倍率 1.0 计算（即原始成本，不包含渠道商倍率加成）。关闭后，显示实际金额（含倍率）。
+            开启后，非管理员看到的所有金额按倍率 1.0
+            计算（即原始成本，不包含渠道商倍率加成）。关闭后，显示实际金额（含倍率）。
           </p>
         </div>
         <Switch

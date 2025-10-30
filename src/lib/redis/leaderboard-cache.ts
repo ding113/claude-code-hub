@@ -17,10 +17,14 @@ type LeaderboardPeriod = "daily" | "monthly";
  * 构建缓存键
  * 注意：缓存键需要包含 isAdmin 和 ignoreMultiplier 来区分不同的计算结果
  */
-function buildCacheKey(period: LeaderboardPeriod, currencyDisplay: string, privacyContext: PrivacyFilterContext): string {
+function buildCacheKey(
+  period: LeaderboardPeriod,
+  currencyDisplay: string,
+  privacyContext: PrivacyFilterContext
+): string {
   const now = new Date();
   // 添加隐私标识：admin=true/false, ignoreMultiplier=true/false
-  const privacyKey = `${privacyContext.isAdmin ? 'admin' : 'user'}_${privacyContext.ignoreMultiplier ? 'ignore' : 'include'}`;
+  const privacyKey = `${privacyContext.isAdmin ? "admin" : "user"}_${privacyContext.ignoreMultiplier ? "ignore" : "include"}`;
 
   if (period === "daily") {
     // leaderboard:daily:2025-01-15:USD:admin_ignore
@@ -36,7 +40,10 @@ function buildCacheKey(period: LeaderboardPeriod, currencyDisplay: string, priva
 /**
  * 查询数据库（根据周期）
  */
-async function queryDatabase(period: LeaderboardPeriod, privacyContext: PrivacyFilterContext): Promise<LeaderboardEntry[]> {
+async function queryDatabase(
+  period: LeaderboardPeriod,
+  privacyContext: PrivacyFilterContext
+): Promise<LeaderboardEntry[]> {
   if (period === "daily") {
     return await findDailyLeaderboard(privacyContext);
   } else {
@@ -161,10 +168,30 @@ export async function invalidateLeaderboardCache(
 
   // 清除所有可能的隐私组合（4 种：admin_ignore, admin_include, user_ignore, user_include）
   const privacyCombinations: PrivacyFilterContext[] = [
-    { isAdmin: true, ignoreMultiplier: true, allowViewProviderInfo: true, userCurrency: currencyDisplay as CurrencyCode },
-    { isAdmin: true, ignoreMultiplier: false, allowViewProviderInfo: true, userCurrency: currencyDisplay as CurrencyCode },
-    { isAdmin: false, ignoreMultiplier: true, allowViewProviderInfo: false, userCurrency: currencyDisplay as CurrencyCode },
-    { isAdmin: false, ignoreMultiplier: false, allowViewProviderInfo: false, userCurrency: currencyDisplay as CurrencyCode },
+    {
+      isAdmin: true,
+      ignoreMultiplier: true,
+      allowViewProviderInfo: true,
+      userCurrency: currencyDisplay as CurrencyCode,
+    },
+    {
+      isAdmin: true,
+      ignoreMultiplier: false,
+      allowViewProviderInfo: true,
+      userCurrency: currencyDisplay as CurrencyCode,
+    },
+    {
+      isAdmin: false,
+      ignoreMultiplier: true,
+      allowViewProviderInfo: false,
+      userCurrency: currencyDisplay as CurrencyCode,
+    },
+    {
+      isAdmin: false,
+      ignoreMultiplier: false,
+      allowViewProviderInfo: false,
+      userCurrency: currencyDisplay as CurrencyCode,
+    },
   ];
 
   try {

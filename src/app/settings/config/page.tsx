@@ -16,7 +16,10 @@ export default async function SettingsConfigPage() {
         description="管理系统的基础参数，影响站点显示和统计行为。"
       />
 
-      <Section title="站点参数" description="配置站点标题、货币显示单位、仪表盘统计展示策略和隐私保护设置。">
+      <Section
+        title="站点参数"
+        description="配置站点标题、货币显示单位、仪表盘统计展示策略和隐私保护设置。"
+      >
         <SystemSettingsForm
           initialSettings={{
             siteTitle: settings.siteTitle,

@@ -109,9 +109,7 @@ function SessionListItem({
             {canViewProviderInfo && session.providerName && (
               <span className="text-muted-foreground"> @ {session.providerName}</span>
             )}
-            {!canViewProviderInfo && (
-              <span className="text-muted-foreground"> @ ***</span>
-            )}
+            {!canViewProviderInfo && <span className="text-muted-foreground"> @ ***</span>}
           </span>
         </div>
 
