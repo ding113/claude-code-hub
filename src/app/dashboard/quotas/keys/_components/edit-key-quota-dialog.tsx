@@ -148,7 +148,8 @@ export function EditKeyQuotaDialog({
               />
               {currentQuota?.cost5h.limit && (
                 <p className="text-xs text-muted-foreground">
-                  当前已用: {currencySymbol}{currentQuota.cost5h.current.toFixed(4)} / {currencySymbol}
+                  当前已用: {currencySymbol}
+                  {currentQuota.cost5h.current.toFixed(4)} / {currencySymbol}
                   {currentQuota.cost5h.limit.toFixed(2)}
                 </p>
               )}
@@ -168,7 +169,8 @@ export function EditKeyQuotaDialog({
               />
               {currentQuota?.costWeekly.limit && (
                 <p className="text-xs text-muted-foreground">
-                  当前已用: {currencySymbol}{currentQuota.costWeekly.current.toFixed(4)} / {currencySymbol}
+                  当前已用: {currencySymbol}
+                  {currentQuota.costWeekly.current.toFixed(4)} / {currencySymbol}
                   {currentQuota.costWeekly.limit.toFixed(2)}
                 </p>
               )}
@@ -188,7 +190,8 @@ export function EditKeyQuotaDialog({
               />
               {currentQuota?.costMonthly.limit && (
                 <p className="text-xs text-muted-foreground">
-                  当前已用: {currencySymbol}{currentQuota.costMonthly.current.toFixed(4)} / {currencySymbol}
+                  当前已用: {currencySymbol}
+                  {currentQuota.costMonthly.current.toFixed(4)} / {currencySymbol}
                   {currentQuota.costMonthly.limit.toFixed(2)}
                 </p>
               )}

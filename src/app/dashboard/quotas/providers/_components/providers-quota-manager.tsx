@@ -28,7 +28,10 @@ interface ProvidersQuotaManagerProps {
   currencyCode?: CurrencyCode;
 }
 
-export function ProvidersQuotaManager({ providers, currencyCode = "USD" }: ProvidersQuotaManagerProps) {
+export function ProvidersQuotaManager({
+  providers,
+  currencyCode = "USD",
+}: ProvidersQuotaManagerProps) {
   const [typeFilter, setTypeFilter] = useState<ProviderType | "all">("all");
 
   // 计算筛选后的供应商数量
@@ -48,7 +51,11 @@ export function ProvidersQuotaManager({ providers, currencyCode = "USD" }: Provi
       </div>
 
       {/* 供应商列表 */}
-      <ProvidersQuotaClient providers={providers} typeFilter={typeFilter} currencyCode={currencyCode} />
+      <ProvidersQuotaClient
+        providers={providers}
+        typeFilter={typeFilter}
+        currencyCode={currencyCode}
+      />
     </div>
   );
 }

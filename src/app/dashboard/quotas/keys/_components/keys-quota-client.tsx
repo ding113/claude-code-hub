@@ -179,8 +179,8 @@ export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClient
                                     <div className="flex items-center justify-between text-sm">
                                       <span className="text-muted-foreground">周消费</span>
                                       <span className="font-medium">
-                                        {formatCurrency(key.quota.costWeekly.current, currencyCode)} /{" "}
-                                        {formatCurrency(key.quota.costWeekly.limit, currencyCode)}
+                                        {formatCurrency(key.quota.costWeekly.current, currencyCode)}{" "}
+                                        / {formatCurrency(key.quota.costWeekly.limit, currencyCode)}
                                       </span>
                                     </div>
                                     <Progress
@@ -207,7 +207,11 @@ export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClient
                                     <div className="flex items-center justify-between text-sm">
                                       <span className="text-muted-foreground">月消费</span>
                                       <span className="font-medium">
-                                        {formatCurrency(key.quota.costMonthly.current, currencyCode)} /{" "}
+                                        {formatCurrency(
+                                          key.quota.costMonthly.current,
+                                          currencyCode
+                                        )}{" "}
+                                        /{" "}
                                         {formatCurrency(key.quota.costMonthly.limit, currencyCode)}
                                       </span>
                                     </div>

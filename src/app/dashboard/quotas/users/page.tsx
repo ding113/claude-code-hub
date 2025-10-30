@@ -24,10 +24,7 @@ async function getUsersWithQuotas() {
 }
 
 export default async function UsersQuotaPage() {
-  const [users, systemSettings] = await Promise.all([
-    getUsersWithQuotas(),
-    getSystemSettings(),
-  ]);
+  const [users, systemSettings] = await Promise.all([getUsersWithQuotas(), getSystemSettings()]);
 
   return (
     <div className="space-y-4">
