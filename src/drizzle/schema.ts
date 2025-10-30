@@ -238,6 +238,9 @@ export const systemSettings = pgTable('system_settings', {
   allowViewProviderInfo: boolean('allow_view_provider_info').notNull().default(false),
   // 非管理员用户前台显示货币（默认继承 currencyDisplay）
   nonAdminCurrencyDisplay: varchar('non_admin_currency_display', { length: 10 }).notNull().default('USD'),
+  // 非管理员忽略所有渠道商倍率（默认开启）
+  // 开启后，非管理员看到的所有金额按倍率=1计算（即原始成本 cost_usd）
+  nonAdminIgnoreMultiplier: boolean('non_admin_ignore_multiplier').notNull().default(true),
 
   // 日志清理配置
   enableAutoCleanup: boolean('enable_auto_cleanup').default(false),

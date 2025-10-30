@@ -19,7 +19,7 @@ import type { SystemSettings } from "@/types/system-config";
 import type { CurrencyCode } from "@/lib/utils";
 
 interface SystemSettingsFormProps {
-  initialSettings: Pick<SystemSettings, "siteTitle" | "allowGlobalUsageView" | "currencyDisplay" | "allowViewProviderInfo" | "nonAdminCurrencyDisplay">;
+  initialSettings: Pick<SystemSettings, "siteTitle" | "allowGlobalUsageView" | "currencyDisplay" | "allowViewProviderInfo" | "nonAdminCurrencyDisplay" | "nonAdminIgnoreMultiplier">;
 }
 
 export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps) {
@@ -35,6 +35,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   );
   const [nonAdminCurrencyDisplay, setNonAdminCurrencyDisplay] = useState<CurrencyCode>(
     initialSettings.nonAdminCurrencyDisplay
+  );
+  const [nonAdminIgnoreMultiplier, setNonAdminIgnoreMultiplier] = useState(
+    initialSettings.nonAdminIgnoreMultiplier
   );
   const [isPending, startTransition] = useTransition();
 
@@ -53,6 +56,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         currencyDisplay,
         allowViewProviderInfo,
         nonAdminCurrencyDisplay,
+        nonAdminIgnoreMultiplier,
       });
 
       if (!result.ok) {
@@ -66,6 +70,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setCurrencyDisplay(result.data.currencyDisplay);
         setAllowViewProviderInfo(result.data.allowViewProviderInfo);
         setNonAdminCurrencyDisplay(result.data.nonAdminCurrencyDisplay);
+        setNonAdminIgnoreMultiplier(result.data.nonAdminIgnoreMultiplier);
       }
 
       toast.success("系统设置已更新，页面将刷新以应用变更");
@@ -179,6 +184,23 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         <p className="text-xs text-muted-foreground">
           非管理员用户看到的货币符号（仅修改符号，不进行汇率转换）。
         </p>
+      </div>
+
+      <div className="flex items-start justify-between gap-4 rounded-lg border border-dashed border-border px-4 py-3">
+        <div>
+          <Label htmlFor="non-admin-ignore-multiplier" className="text-sm font-medium">
+            非管理员忽略所有渠道商倍率
+          </Label>
+          <p className="text-xs text-muted-foreground mt-1">
+            开启后，非管理员看到的所有金额按倍率 1.0 计算（即原始成本，不包含渠道商倍率加成）。关闭后，显示实际金额（含倍率）。
+          </p>
+        </div>
+        <Switch
+          id="non-admin-ignore-multiplier"
+          checked={nonAdminIgnoreMultiplier}
+          onCheckedChange={(checked) => setNonAdminIgnoreMultiplier(checked)}
+          disabled={isPending}
+        />
       </div>
 
       <div className="flex justify-end">

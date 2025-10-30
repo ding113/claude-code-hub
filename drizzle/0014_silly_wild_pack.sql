@@ -1,0 +1,1 @@
+ALTER TABLE "system_settings" ADD COLUMN "non_admin_ignore_multiplier" boolean DEFAULT true NOT NULL;

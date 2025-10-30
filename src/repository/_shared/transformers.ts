@@ -94,6 +94,7 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     currencyDisplay: dbSettings?.currencyDisplay ?? "USD",
     allowViewProviderInfo: dbSettings?.allowViewProviderInfo ?? false,
     nonAdminCurrencyDisplay: dbSettings?.nonAdminCurrencyDisplay ?? "USD",
+    nonAdminIgnoreMultiplier: dbSettings?.nonAdminIgnoreMultiplier ?? true,
     enableAutoCleanup: dbSettings?.enableAutoCleanup ?? false,
     cleanupRetentionDays: dbSettings?.cleanupRetentionDays ?? 30,
     cleanupSchedule: dbSettings?.cleanupSchedule ?? "0 2 * * *",

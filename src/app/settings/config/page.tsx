@@ -24,6 +24,7 @@ export default async function SettingsConfigPage() {
             currencyDisplay: settings.currencyDisplay,
             allowViewProviderInfo: settings.allowViewProviderInfo,
             nonAdminCurrencyDisplay: settings.nonAdminCurrencyDisplay,
+            nonAdminIgnoreMultiplier: settings.nonAdminIgnoreMultiplier,
           }}
         />
       </Section>

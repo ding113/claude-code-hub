@@ -12,6 +12,8 @@ export interface SystemSettings {
   allowViewProviderInfo: boolean;
   // 非管理员用户前台显示货币（默认继承 currencyDisplay）
   nonAdminCurrencyDisplay: CurrencyCode;
+  // 非管理员忽略所有渠道商倍率（默认开启）
+  nonAdminIgnoreMultiplier: boolean;
 
   // 日志清理配置
   enableAutoCleanup?: boolean;
@@ -33,6 +35,7 @@ export interface UpdateSystemSettingsInput {
   // 隐私保护配置（可选）
   allowViewProviderInfo?: boolean;
   nonAdminCurrencyDisplay?: CurrencyCode;
+  nonAdminIgnoreMultiplier?: boolean;
 
   // 日志清理配置（可选）
   enableAutoCleanup?: boolean;

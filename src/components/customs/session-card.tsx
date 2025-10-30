@@ -7,11 +7,13 @@ import type { ActiveSessionInfo } from "@/types/session";
 import Link from "next/link";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
+import { filterProviderName, type PrivacyFilterContext } from "@/lib/utils/privacy-filter";
 
 interface SessionCardProps {
   session: ActiveSessionInfo;
   className?: string;
   currencyCode?: CurrencyCode;
+  privacyContext?: PrivacyFilterContext;
 }
 
 /**
@@ -60,8 +62,13 @@ function getStatusConfig(status: "in_progress" | "completed" | "error", statusCo
  * Session信息卡片
  * 用于概览面板的横向滚动展示
  */
-export function SessionCard({ session, className, currencyCode = "USD" }: SessionCardProps) {
+export function SessionCard({ session, className, currencyCode = "USD", privacyContext }: SessionCardProps) {
   const statusConfig = getStatusConfig(session.status, session.statusCode);
+
+  // 过滤供应商名称
+  const displayProviderName = privacyContext
+    ? filterProviderName(session.providerName, privacyContext)
+    : session.providerName || "-";
 
   return (
     <Link href={`/dashboard/sessions/${session.sessionId}/messages`}>
@@ -93,9 +100,9 @@ export function SessionCard({ session, className, currencyCode = "USD" }: Sessio
             <Badge variant="secondary" className="truncate max-w-[120px] font-mono">
               {session.model || "未知"}
             </Badge>
-            {session.providerName && (
+            {displayProviderName !== "-" && (
               <span className="text-muted-foreground truncate flex-1">
-                @ {session.providerName}
+                @ {displayProviderName}
               </span>
             )}
           </div>

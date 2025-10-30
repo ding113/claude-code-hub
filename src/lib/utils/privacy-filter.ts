@@ -9,6 +9,7 @@ import type { CurrencyCode } from "@/lib/utils/currency";
 export interface PrivacyFilterContext {
   isAdmin: boolean;
   allowViewProviderInfo: boolean;
+  ignoreMultiplier: boolean; // 非管理员是否忽略供应商倍率
   userCurrency: CurrencyCode;
 }
 
@@ -22,6 +23,7 @@ export function createPrivacyContext(
   return {
     isAdmin,
     allowViewProviderInfo: settings.allowViewProviderInfo,
+    ignoreMultiplier: settings.nonAdminIgnoreMultiplier,
     userCurrency: isAdmin ? settings.currencyDisplay : settings.nonAdminCurrencyDisplay,
   };
 }
@@ -69,6 +71,16 @@ export function filterCostMultiplier(
 
 /**
  * 调整金额计算（如果不允许查看供应商信息，则忽略倍率）
+ *
+ * @deprecated 此函数已废弃，不应在新代码中使用。
+ *
+ * 在新架构下，Repository 层会根据 PrivacyFilterContext 直接返回正确的金额：
+ * - 非管理员 + ignoreMultiplier=true: 返回 cost_usd（倍率=1）
+ * - 其他情况: 返回 cost_usd * cost_multiplier（实际金额）
+ *
+ * 前端组件应直接使用后端返回的金额，无需再次调整。
+ * 此函数仅用于向后兼容旧代码。
+ *
  * @param costUsd 原始成本（USD）
  * @param costMultiplier 成本倍率
  * @param context 隐私过滤上下文
@@ -83,12 +95,13 @@ export function adjustCost(
 
   const cost = typeof costUsd === "string" ? parseFloat(costUsd) : costUsd;
 
-  // 如果允许查看供应商信息，返回原始成本
-  if (canViewProviderInfo(context)) {
+  // 如果是管理员或不忽略倍率，返回原始成本（假设后端已处理）
+  if (context.isAdmin || !context.ignoreMultiplier) {
     return cost;
   }
 
-  // 如果不允许查看，需要反向计算出倍率为 1.0 时的成本
+  // 非管理员且忽略倍率：尝试反向计算（这是不准确的兼容逻辑）
+  // 在新架构下，后端应该直接返回 cost_usd，而不是 cost_usd * cost_multiplier
   if (costMultiplier) {
     const multiplier =
       typeof costMultiplier === "string" ? parseFloat(costMultiplier) : costMultiplier;

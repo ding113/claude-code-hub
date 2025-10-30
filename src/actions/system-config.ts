@@ -29,6 +29,7 @@ export async function saveSystemSettings(formData: {
   currencyDisplay?: string;
   allowViewProviderInfo?: boolean;
   nonAdminCurrencyDisplay?: string;
+  nonAdminIgnoreMultiplier?: boolean;
   enableAutoCleanup?: boolean;
   cleanupRetentionDays?: number;
   cleanupSchedule?: string;
@@ -47,6 +48,7 @@ export async function saveSystemSettings(formData: {
       currencyDisplay: validated.currencyDisplay,
       allowViewProviderInfo: validated.allowViewProviderInfo,
       nonAdminCurrencyDisplay: validated.nonAdminCurrencyDisplay,
+      nonAdminIgnoreMultiplier: validated.nonAdminIgnoreMultiplier,
       enableAutoCleanup: validated.enableAutoCleanup,
       cleanupRetentionDays: validated.cleanupRetentionDays,
       cleanupSchedule: validated.cleanupSchedule,

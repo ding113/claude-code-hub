@@ -278,6 +278,7 @@ export const UpdateSystemSettingsSchema = z.object({
       { message: "不支持的货币类型" }
     )
     .optional(),
+  nonAdminIgnoreMultiplier: z.boolean().optional(),
   // 日志清理配置（可选）
   enableAutoCleanup: z.boolean().optional(),
   cleanupRetentionDays: z.coerce
