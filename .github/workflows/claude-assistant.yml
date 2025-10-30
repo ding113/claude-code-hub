@@ -4,7 +4,7 @@ name: Claude AI Assistant
 on:
   # PR 事件：创建、更新、编辑、标签、分配、关闭、重新打开
   pull_request:
-    types: [opened, synchronize, edited, labeled, assigned, closed, reopened, ready_for_review]
+    types: [opened, synchronize, labeled, reopened, ready_for_review]
 
   # PR 审查事件
   pull_request_review:
@@ -16,7 +16,7 @@ on:
 
   # Issue 事件：创建、编辑、标签、分配、关闭、重新打开
   issues:
-    types: [opened, edited, labeled, assigned, closed, reopened]
+    types: [labeled]
 
   # Issue 和 PR 评论
   issue_comment:

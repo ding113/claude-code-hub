@@ -19,11 +19,10 @@ jobs:
   auto-fix:
     # 触发条件：
     # 1. CI 失败
-    # 2. 关联到 PR
-    # 3. 不是 Claude 自己创建的修复分支（避免循环）
+    # 2. 不是 Claude 自己创建的修复分支（避免循环）
+    # 注意：不再强制要求 PR，可以修复任何分支的 CI 失败
     if: |
       github.event.workflow_run.conclusion == 'failure' &&
-      github.event.workflow_run.pull_requests[0] &&
       !startsWith(github.event.workflow_run.head_branch, 'claude-ci-fix-')
 
     runs-on: ubuntu-latest
@@ -81,12 +80,16 @@ jobs:
               }
             }
 
+            const pullRequests = ${{ toJSON(github.event.workflow_run.pull_requests) }};
+            const hasPR = pullRequests && pullRequests.length > 0;
+
             return {
               runUrl: run.data.html_url,
               workflowName: run.data.name,
               failedJobs: failedJobs.map(j => j.name),
               errorLogs: errorLogs,
-              prNumber: ${{ github.event.workflow_run.pull_requests[0].number }},
+              hasPR: hasPR,
+              prNumber: hasPR ? pullRequests[0].number : null,
               headBranch: '${{ github.event.workflow_run.head_branch }}'
             };
 
@@ -101,6 +104,7 @@ jobs:
             REPO: ${{ github.repository }}
             CI WORKFLOW: ${{ fromJSON(steps.failure_details.outputs.result).workflowName }}
             FAILED RUN: ${{ fromJSON(steps.failure_details.outputs.result).runUrl }}
+            HAS PR: ${{ fromJSON(steps.failure_details.outputs.result).hasPR }}
             PR NUMBER: ${{ fromJSON(steps.failure_details.outputs.result).prNumber }}
             BRANCH: ${{ fromJSON(steps.failure_details.outputs.result).headBranch }}
             FAILED JOBS: ${{ join(fromJSON(steps.failure_details.outputs.result).failedJobs, ', ') }}
@@ -132,13 +136,22 @@ jobs:
                - 如果可能，运行相关的测试或 lint 命令验证修复
                - 确保修复不会引入新问题
 
-            4. **提交修复**：
-               - 使用 git 命令创建新分支：`claude-ci-fix-${{ fromJSON(steps.failure_details.outputs.result).prNumber }}-${{ github.run_id }}`
+            4. **提交修复**（根据场景选择）：
+
+            **场景 A - 有关联 PR (HAS PR = true)**:
+               - 创建新分支：`claude-ci-fix-pr-${{ fromJSON(steps.failure_details.outputs.result).prNumber }}-${{ github.run_id }}`
                - 提交修复：`git add . && git commit -m "fix: auto-fix CI failures in ${{ fromJSON(steps.failure_details.outputs.result).workflowName }}"`
                - 推送分支：`git push origin <branch-name>`
-               - 使用 `gh pr create` 创建 PR，指向原始分支
+               - 使用 `gh pr create --base ${{ fromJSON(steps.failure_details.outputs.result).headBranch }}` 创建 PR，指向原始分支
+               - PR 描述使用下面的模板 A
 
-            5. **PR 描述模板**：
+            **场景 B - 无关联 PR (HAS PR = false)**:
+               - 直接在当前分支 `${{ fromJSON(steps.failure_details.outputs.result).headBranch }}` 上修复
+               - 提交修复：`git add . && git commit -m "fix: auto-fix CI failures in ${{ fromJSON(steps.failure_details.outputs.result).workflowName }} [skip ci]"`
+               - 推送：`git push origin ${{ fromJSON(steps.failure_details.outputs.result).headBranch }}`
+               - **不需要创建 PR**
+
+            5. **PR 描述模板 A (仅场景 A 使用)**：
                ```
                ## 🤖 自动修复 CI 失败
 
@@ -160,9 +173,10 @@ jobs:
 
             ### 重要提示：
             - 只修复明显且安全的问题（lint、格式化、简单类型错误）
-            - 如果错误复杂或需要业务逻辑判断，在 PR 中说明无法自动修复
+            - 如果错误复杂或需要业务逻辑判断，在 PR 中说明无法自动修复（场景 A）或在 commit message 中说明（场景 B）
             - 确保不会破坏现有功能
             - 所有修复都应该是保守和安全的
+            - **场景 B 的 commit message 必须包含 [skip ci] 以避免再次触发 CI**
 
           claude_args: |
             --max-turns 999
