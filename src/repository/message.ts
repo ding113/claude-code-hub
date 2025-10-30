@@ -6,6 +6,7 @@ import { eq, isNull, and, desc, sql } from "drizzle-orm";
 import type { MessageRequest, CreateMessageRequestData } from "@/types/message";
 import { toMessageRequest } from "./_shared/transformers";
 import { formatCostForStorage } from "@/lib/utils/currency";
+import type { PrivacyFilterContext } from "@/lib/utils/privacy-filter";
 
 /**
  * 创建消息请求记录
@@ -194,13 +195,30 @@ export async function findMessageRequestBySessionId(
 }
 
 /**
+ * 构建条件化的金额聚合表达式
+ * 用于 session 统计
+ */
+function buildSumCostExpression(context: PrivacyFilterContext) {
+  // 管理员或不忽略倍率：SUM(cost_usd * cost_multiplier)
+  if (context.isAdmin || !context.ignoreMultiplier) {
+    return sql<string>`COALESCE(SUM(${messageRequest.costUsd} * COALESCE(${messageRequest.costMultiplier}, 1.0)), 0)`;
+  }
+  // 非管理员且忽略倍率：SUM(cost_usd)
+  return sql<string>`COALESCE(SUM(${messageRequest.costUsd}), 0)`;
+}
+
+/**
  * 聚合查询指定 session 的所有请求数据
  * 返回总成本、总 Token、请求次数、供应商列表等
  *
  * @param sessionId - Session ID
+ * @param privacyContext 隐私过滤上下文（决定金额计算方式）
  * @returns 聚合统计数据，如果 session 不存在返回 null
  */
-export async function aggregateSessionStats(sessionId: string): Promise<{
+export async function aggregateSessionStats(
+  sessionId: string,
+  privacyContext: PrivacyFilterContext
+): Promise<{
   sessionId: string;
   requestCount: number;
   totalCostUsd: string;
@@ -221,10 +239,12 @@ export async function aggregateSessionStats(sessionId: string): Promise<{
   apiType: string | null;
 } | null> {
   // 1. 聚合统计
+  const costExpression = buildSumCostExpression(privacyContext);
+
   const [stats] = await db
     .select({
       requestCount: sql<number>`count(*)::int`,
-      totalCostUsd: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
+      totalCostUsd: costExpression,
       totalInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::int`,
       totalOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::int`,
       totalCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::int`,

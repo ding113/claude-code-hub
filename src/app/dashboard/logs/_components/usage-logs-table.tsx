@@ -22,9 +22,9 @@ import type { PrivacyFilterContext } from "@/lib/utils/privacy-filter";
 import {
   filterProviderName,
   filterCostMultiplier,
-  adjustCost,
   filterProviderChain,
 } from "@/lib/utils/privacy-filter";
+import { calculateDisplayCost } from "@/repository/_shared/cost-calculator";
 
 /**
  * 格式化时间显示
@@ -200,7 +200,7 @@ export function UsageLogsTable({
                   <TableCell className="text-right font-mono text-xs">
                     {log.costUsd
                       ? formatCurrency(
-                          adjustCost(log.costUsd, log.costMultiplier, privacyContext),
+                          calculateDisplayCost(log.costUsd, log.costMultiplier, privacyContext),
                           privacyContext.userCurrency,
                           6
                         )

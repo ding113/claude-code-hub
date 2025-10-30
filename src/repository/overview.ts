@@ -2,8 +2,9 @@
 
 import { db } from "@/drizzle/db";
 import { messageRequest } from "@/drizzle/schema";
-import { isNull, and, gte, lt, count, sum, avg } from "drizzle-orm";
+import { isNull, and, gte, lt, count, avg, sql } from "drizzle-orm";
 import { Decimal, toCostDecimal } from "@/lib/utils/currency";
+import type { PrivacyFilterContext } from "@/lib/utils/privacy-filter";
 
 /**
  * 今日概览统计数据
@@ -18,19 +19,36 @@ export interface OverviewMetrics {
 }
 
 /**
+ * 构建条件化的金额聚合表达式
+ * 用于概览统计
+ */
+function buildSumCostExpression(context: PrivacyFilterContext) {
+  // 管理员或不忽略倍率：SUM(cost_usd * cost_multiplier)
+  if (context.isAdmin || !context.ignoreMultiplier) {
+    return sql<string>`SUM(${messageRequest.costUsd} * COALESCE(${messageRequest.costMultiplier}, 1.0))`;
+  }
+  // 非管理员且忽略倍率：SUM(cost_usd)
+  return sql<string>`SUM(${messageRequest.costUsd})`;
+}
+
+/**
  * 获取今日概览统计数据
  * 包括：今日总请求数、今日总消耗、平均响应时间
+ *
+ * @param privacyContext 隐私过滤上下文（决定金额计算方式）
  */
-export async function getOverviewMetrics(): Promise<OverviewMetrics> {
+export async function getOverviewMetrics(privacyContext: PrivacyFilterContext): Promise<OverviewMetrics> {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
 
+  const costExpression = buildSumCostExpression(privacyContext);
+
   const [result] = await db
     .select({
       requestCount: count(),
-      totalCost: sum(messageRequest.costUsd),
+      totalCost: costExpression,
       avgDuration: avg(messageRequest.durationMs),
     })
     .from(messageRequest)

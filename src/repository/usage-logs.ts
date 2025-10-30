@@ -5,6 +5,7 @@ import { messageRequest, users, keys as keysTable, providers } from "@/drizzle/s
 import { and, eq, isNull, desc, sql } from "drizzle-orm";
 import type { ProviderChainItem } from "@/types/message";
 import { getEnvConfig } from "@/lib/config";
+import type { PrivacyFilterContext } from "@/lib/utils/privacy-filter";
 
 export interface UsageLogFilters {
   userId?: number;
@@ -61,9 +62,28 @@ export interface UsageLogsResult {
 }
 
 /**
- * 查询使用日志（支持多种筛选条件和分页）
+ * 构建条件化的金额聚合 SQL
+ * 用于统计总成本
  */
-export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promise<UsageLogsResult> {
+function buildSumCostSQL(context: PrivacyFilterContext): string {
+  // 管理员或不忽略倍率：SUM(cost_usd * cost_multiplier)
+  if (context.isAdmin || !context.ignoreMultiplier) {
+    return "COALESCE(SUM(message_request.cost_usd * COALESCE(message_request.cost_multiplier, 1.0)), 0)";
+  }
+  // 非管理员且忽略倍率：SUM(cost_usd)
+  return "COALESCE(SUM(message_request.cost_usd), 0)";
+}
+
+/**
+ * 查询使用日志（支持多种筛选条件和分页）
+ *
+ * @param filters 筛选条件
+ * @param privacyContext 隐私过滤上下文（决定金额计算方式）
+ */
+export async function findUsageLogsWithDetails(
+  filters: UsageLogFilters,
+  privacyContext: PrivacyFilterContext
+): Promise<UsageLogsResult> {
   const {
     userId,
     keyId,
@@ -157,10 +177,12 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
   }
 
   // 查询总数和统计数据
+  const costSumSQL = buildSumCostSQL(privacyContext);
+
   const [summaryResult] = await db
     .select({
       totalRequests: sql<number>`count(*)::int`,
-      totalCost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
+      totalCost: sql<string>`${sql.raw(costSumSQL)}`,
       totalInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::int`,
       totalOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::int`,
       totalCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::int`,

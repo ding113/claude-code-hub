@@ -10,6 +10,7 @@ import {
   type UsageLogsResult,
 } from "@/repository/usage-logs";
 import type { ActionResult } from "./types";
+import { getPrivacyContext } from "@/lib/utils/privacy-filter.server";
 
 /**
  * 获取使用日志（根据权限过滤）
@@ -27,7 +28,10 @@ export async function getUsageLogs(
     const finalFilters: UsageLogFilters =
       session.user.role === "admin" ? filters : { ...filters, userId: session.user.id };
 
-    const result = await findUsageLogsWithDetails(finalFilters);
+    // 获取隐私过滤上下文（决定金额计算方式）
+    const privacyContext = await getPrivacyContext();
+
+    const result = await findUsageLogsWithDetails(finalFilters, privacyContext);
 
     return { ok: true, data: result };
   } catch (error) {

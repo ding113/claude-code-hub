@@ -4,6 +4,7 @@ import { SessionManager } from "@/lib/session-manager";
 import { logger } from "@/lib/logger";
 import type { ActionResult } from "./types";
 import type { ActiveSessionInfo } from "@/types/session";
+import { getPrivacyContext } from "@/lib/utils/privacy-filter.server";
 
 /**
  * 获取所有活跃 session 的详细信息（使用聚合数据）
@@ -19,9 +20,14 @@ export async function getActiveSessions(): Promise<ActionResult<ActiveSessionInf
       return { ok: true, data: [] };
     }
 
+    // 获取隐私过滤上下文（决定金额计算方式）
+    const privacyContext = await getPrivacyContext();
+
     // 2. 并行查询每个 session 的聚合数据
     const { aggregateSessionStats } = await import("@/repository/message");
-    const sessionsData = await Promise.all(sessionIds.map((id) => aggregateSessionStats(id)));
+    const sessionsData = await Promise.all(
+      sessionIds.map((id) => aggregateSessionStats(id, privacyContext))
+    );
 
     // 3. 过滤掉查询失败的 session，并转换格式
     const sessions: ActiveSessionInfo[] = sessionsData
@@ -147,12 +153,15 @@ export async function getSessionDetails(sessionId: string): Promise<
   }>
 > {
   try {
+    // 获取隐私过滤上下文（决定金额计算方式）
+    const privacyContext = await getPrivacyContext();
+
     // 并行获取三项数据：messages, response, 聚合统计
     const { aggregateSessionStats } = await import("@/repository/message");
     const [messages, response, sessionStats] = await Promise.all([
       SessionManager.getSessionMessages(sessionId),
       SessionManager.getSessionResponse(sessionId),
-      aggregateSessionStats(sessionId),
+      aggregateSessionStats(sessionId, privacyContext),
     ]);
 
     return {

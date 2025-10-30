@@ -23,6 +23,7 @@ import type {
 import { TIME_RANGE_OPTIONS, DEFAULT_TIME_RANGE } from "@/types/statistics";
 import type { ActionResult } from "./types";
 import { formatCostForStorage } from "@/lib/utils/currency";
+import { getPrivacyContext } from "@/lib/utils/privacy-filter.server";
 
 /**
  * 生成图表数据使用的用户键，避免名称碰撞
@@ -53,6 +54,9 @@ export async function getUserStatistics(
     const settings = await getSystemSettings();
     const isAdmin = session.user.role === "admin";
 
+    // 获取隐私过滤上下文（决定金额计算方式）
+    const privacyContext = await getPrivacyContext();
+
     // 确定显示模式
     const mode: "users" | "keys" | "mixed" = isAdmin
       ? "users"
@@ -68,7 +72,7 @@ export async function getUserStatistics(
     if (mode === "users") {
       // Admin: 显示所有用户
       const [userStats, userList] = await Promise.all([
-        getUserStatisticsFromDB(timeRange),
+        getUserStatisticsFromDB(timeRange, privacyContext),
         getActiveUsersFromDB(),
       ]);
       statsData = userStats;
@@ -77,7 +81,7 @@ export async function getUserStatistics(
       // 非 Admin + allowGlobalUsageView: 自己的密钥明细 + 其他用户汇总
       const [ownKeysList, mixedData] = await Promise.all([
         getActiveKeysForUserFromDB(session.user.id),
-        getMixedStatisticsFromDB(session.user.id, timeRange),
+        getMixedStatisticsFromDB(session.user.id, timeRange, privacyContext),
       ]);
 
       // 合并数据：自己的密钥 + 其他用户的虚拟条目
@@ -88,7 +92,7 @@ export async function getUserStatistics(
     } else {
       // 非 Admin + !allowGlobalUsageView: 仅显示自己的密钥
       const [keyStats, keyList] = await Promise.all([
-        getKeyStatisticsFromDB(session.user.id, timeRange),
+        getKeyStatisticsFromDB(session.user.id, timeRange, privacyContext),
         getActiveKeysForUserFromDB(session.user.id),
       ]);
       statsData = keyStats;

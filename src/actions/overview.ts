@@ -6,6 +6,7 @@ import { getActiveSessions as getActiveSessionsFromManager } from "./active-sess
 import { logger } from "@/lib/logger";
 import type { ActionResult } from "./types";
 import type { ActiveSessionInfo } from "@/types/session";
+import { getPrivacyContext } from "@/lib/utils/privacy-filter.server";
 
 /**
  * 概览数据（包含并发数和今日统计）
@@ -28,10 +29,13 @@ export interface OverviewData {
  */
 export async function getOverviewData(): Promise<ActionResult<OverviewData>> {
   try {
+    // 获取隐私过滤上下文（决定金额计算方式）
+    const privacyContext = await getPrivacyContext();
+
     // 并行查询所有数据
     const [concurrentResult, metricsData, sessionsResult] = await Promise.all([
       getConcurrentSessionsCount(),
-      getOverviewMetricsFromDB(),
+      getOverviewMetricsFromDB(privacyContext),
       getActiveSessionsFromManager(),
     ]);
 

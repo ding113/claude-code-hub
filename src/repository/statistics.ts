@@ -12,13 +12,34 @@ import type {
   DatabaseKeyStatRow,
   DatabaseKey,
 } from "@/types/statistics";
+import type { PrivacyFilterContext } from "@/lib/utils/privacy-filter";
+
+/**
+ * 构建条件化的金额聚合 SQL 字符串
+ * 用于原生 SQL 查询中
+ */
+function buildSumCostSQL(context: PrivacyFilterContext): string {
+  // 管理员或不忽略倍率：SUM(cost_usd * cost_multiplier)
+  if (context.isAdmin || !context.ignoreMultiplier) {
+    return "COALESCE(SUM(mr.cost_usd * COALESCE(mr.cost_multiplier, 1.0)), 0)";
+  }
+  // 非管理员且忽略倍率：SUM(cost_usd)
+  return "COALESCE(SUM(mr.cost_usd), 0)";
+}
 
 /**
  * 根据时间范围获取用户消费和API调用统计
  * 注意：这个函数使用原生SQL，因为涉及到PostgreSQL特定的generate_series函数
+ *
+ * @param timeRange 时间范围
+ * @param privacyContext 隐私过滤上下文（决定金额计算方式）
  */
-export async function getUserStatisticsFromDB(timeRange: TimeRange): Promise<DatabaseStatRow[]> {
+export async function getUserStatisticsFromDB(
+  timeRange: TimeRange,
+  privacyContext: PrivacyFilterContext
+): Promise<DatabaseStatRow[]> {
   const timezone = getEnvConfig().TZ;
+  const costSumSQL = buildSumCostSQL(privacyContext);
   let query;
 
   switch (timeRange) {
@@ -38,7 +59,7 @@ export async function getUserStatisticsFromDB(timeRange: TimeRange): Promise<Dat
             u.name AS user_name,
             hr.hour,
             COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
+            ${sql.raw(costSumSQL)} AS total_cost
           FROM users u
           CROSS JOIN hour_range hr
           LEFT JOIN message_request mr ON u.id = mr.user_id
@@ -74,7 +95,7 @@ export async function getUserStatisticsFromDB(timeRange: TimeRange): Promise<Dat
             u.name AS user_name,
             dr.date,
             COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
+            ${sql.raw(costSumSQL)} AS total_cost
           FROM users u
           CROSS JOIN date_range dr
           LEFT JOIN message_request mr ON u.id = mr.user_id
@@ -110,7 +131,7 @@ export async function getUserStatisticsFromDB(timeRange: TimeRange): Promise<Dat
             u.name AS user_name,
             dr.date,
             COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
+            ${sql.raw(costSumSQL)} AS total_cost
           FROM users u
           CROSS JOIN date_range dr
           LEFT JOIN message_request mr ON u.id = mr.user_id
@@ -155,12 +176,18 @@ export async function getActiveUsersFromDB(): Promise<DatabaseUser[]> {
 
 /**
  * 获取指定用户的密钥使用统计
+ *
+ * @param userId 用户ID
+ * @param timeRange 时间范围
+ * @param privacyContext 隐私过滤上下文（决定金额计算方式）
  */
 export async function getKeyStatisticsFromDB(
   userId: number,
-  timeRange: TimeRange
+  timeRange: TimeRange,
+  privacyContext: PrivacyFilterContext
 ): Promise<DatabaseKeyStatRow[]> {
   const timezone = getEnvConfig().TZ;
+  const costSumSQL = buildSumCostSQL(privacyContext);
   let query;
 
   switch (timeRange) {
@@ -185,7 +212,7 @@ export async function getKeyStatisticsFromDB(
             k.name AS key_name,
             hr.hour,
             COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
+            ${sql.raw(costSumSQL)} AS total_cost
           FROM user_keys k
           CROSS JOIN hour_range hr
           LEFT JOIN message_request mr ON mr.key = k.key
@@ -226,7 +253,7 @@ export async function getKeyStatisticsFromDB(
             k.name AS key_name,
             dr.date,
             COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
+            ${sql.raw(costSumSQL)} AS total_cost
           FROM user_keys k
           CROSS JOIN date_range dr
           LEFT JOIN message_request mr ON mr.key = k.key
@@ -267,7 +294,7 @@ export async function getKeyStatisticsFromDB(
             k.name AS key_name,
             dr.date,
             COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
+            ${sql.raw(costSumSQL)} AS total_cost
           FROM user_keys k
           CROSS JOIN date_range dr
           LEFT JOIN message_request mr ON mr.key = k.key
@@ -314,15 +341,21 @@ export async function getActiveKeysForUserFromDB(userId: number): Promise<Databa
 /**
  * 获取混合统计数据：当前用户的密钥明细 + 其他用户的汇总
  * 用于非 admin 用户在 allowGlobalUsageView=true 时的数据展示
+ *
+ * @param userId 用户ID
+ * @param timeRange 时间范围
+ * @param privacyContext 隐私过滤上下文（决定金额计算方式）
  */
 export async function getMixedStatisticsFromDB(
   userId: number,
-  timeRange: TimeRange
+  timeRange: TimeRange,
+  privacyContext: PrivacyFilterContext
 ): Promise<{
   ownKeys: DatabaseKeyStatRow[];
   othersAggregate: DatabaseStatRow[];
 }> {
   const timezone = getEnvConfig().TZ;
+  const costSumSQL = buildSumCostSQL(privacyContext);
   let ownKeysQuery;
   let othersQuery;
 
@@ -349,7 +382,7 @@ export async function getMixedStatisticsFromDB(
             k.name AS key_name,
             hr.hour,
             COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
+            ${sql.raw(costSumSQL)} AS total_cost
           FROM user_keys k
           CROSS JOIN hour_range hr
           LEFT JOIN message_request mr ON mr.key = k.key
@@ -381,7 +414,7 @@ export async function getMixedStatisticsFromDB(
           SELECT
             hr.hour,
             COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
+            ${sql.raw(costSumSQL)} AS total_cost
           FROM hour_range hr
           LEFT JOIN message_request mr ON DATE_TRUNC('hour', mr.created_at AT TIME ZONE ${timezone}) = hr.hour
             AND mr.user_id != ${userId}
@@ -421,7 +454,7 @@ export async function getMixedStatisticsFromDB(
             k.name AS key_name,
             dr.date,
             COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
+            ${sql.raw(costSumSQL)} AS total_cost
           FROM user_keys k
           CROSS JOIN date_range dr
           LEFT JOIN message_request mr ON mr.key = k.key
@@ -453,7 +486,7 @@ export async function getMixedStatisticsFromDB(
           SELECT
             dr.date,
             COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
+            ${sql.raw(costSumSQL)} AS total_cost
           FROM date_range dr
           LEFT JOIN message_request mr ON (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
             AND mr.user_id != ${userId}
@@ -493,7 +526,7 @@ export async function getMixedStatisticsFromDB(
             k.name AS key_name,
             dr.date,
             COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
+            ${sql.raw(costSumSQL)} AS total_cost
           FROM user_keys k
           CROSS JOIN date_range dr
           LEFT JOIN message_request mr ON mr.key = k.key
@@ -525,7 +558,7 @@ export async function getMixedStatisticsFromDB(
           SELECT
             dr.date,
             COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
+            ${sql.raw(costSumSQL)} AS total_cost
           FROM date_range dr
           LEFT JOIN message_request mr ON (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
             AND mr.user_id != ${userId}
