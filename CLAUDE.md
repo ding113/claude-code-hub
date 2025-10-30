@@ -223,6 +223,11 @@ STORE_SESSION_MESSAGES=false       # 是否存储请求 messages（用于实时�
 ENABLE_SECURE_COOKIES=true         # 是否强制 HTTPS Cookie（默认：true）
                                    # 设置为 false 允许 HTTP 访问，但会降低安全性
 
+# Codex Instructions 注入（实验性功能）
+ENABLE_CODEX_INSTRUCTIONS_INJECTION=false  # 是否强制替换 Codex 请求的 instructions（默认：false）
+                                           # false: 保持原样透传（推荐）
+                                           # true: 强制替换为官方完整 prompt（约 4000+ 字）
+
 # 应用配置
 APP_PORT=23000                     # 应用端口
 NODE_ENV=production                # 环境模式

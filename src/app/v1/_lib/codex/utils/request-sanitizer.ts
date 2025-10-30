@@ -12,6 +12,22 @@ import { logger } from "@/lib/logger";
 import { getDefaultInstructions } from "../../codex/constants/codex-instructions";
 
 /**
+ * 功能开关：是否启用 Codex Instructions 注入
+ *
+ * 用途：控制是否强制替换请求中的 instructions 字段为官方完整 prompt
+ *
+ * - true：强制替换 instructions（约 4000+ 字完整 prompt）
+ * - false (默认)：保持原样透传，不修改 instructions
+ *
+ * 注意：
+ * - 某些 Codex 供应商可能要求必须包含官方 instructions
+ * - 如果代理请求失败，可以尝试启用此开关
+ * - 官方 Codex CLI 客户端会自动包含完整 instructions，不需要注入
+ */
+export const ENABLE_CODEX_INSTRUCTIONS_INJECTION =
+  process.env.ENABLE_CODEX_INSTRUCTIONS_INJECTION === "true" || false;
+
+/**
  * 检测是否为官方 Codex CLI 客户端
  *
  * 官方客户端 User-Agent 格式：
@@ -61,17 +77,27 @@ export function sanitizeCodexRequest(
 ): Record<string, unknown> {
   const output = { ...request };
 
-  // 步骤 1: 强制替换 instructions 为官方完整 prompt
-  // 无论请求中是否包含 instructions，都要替换为官方版本
-  // 这是 Codex 供应商的强制要求（约 4000+ 字完整 prompt）
-  const officialInstructions = getDefaultInstructions(model);
-  output.instructions = officialInstructions;
+  // 步骤 1: 根据开关决定是否替换 instructions
+  if (ENABLE_CODEX_INSTRUCTIONS_INJECTION) {
+    // 开关启用：强制替换 instructions 为官方完整 prompt
+    // 某些 Codex 供应商可能要求必须有完整 instructions（约 4000+ 字）
+    const officialInstructions = getDefaultInstructions(model);
+    output.instructions = officialInstructions;
 
-  logger.debug("[CodexSanitizer] Instructions replaced with official prompt", {
-    model,
-    instructionsLength: officialInstructions.length,
-    instructionsPreview: officialInstructions.substring(0, 100) + "...",
-  });
+    logger.info("[CodexSanitizer] Instructions injection enabled, replaced with official prompt", {
+      model,
+      instructionsLength: officialInstructions.length,
+      instructionsPreview: officialInstructions.substring(0, 100) + "...",
+    });
+  } else {
+    // 开关关闭（默认）：保持原样透传
+    logger.info("[CodexSanitizer] Instructions injection disabled, keeping original instructions", {
+      model,
+      hasInstructions: !!output.instructions,
+      originalInstructionsLength:
+        typeof output.instructions === "string" ? output.instructions.length : 0,
+    });
+  }
 
   // 步骤 2: 删除 Codex 不支持的参数
   // 参考 CLIProxyAPI 和 OpenAI → Codex 转换器
