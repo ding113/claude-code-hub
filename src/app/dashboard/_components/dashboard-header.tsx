@@ -14,6 +14,7 @@ const NAV_ITEMS: (DashboardNavItem & { adminOnly?: boolean })[] = [
   { href: "/dashboard", label: "仪表盘" },
   { href: "/dashboard/logs", label: "使用记录" },
   { href: "/dashboard/leaderboard", label: "排行榜" },
+  { href: "/dashboard/quotas", label: "限额管理" },
   { href: "/usage-doc", label: "文档" },
   { href: "/settings", label: "系统设置", adminOnly: true },
   { href: "https://github.com/ding113/claude-code-hub/issues", label: "反馈问题", external: true },

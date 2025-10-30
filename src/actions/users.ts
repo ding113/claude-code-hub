@@ -1,6 +1,6 @@
 "use server";
 
-import { findUserList, createUser, updateUser, deleteUser } from "@/repository/user";
+import { findUserList, createUser, updateUser, deleteUser, findUserById } from "@/repository/user";
 import { logger } from "@/lib/logger";
 import { findKeyList, findKeyUsageToday, findKeysWithStatistics } from "@/repository/key";
 import { revalidatePath } from "next/cache";
@@ -214,6 +214,65 @@ export async function removeUser(userId: number): Promise<ActionResult> {
   } catch (error) {
     logger.error("删除用户失败:", error);
     const message = error instanceof Error ? error.message : "删除用户失败，请稍后重试";
+    return { ok: false, error: message };
+  }
+}
+
+/**
+ * 获取用户限额使用情况
+ */
+export async function getUserLimitUsage(userId: number): Promise<
+  ActionResult<{
+    rpm: { current: number; limit: number; window: "per_minute" };
+    dailyCost: { current: number; limit: number; resetAt: Date };
+  }>
+> {
+  try {
+    const session = await getSession();
+    if (!session) {
+      return { ok: false, error: "未登录" };
+    }
+
+    const user = await findUserById(userId);
+    if (!user) {
+      return { ok: false, error: "用户不存在" };
+    }
+
+    // 权限检查：用户只能查看自己，管理员可以查看所有人
+    if (session.user.role !== "admin" && session.user.id !== userId) {
+      return { ok: false, error: "无权限执行此操作" };
+    }
+
+    // 动态导入避免循环依赖
+    const { sumUserCostToday } = await import("@/repository/statistics");
+    const { getDailyResetTime } = await import("@/lib/rate-limit/time-utils");
+
+    // 获取当前 RPM 使用情况（从 Redis）
+    // 注意：RPM 是实时的滑动窗口，无法直接获取"当前值"，这里返回 0
+    // 实际的 RPM 检查在请求时进行
+    const rpmCurrent = 0; // RPM 是动态滑动窗口，此处无法精确获取
+
+    // 获取每日消费（直接查询数据库）
+    const dailyCost = await sumUserCostToday(userId);
+
+    return {
+      ok: true,
+      data: {
+        rpm: {
+          current: rpmCurrent,
+          limit: user.rpm || 60,
+          window: "per_minute",
+        },
+        dailyCost: {
+          current: dailyCost,
+          limit: user.dailyQuota || 100,
+          resetAt: getDailyResetTime(),
+        },
+      },
+    };
+  } catch (error) {
+    logger.error("获取用户限额使用情况失败:", error);
+    const message = error instanceof Error ? error.message : "获取用户限额使用情况失败";
     return { ok: false, error: message };
   }
 }

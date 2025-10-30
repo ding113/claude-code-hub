@@ -3,9 +3,11 @@ import { logger } from "@/lib/logger";
 import { SessionTracker } from "@/lib/session-tracker";
 import { CHECK_AND_TRACK_SESSION } from "@/lib/redis/lua-scripts";
 import { sumUserCostToday } from "@/repository/statistics";
-import { startOfDay, addDays } from "date-fns";
-import { toZonedTime } from "date-fns-tz";
-import { getEnvConfig } from "@/lib/config";
+import {
+  getTimeRangeForPeriod,
+  getTTLForPeriod,
+  getSecondsUntilMidnight,
+} from "./time-utils";
 
 interface CostLimit {
   amount: number | null;
@@ -105,8 +107,8 @@ export class RateLimitService {
     for (const limit of costLimits) {
       if (!limit.amount || limit.amount <= 0) continue;
 
-      // 计算时间范围
-      const { startTime, endTime } = this.getTimeRangeForPeriod(limit.period);
+      // 计算时间范围（使用新的时间工具函数）
+      const { startTime, endTime } = getTimeRangeForPeriod(limit.period);
 
       // 查询数据库
       const current =
@@ -114,13 +116,13 @@ export class RateLimitService {
           ? await sumKeyCostInTimeRange(id, startTime, endTime)
           : await sumProviderCostInTimeRange(id, startTime, endTime);
 
-      // Cache Warming: 写回 Redis
+      // Cache Warming: 写回 Redis（使用新的 TTL 计算）
       if (this.redis && this.redis.status === "ready") {
         try {
-          const ttl = this.getTTLForPeriod(limit.period);
+          const ttl = getTTLForPeriod(limit.period);
           await this.redis.set(`${type}:${id}:cost_${limit.period}`, current.toString(), "EX", ttl);
           logger.info(
-            `[RateLimit] Cache warmed for ${type}:${id}:cost_${limit.period}, value=${current}`
+            `[RateLimit] Cache warmed for ${type}:${id}:cost_${limit.period}, value=${current}, ttl=${ttl}s`
           );
         } catch (error) {
           logger.error("[RateLimit] Failed to warm cache:", error);
@@ -138,45 +140,6 @@ export class RateLimitService {
     return { allowed: true };
   }
 
-  /**
-   * 根据周期计算时间范围
-   */
-  private static getTimeRangeForPeriod(period: "5h" | "weekly" | "monthly"): {
-    startTime: Date;
-    endTime: Date;
-  } {
-    const now = new Date();
-    const endTime = now;
-    let startTime: Date;
-
-    switch (period) {
-      case "5h":
-        startTime = new Date(now.getTime() - 5 * 60 * 60 * 1000);
-        break;
-      case "weekly":
-        startTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        break;
-      case "monthly":
-        startTime = new Date(now.getTime() - 31 * 24 * 60 * 60 * 1000);
-        break;
-    }
-
-    return { startTime, endTime };
-  }
-
-  /**
-   * 根据周期计算 TTL
-   */
-  private static getTTLForPeriod(period: "5h" | "weekly" | "monthly"): number {
-    switch (period) {
-      case "5h":
-        return 5 * 3600;
-      case "weekly":
-        return 7 * 24 * 3600;
-      case "monthly":
-        return 31 * 24 * 3600;
-    }
-  }
 
   /**
    * 检查并发 Session 限制（仅检查，不追踪）
@@ -276,6 +239,7 @@ export class RateLimitService {
 
   /**
    * 累加消费（请求结束后调用）
+   * 使用动态 TTL 以支持自然时间窗口（周一/月初）
    */
   static async trackCost(
     keyId: number,
@@ -286,27 +250,32 @@ export class RateLimitService {
     if (!this.redis || cost <= 0) return;
 
     try {
+      // 计算动态 TTL
+      const ttl5h = getTTLForPeriod("5h");
+      const ttlWeekly = getTTLForPeriod("weekly");
+      const ttlMonthly = getTTLForPeriod("monthly");
+
       const pipeline = this.redis.pipeline();
 
       // 1. 累加 Key 消费
       pipeline.incrbyfloat(`key:${keyId}:cost_5h`, cost);
-      pipeline.expire(`key:${keyId}:cost_5h`, 5 * 3600); // 5小时
+      pipeline.expire(`key:${keyId}:cost_5h`, ttl5h);
 
       pipeline.incrbyfloat(`key:${keyId}:cost_weekly`, cost);
-      pipeline.expire(`key:${keyId}:cost_weekly`, 7 * 24 * 3600); // 7天
+      pipeline.expire(`key:${keyId}:cost_weekly`, ttlWeekly);
 
       pipeline.incrbyfloat(`key:${keyId}:cost_monthly`, cost);
-      pipeline.expire(`key:${keyId}:cost_monthly`, 31 * 24 * 3600); // 31天
+      pipeline.expire(`key:${keyId}:cost_monthly`, ttlMonthly);
 
       // 2. 累加 Provider 消费
       pipeline.incrbyfloat(`provider:${providerId}:cost_5h`, cost);
-      pipeline.expire(`provider:${providerId}:cost_5h`, 5 * 3600);
+      pipeline.expire(`provider:${providerId}:cost_5h`, ttl5h);
 
       pipeline.incrbyfloat(`provider:${providerId}:cost_weekly`, cost);
-      pipeline.expire(`provider:${providerId}:cost_weekly`, 7 * 24 * 3600);
+      pipeline.expire(`provider:${providerId}:cost_weekly`, ttlWeekly);
 
       pipeline.incrbyfloat(`provider:${providerId}:cost_monthly`, cost);
-      pipeline.expire(`provider:${providerId}:cost_monthly`, 31 * 24 * 3600);
+      pipeline.expire(`provider:${providerId}:cost_monthly`, ttlMonthly);
 
       await pipeline.exec();
     } catch (error) {
@@ -345,16 +314,16 @@ export class RateLimitService {
         "@/repository/statistics"
       );
 
-      const { startTime, endTime } = this.getTimeRangeForPeriod(period);
+      const { startTime, endTime } = getTimeRangeForPeriod(period);
       const current =
         type === "key"
           ? await sumKeyCostInTimeRange(id, startTime, endTime)
           : await sumProviderCostInTimeRange(id, startTime, endTime);
 
-      // Cache Warming: 写回 Redis
+      // Cache Warming: 写回 Redis（使用新的 TTL 计算）
       if (this.redis && this.redis.status === "ready") {
         try {
-          const ttl = this.getTTLForPeriod(period);
+          const ttl = getTTLForPeriod(period);
           await this.redis.set(`${type}:${id}:cost_${period}`, current.toString(), "EX", ttl);
         } catch (error) {
           logger.error("[RateLimit] Failed to warm cache:", error);
@@ -450,8 +419,8 @@ export class RateLimitService {
           logger.info(`[RateLimit] Cache miss for ${key}, querying database`);
           currentCost = await sumUserCostToday(userId);
 
-          // Cache Warming: 写回 Redis
-          const secondsUntilMidnight = this.getSecondsUntilMidnight();
+          // Cache Warming: 写回 Redis（使用新的时间工具函数）
+          const secondsUntilMidnight = getSecondsUntilMidnight();
           await this.redis.set(key, currentCost.toString(), "EX", secondsUntilMidnight);
         }
       } else {
@@ -484,7 +453,7 @@ export class RateLimitService {
     const key = `user:${userId}:daily_cost`;
 
     try {
-      const secondsUntilMidnight = this.getSecondsUntilMidnight();
+      const secondsUntilMidnight = getSecondsUntilMidnight();
 
       await this.redis.pipeline().incrbyfloat(key, cost).expire(key, secondsUntilMidnight).exec();
 
@@ -492,19 +461,5 @@ export class RateLimitService {
     } catch (error) {
       logger.error(`[RateLimit] Failed to track user daily cost:`, error);
     }
-  }
-
-  /**
-   * 计算距离午夜的秒数（用于 TTL）
-   * 使用配置的时区（Asia/Shanghai）而非服务器本地时区
-   */
-  private static getSecondsUntilMidnight(): number {
-    const timezone = getEnvConfig().TZ; // 使用配置的时区
-    const now = new Date();
-    const zonedNow = toZonedTime(now, timezone); // 转换到配置时区
-    const zonedTomorrow = addDays(startOfDay(zonedNow), 1); // 配置时区的明天00:00
-
-    // 计算当前时间到配置时区午夜的秒数
-    return Math.ceil((zonedTomorrow.getTime() - zonedNow.getTime()) / 1000);
   }
 }
