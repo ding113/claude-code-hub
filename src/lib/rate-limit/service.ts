@@ -102,8 +102,6 @@ export class RateLimitService {
       "@/repository/statistics"
     );
 
-    const now = new Date();
-
     for (const limit of costLimits) {
       if (!limit.amount || limit.amount <= 0) continue;
 

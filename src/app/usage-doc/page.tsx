@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { cn } from "@/lib/utils";
 import { Menu } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -244,13 +243,6 @@ npm --version`}
    * 渲染 Claude Code 配置
    */
   const renderClaudeCodeConfiguration = (os: OS) => {
-    const lang = os === "windows" ? "powershell" : "bash";
-    const configDir =
-      os === "windows"
-        ? "C:\\Users\\你的用户名\\.claude"
-        : os === "macos"
-          ? "~/.claude"
-          : "~/.claude";
     const configPath =
       os === "windows"
         ? "C:\\Users\\你的用户名\\.claude\\settings.json"

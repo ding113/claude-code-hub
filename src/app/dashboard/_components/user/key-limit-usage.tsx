@@ -37,7 +37,7 @@ export function KeyLimitUsage({ keyId, currencyCode = "USD" }: KeyLimitUsageProp
           // result.ok === false 时，result 是 { ok: false; error: string }
           setError(result.error || "获取失败");
         }
-      } catch (err) {
+      } catch {
         setError("网络错误");
       } finally {
         setLoading(false);

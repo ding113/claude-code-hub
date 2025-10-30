@@ -576,7 +576,7 @@ export async function sumUserCostToday(userId: number): Promise<number> {
   `;
 
   const result = await db.execute(query);
-  const row = Array.from(result)[0] as any;
+  const row = Array.from(result)[0] as { total_cost?: string | number } | undefined;
   return Number(row?.total_cost || 0);
 }
 
