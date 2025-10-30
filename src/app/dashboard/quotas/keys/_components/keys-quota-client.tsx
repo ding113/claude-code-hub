@@ -201,33 +201,32 @@ export function KeysQuotaClient({ users }: KeysQuotaClientProps) {
                                 )}
 
                                 {/* 月消费 */}
-                                {key.quota.costMonthly.limit &&
-                                  key.quota.costMonthly.limit > 0 && (
-                                    <div className="space-y-2">
-                                      <div className="flex items-center justify-between text-sm">
-                                        <span className="text-muted-foreground">月消费</span>
-                                        <span className="font-medium">
-                                          {formatCurrency(key.quota.costMonthly.current)} /{" "}
-                                          {formatCurrency(key.quota.costMonthly.limit)}
-                                        </span>
-                                      </div>
-                                      <Progress
-                                        value={
-                                          (key.quota.costMonthly.current /
-                                            (key.quota.costMonthly.limit || 1)) *
-                                          100
-                                        }
-                                        className="h-2"
-                                      />
-                                      <p className="text-xs text-muted-foreground">
-                                        重置于{" "}
-                                        {formatDistanceToNow(monthlyReset.resetAt!, {
-                                          addSuffix: true,
-                                          locale: zhCN,
-                                        })}
-                                      </p>
+                                {key.quota.costMonthly.limit && key.quota.costMonthly.limit > 0 && (
+                                  <div className="space-y-2">
+                                    <div className="flex items-center justify-between text-sm">
+                                      <span className="text-muted-foreground">月消费</span>
+                                      <span className="font-medium">
+                                        {formatCurrency(key.quota.costMonthly.current)} /{" "}
+                                        {formatCurrency(key.quota.costMonthly.limit)}
+                                      </span>
                                     </div>
-                                  )}
+                                    <Progress
+                                      value={
+                                        (key.quota.costMonthly.current /
+                                          (key.quota.costMonthly.limit || 1)) *
+                                        100
+                                      }
+                                      className="h-2"
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                      重置于{" "}
+                                      {formatDistanceToNow(monthlyReset.resetAt!, {
+                                        addSuffix: true,
+                                        locale: zhCN,
+                                      })}
+                                    </p>
+                                  </div>
+                                )}
 
                                 {/* 并发 Session */}
                                 {key.quota.concurrentSessions.limit > 0 && (
