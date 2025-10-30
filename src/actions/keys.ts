@@ -211,9 +211,7 @@ export async function getKeysWithStatistics(
 /**
  * 获取密钥的限额使用情况（实时数据）
  */
-export async function getKeyLimitUsage(
-  keyId: number
-): Promise<
+export async function getKeyLimitUsage(keyId: number): Promise<
   ActionResult<{
     cost5h: { current: number; limit: number | null };
     costWeekly: { current: number; limit: number | null };
@@ -255,7 +253,10 @@ export async function getKeyLimitUsage(
         cost5h: { current: cost5h, limit: key.limit5hUsd },
         costWeekly: { current: costWeekly, limit: key.limitWeeklyUsd },
         costMonthly: { current: costMonthly, limit: key.limitMonthlyUsd },
-        concurrentSessions: { current: concurrentSessions, limit: key.limitConcurrentSessions || 0 },
+        concurrentSessions: {
+          current: concurrentSessions,
+          limit: key.limitConcurrentSessions || 0,
+        },
       },
     };
   } catch (error) {

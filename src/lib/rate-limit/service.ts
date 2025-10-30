@@ -488,11 +488,7 @@ export class RateLimitService {
     try {
       const secondsUntilMidnight = this.getSecondsUntilMidnight();
 
-      await this.redis
-        .pipeline()
-        .incrbyfloat(key, cost)
-        .expire(key, secondsUntilMidnight)
-        .exec();
+      await this.redis.pipeline().incrbyfloat(key, cost).expire(key, secondsUntilMidnight).exec();
 
       logger.debug(`[RateLimit] Tracked user daily cost: user=${userId}, cost=${cost}`);
     } catch (error) {
