@@ -7,18 +7,18 @@ import type { ProviderChainItem } from "@/types/message";
  * 1. 有 statusCode：实际请求成功
  * 2. 无 statusCode：仅表示选择成功（中间状态，不应显示）
  */
-function getProviderStatus(item: ProviderChainItem): '✓' | '✗' | '⚡' | null {
+function getProviderStatus(item: ProviderChainItem): "✓" | "✗" | "⚡" | null {
   // 成功标记：必须有 statusCode 且是成功状态码
-  if ((item.reason === 'request_success' || item.reason === 'retry_success') && item.statusCode) {
-    return '✓';
+  if ((item.reason === "request_success" || item.reason === "retry_success") && item.statusCode) {
+    return "✓";
   }
   // 失败标记
-  if (item.reason === 'retry_failed' || item.reason === 'system_error') {
-    return '✗';
+  if (item.reason === "retry_failed" || item.reason === "system_error") {
+    return "✗";
   }
   // 并发限制失败
-  if (item.reason === 'concurrent_limit_failed') {
-    return '⚡';
+  if (item.reason === "concurrent_limit_failed") {
+    return "⚡";
   }
   // 中间状态（选择成功但还没有请求结果）
   return null;
@@ -29,13 +29,13 @@ function getProviderStatus(item: ProviderChainItem): '✓' | '✗' | '⚡' | nul
  */
 function isActualRequest(item: ProviderChainItem): boolean {
   // 并发限制失败：算作一次尝试
-  if (item.reason === 'concurrent_limit_failed') return true;
+  if (item.reason === "concurrent_limit_failed") return true;
 
   // 失败记录
-  if (item.reason === 'retry_failed' || item.reason === 'system_error') return true;
+  if (item.reason === "retry_failed" || item.reason === "system_error") return true;
 
   // 成功记录：必须有 statusCode
-  if ((item.reason === 'request_success' || item.reason === 'retry_success') && item.statusCode) {
+  if ((item.reason === "request_success" || item.reason === "retry_success") && item.statusCode) {
     return true;
   }
 
@@ -48,10 +48,14 @@ function isActualRequest(item: ProviderChainItem): boolean {
  */
 function translateCircuitState(state?: string): string {
   switch (state) {
-    case 'closed': return '关闭（正常）';
-    case 'half-open': return '半开（试探中）';
-    case 'open': return '全开（已熔断）';
-    default: return '未知';
+    case "closed":
+      return "关闭（正常）";
+    case "half-open":
+      return "半开（试探中）";
+    case "open":
+      return "全开（已熔断）";
+    default:
+      return "未知";
   }
 }
 
@@ -60,10 +64,10 @@ function translateCircuitState(state?: string): string {
  */
 function getErrorCodeMeaning(code: string): string | null {
   const meanings: Record<string, string> = {
-    'ENOTFOUND': 'DNS 解析失败',
-    'ECONNREFUSED': '连接被拒绝',
-    'ETIMEDOUT': '连接或读取超时',
-    'ECONNRESET': '连接被重置',
+    ENOTFOUND: "DNS 解析失败",
+    ECONNREFUSED: "连接被拒绝",
+    ETIMEDOUT: "连接或读取超时",
+    ECONNRESET: "连接被重置",
   };
   return meanings[code] || null;
 }
@@ -85,11 +89,11 @@ export function formatProviderSummary(chain: ProviderChainItem[]): string {
   }
 
   // 单次请求且成功
-  if (requests.length === 1 && getProviderStatus(requests[0]) === '✓') {
+  if (requests.length === 1 && getProviderStatus(requests[0]) === "✓") {
     const request = requests[0];
 
     // 查找是否有首次选择的决策记录
-    const initialSelection = chain.find(item => item.reason === 'initial_selection');
+    const initialSelection = chain.find((item) => item.reason === "initial_selection");
 
     if (initialSelection && initialSelection.decisionContext) {
       const ctx = initialSelection.decisionContext;
@@ -99,7 +103,7 @@ export function formatProviderSummary(chain: ProviderChainItem[]): string {
     }
 
     // 查找是否是会话复用
-    const sessionReuse = chain.find(item => item.reason === 'session_reuse');
+    const sessionReuse = chain.find((item) => item.reason === "session_reuse");
     if (sessionReuse) {
       return `${request.name}(✓) [会话复用]`;
     }
@@ -133,7 +137,7 @@ export function formatProviderDescription(chain: ProviderChainItem[]): string {
   // === 部分1: 首次选择逻辑 ===
   if (first.reason === "session_reuse" && ctx) {
     desc += `🔄 会话复用\n\n`;
-    desc += `Session ${ctx.sessionId?.slice(-6) || '未知'}\n`;
+    desc += `Session ${ctx.sessionId?.slice(-6) || "未知"}\n`;
     desc += `复用供应商: ${first.name}\n`;
   } else if (first.reason === "initial_selection" && ctx) {
     desc += `🎯 首次选择: ${first.name}\n\n`;
@@ -145,9 +149,7 @@ export function formatProviderDescription(chain: ProviderChainItem[]): string {
 
     if (ctx.candidatesAtPriority && ctx.candidatesAtPriority.length > 0) {
       desc += `优先级${ctx.selectedPriority}: `;
-      desc += ctx.candidatesAtPriority
-        .map(c => `${c.name}(${c.probability}%)`)
-        .join(" ");
+      desc += ctx.candidatesAtPriority.map((c) => `${c.name}(${c.probability}%)`).join(" ");
     }
   }
 
@@ -156,21 +158,21 @@ export function formatProviderDescription(chain: ProviderChainItem[]): string {
   const requests = chain.filter(isActualRequest);
 
   // 只有多次请求或单次请求失败时才显示链路
-  if (requests.length > 1 || (requests.length === 1 && getProviderStatus(requests[0]) !== '✓')) {
+  if (requests.length > 1 || (requests.length === 1 && getProviderStatus(requests[0]) !== "✓")) {
     if (desc) desc += "\n\n";
     desc += `📍 请求链路:\n\n`;
 
     requests.forEach((item, index) => {
       const status = getProviderStatus(item);
-      const statusEmoji = status === '✓' ? '✅' : (status === '⚡' ? '⚡' : '❌');
+      const statusEmoji = status === "✓" ? "✅" : status === "⚡" ? "⚡" : "❌";
 
       desc += `${index + 1}. ${item.name} ${statusEmoji}`;
 
       // 标注特殊情况
-      if (item.reason === 'system_error') {
-        desc += ' (系统错误)';
-      } else if (item.reason === 'concurrent_limit_failed') {
-        desc += ' (并发限制)';
+      if (item.reason === "system_error") {
+        desc += " (系统错误)";
+      } else if (item.reason === "concurrent_limit_failed") {
+        desc += " (并发限制)";
       }
 
       desc += "\n";
@@ -343,7 +345,7 @@ export function formatProviderTimeline(chain: ProviderChainItem[]): {
         if (s.errorCode) {
           timeline += `\n错误详情:\n`;
           timeline += `• errorCode: ${s.errorCode}\n`;
-          timeline += `• errorSyscall: ${s.errorSyscall || '未知'}\n`;
+          timeline += `• errorSyscall: ${s.errorSyscall || "未知"}\n`;
 
           const meaning = getErrorCodeMeaning(s.errorCode);
           if (meaning) {

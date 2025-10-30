@@ -1,6 +1,11 @@
 import { HeaderProcessor } from "../headers";
 import { buildProxyUrl } from "../url";
-import { recordFailure, recordSuccess, getCircuitState, getProviderHealthInfo } from "@/lib/circuit-breaker";
+import {
+  recordFailure,
+  recordSuccess,
+  getCircuitState,
+  getProviderHealthInfo,
+} from "@/lib/circuit-breaker";
 import { ProxyProviderResolver } from "./provider-selector";
 import { ProxyError, categorizeError, ErrorCategory } from "./errors";
 import { ModelRedirector } from "./model-redirector";

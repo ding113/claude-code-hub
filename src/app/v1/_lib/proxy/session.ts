@@ -318,13 +318,13 @@ export class ProxySession {
     const content = firstMessage.content;
 
     // content 必须是字符串
-    if (typeof content !== 'string') {
+    if (typeof content !== "string") {
       return false;
     }
 
     // 匹配探测模式（完全匹配，忽略大小写和空格）
     const trimmed = content.trim().toLowerCase();
-    return trimmed === 'foo' || trimmed === 'count';
+    return trimmed === "foo" || trimmed === "count";
   }
 
   /**
