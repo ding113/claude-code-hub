@@ -2,6 +2,7 @@ import { getUsers } from "@/actions/users";
 import { getUserLimitUsage } from "@/actions/users";
 import { QuotaToolbar } from "@/components/quota/quota-toolbar";
 import { UsersQuotaClient } from "./_components/users-quota-client";
+import { getSystemSettings } from "@/repository/system-config";
 
 async function getUsersWithQuotas() {
   const users = await getUsers();
@@ -23,7 +24,10 @@ async function getUsersWithQuotas() {
 }
 
 export default async function UsersQuotaPage() {
-  const users = await getUsersWithQuotas();
+  const [users, systemSettings] = await Promise.all([
+    getUsersWithQuotas(),
+    getSystemSettings(),
+  ]);
 
   return (
     <div className="space-y-4">
@@ -46,7 +50,7 @@ export default async function UsersQuotaPage() {
         ]}
       />
 
-      <UsersQuotaClient users={users} />
+      <UsersQuotaClient users={users} currencyCode={systemSettings.currencyDisplay} />
     </div>
   );
 }

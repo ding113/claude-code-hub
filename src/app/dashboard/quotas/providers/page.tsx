@@ -1,6 +1,7 @@
 import { getProviders } from "@/actions/providers";
 import { getProviderLimitUsage } from "@/actions/providers";
 import { ProvidersQuotaManager } from "./_components/providers-quota-manager";
+import { getSystemSettings } from "@/repository/system-config";
 
 async function getProvidersWithQuotas() {
   const providers = await getProviders();
@@ -24,7 +25,10 @@ async function getProvidersWithQuotas() {
 }
 
 export default async function ProvidersQuotaPage() {
-  const providers = await getProvidersWithQuotas();
+  const [providers, systemSettings] = await Promise.all([
+    getProvidersWithQuotas(),
+    getSystemSettings(),
+  ]);
 
   return (
     <div className="space-y-4">
@@ -35,7 +39,7 @@ export default async function ProvidersQuotaPage() {
         </div>
       </div>
 
-      <ProvidersQuotaManager providers={providers} />
+      <ProvidersQuotaManager providers={providers} currencyCode={systemSettings.currencyDisplay} />
     </div>
   );
 }

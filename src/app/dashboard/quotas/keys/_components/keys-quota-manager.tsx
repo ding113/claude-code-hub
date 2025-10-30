@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { KeysQuotaClient } from "./keys-quota-client";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
+import type { CurrencyCode } from "@/lib/utils/currency";
 
 interface KeyQuota {
   cost5h: { current: number; limit: number | null };
@@ -29,9 +30,10 @@ interface UserWithKeys {
 
 interface KeysQuotaManagerProps {
   users: UserWithKeys[];
+  currencyCode?: CurrencyCode;
 }
 
-export function KeysQuotaManager({ users }: KeysQuotaManagerProps) {
+export function KeysQuotaManager({ users, currencyCode = "USD" }: KeysQuotaManagerProps) {
   const [searchQuery, setSearchQuery] = useState("");
 
   // 搜索过滤：支持搜索用户名和密钥名
@@ -80,7 +82,7 @@ export function KeysQuotaManager({ users }: KeysQuotaManagerProps) {
       </div>
 
       {/* 按用户分组的密钥列表 */}
-      <KeysQuotaClient users={filteredUsers} />
+      <KeysQuotaClient users={filteredUsers} currencyCode={currencyCode} />
     </div>
   );
 }

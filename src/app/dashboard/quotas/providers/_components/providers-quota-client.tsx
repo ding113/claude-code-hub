@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { formatCurrency } from "@/lib/utils/currency";
+import { formatCurrency, type CurrencyCode } from "@/lib/utils/currency";
 import { formatDistanceToNow } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import type { ProviderType } from "@/types/provider";
@@ -29,9 +29,14 @@ interface ProviderWithQuota {
 interface ProvidersQuotaClientProps {
   providers: ProviderWithQuota[];
   typeFilter?: ProviderType | "all";
+  currencyCode?: CurrencyCode;
 }
 
-export function ProvidersQuotaClient({ providers, typeFilter = "all" }: ProvidersQuotaClientProps) {
+export function ProvidersQuotaClient({
+  providers,
+  typeFilter = "all",
+  currencyCode = "USD",
+}: ProvidersQuotaClientProps) {
   // 筛选供应商
   const filteredProviders = useMemo(() => {
     if (typeFilter === "all") {
@@ -68,8 +73,8 @@ export function ProvidersQuotaClient({ providers, typeFilter = "all" }: Provider
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-muted-foreground">5小时消费</span>
                         <span className="font-medium">
-                          {formatCurrency(provider.quota.cost5h.current)} /{" "}
-                          {formatCurrency(provider.quota.cost5h.limit)}
+                          {formatCurrency(provider.quota.cost5h.current, currencyCode)} /{" "}
+                          {formatCurrency(provider.quota.cost5h.limit, currencyCode)}
                         </span>
                       </div>
                       <Progress
@@ -90,8 +95,8 @@ export function ProvidersQuotaClient({ providers, typeFilter = "all" }: Provider
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-muted-foreground">周消费</span>
                         <span className="font-medium">
-                          {formatCurrency(provider.quota.costWeekly.current)} /{" "}
-                          {formatCurrency(provider.quota.costWeekly.limit)}
+                          {formatCurrency(provider.quota.costWeekly.current, currencyCode)} /{" "}
+                          {formatCurrency(provider.quota.costWeekly.limit, currencyCode)}
                         </span>
                       </div>
                       <Progress
@@ -118,8 +123,8 @@ export function ProvidersQuotaClient({ providers, typeFilter = "all" }: Provider
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-muted-foreground">月消费</span>
                         <span className="font-medium">
-                          {formatCurrency(provider.quota.costMonthly.current)} /{" "}
-                          {formatCurrency(provider.quota.costMonthly.limit)}
+                          {formatCurrency(provider.quota.costMonthly.current, currencyCode)} /{" "}
+                          {formatCurrency(provider.quota.costMonthly.limit, currencyCode)}
                         </span>
                       </div>
                       <Progress

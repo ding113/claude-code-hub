@@ -1,6 +1,7 @@
 import { getUsers } from "@/actions/users";
 import { getKeyLimitUsage } from "@/actions/keys";
 import { KeysQuotaManager } from "./_components/keys-quota-manager";
+import { getSystemSettings } from "@/repository/system-config";
 
 async function getUsersWithKeysQuotas() {
   const users = await getUsers();
@@ -33,7 +34,10 @@ async function getUsersWithKeysQuotas() {
 }
 
 export default async function KeysQuotaPage() {
-  const users = await getUsersWithKeysQuotas();
+  const [users, systemSettings] = await Promise.all([
+    getUsersWithKeysQuotas(),
+    getSystemSettings(),
+  ]);
   const totalKeys = users.reduce((sum, user) => sum + user.keys.length, 0);
 
   return (
@@ -47,7 +51,7 @@ export default async function KeysQuotaPage() {
         </div>
       </div>
 
-      <KeysQuotaManager users={users} />
+      <KeysQuotaManager users={users} currencyCode={systemSettings.currencyDisplay} />
     </div>
   );
 }

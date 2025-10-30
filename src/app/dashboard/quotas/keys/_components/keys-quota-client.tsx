@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { formatCurrency } from "@/lib/utils/currency";
+import { formatCurrency, type CurrencyCode } from "@/lib/utils/currency";
 import { formatDistanceToNow } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { getResetInfo } from "@/lib/rate-limit/time-utils";
@@ -37,6 +37,7 @@ interface UserWithKeys {
 
 interface KeysQuotaClientProps {
   users: UserWithKeys[];
+  currencyCode?: CurrencyCode;
 }
 
 // 判断密钥是否已设置限额
@@ -50,7 +51,7 @@ function hasQuotaSet(key: KeyWithQuota): boolean {
   );
 }
 
-export function KeysQuotaClient({ users }: KeysQuotaClientProps) {
+export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClientProps) {
   // 默认展开所有用户组
   const [openUsers, setOpenUsers] = useState<Set<number>>(new Set(users.map((user) => user.id)));
   // 默认折叠未设置限额区域
@@ -155,8 +156,8 @@ export function KeysQuotaClient({ users }: KeysQuotaClientProps) {
                                     <div className="flex items-center justify-between text-sm">
                                       <span className="text-muted-foreground">5小时消费</span>
                                       <span className="font-medium">
-                                        {formatCurrency(key.quota.cost5h.current)} /{" "}
-                                        {formatCurrency(key.quota.cost5h.limit)}
+                                        {formatCurrency(key.quota.cost5h.current, currencyCode)} /{" "}
+                                        {formatCurrency(key.quota.cost5h.limit, currencyCode)}
                                       </span>
                                     </div>
                                     <Progress
@@ -178,8 +179,8 @@ export function KeysQuotaClient({ users }: KeysQuotaClientProps) {
                                     <div className="flex items-center justify-between text-sm">
                                       <span className="text-muted-foreground">周消费</span>
                                       <span className="font-medium">
-                                        {formatCurrency(key.quota.costWeekly.current)} /{" "}
-                                        {formatCurrency(key.quota.costWeekly.limit)}
+                                        {formatCurrency(key.quota.costWeekly.current, currencyCode)} /{" "}
+                                        {formatCurrency(key.quota.costWeekly.limit, currencyCode)}
                                       </span>
                                     </div>
                                     <Progress
@@ -206,8 +207,8 @@ export function KeysQuotaClient({ users }: KeysQuotaClientProps) {
                                     <div className="flex items-center justify-between text-sm">
                                       <span className="text-muted-foreground">月消费</span>
                                       <span className="font-medium">
-                                        {formatCurrency(key.quota.costMonthly.current)} /{" "}
-                                        {formatCurrency(key.quota.costMonthly.limit)}
+                                        {formatCurrency(key.quota.costMonthly.current, currencyCode)} /{" "}
+                                        {formatCurrency(key.quota.costMonthly.limit, currencyCode)}
                                       </span>
                                     </div>
                                     <Progress
@@ -255,6 +256,7 @@ export function KeysQuotaClient({ users }: KeysQuotaClientProps) {
                                   keyName={key.name}
                                   userName={user.name}
                                   currentQuota={key.quota}
+                                  currencyCode={currencyCode}
                                 />
                               </>
                             ) : (
@@ -320,6 +322,7 @@ export function KeysQuotaClient({ users }: KeysQuotaClientProps) {
                           keyName={key.name}
                           userName={user.name}
                           currentQuota={key.quota}
+                          currencyCode={currencyCode}
                           trigger={
                             <Button variant="outline" size="sm">
                               设置限额

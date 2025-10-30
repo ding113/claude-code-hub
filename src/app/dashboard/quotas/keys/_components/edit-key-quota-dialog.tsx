@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Settings, Loader2 } from "lucide-react";
 import { editKey } from "@/actions/keys";
 import { toast } from "sonner";
+import { type CurrencyCode, CURRENCY_CONFIG } from "@/lib/utils/currency";
 
 interface KeyQuota {
   cost5h: { current: number; limit: number | null };
@@ -30,6 +31,7 @@ interface EditKeyQuotaDialogProps {
   keyName: string;
   userName: string;
   currentQuota: KeyQuota | null;
+  currencyCode?: CurrencyCode;
   trigger?: React.ReactNode;
 }
 
@@ -38,11 +40,14 @@ export function EditKeyQuotaDialog({
   keyName,
   userName,
   currentQuota,
+  currencyCode = "USD",
   trigger,
 }: EditKeyQuotaDialogProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
+
+  const currencySymbol = CURRENCY_CONFIG[currencyCode].symbol;
 
   // 表单状态
   const [limit5h, setLimit5h] = useState<string>(currentQuota?.cost5h.limit?.toString() ?? "");
@@ -143,7 +148,7 @@ export function EditKeyQuotaDialog({
               />
               {currentQuota?.cost5h.limit && (
                 <p className="text-xs text-muted-foreground">
-                  当前已用: ${currentQuota.cost5h.current.toFixed(4)} / $
+                  当前已用: {currencySymbol}{currentQuota.cost5h.current.toFixed(4)} / {currencySymbol}
                   {currentQuota.cost5h.limit.toFixed(2)}
                 </p>
               )}
@@ -163,7 +168,7 @@ export function EditKeyQuotaDialog({
               />
               {currentQuota?.costWeekly.limit && (
                 <p className="text-xs text-muted-foreground">
-                  当前已用: ${currentQuota.costWeekly.current.toFixed(4)} / $
+                  当前已用: {currencySymbol}{currentQuota.costWeekly.current.toFixed(4)} / {currencySymbol}
                   {currentQuota.costWeekly.limit.toFixed(2)}
                 </p>
               )}
@@ -183,7 +188,7 @@ export function EditKeyQuotaDialog({
               />
               {currentQuota?.costMonthly.limit && (
                 <p className="text-xs text-muted-foreground">
-                  当前已用: ${currentQuota.costMonthly.current.toFixed(4)} / $
+                  当前已用: {currencySymbol}{currentQuota.costMonthly.current.toFixed(4)} / {currencySymbol}
                   {currentQuota.costMonthly.limit.toFixed(2)}
                 </p>
               )}

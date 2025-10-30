@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { QuotaProgress } from "@/components/quota/quota-progress";
-import { formatCurrency } from "@/lib/utils/currency";
+import { formatCurrency, type CurrencyCode } from "@/lib/utils/currency";
 import { formatDistanceToNow } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { Progress } from "@/components/ui/progress";
@@ -24,6 +24,7 @@ interface UserWithQuota {
 
 interface UsersQuotaClientProps {
   users: UserWithQuota[];
+  currencyCode?: CurrencyCode;
   searchQuery?: string;
   sortBy?: "name" | "usage";
   filter?: "all" | "warning" | "exceeded";
@@ -31,6 +32,7 @@ interface UsersQuotaClientProps {
 
 export function UsersQuotaClient({
   users,
+  currencyCode = "USD",
   searchQuery = "",
   sortBy = "name",
   filter = "all",
@@ -114,8 +116,8 @@ export function UsersQuotaClient({
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground">每日消费</span>
                       <span className="font-medium">
-                        {formatCurrency(user.quota.dailyCost.current)} /{" "}
-                        {formatCurrency(user.quota.dailyCost.limit)}
+                        {formatCurrency(user.quota.dailyCost.current, currencyCode)} /{" "}
+                        {formatCurrency(user.quota.dailyCost.limit, currencyCode)}
                       </span>
                     </div>
                     <QuotaProgress

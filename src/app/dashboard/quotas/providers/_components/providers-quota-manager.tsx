@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ProviderTypeFilter } from "@/app/settings/providers/_components/provider-type-filter";
 import { ProvidersQuotaClient } from "./providers-quota-client";
 import type { ProviderType } from "@/types/provider";
+import type { CurrencyCode } from "@/lib/utils/currency";
 
 interface ProviderQuota {
   cost5h: { current: number; limit: number | null; resetInfo: string };
@@ -24,9 +25,10 @@ interface ProviderWithQuota {
 
 interface ProvidersQuotaManagerProps {
   providers: ProviderWithQuota[];
+  currencyCode?: CurrencyCode;
 }
 
-export function ProvidersQuotaManager({ providers }: ProvidersQuotaManagerProps) {
+export function ProvidersQuotaManager({ providers, currencyCode = "USD" }: ProvidersQuotaManagerProps) {
   const [typeFilter, setTypeFilter] = useState<ProviderType | "all">("all");
 
   // 计算筛选后的供应商数量
@@ -46,7 +48,7 @@ export function ProvidersQuotaManager({ providers }: ProvidersQuotaManagerProps)
       </div>
 
       {/* 供应商列表 */}
-      <ProvidersQuotaClient providers={providers} typeFilter={typeFilter} />
+      <ProvidersQuotaClient providers={providers} typeFilter={typeFilter} currencyCode={currencyCode} />
     </div>
   );
 }
