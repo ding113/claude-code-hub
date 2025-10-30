@@ -530,8 +530,9 @@ async function trackCostToRedis(session: ProxySession, usage: UsageMetrics | nul
   const messageContext = session.messageContext;
   const provider = session.provider;
   const key = session.authState?.key;
+  const user = session.authState?.user;
 
-  if (!messageContext || !provider || !key) return;
+  if (!messageContext || !provider || !key || !user) return;
 
   const modelName = session.request.model;
   if (!modelName) return;
@@ -543,13 +544,18 @@ async function trackCostToRedis(session: ProxySession, usage: UsageMetrics | nul
   const cost = calculateRequestCost(usage, priceData.priceData, provider.costMultiplier);
   if (cost.lte(0)) return;
 
+  const costFloat = parseFloat(cost.toString());
+
   // 追踪到 Redis（使用 session.sessionId）
   await RateLimitService.trackCost(
     key.id,
     provider.id,
     session.sessionId, // 直接使用 session.sessionId
-    parseFloat(cost.toString())
+    costFloat
   );
+
+  // ✅ 新增：追踪用户层每日消费
+  await RateLimitService.trackUserDailyCost(user.id, costFloat);
 
   // 刷新 session 时间戳（滑动窗口）
   void SessionTracker.refreshSession(session.sessionId, key.id, provider.id).catch((error) => {

@@ -270,15 +270,21 @@ export async function getProviderStatistics(): Promise<
   }>
 > {
   try {
+    // 使用 JavaScript Date 获取今日时间范围（本地时区，受 TZ 环境变量影响）
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
     const query = sql`
       WITH provider_stats AS (
         SELECT
           p.id,
           COALESCE(
-            SUM(CASE WHEN DATE(mr.created_at) = CURRENT_DATE THEN mr.cost_usd ELSE 0 END),
+            SUM(CASE WHEN mr.created_at >= ${today} AND mr.created_at < ${tomorrow} THEN mr.cost_usd ELSE 0 END),
             0
           ) AS today_cost,
-          COUNT(CASE WHEN DATE(mr.created_at) = CURRENT_DATE THEN 1 END)::integer AS today_calls
+          COUNT(CASE WHEN mr.created_at >= ${today} AND mr.created_at < ${tomorrow} THEN 1 END)::integer AS today_calls
         FROM providers p
         LEFT JOIN message_request mr ON p.id = mr.provider_id
           AND mr.deleted_at IS NULL

@@ -58,6 +58,11 @@ export function EditKeyForm({ keyData, onSuccess }: EditKeyFormProps) {
           const res = await editKey(keyData.id, {
             name: data.name,
             expiresAt: data.expiresAt || undefined,
+            canLoginWebUi: data.canLoginWebUi,
+            limit5hUsd: data.limit5hUsd,
+            limitWeeklyUsd: data.limitWeeklyUsd,
+            limitMonthlyUsd: data.limitMonthlyUsd,
+            limitConcurrentSessions: data.limitConcurrentSessions,
           });
           if (!res.ok) {
             toast.error(res.error || "保存失败");

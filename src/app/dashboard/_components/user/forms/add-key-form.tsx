@@ -40,6 +40,11 @@ export function AddKeyForm({ userId, onSuccess }: AddKeyFormProps) {
           userId: userId!,
           name: data.name,
           expiresAt: data.expiresAt || undefined,
+          canLoginWebUi: data.canLoginWebUi,
+          limit5hUsd: data.limit5hUsd,
+          limitWeeklyUsd: data.limitWeeklyUsd,
+          limitMonthlyUsd: data.limitMonthlyUsd,
+          limitConcurrentSessions: data.limitConcurrentSessions,
         });
 
         if (!result.ok) {
