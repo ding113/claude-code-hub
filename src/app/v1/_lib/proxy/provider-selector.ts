@@ -355,6 +355,19 @@ export class ProxyProviderResolver {
       return null;
     }
 
+    // 检查用户分组（如果用户指定了分组，供应商必须属于该分组）
+    const userGroup = session.authState?.user?.providerGroup;
+    if (userGroup && provider.groupTag !== userGroup) {
+      logger.debug("ProviderSelector: Session provider group mismatch", {
+        sessionId: session.sessionId,
+        providerId: provider.id,
+        providerName: provider.name,
+        providerGroup: provider.groupTag || "none",
+        userGroup,
+      });
+      return null;
+    }
+
     logger.info("ProviderSelector: Reusing provider", {
       providerName: provider.name,
       providerId: provider.id,
