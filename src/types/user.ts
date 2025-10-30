@@ -58,6 +58,11 @@ export interface UserKeyDisplay {
   }>; // 各模型统计（当天）
   createdAt: Date; // 创建时间
   createdAtFormatted: string; // 格式化后的具体时间
+  // 限额配置
+  limit5hUsd: number | null; // 5小时消费上限（美元）
+  limitWeeklyUsd: number | null; // 周消费上限（美元）
+  limitMonthlyUsd: number | null; // 月消费上限（美元）
+  limitConcurrentSessions: number; // 并发 Session 上限
 }
 
 /**

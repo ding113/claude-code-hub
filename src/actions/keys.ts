@@ -25,6 +25,11 @@ export async function addKey(data: {
   userId: number;
   name: string;
   expiresAt?: string;
+  canLoginWebUi?: boolean;
+  limit5hUsd?: number | null;
+  limitWeeklyUsd?: number | null;
+  limitMonthlyUsd?: number | null;
+  limitConcurrentSessions?: number;
 }): Promise<ActionResult<{ generatedKey: string; name: string }>> {
   try {
     // 权限检查：用户只能给自己添加Key，管理员可以给所有人添加Key
@@ -79,7 +84,15 @@ export async function addKey(data: {
 // 更新密钥
 export async function editKey(
   keyId: number,
-  data: { name: string; expiresAt?: string }
+  data: {
+    name: string;
+    expiresAt?: string;
+    canLoginWebUi?: boolean;
+    limit5hUsd?: number | null;
+    limitWeeklyUsd?: number | null;
+    limitMonthlyUsd?: number | null;
+    limitConcurrentSessions?: number;
+  }
 ): Promise<ActionResult> {
   try {
     // 权限检查：用户只能编辑自己的Key，管理员可以编辑所有Key
@@ -192,5 +205,61 @@ export async function getKeysWithStatistics(
   } catch (error) {
     logger.error("获取密钥统计失败:", error);
     return { ok: false, error: "获取密钥统计失败" };
+  }
+}
+
+/**
+ * 获取密钥的限额使用情况（实时数据）
+ */
+export async function getKeyLimitUsage(
+  keyId: number
+): Promise<
+  ActionResult<{
+    cost5h: { current: number; limit: number | null };
+    costWeekly: { current: number; limit: number | null };
+    costMonthly: { current: number; limit: number | null };
+    concurrentSessions: { current: number; limit: number };
+  }>
+> {
+  try {
+    const session = await getSession();
+    if (!session) {
+      return { ok: false, error: "未登录" };
+    }
+
+    const key = await findKeyById(keyId);
+    if (!key) {
+      return { ok: false, error: "密钥不存在" };
+    }
+
+    // 权限检查
+    if (session.user.role !== "admin" && session.user.id !== key.userId) {
+      return { ok: false, error: "无权限执行此操作" };
+    }
+
+    // 动态导入 RateLimitService 避免循环依赖
+    const { RateLimitService } = await import("@/lib/rate-limit");
+    const { SessionTracker } = await import("@/lib/session-tracker");
+
+    // 获取金额消费（优先 Redis，降级数据库）
+    const [cost5h, costWeekly, costMonthly, concurrentSessions] = await Promise.all([
+      RateLimitService.getCurrentCost(keyId, "key", "5h"),
+      RateLimitService.getCurrentCost(keyId, "key", "weekly"),
+      RateLimitService.getCurrentCost(keyId, "key", "monthly"),
+      SessionTracker.getKeySessionCount(keyId),
+    ]);
+
+    return {
+      ok: true,
+      data: {
+        cost5h: { current: cost5h, limit: key.limit5hUsd },
+        costWeekly: { current: costWeekly, limit: key.limitWeeklyUsd },
+        costMonthly: { current: costMonthly, limit: key.limitMonthlyUsd },
+        concurrentSessions: { current: concurrentSessions, limit: key.limitConcurrentSessions || 0 },
+      },
+    };
+  } catch (error) {
+    logger.error("获取密钥限额使用情况失败:", error);
+    return { ok: false, error: "获取限额使用情况失败" };
   }
 }

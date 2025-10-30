@@ -2,6 +2,10 @@ import { getRedisClient } from "@/lib/redis";
 import { logger } from "@/lib/logger";
 import { SessionTracker } from "@/lib/session-tracker";
 import { CHECK_AND_TRACK_SESSION } from "@/lib/redis/lua-scripts";
+import { sumUserCostToday } from "@/repository/statistics";
+import { startOfDay, addDays } from "date-fns";
+import { toZonedTime } from "date-fns-tz";
+import { getEnvConfig } from "@/lib/config";
 
 interface CostLimit {
   amount: number | null;
@@ -14,6 +18,7 @@ export class RateLimitService {
 
   /**
    * 检查金额限制（Key 或 Provider）
+   * 优先使用 Redis，失败时降级到数据库查询（防止 Redis 清空后超支）
    */
   static async checkCostLimits(
     id: number,
@@ -24,11 +29,6 @@ export class RateLimitService {
       limit_monthly_usd: number | null;
     }
   ): Promise<{ allowed: boolean; reason?: string }> {
-    if (!this.redis) {
-      // Fail Open：Redis 不可用，放行请求
-      return { allowed: true };
-    }
-
     const costLimits: CostLimit[] = [
       { amount: limits.limit_5h_usd, period: "5h", name: "5小时" },
       { amount: limits.limit_weekly_usd, period: "weekly", name: "周" },
@@ -36,41 +36,147 @@ export class RateLimitService {
     ];
 
     try {
-      // 使用 Pipeline 批量查询（性能优化）
-      const pipeline = this.redis.pipeline();
-      for (const limit of costLimits) {
-        if (!limit.amount || limit.amount <= 0) continue;
-        pipeline.get(`${type}:${id}:cost_${limit.period}`);
-      }
-
-      const results = await pipeline.exec();
-      if (!results) return { allowed: true };
-
-      let index = 0;
-      for (const limit of costLimits) {
-        if (!limit.amount || limit.amount <= 0) continue;
-
-        const [err, value] = results[index] || [];
-        if (err) {
-          logger.error("[RateLimit] Redis error:", err);
-          return { allowed: true }; // Fail Open
+      // Fast Path: Redis 查询
+      if (this.redis && this.redis.status === "ready") {
+        const pipeline = this.redis.pipeline();
+        for (const limit of costLimits) {
+          if (!limit.amount || limit.amount <= 0) continue;
+          pipeline.get(`${type}:${id}:cost_${limit.period}`);
         }
 
-        const current = parseFloat((value as string) || "0");
-        if (current >= limit.amount) {
-          return {
-            allowed: false,
-            reason: `${type === "key" ? "Key" : "供应商"} ${limit.name}消费上限已达到（${current.toFixed(4)}/${limit.amount}）`,
-          };
-        }
+        const results = await pipeline.exec();
+        if (results) {
+          let index = 0;
+          for (const limit of costLimits) {
+            if (!limit.amount || limit.amount <= 0) continue;
 
-        index++;
+            const [err, value] = results[index] || [];
+            if (err) {
+              logger.error("[RateLimit] Redis error, fallback to database:", err);
+              // 出错时降级到数据库
+              return await this.checkCostLimitsFromDatabase(id, type, costLimits);
+            }
+
+            const current = parseFloat((value as string) || "0");
+
+            // Cache Miss 检测：如果 Redis 返回 null，从数据库恢复
+            if (value === null && limit.amount > 0) {
+              logger.info(
+                `[RateLimit] Cache miss for ${type}:${id}:cost_${limit.period}, querying database`
+              );
+              return await this.checkCostLimitsFromDatabase(id, type, costLimits);
+            }
+
+            if (current >= limit.amount) {
+              return {
+                allowed: false,
+                reason: `${type === "key" ? "Key" : "供应商"} ${limit.name}消费上限已达到（${current.toFixed(4)}/${limit.amount}）`,
+              };
+            }
+
+            index++;
+          }
+
+          return { allowed: true };
+        }
       }
 
-      return { allowed: true };
+      // Slow Path: Redis 不可用，降级到数据库
+      logger.warn(`[RateLimit] Redis unavailable, checking ${type} cost limits from database`);
+      return await this.checkCostLimitsFromDatabase(id, type, costLimits);
     } catch (error) {
-      logger.error("[RateLimit] Check failed:", error);
-      return { allowed: true }; // Fail Open
+      logger.error("[RateLimit] Check failed, fallback to database:", error);
+      return await this.checkCostLimitsFromDatabase(id, type, costLimits);
+    }
+  }
+
+  /**
+   * 从数据库检查金额限制（降级路径）
+   */
+  private static async checkCostLimitsFromDatabase(
+    id: number,
+    type: "key" | "provider",
+    costLimits: CostLimit[]
+  ): Promise<{ allowed: boolean; reason?: string }> {
+    const { sumKeyCostInTimeRange, sumProviderCostInTimeRange } = await import(
+      "@/repository/statistics"
+    );
+
+    const now = new Date();
+
+    for (const limit of costLimits) {
+      if (!limit.amount || limit.amount <= 0) continue;
+
+      // 计算时间范围
+      const { startTime, endTime } = this.getTimeRangeForPeriod(limit.period);
+
+      // 查询数据库
+      const current =
+        type === "key"
+          ? await sumKeyCostInTimeRange(id, startTime, endTime)
+          : await sumProviderCostInTimeRange(id, startTime, endTime);
+
+      // Cache Warming: 写回 Redis
+      if (this.redis && this.redis.status === "ready") {
+        try {
+          const ttl = this.getTTLForPeriod(limit.period);
+          await this.redis.set(`${type}:${id}:cost_${limit.period}`, current.toString(), "EX", ttl);
+          logger.info(
+            `[RateLimit] Cache warmed for ${type}:${id}:cost_${limit.period}, value=${current}`
+          );
+        } catch (error) {
+          logger.error("[RateLimit] Failed to warm cache:", error);
+        }
+      }
+
+      if (current >= limit.amount) {
+        return {
+          allowed: false,
+          reason: `${type === "key" ? "Key" : "供应商"} ${limit.name}消费上限已达到（${current.toFixed(4)}/${limit.amount}）`,
+        };
+      }
+    }
+
+    return { allowed: true };
+  }
+
+  /**
+   * 根据周期计算时间范围
+   */
+  private static getTimeRangeForPeriod(period: "5h" | "weekly" | "monthly"): {
+    startTime: Date;
+    endTime: Date;
+  } {
+    const now = new Date();
+    const endTime = now;
+    let startTime: Date;
+
+    switch (period) {
+      case "5h":
+        startTime = new Date(now.getTime() - 5 * 60 * 60 * 1000);
+        break;
+      case "weekly":
+        startTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case "monthly":
+        startTime = new Date(now.getTime() - 31 * 24 * 60 * 60 * 1000);
+        break;
+    }
+
+    return { startTime, endTime };
+  }
+
+  /**
+   * 根据周期计算 TTL
+   */
+  private static getTTLForPeriod(period: "5h" | "weekly" | "monthly"): number {
+    switch (period) {
+      case "5h":
+        return 5 * 3600;
+      case "weekly":
+        return 7 * 24 * 3600;
+      case "monthly":
+        return 31 * 24 * 3600;
     }
   }
 
@@ -212,21 +318,199 @@ export class RateLimitService {
   }
 
   /**
-   * 获取当前消费（用于响应头）
+   * 获取当前消费（用于响应头和前端展示）
+   * 优先使用 Redis，失败时降级到数据库查询
    */
   static async getCurrentCost(
     id: number,
     type: "key" | "provider",
     period: "5h" | "weekly" | "monthly"
   ): Promise<number> {
-    if (!this.redis) return 0;
-
     try {
-      const value = await this.redis.get(`${type}:${id}:cost_${period}`);
-      return parseFloat(value || "0");
+      // Fast Path: Redis 查询
+      if (this.redis && this.redis.status === "ready") {
+        const value = await this.redis.get(`${type}:${id}:cost_${period}`);
+
+        // Cache Hit
+        if (value !== null) {
+          return parseFloat(value || "0");
+        }
+
+        // Cache Miss: 从数据库恢复
+        logger.info(`[RateLimit] Cache miss for ${type}:${id}:cost_${period}, querying database`);
+      } else {
+        logger.warn(`[RateLimit] Redis unavailable, querying database for ${type} cost`);
+      }
+
+      // Slow Path: 数据库查询
+      const { sumKeyCostInTimeRange, sumProviderCostInTimeRange } = await import(
+        "@/repository/statistics"
+      );
+
+      const { startTime, endTime } = this.getTimeRangeForPeriod(period);
+      const current =
+        type === "key"
+          ? await sumKeyCostInTimeRange(id, startTime, endTime)
+          : await sumProviderCostInTimeRange(id, startTime, endTime);
+
+      // Cache Warming: 写回 Redis
+      if (this.redis && this.redis.status === "ready") {
+        try {
+          const ttl = this.getTTLForPeriod(period);
+          await this.redis.set(`${type}:${id}:cost_${period}`, current.toString(), "EX", ttl);
+        } catch (error) {
+          logger.error("[RateLimit] Failed to warm cache:", error);
+        }
+      }
+
+      return current;
     } catch (error) {
       logger.error("[RateLimit] Get cost failed:", error);
       return 0;
     }
+  }
+
+  /**
+   * 检查用户 RPM（每分钟请求数）限制
+   * 使用 Redis ZSET 实现滑动窗口
+   */
+  static async checkUserRPM(
+    userId: number,
+    rpmLimit: number
+  ): Promise<{ allowed: boolean; reason?: string; current?: number }> {
+    if (!rpmLimit || rpmLimit <= 0) {
+      return { allowed: true }; // 未设置限制
+    }
+
+    if (!this.redis) {
+      logger.warn("[RateLimit] Redis unavailable, skipping user RPM check");
+      return { allowed: true }; // Fail Open
+    }
+
+    const key = `user:${userId}:rpm_window`;
+    const now = Date.now();
+    const oneMinuteAgo = now - 60000;
+
+    try {
+      // 使用 Pipeline 提高性能
+      const pipeline = this.redis.pipeline();
+
+      // 1. 清理 1 分钟前的请求
+      pipeline.zremrangebyscore(key, "-inf", oneMinuteAgo);
+
+      // 2. 统计当前请求数
+      pipeline.zcard(key);
+
+      const results = await pipeline.exec();
+      const count = (results?.[1]?.[1] as number) || 0;
+
+      if (count >= rpmLimit) {
+        return {
+          allowed: false,
+          reason: `用户每分钟请求数上限已达到（${count}/${rpmLimit}）`,
+          current: count,
+        };
+      }
+
+      // 3. 记录本次请求
+      await this.redis
+        .pipeline()
+        .zadd(key, now, `${now}:${Math.random()}`)
+        .expire(key, 120) // 2 分钟 TTL
+        .exec();
+
+      return { allowed: true, current: count + 1 };
+    } catch (error) {
+      logger.error(`[RateLimit] User RPM check failed for user ${userId}:`, error);
+      return { allowed: true }; // Fail Open
+    }
+  }
+
+  /**
+   * 检查用户每日消费额度限制
+   * 优先使用 Redis，失败时降级到数据库查询
+   */
+  static async checkUserDailyCost(
+    userId: number,
+    dailyLimitUsd: number
+  ): Promise<{ allowed: boolean; reason?: string; current?: number }> {
+    if (!dailyLimitUsd || dailyLimitUsd <= 0) {
+      return { allowed: true }; // 未设置限制
+    }
+
+    const key = `user:${userId}:daily_cost`;
+    let currentCost = 0;
+
+    try {
+      // Fast Path: Redis 查询
+      if (this.redis) {
+        const cached = await this.redis.get(key);
+        if (cached !== null) {
+          currentCost = parseFloat(cached);
+        } else {
+          // Cache Miss: 从数据库恢复
+          logger.info(`[RateLimit] Cache miss for ${key}, querying database`);
+          currentCost = await sumUserCostToday(userId);
+
+          // Cache Warming: 写回 Redis
+          const secondsUntilMidnight = this.getSecondsUntilMidnight();
+          await this.redis.set(key, currentCost.toString(), "EX", secondsUntilMidnight);
+        }
+      } else {
+        // Slow Path: 数据库查询（Redis 不可用）
+        logger.warn("[RateLimit] Redis unavailable, querying database for user daily cost");
+        currentCost = await sumUserCostToday(userId);
+      }
+
+      if (currentCost >= dailyLimitUsd) {
+        return {
+          allowed: false,
+          reason: `用户每日消费上限已达到（$${currentCost.toFixed(4)}/$${dailyLimitUsd}）`,
+          current: currentCost,
+        };
+      }
+
+      return { allowed: true, current: currentCost };
+    } catch (error) {
+      logger.error(`[RateLimit] User daily cost check failed for user ${userId}:`, error);
+      return { allowed: true }; // Fail Open
+    }
+  }
+
+  /**
+   * 累加用户今日消费（在 trackCost 后调用）
+   */
+  static async trackUserDailyCost(userId: number, cost: number): Promise<void> {
+    if (!this.redis || cost <= 0) return;
+
+    const key = `user:${userId}:daily_cost`;
+
+    try {
+      const secondsUntilMidnight = this.getSecondsUntilMidnight();
+
+      await this.redis
+        .pipeline()
+        .incrbyfloat(key, cost)
+        .expire(key, secondsUntilMidnight)
+        .exec();
+
+      logger.debug(`[RateLimit] Tracked user daily cost: user=${userId}, cost=${cost}`);
+    } catch (error) {
+      logger.error(`[RateLimit] Failed to track user daily cost:`, error);
+    }
+  }
+
+  /**
+   * 计算距离午夜的秒数（用于 TTL）
+   * 使用配置的时区（Asia/Shanghai）而非服务器本地时区
+   */
+  private static getSecondsUntilMidnight(): number {
+    const timezone = getEnvConfig().TZ; // 使用配置的时区
+    const now = new Date();
+    const zonedNow = toZonedTime(now, timezone); // 转换到配置时区
+    const zonedTomorrow = addDays(startOfDay(zonedNow), 1); // 配置时区的明天00:00
+
+    // 计算当前时间到配置时区午夜的秒数
+    return Math.ceil((zonedTomorrow.getTime() - zonedNow.getTime()) / 1000);
   }
 }

@@ -83,11 +83,16 @@ export async function getUsers(): Promise<UserDisplay[]> {
                 lastUsedAt: stats?.lastUsedAt ?? null,
                 lastProviderName: stats?.lastProviderName ?? null,
                 modelStats: stats?.modelStats ?? [],
+                // 限额配置
+                limit5hUsd: key.limit5hUsd,
+                limitWeeklyUsd: key.limitWeeklyUsd,
+                limitMonthlyUsd: key.limitMonthlyUsd,
+                limitConcurrentSessions: key.limitConcurrentSessions || 0,
               };
             }),
           };
         } catch (error) {
-          logger.error("获取用户 ${user.id} 的密钥失败:", error);
+          logger.error(`获取用户 ${user.id} 的密钥失败:`, error);
           return {
             id: user.id,
             name: user.name,
