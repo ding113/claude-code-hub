@@ -17,8 +17,14 @@ import { ProviderChainPopover } from "./provider-chain-popover";
 import { ErrorDetailsDialog } from "./error-details-dialog";
 import { formatProviderSummary } from "@/lib/utils/provider-chain-formatter";
 import { ModelDisplayWithRedirect } from "./model-display-with-redirect";
-import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
+import type { PrivacyFilterContext } from "@/lib/utils/privacy-filter";
+import {
+  filterProviderName,
+  filterCostMultiplier,
+  adjustCost,
+  filterProviderChain,
+} from "@/lib/utils/privacy-filter";
 
 /**
  * 格式化时间显示
@@ -68,7 +74,7 @@ interface UsageLogsTableProps {
   onPageChange: (page: number) => void;
   isPending: boolean;
   newLogIds?: Set<number>; // 新增记录 ID 集合（用于动画高亮）
-  currencyCode?: CurrencyCode;
+  privacyContext: PrivacyFilterContext;
 }
 
 export function UsageLogsTable({
@@ -79,7 +85,7 @@ export function UsageLogsTable({
   onPageChange,
   isPending,
   newLogIds,
-  currencyCode = "USD",
+  privacyContext,
 }: UsageLogsTableProps) {
   const totalPages = Math.ceil(total / pageSize);
 
@@ -133,36 +139,43 @@ export function UsageLogsTable({
                         {log.providerChain && log.providerChain.length > 0 ? (
                           <div className="flex flex-col gap-0.5">
                             <ProviderChainPopover
-                              chain={log.providerChain}
-                              finalProvider={log.providerName || "未知"}
+                              chain={filterProviderChain(log.providerChain, privacyContext) || []}
+                              finalProvider={filterProviderName(log.providerName, privacyContext)}
                             />
-                            {/* 摘要文字（仅在有决策链时显示） */}
-                            {formatProviderSummary(log.providerChain) && (
-                              <span className="text-xs text-muted-foreground">
-                                {formatProviderSummary(log.providerChain)}
-                              </span>
-                            )}
+                            {/* 摘要文字（仅在有决策链时显示，且允许查看供应商信息时） */}
+                            {(privacyContext.isAdmin || privacyContext.allowViewProviderInfo) &&
+                              formatProviderSummary(log.providerChain) && (
+                                <span className="text-xs text-muted-foreground">
+                                  {formatProviderSummary(log.providerChain)}
+                                </span>
+                              )}
                           </div>
                         ) : (
-                          <span>{log.providerName || "-"}</span>
+                          <span>{filterProviderName(log.providerName, privacyContext)}</span>
                         )}
-                        {/* 显示供应商倍率 Badge（不为 1.0 时） */}
-                        {log.costMultiplier && parseFloat(log.costMultiplier) !== 1.0 && (
-                          <Badge
-                            variant={
-                              parseFloat(log.costMultiplier) > 1.0
-                                ? "destructive" // 加价，红色
-                                : "secondary" // 折扣，灰色
-                            }
-                            className={
-                              parseFloat(log.costMultiplier) < 1.0
-                                ? "bg-green-100 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300 dark:border-green-800" // 折扣用绿色
-                                : undefined
-                            }
-                          >
-                            ×{parseFloat(log.costMultiplier).toFixed(2)}
-                          </Badge>
-                        )}
+                        {/* 显示供应商倍率 Badge（不为 1.0 时，且允许查看供应商信息时） */}
+                        {(() => {
+                          const multiplier = filterCostMultiplier(log.costMultiplier, privacyContext);
+                          return (
+                            multiplier &&
+                            multiplier !== 1.0 && (
+                              <Badge
+                                variant={
+                                  multiplier > 1.0
+                                    ? "destructive" // 加价，红色
+                                    : "secondary" // 折扣，灰色
+                                }
+                                className={
+                                  multiplier < 1.0
+                                    ? "bg-green-100 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300 dark:border-green-800" // 折扣用绿色
+                                    : undefined
+                                }
+                              >
+                                ×{multiplier.toFixed(2)}
+                              </Badge>
+                            )
+                          );
+                        })()}
                       </div>
                     )}
                   </TableCell>
@@ -185,7 +198,13 @@ export function UsageLogsTable({
                     {log.cacheReadInputTokens?.toLocaleString() || "-"}
                   </TableCell>
                   <TableCell className="text-right font-mono text-xs">
-                    {log.costUsd ? formatCurrency(log.costUsd, currencyCode, 6) : "-"}
+                    {log.costUsd
+                      ? formatCurrency(
+                          adjustCost(log.costUsd, log.costMultiplier, privacyContext),
+                          privacyContext.userCurrency,
+                          6
+                        )
+                      : "-"}
                   </TableCell>
                   <TableCell className="text-right font-mono text-xs">
                     {formatDuration(log.durationMs)}

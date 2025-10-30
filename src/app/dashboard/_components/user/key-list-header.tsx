@@ -79,12 +79,14 @@ interface KeyListHeaderProps {
   activeUser: UserDisplay | null;
   currentUser?: User;
   currencyCode?: CurrencyCode;
+  canViewProviderInfo?: boolean;
 }
 
 export function KeyListHeader({
   activeUser,
   currentUser,
   currencyCode = "USD",
+  canViewProviderInfo = true,
 }: KeyListHeaderProps) {
   const [openAdd, setOpenAdd] = useState(false);
   const [keyResult, setKeyResult] = useState<{ generatedKey: string; name: string } | null>(null);
@@ -143,7 +145,7 @@ export function KeyListHeader({
         <div className="flex items-center gap-1">
           <span>活跃请求</span>
           <span className="font-medium text-foreground">{activeUserStatus.activeCount}</span>
-          {activeProviders.length > 0 && (
+          {canViewProviderInfo && activeProviders.length > 0 && (
             <span className="text-muted-foreground">（{activeProviders.join("、")}）</span>
           )}
         </div>
@@ -151,7 +153,9 @@ export function KeyListHeader({
           <span>最近请求</span>
           <span className="text-foreground">
             {activeUserStatus.lastRequest
-              ? `${activeUserStatus.lastRequest.providerName} / ${activeUserStatus.lastRequest.model}`
+              ? canViewProviderInfo
+                ? `${activeUserStatus.lastRequest.providerName} / ${activeUserStatus.lastRequest.model}`
+                : `*** / ${activeUserStatus.lastRequest.model}`
               : "暂无记录"}
           </span>
           {activeUserStatus.lastRequest && (
@@ -162,7 +166,7 @@ export function KeyListHeader({
         </div>
       </div>
     );
-  }, [proxyStatusEnabled, proxyStatusLoading, proxyStatusError, activeUserStatus]);
+  }, [proxyStatusEnabled, proxyStatusLoading, proxyStatusError, activeUserStatus, canViewProviderInfo]);
 
   const handleKeyCreated = (result: { generatedKey: string; name: string }) => {
     setOpenAdd(false); // 关闭表单dialog

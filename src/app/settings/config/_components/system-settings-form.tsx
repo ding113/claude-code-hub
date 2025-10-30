@@ -19,7 +19,7 @@ import type { SystemSettings } from "@/types/system-config";
 import type { CurrencyCode } from "@/lib/utils";
 
 interface SystemSettingsFormProps {
-  initialSettings: Pick<SystemSettings, "siteTitle" | "allowGlobalUsageView" | "currencyDisplay">;
+  initialSettings: Pick<SystemSettings, "siteTitle" | "allowGlobalUsageView" | "currencyDisplay" | "allowViewProviderInfo" | "nonAdminCurrencyDisplay">;
 }
 
 export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps) {
@@ -29,6 +29,12 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   );
   const [currencyDisplay, setCurrencyDisplay] = useState<CurrencyCode>(
     initialSettings.currencyDisplay
+  );
+  const [allowViewProviderInfo, setAllowViewProviderInfo] = useState(
+    initialSettings.allowViewProviderInfo
+  );
+  const [nonAdminCurrencyDisplay, setNonAdminCurrencyDisplay] = useState<CurrencyCode>(
+    initialSettings.nonAdminCurrencyDisplay
   );
   const [isPending, startTransition] = useTransition();
 
@@ -45,6 +51,8 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         siteTitle,
         allowGlobalUsageView,
         currencyDisplay,
+        allowViewProviderInfo,
+        nonAdminCurrencyDisplay,
       });
 
       if (!result.ok) {
@@ -56,10 +64,12 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setSiteTitle(result.data.siteTitle);
         setAllowGlobalUsageView(result.data.allowGlobalUsageView);
         setCurrencyDisplay(result.data.currencyDisplay);
+        setAllowViewProviderInfo(result.data.allowViewProviderInfo);
+        setNonAdminCurrencyDisplay(result.data.nonAdminCurrencyDisplay);
       }
 
-      toast.success("系统设置已更新，页面将刷新以应用货币显示变更");
-      // 刷新页面以应用货币显示变更
+      toast.success("系统设置已更新，页面将刷新以应用变更");
+      // 刷新页面以应用配置变更
       setTimeout(() => {
         window.location.reload();
       }, 1000);
@@ -126,6 +136,49 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
           onCheckedChange={(checked) => setAllowGlobalUsageView(checked)}
           disabled={isPending}
         />
+      </div>
+
+      <div className="flex items-start justify-between gap-4 rounded-lg border border-dashed border-border px-4 py-3">
+        <div>
+          <Label htmlFor="allow-view-provider" className="text-sm font-medium">
+            允许非管理员查看供应商信息
+          </Label>
+          <p className="text-xs text-muted-foreground mt-1">
+            关闭后，普通用户将无法查看供应商名称和倍率信息，所有金额按倍率 1.0 显示。
+          </p>
+        </div>
+        <Switch
+          id="allow-view-provider"
+          checked={allowViewProviderInfo}
+          onCheckedChange={(checked) => setAllowViewProviderInfo(checked)}
+          disabled={isPending}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="non-admin-currency">非管理员用户货币显示单位</Label>
+        <Select
+          value={nonAdminCurrencyDisplay}
+          onValueChange={(value) => setNonAdminCurrencyDisplay(value as CurrencyCode)}
+          disabled={isPending}
+        >
+          <SelectTrigger id="non-admin-currency">
+            <SelectValue placeholder="选择货币单位" />
+          </SelectTrigger>
+          <SelectContent>
+            {(Object.keys(CURRENCY_CONFIG) as CurrencyCode[]).map((code) => {
+              const config = CURRENCY_CONFIG[code];
+              return (
+                <SelectItem key={code} value={code}>
+                  {config.symbol} {config.name} ({code})
+                </SelectItem>
+              );
+            })}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          非管理员用户看到的货币符号（仅修改符号，不进行汇率转换）。
+        </p>
       </div>
 
       <div className="flex justify-end">

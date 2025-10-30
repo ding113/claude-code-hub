@@ -234,6 +234,11 @@ export const systemSettings = pgTable('system_settings', {
   // 货币显示配置
   currencyDisplay: varchar('currency_display', { length: 10 }).notNull().default('USD'),
 
+  // 隐私保护配置：是否允许非管理员查看供应商名称和倍率（默认关闭）
+  allowViewProviderInfo: boolean('allow_view_provider_info').notNull().default(false),
+  // 非管理员用户前台显示货币（默认继承 currencyDisplay）
+  nonAdminCurrencyDisplay: varchar('non_admin_currency_display', { length: 10 }).notNull().default('USD'),
+
   // 日志清理配置
   enableAutoCleanup: boolean('enable_auto_cleanup').default(false),
   cleanupRetentionDays: integer('cleanup_retention_days').default(30),

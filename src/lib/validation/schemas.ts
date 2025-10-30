@@ -267,6 +267,17 @@ export const UpdateSystemSettingsSchema = z.object({
       { message: "不支持的货币类型" }
     )
     .optional(),
+  // 隐私保护配置（可选）
+  allowViewProviderInfo: z.boolean().optional(),
+  nonAdminCurrencyDisplay: z
+    .enum(
+      Object.keys(CURRENCY_CONFIG) as [
+        keyof typeof CURRENCY_CONFIG,
+        ...Array<keyof typeof CURRENCY_CONFIG>,
+      ],
+      { message: "不支持的货币类型" }
+    )
+    .optional(),
   // 日志清理配置（可选）
   enableAutoCleanup: z.boolean().optional(),
   cleanupRetentionDays: z.coerce

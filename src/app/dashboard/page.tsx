@@ -10,6 +10,7 @@ import { ListErrorBoundary } from "@/components/error-boundary";
 import { StatisticsWrapper } from "./_components/statistics";
 import { OverviewPanel } from "@/components/customs/overview-panel";
 import { DEFAULT_TIME_RANGE } from "@/types/statistics";
+import { getPrivacyContext } from "@/lib/utils/privacy-filter.server";
 
 export const dynamic = "force-dynamic";
 
@@ -20,21 +21,22 @@ export default async function DashboardPage() {
     redirect("/settings/prices?required=true");
   }
 
-  const [users, session, statistics, systemSettings] = await Promise.all([
+  const [users, session, statistics, systemSettings, privacyContext] = await Promise.all([
     getUsers(),
     getSession(),
     getUserStatistics(DEFAULT_TIME_RANGE),
     getSystemSettings(),
+    getPrivacyContext(),
   ]);
 
   return (
     <div className="space-y-6">
-      <OverviewPanel currencyCode={systemSettings.currencyDisplay} />
+      <OverviewPanel currencyCode={privacyContext.userCurrency} />
 
       <div>
         <StatisticsWrapper
           initialData={statistics.ok ? statistics.data : undefined}
-          currencyCode={systemSettings.currencyDisplay}
+          currencyCode={privacyContext.userCurrency}
         />
       </div>
 
@@ -43,7 +45,8 @@ export default async function DashboardPage() {
           <UserKeyManager
             users={users}
             currentUser={session?.user}
-            currencyCode={systemSettings.currencyDisplay}
+            currencyCode={privacyContext.userCurrency}
+            canViewProviderInfo={privacyContext.isAdmin || privacyContext.allowViewProviderInfo}
           />
         </ListErrorBoundary>
       </Section>

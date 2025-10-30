@@ -11,9 +11,15 @@ interface UserKeyManagerProps {
   users: UserDisplay[];
   currentUser?: User;
   currencyCode?: CurrencyCode;
+  canViewProviderInfo?: boolean;
 }
 
-export function UserKeyManager({ users, currentUser, currencyCode = "USD" }: UserKeyManagerProps) {
+export function UserKeyManager({
+  users,
+  currentUser,
+  currencyCode = "USD",
+  canViewProviderInfo = true,
+}: UserKeyManagerProps) {
   // 普通用户默认选择自己，管理员选择第一个用户
   const getInitialUser = () => {
     if (currentUser?.role === "user") {
@@ -36,6 +42,7 @@ export function UserKeyManager({ users, currentUser, currencyCode = "USD" }: Use
             activeUser={activeUser}
             currentUser={currentUser}
             currencyCode={currencyCode}
+            canViewProviderInfo={canViewProviderInfo}
           />
           <KeyList
             keys={activeUser?.keys || []}
@@ -67,6 +74,7 @@ export function UserKeyManager({ users, currentUser, currencyCode = "USD" }: Use
             activeUser={activeUser}
             currentUser={currentUser}
             currencyCode={currencyCode}
+            canViewProviderInfo={canViewProviderInfo}
           />
           <KeyList
             keys={activeUser?.keys || []}

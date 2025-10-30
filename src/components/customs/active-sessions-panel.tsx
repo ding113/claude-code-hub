@@ -57,9 +57,11 @@ function getStatusIcon(status: "in_progress" | "completed" | "error", statusCode
 function SessionListItem({
   session,
   currencyCode = "USD",
+  canViewProviderInfo = true,
 }: {
   session: ActiveSessionInfo;
   currencyCode?: CurrencyCode;
+  canViewProviderInfo?: boolean;
 }) {
   const statusInfo = getStatusIcon(session.status, session.statusCode);
   const StatusIcon = statusInfo.icon;
@@ -97,11 +99,18 @@ function SessionListItem({
           <Cpu className="h-3 w-3 text-muted-foreground flex-shrink-0" />
           <span
             className="truncate text-xs font-mono max-w-[120px]"
-            title={`${session.model} @ ${session.providerName}`}
+            title={
+              canViewProviderInfo && session.providerName
+                ? `${session.model} @ ${session.providerName}`
+                : session.model || undefined
+            }
           >
             {session.model}
-            {session.providerName && (
+            {canViewProviderInfo && session.providerName && (
               <span className="text-muted-foreground"> @ {session.providerName}</span>
+            )}
+            {!canViewProviderInfo && (
+              <span className="text-muted-foreground"> @ ***</span>
             )}
           </span>
         </div>
@@ -136,7 +145,13 @@ function SessionListItem({
  * 活跃 Session 面板
  * 显示最近 5 分钟内的活跃 session 列表（简洁文字+图标形式）
  */
-export function ActiveSessionsPanel({ currencyCode = "USD" }: { currencyCode?: CurrencyCode }) {
+export function ActiveSessionsPanel({
+  currencyCode = "USD",
+  canViewProviderInfo = true,
+}: {
+  currencyCode?: CurrencyCode;
+  canViewProviderInfo?: boolean;
+}) {
   const router = useRouter();
 
   const { data = [], isLoading } = useQuery<ActiveSessionInfo[], Error>({
@@ -178,6 +193,7 @@ export function ActiveSessionsPanel({ currencyCode = "USD" }: { currencyCode?: C
                 key={session.sessionId}
                 session={session}
                 currencyCode={currencyCode}
+                canViewProviderInfo={canViewProviderInfo}
               />
             ))}
           </div>

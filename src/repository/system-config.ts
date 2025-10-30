@@ -78,6 +78,8 @@ function createFallbackSettings(): SystemSettings {
     siteTitle: DEFAULT_SITE_TITLE,
     allowGlobalUsageView: false,
     currencyDisplay: "USD",
+    allowViewProviderInfo: false,
+    nonAdminCurrencyDisplay: "USD",
     enableAutoCleanup: false,
     cleanupRetentionDays: 30,
     cleanupSchedule: "0 2 * * *",
@@ -98,6 +100,8 @@ export async function getSystemSettings(): Promise<SystemSettings> {
         siteTitle: systemSettings.siteTitle,
         allowGlobalUsageView: systemSettings.allowGlobalUsageView,
         currencyDisplay: systemSettings.currencyDisplay,
+        allowViewProviderInfo: systemSettings.allowViewProviderInfo,
+        nonAdminCurrencyDisplay: systemSettings.nonAdminCurrencyDisplay,
         enableAutoCleanup: systemSettings.enableAutoCleanup,
         cleanupRetentionDays: systemSettings.cleanupRetentionDays,
         cleanupSchedule: systemSettings.cleanupSchedule,
@@ -118,6 +122,8 @@ export async function getSystemSettings(): Promise<SystemSettings> {
         siteTitle: DEFAULT_SITE_TITLE,
         allowGlobalUsageView: false,
         currencyDisplay: "USD",
+        allowViewProviderInfo: false,
+        nonAdminCurrencyDisplay: "USD",
       })
       .onConflictDoNothing()
       .returning({
@@ -125,6 +131,8 @@ export async function getSystemSettings(): Promise<SystemSettings> {
         siteTitle: systemSettings.siteTitle,
         allowGlobalUsageView: systemSettings.allowGlobalUsageView,
         currencyDisplay: systemSettings.currencyDisplay,
+        allowViewProviderInfo: systemSettings.allowViewProviderInfo,
+        nonAdminCurrencyDisplay: systemSettings.nonAdminCurrencyDisplay,
         enableAutoCleanup: systemSettings.enableAutoCleanup,
         cleanupRetentionDays: systemSettings.cleanupRetentionDays,
         cleanupSchedule: systemSettings.cleanupSchedule,
@@ -144,6 +152,8 @@ export async function getSystemSettings(): Promise<SystemSettings> {
         siteTitle: systemSettings.siteTitle,
         allowGlobalUsageView: systemSettings.allowGlobalUsageView,
         currencyDisplay: systemSettings.currencyDisplay,
+        allowViewProviderInfo: systemSettings.allowViewProviderInfo,
+        nonAdminCurrencyDisplay: systemSettings.nonAdminCurrencyDisplay,
         enableAutoCleanup: systemSettings.enableAutoCleanup,
         cleanupRetentionDays: systemSettings.cleanupRetentionDays,
         cleanupSchedule: systemSettings.cleanupSchedule,
@@ -189,6 +199,14 @@ export async function updateSystemSettings(
       updates.currencyDisplay = payload.currencyDisplay;
     }
 
+    // 添加隐私保护配置字段（如果提供）
+    if (payload.allowViewProviderInfo !== undefined) {
+      updates.allowViewProviderInfo = payload.allowViewProviderInfo;
+    }
+    if (payload.nonAdminCurrencyDisplay !== undefined) {
+      updates.nonAdminCurrencyDisplay = payload.nonAdminCurrencyDisplay;
+    }
+
     // 添加日志清理配置字段（如果提供）
     if (payload.enableAutoCleanup !== undefined) {
       updates.enableAutoCleanup = payload.enableAutoCleanup;
@@ -212,6 +230,8 @@ export async function updateSystemSettings(
         siteTitle: systemSettings.siteTitle,
         allowGlobalUsageView: systemSettings.allowGlobalUsageView,
         currencyDisplay: systemSettings.currencyDisplay,
+        allowViewProviderInfo: systemSettings.allowViewProviderInfo,
+        nonAdminCurrencyDisplay: systemSettings.nonAdminCurrencyDisplay,
         enableAutoCleanup: systemSettings.enableAutoCleanup,
         cleanupRetentionDays: systemSettings.cleanupRetentionDays,
         cleanupSchedule: systemSettings.cleanupSchedule,
