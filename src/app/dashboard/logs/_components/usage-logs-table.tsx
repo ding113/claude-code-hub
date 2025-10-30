@@ -8,6 +8,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { UsageLogRow } from "@/repository/usage-logs";
@@ -129,40 +135,69 @@ export function UsageLogsTable({
                         被拦截
                       </span>
                     ) : (
-                      <div className="flex items-center gap-2">
-                        {log.providerChain && log.providerChain.length > 0 ? (
-                          <div className="flex flex-col gap-0.5">
-                            <ProviderChainPopover
-                              chain={log.providerChain}
-                              finalProvider={log.providerName || "未知"}
-                            />
-                            {/* 摘要文字（仅在有决策链时显示） */}
-                            {formatProviderSummary(log.providerChain) && (
-                              <span className="text-xs text-muted-foreground">
-                                {formatProviderSummary(log.providerChain)}
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <span>{log.providerName || "-"}</span>
-                        )}
+                      <div className="flex items-start gap-2">
+                        <div className="flex flex-col items-start gap-0.5 min-w-0 flex-1">
+                          {log.providerChain && log.providerChain.length > 0 ? (
+                            <>
+                              <div className="w-full">
+                                <ProviderChainPopover
+                                  chain={log.providerChain}
+                                  finalProvider={
+                                    log.providerChain[log.providerChain.length - 1].name || log.providerName || "未知"
+                                  }
+                                />
+                              </div>
+                              {/* 摘要文字（第二行显示，左对齐） */}
+                              {formatProviderSummary(log.providerChain) && (
+                                <div className="w-full">
+                                  <TooltipProvider>
+                                    <Tooltip delayDuration={300}>
+                                      <TooltipTrigger asChild>
+                                        <span className="text-xs text-muted-foreground cursor-help truncate max-w-[200px] block text-left">
+                                          {formatProviderSummary(log.providerChain)}
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent side="bottom" align="start" className="max-w-[500px]">
+                                        <p className="text-xs whitespace-normal break-words font-mono">
+                                          {formatProviderSummary(log.providerChain)}
+                                        </p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <span>{log.providerName || "-"}</span>
+                          )}
+                        </div>
                         {/* 显示供应商倍率 Badge（不为 1.0 时） */}
-                        {log.costMultiplier && parseFloat(log.costMultiplier) !== 1.0 && (
-                          <Badge
-                            variant={
-                              parseFloat(log.costMultiplier) > 1.0
-                                ? "destructive" // 加价，红色
-                                : "secondary" // 折扣，灰色
-                            }
-                            className={
-                              parseFloat(log.costMultiplier) < 1.0
-                                ? "bg-green-100 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300 dark:border-green-800" // 折扣用绿色
-                                : undefined
-                            }
-                          >
-                            ×{parseFloat(log.costMultiplier).toFixed(2)}
-                          </Badge>
-                        )}
+                        {(() => {
+                          // 从决策链中找到最后一个成功的供应商，使用它的倍率
+                          const successfulProvider = log.providerChain && log.providerChain.length > 0
+                            ? [...log.providerChain]
+                                .reverse()
+                                .find(item =>
+                                  item.reason === 'request_success' ||
+                                  item.reason === 'retry_success'
+                                )
+                            : null;
+
+                          const actualCostMultiplier = successfulProvider?.costMultiplier ?? log.costMultiplier;
+
+                          return actualCostMultiplier && parseFloat(String(actualCostMultiplier)) !== 1.0 ? (
+                            <Badge
+                              variant="outline"
+                              className={
+                                parseFloat(String(actualCostMultiplier)) > 1.0
+                                  ? "text-xs bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800 shrink-0"
+                                  : "text-xs bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-300 dark:border-green-800 shrink-0"
+                              }
+                            >
+                              ×{parseFloat(String(actualCostMultiplier)).toFixed(2)}
+                            </Badge>
+                          ) : null;
+                        })()}
                       </div>
                     )}
                   </TableCell>

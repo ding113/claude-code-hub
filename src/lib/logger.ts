@@ -33,16 +33,16 @@ function getInitialLogLevel(): LogLevel {
  */
 const pinoInstance = pino({
   level: getInitialLogLevel(),
-  // transport: isDevelopment()
-  //   ? {
-  //       target: "pino-pretty",
-  //       options: {
-  //         colorize: true,
-  //         translateTime: "SYS:standard",
-  //         ignore: "pid,hostname",
-  //       },
-  //     }
-  //   : undefined,
+  transport: isDevelopment()
+    ? {
+        target: "pino-pretty",
+        options: {
+          colorize: true,
+          translateTime: "SYS:standard",
+          ignore: "pid,hostname",
+        },
+      }
+    : undefined,
   formatters: {
     level: (label) => {
       return { level: label };

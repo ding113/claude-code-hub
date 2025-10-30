@@ -19,7 +19,8 @@ import {
   type CircuitBreakerConfig,
 } from "@/lib/redis/circuit-breaker-config";
 
-interface ProviderHealth {
+// 修复：导出 ProviderHealth 类型，供其他模块使用
+export interface ProviderHealth {
   failureCount: number;
   lastFailureTime: number | null;
   circuitState: "closed" | "open" | "half-open";
@@ -81,6 +82,18 @@ async function getProviderConfig(providerId: number): Promise<CircuitBreakerConf
     );
     return DEFAULT_CIRCUIT_BREAKER_CONFIG;
   }
+}
+
+/**
+ * 修复：导出获取健康状态和配置的公共函数（用于决策链记录）
+ */
+export async function getProviderHealthInfo(providerId: number): Promise<{
+  health: ProviderHealth;
+  config: CircuitBreakerConfig;
+}> {
+  const health = getOrCreateHealth(providerId);
+  const config = await getProviderConfig(providerId);
+  return { health, config };
 }
 
 /**

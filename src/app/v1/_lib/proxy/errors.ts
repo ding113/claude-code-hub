@@ -153,3 +153,45 @@ export class ProxyError extends Error {
     return parts.join(" | ");
   }
 }
+
+/**
+ * 错误分类：区分供应商错误和系统错误
+ */
+export enum ErrorCategory {
+  PROVIDER_ERROR, // 供应商问题（所有 4xx/5xx HTTP 错误）→ 计入熔断器 + 直接切换
+  SYSTEM_ERROR, // 系统/网络问题（fetch 网络异常）→ 不计入熔断器 + 先重试1次
+}
+
+/**
+ * 判断错误类型
+ *
+ * 分类规则：
+ * - ProxyError（所有 4xx/5xx HTTP 错误）：供应商问题
+ *   → 说明请求到达供应商并得到响应，但供应商无法正常处理
+ *   → 应计入熔断器，连续失败时触发熔断保护
+ *   → 应直接切换到其他供应商
+ *
+ * - 其他错误（fetch 网络异常）：系统/网络问题
+ *   → 包括：DNS 解析失败、连接被拒绝、连接超时、网络中断等
+ *   → 不应计入供应商熔断器（不是供应商服务不可用）
+ *   → 应先重试1次当前供应商（可能是临时网络抖动）
+ *
+ * @param error - 捕获的错误对象
+ * @returns 错误分类（PROVIDER_ERROR 或 SYSTEM_ERROR）
+ */
+export function categorizeError(error: Error): ErrorCategory {
+  // ProxyError = HTTP 错误（4xx 或 5xx）
+  if (error instanceof ProxyError) {
+    return ErrorCategory.PROVIDER_ERROR; // 所有 HTTP 错误都是供应商问题
+  }
+
+  // 其他所有错误都是系统错误
+  // 包括：
+  // - TypeError: fetch failed (网络层错误)
+  // - ENOTFOUND: DNS 解析失败
+  // - ECONNREFUSED: 连接被拒绝
+  // - ETIMEDOUT: 连接或读取超时
+  // - ECONNRESET: 连接被重置
+  // - AbortError: 请求被中止（超时）
+  return ErrorCategory.SYSTEM_ERROR;
+}

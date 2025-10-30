@@ -13,8 +13,10 @@ export interface ProviderChainItem {
     | "session_reuse" // 会话复用
     | "initial_selection" // 首次选择（成功）
     | "concurrent_limit_failed" // 并发限制失败
+    | "request_success" // 修复：请求成功（首次）
     | "retry_success" // 重试成功
-    | "retry_failed"; // 重试失败
+    | "retry_failed" // 重试失败（供应商错误，已计入熔断器）
+    | "system_error"; // 系统/网络错误（不计入熔断器）
 
   // === 选择方法（细化） ===
   selectionMethod?:
@@ -32,12 +34,41 @@ export interface ProviderChainItem {
   // 健康状态快照
   circuitState?: "closed" | "open" | "half-open";
 
+  // 修复：新增熔断计数信息（用于显示距离熔断还有多少次）
+  circuitFailureCount?: number; // 失败计数（包含本次失败）
+  circuitFailureThreshold?: number; // 熔断阈值
+
   // 时间戳和尝试信息
   timestamp?: number;
   attemptNumber?: number; // 第几次尝试（用于标识重试）
 
+  // 修复：新增成功时的状态码
+  statusCode?: number;
+
   // 错误信息（记录失败时的上游报错）
   errorMessage?: string;
+
+  // 结构化错误详情（便于格式化显示）
+  errorDetails?: {
+    // 供应商错误（HTTP 4xx/5xx）
+    provider?: {
+      id: number;
+      name: string;
+      statusCode: number;
+      statusText: string; // 如 "Internal Server Error"
+      upstreamBody?: string; // 原始响应体
+      upstreamParsed?: unknown; // 解析后的 JSON
+    };
+
+    // 系统/网络错误（fetch 异常）
+    system?: {
+      errorType: string; // 如 "TypeError"
+      errorName: string; // 如 "fetch failed"
+      errorCode?: string; // 如 "ENOTFOUND"
+      errorSyscall?: string; // 如 "getaddrinfo"
+      errorStack?: string; // 堆栈前3行
+    };
+  };
 
   // === 决策上下文（完整记录） ===
   decisionContext?: {

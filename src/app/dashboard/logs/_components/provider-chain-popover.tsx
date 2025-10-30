@@ -12,9 +12,31 @@ interface ProviderChainPopoverProps {
   finalProvider: string;
 }
 
+/**
+ * 判断是否为实际请求记录（排除中间状态）
+ */
+function isActualRequest(item: ProviderChainItem): boolean {
+  // 并发限制失败：算作一次尝试
+  if (item.reason === 'concurrent_limit_failed') return true;
+
+  // 失败记录
+  if (item.reason === 'retry_failed' || item.reason === 'system_error') return true;
+
+  // 成功记录：必须有 statusCode
+  if ((item.reason === 'request_success' || item.reason === 'retry_success') && item.statusCode) {
+    return true;
+  }
+
+  // 其他都是中间状态
+  return false;
+}
+
 export function ProviderChainPopover({ chain, finalProvider }: ProviderChainPopoverProps) {
-  // 如果只有一个供应商,不显示 popover
-  if (chain.length <= 1) {
+  // 计算实际请求次数（排除中间状态）
+  const requestCount = chain.filter(isActualRequest).length;
+
+  // 如果只有一次请求，不显示 popover
+  if (requestCount <= 1) {
     return <span>{finalProvider}</span>;
   }
 
@@ -24,11 +46,9 @@ export function ProviderChainPopover({ chain, finalProvider }: ProviderChainPopo
         <Button variant="ghost" className="h-auto p-0 font-normal hover:bg-transparent">
           <span className="flex items-center gap-1">
             {finalProvider}
-            {chain.length > 1 && (
-              <Badge variant="secondary" className="ml-1">
-                {chain.length}次
-              </Badge>
-            )}
+            <Badge variant="secondary" className="ml-1">
+              {requestCount}次
+            </Badge>
             <InfoIcon className="h-3 w-3 text-muted-foreground" />
           </span>
         </Button>
@@ -38,7 +58,7 @@ export function ProviderChainPopover({ chain, finalProvider }: ProviderChainPopo
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h4 className="font-semibold text-sm">供应商决策链</h4>
-            <Badge variant="outline">{chain.length}次</Badge>
+            <Badge variant="outline">{requestCount}次</Badge>
           </div>
 
           <div className="rounded-md border bg-muted/50 p-4 max-h-[300px] overflow-y-auto overflow-x-hidden">
