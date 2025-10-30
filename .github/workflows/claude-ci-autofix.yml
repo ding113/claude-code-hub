@@ -147,7 +147,7 @@ jobs:
 
             **场景 B - 无关联 PR (HAS PR = false)**:
                - 直接在当前分支 `${{ fromJSON(steps.failure_details.outputs.result).headBranch }}` 上修复
-               - 提交修复：`git add . && git commit -m "fix: auto-fix CI failures in ${{ fromJSON(steps.failure_details.outputs.result).workflowName }} [skip ci]"`
+               - 提交修复：`git add . && git commit -m "fix: auto-fix CI failures in ${{ fromJSON(steps.failure_details.outputs.result).workflowName }} "`
                - 推送：`git push origin ${{ fromJSON(steps.failure_details.outputs.result).headBranch }}`
                - **不需要创建 PR**
 
@@ -176,7 +176,7 @@ jobs:
             - 如果错误复杂或需要业务逻辑判断，在 PR 中说明无法自动修复（场景 A）或在 commit message 中说明（场景 B）
             - 确保不会破坏现有功能
             - 所有修复都应该是保守和安全的
-            - **场景 B 的 commit message 必须包含 [skip ci] 以避免再次触发 CI**
+            - **场景 B 的 commit message 必须不能包含 [skip ci] 以再次触发 CI**
 
           claude_args: |
             --max-turns 999
