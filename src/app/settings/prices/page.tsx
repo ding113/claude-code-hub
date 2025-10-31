@@ -21,8 +21,8 @@ export default async function SettingsPricesPage({ searchParams }: SettingsPrice
   const params = await searchParams;
 
   // 解析分页参数
-  const page = parseInt(params.page || '1', 10);
-  const pageSize = parseInt(params.pageSize || params.size || '50', 10);
+  const page = parseInt(params.page || "1", 10);
+  const pageSize = parseInt(params.pageSize || params.size || "50", 10);
 
   // 获取分页数据（搜索在客户端处理）
   const pricesResult = await getModelPricesPaginated({ page, pageSize });

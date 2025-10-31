@@ -13,6 +13,7 @@
 **文件**: `src/lib/api/action-adapter-openapi.ts` (300+ 行)
 
 **功能**:
+
 - ✅ 通用 `createActionRoute()` 函数 - 将任意 Server Action 转换为 OpenAPI 端点
 - ✅ 自动包装非 ActionResult 格式的返回值
 - ✅ 统一的错误处理和日志记录
@@ -20,18 +21,14 @@
 - ✅ OpenAPI schema 自动生成
 
 **特性**:
+
 ```typescript
 // 使用方式
-const { route, handler } = createActionRoute(
-  "users",
-  "addUser",
-  userActions.addUser,
-  {
-    requestSchema: CreateUserSchema,  // 复用现有 Zod schema!
-    description: "创建新用户",
-    tags: ["用户管理"],
-  }
-);
+const { route, handler } = createActionRoute("users", "addUser", userActions.addUser, {
+  requestSchema: CreateUserSchema, // 复用现有 Zod schema!
+  description: "创建新用户",
+  tags: ["用户管理"],
+});
 
 app.openapi(route, handler);
 ```
@@ -41,6 +38,7 @@ app.openapi(route, handler);
 **文件**: `src/app/api/actions/[...route]/route.ts` (750+ 行)
 
 **已注册的模块**:
+
 1. ✅ 用户管理 (5 个端点)
 2. ✅ 密钥管理 (5 个端点)
 3. ✅ 供应商管理 (7 个端点)
@@ -57,11 +55,13 @@ app.openapi(route, handler);
 ### 3. OpenAPI 文档生成 ✅
 
 **集成的工具**:
+
 - ✅ `@hono/zod-openapi` - OpenAPI 3.1.0 规范生成
 - ✅ `@hono/swagger-ui` - Swagger UI 界面
 - ✅ `@scalar/hono-api-reference` - Scalar UI (现代风格)
 
 **文档端点**:
+
 - 📄 `GET /api/actions/openapi.json` - OpenAPI 规范 (JSON)
 - 📚 `GET /api/actions/docs` - Swagger UI
 - 🎨 `GET /api/actions/scalar` - Scalar UI (推荐)
@@ -77,12 +77,13 @@ app.openapi(route, handler);
 
 ## 📊 代码减少对比
 
-| 方案 | 文件数 | 代码行数 | 维护成本 |
-|------|--------|---------|---------|
-| **手动方案 (PR #33)** | 36 个 | ~1,080 行 | 极高 (每个 action 改 N 次) |
-| **Hono OpenAPI (当前)** | 2 个 | ~1,050 行 | 极低 (新增 action 1 行代码) |
+| 方案                    | 文件数 | 代码行数  | 维护成本                    |
+| ----------------------- | ------ | --------- | --------------------------- |
+| **手动方案 (PR #33)**   | 36 个  | ~1,080 行 | 极高 (每个 action 改 N 次)  |
+| **Hono OpenAPI (当前)** | 2 个   | ~1,050 行 | 极低 (新增 action 1 行代码) |
 
 **关键区别**:
+
 - ❌ 手动方案: 36 个几乎相同的文件,重复代码极多
 - ✅ 自动化方案: 核心逻辑集中,复用现有 schemas,自动生成文档
 
@@ -93,16 +94,19 @@ app.openapi(route, handler);
 ### 1. 访问文档
 
 **Swagger UI** (传统风格):
+
 ```
 http://localhost:13500/api/actions/docs
 ```
 
 **Scalar UI** (现代风格,推荐):
+
 ```
 http://localhost:13500/api/actions/scalar
 ```
 
 **OpenAPI JSON**:
+
 ```
 http://localhost:13500/api/actions/openapi.json
 ```
@@ -110,11 +114,13 @@ http://localhost:13500/api/actions/openapi.json
 ### 2. 调用 API
 
 **端点格式**:
+
 ```
 POST /api/actions/{module}/{actionName}
 ```
 
 **示例**:
+
 ```bash
 curl -X POST http://localhost:13500/api/actions/users/addUser \
   -H "Content-Type: application/json" \
@@ -126,6 +132,7 @@ curl -X POST http://localhost:13500/api/actions/users/addUser \
 ```
 
 **响应格式**:
+
 ```json
 {
   "ok": true,
@@ -143,7 +150,7 @@ const { route, handler } = createActionRoute(
   "actionName",
   moduleActions.actionName,
   {
-    requestSchema: YourZodSchema,  // 可选
+    requestSchema: YourZodSchema, // 可选
     description: "端点描述",
     tags: ["标签"],
   }
@@ -226,13 +233,13 @@ const publicPaths = [
 
 ### 数字对比
 
-| 指标 | 手动方案 | 自动化方案 | 改进 |
-|------|---------|-----------|------|
-| 代码行数 | ~1,080 | ~1,050 | **持平** |
-| 文件数量 | 36 | 2 | **-94%** |
-| 新增 action 成本 | ~30 行/个 | 3 行/个 | **-90%** |
-| 文档维护 | 手动 | 自动 | **100%** |
-| 类型安全 | 部分 | 完整 | **100%** |
+| 指标             | 手动方案  | 自动化方案 | 改进     |
+| ---------------- | --------- | ---------- | -------- |
+| 代码行数         | ~1,080    | ~1,050     | **持平** |
+| 文件数量         | 36        | 2          | **-94%** |
+| 新增 action 成本 | ~30 行/个 | 3 行/个    | **-90%** |
+| 文档维护         | 手动      | 自动       | **100%** |
+| 类型安全         | 部分      | 完整       | **100%** |
 
 ### 质量提升
 
@@ -248,11 +255,13 @@ const publicPaths = [
 ## 📚 相关文件
 
 ### 核心文件
+
 - `src/lib/api/action-adapter-openapi.ts` - 核心 adapter
 - `src/app/api/actions/[...route]/route.ts` - 路由注册
 - `src/lib/validation/schemas.ts` - Zod schemas (已存在)
 
 ### 文档文件
+
 - `docs/api-implementation-summary.md` - 本文档
 - `src/app/api/actions/[...route]/route.ts` (L630-706) - OpenAPI 配置
 

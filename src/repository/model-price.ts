@@ -12,7 +12,7 @@ import { toModelPrice } from "./_shared/transformers";
 export interface PaginationParams {
   page: number;
   pageSize: number;
-  search?: string;  // 可选的搜索关键词
+  search?: string; // 可选的搜索关键词
 }
 
 /**

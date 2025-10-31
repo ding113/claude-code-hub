@@ -269,41 +269,38 @@ const { route: removeProviderRoute, handler: removeProviderHandler } = createAct
 app.openapi(removeProviderRoute, removeProviderHandler);
 
 const { route: getProvidersHealthStatusRoute, handler: getProvidersHealthStatusHandler } =
-  createActionRoute("providers", "getProvidersHealthStatus", providerActions.getProvidersHealthStatus, {
-    description: "获取所有供应商的熔断器健康状态 (管理员)",
-    tags: ["供应商管理"],
-    requiredRole: "admin",
-  });
+  createActionRoute(
+    "providers",
+    "getProvidersHealthStatus",
+    providerActions.getProvidersHealthStatus,
+    {
+      description: "获取所有供应商的熔断器健康状态 (管理员)",
+      tags: ["供应商管理"],
+      requiredRole: "admin",
+    }
+  );
 app.openapi(getProvidersHealthStatusRoute, getProvidersHealthStatusHandler);
 
-const { route: resetProviderCircuitRoute, handler: resetProviderCircuitHandler } = createActionRoute(
-  "providers",
-  "resetProviderCircuit",
-  providerActions.resetProviderCircuit,
-  {
+const { route: resetProviderCircuitRoute, handler: resetProviderCircuitHandler } =
+  createActionRoute("providers", "resetProviderCircuit", providerActions.resetProviderCircuit, {
     requestSchema: z.object({
       providerId: z.number().int().positive(),
     }),
     description: "重置供应商的熔断器状态 (管理员)",
     tags: ["供应商管理"],
     requiredRole: "admin",
-  }
-);
+  });
 app.openapi(resetProviderCircuitRoute, resetProviderCircuitHandler);
 
-const { route: getProviderLimitUsageRoute, handler: getProviderLimitUsageHandler } = createActionRoute(
-  "providers",
-  "getProviderLimitUsage",
-  providerActions.getProviderLimitUsage,
-  {
+const { route: getProviderLimitUsageRoute, handler: getProviderLimitUsageHandler } =
+  createActionRoute("providers", "getProviderLimitUsage", providerActions.getProviderLimitUsage, {
     requestSchema: z.object({
       providerId: z.number().int().positive(),
     }),
     description: "获取供应商限额使用情况 (管理员)",
     tags: ["供应商管理"],
     requiredRole: "admin",
-  }
-);
+  });
 app.openapi(getProviderLimitUsageRoute, getProviderLimitUsageHandler);
 
 // ==================== 模型价格管理 ====================
@@ -584,15 +581,16 @@ app.openapi(getSessionMessagesRoute, getSessionMessagesHandler);
 
 // ==================== 通知管理 ====================
 
-const { route: getNotificationSettingsRoute, handler: getNotificationSettingsHandler } = createActionRoute(
-  "notifications",
-  "getNotificationSettingsAction",
-  notificationActions.getNotificationSettingsAction,
-  {
-    description: "获取通知设置",
-    tags: ["通知管理"],
-  }
-);
+const { route: getNotificationSettingsRoute, handler: getNotificationSettingsHandler } =
+  createActionRoute(
+    "notifications",
+    "getNotificationSettingsAction",
+    notificationActions.getNotificationSettingsAction,
+    {
+      description: "获取通知设置",
+      tags: ["通知管理"],
+    }
+  );
 app.openapi(getNotificationSettingsRoute, getNotificationSettingsHandler);
 
 const { route: updateNotificationSettingsRoute, handler: updateNotificationSettingsHandler } =

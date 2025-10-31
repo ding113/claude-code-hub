@@ -37,7 +37,7 @@ export function PriceList({
   initialPrices,
   initialTotal,
   initialPage,
-  initialPageSize
+  initialPageSize,
 }: PriceListProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [prices, setPrices] = useState<ModelPrice[]>(initialPrices);
@@ -55,41 +55,43 @@ export function PriceList({
   // 从 URL 搜索参数中读取初始状态（仅在挂载时执行一次）
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    const searchParam = urlParams.get('search');
-    const pageParam = urlParams.get('page');
-    const sizeParam = urlParams.get('size');
+    const searchParam = urlParams.get("search");
+    const pageParam = urlParams.get("page");
+    const sizeParam = urlParams.get("size");
 
     if (searchParam) setSearchTerm(searchParam);
     if (pageParam) setPage(parseInt(pageParam, 10));
     if (sizeParam) setPageSize(parseInt(sizeParam, 10));
-  }, []);  // 空依赖数组，仅在挂载时执行一次
+  }, []); // 空依赖数组，仅在挂载时执行一次
 
   // 更新 URL 搜索参数
   const updateURL = (newSearchTerm: string, newPage: number, newPageSize: number) => {
     const url = new URL(window.location.href);
     if (newSearchTerm) {
-      url.searchParams.set('search', newSearchTerm);
+      url.searchParams.set("search", newSearchTerm);
     } else {
-      url.searchParams.delete('search');
+      url.searchParams.delete("search");
     }
     if (newPage > 1) {
-      url.searchParams.set('page', newPage.toString());
+      url.searchParams.set("page", newPage.toString());
     } else {
-      url.searchParams.delete('page');
+      url.searchParams.delete("page");
     }
     if (newPageSize !== 50) {
-      url.searchParams.set('size', newPageSize.toString());
+      url.searchParams.set("size", newPageSize.toString());
     } else {
-      url.searchParams.delete('size');
+      url.searchParams.delete("size");
     }
-    window.history.replaceState({}, '', url.toString());
+    window.history.replaceState({}, "", url.toString());
   };
 
   // 获取价格数据
   const fetchPrices = async (newPage: number, newPageSize: number, newSearchTerm: string) => {
     setIsLoading(true);
     try {
-      const response = await fetch(`/api/prices?page=${newPage}&pageSize=${newPageSize}&search=${encodeURIComponent(newSearchTerm)}`);
+      const response = await fetch(
+        `/api/prices?page=${newPage}&pageSize=${newPageSize}&search=${encodeURIComponent(newSearchTerm)}`
+      );
       const result = await response.json();
 
       if (result.ok) {
@@ -99,7 +101,7 @@ export function PriceList({
         setPageSize(result.data.pageSize);
       }
     } catch (error) {
-      console.error('获取价格数据失败:', error);
+      console.error("获取价格数据失败:", error);
     } finally {
       setIsLoading(false);
     }
@@ -110,12 +112,12 @@ export function PriceList({
     // 跳过初始渲染（当 debouncedSearchTerm 等于初始 searchTerm 时）
     if (debouncedSearchTerm !== searchTerm) return;
 
-    const newPage = 1;  // 搜索时重置到第一页
+    const newPage = 1; // 搜索时重置到第一页
     setPage(newPage);
     updateURL(debouncedSearchTerm, newPage, pageSize);
     fetchPrices(newPage, pageSize, debouncedSearchTerm);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearchTerm]);  // 仅依赖 debouncedSearchTerm
+  }, [debouncedSearchTerm]); // 仅依赖 debouncedSearchTerm
 
   // 搜索输入处理（只更新状态，不触发请求）
   const handleSearchChange = (value: string) => {
@@ -192,7 +194,10 @@ export function PriceList({
         </div>
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">每页显示:</span>
-          <Select value={pageSize.toString()} onValueChange={(value) => handlePageSizeChange(parseInt(value, 10))}>
+          <Select
+            value={pageSize.toString()}
+            onValueChange={(value) => handlePageSizeChange(parseInt(value, 10))}
+          >
             <SelectTrigger className="w-20">
               <SelectValue />
             </SelectTrigger>
@@ -292,7 +297,8 @@ export function PriceList({
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
           <div className="text-sm text-muted-foreground">
-            显示第 {(page - 1) * pageSize + 1} - {Math.min(page * pageSize, total)} 条，共 {total} 条记录
+            显示第 {(page - 1) * pageSize + 1} - {Math.min(page * pageSize, total)} 条，共 {total}{" "}
+            条记录
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -353,9 +359,7 @@ export function PriceList({
           <DollarSign className="h-4 w-4" />
           <span>共 {total} 个模型价格</span>
           {searchTerm && (
-            <span className="text-muted-foreground">
-              （搜索结果：{filteredPrices.length} 个）
-            </span>
+            <span className="text-muted-foreground">（搜索结果：{filteredPrices.length} 个）</span>
           )}
         </div>
         <div>
