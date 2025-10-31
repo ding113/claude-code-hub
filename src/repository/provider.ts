@@ -6,6 +6,7 @@ import { providers } from "@/drizzle/schema";
 import { eq, isNull, and, desc, sql } from "drizzle-orm";
 import type { Provider, CreateProviderData, UpdateProviderData } from "@/types/provider";
 import { toProvider } from "./_shared/transformers";
+import { getEnvConfig } from "@/lib/config";
 
 export async function createProvider(providerData: CreateProviderData): Promise<Provider> {
   const dbData = {
@@ -270,25 +271,38 @@ export async function getProviderStatistics(): Promise<
   }>
 > {
   try {
-    // 使用 JavaScript Date 获取今日时间范围（本地时区，受 TZ 环境变量影响）
+    // 时区感知的时间处理
+    // 获取今日时间范围（本地时区）
+    const timezone = getEnvConfig().TZ;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    // 转换为 ISO 字符串以供 SQL 使用
-    const todayStr = today.toISOString();
-    const tomorrowStr = tomorrow.toISOString();
+    // 从 Date 对象提取本地时间（不要用 toISOString，那会转换为 UTC）
+    const todayYear = today.getFullYear();
+    const todayMonth = String(today.getMonth() + 1).padStart(2, "0");
+    const todayDay = String(today.getDate()).padStart(2, "0");
+    const todayLocalStr = `${todayYear}-${todayMonth}-${todayDay} 00:00:00`;
+
+    const tomorrowYear = tomorrow.getFullYear();
+    const tomorrowMonth = String(tomorrow.getMonth() + 1).padStart(2, "0");
+    const tomorrowDay = String(tomorrow.getDate()).padStart(2, "0");
+    const tomorrowLocalStr = `${tomorrowYear}-${tomorrowMonth}-${tomorrowDay} 00:00:00`;
 
     const query = sql`
       WITH provider_stats AS (
         SELECT
           p.id,
           COALESCE(
-            SUM(CASE WHEN mr.created_at >= ${todayStr}::timestamp AND mr.created_at < ${tomorrowStr}::timestamp THEN mr.cost_usd ELSE 0 END),
+            SUM(CASE WHEN (mr.created_at AT TIME ZONE 'UTC' AT TIME ZONE ${timezone})::timestamp >= ${todayLocalStr}::timestamp
+                      AND (mr.created_at AT TIME ZONE 'UTC' AT TIME ZONE ${timezone})::timestamp < ${tomorrowLocalStr}::timestamp
+                 THEN mr.cost_usd ELSE 0 END),
             0
           ) AS today_cost,
-          COUNT(CASE WHEN mr.created_at >= ${todayStr}::timestamp AND mr.created_at < ${tomorrowStr}::timestamp THEN 1 END)::integer AS today_calls
+          COUNT(CASE WHEN (mr.created_at AT TIME ZONE 'UTC' AT TIME ZONE ${timezone})::timestamp >= ${todayLocalStr}::timestamp
+                       AND (mr.created_at AT TIME ZONE 'UTC' AT TIME ZONE ${timezone})::timestamp < ${tomorrowLocalStr}::timestamp
+                  THEN 1 END)::integer AS today_calls
         FROM providers p
         LEFT JOIN message_request mr ON p.id = mr.provider_id
           AND mr.deleted_at IS NULL
