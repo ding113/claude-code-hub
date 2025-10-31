@@ -192,7 +192,16 @@ export class ProxyResponseHandler {
           statusCode,
         });
       } catch (error) {
-        logger.error("Failed to handle non-stream log:", error);
+        // 检测是否为客户端中断
+        const err = error as Error;
+        if (err.name === "AbortError" || err.message?.includes("aborted")) {
+          logger.warn("ResponseHandler: Non-stream processing aborted by client", {
+            providerId: provider.id,
+            providerName: provider.name,
+          });
+        } else {
+          logger.error("Failed to handle non-stream log:", error);
+        }
       }
     })();
 
@@ -392,7 +401,18 @@ export class ProxyResponseHandler {
           providerChain: session.getProviderChain(),
         });
       } catch (error) {
-        logger.error("Failed to save SSE content:", error);
+        // 检测是否为客户端中断
+        const err = error as Error;
+        if (err.name === "AbortError" || err.message?.includes("aborted")) {
+          logger.warn("ResponseHandler: Stream reading aborted by client", {
+            providerId: provider.id,
+            providerName: provider.name,
+            messageId: messageContext.id,
+            chunksCollected: chunks.length,
+          });
+        } else {
+          logger.error("Failed to save SSE content:", error);
+        }
       } finally {
         reader.releaseLock();
       }

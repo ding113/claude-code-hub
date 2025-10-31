@@ -9,6 +9,7 @@ import {
 import { ProxyProviderResolver } from "./provider-selector";
 import { ProxyError, categorizeError, ErrorCategory } from "./errors";
 import { ModelRedirector } from "./model-redirector";
+import { SessionManager } from "@/lib/session-manager";
 import { logger } from "@/lib/logger";
 import type { ProxySession } from "./session";
 import { defaultRegistry } from "../converters";
@@ -37,6 +38,49 @@ export class ProxyForwarder {
         // 成功：记录健康状态
         recordSuccess(currentProvider.id);
 
+        // ⭐ 成功后绑定 session 到供应商（智能绑定策略）
+        if (session.sessionId) {
+          // 使用智能绑定策略（主备模式 + 健康自动回迁）
+          const result = await SessionManager.updateSessionBindingSmart(
+            session.sessionId,
+            currentProvider.id,
+            currentProvider.priority || 0,
+            attemptCount === 0 // isFirstAttempt
+          );
+
+          if (result.updated) {
+            logger.info("ProxyForwarder: Session binding updated", {
+              sessionId: session.sessionId,
+              providerId: currentProvider.id,
+              providerName: currentProvider.name,
+              priority: currentProvider.priority,
+              groupTag: currentProvider.groupTag,
+              reason: result.reason,
+              details: result.details,
+              attemptNumber: attemptCount + 1,
+            });
+          } else {
+            logger.debug("ProxyForwarder: Session binding not updated", {
+              sessionId: session.sessionId,
+              providerId: currentProvider.id,
+              providerName: currentProvider.name,
+              priority: currentProvider.priority,
+              reason: result.reason,
+              details: result.details,
+            });
+          }
+
+          // ⭐ 统一更新两个数据源（确保监控数据一致）
+          // session:provider (真实绑定) 已在 updateSessionBindingSmart 中更新
+          // session:info (监控信息) 在此更新
+          void SessionManager.updateSessionProvider(session.sessionId, {
+            providerId: currentProvider.id,
+            providerName: currentProvider.name,
+          }).catch((error) => {
+            logger.error("ProxyForwarder: Failed to update session provider info", { error });
+          });
+        }
+
         // 修复：成功时记录到决策链
         session.addProviderToChain(currentProvider, {
           reason: attemptCount === 0 ? "request_success" : "retry_success",
@@ -57,12 +101,40 @@ export class ProxyForwarder {
         attemptCount++;
         lastError = error as Error;
 
-        // ⭐ 1. 分类错误（供应商错误 vs 系统错误）
+        // ⭐ 1. 分类错误（供应商错误 vs 系统错误 vs 客户端中断）
         const errorCategory = categorizeError(lastError);
         const errorMessage =
           lastError instanceof ProxyError ? lastError.getDetailedErrorMessage() : lastError.message;
 
-        // ⭐ 2. 系统错误处理（不计入熔断器，先重试1次当前供应商）
+        // ⭐ 2. 客户端中断处理（不计入熔断器，不重试，立即返回）
+        if (errorCategory === ErrorCategory.CLIENT_ABORT) {
+          logger.warn("ProxyForwarder: Client aborted request, stopping immediately", {
+            providerId: currentProvider.id,
+            providerName: currentProvider.name,
+            attemptNumber: attemptCount,
+          });
+
+          // 记录到决策链（标记为客户端中断）
+          session.addProviderToChain(currentProvider, {
+            reason: "system_error", // 使用 system_error 作为客户端中断的原因
+            circuitState: getCircuitState(currentProvider.id),
+            attemptNumber: attemptCount,
+            errorMessage: "Client aborted request",
+            errorDetails: {
+              system: {
+                errorType: "ClientAbort",
+                errorName: lastError.name,
+                errorCode: "CLIENT_ABORT",
+                errorStack: lastError.stack?.split("\n").slice(0, 3).join("\n"),
+              },
+            },
+          });
+
+          // 立即抛出错误，不重试
+          throw lastError;
+        }
+
+        // ⭐ 3. 系统错误处理（不计入熔断器，先重试1次当前供应商）
         if (errorCategory === ErrorCategory.SYSTEM_ERROR) {
           const err = lastError as Error & {
             code?: string;
@@ -107,7 +179,7 @@ export class ProxyForwarder {
           });
         }
 
-        // ⭐ 3. 供应商错误处理（所有 4xx/5xx HTTP 错误，计入熔断器，直接切换）
+        // ⭐ 4. 供应商错误处理（所有 4xx/5xx HTTP 错误，计入熔断器，直接切换）
         else if (errorCategory === ErrorCategory.PROVIDER_ERROR) {
           const proxyError = lastError as ProxyError;
           const statusCode = proxyError.statusCode;
@@ -359,6 +431,7 @@ export class ProxyForwarder {
     const init: RequestInit = {
       method: session.method,
       headers: processedHeaders,
+      signal: session.clientAbortSignal || undefined, // 传递客户端中断信号
       ...(requestBody ? { body: requestBody } : {}),
     };
 
@@ -371,10 +444,27 @@ export class ProxyForwarder {
       // 捕获 fetch 原始错误（网络错误、DNS 解析失败、连接失败等）
       const err = fetchError as Error & {
         cause?: unknown;
-        code?: string; // Node.js 错误码：如 'ENOTFOUND'、'ECONNREFUSED'、'ETIMEDOUT'
+        code?: string; // Node.js 错误码：如 'ENOTFOUND'、'ECONNREFUSED'、'ETIMEDOUT'、'ECONNRESET'
         errno?: number;
         syscall?: string; // 系统调用：如 'getaddrinfo'、'connect'、'read'、'write'
       };
+
+      // ⭐ 检测客户端主动中断（AbortError）
+      if (err.name === "AbortError" || err.message.includes("aborted")) {
+        logger.warn("ProxyForwarder: Request aborted by client", {
+          providerId: provider.id,
+          providerName: provider.name,
+          proxyUrl: new URL(proxyUrl).origin,
+          errorName: err.name,
+          errorMessage: err.message,
+        });
+
+        // 客户端中断不应计入熔断器，也不重试，直接抛出错误
+        throw new ProxyError(
+          "Request aborted by client",
+          499 // Nginx 使用的 "Client Closed Request" 状态码
+        );
+      }
 
       logger.error("ProxyForwarder: Fetch failed", {
         providerId: provider.id,
@@ -385,7 +475,7 @@ export class ProxyForwarder {
         errorType: err.constructor.name,
         errorName: err.name,
         errorMessage: err.message,
-        errorCode: err.code, // ⭐ 如 'ENOTFOUND'（DNS失败）、'ECONNREFUSED'（连接拒绝）、'ETIMEDOUT'（超时）
+        errorCode: err.code, // ⭐ 如 'ENOTFOUND'（DNS失败）、'ECONNREFUSED'（连接拒绝）、'ETIMEDOUT'（超时）、'ECONNRESET'（连接重置）
         errorSyscall: err.syscall, // ⭐ 如 'getaddrinfo'（DNS查询）、'connect'（TCP连接）
         errorErrno: err.errno,
         errorCause: err.cause,

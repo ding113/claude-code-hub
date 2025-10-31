@@ -44,6 +44,7 @@ export class ProxySession {
   readonly request: ProxyRequestPayload;
   readonly userAgent: string | null; // User-Agent（用于客户端类型分析）
   readonly context: Context; // Hono Context（用于转换器）
+  readonly clientAbortSignal: AbortSignal | null; // 客户端中断信号
   userName: string;
   authState: AuthState | null;
   provider: Provider | null;
@@ -74,6 +75,7 @@ export class ProxySession {
     request: ProxyRequestPayload;
     userAgent: string | null;
     context: Context;
+    clientAbortSignal: AbortSignal | null;
   }) {
     this.startTime = init.startTime;
     this.method = init.method;
@@ -83,6 +85,7 @@ export class ProxySession {
     this.request = init.request;
     this.userAgent = init.userAgent;
     this.context = init.context;
+    this.clientAbortSignal = init.clientAbortSignal;
     this.userName = "unknown";
     this.authState = null;
     this.provider = null;
@@ -101,6 +104,9 @@ export class ProxySession {
 
     // 提取 User-Agent
     const userAgent = headers.get("user-agent") || null;
+
+    // 提取客户端 AbortSignal（如果存在）
+    const clientAbortSignal = c.req.raw.signal || null;
 
     const request: ProxyRequestPayload = {
       message: bodyResult.requestMessage,
@@ -122,6 +128,7 @@ export class ProxySession {
       request,
       userAgent,
       context: c,
+      clientAbortSignal,
     });
   }
 

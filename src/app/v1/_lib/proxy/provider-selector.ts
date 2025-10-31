@@ -261,16 +261,14 @@ export class ProxyProviderResolver {
           });
         }
 
-        // 绑定 session 到 provider（同步等待，确保写入成功）
-        await SessionManager.bindSessionToProvider(session.sessionId, session.provider.id);
+        // ⭐ 延迟绑定策略：移除立即绑定，改为请求成功后绑定
+        // 原因：并发检查成功 ≠ 请求成功，应该绑定到最终成功的供应商
+        // await SessionManager.bindSessionToProvider(session.sessionId, session.provider.id); // ❌ 已移除
 
-        // 更新 session 详细信息中的 provider 信息（异步，非关键路径）
-        void SessionManager.updateSessionProvider(session.sessionId, {
-          providerId: session.provider.id,
-          providerName: session.provider.name,
-        }).catch((error) => {
-          logger.error("ProviderSelector: Failed to update session provider info", { error });
-        });
+        // ⭐ 已移除：不要在并发检查通过后立即更新监控信息
+        // 原因：此时请求还没发送，供应商可能失败
+        // 修复：延迟到 forwarder 请求成功后统一更新（见 forwarder.ts:75-80）
+        // void SessionManager.updateSessionProvider(...); // ❌ 已移除
 
         return null; // 成功
       }

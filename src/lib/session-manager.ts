@@ -377,6 +377,247 @@ export class SessionManager {
   }
 
   /**
+   * 获取当前绑定供应商的优先级
+   *
+   * ⚠️ 修复：从 session:provider 读取（真实绑定），而不是 session:info
+   * 原因：info.providerId 是并发检查通过的供应商，可能请求失败了
+   *
+   * @param sessionId - Session ID
+   * @returns 优先级数字（数字越小优先级越高），如果未绑定或无法查询则返回 null
+   */
+  static async getSessionProviderPriority(sessionId: string): Promise<number | null> {
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") return null;
+
+    try {
+      // ✅ 修复：从真实绑定关系读取（session:provider）
+      const providerIdStr = await redis.get(`session:${sessionId}:provider`);
+      if (!providerIdStr) {
+        return null;
+      }
+
+      const providerId = parseInt(providerIdStr, 10);
+      if (isNaN(providerId)) {
+        return null;
+      }
+
+      // 查询供应商详情获取优先级
+      const { findProviderById } = await import("@/repository/provider");
+      const provider = await findProviderById(providerId);
+
+      if (!provider) {
+        logger.warn("SessionManager: Bound provider not found", { providerId });
+        return null;
+      }
+
+      return provider.priority;
+    } catch (error) {
+      logger.error("SessionManager: Failed to get session provider priority", { error });
+      return null;
+    }
+  }
+
+  /**
+   * 智能更新 Session 绑定（主备模式 + 健康自动回迁）
+   *
+   * ⚠️ 职责分离：不做分组权限检查（选择器已保证）
+   *
+   * 核心策略：
+   * 1. 首次绑定：直接绑定到成功的供应商（SET NX 避免并发竞争）
+   * 2. 重试成功：智能决策
+   *    a) 新供应商优先级更高（数字更小）→ 直接更新（迁移到主供应商）
+   *    b) 新供应商优先级相同或更低 → 检查原供应商健康状态：
+   *       - 原供应商已熔断 → 更新到新供应商（备用供应商接管）
+   *       - 原供应商健康 → 保持原绑定（优先使用主供应商）
+   *
+   * @param sessionId - Session ID
+   * @param newProviderId - 新供应商 ID
+   * @param newProviderPriority - 新供应商优先级
+   * @param isFirstAttempt - 是否首次尝试
+   * @returns { updated: 是否更新, reason: 原因说明, details: 详细说明 }
+   */
+  static async updateSessionBindingSmart(
+    sessionId: string,
+    newProviderId: number,
+    newProviderPriority: number,
+    isFirstAttempt: boolean = false
+  ): Promise<{ updated: boolean; reason: string; details?: string }> {
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") {
+      return { updated: false, reason: "redis_not_ready" };
+    }
+
+    try {
+      // ========== 情况 1：首次尝试成功 ==========
+      if (isFirstAttempt) {
+        const key = `session:${sessionId}:provider`;
+        // 使用 SET NX 绑定（避免覆盖并发请求）
+        const result = await redis.set(
+          key,
+          newProviderId.toString(),
+          "EX",
+          this.SESSION_TTL,
+          "NX"
+        );
+
+        if (result === "OK") {
+          logger.info("SessionManager: Bound session to provider (first success)", {
+            sessionId,
+            providerId: newProviderId,
+            priority: newProviderPriority,
+          });
+          return {
+            updated: true,
+            reason: "first_success",
+            details: `首次成功，绑定到供应商 ${newProviderId} (priority=${newProviderPriority})`
+          };
+        } else {
+          // 并发请求已经绑定了，放弃更新
+          return {
+            updated: false,
+            reason: "concurrent_binding_exists",
+            details: "并发请求已绑定，跳过"
+          };
+        }
+      }
+
+      // ========== 情况 2：重试成功（需要智能决策）==========
+
+      // 2.1 获取当前绑定的供应商 ID
+      const currentProviderIdStr = await redis.get(`session:${sessionId}:provider`);
+      if (!currentProviderIdStr) {
+        // 没有绑定，使用 SET NX 绑定
+        const key = `session:${sessionId}:provider`;
+        const result = await redis.set(
+          key,
+          newProviderId.toString(),
+          "EX",
+          this.SESSION_TTL,
+          "NX"
+        );
+
+        if (result === "OK") {
+          logger.info("SessionManager: Bound session (no previous binding)", {
+            sessionId,
+            providerId: newProviderId,
+            priority: newProviderPriority,
+          });
+          return {
+            updated: true,
+            reason: "no_previous_binding",
+            details: `无绑定，绑定到供应商 ${newProviderId} (priority=${newProviderPriority})`
+          };
+        } else {
+          return {
+            updated: false,
+            reason: "concurrent_binding_exists",
+            details: "并发请求已绑定"
+          };
+        }
+      }
+
+      const currentProviderId = parseInt(currentProviderIdStr, 10);
+      if (isNaN(currentProviderId)) {
+        logger.warn("SessionManager: Invalid provider ID in Redis", { currentProviderIdStr });
+        return { updated: false, reason: "invalid_provider_id" };
+      }
+
+      // 2.2 查询当前供应商的详情（优先级 + 健康状态）
+      const { findProviderById } = await import("@/repository/provider");
+      const currentProvider = await findProviderById(currentProviderId);
+
+      if (!currentProvider) {
+        // 当前供应商不存在（可能被删除），直接更新
+        const key = `session:${sessionId}:provider`;
+        await redis.setex(key, this.SESSION_TTL, newProviderId.toString());
+
+        logger.info("SessionManager: Updated binding (current provider not found)", {
+          sessionId,
+          oldProviderId: currentProviderId,
+          newProviderId,
+          newPriority: newProviderPriority,
+        });
+
+        return {
+          updated: true,
+          reason: "current_provider_not_found",
+          details: `原供应商 ${currentProviderId} 不存在，更新到 ${newProviderId}`
+        };
+      }
+
+      const currentPriority = currentProvider.priority || 0;
+
+      // 2.3 智能决策：优先级比较 + 健康检查
+
+      // ========== 规则 A：新供应商优先级更高（数字更小）→ 直接迁移 ==========
+      if (newProviderPriority < currentPriority) {
+        const key = `session:${sessionId}:provider`;
+        await redis.setex(key, this.SESSION_TTL, newProviderId.toString());
+
+        logger.info("SessionManager: Migrated to higher priority provider", {
+          sessionId,
+          oldProviderId: currentProviderId,
+          oldProviderName: currentProvider.name,
+          oldPriority: currentPriority,
+          newProviderId,
+          newPriority: newProviderPriority,
+        });
+
+        return {
+          updated: true,
+          reason: "priority_upgrade",
+          details: `优先级升级：从供应商 ${currentProvider.name} (priority=${currentPriority}) 迁移到 ${newProviderId} (priority=${newProviderPriority})`
+        };
+      }
+
+      // ========== 规则 B：新供应商优先级相同或更低 → 检查原供应商健康状态 ==========
+      const { isCircuitOpen } = await import("@/lib/circuit-breaker");
+      const isCurrentCircuitOpen = await isCircuitOpen(currentProviderId);
+
+      if (isCurrentCircuitOpen) {
+        // 原供应商已熔断 → 更新到新供应商（备用供应商接管）
+        const key = `session:${sessionId}:provider`;
+        await redis.setex(key, this.SESSION_TTL, newProviderId.toString());
+
+        logger.info("SessionManager: Migrated to backup provider (circuit open)", {
+          sessionId,
+          oldProviderId: currentProviderId,
+          oldProviderName: currentProvider.name,
+          oldPriority: currentPriority,
+          newProviderId,
+          newPriority: newProviderPriority,
+        });
+
+        return {
+          updated: true,
+          reason: "circuit_open_fallback",
+          details: `原供应商 ${currentProvider.name} (priority=${currentPriority}) 已熔断，切换到供应商 ${newProviderId} (priority=${newProviderPriority})`
+        };
+      }
+
+      // 原供应商健康 + 优先级更高/相同 → 保持原绑定（尽量使用主供应商）
+      logger.debug("SessionManager: Keeping current provider (healthy and higher/equal priority)", {
+        sessionId,
+        currentProviderId,
+        currentProviderName: currentProvider.name,
+        currentPriority,
+        attemptedProviderId: newProviderId,
+        attemptedPriority: newProviderPriority,
+      });
+
+      return {
+        updated: false,
+        reason: "keep_healthy_higher_priority",
+        details: `保持原供应商 ${currentProvider.name} (priority=${currentPriority}, 健康)，拒绝供应商 ${newProviderId} (priority=${newProviderPriority})`
+      };
+
+    } catch (error) {
+      logger.error("SessionManager: Failed to update session binding", { error });
+      return { updated: false, reason: "error", details: String(error) };
+    }
+  }
+
+  /**
    * 存储 session 基础信息（请求开始时调用）
    */
   static async storeSessionInfo(sessionId: string, info: SessionStoreInfo): Promise<void> {

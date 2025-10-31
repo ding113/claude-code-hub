@@ -160,6 +160,7 @@ export class ProxyError extends Error {
 export enum ErrorCategory {
   PROVIDER_ERROR, // 供应商问题（所有 4xx/5xx HTTP 错误）→ 计入熔断器 + 直接切换
   SYSTEM_ERROR, // 系统/网络问题（fetch 网络异常）→ 不计入熔断器 + 先重试1次
+  CLIENT_ABORT, // 客户端主动中断 → 不计入熔断器 + 不重试 + 直接返回
 }
 
 /**
@@ -171,15 +172,30 @@ export enum ErrorCategory {
  *   → 应计入熔断器，连续失败时触发熔断保护
  *   → 应直接切换到其他供应商
  *
+ * - 客户端中断（AbortError 或 error.code === 'ECONNRESET' 且 statusCode === 499）：客户端主动中断
+ *   → 客户端关闭连接或主动取消请求
+ *   → 不应计入熔断器（不是供应商问题）
+ *   → 不应重试（客户端已经不想要结果了）
+ *   → 应立即返回错误
+ *
  * - 其他错误（fetch 网络异常）：系统/网络问题
  *   → 包括：DNS 解析失败、连接被拒绝、连接超时、网络中断等
  *   → 不应计入供应商熔断器（不是供应商服务不可用）
  *   → 应先重试1次当前供应商（可能是临时网络抖动）
  *
  * @param error - 捕获的错误对象
- * @returns 错误分类（PROVIDER_ERROR 或 SYSTEM_ERROR）
+ * @returns 错误分类（PROVIDER_ERROR、SYSTEM_ERROR 或 CLIENT_ABORT）
  */
 export function categorizeError(error: Error): ErrorCategory {
+  // 客户端中断检测（优先级最高）
+  if (
+    error.name === "AbortError" ||
+    error.message.includes("aborted") ||
+    (error instanceof ProxyError && error.statusCode === 499)
+  ) {
+    return ErrorCategory.CLIENT_ABORT; // 客户端主动中断
+  }
+
   // ProxyError = HTTP 错误（4xx 或 5xx）
   if (error instanceof ProxyError) {
     return ErrorCategory.PROVIDER_ERROR; // 所有 HTTP 错误都是供应商问题
@@ -191,7 +207,6 @@ export function categorizeError(error: Error): ErrorCategory {
   // - ENOTFOUND: DNS 解析失败
   // - ECONNREFUSED: 连接被拒绝
   // - ETIMEDOUT: 连接或读取超时
-  // - ECONNRESET: 连接被重置
-  // - AbortError: 请求被中止（超时）
+  // - ECONNRESET: 连接被重置（非客户端主动）
   return ErrorCategory.SYSTEM_ERROR;
 }
