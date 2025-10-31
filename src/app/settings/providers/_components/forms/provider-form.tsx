@@ -27,6 +27,7 @@ import {
 import type { ProviderDisplay, ProviderType } from "@/types/provider";
 import { validateNumericField, isValidUrl } from "@/lib/utils/validation";
 import { PROVIDER_DEFAULTS } from "@/lib/constants/provider.constants";
+import { PROVIDER_TYPE_CONFIG, getAllProviderTypes } from "@/lib/provider-type-utils";
 import { toast } from "sonner";
 import { ModelMultiSelect } from "../model-multi-select";
 import { ModelRedirectEditor } from "../model-redirect-editor";
@@ -306,22 +307,23 @@ export function ProviderForm({
                 <SelectValue placeholder="选择供应商类型" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="claude">Claude (Anthropic Messages API)</SelectItem>
-                <SelectItem value="claude-auth">Claude (Anthropic Auth Token)</SelectItem>
-                <SelectItem value="codex">Codex (Response API)</SelectItem>
-                <SelectItem value="gemini-cli" disabled={!enableMultiProviderTypes}>
-                  Gemini CLI{!enableMultiProviderTypes && " - 功能开发中"}
-                </SelectItem>
-                <SelectItem value="openai-compatible" disabled={!enableMultiProviderTypes}>
-                  OpenAI Compatible{!enableMultiProviderTypes && " - 功能开发中"}
-                </SelectItem>
+                {getAllProviderTypes().map((type) => {
+                  const config = PROVIDER_TYPE_CONFIG[type];
+                  const isDisabled = !enableMultiProviderTypes && (type === "gemini-cli" || type === "openai-compatible");
+                  return (
+                    <SelectItem key={type} value={type} disabled={isDisabled}>
+                      {config.label} - {config.description}
+                      {isDisabled && " - 功能开发中"}
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              选择供应商的 API 格式类型。
+              选择供应商的 API 格式类型，不同类型会影响请求处理方式和调度策略。
               {!enableMultiProviderTypes && (
                 <span className="text-amber-600 ml-1">
-                  注：Gemini CLI 和 OpenAI Compatible 类型功能正在开发中，暂不可用
+                  注：Gemini CLI 和 OpenAI Compatible 类型暂不可用
                 </span>
               )}
             </p>
