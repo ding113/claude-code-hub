@@ -967,6 +967,52 @@ export class SessionManager {
   }
 
   /**
+   * 获取所有 session ID 列表（轻量级版本）
+   * 仅返回 session ID，不返回详细信息
+   *
+   * @returns session ID 数组
+   */
+  static async getAllSessionIds(): Promise<string[]> {
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") {
+      logger.warn("SessionManager: Redis not ready, returning empty list");
+      return [];
+    }
+
+    try {
+      const sessionIds: string[] = [];
+      let cursor = "0";
+
+      do {
+        const [nextCursor, keys] = (await redis.scan(
+          cursor,
+          "MATCH",
+          "session:*:info",
+          "COUNT",
+          100
+        )) as [string, string[]];
+
+        cursor = nextCursor;
+
+        if (keys.length > 0) {
+          // 提取 sessionId
+          for (const key of keys) {
+            const sessionId = key.replace("session:", "").replace(":info", "");
+            sessionIds.push(sessionId);
+          }
+        }
+      } while (cursor !== "0");
+
+      logger.trace(`SessionManager: Found ${sessionIds.length} session IDs`);
+
+      return sessionIds;
+    } catch (error) {
+      logger.error("SessionManager: Failed to get session IDs", { error });
+      return [];
+    }
+  }
+
+  /**
    * 获取 session 的 messages 内容
    */
   static async getSessionMessages(sessionId: string): Promise<unknown | null> {

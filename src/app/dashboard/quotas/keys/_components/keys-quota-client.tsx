@@ -18,13 +18,15 @@ import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
 import { UserQuotaHeader } from "@/components/quota/user-quota-header";
 import { QuotaProgress } from "@/components/quota/quota-progress";
+import { QuotaWindowType } from "@/components/quota/quota-window-type";
+import { QuotaCountdownCompact } from "@/components/quota/quota-countdown";
 import { hasKeyQuotaSet, isUserExceeded, getUsageRate } from "@/lib/utils/quota-helpers";
 import { EditKeyQuotaDialog } from "./edit-key-quota-dialog";
 
 interface KeyQuota {
-  cost5h: { current: number; limit: number | null };
-  costWeekly: { current: number; limit: number | null };
-  costMonthly: { current: number; limit: number | null };
+  cost5h: { current: number; limit: number | null; resetAt?: Date };
+  costWeekly: { current: number; limit: number | null; resetAt?: Date };
+  costMonthly: { current: number; limit: number | null; resetAt?: Date };
   concurrentSessions: { current: number; limit: number };
 }
 
@@ -146,6 +148,10 @@ export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClient
                           <TableCell>
                             {hasKeyQuota && key.quota && key.quota.cost5h.limit !== null ? (
                               <div className="space-y-1">
+                                {/* 窗口类型标签 */}
+                                <div className="flex items-center justify-between mb-1">
+                                  <QuotaWindowType type="5h" size="sm" />
+                                </div>
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs font-mono">
                                     {formatCurrency(key.quota.cost5h.current, currencyCode)}/
@@ -174,6 +180,13 @@ export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClient
                           <TableCell>
                             {hasKeyQuota && key.quota && key.quota.costWeekly.limit !== null ? (
                               <div className="space-y-1">
+                                {/* 窗口类型 + 倒计时 */}
+                                <div className="flex items-center justify-between mb-1">
+                                  <QuotaWindowType type="weekly" size="sm" />
+                                  {key.quota.costWeekly.resetAt && (
+                                    <QuotaCountdownCompact resetAt={key.quota.costWeekly.resetAt} />
+                                  )}
+                                </div>
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs font-mono">
                                     {formatCurrency(key.quota.costWeekly.current, currencyCode)}/
@@ -202,6 +215,13 @@ export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClient
                           <TableCell>
                             {hasKeyQuota && key.quota && key.quota.costMonthly.limit !== null ? (
                               <div className="space-y-1">
+                                {/* 窗口类型 + 倒计时 */}
+                                <div className="flex items-center justify-between mb-1">
+                                  <QuotaWindowType type="monthly" size="sm" />
+                                  {key.quota.costMonthly.resetAt && (
+                                    <QuotaCountdownCompact resetAt={key.quota.costMonthly.resetAt} />
+                                  )}
+                                </div>
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs font-mono">
                                     {formatCurrency(key.quota.costMonthly.current, currencyCode)}/
