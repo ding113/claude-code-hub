@@ -1,4 +1,4 @@
-import { getUsers } from "@/actions/users";
+import { getUsers, getUserLimitUsage } from "@/actions/users";
 import { getKeyLimitUsage } from "@/actions/keys";
 import { KeysQuotaManager } from "./_components/keys-quota-manager";
 import { getSystemSettings } from "@/repository/system-config";
@@ -8,23 +8,29 @@ async function getUsersWithKeysQuotas() {
 
   const usersWithKeysQuotas = await Promise.all(
     users.map(async (user) => {
+      // 获取密钥限额数据
       const keysWithQuotas = await Promise.all(
         user.keys.map(async (key) => {
           const result = await getKeyLimitUsage(key.id);
           return {
             id: key.id,
             name: key.name,
-            status: key.status,
+            isEnabled: key.status === "enabled", // 转换 status 为 isEnabled
             expiresAt: key.expiresAt,
             quota: result.ok ? result.data : null,
           };
         })
       );
 
+      // 获取用户限额数据
+      const userQuotaResult = await getUserLimitUsage(user.id);
+      const userQuota = userQuotaResult.ok ? userQuotaResult.data : null;
+
       return {
         id: user.id,
         name: user.name,
         role: user.role,
+        userQuota, // 新增：用户限额数据
         keys: keysWithQuotas,
       };
     })

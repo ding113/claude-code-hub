@@ -17,37 +17,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { UsageLogRow } from "@/repository/usage-logs";
-import { formatDistanceToNow } from "date-fns";
-import { zhCN } from "date-fns/locale";
+import { RelativeTime } from "@/components/ui/relative-time";
 import { ProviderChainPopover } from "./provider-chain-popover";
 import { ErrorDetailsDialog } from "./error-details-dialog";
 import { formatProviderSummary } from "@/lib/utils/provider-chain-formatter";
 import { ModelDisplayWithRedirect } from "./model-display-with-redirect";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
-
-/**
- * 格式化时间显示
- * - 1分钟以内显示具体秒数（如 "30秒前"）
- * - 超过1分钟使用相对时间（如 "2小时前"）
- */
-function formatTimeAgo(date: Date | null): string {
-  if (!date) return '-';
-
-  const now = new Date();
-  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-
-  // 1分钟以内显示秒数
-  if (diffInSeconds < 60) {
-    return `${diffInSeconds}秒前`;
-  }
-
-  // 超过1分钟使用相对时间
-  return formatDistanceToNow(date, {
-    addSuffix: true,
-    locale: zhCN,
-  });
-}
 
 /**
  * 格式化请求耗时
@@ -123,7 +99,7 @@ export function UsageLogsTable({
                   className={newLogIds?.has(log.id) ? 'animate-highlight-flash' : ''}
                 >
                   <TableCell className="font-mono text-xs">
-                    {formatTimeAgo(log.createdAt)}
+                    <RelativeTime date={log.createdAt} fallback="-" />
                   </TableCell>
                   <TableCell>{log.userName}</TableCell>
                   <TableCell className="font-mono text-xs">{log.keyName}</TableCell>
