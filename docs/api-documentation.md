@@ -11,6 +11,7 @@ Claude Code Hub 提供了完整的 REST API 接口，支持通过 HTTP 请求进
 访问：`http://localhost:23000/api/actions/scalar`
 
 **特性**：
+
 - 🎨 现代化紫色主题
 - 🔍 智能搜索和分类
 - 🧪 交互式 API 测试
@@ -22,6 +23,7 @@ Claude Code Hub 提供了完整的 REST API 接口，支持通过 HTTP 请求进
 访问：`http://localhost:23000/api/actions/docs`
 
 **特性**：
+
 - 📚 传统 Swagger 界面
 - 🧪 完整的 Try it out 功能
 - 📄 标准 OpenAPI 格式
@@ -32,6 +34,7 @@ Claude Code Hub 提供了完整的 REST API 接口，支持通过 HTTP 请求进
 访问：`http://localhost:23000/api/actions/openapi.json`
 
 **用途**：
+
 - 生成客户端 SDK（TypeScript、Python、Go 等）
 - 导入到 Postman、Insomnia 等工具
 - 自动化测试集成
@@ -59,15 +62,19 @@ Claude Code Hub 提供了完整的 REST API 接口，支持通过 HTTP 请求进
 
 ```typescript
 // 使用 fetch API
-const response = await fetch('/api/actions/users/getUsers', {
-  method: 'POST',
-  credentials: 'include', // 自动包含 cookie
+const response = await fetch("/api/actions/users/getUsers", {
+  method: "POST",
+  credentials: "include", // 自动包含 cookie
 });
 
 // 使用 axios
-const response = await axios.post('/api/actions/users/getUsers', {}, {
-  withCredentials: true,
-});
+const response = await axios.post(
+  "/api/actions/users/getUsers",
+  {},
+  {
+    withCredentials: true,
+  }
+);
 ```
 
 ## 权限系统
@@ -393,10 +400,10 @@ Cookie: session=your-session-cookie
 async function callAPI<T>(endpoint: string, data: any): Promise<T> {
   try {
     const response = await fetch(`/api/actions/${endpoint}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
-      credentials: 'include', // 自动包含 cookie
+      credentials: "include", // 自动包含 cookie
     });
 
     const result = await response.json();
@@ -407,15 +414,15 @@ async function callAPI<T>(endpoint: string, data: any): Promise<T> {
 
     return result.data as T;
   } catch (error) {
-    console.error('API 调用失败:', error);
+    console.error("API 调用失败:", error);
     throw error;
   }
 }
 
 // 使用示例
 try {
-  const users = await callAPI('users/getUsers', {});
-  console.log('用户列表:', users);
+  const users = await callAPI("users/getUsers", {});
+  console.log("用户列表:", users);
 } catch (error) {
   alert(`获取用户列表失败: ${error.message}`);
 }
@@ -429,13 +436,13 @@ try {
 
 ```typescript
 // ❌ 不推荐：一次性获取所有数据
-const allPrices = await callAPI('model-prices/getModelPrices', {});
+const allPrices = await callAPI("model-prices/getModelPrices", {});
 
 // ✅ 推荐：分页获取
-const pagedPrices = await callAPI('model-prices/getModelPricesPaginated', {
+const pagedPrices = await callAPI("model-prices/getModelPricesPaginated", {
   page: 1,
   pageSize: 50,
-  search: 'claude'
+  search: "claude",
 });
 ```
 
@@ -475,9 +482,7 @@ async function cachedCallAPI<T>(
 
 ```typescript
 // ❌ 不推荐：并发 100 个请求
-const promises = userIds.map(id =>
-  callAPI('users/getUserLimitUsage', { userId: id })
-);
+const promises = userIds.map((id) => callAPI("users/getUserLimitUsage", { userId: id }));
 await Promise.all(promises);
 
 // ✅ 推荐：限制并发数为 5
@@ -488,9 +493,7 @@ async function* chunks<T>(arr: T[], n: number) {
 }
 
 for await (const chunk of chunks(userIds, 5)) {
-  await Promise.all(
-    chunk.map(id => callAPI('users/getUserLimitUsage', { userId: id }))
-  );
+  await Promise.all(chunk.map((id) => callAPI("users/getUserLimitUsage", { userId: id })));
 }
 ```
 
@@ -501,41 +504,42 @@ for await (const chunk of chunks(userIds, 5)) {
 在浏览器环境中，使用 `credentials: 'include'`：
 
 ```typescript
-fetch('/api/actions/users/getUsers', {
-  method: 'POST',
-  credentials: 'include', // 自动包含 cookie
+fetch("/api/actions/users/getUsers", {
+  method: "POST",
+  credentials: "include", // 自动包含 cookie
 });
 ```
 
 在非浏览器环境（如 Node.js），需要手动管理 cookie：
 
 ```typescript
-import { CookieJar } from 'tough-cookie';
-import fetch from 'node-fetch';
+import { CookieJar } from "tough-cookie";
+import fetch from "node-fetch";
 
 const jar = new CookieJar();
 
 // 登录后保存 cookie
-const loginResponse = await fetch('http://localhost:23000/api/auth/login', {
-  method: 'POST',
-  body: JSON.stringify({ token: 'admin-token' }),
+const loginResponse = await fetch("http://localhost:23000/api/auth/login", {
+  method: "POST",
+  body: JSON.stringify({ token: "admin-token" }),
 });
 
-const cookies = loginResponse.headers.raw()['set-cookie'];
-cookies.forEach(cookie => jar.setCookieSync(cookie, 'http://localhost:23000'));
+const cookies = loginResponse.headers.raw()["set-cookie"];
+cookies.forEach((cookie) => jar.setCookieSync(cookie, "http://localhost:23000"));
 
 // 后续请求使用 cookie
-const usersResponse = await fetch('http://localhost:23000/api/actions/users/getUsers', {
-  method: 'POST',
+const usersResponse = await fetch("http://localhost:23000/api/actions/users/getUsers", {
+  method: "POST",
   headers: {
-    Cookie: jar.getCookiesSync('http://localhost:23000').join('; ')
-  }
+    Cookie: jar.getCookiesSync("http://localhost:23000").join("; "),
+  },
 });
 ```
 
 ### API 端点返回 401 未认证？
 
 检查：
+
 1. 是否已通过 Web UI 登录
 2. Cookie 是否正确传递
 3. Cookie 是否过期（默认 7 天）
@@ -549,6 +553,7 @@ const usersResponse = await fetch('http://localhost:23000/api/actions/users/getU
 ### 是否支持 API Key 认证（而非 Cookie）？
 
 当前版本仅支持 Cookie 认证。如需 API Key 认证，可以：
+
 1. 在 GitHub Issues 提出需求
 2. 自行扩展 `src/app/api/actions/[...route]/route.ts` 添加认证中间件
 

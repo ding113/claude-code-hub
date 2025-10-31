@@ -314,6 +314,7 @@ LOG_LEVEL=info                     # 日志级别
 当需要将新的 Server Action 暴露为 REST API 时：
 
 1. 在 `src/app/api/actions/[...route]/route.ts` 中注册：
+
    ```typescript
    const { route, handler } = createActionRoute(
      "module",
@@ -335,6 +336,7 @@ LOG_LEVEL=info                     # 日志级别
 3. 测试端点：访问 `/api/actions/scalar` 查看并测试
 
 **核心特性**：
+
 - 使用 `createActionRoute()` 自动转换 Server Action 为 OpenAPI 端点
 - 复用现有 Zod schemas 进行参数验证
 - 自动生成 OpenAPI 3.1.0 规范文档
@@ -350,6 +352,7 @@ LOG_LEVEL=info                     # 日志级别
 - 分页参数：`page`（页码）、`pageSize`（每页大小）、`search`（搜索关键词）
 
 **实现要点**：
+
 ```typescript
 // 使用 ROW_NUMBER() 窗口函数获取最新价格
 WITH latest_prices AS (
