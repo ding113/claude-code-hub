@@ -49,7 +49,9 @@ interface KeysQuotaManagerProps {
 
 export function KeysQuotaManager({ users, currencyCode = "USD" }: KeysQuotaManagerProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [filter, setFilter] = useState<"all" | "key-quota" | "user-quota-only" | "warning" | "exceeded">("all");
+  const [filter, setFilter] = useState<
+    "all" | "key-quota" | "user-quota-only" | "warning" | "exceeded"
+  >("all");
 
   // 搜索 + 筛选逻辑
   const filteredUsers = useMemo(() => {
@@ -62,7 +64,9 @@ export function KeysQuotaManager({ users, currencyCode = "USD" }: KeysQuotaManag
         if (searchQuery) {
           const userNameMatches = user.name.toLowerCase().includes(lowerQuery);
           if (!userNameMatches) {
-            filteredKeys = filteredKeys.filter((key) => key.name.toLowerCase().includes(lowerQuery));
+            filteredKeys = filteredKeys.filter((key) =>
+              key.name.toLowerCase().includes(lowerQuery)
+            );
           }
         }
 

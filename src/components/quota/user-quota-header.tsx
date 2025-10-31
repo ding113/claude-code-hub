@@ -83,7 +83,10 @@ export function UserQuotaHeader({
             )}
             <User className="h-5 w-5 text-muted-foreground flex-shrink-0" />
             <h3 className="font-semibold text-lg truncate">{userName}</h3>
-            <Badge variant={userRole === "admin" ? "default" : "secondary"} className="flex-shrink-0">
+            <Badge
+              variant={userRole === "admin" ? "default" : "secondary"}
+              className="flex-shrink-0"
+            >
               {userRole === "admin" ? "管理员" : "用户"}
             </Badge>
             <Badge variant="outline" className="flex-shrink-0">
@@ -113,7 +116,11 @@ export function UserQuotaHeader({
                 <span className="text-sm text-muted-foreground w-20 text-right flex-shrink-0">
                   今日消费:
                 </span>
-                <QuotaProgress current={dailyCostCurrent} limit={dailyCostLimit} className="flex-1" />
+                <QuotaProgress
+                  current={dailyCostCurrent}
+                  limit={dailyCostLimit}
+                  className="flex-1"
+                />
                 <span className="text-sm font-mono w-24 text-right flex-shrink-0">
                   ${dailyCostCurrent.toFixed(2)}/${dailyCostLimit}
                 </span>
@@ -130,7 +137,11 @@ export function UserQuotaHeader({
                 userName={userName}
                 currentQuota={{
                   rpm: { current: rpmCurrent, limit: rpmLimit, window: "per_minute" },
-                  dailyCost: { current: dailyCostCurrent, limit: dailyCostLimit, resetAt: new Date() },
+                  dailyCost: {
+                    current: dailyCostCurrent,
+                    limit: dailyCostLimit,
+                    resetAt: new Date(),
+                  },
                 }}
                 currencyCode={currencyCode}
                 trigger={
