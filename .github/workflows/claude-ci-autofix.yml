@@ -9,11 +9,11 @@ on:
       - completed
 
 permissions:
-  contents: write          # 创建分支和提交代码
-  pull-requests: write     # 创建修复 PR
-  actions: read            # 读取 CI 日志
-  issues: write            # 评论通知
-  id-token: write          # OIDC 认证
+  contents: write # 创建分支和提交代码
+  pull-requests: write # 创建修复 PR
+  actions: read # 读取 CI 日志
+  issues: write # 评论通知
+  id-token: write # OIDC 认证
 
 jobs:
   auto-fix:

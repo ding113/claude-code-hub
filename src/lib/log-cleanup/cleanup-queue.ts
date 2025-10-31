@@ -1,4 +1,5 @@
 import Queue from "bull";
+import type { Job } from "bull";
 import { createBullBoard } from "@bull-board/api";
 import { BullAdapter } from "@bull-board/api/bullAdapter";
 import { ExpressAdapter } from "@bull-board/express";
@@ -7,128 +8,102 @@ import { cleanupLogs } from "./service";
 import { getSystemSettings } from "@/repository/system-config";
 
 /**
- * 解析 Redis URL 为 ioredis 配置对象
+ * 队列实例（延迟初始化，避免模块加载时连接 Redis）
  */
-function getRedisConfig() {
+let _cleanupQueue: Queue.Queue | null = null;
+
+/**
+ * 获取或创建清理队列实例（延迟初始化）
+ * 修复：避免在模块加载时实例化，防止 unhandledRejection
+ */
+function getCleanupQueue(): Queue.Queue {
+  if (_cleanupQueue) {
+    return _cleanupQueue;
+  }
+
+  // 检查 Redis 配置
   const redisUrl = process.env.REDIS_URL;
-
   if (!redisUrl) {
-    logger.warn("[CleanupQueue] REDIS_URL not configured, using default localhost:6379");
-    return {
-      host: "localhost",
-      port: 6379,
-    };
-  }
-
-  try {
-    const url = new URL(redisUrl);
-    const config: {
-      host: string;
-      port: number;
-      password?: string;
-      db?: number;
-    } = {
-      host: url.hostname,
-      port: parseInt(url.port || "6379", 10),
-    };
-
-    // 提取密码（如果存在）
-    if (url.password) {
-      config.password = url.password;
-    }
-
-    // 提取数据库编号（如果存在）
-    const pathname = url.pathname;
-    if (pathname && pathname.length > 1) {
-      const db = parseInt(pathname.substring(1), 10);
-      if (!isNaN(db)) {
-        config.db = db;
-      }
-    }
-
-    logger.info("[CleanupQueue] Parsed REDIS_URL", {
-      host: config.host,
-      port: config.port,
-      db: config.db || 0,
-      hasPassword: !!config.password,
+    logger.error({
+      action: "cleanup_queue_init_error",
+      error: "REDIS_URL environment variable is not set",
     });
-
-    return config;
-  } catch (error) {
-    logger.error("[CleanupQueue] Failed to parse REDIS_URL, using default", { error });
-    return {
-      host: "localhost",
-      port: 6379,
-    };
+    throw new Error("REDIS_URL environment variable is required for cleanup queue");
   }
+
+  logger.info({
+    action: "cleanup_queue_initializing",
+    redisUrl: redisUrl.replace(/:[^:]*@/, ":***@"), // 隐藏密码
+  });
+
+  // 创建队列实例
+  _cleanupQueue = new Queue("log-cleanup", {
+    redis: redisUrl, // 直接使用 URL 字符串
+    defaultJobOptions: {
+      attempts: 3, // 失败重试 3 次
+      backoff: {
+        type: "exponential",
+        delay: 60000, // 首次重试延迟 1 分钟
+      },
+      removeOnComplete: 100, // 保留最近 100 个完成任务
+      removeOnFail: 50, // 保留最近 50 个失败任务
+    },
+  });
+
+  // 注册任务处理器
+  setupQueueProcessor(_cleanupQueue);
+
+  logger.info({ action: "cleanup_queue_initialized" });
+
+  return _cleanupQueue;
 }
 
 /**
- * 日志清理任务队列
+ * 设置队列处理器和事件监听（抽取为独立函数）
  */
-export const cleanupQueue = new Queue("log-cleanup", {
-  redis: {
-    ...getRedisConfig(),
-    // ioredis 快速失败配置
-    maxRetriesPerRequest: 3, // 最多重试 3 次
-    enableOfflineQueue: false, // 快速失败，不排队
-    retryStrategy: (times: number) => {
-      if (times > 3) return null; // 停止重试
-      return Math.min(times * 200, 1000); // 最多延迟 1 秒
-    },
-  },
-  defaultJobOptions: {
-    attempts: 3, // 失败重试 3 次
-    backoff: {
-      type: "exponential",
-      delay: 60000, // 首次重试延迟 1 分钟
-    },
-    removeOnComplete: 100, // 保留最近 100 个完成任务
-    removeOnFail: 50, // 保留最近 50 个失败任务
-  },
-});
+function setupQueueProcessor(queue: Queue.Queue): void {
+  /**
+   * 处理清理任务
+   */
+  queue.process(async (job: Job) => {
+    logger.info({
+      action: "cleanup_job_start",
+      jobId: job.id,
+      conditions: job.data.conditions,
+    });
 
-/**
- * 处理清理任务
- */
-cleanupQueue.process(async (job) => {
-  logger.info({
-    action: "cleanup_job_start",
-    jobId: job.id,
-    conditions: job.data.conditions,
+    const result = await cleanupLogs(
+      job.data.conditions,
+      { batchSize: job.data.batchSize },
+      { type: "scheduled" }
+    );
+
+    if (result.error) {
+      throw new Error(result.error);
+    }
+
+    logger.info({
+      action: "cleanup_job_complete",
+      jobId: job.id,
+      totalDeleted: result.totalDeleted,
+      durationMs: result.durationMs,
+    });
+
+    return result;
   });
 
-  const result = await cleanupLogs(
-    job.data.conditions,
-    { batchSize: job.data.batchSize },
-    { type: "scheduled" }
-  );
-
-  if (result.error) {
-    throw new Error(result.error);
-  }
-
-  logger.info({
-    action: "cleanup_job_complete",
-    jobId: job.id,
-    totalDeleted: result.totalDeleted,
-    durationMs: result.durationMs,
+  /**
+   * 错误处理
+   */
+  queue.on("failed", (job: Job, err: Error) => {
+    logger.error({
+      action: "cleanup_job_failed",
+      jobId: job.id,
+      error: err.message,
+      attempts: job.attemptsMade,
+    });
   });
-
-  return result;
-});
-
-/**
- * 错误处理
- */
-cleanupQueue.on("failed", (job, err) => {
-  logger.error({
-    action: "cleanup_job_failed",
-    jobId: job.id,
-    error: err.message,
-    attempts: job.attemptsMade,
-  });
-});
+}
 
 /**
  * 添加或更新定时清理任务
@@ -136,23 +111,24 @@ cleanupQueue.on("failed", (job, err) => {
 export async function scheduleAutoCleanup() {
   try {
     const settings = await getSystemSettings();
+    const queue = getCleanupQueue();
 
     if (!settings.enableAutoCleanup) {
       logger.info({ action: "auto_cleanup_disabled" });
 
       // 移除所有已存在的定时任务
-      const repeatableJobs = await cleanupQueue.getRepeatableJobs();
+      const repeatableJobs = await queue.getRepeatableJobs();
       for (const job of repeatableJobs) {
-        await cleanupQueue.removeRepeatableByKey(job.key);
+        await queue.removeRepeatableByKey(job.key);
       }
 
       return;
     }
 
     // 移除旧的定时任务
-    const repeatableJobs = await cleanupQueue.getRepeatableJobs();
+    const repeatableJobs = await queue.getRepeatableJobs();
     for (const job of repeatableJobs) {
-      await cleanupQueue.removeRepeatableByKey(job.key);
+      await queue.removeRepeatableByKey(job.key);
     }
 
     // 构建清理条件（使用默认值）
@@ -161,7 +137,7 @@ export async function scheduleAutoCleanup() {
     beforeDate.setDate(beforeDate.getDate() - retentionDays);
 
     // 添加新的定时任务
-    await cleanupQueue.add(
+    await queue.add(
       "auto-cleanup",
       {
         conditions: { beforeDate },
@@ -197,8 +173,9 @@ export function createCleanupMonitor() {
   const serverAdapter = new ExpressAdapter();
   serverAdapter.setBasePath("/admin/queues");
 
+  const queue = getCleanupQueue();
   createBullBoard({
-    queues: [new BullAdapter(cleanupQueue)],
+    queues: [new BullAdapter(queue)],
     serverAdapter,
   });
 
@@ -209,6 +186,8 @@ export function createCleanupMonitor() {
  * 停止清理队列（优雅关闭）
  */
 export async function stopCleanupQueue() {
-  await cleanupQueue.close();
-  logger.info({ action: "cleanup_queue_closed" });
+  if (_cleanupQueue) {
+    await _cleanupQueue.close();
+    logger.info({ action: "cleanup_queue_closed" });
+  }
 }
