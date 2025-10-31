@@ -1,9 +1,15 @@
 import { HeaderProcessor } from "../headers";
 import { buildProxyUrl } from "../url";
-import { recordFailure, recordSuccess, getCircuitState } from "@/lib/circuit-breaker";
+import {
+  recordFailure,
+  recordSuccess,
+  getCircuitState,
+  getProviderHealthInfo,
+} from "@/lib/circuit-breaker";
 import { ProxyProviderResolver } from "./provider-selector";
-import { ProxyError } from "./errors";
+import { ProxyError, categorizeError, ErrorCategory } from "./errors";
 import { ModelRedirector } from "./model-redirector";
+import { SessionManager } from "@/lib/session-manager";
 import { logger } from "@/lib/logger";
 import type { ProxySession } from "./session";
 import { defaultRegistry } from "../converters";
@@ -32,48 +38,211 @@ export class ProxyForwarder {
         // 成功：记录健康状态
         recordSuccess(currentProvider.id);
 
-        logger.debug("ProxyForwarder: Request successful", {
+        // ⭐ 成功后绑定 session 到供应商（智能绑定策略）
+        if (session.sessionId) {
+          // 使用智能绑定策略（主备模式 + 健康自动回迁）
+          const result = await SessionManager.updateSessionBindingSmart(
+            session.sessionId,
+            currentProvider.id,
+            currentProvider.priority || 0,
+            attemptCount === 0 // isFirstAttempt
+          );
+
+          if (result.updated) {
+            logger.info("ProxyForwarder: Session binding updated", {
+              sessionId: session.sessionId,
+              providerId: currentProvider.id,
+              providerName: currentProvider.name,
+              priority: currentProvider.priority,
+              groupTag: currentProvider.groupTag,
+              reason: result.reason,
+              details: result.details,
+              attemptNumber: attemptCount + 1,
+            });
+          } else {
+            logger.debug("ProxyForwarder: Session binding not updated", {
+              sessionId: session.sessionId,
+              providerId: currentProvider.id,
+              providerName: currentProvider.name,
+              priority: currentProvider.priority,
+              reason: result.reason,
+              details: result.details,
+            });
+          }
+
+          // ⭐ 统一更新两个数据源（确保监控数据一致）
+          // session:provider (真实绑定) 已在 updateSessionBindingSmart 中更新
+          // session:info (监控信息) 在此更新
+          void SessionManager.updateSessionProvider(session.sessionId, {
+            providerId: currentProvider.id,
+            providerName: currentProvider.name,
+          }).catch((error) => {
+            logger.error("ProxyForwarder: Failed to update session provider info", { error });
+          });
+        }
+
+        // 修复：成功时记录到决策链
+        session.addProviderToChain(currentProvider, {
+          reason: attemptCount === 0 ? "request_success" : "retry_success",
+          attemptNumber: attemptCount + 1,
+          statusCode: response.status,
+          circuitState: getCircuitState(currentProvider.id),
+        });
+
+        logger.info("ProxyForwarder: Request successful", {
           providerId: currentProvider.id,
+          providerName: currentProvider.name,
           attempt: attemptCount + 1,
+          statusCode: response.status,
         });
 
         return response;
       } catch (error) {
         attemptCount++;
         lastError = error as Error;
-        failedProviderIds.push(currentProvider.id); // 记录失败的供应商
 
-        // 提取错误信息（支持 ProxyError 和普通 Error）
+        // ⭐ 1. 分类错误（供应商错误 vs 系统错误 vs 客户端中断）
+        const errorCategory = categorizeError(lastError);
         const errorMessage =
-          error instanceof ProxyError ? error.getDetailedErrorMessage() : (error as Error).message;
+          lastError instanceof ProxyError ? lastError.getDetailedErrorMessage() : lastError.message;
 
-        // 记录失败的供应商和错误信息到决策链
-        session.addProviderToChain(currentProvider, {
-          reason: "retry_failed",
-          circuitState: getCircuitState(currentProvider.id),
-          attemptNumber: attemptCount,
-          errorMessage: errorMessage, // 记录完整上游错误
-        });
+        // ⭐ 2. 客户端中断处理（不计入熔断器，不重试，立即返回）
+        if (errorCategory === ErrorCategory.CLIENT_ABORT) {
+          logger.warn("ProxyForwarder: Client aborted request, stopping immediately", {
+            providerId: currentProvider.id,
+            providerName: currentProvider.name,
+            attemptNumber: attemptCount,
+          });
 
-        // 记录失败
-        recordFailure(currentProvider.id, lastError);
+          // 记录到决策链（标记为客户端中断）
+          session.addProviderToChain(currentProvider, {
+            reason: "system_error", // 使用 system_error 作为客户端中断的原因
+            circuitState: getCircuitState(currentProvider.id),
+            attemptNumber: attemptCount,
+            errorMessage: "Client aborted request",
+            errorDetails: {
+              system: {
+                errorType: "ClientAbort",
+                errorName: lastError.name,
+                errorCode: "CLIENT_ABORT",
+                errorStack: lastError.stack?.split("\n").slice(0, 3).join("\n"),
+              },
+            },
+          });
 
-        logger.warn("ProxyForwarder: Provider failed", {
-          providerId: currentProvider.id,
-          attempt: attemptCount,
-          maxAttempts: MAX_RETRY_ATTEMPTS + 1,
-          error: lastError.message,
-        });
+          // 立即抛出错误，不重试
+          throw lastError;
+        }
 
-        // 如果还有重试机会，选择新的供应商
+        // ⭐ 3. 系统错误处理（不计入熔断器，先重试1次当前供应商）
+        if (errorCategory === ErrorCategory.SYSTEM_ERROR) {
+          const err = lastError as Error & {
+            code?: string;
+            syscall?: string;
+          };
+
+          logger.warn("ProxyForwarder: System/network error occurred", {
+            providerId: currentProvider.id,
+            providerName: currentProvider.name,
+            error: errorMessage,
+            attemptNumber: attemptCount,
+            willRetry: attemptCount === 1,
+          });
+
+          // 记录到决策链（不计入 failedProviderIds）
+          session.addProviderToChain(currentProvider, {
+            reason: "system_error",
+            circuitState: getCircuitState(currentProvider.id),
+            attemptNumber: attemptCount,
+            errorMessage: errorMessage,
+            errorDetails: {
+              system: {
+                errorType: err.constructor.name,
+                errorName: err.name,
+                errorCode: err.code,
+                errorSyscall: err.syscall,
+                errorStack: err.stack?.split("\n").slice(0, 3).join("\n"),
+              },
+            },
+          });
+
+          // 第一次系统错误：重试当前供应商（等待100ms避免立即重试）
+          if (attemptCount === 1) {
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            continue; // ⭐ 不切换供应商，不记录熔断器
+          }
+
+          // 第二次仍失败：切换供应商（但仍不熔断）
+          logger.warn("ProxyForwarder: System error persists, switching provider", {
+            providerId: currentProvider.id,
+            providerName: currentProvider.name,
+          });
+        }
+
+        // ⭐ 4. 供应商错误处理（所有 4xx/5xx HTTP 错误，计入熔断器，直接切换）
+        else if (errorCategory === ErrorCategory.PROVIDER_ERROR) {
+          const proxyError = lastError as ProxyError;
+          const statusCode = proxyError.statusCode;
+
+          logger.warn("ProxyForwarder: Provider error, switching immediately", {
+            providerId: currentProvider.id,
+            providerName: currentProvider.name,
+            statusCode: statusCode,
+            error: errorMessage,
+            attemptNumber: attemptCount,
+          });
+
+          // 记录到失败列表（避免重新选择）
+          failedProviderIds.push(currentProvider.id);
+
+          // 获取熔断器健康信息（用于决策链显示）
+          const { health, config } = await getProviderHealthInfo(currentProvider.id);
+
+          // 记录到决策链
+          session.addProviderToChain(currentProvider, {
+            reason: "retry_failed",
+            circuitState: getCircuitState(currentProvider.id),
+            attemptNumber: attemptCount,
+            errorMessage: errorMessage,
+            circuitFailureCount: health.failureCount + 1, // 包含本次失败
+            circuitFailureThreshold: config.failureThreshold,
+            statusCode: statusCode,
+            errorDetails: {
+              provider: {
+                id: currentProvider.id,
+                name: currentProvider.name,
+                statusCode: statusCode,
+                statusText: proxyError.message,
+                upstreamBody: proxyError.upstreamError?.body,
+                upstreamParsed: proxyError.upstreamError?.parsed,
+              },
+            },
+          });
+
+          // ⭐ 只有非探测请求才计入熔断器
+          if (session.isProbeRequest()) {
+            logger.debug("ProxyForwarder: Probe request error, skipping circuit breaker", {
+              providerId: currentProvider.id,
+              providerName: currentProvider.name,
+              messagesCount: session.getMessagesLength(),
+            });
+          } else {
+            await recordFailure(currentProvider.id, lastError);
+          }
+        }
+
+        // 尝试切换供应商（供应商错误 + 系统错误第二次失败）
         if (attemptCount <= MAX_RETRY_ATTEMPTS) {
           const alternativeProvider = await ProxyForwarder.selectAlternative(
             session,
-            failedProviderIds // 传入所有已失败的供应商ID列表
+            failedProviderIds // ⭐ 系统错误不在此列表中（仍可能被选中）
           );
 
           if (!alternativeProvider) {
-            logger.error("ProxyForwarder: No alternative provider available, stopping retries");
+            logger.error("ProxyForwarder: No alternative provider available, stopping retries", {
+              attemptCount,
+              failedProviderIds,
+            });
             break;
           }
 
@@ -83,20 +252,26 @@ export class ProxyForwarder {
           logger.info("ProxyForwarder: Switched to alternative provider", {
             retryAttempt: attemptCount,
             newProviderId: currentProvider.id,
+            newProviderName: currentProvider.name,
           });
         }
       }
     }
 
     // 所有重试都失败
-    // 如果最后一个错误是 ProxyError，提取详细信息（包含上游响应）
-    const errorDetails =
-      lastError instanceof ProxyError
-        ? lastError.getDetailedErrorMessage()
-        : lastError?.message || "Unknown error";
+    // 如果最后一个错误是 ProxyError，保留状态码并重新抛出
+    if (lastError instanceof ProxyError) {
+      throw new ProxyError(
+        `All providers failed after ${attemptCount} attempts. Last error: ${lastError.getDetailedErrorMessage()}`,
+        lastError.statusCode // 使用最后一次请求的实际状态码
+      );
+    }
 
-    throw new Error(
-      `All providers failed after ${attemptCount} attempts. Last error: ${errorDetails}`
+    // 其他类型的错误，抛出 500
+    const errorDetails = lastError?.message || "Unknown error";
+    throw new ProxyError(
+      `All providers failed after ${attemptCount} attempts. Last error: ${errorDetails}`,
+      500
     );
   }
 
@@ -256,6 +431,7 @@ export class ProxyForwarder {
     const init: RequestInit = {
       method: session.method,
       headers: processedHeaders,
+      signal: session.clientAbortSignal || undefined, // 传递客户端中断信号
       ...(requestBody ? { body: requestBody } : {}),
     };
 
@@ -265,16 +441,50 @@ export class ProxyForwarder {
     try {
       response = await fetch(proxyUrl, init);
     } catch (fetchError) {
-      // 捕获 fetch 原始错误（网络错误、DNS 解析失败、JSON 序列化错误等）
+      // 捕获 fetch 原始错误（网络错误、DNS 解析失败、连接失败等）
+      const err = fetchError as Error & {
+        cause?: unknown;
+        code?: string; // Node.js 错误码：如 'ENOTFOUND'、'ECONNREFUSED'、'ETIMEDOUT'、'ECONNRESET'
+        errno?: number;
+        syscall?: string; // 系统调用：如 'getaddrinfo'、'connect'、'read'、'write'
+      };
+
+      // ⭐ 检测客户端主动中断（AbortError）
+      if (err.name === "AbortError" || err.message.includes("aborted")) {
+        logger.warn("ProxyForwarder: Request aborted by client", {
+          providerId: provider.id,
+          providerName: provider.name,
+          proxyUrl: new URL(proxyUrl).origin,
+          errorName: err.name,
+          errorMessage: err.message,
+        });
+
+        // 客户端中断不应计入熔断器，也不重试，直接抛出错误
+        throw new ProxyError(
+          "Request aborted by client",
+          499 // Nginx 使用的 "Client Closed Request" 状态码
+        );
+      }
+
       logger.error("ProxyForwarder: Fetch failed", {
         providerId: provider.id,
-        error: fetchError,
-        errorType: fetchError?.constructor?.name,
-        errorMessage: (fetchError as Error)?.message,
-        errorCause: (fetchError as Error & { cause?: unknown })?.cause,
-        proxyUrl: proxyUrl,
+        providerName: provider.name,
+        proxyUrl: new URL(proxyUrl).origin, // 只记录域名，隐藏查询参数和 API Key
+
+        // ⭐ 详细错误信息（关键诊断字段）
+        errorType: err.constructor.name,
+        errorName: err.name,
+        errorMessage: err.message,
+        errorCode: err.code, // ⭐ 如 'ENOTFOUND'（DNS失败）、'ECONNREFUSED'（连接拒绝）、'ETIMEDOUT'（超时）、'ECONNRESET'（连接重置）
+        errorSyscall: err.syscall, // ⭐ 如 'getaddrinfo'（DNS查询）、'connect'（TCP连接）
+        errorErrno: err.errno,
+        errorCause: err.cause,
+        errorStack: err.stack?.split("\n").slice(0, 3).join("\n"), // 前3行堆栈
+
+        // 请求上下文
         method: session.method,
         hasBody: !!requestBody,
+        bodySize: requestBody ? JSON.stringify(requestBody).length : 0,
       });
 
       throw fetchError;

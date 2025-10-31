@@ -1,0 +1,2 @@
+ALTER TABLE "system_settings" ADD COLUMN "allow_view_provider_info" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "system_settings" ADD COLUMN "non_admin_currency_display" varchar(10) DEFAULT 'USD' NOT NULL;

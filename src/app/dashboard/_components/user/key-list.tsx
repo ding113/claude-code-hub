@@ -7,7 +7,7 @@ import { KeyActions } from "./key-actions";
 import { KeyLimitUsage } from "./key-limit-usage";
 import type { UserKeyDisplay } from "@/types/user";
 import type { User } from "@/types/user";
-import { format } from "timeago.js";
+import { RelativeTime } from "@/components/ui/relative-time";
 import { formatCurrency, type CurrencyCode } from "@/lib/utils/currency";
 import Link from "next/link";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -179,7 +179,9 @@ export function KeyList({ keys, currentUser, keyOwnerUserId, currencyCode = "USD
         <div className="space-y-0.5">
           {record.lastUsedAt ? (
             <>
-              <div className="text-sm">{format(record.lastUsedAt, "zh_CN")}</div>
+              <div className="text-sm">
+                <RelativeTime date={record.lastUsedAt} />
+              </div>
               {record.lastProviderName && (
                 <div className="text-xs text-muted-foreground">
                   供应商: {record.lastProviderName}
