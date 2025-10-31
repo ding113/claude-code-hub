@@ -452,13 +452,7 @@ export class SessionManager {
       if (isFirstAttempt) {
         const key = `session:${sessionId}:provider`;
         // 使用 SET NX 绑定（避免覆盖并发请求）
-        const result = await redis.set(
-          key,
-          newProviderId.toString(),
-          "EX",
-          this.SESSION_TTL,
-          "NX"
-        );
+        const result = await redis.set(key, newProviderId.toString(), "EX", this.SESSION_TTL, "NX");
 
         if (result === "OK") {
           logger.info("SessionManager: Bound session to provider (first success)", {
@@ -469,14 +463,14 @@ export class SessionManager {
           return {
             updated: true,
             reason: "first_success",
-            details: `首次成功，绑定到供应商 ${newProviderId} (priority=${newProviderPriority})`
+            details: `首次成功，绑定到供应商 ${newProviderId} (priority=${newProviderPriority})`,
           };
         } else {
           // 并发请求已经绑定了，放弃更新
           return {
             updated: false,
             reason: "concurrent_binding_exists",
-            details: "并发请求已绑定，跳过"
+            details: "并发请求已绑定，跳过",
           };
         }
       }
@@ -488,13 +482,7 @@ export class SessionManager {
       if (!currentProviderIdStr) {
         // 没有绑定，使用 SET NX 绑定
         const key = `session:${sessionId}:provider`;
-        const result = await redis.set(
-          key,
-          newProviderId.toString(),
-          "EX",
-          this.SESSION_TTL,
-          "NX"
-        );
+        const result = await redis.set(key, newProviderId.toString(), "EX", this.SESSION_TTL, "NX");
 
         if (result === "OK") {
           logger.info("SessionManager: Bound session (no previous binding)", {
@@ -505,13 +493,13 @@ export class SessionManager {
           return {
             updated: true,
             reason: "no_previous_binding",
-            details: `无绑定，绑定到供应商 ${newProviderId} (priority=${newProviderPriority})`
+            details: `无绑定，绑定到供应商 ${newProviderId} (priority=${newProviderPriority})`,
           };
         } else {
           return {
             updated: false,
             reason: "concurrent_binding_exists",
-            details: "并发请求已绑定"
+            details: "并发请求已绑定",
           };
         }
       }
@@ -541,7 +529,7 @@ export class SessionManager {
         return {
           updated: true,
           reason: "current_provider_not_found",
-          details: `原供应商 ${currentProviderId} 不存在，更新到 ${newProviderId}`
+          details: `原供应商 ${currentProviderId} 不存在，更新到 ${newProviderId}`,
         };
       }
 
@@ -566,7 +554,7 @@ export class SessionManager {
         return {
           updated: true,
           reason: "priority_upgrade",
-          details: `优先级升级：从供应商 ${currentProvider.name} (priority=${currentPriority}) 迁移到 ${newProviderId} (priority=${newProviderPriority})`
+          details: `优先级升级：从供应商 ${currentProvider.name} (priority=${currentPriority}) 迁移到 ${newProviderId} (priority=${newProviderPriority})`,
         };
       }
 
@@ -591,7 +579,7 @@ export class SessionManager {
         return {
           updated: true,
           reason: "circuit_open_fallback",
-          details: `原供应商 ${currentProvider.name} (priority=${currentPriority}) 已熔断，切换到供应商 ${newProviderId} (priority=${newProviderPriority})`
+          details: `原供应商 ${currentProvider.name} (priority=${currentPriority}) 已熔断，切换到供应商 ${newProviderId} (priority=${newProviderPriority})`,
         };
       }
 
@@ -608,9 +596,8 @@ export class SessionManager {
       return {
         updated: false,
         reason: "keep_healthy_higher_priority",
-        details: `保持原供应商 ${currentProvider.name} (priority=${currentPriority}, 健康)，拒绝供应商 ${newProviderId} (priority=${newProviderPriority})`
+        details: `保持原供应商 ${currentProvider.name} (priority=${currentPriority}, 健康)，拒绝供应商 ${newProviderId} (priority=${newProviderPriority})`,
       };
-
     } catch (error) {
       logger.error("SessionManager: Failed to update session binding", { error });
       return { updated: false, reason: "error", details: String(error) };
