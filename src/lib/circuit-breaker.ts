@@ -203,18 +203,14 @@ async function triggerCircuitBreakerAlert(
       return;
     }
 
-    const webhookUrl = ""; // webhook URL 在 notifier 中从配置读取
-
-    await sendCircuitBreakerAlert(
-      {
-        providerName: provider[0].name,
-        providerId,
-        failureCount,
-        retryAt,
-        lastError,
-      },
-      webhookUrl
-    );
+    // sendCircuitBreakerAlert 只接受一个参数，webhook URL 在函数内部从配置读取
+    await sendCircuitBreakerAlert({
+      providerName: provider[0].name,
+      providerId,
+      failureCount,
+      retryAt,
+      lastError,
+    });
   } catch (error) {
     // 告警失败不影响熔断器功能
     logger.error({
