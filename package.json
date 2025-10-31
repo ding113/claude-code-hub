@@ -19,6 +19,8 @@
   "dependencies": {
     "@bull-board/api": "^6.14.0",
     "@bull-board/express": "^6.14.0",
+    "@hono/swagger-ui": "^0.5.2",
+    "@hono/zod-openapi": "^1.1.4",
     "@hookform/resolvers": "^5.2.2",
     "@lobehub/icons": "^2.43.1",
     "@radix-ui/react-alert-dialog": "^1.1.15",
@@ -36,6 +38,7 @@
     "@radix-ui/react-switch": "^1.2.6",
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
+    "@scalar/hono-api-reference": "^0.9.22",
     "@tanstack/react-query": "^5.90.5",
     "antd": "^5.27.6",
     "bull": "^4.16.5",
