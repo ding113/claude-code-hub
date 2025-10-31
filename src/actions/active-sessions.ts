@@ -92,9 +92,7 @@ export async function getActiveSessions(): Promise<ActionResult<ActiveSessionInf
       requestCount: s.requestCount,
     }));
 
-    logger.debug(
-      `[SessionCache] Active sessions fetched and cached, count: ${sessions.length}`
-    );
+    logger.debug(`[SessionCache] Active sessions fetched and cached, count: ${sessions.length}`);
 
     return { ok: true, data: sessions };
   } catch (error) {

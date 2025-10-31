@@ -322,9 +322,7 @@ export async function aggregateSessionStats(sessionId: string): Promise<{
  * @param sessionIds - Session ID 列表
  * @returns 聚合统计数据数组
  */
-export async function aggregateMultipleSessionStats(
-  sessionIds: string[]
-): Promise<
+export async function aggregateMultipleSessionStats(sessionIds: string[]): Promise<
   Array<{
     sessionId: string;
     requestCount: number;

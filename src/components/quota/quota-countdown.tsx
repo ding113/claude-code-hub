@@ -119,7 +119,9 @@ export function QuotaCountdownCompact({
   };
 
   return (
-    <span className={cn("font-mono text-xs font-medium tabular-nums", statusStyles[status], className)}>
+    <span
+      className={cn("font-mono text-xs font-medium tabular-nums", statusStyles[status], className)}
+    >
       {countdown.shortFormatted}
     </span>
   );

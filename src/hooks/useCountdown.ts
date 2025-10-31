@@ -97,14 +97,9 @@ function calculateCountdown(targetDate: Date | null): CountdownResult {
  * return <div>{countdown.formatted}</div>;
  * ```
  */
-export function useCountdown(
-  targetDate: Date | null,
-  enabled: boolean = true
-): CountdownResult {
+export function useCountdown(targetDate: Date | null, enabled: boolean = true): CountdownResult {
   const [mounted, setMounted] = useState(false);
-  const [countdown, setCountdown] = useState<CountdownResult>(() =>
-    calculateCountdown(targetDate)
-  );
+  const [countdown, setCountdown] = useState<CountdownResult>(() => calculateCountdown(targetDate));
 
   // 挂载状态（避免 SSR 不一致）
   useEffect(() => {
@@ -156,10 +151,7 @@ export function useCountdown(
  * return <ProgressBar value={progress} />;
  * ```
  */
-export function useCountdownProgress(
-  targetDate: Date | null,
-  startDate?: Date | null
-): number {
+export function useCountdownProgress(targetDate: Date | null, startDate?: Date | null): number {
   const countdown = useCountdown(targetDate);
 
   return useMemo(() => {

@@ -73,7 +73,10 @@ export class RateLimitService {
                 }
               }
             } catch (error) {
-              logger.error("[RateLimit] 5h rolling window query failed, fallback to database:", error);
+              logger.error(
+                "[RateLimit] 5h rolling window query failed, fallback to database:",
+                error
+              );
               return await this.checkCostLimitsFromDatabase(id, type, costLimits);
             }
           } else {
@@ -154,14 +157,17 @@ export class RateLimitService {
                 window5h.toString()
               );
 
-              logger.info(
-                `[RateLimit] Cache warmed for ${key}, value=${current} (rolling window)`
-              );
+              logger.info(`[RateLimit] Cache warmed for ${key}, value=${current} (rolling window)`);
             }
           } else {
             // 周/月固定窗口：使用 STRING + 动态 TTL
             const ttl = getTTLForPeriod(limit.period);
-            await this.redis.set(`${type}:${id}:cost_${limit.period}`, current.toString(), "EX", ttl);
+            await this.redis.set(
+              `${type}:${id}:cost_${limit.period}`,
+              current.toString(),
+              "EX",
+              ttl
+            );
             logger.info(
               `[RateLimit] Cache warmed for ${type}:${id}:cost_${limit.period}, value=${current}, ttl=${ttl}s`
             );
@@ -338,9 +344,7 @@ export class RateLimitService {
 
       await pipeline.exec();
 
-      logger.debug(
-        `[RateLimit] Tracked cost: key=${keyId}, provider=${providerId}, cost=${cost}`
-      );
+      logger.debug(`[RateLimit] Tracked cost: key=${keyId}, provider=${providerId}, cost=${cost}`);
     } catch (error) {
       logger.error("[RateLimit] Track cost failed:", error);
       // 不抛出错误，静默失败
@@ -438,9 +442,7 @@ export class RateLimitService {
                 window5h.toString()
               );
 
-              logger.info(
-                `[RateLimit] Cache warmed for ${key}, value=${current} (rolling window)`
-              );
+              logger.info(`[RateLimit] Cache warmed for ${key}, value=${current} (rolling window)`);
             }
           } else {
             // 周/月固定窗口：使用 STRING + 动态 TTL
