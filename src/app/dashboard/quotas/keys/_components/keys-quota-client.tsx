@@ -158,7 +158,11 @@ export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClient
                                   className="h-1"
                                 />
                                 <div className="text-xs text-muted-foreground text-right">
-                                  {getUsageRate(key.quota.cost5h.current, key.quota.cost5h.limit).toFixed(1)}%
+                                  {getUsageRate(
+                                    key.quota.cost5h.current,
+                                    key.quota.cost5h.limit
+                                  ).toFixed(1)}
+                                  %
                                 </div>
                               </div>
                             ) : (
@@ -182,7 +186,11 @@ export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClient
                                   className="h-1"
                                 />
                                 <div className="text-xs text-muted-foreground text-right">
-                                  {getUsageRate(key.quota.costWeekly.current, key.quota.costWeekly.limit).toFixed(1)}%
+                                  {getUsageRate(
+                                    key.quota.costWeekly.current,
+                                    key.quota.costWeekly.limit
+                                  ).toFixed(1)}
+                                  %
                                 </div>
                               </div>
                             ) : (
@@ -206,7 +214,11 @@ export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClient
                                   className="h-1"
                                 />
                                 <div className="text-xs text-muted-foreground text-right">
-                                  {getUsageRate(key.quota.costMonthly.current, key.quota.costMonthly.limit).toFixed(1)}%
+                                  {getUsageRate(
+                                    key.quota.costMonthly.current,
+                                    key.quota.costMonthly.limit
+                                  ).toFixed(1)}
+                                  %
                                 </div>
                               </div>
                             ) : (
@@ -233,7 +245,8 @@ export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClient
                                   {getUsageRate(
                                     key.quota.concurrentSessions.current,
                                     key.quota.concurrentSessions.limit
-                                  ).toFixed(1)}%
+                                  ).toFixed(1)}
+                                  %
                                 </div>
                               </div>
                             ) : (

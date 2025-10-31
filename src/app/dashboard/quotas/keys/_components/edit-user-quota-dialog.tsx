@@ -46,9 +46,7 @@ export function EditUserQuotaDialog({
   const currencySymbol = CURRENCY_CONFIG[currencyCode].symbol;
 
   // 表单状态
-  const [rpmLimit, setRpmLimit] = useState<string>(
-    currentQuota?.rpm.limit?.toString() ?? "60"
-  );
+  const [rpmLimit, setRpmLimit] = useState<string>(currentQuota?.rpm.limit?.toString() ?? "60");
   const [dailyQuota, setDailyQuota] = useState<string>(
     currentQuota?.dailyCost.limit?.toString() ?? "100"
   );
@@ -91,9 +89,7 @@ export function EditUserQuotaDialog({
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>设置用户限额</DialogTitle>
-            <DialogDescription>
-              用户: {userName}
-            </DialogDescription>
+            <DialogDescription>用户: {userName}</DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
