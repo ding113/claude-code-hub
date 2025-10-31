@@ -14,8 +14,11 @@ import type { ActionResult } from "@/actions/types";
 import { logger } from "@/lib/logger";
 
 // Server Action 函数签名 (支持两种格式)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ServerAction =
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   | ((...args: any[]) => Promise<ActionResult<any>>) // 标准格式
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   | ((...args: any[]) => Promise<any>); // 直接返回数据的格式
 
 /**
@@ -199,6 +202,7 @@ export function createActionRoute(
       const rawResult = await action(body);
 
       // 2.5. 包装非 ActionResult 格式的返回值
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result: ActionResult<any> =
         rawResult && typeof rawResult === "object" && "ok" in rawResult
           ? rawResult // 已经是 ActionResult 格式

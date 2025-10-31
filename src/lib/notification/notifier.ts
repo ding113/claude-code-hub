@@ -8,10 +8,7 @@ import { generateCostAlerts } from "./tasks/cost-alert";
  * 发送熔断器告警通知
  * 防止重复推送：使用 Redis 缓存 5 分钟内不重复发送同一供应商的告警
  */
-export async function sendCircuitBreakerAlert(
-  data: CircuitBreakerAlertData,
-  webhookUrl: string
-): Promise<void> {
+export async function sendCircuitBreakerAlert(data: CircuitBreakerAlertData): Promise<void> {
   try {
     // 检查是否开启熔断器告警
     const { getNotificationSettings } = await import("@/repository/notifications");

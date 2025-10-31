@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -46,7 +46,6 @@ const notificationSchema = z.object({
 type NotificationFormData = z.infer<typeof notificationSchema>;
 
 export default function NotificationsPage() {
-  const [settings, setSettings] = useState<NotificationSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [testingWebhook, setTestingWebhook] = useState<string | null>(null);
@@ -67,15 +66,9 @@ export default function NotificationsPage() {
   const costAlertEnabled = watch("costAlertEnabled");
   const costAlertThreshold = watch("costAlertThreshold");
 
-  // 加载设置
-  useEffect(() => {
-    loadSettings();
-  }, []);
-
-  const loadSettings = async () => {
+  const loadSettings = useCallback(async () => {
     try {
       const data = await getNotificationSettingsAction();
-      setSettings(data);
 
       // 设置表单默认值
       setValue("enabled", data.enabled);
@@ -95,7 +88,12 @@ export default function NotificationsPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [setValue]);
+
+  // 加载设置
+  useEffect(() => {
+    loadSettings();
+  }, [loadSettings]);
 
   const onSubmit = async (data: NotificationFormData) => {
     setIsSubmitting(true);
