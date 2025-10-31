@@ -53,6 +53,8 @@
 - **📝 Session 详情** - 记录 UA、请求体和响应体（可选，默认关闭），便于排查供应商模型性能问题
 - **🔐 密钥权限控制** - 可选特定密钥不允许登录 Web UI，为分享划清权限边界
 - **📖 公开使用文档** - 使用文档重写并支持免登录访问，便于用户快速上手
+- **📚 自动化 API 文档** - OpenAPI 3.1.0 规范 + Swagger UI + Scalar UI 双界面，支持 39 个 REST API 端点
+- **📄 价格表分页** - 支持大规模模型数据查询，搜索防抖，SQL 层面性能优化
 
 ### 界面预览
 
@@ -245,6 +247,48 @@ docker compose down && rm -rf ./data/ && docker compose up -d
 - 输入价格（USD/M tokens）：`0.003`
 - 输出价格（USD/M tokens）：`0.006`
 
+### 7️⃣ API 文档和集成
+
+本系统提供完整的 REST API 接口，支持通过 HTTP 请求进行所有管理操作。
+
+**访问 API 文档**：
+
+登录后，进入 **设置 → API 文档** 或直接访问：
+
+- **Scalar UI**（推荐）：`http://localhost:23000/api/actions/scalar`
+- **Swagger UI**：`http://localhost:23000/api/actions/docs`
+- **OpenAPI JSON**：`http://localhost:23000/api/actions/openapi.json`
+
+**功能特性**：
+
+- 📋 **39 个 REST API 端点**，覆盖所有管理功能
+- 🔐 Cookie 认证保护
+- 📝 完整的请求/响应示例
+- 🧪 交互式 API 测试界面
+- 📦 自动类型验证（Zod schemas）
+
+**支持的功能模块**：
+
+- 用户管理、密钥管理、供应商管理
+- 模型价格、统计数据、使用日志
+- 敏感词管理、Session 管理、通知管理
+
+**API 调用示例**：
+
+```bash
+# 创建用户（需要先登录获取 session cookie）
+curl -X POST http://localhost:23000/api/actions/users/addUser \
+  -H "Content-Type: application/json" \
+  -H "Cookie: session=your-session-cookie" \
+  -d '{
+    "name": "Alice",
+    "rpm": 60,
+    "dailyQuota": 10
+  }'
+```
+
+**详细文档**：参见 [API 文档使用指南](docs/api-documentation.md)
+
 ## 🛠️ 常见问题
 
 <details>
@@ -387,6 +431,61 @@ server {
 ```
 
 配置 HTTPS 后，确保 `.env` 中 `ENABLE_SECURE_COOKIES=true`（默认值），以启用 Cookie 安全传输。
+
+</details>
+
+<details>
+<summary><b>❓ 如何使用 API 文档？</b></summary>
+
+本系统提供完整的 REST API 文档，方便第三方系统集成和自动化管理。
+
+**访问方式**：
+
+1. 登录管理后台
+2. 进入 **设置 → API 文档**
+3. 选择 Scalar UI（推荐）或 Swagger UI
+4. 在文档页面直接测试 API
+
+**认证说明**：
+
+- 所有 API 端点使用 Cookie 认证
+- 需要先通过 Web UI 登录获取 session cookie
+- 在 API 请求中包含 cookie 即可调用
+
+**支持的功能**：
+
+- 39 个 REST API 端点
+- 覆盖用户、密钥、供应商、价格、日志、统计等所有管理功能
+- 交互式测试界面，无需额外工具
+
+**详细文档**：参见 [API 文档使用指南](docs/api-documentation.md)
+
+</details>
+
+<details>
+<summary><b>❓ 价格表数据量大，加载很慢？</b></summary>
+
+系统已支持价格表分页功能（v0.2.21+），可显著提升大规模数据加载性能。
+
+**功能特性**：
+
+- 默认每页显示 50 条记录
+- 支持搜索模型名称（自动防抖，避免频繁请求）
+- 可选每页 20/50/100/200 条
+- URL 参数同步，刷新页面不丢失状态
+
+**使用方式**：
+
+1. 进入 **设置 → 价格管理**
+2. 使用顶部搜索框过滤模型
+3. 通过分页控件浏览数据
+4. 可调整每页显示数量
+
+**性能优化**：
+
+- SQL 层面分页查询，避免全表扫描
+- 搜索防抖（500ms），减少不必要的请求
+- 服务端渲染 + 客户端交互，首屏加载快
 
 </details>
 
