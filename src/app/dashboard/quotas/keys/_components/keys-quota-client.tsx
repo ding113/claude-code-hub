@@ -1,29 +1,44 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
+import { useState } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ChevronDown, ChevronRight } from "lucide-react";
-import { formatCurrency, type CurrencyCode } from "@/lib/utils/currency";
-import { formatDistanceToNow } from "date-fns";
-import { zhCN } from "date-fns/locale";
-import { getResetInfo } from "@/lib/rate-limit/time-utils";
+import { Settings } from "lucide-react";
+import type { CurrencyCode } from "@/lib/utils/currency";
+import { formatCurrency } from "@/lib/utils/currency";
+import { UserQuotaHeader } from "@/components/quota/user-quota-header";
+import { QuotaProgress } from "@/components/quota/quota-progress";
+import { QuotaWindowType } from "@/components/quota/quota-window-type";
+import { QuotaCountdownCompact } from "@/components/quota/quota-countdown";
+import { hasKeyQuotaSet, isUserExceeded, getUsageRate } from "@/lib/utils/quota-helpers";
 import { EditKeyQuotaDialog } from "./edit-key-quota-dialog";
 
 interface KeyQuota {
-  cost5h: { current: number; limit: number | null };
-  costWeekly: { current: number; limit: number | null };
-  costMonthly: { current: number; limit: number | null };
+  cost5h: { current: number; limit: number | null; resetAt?: Date };
+  costWeekly: { current: number; limit: number | null; resetAt?: Date };
+  costMonthly: { current: number; limit: number | null; resetAt?: Date };
   concurrentSessions: { current: number; limit: number };
+}
+
+interface UserQuota {
+  rpm: { current: number; limit: number; window: "per_minute" };
+  dailyCost: { current: number; limit: number; resetAt: Date };
 }
 
 interface KeyWithQuota {
   id: number;
   name: string;
-  status: string;
+  isEnabled: boolean;
   expiresAt: string | null;
   quota: KeyQuota | null;
 }
@@ -32,6 +47,7 @@ interface UserWithKeys {
   id: number;
   name: string;
   role: string;
+  userQuota: UserQuota | null;
   keys: KeyWithQuota[];
 }
 
@@ -40,25 +56,9 @@ interface KeysQuotaClientProps {
   currencyCode?: CurrencyCode;
 }
 
-// 判断密钥是否已设置限额
-function hasQuotaSet(key: KeyWithQuota): boolean {
-  if (!key.quota) return false;
-  return !!(
-    key.quota.cost5h.limit ||
-    key.quota.costWeekly.limit ||
-    key.quota.costMonthly.limit ||
-    key.quota.concurrentSessions.limit > 0
-  );
-}
-
 export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClientProps) {
   // 默认展开所有用户组
   const [openUsers, setOpenUsers] = useState<Set<number>>(new Set(users.map((user) => user.id)));
-  // 默认折叠未设置限额区域
-  const [showUnsetQuota, setShowUnsetQuota] = useState(false);
-
-  const weeklyReset = getResetInfo("weekly");
-  const monthlyReset = getResetInfo("monthly");
 
   const toggleUser = (userId: number) => {
     setOpenUsers((prev) => {
@@ -72,28 +72,6 @@ export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClient
     });
   };
 
-  // 将用户的密钥分为已设置限额和未设置限额两类
-  const { usersWithSetQuota, usersWithUnsetQuota } = useMemo(() => {
-    const withSet: UserWithKeys[] = [];
-    const withUnset: UserWithKeys[] = [];
-
-    users.forEach((user) => {
-      const keysWithQuota = user.keys.filter(hasQuotaSet);
-      const keysWithoutQuota = user.keys.filter((key) => !hasQuotaSet(key));
-
-      if (keysWithQuota.length > 0) {
-        withSet.push({ ...user, keys: keysWithQuota });
-      }
-      if (keysWithoutQuota.length > 0) {
-        withUnset.push({ ...user, keys: keysWithoutQuota });
-      }
-    });
-
-    return { usersWithSetQuota: withSet, usersWithUnsetQuota: withUnset };
-  }, [users]);
-
-  const totalUnsetKeys = usersWithUnsetQuota.reduce((sum, user) => sum + user.keys.length, 0);
-
   if (users.length === 0) {
     return (
       <Card>
@@ -106,250 +84,237 @@ export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClient
 
   return (
     <div className="space-y-4">
-      {/* 已设置限额的密钥 */}
-      {usersWithSetQuota.length > 0 && (
-        <div className="space-y-4">
-          {usersWithSetQuota.map((user) => (
-            <Card key={user.id}>
-              <Collapsible open={openUsers.has(user.id)} onOpenChange={() => toggleUser(user.id)}>
-                <CollapsibleTrigger className="w-full">
-                  <CardHeader className="flex flex-row items-center justify-between py-4">
-                    <div className="flex items-center gap-3">
-                      {openUsers.has(user.id) ? (
-                        <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                      ) : (
-                        <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                      )}
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold">{user.name}</span>
-                        <Badge variant={user.role === "admin" ? "default" : "secondary"}>
-                          {user.role}
-                        </Badge>
-                      </div>
-                    </div>
-                    <div className="text-sm text-muted-foreground">{user.keys.length} 个密钥</div>
-                  </CardHeader>
-                </CollapsibleTrigger>
+      {users.map((user) => {
+        // 判断用户是否超限
+        const userExceeded = isUserExceeded(user.userQuota);
 
-                <CollapsibleContent>
-                  <CardContent className="pt-0">
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                      {user.keys.map((key) => (
-                        <Card key={key.id}>
-                          <CardHeader>
-                            <div className="flex items-center justify-between">
-                              <CardTitle className="text-base">{key.name}</CardTitle>
-                              <Badge variant={key.status === "enabled" ? "default" : "secondary"}>
-                                {key.status === "enabled" ? "启用" : "禁用"}
-                              </Badge>
-                            </div>
-                            <CardDescription>
-                              {key.expiresAt ? `过期: ${key.expiresAt}` : "永久有效"}
-                            </CardDescription>
-                          </CardHeader>
-                          <CardContent className="space-y-4">
-                            {key.quota ? (
-                              <>
-                                {/* 5小时消费 */}
-                                {key.quota.cost5h.limit && key.quota.cost5h.limit > 0 && (
-                                  <div className="space-y-2">
-                                    <div className="flex items-center justify-between text-sm">
-                                      <span className="text-muted-foreground">5小时消费</span>
-                                      <span className="font-medium">
-                                        {formatCurrency(key.quota.cost5h.current, currencyCode)} /{" "}
-                                        {formatCurrency(key.quota.cost5h.limit, currencyCode)}
-                                      </span>
-                                    </div>
-                                    <Progress
-                                      value={
-                                        (key.quota.cost5h.current / (key.quota.cost5h.limit || 1)) *
-                                        100
-                                      }
-                                      className="h-2"
-                                    />
-                                    <p className="text-xs text-muted-foreground">
-                                      滚动窗口（过去5小时）
-                                    </p>
-                                  </div>
-                                )}
+        return (
+          <Collapsible
+            key={user.id}
+            open={openUsers.has(user.id)}
+            onOpenChange={() => toggleUser(user.id)}
+          >
+            {/* 用户头部 */}
+            <UserQuotaHeader
+              userId={user.id}
+              userName={user.name}
+              userRole={user.role}
+              keyCount={user.keys.length}
+              rpmCurrent={user.userQuota?.rpm.current || 0}
+              rpmLimit={user.userQuota?.rpm.limit || 60}
+              dailyCostCurrent={user.userQuota?.dailyCost.current || 0}
+              dailyCostLimit={user.userQuota?.dailyCost.limit || 100}
+              isOpen={openUsers.has(user.id)}
+              onToggle={() => toggleUser(user.id)}
+              currencyCode={currencyCode}
+            />
 
-                                {/* 周消费 */}
-                                {key.quota.costWeekly.limit && key.quota.costWeekly.limit > 0 && (
-                                  <div className="space-y-2">
-                                    <div className="flex items-center justify-between text-sm">
-                                      <span className="text-muted-foreground">周消费</span>
-                                      <span className="font-medium">
-                                        {formatCurrency(key.quota.costWeekly.current, currencyCode)}{" "}
-                                        / {formatCurrency(key.quota.costWeekly.limit, currencyCode)}
-                                      </span>
-                                    </div>
-                                    <Progress
-                                      value={
-                                        (key.quota.costWeekly.current /
-                                          (key.quota.costWeekly.limit || 1)) *
-                                        100
-                                      }
-                                      className="h-2"
-                                    />
-                                    <p className="text-xs text-muted-foreground">
-                                      重置于{" "}
-                                      {formatDistanceToNow(weeklyReset.resetAt!, {
-                                        addSuffix: true,
-                                        locale: zhCN,
-                                      })}
-                                    </p>
-                                  </div>
-                                )}
-
-                                {/* 月消费 */}
-                                {key.quota.costMonthly.limit && key.quota.costMonthly.limit > 0 && (
-                                  <div className="space-y-2">
-                                    <div className="flex items-center justify-between text-sm">
-                                      <span className="text-muted-foreground">月消费</span>
-                                      <span className="font-medium">
-                                        {formatCurrency(
-                                          key.quota.costMonthly.current,
-                                          currencyCode
-                                        )}{" "}
-                                        /{" "}
-                                        {formatCurrency(key.quota.costMonthly.limit, currencyCode)}
-                                      </span>
-                                    </div>
-                                    <Progress
-                                      value={
-                                        (key.quota.costMonthly.current /
-                                          (key.quota.costMonthly.limit || 1)) *
-                                        100
-                                      }
-                                      className="h-2"
-                                    />
-                                    <p className="text-xs text-muted-foreground">
-                                      重置于{" "}
-                                      {formatDistanceToNow(monthlyReset.resetAt!, {
-                                        addSuffix: true,
-                                        locale: zhCN,
-                                      })}
-                                    </p>
-                                  </div>
-                                )}
-
-                                {/* 并发 Session */}
-                                {key.quota.concurrentSessions.limit > 0 && (
-                                  <div className="space-y-2">
-                                    <div className="flex items-center justify-between text-sm">
-                                      <span className="text-muted-foreground">并发 Session</span>
-                                      <span className="font-medium">
-                                        {key.quota.concurrentSessions.current} /{" "}
-                                        {key.quota.concurrentSessions.limit}
-                                      </span>
-                                    </div>
-                                    <Progress
-                                      value={
-                                        (key.quota.concurrentSessions.current /
-                                          key.quota.concurrentSessions.limit) *
-                                        100
-                                      }
-                                      className="h-2"
-                                    />
-                                  </div>
-                                )}
-
-                                {/* 设置限额按钮 */}
-                                <EditKeyQuotaDialog
-                                  keyId={key.id}
-                                  keyName={key.name}
-                                  userName={user.name}
-                                  currentQuota={key.quota}
-                                  currencyCode={currencyCode}
-                                />
-                              </>
-                            ) : (
-                              <p className="text-sm text-muted-foreground">无法获取限额信息</p>
-                            )}
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  </CardContent>
-                </CollapsibleContent>
-              </Collapsible>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {/* 未设置限额的密钥（折叠收纳到底部） */}
-      {totalUnsetKeys > 0 && (
-        <Card>
-          <Collapsible open={showUnsetQuota} onOpenChange={setShowUnsetQuota}>
-            <CollapsibleTrigger className="w-full">
-              <CardHeader className="flex flex-row items-center justify-between py-4">
-                <div className="flex items-center gap-3">
-                  {showUnsetQuota ? (
-                    <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                  ) : (
-                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                  )}
-                  <span className="font-semibold">未设置限额的密钥</span>
-                </div>
-                <div className="text-sm text-muted-foreground">{totalUnsetKeys} 个密钥</div>
-              </CardHeader>
-            </CollapsibleTrigger>
-
+            {/* 密钥表格 */}
             <CollapsibleContent>
-              <CardContent className="pt-0">
-                <div className="space-y-2">
-                  {usersWithUnsetQuota.map((user) =>
-                    user.keys.map((key) => (
-                      <div
-                        key={key.id}
-                        className="flex items-center justify-between border-b py-3 last:border-0"
-                      >
-                        <div className="flex items-center gap-4 flex-1">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium truncate">{key.name}</span>
-                              <Badge
-                                variant={key.status === "enabled" ? "default" : "secondary"}
-                                className="shrink-0"
-                              >
-                                {key.status === "enabled" ? "启用" : "禁用"}
-                              </Badge>
-                            </div>
-                            <p className="text-sm text-muted-foreground">
-                              {user.name} · {key.expiresAt || "永久有效"}
-                            </p>
-                          </div>
-                        </div>
-                        <EditKeyQuotaDialog
-                          keyId={key.id}
-                          keyName={key.name}
-                          userName={user.name}
-                          currentQuota={key.quota}
-                          currencyCode={currencyCode}
-                          trigger={
-                            <Button variant="outline" size="sm">
-                              设置限额
-                            </Button>
-                          }
-                        />
-                      </div>
-                    ))
-                  )}
-                </div>
-              </CardContent>
+              <Card className="mt-4">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[200px]">密钥名称</TableHead>
+                      <TableHead className="w-[120px]">限额类型</TableHead>
+                      <TableHead className="w-[150px]">5小时限额</TableHead>
+                      <TableHead className="w-[150px]">周限额</TableHead>
+                      <TableHead className="w-[150px]">月限额</TableHead>
+                      <TableHead className="w-[120px]">并发限制</TableHead>
+                      <TableHead className="w-[100px]">状态</TableHead>
+                      <TableHead className="w-[100px] text-right">操作</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {user.keys.map((key) => {
+                      // 判断密钥是否设置了限额
+                      const hasKeyQuota = hasKeyQuotaSet(key.quota);
+
+                      return (
+                        <TableRow key={key.id}>
+                          {/* 密钥名称 */}
+                          <TableCell className="font-medium">{key.name}</TableCell>
+
+                          {/* 限额类型 */}
+                          <TableCell>
+                            {hasKeyQuota ? (
+                              <Badge variant="default">独立限额</Badge>
+                            ) : (
+                              <Badge variant="outline">继承用户</Badge>
+                            )}
+                          </TableCell>
+
+                          {/* 5小时限额 */}
+                          <TableCell>
+                            {hasKeyQuota && key.quota && key.quota.cost5h.limit !== null ? (
+                              <div className="space-y-1">
+                                {/* 窗口类型标签 */}
+                                <div className="flex items-center justify-between mb-1">
+                                  <QuotaWindowType type="5h" size="sm" />
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-mono">
+                                    {formatCurrency(key.quota.cost5h.current, currencyCode)}/
+                                    {formatCurrency(key.quota.cost5h.limit, currencyCode)}
+                                  </span>
+                                </div>
+                                <QuotaProgress
+                                  current={key.quota.cost5h.current}
+                                  limit={key.quota.cost5h.limit}
+                                  className="h-1"
+                                />
+                                <div className="text-xs text-muted-foreground text-right">
+                                  {getUsageRate(
+                                    key.quota.cost5h.current,
+                                    key.quota.cost5h.limit
+                                  ).toFixed(1)}
+                                  %
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">-</span>
+                            )}
+                          </TableCell>
+
+                          {/* 周限额 */}
+                          <TableCell>
+                            {hasKeyQuota && key.quota && key.quota.costWeekly.limit !== null ? (
+                              <div className="space-y-1">
+                                {/* 窗口类型 + 倒计时 */}
+                                <div className="flex items-center justify-between mb-1">
+                                  <QuotaWindowType type="weekly" size="sm" />
+                                  {key.quota.costWeekly.resetAt && (
+                                    <QuotaCountdownCompact resetAt={key.quota.costWeekly.resetAt} />
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-mono">
+                                    {formatCurrency(key.quota.costWeekly.current, currencyCode)}/
+                                    {formatCurrency(key.quota.costWeekly.limit, currencyCode)}
+                                  </span>
+                                </div>
+                                <QuotaProgress
+                                  current={key.quota.costWeekly.current}
+                                  limit={key.quota.costWeekly.limit}
+                                  className="h-1"
+                                />
+                                <div className="text-xs text-muted-foreground text-right">
+                                  {getUsageRate(
+                                    key.quota.costWeekly.current,
+                                    key.quota.costWeekly.limit
+                                  ).toFixed(1)}
+                                  %
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">-</span>
+                            )}
+                          </TableCell>
+
+                          {/* 月限额 */}
+                          <TableCell>
+                            {hasKeyQuota && key.quota && key.quota.costMonthly.limit !== null ? (
+                              <div className="space-y-1">
+                                {/* 窗口类型 + 倒计时 */}
+                                <div className="flex items-center justify-between mb-1">
+                                  <QuotaWindowType type="monthly" size="sm" />
+                                  {key.quota.costMonthly.resetAt && (
+                                    <QuotaCountdownCompact
+                                      resetAt={key.quota.costMonthly.resetAt}
+                                    />
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-mono">
+                                    {formatCurrency(key.quota.costMonthly.current, currencyCode)}/
+                                    {formatCurrency(key.quota.costMonthly.limit, currencyCode)}
+                                  </span>
+                                </div>
+                                <QuotaProgress
+                                  current={key.quota.costMonthly.current}
+                                  limit={key.quota.costMonthly.limit}
+                                  className="h-1"
+                                />
+                                <div className="text-xs text-muted-foreground text-right">
+                                  {getUsageRate(
+                                    key.quota.costMonthly.current,
+                                    key.quota.costMonthly.limit
+                                  ).toFixed(1)}
+                                  %
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">-</span>
+                            )}
+                          </TableCell>
+
+                          {/* 并发限制 */}
+                          <TableCell>
+                            {hasKeyQuota && key.quota && key.quota.concurrentSessions.limit > 0 ? (
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-mono">
+                                    {key.quota.concurrentSessions.current}/
+                                    {key.quota.concurrentSessions.limit}
+                                  </span>
+                                </div>
+                                <QuotaProgress
+                                  current={key.quota.concurrentSessions.current}
+                                  limit={key.quota.concurrentSessions.limit}
+                                  className="h-1"
+                                />
+                                <div className="text-xs text-muted-foreground text-right">
+                                  {getUsageRate(
+                                    key.quota.concurrentSessions.current,
+                                    key.quota.concurrentSessions.limit
+                                  ).toFixed(1)}
+                                  %
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">-</span>
+                            )}
+                          </TableCell>
+
+                          {/* 状态 */}
+                          <TableCell>
+                            <Badge
+                              variant={key.isEnabled && !userExceeded ? "default" : "secondary"}
+                              className="text-xs"
+                            >
+                              {!key.isEnabled
+                                ? "已禁用"
+                                : userExceeded && !hasKeyQuota
+                                  ? "受限"
+                                  : "正常"}
+                            </Badge>
+                          </TableCell>
+
+                          {/* 操作 */}
+                          <TableCell className="text-right">
+                            <EditKeyQuotaDialog
+                              keyId={key.id}
+                              keyName={key.name}
+                              userName={user.name}
+                              currentQuota={key.quota}
+                              currencyCode={currencyCode}
+                              trigger={
+                                <Button variant="ghost" size="sm">
+                                  <Settings className="h-4 w-4" />
+                                </Button>
+                              }
+                            />
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </Card>
             </CollapsibleContent>
           </Collapsible>
-        </Card>
-      )}
-
-      {usersWithSetQuota.length === 0 && totalUnsetKeys === 0 && (
-        <Card>
-          <CardContent className="flex items-center justify-center py-10">
-            <p className="text-muted-foreground">没有匹配的密钥</p>
-          </CardContent>
-        </Card>
-      )}
+        );
+      })}
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { db } from "@/drizzle/db";
 import { messageRequest, users, keys as keysTable, providers } from "@/drizzle/schema";
-import { eq, isNull, and, desc, sql } from "drizzle-orm";
+import { eq, isNull, and, desc, sql, inArray } from "drizzle-orm";
 import type { MessageRequest, CreateMessageRequestData } from "@/types/message";
 import { toMessageRequest } from "./_shared/transformers";
 import { formatCostForStorage } from "@/lib/utils/currency";
@@ -312,6 +312,187 @@ export async function aggregateSessionStats(sessionId: string): Promise<{
     userAgent: userInfo.userAgent,
     apiType: userInfo.apiType,
   };
+}
+
+/**
+ * 批量聚合多个 session 的统计数据（性能优化版本）
+ *
+ * 使用单次 SQL 查询获取所有 session 的聚合数据，避免 N+1 查询问题
+ *
+ * @param sessionIds - Session ID 列表
+ * @returns 聚合统计数据数组
+ */
+export async function aggregateMultipleSessionStats(sessionIds: string[]): Promise<
+  Array<{
+    sessionId: string;
+    requestCount: number;
+    totalCostUsd: string;
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    totalCacheCreationTokens: number;
+    totalCacheReadTokens: number;
+    totalDurationMs: number;
+    firstRequestAt: Date | null;
+    lastRequestAt: Date | null;
+    providers: Array<{ id: number; name: string }>;
+    models: string[];
+    userName: string;
+    userId: number;
+    keyName: string;
+    keyId: number;
+    userAgent: string | null;
+    apiType: string | null;
+  }>
+> {
+  if (sessionIds.length === 0) {
+    return [];
+  }
+
+  // 1. 批量聚合统计（单次查询）
+  const statsResults = await db
+    .select({
+      sessionId: messageRequest.sessionId,
+      requestCount: sql<number>`count(*)::int`,
+      totalCostUsd: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
+      totalInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::int`,
+      totalOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::int`,
+      totalCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::int`,
+      totalCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}), 0)::int`,
+      totalDurationMs: sql<number>`COALESCE(sum(${messageRequest.durationMs}), 0)::int`,
+      firstRequestAt: sql<Date>`min(${messageRequest.createdAt})`,
+      lastRequestAt: sql<Date>`max(${messageRequest.createdAt})`,
+    })
+    .from(messageRequest)
+    .where(and(inArray(messageRequest.sessionId, sessionIds), isNull(messageRequest.deletedAt)))
+    .groupBy(messageRequest.sessionId);
+
+  // 创建 sessionId → stats 的 Map
+  const statsMap = new Map(statsResults.map((s) => [s.sessionId, s]));
+
+  // 2. 批量查询供应商列表（按 session 分组）
+  const providerResults = await db
+    .selectDistinct({
+      sessionId: messageRequest.sessionId,
+      providerId: messageRequest.providerId,
+      providerName: providers.name,
+    })
+    .from(messageRequest)
+    .leftJoin(providers, eq(messageRequest.providerId, providers.id))
+    .where(
+      and(
+        inArray(messageRequest.sessionId, sessionIds),
+        isNull(messageRequest.deletedAt),
+        sql`${messageRequest.providerId} IS NOT NULL`
+      )
+    );
+
+  // 创建 sessionId → providers 的 Map
+  const providersMap = new Map<string, Array<{ id: number; name: string }>>();
+  for (const p of providerResults) {
+    // 跳过 null sessionId（虽然 WHERE 条件已过滤，但需要满足 TypeScript 类型检查）
+    if (!p.sessionId) continue;
+
+    if (!providersMap.has(p.sessionId)) {
+      providersMap.set(p.sessionId, []);
+    }
+    providersMap.get(p.sessionId)!.push({
+      id: p.providerId!,
+      name: p.providerName || "未知",
+    });
+  }
+
+  // 3. 批量查询模型列表（按 session 分组）
+  const modelResults = await db
+    .selectDistinct({
+      sessionId: messageRequest.sessionId,
+      model: messageRequest.model,
+    })
+    .from(messageRequest)
+    .where(
+      and(
+        inArray(messageRequest.sessionId, sessionIds),
+        isNull(messageRequest.deletedAt),
+        sql`${messageRequest.model} IS NOT NULL`
+      )
+    );
+
+  // 创建 sessionId → models 的 Map
+  const modelsMap = new Map<string, string[]>();
+  for (const m of modelResults) {
+    // 跳过 null sessionId（虽然 WHERE 条件已过滤，但需要满足 TypeScript 类型检查）
+    if (!m.sessionId) continue;
+
+    if (!modelsMap.has(m.sessionId)) {
+      modelsMap.set(m.sessionId, []);
+    }
+    modelsMap.get(m.sessionId)!.push(m.model!);
+  }
+
+  // 4. 批量获取用户信息（每个 session 的第一条请求）
+  // 使用 DISTINCT ON + ORDER BY 优化
+  const userInfoResults = await db
+    .select({
+      sessionId: messageRequest.sessionId,
+      userName: users.name,
+      userId: users.id,
+      keyName: keysTable.name,
+      keyId: keysTable.id,
+      userAgent: messageRequest.userAgent,
+      apiType: messageRequest.apiType,
+      createdAt: messageRequest.createdAt,
+    })
+    .from(messageRequest)
+    .innerJoin(users, eq(messageRequest.userId, users.id))
+    .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
+    .where(and(inArray(messageRequest.sessionId, sessionIds), isNull(messageRequest.deletedAt)))
+    .orderBy(messageRequest.sessionId, messageRequest.createdAt);
+
+  // 创建 sessionId → userInfo 的 Map（取每个 session 最早的记录）
+  const userInfoMap = new Map<string, (typeof userInfoResults)[0]>();
+  for (const info of userInfoResults) {
+    // 跳过 null sessionId（虽然 WHERE 条件已过滤，但需要满足 TypeScript 类型检查）
+    if (!info.sessionId) continue;
+
+    if (!userInfoMap.has(info.sessionId)) {
+      userInfoMap.set(info.sessionId, info);
+    }
+  }
+
+  // 5. 组装最终结果
+  const results: Awaited<ReturnType<typeof aggregateMultipleSessionStats>> = [];
+
+  for (const sessionId of sessionIds) {
+    const stats = statsMap.get(sessionId);
+    const userInfo = userInfoMap.get(sessionId);
+
+    // 跳过没有数据的 session
+    if (!stats || !userInfo || stats.requestCount === 0) {
+      continue;
+    }
+
+    results.push({
+      sessionId,
+      requestCount: stats.requestCount,
+      totalCostUsd: stats.totalCostUsd,
+      totalInputTokens: stats.totalInputTokens,
+      totalOutputTokens: stats.totalOutputTokens,
+      totalCacheCreationTokens: stats.totalCacheCreationTokens,
+      totalCacheReadTokens: stats.totalCacheReadTokens,
+      totalDurationMs: stats.totalDurationMs,
+      firstRequestAt: stats.firstRequestAt,
+      lastRequestAt: stats.lastRequestAt,
+      providers: providersMap.get(sessionId) || [],
+      models: modelsMap.get(sessionId) || [],
+      userName: userInfo.userName,
+      userId: userInfo.userId,
+      keyName: userInfo.keyName,
+      keyId: userInfo.keyId,
+      userAgent: userInfo.userAgent,
+      apiType: userInfo.apiType,
+    });
+  }
+
+  return results;
 }
 
 /**

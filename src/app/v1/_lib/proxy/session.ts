@@ -44,6 +44,7 @@ export class ProxySession {
   readonly request: ProxyRequestPayload;
   readonly userAgent: string | null; // User-Agent（用于客户端类型分析）
   readonly context: Context; // Hono Context（用于转换器）
+  readonly clientAbortSignal: AbortSignal | null; // 客户端中断信号
   userName: string;
   authState: AuthState | null;
   provider: Provider | null;
@@ -74,6 +75,7 @@ export class ProxySession {
     request: ProxyRequestPayload;
     userAgent: string | null;
     context: Context;
+    clientAbortSignal: AbortSignal | null;
   }) {
     this.startTime = init.startTime;
     this.method = init.method;
@@ -83,6 +85,7 @@ export class ProxySession {
     this.request = init.request;
     this.userAgent = init.userAgent;
     this.context = init.context;
+    this.clientAbortSignal = init.clientAbortSignal;
     this.userName = "unknown";
     this.authState = null;
     this.provider = null;
@@ -101,6 +104,9 @@ export class ProxySession {
 
     // 提取 User-Agent
     const userAgent = headers.get("user-agent") || null;
+
+    // 提取客户端 AbortSignal（如果存在）
+    const clientAbortSignal = c.req.raw.signal || null;
 
     const request: ProxyRequestPayload = {
       message: bodyResult.requestMessage,
@@ -122,6 +128,7 @@ export class ProxySession {
       request,
       userAgent,
       context: c,
+      clientAbortSignal,
     });
   }
 
@@ -209,8 +216,10 @@ export class ProxySession {
         | "session_reuse"
         | "initial_selection"
         | "concurrent_limit_failed"
+        | "request_success" // 修复：添加 request_success
         | "retry_success"
-        | "retry_failed";
+        | "retry_failed" // 供应商错误（已计入熔断器）
+        | "system_error"; // 系统/网络错误（不计入熔断器）
       selectionMethod?:
         | "session_reuse"
         | "weighted_random"
@@ -219,6 +228,11 @@ export class ProxySession {
       circuitState?: "closed" | "open" | "half-open";
       attemptNumber?: number;
       errorMessage?: string; // 错误信息（失败时记录）
+      // 修复：添加新字段
+      statusCode?: number; // 成功时的状态码
+      circuitFailureCount?: number; // 熔断失败计数
+      circuitFailureThreshold?: number; // 熔断阈值
+      errorDetails?: ProviderChainItem["errorDetails"]; // 结构化错误详情
       decisionContext?: ProviderChainItem["decisionContext"];
     }
   ): void {
@@ -236,6 +250,11 @@ export class ProxySession {
       timestamp: Date.now(),
       attemptNumber: metadata?.attemptNumber,
       errorMessage: metadata?.errorMessage, // 记录错误信息
+      // 修复：记录新字段
+      statusCode: metadata?.statusCode,
+      circuitFailureCount: metadata?.circuitFailureCount,
+      circuitFailureThreshold: metadata?.circuitFailureThreshold,
+      errorDetails: metadata?.errorDetails, // 结构化错误详情
       decisionContext: metadata?.decisionContext,
     };
 
@@ -287,6 +306,32 @@ export class ProxySession {
    */
   isModelRedirected(): boolean {
     return this.originalModelName !== null && this.originalModelName !== this.request.model;
+  }
+
+  /**
+   * 检查是否为 Claude Code CLI 探测请求
+   * - [{"role":"user","content":"foo"}]
+   * - [{"role":"user","content":"count"}]
+   */
+  isProbeRequest(): boolean {
+    const messages = this.getMessages();
+
+    // 必须是单条消息
+    if (!Array.isArray(messages) || messages.length !== 1) {
+      return false;
+    }
+
+    const firstMessage = messages[0] as Record<string, unknown>;
+    const content = firstMessage.content;
+
+    // content 必须是字符串
+    if (typeof content !== "string") {
+      return false;
+    }
+
+    // 匹配探测模式（完全匹配，忽略大小写和空格）
+    const trimmed = content.trim().toLowerCase();
+    return trimmed === "foo" || trimmed === "count";
   }
 
   /**

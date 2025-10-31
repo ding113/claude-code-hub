@@ -213,9 +213,9 @@ export async function getKeysWithStatistics(
  */
 export async function getKeyLimitUsage(keyId: number): Promise<
   ActionResult<{
-    cost5h: { current: number; limit: number | null };
-    costWeekly: { current: number; limit: number | null };
-    costMonthly: { current: number; limit: number | null };
+    cost5h: { current: number; limit: number | null; resetAt?: Date };
+    costWeekly: { current: number; limit: number | null; resetAt?: Date };
+    costMonthly: { current: number; limit: number | null; resetAt?: Date };
     concurrentSessions: { current: number; limit: number };
   }>
 > {
@@ -238,6 +238,7 @@ export async function getKeyLimitUsage(keyId: number): Promise<
     // 动态导入 RateLimitService 避免循环依赖
     const { RateLimitService } = await import("@/lib/rate-limit");
     const { SessionTracker } = await import("@/lib/session-tracker");
+    const { getResetInfo } = await import("@/lib/rate-limit/time-utils");
 
     // 获取金额消费（优先 Redis，降级数据库）
     const [cost5h, costWeekly, costMonthly, concurrentSessions] = await Promise.all([
@@ -247,12 +248,29 @@ export async function getKeyLimitUsage(keyId: number): Promise<
       SessionTracker.getKeySessionCount(keyId),
     ]);
 
+    // 获取重置时间
+    const resetInfo5h = getResetInfo("5h");
+    const resetInfoWeekly = getResetInfo("weekly");
+    const resetInfoMonthly = getResetInfo("monthly");
+
     return {
       ok: true,
       data: {
-        cost5h: { current: cost5h, limit: key.limit5hUsd },
-        costWeekly: { current: costWeekly, limit: key.limitWeeklyUsd },
-        costMonthly: { current: costMonthly, limit: key.limitMonthlyUsd },
+        cost5h: {
+          current: cost5h,
+          limit: key.limit5hUsd,
+          resetAt: resetInfo5h.resetAt, // 滚动窗口无 resetAt
+        },
+        costWeekly: {
+          current: costWeekly,
+          limit: key.limitWeeklyUsd,
+          resetAt: resetInfoWeekly.resetAt,
+        },
+        costMonthly: {
+          current: costMonthly,
+          limit: key.limitMonthlyUsd,
+          resetAt: resetInfoMonthly.resetAt,
+        },
         concurrentSessions: {
           current: concurrentSessions,
           limit: key.limitConcurrentSessions || 0,

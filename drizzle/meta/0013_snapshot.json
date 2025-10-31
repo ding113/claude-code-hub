@@ -1,5 +1,5 @@
 {
-  "id": "392dbe44-9b4c-4bd6-a825-50ed07bce257",
+  "id": "8aa13f86-5369-426b-bb36-fd6619a353d3",
   "prevId": "4695bdfd-8bb5-4f66-9e4d-0c7291e76670",
   "version": "7",
   "dialect": "postgresql",
@@ -557,6 +557,113 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.notification_settings": {
+      "name": "notification_settings",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "enabled": {
+          "name": "enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "circuit_breaker_enabled": {
+          "name": "circuit_breaker_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "circuit_breaker_webhook": {
+          "name": "circuit_breaker_webhook",
+          "type": "varchar(512)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "daily_leaderboard_enabled": {
+          "name": "daily_leaderboard_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "daily_leaderboard_webhook": {
+          "name": "daily_leaderboard_webhook",
+          "type": "varchar(512)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "daily_leaderboard_time": {
+          "name": "daily_leaderboard_time",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'09:00'"
+        },
+        "daily_leaderboard_top_n": {
+          "name": "daily_leaderboard_top_n",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 5
+        },
+        "cost_alert_enabled": {
+          "name": "cost_alert_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "cost_alert_webhook": {
+          "name": "cost_alert_webhook",
+          "type": "varchar(512)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cost_alert_threshold": {
+          "name": "cost_alert_threshold",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'0.80'"
+        },
+        "cost_alert_check_interval": {
+          "name": "cost_alert_check_interval",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 60
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.providers": {
       "name": "providers",
       "schema": "",
@@ -952,20 +1059,6 @@
         },
         "currency_display": {
           "name": "currency_display",
-          "type": "varchar(10)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'USD'"
-        },
-        "allow_view_provider_info": {
-          "name": "allow_view_provider_info",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "non_admin_currency_display": {
-          "name": "non_admin_currency_display",
           "type": "varchar(10)",
           "primaryKey": false,
           "notNull": true,
