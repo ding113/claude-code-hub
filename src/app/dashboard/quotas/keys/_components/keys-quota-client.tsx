@@ -219,7 +219,9 @@ export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClient
                                 <div className="flex items-center justify-between mb-1">
                                   <QuotaWindowType type="monthly" size="sm" />
                                   {key.quota.costMonthly.resetAt && (
-                                    <QuotaCountdownCompact resetAt={key.quota.costMonthly.resetAt} />
+                                    <QuotaCountdownCompact
+                                      resetAt={key.quota.costMonthly.resetAt}
+                                    />
                                   )}
                                 </div>
                                 <div className="flex items-center gap-2">

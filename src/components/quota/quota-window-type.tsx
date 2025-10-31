@@ -112,9 +112,7 @@ export function QuotaWindowTypeCompact({
 }) {
   const config = WINDOW_CONFIG[type];
 
-  return (
-    <span className={cn("text-xs text-muted-foreground", className)}>{config.label}</span>
-  );
+  return <span className={cn("text-xs text-muted-foreground", className)}>{config.label}</span>;
 }
 
 /**

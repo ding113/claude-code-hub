@@ -322,9 +322,7 @@ export async function aggregateSessionStats(sessionId: string): Promise<{
  * @param sessionIds - Session ID 列表
  * @returns 聚合统计数据数组
  */
-export async function aggregateMultipleSessionStats(
-  sessionIds: string[]
-): Promise<
+export async function aggregateMultipleSessionStats(sessionIds: string[]): Promise<
   Array<{
     sessionId: string;
     requestCount: number;
@@ -365,7 +363,9 @@ export async function aggregateMultipleSessionStats(
       lastRequestAt: sql<Date>`max(${messageRequest.createdAt})`,
     })
     .from(messageRequest)
-    .where(and(sql`${messageRequest.sessionId} = ANY(${sessionIds})`, isNull(messageRequest.deletedAt)))
+    .where(
+      and(sql`${messageRequest.sessionId} = ANY(${sessionIds})`, isNull(messageRequest.deletedAt))
+    )
     .groupBy(messageRequest.sessionId);
 
   // 创建 sessionId → stats 的 Map
@@ -446,7 +446,9 @@ export async function aggregateMultipleSessionStats(
     .from(messageRequest)
     .innerJoin(users, eq(messageRequest.userId, users.id))
     .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
-    .where(and(sql`${messageRequest.sessionId} = ANY(${sessionIds})`, isNull(messageRequest.deletedAt)))
+    .where(
+      and(sql`${messageRequest.sessionId} = ANY(${sessionIds})`, isNull(messageRequest.deletedAt))
+    )
     .orderBy(messageRequest.sessionId, messageRequest.createdAt);
 
   // 创建 sessionId → userInfo 的 Map（取每个 session 最早的记录）
