@@ -1,0 +1,31 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getUserLimitUsage } from "@/actions/users";
+import { logger } from "@/lib/logger";
+
+// 需要数据库连接
+export const runtime = "nodejs";
+
+/**
+ * GET /api/admin/users/:id/limits
+ * 获取用户限额使用情况（管理员）
+
+ */
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const userId = parseInt(params.id, 10);
+    if (isNaN(userId)) {
+      return NextResponse.json({ error: "无效的用户 ID" }, { status: 400 });
+    }
+
+    const result = await getUserLimitUsage(userId);
+
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: 400 });
+    }
+
+    return NextResponse.json(result.data);
+  } catch (error) {
+    logger.error("Failed to get user limit usage:", error);
+    return NextResponse.json({ error: "获取用户限额失败" }, { status: 500 });
+  }
+}
