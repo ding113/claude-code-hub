@@ -4,6 +4,7 @@ import { DataTable, TableColumnTypes } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
 import { Copy, Check, ExternalLink, ChevronDown, ChevronRight } from "lucide-react";
 import { KeyActions } from "./key-actions";
+import { KeyLimitUsage } from "./key-limit-usage";
 import type { UserKeyDisplay } from "@/types/user";
 import type { User } from "@/types/user";
 import { format } from "timeago.js";
@@ -57,54 +58,88 @@ export function KeyList({ keys, currentUser, keyOwnerUserId, currencyCode = "USD
 
   const columns = [
     TableColumnTypes.text<UserKeyDisplay>("name", "名称", {
-      render: (value, record) => (
-        <div className="space-y-1">
-          <div className="truncate font-medium">{value}</div>
-          {record.modelStats.length > 0 && (
-            <Collapsible open={expandedKeys.has(record.id)}>
-              <CollapsibleTrigger asChild>
-                <button
-                  onClick={() => toggleExpanded(record.id)}
-                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  {expandedKeys.has(record.id) ? (
-                    <ChevronDown className="h-3 w-3" />
-                  ) : (
-                    <ChevronRight className="h-3 w-3" />
+      render: (value, record) => {
+        // 检查是否有限额配置
+        const hasLimitConfig =
+          (record.limit5hUsd && record.limit5hUsd > 0) ||
+          (record.limitWeeklyUsd && record.limitWeeklyUsd > 0) ||
+          (record.limitMonthlyUsd && record.limitMonthlyUsd > 0) ||
+          (record.limitConcurrentSessions && record.limitConcurrentSessions > 0);
+
+        const hasModelStats = record.modelStats.length > 0;
+        const showDetails = hasModelStats || hasLimitConfig;
+
+        return (
+          <div className="space-y-1">
+            <div className="truncate font-medium">{value}</div>
+            {showDetails && (
+              <Collapsible open={expandedKeys.has(record.id)}>
+                <CollapsibleTrigger asChild>
+                  <button
+                    onClick={() => toggleExpanded(record.id)}
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {expandedKeys.has(record.id) ? (
+                      <ChevronDown className="h-3 w-3" />
+                    ) : (
+                      <ChevronRight className="h-3 w-3" />
+                    )}
+                    详细信息
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-2 space-y-3">
+                  {/* 模型统计 */}
+                  {hasModelStats && (
+                    <div>
+                      <div className="text-xs font-medium text-muted-foreground mb-1.5">
+                        模型统计 ({record.modelStats.length})
+                      </div>
+                      <div className="border rounded-md">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="text-xs py-1.5">模型</TableHead>
+                              <TableHead className="text-xs py-1.5 text-right">调用次数</TableHead>
+                              <TableHead className="text-xs py-1.5 text-right">消耗</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {record.modelStats.map((stat) => (
+                              <TableRow key={stat.model}>
+                                <TableCell className="text-xs py-1.5 font-mono">
+                                  {stat.model}
+                                </TableCell>
+                                <TableCell className="text-xs py-1.5 text-right">
+                                  {stat.callCount}
+                                </TableCell>
+                                <TableCell className="text-xs py-1.5 text-right font-mono">
+                                  {formatCurrency(stat.totalCost, currencyCode)}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
                   )}
-                  模型统计 ({record.modelStats.length})
-                </button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="mt-2">
-                <div className="border rounded-md">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-xs py-1.5">模型</TableHead>
-                        <TableHead className="text-xs py-1.5 text-right">调用次数</TableHead>
-                        <TableHead className="text-xs py-1.5 text-right">消耗</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {record.modelStats.map((stat) => (
-                        <TableRow key={stat.model}>
-                          <TableCell className="text-xs py-1.5 font-mono">{stat.model}</TableCell>
-                          <TableCell className="text-xs py-1.5 text-right">
-                            {stat.callCount}
-                          </TableCell>
-                          <TableCell className="text-xs py-1.5 text-right font-mono">
-                            {formatCurrency(stat.totalCost, currencyCode)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-          )}
-        </div>
-      ),
+
+                  {/* 限额使用情况 */}
+                  {hasLimitConfig && (
+                    <div>
+                      <div className="text-xs font-medium text-muted-foreground mb-1.5">
+                        限额使用情况
+                      </div>
+                      <div className="border rounded-md p-3 bg-muted/30">
+                        <KeyLimitUsage keyId={record.id} currencyCode={currencyCode} />
+                      </div>
+                    </div>
+                  )}
+                </CollapsibleContent>
+              </Collapsible>
+            )}
+          </div>
+        );
+      },
     }),
     TableColumnTypes.text<UserKeyDisplay>("maskedKey", "Key", {
       render: (_, record: UserKeyDisplay) => (

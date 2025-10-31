@@ -6,6 +6,7 @@ import {
   updateProvider,
   deleteProvider,
   getProviderStatistics,
+  findProviderById,
 } from "@/repository/provider";
 import { revalidatePath } from "next/cache";
 import { logger } from "@/lib/logger";
@@ -408,6 +409,77 @@ export async function resetProviderCircuit(providerId: number): Promise<ActionRe
   } catch (error) {
     logger.error("重置熔断器失败:", error);
     const message = error instanceof Error ? error.message : "重置熔断器失败";
+    return { ok: false, error: message };
+  }
+}
+
+/**
+ * 获取供应商限额使用情况
+ */
+export async function getProviderLimitUsage(providerId: number): Promise<
+  ActionResult<{
+    cost5h: { current: number; limit: number | null; resetInfo: string };
+    costWeekly: { current: number; limit: number | null; resetAt: Date };
+    costMonthly: { current: number; limit: number | null; resetAt: Date };
+    concurrentSessions: { current: number; limit: number };
+  }>
+> {
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return { ok: false, error: "无权限执行此操作" };
+    }
+
+    const provider = await findProviderById(providerId);
+    if (!provider) {
+      return { ok: false, error: "供应商不存在" };
+    }
+
+    // 动态导入避免循环依赖
+    const { RateLimitService } = await import("@/lib/rate-limit");
+    const { SessionTracker } = await import("@/lib/session-tracker");
+    const { getResetInfo } = await import("@/lib/rate-limit/time-utils");
+
+    // 获取金额消费（优先 Redis，降级数据库）
+    const [cost5h, costWeekly, costMonthly, concurrentSessions] = await Promise.all([
+      RateLimitService.getCurrentCost(providerId, "provider", "5h"),
+      RateLimitService.getCurrentCost(providerId, "provider", "weekly"),
+      RateLimitService.getCurrentCost(providerId, "provider", "monthly"),
+      SessionTracker.getProviderSessionCount(providerId),
+    ]);
+
+    // 获取重置时间信息
+    const reset5h = getResetInfo("5h");
+    const resetWeekly = getResetInfo("weekly");
+    const resetMonthly = getResetInfo("monthly");
+
+    return {
+      ok: true,
+      data: {
+        cost5h: {
+          current: cost5h,
+          limit: provider.limit5hUsd,
+          resetInfo: reset5h.type === "rolling" ? `滚动窗口（${reset5h.period}）` : "自然时间窗口",
+        },
+        costWeekly: {
+          current: costWeekly,
+          limit: provider.limitWeeklyUsd,
+          resetAt: resetWeekly.resetAt!,
+        },
+        costMonthly: {
+          current: costMonthly,
+          limit: provider.limitMonthlyUsd,
+          resetAt: resetMonthly.resetAt!,
+        },
+        concurrentSessions: {
+          current: concurrentSessions,
+          limit: provider.limitConcurrentSessions || 0,
+        },
+      },
+    };
+  } catch (error) {
+    logger.error("获取供应商限额使用情况失败:", error);
+    const message = error instanceof Error ? error.message : "获取供应商限额使用情况失败";
     return { ok: false, error: message };
   }
 }

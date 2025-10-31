@@ -1,8 +1,10 @@
 "use server";
 
 import { db } from "@/drizzle/db";
-import { sql } from "drizzle-orm";
+import { sql, and, eq, gte, lt, isNull } from "drizzle-orm";
 import { getEnvConfig } from "@/lib/config";
+import { messageRequest } from "@/drizzle/schema";
+import { keys } from "@/drizzle/schema";
 import type {
   TimeRange,
   DatabaseStatRow,
@@ -554,4 +556,85 @@ export async function getMixedStatisticsFromDB(
     ownKeys: Array.from(ownKeysResult) as unknown as DatabaseKeyStatRow[],
     othersAggregate: Array.from(othersResult) as unknown as DatabaseStatRow[],
   };
+}
+
+/**
+ * 查询用户今日总消费（所有 Key 的消费总和）
+ * 用于用户层每日限额检查（Redis 降级）
+ */
+export async function sumUserCostToday(userId: number): Promise<number> {
+  const timezone = getEnvConfig().TZ;
+
+  const query = sql`
+    SELECT COALESCE(SUM(mr.cost_usd), 0) AS total_cost
+    FROM message_request mr
+    INNER JOIN keys k ON mr.key = k.key
+    WHERE k.user_id = ${userId}
+      AND (mr.created_at AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date
+      AND mr.deleted_at IS NULL
+      AND k.deleted_at IS NULL
+  `;
+
+  const result = await db.execute(query);
+  const row = Array.from(result)[0] as { total_cost?: string | number } | undefined;
+  return Number(row?.total_cost || 0);
+}
+
+/**
+ * 查询 Key 在指定时间范围内的消费总和
+ * 用于 Key 层限额检查（Redis 降级）
+ */
+export async function sumKeyCostInTimeRange(
+  keyId: number,
+  startTime: Date,
+  endTime: Date
+): Promise<number> {
+  // 注意：message_request.key 存储的是 API key 字符串，需要先查询 keys 表获取 key 值
+  const keyRecord = await db
+    .select({ key: keys.key })
+    .from(keys)
+    .where(eq(keys.id, keyId))
+    .limit(1);
+
+  if (!keyRecord || keyRecord.length === 0) return 0;
+
+  const keyString = keyRecord[0].key;
+
+  const result = await db
+    .select({ total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)` })
+    .from(messageRequest)
+    .where(
+      and(
+        eq(messageRequest.key, keyString), // 使用 key 字符串而非 ID
+        gte(messageRequest.createdAt, startTime),
+        lt(messageRequest.createdAt, endTime),
+        isNull(messageRequest.deletedAt)
+      )
+    );
+
+  return Number(result[0]?.total || 0);
+}
+
+/**
+ * 查询 Provider 在指定时间范围内的消费总和
+ * 用于 Provider 层限额检查（Redis 降级）
+ */
+export async function sumProviderCostInTimeRange(
+  providerId: number,
+  startTime: Date,
+  endTime: Date
+): Promise<number> {
+  const result = await db
+    .select({ total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)` })
+    .from(messageRequest)
+    .where(
+      and(
+        eq(messageRequest.providerId, providerId),
+        gte(messageRequest.createdAt, startTime),
+        lt(messageRequest.createdAt, endTime),
+        isNull(messageRequest.deletedAt)
+      )
+    );
+
+  return Number(result[0]?.total || 0);
 }
