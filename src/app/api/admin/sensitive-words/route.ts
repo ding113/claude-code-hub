@@ -1,9 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  listSensitiveWords,
-  createSensitiveWordAction,
-  getCacheStats,
-} from "@/actions/sensitive-words";
+import { listSensitiveWords, createSensitiveWordAction } from "@/actions/sensitive-words";
 import { logger } from "@/lib/logger";
 
 // 需要数据库连接

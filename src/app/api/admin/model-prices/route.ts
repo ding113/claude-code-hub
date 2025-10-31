@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  getModelPrices,
-  uploadPriceTable,
-  syncLiteLLMPrices,
-  getAvailableModelsByProviderType,
-} from "@/actions/model-prices";
+import { getModelPrices, uploadPriceTable } from "@/actions/model-prices";
 import { logger } from "@/lib/logger";
 
 // 需要数据库连接

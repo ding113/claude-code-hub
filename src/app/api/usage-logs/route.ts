@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUsageLogs, getModelList, getStatusCodeList } from "@/actions/usage-logs";
+import { getUsageLogs } from "@/actions/usage-logs";
 import { logger } from "@/lib/logger";
 
 // 需要数据库连接
@@ -23,9 +23,13 @@ export async function GET(req: NextRequest) {
       page: parseInt(searchParams.get("page") || "1", 10),
       pageSize: parseInt(searchParams.get("limit") || "50", 10),
       model: searchParams.get("model") || undefined,
-      statusCode: searchParams.get("status") ? parseInt(searchParams.get("status")!, 10) : undefined,
+      statusCode: searchParams.get("status")
+        ? parseInt(searchParams.get("status")!, 10)
+        : undefined,
       keyId: searchParams.get("keyId") ? parseInt(searchParams.get("keyId")!, 10) : undefined,
-      startDate: searchParams.get("startDate") ? new Date(searchParams.get("startDate")!) : undefined,
+      startDate: searchParams.get("startDate")
+        ? new Date(searchParams.get("startDate")!)
+        : undefined,
       endDate: searchParams.get("endDate") ? new Date(searchParams.get("endDate")!) : undefined,
     };
 

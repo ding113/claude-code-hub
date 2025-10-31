@@ -8,11 +8,11 @@ export const runtime = "nodejs";
 /**
  * GET /api/admin/keys/:id/limits
  * 获取密钥限额使用情况（管理员）
-
  */
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const keyId = parseInt(params.id, 10);
+    const { id } = await params;
+    const keyId = parseInt(id, 10);
     if (isNaN(keyId)) {
       return NextResponse.json({ error: "无效的密钥 ID" }, { status: 400 });
     }

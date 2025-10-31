@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getUsers, getUserLimitUsage } from "@/actions/users";
+import { getUsers } from "@/actions/users";
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 
