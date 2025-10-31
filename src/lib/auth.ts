@@ -18,9 +18,11 @@ export async function validateKey(keyString: string): Promise<AuthSession | null
   const adminToken = config.auth.adminToken;
   if (adminToken && keyString === adminToken) {
     const now = new Date();
+    // 生成管理员用户显示名称：显示令牌前8位作为标识
+    const adminTokenPrefix = keyString.length > 8 ? keyString.substring(0, 8) + "..." : keyString;
     const adminUser: User = {
       id: -1,
-      name: "Admin Token",
+      name: `Admin (${adminTokenPrefix})`,
       description: "Environment admin session",
       role: "admin",
       rpm: 0,
