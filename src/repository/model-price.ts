@@ -12,6 +12,7 @@ import { toModelPrice } from "./_shared/transformers";
 export interface PaginationParams {
   page: number;
   pageSize: number;
+  search?: string;  // 可选的搜索关键词
 }
 
 /**
@@ -94,7 +95,7 @@ export async function findAllLatestPrices(): Promise<ModelPrice[]> {
 export async function findAllLatestPricesPaginated(
   params: PaginationParams
 ): Promise<PaginatedResult<ModelPrice>> {
-  const { page, pageSize } = params;
+  const { page, pageSize, search } = params;
   const offset = (page - 1) * pageSize;
 
   // 先获取总数
@@ -104,6 +105,7 @@ export async function findAllLatestPricesPaginated(
         model_name,
         MAX(created_at) as max_created_at
       FROM model_prices
+      ${search?.trim() ? sql`WHERE model_name ILIKE ${`%${search.trim()}%`}` : sql``}
       GROUP BY model_name
     ),
     latest_records AS (
@@ -130,6 +132,7 @@ export async function findAllLatestPricesPaginated(
         model_name,
         MAX(created_at) as max_created_at
       FROM model_prices
+      ${search?.trim() ? sql`WHERE model_name ILIKE ${`%${search.trim()}%`}` : sql``}
       GROUP BY model_name
     ),
     latest_records AS (

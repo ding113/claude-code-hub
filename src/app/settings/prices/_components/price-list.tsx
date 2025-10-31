@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { ModelPrice } from "@/types/model-price";
-import type { PaginatedResult } from "@/repository/model-price";
+import { useDebounce } from "@/lib/hooks/use-debounce";
 
 interface PriceListProps {
   initialPrices: ModelPrice[];
@@ -46,10 +46,13 @@ export function PriceList({
   const [pageSize, setPageSize] = useState(initialPageSize);
   const [isLoading, setIsLoading] = useState(false);
 
+  // 使用防抖，避免频繁请求
+  const debouncedSearchTerm = useDebounce(searchTerm, 500);
+
   // 计算总页数
   const totalPages = Math.ceil(total / pageSize);
 
-  // 从 URL 搜索参数中读取初始状态
+  // 从 URL 搜索参数中读取初始状态（仅在挂载时执行一次）
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const searchParam = urlParams.get('search');
@@ -59,7 +62,7 @@ export function PriceList({
     if (searchParam) setSearchTerm(searchParam);
     if (pageParam) setPage(parseInt(pageParam, 10));
     if (sizeParam) setPageSize(parseInt(sizeParam, 10));
-  }, []);
+  }, []);  // 空依赖数组，仅在挂载时执行一次
 
   // 更新 URL 搜索参数
   const updateURL = (newSearchTerm: string, newPage: number, newPageSize: number) => {
@@ -102,12 +105,21 @@ export function PriceList({
     }
   };
 
-  // 搜索处理
+  // 当防抖后的搜索词变化时，触发搜索（重置到第一页）
+  useEffect(() => {
+    // 跳过初始渲染（当 debouncedSearchTerm 等于初始 searchTerm 时）
+    if (debouncedSearchTerm !== searchTerm) return;
+
+    const newPage = 1;  // 搜索时重置到第一页
+    setPage(newPage);
+    updateURL(debouncedSearchTerm, newPage, pageSize);
+    fetchPrices(newPage, pageSize, debouncedSearchTerm);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearchTerm]);  // 仅依赖 debouncedSearchTerm
+
+  // 搜索输入处理（只更新状态，不触发请求）
   const handleSearchChange = (value: string) => {
     setSearchTerm(value);
-    setPage(1); // 搜索时重置到第一页
-    updateURL(value, 1, pageSize);
-    fetchPrices(1, pageSize, value);
   };
 
   // 页面大小变化处理
@@ -115,22 +127,20 @@ export function PriceList({
     const newPage = Math.max(1, Math.min(page, Math.ceil(total / newPageSize)));
     setPageSize(newPageSize);
     setPage(newPage);
-    updateURL(searchTerm, newPage, newPageSize);
-    fetchPrices(newPage, newPageSize, searchTerm);
+    updateURL(debouncedSearchTerm, newPage, newPageSize);
+    fetchPrices(newPage, newPageSize, debouncedSearchTerm);
   };
 
   // 页面跳转处理
   const handlePageChange = (newPage: number) => {
     if (newPage < 1 || newPage > totalPages) return;
     setPage(newPage);
-    updateURL(searchTerm, newPage, pageSize);
-    fetchPrices(newPage, pageSize, searchTerm);
+    updateURL(debouncedSearchTerm, newPage, pageSize);
+    fetchPrices(newPage, pageSize, debouncedSearchTerm);
   };
 
-  // 过滤价格数据（客户端过滤，用于实时搜索）
-  const filteredPrices = prices.filter((price) =>
-    price.modelName.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // 移除客户端过滤逻辑（现在由后端处理）
+  const filteredPrices = prices;
 
   /**
    * 格式化价格显示为每百万token的价格

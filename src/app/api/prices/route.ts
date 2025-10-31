@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getModelPricesPaginated } from "@/actions/model-prices";
 import type { PaginationParams } from "@/repository/model-price";
+import { getSession } from "@/lib/auth";
 
 /**
  * GET /api/prices
@@ -12,6 +13,15 @@ import type { PaginationParams } from "@/repository/model-price";
  */
 export async function GET(request: NextRequest) {
   try {
+    // 权限检查：只有管理员可以访问价格数据
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return NextResponse.json(
+        { ok: false, error: "无权限访问此资源" },
+        { status: 403 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
 
     // 解析查询参数
@@ -38,41 +48,11 @@ export async function GET(request: NextRequest) {
     const paginationParams: PaginationParams = {
       page,
       pageSize,
+      search: search || undefined,  // 传递搜索关键词给后端
     };
 
-    // 获取分页数据
+    // 获取分页数据（搜索在 SQL 层面执行）
     const result = await getModelPricesPaginated(paginationParams);
-
-    if (!result.ok) {
-      return NextResponse.json(result, { status: 403 });
-    }
-
-    // 如果有搜索关键词，在前端进行过滤
-    // 注意：这里我们返回所有数据，让前端处理搜索，因为后端搜索会使得分页变得复杂
-    // 如果需要后端搜索，需要在 repository 层实现 SQL 查询过滤
-    let filteredData = result.data!.data;
-    if (search.trim()) {
-      filteredData = filteredData.filter(price =>
-        price.modelName.toLowerCase().includes(search.toLowerCase())
-      );
-
-      // 重新计算分页信息
-      const filteredTotal = filteredData.length;
-      const filteredTotalPages = Math.ceil(filteredTotal / pageSize);
-      const filteredOffset = (page - 1) * pageSize;
-      const paginatedData = filteredData.slice(filteredOffset, filteredOffset + pageSize);
-
-      return NextResponse.json({
-        ok: true,
-        data: {
-          data: paginatedData,
-          total: filteredTotal,
-          page,
-          pageSize,
-          totalPages: filteredTotalPages,
-        },
-      });
-    }
 
     return NextResponse.json(result);
   } catch (error) {
