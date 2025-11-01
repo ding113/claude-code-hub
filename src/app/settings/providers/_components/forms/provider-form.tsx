@@ -30,6 +30,7 @@ import { PROVIDER_DEFAULTS } from "@/lib/constants/provider.constants";
 import { toast } from "sonner";
 import { ModelMultiSelect } from "../model-multi-select";
 import { ModelRedirectEditor } from "../model-redirect-editor";
+import { ProxyTestButton } from "./proxy-test-button";
 
 type Mode = "create" | "edit";
 
@@ -100,6 +101,12 @@ export function ProviderForm({
     sourceProvider?.circuitBreakerHalfOpenSuccessThreshold
   );
 
+  // 代理配置
+  const [proxyUrl, setProxyUrl] = useState<string>(sourceProvider?.proxyUrl ?? "");
+  const [proxyFallbackToDirect, setProxyFallbackToDirect] = useState<boolean>(
+    sourceProvider?.proxyFallbackToDirect ?? false
+  );
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -137,6 +144,8 @@ export function ProviderForm({
             circuit_breaker_failure_threshold?: number;
             circuit_breaker_open_duration?: number;
             circuit_breaker_half_open_success_threshold?: number;
+            proxy_url?: string | null;
+            proxy_fallback_to_direct?: boolean;
             tpm?: number | null;
             rpm?: number | null;
             rpd?: number | null;
@@ -161,6 +170,8 @@ export function ProviderForm({
               ? openDurationMinutes * 60000
               : 1800000,
             circuit_breaker_half_open_success_threshold: halfOpenSuccessThreshold ?? 2,
+            proxy_url: proxyUrl.trim() || null,
+            proxy_fallback_to_direct: proxyFallbackToDirect,
             tpm: null,
             rpm: null,
             rpd: null,
@@ -198,6 +209,8 @@ export function ProviderForm({
               ? openDurationMinutes * 60000
               : 1800000,
             circuit_breaker_half_open_success_threshold: halfOpenSuccessThreshold ?? 2,
+            proxy_url: proxyUrl.trim() || null,
+            proxy_fallback_to_direct: proxyFallbackToDirect,
             tpm: null,
             rpm: null,
             rpd: null,
@@ -230,6 +243,8 @@ export function ProviderForm({
           setFailureThreshold(5);
           setOpenDurationMinutes(30);
           setHalfOpenSuccessThreshold(2);
+          setProxyUrl("");
+          setProxyFallbackToDirect(false);
         }
         onSuccess?.();
       } catch (error) {
@@ -632,6 +647,73 @@ export function ProviderForm({
                 step="1"
               />
               <p className="text-xs text-muted-foreground">半开状态下成功多少次后完全恢复</p>
+            </div>
+          </div>
+        </div>
+
+        {/* 代理配置 */}
+        <div className="space-y-4 pt-2 border-t">
+          <div className="space-y-1">
+            <div className="text-sm font-medium">代理配置</div>
+            <p className="text-xs text-muted-foreground">
+              配置代理服务器以改善供应商连接性（支持 HTTP、HTTPS、SOCKS4、SOCKS5）
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            {/* 代理地址输入 */}
+            <div className="space-y-2">
+              <Label htmlFor={isEdit ? "edit-proxy-url" : "proxy-url"}>
+                代理地址
+                <span className="text-xs text-muted-foreground ml-1">(可选)</span>
+              </Label>
+              <Input
+                id={isEdit ? "edit-proxy-url" : "proxy-url"}
+                value={proxyUrl}
+                onChange={(e) => setProxyUrl(e.target.value)}
+                placeholder="例如: http://proxy.example.com:8080 或 socks5://127.0.0.1:1080"
+                disabled={isPending}
+              />
+              <p className="text-xs text-muted-foreground">
+                支持格式: <code className="bg-muted px-1 rounded">http://</code>、
+                <code className="bg-muted px-1 rounded">https://</code>、
+                <code className="bg-muted px-1 rounded">socks4://</code>、
+                <code className="bg-muted px-1 rounded">socks5://</code>
+              </p>
+            </div>
+
+            {/* 降级策略开关 */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor={isEdit ? "edit-proxy-fallback" : "proxy-fallback"}>
+                    代理失败时降级到直连
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    启用后，代理连接失败时自动尝试直接连接供应商
+                  </p>
+                </div>
+                <Switch
+                  id={isEdit ? "edit-proxy-fallback" : "proxy-fallback"}
+                  checked={proxyFallbackToDirect}
+                  onCheckedChange={setProxyFallbackToDirect}
+                  disabled={isPending}
+                />
+              </div>
+            </div>
+
+            {/* 测试连接按钮 */}
+            <div className="space-y-2">
+              <Label>连接测试</Label>
+              <ProxyTestButton
+                providerUrl={url}
+                proxyUrl={proxyUrl}
+                proxyFallbackToDirect={proxyFallbackToDirect}
+                disabled={isPending || !url.trim()}
+              />
+              <p className="text-xs text-muted-foreground">
+                测试通过配置的代理访问供应商 URL（使用 HEAD 请求，不消耗额度）
+              </p>
             </div>
           </div>
         </div>

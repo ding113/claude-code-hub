@@ -215,6 +215,69 @@ Session 追踪和缓存 (`src/lib/session-manager.ts`):
 - **决策链记录** - 完整的供应商选择和失败切换记录
 - **自动清理** - TTL 过期自动清理
 
+### 代理支持
+
+供应商级别的代理配置 (`src/lib/proxy-agent.ts`):
+
+- **支持协议**: HTTP、HTTPS、SOCKS4、SOCKS5
+- **配置粒度**: 每个供应商独立配置代理
+- **自动检测**: 根据 URL 协议自动选择代理类型（HTTP/HTTPS 使用 undici ProxyAgent，SOCKS 使用 socks-proxy-agent）
+- **故障降级**: 可配置代理失败时是否降级到直连（`proxy_fallback_to_direct` 字段）
+- **连接测试**: UI 提供测试按钮，使用 HEAD 请求验证代理配置
+- **安全性**: 日志中自动脱敏代理密码
+
+**配置方式**:
+
+在供应商管理页面的"代理配置"部分：
+
+1. **代理地址** (`proxy_url`): 支持以下格式
+   - HTTP: `http://proxy.example.com:8080`
+   - HTTPS: `https://proxy.example.com:8080`
+   - SOCKS4: `socks4://127.0.0.1:1080`
+   - SOCKS5: `socks5://user:password@proxy.example.com:1080`
+
+2. **降级策略** (`proxy_fallback_to_direct`):
+   - 启用: 代理连接失败时自动尝试直连
+   - 禁用: 代理失败直接报错，不降级
+
+3. **测试连接**: 点击"测试连接"按钮验证配置，显示：
+   - 连接成功/失败状态
+   - HTTP 状态码
+   - 响应时间
+   - 是否使用代理
+   - 错误详情（如果失败）
+
+**技术实现**:
+
+```typescript
+// 代理工厂函数（src/lib/proxy-agent.ts）
+export function createProxyAgentForProvider(
+  provider: Provider,
+  targetUrl: string
+): ProxyConfig | null {
+  // 自动检测协议并创建对应的 ProxyAgent 或 SocksProxyAgent
+  // 返回 { agent, fallbackToDirect, proxyUrl }
+}
+
+// 请求转发层集成（src/app/v1/_lib/proxy/forwarder.ts）
+const proxyConfig = createProxyAgentForProvider(provider, proxyUrl);
+if (proxyConfig) {
+  init.dispatcher = proxyConfig.agent; // undici dispatcher
+
+  // 代理失败降级逻辑
+  if (proxyError && proxyConfig.fallbackToDirect) {
+    delete init.dispatcher;
+    response = await fetch(proxyUrl, init); // 直连重试
+  }
+}
+```
+
+**使用场景**:
+
+- 中国大陆访问海外 API 服务，改善连接性
+- 企业内网环境，需要通过公司代理访问外网
+- IP 限制场景，通过代理绕过 IP 封锁
+
 ### 数据库 Schema
 
 核心表结构 (`src/drizzle/schema.ts`):
@@ -453,6 +516,19 @@ SELECT ... LIMIT 50 OFFSET 0;
 - 检查熔断器状态（日志中的 `circuitState`）
 - 检查并发限制配置（`limit_concurrent_sessions`）
 - 查看决策链记录（日志详情页面）
+
+### 代理连接失败
+
+- 使用"测试连接"按钮验证代理配置
+- 检查代理地址格式（必须包含协议前缀：http://, https://, socks4://, socks5://）
+- 检查代理服务器是否可访问（防火墙、端口）
+- 检查代理认证信息（用户名/密码）
+- 查看日志中的详细错误信息：
+  - `ProxyError`: 代理服务器连接失败
+  - `Timeout`: 连接超时（默认 5 秒）
+  - `NetworkError`: 网络错误或 DNS 解析失败
+- 如启用了"降级到直连"，检查是否自动降级成功
+- 验证目标供应商 URL 是否正确
 
 ## 参考资源
 

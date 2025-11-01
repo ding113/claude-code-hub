@@ -16,6 +16,8 @@ import { defaultRegistry } from "../converters";
 import type { Format } from "../converters/types";
 import { mapClientFormatToTransformer, mapProviderTypeToTransformer } from "./format-mapper";
 import { isOfficialCodexClient, sanitizeCodexRequest } from "../codex/utils/request-sanitizer";
+import { createProxyAgentForProvider } from "@/lib/proxy-agent";
+import type { Dispatcher } from "undici";
 
 const MAX_RETRY_ATTEMPTS = 3;
 
@@ -428,12 +430,30 @@ export class ProxyForwarder {
       }
     }
 
-    const init: RequestInit = {
+    // ⭐ 扩展 RequestInit 类型以支持 undici dispatcher
+    interface UndiciFetchOptions extends RequestInit {
+      dispatcher?: Dispatcher;
+    }
+
+    const init: UndiciFetchOptions = {
       method: session.method,
       headers: processedHeaders,
       signal: session.clientAbortSignal || undefined, // 传递客户端中断信号
       ...(requestBody ? { body: requestBody } : {}),
     };
+
+    // ⭐ 应用代理配置（如果配置了）
+    const proxyConfig = createProxyAgentForProvider(provider, proxyUrl);
+    if (proxyConfig) {
+      init.dispatcher = proxyConfig.agent;
+      logger.info("ProxyForwarder: Using proxy", {
+        providerId: provider.id,
+        providerName: provider.name,
+        proxyUrl: proxyConfig.proxyUrl,
+        fallbackToDirect: proxyConfig.fallbackToDirect,
+        targetUrl: new URL(proxyUrl).origin,
+      });
+    }
 
     (init as Record<string, unknown>).verbose = true;
 
@@ -466,28 +486,103 @@ export class ProxyForwarder {
         );
       }
 
-      logger.error("ProxyForwarder: Fetch failed", {
-        providerId: provider.id,
-        providerName: provider.name,
-        proxyUrl: new URL(proxyUrl).origin, // 只记录域名，隐藏查询参数和 API Key
+      // ⭐ 代理相关错误处理（如果配置了代理）
+      if (proxyConfig) {
+        const isProxyError =
+          err.message.includes('proxy') ||
+          err.message.includes('ECONNREFUSED') ||
+          err.message.includes('ENOTFOUND') ||
+          err.message.includes('ETIMEDOUT');
 
-        // ⭐ 详细错误信息（关键诊断字段）
-        errorType: err.constructor.name,
-        errorName: err.name,
-        errorMessage: err.message,
-        errorCode: err.code, // ⭐ 如 'ENOTFOUND'（DNS失败）、'ECONNREFUSED'（连接拒绝）、'ETIMEDOUT'（超时）、'ECONNRESET'（连接重置）
-        errorSyscall: err.syscall, // ⭐ 如 'getaddrinfo'（DNS查询）、'connect'（TCP连接）
-        errorErrno: err.errno,
-        errorCause: err.cause,
-        errorStack: err.stack?.split("\n").slice(0, 3).join("\n"), // 前3行堆栈
+        if (isProxyError) {
+          logger.error("ProxyForwarder: Proxy connection failed", {
+            providerId: provider.id,
+            providerName: provider.name,
+            proxyUrl: proxyConfig.proxyUrl,
+            fallbackToDirect: proxyConfig.fallbackToDirect,
+            errorType: err.constructor.name,
+            errorMessage: err.message,
+            errorCode: err.code,
+          });
 
-        // 请求上下文
-        method: session.method,
-        hasBody: !!requestBody,
-        bodySize: requestBody ? JSON.stringify(requestBody).length : 0,
-      });
+          // 如果配置了降级到直连，尝试不使用代理
+          if (proxyConfig.fallbackToDirect) {
+            logger.warn("ProxyForwarder: Falling back to direct connection", {
+              providerId: provider.id,
+              providerName: provider.name,
+            });
 
-      throw fetchError;
+            // 移除 dispatcher，重新发起请求
+            delete init.dispatcher;
+            try {
+              response = await fetch(proxyUrl, init);
+              logger.info("ProxyForwarder: Direct connection succeeded after proxy failure", {
+                providerId: provider.id,
+                providerName: provider.name,
+              });
+              // 成功后跳过 throw，继续执行后续逻辑
+            } catch (directError) {
+              // 直连也失败，抛出原始错误
+              logger.error("ProxyForwarder: Direct connection also failed", {
+                providerId: provider.id,
+                error: directError,
+              });
+              throw fetchError; // 抛出原始代理错误
+            }
+          } else {
+            // 不降级，直接抛出代理错误
+            throw new ProxyError(
+              `Proxy connection failed: ${err.message}`,
+              500
+            );
+          }
+        } else {
+          // 非代理相关错误，记录详细信息后抛出
+          logger.error("ProxyForwarder: Fetch failed (with proxy configured)", {
+            providerId: provider.id,
+            providerName: provider.name,
+            proxyUrl: new URL(proxyUrl).origin,
+            proxyConfigured: proxyConfig.proxyUrl,
+            errorType: err.constructor.name,
+            errorName: err.name,
+            errorMessage: err.message,
+            errorCode: err.code,
+            errorSyscall: err.syscall,
+            errorErrno: err.errno,
+            errorCause: err.cause,
+            errorStack: err.stack?.split("\n").slice(0, 3).join("\n"),
+            method: session.method,
+            hasBody: !!requestBody,
+            bodySize: requestBody ? JSON.stringify(requestBody).length : 0,
+          });
+
+          throw fetchError;
+        }
+      } else {
+        // 未使用代理，原有错误处理逻辑
+        logger.error("ProxyForwarder: Fetch failed", {
+          providerId: provider.id,
+          providerName: provider.name,
+          proxyUrl: new URL(proxyUrl).origin, // 只记录域名，隐藏查询参数和 API Key
+
+          // ⭐ 详细错误信息（关键诊断字段）
+          errorType: err.constructor.name,
+          errorName: err.name,
+          errorMessage: err.message,
+          errorCode: err.code, // ⭐ 如 'ENOTFOUND'（DNS失败）、'ECONNREFUSED'（连接拒绝）、'ETIMEDOUT'（超时）、'ECONNRESET'（连接重置）
+          errorSyscall: err.syscall, // ⭐ 如 'getaddrinfo'（DNS查询）、'connect'（TCP连接）
+          errorErrno: err.errno,
+          errorCause: err.cause,
+          errorStack: err.stack?.split("\n").slice(0, 3).join("\n"), // 前3行堆栈
+
+          // 请求上下文
+          method: session.method,
+          hasBody: !!requestBody,
+          bodySize: requestBody ? JSON.stringify(requestBody).length : 0,
+        });
+
+        throw fetchError;
+      }
     }
 
     // 检查 HTTP 错误状态（4xx/5xx 均视为失败，触发重试）

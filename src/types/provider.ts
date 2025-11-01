@@ -40,6 +40,10 @@ export interface Provider {
   circuitBreakerOpenDuration: number; // 毫秒
   circuitBreakerHalfOpenSuccessThreshold: number;
 
+  // 代理配置（支持 HTTP/HTTPS/SOCKS5）
+  proxyUrl: string | null;
+  proxyFallbackToDirect: boolean;
+
   // 废弃（保留向后兼容，但不再使用）
   // TPM (Tokens Per Minute): 每分钟可处理的文本总量
   tpm: number | null;
@@ -83,6 +87,9 @@ export interface ProviderDisplay {
   circuitBreakerFailureThreshold: number;
   circuitBreakerOpenDuration: number; // 毫秒
   circuitBreakerHalfOpenSuccessThreshold: number;
+  // 代理配置
+  proxyUrl: string | null;
+  proxyFallbackToDirect: boolean;
   // 废弃字段（保留向后兼容）
   tpm: number | null;
   rpm: number | null;
@@ -128,6 +135,10 @@ export interface CreateProviderData {
   circuit_breaker_open_duration?: number; // 毫秒
   circuit_breaker_half_open_success_threshold?: number;
 
+  // 代理配置（支持 HTTP/HTTPS/SOCKS5）
+  proxy_url?: string | null;
+  proxy_fallback_to_direct?: boolean;
+
   // 废弃字段（保留向后兼容）
   // TPM (Tokens Per Minute): 每分钟可处理的文本总量
   tpm: number | null;
@@ -169,6 +180,10 @@ export interface UpdateProviderData {
   circuit_breaker_failure_threshold?: number;
   circuit_breaker_open_duration?: number; // 毫秒
   circuit_breaker_half_open_success_threshold?: number;
+
+  // 代理配置（支持 HTTP/HTTPS/SOCKS5）
+  proxy_url?: string | null;
+  proxy_fallback_to_direct?: boolean;
 
   // 废弃字段（保留向后兼容）
   // TPM (Tokens Per Minute): 每分钟可处理的文本总量
