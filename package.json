@@ -64,6 +64,7 @@
     "react-dom": "19.2.0",
     "react-hook-form": "^7.65.0",
     "recharts": "2.15.4",
+    "socks-proxy-agent": "^8.0.5",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.3.1",
     "timeago.js": "^4.0.2",
@@ -84,7 +85,8 @@
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.6.2",
     "tailwindcss": "^4.1.16",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "undici": "^7.16.0"
   },
   "packageManager": "pnpm@9.15.0"
 }

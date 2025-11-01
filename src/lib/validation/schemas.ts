@@ -163,6 +163,9 @@ export const CreateProviderSchema = z.object({
     .min(1, "恢复阈值不能少于1次")
     .max(10, "恢复阈值不能超过10次")
     .optional(),
+  // 代理配置
+  proxy_url: z.string().max(512, "代理地址长度不能超过512个字符").nullable().optional(),
+  proxy_fallback_to_direct: z.boolean().optional().default(false),
   // 废弃字段（保留向后兼容，不再验证范围）
   tpm: z.number().int().nullable().optional(),
   rpm: z.number().int().nullable().optional(),
@@ -244,6 +247,9 @@ export const UpdateProviderSchema = z
       .min(1, "恢复阈值不能少于1次")
       .max(10, "恢复阈值不能超过10次")
       .optional(),
+    // 代理配置
+    proxy_url: z.string().max(512, "代理地址长度不能超过512个字符").nullable().optional(),
+    proxy_fallback_to_direct: z.boolean().optional(),
     // 废弃字段（保留向后兼容，不再验证范围）
     tpm: z.number().int().nullable().optional(),
     rpm: z.number().int().nullable().optional(),

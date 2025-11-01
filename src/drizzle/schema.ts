@@ -110,6 +110,10 @@ export const providers = pgTable('providers', {
   circuitBreakerOpenDuration: integer('circuit_breaker_open_duration').default(1800000), // 30分钟（毫秒）
   circuitBreakerHalfOpenSuccessThreshold: integer('circuit_breaker_half_open_success_threshold').default(2),
 
+  // 代理配置（支持 HTTP/HTTPS/SOCKS5）
+  proxyUrl: varchar('proxy_url', { length: 512 }),
+  proxyFallbackToDirect: boolean('proxy_fallback_to_direct').default(false),
+
   // 废弃（保留向后兼容，但不再使用）
   tpm: integer('tpm').default(0),
   rpm: integer('rpm').default(0),

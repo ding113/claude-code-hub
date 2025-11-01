@@ -20,6 +20,7 @@ import {
   saveProviderCircuitConfig,
   deleteProviderCircuitConfig,
 } from "@/lib/redis/circuit-breaker-config";
+import { isValidProxyUrl } from "@/lib/proxy-agent";
 
 // 获取服务商数据
 export async function getProviders(): Promise<ProviderDisplay[]> {
@@ -124,6 +125,8 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         circuitBreakerFailureThreshold: provider.circuitBreakerFailureThreshold,
         circuitBreakerOpenDuration: provider.circuitBreakerOpenDuration,
         circuitBreakerHalfOpenSuccessThreshold: provider.circuitBreakerHalfOpenSuccessThreshold,
+        proxyUrl: provider.proxyUrl,
+        proxyFallbackToDirect: provider.proxyFallbackToDirect,
         tpm: provider.tpm,
         rpm: provider.rpm,
         rpd: provider.rpd,
@@ -171,6 +174,8 @@ export async function addProvider(data: {
   circuit_breaker_failure_threshold?: number;
   circuit_breaker_open_duration?: number;
   circuit_breaker_half_open_success_threshold?: number;
+  proxy_url?: string | null;
+  proxy_fallback_to_direct?: boolean;
   tpm: number | null;
   rpm: number | null;
   rpd: number | null;
@@ -186,7 +191,16 @@ export async function addProvider(data: {
       name: data.name,
       url: data.url,
       provider_type: data.provider_type,
+      proxy_url: data.proxy_url ? "***" : null,
     });
+
+    // 验证代理 URL 格式
+    if (data.proxy_url && !isValidProxyUrl(data.proxy_url)) {
+      return {
+        ok: false,
+        error: "代理地址格式无效，支持格式: http://, https://, socks5://, socks4://",
+      };
+    }
 
     const validated = CreateProviderSchema.parse(data);
     logger.trace("addProvider:validated", { name: validated.name });
@@ -201,6 +215,8 @@ export async function addProvider(data: {
       circuit_breaker_open_duration: validated.circuit_breaker_open_duration ?? 1800000,
       circuit_breaker_half_open_success_threshold:
         validated.circuit_breaker_half_open_success_threshold ?? 2,
+      proxy_url: validated.proxy_url ?? null,
+      proxy_fallback_to_direct: validated.proxy_fallback_to_direct ?? false,
       tpm: validated.tpm ?? null,
       rpm: validated.rpm ?? null,
       rpd: validated.rpd ?? null,
@@ -264,6 +280,8 @@ export async function editProvider(
     circuit_breaker_failure_threshold?: number;
     circuit_breaker_open_duration?: number;
     circuit_breaker_half_open_success_threshold?: number;
+    proxy_url?: string | null;
+    proxy_fallback_to_direct?: boolean;
     tpm?: number | null;
     rpm?: number | null;
     rpd?: number | null;
@@ -274,6 +292,14 @@ export async function editProvider(
     const session = await getSession();
     if (!session || session.user.role !== "admin") {
       return { ok: false, error: "无权限执行此操作" };
+    }
+
+    // 验证代理 URL 格式
+    if (data.proxy_url && !isValidProxyUrl(data.proxy_url)) {
+      return {
+        ok: false,
+        error: "代理地址格式无效，支持格式: http://, https://, socks5://, socks4://",
+      };
     }
 
     const validated = UpdateProviderSchema.parse(data);
@@ -480,6 +506,134 @@ export async function getProviderLimitUsage(providerId: number): Promise<
   } catch (error) {
     logger.error("获取供应商限额使用情况失败:", error);
     const message = error instanceof Error ? error.message : "获取供应商限额使用情况失败";
+    return { ok: false, error: message };
+  }
+}
+
+/**
+ * 测试代理连接
+ * 通过代理访问供应商 URL，验证代理配置是否正确
+ */
+export async function testProviderProxy(data: {
+  providerUrl: string;
+  proxyUrl?: string | null;
+  proxyFallbackToDirect?: boolean;
+}): Promise<
+  ActionResult<{
+    success: boolean;
+    message: string;
+    details?: {
+      statusCode?: number;
+      responseTime?: number;
+      usedProxy?: boolean;
+      proxyUrl?: string;
+      error?: string;
+      errorType?: string;
+    };
+  }>
+> {
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return { ok: false, error: "无权限执行此操作" };
+    }
+
+    // 验证代理 URL 格式
+    if (data.proxyUrl && !isValidProxyUrl(data.proxyUrl)) {
+      return {
+        ok: true,
+        data: {
+          success: false,
+          message: "代理地址格式无效",
+          details: {
+            error: "支持格式: http://, https://, socks5://, socks4://",
+            errorType: "InvalidProxyUrl",
+          },
+        },
+      };
+    }
+
+    const startTime = Date.now();
+
+    // 导入代理工厂函数
+    const { createProxyAgentForProvider } = await import("@/lib/proxy-agent");
+
+    // 构造临时 Provider 对象（用于创建代理 agent）
+    const tempProvider = {
+      id: -1,
+      proxyUrl: data.proxyUrl,
+      proxyFallbackToDirect: data.proxyFallbackToDirect ?? false,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+
+    try {
+      // 创建代理配置
+      const proxyConfig = createProxyAgentForProvider(tempProvider, data.providerUrl);
+
+      // 扩展 RequestInit 类型
+      interface UndiciFetchOptions extends RequestInit {
+        dispatcher?: unknown;
+      }
+
+      const init: UndiciFetchOptions = {
+        method: "HEAD", // 使用 HEAD 请求，减少流量
+        signal: AbortSignal.timeout(5000), // 5 秒超时
+      };
+
+      // 应用代理配置
+      if (proxyConfig) {
+        init.dispatcher = proxyConfig.agent;
+      }
+
+      // 发起测试请求
+      const response = await fetch(data.providerUrl, init);
+      const responseTime = Date.now() - startTime;
+
+      return {
+        ok: true,
+        data: {
+          success: true,
+          message: `成功连接到 ${new URL(data.providerUrl).hostname}`,
+          details: {
+            statusCode: response.status,
+            responseTime,
+            usedProxy: !!proxyConfig,
+            proxyUrl: proxyConfig?.proxyUrl,
+          },
+        },
+      };
+    } catch (error) {
+      const responseTime = Date.now() - startTime;
+      const err = error as Error & { code?: string };
+
+      // 判断错误类型
+      const isProxyError =
+        err.message.includes("proxy") ||
+        err.message.includes("ECONNREFUSED") ||
+        err.message.includes("ENOTFOUND") ||
+        err.message.includes("ETIMEDOUT");
+
+      const errorType =
+        err.name === "AbortError" ? "Timeout" : isProxyError ? "ProxyError" : "NetworkError";
+
+      return {
+        ok: true,
+        data: {
+          success: false,
+          message: `连接失败: ${err.message}`,
+          details: {
+            responseTime,
+            usedProxy: !!data.proxyUrl,
+            proxyUrl: data.proxyUrl ?? undefined,
+            error: err.message,
+            errorType,
+          },
+        },
+      };
+    }
+  } catch (error) {
+    logger.error("测试代理连接失败:", error);
+    const message = error instanceof Error ? error.message : "测试代理连接失败";
     return { ok: false, error: message };
   }
 }
