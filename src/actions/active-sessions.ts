@@ -37,9 +37,7 @@ export async function getActiveSessions(): Promise<ActionResult<ActiveSessionInf
       logger.debug("[SessionCache] Active sessions cache hit");
 
       // 过滤：管理员可查看所有，普通用户只能查看自己的
-      const filteredData = isAdmin
-        ? cached
-        : cached.filter(s => s.userId === currentUserId);
+      const filteredData = isAdmin ? cached : cached.filter((s) => s.userId === currentUserId);
 
       return {
         ok: true,
@@ -89,7 +87,7 @@ export async function getActiveSessions(): Promise<ActionResult<ActiveSessionInf
     // 5. 过滤：管理员可查看所有，普通用户只能查看自己的
     const filteredSessions = isAdmin
       ? sessionsData
-      : sessionsData.filter(s => s.userId === currentUserId);
+      : sessionsData.filter((s) => s.userId === currentUserId);
 
     // 6. 转换格式
     const sessions: ActiveSessionInfo[] = filteredSessions.map((s) => ({
@@ -118,7 +116,9 @@ export async function getActiveSessions(): Promise<ActionResult<ActiveSessionInf
       requestCount: s.requestCount,
     }));
 
-    logger.debug(`[SessionCache] Active sessions fetched and cached, count: ${sessions.length} (filtered for user: ${currentUserId})`);
+    logger.debug(
+      `[SessionCache] Active sessions fetched and cached, count: ${sessions.length} (filtered for user: ${currentUserId})`
+    );
 
     return { ok: true, data: sessions };
   } catch (error) {
@@ -163,9 +163,7 @@ export async function getAllSessions(): Promise<
       logger.debug("[SessionCache] All sessions cache hit");
 
       // 过滤：管理员可查看所有，普通用户只能查看自己的
-      const filteredCached = isAdmin
-        ? cached
-        : cached.filter(s => s.userId === currentUserId);
+      const filteredCached = isAdmin ? cached : cached.filter((s) => s.userId === currentUserId);
 
       // 分离活跃和非活跃（5 分钟内有请求为活跃）
       const now = Date.now();
@@ -230,7 +228,7 @@ export async function getAllSessions(): Promise<
     // 5. 过滤：管理员可查看所有，普通用户只能查看自己的
     const filteredSessions = isAdmin
       ? sessionsData
-      : sessionsData.filter(s => s.userId === currentUserId);
+      : sessionsData.filter((s) => s.userId === currentUserId);
 
     // 6. 分离活跃和非活跃（5 分钟内有请求为活跃）
     const now = Date.now();
