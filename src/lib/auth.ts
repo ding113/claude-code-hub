@@ -69,13 +69,25 @@ export async function validateKey(keyString: string): Promise<AuthSession | null
 export async function setAuthCookie(keyString: string) {
   const cookieStore = await cookies();
   const env = getEnvConfig();
-  cookieStore.set(AUTH_COOKIE_NAME, keyString, {
+
+  // HTTP 环境下需要特殊处理 Cookie 策略
+  // 当 secure=false 时，不能使用 sameSite="none"（浏览器会拒绝）
+  // 因此 HTTP 环境下完全移除 sameSite 限制，让浏览器使用默认策略
+  const isSecure = env.ENABLE_SECURE_COOKIES;
+
+  const cookieOptions: Parameters<typeof cookieStore.set>[2] = {
     httpOnly: true,
-    secure: env.ENABLE_SECURE_COOKIES,
-    sameSite: "lax",
+    secure: isSecure,
     maxAge: AUTH_COOKIE_MAX_AGE,
     path: "/",
-  });
+  };
+
+  // 只有在 HTTPS 环境下才设置 sameSite
+  if (isSecure) {
+    cookieOptions.sameSite = "lax";
+  }
+
+  cookieStore.set(AUTH_COOKIE_NAME, keyString, cookieOptions);
 }
 
 export async function getAuthCookie(): Promise<string | undefined> {
