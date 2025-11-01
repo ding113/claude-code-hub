@@ -1,6 +1,7 @@
 "use server";
 
 import { logger } from "@/lib/logger";
+import { getSession } from "@/lib/auth";
 import type { ActionResult } from "./types";
 import type { ActiveSessionInfo } from "@/types/session";
 import {
@@ -13,16 +14,36 @@ import {
 /**
  * 获取所有活跃 session 的详细信息（使用聚合数据 + 批量查询 + 缓存）
  * 用于实时监控页面
+ *
+ * ✅ 安全修复：添加用户权限隔离
  */
 export async function getActiveSessions(): Promise<ActionResult<ActiveSessionInfo[]>> {
   try {
+    // 0. 验证用户权限
+    const authSession = await getSession();
+    if (!authSession) {
+      return {
+        ok: false,
+        error: "未登录",
+      };
+    }
+
+    const isAdmin = authSession.user.role === "admin";
+    const currentUserId = authSession.user.id;
+
     // 1. 尝试从缓存获取
     const cached = getActiveSessionsCache();
     if (cached) {
       logger.debug("[SessionCache] Active sessions cache hit");
+
+      // 过滤：管理员可查看所有，普通用户只能查看自己的
+      const filteredData = isAdmin
+        ? cached
+        : cached.filter(s => s.userId === currentUserId);
+
       return {
         ok: true,
-        data: cached.map((s) => ({
+        data: filteredData.map((s) => ({
           sessionId: s.sessionId,
           userName: s.userName,
           userId: s.userId,
@@ -65,8 +86,13 @@ export async function getActiveSessions(): Promise<ActionResult<ActiveSessionInf
     // 4. 写入缓存
     setActiveSessionsCache(sessionsData);
 
-    // 5. 转换格式
-    const sessions: ActiveSessionInfo[] = sessionsData.map((s) => ({
+    // 5. 过滤：管理员可查看所有，普通用户只能查看自己的
+    const filteredSessions = isAdmin
+      ? sessionsData
+      : sessionsData.filter(s => s.userId === currentUserId);
+
+    // 6. 转换格式
+    const sessions: ActiveSessionInfo[] = filteredSessions.map((s) => ({
       sessionId: s.sessionId,
       userName: s.userName,
       userId: s.userId,
@@ -92,7 +118,7 @@ export async function getActiveSessions(): Promise<ActionResult<ActiveSessionInf
       requestCount: s.requestCount,
     }));
 
-    logger.debug(`[SessionCache] Active sessions fetched and cached, count: ${sessions.length}`);
+    logger.debug(`[SessionCache] Active sessions fetched and cached, count: ${sessions.length} (filtered for user: ${currentUserId})`);
 
     return { ok: true, data: sessions };
   } catch (error) {
@@ -109,6 +135,7 @@ export async function getActiveSessions(): Promise<ActionResult<ActiveSessionInf
  * 用于实时监控页面的完整视图
  *
  * ✅ 修复：统一使用数据库聚合查询，确保与其他页面数据一致
+ * ✅ 安全修复：添加用户权限隔离
  */
 export async function getAllSessions(): Promise<
   ActionResult<{
@@ -117,11 +144,28 @@ export async function getAllSessions(): Promise<
   }>
 > {
   try {
+    // 0. 验证用户权限
+    const authSession = await getSession();
+    if (!authSession) {
+      return {
+        ok: false,
+        error: "未登录",
+      };
+    }
+
+    const isAdmin = authSession.user.role === "admin";
+    const currentUserId = authSession.user.id;
+
     // 1. 尝试从缓存获取（使用不同的 key）
     const cacheKey = "all_sessions";
     const cached = getActiveSessionsCache(cacheKey);
     if (cached) {
       logger.debug("[SessionCache] All sessions cache hit");
+
+      // 过滤：管理员可查看所有，普通用户只能查看自己的
+      const filteredCached = isAdmin
+        ? cached
+        : cached.filter(s => s.userId === currentUserId);
 
       // 分离活跃和非活跃（5 分钟内有请求为活跃）
       const now = Date.now();
@@ -130,7 +174,7 @@ export async function getAllSessions(): Promise<
       const active: ActiveSessionInfo[] = [];
       const inactive: ActiveSessionInfo[] = [];
 
-      for (const s of cached) {
+      for (const s of filteredCached) {
         const lastRequestTime = s.lastRequestAt ? new Date(s.lastRequestAt).getTime() : 0;
         const sessionInfo: ActiveSessionInfo = {
           sessionId: s.sessionId,
@@ -183,14 +227,19 @@ export async function getAllSessions(): Promise<
     // 4. 写入缓存
     setActiveSessionsCache(sessionsData, cacheKey);
 
-    // 5. 分离活跃和非活跃（5 分钟内有请求为活跃）
+    // 5. 过滤：管理员可查看所有，普通用户只能查看自己的
+    const filteredSessions = isAdmin
+      ? sessionsData
+      : sessionsData.filter(s => s.userId === currentUserId);
+
+    // 6. 分离活跃和非活跃（5 分钟内有请求为活跃）
     const now = Date.now();
     const fiveMinutesAgo = now - 5 * 60 * 1000;
 
     const active: ActiveSessionInfo[] = [];
     const inactive: ActiveSessionInfo[] = [];
 
-    for (const s of sessionsData) {
+    for (const s of filteredSessions) {
       const lastRequestTime = s.lastRequestAt ? new Date(s.lastRequestAt).getTime() : 0;
       const sessionInfo: ActiveSessionInfo = {
         sessionId: s.sessionId,
@@ -226,7 +275,7 @@ export async function getAllSessions(): Promise<
     }
 
     logger.debug(
-      `[SessionCache] All sessions fetched and cached, active: ${active.length}, inactive: ${inactive.length}`
+      `[SessionCache] All sessions fetched and cached, active: ${active.length}, inactive: ${inactive.length} (filtered for user: ${currentUserId})`
     );
 
     return { ok: true, data: { active, inactive } };
@@ -242,9 +291,46 @@ export async function getAllSessions(): Promise<
 /**
  * 获取指定 session 的 messages 内容
  * 仅当 STORE_SESSION_MESSAGES=true 时可用
+ *
+ * ✅ 安全修复：添加用户权限检查
  */
 export async function getSessionMessages(sessionId: string): Promise<ActionResult<unknown>> {
   try {
+    // 0. 验证用户权限
+    const authSession = await getSession();
+    if (!authSession) {
+      return {
+        ok: false,
+        error: "未登录",
+      };
+    }
+
+    const isAdmin = authSession.user.role === "admin";
+    const currentUserId = authSession.user.id;
+
+    // 1. 获取 session 统计数据以验证所有权
+    const { aggregateSessionStats } = await import("@/repository/message");
+    const sessionStats = await aggregateSessionStats(sessionId);
+
+    if (!sessionStats) {
+      return {
+        ok: false,
+        error: "Session 不存在",
+      };
+    }
+
+    // 2. 权限检查：管理员可查看所有，普通用户只能查看自己的
+    if (!isAdmin && sessionStats.userId !== currentUserId) {
+      logger.warn(
+        `[Security] User ${currentUserId} attempted to access messages of session ${sessionId} owned by user ${sessionStats.userId}`
+      );
+      return {
+        ok: false,
+        error: "无权访问该 Session",
+      };
+    }
+
+    // 3. 获取 messages
     const { SessionManager } = await import("@/lib/session-manager");
     const messages = await SessionManager.getSessionMessages(sessionId);
     if (messages === null) {
@@ -292,6 +378,7 @@ export async function hasSessionMessages(sessionId: string): Promise<ActionResul
  * 用于 session messages 详情页面
  *
  * ✅ 优化：添加缓存支持
+ * ✅ 安全修复：添加用户权限检查
  */
 export async function getSessionDetails(sessionId: string): Promise<
   ActionResult<{
@@ -303,6 +390,18 @@ export async function getSessionDetails(sessionId: string): Promise<
   }>
 > {
   try {
+    // 0. 验证用户权限
+    const authSession = await getSession();
+    if (!authSession) {
+      return {
+        ok: false,
+        error: "未登录",
+      };
+    }
+
+    const isAdmin = authSession.user.role === "admin";
+    const currentUserId = authSession.user.id;
+
     // 1. 尝试从缓存获取统计数据
     const cachedStats = getSessionDetailsCache(sessionId);
 
@@ -326,7 +425,25 @@ export async function getSessionDetails(sessionId: string): Promise<
       logger.debug(`[SessionCache] Session details fetched and cached: ${sessionId}`);
     }
 
-    // 4. 并行获取 messages 和 response（不缓存，因为这些数据较大）
+    // 4. 权限检查：管理员可查看所有，普通用户只能查看自己的
+    if (!sessionStats) {
+      return {
+        ok: false,
+        error: "Session 不存在",
+      };
+    }
+
+    if (!isAdmin && sessionStats.userId !== currentUserId) {
+      logger.warn(
+        `[Security] User ${currentUserId} attempted to access session ${sessionId} owned by user ${sessionStats.userId}`
+      );
+      return {
+        ok: false,
+        error: "无权访问该 Session",
+      };
+    }
+
+    // 5. 并行获取 messages 和 response（不缓存，因为这些数据较大）
     const { SessionManager } = await import("@/lib/session-manager");
     const [messages, response] = await Promise.all([
       SessionManager.getSessionMessages(sessionId),
