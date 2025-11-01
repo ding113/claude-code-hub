@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { Search, Package, DollarSign } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Search, Package, DollarSign, ChevronLeft, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -12,22 +13,136 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { ModelPrice } from "@/types/model-price";
+import { useDebounce } from "@/lib/hooks/use-debounce";
 
 interface PriceListProps {
-  prices: ModelPrice[];
+  initialPrices: ModelPrice[];
+  initialTotal: number;
+  initialPage: number;
+  initialPageSize: number;
 }
 
 /**
- * 价格列表组件
+ * 价格列表组件（支持分页）
  */
-export function PriceList({ prices }: PriceListProps) {
+export function PriceList({
+  initialPrices,
+  initialTotal,
+  initialPage,
+  initialPageSize,
+}: PriceListProps) {
   const [searchTerm, setSearchTerm] = useState("");
+  const [prices, setPrices] = useState<ModelPrice[]>(initialPrices);
+  const [total, setTotal] = useState(initialTotal);
+  const [page, setPage] = useState(initialPage);
+  const [pageSize, setPageSize] = useState(initialPageSize);
+  const [isLoading, setIsLoading] = useState(false);
 
-  // 过滤价格数据
-  const filteredPrices = prices.filter((price) =>
-    price.modelName.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // 使用防抖，避免频繁请求
+  const debouncedSearchTerm = useDebounce(searchTerm, 500);
+
+  // 计算总页数
+  const totalPages = Math.ceil(total / pageSize);
+
+  // 从 URL 搜索参数中读取初始状态（仅在挂载时执行一次）
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const searchParam = urlParams.get("search");
+    const pageParam = urlParams.get("page");
+    const sizeParam = urlParams.get("size");
+
+    if (searchParam) setSearchTerm(searchParam);
+    if (pageParam) setPage(parseInt(pageParam, 10));
+    if (sizeParam) setPageSize(parseInt(sizeParam, 10));
+  }, []); // 空依赖数组，仅在挂载时执行一次
+
+  // 更新 URL 搜索参数
+  const updateURL = (newSearchTerm: string, newPage: number, newPageSize: number) => {
+    const url = new URL(window.location.href);
+    if (newSearchTerm) {
+      url.searchParams.set("search", newSearchTerm);
+    } else {
+      url.searchParams.delete("search");
+    }
+    if (newPage > 1) {
+      url.searchParams.set("page", newPage.toString());
+    } else {
+      url.searchParams.delete("page");
+    }
+    if (newPageSize !== 50) {
+      url.searchParams.set("size", newPageSize.toString());
+    } else {
+      url.searchParams.delete("size");
+    }
+    window.history.replaceState({}, "", url.toString());
+  };
+
+  // 获取价格数据
+  const fetchPrices = async (newPage: number, newPageSize: number, newSearchTerm: string) => {
+    setIsLoading(true);
+    try {
+      const response = await fetch(
+        `/api/prices?page=${newPage}&pageSize=${newPageSize}&search=${encodeURIComponent(newSearchTerm)}`
+      );
+      const result = await response.json();
+
+      if (result.ok) {
+        setPrices(result.data.data);
+        setTotal(result.data.total);
+        setPage(result.data.page);
+        setPageSize(result.data.pageSize);
+      }
+    } catch (error) {
+      console.error("获取价格数据失败:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 当防抖后的搜索词变化时，触发搜索（重置到第一页）
+  useEffect(() => {
+    // 跳过初始渲染（当 debouncedSearchTerm 等于初始 searchTerm 时）
+    if (debouncedSearchTerm !== searchTerm) return;
+
+    const newPage = 1; // 搜索时重置到第一页
+    setPage(newPage);
+    updateURL(debouncedSearchTerm, newPage, pageSize);
+    fetchPrices(newPage, pageSize, debouncedSearchTerm);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearchTerm]); // 仅依赖 debouncedSearchTerm
+
+  // 搜索输入处理（只更新状态，不触发请求）
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value);
+  };
+
+  // 页面大小变化处理
+  const handlePageSizeChange = (newPageSize: number) => {
+    const newPage = Math.max(1, Math.min(page, Math.ceil(total / newPageSize)));
+    setPageSize(newPageSize);
+    setPage(newPage);
+    updateURL(debouncedSearchTerm, newPage, newPageSize);
+    fetchPrices(newPage, newPageSize, debouncedSearchTerm);
+  };
+
+  // 页面跳转处理
+  const handlePageChange = (newPage: number) => {
+    if (newPage < 1 || newPage > totalPages) return;
+    setPage(newPage);
+    updateURL(debouncedSearchTerm, newPage, pageSize);
+    fetchPrices(newPage, pageSize, debouncedSearchTerm);
+  };
+
+  // 移除客户端过滤逻辑（现在由后端处理）
+  const filteredPrices = prices;
 
   /**
    * 格式化价格显示为每百万token的价格
@@ -66,15 +181,34 @@ export function PriceList({ prices }: PriceListProps) {
 
   return (
     <div className="space-y-4">
-      {/* 搜索栏 */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="搜索模型名称..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="pl-9"
-        />
+      {/* 搜索和页面大小控制 */}
+      <div className="flex items-center gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="搜索模型名称..."
+            value={searchTerm}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">每页显示:</span>
+          <Select
+            value={pageSize.toString()}
+            onValueChange={(value) => handlePageSizeChange(parseInt(value, 10))}
+          >
+            <SelectTrigger className="w-20">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="20">20</SelectItem>
+              <SelectItem value="50">50</SelectItem>
+              <SelectItem value="100">100</SelectItem>
+              <SelectItem value="200">200</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* 价格表格 */}
@@ -91,7 +225,16 @@ export function PriceList({ prices }: PriceListProps) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredPrices.length > 0 ? (
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-8">
+                  <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-current"></div>
+                    <span>加载中...</span>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : filteredPrices.length > 0 ? (
               filteredPrices.map((price) => (
                 <TableRow key={price.id}>
                   <TableCell className="font-mono text-sm whitespace-normal break-words">
@@ -150,11 +293,74 @@ export function PriceList({ prices }: PriceListProps) {
         </Table>
       </div>
 
+      {/* 分页控件 */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-muted-foreground">
+            显示第 {(page - 1) * pageSize + 1} - {Math.min(page * pageSize, total)} 条，共 {total}{" "}
+            条记录
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(page - 1)}
+              disabled={page <= 1 || isLoading}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              上一页
+            </Button>
+
+            <div className="flex items-center gap-1">
+              {/* 页码显示逻辑 */}
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum;
+                if (totalPages <= 5) {
+                  pageNum = i + 1;
+                } else if (page <= 3) {
+                  pageNum = i + 1;
+                } else if (page >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i;
+                } else {
+                  pageNum = page - 2 + i;
+                }
+
+                return (
+                  <Button
+                    key={pageNum}
+                    variant={page === pageNum ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => handlePageChange(pageNum)}
+                    disabled={isLoading}
+                    className="w-8 h-8"
+                  >
+                    {pageNum}
+                  </Button>
+                );
+              })}
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(page + 1)}
+              disabled={page >= totalPages || isLoading}
+            >
+              下一页
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* 统计信息 */}
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <div className="flex items-center gap-1">
           <DollarSign className="h-4 w-4" />
-          <span>共 {filteredPrices.length} 个模型价格</span>
+          <span>共 {total} 个模型价格</span>
+          {searchTerm && (
+            <span className="text-muted-foreground">（搜索结果：{filteredPrices.length} 个）</span>
+          )}
         </div>
         <div>
           最后更新：

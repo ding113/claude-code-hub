@@ -1,7 +1,11 @@
 import { getRedisClient } from "@/lib/redis";
 import { logger } from "@/lib/logger";
 import { SessionTracker } from "@/lib/session-tracker";
-import { CHECK_AND_TRACK_SESSION } from "@/lib/redis/lua-scripts";
+import {
+  CHECK_AND_TRACK_SESSION,
+  TRACK_COST_5H_ROLLING_WINDOW,
+  GET_COST_5H_ROLLING_WINDOW,
+} from "@/lib/redis/lua-scripts";
 import { sumUserCostToday } from "@/repository/statistics";
 import { getTimeRangeForPeriod, getTTLForPeriod, getSecondsUntilMidnight } from "./time-utils";
 
@@ -36,28 +40,50 @@ export class RateLimitService {
     try {
       // Fast Path: Redis 查询
       if (this.redis && this.redis.status === "ready") {
-        const pipeline = this.redis.pipeline();
+        const now = Date.now();
+        const window5h = 5 * 60 * 60 * 1000; // 5 hours in ms
+
         for (const limit of costLimits) {
           if (!limit.amount || limit.amount <= 0) continue;
-          pipeline.get(`${type}:${id}:cost_${limit.period}`);
-        }
 
-        const results = await pipeline.exec();
-        if (results) {
-          let index = 0;
-          for (const limit of costLimits) {
-            if (!limit.amount || limit.amount <= 0) continue;
+          let current = 0;
 
-            const [err, value] = results[index] || [];
-            if (err) {
-              logger.error("[RateLimit] Redis error, fallback to database:", err);
-              // 出错时降级到数据库
+          // 5h 使用滚动窗口 Lua 脚本
+          if (limit.period === "5h") {
+            try {
+              const key = `${type}:${id}:cost_5h_rolling`;
+              const result = (await this.redis.eval(
+                GET_COST_5H_ROLLING_WINDOW,
+                1, // KEYS count
+                key, // KEYS[1]
+                now.toString(), // ARGV[1]: now
+                window5h.toString() // ARGV[2]: window
+              )) as string;
+
+              current = parseFloat(result || "0");
+
+              // Cache Miss 检测：如果返回 0 但 Redis 中没有 key，从数据库恢复
+              if (current === 0) {
+                const exists = await this.redis.exists(key);
+                if (!exists) {
+                  logger.info(
+                    `[RateLimit] Cache miss for ${type}:${id}:cost_5h, querying database`
+                  );
+                  return await this.checkCostLimitsFromDatabase(id, type, costLimits);
+                }
+              }
+            } catch (error) {
+              logger.error(
+                "[RateLimit] 5h rolling window query failed, fallback to database:",
+                error
+              );
               return await this.checkCostLimitsFromDatabase(id, type, costLimits);
             }
+          } else {
+            // 周/月使用普通 GET
+            const value = await this.redis.get(`${type}:${id}:cost_${limit.period}`);
 
-            const current = parseFloat((value as string) || "0");
-
-            // Cache Miss 检测：如果 Redis 返回 null，从数据库恢复
+            // Cache Miss 检测
             if (value === null && limit.amount > 0) {
               logger.info(
                 `[RateLimit] Cache miss for ${type}:${id}:cost_${limit.period}, querying database`
@@ -65,18 +91,18 @@ export class RateLimitService {
               return await this.checkCostLimitsFromDatabase(id, type, costLimits);
             }
 
-            if (current >= limit.amount) {
-              return {
-                allowed: false,
-                reason: `${type === "key" ? "Key" : "供应商"} ${limit.name}消费上限已达到（${current.toFixed(4)}/${limit.amount}）`,
-              };
-            }
-
-            index++;
+            current = parseFloat((value as string) || "0");
           }
 
-          return { allowed: true };
+          if (current >= limit.amount) {
+            return {
+              allowed: false,
+              reason: `${type === "key" ? "Key" : "供应商"} ${limit.name}消费上限已达到（${current.toFixed(4)}/${limit.amount}）`,
+            };
+          }
         }
+
+        return { allowed: true };
       }
 
       // Slow Path: Redis 不可用，降级到数据库
@@ -112,14 +138,40 @@ export class RateLimitService {
           ? await sumKeyCostInTimeRange(id, startTime, endTime)
           : await sumProviderCostInTimeRange(id, startTime, endTime);
 
-      // Cache Warming: 写回 Redis（使用新的 TTL 计算）
+      // Cache Warming: 写回 Redis
       if (this.redis && this.redis.status === "ready") {
         try {
-          const ttl = getTTLForPeriod(limit.period);
-          await this.redis.set(`${type}:${id}:cost_${limit.period}`, current.toString(), "EX", ttl);
-          logger.info(
-            `[RateLimit] Cache warmed for ${type}:${id}:cost_${limit.period}, value=${current}, ttl=${ttl}s`
-          );
+          if (limit.period === "5h") {
+            // 5h 滚动窗口：使用 ZSET + Lua 脚本
+            if (current > 0) {
+              const now = Date.now();
+              const window5h = 5 * 60 * 60 * 1000;
+              const key = `${type}:${id}:cost_5h_rolling`;
+
+              await this.redis.eval(
+                TRACK_COST_5H_ROLLING_WINDOW,
+                1,
+                key,
+                current.toString(),
+                now.toString(),
+                window5h.toString()
+              );
+
+              logger.info(`[RateLimit] Cache warmed for ${key}, value=${current} (rolling window)`);
+            }
+          } else {
+            // 周/月固定窗口：使用 STRING + 动态 TTL
+            const ttl = getTTLForPeriod(limit.period);
+            await this.redis.set(
+              `${type}:${id}:cost_${limit.period}`,
+              current.toString(),
+              "EX",
+              ttl
+            );
+            logger.info(
+              `[RateLimit] Cache warmed for ${type}:${id}:cost_${limit.period}, value=${current}, ttl=${ttl}s`
+            );
+          }
         } catch (error) {
           logger.error("[RateLimit] Failed to warm cache:", error);
         }
@@ -234,7 +286,7 @@ export class RateLimitService {
 
   /**
    * 累加消费（请求结束后调用）
-   * 使用动态 TTL 以支持自然时间窗口（周一/月初）
+   * 5h 使用滚动窗口（ZSET），周/月使用固定窗口（STRING）
    */
   static async trackCost(
     keyId: number,
@@ -245,27 +297,45 @@ export class RateLimitService {
     if (!this.redis || cost <= 0) return;
 
     try {
-      // 计算动态 TTL
-      const ttl5h = getTTLForPeriod("5h");
+      const now = Date.now();
+      const window5h = 5 * 60 * 60 * 1000; // 5 hours in ms
+
+      // 计算动态 TTL（周/月）
       const ttlWeekly = getTTLForPeriod("weekly");
       const ttlMonthly = getTTLForPeriod("monthly");
 
+      // 1. 5h 滚动窗口：使用 Lua 脚本（ZSET）
+      // Key 的 5h 滚动窗口
+      await this.redis.eval(
+        TRACK_COST_5H_ROLLING_WINDOW,
+        1, // KEYS count
+        `key:${keyId}:cost_5h_rolling`, // KEYS[1]
+        cost.toString(), // ARGV[1]: cost
+        now.toString(), // ARGV[2]: now
+        window5h.toString() // ARGV[3]: window
+      );
+
+      // Provider 的 5h 滚动窗口
+      await this.redis.eval(
+        TRACK_COST_5H_ROLLING_WINDOW,
+        1,
+        `provider:${providerId}:cost_5h_rolling`,
+        cost.toString(),
+        now.toString(),
+        window5h.toString()
+      );
+
+      // 2. 周/月固定窗口：使用 STRING + 动态 TTL
       const pipeline = this.redis.pipeline();
 
-      // 1. 累加 Key 消费
-      pipeline.incrbyfloat(`key:${keyId}:cost_5h`, cost);
-      pipeline.expire(`key:${keyId}:cost_5h`, ttl5h);
-
+      // Key 的周/月消费
       pipeline.incrbyfloat(`key:${keyId}:cost_weekly`, cost);
       pipeline.expire(`key:${keyId}:cost_weekly`, ttlWeekly);
 
       pipeline.incrbyfloat(`key:${keyId}:cost_monthly`, cost);
       pipeline.expire(`key:${keyId}:cost_monthly`, ttlMonthly);
 
-      // 2. 累加 Provider 消费
-      pipeline.incrbyfloat(`provider:${providerId}:cost_5h`, cost);
-      pipeline.expire(`provider:${providerId}:cost_5h`, ttl5h);
-
+      // Provider 的周/月消费
       pipeline.incrbyfloat(`provider:${providerId}:cost_weekly`, cost);
       pipeline.expire(`provider:${providerId}:cost_weekly`, ttlWeekly);
 
@@ -273,6 +343,8 @@ export class RateLimitService {
       pipeline.expire(`provider:${providerId}:cost_monthly`, ttlMonthly);
 
       await pipeline.exec();
+
+      logger.debug(`[RateLimit] Tracked cost: key=${keyId}, provider=${providerId}, cost=${cost}`);
     } catch (error) {
       logger.error("[RateLimit] Track cost failed:", error);
       // 不抛出错误，静默失败
@@ -291,15 +363,49 @@ export class RateLimitService {
     try {
       // Fast Path: Redis 查询
       if (this.redis && this.redis.status === "ready") {
-        const value = await this.redis.get(`${type}:${id}:cost_${period}`);
+        let current = 0;
 
-        // Cache Hit
-        if (value !== null) {
-          return parseFloat(value || "0");
+        // 5h 使用滚动窗口 Lua 脚本
+        if (period === "5h") {
+          const now = Date.now();
+          const window5h = 5 * 60 * 60 * 1000;
+          const key = `${type}:${id}:cost_5h_rolling`;
+
+          const result = (await this.redis.eval(
+            GET_COST_5H_ROLLING_WINDOW,
+            1,
+            key,
+            now.toString(),
+            window5h.toString()
+          )) as string;
+
+          current = parseFloat(result || "0");
+
+          // Cache Hit
+          if (current > 0) {
+            return current;
+          }
+
+          // Cache Miss 检测：如果返回 0 但 Redis 中没有 key，从数据库恢复
+          const exists = await this.redis.exists(key);
+          if (!exists) {
+            logger.info(`[RateLimit] Cache miss for ${type}:${id}:cost_5h, querying database`);
+          } else {
+            // Key 存在但值为 0，说明真的是 0
+            return 0;
+          }
+        } else {
+          // 周/月使用普通 GET
+          const value = await this.redis.get(`${type}:${id}:cost_${period}`);
+
+          // Cache Hit
+          if (value !== null) {
+            return parseFloat(value || "0");
+          }
+
+          // Cache Miss: 从数据库恢复
+          logger.info(`[RateLimit] Cache miss for ${type}:${id}:cost_${period}, querying database`);
         }
-
-        // Cache Miss: 从数据库恢复
-        logger.info(`[RateLimit] Cache miss for ${type}:${id}:cost_${period}, querying database`);
       } else {
         logger.warn(`[RateLimit] Redis unavailable, querying database for ${type} cost`);
       }
@@ -315,11 +421,37 @@ export class RateLimitService {
           ? await sumKeyCostInTimeRange(id, startTime, endTime)
           : await sumProviderCostInTimeRange(id, startTime, endTime);
 
-      // Cache Warming: 写回 Redis（使用新的 TTL 计算）
+      // Cache Warming: 写回 Redis
       if (this.redis && this.redis.status === "ready") {
         try {
-          const ttl = getTTLForPeriod(period);
-          await this.redis.set(`${type}:${id}:cost_${period}`, current.toString(), "EX", ttl);
+          if (period === "5h") {
+            // 5h 滚动窗口：需要将历史数据转换为 ZSET 格式
+            // 由于无法精确知道每次消费的时间戳，使用当前时间作为近似
+            if (current > 0) {
+              const now = Date.now();
+              const window5h = 5 * 60 * 60 * 1000;
+              const key = `${type}:${id}:cost_5h_rolling`;
+
+              // 将数据库查询到的总额作为单条记录写入
+              await this.redis.eval(
+                TRACK_COST_5H_ROLLING_WINDOW,
+                1,
+                key,
+                current.toString(),
+                now.toString(),
+                window5h.toString()
+              );
+
+              logger.info(`[RateLimit] Cache warmed for ${key}, value=${current} (rolling window)`);
+            }
+          } else {
+            // 周/月固定窗口：使用 STRING + 动态 TTL
+            const ttl = getTTLForPeriod(period);
+            await this.redis.set(`${type}:${id}:cost_${period}`, current.toString(), "EX", ttl);
+            logger.info(
+              `[RateLimit] Cache warmed for ${type}:${id}:cost_${period}, value=${current}, ttl=${ttl}s`
+            );
+          }
         } catch (error) {
           logger.error("[RateLimit] Failed to warm cache:", error);
         }

@@ -244,6 +244,33 @@ export const systemSettings = pgTable('system_settings', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 });
 
+// Notification Settings table - 企业微信机器人通知配置
+export const notificationSettings = pgTable('notification_settings', {
+  id: serial('id').primaryKey(),
+
+  // 全局开关
+  enabled: boolean('enabled').notNull().default(false),
+
+  // 熔断器告警配置
+  circuitBreakerEnabled: boolean('circuit_breaker_enabled').notNull().default(false),
+  circuitBreakerWebhook: varchar('circuit_breaker_webhook', { length: 512 }),
+
+  // 每日用户消费排行榜配置
+  dailyLeaderboardEnabled: boolean('daily_leaderboard_enabled').notNull().default(false),
+  dailyLeaderboardWebhook: varchar('daily_leaderboard_webhook', { length: 512 }),
+  dailyLeaderboardTime: varchar('daily_leaderboard_time', { length: 10 }).default('09:00'), // HH:mm 格式
+  dailyLeaderboardTopN: integer('daily_leaderboard_top_n').default(5), // 显示前 N 名
+
+  // 成本预警配置
+  costAlertEnabled: boolean('cost_alert_enabled').notNull().default(false),
+  costAlertWebhook: varchar('cost_alert_webhook', { length: 512 }),
+  costAlertThreshold: numeric('cost_alert_threshold', { precision: 5, scale: 2 }).default('0.80'), // 阈值 0-1 (80% = 0.80)
+  costAlertCheckInterval: integer('cost_alert_check_interval').default(60), // 检查间隔（分钟）
+
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   keys: many(keys),

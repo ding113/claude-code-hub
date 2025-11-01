@@ -40,17 +40,17 @@ jobs:
 
     # 完整权限配置
     permissions:
-      contents: write          # 代码读写、分支创建、提交
-      pull-requests: write     # PR 全功能操作
-      issues: write            # Issue 全功能操作
-      actions: read            # 读取 CI 状态
-      id-token: write          # OIDC 认证
+      contents: write # 代码读写、分支创建、提交
+      pull-requests: write # PR 全功能操作
+      issues: write # Issue 全功能操作
+      actions: read # 读取 CI 状态
+      id-token: write # OIDC 认证
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
-          fetch-depth: 0  # 完整历史，便于分析
+          fetch-depth: 0 # 完整历史，便于分析
 
       - name: Run Claude Code Assistant
         uses: anthropics/claude-code-action@v1

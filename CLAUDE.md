@@ -6,7 +6,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Claude Code Hub 是一个 Claude Code API 代理中转服务平台，用于统一管理多个 AI 服务提供商（支持 Claude Code 格式和 OpenAI 兼容格式），提供智能负载均衡、用户权限管理、使用统计和实时监控功能。
 
-本项目基于 [zsio/claude-code-hub](https://github.com/zsio/claude-code-hub) 进行了增强，新增了详细日志记录、并发控制、多时段限流、熔断保护、决策链追踪、OpenAI 兼容等功能。
+本项目基于 [zsio/claude-code-hub](https://github.com/zsio/claude-code-hub) 进行了增强，新增了：
+
+- **自动化 API 文档生成**（OpenAPI 3.1.0 + Swagger/Scalar UI 双界面，39 个 REST API 端点）
+- **价格表分页查询**（支持大规模数据，搜索防抖，SQL 层面性能优化）
+- 详细日志记录、并发控制、多时段限流、熔断保护、决策链追踪、OpenAI 兼容等功能
 
 使用中文和用户沟通。
 
@@ -92,6 +96,20 @@ make reset        # 完全重置 (clean + dev)
 
 **完整文档**: 详见 `dev/README.md`
 
+### API 文档
+
+```bash
+# 访问 API 文档（需要先登录管理后台）
+open http://localhost:13500/api/actions/scalar   # Scalar UI（推荐）
+open http://localhost:13500/api/actions/docs     # Swagger UI
+
+# 获取 OpenAPI 规范
+curl http://localhost:13500/api/actions/openapi.json > openapi.json
+
+# 健康检查
+curl http://localhost:13500/api/actions/health
+```
+
 ## 核心技术栈
 
 - **Next.js 15** (App Router) + **React 19** + **TypeScript**
@@ -117,8 +135,16 @@ src/
 │   │   └── [...route]/route.ts   # 动态路由处理器
 │   ├── dashboard/                # 仪表盘 (统计、日志、排行榜、实时监控)
 │   ├── settings/                 # 设置页面 (用户、供应商、价格、系统配置)
-│   └── api/                      # 内部 API (auth, admin, leaderboard, version)
+│   │   └── prices/               # 价格表页面（支持分页查询）
+│   └── api/                      # 内部 API
+│       ├── actions/[...route]/   # 自动化 API 文档系统 (OpenAPI 3.1.0)
+│       ├── prices/               # 价格表分页 API
+│       └── auth, admin, ...      # 认证、管理、排行榜、版本等
 ├── lib/                          # 核心业务逻辑
+│   ├── api/
+│   │   └── action-adapter-openapi.ts  # OpenAPI 自动生成核心适配器
+│   ├── hooks/
+│   │   └── use-debounce.ts       # 搜索防抖 Hook
 │   ├── circuit-breaker.ts        # 熔断器 (内存实现)
 │   ├── session-manager.ts        # Session 追踪和缓存
 │   ├── rate-limit/               # 限流服务 (Redis + Lua 脚本)
@@ -126,6 +152,7 @@ src/
 │   ├── proxy-status-tracker.ts   # 实时代理状态追踪
 │   └── price-sync.ts             # LiteLLM 价格同步
 ├── repository/                   # 数据访问层 (Drizzle ORM)
+│   └── model-price.ts            # 模型价格查询（含分页方法）
 ├── drizzle/                      # 数据库 schema 和迁移
 ├── types/                        # TypeScript 类型定义
 └── components/                   # React UI 组件
@@ -281,6 +308,61 @@ LOG_LEVEL=info                     # 日志级别
 - 使用 ESLint + Prettier
 - 提交前运行 `pnpm typecheck` 确保类型正确
 - 遵循现有代码风格（参考 `src/app/v1/_lib/proxy/` 中的代码）
+
+### 8. 添加新的 API 端点
+
+当需要将新的 Server Action 暴露为 REST API 时：
+
+1. 在 `src/app/api/actions/[...route]/route.ts` 中注册：
+
+   ```typescript
+   const { route, handler } = createActionRoute(
+     "module",
+     "actionName",
+     moduleActions.actionName,
+     {
+       requestSchema: YourZodSchema,  // 可选
+       responseSchema: z.object(...),  // 可选
+       description: "端点描述",
+       tags: ["标签"],
+       requiredRole: "admin",          // 可选
+     }
+   );
+   app.openapi(route, handler);
+   ```
+
+2. OpenAPI 文档自动更新，无需手动维护
+
+3. 测试端点：访问 `/api/actions/scalar` 查看并测试
+
+**核心特性**：
+
+- 使用 `createActionRoute()` 自动转换 Server Action 为 OpenAPI 端点
+- 复用现有 Zod schemas 进行参数验证
+- 自动生成 OpenAPI 3.1.0 规范文档
+- 统一的 `ActionResult<T>` 响应格式
+
+### 9. 价格表数据库查询优化
+
+分页查询使用窗口函数和 CTE，注意：
+
+- `findAllLatestPricesPaginated()` - 分页版本（推荐用于大数据量）
+- `findAllLatestPrices()` - 非分页版本（向后兼容，小数据量）
+- 搜索使用 SQL 层面的 `ILIKE`，性能优于客户端过滤
+- 分页参数：`page`（页码）、`pageSize`（每页大小）、`search`（搜索关键词）
+
+**实现要点**：
+
+```typescript
+// 使用 ROW_NUMBER() 窗口函数获取最新价格
+WITH latest_prices AS (
+  SELECT model_name, MAX(created_at) as max_created_at
+  FROM model_prices
+  WHERE model_name ILIKE '%search%'
+  GROUP BY model_name
+)
+SELECT ... LIMIT 50 OFFSET 0;
+```
 
 ## 常见任务
 

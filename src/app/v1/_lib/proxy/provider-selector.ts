@@ -237,38 +237,38 @@ export class ProxyProviderResolver {
           attempt: attempt + 1,
         });
 
-        const successContext = session.getLastSelectionContext();
-        session.addProviderToChain(session.provider, {
-          reason: attempt === 0 ? "initial_selection" : "retry_success",
-          selectionMethod: successContext?.groupFilterApplied
-            ? "group_filtered"
-            : "weighted_random",
-          circuitState: getCircuitState(session.provider.id),
-          attemptNumber: attempt > 0 ? attempt + 1 : undefined,
-          decisionContext: successContext || {
-            totalProviders: 0,
-            enabledProviders: 0,
-            targetType: session.provider.providerType as "claude" | "codex",
-            requestedModel: session.getCurrentModel() || "",
-            groupFilterApplied: false,
-            beforeHealthCheck: 0,
-            afterHealthCheck: 0,
-            priorityLevels: [],
-            selectedPriority: 0,
-            candidatesAtPriority: [],
-          },
-        });
+        // 只在首次选择时记录到决策链（重试时的记录由 forwarder.ts 在请求完成后统一记录）
+        if (attempt === 0) {
+          const successContext = session.getLastSelectionContext();
+          session.addProviderToChain(session.provider, {
+            reason: "initial_selection",
+            selectionMethod: successContext?.groupFilterApplied
+              ? "group_filtered"
+              : "weighted_random",
+            circuitState: getCircuitState(session.provider.id),
+            decisionContext: successContext || {
+              totalProviders: 0,
+              enabledProviders: 0,
+              targetType: session.provider.providerType as "claude" | "codex",
+              requestedModel: session.getCurrentModel() || "",
+              groupFilterApplied: false,
+              beforeHealthCheck: 0,
+              afterHealthCheck: 0,
+              priorityLevels: [],
+              selectedPriority: 0,
+              candidatesAtPriority: [],
+            },
+          });
+        }
 
-        // 绑定 session 到 provider（同步等待，确保写入成功）
-        await SessionManager.bindSessionToProvider(session.sessionId, session.provider.id);
+        // ⭐ 延迟绑定策略：移除立即绑定，改为请求成功后绑定
+        // 原因：并发检查成功 ≠ 请求成功，应该绑定到最终成功的供应商
+        // await SessionManager.bindSessionToProvider(session.sessionId, session.provider.id); // ❌ 已移除
 
-        // 更新 session 详细信息中的 provider 信息（异步，非关键路径）
-        void SessionManager.updateSessionProvider(session.sessionId, {
-          providerId: session.provider.id,
-          providerName: session.provider.name,
-        }).catch((error) => {
-          logger.error("ProviderSelector: Failed to update session provider info", { error });
-        });
+        // ⭐ 已移除：不要在并发检查通过后立即更新监控信息
+        // 原因：此时请求还没发送，供应商可能失败
+        // 修复：延迟到 forwarder 请求成功后统一更新（见 forwarder.ts:75-80）
+        // void SessionManager.updateSessionProvider(...); // ❌ 已移除
 
         return null; // 成功
       }
@@ -355,18 +355,29 @@ export class ProxyProviderResolver {
       return null;
     }
 
-    // 检查用户分组（如果用户指定了分组，供应商必须属于该分组）
-    const userGroup = session.authState?.user?.providerGroup;
-    if (userGroup && provider.groupTag !== userGroup) {
-      logger.debug("ProviderSelector: Session provider group mismatch", {
-        sessionId: session.sessionId,
-        providerId: provider.id,
-        providerName: provider.name,
-        providerGroup: provider.groupTag || "none",
-        userGroup,
-      });
-      return null;
+    // 修复：检查用户分组权限（严格分组隔离 + 支持多分组）
+    const userGroup = session?.authState?.user?.providerGroup;
+    if (userGroup) {
+      // 用户有分组，支持多个分组（逗号分隔）
+      const userGroups = userGroup
+        .split(",")
+        .map((g) => g.trim())
+        .filter(Boolean);
+
+      // 检查供应商的 groupTag 是否在用户的分组列表中
+      if (provider.groupTag && !userGroups.includes(provider.groupTag)) {
+        logger.warn("ProviderSelector: Session provider not in user groups", {
+          sessionId: session.sessionId,
+          providerId: provider.id,
+          providerName: provider.name,
+          providerGroup: provider.groupTag,
+          userGroups: userGroups.join(","),
+          message: "Strict group isolation: rejecting cross-group session reuse",
+        });
+        return null; // 不允许复用，重新选择
+      }
     }
+    // 全局用户（userGroup 为空）可以复用任何供应商
 
     logger.info("ProviderSelector: Reusing provider", {
       providerName: provider.name,
@@ -467,22 +478,43 @@ export class ProxyProviderResolver {
 
     if (userGroup) {
       context.userGroup = userGroup;
-      const groupFiltered = enabledProviders.filter((p) => p.groupTag === userGroup);
+
+      // 修复：支持多个分组（逗号分隔，如 "fero,chen"）
+      const userGroups = userGroup
+        .split(",")
+        .map((g) => g.trim())
+        .filter(Boolean);
+
+      // 过滤：供应商的 groupTag 在用户的分组列表中
+      const groupFiltered = enabledProviders.filter(
+        (p) => p.groupTag && userGroups.includes(p.groupTag)
+      );
 
       if (groupFiltered.length > 0) {
         candidateProviders = groupFiltered;
         context.groupFilterApplied = true;
         context.afterGroupFilter = groupFiltered.length;
-        logger.debug("ProviderSelector: User group filter applied", {
+        logger.debug("ProviderSelector: User multi-group filter applied", {
           userGroup,
+          userGroups,
           count: groupFiltered.length,
         });
       } else {
+        // 修复：严格分组隔离，无可用供应商时返回错误而不是 fallback
         context.groupFilterApplied = false;
         context.afterGroupFilter = 0;
-        logger.warn("ProviderSelector: User group has no providers, falling back", {
+        logger.error("ProviderSelector: User groups have no available providers", {
           userGroup,
+          userGroups,
+          enabledProviders: enabledProviders.length,
+          message: "Strict group isolation: returning null instead of fallback",
         });
+
+        // 返回 null 表示无可用供应商
+        return {
+          provider: null,
+          context,
+        };
       }
     }
 

@@ -13,12 +13,19 @@ export class ProxyErrorHandler {
     // 识别 ProxyError，提取详细信息（包含上游响应）
     if (error instanceof ProxyError) {
       errorMessage = error.getDetailedErrorMessage();
-      // 4xx 客户端错误返回原始状态码，5xx 统一返回 500
-      statusCode = error.statusCode >= 500 ? 500 : error.statusCode;
+      statusCode = error.statusCode; // 使用实际状态码（不再统一 5xx 为 500）
     } else if (error instanceof Error) {
       errorMessage = error.message;
     } else {
       errorMessage = "代理请求发生未知错误";
+    }
+
+    // 后备方案：如果状态码仍是 500，尝试从 provider chain 中提取最后一次实际请求的状态码
+    if (statusCode === 500) {
+      const lastRequestStatusCode = this.getLastRequestStatusCode(session);
+      if (lastRequestStatusCode && lastRequestStatusCode !== 200) {
+        statusCode = lastRequestStatusCode;
+      }
     }
 
     if (session.messageContext) {
@@ -43,5 +50,26 @@ export class ProxyErrorHandler {
     });
 
     return ProxyResponses.buildError(statusCode, errorMessage);
+  }
+
+  /**
+   * 从 provider chain 中提取最后一次实际请求的状态码
+   */
+  private static getLastRequestStatusCode(session: ProxySession): number | null {
+    const chain = session.getProviderChain();
+    if (!chain || chain.length === 0) {
+      return null;
+    }
+
+    // 从后往前遍历，找到第一个有 statusCode 的记录（retry_failed 或 request_success）
+    for (let i = chain.length - 1; i >= 0; i--) {
+      const item = chain[i];
+      if (item.statusCode && item.statusCode !== 200) {
+        // 找到了失败的请求状态码
+        return item.statusCode;
+      }
+    }
+
+    return null;
   }
 }

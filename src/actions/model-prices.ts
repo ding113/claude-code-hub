@@ -7,7 +7,10 @@ import {
   findLatestPriceByModel,
   createModelPrice,
   findAllLatestPrices,
+  findAllLatestPricesPaginated,
   hasAnyPriceRecords,
+  type PaginationParams,
+  type PaginatedResult,
 } from "@/repository/model-price";
 import type {
   PriceTableJson,
@@ -132,6 +135,36 @@ export async function getModelPrices(): Promise<ModelPrice[]> {
   } catch (error) {
     logger.error("获取模型价格失败:", error);
     return [];
+  }
+}
+
+/**
+ * 分页获取所有模型的最新价格
+ */
+export async function getModelPricesPaginated(
+  params: PaginationParams
+): Promise<ActionResult<PaginatedResult<ModelPrice>>> {
+  try {
+    // 权限检查：只有管理员可以查看价格表
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return {
+        ok: false,
+        error: "无权限执行此操作",
+      };
+    }
+
+    const result = await findAllLatestPricesPaginated(params);
+    return {
+      ok: true,
+      data: result,
+    };
+  } catch (error) {
+    logger.error("获取模型价格失败:", error);
+    return {
+      ok: false,
+      error: "获取价格数据失败，请稍后重试",
+    };
   }
 }
 

@@ -3,8 +3,16 @@
 import { useState, useMemo } from "react";
 import { KeysQuotaClient } from "./keys-quota-client";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Search } from "lucide-react";
 import type { CurrencyCode } from "@/lib/utils/currency";
+import { hasKeyQuotaSet, isWarning, isExceeded } from "@/lib/utils/quota-helpers";
 
 interface KeyQuota {
   cost5h: { current: number; limit: number | null };
@@ -13,10 +21,15 @@ interface KeyQuota {
   concurrentSessions: { current: number; limit: number };
 }
 
+interface UserQuota {
+  rpm: { current: number; limit: number; window: "per_minute" };
+  dailyCost: { current: number; limit: number; resetAt: Date };
+}
+
 interface KeyWithQuota {
   id: number;
   name: string;
-  status: string;
+  isEnabled: boolean;
   expiresAt: string | null;
   quota: KeyQuota | null;
 }
@@ -25,6 +38,7 @@ interface UserWithKeys {
   id: number;
   name: string;
   role: string;
+  userQuota: UserQuota | null;
   keys: KeyWithQuota[];
 }
 
@@ -35,38 +49,61 @@ interface KeysQuotaManagerProps {
 
 export function KeysQuotaManager({ users, currencyCode = "USD" }: KeysQuotaManagerProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [filter, setFilter] = useState<
+    "all" | "key-quota" | "user-quota-only" | "warning" | "exceeded"
+  >("all");
 
-  // 搜索过滤：支持搜索用户名和密钥名
+  // 搜索 + 筛选逻辑
   const filteredUsers = useMemo(() => {
-    if (!searchQuery) return users;
-
     const lowerQuery = searchQuery.toLowerCase();
+
     return users
       .map((user) => {
-        // 检查用户名是否匹配
-        const userNameMatches = user.name.toLowerCase().includes(lowerQuery);
-
-        // 筛选匹配的密钥
-        const matchedKeys = user.keys.filter((key) => key.name.toLowerCase().includes(lowerQuery));
-
-        // 如果用户名匹配，显示所有密钥；否则只显示匹配的密钥
-        if (userNameMatches) {
-          return user;
-        } else if (matchedKeys.length > 0) {
-          return { ...user, keys: matchedKeys };
+        // 搜索：用户名或密钥名匹配
+        let filteredKeys = user.keys;
+        if (searchQuery) {
+          const userNameMatches = user.name.toLowerCase().includes(lowerQuery);
+          if (!userNameMatches) {
+            filteredKeys = filteredKeys.filter((key) =>
+              key.name.toLowerCase().includes(lowerQuery)
+            );
+          }
         }
-        return null;
+
+        // 筛选：根据限额类型或状态
+        switch (filter) {
+          case "key-quota":
+            // 仅显示设置了密钥限额的
+            filteredKeys = filteredKeys.filter((key) => hasKeyQuotaSet(key.quota));
+            break;
+          case "user-quota-only":
+            // 仅显示继承用户限额的（未设置密钥限额）
+            filteredKeys = filteredKeys.filter((key) => !hasKeyQuotaSet(key.quota));
+            break;
+          case "warning":
+            // 预警：密钥或用户使用率 ≥60%
+            filteredKeys = filteredKeys.filter((key) => isWarning(key.quota, user.userQuota));
+            break;
+          case "exceeded":
+            // 超限：密钥或用户使用率 ≥100%
+            filteredKeys = filteredKeys.filter((key) => isExceeded(key.quota, user.userQuota));
+            break;
+        }
+
+        return { ...user, keys: filteredKeys };
       })
-      .filter((user): user is UserWithKeys => user !== null);
-  }, [users, searchQuery]);
+      .filter((user) => user.keys.length > 0); // 过滤掉没有密钥的用户
+  }, [users, searchQuery, filter]);
 
   // 统计信息
   const totalFilteredKeys = filteredUsers.reduce((sum, user) => sum + user.keys.length, 0);
+  const totalFilteredUsers = filteredUsers.length;
 
   return (
     <div className="space-y-4">
-      {/* 搜索框 */}
-      <div className="flex items-center justify-between">
+      {/* 搜索框 + 筛选器 */}
+      <div className="flex items-center gap-4">
+        {/* 搜索框 */}
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -76,8 +113,24 @@ export function KeysQuotaManager({ users, currencyCode = "USD" }: KeysQuotaManag
             className="pl-9"
           />
         </div>
-        <div className="text-sm text-muted-foreground">
-          显示 {filteredUsers.length} 个用户，{totalFilteredKeys} 个密钥
+
+        {/* 筛选器 */}
+        <Select value={filter} onValueChange={(value: typeof filter) => setFilter(value)}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="筛选条件" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">全部密钥</SelectItem>
+            <SelectItem value="key-quota">仅密钥限额</SelectItem>
+            <SelectItem value="user-quota-only">仅用户限额</SelectItem>
+            <SelectItem value="warning">预警（≥60%）</SelectItem>
+            <SelectItem value="exceeded">超限（≥100%）</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* 统计信息 */}
+        <div className="text-sm text-muted-foreground ml-auto">
+          显示 {totalFilteredUsers} 个用户，{totalFilteredKeys} 个密钥
         </div>
       </div>
 
