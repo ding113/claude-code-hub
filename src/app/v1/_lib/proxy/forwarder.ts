@@ -512,10 +512,11 @@ export class ProxyForwarder {
               providerName: provider.name,
             });
 
-            // 移除 dispatcher，重新发起请求
-            delete init.dispatcher;
+            // 创建新的配置对象，不包含 dispatcher
+            const fallbackInit = { ...init };
+            delete fallbackInit.dispatcher;
             try {
-              response = await fetch(proxyUrl, init);
+              response = await fetch(proxyUrl, fallbackInit);
               logger.info("ProxyForwarder: Direct connection succeeded after proxy failure", {
                 providerId: provider.id,
                 providerName: provider.name,

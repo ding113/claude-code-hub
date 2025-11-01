@@ -83,10 +83,11 @@ export function ProxyTestButton({
         toast.error("连接失败", {
           description:
             errorType === "Timeout"
-              ? "连接超时（5秒），请检查代理配置或网络连接"
+              ? "连接超时（5秒）。请检查：\n1. 代理服务器是否可访问\n2. 代理地址和端口是否正确\n3. 代理认证信息是否正确"
               : errorType === "ProxyError"
                 ? `代理错误: ${errorMessage}`
                 : `网络错误: ${errorMessage}`,
+          duration: 5000, // 延长显示时间，让用户看清楚诊断提示
         });
       }
     } catch (error) {

@@ -77,7 +77,7 @@ export function createProxyAgentForProvider(
 
     return {
       agent,
-      fallbackToDirect: provider.proxyFallbackToDirect,
+      fallbackToDirect: provider.proxyFallbackToDirect ?? false,
       proxyUrl: maskProxyUrl(proxyUrl),
     };
   } catch (error) {
