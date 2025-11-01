@@ -17,16 +17,34 @@ export const EnvSchema = z.object({
     if (val === "change-me") return undefined;
     return val;
   }, z.string().min(1, "管理员令牌不能为空").optional()),
-  AUTO_MIGRATE: z.coerce.boolean().default(true),
+  // ⚠️ 注意: 不要使用 z.coerce.boolean(),它会把字符串 "false" 转换为 true!
+  // 原因: Boolean("false") === true (任何非空字符串都是 truthy)
+  // 正确做法: 使用 transform 显式处理 "false" 和 "0" 字符串
+  AUTO_MIGRATE: z
+    .string()
+    .default("true")
+    .transform((s) => s !== "false" && s !== "0"),
   PORT: z.coerce.number().default(23000),
   REDIS_URL: z.string().optional(),
-  ENABLE_RATE_LIMIT: z.coerce.boolean().default(true),
-  ENABLE_SECURE_COOKIES: z.coerce.boolean().default(true),
+  ENABLE_RATE_LIMIT: z
+    .string()
+    .default("true")
+    .transform((s) => s !== "false" && s !== "0"),
+  ENABLE_SECURE_COOKIES: z
+    .string()
+    .default("true")
+    .transform((s) => s !== "false" && s !== "0"),
   SESSION_TTL: z.coerce.number().default(300),
-  DEBUG_MODE: z.coerce.boolean().default(false),
+  DEBUG_MODE: z
+    .string()
+    .default("false")
+    .transform((s) => s !== "false" && s !== "0"),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   TZ: z.string().default("Asia/Shanghai"),
-  ENABLE_MULTI_PROVIDER_TYPES: z.coerce.boolean().default(false),
+  ENABLE_MULTI_PROVIDER_TYPES: z
+    .string()
+    .default("false")
+    .transform((s) => s !== "false" && s !== "0"),
 });
 
 /**

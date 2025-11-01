@@ -262,6 +262,40 @@ TZ=Asia/Shanghai                   # 时区设置
 LOG_LEVEL=info                     # 日志级别
 ```
 
+### 环境变量配置注意事项
+
+#### 布尔值配置的正确方式
+
+**重要**: 所有布尔类型的环境变量(如 `ENABLE_SECURE_COOKIES`, `AUTO_MIGRATE`, `ENABLE_RATE_LIMIT` 等)必须使用以下值:
+
+- ✅ **表示 `true`**: `true`, `1`, `yes`, `on` 或任何非 `false`/`0` 的值
+- ✅ **表示 `false`**: `false`, `0`
+
+**常见错误**:
+```bash
+# ❌ 错误 - 字符串 "false" 会被解析为 true!
+ENABLE_SECURE_COOKIES="false"  # 错误:引号导致字符串被当作 true
+
+# ✅ 正确 - 不带引号
+ENABLE_SECURE_COOKIES=false    # 正确:直接写 false
+ENABLE_SECURE_COOKIES=0        # 正确:也可以用 0
+```
+
+**技术原因**: 项目使用 Zod 的自定义 transform 逻辑处理布尔值,而不是默认的 `z.coerce.boolean()`,因为后者会将任何非空字符串(包括 `"false"`)都强制转换为 `true`。详见 `src/lib/config/env.schema.ts:20-22` 的注释说明。
+
+#### Cookie 安全策略说明
+
+当通过 HTTP(非 HTTPS)访问系统时:
+
+1. **localhost 访问** (`http://localhost` 或 `http://127.0.0.1`)
+   - 即使 `ENABLE_SECURE_COOKIES=true`,现代浏览器也允许设置 Secure Cookie
+   - 这是浏览器的安全例外,用于方便本地开发
+
+2. **远程 IP/域名访问** (`http://192.168.x.x` 或 `http://example.com`)
+   - 如果 `ENABLE_SECURE_COOKIES=true`,浏览器会**拒绝**设置 Cookie,导致无法登录
+   - 必须设置 `ENABLE_SECURE_COOKIES=false` 才能正常使用
+   - 或者配置 HTTPS 反向代理(推荐)
+
 ## 开发注意事项
 
 ### 1. Redis 依赖和降级策略
