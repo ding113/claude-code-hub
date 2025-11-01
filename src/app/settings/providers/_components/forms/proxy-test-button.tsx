@@ -81,11 +81,12 @@ export function ProxyTestButton({
         const errorMessage = response.data.details?.error || response.data.message;
 
         toast.error("连接失败", {
-          description: errorType === "Timeout"
-            ? "连接超时（5秒），请检查代理配置或网络连接"
-            : errorType === "ProxyError"
-            ? `代理错误: ${errorMessage}`
-            : `网络错误: ${errorMessage}`,
+          description:
+            errorType === "Timeout"
+              ? "连接超时（5秒），请检查代理配置或网络连接"
+              : errorType === "ProxyError"
+                ? `代理错误: ${errorMessage}`
+                : `网络错误: ${errorMessage}`,
         });
       }
     } catch (error) {
@@ -147,17 +148,17 @@ export function ProxyTestButton({
 
       {/* 显示详细测试结果 */}
       {testResult && !isTesting && (
-        <div className={`text-xs p-2 rounded-md ${
-          testResult.success
-            ? "bg-green-50 text-green-700 border border-green-200"
-            : "bg-red-50 text-red-700 border border-red-200"
-        }`}>
+        <div
+          className={`text-xs p-2 rounded-md ${
+            testResult.success
+              ? "bg-green-50 text-green-700 border border-green-200"
+              : "bg-red-50 text-red-700 border border-red-200"
+          }`}
+        >
           <div className="font-medium mb-1">{testResult.message}</div>
           {testResult.details && (
             <div className="space-y-0.5 text-xs opacity-80">
-              {testResult.details.statusCode && (
-                <div>状态码: {testResult.details.statusCode}</div>
-              )}
+              {testResult.details.statusCode && <div>状态码: {testResult.details.statusCode}</div>}
               {testResult.details.responseTime !== undefined && (
                 <div>响应时间: {testResult.details.responseTime}ms</div>
               )}
@@ -167,9 +168,7 @@ export function ProxyTestButton({
                   {testResult.details.proxyUrl && ` (${testResult.details.proxyUrl})`}
                 </div>
               )}
-              {testResult.details.errorType && (
-                <div>错误类型: {testResult.details.errorType}</div>
-              )}
+              {testResult.details.errorType && <div>错误类型: {testResult.details.errorType}</div>}
             </div>
           )}
         </div>

@@ -447,7 +447,9 @@ export function ProviderForm({
             <div className="space-y-2">
               <Label htmlFor={isEdit ? "edit-priority" : "priority"}>
                 优先级
-                <span className="text-xs text-muted-foreground ml-1">(数值越小优先级越高，0为最高)</span>
+                <span className="text-xs text-muted-foreground ml-1">
+                  (数值越小优先级越高，0为最高)
+                </span>
               </Label>
               <Input
                 id={isEdit ? "edit-priority" : "priority"}

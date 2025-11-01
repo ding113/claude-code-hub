@@ -196,7 +196,10 @@ export async function addProvider(data: {
 
     // 验证代理 URL 格式
     if (data.proxy_url && !isValidProxyUrl(data.proxy_url)) {
-      return { ok: false, error: "代理地址格式无效，支持格式: http://, https://, socks5://, socks4://" };
+      return {
+        ok: false,
+        error: "代理地址格式无效，支持格式: http://, https://, socks5://, socks4://",
+      };
     }
 
     const validated = CreateProviderSchema.parse(data);
@@ -293,7 +296,10 @@ export async function editProvider(
 
     // 验证代理 URL 格式
     if (data.proxy_url && !isValidProxyUrl(data.proxy_url)) {
-      return { ok: false, error: "代理地址格式无效，支持格式: http://, https://, socks5://, socks4://" };
+      return {
+        ok: false,
+        error: "代理地址格式无效，支持格式: http://, https://, socks5://, socks4://",
+      };
     }
 
     const validated = UpdateProviderSchema.parse(data);
@@ -607,7 +613,8 @@ export async function testProviderProxy(data: {
         err.message.includes("ENOTFOUND") ||
         err.message.includes("ETIMEDOUT");
 
-      const errorType = err.name === "AbortError" ? "Timeout" : isProxyError ? "ProxyError" : "NetworkError";
+      const errorType =
+        err.name === "AbortError" ? "Timeout" : isProxyError ? "ProxyError" : "NetworkError";
 
       return {
         ok: true,

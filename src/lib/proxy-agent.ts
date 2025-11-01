@@ -1,7 +1,7 @@
-import { ProxyAgent } from 'undici';
-import { SocksProxyAgent } from 'socks-proxy-agent';
-import type { Provider } from '@/types/provider';
-import { logger } from './logger';
+import { ProxyAgent } from "undici";
+import { SocksProxyAgent } from "socks-proxy-agent";
+import type { Provider } from "@/types/provider";
+import { logger } from "./logger";
 
 /**
  * 代理配置结果
@@ -47,10 +47,10 @@ export function createProxyAgentForProvider(
     // 根据协议选择 Agent
     let agent: ProxyAgent | SocksProxyAgent;
 
-    if (parsedProxy.protocol === 'socks5:' || parsedProxy.protocol === 'socks4:') {
+    if (parsedProxy.protocol === "socks5:" || parsedProxy.protocol === "socks4:") {
       // SOCKS 代理
       agent = new SocksProxyAgent(proxyUrl);
-      logger.debug('SOCKS ProxyAgent created', {
+      logger.debug("SOCKS ProxyAgent created", {
         providerId: provider.id,
         providerName: provider.name,
         protocol: parsedProxy.protocol,
@@ -58,10 +58,10 @@ export function createProxyAgentForProvider(
         proxyPort: parsedProxy.port,
         targetUrl: new URL(targetUrl).origin,
       });
-    } else if (parsedProxy.protocol === 'http:' || parsedProxy.protocol === 'https:') {
+    } else if (parsedProxy.protocol === "http:" || parsedProxy.protocol === "https:") {
       // HTTP/HTTPS 代理（使用 undici）
       agent = new ProxyAgent(proxyUrl);
-      logger.debug('HTTP/HTTPS ProxyAgent created', {
+      logger.debug("HTTP/HTTPS ProxyAgent created", {
         providerId: provider.id,
         providerName: provider.name,
         protocol: parsedProxy.protocol,
@@ -81,7 +81,7 @@ export function createProxyAgentForProvider(
       proxyUrl: maskProxyUrl(proxyUrl),
     };
   } catch (error) {
-    logger.error('Failed to create ProxyAgent', {
+    logger.error("Failed to create ProxyAgent", {
       providerId: provider.id,
       providerName: provider.name,
       proxyUrl: maskProxyUrl(proxyUrl),
@@ -106,12 +106,12 @@ export function maskProxyUrl(proxyUrl: string): string {
   try {
     const url = new URL(proxyUrl);
     if (url.password) {
-      url.password = '***';
+      url.password = "***";
     }
     return url.toString();
   } catch {
     // 如果 URL 解析失败，使用正则替换
-    return proxyUrl.replace(/:([^:@]+)@/, ':***@');
+    return proxyUrl.replace(/:([^:@]+)@/, ":***@");
   }
 }
 
@@ -130,7 +130,7 @@ export function isValidProxyUrl(proxyUrl: string): boolean {
     const url = new URL(proxyUrl.trim());
 
     // 检查协议
-    const supportedProtocols = ['http:', 'https:', 'socks5:', 'socks4:'];
+    const supportedProtocols = ["http:", "https:", "socks5:", "socks4:"];
     if (!supportedProtocols.includes(url.protocol)) {
       return false;
     }

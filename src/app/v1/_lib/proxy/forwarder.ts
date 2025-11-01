@@ -489,10 +489,10 @@ export class ProxyForwarder {
       // ⭐ 代理相关错误处理（如果配置了代理）
       if (proxyConfig) {
         const isProxyError =
-          err.message.includes('proxy') ||
-          err.message.includes('ECONNREFUSED') ||
-          err.message.includes('ENOTFOUND') ||
-          err.message.includes('ETIMEDOUT');
+          err.message.includes("proxy") ||
+          err.message.includes("ECONNREFUSED") ||
+          err.message.includes("ENOTFOUND") ||
+          err.message.includes("ETIMEDOUT");
 
         if (isProxyError) {
           logger.error("ProxyForwarder: Proxy connection failed", {
@@ -531,10 +531,7 @@ export class ProxyForwarder {
             }
           } else {
             // 不降级，直接抛出代理错误
-            throw new ProxyError(
-              `Proxy connection failed: ${err.message}`,
-              500
-            );
+            throw new ProxyError(`Proxy connection failed: ${err.message}`, 500);
           }
         } else {
           // 非代理相关错误，记录详细信息后抛出
