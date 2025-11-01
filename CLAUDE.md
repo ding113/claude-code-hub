@@ -272,6 +272,7 @@ LOG_LEVEL=info                     # 日志级别
 - ✅ **表示 `false`**: `false`, `0`
 
 **常见错误**:
+
 ```bash
 # ❌ 错误 - 字符串 "false" 会被解析为 true!
 ENABLE_SECURE_COOKIES="false"  # 错误:引号导致字符串被当作 true
