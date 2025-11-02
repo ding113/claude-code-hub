@@ -104,14 +104,14 @@ export function ModelMultiSelect({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[400px] h-[500px] p-0 flex flex-col"
+        className="w-[400px] p-0 flex flex-col"
         align="start"
         onWheel={(e) => e.stopPropagation()}
         onTouchMove={(e) => e.stopPropagation()}
       >
-        <Command shouldFilter={true} className="flex-1">
+        <Command shouldFilter={true}>
           <CommandInput placeholder="搜索模型名称..." />
-          <CommandList className="flex-1 max-h-[250px] overflow-y-auto">
+          <CommandList className="max-h-[250px] overflow-y-auto">
             <CommandEmpty>{loading ? "加载中..." : "未找到模型"}</CommandEmpty>
 
             {!loading && (
