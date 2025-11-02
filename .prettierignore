@@ -44,6 +44,12 @@ data
 .git
 .gitignore
 
+# GitHub Actions workflows (YAML formatting conflicts)
+.github/workflows
+
+# Seed data (large auto-generated JSON files)
+public/seed/litellm-prices.json
+
 # Package manager
 pnpm-lock.yaml
 package-lock.json
