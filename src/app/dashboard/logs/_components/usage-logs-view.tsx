@@ -11,6 +11,7 @@ import { UsageLogsTable } from "./usage-logs-table";
 import type { UsageLogsResult } from "@/repository/usage-logs";
 import type { UserDisplay } from "@/types/user";
 import type { ProviderDisplay } from "@/types/provider";
+import type { Key } from "@/types/key";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
 
@@ -31,6 +32,7 @@ interface UsageLogsViewProps {
   isAdmin: boolean;
   users: UserDisplay[];
   providers: ProviderDisplay[];
+  initialKeys: Key[];
   searchParams: { [key: string]: string | string[] | undefined };
   currencyCode?: CurrencyCode;
 }
@@ -39,6 +41,7 @@ export function UsageLogsView({
   isAdmin,
   users,
   providers,
+  initialKeys,
   searchParams,
   currencyCode = "USD",
 }: UsageLogsViewProps) {
@@ -251,6 +254,7 @@ export function UsageLogsView({
             isAdmin={isAdmin}
             users={users}
             providers={providers}
+            initialKeys={initialKeys}
             filters={filters}
             onChange={handleFilterChange}
             onReset={() => router.push("/dashboard/logs")}
