@@ -368,7 +368,9 @@ ENABLE_SECURE_COOKIES=0        # 正确:也可以用 0
 OpenAPI 文档（`/api/actions/scalar` 和 `/api/actions/docs`）中的 server URL 配置：
 
 **配置方式**：
+
 - **生产环境（推荐）**：显式设置 `APP_URL` 环境变量
+
   ```bash
   APP_URL=https://your-domain.com  # HTTPS 域名
   APP_URL=http://192.168.1.100:23000  # HTTP IP + 端口
@@ -377,6 +379,7 @@ OpenAPI 文档（`/api/actions/scalar` 和 `/api/actions/docs`）中的 server U
 - **开发环境**：留空即可，自动使用 `http://localhost:13500`
 
 **效果**：
+
 - 配置后，OpenAPI 文档中的 "Try it out" 功能会自动使用正确的地址
 - 避免生产环境显示 `http://localhost`，导致 API 测试失败
 
