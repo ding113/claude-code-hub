@@ -1,5 +1,5 @@
 
-const TOKEN_UNIT_K = 1024;
+const TOKEN_UNIT_K = 1000;
 const TOKEN_UNIT_M = TOKEN_UNIT_K * TOKEN_UNIT_K;
 
 const NUMBER_FORMAT_OPTIONS: Intl.NumberFormatOptions = {
@@ -18,8 +18,8 @@ function appendUnit(value: number, divisor: number, unit: string): string {
 
 /**
  * 统一的 Token 数值格式化函数
- * - 小于 1024 显示原值
- * - 小于 1024 * 1024 时转为 K，保留2位小数
+ * - 小于 1000 显示原值
+ * - 小于 1000 * 1000 时转为 K，保留2位小数
  * - 其他情况转为 M，保留2位小数
  * - 空值返回 "-"
  */
