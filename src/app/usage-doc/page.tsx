@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Menu } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { TocNav, type TocItem } from "./_components/toc-nav";
 import { QuickLinks } from "./_components/quick-links";
 
@@ -222,20 +223,192 @@ npm --version`}
    */
   const renderClaudeCodeInstallation = (os: OS) => {
     const lang = os === "windows" ? "powershell" : "bash";
-    const sudoNote =
-      os !== "windows"
-        ? "\n\n如果遇到权限问题，可以使用 sudo：\n\nsudo npm install -g @anthropic-ai/claude-code"
-        : "";
 
     return (
-      <div className="space-y-3">
-        <p>打开终端/命令行，运行以下命令：</p>
-        <CodeBlock language={lang} code={`npm install -g @anthropic-ai/claude-code`} />
-        {sudoNote && <p className="text-sm text-muted-foreground">提示：{sudoNote}</p>}
-        <p>验证安装：</p>
-        <CodeBlock language={lang} code={`claude --version`} />
-        <p>如果显示版本号，恭喜！Claude Code 已成功安装。</p>
-      </div>
+      <Tabs defaultValue="native" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="native">Native Install (推荐)</TabsTrigger>
+          <TabsTrigger value="npm">NPM</TabsTrigger>
+        </TabsList>
+
+        {/* Native Install 标签页 */}
+        <TabsContent value="native" className="space-y-4 mt-4">
+          <div className="space-y-3">
+            <p>官方推荐使用 Native 安装方式，具有以下优势：</p>
+            <ul className="list-disc space-y-1 pl-6">
+              <li>单个可执行文件，无需 Node.js 依赖</li>
+              <li>自动更新机制更稳定</li>
+              <li>启动速度更快</li>
+            </ul>
+          </div>
+
+          {/* macOS 安装方式 */}
+          {os === "macos" && (
+            <div className="space-y-4">
+              <div className="space-y-3">
+                <p className="font-semibold text-foreground">方法一：Homebrew（推荐）</p>
+                <CodeBlock language="bash" code={`brew install --cask claude-code`} />
+                <blockquote className="space-y-2 rounded-lg border-l-2 border-primary/50 bg-muted/40 px-4 py-3">
+                  <p className="font-semibold text-foreground">自动更新说明</p>
+                  <p className="text-sm">
+                    通过 Homebrew 安装的 Claude Code 会在 brew 目录外自动更新，除非使用{" "}
+                    <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                      DISABLE_AUTOUPDATER
+                    </code>{" "}
+                    环境变量显式禁用。
+                  </p>
+                </blockquote>
+              </div>
+
+              <div className="space-y-3">
+                <p className="font-semibold text-foreground">方法二：curl 脚本</p>
+                <CodeBlock
+                  language="bash"
+                  code={`# 安装稳定版（默认）
+curl -fsSL https://claude.ai/install.sh | bash
+
+# 安装最新版
+curl -fsSL https://claude.ai/install.sh | bash -s latest
+
+# 安装指定版本
+curl -fsSL https://claude.ai/install.sh | bash -s 1.0.58`}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Linux 安装方式 */}
+          {os === "linux" && (
+            <div className="space-y-4">
+              <div className="space-y-3">
+                <p className="font-semibold text-foreground">curl 脚本安装</p>
+                <CodeBlock
+                  language="bash"
+                  code={`# 安装稳定版（默认）
+curl -fsSL https://claude.ai/install.sh | bash
+
+# 安装最新版
+curl -fsSL https://claude.ai/install.sh | bash -s latest
+
+# 安装指定版本
+curl -fsSL https://claude.ai/install.sh | bash -s 1.0.58`}
+                />
+              </div>
+
+              <blockquote className="space-y-2 rounded-lg border-l-2 border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20 px-4 py-3">
+                <p className="font-semibold text-foreground">Alpine Linux 特殊说明</p>
+                <p className="text-sm">
+                  基于 musl/uClibc 的发行版（如 Alpine Linux）需要安装额外依赖：
+                </p>
+                <CodeBlock
+                  language="bash"
+                  code={`apk add libgcc libstdc++ ripgrep
+export USE_BUILTIN_RIPGREP=0`}
+                />
+              </blockquote>
+            </div>
+          )}
+
+          {/* Windows 安装方式 */}
+          {os === "windows" && (
+            <div className="space-y-4">
+              <div className="space-y-3">
+                <p className="font-semibold text-foreground">方法一：PowerShell</p>
+                <CodeBlock
+                  language="powershell"
+                  code={`# 安装稳定版（默认）
+irm https://claude.ai/install.ps1 | iex
+
+# 安装最新版
+& ([scriptblock]::Create((irm https://claude.ai/install.ps1))) latest
+
+# 安装指定版本
+& ([scriptblock]::Create((irm https://claude.ai/install.ps1))) 1.0.58`}
+                />
+              </div>
+
+              <div className="space-y-3">
+                <p className="font-semibold text-foreground">方法二：CMD</p>
+                <CodeBlock
+                  language="batch"
+                  code={`REM 安装稳定版（默认）
+curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd && del install.cmd
+
+REM 安装最新版
+curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd latest && del install.cmd
+
+REM 安装指定版本
+curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd 1.0.58 && del install.cmd`}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* 验证安装 */}
+          <div className="space-y-3">
+            <p className="font-semibold text-foreground">验证安装</p>
+            <p>安装完成后，运行以下命令验证：</p>
+            <CodeBlock language={lang} code={`claude --version`} />
+            <p>如果显示版本号，恭喜！Claude Code 已成功安装。</p>
+          </div>
+
+          <blockquote className="space-y-2 rounded-lg border-l-2 border-primary/50 bg-muted/40 px-4 py-3">
+            <p className="font-semibold text-foreground">提示</p>
+            <p className="text-sm">
+              安装前请确保移除任何过期的别名或符号链接。使用{" "}
+              <code className="rounded bg-muted px-1 py-0.5 text-xs">claude doctor</code>{" "}
+              命令可以检查安装类型和版本。
+            </p>
+          </blockquote>
+        </TabsContent>
+
+        {/* NPM 标签页 */}
+        <TabsContent value="npm" className="space-y-4 mt-4">
+          <div className="space-y-3">
+            <p>
+              使用 NPM 安装需要先安装 Node.js 18 或更高版本。适合偏好使用 NPM 管理工具的开发者。
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            <p className="font-semibold text-foreground">安装命令</p>
+            <CodeBlock language={lang} code={`npm install -g @anthropic-ai/claude-code`} />
+          </div>
+
+          <blockquote className="space-y-2 rounded-lg border-l-2 border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20 px-4 py-3">
+            <p className="font-semibold text-foreground">警告</p>
+            <p className="text-sm">
+              <strong>不要使用</strong>{" "}
+              <code className="rounded bg-muted px-1 py-0.5 text-xs">sudo npm install -g</code>，
+              这可能导致权限问题和安全风险。如果遇到权限错误，请参考{" "}
+              <a
+                href="https://docs.npmjs.com/resolving-eacces-permissions-errors-when-installing-packages-globally"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-primary underline underline-offset-4 transition-colors hover:text-primary/80"
+              >
+                NPM 官方解决方案
+              </a>
+              。
+            </p>
+          </blockquote>
+
+          <div className="space-y-3">
+            <p className="font-semibold text-foreground">验证安装</p>
+            <CodeBlock language={lang} code={`claude --version`} />
+            <p>如果显示版本号，恭喜！Claude Code 已成功安装。</p>
+          </div>
+
+          <div className="space-y-3">
+            <p className="font-semibold text-foreground">迁移到 Native Install</p>
+            <p>如果你已通过 NPM 全局安装，可以使用以下命令迁移到 Native 安装：</p>
+            <CodeBlock language={lang} code={`claude install`} />
+            <p className="text-sm text-muted-foreground">
+              部分用户可能会被自动迁移到这种安装方式。
+            </p>
+          </div>
+        </TabsContent>
+      </Tabs>
     );
   };
 

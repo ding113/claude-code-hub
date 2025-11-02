@@ -13,6 +13,45 @@ env:
   IMAGE_NAME: ding113/claude-code-hub
 
 jobs:
+  # 代码质量检查任务
+  code-quality:
+    runs-on: ubuntu-latest
+    name: Code Quality Check
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 📦 Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: 📦 Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: 🔍 Type check
+        run: pnpm typecheck
+
+      - name: 🎨 Format check
+        run: pnpm format:check
+
+      - name: 🛡️ Validate migrations
+        run: pnpm validate:migrations
+
+      - name: ✅ Code quality checks passed
+        run: |
+          echo "✅ All code quality checks passed!"
+          echo "📝 Type checking: OK"
+          echo "🎨 Code formatting: OK"
+          echo "🛡️ Migration validation: OK"
+
   # PR 构建测试任务（不推送镜像）
   build-check:
     runs-on: ubuntu-latest
