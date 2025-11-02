@@ -33,6 +33,8 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     circuitBreakerOpenDuration: providerData.circuit_breaker_open_duration ?? 1800000,
     circuitBreakerHalfOpenSuccessThreshold:
       providerData.circuit_breaker_half_open_success_threshold ?? 2,
+    proxyUrl: providerData.proxy_url ?? null,
+    proxyFallbackToDirect: providerData.proxy_fallback_to_direct ?? false,
     tpm: providerData.tpm,
     rpm: providerData.rpm,
     rpd: providerData.rpd,
@@ -60,6 +62,8 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     circuitBreakerFailureThreshold: providers.circuitBreakerFailureThreshold,
     circuitBreakerOpenDuration: providers.circuitBreakerOpenDuration,
     circuitBreakerHalfOpenSuccessThreshold: providers.circuitBreakerHalfOpenSuccessThreshold,
+    proxyUrl: providers.proxyUrl,
+    proxyFallbackToDirect: providers.proxyFallbackToDirect,
     tpm: providers.tpm,
     rpm: providers.rpm,
     rpd: providers.rpd,
@@ -98,6 +102,8 @@ export async function findProviderList(
       circuitBreakerFailureThreshold: providers.circuitBreakerFailureThreshold,
       circuitBreakerOpenDuration: providers.circuitBreakerOpenDuration,
       circuitBreakerHalfOpenSuccessThreshold: providers.circuitBreakerHalfOpenSuccessThreshold,
+      proxyUrl: providers.proxyUrl,
+      proxyFallbackToDirect: providers.proxyFallbackToDirect,
       tpm: providers.tpm,
       rpm: providers.rpm,
       rpd: providers.rpd,
@@ -143,6 +149,8 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       circuitBreakerFailureThreshold: providers.circuitBreakerFailureThreshold,
       circuitBreakerOpenDuration: providers.circuitBreakerOpenDuration,
       circuitBreakerHalfOpenSuccessThreshold: providers.circuitBreakerHalfOpenSuccessThreshold,
+      proxyUrl: providers.proxyUrl,
+      proxyFallbackToDirect: providers.proxyFallbackToDirect,
       tpm: providers.tpm,
       rpm: providers.rpm,
       rpd: providers.rpd,
@@ -204,6 +212,9 @@ export async function updateProvider(
   if (providerData.circuit_breaker_half_open_success_threshold !== undefined)
     dbData.circuitBreakerHalfOpenSuccessThreshold =
       providerData.circuit_breaker_half_open_success_threshold;
+  if (providerData.proxy_url !== undefined) dbData.proxyUrl = providerData.proxy_url;
+  if (providerData.proxy_fallback_to_direct !== undefined)
+    dbData.proxyFallbackToDirect = providerData.proxy_fallback_to_direct;
   if (providerData.tpm !== undefined) dbData.tpm = providerData.tpm;
   if (providerData.rpm !== undefined) dbData.rpm = providerData.rpm;
   if (providerData.rpd !== undefined) dbData.rpd = providerData.rpd;
@@ -234,6 +245,8 @@ export async function updateProvider(
       circuitBreakerFailureThreshold: providers.circuitBreakerFailureThreshold,
       circuitBreakerOpenDuration: providers.circuitBreakerOpenDuration,
       circuitBreakerHalfOpenSuccessThreshold: providers.circuitBreakerHalfOpenSuccessThreshold,
+      proxyUrl: providers.proxyUrl,
+      proxyFallbackToDirect: providers.proxyFallbackToDirect,
       tpm: providers.tpm,
       rpm: providers.rpm,
       rpd: providers.rpd,
