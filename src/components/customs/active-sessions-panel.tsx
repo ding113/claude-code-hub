@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Activity, User, Key, Cpu, Clock, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { getActiveSessions } from "@/actions/active-sessions";
-import { cn } from "@/lib/utils";
+import { cn, formatTokenAmount } from "@/lib/utils";
 import type { ActiveSessionInfo } from "@/types/session";
 import Link from "next/link";
 import type { CurrencyCode } from "@/lib/utils/currency";
@@ -63,6 +63,10 @@ function SessionListItem({
 }) {
   const statusInfo = getStatusIcon(session.status, session.statusCode);
   const StatusIcon = statusInfo.icon;
+  const inputTokensDisplay =
+    session.inputTokens !== undefined ? formatTokenAmount(session.inputTokens) : null;
+  const outputTokensDisplay =
+    session.outputTokens !== undefined ? formatTokenAmount(session.outputTokens) : null;
 
   return (
     <Link
@@ -116,11 +120,11 @@ function SessionListItem({
 
         {/* Token 和成本 */}
         <div className="flex items-center gap-2 text-xs font-mono flex-shrink-0">
-          {(session.inputTokens !== undefined || session.outputTokens !== undefined) && (
+          {(inputTokensDisplay || outputTokensDisplay) && (
             <span className="text-muted-foreground">
-              {session.inputTokens !== undefined && `↑${session.inputTokens.toLocaleString()}`}
-              {session.inputTokens !== undefined && session.outputTokens !== undefined && " "}
-              {session.outputTokens !== undefined && `↓${session.outputTokens.toLocaleString()}`}
+              {inputTokensDisplay && `↑${inputTokensDisplay}`}
+              {inputTokensDisplay && outputTokensDisplay && " "}
+              {outputTokensDisplay && `↓${outputTokensDisplay}`}
             </span>
           )}
           {session.costUsd && (

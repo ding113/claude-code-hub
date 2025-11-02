@@ -2,7 +2,7 @@
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
+import { cn, formatTokenAmount } from "@/lib/utils";
 import type { ActiveSessionInfo } from "@/types/session";
 import Link from "next/link";
 import type { CurrencyCode } from "@/lib/utils/currency";
@@ -62,6 +62,10 @@ function getStatusConfig(status: "in_progress" | "completed" | "error", statusCo
  */
 export function SessionCard({ session, className, currencyCode = "USD" }: SessionCardProps) {
   const statusConfig = getStatusConfig(session.status, session.statusCode);
+  const inputTokensDisplay =
+    session.inputTokens !== undefined ? formatTokenAmount(session.inputTokens) : null;
+  const outputTokensDisplay =
+    session.outputTokens !== undefined ? formatTokenAmount(session.outputTokens) : null;
 
   return (
     <Link href={`/dashboard/sessions/${session.sessionId}/messages`}>
@@ -113,12 +117,8 @@ export function SessionCard({ session, className, currencyCode = "USD" }: Sessio
           {/* Token和成本 */}
           <div className="flex items-center justify-between text-xs border-t pt-2">
             <div className="flex items-center gap-2 text-muted-foreground">
-              {session.inputTokens !== undefined && (
-                <span className="font-mono">↑{session.inputTokens.toLocaleString()}</span>
-              )}
-              {session.outputTokens !== undefined && (
-                <span className="font-mono">↓{session.outputTokens.toLocaleString()}</span>
-              )}
+              {inputTokensDisplay && <span className="font-mono">↑{inputTokensDisplay}</span>}
+              {outputTokensDisplay && <span className="font-mono">↓{outputTokensDisplay}</span>}
             </div>
             {session.costUsd && (
               <span className="font-mono font-medium">

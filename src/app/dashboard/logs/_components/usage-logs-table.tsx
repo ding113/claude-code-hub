@@ -24,6 +24,7 @@ import { formatProviderSummary } from "@/lib/utils/provider-chain-formatter";
 import { ModelDisplayWithRedirect } from "./model-display-with-redirect";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
+import { formatTokenAmount } from "@/lib/utils";
 
 /**
  * 格式化请求耗时
@@ -184,16 +185,16 @@ export function UsageLogsTable({
                     />
                   </TableCell>
                   <TableCell className="text-right font-mono text-xs">
-                    {log.inputTokens?.toLocaleString() || "-"}
+                    {formatTokenAmount(log.inputTokens)}
                   </TableCell>
                   <TableCell className="text-right font-mono text-xs">
-                    {log.outputTokens?.toLocaleString() || "-"}
+                    {formatTokenAmount(log.outputTokens)}
                   </TableCell>
                   <TableCell className="text-right font-mono text-xs">
-                    {log.cacheCreationInputTokens?.toLocaleString() || "-"}
+                    {formatTokenAmount(log.cacheCreationInputTokens)}
                   </TableCell>
                   <TableCell className="text-right font-mono text-xs">
-                    {log.cacheReadInputTokens?.toLocaleString() || "-"}
+                    {formatTokenAmount(log.cacheReadInputTokens)}
                   </TableCell>
                   <TableCell className="text-right font-mono text-xs">
                     {log.costUsd ? formatCurrency(log.costUsd, currencyCode, 6) : "-"}
