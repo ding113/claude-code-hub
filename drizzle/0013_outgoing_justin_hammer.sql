@@ -1,4 +1,4 @@
-CREATE TABLE "notification_settings" (
+CREATE TABLE IF NOT EXISTS "notification_settings" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"enabled" boolean DEFAULT false NOT NULL,
 	"circuit_breaker_enabled" boolean DEFAULT false NOT NULL,
