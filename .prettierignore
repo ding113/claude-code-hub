@@ -44,6 +44,9 @@ data
 .git
 .gitignore
 
+# GitHub workflows (cannot be modified by GitHub Actions without workflows permission)
+.github/workflows
+
 # Package manager
 pnpm-lock.yaml
 package-lock.json
