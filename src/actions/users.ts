@@ -83,6 +83,8 @@ export async function getUsers(): Promise<UserDisplay[]> {
                 lastUsedAt: stats?.lastUsedAt ?? null,
                 lastProviderName: stats?.lastProviderName ?? null,
                 modelStats: stats?.modelStats ?? [],
+                // Web UI 登录权限控制
+                canLoginWebUi: key.canLoginWebUi,
                 // 限额配置
                 limit5hUsd: key.limit5hUsd,
                 limitWeeklyUsd: key.limitWeeklyUsd,

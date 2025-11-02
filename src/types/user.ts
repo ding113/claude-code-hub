@@ -58,6 +58,8 @@ export interface UserKeyDisplay {
   }>; // 各模型统计（当天）
   createdAt: Date; // 创建时间
   createdAtFormatted: string; // 格式化后的具体时间
+  // Web UI 登录权限控制
+  canLoginWebUi: boolean; // 是否允许使用该 Key 登录 Web UI
   // 限额配置
   limit5hUsd: number | null; // 5小时消费上限（美元）
   limitWeeklyUsd: number | null; // 周消费上限（美元）
