@@ -44,6 +44,7 @@ interface UsageLogsFiltersProps {
   isAdmin: boolean;
   users: UserDisplay[];
   providers: ProviderDisplay[];
+  initialKeys: Key[];
   filters: {
     userId?: number;
     keyId?: number;
@@ -61,13 +62,14 @@ export function UsageLogsFilters({
   isAdmin,
   users,
   providers,
+  initialKeys,
   filters,
   onChange,
   onReset,
 }: UsageLogsFiltersProps) {
   const [models, setModels] = useState<string[]>([]);
   const [statusCodes, setStatusCodes] = useState<number[]>([]);
-  const [keys, setKeys] = useState<Key[]>([]);
+  const [keys, setKeys] = useState<Key[]>(initialKeys);
   const [localFilters, setLocalFilters] = useState(filters);
 
   // 加载筛选器选项
@@ -86,8 +88,9 @@ export function UsageLogsFilters({
         setStatusCodes(codesResult.data);
       }
 
-      // 如果选择了用户，加载该用户的 keys
-      if (localFilters.userId) {
+      // 管理员：如果选择了用户，加载该用户的 keys
+      // 非管理员：已经有 initialKeys，不需要额外加载
+      if (isAdmin && localFilters.userId) {
         const keysResult = await getKeys(localFilters.userId);
         if (keysResult.ok && keysResult.data) {
           setKeys(keysResult.data);
@@ -96,7 +99,7 @@ export function UsageLogsFilters({
     };
 
     loadOptions();
-  }, [localFilters.userId]);
+  }, [isAdmin, localFilters.userId]);
 
   // 处理用户选择变更
   const handleUserChange = async (userId: string) => {
@@ -190,10 +193,10 @@ export function UsageLogsFilters({
                 keyId: value ? parseInt(value) : undefined,
               })
             }
-            disabled={isAdmin && !localFilters.userId}
+            disabled={isAdmin && !localFilters.userId && keys.length === 0}
           >
             <SelectTrigger>
-              <SelectValue placeholder={isAdmin && !localFilters.userId ? "请先选择用户" : "全部密钥"} />
+              <SelectValue placeholder={isAdmin && !localFilters.userId && keys.length === 0 ? "请先选择用户" : "全部密钥"} />
             </SelectTrigger>
             <SelectContent>
               {keys.map((key) => (
