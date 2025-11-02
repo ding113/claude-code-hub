@@ -5,6 +5,7 @@ export interface Provider {
   id: number;
   name: string;
   url: string;
+  officialSiteUrl: string | null;
   key: string;
   // 是否启用
   isEnabled: boolean;
@@ -64,6 +65,7 @@ export interface ProviderDisplay {
   id: number;
   name: string;
   url: string;
+  officialSiteUrl: string | null;
   maskedKey: string;
   isEnabled: boolean;
   weight: number;
@@ -107,6 +109,7 @@ export interface ProviderDisplay {
 export interface CreateProviderData {
   name: string;
   url: string;
+  official_site_url?: string | null;
   key: string;
   // 是否启用（默认 true）- 数据库字段名
   is_enabled?: boolean;
@@ -153,6 +156,7 @@ export interface CreateProviderData {
 export interface UpdateProviderData {
   name?: string;
   url?: string;
+  official_site_url?: string | null;
   key?: string;
   // 是否启用 - 数据库字段名
   is_enabled?: boolean;

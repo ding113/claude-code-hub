@@ -12,6 +12,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
   const dbData = {
     name: providerData.name,
     url: providerData.url,
+    officialSiteUrl: providerData.official_site_url ?? null,
     key: providerData.key,
     isEnabled: providerData.is_enabled,
     weight: providerData.weight,
@@ -51,6 +52,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     priority: providers.priority,
     costMultiplier: providers.costMultiplier,
     groupTag: providers.groupTag,
+    officialSiteUrl: providers.officialSiteUrl,
     providerType: providers.providerType,
     modelRedirects: providers.modelRedirects,
     allowedModels: providers.allowedModels,
@@ -91,6 +93,7 @@ export async function findProviderList(
       priority: providers.priority,
       costMultiplier: providers.costMultiplier,
       groupTag: providers.groupTag,
+      officialSiteUrl: providers.officialSiteUrl,
       providerType: providers.providerType,
       modelRedirects: providers.modelRedirects,
       allowedModels: providers.allowedModels,
@@ -132,6 +135,7 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       id: providers.id,
       name: providers.name,
       url: providers.url,
+      officialSiteUrl: providers.officialSiteUrl,
       key: providers.key,
       isEnabled: providers.isEnabled,
       weight: providers.weight,
@@ -180,6 +184,8 @@ export async function updateProvider(
   };
   if (providerData.name !== undefined) dbData.name = providerData.name;
   if (providerData.url !== undefined) dbData.url = providerData.url;
+  if (providerData.official_site_url !== undefined)
+    dbData.officialSiteUrl = providerData.official_site_url;
   if (providerData.key !== undefined) dbData.key = providerData.key;
   if (providerData.is_enabled !== undefined) dbData.isEnabled = providerData.is_enabled;
   if (providerData.weight !== undefined) dbData.weight = providerData.weight;
@@ -228,6 +234,7 @@ export async function updateProvider(
       id: providers.id,
       name: providers.name,
       url: providers.url,
+      officialSiteUrl: providers.officialSiteUrl,
       key: providers.key,
       isEnabled: providers.isEnabled,
       weight: providers.weight,

@@ -59,6 +59,9 @@ export function ProviderForm({
     isEdit ? (provider?.name ?? "") : cloneProvider ? `${cloneProvider.name}_Copy` : ""
   );
   const [url, setUrl] = useState(sourceProvider?.url ?? "");
+  const [officialSiteUrl, setOfficialSiteUrl] = useState<string>(
+    sourceProvider?.officialSiteUrl ?? ""
+  );
   const [key, setKey] = useState(""); // 编辑时留空代表不更新
   const [providerType, setProviderType] = useState<ProviderType>(
     sourceProvider?.providerType ?? "claude"
@@ -114,8 +117,15 @@ export function ProviderForm({
       return;
     }
 
+    const trimmedOfficialSiteUrl = officialSiteUrl.trim();
+
     if (!isValidUrl(url.trim())) {
       toast.error("请输入有效的URL地址");
+      return;
+    }
+
+    if (trimmedOfficialSiteUrl && !isValidUrl(trimmedOfficialSiteUrl)) {
+      toast.error("请输入有效的官网地址");
       return;
     }
 
@@ -128,6 +138,7 @@ export function ProviderForm({
           const updateData: {
             name?: string;
             url?: string;
+            official_site_url?: string | null;
             key?: string;
             provider_type?: ProviderType;
             model_redirects?: Record<string, string> | null;
@@ -153,6 +164,7 @@ export function ProviderForm({
           } = {
             name: name.trim(),
             url: url.trim(),
+            official_site_url: trimmedOfficialSiteUrl || null,
             provider_type: providerType,
             model_redirects: parsedModelRedirects,
             allowed_models: allowedModels.length > 0 ? allowedModels : null,
@@ -189,6 +201,7 @@ export function ProviderForm({
           const res = await addProvider({
             name: name.trim(),
             url: url.trim(),
+            official_site_url: trimmedOfficialSiteUrl || null,
             key: key.trim(),
             provider_type: providerType,
             model_redirects: parsedModelRedirects,
@@ -227,6 +240,7 @@ export function ProviderForm({
           // 重置表单（仅新增）
           setName("");
           setUrl("");
+          setOfficialSiteUrl("");
           setKey("");
           setProviderType("claude");
           setModelRedirects({});
@@ -284,6 +298,20 @@ export function ProviderForm({
             placeholder="例如: https://open.bigmodel.cn/api/anthropic"
             disabled={isPending}
             required
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor={isEdit ? "edit-official-site-url" : "official-site-url"}>
+            供应商官网
+            <span className="text-xs text-muted-foreground ml-1">(可选)</span>
+          </Label>
+          <Input
+            id={isEdit ? "edit-official-site-url" : "official-site-url"}
+            value={officialSiteUrl}
+            onChange={(e) => setOfficialSiteUrl(e.target.value)}
+            placeholder="例如: https://www.provider.com"
+            disabled={isPending}
           />
         </div>
 

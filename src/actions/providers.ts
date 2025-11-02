@@ -108,6 +108,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         id: provider.id,
         name: provider.name,
         url: provider.url,
+        officialSiteUrl: provider.officialSiteUrl,
         maskedKey: maskKey(provider.key),
         isEnabled: provider.isEnabled,
         weight: provider.weight,
@@ -157,6 +158,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
 export async function addProvider(data: {
   name: string;
   url: string;
+  official_site_url?: string | null;
   key: string;
   is_enabled?: boolean;
   weight?: number;
@@ -207,6 +209,7 @@ export async function addProvider(data: {
 
     const payload = {
       ...validated,
+      official_site_url: validated.official_site_url ?? null,
       limit_5h_usd: validated.limit_5h_usd ?? null,
       limit_weekly_usd: validated.limit_weekly_usd ?? null,
       limit_monthly_usd: validated.limit_monthly_usd ?? null,
@@ -263,6 +266,7 @@ export async function editProvider(
   data: {
     name?: string;
     url?: string;
+    official_site_url?: string | null;
     key?: string;
     is_enabled?: boolean;
     weight?: number;

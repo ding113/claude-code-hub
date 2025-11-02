@@ -91,6 +91,12 @@ export const KeyFormSchema = z.object({
 export const CreateProviderSchema = z.object({
   name: z.string().min(1, "服务商名称不能为空").max(64, "服务商名称不能超过64个字符"),
   url: z.string().url("请输入有效的URL地址").max(255, "URL长度不能超过255个字符"),
+  official_site_url: z
+    .string()
+    .url("请输入有效的官网地址")
+    .max(512, "官网地址长度不能超过512个字符")
+    .nullable()
+    .optional(),
   key: z.string().min(1, "API密钥不能为空").max(1024, "API密钥长度不能超过1024个字符"),
   // 数据库字段命名：下划线
   is_enabled: z.boolean().optional().default(PROVIDER_DEFAULTS.IS_ENABLED),
@@ -180,6 +186,12 @@ export const UpdateProviderSchema = z
   .object({
     name: z.string().min(1).max(64).optional(),
     url: z.string().url().max(255).optional(),
+    official_site_url: z
+      .string()
+      .url("请输入有效的官网地址")
+      .max(512, "官网地址长度不能超过512个字符")
+      .nullable()
+      .optional(),
     key: z.string().min(1).max(1024).optional(),
     is_enabled: z.boolean().optional(),
     weight: z

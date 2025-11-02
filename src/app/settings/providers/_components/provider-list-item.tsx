@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Edit, Globe, Key, RotateCcw, Copy } from "lucide-react";
+import { Edit, Globe, Key, RotateCcw, Copy, ExternalLink } from "lucide-react";
 import type { ProviderDisplay } from "@/types/provider";
 import type { User } from "@/types/user";
 import { getProviderTypeConfig } from "@/lib/provider-type-utils";
@@ -326,6 +326,19 @@ export function ProviderListItem({
             <Globe className="h-3.5 w-3.5 text-blue-500 shrink-0" />
             <span className="font-mono text-muted-foreground truncate">{item.url}</span>
           </div>
+          {item.officialSiteUrl ? (
+            <div className="flex items-center gap-2 text-xs">
+              <ExternalLink className="h-3.5 w-3.5 text-green-500 shrink-0" />
+              <a
+                href={item.officialSiteUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-primary truncate hover:underline"
+              >
+                {item.officialSiteUrl}
+              </a>
+            </div>
+          ) : null}
           <div className="flex items-center gap-2 text-xs">
             <Key className="h-3.5 w-3.5 text-amber-500 shrink-0" />
             <span className="font-mono text-muted-foreground">{item.maskedKey}</span>

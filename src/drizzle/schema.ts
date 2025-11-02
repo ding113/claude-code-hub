@@ -66,6 +66,7 @@ export const providers = pgTable('providers', {
   name: varchar('name').notNull(),
   description: text('description'),
   url: varchar('url').notNull(),
+  officialSiteUrl: varchar('official_site_url', { length: 512 }),
   key: varchar('key').notNull(),
   isEnabled: boolean('is_enabled').notNull().default(true),
   weight: integer('weight').notNull().default(1),
