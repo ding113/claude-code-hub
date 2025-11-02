@@ -9,6 +9,7 @@
 [![Container Image](https://img.shields.io/badge/ghcr.io-ding113%2Fclaude--code--hub-181717?logo=github)](https://github.com/ding113/claude-code-hub/pkgs/container/claude-code-hub)
 [![License](https://img.shields.io/github/license/ding113/claude-code-hub)](LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/ding113/claude-code-hub)](https://github.com/ding113/claude-code-hub/stargazers)
+[![Telegram](https://img.shields.io/badge/Telegram-@ygxz__group-26A5E4?logo=telegram)](https://t.me/ygxz_group)
 
 [功能特性](#-功能特性) •
 [快速部署](#-快速部署) •
@@ -20,6 +21,16 @@
 > **💡 致谢**
 > 本项目基于 [zsio/claude-code-hub](https://github.com/zsio/claude-code-hub) 二次开发而来。
 > 感谢原作者 [@zsio](https://github.com/zsio) 的开源贡献!
+
+> **💬 加入交流群**
+>
+> 欢迎加入 Telegram 交流群讨论项目使用、功能建议和技术问题：
+>
+> <div align="center">
+>
+> **📱 [点击加入 @ygxz_group](https://t.me/ygxz_group)**
+>
+> </div>
 
 ---
 

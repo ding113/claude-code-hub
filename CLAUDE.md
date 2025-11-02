@@ -320,6 +320,9 @@ ENABLE_CODEX_INSTRUCTIONS_INJECTION=false  # 是否强制替换 Codex 请求的 
 
 # 应用配置
 APP_PORT=23000                     # 应用端口
+APP_URL=                           # 应用访问地址（留空自动检测，生产环境建议显式配置）
+                                   # 示例：https://your-domain.com 或 http://192.168.1.100:23000
+                                   # 用于 OpenAPI 文档的 server URL 配置
 NODE_ENV=production                # 环境模式
 TZ=Asia/Shanghai                   # 时区设置
 LOG_LEVEL=info                     # 日志级别
@@ -359,6 +362,26 @@ ENABLE_SECURE_COOKIES=0        # 正确:也可以用 0
    - 如果 `ENABLE_SECURE_COOKIES=true`,浏览器会**拒绝**设置 Cookie,导致无法登录
    - 必须设置 `ENABLE_SECURE_COOKIES=false` 才能正常使用
    - 或者配置 HTTPS 反向代理(推荐)
+
+#### OpenAPI 文档地址配置
+
+OpenAPI 文档（`/api/actions/scalar` 和 `/api/actions/docs`）中的 server URL 配置：
+
+**配置方式**：
+
+- **生产环境（推荐）**：显式设置 `APP_URL` 环境变量
+
+  ```bash
+  APP_URL=https://your-domain.com  # HTTPS 域名
+  APP_URL=http://192.168.1.100:23000  # HTTP IP + 端口
+  ```
+
+- **开发环境**：留空即可，自动使用 `http://localhost:13500`
+
+**效果**：
+
+- 配置后，OpenAPI 文档中的 "Try it out" 功能会自动使用正确的地址
+- 避免生产环境显示 `http://localhost`，导致 API 测试失败
 
 ## 开发注意事项
 

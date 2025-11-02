@@ -623,6 +623,40 @@ app.openapi(testWebhookRoute, testWebhookHandler);
 
 // ==================== OpenAPI 文档 ====================
 
+/**
+ * 生成 OpenAPI servers 配置（动态检测）
+ */
+function getOpenAPIServers() {
+  const servers: Array<{ url: string; description: string }> = [];
+
+  // 优先使用环境变量配置的 APP_URL
+  const appUrl = process.env.APP_URL;
+  if (appUrl) {
+    servers.push({
+      url: appUrl,
+      description: "应用地址 (配置)",
+    });
+  }
+
+  // 降级：添加常见的开发环境地址
+  if (process.env.NODE_ENV !== "production") {
+    servers.push({
+      url: "http://localhost:13500",
+      description: "本地开发环境",
+    });
+  }
+
+  // 兜底：如果没有配置，提供占位符提示
+  if (servers.length === 0) {
+    servers.push({
+      url: "https://your-domain.com",
+      description: "生产环境 (请配置 APP_URL 环境变量)",
+    });
+  }
+
+  return servers;
+}
+
 // 生成 OpenAPI 3.1.0 规范文档
 app.doc("/openapi.json", {
   openapi: "3.1.0",
@@ -677,16 +711,7 @@ HTTP 状态码:
 - \`500\`: 服务器内部错误
     `,
   },
-  servers: [
-    {
-      url: "http://localhost:13500",
-      description: "本地开发环境",
-    },
-    {
-      url: "https://your-domain.com",
-      description: "生产环境",
-    },
-  ],
+  servers: getOpenAPIServers(),
   tags: [
     { name: "用户管理", description: "用户的 CRUD 操作和限额管理" },
     { name: "密钥管理", description: "API 密钥的生成、编辑和限额配置" },
