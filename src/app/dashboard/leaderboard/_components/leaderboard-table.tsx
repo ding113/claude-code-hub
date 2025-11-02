@@ -12,6 +12,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Trophy, Medal, Award } from "lucide-react";
 import type { LeaderboardEntry } from "@/repository/leaderboard";
+import { formatTokenAmount } from "@/lib/utils";
 
 interface LeaderboardTableProps {
   data: LeaderboardEntry[];
@@ -93,7 +94,7 @@ export function LeaderboardTable({ data, period }: LeaderboardTableProps) {
                       {entry.totalRequests.toLocaleString()}
                     </TableCell>
                     <TableCell className="text-right font-mono">
-                      {entry.totalTokens.toLocaleString()}
+                      {formatTokenAmount(entry.totalTokens)}
                     </TableCell>
                     <TableCell className="text-right font-mono font-semibold">
                       {"totalCostFormatted" in entry

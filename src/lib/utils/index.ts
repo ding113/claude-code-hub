@@ -35,3 +35,4 @@ export {
   isValidUrl,
   maskKey,
 } from "./validation";
+export { formatTokenAmount } from "./token";

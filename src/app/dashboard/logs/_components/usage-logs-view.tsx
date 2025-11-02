@@ -13,6 +13,7 @@ import type { UserDisplay } from "@/types/user";
 import type { ProviderDisplay } from "@/types/provider";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
+import { formatTokenAmount } from "@/lib/utils";
 
 /**
  * 将 Date 对象格式化为 datetime-local 格式的字符串
@@ -205,17 +206,17 @@ export function UsageLogsView({
             <CardHeader className="pb-3">
               <CardDescription>总 Token 数</CardDescription>
               <CardTitle className="text-3xl font-mono">
-                {data.summary.totalTokens.toLocaleString()}
+                {formatTokenAmount(data.summary.totalTokens)}
               </CardTitle>
             </CardHeader>
             <CardContent className="text-xs text-muted-foreground space-y-1">
               <div className="flex justify-between">
                 <span>输入:</span>
-                <span className="font-mono">{data.summary.totalInputTokens.toLocaleString()}</span>
+                <span className="font-mono">{formatTokenAmount(data.summary.totalInputTokens)}</span>
               </div>
               <div className="flex justify-between">
                 <span>输出:</span>
-                <span className="font-mono">{data.summary.totalOutputTokens.toLocaleString()}</span>
+                <span className="font-mono">{formatTokenAmount(data.summary.totalOutputTokens)}</span>
               </div>
             </CardContent>
           </Card>
@@ -224,17 +225,23 @@ export function UsageLogsView({
             <CardHeader className="pb-3">
               <CardDescription>缓存 Token</CardDescription>
               <CardTitle className="text-3xl font-mono">
-                {(data.summary.totalCacheCreationTokens + data.summary.totalCacheReadTokens).toLocaleString()}
+                {formatTokenAmount(
+                  data.summary.totalCacheCreationTokens + data.summary.totalCacheReadTokens
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent className="text-xs text-muted-foreground space-y-1">
               <div className="flex justify-between">
                 <span>写入:</span>
-                <span className="font-mono">{data.summary.totalCacheCreationTokens.toLocaleString()}</span>
+                <span className="font-mono">
+                  {formatTokenAmount(data.summary.totalCacheCreationTokens)}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span>读取:</span>
-                <span className="font-mono">{data.summary.totalCacheReadTokens.toLocaleString()}</span>
+                <span className="font-mono">
+                  {formatTokenAmount(data.summary.totalCacheReadTokens)}
+                </span>
               </div>
             </CardContent>
           </Card>
