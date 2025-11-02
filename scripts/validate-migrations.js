@@ -10,43 +10,43 @@
  * 防止迁移在重复执行或数据库状态不一致时失败
  */
 
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // 迁移文件目录
-const MIGRATIONS_DIR = path.join(__dirname, '../drizzle');
+const MIGRATIONS_DIR = path.join(__dirname, "../drizzle");
 
 // 豁免列表：历史迁移文件（在问题修复前已发布的版本）
 // 这些文件虽然缺少 IF NOT EXISTS，但已在生产环境稳定运行
 // 不建议修改以避免引入新问题
 const EXEMPT_FILES = [
-  '0000_legal_brother_voodoo.sql',    // 初始迁移
-  '0001_ambiguous_bromley.sql',        // 历史迁移
-  '0002_fancy_preak.sql',              // 历史迁移
-  '0003_outstanding_centennial.sql',   // 历史迁移
-  '0004_dazzling_starbolt.sql',        // 历史迁移
-  '0005_true_raza.sql',                // 历史迁移
-  '0006_lame_matthew_murdock.sql',     // 历史迁移
-  '0007_lazy_post.sql',                // 历史迁移
-  '0008_talented_molten_man.sql',      // 历史迁移
-  '0009_many_amazoness.sql',           // 历史迁移
-  '0010_unusual_bloodscream.sql',      // 历史迁移
-  '0011_charming_ben_parker.sql',      // 历史迁移
-  '0012_elite_iron_patriot.sql',       // 历史迁移
-  '0014_overconfident_mongu.sql',      // 历史迁移（0013 已修复）
+  "0000_legal_brother_voodoo.sql", // 初始迁移
+  "0001_ambiguous_bromley.sql", // 历史迁移
+  "0002_fancy_preak.sql", // 历史迁移
+  "0003_outstanding_centennial.sql", // 历史迁移
+  "0004_dazzling_starbolt.sql", // 历史迁移
+  "0005_true_raza.sql", // 历史迁移
+  "0006_lame_matthew_murdock.sql", // 历史迁移
+  "0007_lazy_post.sql", // 历史迁移
+  "0008_talented_molten_man.sql", // 历史迁移
+  "0009_many_amazoness.sql", // 历史迁移
+  "0010_unusual_bloodscream.sql", // 历史迁移
+  "0011_charming_ben_parker.sql", // 历史迁移
+  "0012_elite_iron_patriot.sql", // 历史迁移
+  "0014_overconfident_mongu.sql", // 历史迁移（0013 已修复）
 ];
 
 // 颜色输出
 const colors = {
-  reset: '\x1b[0m',
-  red: '\x1b[31m',
-  green: '\x1b[32m',
-  yellow: '\x1b[33m',
-  blue: '\x1b[34m',
+  reset: "\x1b[0m",
+  red: "\x1b[31m",
+  green: "\x1b[32m",
+  yellow: "\x1b[33m",
+  blue: "\x1b[34m",
 };
 
 function log(color, prefix, message) {
@@ -54,19 +54,19 @@ function log(color, prefix, message) {
 }
 
 function info(message) {
-  log(colors.blue, '[INFO]', message);
+  log(colors.blue, "[INFO]", message);
 }
 
 function warn(message) {
-  log(colors.yellow, '[WARN]', message);
+  log(colors.yellow, "[WARN]", message);
 }
 
 function error(message) {
-  log(colors.red, '[ERROR]', message);
+  log(colors.red, "[ERROR]", message);
 }
 
 function success(message) {
-  log(colors.green, '[SUCCESS]', message);
+  log(colors.green, "[SUCCESS]", message);
 }
 
 /**
@@ -74,8 +74,8 @@ function success(message) {
  */
 function validateMigrationFile(filePath) {
   const fileName = path.basename(filePath);
-  const content = fs.readFileSync(filePath, 'utf-8');
-  const lines = content.split('\n');
+  const content = fs.readFileSync(filePath, "utf-8");
+  const lines = content.split("\n");
 
   const issues = [];
 
@@ -91,12 +91,12 @@ function validateMigrationFile(filePath) {
   if (missingIfNotExistsTables > 0) {
     createTables.forEach((match) => {
       if (!/IF\s+NOT\s+EXISTS/i.test(match)) {
-        const lineNumber = lines.findIndex(line => line.includes(match.split('"')[1])) + 1;
+        const lineNumber = lines.findIndex((line) => line.includes(match.split('"')[1])) + 1;
         issues.push({
-          type: 'CREATE TABLE',
+          type: "CREATE TABLE",
           line: lineNumber,
           statement: match,
-          suggestion: match.replace(/CREATE\s+TABLE\s+/i, 'CREATE TABLE IF NOT EXISTS '),
+          suggestion: match.replace(/CREATE\s+TABLE\s+/i, "CREATE TABLE IF NOT EXISTS "),
         });
       }
     });
@@ -104,7 +104,8 @@ function validateMigrationFile(filePath) {
 
   // 检查 CREATE INDEX 语句
   const createIndexRegex = /CREATE\s+(?:UNIQUE\s+)?INDEX\s+"[^"]+"/gi;
-  const createIndexIfNotExistsRegex = /CREATE\s+(?:UNIQUE\s+)?INDEX\s+IF\s+NOT\s+EXISTS\s+"[^"]+"/gi;
+  const createIndexIfNotExistsRegex =
+    /CREATE\s+(?:UNIQUE\s+)?INDEX\s+IF\s+NOT\s+EXISTS\s+"[^"]+"/gi;
 
   const createIndexes = content.match(createIndexRegex) || [];
   const createIndexesIfNotExists = content.match(createIndexIfNotExistsRegex) || [];
@@ -114,12 +115,15 @@ function validateMigrationFile(filePath) {
   if (missingIfNotExistsIndexes > 0) {
     createIndexes.forEach((match) => {
       if (!/IF\s+NOT\s+EXISTS/i.test(match)) {
-        const lineNumber = lines.findIndex(line => line.includes(match)) + 1;
+        const lineNumber = lines.findIndex((line) => line.includes(match)) + 1;
         issues.push({
-          type: 'CREATE INDEX',
+          type: "CREATE INDEX",
           line: lineNumber,
           statement: match,
-          suggestion: match.replace(/CREATE\s+(UNIQUE\s+)?INDEX\s+/i, 'CREATE $1INDEX IF NOT EXISTS '),
+          suggestion: match.replace(
+            /CREATE\s+(UNIQUE\s+)?INDEX\s+/i,
+            "CREATE $1INDEX IF NOT EXISTS "
+          ),
         });
       }
     });
@@ -132,17 +136,17 @@ function validateMigrationFile(filePath) {
  * 主函数
  */
 function main() {
-  info('开始检查迁移文件的幂等性...\n');
+  info("开始检查迁移文件的幂等性...\n");
 
   // 获取所有 .sql 迁移文件
   const files = fs
     .readdirSync(MIGRATIONS_DIR)
-    .filter(file => file.endsWith('.sql') && /^\d{4}_/.test(file))
+    .filter((file) => file.endsWith(".sql") && /^\d{4}_/.test(file))
     .sort()
-    .map(file => path.join(MIGRATIONS_DIR, file));
+    .map((file) => path.join(MIGRATIONS_DIR, file));
 
   if (files.length === 0) {
-    warn('未找到任何迁移文件');
+    warn("未找到任何迁移文件");
     process.exit(0);
   }
 
@@ -152,7 +156,7 @@ function main() {
   const filesWithIssues = [];
 
   // 检查每个文件
-  files.forEach(filePath => {
+  files.forEach((filePath) => {
     const result = validateMigrationFile(filePath);
     const isExempt = EXEMPT_FILES.includes(result.fileName);
 
@@ -172,20 +176,20 @@ function main() {
         console.log(`     ${colors.red}✗${colors.reset} ${issue.statement}`);
         console.log(`     ${colors.green}✓${colors.reset} ${issue.suggestion}`);
       });
-      console.log('');
+      console.log("");
     }
   });
 
   // 输出总结
-  console.log('─'.repeat(60));
+  console.log("─".repeat(60));
   if (totalIssues === 0) {
     success(`所有 ${files.length} 个迁移文件都通过了幂等性检查 ✓`);
     process.exit(0);
   } else {
     error(`检查完成: 发现 ${totalIssues} 个问题，涉及 ${filesWithIssues.length} 个文件`);
-    console.log('');
-    warn('建议修复上述问题以确保迁移的幂等性');
-    warn('所有 CREATE TABLE 和 CREATE INDEX 语句都应该使用 IF NOT EXISTS');
+    console.log("");
+    warn("建议修复上述问题以确保迁移的幂等性");
+    warn("所有 CREATE TABLE 和 CREATE INDEX 语句都应该使用 IF NOT EXISTS");
     process.exit(1);
   }
 }
