@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -15,11 +17,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { AlertCircle, Download, FileDown, Loader2, Settings } from "lucide-react";
-import type { GeneratorResult } from "@/lib/data-generator/types";
+import type { GeneratorResult, UserBreakdownResult } from "@/lib/data-generator/types";
 
 export function DataGeneratorPage() {
+  const [mode, setMode] = useState<"usage" | "userBreakdown">("usage");
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
+  const [serviceName, setServiceName] = useState<string>("AI大模型推理服务");
   const [totalCostCny, setTotalCostCny] = useState<string>("");
   const [totalRecords, setTotalRecords] = useState<string>("");
   const [models, setModels] = useState<string>("");
@@ -29,18 +33,28 @@ export function DataGeneratorPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<GeneratorResult | null>(null);
+  const [userBreakdownResult, setUserBreakdownResult] = useState<UserBreakdownResult | null>(
+    null
+  );
   const [showParams, setShowParams] = useState(true);
+  const [collapseByUser, setCollapseByUser] = useState(true); // 默认折叠
 
   const handleGenerate = async () => {
     setLoading(true);
     setError(null);
     setResult(null);
+    setUserBreakdownResult(null);
 
     try {
       const payload: Record<string, unknown> = {
+        mode,
         startDate,
         endDate,
       };
+
+      if (mode === "userBreakdown") {
+        payload.serviceName = serviceName;
+      }
 
       if (totalCostCny) {
         payload.totalCostCny = parseFloat(totalCostCny);
@@ -78,9 +92,14 @@ export function DataGeneratorPage() {
         throw new Error(data.error || "Failed to generate logs");
       }
 
-      const data: GeneratorResult = await response.json();
-      setResult(data);
-      setShowParams(false); // 生成成功后自动关闭参数框
+      if (mode === "userBreakdown") {
+        const data: UserBreakdownResult = await response.json();
+        setUserBreakdownResult(data);
+      } else {
+        const data: GeneratorResult = await response.json();
+        setResult(data);
+      }
+      setShowParams(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
@@ -135,9 +154,58 @@ export function DataGeneratorPage() {
     });
   };
 
+  // 折叠后的用户数据（按用户聚合）
+  const collapsedUserData = useMemo(() => {
+    if (!userBreakdownResult || !collapseByUser) return null;
+
+    const userMap = new Map<
+      string,
+      {
+        userName: string;
+        serviceName: string;
+        models: Set<string>;
+        totalCalls: number;
+        totalCost: number;
+      }
+    >();
+
+    for (const item of userBreakdownResult.items) {
+      const existing = userMap.get(item.userName);
+      if (existing) {
+        existing.models.add(item.model);
+        existing.totalCalls += item.totalCalls;
+        existing.totalCost += item.totalCost;
+      } else {
+        userMap.set(item.userName, {
+          userName: item.userName,
+          serviceName: item.serviceName,
+          models: new Set([item.model]),
+          totalCalls: item.totalCalls,
+          totalCost: item.totalCost,
+        });
+      }
+    }
+
+    return Array.from(userMap.values())
+      .map((user) => ({
+        userName: user.userName,
+        serviceModel: `${user.serviceName} - ${Array.from(user.models).join("、")}`,
+        totalCalls: user.totalCalls,
+        totalCost: user.totalCost,
+      }))
+      .sort((a, b) => b.totalCost - a.totalCost);
+  }, [userBreakdownResult, collapseByUser]);
+
   return (
     <div className="space-y-6 p-6">
-      {!showParams && result && (
+      <Tabs value={mode} onValueChange={(v) => setMode(v as "usage" | "userBreakdown")}>
+        <TabsList>
+          <TabsTrigger value="usage">用量数据生成</TabsTrigger>
+          <TabsTrigger value="userBreakdown">按用户显示用量</TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      {!showParams && (result || userBreakdownResult) && (
         <div className="flex justify-end">
           <Button variant="outline" size="sm" onClick={() => setShowParams(true)}>
             <Settings className="mr-2 h-4 w-4" />
@@ -219,6 +287,17 @@ export function DataGeneratorPage() {
                   onChange={(e) => setProviderIds(e.target.value)}
                 />
               </div>
+              {mode === "userBreakdown" && (
+                <div className="space-y-2">
+                  <Label htmlFor="serviceName">服务名称</Label>
+                  <Input
+                    id="serviceName"
+                    placeholder="AI大模型推理服务"
+                    value={serviceName}
+                    onChange={(e) => setServiceName(e.target.value)}
+                  />
+                </div>
+              )}
             </div>
 
             <Button onClick={handleGenerate} disabled={loading || !startDate || !endDate}>
@@ -353,6 +432,140 @@ export function DataGeneratorPage() {
                         </TableCell>
                       </TableRow>
                     ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {userBreakdownResult && (
+        <div id="export-content" className="space-y-6">
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={handleExportScreenshot}>
+              <Download className="mr-2 h-4 w-4" />
+              导出截图
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleExportPDF}>
+              <FileDown className="mr-2 h-4 w-4" />
+              导出 PDF
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>时间范围</CardDescription>
+                <CardTitle className="text-sm">
+                  <div>{new Date(startDate).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
+                  <div className="text-muted-foreground text-xs">至</div>
+                  <div>{new Date(endDate).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
+                </CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>总用户数</CardDescription>
+                <CardTitle className="text-2xl">
+                  {userBreakdownResult.summary.uniqueUsers.toLocaleString()}
+                </CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>总调用数</CardDescription>
+                <CardTitle className="text-2xl">
+                  {userBreakdownResult.summary.totalCalls.toLocaleString()}
+                </CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>总成本</CardDescription>
+                <CardTitle className="text-2xl">
+                  ${userBreakdownResult.summary.totalCost.toFixed(4)}
+                </CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>总成本（人民币）</CardDescription>
+                <CardTitle className="text-2xl">
+                  ¥{(userBreakdownResult.summary.totalCost * 7.1).toFixed(2)}
+                </CardTitle>
+              </CardHeader>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>用户用量明细</CardTitle>
+                  <CardDescription>
+                    共 {collapseByUser ? collapsedUserData?.length : userBreakdownResult.items.length} 条记录
+                  </CardDescription>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="collapse-mode"
+                    checked={collapseByUser}
+                    onCheckedChange={setCollapseByUser}
+                  />
+                  <Label htmlFor="collapse-mode" className="cursor-pointer">
+                    按用户折叠
+                  </Label>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="rounded-md border max-h-[600px] overflow-auto">
+                <Table>
+                  <TableHeader className="sticky top-0 bg-background">
+                    <TableRow>
+                      <TableHead>用户名</TableHead>
+                      {!collapseByUser && <TableHead>密钥</TableHead>}
+                      <TableHead>服务模型</TableHead>
+                      <TableHead className="text-right">总调用数</TableHead>
+                      <TableHead className="text-right">总调用额度</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {collapseByUser
+                      ? collapsedUserData?.map((item, idx) => (
+                          <TableRow key={idx}>
+                            <TableCell>{item.userName}</TableCell>
+                            <TableCell className="font-mono text-xs">{item.serviceModel}</TableCell>
+                            <TableCell className="text-right">
+                              {item.totalCalls.toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-xs">
+                              <div>${item.totalCost.toFixed(6)}</div>
+                              <div className="text-muted-foreground">
+                                ¥{(item.totalCost * 7.1).toFixed(2)}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      : userBreakdownResult.items.map((item, idx) => (
+                          <TableRow key={idx}>
+                            <TableCell>{item.userName}</TableCell>
+                            <TableCell className="font-mono text-xs">{item.keyName}</TableCell>
+                            <TableCell className="font-mono text-xs">
+                              {item.serviceName} - {item.model}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {item.totalCalls.toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-xs">
+                              <div>${item.totalCost.toFixed(6)}</div>
+                              <div className="text-muted-foreground">
+                                ¥{(item.totalCost * 7.1).toFixed(2)}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
                   </TableBody>
                 </Table>
               </div>

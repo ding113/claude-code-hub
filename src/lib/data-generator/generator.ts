@@ -6,6 +6,8 @@ import type {
   WeightedItem,
   ProviderInfo,
   ModelInfo,
+  UserBreakdownResult,
+  UserBreakdownItem,
 } from "./types";
 import type { ProviderChainItem } from "@/types/message";
 import { analyzeLogDistribution } from "./analyzer";
@@ -284,6 +286,56 @@ export async function generateLogs(params: GeneratorParams): Promise<GeneratorRe
       totalOutputTokens,
       totalCacheCreationTokens,
       totalCacheReadTokens,
+    },
+  };
+}
+
+export async function generateUserBreakdown(
+  params: GeneratorParams
+): Promise<UserBreakdownResult> {
+  const logsResult = await generateLogs(params);
+  const serviceName = params.serviceName || "AI大模型推理服务";
+
+  const breakdownMap = new Map<string, UserBreakdownItem>();
+
+  for (const log of logsResult.logs) {
+    if (log.statusCode !== 200) continue;
+
+    const key = `${log.userName}|${log.keyName}|${log.model}`;
+    const existing = breakdownMap.get(key);
+
+    if (existing) {
+      existing.totalCalls++;
+      existing.totalCost += parseFloat(log.costUsd);
+    } else {
+      breakdownMap.set(key, {
+        userName: log.userName,
+        keyName: log.keyName,
+        model: log.model,
+        serviceName,
+        totalCalls: 1,
+        totalCost: parseFloat(log.costUsd),
+      });
+    }
+  }
+
+  const items = Array.from(breakdownMap.values()).sort((a, b) => b.totalCost - a.totalCost);
+
+  const uniqueUsers = new Set(items.map((item) => item.userName)).size;
+  const uniqueKeys = new Set(items.map((item) => item.keyName)).size;
+  const uniqueModels = new Set(items.map((item) => item.model)).size;
+
+  const totalCalls = items.reduce((sum, item) => sum + item.totalCalls, 0);
+  const totalCost = items.reduce((sum, item) => sum + item.totalCost, 0);
+
+  return {
+    items,
+    summary: {
+      totalCalls,
+      totalCost,
+      uniqueUsers,
+      uniqueKeys,
+      uniqueModels,
     },
   };
 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { generateLogs } from "@/lib/data-generator/generator";
+import { generateLogs, generateUserBreakdown } from "@/lib/data-generator/generator";
 import type { GeneratorParams } from "@/lib/data-generator/types";
 
 // 需要数据库连接
@@ -16,13 +16,25 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    const { startDate, endDate, totalRecords, totalCostCny, models, userIds, providerIds } = body;
+    const {
+      mode,
+      serviceName,
+      startDate,
+      endDate,
+      totalRecords,
+      totalCostCny,
+      models,
+      userIds,
+      providerIds,
+    } = body;
 
     if (!startDate || !endDate) {
       return NextResponse.json({ error: "startDate and endDate are required" }, { status: 400 });
     }
 
     const params: GeneratorParams = {
+      mode: mode || "usage",
+      serviceName: serviceName || "AI大模型推理服务",
       startDate: new Date(startDate),
       endDate: new Date(endDate),
       totalRecords,
@@ -32,9 +44,13 @@ export async function POST(request: NextRequest) {
       providerIds,
     };
 
-    const result = await generateLogs(params);
-
-    return NextResponse.json(result);
+    if (params.mode === "userBreakdown") {
+      const result = await generateUserBreakdown(params);
+      return NextResponse.json(result);
+    } else {
+      const result = await generateLogs(params);
+      return NextResponse.json(result);
+    }
   } catch (error) {
     console.error("Error generating logs:", error);
     return NextResponse.json(

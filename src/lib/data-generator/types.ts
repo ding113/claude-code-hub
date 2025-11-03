@@ -57,6 +57,8 @@ export interface LogDistribution {
 export interface GeneratorParams {
   startDate: Date;
   endDate: Date;
+  mode?: "usage" | "userBreakdown";
+  serviceName?: string;
   totalRecords?: number;
   totalCostCny?: number;
   models?: string[];
@@ -96,5 +98,25 @@ export interface GeneratorResult {
     totalOutputTokens: number;
     totalCacheCreationTokens: number;
     totalCacheReadTokens: number;
+  };
+}
+
+export interface UserBreakdownItem {
+  userName: string;
+  keyName: string;
+  model: string;
+  serviceName: string;
+  totalCalls: number;
+  totalCost: number;
+}
+
+export interface UserBreakdownResult {
+  items: UserBreakdownItem[];
+  summary: {
+    totalCalls: number;
+    totalCost: number;
+    uniqueUsers: number;
+    uniqueKeys: number;
+    uniqueModels: number;
   };
 }
