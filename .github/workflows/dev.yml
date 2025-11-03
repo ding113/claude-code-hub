@@ -1,9 +1,10 @@
-name: Dev Branch CI/CD
+name: Non-Main Branch CI/CD
 
 on:
   push:
     branches:
-      - dev
+      - '**'        # 匹配所有分支
+      - '!main'     # 排除 main 分支
 
 permissions:
   contents: write
@@ -21,12 +22,37 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Get commit hash
-        id: commit
+      - name: Prepare branch info and tags
+        id: branch_info
         run: |
+          # 获取分支名（去掉 refs/heads/ 前缀）
+          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+
+          # 处理分支名：转小写，替换 / 为 -，只保留字母数字和连字符
+          SAFE_BRANCH_NAME=$(echo "$BRANCH_NAME" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
+
+          # 获取短 commit hash
           SHORT_SHA=$(git rev-parse --short=7 HEAD)
+
+          # 根据是否是 dev 分支决定 tag 策略
+          if [ "$BRANCH_NAME" = "dev" ]; then
+            BASE_TAG="dev"
+            VERSIONED_TAG="dev-$SHORT_SHA"
+          else
+            BASE_TAG="$SAFE_BRANCH_NAME"
+            VERSIONED_TAG="$SAFE_BRANCH_NAME-$SHORT_SHA"
+          fi
+
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "safe_branch_name=$SAFE_BRANCH_NAME" >> $GITHUB_OUTPUT
           echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
-          echo "Dev build version: dev-$SHORT_SHA"
+          echo "base_tag=$BASE_TAG" >> $GITHUB_OUTPUT
+          echo "versioned_tag=$VERSIONED_TAG" >> $GITHUB_OUTPUT
+
+          echo "Building from branch: $BRANCH_NAME"
+          echo "Safe branch name: $SAFE_BRANCH_NAME"
+          echo "Base tag: $BASE_TAG"
+          echo "Versioned tag: $VERSIONED_TAG"
 
       - name: Setup Node.js for formatting
         uses: actions/setup-node@v4
@@ -60,8 +86,8 @@ jobs:
             echo "No changes to commit"
           else
             # 提交格式化后的代码
-            git commit -m "chore: format code (dev-${{ steps.commit.outputs.short_sha }})"
-            git push origin dev
+            git commit -m "chore: format code (${{ steps.branch_info.outputs.versioned_tag }})"
+            git push origin ${{ steps.branch_info.outputs.branch_name }}
           fi
 
       - name: Prepare image names
@@ -92,12 +118,12 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           build-args: |
-            APP_VERSION=dev-${{ steps.commit.outputs.short_sha }}
+            APP_VERSION=${{ steps.branch_info.outputs.versioned_tag }}
           tags: |
-            ${{ steps.image_names.outputs.ghcr_image }}:dev-${{ steps.commit.outputs.short_sha }}
-            ${{ steps.image_names.outputs.ghcr_image }}:dev
+            ${{ steps.image_names.outputs.ghcr_image }}:${{ steps.branch_info.outputs.versioned_tag }}
+            ${{ steps.image_names.outputs.ghcr_image }}:${{ steps.branch_info.outputs.base_tag }}
           labels: |
-            org.opencontainers.image.version=dev-${{ steps.commit.outputs.short_sha }}
+            org.opencontainers.image.version=${{ steps.branch_info.outputs.versioned_tag }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
           cache-from: type=gha
@@ -105,12 +131,13 @@ jobs:
 
       - name: Build summary
         run: |
-          echo "✅ Dev build completed successfully!"
+          echo "✅ Build completed successfully!"
           echo ""
+          echo "📦 Branch: ${{ steps.branch_info.outputs.branch_name }}"
           echo "📦 Docker Images:"
-          echo "  - ${{ steps.image_names.outputs.ghcr_image }}:dev-${{ steps.commit.outputs.short_sha }}"
-          echo "  - ${{ steps.image_names.outputs.ghcr_image }}:dev"
+          echo "  - ${{ steps.image_names.outputs.ghcr_image }}:${{ steps.branch_info.outputs.versioned_tag }}"
+          echo "  - ${{ steps.image_names.outputs.ghcr_image }}:${{ steps.branch_info.outputs.base_tag }}"
           echo ""
           echo "🚀 Usage:"
-          echo "  docker pull ${{ steps.image_names.outputs.ghcr_image }}:dev"
-          echo "  docker pull ${{ steps.image_names.outputs.ghcr_image }}:dev-${{ steps.commit.outputs.short_sha }}"
+          echo "  docker pull ${{ steps.image_names.outputs.ghcr_image }}:${{ steps.branch_info.outputs.base_tag }}"
+          echo "  docker pull ${{ steps.image_names.outputs.ghcr_image }}:${{ steps.branch_info.outputs.versioned_tag }}"
