@@ -213,7 +213,7 @@ export class ProxyForwarder {
             circuitFailureCount: health.failureCount + 1, // 包含本次失败
             circuitFailureThreshold: config.failureThreshold,
             errorDetails: {
-              network: {
+              system: {
                 errorType: err.constructor.name,
                 errorName: err.name,
                 errorCode: err.code,
