@@ -103,7 +103,7 @@ export class ProxyForwarder {
         attemptCount++;
         lastError = error as Error;
 
-        // ⭐ 1. 分类错误（供应商错误 vs 系统错误 vs 客户端中断）
+        // ⭐ 1. 分类错误（供应商错误 vs 持续性网络错误 vs 临时错误 vs 客户端中断）
         const errorCategory = categorizeError(lastError);
         const errorMessage =
           lastError instanceof ProxyError ? lastError.getDetailedErrorMessage() : lastError.message;
@@ -136,17 +136,18 @@ export class ProxyForwarder {
           throw lastError;
         }
 
-        // ⭐ 3. 系统错误处理（不计入熔断器，先重试1次当前供应商）
-        if (errorCategory === ErrorCategory.SYSTEM_ERROR) {
+        // ⭐ 3. 临时系统错误处理（不计入熔断器，先重试1次当前供应商）
+        if (errorCategory === ErrorCategory.TRANSIENT_ERROR) {
           const err = lastError as Error & {
             code?: string;
             syscall?: string;
           };
 
-          logger.warn("ProxyForwarder: System/network error occurred", {
+          logger.warn("ProxyForwarder: Transient network error occurred", {
             providerId: currentProvider.id,
             providerName: currentProvider.name,
             error: errorMessage,
+            errorCode: err.code,
             attemptNumber: attemptCount,
             willRetry: attemptCount === 1,
           });
@@ -168,20 +169,73 @@ export class ProxyForwarder {
             },
           });
 
-          // 第一次系统错误：重试当前供应商（等待100ms避免立即重试）
+          // 第一次临时错误：重试当前供应商（等待100ms避免立即重试）
           if (attemptCount === 1) {
             await new Promise((resolve) => setTimeout(resolve, 100));
             continue; // ⭐ 不切换供应商，不记录熔断器
           }
 
           // 第二次仍失败：切换供应商（但仍不熔断）
-          logger.warn("ProxyForwarder: System error persists, switching provider", {
+          logger.warn("ProxyForwarder: Transient error persists, switching provider", {
             providerId: currentProvider.id,
             providerName: currentProvider.name,
           });
         }
 
-        // ⭐ 4. 供应商错误处理（所有 4xx/5xx HTTP 错误，计入熔断器，直接切换）
+        // ⭐ 4. 持续性网络错误处理（DNS失败、连接拒绝、超时等，计入熔断器，直接切换）
+        else if (errorCategory === ErrorCategory.NETWORK_ERROR) {
+          const err = lastError as Error & {
+            code?: string;
+            syscall?: string;
+          };
+
+          logger.warn("ProxyForwarder: Persistent network error, recording failure", {
+            providerId: currentProvider.id,
+            providerName: currentProvider.name,
+            errorCode: err.code,
+            errorMessage: errorMessage,
+            attemptNumber: attemptCount,
+            willRecordFailure: !session.isProbeRequest(),
+          });
+
+          // 记录到失败列表（避免重新选择）
+          failedProviderIds.push(currentProvider.id);
+
+          // 获取熔断器健康信息（用于决策链显示）
+          const { health, config } = await getProviderHealthInfo(currentProvider.id);
+
+          // 记录到决策链
+          session.addProviderToChain(currentProvider, {
+            reason: "retry_failed",
+            circuitState: getCircuitState(currentProvider.id),
+            attemptNumber: attemptCount,
+            errorMessage: errorMessage,
+            circuitFailureCount: health.failureCount + 1, // 包含本次失败
+            circuitFailureThreshold: config.failureThreshold,
+            errorDetails: {
+              network: {
+                errorType: err.constructor.name,
+                errorName: err.name,
+                errorCode: err.code,
+                errorSyscall: err.syscall,
+                errorStack: err.stack?.split("\n").slice(0, 3).join("\n"),
+              },
+            },
+          });
+
+          // ⭐ 只有非探测请求才计入熔断器
+          if (session.isProbeRequest()) {
+            logger.debug("ProxyForwarder: Probe request error, skipping circuit breaker", {
+              providerId: currentProvider.id,
+              providerName: currentProvider.name,
+              messagesCount: session.getMessagesLength(),
+            });
+          } else {
+            await recordFailure(currentProvider.id, lastError);
+          }
+        }
+
+        // ⭐ 5. 供应商错误处理（所有 4xx/5xx HTTP 错误，计入熔断器，直接切换）
         else if (errorCategory === ErrorCategory.PROVIDER_ERROR) {
           const proxyError = lastError as ProxyError;
           const statusCode = proxyError.statusCode;
@@ -233,11 +287,11 @@ export class ProxyForwarder {
           }
         }
 
-        // 尝试切换供应商（供应商错误 + 系统错误第二次失败）
+        // 尝试切换供应商（供应商错误 + 持续性网络错误 + 临时错误第二次失败）
         if (attemptCount <= MAX_RETRY_ATTEMPTS) {
           const alternativeProvider = await ProxyForwarder.selectAlternative(
             session,
-            failedProviderIds // ⭐ 系统错误不在此列表中（仍可能被选中）
+            failedProviderIds // ⭐ 只包含供应商错误和持续性网络错误的供应商
           );
 
           if (!alternativeProvider) {
