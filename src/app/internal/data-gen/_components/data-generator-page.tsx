@@ -33,9 +33,7 @@ export function DataGeneratorPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<GeneratorResult | null>(null);
-  const [userBreakdownResult, setUserBreakdownResult] = useState<UserBreakdownResult | null>(
-    null
-  );
+  const [userBreakdownResult, setUserBreakdownResult] = useState<UserBreakdownResult | null>(null);
   const [showParams, setShowParams] = useState(true);
   const [collapseByUser, setCollapseByUser] = useState(true); // 默认折叠
 
@@ -458,9 +456,23 @@ export function DataGeneratorPage() {
               <CardHeader className="pb-2">
                 <CardDescription>时间范围</CardDescription>
                 <CardTitle className="text-sm">
-                  <div>{new Date(startDate).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
+                  <div>
+                    {new Date(startDate).toLocaleString("zh-CN", {
+                      month: "numeric",
+                      day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </div>
                   <div className="text-muted-foreground text-xs">至</div>
-                  <div>{new Date(endDate).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
+                  <div>
+                    {new Date(endDate).toLocaleString("zh-CN", {
+                      month: "numeric",
+                      day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </div>
                 </CardTitle>
               </CardHeader>
             </Card>
@@ -504,7 +516,9 @@ export function DataGeneratorPage() {
                 <div>
                   <CardTitle>用户用量明细</CardTitle>
                   <CardDescription>
-                    共 {collapseByUser ? collapsedUserData?.length : userBreakdownResult.items.length} 条记录
+                    共{" "}
+                    {collapseByUser ? collapsedUserData?.length : userBreakdownResult.items.length}{" "}
+                    条记录
                   </CardDescription>
                 </div>
                 <div className="flex items-center space-x-2">

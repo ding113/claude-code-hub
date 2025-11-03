@@ -290,9 +290,7 @@ export async function generateLogs(params: GeneratorParams): Promise<GeneratorRe
   };
 }
 
-export async function generateUserBreakdown(
-  params: GeneratorParams
-): Promise<UserBreakdownResult> {
+export async function generateUserBreakdown(params: GeneratorParams): Promise<UserBreakdownResult> {
   const logsResult = await generateLogs(params);
   const serviceName = params.serviceName || "AI大模型推理服务";
 
