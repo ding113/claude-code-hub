@@ -547,7 +547,7 @@ export function DataGeneratorPage() {
                               {item.totalCalls.toLocaleString()}
                             </TableCell>
                             <TableCell className="text-right font-mono text-xs">
-                                ¥{(item.totalCost * 7.1).toFixed(2)}
+                              ¥{(item.totalCost * 7.1).toFixed(2)}
                             </TableCell>
                           </TableRow>
                         ))
@@ -562,7 +562,7 @@ export function DataGeneratorPage() {
                               {item.totalCalls.toLocaleString()}
                             </TableCell>
                             <TableCell className="text-right font-mono text-xs">
-                            ¥{(item.totalCost * 7.1).toFixed(2)}
+                              ¥{(item.totalCost * 7.1).toFixed(2)}
                             </TableCell>
                           </TableRow>
                         ))}
