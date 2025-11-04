@@ -445,12 +445,7 @@ export function ProviderForm({
           <div className="text-sm font-medium">路由配置</div>
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
-              <Label htmlFor={isEdit ? "edit-priority" : "priority"}>
-                优先级
-                <span className="text-xs text-muted-foreground ml-1">
-                  (数值越小优先级越高，0为最高)
-                </span>
-              </Label>
+              <Label htmlFor={isEdit ? "edit-priority" : "priority"}>优先级</Label>
               <Input
                 id={isEdit ? "edit-priority" : "priority"}
                 type="number"
@@ -461,12 +456,13 @@ export function ProviderForm({
                 min="0"
                 step="1"
               />
+              <p className="text-xs text-muted-foreground">
+                数值越小优先级越高（0
+                最高）。系统只从最高优先级的供应商中选择。建议：主力=0，备用=1，紧急备份=2
+              </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor={isEdit ? "edit-weight" : "weight"}>
-                权重
-                <span className="text-xs text-muted-foreground ml-1">(负载均衡)</span>
-              </Label>
+              <Label htmlFor={isEdit ? "edit-weight" : "weight"}>权重</Label>
               <Input
                 id={isEdit ? "edit-weight" : "weight"}
                 type="number"
@@ -477,32 +473,30 @@ export function ProviderForm({
                 min="1"
                 step="1"
               />
+              <p className="text-xs text-muted-foreground">
+                加权随机概率。同优先级内，权重越高被选中概率越大。例如权重 1:2:3 的概率为
+                16%:33%:50%
+              </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor={isEdit ? "edit-cost" : "cost"}>
-                成本倍率
-                <span className="text-xs text-muted-foreground ml-1">(相对官方定价)</span>
-              </Label>
+              <Label htmlFor={isEdit ? "edit-cost" : "cost"}>成本倍率</Label>
               <Input
                 id={isEdit ? "edit-cost" : "cost"}
                 type="number"
                 value={costMultiplier}
                 onChange={(e) => setCostMultiplier(parseFloat(e.target.value) || 1.0)}
-                placeholder="1.0 表示官方价格"
+                placeholder="1.0"
                 disabled={isPending}
                 min="0"
                 step="0.0001"
               />
               <p className="text-xs text-muted-foreground">
-                例如填 0.6 表示按官方价格的 60% 计费，填 1.0 表示官方价格（支持最多4位小数）
+                成本计算倍数。官方供应商=1.0，便宜 20%=0.8，贵 20%=1.2（支持最多 4 位小数）
               </p>
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor={isEdit ? "edit-group" : "group"}>
-              供应商分组
-              <span className="text-xs text-muted-foreground ml-1">(用于用户绑定)</span>
-            </Label>
+            <Label htmlFor={isEdit ? "edit-group" : "group"}>供应商分组</Label>
             <Input
               id={isEdit ? "edit-group" : "group"}
               value={groupTag}
@@ -510,6 +504,11 @@ export function ProviderForm({
               placeholder="例如: premium, economy"
               disabled={isPending}
             />
+            <p className="text-xs text-muted-foreground">
+              供应商分组标签。只有用户的 providerGroup
+              与此值匹配时，该用户才能使用此供应商。示例：设置为 &quot;premium&quot; 表示只供
+              providerGroup=&quot;premium&quot; 的用户使用
+            </p>
           </div>
         </div>
 

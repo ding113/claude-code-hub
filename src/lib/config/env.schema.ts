@@ -37,6 +37,7 @@ export const EnvSchema = z.object({
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   TZ: z.string().default("Asia/Shanghai"),
   ENABLE_MULTI_PROVIDER_TYPES: z.string().default("false").transform(booleanTransform),
+  ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS: z.string().default("false").transform(booleanTransform),
 });
 
 /**

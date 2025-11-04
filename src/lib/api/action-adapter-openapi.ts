@@ -14,7 +14,6 @@ import type { ActionResult } from "@/actions/types";
 import { logger } from "@/lib/logger";
 
 // Server Action 函数签名 (支持两种格式)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ServerAction =
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   | ((...args: any[]) => Promise<ActionResult<any>>) // 标准格式

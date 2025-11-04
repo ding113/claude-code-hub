@@ -18,6 +18,7 @@ import { mapClientFormatToTransformer, mapProviderTypeToTransformer } from "./fo
 import { isOfficialCodexClient, sanitizeCodexRequest } from "../codex/utils/request-sanitizer";
 import { createProxyAgentForProvider } from "@/lib/proxy-agent";
 import type { Dispatcher } from "undici";
+import { getEnvConfig } from "@/lib/config/env.schema";
 
 const MAX_RETRY_ATTEMPTS = 3;
 
@@ -179,6 +180,34 @@ export class ProxyForwarder {
             providerId: currentProvider.id,
             providerName: currentProvider.name,
           });
+
+          // ⭐ 检查是否启用了网络错误计入熔断器
+          const env = getEnvConfig();
+          if (env.ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS) {
+            logger.warn(
+              "ProxyForwarder: Network error will be counted towards circuit breaker (enabled by config)",
+              {
+                providerId: currentProvider.id,
+                providerName: currentProvider.name,
+                errorType: err.constructor.name,
+                errorCode: err.code,
+              }
+            );
+
+            // 记录到失败列表（避免重新选择）
+            failedProviderIds.push(currentProvider.id);
+
+            // 计入熔断器
+            await recordFailure(currentProvider.id, lastError);
+          } else {
+            logger.debug(
+              "ProxyForwarder: Network error not counted towards circuit breaker (disabled by default)",
+              {
+                providerId: currentProvider.id,
+                providerName: currentProvider.name,
+              }
+            );
+          }
         }
 
         // ⭐ 4. 供应商错误处理（所有 4xx/5xx HTTP 错误，计入熔断器，直接切换）

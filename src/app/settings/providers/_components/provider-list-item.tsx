@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Edit, Globe, Key, RotateCcw, Copy } from "lucide-react";
 import type { ProviderDisplay } from "@/types/provider";
 import type { User } from "@/types/user";
@@ -337,9 +338,18 @@ export function ProviderListItem({
           {/* 优先级 */}
           <div className="min-w-0 text-center">
             <div className="text-muted-foreground">优先级</div>
-            <div className="w-full text-center font-medium tabular-nums truncate text-foreground">
-              <span>{item.priority}</span>
-            </div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="w-full text-center font-medium tabular-nums truncate text-foreground cursor-help">
+                  <span>{item.priority}</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs">
+                <p className="text-xs">
+                  数值越小优先级越高（0 最高）。系统只从最高优先级的供应商中选择。
+                </p>
+              </TooltipContent>
+            </Tooltip>
           </div>
 
           {/* 权重 */}
@@ -348,13 +358,22 @@ export function ProviderListItem({
             {canEdit ? (
               <Popover open={showWeight} onOpenChange={handleWeightPopover}>
                 <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label="编辑权重"
-                    className="w-full text-center font-medium tabular-nums truncate text-foreground cursor-pointer hover:text-primary/80 transition-colors"
-                  >
-                    <span>{weight}</span>
-                  </button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label="编辑权重"
+                        className="w-full text-center font-medium tabular-nums truncate text-foreground cursor-pointer hover:text-primary/80 transition-colors"
+                      >
+                        <span>{weight}</span>
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-xs">
+                      <p className="text-xs">
+                        加权随机概率。同优先级内，权重越高被选中概率越大。点击可编辑。
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
                 </PopoverTrigger>
                 <PopoverContent align="center" side="bottom" sideOffset={6} className="w-64 p-3">
                   <div className="mb-2 flex items-center justify-between text-[11px] text-muted-foreground">
@@ -371,26 +390,49 @@ export function ProviderListItem({
                 </PopoverContent>
               </Popover>
             ) : (
-              <div className="w-full text-center font-medium tabular-nums truncate text-foreground">
-                <span>{weight}</span>
-              </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="w-full text-center font-medium tabular-nums truncate text-foreground cursor-help">
+                    <span>{weight}</span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-xs">
+                  <p className="text-xs">加权随机概率。同优先级内，权重越高被选中概率越大。</p>
+                </TooltipContent>
+              </Tooltip>
             )}
           </div>
 
           {/* 成本倍率 */}
           <div className="min-w-0 text-center">
             <div className="text-muted-foreground">倍率</div>
-            <div className="w-full text-center font-medium tabular-nums truncate text-foreground">
-              <span>{item.costMultiplier.toFixed(2)}x</span>
-            </div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="w-full text-center font-medium tabular-nums truncate text-foreground cursor-help">
+                  <span>{item.costMultiplier.toFixed(2)}x</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs">
+                <p className="text-xs">成本计算倍数。1.0x=官方价格，0.8x=便宜 20%，1.2x=贵 20%</p>
+              </TooltipContent>
+            </Tooltip>
           </div>
 
           {/* 分组 */}
           <div className="min-w-0 text-center">
             <div className="text-muted-foreground">分组</div>
-            <div className="w-full text-center font-medium truncate text-foreground">
-              <span>{item.groupTag || "-"}</span>
-            </div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="w-full text-center font-medium truncate text-foreground cursor-help">
+                  <span>{item.groupTag || "-"}</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs">
+                <p className="text-xs">
+                  只有 providerGroup 包含此标签的用户才能使用此供应商。未设置表示所有用户可用。
+                </p>
+              </TooltipContent>
+            </Tooltip>
           </div>
         </div>
 
