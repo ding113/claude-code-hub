@@ -6,7 +6,8 @@ import type { ProxySession } from "./session";
  * 模型重定向器
  *
  * 根据供应商配置的 modelRedirects 重写请求中的模型名称
- * 例如：将 "gpt-5" 重定向为 "gpt-5-codex"
+ * 例如：将 Claude Code 客户端请求的 "claude-sonnet-4-5-20250929" 重定向为上游供应商支持的 "glm-4.6"
+ * 用于接入第三方 AI 服务或成本优化
  */
 export class ModelRedirector {
   /**

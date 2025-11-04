@@ -1,11 +1,10 @@
 "use client";
 import { useState } from "react";
-import { Plus, Trash2, AlertCircle } from "lucide-react";
+import { Plus, X, ArrowRight, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
 
 interface ModelRedirectEditorProps {
   value: Record<string, string>;
@@ -76,38 +75,31 @@ export function ModelRedirectEditor({
           <div className="text-xs font-medium text-muted-foreground">
             当前规则 ({redirects.length})
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1">
             {redirects.map(([source, target]) => (
-              <Card
+              <div
                 key={source}
-                className="p-3 flex items-center justify-between gap-3 hover:bg-muted/50 transition-colors"
+                className="group flex items-center gap-2 py-2 px-3 rounded-md hover:bg-muted/50 transition-colors"
               >
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs text-muted-foreground mb-1">源模型</div>
-                    <Badge variant="outline" className="font-mono text-xs">
-                      {source}
-                    </Badge>
-                  </div>
-                  <div className="text-muted-foreground">→</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs text-muted-foreground mb-1">目标模型</div>
-                    <Badge variant="secondary" className="font-mono text-xs">
-                      {target}
-                    </Badge>
-                  </div>
-                </div>
+                <Badge variant="outline" className="font-mono text-xs shrink-0">
+                  {source}
+                </Badge>
+                <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                <Badge variant="secondary" className="font-mono text-xs shrink-0">
+                  {target}
+                </Badge>
+                <div className="flex-1" />
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
                   onClick={() => handleRemove(source)}
                   disabled={disabled}
-                  className="shrink-0 h-8 w-8 p-0"
+                  className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
                 >
-                  <Trash2 className="h-4 w-4 text-destructive" />
+                  <X className="h-3 w-3 text-muted-foreground" />
                 </Button>
-              </Card>
+              </div>
             ))}
           </div>
         </div>
@@ -119,14 +111,14 @@ export function ModelRedirectEditor({
         <div className="grid grid-cols-[1fr_auto_1fr_auto] gap-2 items-end">
           <div className="space-y-1">
             <Label htmlFor="new-source" className="text-xs">
-              源模型名称
+              用户请求的模型
             </Label>
             <Input
               id="new-source"
               value={newSource}
               onChange={(e) => setNewSource(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="例如: gpt-5"
+              placeholder="例如: claude-sonnet-4-5-20250929"
               disabled={disabled}
               className="font-mono text-sm"
             />
@@ -136,14 +128,14 @@ export function ModelRedirectEditor({
 
           <div className="space-y-1">
             <Label htmlFor="new-target" className="text-xs">
-              目标模型名称
+              实际转发的模型
             </Label>
             <Input
               id="new-target"
               value={newTarget}
               onChange={(e) => setNewTarget(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="例如: claude-sonnet-4.5"
+              placeholder="例如: glm-4.6"
               disabled={disabled}
               className="font-mono text-sm"
             />
@@ -171,7 +163,9 @@ export function ModelRedirectEditor({
 
         {/* 帮助文本 */}
         <p className="text-xs text-muted-foreground">
-          输入源模型和目标模型名称，然后点击&ldquo;添加&rdquo;按钮。重定向规则将在请求时自动应用。
+          将 Claude Code 客户端请求的模型（如
+          claude-sonnet-4.5）重定向到上游供应商实际支持的模型（如
+          glm-4.6、gemini-pro）。用于成本优化或接入第三方 AI 服务。
         </p>
       </div>
 
