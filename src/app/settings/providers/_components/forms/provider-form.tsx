@@ -506,8 +506,8 @@ export function ProviderForm({
             />
             <p className="text-xs text-muted-foreground">
               供应商分组标签。只有用户的 providerGroup
-              与此值匹配时，该用户才能使用此供应商。示例：设置为 "premium" 表示只供
-              providerGroup="premium" 的用户使用
+              与此值匹配时，该用户才能使用此供应商。示例：设置为 &quot;premium&quot; 表示只供
+              providerGroup=&quot;premium&quot; 的用户使用
             </p>
           </div>
         </div>
