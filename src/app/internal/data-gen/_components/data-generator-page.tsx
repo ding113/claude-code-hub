@@ -335,12 +335,12 @@ export function DataGeneratorPage() {
                 </CardTitle>
               </CardHeader>
             </Card>
-            <Card>
+            {/* <Card>
               <CardHeader className="pb-2">
                 <CardDescription>总成本</CardDescription>
                 <CardTitle className="text-2xl">${result.summary.totalCost.toFixed(4)}</CardTitle>
               </CardHeader>
-            </Card>
+            </Card> */}
             <Card>
               <CardHeader className="pb-2">
                 <CardDescription>总成本（人民币）</CardDescription>
