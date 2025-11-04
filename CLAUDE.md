@@ -309,6 +309,11 @@ ENABLE_RATE_LIMIT=true             # 启用限流功能
 SESSION_TTL=300                    # Session 缓存过期时间（秒）
 STORE_SESSION_MESSAGES=false       # 是否存储请求 messages（用于实时监控）
 
+# 熔断器配置
+ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS=false  # 网络错误是否计入熔断器（默认：false）
+                                                # false: 仅 HTTP 4xx/5xx 错误计入熔断器
+                                                # true: 网络错误（DNS 失败、连接超时等）也计入熔断器
+
 # Cookie 安全策略
 ENABLE_SECURE_COOKIES=true         # 是否强制 HTTPS Cookie（默认：true）
                                    # 设置为 false 允许 HTTP 访问，但会降低安全性

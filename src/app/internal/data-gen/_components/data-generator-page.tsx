@@ -494,14 +494,6 @@ export function DataGeneratorPage() {
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <CardDescription>总成本</CardDescription>
-                <CardTitle className="text-2xl">
-                  ${userBreakdownResult.summary.totalCost.toFixed(4)}
-                </CardTitle>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
                 <CardDescription>总成本（人民币）</CardDescription>
                 <CardTitle className="text-2xl">
                   ¥{(userBreakdownResult.summary.totalCost * 7.1).toFixed(2)}
@@ -555,10 +547,7 @@ export function DataGeneratorPage() {
                               {item.totalCalls.toLocaleString()}
                             </TableCell>
                             <TableCell className="text-right font-mono text-xs">
-                              <div>${item.totalCost.toFixed(6)}</div>
-                              <div className="text-muted-foreground">
                                 ¥{(item.totalCost * 7.1).toFixed(2)}
-                              </div>
                             </TableCell>
                           </TableRow>
                         ))
@@ -573,10 +562,7 @@ export function DataGeneratorPage() {
                               {item.totalCalls.toLocaleString()}
                             </TableCell>
                             <TableCell className="text-right font-mono text-xs">
-                              <div>${item.totalCost.toFixed(6)}</div>
-                              <div className="text-muted-foreground">
-                                ¥{(item.totalCost * 7.1).toFixed(2)}
-                              </div>
+                            ¥{(item.totalCost * 7.1).toFixed(2)}
                             </TableCell>
                           </TableRow>
                         ))}
