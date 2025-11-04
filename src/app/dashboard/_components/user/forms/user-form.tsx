@@ -106,8 +106,8 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
       <TextField
         label="供应商分组"
         maxLength={50}
-        placeholder="例如: premium, economy（可选）"
-        description="指定用户专属的供应商分组，留空则使用全局供应商池"
+        placeholder="例如: premium 或 premium,economy（可选）"
+        description="指定用户专属的供应商分组（支持多个，逗号分隔）。系统将只从 groupTag 匹配的供应商中选择。留空=使用所有供应商"
         {...form.getFieldProps("providerGroup")}
       />
 
