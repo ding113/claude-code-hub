@@ -18,7 +18,6 @@ import {
   updateNotificationSettingsAction,
   testWebhookAction,
 } from "@/actions/notifications";
-import type { NotificationSettings } from "@/repository/notifications";
 
 /**
  * 通知设置表单 Schema
