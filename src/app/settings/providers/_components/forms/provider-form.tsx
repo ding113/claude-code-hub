@@ -778,7 +778,7 @@ export function ProviderForm({
               </Select>
               <p className="text-xs text-muted-foreground">
                 <strong>提示</strong>: 部分严格的 Codex 中转站（如 88code、foxcode）需要官方
-                instructions，选择"自动"或"强制官方"策略
+                instructions，选择&quot;自动&quot;或&quot;强制官方&quot;策略
               </p>
             </div>
           </div>
