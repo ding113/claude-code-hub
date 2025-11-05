@@ -1,0 +1,269 @@
+import { getRedisClient } from "@/lib/redis/client";
+import { parseUserAgent, type ClientInfo } from "@/lib/ua-parser";
+import { compareVersions } from "@/lib/version";
+import { getActiveUserVersions, type RawUserVersion } from "@/repository/client-versions";
+import { logger } from "@/lib/logger";
+
+/**
+ * Redis Key 前缀
+ */
+const REDIS_KEYS = {
+  /** 用户当前版本: client_version:{clientType}:{userId} */
+  userVersion: (clientType: string, userId: number) => `client_version:${clientType}:${userId}`,
+
+  /** GA 版本缓存: ga_version:{clientType} */
+  gaVersion: (clientType: string) => `ga_version:${clientType}`,
+};
+
+/**
+ * TTL 配置（秒）
+ */
+const TTL = {
+  USER_VERSION: 7 * 24 * 60 * 60, // 7 天（匹配活跃窗口）
+  GA_VERSION: 5 * 60, // 5 分钟
+};
+
+/**
+ * GA 版本检测阈值
+ */
+const GA_THRESHOLD = 2; // 2 个用户以上使用
+
+/**
+ * 客户端版本统计信息
+ */
+export interface ClientVersionStats {
+  /** 客户端类型，如 "claude-cli" */
+  clientType: string;
+  /** 最新 GA 版本，无则为 null */
+  gaVersion: string | null;
+  /** 使用该客户端的总用户数 */
+  totalUsers: number;
+  /** 用户详情列表 */
+  users: {
+    userId: number;
+    username: string;
+    version: string;
+    lastSeen: Date;
+    isLatest: boolean; // 是否是最新版本
+    needsUpgrade: boolean; // 是否需要升级
+  }[];
+}
+
+/**
+ * 客户端版本检测器
+ *
+ * 核心功能：
+ * 1. 检测每种客户端的最新 GA 版本（2 个用户以上使用）
+ * 2. 检查用户版本是否需要升级
+ * 3. 追踪用户当前使用的版本
+ */
+export class ClientVersionChecker {
+  /**
+   * 检测指定客户端的最新 GA 版本
+   *
+   * GA 版本定义：被 2 个或以上用户使用的最新版本
+   * 活跃窗口：过去 7 天内有请求的用户
+   *
+   * @param clientType - 客户端类型，如 "claude-cli"
+   * @returns GA 版本号，无则返回 null
+   */
+  static async detectGAVersion(clientType: string): Promise<string | null> {
+    try {
+      const redis = getRedisClient();
+
+      // 1. 尝试从 Redis 读取缓存
+      if (redis) {
+        const cached = await redis.get(REDIS_KEYS.gaVersion(clientType));
+        if (cached) {
+          const data = JSON.parse(cached) as { version: string; userCount: number };
+          logger.debug(
+            { clientType, gaVersion: data.version },
+            "[ClientVersionChecker] GA 版本缓存命中"
+          );
+          return data.version;
+        }
+      }
+
+      // 2. 缓存未命中，查询数据库
+      const activeUsers = await getActiveUserVersions(7);
+
+      // 3. 解析所有 UA，过滤出指定客户端类型
+      const clientUsers = activeUsers
+        .map((user) => {
+          const clientInfo = parseUserAgent(user.userAgent);
+          return clientInfo && clientInfo.clientType === clientType
+            ? { ...user, version: clientInfo.version }
+            : null;
+        })
+        .filter((item): item is RawUserVersion & { version: string } => item !== null);
+
+      if (clientUsers.length === 0) {
+        logger.debug({ clientType }, "[ClientVersionChecker] 无活跃用户");
+        return null;
+      }
+
+      // 4. 统计每个版本的用户数（去重）
+      const versionCounts = new Map<string, Set<number>>();
+      for (const user of clientUsers) {
+        if (!versionCounts.has(user.version)) {
+          versionCounts.set(user.version, new Set());
+        }
+        versionCounts.get(user.version)!.add(user.userId);
+      }
+
+      // 5. 找到用户数 >= 2 的最新版本
+      let gaVersion: string | null = null;
+      for (const [version, userIds] of versionCounts.entries()) {
+        if (userIds.size >= GA_THRESHOLD) {
+          if (!gaVersion || compareVersions(version, gaVersion) > 0) {
+            gaVersion = version;
+          }
+        }
+      }
+
+      if (!gaVersion) {
+        logger.debug({ clientType }, "[ClientVersionChecker] 无 GA 版本（用户数不足 2）");
+        return null;
+      }
+
+      // 6. 写入 Redis 缓存
+      if (redis) {
+        const cacheData = {
+          version: gaVersion,
+          userCount: versionCounts.get(gaVersion)!.size,
+          updatedAt: Date.now(),
+        };
+        await redis.setex(
+          REDIS_KEYS.gaVersion(clientType),
+          TTL.GA_VERSION,
+          JSON.stringify(cacheData)
+        );
+        logger.info(
+          { clientType, gaVersion, userCount: cacheData.userCount },
+          "[ClientVersionChecker] GA 版本已缓存"
+        );
+      }
+
+      return gaVersion;
+    } catch (error) {
+      // Fail Open: 任何错误都返回 null
+      logger.error({ error, clientType }, "[ClientVersionChecker] 检测 GA 版本失败");
+      return null;
+    }
+  }
+
+  /**
+   * 检查用户版本是否需要升级
+   *
+   * @param clientType - 客户端类型
+   * @param userVersion - 用户当前版本
+   * @returns true: 需要升级, false: 不需要升级或无 GA 版本
+   */
+  static async shouldUpgrade(clientType: string, userVersion: string): Promise<boolean> {
+    try {
+      const gaVersion = await this.detectGAVersion(clientType);
+      if (!gaVersion) {
+        return false; // 无 GA 版本，放行
+      }
+
+      // 使用 compareVersions: 返回值 < 0 表示 userVersion < gaVersion
+      return compareVersions(userVersion, gaVersion) < 0;
+    } catch (error) {
+      // Fail Open: 检查失败时放行
+      logger.error({ error, clientType, userVersion }, "[ClientVersionChecker] 版本检查失败");
+      return false;
+    }
+  }
+
+  /**
+   * 更新用户当前使用的版本（异步，不阻塞主流程）
+   *
+   * @param userId - 用户 ID
+   * @param clientType - 客户端类型
+   * @param version - 版本号
+   */
+  static async updateUserVersion(
+    userId: number,
+    clientType: string,
+    version: string
+  ): Promise<void> {
+    try {
+      const redis = getRedisClient();
+      if (!redis) {
+        return; // Redis 不可用，跳过
+      }
+
+      const data = {
+        version,
+        lastSeen: Date.now(),
+      };
+
+      await redis.setex(
+        REDIS_KEYS.userVersion(clientType, userId),
+        TTL.USER_VERSION,
+        JSON.stringify(data)
+      );
+
+      logger.debug({ userId, clientType, version }, "[ClientVersionChecker] 用户版本已更新");
+    } catch (error) {
+      // 非关键操作，仅记录日志
+      logger.error(
+        { error, userId, clientType, version },
+        "[ClientVersionChecker] 更新用户版本失败"
+      );
+    }
+  }
+
+  /**
+   * 获取所有客户端的版本统计（供前端使用）
+   *
+   * @returns 所有客户端的版本统计信息
+   */
+  static async getAllClientStats(): Promise<ClientVersionStats[]> {
+    try {
+      // 1. 查询活跃用户
+      const activeUsers = await getActiveUserVersions(7);
+
+      // 2. 解析 UA 并分组
+      const clientGroups = new Map<string, Array<RawUserVersion & { clientInfo: ClientInfo }>>();
+
+      for (const user of activeUsers) {
+        const clientInfo = parseUserAgent(user.userAgent);
+        if (!clientInfo) continue; // 解析失败，跳过
+
+        if (!clientGroups.has(clientInfo.clientType)) {
+          clientGroups.set(clientInfo.clientType, []);
+        }
+        clientGroups.get(clientInfo.clientType)!.push({ ...user, clientInfo });
+      }
+
+      // 3. 为每个客户端类型生成统计
+      const stats: ClientVersionStats[] = [];
+
+      for (const [clientType, users] of clientGroups.entries()) {
+        const gaVersion = await this.detectGAVersion(clientType);
+
+        const userStats = users.map((user) => ({
+          userId: user.userId,
+          username: user.username,
+          version: user.clientInfo.version,
+          lastSeen: user.lastSeen,
+          isLatest: gaVersion ? user.clientInfo.version === gaVersion : false,
+          needsUpgrade: gaVersion ? compareVersions(user.clientInfo.version, gaVersion) < 0 : false,
+        }));
+
+        stats.push({
+          clientType,
+          gaVersion,
+          totalUsers: userStats.length,
+          users: userStats,
+        });
+      }
+
+      return stats;
+    } catch (error) {
+      logger.error({ error }, "[ClientVersionChecker] 获取客户端统计失败");
+      return []; // Fail Open
+    }
+  }
+}

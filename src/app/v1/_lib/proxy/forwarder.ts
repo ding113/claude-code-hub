@@ -16,6 +16,7 @@ import { defaultRegistry } from "../converters";
 import type { Format } from "../converters/types";
 import { mapClientFormatToTransformer, mapProviderTypeToTransformer } from "./format-mapper";
 import { isOfficialCodexClient, sanitizeCodexRequest } from "../codex/utils/request-sanitizer";
+import { getDefaultInstructions } from "../codex/constants/codex-instructions";
 import { createProxyAgentForProvider } from "@/lib/proxy-agent";
 import type { Dispatcher } from "undici";
 import { getEnvConfig } from "@/lib/config/env.schema";
@@ -249,6 +250,58 @@ export class ProxyForwarder {
               totalProvidersAttempted,
             });
 
+            // 🆕 特殊处理：400 + "Instructions are not valid" 错误自动重试
+            // 针对部分严格的 Codex 中转站（如 88code、foxcode），会验证 instructions 字段
+            // 如果检测到该错误且请求带有重试标记，自动替换为官方 instructions 并重试
+            if (
+              statusCode === 400 &&
+              errorMessage.includes("Instructions are not valid") &&
+              (session.request.message as Record<string, unknown>)._canRetryWithOfficialInstructions
+            ) {
+              logger.warn(
+                "ProxyForwarder: Detected 'Instructions are not valid' error, retrying with official instructions",
+                {
+                  providerId: currentProvider.id,
+                  providerName: currentProvider.name,
+                  attemptNumber: attemptCount,
+                  totalProvidersAttempted,
+                }
+              );
+
+              // 替换 instructions 为官方 prompt
+              const officialInstructions = getDefaultInstructions(
+                session.request.model || "gpt-5-codex"
+              );
+              (session.request.message as Record<string, unknown>).instructions =
+                officialInstructions;
+
+              // 删除重试标记（避免无限循环）
+              delete (session.request.message as Record<string, unknown>)
+                ._canRetryWithOfficialInstructions;
+
+              // 记录到决策链（标记为 instructions 重试）
+              session.addProviderToChain(currentProvider, {
+                reason: "retry_with_official_instructions",
+                circuitState: getCircuitState(currentProvider.id),
+                attemptNumber: attemptCount,
+                errorMessage: errorMessage,
+                statusCode: statusCode,
+                errorDetails: {
+                  provider: {
+                    id: currentProvider.id,
+                    name: currentProvider.name,
+                    statusCode: statusCode,
+                    statusText: proxyError.message,
+                    upstreamBody: proxyError.upstreamError?.body,
+                    upstreamParsed: proxyError.upstreamError?.parsed,
+                  },
+                },
+              });
+
+              // 继续内层循环（重试当前供应商，不切换）
+              continue;
+            }
+
             // 记录到失败列表（避免重新选择）
             failedProviderIds.push(currentProvider.id);
 
@@ -399,12 +452,14 @@ export class ProxyForwarder {
         providerId: provider.id,
         providerName: provider.name,
         officialClient: isOfficialClient,
+        codexStrategy: provider.codexInstructionsStrategy,
       });
 
       try {
         const sanitized = sanitizeCodexRequest(
           session.request.message as Record<string, unknown>,
-          session.request.model || "gpt-5-codex"
+          session.request.model || "gpt-5-codex",
+          provider.codexInstructionsStrategy // ⭐ Phase 2: 传递供应商级别策略
         );
 
         const instructionsLength =

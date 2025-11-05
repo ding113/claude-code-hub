@@ -118,6 +118,11 @@ export const CreateProviderSchema = z.object({
   model_redirects: z.record(z.string(), z.string()).nullable().optional(),
   allowed_models: z.array(z.string()).nullable().optional(),
   join_claude_pool: z.boolean().optional().default(false),
+  // Codex Instructions 策略
+  codex_instructions_strategy: z
+    .enum(["auto", "force_official", "keep_original"])
+    .optional()
+    .default("auto"),
   // 金额限流配置
   limit_5h_usd: z.coerce
     .number()
@@ -203,6 +208,7 @@ export const UpdateProviderSchema = z
     model_redirects: z.record(z.string(), z.string()).nullable().optional(),
     allowed_models: z.array(z.string()).nullable().optional(),
     join_claude_pool: z.boolean().optional(),
+    codex_instructions_strategy: z.enum(["auto", "force_official", "keep_original"]).optional(),
     // 金额限流配置
     limit_5h_usd: z.coerce
       .number()
@@ -260,10 +266,11 @@ export const UpdateProviderSchema = z
 
 /**
  * 系统设置更新数据验证schema
+ * 注意：所有字段均为可选，支持部分更新
  */
 export const UpdateSystemSettingsSchema = z.object({
-  siteTitle: z.string().min(1, "站点标题不能为空").max(128, "站点标题不能超过128个字符"),
-  allowGlobalUsageView: z.boolean(),
+  siteTitle: z.string().min(1, "站点标题不能为空").max(128, "站点标题不能超过128个字符").optional(),
+  allowGlobalUsageView: z.boolean().optional(),
   currencyDisplay: z
     .enum(
       Object.keys(CURRENCY_CONFIG) as [
@@ -288,6 +295,8 @@ export const UpdateSystemSettingsSchema = z.object({
     .min(1000, "批量大小不能少于1000")
     .max(100000, "批量大小不能超过100000")
     .optional(),
+  // 客户端版本检查配置（可选）
+  enableClientVersionCheck: z.boolean().optional(),
 });
 
 // 导出类型推断

@@ -1,0 +1,2 @@
+ALTER TABLE "providers" ADD COLUMN "codex_instructions_strategy" varchar(20) DEFAULT 'auto';--> statement-breakpoint
+ALTER TABLE "system_settings" ADD COLUMN "enable_client_version_check" boolean DEFAULT false NOT NULL;

@@ -59,7 +59,7 @@ export function isOfficialCodexClient(userAgent: string | null): boolean {
  * 清洗 Codex 请求（即使格式相同也需要执行）
  *
  * 清洗内容：
- * 1. 强制替换 instructions 为官方完整 prompt
+ * 1. 根据策略处理 instructions（auto/force_official/keep_original）
  * 2. 删除不支持的参数：max_tokens, temperature, top_p 等
  * 3. 确保必需字段：stream, store, parallel_tool_calls
  *
@@ -69,34 +69,53 @@ export function isOfficialCodexClient(userAgent: string | null): boolean {
  *
  * @param request - 原始请求体
  * @param model - 模型名称（用于选择 instructions）
+ * @param strategy - Codex Instructions 策略（供应商级别配置，可选）
  * @returns 清洗后的请求体
  */
 export function sanitizeCodexRequest(
   request: Record<string, unknown>,
-  model: string
+  model: string,
+  strategy?: "auto" | "force_official" | "keep_original"
 ): Record<string, unknown> {
   const output = { ...request };
 
-  // 步骤 1: 根据开关决定是否替换 instructions
-  if (ENABLE_CODEX_INSTRUCTIONS_INJECTION) {
-    // 开关启用：强制替换 instructions 为官方完整 prompt
-    // 某些 Codex 供应商可能要求必须有完整 instructions（约 4000+ 字）
+  // 优先使用供应商级别策略，否则使用全局环境变量
+  const effectiveStrategy =
+    strategy || (ENABLE_CODEX_INSTRUCTIONS_INJECTION ? "force_official" : "auto");
+
+  // 步骤 1: 根据策略决定是否替换 instructions
+  if (effectiveStrategy === "force_official") {
+    // 策略 1: 强制使用官方 instructions
     const officialInstructions = getDefaultInstructions(model);
     output.instructions = officialInstructions;
 
-    logger.info("[CodexSanitizer] Instructions injection enabled, replaced with official prompt", {
+    logger.info("[CodexSanitizer] Using 'force_official' strategy, replaced with official prompt", {
       model,
+      strategy: effectiveStrategy,
       instructionsLength: officialInstructions.length,
       instructionsPreview: officialInstructions.substring(0, 100) + "...",
     });
-  } else {
-    // 开关关闭（默认）：保持原样透传
-    logger.info("[CodexSanitizer] Instructions injection disabled, keeping original instructions", {
+  } else if (effectiveStrategy === "keep_original") {
+    // 策略 2: 始终透传，不添加重试标记
+    logger.info("[CodexSanitizer] Using 'keep_original' strategy, keeping original instructions", {
       model,
+      strategy: effectiveStrategy,
       hasInstructions: !!output.instructions,
       originalInstructionsLength:
         typeof output.instructions === "string" ? output.instructions.length : 0,
     });
+  } else {
+    // 策略 3 (默认): auto - 透传 + 添加重试标记
+    logger.info("[CodexSanitizer] Using 'auto' strategy, keeping original with retry marker", {
+      model,
+      strategy: effectiveStrategy,
+      hasInstructions: !!output.instructions,
+      originalInstructionsLength:
+        typeof output.instructions === "string" ? output.instructions.length : 0,
+    });
+
+    // ⭐ Phase 1: 添加重试标记，用于 400 错误自动重试
+    output._canRetryWithOfficialInstructions = true;
   }
 
   // 步骤 2: 删除 Codex 不支持的参数

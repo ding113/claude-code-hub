@@ -24,13 +24,15 @@ export async function fetchSystemSettings(): Promise<ActionResult<SystemSettings
 }
 
 export async function saveSystemSettings(formData: {
-  siteTitle: string;
-  allowGlobalUsageView: boolean;
+  // 所有字段均为可选，支持部分更新
+  siteTitle?: string;
+  allowGlobalUsageView?: boolean;
   currencyDisplay?: string;
   enableAutoCleanup?: boolean;
   cleanupRetentionDays?: number;
   cleanupSchedule?: string;
   cleanupBatchSize?: number;
+  enableClientVersionCheck?: boolean;
 }): Promise<ActionResult<SystemSettings>> {
   try {
     const session = await getSession();
@@ -40,13 +42,14 @@ export async function saveSystemSettings(formData: {
 
     const validated = UpdateSystemSettingsSchema.parse(formData);
     const updated = await updateSystemSettings({
-      siteTitle: validated.siteTitle.trim(),
+      siteTitle: validated.siteTitle?.trim(),
       allowGlobalUsageView: validated.allowGlobalUsageView,
       currencyDisplay: validated.currencyDisplay,
       enableAutoCleanup: validated.enableAutoCleanup,
       cleanupRetentionDays: validated.cleanupRetentionDays,
       cleanupSchedule: validated.cleanupSchedule,
       cleanupBatchSize: validated.cleanupBatchSize,
+      enableClientVersionCheck: validated.enableClientVersionCheck,
     });
 
     revalidatePath("/settings/config");

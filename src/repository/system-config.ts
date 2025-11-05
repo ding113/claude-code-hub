@@ -82,6 +82,7 @@ function createFallbackSettings(): SystemSettings {
     cleanupRetentionDays: 30,
     cleanupSchedule: "0 2 * * *",
     cleanupBatchSize: 10000,
+    enableClientVersionCheck: false,
     createdAt: now,
     updatedAt: now,
   };
@@ -102,6 +103,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
         cleanupRetentionDays: systemSettings.cleanupRetentionDays,
         cleanupSchedule: systemSettings.cleanupSchedule,
         cleanupBatchSize: systemSettings.cleanupBatchSize,
+        enableClientVersionCheck: systemSettings.enableClientVersionCheck,
         createdAt: systemSettings.createdAt,
         updatedAt: systemSettings.updatedAt,
       })
@@ -129,6 +131,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
         cleanupRetentionDays: systemSettings.cleanupRetentionDays,
         cleanupSchedule: systemSettings.cleanupSchedule,
         cleanupBatchSize: systemSettings.cleanupBatchSize,
+        enableClientVersionCheck: systemSettings.enableClientVersionCheck,
         createdAt: systemSettings.createdAt,
         updatedAt: systemSettings.updatedAt,
       });
@@ -148,6 +151,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
         cleanupRetentionDays: systemSettings.cleanupRetentionDays,
         cleanupSchedule: systemSettings.cleanupSchedule,
         cleanupBatchSize: systemSettings.cleanupBatchSize,
+        enableClientVersionCheck: systemSettings.enableClientVersionCheck,
         createdAt: systemSettings.createdAt,
         updatedAt: systemSettings.updatedAt,
       })
@@ -177,19 +181,25 @@ export async function updateSystemSettings(
   const current = await getSystemSettings();
 
   try {
-    // 构建更新对象，只更新提供的字段
+    // 构建更新对象，只更新提供的字段（非 undefined）
     const updates: Partial<typeof systemSettings.$inferInsert> = {
-      siteTitle: payload.siteTitle,
-      allowGlobalUsageView: payload.allowGlobalUsageView,
       updatedAt: new Date(),
     };
 
-    // 添加货币显示配置字段（如果提供）
+    // 基础配置字段（如果提供）
+    if (payload.siteTitle !== undefined) {
+      updates.siteTitle = payload.siteTitle;
+    }
+    if (payload.allowGlobalUsageView !== undefined) {
+      updates.allowGlobalUsageView = payload.allowGlobalUsageView;
+    }
+
+    // 货币显示配置字段（如果提供）
     if (payload.currencyDisplay !== undefined) {
       updates.currencyDisplay = payload.currencyDisplay;
     }
 
-    // 添加日志清理配置字段（如果提供）
+    // 日志清理配置字段（如果提供）
     if (payload.enableAutoCleanup !== undefined) {
       updates.enableAutoCleanup = payload.enableAutoCleanup;
     }
@@ -201,6 +211,11 @@ export async function updateSystemSettings(
     }
     if (payload.cleanupBatchSize !== undefined) {
       updates.cleanupBatchSize = payload.cleanupBatchSize;
+    }
+
+    // 客户端版本检查配置字段（如果提供）
+    if (payload.enableClientVersionCheck !== undefined) {
+      updates.enableClientVersionCheck = payload.enableClientVersionCheck;
     }
 
     const [updated] = await db
@@ -216,6 +231,7 @@ export async function updateSystemSettings(
         cleanupRetentionDays: systemSettings.cleanupRetentionDays,
         cleanupSchedule: systemSettings.cleanupSchedule,
         cleanupBatchSize: systemSettings.cleanupBatchSize,
+        enableClientVersionCheck: systemSettings.enableClientVersionCheck,
         createdAt: systemSettings.createdAt,
         updatedAt: systemSettings.updatedAt,
       });

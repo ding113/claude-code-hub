@@ -118,6 +118,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         modelRedirects: provider.modelRedirects,
         allowedModels: provider.allowedModels,
         joinClaudePool: provider.joinClaudePool,
+        codexInstructionsStrategy: provider.codexInstructionsStrategy,
         limit5hUsd: provider.limit5hUsd,
         limitWeeklyUsd: provider.limitWeeklyUsd,
         limitMonthlyUsd: provider.limitMonthlyUsd,

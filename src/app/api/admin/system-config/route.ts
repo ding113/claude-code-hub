@@ -56,7 +56,7 @@ export async function POST(req: Request) {
 
     // 更新系统设置
     const updated = await updateSystemSettings({
-      siteTitle: validated.siteTitle.trim(),
+      siteTitle: validated.siteTitle?.trim(),
       allowGlobalUsageView: validated.allowGlobalUsageView,
       currencyDisplay: validated.currencyDisplay,
       enableAutoCleanup: validated.enableAutoCleanup,
