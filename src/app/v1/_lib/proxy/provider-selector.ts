@@ -97,8 +97,7 @@ export class ProxyProviderResolver {
       );
     }
 
-    // 最大重试次数（避免无限循环）
-    const MAX_RETRIES = 3;
+    // 动态尝试所有可用供应商（避免无限循环通过 excludedProviders 和 null 返回）
     const excludedProviders: number[] = [];
 
     // === 会话复用 ===
@@ -145,7 +144,10 @@ export class ProxyProviderResolver {
     }
 
     // === 故障转移循环 ===
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    let attemptCount = 0;
+    while (true) {
+      attemptCount++;
+
       if (!session.provider) {
         break; // 无可用供应商，退出循环
       }
@@ -170,7 +172,7 @@ export class ProxyProviderResolver {
               providerId: session.provider.id,
               current: checkResult.count,
               limit,
-              attempt: attempt + 1,
+              attempt: attemptCount,
             }
           );
 
@@ -181,7 +183,7 @@ export class ProxyProviderResolver {
               ? "group_filtered"
               : "weighted_random",
             circuitState: getCircuitState(session.provider.id),
-            attemptNumber: attempt + 1,
+            attemptNumber: attemptCount,
             errorMessage: checkResult.reason || "并发限制已达到",
             decisionContext: failedContext
               ? {
@@ -213,14 +215,12 @@ export class ProxyProviderResolver {
             await ProxyProviderResolver.pickRandomProvider(session, excludedProviders);
 
           if (!fallbackProvider) {
-            // 无其他可用供应商
+            // 无其他可用供应商，退出循环
             logger.error("ProviderSelector: No fallback providers available", {
               excludedCount: excludedProviders.length,
+              totalAttempts: attemptCount,
             });
-            return ProxyResponses.buildError(
-              503,
-              `所有供应商并发限制已达到（尝试了 ${excludedProviders.length} 个供应商）`
-            );
+            break;
           }
 
           // 切换到新供应商
@@ -234,11 +234,11 @@ export class ProxyProviderResolver {
           sessionId: session.sessionId,
           providerName: session.provider.name,
           count: checkResult.count,
-          attempt: attempt + 1,
+          attempt: attemptCount,
         });
 
         // 只在首次选择时记录到决策链（重试时的记录由 forwarder.ts 在请求完成后统一记录）
-        if (attempt === 0) {
+        if (attemptCount === 1) {
           const successContext = session.getLastSelectionContext();
           session.addProviderToChain(session.provider, {
             reason: "initial_selection",
@@ -278,15 +278,15 @@ export class ProxyProviderResolver {
       return null;
     }
 
-    // 达到最大重试次数或无可用供应商
+    // 循环结束：所有可用供应商都已尝试或无可用供应商
     const status = 503;
     const message =
       excludedProviders.length > 0
         ? `所有供应商不可用（尝试了 ${excludedProviders.length} 个供应商）`
         : "暂无可用的上游服务";
-    logger.error("ProviderSelector: No available providers after retries", {
+    logger.error("ProviderSelector: No available providers after trying all candidates", {
       excludedProviders,
-      maxRetries: MAX_RETRIES,
+      totalAttempts: attemptCount,
     });
     return ProxyResponses.buildError(status, message);
   }
