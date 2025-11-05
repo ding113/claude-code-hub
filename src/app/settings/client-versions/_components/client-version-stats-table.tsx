@@ -22,9 +22,7 @@ interface ClientVersionStatsTableProps {
 /**
  * 获取客户端类型对应的图标组件
  */
-function getClientTypeIcon(
-  clientType: string
-): React.ComponentType<{ className?: string }> {
+function getClientTypeIcon(clientType: string): React.ComponentType<{ className?: string }> {
   const icons: Record<string, React.ComponentType<{ className?: string }>> = {
     "claude-vscode": Code2,
     "claude-cli": Terminal,
@@ -94,7 +92,10 @@ export function ClientVersionStatsTable({ data }: ClientVersionStatsTableProps) 
                         </TableCell>
                         <TableCell>
                           {user.isLatest ? (
-                            <Badge variant="default" className="bg-green-500 hover:bg-green-600 gap-1">
+                            <Badge
+                              variant="default"
+                              className="bg-green-500 hover:bg-green-600 gap-1"
+                            >
                               <Check className="h-3 w-3" />
                               最新
                             </Badge>
