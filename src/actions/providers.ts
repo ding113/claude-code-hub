@@ -21,6 +21,8 @@ import {
   deleteProviderCircuitConfig,
 } from "@/lib/redis/circuit-breaker-config";
 import { isValidProxyUrl } from "@/lib/proxy-agent";
+import { CodexInstructionsCache } from "@/lib/codex-instructions-cache";
+import { isClientAbortError } from "@/app/v1/_lib/proxy/errors";
 
 // 获取服务商数据
 export async function getProviders(): Promise<ProviderDisplay[]> {
@@ -336,6 +338,19 @@ export async function editProvider(
       }
     }
 
+    // 清理 Codex Instructions 缓存（如果策略有变化）
+    if (validated.codex_instructions_strategy !== undefined) {
+      try {
+        await CodexInstructionsCache.clearByProvider(providerId);
+        logger.debug("editProvider:codex_cache_cleared", { providerId });
+      } catch (error) {
+        logger.warn("editProvider:codex_cache_clear_failed", {
+          providerId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
     revalidatePath("/settings/providers");
     return { ok: true };
   } catch (error) {
@@ -616,8 +631,11 @@ export async function testProviderProxy(data: {
         err.message.includes("ENOTFOUND") ||
         err.message.includes("ETIMEDOUT");
 
-      const errorType =
-        err.name === "AbortError" ? "Timeout" : isProxyError ? "ProxyError" : "NetworkError";
+      const errorType = isClientAbortError(err)
+        ? "Timeout"
+        : isProxyError
+          ? "ProxyError"
+          : "NetworkError";
 
       return {
         ok: true,

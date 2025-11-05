@@ -1,6 +1,6 @@
 import { getRedisClient } from "@/lib/redis/client";
 import { parseUserAgent, type ClientInfo } from "@/lib/ua-parser";
-import { compareVersions } from "@/lib/version";
+import { isVersionGreater, isVersionLess } from "@/lib/version";
 import { getActiveUserVersions, type RawUserVersion } from "@/repository/client-versions";
 import { logger } from "@/lib/logger";
 
@@ -24,9 +24,36 @@ const TTL = {
 };
 
 /**
- * GA 版本检测阈值
+ * GA 版本检测阈值（从环境变量读取，默认 2）
+ *
+ * 阈值定义：当某个版本的用户数 >= 该值时，该版本被视为 GA 版本
+ *
+ * 配置方式：设置环境变量 CLIENT_VERSION_GA_THRESHOLD
+ * 有效范围：1-10（超出范围会被强制到边界）
  */
-const GA_THRESHOLD = 1; // 1 个用户以上使用
+const GA_THRESHOLD = (() => {
+  const envValue = process.env.CLIENT_VERSION_GA_THRESHOLD;
+  const parsed = envValue ? parseInt(envValue, 10) : 2; // 默认 2，与文档一致
+
+  // 边界校验：范围 1-10
+  if (isNaN(parsed) || parsed < 1) {
+    logger.warn(
+      { envValue, parsed },
+      "[ClientVersionChecker] Invalid GA_THRESHOLD, using minimum value 1"
+    );
+    return 1;
+  }
+  if (parsed > 10) {
+    logger.warn(
+      { envValue, parsed },
+      "[ClientVersionChecker] GA_THRESHOLD exceeds maximum, using 10"
+    );
+    return 10;
+  }
+
+  logger.info({ gaThreshold: parsed }, "[ClientVersionChecker] GA_THRESHOLD configured");
+  return parsed;
+})();
 
 /**
  * 客户端版本统计信息
@@ -74,6 +101,42 @@ export interface ClientVersionStats {
  * - 其他客户端类型
  */
 export class ClientVersionChecker {
+  /**
+   * 从用户列表计算 GA 版本（内存计算，不查询数据库）
+   *
+   * @param users - 用户版本列表（包含 version 字段）
+   * @returns GA 版本号，无则返回 null
+   * @private
+   */
+  private static computeGAVersionFromUsers(
+    users: Array<{ userId: number; version: string }>
+  ): string | null {
+    if (users.length === 0) {
+      return null;
+    }
+
+    // 1. 统计每个版本的用户数（去重）
+    const versionCounts = new Map<string, Set<number>>();
+    for (const user of users) {
+      if (!versionCounts.has(user.version)) {
+        versionCounts.set(user.version, new Set());
+      }
+      versionCounts.get(user.version)!.add(user.userId);
+    }
+
+    // 2. 找到用户数 >= GA_THRESHOLD 的最新版本
+    let gaVersion: string | null = null;
+    for (const [version, userIds] of versionCounts.entries()) {
+      if (userIds.size >= GA_THRESHOLD) {
+        if (!gaVersion || isVersionGreater(version, gaVersion)) {
+          gaVersion = version;
+        }
+      }
+    }
+
+    return gaVersion;
+  }
+
   /**
    * 检测指定客户端的最新 GA 版本
    *
@@ -125,33 +188,25 @@ export class ClientVersionChecker {
         return null;
       }
 
-      // 4. 统计每个版本的用户数（去重）
-      const versionCounts = new Map<string, Set<number>>();
-      for (const user of clientUsers) {
-        if (!versionCounts.has(user.version)) {
-          versionCounts.set(user.version, new Set());
-        }
-        versionCounts.get(user.version)!.add(user.userId);
-      }
-
-      // 5. 找到用户数 >= 2 的最新版本
-      let gaVersion: string | null = null;
-      for (const [version, userIds] of versionCounts.entries()) {
-        if (userIds.size >= GA_THRESHOLD) {
-          // compareVersions(version, gaVersion) < 0 表示 version > gaVersion
-          if (!gaVersion || compareVersions(version, gaVersion) < 0) {
-            gaVersion = version;
-          }
-        }
-      }
+      // 4. 使用内存计算逻辑
+      const gaVersion = this.computeGAVersionFromUsers(clientUsers);
 
       if (!gaVersion) {
         logger.debug({ clientType }, "[ClientVersionChecker] 无 GA 版本（暂无用户使用该版本）");
         return null;
       }
 
-      // 6. 写入 Redis 缓存
+      // 5. 写入 Redis 缓存
       if (redis) {
+        // 重新统计用户数（用于缓存）
+        const versionCounts = new Map<string, Set<number>>();
+        for (const user of clientUsers) {
+          if (!versionCounts.has(user.version)) {
+            versionCounts.set(user.version, new Set());
+          }
+          versionCounts.get(user.version)!.add(user.userId);
+        }
+
         const cacheData = {
           version: gaVersion,
           userCount: versionCounts.get(gaVersion)!.size,
@@ -181,21 +236,24 @@ export class ClientVersionChecker {
    *
    * @param clientType - 客户端类型
    * @param userVersion - 用户当前版本
-   * @returns true: 需要升级, false: 不需要升级或无 GA 版本
+   * @returns {needsUpgrade, gaVersion} - 是否需要升级及当前 GA 版本
    */
-  static async shouldUpgrade(clientType: string, userVersion: string): Promise<boolean> {
+  static async shouldUpgrade(
+    clientType: string,
+    userVersion: string
+  ): Promise<{ needsUpgrade: boolean; gaVersion: string | null }> {
     try {
       const gaVersion = await this.detectGAVersion(clientType);
       if (!gaVersion) {
-        return false; // 无 GA 版本，放行
+        return { needsUpgrade: false, gaVersion: null }; // 无 GA 版本，放行
       }
 
-      // compareVersions(userVersion, gaVersion) > 0 表示 userVersion < gaVersion（需要升级）
-      return compareVersions(userVersion, gaVersion) > 0;
+      const needsUpgrade = isVersionLess(userVersion, gaVersion);
+      return { needsUpgrade, gaVersion };
     } catch (error) {
       // Fail Open: 检查失败时放行
       logger.error({ error, clientType, userVersion }, "[ClientVersionChecker] 版本检查失败");
-      return false;
+      return { needsUpgrade: false, gaVersion: null };
     }
   }
 
@@ -245,7 +303,7 @@ export class ClientVersionChecker {
    */
   static async getAllClientStats(): Promise<ClientVersionStats[]> {
     try {
-      // 1. 查询活跃用户
+      // 1. 查询活跃用户（一次性查询，避免 N+1）
       const activeUsers = await getActiveUserVersions(7);
 
       // 2. 解析 UA 并分组
@@ -261,12 +319,10 @@ export class ClientVersionChecker {
         clientGroups.get(clientInfo.clientType)!.push({ ...user, clientInfo });
       }
 
-      // 3. 为每个客户端类型生成统计
+      // 3. 为每个客户端类型生成统计（使用内存计算，不再查询数据库）
       const stats: ClientVersionStats[] = [];
 
       for (const [clientType, users] of clientGroups.entries()) {
-        const gaVersion = await this.detectGAVersion(clientType);
-
         // 去重：每个用户只保留最新版本
         const userMap = new Map<number, (typeof users)[0]>();
         for (const user of users) {
@@ -274,8 +330,7 @@ export class ClientVersionChecker {
           if (!existing) {
             userMap.set(user.userId, user);
           } else {
-            // compareVersions(user.version, existing.version) < 0 表示 user.version > existing.version
-            if (compareVersions(user.clientInfo.version, existing.clientInfo.version) < 0) {
+            if (isVersionGreater(user.clientInfo.version, existing.clientInfo.version)) {
               userMap.set(user.userId, user);
             }
           }
@@ -283,14 +338,20 @@ export class ClientVersionChecker {
 
         const uniqueUsers = Array.from(userMap.values());
 
+        // ✅ 使用内存计算 GA 版本，避免重复查询数据库
+        const usersWithVersion = uniqueUsers.map((u) => ({
+          userId: u.userId,
+          version: u.clientInfo.version,
+        }));
+        const gaVersion = this.computeGAVersionFromUsers(usersWithVersion);
+
         const userStats = uniqueUsers.map((user) => ({
           userId: user.userId,
           username: user.username,
           version: user.clientInfo.version,
           lastSeen: user.lastSeen,
           isLatest: gaVersion ? user.clientInfo.version === gaVersion : false,
-          // compareVersions(version, gaVersion) > 0 表示 version < gaVersion（需要升级）
-          needsUpgrade: gaVersion ? compareVersions(user.clientInfo.version, gaVersion) > 0 : false,
+          needsUpgrade: gaVersion ? isVersionLess(user.clientInfo.version, gaVersion) : false,
         }));
 
         stats.push({

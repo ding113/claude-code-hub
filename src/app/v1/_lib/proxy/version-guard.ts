@@ -68,8 +68,8 @@ export class ProxyVersionGuard {
         logger.error({ err }, "[ProxyVersionGuard] 更新用户版本失败");
       });
 
-      // 5. 检查是否需要升级
-      const needsUpgrade = await ClientVersionChecker.shouldUpgrade(
+      // 5. 检查是否需要升级（同时获取 GA 版本，避免重复查询）
+      const { needsUpgrade, gaVersion } = await ClientVersionChecker.shouldUpgrade(
         clientInfo.clientType,
         clientInfo.version
       );
@@ -82,8 +82,7 @@ export class ProxyVersionGuard {
         return null; // 版本符合要求，放行
       }
 
-      // 6. 获取 GA 版本用于错误提示
-      const gaVersion = await ClientVersionChecker.detectGAVersion(clientInfo.clientType);
+      // 6. 构建错误提示（重用第 5 步获取的 gaVersion，避免重复查询）
       const clientDisplayName = getClientTypeDisplayName(clientInfo.clientType);
 
       logger.warn(

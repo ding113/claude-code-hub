@@ -1,4 +1,5 @@
 import { logger } from "./logger";
+import { isClientAbortError } from "@/app/v1/_lib/proxy/errors";
 
 /**
  * 异步任务管理器
@@ -40,7 +41,7 @@ class AsyncTaskManagerClass {
     process.on("SIGINT", () => exitHandler("SIGINT")); // Ctrl+C
     process.on("beforeExit", () => exitHandler("beforeExit")); // 正常退出
 
-    // 每分钟清理一次已完成的任务（防止内存泄漏）
+    // 每分钟检查并清理超时任务（>10 分钟未完成，防止内存泄漏）
     this.cleanupInterval = setInterval(() => {
       this.cleanupCompletedTasks();
     }, 60000);
@@ -86,7 +87,7 @@ class AsyncTaskManagerClass {
       })
       .catch((error) => {
         // 如果是取消操作，使用 info 级别
-        if (error.name === "AbortError" || error.message?.includes("aborted")) {
+        if (isClientAbortError(error)) {
           logger.info("[AsyncTaskManager] Task cancelled", {
             taskId,
             taskType,
@@ -153,7 +154,14 @@ class AsyncTaskManagerClass {
   }
 
   /**
-   * 清理所有已完成的任务
+   * 检查并清理超时任务
+   *
+   * 遍历所有活跃任务，对于超过 10 分钟还未完成的任务：
+   * 1. 记录警告日志
+   * 2. 触发 AbortController 取消任务
+   * 3. 从任务 Map 中移除
+   *
+   * ⚠️ 注意：这不是清理"已完成"的任务，而是清理"超时未完成"的任务
    */
   private cleanupCompletedTasks(): void {
     const now = Date.now();
