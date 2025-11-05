@@ -121,9 +121,7 @@ export function ProvidersQuotaClient({
                   </span>
                 </div>
                 <Progress
-                  value={
-                    (provider.quota.cost5h.current / (provider.quota.cost5h.limit || 1)) * 100
-                  }
+                  value={(provider.quota.cost5h.current / (provider.quota.cost5h.limit || 1)) * 100}
                   className="h-2"
                 />
                 <p className="text-xs text-muted-foreground">{provider.quota.cost5h.resetInfo}</p>
@@ -169,8 +167,7 @@ export function ProvidersQuotaClient({
                 </div>
                 <Progress
                   value={
-                    (provider.quota.costMonthly.current /
-                      (provider.quota.costMonthly.limit || 1)) *
+                    (provider.quota.costMonthly.current / (provider.quota.costMonthly.limit || 1)) *
                     100
                   }
                   className="h-2"
