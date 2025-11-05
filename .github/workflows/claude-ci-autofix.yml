@@ -4,7 +4,7 @@ name: Claude CI Auto-Fix
 on:
   workflow_run:
     # 监听本项目的真实 CI Workflow 名称
-    workflows: ["Dev Branch CI/CD", "Auto Release Pipeline", "PR Build Check"]
+    workflows: ["Non-Main Branch CI/CD", "Auto Release Pipeline", "PR Build Check"]
     types:
       - completed
 
