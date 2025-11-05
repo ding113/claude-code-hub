@@ -26,7 +26,7 @@ const TTL = {
 /**
  * GA 版本检测阈值
  */
-const GA_THRESHOLD = 2; // 2 个用户以上使用
+const GA_THRESHOLD = 1; // 1 个用户以上使用
 
 /**
  * 客户端版本统计信息
@@ -61,7 +61,7 @@ export class ClientVersionChecker {
   /**
    * 检测指定客户端的最新 GA 版本
    *
-   * GA 版本定义：被 2 个或以上用户使用的最新版本
+   * GA 版本定义：被 1 个或以上用户使用的最新版本
    * 活跃窗口：过去 7 天内有请求的用户
    *
    * @param clientType - 客户端类型，如 "claude-cli"
@@ -115,14 +115,15 @@ export class ClientVersionChecker {
       let gaVersion: string | null = null;
       for (const [version, userIds] of versionCounts.entries()) {
         if (userIds.size >= GA_THRESHOLD) {
-          if (!gaVersion || compareVersions(version, gaVersion) > 0) {
+          // compareVersions(version, gaVersion) < 0 表示 version > gaVersion
+          if (!gaVersion || compareVersions(version, gaVersion) < 0) {
             gaVersion = version;
           }
         }
       }
 
       if (!gaVersion) {
-        logger.debug({ clientType }, "[ClientVersionChecker] 无 GA 版本（用户数不足 2）");
+        logger.debug({ clientType }, "[ClientVersionChecker] 无 GA 版本（用户数不足 1）");
         return null;
       }
 
@@ -166,8 +167,8 @@ export class ClientVersionChecker {
         return false; // 无 GA 版本，放行
       }
 
-      // 使用 compareVersions: 返回值 < 0 表示 userVersion < gaVersion
-      return compareVersions(userVersion, gaVersion) < 0;
+      // compareVersions(userVersion, gaVersion) > 0 表示 userVersion < gaVersion（需要升级）
+      return compareVersions(userVersion, gaVersion) > 0;
     } catch (error) {
       // Fail Open: 检查失败时放行
       logger.error({ error, clientType, userVersion }, "[ClientVersionChecker] 版本检查失败");
@@ -243,13 +244,30 @@ export class ClientVersionChecker {
       for (const [clientType, users] of clientGroups.entries()) {
         const gaVersion = await this.detectGAVersion(clientType);
 
-        const userStats = users.map((user) => ({
+        // 去重：每个用户只保留最新版本
+        const userMap = new Map<number, (typeof users)[0]>();
+        for (const user of users) {
+          const existing = userMap.get(user.userId);
+          if (!existing) {
+            userMap.set(user.userId, user);
+          } else {
+            // compareVersions(user.version, existing.version) < 0 表示 user.version > existing.version
+            if (compareVersions(user.clientInfo.version, existing.clientInfo.version) < 0) {
+              userMap.set(user.userId, user);
+            }
+          }
+        }
+
+        const uniqueUsers = Array.from(userMap.values());
+
+        const userStats = uniqueUsers.map((user) => ({
           userId: user.userId,
           username: user.username,
           version: user.clientInfo.version,
           lastSeen: user.lastSeen,
           isLatest: gaVersion ? user.clientInfo.version === gaVersion : false,
-          needsUpgrade: gaVersion ? compareVersions(user.clientInfo.version, gaVersion) < 0 : false,
+          // compareVersions(version, gaVersion) > 0 表示 version < gaVersion（需要升级）
+          needsUpgrade: gaVersion ? compareVersions(user.clientInfo.version, gaVersion) > 0 : false,
         }));
 
         stats.push({

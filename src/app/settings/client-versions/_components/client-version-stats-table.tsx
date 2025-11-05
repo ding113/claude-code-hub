@@ -29,7 +29,7 @@ export function ClientVersionStatsTable({ data }: ClientVersionStatsTableProps) 
               <p className="text-sm text-muted-foreground">
                 当前 GA 版本：
                 <Badge variant="outline" className="ml-2">
-                  {clientStats.gaVersion || "无（用户数不足 2）"}
+                  {clientStats.gaVersion || "无（用户数不足 1）"}
                 </Badge>
               </p>
             </div>

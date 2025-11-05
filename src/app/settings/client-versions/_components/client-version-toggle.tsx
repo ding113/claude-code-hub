@@ -58,7 +58,7 @@ export function ClientVersionToggle({ enabled }: ClientVersionToggleProps) {
           <ul className="list-inside list-disc space-y-1">
             <li>系统会自动检测每种客户端的最新稳定版本（GA 版本）</li>
             <li>
-              <strong>判定规则：</strong>当某个版本被 2 个以上用户使用时，视为 GA 版本
+              <strong>判定规则：</strong>当某个版本被 1 个以上用户使用时，视为 GA 版本
             </li>
             <li>
               <strong>活跃窗口：</strong>仅统计过去 7 天内有请求的用户
