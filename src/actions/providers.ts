@@ -177,6 +177,7 @@ export async function addProvider(data: {
   circuit_breaker_half_open_success_threshold?: number;
   proxy_url?: string | null;
   proxy_fallback_to_direct?: boolean;
+  codex_instructions_strategy?: "auto" | "force_official" | "keep_original";
   tpm: number | null;
   rpm: number | null;
   rpd: number | null;
@@ -283,6 +284,7 @@ export async function editProvider(
     circuit_breaker_half_open_success_threshold?: number;
     proxy_url?: string | null;
     proxy_fallback_to_direct?: boolean;
+    codex_instructions_strategy?: "auto" | "force_official" | "keep_original";
     tpm?: number | null;
     rpm?: number | null;
     rpd?: number | null;

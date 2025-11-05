@@ -414,10 +414,13 @@ ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS=false  # 网络错误是否计入熔断
 ENABLE_SECURE_COOKIES=true         # 是否强制 HTTPS Cookie（默认：true）
                                    # 设置为 false 允许 HTTP 访问，但会降低安全性
 
-# Codex Instructions 注入（实验性功能）
+# Codex Instructions 注入（已弃用，建议使用供应商级别配置）
+# ⚠️ DEPRECATED: 请在供应商管理页面配置 "Codex Instructions 策略" 替代全局开关
+# 供应商级别策略提供更精细的控制：auto（智能缓存）、force_official、keep_original
 ENABLE_CODEX_INSTRUCTIONS_INJECTION=false  # 是否强制替换 Codex 请求的 instructions（默认：false）
-                                           # false: 保持原样透传（推荐）
-                                           # true: 强制替换为官方完整 prompt（约 4000+ 字）
+                                           # false: 使用供应商级别策略（推荐）
+                                           # true: 全局强制使用官方 instructions（向后兼容，不推荐）
+                                           # 注意：供应商未配置策略时，此环境变量作为 fallback
 
 # 应用配置
 APP_PORT=23000                     # 应用端口

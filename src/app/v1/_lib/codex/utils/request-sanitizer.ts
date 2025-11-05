@@ -10,6 +10,7 @@
 
 import { logger } from "@/lib/logger";
 import { getDefaultInstructions } from "../../codex/constants/codex-instructions";
+import { CodexInstructionsCache } from "@/lib/codex-instructions-cache";
 
 /**
  * 功能开关：是否启用 Codex Instructions 注入
@@ -70,13 +71,15 @@ export function isOfficialCodexClient(userAgent: string | null): boolean {
  * @param request - 原始请求体
  * @param model - 模型名称（用于选择 instructions）
  * @param strategy - Codex Instructions 策略（供应商级别配置，可选）
+ * @param providerId - 供应商 ID（用于缓存 instructions）
  * @returns 清洗后的请求体
  */
-export function sanitizeCodexRequest(
+export async function sanitizeCodexRequest(
   request: Record<string, unknown>,
   model: string,
-  strategy?: "auto" | "force_official" | "keep_original"
-): Record<string, unknown> {
+  strategy?: "auto" | "force_official" | "keep_original",
+  providerId?: number
+): Promise<Record<string, unknown>> {
   const output = { ...request };
 
   // 优先使用供应商级别策略，否则使用全局环境变量
@@ -105,17 +108,72 @@ export function sanitizeCodexRequest(
         typeof output.instructions === "string" ? output.instructions.length : 0,
     });
   } else {
-    // 策略 3 (默认): auto - 透传 + 添加重试标记
-    logger.info("[CodexSanitizer] Using 'auto' strategy, keeping original with retry marker", {
+    // 策略 3 (默认): auto - 智能缓存对比 + 透传 + 添加重试标记
+
+    // ⭐ Phase 3: 缓存对比和自动覆盖
+    let shouldUseCachedInstructions = false;
+    if (providerId) {
+      try {
+        const cachedInstructions = await CodexInstructionsCache.get(providerId, model);
+
+        if (cachedInstructions) {
+          const clientInstructions =
+            typeof output.instructions === "string" ? output.instructions : "";
+
+          // 对比缓存和客户端 instructions（允许 5% 长度误差）
+          const lengthDiff = Math.abs(cachedInstructions.length - clientInstructions.length);
+          const lengthThreshold = cachedInstructions.length * 0.05;
+
+          if (lengthDiff > lengthThreshold) {
+            // 不匹配：覆盖为缓存的 instructions
+            logger.warn("[CodexSanitizer] Client instructions mismatch with cache, overriding", {
+              model,
+              providerId,
+              cachedLength: cachedInstructions.length,
+              clientLength: clientInstructions.length,
+              lengthDiff,
+              threshold: lengthThreshold,
+            });
+
+            output.instructions = cachedInstructions;
+            shouldUseCachedInstructions = true;
+          } else {
+            logger.debug("[CodexSanitizer] Client instructions match cache", {
+              model,
+              providerId,
+              instructionsLength: clientInstructions.length,
+            });
+          }
+        } else {
+          logger.debug("[CodexSanitizer] No cached instructions found for this provider+model", {
+            model,
+            providerId,
+          });
+        }
+      } catch (error) {
+        // Fail Open: 缓存读取失败不影响主流程
+        logger.warn("[CodexSanitizer] Failed to read cached instructions, continuing", {
+          error,
+          providerId,
+          model,
+        });
+      }
+    }
+
+    logger.info("[CodexSanitizer] Using 'auto' strategy with cache-aware logic", {
       model,
       strategy: effectiveStrategy,
+      providerId,
       hasInstructions: !!output.instructions,
+      instructionsSource: shouldUseCachedInstructions ? "cache" : "client",
       originalInstructionsLength:
         typeof output.instructions === "string" ? output.instructions.length : 0,
     });
 
-    // ⭐ Phase 1: 添加重试标记，用于 400 错误自动重试
-    output._canRetryWithOfficialInstructions = true;
+    // ⭐ Phase 1: 添加重试标记（仅当未使用缓存时）
+    if (!shouldUseCachedInstructions) {
+      output._canRetryWithOfficialInstructions = true;
+    }
   }
 
   // 步骤 2: 删除 Codex 不支持的参数
