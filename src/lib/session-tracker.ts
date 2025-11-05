@@ -167,6 +167,12 @@ export class SessionTracker {
       pipeline.zadd(`key:${keyId}:active_sessions`, now, sessionId);
       pipeline.zadd(`provider:${providerId}:active_sessions`, now, sessionId);
 
+      // ✅ 修复：刷新 session 绑定信息的 TTL（与 ZSET 同步过期）
+      // 避免绑定信息在 5 分钟后过期，导致 session 复用失效和并发检查被绕过
+      pipeline.expire(`session:${sessionId}:provider`, 300); // 5 分钟（秒）
+      pipeline.expire(`session:${sessionId}:key`, 300);
+      pipeline.setex(`session:${sessionId}:last_seen`, 300, now.toString());
+
       const results = await pipeline.exec();
 
       // 检查执行结果，捕获类型冲突错误
