@@ -73,12 +73,15 @@ export class ProxyForwarder {
                   instructions
                 );
 
-                logger.debug("[ProxyForwarder] Cached successful instructions for future requests", {
-                  providerId: currentProvider.id,
-                  providerName: currentProvider.name,
-                  model: session.request.model,
-                  instructionsLength: instructions.length,
-                });
+                logger.debug(
+                  "[ProxyForwarder] Cached successful instructions for future requests",
+                  {
+                    providerId: currentProvider.id,
+                    providerName: currentProvider.name,
+                    model: session.request.model,
+                    instructionsLength: instructions.length,
+                  }
+                );
               }
             } catch (error) {
               // Fail Open: 缓存失败不影响主流程
@@ -286,12 +289,9 @@ export class ProxyForwarder {
             // 🆕 特殊处理：400 + "Instructions are not valid" 错误智能重试
             // 针对部分严格的 Codex 中转站（如 88code、foxcode），会验证 instructions 字段
             // 如果检测到该错误且满足重试条件，根据策略选择重试方式
-            if (
-              statusCode === 400 &&
-              errorMessage.includes("Instructions are not valid")
-            ) {
-              const canRetryWithOfficial =
-                (session.request.message as Record<string, unknown>)._canRetryWithOfficialInstructions;
+            if (statusCode === 400 && errorMessage.includes("Instructions are not valid")) {
+              const canRetryWithOfficial = (session.request.message as Record<string, unknown>)
+                ._canRetryWithOfficialInstructions;
               const canRetryWithCache = currentProvider.codexInstructionsStrategy === "auto";
 
               if (canRetryWithOfficial || canRetryWithCache) {
@@ -343,7 +343,8 @@ export class ProxyForwarder {
                 }
 
                 // 替换 instructions
-                (session.request.message as Record<string, unknown>).instructions = retryInstructions;
+                (session.request.message as Record<string, unknown>).instructions =
+                  retryInstructions;
 
                 // 删除重试标记（避免无限循环）
                 delete (session.request.message as Record<string, unknown>)

@@ -108,9 +108,8 @@ export function ProviderForm({
   );
 
   // Codex Instructions 策略配置
-  const [codexInstructionsStrategy, setCodexInstructionsStrategy] = useState<CodexInstructionsStrategy>(
-    sourceProvider?.codexInstructionsStrategy ?? "auto"
-  );
+  const [codexInstructionsStrategy, setCodexInstructionsStrategy] =
+    useState<CodexInstructionsStrategy>(sourceProvider?.codexInstructionsStrategy ?? "auto");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -739,9 +738,7 @@ export function ProviderForm({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor={isEdit ? "edit-codex-strategy" : "codex-strategy"}>
-                策略选择
-              </Label>
+              <Label htmlFor={isEdit ? "edit-codex-strategy" : "codex-strategy"}>策略选择</Label>
               <Select
                 value={codexInstructionsStrategy}
                 onValueChange={(value) =>
