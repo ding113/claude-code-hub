@@ -28,14 +28,19 @@ export default async function ClientVersionsPage() {
     <div className="space-y-6">
       <SettingsPageHeader
         title="客户端升级提醒"
-        description="管理客户端版本要求，确保用户使用最新的稳定版本"
+        description="管理客户端版本要求，确保用户使用最新的稳定版本。VSCode 插件和 CLI 作为独立客户端分别管理版本。"
       />
 
       {/* 功能开关和说明 */}
       <Card>
         <CardHeader>
           <CardTitle>升级提醒设置</CardTitle>
-          <CardDescription>启用后，系统将自动检测客户端版本并拦截旧版本用户的请求</CardDescription>
+          <CardDescription>
+            启用后，系统将自动检测客户端版本并拦截旧版本用户的请求。
+            <br />
+            <strong>注意：</strong> VSCode 插件（claude-vscode）和纯
+            CLI（claude-cli）采用独立的版本检测策略，互不影响。
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <ClientVersionToggle enabled={enableClientVersionCheck} />
@@ -46,7 +51,9 @@ export default async function ClientVersionsPage() {
       <Card>
         <CardHeader>
           <CardTitle>客户端版本分布</CardTitle>
-          <CardDescription>显示过去 7 天内活跃用户的客户端版本信息</CardDescription>
+          <CardDescription>
+            显示过去 7 天内活跃用户的客户端版本信息。每种客户端类型独立统计 GA 版本。
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {stats && stats.length > 0 ? (

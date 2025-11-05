@@ -32,7 +32,16 @@ const GA_THRESHOLD = 1; // 1 个用户以上使用
  * 客户端版本统计信息
  */
 export interface ClientVersionStats {
-  /** 客户端类型，如 "claude-cli" */
+  /**
+   * 客户端类型
+   *
+   * 可能的值：
+   * - "claude-vscode": VSCode 插件
+   * - "claude-cli": 纯 CLI
+   * - "claude-cli-unknown": 无法识别的旧版本
+   * - "anthropic-sdk-typescript": SDK
+   * - 其他客户端类型
+   */
   clientType: string;
   /** 最新 GA 版本，无则为 null */
   gaVersion: string | null;
@@ -53,9 +62,16 @@ export interface ClientVersionStats {
  * 客户端版本检测器
  *
  * 核心功能：
- * 1. 检测每种客户端的最新 GA 版本（2 个用户以上使用）
+ * 1. 检测每种客户端的最新 GA 版本（1 个用户以上使用）
  * 2. 检查用户版本是否需要升级
  * 3. 追踪用户当前使用的版本
+ *
+ * 支持的客户端类型：
+ * - claude-vscode: VSCode 插件（独立版本检测）
+ * - claude-cli: 纯 CLI（独立版本检测）
+ * - claude-cli-unknown: 无法识别的旧版本（独立版本检测）
+ * - anthropic-sdk-typescript: SDK
+ * - 其他客户端类型
  */
 export class ClientVersionChecker {
   /**
@@ -64,8 +80,15 @@ export class ClientVersionChecker {
    * GA 版本定义：被 1 个或以上用户使用的最新版本
    * 活跃窗口：过去 7 天内有请求的用户
    *
-   * @param clientType - 客户端类型，如 "claude-cli"
+   * @param clientType - 客户端类型（如 "claude-vscode"、"claude-cli"、"claude-cli-unknown"）
    * @returns GA 版本号，无则返回 null
+   *
+   * @example
+   * ```typescript
+   * // VSCode 插件和 CLI 分别检测
+   * const vscodeGA = await detectGAVersion("claude-vscode"); // "2.0.35"
+   * const cliGA = await detectGAVersion("claude-cli");       // "2.0.33"
+   * ```
    */
   static async detectGAVersion(clientType: string): Promise<string | null> {
     try {
@@ -123,7 +146,7 @@ export class ClientVersionChecker {
       }
 
       if (!gaVersion) {
-        logger.debug({ clientType }, "[ClientVersionChecker] 无 GA 版本（用户数不足 1）");
+        logger.debug({ clientType }, "[ClientVersionChecker] 无 GA 版本（暂无用户使用该版本）");
         return null;
       }
 

@@ -1,6 +1,6 @@
 import { logger } from "@/lib/logger";
 import { getSystemSettings } from "@/repository/system-config";
-import { parseUserAgent } from "@/lib/ua-parser";
+import { parseUserAgent, getClientTypeDisplayName } from "@/lib/ua-parser";
 import { ClientVersionChecker } from "@/lib/client-version-checker";
 import type { ProxySession } from "./session";
 
@@ -84,6 +84,7 @@ export class ProxyVersionGuard {
 
       // 6. 获取 GA 版本用于错误提示
       const gaVersion = await ClientVersionChecker.detectGAVersion(clientInfo.clientType);
+      const clientDisplayName = getClientTypeDisplayName(clientInfo.clientType);
 
       logger.warn(
         {
@@ -100,10 +101,11 @@ export class ProxyVersionGuard {
         JSON.stringify({
           error: {
             type: "client_upgrade_required",
-            message: `Your ${clientInfo.clientType} client (v${clientInfo.version}) is outdated. Please upgrade to v${gaVersion} or later to continue using this service.`,
+            message: `Your ${clientDisplayName} (v${clientInfo.version}) is outdated. Please upgrade to v${gaVersion} or later to continue using this service.`,
             current_version: clientInfo.version,
             required_version: gaVersion,
             client_type: clientInfo.clientType,
+            client_display_name: clientDisplayName,
           },
         }),
         {
