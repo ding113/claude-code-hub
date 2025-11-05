@@ -3,6 +3,7 @@
 import type { ClientVersionStats } from "@/lib/client-version-checker";
 import { getClientTypeDisplayName } from "@/lib/ua-parser";
 import { Badge } from "@/components/ui/badge";
+import { Code2, Terminal, HelpCircle, Package, Check, AlertTriangle } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -19,16 +20,18 @@ interface ClientVersionStatsTableProps {
 }
 
 /**
- * 获取客户端类型对应的图标/emoji
+ * 获取客户端类型对应的图标组件
  */
-function getClientTypeIcon(clientType: string): string {
-  const icons: Record<string, string> = {
-    "claude-vscode": "🔷",
-    "claude-cli": "💻",
-    "claude-cli-unknown": "❓",
-    "anthropic-sdk-typescript": "📦",
+function getClientTypeIcon(
+  clientType: string
+): React.ComponentType<{ className?: string }> {
+  const icons: Record<string, React.ComponentType<{ className?: string }>> = {
+    "claude-vscode": Code2,
+    "claude-cli": Terminal,
+    "claude-cli-unknown": HelpCircle,
+    "anthropic-sdk-typescript": Package,
   };
-  return icons[clientType] || "🔧";
+  return icons[clientType] || HelpCircle;
 }
 
 export function ClientVersionStatsTable({ data }: ClientVersionStatsTableProps) {
@@ -36,15 +39,16 @@ export function ClientVersionStatsTable({ data }: ClientVersionStatsTableProps) 
     <div className="space-y-8">
       {data.map((clientStats) => {
         const displayName = getClientTypeDisplayName(clientStats.clientType);
-        const icon = getClientTypeIcon(clientStats.clientType);
+        const IconComponent = getClientTypeIcon(clientStats.clientType);
 
         return (
           <div key={clientStats.clientType} className="space-y-3">
             {/* 客户端类型标题 */}
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-semibold">
-                  {icon} {displayName}
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <IconComponent className="h-5 w-5 text-blue-600" />
+                  {displayName}
                 </h3>
                 <p className="text-sm text-muted-foreground">
                   内部类型：<code className="text-xs">{clientStats.clientType}</code>
@@ -90,13 +94,20 @@ export function ClientVersionStatsTable({ data }: ClientVersionStatsTableProps) 
                         </TableCell>
                         <TableCell>
                           {user.isLatest ? (
-                            <Badge variant="default" className="bg-green-500 hover:bg-green-600">
-                              ✅ 最新
+                            <Badge variant="default" className="bg-green-500 hover:bg-green-600 gap-1">
+                              <Check className="h-3 w-3" />
+                              最新
                             </Badge>
                           ) : user.needsUpgrade ? (
-                            <Badge variant="destructive">⚠️ 需升级</Badge>
+                            <Badge variant="destructive" className="gap-1">
+                              <AlertTriangle className="h-3 w-3" />
+                              需升级
+                            </Badge>
                           ) : (
-                            <Badge variant="outline">未知</Badge>
+                            <Badge variant="outline" className="gap-1">
+                              <HelpCircle className="h-3 w-3" />
+                              未知
+                            </Badge>
                           )}
                         </TableCell>
                       </TableRow>
