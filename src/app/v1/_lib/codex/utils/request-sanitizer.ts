@@ -78,13 +78,29 @@ export async function sanitizeCodexRequest(
   request: Record<string, unknown>,
   model: string,
   strategy?: "auto" | "force_official" | "keep_original",
-  providerId?: number
+  providerId?: number,
+  options?: { isOfficialClient?: boolean }
 ): Promise<Record<string, unknown>> {
-  const output = { ...request };
+  const { isOfficialClient = false } = options ?? {};
 
   // 优先使用供应商级别策略，否则使用全局环境变量
   const effectiveStrategy =
     strategy || (ENABLE_CODEX_INSTRUCTIONS_INJECTION ? "force_official" : "auto");
+
+  // ✅ 官方 Codex CLI 客户端 + auto 策略：保持原始请求
+  if (isOfficialClient && effectiveStrategy === "auto") {
+    logger.debug("[CodexSanitizer] Official client detected, skipping auto sanitization", {
+      model,
+      providerId,
+      strategy: effectiveStrategy,
+      hasInstructions: typeof request.instructions === "string",
+      instructionsLength:
+        typeof request.instructions === "string" ? request.instructions.length : 0,
+    });
+    return request;
+  }
+
+  const output = { ...request };
 
   // 步骤 1: 根据策略决定是否替换 instructions
   if (effectiveStrategy === "force_official") {
