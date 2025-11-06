@@ -531,37 +531,52 @@ export class ProxyForwarder {
         codexStrategy: provider.codexInstructionsStrategy,
       });
 
-      try {
-        const sanitized = await sanitizeCodexRequest(
-          session.request.message as Record<string, unknown>,
-          session.request.model || "gpt-5-codex",
-          provider.codexInstructionsStrategy, // ⭐ Phase 2: 传递供应商级别策略
-          provider.id // ⭐ Phase 3: 传递 providerId 用于缓存
-        );
+      // 官方 Codex CLI + auto 策略：完全透传（避免额外字段处理影响上游）
+      const shouldBypassSanitizer =
+        isOfficialClient && (provider.codexInstructionsStrategy ?? "auto") === "auto";
 
-        const instructionsLength =
-          typeof sanitized.instructions === "string" ? sanitized.instructions.length : 0;
-
-        if (!instructionsLength) {
-          logger.warn("[ProxyForwarder] Codex sanitization yielded empty instructions", {
+      if (shouldBypassSanitizer) {
+        logger.debug(
+          "[ProxyForwarder] Bypassing sanitizer for official Codex CLI (auto strategy)",
+          {
             providerId: provider.id,
-            officialClient: isOfficialClient,
+            providerName: provider.name,
+          }
+        );
+      } else {
+        try {
+          const sanitized = await sanitizeCodexRequest(
+            session.request.message as Record<string, unknown>,
+            session.request.model || "gpt-5-codex",
+            provider.codexInstructionsStrategy, // ⭐ Phase 2: 传递供应商级别策略
+            provider.id, // ⭐ Phase 3: 传递 providerId 用于缓存
+            { isOfficialClient }
+          );
+
+          const instructionsLength =
+            typeof sanitized.instructions === "string" ? sanitized.instructions.length : 0;
+
+          if (!instructionsLength) {
+            logger.warn("[ProxyForwarder] Codex sanitization yielded empty instructions", {
+              providerId: provider.id,
+              officialClient: isOfficialClient,
+            });
+          }
+
+          session.request.message = sanitized;
+
+          logger.debug("[ProxyForwarder] Codex request sanitized", {
+            instructionsLength,
+            hasParallelToolCalls: sanitized.parallel_tool_calls,
+            hasStoreFlag: sanitized.store,
           });
+        } catch (error) {
+          logger.error("[ProxyForwarder] Failed to sanitize Codex request, using original", {
+            error,
+            providerId: provider.id,
+          });
+          // 清洗失败时继续使用原始请求（降级策略）
         }
-
-        session.request.message = sanitized;
-
-        logger.debug("[ProxyForwarder] Codex request sanitized", {
-          instructionsLength,
-          hasParallelToolCalls: sanitized.parallel_tool_calls,
-          hasStoreFlag: sanitized.store,
-        });
-      } catch (error) {
-        logger.error("[ProxyForwarder] Failed to sanitize Codex request, using original", {
-          error,
-          providerId: provider.id,
-        });
-        // 清洗失败时继续使用原始请求（降级策略）
       }
     }
 
@@ -840,11 +855,14 @@ export class ProxyForwarder {
       delete overrides["x-api-key"];
     }
 
-    // Codex 特殊处理：强制设置 User-Agent
-    // Codex 供应商检测 User-Agent，只接受 codex_cli_rs 客户端
+    // Codex 特殊处理：若存在原始 User-Agent 则透传，否则兜底设置
     if (provider.providerType === "codex") {
-      overrides["user-agent"] = "codex_cli_rs/1.0.0 (Mac OS 14.0.0; arm64)";
-      logger.debug("ProxyForwarder: Codex provider detected, forcing User-Agent");
+      const originalUA = session.userAgent;
+      overrides["user-agent"] =
+        originalUA || "codex_cli_rs/0.55.0 (Mac OS 26.1.0; arm64) vscode/2.0.64";
+      logger.debug("ProxyForwarder: Codex provider detected, setting User-Agent", {
+        originalUA: session.userAgent ? "provided" : "fallback",
+      });
     }
 
     const headerProcessor = HeaderProcessor.createForProxy({
