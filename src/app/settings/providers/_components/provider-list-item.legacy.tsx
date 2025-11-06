@@ -2,10 +2,17 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogTrigger,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Edit, Globe, Key, RotateCcw, Copy } from "lucide-react";
+import { Edit, Globe, Key, RotateCcw, Copy, CheckCircle } from "lucide-react";
 import type { ProviderDisplay } from "@/types/provider";
 import type { User } from "@/types/user";
 import { getProviderTypeConfig } from "@/lib/provider-type-utils";
@@ -26,7 +33,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { resetProviderCircuit } from "@/actions/providers";
+import { resetProviderCircuit, getUnmaskedProviderKey } from "@/actions/providers";
 import { toast } from "sonner";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
@@ -55,6 +62,9 @@ export function ProviderListItem({
   const router = useRouter();
   const [openEdit, setOpenEdit] = useState(false);
   const [openClone, setOpenClone] = useState(false);
+  const [showKeyDialog, setShowKeyDialog] = useState(false);
+  const [unmaskedKey, setUnmaskedKey] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [resetPending, startResetTransition] = useTransition();
   const canEdit = currentUser?.role === "admin";
 
@@ -119,6 +129,41 @@ export function ProviderListItem({
         });
       }
     });
+  };
+
+  // 处理查看密钥
+  const handleShowKey = async () => {
+    setShowKeyDialog(true);
+    const result = await getUnmaskedProviderKey(item.id);
+    if (result.ok) {
+      setUnmaskedKey(result.data.key);
+    } else {
+      toast.error("获取密钥失败", {
+        description: result.error || "未知错误",
+      });
+    }
+  };
+
+  // 处理复制密钥
+  const handleCopy = async () => {
+    if (unmaskedKey) {
+      try {
+        await navigator.clipboard.writeText(unmaskedKey);
+        setCopied(true);
+        toast.success("密钥已复制到剪贴板");
+        setTimeout(() => setCopied(false), 3000);
+      } catch (err) {
+        console.error("复制失败:", err);
+        toast.error("复制失败");
+      }
+    }
+  };
+
+  // 处理关闭对话框
+  const handleCloseDialog = () => {
+    setShowKeyDialog(false);
+    setUnmaskedKey(null);
+    setCopied(false);
   };
 
   return (
@@ -329,7 +374,17 @@ export function ProviderListItem({
           </div>
           <div className="flex items-center gap-2 text-xs">
             <Key className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-            <span className="font-mono text-muted-foreground">{item.maskedKey}</span>
+            {canEdit ? (
+              <button
+                onClick={handleShowKey}
+                className="font-mono text-muted-foreground hover:text-foreground hover:underline cursor-pointer transition-colors"
+                type="button"
+              >
+                {item.maskedKey}
+              </button>
+            ) : (
+              <span className="font-mono text-muted-foreground">{item.maskedKey}</span>
+            )}
           </div>
         </div>
 
@@ -644,6 +699,40 @@ export function ProviderListItem({
         <span>创建 {item.createdAt}</span>
         <span>更新 {item.updatedAt}</span>
       </div>
+
+      {/* API Key 查看 Dialog */}
+      <Dialog open={showKeyDialog} onOpenChange={handleCloseDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Key className="h-5 w-5 text-amber-500" />
+              查看完整 API Key
+            </DialogTitle>
+            <DialogDescription>请妥善保管，不要泄露给他人</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <code className="flex-1 font-mono bg-muted px-3 py-2 rounded text-sm break-all border">
+                {unmaskedKey || "加载中..."}
+              </code>
+              <Button
+                size="icon"
+                variant="outline"
+                onClick={handleCopy}
+                disabled={!unmaskedKey}
+                type="button"
+              >
+                {copied ? (
+                  <CheckCircle className="h-4 w-4 text-green-500" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -12,7 +12,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useState, useTransition } from "react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { useState, useTransition, useEffect, useRef } from "react";
 import { addProvider, editProvider, removeProvider } from "@/actions/providers";
 import {
   AlertDialog,
@@ -31,6 +32,7 @@ import { toast } from "sonner";
 import { ModelMultiSelect } from "../model-multi-select";
 import { ModelRedirectEditor } from "../model-redirect-editor";
 import { ProxyTestButton } from "./proxy-test-button";
+import { ChevronDown } from "lucide-react";
 
 type Mode = "create" | "edit";
 
@@ -51,6 +53,9 @@ export function ProviderForm({
 }: ProviderFormProps) {
   const isEdit = mode === "edit";
   const [isPending, startTransition] = useTransition();
+
+  // 名称输入框引用，用于自动聚焦
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   // 获取初始数据源：编辑模式用 provider，创建模式用 cloneProvider（如果有）
   const sourceProvider = isEdit ? provider : cloneProvider;
@@ -107,9 +112,76 @@ export function ProviderForm({
     sourceProvider?.proxyFallbackToDirect ?? false
   );
 
+  // 供应商官网地址
+  const [websiteUrl, setWebsiteUrl] = useState<string>(sourceProvider?.websiteUrl ?? "");
+
   // Codex Instructions 策略配置
   const [codexInstructionsStrategy, setCodexInstructionsStrategy] =
     useState<CodexInstructionsStrategy>(sourceProvider?.codexInstructionsStrategy ?? "auto");
+
+  // 折叠区域状态管理
+  type SectionKey = "routing" | "rateLimit" | "circuitBreaker" | "proxy" | "codexStrategy";
+  const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
+    routing: false,
+    rateLimit: false,
+    circuitBreaker: false,
+    proxy: false,
+    codexStrategy: false,
+  });
+
+  // 从 localStorage 加载折叠偏好
+  useEffect(() => {
+    const saved = localStorage.getItem("provider-form-sections");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setOpenSections(parsed);
+      } catch (e) {
+        console.error("Failed to parse saved sections state:", e);
+      }
+    }
+  }, []);
+
+  // 保存折叠状态到 localStorage
+  useEffect(() => {
+    localStorage.setItem("provider-form-sections", JSON.stringify(openSections));
+  }, [openSections]);
+
+  // 自动聚焦名称输入框
+  useEffect(() => {
+    // 延迟聚焦，确保 Dialog 动画完成
+    const timer = setTimeout(() => {
+      nameInputRef.current?.focus();
+    }, 100);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // 折叠区域切换函数
+  const toggleSection = (key: SectionKey) => {
+    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  // 展开全部高级配置
+  const expandAll = () => {
+    setOpenSections({
+      routing: true,
+      rateLimit: true,
+      circuitBreaker: true,
+      proxy: true,
+      codexStrategy: true,
+    });
+  };
+
+  // 折叠全部高级配置
+  const collapseAll = () => {
+    setOpenSections({
+      routing: false,
+      rateLimit: false,
+      circuitBreaker: false,
+      proxy: false,
+      codexStrategy: false,
+    });
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -119,7 +191,13 @@ export function ProviderForm({
     }
 
     if (!isValidUrl(url.trim())) {
-      toast.error("请输入有效的URL地址");
+      toast.error("请输入有效的 API 地址");
+      return;
+    }
+
+    // 验证 websiteUrl（可选，但如果填写了必须是有效 URL）
+    if (websiteUrl.trim() && !isValidUrl(websiteUrl.trim())) {
+      toast.error("请输入有效的供应商官网地址");
       return;
     }
 
@@ -150,6 +228,7 @@ export function ProviderForm({
             circuit_breaker_half_open_success_threshold?: number;
             proxy_url?: string | null;
             proxy_fallback_to_direct?: boolean;
+            website_url?: string | null;
             codex_instructions_strategy?: CodexInstructionsStrategy;
             tpm?: number | null;
             rpm?: number | null;
@@ -177,6 +256,7 @@ export function ProviderForm({
             circuit_breaker_half_open_success_threshold: halfOpenSuccessThreshold ?? 2,
             proxy_url: proxyUrl.trim() || null,
             proxy_fallback_to_direct: proxyFallbackToDirect,
+            website_url: websiteUrl.trim() || null,
             codex_instructions_strategy: codexInstructionsStrategy,
             tpm: null,
             rpm: null,
@@ -217,6 +297,7 @@ export function ProviderForm({
             circuit_breaker_half_open_success_threshold: halfOpenSuccessThreshold ?? 2,
             proxy_url: proxyUrl.trim() || null,
             proxy_fallback_to_direct: proxyFallbackToDirect,
+            website_url: websiteUrl.trim() || null,
             codex_instructions_strategy: codexInstructionsStrategy,
             tpm: null,
             rpm: null,
@@ -252,6 +333,7 @@ export function ProviderForm({
           setHalfOpenSuccessThreshold(2);
           setProxyUrl("");
           setProxyFallbackToDirect(false);
+          setWebsiteUrl("");
           setCodexInstructionsStrategy("auto");
         }
         onSuccess?.();
@@ -272,6 +354,7 @@ export function ProviderForm({
         <div className="space-y-2">
           <Label htmlFor={isEdit ? "edit-name" : "name"}>服务商名称 *</Label>
           <Input
+            ref={nameInputRef}
             id={isEdit ? "edit-name" : "name"}
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -313,475 +396,649 @@ export function ProviderForm({
           ) : null}
         </div>
 
+        <div className="space-y-2">
+          <Label htmlFor={isEdit ? "edit-website-url" : "website-url"}>供应商官网地址</Label>
+          <Input
+            id={isEdit ? "edit-website-url" : "website-url"}
+            type="url"
+            value={websiteUrl}
+            onChange={(e) => setWebsiteUrl(e.target.value)}
+            placeholder="https://example.com"
+            disabled={isPending}
+          />
+          <div className="text-xs text-muted-foreground">供应商官网地址，用于快速跳转管理</div>
+        </div>
+
+        {/* 展开/折叠全部按钮 */}
+        <div className="flex gap-2 py-2 border-t">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={expandAll}
+            disabled={isPending}
+          >
+            展开全部高级配置
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={collapseAll}
+            disabled={isPending}
+          >
+            折叠全部高级配置
+          </Button>
+        </div>
+
         {/* Codex 支持：供应商类型和模型重定向 */}
-        <div className="space-y-4 pt-2 border-t">
-          <div className="space-y-2">
-            <Label htmlFor={isEdit ? "edit-provider-type" : "provider-type"}>
-              供应商类型
-              <span className="text-xs text-muted-foreground ml-1">(决定调度策略)</span>
-            </Label>
-            <Select
-              value={providerType}
-              onValueChange={(value) => setProviderType(value as ProviderType)}
+        <Collapsible open={openSections.routing} onOpenChange={(open) => toggleSection("routing")}>
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="flex items-center justify-between w-full py-4 border-t hover:bg-muted/50 transition-colors"
               disabled={isPending}
             >
-              <SelectTrigger id={isEdit ? "edit-provider-type" : "provider-type"}>
-                <SelectValue placeholder="选择供应商类型" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="claude">Claude (Anthropic Messages API)</SelectItem>
-                <SelectItem value="claude-auth">Claude (Anthropic Auth Token)</SelectItem>
-                <SelectItem value="codex">Codex (Response API)</SelectItem>
-                <SelectItem value="gemini-cli" disabled={!enableMultiProviderTypes}>
-                  Gemini CLI{!enableMultiProviderTypes && " - 功能开发中"}
-                </SelectItem>
-                <SelectItem value="openai-compatible" disabled={!enableMultiProviderTypes}>
-                  OpenAI Compatible{!enableMultiProviderTypes && " - 功能开发中"}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              选择供应商的 API 格式类型。
-              {!enableMultiProviderTypes && (
-                <span className="text-amber-600 ml-1">
-                  注：Gemini CLI 和 OpenAI Compatible 类型功能正在开发中，暂不可用
-                </span>
-              )}
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label>
-              模型重定向配置
-              <span className="text-xs text-muted-foreground ml-1">(可选)</span>
-            </Label>
-            <ModelRedirectEditor
-              value={modelRedirects}
-              onChange={setModelRedirects}
-              disabled={isPending}
-            />
-          </div>
-
-          {/* joinClaudePool 开关 - 仅非 Claude 供应商显示 */}
-          {providerType !== "claude" &&
-            (() => {
-              // 检查是否有重定向到 Claude 模型的映射
-              const hasClaudeRedirects = Object.values(modelRedirects).some((target) =>
-                target.startsWith("claude-")
-              );
-
-              if (!hasClaudeRedirects) return null;
-
-              return (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label htmlFor={isEdit ? "edit-join-claude-pool" : "join-claude-pool"}>
-                        加入 Claude 调度池
-                      </Label>
-                      <p className="text-xs text-muted-foreground">
-                        启用后，此供应商将与 Claude 类型供应商一起参与负载均衡调度
-                      </p>
-                    </div>
-                    <Switch
-                      id={isEdit ? "edit-join-claude-pool" : "join-claude-pool"}
-                      checked={joinClaudePool}
-                      onCheckedChange={setJoinClaudePool}
-                      disabled={isPending}
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    仅当模型重定向配置中存在映射到 claude-* 模型时可用。启用后，当用户请求 claude-*
-                    模型时，此供应商也会参与调度选择。
-                  </p>
-                </div>
-              );
-            })()}
-        </div>
-
-        {/* 模型白名单配置 */}
-        <div className="space-y-4 pt-2 border-t">
-          <div className="space-y-1">
-            <div className="text-sm font-medium">模型白名单</div>
-            <p className="text-xs text-muted-foreground">
-              限制此供应商可以处理的模型。默认情况下，供应商可以处理该类型下的所有模型。
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="allowed-models">
-              允许的模型
-              <span className="text-xs text-muted-foreground ml-1">(可选)</span>
-            </Label>
-
-            <ModelMultiSelect
-              providerType={providerType as "claude" | "codex" | "gemini-cli" | "openai-compatible"}
-              selectedModels={allowedModels}
-              onChange={setAllowedModels}
-              disabled={isPending}
-            />
-
-            {allowedModels.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-2 p-2 bg-muted/50 rounded-md">
-                {allowedModels.slice(0, 5).map((model) => (
-                  <Badge key={model} variant="outline" className="font-mono text-xs">
-                    {model}
-                  </Badge>
-                ))}
-                {allowedModels.length > 5 && (
-                  <Badge variant="secondary" className="text-xs">
-                    +{allowedModels.length - 5} 更多
-                  </Badge>
-                )}
+              <div className="flex items-center gap-2">
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${
+                    openSections.routing ? "rotate-180" : ""
+                  }`}
+                />
+                <span className="text-sm font-medium">路由配置</span>
               </div>
-            )}
+              <span className="text-xs text-muted-foreground">
+                {(() => {
+                  const parts = [];
+                  if (allowedModels.length > 0) parts.push(`${allowedModels.length} 个模型白名单`);
+                  if (Object.keys(modelRedirects).length > 0)
+                    parts.push(`${Object.keys(modelRedirects).length} 个重定向`);
+                  return parts.length > 0 ? parts.join(", ") : "未配置";
+                })()}
+              </span>
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-4 pb-4">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor={isEdit ? "edit-provider-type" : "provider-type"}>
+                  供应商类型
+                  <span className="text-xs text-muted-foreground ml-1">(决定调度策略)</span>
+                </Label>
+                <Select
+                  value={providerType}
+                  onValueChange={(value) => setProviderType(value as ProviderType)}
+                  disabled={isPending}
+                >
+                  <SelectTrigger id={isEdit ? "edit-provider-type" : "provider-type"}>
+                    <SelectValue placeholder="选择供应商类型" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="claude">Claude (Anthropic Messages API)</SelectItem>
+                    <SelectItem value="claude-auth">Claude (Anthropic Auth Token)</SelectItem>
+                    <SelectItem value="codex">Codex (Response API)</SelectItem>
+                    <SelectItem value="gemini-cli" disabled={!enableMultiProviderTypes}>
+                      Gemini CLI{!enableMultiProviderTypes && " - 功能开发中"}
+                    </SelectItem>
+                    <SelectItem value="openai-compatible" disabled={!enableMultiProviderTypes}>
+                      OpenAI Compatible{!enableMultiProviderTypes && " - 功能开发中"}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  选择供应商的 API 格式类型。
+                  {!enableMultiProviderTypes && (
+                    <span className="text-amber-600 ml-1">
+                      注：Gemini CLI 和 OpenAI Compatible 类型功能正在开发中，暂不可用
+                    </span>
+                  )}
+                </p>
+              </div>
 
-            <p className="text-xs text-muted-foreground">
-              {allowedModels.length === 0 ? (
-                <span className="text-green-600">✓ 允许所有模型（推荐）</span>
-              ) : (
-                <span>
-                  仅允许选中的 {allowedModels.length} 个模型。其他模型的请求不会调度到此供应商。
-                </span>
-              )}
-            </p>
-          </div>
-        </div>
-
-        {/* 路由配置 */}
-        <div className="space-y-4 pt-2 border-t">
-          <div className="text-sm font-medium">路由配置</div>
-          <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor={isEdit ? "edit-priority" : "priority"}>优先级</Label>
-              <Input
-                id={isEdit ? "edit-priority" : "priority"}
-                type="number"
-                value={priority}
-                onChange={(e) => setPriority(parseInt(e.target.value) || 0)}
-                placeholder="0"
-                disabled={isPending}
-                min="0"
-                step="1"
-              />
-              <p className="text-xs text-muted-foreground">
-                数值越小优先级越高（0
-                最高）。系统只从最高优先级的供应商中选择。建议：主力=0，备用=1，紧急备份=2
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor={isEdit ? "edit-weight" : "weight"}>权重</Label>
-              <Input
-                id={isEdit ? "edit-weight" : "weight"}
-                type="number"
-                value={weight}
-                onChange={(e) => setWeight(parseInt(e.target.value) || 1)}
-                placeholder="1"
-                disabled={isPending}
-                min="1"
-                step="1"
-              />
-              <p className="text-xs text-muted-foreground">
-                加权随机概率。同优先级内，权重越高被选中概率越大。例如权重 1:2:3 的概率为
-                16%:33%:50%
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor={isEdit ? "edit-cost" : "cost"}>成本倍率</Label>
-              <Input
-                id={isEdit ? "edit-cost" : "cost"}
-                type="number"
-                value={costMultiplier}
-                onChange={(e) => setCostMultiplier(parseFloat(e.target.value) || 1.0)}
-                placeholder="1.0"
-                disabled={isPending}
-                min="0"
-                step="0.0001"
-              />
-              <p className="text-xs text-muted-foreground">
-                成本计算倍数。官方供应商=1.0，便宜 20%=0.8，贵 20%=1.2（支持最多 4 位小数）
-              </p>
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor={isEdit ? "edit-group" : "group"}>供应商分组</Label>
-            <Input
-              id={isEdit ? "edit-group" : "group"}
-              value={groupTag}
-              onChange={(e) => setGroupTag(e.target.value)}
-              placeholder="例如: premium, economy"
-              disabled={isPending}
-            />
-            <p className="text-xs text-muted-foreground">
-              供应商分组标签。只有用户的 providerGroup
-              与此值匹配时，该用户才能使用此供应商。示例：设置为 &quot;premium&quot; 表示只供
-              providerGroup=&quot;premium&quot; 的用户使用
-            </p>
-          </div>
-        </div>
-
-        {/* 限流配置 */}
-        <div className="space-y-4 pt-2 border-t">
-          <div className="text-sm font-medium">限流配置</div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor={isEdit ? "edit-limit-5h" : "limit-5h"}>5小时消费上限 (USD)</Label>
-              <Input
-                id={isEdit ? "edit-limit-5h" : "limit-5h"}
-                type="number"
-                value={limit5hUsd?.toString() ?? ""}
-                onChange={(e) => setLimit5hUsd(validateNumericField(e.target.value))}
-                placeholder="留空表示无限制"
-                disabled={isPending}
-                min="0"
-                step="0.01"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor={isEdit ? "edit-limit-weekly" : "limit-weekly"}>
-                周消费上限 (USD)
-              </Label>
-              <Input
-                id={isEdit ? "edit-limit-weekly" : "limit-weekly"}
-                type="number"
-                value={limitWeeklyUsd?.toString() ?? ""}
-                onChange={(e) => setLimitWeeklyUsd(validateNumericField(e.target.value))}
-                placeholder="留空表示无限制"
-                disabled={isPending}
-                min="0"
-                step="0.01"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor={isEdit ? "edit-limit-monthly" : "limit-monthly"}>
-                月消费上限 (USD)
-              </Label>
-              <Input
-                id={isEdit ? "edit-limit-monthly" : "limit-monthly"}
-                type="number"
-                value={limitMonthlyUsd?.toString() ?? ""}
-                onChange={(e) => setLimitMonthlyUsd(validateNumericField(e.target.value))}
-                placeholder="留空表示无限制"
-                disabled={isPending}
-                min="0"
-                step="0.01"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor={isEdit ? "edit-limit-concurrent" : "limit-concurrent"}>
-                并发 Session 上限
-              </Label>
-              <Input
-                id={isEdit ? "edit-limit-concurrent" : "limit-concurrent"}
-                type="number"
-                value={limitConcurrentSessions?.toString() ?? ""}
-                onChange={(e) => setLimitConcurrentSessions(validateNumericField(e.target.value))}
-                placeholder="0 表示无限制"
-                disabled={isPending}
-                min="0"
-                step="1"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* 熔断器配置 */}
-        <div className="space-y-4 pt-2 border-t">
-          <div className="space-y-1">
-            <div className="text-sm font-medium">熔断器配置</div>
-            <p className="text-xs text-muted-foreground">
-              供应商连续失败时自动熔断，避免影响整体服务质量
-            </p>
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor={isEdit ? "edit-failure-threshold" : "failure-threshold"}>
-                失败阈值（次）
-              </Label>
-              <Input
-                id={isEdit ? "edit-failure-threshold" : "failure-threshold"}
-                type="number"
-                value={failureThreshold ?? ""}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setFailureThreshold(val === "" ? undefined : parseInt(val));
-                }}
-                placeholder="5"
-                disabled={isPending}
-                min="1"
-                max="100"
-                step="1"
-              />
-              <p className="text-xs text-muted-foreground">连续失败多少次后触发熔断</p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor={isEdit ? "edit-open-duration" : "open-duration"}>
-                熔断时长（分钟）
-              </Label>
-              <Input
-                id={isEdit ? "edit-open-duration" : "open-duration"}
-                type="number"
-                value={openDurationMinutes ?? ""}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setOpenDurationMinutes(val === "" ? undefined : parseInt(val));
-                }}
-                placeholder="30"
-                disabled={isPending}
-                min="1"
-                max="1440"
-                step="1"
-              />
-              <p className="text-xs text-muted-foreground">熔断后多久自动进入半开状态</p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor={isEdit ? "edit-success-threshold" : "success-threshold"}>
-                恢复阈值（次）
-              </Label>
-              <Input
-                id={isEdit ? "edit-success-threshold" : "success-threshold"}
-                type="number"
-                value={halfOpenSuccessThreshold ?? ""}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setHalfOpenSuccessThreshold(val === "" ? undefined : parseInt(val));
-                }}
-                placeholder="2"
-                disabled={isPending}
-                min="1"
-                max="10"
-                step="1"
-              />
-              <p className="text-xs text-muted-foreground">半开状态下成功多少次后完全恢复</p>
-            </div>
-          </div>
-        </div>
-
-        {/* 代理配置 */}
-        <div className="space-y-4 pt-2 border-t">
-          <div className="space-y-1">
-            <div className="text-sm font-medium">代理配置</div>
-            <p className="text-xs text-muted-foreground">
-              配置代理服务器以改善供应商连接性（支持 HTTP、HTTPS、SOCKS4、SOCKS5）
-            </p>
-          </div>
-
-          <div className="space-y-4">
-            {/* 代理地址输入 */}
-            <div className="space-y-2">
-              <Label htmlFor={isEdit ? "edit-proxy-url" : "proxy-url"}>
-                代理地址
-                <span className="text-xs text-muted-foreground ml-1">(可选)</span>
-              </Label>
-              <Input
-                id={isEdit ? "edit-proxy-url" : "proxy-url"}
-                value={proxyUrl}
-                onChange={(e) => setProxyUrl(e.target.value)}
-                placeholder="例如: http://proxy.example.com:8080 或 socks5://127.0.0.1:1080"
-                disabled={isPending}
-              />
-              <p className="text-xs text-muted-foreground">
-                支持格式: <code className="bg-muted px-1 rounded">http://</code>、
-                <code className="bg-muted px-1 rounded">https://</code>、
-                <code className="bg-muted px-1 rounded">socks4://</code>、
-                <code className="bg-muted px-1 rounded">socks5://</code>
-              </p>
-            </div>
-
-            {/* 降级策略开关 */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label htmlFor={isEdit ? "edit-proxy-fallback" : "proxy-fallback"}>
-                    代理失败时降级到直连
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    启用后，代理连接失败时自动尝试直接连接供应商
-                  </p>
-                </div>
-                <Switch
-                  id={isEdit ? "edit-proxy-fallback" : "proxy-fallback"}
-                  checked={proxyFallbackToDirect}
-                  onCheckedChange={setProxyFallbackToDirect}
+              <div className="space-y-2">
+                <Label>
+                  模型重定向配置
+                  <span className="text-xs text-muted-foreground ml-1">(可选)</span>
+                </Label>
+                <ModelRedirectEditor
+                  value={modelRedirects}
+                  onChange={setModelRedirects}
                   disabled={isPending}
                 />
               </div>
-            </div>
 
-            {/* 测试连接按钮 */}
-            <div className="space-y-2">
-              <Label>连接测试</Label>
-              <ProxyTestButton
-                providerUrl={url}
-                proxyUrl={proxyUrl}
-                proxyFallbackToDirect={proxyFallbackToDirect}
-                disabled={isPending || !url.trim()}
-              />
-              <p className="text-xs text-muted-foreground">
-                测试通过配置的代理访问供应商 URL（使用 HEAD 请求，不消耗额度）
-              </p>
+              {/* joinClaudePool 开关 - 仅非 Claude 供应商显示 */}
+              {providerType !== "claude" &&
+                (() => {
+                  // 检查是否有重定向到 Claude 模型的映射
+                  const hasClaudeRedirects = Object.values(modelRedirects).some((target) =>
+                    target.startsWith("claude-")
+                  );
+
+                  if (!hasClaudeRedirects) return null;
+
+                  return (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label htmlFor={isEdit ? "edit-join-claude-pool" : "join-claude-pool"}>
+                            加入 Claude 调度池
+                          </Label>
+                          <p className="text-xs text-muted-foreground">
+                            启用后，此供应商将与 Claude 类型供应商一起参与负载均衡调度
+                          </p>
+                        </div>
+                        <Switch
+                          id={isEdit ? "edit-join-claude-pool" : "join-claude-pool"}
+                          checked={joinClaudePool}
+                          onCheckedChange={setJoinClaudePool}
+                          disabled={isPending}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        仅当模型重定向配置中存在映射到 claude-* 模型时可用。启用后，当用户请求
+                        claude-* 模型时，此供应商也会参与调度选择。
+                      </p>
+                    </div>
+                  );
+                })()}
+
+              {/* 模型白名单配置 */}
+              <div className="space-y-1">
+                <div className="text-sm font-medium">模型白名单</div>
+                <p className="text-xs text-muted-foreground">
+                  限制此供应商可以处理的模型。默认情况下，供应商可以处理该类型下的所有模型。
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="allowed-models">
+                  允许的模型
+                  <span className="text-xs text-muted-foreground ml-1">(可选)</span>
+                </Label>
+
+                <ModelMultiSelect
+                  providerType={
+                    providerType as "claude" | "codex" | "gemini-cli" | "openai-compatible"
+                  }
+                  selectedModels={allowedModels}
+                  onChange={setAllowedModels}
+                  disabled={isPending}
+                />
+
+                {allowedModels.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2 p-2 bg-muted/50 rounded-md">
+                    {allowedModels.slice(0, 5).map((model) => (
+                      <Badge key={model} variant="outline" className="font-mono text-xs">
+                        {model}
+                      </Badge>
+                    ))}
+                    {allowedModels.length > 5 && (
+                      <Badge variant="secondary" className="text-xs">
+                        +{allowedModels.length - 5} 更多
+                      </Badge>
+                    )}
+                  </div>
+                )}
+
+                <p className="text-xs text-muted-foreground">
+                  {allowedModels.length === 0 ? (
+                    <span className="text-green-600">✓ 允许所有模型（推荐）</span>
+                  ) : (
+                    <span>
+                      仅允许选中的 {allowedModels.length} 个模型。其他模型的请求不会调度到此供应商。
+                    </span>
+                  )}
+                </p>
+              </div>
+
+              {/* 路由配置 - 优先级、权重、成本 */}
+              <div className="space-y-4">
+                <div className="text-sm font-medium">调度参数</div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor={isEdit ? "edit-priority" : "priority"}>优先级</Label>
+                    <Input
+                      id={isEdit ? "edit-priority" : "priority"}
+                      type="number"
+                      value={priority}
+                      onChange={(e) => setPriority(parseInt(e.target.value) || 0)}
+                      placeholder="0"
+                      disabled={isPending}
+                      min="0"
+                      step="1"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      数值越小优先级越高（0
+                      最高）。系统只从最高优先级的供应商中选择。建议：主力=0，备用=1，紧急备份=2
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={isEdit ? "edit-weight" : "weight"}>权重</Label>
+                    <Input
+                      id={isEdit ? "edit-weight" : "weight"}
+                      type="number"
+                      value={weight}
+                      onChange={(e) => setWeight(parseInt(e.target.value) || 1)}
+                      placeholder="1"
+                      disabled={isPending}
+                      min="1"
+                      step="1"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      加权随机概率。同优先级内，权重越高被选中概率越大。例如权重 1:2:3 的概率为
+                      16%:33%:50%
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={isEdit ? "edit-cost" : "cost"}>成本倍率</Label>
+                    <Input
+                      id={isEdit ? "edit-cost" : "cost"}
+                      type="number"
+                      value={costMultiplier}
+                      onChange={(e) => setCostMultiplier(parseFloat(e.target.value) || 1.0)}
+                      placeholder="1.0"
+                      disabled={isPending}
+                      min="0"
+                      step="0.0001"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      成本计算倍数。官方供应商=1.0，便宜 20%=0.8，贵 20%=1.2（支持最多 4 位小数）
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor={isEdit ? "edit-group" : "group"}>供应商分组</Label>
+                  <Input
+                    id={isEdit ? "edit-group" : "group"}
+                    value={groupTag}
+                    onChange={(e) => setGroupTag(e.target.value)}
+                    placeholder="例如: premium, economy"
+                    disabled={isPending}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    供应商分组标签。只有用户的 providerGroup
+                    与此值匹配时，该用户才能使用此供应商。示例：设置为 &quot;premium&quot; 表示只供
+                    providerGroup=&quot;premium&quot; 的用户使用
+                  </p>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          </CollapsibleContent>
+        </Collapsible>
+
+        {/* 限流配置 */}
+        <Collapsible
+          open={openSections.rateLimit}
+          onOpenChange={(open) => toggleSection("rateLimit")}
+        >
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="flex items-center justify-between w-full py-4 border-t hover:bg-muted/50 transition-colors"
+              disabled={isPending}
+            >
+              <div className="flex items-center gap-2">
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${
+                    openSections.rateLimit ? "rotate-180" : ""
+                  }`}
+                />
+                <span className="text-sm font-medium">限流配置</span>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {(() => {
+                  const limits = [];
+                  if (limit5hUsd) limits.push(`5h: $${limit5hUsd}`);
+                  if (limitWeeklyUsd) limits.push(`周: $${limitWeeklyUsd}`);
+                  if (limitMonthlyUsd) limits.push(`月: $${limitMonthlyUsd}`);
+                  if (limitConcurrentSessions) limits.push(`并发: ${limitConcurrentSessions}`);
+                  return limits.length > 0 ? limits.join(", ") : "无限制";
+                })()}
+              </span>
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-4 pb-4">
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor={isEdit ? "edit-limit-5h" : "limit-5h"}>5小时消费上限 (USD)</Label>
+                  <Input
+                    id={isEdit ? "edit-limit-5h" : "limit-5h"}
+                    type="number"
+                    value={limit5hUsd?.toString() ?? ""}
+                    onChange={(e) => setLimit5hUsd(validateNumericField(e.target.value))}
+                    placeholder="留空表示无限制"
+                    disabled={isPending}
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor={isEdit ? "edit-limit-weekly" : "limit-weekly"}>
+                    周消费上限 (USD)
+                  </Label>
+                  <Input
+                    id={isEdit ? "edit-limit-weekly" : "limit-weekly"}
+                    type="number"
+                    value={limitWeeklyUsd?.toString() ?? ""}
+                    onChange={(e) => setLimitWeeklyUsd(validateNumericField(e.target.value))}
+                    placeholder="留空表示无限制"
+                    disabled={isPending}
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor={isEdit ? "edit-limit-monthly" : "limit-monthly"}>
+                    月消费上限 (USD)
+                  </Label>
+                  <Input
+                    id={isEdit ? "edit-limit-monthly" : "limit-monthly"}
+                    type="number"
+                    value={limitMonthlyUsd?.toString() ?? ""}
+                    onChange={(e) => setLimitMonthlyUsd(validateNumericField(e.target.value))}
+                    placeholder="留空表示无限制"
+                    disabled={isPending}
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor={isEdit ? "edit-limit-concurrent" : "limit-concurrent"}>
+                    并发 Session 上限
+                  </Label>
+                  <Input
+                    id={isEdit ? "edit-limit-concurrent" : "limit-concurrent"}
+                    type="number"
+                    value={limitConcurrentSessions?.toString() ?? ""}
+                    onChange={(e) =>
+                      setLimitConcurrentSessions(validateNumericField(e.target.value))
+                    }
+                    placeholder="0 表示无限制"
+                    disabled={isPending}
+                    min="0"
+                    step="1"
+                  />
+                </div>
+              </div>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+
+        {/* 熔断器配置 */}
+        <Collapsible
+          open={openSections.circuitBreaker}
+          onOpenChange={(open) => toggleSection("circuitBreaker")}
+        >
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="flex items-center justify-between w-full py-4 border-t hover:bg-muted/50 transition-colors"
+              disabled={isPending}
+            >
+              <div className="flex items-center gap-2">
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${
+                    openSections.circuitBreaker ? "rotate-180" : ""
+                  }`}
+                />
+                <span className="text-sm font-medium">熔断器配置</span>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {failureThreshold ?? 5} 次失败 / {openDurationMinutes ?? 30} 分钟熔断 /{" "}
+                {halfOpenSuccessThreshold ?? 2} 次成功恢复
+              </span>
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-4 pb-4">
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">
+                  供应商连续失败时自动熔断，避免影响整体服务质量
+                </p>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor={isEdit ? "edit-failure-threshold" : "failure-threshold"}>
+                    失败阈值（次）
+                  </Label>
+                  <Input
+                    id={isEdit ? "edit-failure-threshold" : "failure-threshold"}
+                    type="number"
+                    value={failureThreshold ?? ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFailureThreshold(val === "" ? undefined : parseInt(val));
+                    }}
+                    placeholder="5"
+                    disabled={isPending}
+                    min="1"
+                    max="100"
+                    step="1"
+                  />
+                  <p className="text-xs text-muted-foreground">连续失败多少次后触发熔断</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor={isEdit ? "edit-open-duration" : "open-duration"}>
+                    熔断时长（分钟）
+                  </Label>
+                  <Input
+                    id={isEdit ? "edit-open-duration" : "open-duration"}
+                    type="number"
+                    value={openDurationMinutes ?? ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setOpenDurationMinutes(val === "" ? undefined : parseInt(val));
+                    }}
+                    placeholder="30"
+                    disabled={isPending}
+                    min="1"
+                    max="1440"
+                    step="1"
+                  />
+                  <p className="text-xs text-muted-foreground">熔断后多久自动进入半开状态</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor={isEdit ? "edit-success-threshold" : "success-threshold"}>
+                    恢复阈值（次）
+                  </Label>
+                  <Input
+                    id={isEdit ? "edit-success-threshold" : "success-threshold"}
+                    type="number"
+                    value={halfOpenSuccessThreshold ?? ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setHalfOpenSuccessThreshold(val === "" ? undefined : parseInt(val));
+                    }}
+                    placeholder="2"
+                    disabled={isPending}
+                    min="1"
+                    max="10"
+                    step="1"
+                  />
+                  <p className="text-xs text-muted-foreground">半开状态下成功多少次后完全恢复</p>
+                </div>
+              </div>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+
+        {/* 代理配置 */}
+        <Collapsible open={openSections.proxy} onOpenChange={(open) => toggleSection("proxy")}>
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="flex items-center justify-between w-full py-4 border-t hover:bg-muted/50 transition-colors"
+              disabled={isPending}
+            >
+              <div className="flex items-center gap-2">
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${
+                    openSections.proxy ? "rotate-180" : ""
+                  }`}
+                />
+                <span className="text-sm font-medium">代理配置</span>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {proxyUrl.trim() ? "已配置代理" : "未配置"}
+                {proxyUrl.trim() && proxyFallbackToDirect ? " (启用降级)" : ""}
+              </span>
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-4 pb-4">
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">
+                  配置代理服务器以改善供应商连接性（支持 HTTP、HTTPS、SOCKS4、SOCKS5）
+                </p>
+              </div>
+
+              {/* 代理地址输入 */}
+              <div className="space-y-2">
+                <Label htmlFor={isEdit ? "edit-proxy-url" : "proxy-url"}>
+                  代理地址
+                  <span className="text-xs text-muted-foreground ml-1">(可选)</span>
+                </Label>
+                <Input
+                  id={isEdit ? "edit-proxy-url" : "proxy-url"}
+                  value={proxyUrl}
+                  onChange={(e) => setProxyUrl(e.target.value)}
+                  placeholder="例如: http://proxy.example.com:8080 或 socks5://127.0.0.1:1080"
+                  disabled={isPending}
+                />
+                <p className="text-xs text-muted-foreground">
+                  支持格式: <code className="bg-muted px-1 rounded">http://</code>、
+                  <code className="bg-muted px-1 rounded">https://</code>、
+                  <code className="bg-muted px-1 rounded">socks4://</code>、
+                  <code className="bg-muted px-1 rounded">socks5://</code>
+                </p>
+              </div>
+
+              {/* 降级策略开关 */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor={isEdit ? "edit-proxy-fallback" : "proxy-fallback"}>
+                      代理失败时降级到直连
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      启用后，代理连接失败时自动尝试直接连接供应商
+                    </p>
+                  </div>
+                  <Switch
+                    id={isEdit ? "edit-proxy-fallback" : "proxy-fallback"}
+                    checked={proxyFallbackToDirect}
+                    onCheckedChange={setProxyFallbackToDirect}
+                    disabled={isPending}
+                  />
+                </div>
+              </div>
+
+              {/* 测试连接按钮 */}
+              <div className="space-y-2">
+                <Label>连接测试</Label>
+                <ProxyTestButton
+                  providerUrl={url}
+                  proxyUrl={proxyUrl}
+                  proxyFallbackToDirect={proxyFallbackToDirect}
+                  disabled={isPending || !url.trim()}
+                />
+                <p className="text-xs text-muted-foreground">
+                  测试通过配置的代理访问供应商 URL（使用 HEAD 请求，不消耗额度）
+                </p>
+              </div>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
 
         {/* Codex Instructions 策略配置 - 仅 Codex 供应商显示 */}
         {providerType === "codex" && (
-          <div className="space-y-4 pt-2 border-t">
-            <div className="space-y-1">
-              <div className="text-sm font-medium">Codex Instructions 策略</div>
-              <p className="text-xs text-muted-foreground">
-                控制如何处理 Codex 请求的 instructions 字段，影响与上游中转站的兼容性
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor={isEdit ? "edit-codex-strategy" : "codex-strategy"}>策略选择</Label>
-              <Select
-                value={codexInstructionsStrategy}
-                onValueChange={(value) =>
-                  setCodexInstructionsStrategy(value as CodexInstructionsStrategy)
-                }
+          <Collapsible
+            open={openSections.codexStrategy}
+            onOpenChange={(open) => toggleSection("codexStrategy")}
+          >
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className="flex items-center justify-between w-full py-4 border-t hover:bg-muted/50 transition-colors"
                 disabled={isPending}
               >
-                <SelectTrigger id={isEdit ? "edit-codex-strategy" : "codex-strategy"}>
-                  <SelectValue placeholder="选择策略" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="auto">
-                    <div className="space-y-1">
-                      <div className="font-medium">自动 (推荐)</div>
-                      <div className="text-xs text-muted-foreground max-w-xs">
-                        透传客户端 instructions，400 错误时自动重试官方 prompt
-                      </div>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="force_official">
-                    <div className="space-y-1">
-                      <div className="font-medium">强制官方</div>
-                      <div className="text-xs text-muted-foreground max-w-xs">
-                        始终使用官方 Codex CLI instructions（约 4000+ 字）
-                      </div>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="keep_original">
-                    <div className="space-y-1">
-                      <div className="font-medium">透传原样</div>
-                      <div className="text-xs text-muted-foreground max-w-xs">
-                        始终透传客户端 instructions，不自动重试（适用于宽松中转站）
-                      </div>
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                <strong>提示</strong>: 部分严格的 Codex 中转站（如 88code、foxcode）需要官方
-                instructions，选择&quot;自动&quot;或&quot;强制官方&quot;策略
-              </p>
-            </div>
-          </div>
+                <div className="flex items-center gap-2">
+                  <ChevronDown
+                    className={`h-4 w-4 transition-transform ${
+                      openSections.codexStrategy ? "rotate-180" : ""
+                    }`}
+                  />
+                  <span className="text-sm font-medium">Codex Instructions 策略</span>
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {codexInstructionsStrategy === "auto" && "自动 (推荐)"}
+                  {codexInstructionsStrategy === "force_official" && "强制官方"}
+                  {codexInstructionsStrategy === "keep_original" && "透传原样"}
+                </span>
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-4 pb-4">
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">
+                    控制如何处理 Codex 请求的 instructions 字段，影响与上游中转站的兼容性
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor={isEdit ? "edit-codex-strategy" : "codex-strategy"}>
+                    策略选择
+                  </Label>
+                  <Select
+                    value={codexInstructionsStrategy}
+                    onValueChange={(value) =>
+                      setCodexInstructionsStrategy(value as CodexInstructionsStrategy)
+                    }
+                    disabled={isPending}
+                  >
+                    <SelectTrigger id={isEdit ? "edit-codex-strategy" : "codex-strategy"}>
+                      <SelectValue placeholder="选择策略" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">
+                        <div className="space-y-1">
+                          <div className="font-medium">自动 (推荐)</div>
+                          <div className="text-xs text-muted-foreground max-w-xs">
+                            透传客户端 instructions，400 错误时自动重试官方 prompt
+                          </div>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="force_official">
+                        <div className="space-y-1">
+                          <div className="font-medium">强制官方</div>
+                          <div className="text-xs text-muted-foreground max-w-xs">
+                            始终使用官方 Codex CLI instructions（约 4000+ 字）
+                          </div>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="keep_original">
+                        <div className="space-y-1">
+                          <div className="font-medium">透传原样</div>
+                          <div className="text-xs text-muted-foreground max-w-xs">
+                            始终透传客户端 instructions，不自动重试（适用于宽松中转站）
+                          </div>
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    <strong>提示</strong>: 部分严格的 Codex 中转站（如 88code、foxcode）需要官方
+                    instructions，选择&quot;自动&quot;或&quot;强制官方&quot;策略
+                  </p>
+                </div>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
         )}
 
         {isEdit ? (

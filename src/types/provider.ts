@@ -51,6 +51,10 @@ export interface Provider {
   proxyUrl: string | null;
   proxyFallbackToDirect: boolean;
 
+  // 供应商官网地址（用于快速跳转管理）
+  websiteUrl: string | null;
+  faviconUrl: string | null;
+
   // 废弃（保留向后兼容，但不再使用）
   // TPM (Tokens Per Minute): 每分钟可处理的文本总量
   tpm: number | null;
@@ -99,6 +103,9 @@ export interface ProviderDisplay {
   // 代理配置
   proxyUrl: string | null;
   proxyFallbackToDirect: boolean;
+  // 供应商官网地址
+  websiteUrl: string | null;
+  faviconUrl: string | null;
   // 废弃字段（保留向后兼容）
   tpm: number | null;
   rpm: number | null;
@@ -149,6 +156,10 @@ export interface CreateProviderData {
   proxy_url?: string | null;
   proxy_fallback_to_direct?: boolean;
 
+  // 供应商官网地址
+  website_url?: string | null;
+  favicon_url?: string | null;
+
   // 废弃字段（保留向后兼容）
   // TPM (Tokens Per Minute): 每分钟可处理的文本总量
   tpm: number | null;
@@ -195,6 +206,10 @@ export interface UpdateProviderData {
   // 代理配置（支持 HTTP/HTTPS/SOCKS5）
   proxy_url?: string | null;
   proxy_fallback_to_direct?: boolean;
+
+  // 供应商官网地址
+  website_url?: string | null;
+  favicon_url?: string | null;
 
   // 废弃字段（保留向后兼容）
   // TPM (Tokens Per Minute): 每分钟可处理的文本总量

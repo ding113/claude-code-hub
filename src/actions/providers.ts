@@ -130,6 +130,8 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         circuitBreakerHalfOpenSuccessThreshold: provider.circuitBreakerHalfOpenSuccessThreshold,
         proxyUrl: provider.proxyUrl,
         proxyFallbackToDirect: provider.proxyFallbackToDirect,
+        websiteUrl: provider.websiteUrl,
+        faviconUrl: provider.faviconUrl,
         tpm: provider.tpm,
         rpm: provider.rpm,
         rpd: provider.rpd,
@@ -179,6 +181,7 @@ export async function addProvider(data: {
   circuit_breaker_half_open_success_threshold?: number;
   proxy_url?: string | null;
   proxy_fallback_to_direct?: boolean;
+  website_url?: string | null;
   codex_instructions_strategy?: "auto" | "force_official" | "keep_original";
   tpm: number | null;
   rpm: number | null;
@@ -209,6 +212,23 @@ export async function addProvider(data: {
     const validated = CreateProviderSchema.parse(data);
     logger.trace("addProvider:validated", { name: validated.name });
 
+    // 获取 favicon URL
+    let faviconUrl: string | null = null;
+    if (validated.website_url) {
+      try {
+        const url = new URL(validated.website_url);
+        const domain = url.hostname;
+        faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
+        logger.trace("addProvider:favicon_generated", { domain, faviconUrl });
+      } catch (error) {
+        logger.warn("addProvider:favicon_fetch_failed", {
+          websiteUrl: validated.website_url,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        // Favicon 获取失败不影响主流程
+      }
+    }
+
     const payload = {
       ...validated,
       limit_5h_usd: validated.limit_5h_usd ?? null,
@@ -221,6 +241,8 @@ export async function addProvider(data: {
         validated.circuit_breaker_half_open_success_threshold ?? 2,
       proxy_url: validated.proxy_url ?? null,
       proxy_fallback_to_direct: validated.proxy_fallback_to_direct ?? false,
+      website_url: validated.website_url ?? null,
+      favicon_url: faviconUrl,
       tpm: validated.tpm ?? null,
       rpm: validated.rpm ?? null,
       rpd: validated.rpd ?? null,
@@ -286,6 +308,7 @@ export async function editProvider(
     circuit_breaker_half_open_success_threshold?: number;
     proxy_url?: string | null;
     proxy_fallback_to_direct?: boolean;
+    website_url?: string | null;
     codex_instructions_strategy?: "auto" | "force_official" | "keep_original";
     tpm?: number | null;
     rpm?: number | null;
@@ -308,7 +331,34 @@ export async function editProvider(
     }
 
     const validated = UpdateProviderSchema.parse(data);
-    const provider = await updateProvider(providerId, validated);
+
+    // 如果 website_url 被更新，重新生成 favicon URL
+    let faviconUrl: string | null | undefined = undefined; // undefined 表示不更新
+    if (validated.website_url !== undefined) {
+      if (validated.website_url) {
+        try {
+          const url = new URL(validated.website_url);
+          const domain = url.hostname;
+          faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
+          logger.trace("editProvider:favicon_generated", { domain, faviconUrl });
+        } catch (error) {
+          logger.warn("editProvider:favicon_fetch_failed", {
+            websiteUrl: validated.website_url,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          faviconUrl = null;
+        }
+      } else {
+        faviconUrl = null; // website_url 被清空时也清空 favicon
+      }
+    }
+
+    const payload = {
+      ...validated,
+      ...(faviconUrl !== undefined && { favicon_url: faviconUrl }),
+    };
+
+    const provider = await updateProvider(providerId, payload);
 
     if (!provider) {
       return { ok: false, error: "供应商不存在" };
@@ -655,6 +705,39 @@ export async function testProviderProxy(data: {
   } catch (error) {
     logger.error("测试代理连接失败:", error);
     const message = error instanceof Error ? error.message : "测试代理连接失败";
+    return { ok: false, error: message };
+  }
+}
+
+/**
+ * 获取供应商的未脱敏密钥（仅管理员）
+ * 用于安全展示和复制完整 API Key
+ */
+export async function getUnmaskedProviderKey(id: number): Promise<ActionResult<{ key: string }>> {
+  "use server";
+
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return { ok: false, error: "权限不足：仅管理员可查看完整密钥" };
+    }
+
+    const provider = await findProviderById(id);
+    if (!provider) {
+      return { ok: false, error: "供应商不存在" };
+    }
+
+    // 记录查看行为（不记录密钥内容）
+    logger.info("Admin viewed provider key", {
+      userId: session.user.id,
+      providerId: id,
+      providerName: provider.name,
+    });
+
+    return { ok: true, data: { key: provider.key } };
+  } catch (error) {
+    logger.error("获取供应商密钥失败:", error);
+    const message = error instanceof Error ? error.message : "获取供应商密钥失败";
     return { ok: false, error: message };
   }
 }

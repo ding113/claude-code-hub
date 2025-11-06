@@ -113,6 +113,13 @@
       "when": 1762333515926,
       "tag": "0015_narrow_gunslinger",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1762449880213,
+      "tag": "0016_curious_paladin",
+      "breakpoints": true
     }
   ]
 }
