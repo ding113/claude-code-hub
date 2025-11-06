@@ -30,10 +30,14 @@ function getInitialLogLevel(): LogLevel {
 
 /**
  * 创建 Pino 日志实例
+ * pino-pretty 在 Next.js 15 + Turbopack 下有兼容性问题，暂时禁用
+ * 在 Turbopack 环境下使用默认格式化器（不启用 pino-pretty)
  */
+const enablePrettyTransport = isDevelopment() && !process.env.TURBOPACK;
+
 const pinoInstance = pino({
   level: getInitialLogLevel(),
-  transport: isDevelopment()
+  transport: enablePrettyTransport
     ? {
         target: "pino-pretty",
         options: {
