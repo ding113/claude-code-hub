@@ -46,8 +46,10 @@ export function ProviderManager({
         case "name":
           return a.name.localeCompare(b.name);
         case "priority":
-          return b.priority - a.priority;
+          // 优先级：数值越小越优先（1 > 2 > 3），升序排列
+          return a.priority - b.priority;
         case "weight":
+          // 权重：数值越大越优先，降序排列
           return b.weight - a.weight;
         case "createdAt": {
           const timeA = new Date(a.createdAt).getTime();
