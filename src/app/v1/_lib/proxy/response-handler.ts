@@ -535,9 +535,23 @@ function extractUsageMetrics(value: unknown): UsageMetrics | null {
     hasAny = true;
   }
 
+  // Claude 格式：顶层 cache_read_input_tokens（扁平结构）
   if (typeof usage.cache_read_input_tokens === "number") {
     result.cache_read_input_tokens = usage.cache_read_input_tokens;
     hasAny = true;
+  }
+
+  // OpenAI Response API 格式：input_tokens_details.cached_tokens（嵌套结构）
+  // 仅在顶层字段不存在时使用（避免重复计算）
+  if (!result.cache_read_input_tokens) {
+    const inputTokensDetails = usage.input_tokens_details as Record<string, unknown> | undefined;
+    if (inputTokensDetails && typeof inputTokensDetails.cached_tokens === "number") {
+      result.cache_read_input_tokens = inputTokensDetails.cached_tokens;
+      hasAny = true;
+      logger.debug("[UsageMetrics] Extracted cached tokens from OpenAI Response API format", {
+        cachedTokens: inputTokensDetails.cached_tokens,
+      });
+    }
   }
 
   return hasAny ? result : null;
