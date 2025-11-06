@@ -125,7 +125,14 @@ export class ProxyResponseHandler {
           }
           if (usageValue && typeof usageValue === "object") {
             usageRecord = usageValue as Record<string, unknown>;
-            usageMetrics = extractUsageMetrics(usageValue);
+            const extractedUsage = extractUsageMetrics(usageValue);
+            if (extractedUsage) {
+              usageMetrics = adjustUsageForProviderType(extractedUsage, provider.providerType);
+              logger.debug("[ResponseHandler] Parsed usage from non-stream response", {
+                usage: usageMetrics,
+                providerType: provider.providerType,
+              });
+            }
           }
         } catch {
           // 非 JSON 响应时保持原始日志
@@ -379,9 +386,9 @@ export class ProxyResponseHandler {
             if (responseObj?.usage) {
               const usageMetrics = extractUsageMetrics(responseObj.usage);
               if (usageMetrics) {
-                usageForCost = usageMetrics;
+                usageForCost = adjustUsageForProviderType(usageMetrics, provider.providerType);
                 logger.debug("[ResponseHandler] Captured usage from Codex response.completed", {
-                  usage: usageMetrics,
+                  usage: usageForCost,
                 });
               }
             }
@@ -396,9 +403,9 @@ export class ProxyResponseHandler {
             const eventData = event.data as Record<string, unknown>;
             const usageMetrics = extractUsageMetrics(eventData.usage);
             if (usageMetrics) {
-              usageForCost = usageMetrics;
+              usageForCost = adjustUsageForProviderType(usageMetrics, provider.providerType);
               logger.debug("[ResponseHandler] Captured usage from Claude message_delta", {
-                usage: usageMetrics,
+                usage: usageForCost,
               });
             }
           }
@@ -555,6 +562,39 @@ function extractUsageMetrics(value: unknown): UsageMetrics | null {
   }
 
   return hasAny ? result : null;
+}
+
+function adjustUsageForProviderType(
+  usage: UsageMetrics,
+  providerType: string | null | undefined
+): UsageMetrics {
+  if (providerType !== "codex") {
+    return usage;
+  }
+
+  const cachedTokens = usage.cache_read_input_tokens;
+  const inputTokens = usage.input_tokens;
+
+  if (typeof cachedTokens !== "number" || typeof inputTokens !== "number") {
+    return usage;
+  }
+
+  const adjustedInput = Math.max(inputTokens - cachedTokens, 0);
+  if (adjustedInput === inputTokens) {
+    return usage;
+  }
+
+  logger.debug("[UsageMetrics] Adjusted codex input tokens to exclude cached tokens", {
+    providerType,
+    originalInputTokens: inputTokens,
+    cachedTokens,
+    adjustedInputTokens: adjustedInput,
+  });
+
+  return {
+    ...usage,
+    input_tokens: adjustedInput,
+  };
 }
 
 async function updateRequestCostFromUsage(
