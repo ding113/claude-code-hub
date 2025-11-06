@@ -231,7 +231,9 @@ export function ProviderRichListItem({
           )}
 
           {/* 类型图标 */}
-          <div className={`flex items-center justify-center w-6 h-6 rounded ${typeConfig.bgColor} flex-shrink-0`}>
+          <div
+            className={`flex items-center justify-center w-6 h-6 rounded ${typeConfig.bgColor} flex-shrink-0`}
+          >
             <TypeIcon className="h-3.5 w-3.5" />
           </div>
         </div>
