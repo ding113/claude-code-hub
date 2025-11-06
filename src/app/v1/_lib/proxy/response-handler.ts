@@ -595,7 +595,10 @@ function parseUsageFromResponseText(
       applyUsageValue(data.usage, `sse.${event.event}`);
 
       if (!usageMetrics && data.response && typeof data.response === "object") {
-        applyUsageValue((data.response as Record<string, unknown>).usage, `sse.${event.event}.response`);
+        applyUsageValue(
+          (data.response as Record<string, unknown>).usage,
+          `sse.${event.event}.response`
+        );
       }
     }
   }
