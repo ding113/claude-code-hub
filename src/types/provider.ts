@@ -1,6 +1,9 @@
 // 供应商类型枚举
 export type ProviderType = "claude" | "claude-auth" | "codex" | "gemini-cli" | "openai-compatible";
 
+// Codex Instructions 策略枚举
+export type CodexInstructionsStrategy = "auto" | "force_official" | "keep_original";
+
 export interface Provider {
   id: number;
   name: string;
@@ -28,6 +31,10 @@ export interface Provider {
 
   // 加入 Claude 调度池：仅对非 Anthropic 提供商有效
   joinClaudePool: boolean;
+
+  // Codex Instructions 策略：控制如何处理 Codex 请求的 instructions 字段
+  // 仅对 providerType = 'codex' 的供应商有效
+  codexInstructionsStrategy: CodexInstructionsStrategy;
 
   // 金额限流配置
   limit5hUsd: number | null;
@@ -78,6 +85,8 @@ export interface ProviderDisplay {
   allowedModels: string[] | null;
   // 加入 Claude 调度池
   joinClaudePool: boolean;
+  // Codex Instructions 策略
+  codexInstructionsStrategy: CodexInstructionsStrategy;
   // 金额限流配置
   limit5hUsd: number | null;
   limitWeeklyUsd: number | null;
@@ -123,6 +132,7 @@ export interface CreateProviderData {
   model_redirects?: Record<string, string> | null;
   allowed_models?: string[] | null;
   join_claude_pool?: boolean;
+  codex_instructions_strategy?: CodexInstructionsStrategy;
 
   // 金额限流配置
   limit_5h_usd?: number | null;
@@ -169,6 +179,7 @@ export interface UpdateProviderData {
   model_redirects?: Record<string, string> | null;
   allowed_models?: string[] | null;
   join_claude_pool?: boolean;
+  codex_instructions_strategy?: CodexInstructionsStrategy;
 
   // 金额限流配置
   limit_5h_usd?: number | null;

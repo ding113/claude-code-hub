@@ -16,7 +16,9 @@ export interface ProviderChainItem {
     | "request_success" // 修复：请求成功（首次）
     | "retry_success" // 重试成功
     | "retry_failed" // 重试失败（供应商错误，已计入熔断器）
-    | "system_error"; // 系统/网络错误（不计入熔断器）
+    | "system_error" // 系统/网络错误（不计入熔断器）
+    | "retry_with_official_instructions" // Codex instructions 自动重试（官方）
+    | "retry_with_cached_instructions"; // Codex instructions 智能重试（缓存）
 
   // === 选择方法（细化） ===
   selectionMethod?:
@@ -59,6 +61,9 @@ export interface ProviderChainItem {
       upstreamBody?: string; // 原始响应体
       upstreamParsed?: unknown; // 解析后的 JSON
     };
+
+    // Codex Instructions 重试来源（用于智能重试）
+    instructionsSource?: "cache" | "official";
 
     // 系统/网络错误（fetch 异常）
     system?: {

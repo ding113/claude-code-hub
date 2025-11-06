@@ -99,6 +99,15 @@ export const providers = pgTable('providers', {
   // 启用后，如果该提供商配置了重定向到 claude-* 模型，可以加入 claude 调度池
   joinClaudePool: boolean('join_claude_pool').default(false),
 
+  // Codex Instructions 策略：控制如何处理 Codex 请求的 instructions 字段
+  // - 'auto' (默认): 透传客户端 instructions，400 错误时自动重试（使用官方 instructions）
+  // - 'force_official': 始终强制使用官方 Codex CLI instructions（约 4000+ 字完整 prompt）
+  // - 'keep_original': 始终透传客户端 instructions，不自动重试（适用于宽松的中转站）
+  // 仅对 providerType = 'codex' 的供应商有效
+  codexInstructionsStrategy: varchar('codex_instructions_strategy', { length: 20 })
+    .default('auto')
+    .$type<'auto' | 'force_official' | 'keep_original'>(),
+
   // 金额限流配置
   limit5hUsd: numeric('limit_5h_usd', { precision: 10, scale: 2 }),
   limitWeeklyUsd: numeric('limit_weekly_usd', { precision: 10, scale: 2 }),
@@ -243,6 +252,9 @@ export const systemSettings = pgTable('system_settings', {
   cleanupRetentionDays: integer('cleanup_retention_days').default(30),
   cleanupSchedule: varchar('cleanup_schedule', { length: 50 }).default('0 2 * * *'),
   cleanupBatchSize: integer('cleanup_batch_size').default(10000),
+
+  // 客户端版本检查配置
+  enableClientVersionCheck: boolean('enable_client_version_check').notNull().default(false),
 
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),

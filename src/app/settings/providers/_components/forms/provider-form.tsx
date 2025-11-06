@@ -24,7 +24,7 @@ import {
   AlertDialogTitle as AlertTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import type { ProviderDisplay, ProviderType } from "@/types/provider";
+import type { ProviderDisplay, ProviderType, CodexInstructionsStrategy } from "@/types/provider";
 import { validateNumericField, isValidUrl } from "@/lib/utils/validation";
 import { PROVIDER_DEFAULTS } from "@/lib/constants/provider.constants";
 import { toast } from "sonner";
@@ -107,6 +107,10 @@ export function ProviderForm({
     sourceProvider?.proxyFallbackToDirect ?? false
   );
 
+  // Codex Instructions 策略配置
+  const [codexInstructionsStrategy, setCodexInstructionsStrategy] =
+    useState<CodexInstructionsStrategy>(sourceProvider?.codexInstructionsStrategy ?? "auto");
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -146,6 +150,7 @@ export function ProviderForm({
             circuit_breaker_half_open_success_threshold?: number;
             proxy_url?: string | null;
             proxy_fallback_to_direct?: boolean;
+            codex_instructions_strategy?: CodexInstructionsStrategy;
             tpm?: number | null;
             rpm?: number | null;
             rpd?: number | null;
@@ -172,6 +177,7 @@ export function ProviderForm({
             circuit_breaker_half_open_success_threshold: halfOpenSuccessThreshold ?? 2,
             proxy_url: proxyUrl.trim() || null,
             proxy_fallback_to_direct: proxyFallbackToDirect,
+            codex_instructions_strategy: codexInstructionsStrategy,
             tpm: null,
             rpm: null,
             rpd: null,
@@ -211,6 +217,7 @@ export function ProviderForm({
             circuit_breaker_half_open_success_threshold: halfOpenSuccessThreshold ?? 2,
             proxy_url: proxyUrl.trim() || null,
             proxy_fallback_to_direct: proxyFallbackToDirect,
+            codex_instructions_strategy: codexInstructionsStrategy,
             tpm: null,
             rpm: null,
             rpd: null,
@@ -245,6 +252,7 @@ export function ProviderForm({
           setHalfOpenSuccessThreshold(2);
           setProxyUrl("");
           setProxyFallbackToDirect(false);
+          setCodexInstructionsStrategy("auto");
         }
         onSuccess?.();
       } catch (error) {
@@ -718,6 +726,63 @@ export function ProviderForm({
             </div>
           </div>
         </div>
+
+        {/* Codex Instructions 策略配置 - 仅 Codex 供应商显示 */}
+        {providerType === "codex" && (
+          <div className="space-y-4 pt-2 border-t">
+            <div className="space-y-1">
+              <div className="text-sm font-medium">Codex Instructions 策略</div>
+              <p className="text-xs text-muted-foreground">
+                控制如何处理 Codex 请求的 instructions 字段，影响与上游中转站的兼容性
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor={isEdit ? "edit-codex-strategy" : "codex-strategy"}>策略选择</Label>
+              <Select
+                value={codexInstructionsStrategy}
+                onValueChange={(value) =>
+                  setCodexInstructionsStrategy(value as CodexInstructionsStrategy)
+                }
+                disabled={isPending}
+              >
+                <SelectTrigger id={isEdit ? "edit-codex-strategy" : "codex-strategy"}>
+                  <SelectValue placeholder="选择策略" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">
+                    <div className="space-y-1">
+                      <div className="font-medium">自动 (推荐)</div>
+                      <div className="text-xs text-muted-foreground max-w-xs">
+                        透传客户端 instructions，400 错误时自动重试官方 prompt
+                      </div>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="force_official">
+                    <div className="space-y-1">
+                      <div className="font-medium">强制官方</div>
+                      <div className="text-xs text-muted-foreground max-w-xs">
+                        始终使用官方 Codex CLI instructions（约 4000+ 字）
+                      </div>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="keep_original">
+                    <div className="space-y-1">
+                      <div className="font-medium">透传原样</div>
+                      <div className="text-xs text-muted-foreground max-w-xs">
+                        始终透传客户端 instructions，不自动重试（适用于宽松中转站）
+                      </div>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                <strong>提示</strong>: 部分严格的 Codex 中转站（如 88code、foxcode）需要官方
+                instructions，选择&quot;自动&quot;或&quot;强制官方&quot;策略
+              </p>
+            </div>
+          </div>
+        )}
 
         {isEdit ? (
           <div className="flex items-center justify-between pt-4">

@@ -10,6 +10,7 @@
 import fs from "fs/promises";
 import { logger } from "@/lib/logger";
 import path from "path";
+import { isClientAbortError } from "@/app/v1/_lib/proxy/errors";
 
 const LITELLM_PRICE_URL =
   "https://jsd-proxy.ygxz.in/gh/BerriAI/litellm/model_prices_and_context_window.json";
@@ -60,7 +61,7 @@ export async function fetchLiteLLMPrices(): Promise<string | null> {
     return jsonText;
   } catch (error) {
     if (error instanceof Error) {
-      if (error.name === "AbortError") {
+      if (isClientAbortError(error)) {
         logger.error("❌ Fetch LiteLLM prices timeout after 10s");
       } else {
         logger.error("❌ Failed to fetch LiteLLM prices:", { context: error.message });

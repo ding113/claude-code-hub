@@ -164,6 +164,44 @@ export enum ErrorCategory {
 }
 
 /**
+ * 检测是否为客户端中断错误
+ *
+ * 采用白名单模式，精确检测客户端主动中断的错误，避免误判业务错误。
+ *
+ * 检测逻辑（优先级从高到低）：
+ * 1. 错误名称检查（最可靠）：AbortError、ResponseAborted
+ * 2. HTTP 状态码检查：499（Client Closed Request）
+ * 3. 错误消息检查（向后兼容）：仅检查精确的中断消息
+ *
+ * @param error - 错误对象
+ * @returns 是否为客户端中断错误
+ *
+ * @example
+ * isClientAbortError(new Error('AbortError')) // true
+ * isClientAbortError(new Error('User aborted transaction')) // false（业务错误，不是客户端中断）
+ */
+export function isClientAbortError(error: Error): boolean {
+  // 1. 检查错误名称（最可靠）
+  if (error.name === "AbortError" || error.name === "ResponseAborted") {
+    return true;
+  }
+
+  // 2. 检查 HTTP 状态码（Nginx 使用的 "Client Closed Request"）
+  if (error instanceof ProxyError && error.statusCode === 499) {
+    return true;
+  }
+
+  // 3. 检查精确的错误消息（白名单模式，向后兼容）
+  const abortMessages = [
+    "This operation was aborted", // 标准 AbortError 消息
+    "The user aborted a request", // 浏览器标准消息
+    "aborted", // 向后兼容（但需在前两个检查失败后才使用）
+  ];
+
+  return abortMessages.some((msg) => error.message.includes(msg));
+}
+
+/**
  * 判断错误类型
  *
  * 分类规则：
@@ -187,12 +225,8 @@ export enum ErrorCategory {
  * @returns 错误分类（PROVIDER_ERROR、SYSTEM_ERROR 或 CLIENT_ABORT）
  */
 export function categorizeError(error: Error): ErrorCategory {
-  // 客户端中断检测（优先级最高）
-  if (
-    error.name === "AbortError" ||
-    error.message.includes("aborted") ||
-    (error instanceof ProxyError && error.statusCode === 499)
-  ) {
+  // 客户端中断检测（优先级最高）- 使用统一的精确检测函数
+  if (isClientAbortError(error)) {
     return ErrorCategory.CLIENT_ABORT; // 客户端主动中断
   }
 

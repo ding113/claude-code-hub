@@ -15,6 +15,8 @@ import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { defaultRegistry } from "../converters";
 import type { Format, TransformState } from "../converters/types";
 import { mapClientFormatToTransformer, mapProviderTypeToTransformer } from "./format-mapper";
+import { AsyncTaskManager } from "@/lib/async-task-manager";
+import { isClientAbortError } from "./errors";
 
 export type UsageMetrics = {
   input_tokens?: number;
@@ -92,8 +94,22 @@ export class ProxyResponseHandler {
       }
     }
 
-    void (async () => {
+    // ✅ 使用 AsyncTaskManager 管理后台处理任务
+    const messageContext = session.messageContext;
+    const taskId = `non-stream-${messageContext?.id || `unknown-${Date.now()}`}`;
+    const abortController = new AbortController();
+
+    const processingPromise = (async () => {
       try {
+        // ✅ 检查客户端是否断开
+        if (session.clientAbortSignal?.aborted || abortController.signal.aborted) {
+          logger.info("ResponseHandler: Non-stream task cancelled (client disconnected)", {
+            taskId,
+            providerId: provider.id,
+          });
+          return;
+        }
+
         const responseText = await responseForLog.text();
         let usageRecord: Record<string, unknown> | null = null;
         let usageMetrics: UsageMetrics | null = null;
@@ -122,7 +138,6 @@ export class ProxyResponseHandler {
           });
         }
 
-        const messageContext = session.messageContext;
         if (usageRecord && usageMetrics && messageContext) {
           await updateRequestCostFromUsage(
             messageContext.id,
@@ -187,23 +202,49 @@ export class ProxyResponseHandler {
         }
 
         logger.debug("ResponseHandler: Non-stream response processed", {
+          taskId,
           providerId: provider.id,
           providerName: provider.name,
           statusCode,
         });
       } catch (error) {
-        // 检测是否为客户端中断
+        // 检测是否为客户端中断（使用统一的精确检测函数）
         const err = error as Error;
-        if (err.name === "AbortError" || err.message?.includes("aborted")) {
-          logger.warn("ResponseHandler: Non-stream processing aborted by client", {
+        if (isClientAbortError(err)) {
+          logger.warn("ResponseHandler: Non-stream processing aborted", {
+            taskId,
             providerId: provider.id,
             providerName: provider.name,
+            errorName: err.name,
+            reason:
+              err.name === "ResponseAborted"
+                ? "Response transmission interrupted"
+                : "Client disconnected",
           });
         } else {
           logger.error("Failed to handle non-stream log:", error);
         }
+      } finally {
+        AsyncTaskManager.cleanup(taskId);
       }
     })();
+
+    // ✅ 注册任务并添加全局错误捕获
+    AsyncTaskManager.register(taskId, processingPromise, "non-stream-processing");
+    processingPromise.catch((error) => {
+      logger.error("ResponseHandler: Uncaught error in non-stream processing", {
+        taskId,
+        error,
+      });
+    });
+
+    // ✅ 客户端断开时取消任务
+    if (session.clientAbortSignal) {
+      session.clientAbortSignal.addEventListener("abort", () => {
+        AsyncTaskManager.cancel(taskId);
+        abortController.abort();
+      });
+    }
 
     return finalResponse;
   }
@@ -271,7 +312,11 @@ export class ProxyResponseHandler {
     const [clientStream, internalStream] = processedStream.tee();
     const statusCode = response.status;
 
-    void (async () => {
+    // ✅ 使用 AsyncTaskManager 管理后台处理任务
+    const taskId = `stream-${messageContext.id}`;
+    const abortController = new AbortController();
+
+    const processingPromise = (async () => {
       const reader = internalStream.getReader();
       const decoder = new TextDecoder();
       const chunks: string[] = [];
@@ -279,6 +324,16 @@ export class ProxyResponseHandler {
 
       try {
         while (true) {
+          // ✅ 检查取消信号
+          if (session.clientAbortSignal?.aborted || abortController.signal.aborted) {
+            logger.info("ResponseHandler: Stream processing cancelled", {
+              taskId,
+              providerId: provider.id,
+              chunksCollected: chunks.length,
+            });
+            break; // 提前终止
+          }
+
           const { value, done } = await reader.read();
           if (done) {
             break;
@@ -401,22 +456,52 @@ export class ProxyResponseHandler {
           providerChain: session.getProviderChain(),
         });
       } catch (error) {
-        // 检测是否为客户端中断
+        // 检测是否为客户端中断（使用统一的精确检测函数）
         const err = error as Error;
-        if (err.name === "AbortError" || err.message?.includes("aborted")) {
-          logger.warn("ResponseHandler: Stream reading aborted by client", {
+        if (isClientAbortError(err)) {
+          logger.warn("ResponseHandler: Stream reading aborted", {
+            taskId,
             providerId: provider.id,
             providerName: provider.name,
             messageId: messageContext.id,
             chunksCollected: chunks.length,
+            errorName: err.name,
+            reason:
+              err.name === "ResponseAborted"
+                ? "Response transmission interrupted"
+                : "Client disconnected",
           });
         } else {
           logger.error("Failed to save SSE content:", error);
         }
       } finally {
-        reader.releaseLock();
+        // ✅ 确保资源释放
+        try {
+          reader.releaseLock();
+        } catch (releaseError) {
+          logger.warn("Failed to release reader lock", { taskId, releaseError });
+        }
+        AsyncTaskManager.cleanup(taskId);
       }
     })();
+
+    // ✅ 注册任务并添加全局错误捕获
+    AsyncTaskManager.register(taskId, processingPromise, "stream-processing");
+    processingPromise.catch((error) => {
+      logger.error("ResponseHandler: Uncaught error in stream processing", {
+        taskId,
+        messageId: messageContext.id,
+        error,
+      });
+    });
+
+    // ✅ 客户端断开时取消任务
+    if (session.clientAbortSignal) {
+      session.clientAbortSignal.addEventListener("abort", () => {
+        AsyncTaskManager.cancel(taskId);
+        abortController.abort();
+      });
+    }
 
     return new Response(clientStream, {
       status: response.status,
@@ -450,9 +535,23 @@ function extractUsageMetrics(value: unknown): UsageMetrics | null {
     hasAny = true;
   }
 
+  // Claude 格式：顶层 cache_read_input_tokens（扁平结构）
   if (typeof usage.cache_read_input_tokens === "number") {
     result.cache_read_input_tokens = usage.cache_read_input_tokens;
     hasAny = true;
+  }
+
+  // OpenAI Response API 格式：input_tokens_details.cached_tokens（嵌套结构）
+  // 仅在顶层字段不存在时使用（避免重复计算）
+  if (!result.cache_read_input_tokens) {
+    const inputTokensDetails = usage.input_tokens_details as Record<string, unknown> | undefined;
+    if (inputTokensDetails && typeof inputTokensDetails.cached_tokens === "number") {
+      result.cache_read_input_tokens = inputTokensDetails.cached_tokens;
+      hasAny = true;
+      logger.debug("[UsageMetrics] Extracted cached tokens from OpenAI Response API format", {
+        cachedTokens: inputTokensDetails.cached_tokens,
+      });
+    }
   }
 
   return hasAny ? result : null;
