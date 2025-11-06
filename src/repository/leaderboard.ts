@@ -46,7 +46,7 @@ async function findLeaderboard(startTime: Date, endTime: Date): Promise<Leaderbo
     .select({
       userId: messageRequest.userId,
       userName: users.name,
-      totalRequests: sql<number>`count(*)::int`,
+      totalRequests: sql<number>`count(*)::double precision`,
       totalCost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
       totalTokens: sql<number>`COALESCE(
         sum(
@@ -54,8 +54,9 @@ async function findLeaderboard(startTime: Date, endTime: Date): Promise<Leaderbo
           ${messageRequest.outputTokens} +
           COALESCE(${messageRequest.cacheCreationInputTokens}, 0) +
           COALESCE(${messageRequest.cacheReadInputTokens}, 0)
-        ), 0
-      )::int`,
+        )::double precision,
+        0::double precision
+      )`,
     })
     .from(messageRequest)
     .innerJoin(users, and(sql`${messageRequest.userId} = ${users.id}`, isNull(users.deletedAt)))

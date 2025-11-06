@@ -223,13 +223,13 @@ export async function aggregateSessionStats(sessionId: string): Promise<{
   // 1. 聚合统计
   const [stats] = await db
     .select({
-      requestCount: sql<number>`count(*)::int`,
+      requestCount: sql<number>`count(*)::double precision`,
       totalCostUsd: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
-      totalInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::int`,
-      totalOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::int`,
-      totalCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::int`,
-      totalCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}), 0)::int`,
-      totalDurationMs: sql<number>`COALESCE(sum(${messageRequest.durationMs}), 0)::int`,
+      totalInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens})::double precision, 0::double precision)`,
+      totalOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens})::double precision, 0::double precision)`,
+      totalCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens})::double precision, 0::double precision)`,
+      totalCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens})::double precision, 0::double precision)`,
+      totalDurationMs: sql<number>`COALESCE(sum(${messageRequest.durationMs})::double precision, 0::double precision)`,
       firstRequestAt: sql<Date>`min(${messageRequest.createdAt})`,
       lastRequestAt: sql<Date>`max(${messageRequest.createdAt})`,
     })
@@ -352,13 +352,13 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
   const statsResults = await db
     .select({
       sessionId: messageRequest.sessionId,
-      requestCount: sql<number>`count(*)::int`,
+      requestCount: sql<number>`count(*)::double precision`,
       totalCostUsd: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
-      totalInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::int`,
-      totalOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::int`,
-      totalCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::int`,
-      totalCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}), 0)::int`,
-      totalDurationMs: sql<number>`COALESCE(sum(${messageRequest.durationMs}), 0)::int`,
+      totalInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens})::double precision, 0::double precision)`,
+      totalOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens})::double precision, 0::double precision)`,
+      totalCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens})::double precision, 0::double precision)`,
+      totalCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens})::double precision, 0::double precision)`,
+      totalDurationMs: sql<number>`COALESCE(sum(${messageRequest.durationMs})::double precision, 0::double precision)`,
       firstRequestAt: sql<Date>`min(${messageRequest.createdAt})`,
       lastRequestAt: sql<Date>`max(${messageRequest.createdAt})`,
     })
