@@ -25,6 +25,51 @@ import { getEnvConfig } from "@/lib/config/env.schema";
 const MAX_ATTEMPTS_PER_PROVIDER = 2; // 每个供应商最多尝试次数（首次 + 1次重试）
 const MAX_PROVIDER_SWITCHES = 20; // 保险栓：最多切换 20 次供应商（防止无限循环）
 
+/**
+ * 过滤私有参数（下划线前缀）
+ *
+ * 目的：防止私有参数（如 _canRetryWithOfficialInstructions）泄露到上游供应商
+ * 导致 "Unsupported parameter" 错误
+ *
+ * @param obj - 原始请求对象
+ * @returns 过滤后的请求对象
+ */
+function filterPrivateParameters(obj: unknown): unknown {
+  // 非对象类型直接返回
+  if (typeof obj !== "object" || obj === null) {
+    return obj;
+  }
+
+  // 数组类型递归处理
+  if (Array.isArray(obj)) {
+    return obj.map((item) => filterPrivateParameters(item));
+  }
+
+  // 对象类型：过滤下划线前缀的键
+  const filtered: Record<string, unknown> = {};
+  const removedKeys: string[] = [];
+
+  for (const [key, value] of Object.entries(obj)) {
+    if (key.startsWith("_")) {
+      // 私有参数：跳过
+      removedKeys.push(key);
+    } else {
+      // 公开参数：递归过滤值
+      filtered[key] = filterPrivateParameters(value);
+    }
+  }
+
+  // 记录被过滤的参数（debug 级别）
+  if (removedKeys.length > 0) {
+    logger.debug("[ProxyForwarder] Filtered private parameters from request", {
+      removedKeys,
+      reason: "Private parameters (underscore-prefixed) should not be sent to upstream providers",
+    });
+  }
+
+  return filtered;
+}
+
 export class ProxyForwarder {
   static async send(session: ProxySession): Promise<Response> {
     if (!session.provider || !session.authState?.success) {
@@ -660,7 +705,9 @@ export class ProxyForwarder {
     // 确保 OpenAI 格式转换为 Response API 后，发送的是包含 input 字段的请求体
     let requestBody: BodyInit | undefined;
     if (hasBody) {
-      const bodyString = JSON.stringify(session.request.message);
+      // 过滤私有参数（下划线前缀）防止泄露到上游供应商
+      const filteredMessage = filterPrivateParameters(session.request.message);
+      const bodyString = JSON.stringify(filteredMessage);
       requestBody = bodyString;
 
       // 调试日志：输出实际转发的请求体（仅在开发环境）
