@@ -119,7 +119,13 @@ export async function getLeaderboardWithCache(
       // 释放锁
       await redis.del(lockKey);
 
-      logger.info("[LeaderboardCache] Cache updated", { period, scope, recordCount: data.length, cacheKey, ttl: 60 });
+      logger.info("[LeaderboardCache] Cache updated", {
+        period,
+        scope,
+        recordCount: data.length,
+        cacheKey,
+        ttl: 60,
+      });
 
       return data;
     } else {
@@ -145,7 +151,11 @@ export async function getLeaderboardWithCache(
     }
   } catch (error) {
     // Redis 异常，降级到直接查询
-    logger.error("[LeaderboardCache] Redis error, fallback to direct query", { period, scope, error });
+    logger.error("[LeaderboardCache] Redis error, fallback to direct query", {
+      period,
+      scope,
+      error,
+    });
     return await queryDatabase(period, scope);
   }
 }

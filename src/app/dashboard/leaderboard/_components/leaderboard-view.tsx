@@ -109,7 +109,9 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     {
       header: "供应商",
       cell: (row, index) => (
-        <span className={index < 3 ? "font-semibold" : ""}>{(row as ProviderEntry).providerName}</span>
+        <span className={index < 3 ? "font-semibold" : ""}>
+          {(row as ProviderEntry).providerName}
+        </span>
       ),
     },
     {
@@ -138,13 +140,16 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     {
       header: "平均响应时间",
       className: "text-right",
-      cell: (row) => `${Math.round((row as ProviderEntry).avgResponseTime || 0).toLocaleString()} ms`,
+      cell: (row) =>
+        `${Math.round((row as ProviderEntry).avgResponseTime || 0).toLocaleString()} ms`,
     },
   ];
 
-  const columns = (scope === "user"
-    ? (userColumns as ColumnDef<UserEntry>[])
-    : (providerColumns as ColumnDef<ProviderEntry>[])) as ColumnDef<UserEntry | ProviderEntry>[];
+  const columns = (
+    scope === "user"
+      ? (userColumns as ColumnDef<UserEntry>[])
+      : (providerColumns as ColumnDef<ProviderEntry>[])
+  ) as ColumnDef<UserEntry | ProviderEntry>[];
   const rowKey = (row: UserEntry | ProviderEntry) =>
     scope === "user" ? (row as UserEntry).userId : (row as ProviderEntry).providerId;
 

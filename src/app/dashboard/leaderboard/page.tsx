@@ -22,10 +22,7 @@ export default async function LeaderboardPage() {
   if (!hasPermission) {
     return (
       <div className="space-y-6">
-        <Section
-          title="消耗排行榜"
-          description="查看用户消耗排名，数据每 5 分钟更新一次"
-        >
+        <Section title="消耗排行榜" description="查看用户消耗排名，数据每 5 分钟更新一次">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -61,10 +58,7 @@ export default async function LeaderboardPage() {
   // 有权限时渲染排行榜
   return (
     <div className="space-y-6">
-      <Section
-        title="消耗排行榜"
-        description="查看用户消耗排名，数据每 5 分钟更新一次"
-      >
+      <Section title="消耗排行榜" description="查看用户消耗排名，数据每 5 分钟更新一次">
         <LeaderboardView isAdmin={isAdmin} />
       </Section>
     </div>

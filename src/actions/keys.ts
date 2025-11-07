@@ -58,9 +58,8 @@ export async function addKey(data: {
     const generatedKey = "sk-" + randomBytes(16).toString("hex");
 
     // 转换 expiresAt: undefined → null（永不过期），string → Date（设置日期）
-    const expiresAt = validatedData.expiresAt === undefined
-      ? null
-      : new Date(validatedData.expiresAt);
+    const expiresAt =
+      validatedData.expiresAt === undefined ? null : new Date(validatedData.expiresAt);
 
     await createKey({
       user_id: data.userId,
@@ -118,9 +117,8 @@ export async function editKey(
     const validatedData = KeyFormSchema.parse(data);
 
     // 转换 expiresAt: undefined → null（清除日期），string → Date（设置日期）
-    const expiresAt = validatedData.expiresAt === undefined
-      ? null
-      : new Date(validatedData.expiresAt);
+    const expiresAt =
+      validatedData.expiresAt === undefined ? null : new Date(validatedData.expiresAt);
 
     await updateKey(keyId, {
       name: validatedData.name,

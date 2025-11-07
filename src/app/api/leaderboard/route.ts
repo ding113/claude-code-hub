@@ -66,18 +66,11 @@ export async function GET(request: NextRequest) {
 
     // 供应商榜仅管理员可见
     if (scope === "provider" && !isAdmin) {
-      return NextResponse.json(
-        { error: "仅管理员可查看供应商排行榜" },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: "仅管理员可查看供应商排行榜" }, { status: 403 });
     }
 
     // 使用 Redis 乐观缓存获取数据
-    const rawData = await getLeaderboardWithCache(
-      period,
-      systemSettings.currencyDisplay,
-      scope
-    );
+    const rawData = await getLeaderboardWithCache(period, systemSettings.currencyDisplay, scope);
 
     // 格式化金额字段
     const data = rawData.map((entry) => ({

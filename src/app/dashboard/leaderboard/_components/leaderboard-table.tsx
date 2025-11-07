@@ -26,7 +26,12 @@ interface LeaderboardTableProps<T> {
   getRowKey?: (row: T, index: number) => string | number;
 }
 
-export function LeaderboardTable<T>({ data, period, columns, getRowKey }: LeaderboardTableProps<T>) {
+export function LeaderboardTable<T>({
+  data,
+  period,
+  columns,
+  getRowKey,
+}: LeaderboardTableProps<T>) {
   if (data.length === 0) {
     return (
       <Card>
