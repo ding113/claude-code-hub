@@ -16,7 +16,10 @@ interface CostLimit {
 }
 
 export class RateLimitService {
-  private static redis = getRedisClient();
+  // 使用 getter 实现懒加载，避免模块加载时立即连接 Redis（构建阶段触发）
+  private static get redis() {
+    return getRedisClient();
+  }
 
   /**
    * 检查金额限制（Key 或 Provider）
