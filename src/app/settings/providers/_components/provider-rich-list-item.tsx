@@ -324,9 +324,12 @@ export function ProviderRichListItem({
         </div>
 
         {/* 今日用量（仅大屏） */}
-        <div className="hidden lg:block text-center flex-shrink-0 w-20">
+        <div className="hidden lg:block text-center flex-shrink-0 min-w-[100px]">
           <div className="text-xs text-muted-foreground">今日用量</div>
-          <div className="font-medium">{provider.todayCallCount || 0}</div>
+          <div className="font-medium">{provider.todayCallCount || 0} 次</div>
+          <div className="text-xs font-mono text-muted-foreground mt-0.5">
+            {formatCurrency(parseFloat(provider.todayTotalCostUsd || "0"), currencyCode)}
+          </div>
         </div>
 
         {/* 操作按钮 */}

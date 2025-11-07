@@ -6,6 +6,7 @@ import { providers } from "@/drizzle/schema";
 import { eq, isNull, and, desc, sql } from "drizzle-orm";
 import type { Provider, CreateProviderData, UpdateProviderData } from "@/types/provider";
 import { toProvider } from "./_shared/transformers";
+import { getEnvConfig } from "@/lib/config";
 
 export async function createProvider(providerData: CreateProviderData): Promise<Provider> {
   const dbData = {
@@ -300,22 +301,20 @@ export async function getProviderStatistics(): Promise<
   }>
 > {
   try {
-    // 获取今日时间范围（本地时区）- 使用 Date 对象进行范围查询
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    // 统一的时区处理：使用 PostgreSQL AT TIME ZONE + 环境变量 TZ
+    // 参考 getUserStatisticsFromDB 的实现，避免 Node.js Date 带来的时区偏移
+    const timezone = getEnvConfig().TZ;
 
     const query = sql`
       WITH provider_stats AS (
         SELECT
           p.id,
           COALESCE(
-            SUM(CASE WHEN mr.created_at >= ${today} AND mr.created_at < ${tomorrow}
+            SUM(CASE WHEN (mr.created_at AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date
                  THEN mr.cost_usd ELSE 0 END),
             0
           ) AS today_cost,
-          COUNT(CASE WHEN mr.created_at >= ${today} AND mr.created_at < ${tomorrow}
+          COUNT(CASE WHEN (mr.created_at AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date
                   THEN 1 END)::integer AS today_calls
         FROM providers p
         LEFT JOIN message_request mr ON p.id = mr.provider_id
@@ -351,7 +350,9 @@ export async function getProviderStatistics(): Promise<
       count: Array.isArray(result) ? result.length : 0,
     });
 
-    // postgres-js 返回的结果需要通过 unknown 进行类型断言
+    // 注意：返回结果中的 today_cost 为 numeric，使用字符串表示；
+    // last_call_time 由数据库返回为时间戳（UTC）。
+    // 这里保持原样，交由上层进行展示格式化。
     return result as unknown as Array<{
       id: number;
       today_cost: string;

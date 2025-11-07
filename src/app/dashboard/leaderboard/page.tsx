@@ -38,7 +38,7 @@ export default async function LeaderboardPage() {
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>访问受限</AlertTitle>
                 <AlertDescription>
-                  排行榜功能需要管理员开启"允许查看全站使用量"权限。
+                  排行榜功能需要管理员开启&nbsp;&quot;允许查看全站使用量&quot;&nbsp;权限。
                   {isAdmin && (
                     <span>
                       请前往{" "}
@@ -65,7 +65,7 @@ export default async function LeaderboardPage() {
         title="消耗排行榜"
         description="查看用户消耗排名，数据每 5 分钟更新一次"
       >
-        <LeaderboardView />
+        <LeaderboardView isAdmin={isAdmin} />
       </Section>
     </div>
   );

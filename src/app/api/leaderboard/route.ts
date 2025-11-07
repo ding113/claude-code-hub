@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
 import { getLeaderboardWithCache } from "@/lib/redis";
+import type { LeaderboardScope } from "@/lib/redis/leaderboard-cache";
 import { getSystemSettings } from "@/repository/system-config";
 import { formatCurrency } from "@/lib/utils";
 import { getSession } from "@/lib/auth";
@@ -10,7 +11,7 @@ export const runtime = "nodejs";
 
 /**
  * 获取排行榜数据
- * GET /api/leaderboard?period=daily|monthly
+ * GET /api/leaderboard?period=daily|monthly&scope=user|provider
  *
  * 需要认证，普通用户需要 allowGlobalUsageView 权限
  * 实时计算 + Redis 乐观缓存（60 秒 TTL）
@@ -47,6 +48,7 @@ export async function GET(request: NextRequest) {
     // 验证参数
     const searchParams = request.nextUrl.searchParams;
     const period = searchParams.get("period") || "daily";
+    const scope = (searchParams.get("scope") as LeaderboardScope) || "user"; // 向后兼容：默认 user
 
     if (period !== "daily" && period !== "monthly") {
       return NextResponse.json(
@@ -55,8 +57,27 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    if (scope !== "user" && scope !== "provider") {
+      return NextResponse.json(
+        { error: "参数 scope 必须是 'user' 或 'provider'" },
+        { status: 400 }
+      );
+    }
+
+    // 供应商榜仅管理员可见
+    if (scope === "provider" && !isAdmin) {
+      return NextResponse.json(
+        { error: "仅管理员可查看供应商排行榜" },
+        { status: 403 }
+      );
+    }
+
     // 使用 Redis 乐观缓存获取数据
-    const rawData = await getLeaderboardWithCache(period, systemSettings.currencyDisplay);
+    const rawData = await getLeaderboardWithCache(
+      period,
+      systemSettings.currencyDisplay,
+      scope
+    );
 
     // 格式化金额字段
     const data = rawData.map((entry) => ({
@@ -69,6 +90,7 @@ export async function GET(request: NextRequest) {
       userName: session.user.name,
       isAdmin: session.user.role === "admin",
       period,
+      scope,
       entriesCount: data.length,
     });
 
