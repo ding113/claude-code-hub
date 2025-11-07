@@ -47,7 +47,6 @@ next-env.d.ts
 .cursor/
 .claude/
 .serena/
-logs/
 !src/app/dashboard/logs/
 !src/app/settings/logs/
 .idea/
