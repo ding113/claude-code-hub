@@ -162,8 +162,8 @@ interface OverviewPanelProps {
  */
 export function OverviewPanel({ currencyCode = "USD", isAdmin = false }: OverviewPanelProps) {
   const router = useRouter();
-  const tc = useTranslations('customs');
-  const tu = useTranslations('ui');
+  const tc = useTranslations("customs");
+  const tu = useTranslations("ui");
 
   const { data, isLoading } = useQuery<OverviewData, Error>({
     queryKey: ["overview-data"],
@@ -197,27 +197,27 @@ export function OverviewPanel({ currencyCode = "USD", isAdmin = false }: Overvie
       <div className="lg:col-span-3">
         <div className="grid grid-cols-2 gap-3">
           <MetricCard
-            title={tc('metrics.concurrent')}
+            title={tc("metrics.concurrent")}
             value={metrics.concurrentSessions}
-            description={tc('activeSessions.recent')}
+            description={tc("activeSessions.recent")}
             icon={Activity}
           />
           <MetricCard
-            title={tc('metrics.todayRequests')}
+            title={tc("metrics.todayRequests")}
             value={metrics.todayRequests}
-            description={tc('metrics.requestsDescription')}
+            description={tc("metrics.requestsDescription")}
             icon={TrendingUp}
           />
           <MetricCard
-            title={tc('metrics.todayCost')}
+            title={tc("metrics.todayCost")}
             value={formatCurrency(metrics.todayCost, currencyCode)}
-            description={tc('metrics.costDescription')}
+            description={tc("metrics.costDescription")}
             icon={DollarSign}
           />
           <MetricCard
-            title={tc('metrics.avgResponse')}
+            title={tc("metrics.avgResponse")}
             value={metrics.avgResponseTime}
-            description={tc('metrics.responseDescription')}
+            description={tc("metrics.responseDescription")}
             icon={Clock}
             formatter={formatResponseTime}
           />
@@ -227,7 +227,7 @@ export function OverviewPanel({ currencyCode = "USD", isAdmin = false }: Overvie
             onClick={() => router.push("/dashboard/sessions")}
             className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors text-center py-1.5 hover:bg-muted rounded-md"
           >
-            {tc('metrics.viewDetails')} →
+            {tc("metrics.viewDetails")} →
           </button>
         </div>
       </div>
@@ -238,16 +238,16 @@ export function OverviewPanel({ currencyCode = "USD", isAdmin = false }: Overvie
           <div className="px-4 py-3 border-b flex items-center justify-between flex-shrink-0">
             <div className="flex items-center gap-2">
               <Activity className="h-4 w-4 text-primary" />
-              <h3 className="font-semibold text-sm">{tc('activeSessions.title')}</h3>
+              <h3 className="font-semibold text-sm">{tc("activeSessions.title")}</h3>
               <span className="text-xs text-muted-foreground">
-                {tc('activeSessions.summary', { count: metrics.recentSessions.length, minutes: 5 })}
+                {tc("activeSessions.summary", { count: metrics.recentSessions.length, minutes: 5 })}
               </span>
             </div>
             <button
               onClick={() => router.push("/dashboard/sessions")}
               className="text-xs text-muted-foreground hover:text-foreground transition-colors"
             >
-              {tc('activeSessions.viewAll')} →
+              {tc("activeSessions.viewAll")} →
             </button>
           </div>
 
@@ -255,11 +255,11 @@ export function OverviewPanel({ currencyCode = "USD", isAdmin = false }: Overvie
             {isLoading && metrics.recentSessions.length === 0 ? (
               <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                {tu('common.loading')}
+                {tu("common.loading")}
               </div>
             ) : metrics.recentSessions.length === 0 ? (
               <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-                {tc('activeSessions.empty')}
+                {tc("activeSessions.empty")}
               </div>
             ) : (
               <div className="divide-y">

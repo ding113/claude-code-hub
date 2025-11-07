@@ -40,7 +40,7 @@ export function UserQuotaHeader({
   currencyCode = "USD",
   className,
 }: UserQuotaHeaderProps) {
-  const t = useTranslations('quota');
+  const t = useTranslations("quota");
   // 计算使用率
   const rpmRate = getUsageRate(rpmCurrent, rpmLimit);
   const dailyRate = getUsageRate(dailyCostCurrent, dailyCostLimit);
@@ -89,10 +89,10 @@ export function UserQuotaHeader({
               variant={userRole === "admin" ? "default" : "secondary"}
               className="flex-shrink-0"
             >
-              {userRole === "admin" ? t('header.role.admin') : t('header.role.user')}
+              {userRole === "admin" ? t("header.role.admin") : t("header.role.user")}
             </Badge>
             <Badge variant="outline" className="flex-shrink-0">
-              {keyCount} {t('header.keysCountSuffix')}
+              {keyCount} {t("header.keysCountSuffix")}
             </Badge>
           </div>
 
@@ -102,7 +102,7 @@ export function UserQuotaHeader({
               {/* RPM 进度条 */}
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground w-20 text-right flex-shrink-0">
-                  {t('header.rpm')}:
+                  {t("header.rpm")}:
                 </span>
                 <QuotaProgress current={rpmCurrent} limit={rpmLimit} className="flex-1" />
                 <span className="text-sm font-mono w-24 text-right flex-shrink-0">
@@ -116,7 +116,7 @@ export function UserQuotaHeader({
               {/* 今日消费进度条 */}
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground w-20 text-right flex-shrink-0">
-                  {t('header.todayCost')}:
+                  {t("header.todayCost")}:
                 </span>
                 <QuotaProgress
                   current={dailyCostCurrent}
@@ -159,7 +159,7 @@ export function UserQuotaHeader({
         {/* 超限提示 */}
         {colorClass === "exceeded" && (
           <div className="mt-2 text-sm text-red-600 dark:text-red-400 font-medium">
-            ⚠️ {t('header.exceededNotice')}
+            ⚠️ {t("header.exceededNotice")}
           </div>
         )}
       </CardHeader>

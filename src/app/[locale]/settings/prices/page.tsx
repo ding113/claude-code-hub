@@ -54,10 +54,7 @@ export default async function SettingsPricesPage({ searchParams }: SettingsPrice
 
   return (
     <>
-      <SettingsPageHeader
-        title={t("prices.title")}
-        description={t("prices.description")}
-      />
+      <SettingsPageHeader title={t("prices.title")} description={t("prices.description")} />
 
       <Section
         title={t("prices.section.title")}

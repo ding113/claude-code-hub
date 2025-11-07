@@ -72,11 +72,7 @@
       "nativeInstall": {
         "title": "Native Install（推荐）",
         "description": "官方推荐使用 Native 安装方式，具有以下优势：",
-        "advantages": [
-          "单个可执行文件，无需 Node.js 依赖",
-          "自动更新机制更稳定",
-          "启动速度更快"
-        ],
+        "advantages": ["单个可执行文件，无需 Node.js 依赖", "自动更新机制更稳定", "启动速度更快"],
 
         "macos": {
           "homebrew": "方法一：Homebrew（推荐）",
@@ -109,10 +105,7 @@
           ],
           "alpine": "Alpine Linux 特殊说明",
           "alpineText": "基于 musl/uClibc 的发行版（如 Alpine Linux）需要安装额外依赖：",
-          "alpineCode": [
-            "apk add libgcc libstdc++ ripgrep",
-            "export USE_BUILTIN_RIPGREP=0"
-          ]
+          "alpineCode": ["apk add libgcc libstdc++ ripgrep", "export USE_BUILTIN_RIPGREP=0"]
         },
 
         "windows": {

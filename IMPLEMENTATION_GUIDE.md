@@ -24,6 +24,7 @@ All translation keys are documented in `TRANSLATION_KEYS_REFERENCE.md`.
 ### Step 3: Test with Multiple Locales
 
 The application automatically loads translations based on the active locale:
+
 - English: `/en/*`
 - Japanese: `/ja/*`
 - Simplified Chinese: `/zh-CN/*`
@@ -34,7 +35,6 @@ The application automatically loads translations based on the active locale:
 
 - [x] Created `ui.json` for all 5 locales
   - UI states, table operations, error messages, pagination
-  
 - [x] Created `common.json` for all 5 locales
   - Action buttons, shared terms, status indicators
 
@@ -76,17 +76,20 @@ messages/
 ## Components Using These Translations
 
 ### 1. DataTable Component
+
 - **File**: `src/components/ui/data-table.tsx`
 - **Keys Used**:
   - `ui.common.noData` (line 107)
   - `ui.common.actions` (line 280)
 
 ### 2. List Component
+
 - **File**: `src/components/ui/list.tsx`
 - **Keys Used**:
   - `ui.common.noData` (line 240)
 
 ### 3. Error Boundary
+
 - **File**: `src/components/error-boundary.tsx`
 - **Keys Used**:
   - `ui.errorBoundary.title`
@@ -97,6 +100,7 @@ messages/
   - `common.retry`
 
 ### 4. Form Error Boundary
+
 - **File**: `src/components/form-error-boundary.tsx`
 - **Keys Used**:
   - `forms.errors.formErrorTitle`
@@ -104,6 +108,7 @@ messages/
   - `ui.common.retry` (through useTranslations("ui"))
 
 ### 5. Form Layout
+
 - **File**: `src/components/form/form-layout.tsx`
 - **Keys Used**:
   - `forms.common.cancel`
@@ -111,19 +116,21 @@ messages/
 
 ## Key Translation Statistics
 
-| Metric | Count |
-|--------|-------|
-| Total Locales | 5 |
-| Total Namespaces | 3 |
-| Total Files | 15 |
-| Keys per Locale | 141 |
-| Total Keys (across all locales) | 705 |
-| Average File Size | ~1.5 KB |
+| Metric                          | Count   |
+| ------------------------------- | ------- |
+| Total Locales                   | 5       |
+| Total Namespaces                | 3       |
+| Total Files                     | 15      |
+| Keys per Locale                 | 141     |
+| Total Keys (across all locales) | 705     |
+| Average File Size               | ~1.5 KB |
 
 ## Namespace Organization
 
 ### `ui.json` (47 keys per locale)
+
 Purpose: UI component states and operations
+
 - Common states (noData, loading, empty, error)
 - Table operations (pagination, sorting, filtering)
 - Error boundary messages
@@ -131,7 +138,9 @@ Purpose: UI component states and operations
 - Empty/Loading state messages
 
 ### `common.json` (43 keys per locale)
+
 Purpose: Cross-module shared terminology
+
 - Action buttons (save, cancel, delete, edit, create, etc.)
 - Generic operations (search, filter, export, import, etc.)
 - Status indicators (success, error, warning, info)
@@ -139,7 +148,9 @@ Purpose: Cross-module shared terminology
 - Boolean states (yes, no, ok)
 
 ### `forms.json` (51 keys per locale)
+
 Purpose: Form-specific texts
+
 - Form actions (submit, reset)
 - Form attributes (required, optional, processing)
 - Validation error messages
@@ -149,6 +160,7 @@ Purpose: Form-specific texts
 ## Usage Examples
 
 ### Example 1: DataTable with No Data
+
 ```typescript
 import { useTranslations } from "next-intl";
 
@@ -172,6 +184,7 @@ export function DataTable({ data, loading, error }) {
 ```
 
 ### Example 2: Form with Validation
+
 ```typescript
 import { useTranslations } from "next-intl";
 
@@ -204,6 +217,7 @@ export function LoginForm() {
 ```
 
 ### Example 3: Error Boundary
+
 ```typescript
 import { useTranslations } from "next-intl";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -272,6 +286,7 @@ test("displays no data message", () => {
    - `forms.json` - Form-specific texts
 
 2. Add the key to all 5 locale files:
+
    ```json
    {
      "ui": {
@@ -313,6 +328,7 @@ Translations support dynamic content using placeholders:
 ```
 
 Usage:
+
 ```typescript
 const t = useTranslations("forms");
 const message = t("errors.minLength", { min: 5 });
@@ -335,7 +351,8 @@ const message = t("errors.minLength", { min: 5 });
 
 **Problem**: Component shows key name instead of translation (e.g., "ui.common.noData")
 
-**Solution**: 
+**Solution**:
+
 1. Verify the key exists in all locale files
 2. Check spelling and nesting
 3. Use `TRANSLATION_KEYS_REFERENCE.md` to find correct key
@@ -345,6 +362,7 @@ const message = t("errors.minLength", { min: 5 });
 **Problem**: Same component shows different text in different locales
 
 **Solution**:
+
 1. Check that all locale files have identical key structure
 2. Verify no typos in key names
 3. Ensure all placeholders are consistent
@@ -354,6 +372,7 @@ const message = t("errors.minLength", { min: 5 });
 **Problem**: Translation file won't load
 
 **Solution**:
+
 1. Validate JSON: `jq empty messages/en/ui.json`
 2. Check for syntax errors (missing commas, quotes)
 3. Use JSON formatter to identify issues

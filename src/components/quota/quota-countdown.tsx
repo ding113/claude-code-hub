@@ -38,8 +38,8 @@ export function QuotaCountdown({
   showIcon = true,
   size = "md",
 }: QuotaCountdownProps) {
-  const t = useTranslations('quota');
-  const resolvedLabel = label ?? t('countdown.reset');
+  const t = useTranslations("quota");
+  const resolvedLabel = label ?? t("countdown.reset");
   const countdown = useCountdown(resetAt);
 
   // 根据剩余时间判断状态
@@ -144,9 +144,9 @@ export function QuotaCountdownWithProgress({
   label?: string;
   className?: string;
 }) {
-  const t = useTranslations('quota');
+  const t = useTranslations("quota");
   const countdown = useCountdown(resetAt);
-  const resolvedLabel = label ?? t('countdown.reset');
+  const resolvedLabel = label ?? t("countdown.reset");
 
   // 计算进度百分比
   const getProgress = () => {

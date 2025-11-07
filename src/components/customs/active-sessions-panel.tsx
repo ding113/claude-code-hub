@@ -143,8 +143,8 @@ function SessionListItem({
  */
 export function ActiveSessionsPanel({ currencyCode = "USD" }: { currencyCode?: CurrencyCode }) {
   const router = useRouter();
-  const tu = useTranslations('ui');
-  const tc = useTranslations('customs');
+  const tu = useTranslations("ui");
+  const tc = useTranslations("customs");
 
   const { data = [], isLoading } = useQuery<ActiveSessionInfo[], Error>({
     queryKey: ["active-sessions"],
@@ -157,16 +157,16 @@ export function ActiveSessionsPanel({ currencyCode = "USD" }: { currencyCode?: C
       <div className="px-4 py-3 border-b flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Activity className="h-4 w-4 text-primary" />
-          <h3 className="font-semibold text-sm">{tc('activeSessions.title')}</h3>
+          <h3 className="font-semibold text-sm">{tc("activeSessions.title")}</h3>
           <span className="text-xs text-muted-foreground">
-            {tc('activeSessions.summary', { count: data.length, minutes: 5 })}
+            {tc("activeSessions.summary", { count: data.length, minutes: 5 })}
           </span>
         </div>
         <button
           onClick={() => router.push("/dashboard/sessions")}
           className="text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
-          {tc('activeSessions.viewAll')} →
+          {tc("activeSessions.viewAll")} →
         </button>
       </div>
 
@@ -174,11 +174,11 @@ export function ActiveSessionsPanel({ currencyCode = "USD" }: { currencyCode?: C
         {isLoading && data.length === 0 ? (
           <div className="flex items-center justify-center h-[200px] text-muted-foreground text-sm">
             <Loader2 className="h-4 w-4 animate-spin mr-2" />
-            {tu('common.loading')}
+            {tu("common.loading")}
           </div>
         ) : data.length === 0 ? (
           <div className="flex items-center justify-center h-[200px] text-muted-foreground text-sm">
-            {tc('activeSessions.empty')}
+            {tc("activeSessions.empty")}
           </div>
         ) : (
           <div className="divide-y">

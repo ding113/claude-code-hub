@@ -26,6 +26,7 @@ export function MyComponent() {
 ## UI Namespace (`ui.json`)
 
 ### Common UI States
+
 ```
 ui.common.noData        "No data available"
 ui.common.actions       "Actions"
@@ -35,6 +36,7 @@ ui.common.error         "Error"
 ```
 
 ### Table Operations
+
 ```
 ui.table.pagination     "Pagination"
 ui.table.sorting        "Sort"
@@ -51,6 +53,7 @@ ui.table.deselectAll    "Deselect all"
 ```
 
 ### Error Boundary
+
 ```
 ui.errorBoundary.title                  "Something went wrong"
 ui.errorBoundary.defaultDescription     "An unexpected error occurred..."
@@ -60,6 +63,7 @@ ui.errorBoundary.listErrorDescription   "An error occurred while loading the lis
 ```
 
 ### Pagination
+
 ```
 ui.pagination.first     "First"
 ui.pagination.last      "Last"
@@ -71,6 +75,7 @@ ui.pagination.total     "Total {total} items"
 ```
 
 ### Empty & Loading States
+
 ```
 ui.empty.title          "No data"
 ui.empty.description    "No data to display"
@@ -82,6 +87,7 @@ ui.loading.description  "Please wait..."
 ## Common Namespace (`common.json`)
 
 ### Action Buttons
+
 ```
 common.save             "Save"
 common.cancel           "Cancel"
@@ -98,6 +104,7 @@ common.refresh          "Refresh"
 ```
 
 ### Form Operations
+
 ```
 common.search           "Search"
 common.filter           "Filter"
@@ -108,6 +115,7 @@ common.reset            "Reset"
 ```
 
 ### View Operations
+
 ```
 common.view             "View"
 common.copy             "Copy"
@@ -120,6 +128,7 @@ common.clear            "Clear"
 ```
 
 ### Boolean States
+
 ```
 common.ok               "OK"
 common.yes              "Yes"
@@ -127,6 +136,7 @@ common.no               "No"
 ```
 
 ### Time References
+
 ```
 common.today            "Today"
 common.yesterday        "Yesterday"
@@ -136,6 +146,7 @@ common.thisYear         "This year"
 ```
 
 ### Status Indicators
+
 ```
 common.loading          "Loading..."
 common.error            "Error"
@@ -149,12 +160,14 @@ common.emptyState       "No data to display"
 ## Forms Namespace (`forms.json`)
 
 ### Form Actions
+
 ```
 forms.submit            "Submit"
 forms.reset             "Reset"
 ```
 
 ### Form Attributes
+
 ```
 forms.required          "Required"
 forms.optional          "Optional"
@@ -162,12 +175,14 @@ forms.processing        "Processing..."
 ```
 
 ### Common Form Texts
+
 ```
 forms.common.cancel         "Cancel"
 forms.common.processing     "Processing..."
 ```
 
 ### Error Messages
+
 ```
 forms.errors.formErrorTitle             "Form error"
 forms.errors.formErrorDescription       "An error occurred while processing the form..."
@@ -184,6 +199,7 @@ forms.errors.pattern                    "Format does not match requirements"
 ```
 
 ### Input Placeholders
+
 ```
 forms.placeholder.text                  "Enter text"
 forms.placeholder.number                "Enter a number"
@@ -196,6 +212,7 @@ forms.placeholder.textarea              "Enter text here"
 ```
 
 ### Validation Messages
+
 ```
 forms.validation.required               "This field is required"
 forms.validation.invalid                "Invalid format"
@@ -207,6 +224,7 @@ forms.validation.invalidNumber          "Invalid number format"
 ```
 
 ### Form Messages
+
 ```
 forms.messages.success                  "Operation successful"
 forms.messages.error                    "Operation failed"
@@ -219,6 +237,7 @@ forms.messages.submit                   "Submitting..."
 ## Usage Patterns
 
 ### DataTable Component
+
 ```typescript
 const t = useTranslations("ui");
 
@@ -234,6 +253,7 @@ const t = useTranslations("ui");
 ```
 
 ### Form Component
+
 ```typescript
 const t = useTranslations("forms");
 const tCommon = useTranslations("common");
@@ -252,6 +272,7 @@ const tCommon = useTranslations("common");
 ```
 
 ### Error Boundary
+
 ```typescript
 const t = useTranslations("ui");
 
@@ -268,26 +289,31 @@ const t = useTranslations("ui");
 ## Localization Notes by Language
 
 ### English (en)
+
 - Standard professional English
 - Clear and concise terminology
 - Suitable for international business context
 
 ### Japanese (ja)
+
 - Uses appropriate Japanese grammatical structures
 - Technical terms in katakana
 - Polite form suitable for professional interfaces
 
 ### Simplified Chinese (zh-CN)
+
 - Mainland China standard terminology
 - Clear and direct communication style
 - Aligns with common technical community usage
 
 ### Traditional Chinese (zh-TW)
+
 - Taiwan/Hong Kong character set
 - Regional terminology alignment
 - Professional and respectful tone
 
 ### Russian (ru)
+
 - Full Russian language support
 - Proper case and gender agreement
 - Professional tone for business application
@@ -295,6 +321,7 @@ const t = useTranslations("ui");
 ## Best Practices
 
 1. **Always Use Translation Keys**: Never hardcode UI strings
+
    ```typescript
    // Good
    <p>{t("common.noData")}</p>
@@ -304,6 +331,7 @@ const t = useTranslations("ui");
    ```
 
 2. **Use Correct Namespace**: Choose the right namespace for context
+
    ```typescript
    // Use common for generic actions
    const tCommon = useTranslations("common");
@@ -316,15 +344,21 @@ const t = useTranslations("ui");
    ```
 
 3. **Handle Missing Keys Gracefully**: The i18n system will fallback to key name
+
    ```typescript
    // If key is missing, displays: "common.save"
-   {tCommon("save")}
+   {
+     tCommon("save");
+   }
    ```
 
 4. **Use Placeholders for Dynamic Content**: Format strings with placeholders
+
    ```typescript
    // Template has: "Minimum length is {min} characters"
-   {t("errors.minLength", { min: 5 })}  // "Minimum length is 5 characters"
+   {
+     t("errors.minLength", { min: 5 });
+   } // "Minimum length is 5 characters"
    ```
 
 5. **Keep Keys Consistent**: Use the provided keys, don't create new ones
@@ -359,6 +393,7 @@ const t = useTranslations("ui");
 ## Support & Maintenance
 
 For questions or to request new translation keys:
+
 1. Check this reference guide first
 2. Verify the key exists in all 5 locales
 3. Ensure consistent usage across components

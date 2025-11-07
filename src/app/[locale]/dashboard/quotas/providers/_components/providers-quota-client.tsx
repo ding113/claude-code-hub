@@ -147,7 +147,12 @@ export function ProvidersQuotaClient({
                   className="h-2"
                 />
                 <p className="text-xs text-muted-foreground">
-                  重置于 {formatDateDistance(new Date(provider.quota.costWeekly.resetAt), new Date(), locale)}
+                  重置于{" "}
+                  {formatDateDistance(
+                    new Date(provider.quota.costWeekly.resetAt),
+                    new Date(),
+                    locale
+                  )}
                 </p>
               </div>
             )}
@@ -170,7 +175,12 @@ export function ProvidersQuotaClient({
                   className="h-2"
                 />
                 <p className="text-xs text-muted-foreground">
-                  重置于 {formatDateDistance(new Date(provider.quota.costMonthly.resetAt), new Date(), locale)}
+                  重置于{" "}
+                  {formatDateDistance(
+                    new Date(provider.quota.costMonthly.resetAt),
+                    new Date(),
+                    locale
+                  )}
                 </p>
               </div>
             )}

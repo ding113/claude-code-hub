@@ -109,10 +109,7 @@
           ],
           "alpine": "Alpine Linux の特別な注記",
           "alpineText": "musl/uClibc ベースのディストリビューション (Alpine Linux など) は追加の依存関係をインストールする必要があります:",
-          "alpineCode": [
-            "apk add libgcc libstdc++ ripgrep",
-            "export USE_BUILTIN_RIPGREP=0"
-          ]
+          "alpineCode": ["apk add libgcc libstdc++ ripgrep", "export USE_BUILTIN_RIPGREP=0"]
         },
 
         "windows": {

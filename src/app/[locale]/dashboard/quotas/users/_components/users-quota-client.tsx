@@ -127,7 +127,12 @@ export function UsersQuotaClient({
                       limit={user.quota.dailyCost.limit}
                     />
                     <p className="text-xs text-muted-foreground">
-                      重置于 {formatDateDistance(new Date(user.quota.dailyCost.resetAt), new Date(), locale)}
+                      重置于{" "}
+                      {formatDateDistance(
+                        new Date(user.quota.dailyCost.resetAt),
+                        new Date(),
+                        locale
+                      )}
                     </p>
                   </div>
                 </>

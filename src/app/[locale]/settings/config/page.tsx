@@ -13,10 +13,7 @@ export default async function SettingsConfigPage() {
 
   return (
     <>
-      <SettingsPageHeader
-        title={t("config.title")}
-        description={t("config.description")}
-      />
+      <SettingsPageHeader title={t("config.title")} description={t("config.description")} />
 
       <Section
         title={t("config.section.siteParams.title")}

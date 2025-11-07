@@ -62,9 +62,7 @@ function DefaultErrorFallback({ error, resetError }: { error?: Error; resetError
           <AlertTriangle className="h-12 w-12 text-destructive" />
         </div>
         <CardTitle className="text-destructive">{t("errorBoundary.title")}</CardTitle>
-        <CardDescription>
-          {error?.message || t("errorBoundary.defaultDescription")}
-        </CardDescription>
+        <CardDescription>{error?.message || t("errorBoundary.defaultDescription")}</CardDescription>
       </CardHeader>
       <CardFooter className="flex gap-2 justify-center">
         <Button variant="outline" onClick={resetError} size="sm">

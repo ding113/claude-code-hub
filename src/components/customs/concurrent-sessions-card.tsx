@@ -25,7 +25,7 @@ async function fetchConcurrentSessions(): Promise<number> {
  */
 export function ConcurrentSessionsCard() {
   const router = useRouter();
-  const t = useTranslations('customs');
+  const t = useTranslations("customs");
   const { data = 0 } = useQuery<number, Error>({
     queryKey: ["concurrent-sessions"],
     queryFn: fetchConcurrentSessions,
@@ -39,12 +39,12 @@ export function ConcurrentSessionsCard() {
   return (
     <Card className="cursor-pointer hover:border-primary transition-colors" onClick={handleClick}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">{t('concurrent.title')}</CardTitle>
+        <CardTitle className="text-sm font-medium">{t("concurrent.title")}</CardTitle>
         <Activity className="h-4 w-4 text-muted-foreground" />
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold">{data}</div>
-        <p className="text-xs text-muted-foreground">{t('concurrent.description')}</p>
+        <p className="text-xs text-muted-foreground">{t("concurrent.description")}</p>
       </CardContent>
     </Card>
   );

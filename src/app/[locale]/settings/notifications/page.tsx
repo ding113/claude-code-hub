@@ -196,7 +196,9 @@ export default function NotificationsPage() {
               <AlertTriangle className="w-5 h-5 text-red-500" />
               {t("notifications.section.circuitBreaker.title")}
             </CardTitle>
-            <CardDescription>{t("notifications.section.circuitBreaker.description")}</CardDescription>
+            <CardDescription>
+              {t("notifications.section.circuitBreaker.description")}
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
@@ -260,7 +262,9 @@ export default function NotificationsPage() {
               <TrendingUp className="w-5 h-5 text-blue-500" />
               {t("notifications.section.dailyLeaderboard.title")}
             </CardTitle>
-            <CardDescription>{t("notifications.section.dailyLeaderboard.description")}</CardDescription>
+            <CardDescription>
+              {t("notifications.section.dailyLeaderboard.description")}
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">

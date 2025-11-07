@@ -5,6 +5,7 @@ This directory contains the internationalization (i18n) infrastructure for the a
 ## Overview
 
 The application supports 5 locales:
+
 - **zh-CN** (Chinese Simplified) - Default
 - **zh-TW** (Chinese Traditional)
 - **en** (English)
@@ -29,7 +30,7 @@ src/i18n/
 Defines supported locales, default locale, and locale labels.
 
 ```typescript
-import { locales, defaultLocale, localeLabels } from '@/i18n/config';
+import { locales, defaultLocale, localeLabels } from "@/i18n/config";
 ```
 
 ### 2. Routing (`routing.ts`)
@@ -37,6 +38,7 @@ import { locales, defaultLocale, localeLabels } from '@/i18n/config';
 Provides locale-aware routing configuration and navigation utilities.
 
 **Key Features:**
+
 - Automatic locale detection from:
   1. NEXT_LOCALE cookie (persisted for 1 year)
   2. Accept-Language header
@@ -44,6 +46,7 @@ Provides locale-aware routing configuration and navigation utilities.
 - Always-prefix strategy: All routes include locale prefix (e.g., `/zh-CN/dashboard`)
 
 **Navigation Utilities:**
+
 ```typescript
 import { Link, redirect, useRouter, usePathname } from '@/i18n/routing';
 
@@ -68,6 +71,7 @@ Configures how translations are loaded for each request. Currently returns empty
 ## Middleware Integration
 
 The middleware (`src/middleware.ts`) integrates:
+
 1. **Locale Detection**: Automatically detects and routes based on locale
 2. **Authentication**: Validates auth tokens and redirects if needed
 3. **Path Preservation**: Maintains locale prefix in redirects
@@ -75,6 +79,7 @@ The middleware (`src/middleware.ts`) integrates:
 ### Public Paths
 
 These paths don't require authentication:
+
 - `/[locale]/login`
 - `/[locale]/usage-doc`
 - `/api/auth/login`
@@ -121,15 +126,15 @@ export default function ClientComponent() {
 ### In Server Actions
 
 ```typescript
-import { redirect } from '@/i18n/routing';
-import { getTranslations } from 'next-intl/server';
+import { redirect } from "@/i18n/routing";
+import { getTranslations } from "next-intl/server";
 
 export async function serverAction() {
-  const t = await getTranslations('namespace');
+  const t = await getTranslations("namespace");
 
   // Do something...
 
-  redirect('/dashboard');
+  redirect("/dashboard");
 }
 ```
 
@@ -153,6 +158,7 @@ export async function serverAction() {
 ### Next.js 15 App Router Integration
 
 The configuration integrates with Next.js 15's App Router using:
+
 - `createNextIntlPlugin()` in `next.config.ts`
 - `createMiddleware()` for locale routing
 - `getRequestConfig()` for server-side translation loading
@@ -160,6 +166,7 @@ The configuration integrates with Next.js 15's App Router using:
 ### Type Safety
 
 All locale-related types are strictly typed:
+
 - `Locale` type: Union of supported locale codes
 - `Routing` type: Routing configuration type
 - Navigation utilities: Fully typed for IDE autocomplete
@@ -172,12 +179,15 @@ All locale-related types are strictly typed:
 ## Troubleshooting
 
 ### Issue: Locale not detected
+
 **Solution**: Check Accept-Language header or NEXT_LOCALE cookie
 
 ### Issue: Redirect loop
+
 **Solution**: Ensure public paths are correctly configured in middleware
 
 ### Issue: Type errors
+
 **Solution**: Run `pnpm typecheck` to verify TypeScript configuration
 
 ## References

@@ -100,9 +100,7 @@ function LoginPageContent() {
                     <p className="font-medium">{t("security.solutionTitle")}</p>
                     <ol className="ml-4 mt-1 list-decimal space-y-1">
                       <li>{t("security.useHttps")}</li>
-                      <li>
-                        {t("security.disableSecureCookies")}
-                      </li>
+                      <li>{t("security.disableSecureCookies")}</li>
                     </ol>
                   </div>
                 </AlertDescription>

@@ -44,17 +44,17 @@ export function QuotaToolbar({
   const [searchQuery, setSearchQuery] = useState("");
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [refreshInterval, setRefreshInterval] = useState(30);
-  const t = useTranslations('quota');
+  const t = useTranslations("quota");
 
   // Provide translated defaults when options are not passed in
   const _sortOptions = sortOptions ?? [
-    { value: 'name', label: t('toolbar.sortOptions.name') },
-    { value: 'usage', label: t('toolbar.sortOptions.usage') },
+    { value: "name", label: t("toolbar.sortOptions.name") },
+    { value: "usage", label: t("toolbar.sortOptions.usage") },
   ];
   const _filterOptions = filterOptions ?? [
-    { value: 'all', label: t('toolbar.filterOptions.all') },
-    { value: 'warning', label: t('toolbar.filterOptions.warning') },
-    { value: 'exceeded', label: t('toolbar.filterOptions.exceeded') },
+    { value: "all", label: t("toolbar.filterOptions.all") },
+    { value: "warning", label: t("toolbar.filterOptions.warning") },
+    { value: "exceeded", label: t("toolbar.filterOptions.exceeded") },
   ];
 
   // 自动刷新机制
@@ -91,7 +91,7 @@ export function QuotaToolbar({
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder={t('toolbar.searchPlaceholder')}
+              placeholder={t("toolbar.searchPlaceholder")}
               value={searchQuery}
               onChange={(e) => handleSearchChange(e.target.value)}
               className="pl-9"
@@ -103,7 +103,7 @@ export function QuotaToolbar({
         {showFilter && onFilter && (
           <Select defaultValue="all" onValueChange={onFilter}>
             <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder={t('toolbar.filter')} />
+              <SelectValue placeholder={t("toolbar.filter")} />
             </SelectTrigger>
             <SelectContent>
               {_filterOptions.map((option) => (
@@ -119,7 +119,7 @@ export function QuotaToolbar({
         {showSort && onSort && (
           <Select defaultValue="name" onValueChange={onSort}>
             <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder={t('toolbar.sort')} />
+              <SelectValue placeholder={t("toolbar.sort")} />
             </SelectTrigger>
             <SelectContent>
               {_sortOptions.map((option) => (
@@ -139,7 +139,7 @@ export function QuotaToolbar({
             <div className="flex items-center gap-2">
               <Switch id="auto-refresh" checked={autoRefresh} onCheckedChange={setAutoRefresh} />
               <Label htmlFor="auto-refresh" className="text-sm cursor-pointer">
-                {t('toolbar.autoRefresh')}
+                {t("toolbar.autoRefresh")}
               </Label>
             </div>
 
@@ -152,9 +152,9 @@ export function QuotaToolbar({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="10">{t('toolbar.interval.10s')}</SelectItem>
-                  <SelectItem value="30">{t('toolbar.interval.30s')}</SelectItem>
-                  <SelectItem value="60">{t('toolbar.interval.60s')}</SelectItem>
+                  <SelectItem value="10">{t("toolbar.interval.10s")}</SelectItem>
+                  <SelectItem value="30">{t("toolbar.interval.30s")}</SelectItem>
+                  <SelectItem value="60">{t("toolbar.interval.60s")}</SelectItem>
                 </SelectContent>
               </Select>
             )}
@@ -163,7 +163,7 @@ export function QuotaToolbar({
 
         <Button variant="outline" size="sm" onClick={handleManualRefresh} disabled={isPending}>
           <RefreshCw className={`h-4 w-4 ${isPending ? "animate-spin" : ""}`} />
-          <span className="ml-2">{t('toolbar.refresh')}</span>
+          <span className="ml-2">{t("toolbar.refresh")}</span>
         </Button>
       </div>
     </div>

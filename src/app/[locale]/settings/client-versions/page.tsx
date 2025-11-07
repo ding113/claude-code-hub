@@ -37,9 +37,7 @@ export default async function ClientVersionsPage() {
       <Card>
         <CardHeader>
           <CardTitle>{t("clientVersions.section.settings.title")}</CardTitle>
-          <CardDescription>
-            {t("clientVersions.section.settings.description")}
-          </CardDescription>
+          <CardDescription>{t("clientVersions.section.settings.description")}</CardDescription>
         </CardHeader>
         <CardContent>
           <ClientVersionToggle enabled={enableClientVersionCheck} />
@@ -50,9 +48,7 @@ export default async function ClientVersionsPage() {
       <Card>
         <CardHeader>
           <CardTitle>{t("clientVersions.section.distribution.title")}</CardTitle>
-          <CardDescription>
-            {t("clientVersions.section.distribution.description")}
-          </CardDescription>
+          <CardDescription>{t("clientVersions.section.distribution.description")}</CardDescription>
         </CardHeader>
         <CardContent>
           {stats && stats.length > 0 ? (

@@ -13,7 +13,7 @@ interface VersionInfo {
 }
 
 export function VersionUpdateNotifier() {
-  const t = useTranslations('customs');
+  const t = useTranslations("customs");
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
 
   useEffect(() => {
@@ -45,13 +45,13 @@ export function VersionUpdateNotifier() {
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center justify-center text-orange-600 hover:text-orange-700 dark:text-orange-500 dark:hover:text-orange-400"
-            aria-label={t('version.ariaUpdateAvailable')}
+            aria-label={t("version.ariaUpdateAvailable")}
           >
             <AlertCircle className="h-5 w-5" />
           </a>
         </TooltipTrigger>
         <TooltipContent side="bottom" className="max-w-xs">
-          <p className="font-medium">{t('version.updateAvailable')}</p>
+          <p className="font-medium">{t("version.updateAvailable")}</p>
           <p className="text-xs text-muted-foreground">
             {versionInfo.current} → {versionInfo.latest}
           </p>

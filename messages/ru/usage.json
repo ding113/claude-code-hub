@@ -109,10 +109,7 @@
           ],
           "alpine": "Особые примечания для Alpine Linux",
           "alpineText": "Дистрибутивы на основе musl/uClibc (например Alpine Linux) требуют установки дополнительных зависимостей:",
-          "alpineCode": [
-            "apk add libgcc libstdc++ ripgrep",
-            "export USE_BUILTIN_RIPGREP=0"
-          ]
+          "alpineCode": ["apk add libgcc libstdc++ ripgrep", "export USE_BUILTIN_RIPGREP=0"]
         },
 
         "windows": {

@@ -43,6 +43,7 @@ messages/
 Used for displaying UI states and table/list component texts.
 
 **Key Categories:**
+
 - `common` - Basic UI states (noData, actions, loading, empty, error)
 - `table` - Table-specific features (pagination, sorting, filtering, search, refresh, columns)
 - `errorBoundary` - Error messages for error boundaries (title, description, refresh page, list errors)
@@ -51,6 +52,7 @@ Used for displaying UI states and table/list component texts.
 - `loading` - Loading state messages
 
 **Translation Keys** (Sample):
+
 ```json
 {
   "common": {
@@ -73,6 +75,7 @@ Used for displaying UI states and table/list component texts.
 Used for generic action buttons and common terminology shared across all modules.
 
 **Key Categories:**
+
 - Action buttons (save, cancel, delete, confirm, edit, create, close, back, next, previous, retry)
 - Generic operations (refresh, search, filter, export, import, submit, reset, view, copy, download, upload, add, remove, apply, clear)
 - Boolean/UI states (ok, yes, no)
@@ -80,6 +83,7 @@ Used for generic action buttons and common terminology shared across all modules
 - Status indicators (loading, error, success, warning, info, noData, emptyState)
 
 **Translation Keys** (Sample):
+
 ```json
 {
   "save": "Save",
@@ -97,6 +101,7 @@ Used for generic action buttons and common terminology shared across all modules
 Used for form components, validation messages, and form-specific UI.
 
 **Key Categories:**
+
 - Form actions (submit, reset)
 - Form attributes (required, optional, processing)
 - Common form texts (cancel, processing)
@@ -106,6 +111,7 @@ Used for form components, validation messages, and form-specific UI.
 - Form messages (success, error, saved, deleted, loading)
 
 **Translation Keys** (Sample):
+
 ```json
 {
   "submit": "Submit",
@@ -127,23 +133,27 @@ Used for form components, validation messages, and form-specific UI.
 ### Components Using These Translations
 
 **ui.json:**
+
 - `src/components/ui/data-table.tsx` - Line 62, 107
 - `src/components/ui/list.tsx` - Line 195, 240
 - `src/components/error-boundary.tsx` - Line 57, 64, 66, 75, 86, 93, 96, 100
 - `src/components/form-error-boundary.tsx` - Line 14
 
 **common.json:**
+
 - `src/components/error-boundary.tsx` - Line 72, 100
 - `src/components/form/form-layout.tsx` - Line 72, 79, 124, 131
 - `src/components/form-error-boundary.tsx` - Line 28
 
 **forms.json:**
+
 - `src/components/form/form-layout.tsx` - Line 51, 102
 - `src/components/form-error-boundary.tsx` - Line 13, 21, 24
 
 ## Translation Locales
 
 ### 1. English (en)
+
 - **File Paths**: `/messages/en/{ui,common,forms}.json`
 - **Language Code**: `en`
 - **Status**: Complete
@@ -153,6 +163,7 @@ Used for form components, validation messages, and form-specific UI.
   - Complete coverage of all keys
 
 ### 2. Japanese (ja)
+
 - **File Paths**: `/messages/ja/{ui,common,forms}.json`
 - **Language Code**: `ja`
 - **Status**: Complete
@@ -162,6 +173,7 @@ Used for form components, validation messages, and form-specific UI.
   - Complete coverage including form placeholders
 
 ### 3. Russian (ru)
+
 - **File Paths**: `/messages/ru/{ui,common,forms}.json`
 - **Language Code**: `ru`
 - **Status**: Complete
@@ -171,6 +183,7 @@ Used for form components, validation messages, and form-specific UI.
   - Complete coverage of all categories
 
 ### 4. Simplified Chinese (zh-CN)
+
 - **File Paths**: `/messages/zh-CN/{ui,common,forms}.json`
 - **Language Code**: `zh-CN`
 - **Status**: Complete
@@ -180,6 +193,7 @@ Used for form components, validation messages, and form-specific UI.
   - Complete coverage including form validation messages
 
 ### 5. Traditional Chinese (zh-TW)
+
 - **File Paths**: `/messages/zh-TW/{ui,common,forms}.json`
 - **Language Code**: `zh-TW`
 - **Status**: Complete
@@ -255,12 +269,12 @@ forms.errors.formErrorDescription
 
 ### Distribution by Namespace
 
-| Namespace | Key Count | Purpose |
-|-----------|-----------|---------|
-| ui.json | 47 | UI states, table/list operations, error messages |
-| common.json | 43 | Generic action buttons and shared terms |
-| forms.json | 51 | Form validation, messages, placeholders |
-| **Total** | **141** | **Comprehensive UI translation set** |
+| Namespace   | Key Count | Purpose                                          |
+| ----------- | --------- | ------------------------------------------------ |
+| ui.json     | 47        | UI states, table/list operations, error messages |
+| common.json | 43        | Generic action buttons and shared terms          |
+| forms.json  | 51        | Form validation, messages, placeholders          |
+| **Total**   | **141**   | **Comprehensive UI translation set**             |
 
 ## File Ownership
 

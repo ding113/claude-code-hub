@@ -67,11 +67,11 @@ function getStatusConfig(
  * 用于概览面板的横向滚动展示
  */
 export function SessionCard({ session, className, currencyCode = "USD" }: SessionCardProps) {
-  const t = useTranslations('customs');
+  const t = useTranslations("customs");
   const statusConfig = getStatusConfig(session.status, session.statusCode, {
-    inProgress: t('sessions.status.inProgress'),
-    error: t('sessions.status.error'),
-    completed: t('sessions.status.completed')
+    inProgress: t("sessions.status.inProgress"),
+    error: t("sessions.status.error"),
+    completed: t("sessions.status.completed"),
   });
   const inputTokensDisplay =
     session.inputTokens !== undefined ? formatTokenAmount(session.inputTokens) : null;
@@ -106,7 +106,7 @@ export function SessionCard({ session, className, currencyCode = "USD" }: Sessio
           {/* 模型和供应商 */}
           <div className="flex items-center gap-1.5 text-xs">
             <Badge variant="secondary" className="truncate max-w-[120px] font-mono">
-              {session.model || t('sessions.unknown')}
+              {session.model || t("sessions.unknown")}
             </Badge>
             {session.providerName && (
               <span className="text-muted-foreground truncate flex-1">

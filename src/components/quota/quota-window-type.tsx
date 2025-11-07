@@ -16,7 +16,11 @@ interface WindowTypeConfig {
 // Static icon/style config; labels/descriptions come from i18n
 const WINDOW_STYLE: Record<WindowType, WindowTypeConfig> = {
   "5h": { icon: RefreshCw, variant: "default", color: "text-blue-600 dark:text-blue-400" },
-  weekly: { icon: CalendarDays, variant: "secondary", color: "text-purple-600 dark:text-purple-400" },
+  weekly: {
+    icon: CalendarDays,
+    variant: "secondary",
+    color: "text-purple-600 dark:text-purple-400",
+  },
   monthly: { icon: Calendar, variant: "secondary", color: "text-green-600 dark:text-green-400" },
   daily: { icon: Clock, variant: "secondary", color: "text-orange-600 dark:text-orange-400" },
 };
@@ -51,7 +55,7 @@ export function QuotaWindowType({
   showDescription = false,
   size = "sm",
 }: QuotaWindowTypeProps) {
-  const t = useTranslations('quota');
+  const t = useTranslations("quota");
   const style = WINDOW_STYLE[type];
   const Icon = style.icon;
   const label = t(`windowType.${type}.label` as any);
@@ -87,7 +91,7 @@ export function QuotaWindowTypeCompact({
   type: WindowType;
   className?: string;
 }) {
-  const t = useTranslations('quota');
+  const t = useTranslations("quota");
   const label = t(`windowType.${type}.label` as any);
   return <span className={cn("text-xs text-muted-foreground", className)}>{label}</span>;
 }
@@ -102,7 +106,7 @@ export function QuotaWindowTypeWithTooltip({
   type: WindowType;
   className?: string;
 }) {
-  const t = useTranslations('quota');
+  const t = useTranslations("quota");
   const style = WINDOW_STYLE[type];
   const Icon = style.icon;
   const label = t(`windowType.${type}.label` as any);

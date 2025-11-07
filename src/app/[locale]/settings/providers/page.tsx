@@ -25,10 +25,7 @@ export default async function SettingsProvidersPage() {
 
   return (
     <>
-      <SettingsPageHeader
-        title={t("providers.title")}
-        description={t("providers.description")}
-      />
+      <SettingsPageHeader title={t("providers.title")} description={t("providers.description")} />
 
       <Section
         title={t("providers.section.title")}

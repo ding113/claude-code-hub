@@ -127,7 +127,7 @@ Use variables in translations:
 
 ```tsx
 const t = useTranslations("common");
-<p>{t("greeting", { name: userName })}</p>
+<p>{t("greeting", { name: userName })}</p>;
 ```
 
 ## Automated String Extraction
@@ -211,7 +211,7 @@ const t = useTranslations("dashboard");
 <div>
   <h2>{t("newFeature.title")}</h2>
   <p>{t("newFeature.description")}</p>
-</div>
+</div>;
 ```
 
 ### Step 4: Validate JSON Syntax
@@ -247,8 +247,8 @@ next-intl provides type-safe translation keys when configured correctly:
 ```tsx
 // TypeScript will autocomplete and validate translation keys
 const t = useTranslations("dashboard");
-t("overview.title");  // ✓ Valid
-t("invalid.key");     // ✗ TypeScript error
+t("overview.title"); // ✓ Valid
+t("invalid.key"); // ✗ TypeScript error
 ```
 
 ## Common Patterns
@@ -256,7 +256,9 @@ t("invalid.key");     // ✗ TypeScript error
 ### Conditional Rendering
 
 ```tsx
-{isLoading ? t("common.status.loading") : t("common.actions.submit")}
+{
+  isLoading ? t("common.status.loading") : t("common.actions.submit");
+}
 ```
 
 ### Lists/Arrays
@@ -281,7 +283,7 @@ const weekdays = t.raw("weekdays") as string[];
 ```
 
 ```tsx
-t("itemCount", { count: items.length })
+t("itemCount", { count: items.length });
 ```
 
 ## Best Practices
@@ -309,6 +311,7 @@ t("itemCount", { count: items.length })
 
 **Problem**: `t("myKey")` returns the key instead of translation
 **Solution**:
+
 - Verify key exists in `messages/{locale}/{namespace}.json`
 - Check namespace matches `useTranslations("namespace")`
 - Ensure JSON syntax is valid
@@ -317,6 +320,7 @@ t("itemCount", { count: items.length })
 
 **Problem**: "Argument of type 'string' is not assignable to parameter"
 **Solution**:
+
 - Add key to translation file
 - Restart TypeScript server
 - Check for typos in key path
@@ -325,6 +329,7 @@ t("itemCount", { count: items.length })
 
 **Problem**: Fallback to Chinese appears in English locale
 **Solution**:
+
 - Add translation to `messages/en/{namespace}.json`
 - Copy key structure from `messages/zh-CN/`
 - Translate value to target language

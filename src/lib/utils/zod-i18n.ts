@@ -38,7 +38,9 @@ import { ERROR_CODES, zodErrorToCode } from "./error-messages";
  * const t = useTranslations("errors");
  * setZodErrorMap(t);
  */
-export function setZodErrorMap(t: (key: string, params?: Record<string, string | number>) => string): void {
+export function setZodErrorMap(
+  t: (key: string, params?: Record<string, string | number>) => string
+): void {
   // @ts-expect-error - Zod v4 type definition issue with error map signature
   z.setErrorMap((issue: z.ZodIssue, _ctx: { defaultError: string; data: unknown }) => {
     // Convert Zod error to our error code system
