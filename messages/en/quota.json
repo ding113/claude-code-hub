@@ -1,0 +1,55 @@
+{
+  "header": {
+    "title": "User Quota",
+    "role": {
+      "admin": "Admin",
+      "user": "User"
+    },
+    "keysCountSuffix": "keys",
+    "rpm": "Request Limit",
+    "todayCost": "Today's Cost",
+    "exceededNotice": "Quota exceeded, please contact administrator for assistance"
+  },
+  "countdown": {
+    "reset": "Reset Countdown"
+  },
+  "windowType": {
+    "5h": {
+      "label": "5-Hour Rolling",
+      "description": "Tracks spending from the past 5 hours, rolling updates hourly"
+    },
+    "weekly": {
+      "label": "Weekly Reset",
+      "description": "Calendar week (resets Monday 00:00), tracks entire week"
+    },
+    "monthly": {
+      "label": "Monthly Reset",
+      "description": "Calendar month (resets on 1st of month 00:00), tracks entire month"
+    },
+    "daily": {
+      "label": "Daily Reset",
+      "description": "Calendar day (resets daily 00:00), tracks by day"
+    }
+  },
+  "toolbar": {
+    "searchPlaceholder": "Search by username or key",
+    "filter": "Filter",
+    "sort": "Sort",
+    "refresh": "Refresh",
+    "autoRefresh": "Auto Refresh",
+    "filterOptions": {
+      "all": "All",
+      "warning": "Warning",
+      "exceeded": "Exceeded"
+    },
+    "sortOptions": {
+      "name": "By Name",
+      "usage": "By Usage"
+    },
+    "interval": {
+      "10s": "10s",
+      "30s": "30s",
+      "60s": "60s"
+    }
+  }
+}

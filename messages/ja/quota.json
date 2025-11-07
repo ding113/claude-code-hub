@@ -1,0 +1,55 @@
+{
+  "header": {
+    "title": "ユーザークォータ",
+    "role": {
+      "admin": "管理者",
+      "user": "ユーザー"
+    },
+    "keysCountSuffix": "個のキー",
+    "rpm": "リクエスト制限",
+    "todayCost": "本日の消費量",
+    "exceededNotice": "クォータを超過しています。管理者にお問い合わせください"
+  },
+  "countdown": {
+    "reset": "リセットカウントダウン"
+  },
+  "windowType": {
+    "5h": {
+      "label": "5時間ローリング",
+      "description": "過去5時間の消費を追跡し、1時間ごとに更新されます"
+    },
+    "weekly": {
+      "label": "週単位リセット",
+      "description": "カレンダー週（月曜日00:00リセット）、1週間全体を集計"
+    },
+    "monthly": {
+      "label": "月単位リセット",
+      "description": "カレンダー月（毎月1日00:00リセット）、1ヶ月全体を集計"
+    },
+    "daily": {
+      "label": "日単位リセット",
+      "description": "カレンダー日（毎日00:00リセット）、日ごとに集計"
+    }
+  },
+  "toolbar": {
+    "searchPlaceholder": "ユーザー名またはキーで検索",
+    "filter": "フィルター",
+    "sort": "並べ替え",
+    "refresh": "更新",
+    "autoRefresh": "自動更新",
+    "filterOptions": {
+      "all": "すべて",
+      "warning": "警告",
+      "exceeded": "超過"
+    },
+    "sortOptions": {
+      "name": "名前順",
+      "usage": "使用率順"
+    },
+    "interval": {
+      "10s": "10秒",
+      "30s": "30秒",
+      "60s": "60秒"
+    }
+  }
+}

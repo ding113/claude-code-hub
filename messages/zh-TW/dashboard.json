@@ -1,0 +1,190 @@
+{
+  "title": {
+    "costRanking": "消耗排行榜",
+    "costRankingDescription": "查看用户消耗排名，資料每 5 分鐘更新一次",
+    "usageLogs": "使用記錄",
+    "clients": "用户端",
+    "userAndKeyManagement": "用户和密鑰管理",
+    "requestMessages": "請求 Messages",
+    "activeSessions": "活躍 Session（最近 5 分鐘）",
+    "sessionMonitoring": "Session 監控",
+    "sessionMonitoringDescription": "即時顯示活躍和非活躍 Session（每 3 秒自動重新整理）",
+    "inactiveSessions": "非活躍 Session（超過 5 分鐘，僅供查看）",
+    "quotasManagement": "額度管理",
+    "quotasManagementDescription": "查看和管理所有層級的額度使用情況",
+    "usersQuotas": "用户額度統計",
+    "keysQuotas": "密鑰額度統計",
+    "providersQuotas": "供應商額度統計"
+  },
+  "description": {
+    "viewApiCallLogs": "查看 API 呼叫日誌和使用統計",
+    "dashboard": "查看系統統計資料和監控資訊",
+    "quotas": "查看和管理所有層級的額度使用情況",
+    "clientInfo": "User-Agent 請求頭",
+    "requestMessagesDescription": "用户端傳送的訊息內容",
+    "responseBodyDescription": "伺服器傳回的完整回應（5分鐘 TTL）"
+  },
+  "overview": {
+    "title": "概覽",
+    "totalRequests": "總請求數",
+    "totalCost": "總成本",
+    "totalUsers": "總用户數",
+    "totalProviders": "總供應商數",
+    "activeUsers": "活躍用户",
+    "activeSessions": "活躍工作階段",
+    "errorRate": "錯誤率",
+    "avgResponseTime": "平均回應時間"
+  },
+  "stats": {
+    "title": "統計",
+    "requests": "請求",
+    "cost": "成本",
+    "tokens": "Tokens",
+    "period": {
+      "hour": "最近1小時",
+      "day": "今天",
+      "week": "本週",
+      "month": "本月"
+    }
+  },
+  "logs": {
+    "title": "使用日誌",
+    "description": "查看和分析 API 呼叫記錄",
+    "filters": {
+      "user": "用户",
+      "provider": "供應商",
+      "model": "模型",
+      "status": "狀態",
+      "timeRange": "時間範圍"
+    },
+    "columns": {
+      "time": "時間",
+      "user": "用户",
+      "provider": "供應商",
+      "model": "模型",
+      "inputTokens": "輸入 Tokens",
+      "outputTokens": "輸出 Tokens",
+      "cost": "成本",
+      "status": "狀態",
+      "duration": "耗時"
+    }
+  },
+  "leaderboard": {
+    "title": "成本排行榜",
+    "description": "查看用户和密鑰的成本統計排名",
+    "tabs": {
+      "users": "用户排行",
+      "keys": "密鑰排行"
+    },
+    "columns": {
+      "rank": "排名",
+      "name": "名稱",
+      "totalCost": "總成本",
+      "totalRequests": "總請求數",
+      "avgCost": "平均成本",
+      "lastActive": "最後活躍時間"
+    }
+  },
+  "sessions": {
+    "title": "活躍工作階段",
+    "description": "即時監控目前活躍的 API 工作階段",
+    "columns": {
+      "sessionId": "工作階段 ID",
+      "user": "用户",
+      "provider": "供應商",
+      "model": "模型",
+      "startTime": "開始時間",
+      "lastActivity": "最後活動",
+      "requestCount": "請求數",
+      "status": "狀態"
+    },
+    "details": {
+      "title": "工作階段詳情",
+      "messages": "訊息清單",
+      "info": "工作階段資訊",
+      "timeline": "時間線",
+      "overview": "Session 概覽",
+      "overviewDescription": "彙總統計資訊",
+      "providersAndModels": "供應商與模型",
+      "providersAndModelsDescription": "使用的提供商和模型",
+      "tokenUsage": "Token 使用（總量）",
+      "tokenUsageDescription": "所有請求的累計統計",
+      "costInfo": "成本資訊（總計）",
+      "costInfoDescription": "所有請求的累計費用",
+      "totalRequests": "總請求數",
+      "firstRequest": "首次請求",
+      "lastRequest": "最後請求",
+      "totalDuration": "總耗時",
+      "totalInput": "總輸入",
+      "totalOutput": "總輸出",
+      "cacheCreation": "快取建立",
+      "cacheRead": "快取讀取",
+      "total": "總計",
+      "totalFee": "總費用",
+      "providers": "供應商",
+      "models": "模型",
+      "noDetailedData": "暫無詳細資料",
+      "storageTip": "提示：請設定環境變數 STORE_SESSION_MESSAGES=true 以啟用 messages 和 response 儲存"
+    },
+    "noActiveSessions": "暫無活躍 Session",
+    "back": "返回",
+    "copyMessages": "複製 Messages",
+    "downloadMessages": "下載 Messages",
+    "copied": "已複製",
+    "copyResponse": "複製回應內文",
+    "loading": "載入中...",
+    "loadError": "載入失敗"
+  },
+  "quotas": {
+    "title": "額度管理",
+    "description": "管理用户、密鑰和供應商的使用額度",
+    "tabs": {
+      "overview": "概覽",
+      "users": "用户額度",
+      "keys": "密鑰額度",
+      "providers": "供應商額度"
+    },
+    "columns": {
+      "name": "名稱",
+      "limit": "額度",
+      "used": "已用",
+      "remaining": "剩餘",
+      "resetTime": "重設時間",
+      "status": "狀態"
+    },
+    "labels": {
+      "byName": "按名稱",
+      "byUsageRate": "按使用率",
+      "all": "全部",
+      "warning": "接近額度 (>60%)",
+      "exceeded": "已超額 (≥100%)"
+    },
+    "users": {
+      "title": "用户額度統計",
+      "totalUsers": "共 {count} 個用户"
+    },
+    "keys": {
+      "title": "密鑰額度統計",
+      "totalKeysInfo": "共 {userCount} 個用户，{keyCount} 個密鑰",
+      "setKeyQuota": "設定密鑰額度",
+      "setUserQuota": "設定用户額度",
+      "onlyKeyQuota": "僅密鑰額度",
+      "onlyUserQuota": "僅用户額度",
+      "success": "用户額度設定成功"
+    },
+    "providers": {
+      "title": "供應商額度統計",
+      "totalProviders": "共 {count} 個供應商"
+    }
+  },
+  "labels": {
+    "byName": "按名稱",
+    "byUsageRate": "按使用率"
+  },
+  "all": "全部",
+  "errors": {
+    "fetchSystemSettingsFailed": "取得系統設定失敗",
+    "fetchFailed": "取得失敗",
+    "fetchSessionListFailed": "取得 session 清單失敗"
+  }
+}

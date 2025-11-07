@@ -1,0 +1,51 @@
+{
+  "submit": "送信",
+  "reset": "リセット",
+  "required": "必須",
+  "optional": "オプション",
+  "processing": "処理中...",
+  "common": {
+    "cancel": "キャンセル",
+    "processing": "処理中..."
+  },
+  "errors": {
+    "formErrorTitle": "フォームエラー",
+    "formErrorDescription": "フォーム処理中にエラーが発生しました。もう一度試してください。",
+    "required": "このフィールドは必須です",
+    "invalid": "入力が無効です",
+    "minLength": "最小文字数は {min} です",
+    "maxLength": "最大文字数は {max} です",
+    "min": "最小値は {min} です",
+    "max": "最大値は {max} です",
+    "email": "有効なメールアドレスを入力してください",
+    "url": "有効なURLを入力してください",
+    "pattern": "形式が要件を満たしていません"
+  },
+  "placeholder": {
+    "text": "テキストを入力",
+    "number": "数字を入力",
+    "email": "メールアドレスを入力",
+    "password": "パスワードを入力",
+    "search": "検索...",
+    "select": "選択してください",
+    "date": "日付を選択",
+    "textarea": "ここにテキストを入力"
+  },
+  "validation": {
+    "required": "このフィールドは必須です",
+    "invalid": "入力形式が無効です",
+    "tooShort": "入力が短すぎます",
+    "tooLong": "入力が長すぎます",
+    "invalidEmail": "メールアドレスの形式が無効です",
+    "invalidUrl": "URLの形式が無効です",
+    "invalidNumber": "数字の形式が無効です"
+  },
+  "messages": {
+    "success": "操作に成功しました",
+    "error": "操作に失敗しました",
+    "saved": "保存されました",
+    "deleted": "削除されました",
+    "loading": "処理中...",
+    "submit": "送信中..."
+  }
+}

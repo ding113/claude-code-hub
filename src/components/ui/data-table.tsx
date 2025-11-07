@@ -3,6 +3,7 @@
 import { ReactNode } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 
 /**
  * 表格列定义
@@ -58,6 +59,7 @@ export function DataTable<T extends TableData>({
   maxHeight,
   stickyHeader = false
 }: DataTableProps<T>) {
+  const t = useTranslations("ui");
   const renderCell = (column: TableColumn<T>, record: T, index: number) => {
     if (column.render) {
       return column.render(record[column.key], record, index);
@@ -102,7 +104,7 @@ export function DataTable<T extends TableData>({
               {emptyState.action}
             </>
           ) : (
-            <p className="text-sm text-muted-foreground">暂无数据</p>
+            <p className="text-sm text-muted-foreground">{t("common.noData")}</p>
           )}
         </div>
       </div>

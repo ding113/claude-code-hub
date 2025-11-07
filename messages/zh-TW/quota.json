@@ -1,0 +1,55 @@
+{
+  "header": {
+    "title": "使用者配額",
+    "role": {
+      "admin": "管理員",
+      "user": "使用者"
+    },
+    "keysCountSuffix": "個密鑰",
+    "rpm": "請求限流",
+    "todayCost": "今日消費",
+    "exceededNotice": "已超過限額，請聯絡管理員處理"
+  },
+  "countdown": {
+    "reset": "重置倒計時"
+  },
+  "windowType": {
+    "5h": {
+      "label": "5小時滾動",
+      "description": "統計過去5小時內的消費，每小時滾動更新"
+    },
+    "weekly": {
+      "label": "每週重置",
+      "description": "自然週制（週一00:00重置），整週統計"
+    },
+    "monthly": {
+      "label": "每月重置",
+      "description": "自然月制（每月1日00:00重置），整月統計"
+    },
+    "daily": {
+      "label": "每日重置",
+      "description": "自然日制（每日00:00重置），按日統計"
+    }
+  },
+  "toolbar": {
+    "searchPlaceholder": "搜尋使用者名稱或密鑰",
+    "filter": "篩選",
+    "sort": "排序",
+    "refresh": "重新整理",
+    "autoRefresh": "自動重新整理",
+    "filterOptions": {
+      "all": "全部",
+      "warning": "預警",
+      "exceeded": "已超限"
+    },
+    "sortOptions": {
+      "name": "按名稱",
+      "usage": "按使用率"
+    },
+    "interval": {
+      "10s": "10秒",
+      "30s": "30秒",
+      "60s": "60秒"
+    }
+  }
+}

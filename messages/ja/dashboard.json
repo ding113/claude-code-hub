@@ -1,0 +1,190 @@
+{
+  "title": {
+    "costRanking": "コスト ランキング",
+    "costRankingDescription": "ユーザーコスト ランキングを表示します。データは 5 分ごとに更新されます",
+    "usageLogs": "使用ログ",
+    "clients": "クライアント",
+    "userAndKeyManagement": "ユーザーとキー管理",
+    "requestMessages": "リクエスト メッセージ",
+    "activeSessions": "アクティブ セッション (最近 5 分間)",
+    "sessionMonitoring": "セッション監視",
+    "sessionMonitoringDescription": "アクティブおよび非アクティブ セッションをリアルタイムで表示します (3 秒ごとに自動更新)",
+    "inactiveSessions": "非アクティブ セッション (5 分以上、表示のみ)",
+    "quotasManagement": "クォータ管理",
+    "quotasManagementDescription": "すべてのレベルのクォータを表示および管理します",
+    "usersQuotas": "ユーザー クォータ統計",
+    "keysQuotas": "キー クォータ統計",
+    "providersQuotas": "プロバイダー クォータ統計"
+  },
+  "description": {
+    "viewApiCallLogs": "API 呼び出しログと使用統計を表示します",
+    "dashboard": "システム統計と監視情報を表示します",
+    "quotas": "すべてのレベルのクォータを表示および管理します",
+    "clientInfo": "User-Agent リクエスト ヘッダー",
+    "requestMessagesDescription": "クライアントが送信したメッセージ コンテンツ",
+    "responseBodyDescription": "サーバーからの完全なレスポンス (5 分間の TTL)"
+  },
+  "overview": {
+    "title": "概要",
+    "totalRequests": "リクエスト総数",
+    "totalCost": "合計コスト",
+    "totalUsers": "ユーザー総数",
+    "totalProviders": "プロバイダー総数",
+    "activeUsers": "アクティブ ユーザー",
+    "activeSessions": "アクティブ セッション",
+    "errorRate": "エラー率",
+    "avgResponseTime": "平均応答時間"
+  },
+  "stats": {
+    "title": "統計",
+    "requests": "リクエスト",
+    "cost": "コスト",
+    "tokens": "トークン",
+    "period": {
+      "hour": "最近 1 時間",
+      "day": "今日",
+      "week": "今週",
+      "month": "今月"
+    }
+  },
+  "logs": {
+    "title": "使用ログ",
+    "description": "API 呼び出しレコードを表示および分析します",
+    "filters": {
+      "user": "ユーザー",
+      "provider": "プロバイダー",
+      "model": "モデル",
+      "status": "ステータス",
+      "timeRange": "時間範囲"
+    },
+    "columns": {
+      "time": "時間",
+      "user": "ユーザー",
+      "provider": "プロバイダー",
+      "model": "モデル",
+      "inputTokens": "入力トークン",
+      "outputTokens": "出力トークン",
+      "cost": "コスト",
+      "status": "ステータス",
+      "duration": "期間"
+    }
+  },
+  "leaderboard": {
+    "title": "コスト ランキング",
+    "description": "ユーザーとキーのコスト統計ランキングを表示します",
+    "tabs": {
+      "users": "ユーザー ランキング",
+      "keys": "キー ランキング"
+    },
+    "columns": {
+      "rank": "ランク",
+      "name": "名前",
+      "totalCost": "合計コスト",
+      "totalRequests": "リクエスト総数",
+      "avgCost": "平均コスト",
+      "lastActive": "最後のアクティビティ"
+    }
+  },
+  "sessions": {
+    "title": "アクティブ セッション",
+    "description": "アクティブな API セッションをリアルタイムで監視します",
+    "columns": {
+      "sessionId": "セッション ID",
+      "user": "ユーザー",
+      "provider": "プロバイダー",
+      "model": "モデル",
+      "startTime": "開始時刻",
+      "lastActivity": "最後のアクティビティ",
+      "requestCount": "リクエスト数",
+      "status": "ステータス"
+    },
+    "details": {
+      "title": "セッション詳細",
+      "messages": "メッセージ",
+      "info": "セッション情報",
+      "timeline": "タイムライン",
+      "overview": "セッション概要",
+      "overviewDescription": "集計統計",
+      "providersAndModels": "プロバイダーとモデル",
+      "providersAndModelsDescription": "使用されたプロバイダーとモデル",
+      "tokenUsage": "トークン使用量 (合計)",
+      "tokenUsageDescription": "すべてのリクエストの累積統計",
+      "costInfo": "コスト情報 (合計)",
+      "costInfoDescription": "すべてのリクエストの累積コスト",
+      "totalRequests": "リクエスト総数",
+      "firstRequest": "最初のリクエスト",
+      "lastRequest": "最後のリクエスト",
+      "totalDuration": "合計期間",
+      "totalInput": "入力合計",
+      "totalOutput": "出力合計",
+      "cacheCreation": "キャッシュ作成",
+      "cacheRead": "キャッシュ読み取り",
+      "total": "合計",
+      "totalFee": "合計料金",
+      "providers": "プロバイダー",
+      "models": "モデル",
+      "noDetailedData": "詳細データはありません",
+      "storageTip": "ヒント: メッセージとレスポンス ストレージを有効にするには、環境変数 STORE_SESSION_MESSAGES=true を設定してください"
+    },
+    "noActiveSessions": "アクティブなセッションがありません",
+    "back": "戻る",
+    "copyMessages": "メッセージをコピー",
+    "downloadMessages": "メッセージをダウンロード",
+    "copied": "コピーしました",
+    "copyResponse": "レスポンスをコピー",
+    "loading": "読み込み中...",
+    "loadError": "読み込みに失敗しました"
+  },
+  "quotas": {
+    "title": "クォータ管理",
+    "description": "すべてのレベルのクォータを管理します",
+    "tabs": {
+      "overview": "概要",
+      "users": "ユーザー クォータ",
+      "keys": "キー クォータ",
+      "providers": "プロバイダー クォータ"
+    },
+    "columns": {
+      "name": "名前",
+      "limit": "制限",
+      "used": "使用済み",
+      "remaining": "残り",
+      "resetTime": "リセット時刻",
+      "status": "ステータス"
+    },
+    "labels": {
+      "byName": "名前順",
+      "byUsageRate": "使用率順",
+      "all": "すべて",
+      "warning": "制限に近い (>60%)",
+      "exceeded": "超過 (≥100%)"
+    },
+    "users": {
+      "title": "ユーザー クォータ統計",
+      "totalUsers": "合計 {count} ユーザー"
+    },
+    "keys": {
+      "title": "キー クォータ統計",
+      "totalKeysInfo": "合計 {userCount} ユーザー、{keyCount} キー",
+      "setKeyQuota": "キー クォータを設定",
+      "setUserQuota": "ユーザー クォータを設定",
+      "onlyKeyQuota": "キー クォータのみ",
+      "onlyUserQuota": "ユーザー クォータのみ",
+      "success": "ユーザー クォータが正常に設定されました"
+    },
+    "providers": {
+      "title": "プロバイダー クォータ統計",
+      "totalProviders": "合計 {count} プロバイダー"
+    }
+  },
+  "labels": {
+    "byName": "名前順",
+    "byUsageRate": "使用率順"
+  },
+  "all": "すべて",
+  "errors": {
+    "fetchSystemSettingsFailed": "システム設定の取得に失敗しました",
+    "fetchFailed": "取得に失敗しました",
+    "fetchSessionListFailed": "セッション リストの取得に失敗しました"
+  }
+}

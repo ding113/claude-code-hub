@@ -12,6 +12,8 @@ import { USER_DEFAULTS } from "@/lib/constants/user.constants";
 import { createKey } from "@/repository/key";
 import { getSession } from "@/lib/auth";
 import type { ActionResult } from "./types";
+import { ERROR_CODES } from "@/lib/utils/error-messages";
+import { formatZodError } from "@/lib/utils/zod-i18n";
 
 // 获取用户数据
 export async function getUsers(): Promise<UserDisplay[]> {
@@ -128,16 +130,31 @@ export async function addUser(data: {
     // 权限检查：只有管理员可以添加用户
     const session = await getSession();
     if (!session || session.user.role !== "admin") {
-      return { ok: false, error: "无权限执行此操作" } as const;
+      return {
+        ok: false,
+        error: "无权限执行此操作",
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
     }
 
-    const validatedData = CreateUserSchema.parse({
+    // Validate data with Zod
+    const validationResult = CreateUserSchema.safeParse({
       name: data.name,
       note: data.note || "",
       providerGroup: data.providerGroup || "",
       rpm: data.rpm || USER_DEFAULTS.RPM,
       dailyQuota: data.dailyQuota || USER_DEFAULTS.DAILY_QUOTA,
     });
+
+    if (!validationResult.success) {
+      return {
+        ok: false,
+        error: formatZodError(validationResult.error),
+        errorCode: ERROR_CODES.INVALID_FORMAT,
+      };
+    }
+
+    const validatedData = validationResult.data;
 
     const newUser = await createUser({
       name: validatedData.name,
@@ -162,7 +179,11 @@ export async function addUser(data: {
   } catch (error) {
     logger.error("添加用户失败:", error);
     const message = error instanceof Error ? error.message : "添加用户失败，请稍后重试";
-    return { ok: false, error: message };
+    return {
+      ok: false,
+      error: message,
+      errorCode: ERROR_CODES.CREATE_FAILED,
+    };
   }
 }
 
@@ -180,7 +201,11 @@ export async function editUser(
   try {
     const session = await getSession();
     if (!session) {
-      return { ok: false, error: "未登录" };
+      return {
+        ok: false,
+        error: "未登录",
+        errorCode: ERROR_CODES.UNAUTHORIZED,
+      };
     }
 
     // 定义敏感字段列表（仅管理员可修改）
@@ -190,7 +215,17 @@ export async function editUser(
     // 权限检查：区分三种情况
     if (session.user.role === "admin") {
       // 管理员可以修改所有用户的所有字段
-      const validatedData = UpdateUserSchema.parse(data);
+      const validationResult = UpdateUserSchema.safeParse(data);
+
+      if (!validationResult.success) {
+        return {
+          ok: false,
+          error: formatZodError(validationResult.error),
+          errorCode: ERROR_CODES.INVALID_FORMAT,
+        };
+      }
+
+      const validatedData = validationResult.data;
 
       await updateUser(userId, {
         name: validatedData.name,
@@ -205,14 +240,25 @@ export async function editUser(
         return {
           ok: false,
           error: "普通用户不能修改账户限额和供应商分组",
+          errorCode: ERROR_CODES.PERMISSION_DENIED,
         };
       }
 
       // 仅允许修改非敏感字段（name, description）
-      const validatedData = UpdateUserSchema.parse({
+      const validationResult = UpdateUserSchema.safeParse({
         name: data.name,
         note: data.note,
       });
+
+      if (!validationResult.success) {
+        return {
+          ok: false,
+          error: formatZodError(validationResult.error),
+          errorCode: ERROR_CODES.INVALID_FORMAT,
+        };
+      }
+
+      const validatedData = validationResult.data;
 
       await updateUser(userId, {
         name: validatedData.name,
@@ -220,7 +266,11 @@ export async function editUser(
       });
     } else {
       // 普通用户尝试修改他人信息
-      return { ok: false, error: "无权限执行此操作" };
+      return {
+        ok: false,
+        error: "无权限执行此操作",
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
     }
 
     revalidatePath("/dashboard");
@@ -228,7 +278,11 @@ export async function editUser(
   } catch (error) {
     logger.error("更新用户失败:", error);
     const message = error instanceof Error ? error.message : "更新用户失败，请稍后重试";
-    return { ok: false, error: message };
+    return {
+      ok: false,
+      error: message,
+      errorCode: ERROR_CODES.UPDATE_FAILED,
+    };
   }
 }
 

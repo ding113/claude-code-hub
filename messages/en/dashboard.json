@@ -1,0 +1,190 @@
+{
+  "title": {
+    "costRanking": "Cost Leaderboard",
+    "costRankingDescription": "View user cost rankings, data updates every 5 minutes",
+    "usageLogs": "Usage Logs",
+    "clients": "Clients",
+    "userAndKeyManagement": "User and Key Management",
+    "requestMessages": "Request Messages",
+    "activeSessions": "Active Sessions (Last 5 Minutes)",
+    "sessionMonitoring": "Session Monitoring",
+    "sessionMonitoringDescription": "Real-time display of active and inactive sessions (auto-refresh every 3 seconds)",
+    "inactiveSessions": "Inactive Sessions (Over 5 Minutes, View Only)",
+    "quotasManagement": "Quota Management",
+    "quotasManagementDescription": "View and manage quotas at all levels",
+    "usersQuotas": "User Quota Statistics",
+    "keysQuotas": "Key Quota Statistics",
+    "providersQuotas": "Provider Quota Statistics"
+  },
+  "description": {
+    "viewApiCallLogs": "View API call logs and usage statistics",
+    "dashboard": "View system statistics and monitoring information",
+    "quotas": "View and manage quotas at all levels",
+    "clientInfo": "User-Agent request header",
+    "requestMessagesDescription": "Message content sent by the client",
+    "responseBodyDescription": "Complete server response (5-minute TTL)"
+  },
+  "overview": {
+    "title": "Overview",
+    "totalRequests": "Total Requests",
+    "totalCost": "Total Cost",
+    "totalUsers": "Total Users",
+    "totalProviders": "Total Providers",
+    "activeUsers": "Active Users",
+    "activeSessions": "Active Sessions",
+    "errorRate": "Error Rate",
+    "avgResponseTime": "Average Response Time"
+  },
+  "stats": {
+    "title": "Statistics",
+    "requests": "Requests",
+    "cost": "Cost",
+    "tokens": "Tokens",
+    "period": {
+      "hour": "Last Hour",
+      "day": "Today",
+      "week": "This Week",
+      "month": "This Month"
+    }
+  },
+  "logs": {
+    "title": "Usage Logs",
+    "description": "View and analyze API call records",
+    "filters": {
+      "user": "User",
+      "provider": "Provider",
+      "model": "Model",
+      "status": "Status",
+      "timeRange": "Time Range"
+    },
+    "columns": {
+      "time": "Time",
+      "user": "User",
+      "provider": "Provider",
+      "model": "Model",
+      "inputTokens": "Input Tokens",
+      "outputTokens": "Output Tokens",
+      "cost": "Cost",
+      "status": "Status",
+      "duration": "Duration"
+    }
+  },
+  "leaderboard": {
+    "title": "Cost Leaderboard",
+    "description": "View cost statistics rankings for users and keys",
+    "tabs": {
+      "users": "User Rankings",
+      "keys": "Key Rankings"
+    },
+    "columns": {
+      "rank": "Rank",
+      "name": "Name",
+      "totalCost": "Total Cost",
+      "totalRequests": "Total Requests",
+      "avgCost": "Average Cost",
+      "lastActive": "Last Active"
+    }
+  },
+  "sessions": {
+    "title": "Active Sessions",
+    "description": "Monitor current active API sessions in real-time",
+    "columns": {
+      "sessionId": "Session ID",
+      "user": "User",
+      "provider": "Provider",
+      "model": "Model",
+      "startTime": "Start Time",
+      "lastActivity": "Last Activity",
+      "requestCount": "Requests",
+      "status": "Status"
+    },
+    "details": {
+      "title": "Session Details",
+      "messages": "Messages",
+      "info": "Session Info",
+      "timeline": "Timeline",
+      "overview": "Session Overview",
+      "overviewDescription": "Aggregated statistics",
+      "providersAndModels": "Providers & Models",
+      "providersAndModelsDescription": "Providers and models used",
+      "tokenUsage": "Token Usage (Total)",
+      "tokenUsageDescription": "Cumulative statistics for all requests",
+      "costInfo": "Cost Information (Total)",
+      "costInfoDescription": "Cumulative cost for all requests",
+      "totalRequests": "Total Requests",
+      "firstRequest": "First Request",
+      "lastRequest": "Last Request",
+      "totalDuration": "Total Duration",
+      "totalInput": "Total Input",
+      "totalOutput": "Total Output",
+      "cacheCreation": "Cache Creation",
+      "cacheRead": "Cache Read",
+      "total": "Total",
+      "totalFee": "Total Fee",
+      "providers": "Providers",
+      "models": "Models",
+      "noDetailedData": "No detailed data available",
+      "storageTip": "Tip: Set environment variable STORE_SESSION_MESSAGES=true to enable messages and response storage"
+    },
+    "noActiveSessions": "No active sessions",
+    "back": "Back",
+    "copyMessages": "Copy Messages",
+    "downloadMessages": "Download Messages",
+    "copied": "Copied",
+    "copyResponse": "Copy Response",
+    "loading": "Loading...",
+    "loadError": "Load failed"
+  },
+  "quotas": {
+    "title": "Quota Management",
+    "description": "Manage quotas at all levels",
+    "tabs": {
+      "overview": "Overview",
+      "users": "User Quotas",
+      "keys": "Key Quotas",
+      "providers": "Provider Quotas"
+    },
+    "columns": {
+      "name": "Name",
+      "limit": "Limit",
+      "used": "Used",
+      "remaining": "Remaining",
+      "resetTime": "Reset Time",
+      "status": "Status"
+    },
+    "labels": {
+      "byName": "By Name",
+      "byUsageRate": "By Usage Rate",
+      "all": "All",
+      "warning": "Near Limit (>60%)",
+      "exceeded": "Exceeded (≥100%)"
+    },
+    "users": {
+      "title": "User Quota Statistics",
+      "totalUsers": "{count} users total"
+    },
+    "keys": {
+      "title": "Key Quota Statistics",
+      "totalKeysInfo": "{userCount} users, {keyCount} keys total",
+      "setKeyQuota": "Set Key Quota",
+      "setUserQuota": "Set User Quota",
+      "onlyKeyQuota": "Key Quota Only",
+      "onlyUserQuota": "User Quota Only",
+      "success": "User quota set successfully"
+    },
+    "providers": {
+      "title": "Provider Quota Statistics",
+      "totalProviders": "{count} providers total"
+    }
+  },
+  "labels": {
+    "byName": "By Name",
+    "byUsageRate": "By Usage Rate"
+  },
+  "all": "All",
+  "errors": {
+    "fetchSystemSettingsFailed": "Failed to fetch system settings",
+    "fetchFailed": "Fetch failed",
+    "fetchSessionListFailed": "Failed to fetch session list"
+  }
+}

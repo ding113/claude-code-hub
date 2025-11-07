@@ -1,0 +1,190 @@
+{
+  "title": {
+    "costRanking": "Таблица расходов",
+    "costRankingDescription": "Просмотр рейтинга расходов пользователей, данные обновляются каждые 5 минут",
+    "usageLogs": "Журналы использования",
+    "clients": "Клиенты",
+    "userAndKeyManagement": "Управление пользователями и ключами",
+    "requestMessages": "Сообщения запроса",
+    "activeSessions": "Активные сеансы (последние 5 минут)",
+    "sessionMonitoring": "Мониторинг сеансов",
+    "sessionMonitoringDescription": "Отображение активных и неактивных сеансов в реальном времени (автоматическое обновление каждые 3 секунды)",
+    "inactiveSessions": "Неактивные сеансы (более 5 минут, только просмотр)",
+    "quotasManagement": "Управление квотами",
+    "quotasManagementDescription": "Просмотр и управление квотами на всех уровнях",
+    "usersQuotas": "Статистика квот пользователей",
+    "keysQuotas": "Статистика квот ключей",
+    "providersQuotas": "Статистика квот поставщиков"
+  },
+  "description": {
+    "viewApiCallLogs": "Просмотр журналов вызовов API и статистики использования",
+    "dashboard": "Просмотр системной статистики и информации мониторинга",
+    "quotas": "Просмотр и управление квотами на всех уровнях",
+    "clientInfo": "Заголовок запроса User-Agent",
+    "requestMessagesDescription": "Содержимое сообщения, отправленного клиентом",
+    "responseBodyDescription": "Полный ответ сервера (TTL 5 минут)"
+  },
+  "overview": {
+    "title": "Обзор",
+    "totalRequests": "Всего запросов",
+    "totalCost": "Общие затраты",
+    "totalUsers": "Всего пользователей",
+    "totalProviders": "Всего поставщиков",
+    "activeUsers": "Активные пользователи",
+    "activeSessions": "Активные сеансы",
+    "errorRate": "Коэффициент ошибок",
+    "avgResponseTime": "Среднее время ответа"
+  },
+  "stats": {
+    "title": "Статистика",
+    "requests": "Запросы",
+    "cost": "Стоимость",
+    "tokens": "Токены",
+    "period": {
+      "hour": "Последний час",
+      "day": "Сегодня",
+      "week": "На этой неделе",
+      "month": "В этом месяце"
+    }
+  },
+  "logs": {
+    "title": "Журналы использования",
+    "description": "Просмотр и анализ записей вызовов API",
+    "filters": {
+      "user": "Пользователь",
+      "provider": "Поставщик",
+      "model": "Модель",
+      "status": "Статус",
+      "timeRange": "Диапазон времени"
+    },
+    "columns": {
+      "time": "Время",
+      "user": "Пользователь",
+      "provider": "Поставщик",
+      "model": "Модель",
+      "inputTokens": "Входные токены",
+      "outputTokens": "Выходные токены",
+      "cost": "Стоимость",
+      "status": "Статус",
+      "duration": "Продолжительность"
+    }
+  },
+  "leaderboard": {
+    "title": "Таблица расходов",
+    "description": "Просмотр рейтинга расходов пользователей и ключей",
+    "tabs": {
+      "users": "Рейтинг пользователей",
+      "keys": "Рейтинг ключей"
+    },
+    "columns": {
+      "rank": "Ранг",
+      "name": "Имя",
+      "totalCost": "Общие затраты",
+      "totalRequests": "Всего запросов",
+      "avgCost": "Средние затраты",
+      "lastActive": "Последняя активность"
+    }
+  },
+  "sessions": {
+    "title": "Активные сеансы",
+    "description": "Мониторинг активных сеансов API в режиме реального времени",
+    "columns": {
+      "sessionId": "ID сеанса",
+      "user": "Пользователь",
+      "provider": "Поставщик",
+      "model": "Модель",
+      "startTime": "Время начала",
+      "lastActivity": "Последняя активность",
+      "requestCount": "Количество запросов",
+      "status": "Статус"
+    },
+    "details": {
+      "title": "Детали сеанса",
+      "messages": "Сообщения",
+      "info": "Информация сеанса",
+      "timeline": "Временная шкала",
+      "overview": "Обзор сеанса",
+      "overviewDescription": "Совокупная статистика",
+      "providersAndModels": "Поставщики и модели",
+      "providersAndModelsDescription": "Используемые поставщики и модели",
+      "tokenUsage": "Использование токенов (всего)",
+      "tokenUsageDescription": "Совокупная статистика по всем запросам",
+      "costInfo": "Информация о стоимости (всего)",
+      "costInfoDescription": "Совокупная стоимость по всем запросам",
+      "totalRequests": "Всего запросов",
+      "firstRequest": "Первый запрос",
+      "lastRequest": "Последний запрос",
+      "totalDuration": "Общая продолжительность",
+      "totalInput": "Всего входных",
+      "totalOutput": "Всего выходных",
+      "cacheCreation": "Создание кэша",
+      "cacheRead": "Чтение из кэша",
+      "total": "Всего",
+      "totalFee": "Общая плата",
+      "providers": "Поставщики",
+      "models": "Модели",
+      "noDetailedData": "Подробные данные недоступны",
+      "storageTip": "Совет: установите переменную окружения STORE_SESSION_MESSAGES=true для включения хранилища сообщений и ответов"
+    },
+    "noActiveSessions": "Нет активных сеансов",
+    "back": "Назад",
+    "copyMessages": "Копировать сообщения",
+    "downloadMessages": "Скачать сообщения",
+    "copied": "Скопировано",
+    "copyResponse": "Копировать ответ",
+    "loading": "Загрузка...",
+    "loadError": "Ошибка загрузки"
+  },
+  "quotas": {
+    "title": "Управление квотами",
+    "description": "Управление квотами на всех уровнях",
+    "tabs": {
+      "overview": "Обзор",
+      "users": "Квоты пользователей",
+      "keys": "Квоты ключей",
+      "providers": "Квоты поставщиков"
+    },
+    "columns": {
+      "name": "Имя",
+      "limit": "Лимит",
+      "used": "Использовано",
+      "remaining": "Осталось",
+      "resetTime": "Время сброса",
+      "status": "Статус"
+    },
+    "labels": {
+      "byName": "По имени",
+      "byUsageRate": "По уровню использования",
+      "all": "Все",
+      "warning": "Приближается к лимиту (>60%)",
+      "exceeded": "Превышено (≥100%)"
+    },
+    "users": {
+      "title": "Статистика квот пользователей",
+      "totalUsers": "Всего {count} пользователей"
+    },
+    "keys": {
+      "title": "Статистика квот ключей",
+      "totalKeysInfo": "Всего {userCount} пользователей, {keyCount} ключей",
+      "setKeyQuota": "Установить квоту ключа",
+      "setUserQuota": "Установить квоту пользователя",
+      "onlyKeyQuota": "Только квота ключа",
+      "onlyUserQuota": "Только квота пользователя",
+      "success": "Квота пользователя установлена успешно"
+    },
+    "providers": {
+      "title": "Статистика квот поставщиков",
+      "totalProviders": "Всего {count} поставщиков"
+    }
+  },
+  "labels": {
+    "byName": "По имени",
+    "byUsageRate": "По уровню использования"
+  },
+  "all": "Все",
+  "errors": {
+    "fetchSystemSettingsFailed": "Не удалось получить параметры системы",
+    "fetchFailed": "Ошибка загрузки",
+    "fetchSessionListFailed": "Не удалось получить список сеансов"
+  }
+}

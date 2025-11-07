@@ -1,0 +1,47 @@
+{
+  "common": {
+    "noData": "Нет данных",
+    "actions": "Действия",
+    "loading": "Загрузка...",
+    "empty": "Пусто",
+    "error": "Ошибка"
+  },
+  "table": {
+    "pagination": "Пагинация",
+    "sorting": "Сортировка",
+    "filtering": "Фильтрация",
+    "search": "Поиск",
+    "refresh": "Обновить",
+    "columns": "Столбцы",
+    "previousPage": "Предыдущая",
+    "nextPage": "Следующая",
+    "pageInfo": "Страница {current} из {total}",
+    "itemsPerPage": "Элементов на странице",
+    "selectAll": "Выбрать все",
+    "deselectAll": "Отменить выделение"
+  },
+  "errorBoundary": {
+    "title": "Произошла ошибка",
+    "defaultDescription": "Произошла непредвиденная ошибка. Пожалуйста, повторите попытку.",
+    "refreshPage": "Обновить страницу",
+    "listErrorTitle": "Ошибка загрузки списка",
+    "listErrorDescription": "При загрузке списка произошла ошибка. Пожалуйста, повторите попытку."
+  },
+  "pagination": {
+    "first": "Первая",
+    "last": "Последняя",
+    "previous": "Предыдущая",
+    "next": "Следующая",
+    "goToPage": "Перейти на страницу",
+    "pageSize": "Размер страницы",
+    "total": "Всего {total} элементов"
+  },
+  "empty": {
+    "title": "Нет данных",
+    "description": "Нечего отображать"
+  },
+  "loading": {
+    "title": "Загрузка",
+    "description": "Пожалуйста, подождите..."
+  }
+}

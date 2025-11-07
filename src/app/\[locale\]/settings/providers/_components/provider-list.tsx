@@ -1,0 +1,58 @@
+"use client";
+import { Globe } from "lucide-react";
+import type { ProviderDisplay } from "@/types/provider";
+import type { User } from "@/types/user";
+import { ProviderRichListItem } from "./provider-rich-list-item";
+import type { CurrencyCode } from "@/lib/utils/currency";
+
+interface ProviderListProps {
+  providers: ProviderDisplay[];
+  currentUser?: User;
+  healthStatus: Record<
+    number,
+    {
+      circuitState: "closed" | "open" | "half-open";
+      failureCount: number;
+      lastFailureTime: number | null;
+      circuitOpenUntil: number | null;
+      recoveryMinutes: number | null;
+    }
+  >;
+  currencyCode?: CurrencyCode;
+  enableMultiProviderTypes: boolean;
+}
+
+export function ProviderList({
+  providers,
+  currentUser,
+  healthStatus,
+  currencyCode = "USD",
+  enableMultiProviderTypes,
+}: ProviderListProps) {
+  if (providers.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 px-4">
+        <div className="w-12 h-12 rounded-full bg-muted/50 flex items-center justify-center mb-3">
+          <Globe className="h-6 w-6 text-muted-foreground" />
+        </div>
+        <h3 className="font-medium text-foreground mb-1">暂无服务商配置</h3>
+        <p className="text-sm text-muted-foreground text-center">添加你的第一个 API 服务商</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border rounded-lg overflow-hidden">
+      {providers.map((provider) => (
+        <ProviderRichListItem
+          key={provider.id}
+          provider={provider}
+          currentUser={currentUser}
+          healthStatus={healthStatus[provider.id]}
+          currencyCode={currencyCode}
+          enableMultiProviderTypes={enableMultiProviderTypes}
+        />
+      ))}
+    </div>
+  );
+}

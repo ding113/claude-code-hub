@@ -7,9 +7,10 @@ import { Activity, User, Key, Cpu, Clock, CheckCircle, XCircle, Loader2 } from "
 import { getActiveSessions } from "@/actions/active-sessions";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import type { ActiveSessionInfo } from "@/types/session";
-import Link from "next/link";
+import { Link } from "@/i18n/routing";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
+import { useTranslations } from "next-intl";
 
 const REFRESH_INTERVAL = 5000; // 5秒刷新一次
 
@@ -142,6 +143,8 @@ function SessionListItem({
  */
 export function ActiveSessionsPanel({ currencyCode = "USD" }: { currencyCode?: CurrencyCode }) {
   const router = useRouter();
+  const tu = useTranslations('ui');
+  const tc = useTranslations('customs');
 
   const { data = [], isLoading } = useQuery<ActiveSessionInfo[], Error>({
     queryKey: ["active-sessions"],
@@ -154,14 +157,16 @@ export function ActiveSessionsPanel({ currencyCode = "USD" }: { currencyCode?: C
       <div className="px-4 py-3 border-b flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Activity className="h-4 w-4 text-primary" />
-          <h3 className="font-semibold text-sm">活跃 Session</h3>
-          <span className="text-xs text-muted-foreground">({data.length} 个活跃，最近 5 分钟)</span>
+          <h3 className="font-semibold text-sm">{tc('activeSessions.title')}</h3>
+          <span className="text-xs text-muted-foreground">
+            {tc('activeSessions.summary', { count: data.length, minutes: 5 })}
+          </span>
         </div>
         <button
           onClick={() => router.push("/dashboard/sessions")}
           className="text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
-          查看全部 →
+          {tc('activeSessions.viewAll')} →
         </button>
       </div>
 
@@ -169,11 +174,11 @@ export function ActiveSessionsPanel({ currencyCode = "USD" }: { currencyCode?: C
         {isLoading && data.length === 0 ? (
           <div className="flex items-center justify-center h-[200px] text-muted-foreground text-sm">
             <Loader2 className="h-4 w-4 animate-spin mr-2" />
-            加载中...
+            {tu('common.loading')}
           </div>
         ) : data.length === 0 ? (
           <div className="flex items-center justify-center h-[200px] text-muted-foreground text-sm">
-            暂无活跃 Session
+            {tc('activeSessions.empty')}
           </div>
         ) : (
           <div className="divide-y">

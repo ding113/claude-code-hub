@@ -1,0 +1,29 @@
+{
+  "_comment": "Toast notification messages for Russian",
+
+  "save_success": "Успешно сохранено",
+  "create_success": "Успешно создано",
+  "update_success": "Успешно обновлено",
+  "delete_success": "Успешно удалено",
+  "copy_success": "Успешно скопировано",
+  "sync_success": "Успешно синхронизировано",
+  "export_success": "Успешно экспортировано",
+  "import_success": "Успешно импортировано",
+  "refresh_success": "Успешно обновлено",
+  "test_success": "Тест успешен",
+
+  "user_created": "Пользователь {name} успешно создан",
+  "user_updated": "Информация о пользователе обновлена",
+  "user_deleted": "Пользователь удален",
+  "key_created": "API ключ успешно создан",
+  "key_updated": "API ключ обновлен",
+  "key_deleted": "API ключ удален",
+  "provider_created": "Провайдер успешно создан",
+  "provider_updated": "Провайдер обновлен",
+  "provider_deleted": "Провайдер удален",
+
+  "operation_success": "Операция выполнена успешно",
+  "operation_failed": "Операция не удалась",
+  "processing": "Обработка...",
+  "please_wait": "Пожалуйста, подождите..."
+}

@@ -1,0 +1,14 @@
+{
+  "_comment": "Form validation messages for Chinese Traditional",
+
+  "name_required": "名稱不能為空",
+  "name_max_length": "名稱不能超過{max}個字符",
+  "note_max_length": "備註不能超過{max}個字符",
+  "email_invalid": "請輸入有效的電子郵件地址",
+  "url_invalid": "請輸入有效的URL地址",
+  "number_min": "不能低於{min}",
+  "number_max": "不能超過{max}",
+  "number_integer": "必須是整數",
+  "number_positive": "必須是正數",
+  "required": "此欄位必填"
+}

@@ -14,6 +14,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { RefreshCw, Search } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 interface QuotaToolbarProps {
   onSearch?: (query: string) => void;
@@ -31,15 +32,8 @@ export function QuotaToolbar({
   onSearch,
   onSort,
   onFilter,
-  sortOptions = [
-    { value: "name", label: "按名称" },
-    { value: "usage", label: "按使用率" },
-  ],
-  filterOptions = [
-    { value: "all", label: "全部" },
-    { value: "warning", label: "接近限额" },
-    { value: "exceeded", label: "已超限" },
-  ],
+  sortOptions,
+  filterOptions,
   showSearch = true,
   showSort = true,
   showFilter = true,
@@ -50,6 +44,18 @@ export function QuotaToolbar({
   const [searchQuery, setSearchQuery] = useState("");
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [refreshInterval, setRefreshInterval] = useState(30);
+  const t = useTranslations('quota');
+
+  // Provide translated defaults when options are not passed in
+  const _sortOptions = sortOptions ?? [
+    { value: 'name', label: t('toolbar.sortOptions.name') },
+    { value: 'usage', label: t('toolbar.sortOptions.usage') },
+  ];
+  const _filterOptions = filterOptions ?? [
+    { value: 'all', label: t('toolbar.filterOptions.all') },
+    { value: 'warning', label: t('toolbar.filterOptions.warning') },
+    { value: 'exceeded', label: t('toolbar.filterOptions.exceeded') },
+  ];
 
   // 自动刷新机制
   useEffect(() => {
@@ -85,7 +91,7 @@ export function QuotaToolbar({
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="搜索..."
+              placeholder={t('toolbar.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => handleSearchChange(e.target.value)}
               className="pl-9"
@@ -97,10 +103,10 @@ export function QuotaToolbar({
         {showFilter && onFilter && (
           <Select defaultValue="all" onValueChange={onFilter}>
             <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="筛选" />
+              <SelectValue placeholder={t('toolbar.filter')} />
             </SelectTrigger>
             <SelectContent>
-              {filterOptions.map((option) => (
+              {_filterOptions.map((option) => (
                 <SelectItem key={option.value} value={option.value}>
                   {option.label}
                 </SelectItem>
@@ -113,10 +119,10 @@ export function QuotaToolbar({
         {showSort && onSort && (
           <Select defaultValue="name" onValueChange={onSort}>
             <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="排序" />
+              <SelectValue placeholder={t('toolbar.sort')} />
             </SelectTrigger>
             <SelectContent>
-              {sortOptions.map((option) => (
+              {_sortOptions.map((option) => (
                 <SelectItem key={option.value} value={option.value}>
                   {option.label}
                 </SelectItem>
@@ -133,7 +139,7 @@ export function QuotaToolbar({
             <div className="flex items-center gap-2">
               <Switch id="auto-refresh" checked={autoRefresh} onCheckedChange={setAutoRefresh} />
               <Label htmlFor="auto-refresh" className="text-sm cursor-pointer">
-                自动刷新
+                {t('toolbar.autoRefresh')}
               </Label>
             </div>
 
@@ -146,9 +152,9 @@ export function QuotaToolbar({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="10">10秒</SelectItem>
-                  <SelectItem value="30">30秒</SelectItem>
-                  <SelectItem value="60">60秒</SelectItem>
+                  <SelectItem value="10">{t('toolbar.interval.10s')}</SelectItem>
+                  <SelectItem value="30">{t('toolbar.interval.30s')}</SelectItem>
+                  <SelectItem value="60">{t('toolbar.interval.60s')}</SelectItem>
                 </SelectContent>
               </Select>
             )}
@@ -157,7 +163,7 @@ export function QuotaToolbar({
 
         <Button variant="outline" size="sm" onClick={handleManualRefresh} disabled={isPending}>
           <RefreshCw className={`h-4 w-4 ${isPending ? "animate-spin" : ""}`} />
-          <span className="ml-2">刷新</span>
+          <span className="ml-2">{t('toolbar.refresh')}</span>
         </Button>
       </div>
     </div>

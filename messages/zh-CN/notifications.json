@@ -1,0 +1,29 @@
+{
+  "_comment": "Toast notification messages for Chinese Simplified",
+
+  "save_success": "保存成功",
+  "create_success": "创建成功",
+  "update_success": "更新成功",
+  "delete_success": "删除成功",
+  "copy_success": "复制成功",
+  "sync_success": "同步成功",
+  "export_success": "导出成功",
+  "import_success": "导入成功",
+  "refresh_success": "刷新成功",
+  "test_success": "测试成功",
+
+  "user_created": "用户 {name} 创建成功",
+  "user_updated": "用户信息已更新",
+  "user_deleted": "用户已删除",
+  "key_created": "密钥创建成功",
+  "key_updated": "密钥已更新",
+  "key_deleted": "密钥已删除",
+  "provider_created": "供应商创建成功",
+  "provider_updated": "供应商已更新",
+  "provider_deleted": "供应商已删除",
+
+  "operation_success": "操作成功",
+  "operation_failed": "操作失败",
+  "processing": "处理中...",
+  "please_wait": "请稍候..."
+}
