@@ -151,6 +151,7 @@ function SessionListItem({
 
 interface OverviewPanelProps {
   currencyCode?: CurrencyCode;
+  isAdmin?: boolean;
 }
 
 /**
@@ -158,13 +159,14 @@ interface OverviewPanelProps {
  * 左侧：4个指标卡片
  * 右侧：简洁的活跃 Session 列表
  */
-export function OverviewPanel({ currencyCode = "USD" }: OverviewPanelProps) {
+export function OverviewPanel({ currencyCode = "USD", isAdmin = false }: OverviewPanelProps) {
   const router = useRouter();
 
   const { data, isLoading } = useQuery<OverviewData, Error>({
     queryKey: ["overview-data"],
     queryFn: fetchOverviewData,
     refetchInterval: REFRESH_INTERVAL,
+    enabled: isAdmin, // 仅当用户是 admin 时才获取数据
   });
 
   // 格式化响应时间
@@ -180,6 +182,11 @@ export function OverviewPanel({ currencyCode = "USD" }: OverviewPanelProps) {
     avgResponseTime: 0,
     recentSessions: [],
   };
+
+  // 对于非 admin 用户，不显示概览面板
+  if (!isAdmin) {
+    return null;
+  }
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 w-full">
