@@ -1,25 +1,55 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
 import { getLeaderboardWithCache } from "@/lib/redis";
+import type { LeaderboardScope } from "@/lib/redis/leaderboard-cache";
 import { getSystemSettings } from "@/repository/system-config";
 import { formatCurrency } from "@/lib/utils";
+import { getSession } from "@/lib/auth";
 
 // 需要数据库连接
 export const runtime = "nodejs";
 
 /**
  * 获取排行榜数据
- * GET /api/leaderboard?period=daily|monthly
+ * GET /api/leaderboard?period=daily|monthly&scope=user|provider
  *
- * 无需认证，公开访问
+ * 需要认证，普通用户需要 allowGlobalUsageView 权限
  * 实时计算 + Redis 乐观缓存（60 秒 TTL）
  */
 export async function GET(request: NextRequest) {
   try {
-    const searchParams = request.nextUrl.searchParams;
-    const period = searchParams.get("period") || "daily";
+    // 获取用户 session
+    const session = await getSession();
+    if (!session) {
+      logger.warn("Leaderboard API: Unauthorized access attempt");
+      return NextResponse.json({ error: "未登录" }, { status: 401 });
+    }
+
+    // 获取系统配置
+    const systemSettings = await getSystemSettings();
+
+    // 检查权限：管理员或开启了全站使用量查看权限
+    const isAdmin = session.user.role === "admin";
+    const hasPermission = isAdmin || systemSettings.allowGlobalUsageView;
+
+    if (!hasPermission) {
+      logger.warn("Leaderboard API: Access denied", {
+        userId: session.user.id,
+        userName: session.user.name,
+        isAdmin,
+        allowGlobalUsageView: systemSettings.allowGlobalUsageView,
+      });
+      return NextResponse.json(
+        { error: "无权限访问排行榜，请联系管理员开启全站使用量查看权限" },
+        { status: 403 }
+      );
+    }
 
     // 验证参数
+    const searchParams = request.nextUrl.searchParams;
+    const period = searchParams.get("period") || "daily";
+    const scope = (searchParams.get("scope") as LeaderboardScope) || "user"; // 向后兼容：默认 user
+
     if (period !== "daily" && period !== "monthly") {
       return NextResponse.json(
         { error: "参数 period 必须是 'daily' 或 'monthly'" },
@@ -27,17 +57,35 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 获取系统配置（货币显示单位）
-    const systemSettings = await getSystemSettings();
+    if (scope !== "user" && scope !== "provider") {
+      return NextResponse.json(
+        { error: "参数 scope 必须是 'user' 或 'provider'" },
+        { status: 400 }
+      );
+    }
+
+    // 供应商榜仅管理员可见
+    if (scope === "provider" && !isAdmin) {
+      return NextResponse.json({ error: "仅管理员可查看供应商排行榜" }, { status: 403 });
+    }
 
     // 使用 Redis 乐观缓存获取数据
-    const rawData = await getLeaderboardWithCache(period, systemSettings.currencyDisplay);
+    const rawData = await getLeaderboardWithCache(period, systemSettings.currencyDisplay, scope);
 
     // 格式化金额字段
     const data = rawData.map((entry) => ({
       ...entry,
       totalCostFormatted: formatCurrency(entry.totalCost, systemSettings.currencyDisplay),
     }));
+
+    logger.info("Leaderboard API: Access granted", {
+      userId: session.user.id,
+      userName: session.user.name,
+      isAdmin: session.user.role === "admin",
+      period,
+      scope,
+      entriesCount: data.length,
+    });
 
     return NextResponse.json(data, {
       headers: {

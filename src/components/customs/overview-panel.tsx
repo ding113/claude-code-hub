@@ -151,6 +151,7 @@ function SessionListItem({
 
 interface OverviewPanelProps {
   currencyCode?: CurrencyCode;
+  isAdmin?: boolean;
 }
 
 /**
@@ -158,13 +159,14 @@ interface OverviewPanelProps {
  * 左侧：4个指标卡片
  * 右侧：简洁的活跃 Session 列表
  */
-export function OverviewPanel({ currencyCode = "USD" }: OverviewPanelProps) {
+export function OverviewPanel({ currencyCode = "USD", isAdmin = false }: OverviewPanelProps) {
   const router = useRouter();
 
   const { data, isLoading } = useQuery<OverviewData, Error>({
     queryKey: ["overview-data"],
     queryFn: fetchOverviewData,
     refetchInterval: REFRESH_INTERVAL,
+    enabled: isAdmin, // 仅当用户是 admin 时才获取数据
   });
 
   // 格式化响应时间
@@ -180,6 +182,11 @@ export function OverviewPanel({ currencyCode = "USD" }: OverviewPanelProps) {
     avgResponseTime: 0,
     recentSessions: [],
   };
+
+  // 对于非 admin 用户，不显示概览面板
+  if (!isAdmin) {
+    return null;
+  }
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 w-full">
@@ -224,8 +231,8 @@ export function OverviewPanel({ currencyCode = "USD" }: OverviewPanelProps) {
 
       {/* 右侧：活跃 Session 列表 */}
       <div className="lg:col-span-9">
-        <div className="border rounded-lg bg-card">
-          <div className="px-4 py-3 border-b flex items-center justify-between">
+        <div className="border rounded-lg bg-card h-full flex flex-col">
+          <div className="px-4 py-3 border-b flex items-center justify-between flex-shrink-0">
             <div className="flex items-center gap-2">
               <Activity className="h-4 w-4 text-primary" />
               <h3 className="font-semibold text-sm">活跃 Session</h3>
@@ -241,14 +248,14 @@ export function OverviewPanel({ currencyCode = "USD" }: OverviewPanelProps) {
             </button>
           </div>
 
-          <div className="max-h-[200px] overflow-y-auto">
+          <div className="flex-1 overflow-y-auto min-h-0">
             {isLoading && metrics.recentSessions.length === 0 ? (
-              <div className="flex items-center justify-center h-[200px] text-muted-foreground text-sm">
+              <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 加载中...
               </div>
             ) : metrics.recentSessions.length === 0 ? (
-              <div className="flex items-center justify-center h-[200px] text-muted-foreground text-sm">
+              <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
                 暂无活跃 Session
               </div>
             ) : (

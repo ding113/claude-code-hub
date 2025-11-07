@@ -2,7 +2,7 @@
 import { Globe } from "lucide-react";
 import type { ProviderDisplay } from "@/types/provider";
 import type { User } from "@/types/user";
-import { ProviderListItem } from "./provider-list-item";
+import { ProviderRichListItem } from "./provider-rich-list-item";
 import type { CurrencyCode } from "@/lib/utils/currency";
 
 interface ProviderListProps {
@@ -42,11 +42,11 @@ export function ProviderList({
   }
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+    <div className="border rounded-lg overflow-hidden">
       {providers.map((provider) => (
-        <ProviderListItem
+        <ProviderRichListItem
           key={provider.id}
-          item={provider}
+          provider={provider}
           currentUser={currentUser}
           healthStatus={healthStatus[provider.id]}
           currencyCode={currencyCode}

@@ -123,6 +123,10 @@ export const providers = pgTable('providers', {
   proxyUrl: varchar('proxy_url', { length: 512 }),
   proxyFallbackToDirect: boolean('proxy_fallback_to_direct').default(false),
 
+  // 供应商官网地址（用于快速跳转管理）
+  websiteUrl: text('website_url'),
+  faviconUrl: text('favicon_url'),
+
   // 废弃（保留向后兼容，但不再使用）
   tpm: integer('tpm').default(0),
   rpm: integer('rpm').default(0),

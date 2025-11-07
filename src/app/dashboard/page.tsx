@@ -27,9 +27,12 @@ export default async function DashboardPage() {
     getSystemSettings(),
   ]);
 
+  // 检查是否是 admin 用户
+  const isAdmin = session?.user?.role === "admin";
+
   return (
     <div className="space-y-6">
-      <OverviewPanel currencyCode={systemSettings.currencyDisplay} />
+      <OverviewPanel currencyCode={systemSettings.currencyDisplay} isAdmin={isAdmin} />
 
       <div>
         <StatisticsWrapper

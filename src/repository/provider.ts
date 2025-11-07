@@ -36,6 +36,8 @@ export async function createProvider(providerData: CreateProviderData): Promise<
       providerData.circuit_breaker_half_open_success_threshold ?? 2,
     proxyUrl: providerData.proxy_url ?? null,
     proxyFallbackToDirect: providerData.proxy_fallback_to_direct ?? false,
+    websiteUrl: providerData.website_url ?? null,
+    faviconUrl: providerData.favicon_url ?? null,
     tpm: providerData.tpm,
     rpm: providerData.rpm,
     rpd: providerData.rpd,
@@ -66,6 +68,8 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     circuitBreakerHalfOpenSuccessThreshold: providers.circuitBreakerHalfOpenSuccessThreshold,
     proxyUrl: providers.proxyUrl,
     proxyFallbackToDirect: providers.proxyFallbackToDirect,
+    websiteUrl: providers.websiteUrl,
+    faviconUrl: providers.faviconUrl,
     tpm: providers.tpm,
     rpm: providers.rpm,
     rpd: providers.rpd,
@@ -107,6 +111,8 @@ export async function findProviderList(
       circuitBreakerHalfOpenSuccessThreshold: providers.circuitBreakerHalfOpenSuccessThreshold,
       proxyUrl: providers.proxyUrl,
       proxyFallbackToDirect: providers.proxyFallbackToDirect,
+      websiteUrl: providers.websiteUrl,
+      faviconUrl: providers.faviconUrl,
       tpm: providers.tpm,
       rpm: providers.rpm,
       rpd: providers.rpd,
@@ -155,6 +161,8 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       circuitBreakerHalfOpenSuccessThreshold: providers.circuitBreakerHalfOpenSuccessThreshold,
       proxyUrl: providers.proxyUrl,
       proxyFallbackToDirect: providers.proxyFallbackToDirect,
+      websiteUrl: providers.websiteUrl,
+      faviconUrl: providers.faviconUrl,
       tpm: providers.tpm,
       rpm: providers.rpm,
       rpd: providers.rpd,
@@ -221,6 +229,8 @@ export async function updateProvider(
   if (providerData.proxy_url !== undefined) dbData.proxyUrl = providerData.proxy_url;
   if (providerData.proxy_fallback_to_direct !== undefined)
     dbData.proxyFallbackToDirect = providerData.proxy_fallback_to_direct;
+  if (providerData.website_url !== undefined) dbData.websiteUrl = providerData.website_url;
+  if (providerData.favicon_url !== undefined) dbData.faviconUrl = providerData.favicon_url;
   if (providerData.tpm !== undefined) dbData.tpm = providerData.tpm;
   if (providerData.rpm !== undefined) dbData.rpm = providerData.rpm;
   if (providerData.rpd !== undefined) dbData.rpd = providerData.rpd;
@@ -291,37 +301,20 @@ export async function getProviderStatistics(): Promise<
   }>
 > {
   try {
-    // 时区感知的时间处理
-    // 获取今日时间范围（本地时区）
+    // 统一的时区处理：使用 PostgreSQL AT TIME ZONE + 环境变量 TZ
+    // 参考 getUserStatisticsFromDB 的实现，避免 Node.js Date 带来的时区偏移
     const timezone = getEnvConfig().TZ;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    // 从 Date 对象提取本地时间（不要用 toISOString，那会转换为 UTC）
-    const todayYear = today.getFullYear();
-    const todayMonth = String(today.getMonth() + 1).padStart(2, "0");
-    const todayDay = String(today.getDate()).padStart(2, "0");
-    const todayLocalStr = `${todayYear}-${todayMonth}-${todayDay} 00:00:00`;
-
-    const tomorrowYear = tomorrow.getFullYear();
-    const tomorrowMonth = String(tomorrow.getMonth() + 1).padStart(2, "0");
-    const tomorrowDay = String(tomorrow.getDate()).padStart(2, "0");
-    const tomorrowLocalStr = `${tomorrowYear}-${tomorrowMonth}-${tomorrowDay} 00:00:00`;
 
     const query = sql`
       WITH provider_stats AS (
         SELECT
           p.id,
           COALESCE(
-            SUM(CASE WHEN (mr.created_at AT TIME ZONE 'UTC' AT TIME ZONE ${timezone})::timestamp >= ${todayLocalStr}::timestamp
-                      AND (mr.created_at AT TIME ZONE 'UTC' AT TIME ZONE ${timezone})::timestamp < ${tomorrowLocalStr}::timestamp
+            SUM(CASE WHEN (mr.created_at AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date
                  THEN mr.cost_usd ELSE 0 END),
             0
           ) AS today_cost,
-          COUNT(CASE WHEN (mr.created_at AT TIME ZONE 'UTC' AT TIME ZONE ${timezone})::timestamp >= ${todayLocalStr}::timestamp
-                       AND (mr.created_at AT TIME ZONE 'UTC' AT TIME ZONE ${timezone})::timestamp < ${tomorrowLocalStr}::timestamp
+          COUNT(CASE WHEN (mr.created_at AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date
                   THEN 1 END)::integer AS today_calls
         FROM providers p
         LEFT JOIN message_request mr ON p.id = mr.provider_id
@@ -357,7 +350,9 @@ export async function getProviderStatistics(): Promise<
       count: Array.isArray(result) ? result.length : 0,
     });
 
-    // postgres-js 返回的结果需要通过 unknown 进行类型断言
+    // 注意：返回结果中的 today_cost 为 numeric，使用字符串表示；
+    // last_call_time 由数据库返回为时间戳（UTC）。
+    // 这里保持原样，交由上层进行展示格式化。
     return result as unknown as Array<{
       id: number;
       today_cost: string;

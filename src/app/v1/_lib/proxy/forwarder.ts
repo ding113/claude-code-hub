@@ -25,6 +25,51 @@ import { getEnvConfig } from "@/lib/config/env.schema";
 const MAX_ATTEMPTS_PER_PROVIDER = 2; // 每个供应商最多尝试次数（首次 + 1次重试）
 const MAX_PROVIDER_SWITCHES = 20; // 保险栓：最多切换 20 次供应商（防止无限循环）
 
+/**
+ * 过滤私有参数（下划线前缀）
+ *
+ * 目的：防止私有参数（如 _canRetryWithOfficialInstructions）泄露到上游供应商
+ * 导致 "Unsupported parameter" 错误
+ *
+ * @param obj - 原始请求对象
+ * @returns 过滤后的请求对象
+ */
+function filterPrivateParameters(obj: unknown): unknown {
+  // 非对象类型直接返回
+  if (typeof obj !== "object" || obj === null) {
+    return obj;
+  }
+
+  // 数组类型递归处理
+  if (Array.isArray(obj)) {
+    return obj.map((item) => filterPrivateParameters(item));
+  }
+
+  // 对象类型：过滤下划线前缀的键
+  const filtered: Record<string, unknown> = {};
+  const removedKeys: string[] = [];
+
+  for (const [key, value] of Object.entries(obj)) {
+    if (key.startsWith("_")) {
+      // 私有参数：跳过
+      removedKeys.push(key);
+    } else {
+      // 公开参数：递归过滤值
+      filtered[key] = filterPrivateParameters(value);
+    }
+  }
+
+  // 记录被过滤的参数（debug 级别）
+  if (removedKeys.length > 0) {
+    logger.debug("[ProxyForwarder] Filtered private parameters from request", {
+      removedKeys,
+      reason: "Private parameters (underscore-prefixed) should not be sent to upstream providers",
+    });
+  }
+
+  return filtered;
+}
+
 export class ProxyForwarder {
   static async send(session: ProxySession): Promise<Response> {
     if (!session.provider || !session.authState?.success) {
@@ -195,7 +240,49 @@ export class ProxyForwarder {
             throw lastError;
           }
 
-          // ⭐ 3. 系统错误处理（不计入熔断器，先重试1次当前供应商）
+          // ⭐ 3. 不可重试的客户端输入错误处理（不计入熔断器，不重试，立即返回）
+          if (errorCategory === ErrorCategory.NON_RETRYABLE_CLIENT_ERROR) {
+            const proxyError = lastError as ProxyError;
+            const statusCode = proxyError.statusCode;
+
+            logger.warn("ProxyForwarder: Non-retryable client error, stopping immediately", {
+              providerId: currentProvider.id,
+              providerName: currentProvider.name,
+              statusCode: statusCode,
+              error: errorMessage,
+              attemptNumber: attemptCount,
+              totalProvidersAttempted,
+              reason:
+                "White-listed client error (prompt length, content filter, PDF limit, or thinking format)",
+            });
+
+            // 记录到决策链（标记为不可重试的客户端错误）
+            // 注意：不调用 recordFailure()，因为这不是供应商的问题，是客户端输入问题
+            session.addProviderToChain(currentProvider, {
+              reason: "client_error_non_retryable", // 新增的 reason 值
+              circuitState: getCircuitState(currentProvider.id),
+              attemptNumber: attemptCount,
+              errorMessage: errorMessage,
+              statusCode: statusCode,
+              errorDetails: {
+                provider: {
+                  id: currentProvider.id,
+                  name: currentProvider.name,
+                  statusCode: statusCode,
+                  statusText: proxyError.message,
+                  upstreamBody: proxyError.upstreamError?.body,
+                  upstreamParsed: proxyError.upstreamError?.parsed,
+                },
+                clientError: proxyError.getDetailedErrorMessage(),
+              },
+            });
+
+            // 立即抛出错误，不重试，不切换供应商
+            // 白名单错误不计入熔断器，因为是客户端输入问题，不是供应商故障
+            throw lastError;
+          }
+
+          // ⭐ 4. 系统错误处理（不计入熔断器，先重试1次当前供应商）
           if (errorCategory === ErrorCategory.SYSTEM_ERROR) {
             const err = lastError as Error & {
               code?: string;
@@ -272,7 +359,7 @@ export class ProxyForwarder {
             break; // ⭐ 跳出内层循环，进入供应商切换逻辑
           }
 
-          // ⭐ 4. 供应商错误处理（所有 4xx/5xx HTTP 错误，计入熔断器，直接切换）
+          // ⭐ 5. 供应商错误处理（所有 4xx/5xx HTTP 错误，计入熔断器，直接切换）
           if (errorCategory === ErrorCategory.PROVIDER_ERROR) {
             const proxyError = lastError as ProxyError;
             const statusCode = proxyError.statusCode;
@@ -618,7 +705,9 @@ export class ProxyForwarder {
     // 确保 OpenAI 格式转换为 Response API 后，发送的是包含 input 字段的请求体
     let requestBody: BodyInit | undefined;
     if (hasBody) {
-      const bodyString = JSON.stringify(session.request.message);
+      // 过滤私有参数（下划线前缀）防止泄露到上游供应商
+      const filteredMessage = filterPrivateParameters(session.request.message);
+      const bodyString = JSON.stringify(filteredMessage);
       requestBody = bodyString;
 
       // 调试日志：输出实际转发的请求体（仅在开发环境）

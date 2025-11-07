@@ -1,42 +1,60 @@
 import { getRedisClient } from "./client";
 import { logger } from "@/lib/logger";
+import { formatInTimeZone } from "date-fns-tz";
+import { getEnvConfig } from "@/lib/config";
 import {
   findDailyLeaderboard,
   findMonthlyLeaderboard,
   LeaderboardEntry,
+  findDailyProviderLeaderboard,
+  findMonthlyProviderLeaderboard,
+  ProviderLeaderboardEntry,
 } from "@/repository/leaderboard";
 
 /**
  * 排行榜周期类型
  */
 type LeaderboardPeriod = "daily" | "monthly";
+export type LeaderboardScope = "user" | "provider";
+
+type LeaderboardData = LeaderboardEntry[] | ProviderLeaderboardEntry[];
 
 /**
  * 构建缓存键
  */
-function buildCacheKey(period: LeaderboardPeriod, currencyDisplay: string): string {
+function buildCacheKey(
+  period: LeaderboardPeriod,
+  currencyDisplay: string,
+  scope: LeaderboardScope = "user"
+): string {
   const now = new Date();
+  const tz = getEnvConfig().TZ; // ensure date formatting aligns with configured timezone
 
   if (period === "daily") {
-    // leaderboard:daily:2025-01-15:USD
-    const dateStr = now.toISOString().split("T")[0];
-    return `leaderboard:daily:${dateStr}:${currencyDisplay}`;
+    // leaderboard:{scope}:daily:2025-01-15:USD
+    const dateStr = formatInTimeZone(now, tz, "yyyy-MM-dd");
+    return `leaderboard:${scope}:daily:${dateStr}:${currencyDisplay}`;
   } else {
-    // leaderboard:monthly:2025-01:USD
-    const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    return `leaderboard:monthly:${monthStr}:${currencyDisplay}`;
+    // leaderboard:{scope}:monthly:2025-01:USD
+    const monthStr = formatInTimeZone(now, tz, "yyyy-MM");
+    return `leaderboard:${scope}:monthly:${monthStr}:${currencyDisplay}`;
   }
 }
 
 /**
  * 查询数据库（根据周期）
  */
-async function queryDatabase(period: LeaderboardPeriod): Promise<LeaderboardEntry[]> {
-  if (period === "daily") {
-    return await findDailyLeaderboard();
-  } else {
-    return await findMonthlyLeaderboard();
+async function queryDatabase(
+  period: LeaderboardPeriod,
+  scope: LeaderboardScope
+): Promise<LeaderboardData> {
+  if (scope === "user") {
+    return period === "daily" ? await findDailyLeaderboard() : await findMonthlyLeaderboard();
   }
+  // provider scope
+  return period === "daily"
+    ? await findDailyProviderLeaderboard()
+    : await findMonthlyProviderLeaderboard();
 }
 
 /**
@@ -61,17 +79,21 @@ function sleep(ms: number): Promise<void> {
  */
 export async function getLeaderboardWithCache(
   period: LeaderboardPeriod,
-  currencyDisplay: string
-): Promise<LeaderboardEntry[]> {
+  currencyDisplay: string,
+  scope: LeaderboardScope = "user"
+): Promise<LeaderboardData> {
   const redis = getRedisClient();
 
   // Redis 不可用，直接查数据库
   if (!redis) {
-    logger.warn("[LeaderboardCache] Redis not available, fallback to direct query", { period });
-    return await queryDatabase(period);
+    logger.warn("[LeaderboardCache] Redis not available, fallback to direct query", {
+      period,
+      scope,
+    });
+    return await queryDatabase(period, scope);
   }
 
-  const cacheKey = buildCacheKey(period, currencyDisplay);
+  const cacheKey = buildCacheKey(period, currencyDisplay, scope);
   const lockKey = `${cacheKey}:lock`;
 
   try {
@@ -79,7 +101,7 @@ export async function getLeaderboardWithCache(
     const cached = await redis.get(cacheKey);
     if (cached) {
       logger.debug("[LeaderboardCache] Cache hit", { period, cacheKey });
-      return JSON.parse(cached) as LeaderboardEntry[];
+      return JSON.parse(cached) as LeaderboardData;
     }
 
     // 2. 缓存未命中，尝试获取计算锁（SET NX EX 10 秒）
@@ -87,9 +109,9 @@ export async function getLeaderboardWithCache(
 
     if (locked === "OK") {
       // 获得锁，查询数据库
-      logger.debug("[LeaderboardCache] Acquired lock, computing", { period, lockKey });
+      logger.debug("[LeaderboardCache] Acquired lock, computing", { period, scope, lockKey });
 
-      const data = await queryDatabase(period);
+      const data = await queryDatabase(period, scope);
 
       // 写入缓存（60 秒 TTL）
       await redis.setex(cacheKey, 60, JSON.stringify(data));
@@ -99,6 +121,7 @@ export async function getLeaderboardWithCache(
 
       logger.info("[LeaderboardCache] Cache updated", {
         period,
+        scope,
         recordCount: data.length,
         cacheKey,
         ttl: 60,
@@ -107,7 +130,7 @@ export async function getLeaderboardWithCache(
       return data;
     } else {
       // 未获得锁，等待并重试（最多 50 次 × 100ms = 5 秒）
-      logger.debug("[LeaderboardCache] Lock held by another request, retrying", { period });
+      logger.debug("[LeaderboardCache] Lock held by another request, retrying", { period, scope });
 
       for (let i = 0; i < 50; i++) {
         await sleep(100);
@@ -118,21 +141,22 @@ export async function getLeaderboardWithCache(
             period,
             retries: i + 1,
           });
-          return JSON.parse(retried) as LeaderboardEntry[];
+          return JSON.parse(retried) as LeaderboardData;
         }
       }
 
       // 超时降级：直接查数据库
-      logger.warn("[LeaderboardCache] Retry timeout, fallback to direct query", { period });
-      return await queryDatabase(period);
+      logger.warn("[LeaderboardCache] Retry timeout, fallback to direct query", { period, scope });
+      return await queryDatabase(period, scope);
     }
   } catch (error) {
     // Redis 异常，降级到直接查询
     logger.error("[LeaderboardCache] Redis error, fallback to direct query", {
       period,
+      scope,
       error,
     });
-    return await queryDatabase(period);
+    return await queryDatabase(period, scope);
   }
 }
 
@@ -144,19 +168,20 @@ export async function getLeaderboardWithCache(
  */
 export async function invalidateLeaderboardCache(
   period: LeaderboardPeriod,
-  currencyDisplay: string
+  currencyDisplay: string,
+  scope: LeaderboardScope = "user"
 ): Promise<void> {
   const redis = getRedisClient();
   if (!redis) {
     return;
   }
 
-  const cacheKey = buildCacheKey(period, currencyDisplay);
+  const cacheKey = buildCacheKey(period, currencyDisplay, scope);
 
   try {
     await redis.del(cacheKey);
-    logger.info("[LeaderboardCache] Cache invalidated", { period, cacheKey });
+    logger.info("[LeaderboardCache] Cache invalidated", { period, scope, cacheKey });
   } catch (error) {
-    logger.error("[LeaderboardCache] Failed to invalidate cache", { period, error });
+    logger.error("[LeaderboardCache] Failed to invalidate cache", { period, scope, error });
   }
 }

@@ -11,15 +11,27 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Trophy, Medal, Award } from "lucide-react";
-import type { LeaderboardEntry } from "@/repository/leaderboard";
-import { formatTokenAmount } from "@/lib/utils";
 
-interface LeaderboardTableProps {
-  data: LeaderboardEntry[];
-  period: "daily" | "monthly";
+// 支持动态列定义
+export interface ColumnDef<T> {
+  header: string;
+  className?: string;
+  cell: (row: T, index: number) => React.ReactNode;
 }
 
-export function LeaderboardTable({ data, period }: LeaderboardTableProps) {
+interface LeaderboardTableProps<T> {
+  data: T[];
+  period: "daily" | "monthly";
+  columns: ColumnDef<T>[]; // 不包含“排名”列，组件会自动添加
+  getRowKey?: (row: T, index: number) => string | number;
+}
+
+export function LeaderboardTable<T>({
+  data,
+  period,
+  columns,
+  getRowKey,
+}: LeaderboardTableProps<T>) {
   if (data.length === 0) {
     return (
       <Card>
@@ -73,34 +85,29 @@ export function LeaderboardTable({ data, period }: LeaderboardTableProps) {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-24">排名</TableHead>
-                <TableHead>用户</TableHead>
-                <TableHead className="text-right">请求数</TableHead>
-                <TableHead className="text-right">Token 数</TableHead>
-                <TableHead className="text-right">消耗金额</TableHead>
+                {columns.map((col, idx) => (
+                  <TableHead key={idx} className={col.className || ""}>
+                    {col.header}
+                  </TableHead>
+                ))}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data.map((entry, index) => {
+              {data.map((row, index) => {
                 const rank = index + 1;
                 const isTopThree = rank <= 3;
 
                 return (
-                  <TableRow key={entry.userId} className={isTopThree ? "bg-muted/50" : ""}>
+                  <TableRow
+                    key={(getRowKey ? getRowKey(row, index) : index) as React.Key}
+                    className={isTopThree ? "bg-muted/50" : ""}
+                  >
                     <TableCell>{getRankBadge(rank)}</TableCell>
-                    <TableCell className={isTopThree ? "font-semibold" : ""}>
-                      {entry.userName}
-                    </TableCell>
-                    <TableCell className="text-right font-mono">
-                      {entry.totalRequests.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right font-mono">
-                      {formatTokenAmount(entry.totalTokens)}
-                    </TableCell>
-                    <TableCell className="text-right font-mono font-semibold">
-                      {"totalCostFormatted" in entry
-                        ? (entry as { totalCostFormatted: string }).totalCostFormatted
-                        : entry.totalCost}
-                    </TableCell>
+                    {columns.map((col, idx) => (
+                      <TableCell key={idx} className={col.className || ""}>
+                        {col.cell(row, index)}
+                      </TableCell>
+                    ))}
                   </TableRow>
                 );
               })}

@@ -114,22 +114,9 @@ export class ProxyResponseHandler {
         let usageRecord: Record<string, unknown> | null = null;
         let usageMetrics: UsageMetrics | null = null;
 
-        try {
-          const parsed = JSON.parse(responseText) as Record<string, unknown>;
-          // Claude 格式: 顶级 usage
-          let usageValue = parsed.usage;
-          // Codex 格式: response.usage
-          if (!usageValue && parsed.response && typeof parsed.response === "object") {
-            const responseObj = parsed.response as Record<string, unknown>;
-            usageValue = responseObj.usage;
-          }
-          if (usageValue && typeof usageValue === "object") {
-            usageRecord = usageValue as Record<string, unknown>;
-            usageMetrics = extractUsageMetrics(usageValue);
-          }
-        } catch {
-          // 非 JSON 响应时保持原始日志
-        }
+        const usageResult = parseUsageFromResponseText(responseText, provider.providerType);
+        usageRecord = usageResult.usageRecord;
+        usageMetrics = usageResult.usageMetrics;
 
         // 存储响应体到 Redis（5分钟过期）
         if (session.sessionId) {
@@ -357,8 +344,6 @@ export class ProxyResponseHandler {
           });
         }
 
-        const parsedEvents = parseSSEData(allContent);
-
         const duration = Date.now() - session.startTime;
         await updateMessageRequestDuration(messageContext.id, duration);
 
@@ -366,43 +351,8 @@ export class ProxyResponseHandler {
         const tracker = ProxyStatusTracker.getInstance();
         tracker.endRequest(messageContext.user.id, messageContext.id);
 
-        for (const event of parsedEvents) {
-          // Codex API: 监听 response.completed 事件（官方格式）
-          if (
-            event.event === "response.completed" &&
-            typeof event.data === "object" &&
-            event.data !== null
-          ) {
-            const eventData = event.data as Record<string, unknown>;
-            // Codex API 的 usage 在 response.usage 路径下
-            const responseObj = eventData.response as Record<string, unknown> | undefined;
-            if (responseObj?.usage) {
-              const usageMetrics = extractUsageMetrics(responseObj.usage);
-              if (usageMetrics) {
-                usageForCost = usageMetrics;
-                logger.debug("[ResponseHandler] Captured usage from Codex response.completed", {
-                  usage: usageMetrics,
-                });
-              }
-            }
-          }
-
-          // Claude API: 监听 message_delta 事件（向后兼容）
-          if (
-            event.event === "message_delta" &&
-            typeof event.data === "object" &&
-            event.data !== null
-          ) {
-            const eventData = event.data as Record<string, unknown>;
-            const usageMetrics = extractUsageMetrics(eventData.usage);
-            if (usageMetrics) {
-              usageForCost = usageMetrics;
-              logger.debug("[ResponseHandler] Captured usage from Claude message_delta", {
-                usage: usageMetrics,
-              });
-            }
-          }
-        }
+        const usageResult = parseUsageFromResponseText(allContent, provider.providerType);
+        usageForCost = usageResult.usageMetrics;
 
         await updateRequestCostFromUsage(
           messageContext.id,
@@ -555,6 +505,138 @@ function extractUsageMetrics(value: unknown): UsageMetrics | null {
   }
 
   return hasAny ? result : null;
+}
+
+function parseUsageFromResponseText(
+  responseText: string,
+  providerType: string | null | undefined
+): {
+  usageRecord: Record<string, unknown> | null;
+  usageMetrics: UsageMetrics | null;
+} {
+  let usageRecord: Record<string, unknown> | null = null;
+  let usageMetrics: UsageMetrics | null = null;
+
+  const applyUsageValue = (value: unknown, source: string) => {
+    if (usageMetrics) {
+      return;
+    }
+
+    if (!value || typeof value !== "object") {
+      return;
+    }
+
+    const extracted = extractUsageMetrics(value);
+    if (!extracted) {
+      return;
+    }
+
+    usageRecord = value as Record<string, unknown>;
+    usageMetrics = adjustUsageForProviderType(extracted, providerType);
+
+    logger.debug("[ResponseHandler] Parsed usage from response", {
+      source,
+      providerType,
+      usage: usageMetrics,
+    });
+  };
+
+  try {
+    const parsedValue = JSON.parse(responseText);
+
+    if (parsedValue && typeof parsedValue === "object" && !Array.isArray(parsedValue)) {
+      const parsed = parsedValue as Record<string, unknown>;
+      applyUsageValue(parsed.usage, "json.root");
+
+      if (parsed.response && typeof parsed.response === "object") {
+        applyUsageValue((parsed.response as Record<string, unknown>).usage, "json.response");
+      }
+
+      if (Array.isArray(parsed.output)) {
+        for (const item of parsed.output as Array<Record<string, unknown>>) {
+          if (!item || typeof item !== "object") {
+            continue;
+          }
+          applyUsageValue(item.usage, "json.output");
+        }
+      }
+    }
+
+    if (!usageMetrics && Array.isArray(parsedValue)) {
+      for (const item of parsedValue) {
+        if (!item || typeof item !== "object") {
+          continue;
+        }
+
+        const record = item as Record<string, unknown>;
+        applyUsageValue(record.usage, "json.array");
+
+        if (record.data && typeof record.data === "object") {
+          applyUsageValue((record.data as Record<string, unknown>).usage, "json.array.data");
+        }
+      }
+    }
+  } catch {
+    // Fallback to SSE parsing when body is not valid JSON
+  }
+
+  if (!usageMetrics && responseText.includes("event:")) {
+    const events = parseSSEData(responseText);
+    for (const event of events) {
+      if (usageMetrics) {
+        break;
+      }
+
+      if (typeof event.data !== "object" || !event.data) {
+        continue;
+      }
+
+      const data = event.data as Record<string, unknown>;
+      applyUsageValue(data.usage, `sse.${event.event}`);
+
+      if (!usageMetrics && data.response && typeof data.response === "object") {
+        applyUsageValue(
+          (data.response as Record<string, unknown>).usage,
+          `sse.${event.event}.response`
+        );
+      }
+    }
+  }
+
+  return { usageRecord, usageMetrics };
+}
+
+function adjustUsageForProviderType(
+  usage: UsageMetrics,
+  providerType: string | null | undefined
+): UsageMetrics {
+  if (providerType !== "codex") {
+    return usage;
+  }
+
+  const cachedTokens = usage.cache_read_input_tokens;
+  const inputTokens = usage.input_tokens;
+
+  if (typeof cachedTokens !== "number" || typeof inputTokens !== "number") {
+    return usage;
+  }
+
+  const adjustedInput = Math.max(inputTokens - cachedTokens, 0);
+  if (adjustedInput === inputTokens) {
+    return usage;
+  }
+
+  logger.debug("[UsageMetrics] Adjusted codex input tokens to exclude cached tokens", {
+    providerType,
+    originalInputTokens: inputTokens,
+    cachedTokens,
+    adjustedInputTokens: adjustedInput,
+  });
+
+  return {
+    ...usage,
+    input_tokens: adjustedInput,
+  };
 }
 
 async function updateRequestCostFromUsage(
