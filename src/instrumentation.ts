@@ -8,6 +8,14 @@ import { logger } from "@/lib/logger";
 export async function register() {
   // 仅在服务器端执行
   if (process.env.NEXT_RUNTIME === "nodejs") {
+    // Skip initialization in CI environment (no DB connection needed)
+    if (process.env.CI === "true") {
+      logger.warn(
+        "[Instrumentation] CI environment detected: skipping DB migrations, price seeding and queue scheduling"
+      );
+      return;
+    }
+
     // 生产环境: 执行完整初始化(迁移 + 价格表 + 清理任务 + 通知任务)
     if (process.env.NODE_ENV === "production" && process.env.AUTO_MIGRATE !== "false") {
       const { checkDatabaseConnection, runMigrations } = await import("@/lib/migrate");

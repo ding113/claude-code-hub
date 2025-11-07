@@ -28,6 +28,12 @@ class AsyncTaskManagerClass {
   private cleanupInterval: NodeJS.Timeout | null = null;
 
   constructor() {
+    // Skip initialization during CI/build phase to avoid unnecessary logs and side effects
+    if (process.env.CI === "true" || process.env.NEXT_PHASE === "phase-production-build") {
+      logger.debug("[AsyncTaskManager] Skipping initialization in CI/build environment");
+      return;
+    }
+
     // 定义统一的清理处理器
     const exitHandler = (signal: string) => {
       logger.info(`[AsyncTaskManager] Received ${signal}, cleaning up all tasks`, {
@@ -37,9 +43,10 @@ class AsyncTaskManagerClass {
     };
 
     // 监听所有退出信号（确保 Docker 环境下优雅关闭）
-    process.on("SIGTERM", () => exitHandler("SIGTERM")); // Docker stop
-    process.on("SIGINT", () => exitHandler("SIGINT")); // Ctrl+C
-    process.on("beforeExit", () => exitHandler("beforeExit")); // 正常退出
+    // 使用 once 而非 on，避免重复注册（特别是热重载场景）
+    process.once("SIGTERM", () => exitHandler("SIGTERM")); // Docker stop
+    process.once("SIGINT", () => exitHandler("SIGINT")); // Ctrl+C
+    process.once("beforeExit", () => exitHandler("beforeExit")); // 正常退出
 
     // 每分钟检查并清理超时任务（>10 分钟未完成，防止内存泄漏）
     this.cleanupInterval = setInterval(() => {
@@ -220,5 +227,7 @@ class AsyncTaskManagerClass {
   }
 }
 
-// 导出单例
-export const AsyncTaskManager = new AsyncTaskManagerClass();
+// 导出单例（使用 globalThis 缓存避免热重载时重复实例化）
+const g = globalThis as unknown as { __ASYNC_TASK_MANAGER__?: AsyncTaskManagerClass };
+export const AsyncTaskManager =
+  g.__ASYNC_TASK_MANAGER__ ?? (g.__ASYNC_TASK_MANAGER__ = new AsyncTaskManagerClass());

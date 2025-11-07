@@ -4,6 +4,11 @@ import { logger } from "@/lib/logger";
 let redisClient: Redis | null = null;
 
 export function getRedisClient(): Redis | null {
+  // Skip Redis connection during CI/build phase (avoid connection attempts)
+  if (process.env.CI === "true" || process.env.NEXT_PHASE === "phase-production-build") {
+    return null;
+  }
+
   const redisUrl = process.env.REDIS_URL;
   const isEnabled = process.env.ENABLE_RATE_LIMIT === "true";
 
