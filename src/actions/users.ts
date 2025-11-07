@@ -179,19 +179,49 @@ export async function editUser(
 ): Promise<ActionResult> {
   try {
     const session = await getSession();
-    if (!session || session.user.role !== "admin") {
-      return { ok: false, error: "无权限执行此操作" };
+    if (!session) {
+      return { ok: false, error: "未登录" };
     }
 
-    const validatedData = UpdateUserSchema.parse(data);
+    // 定义敏感字段列表（仅管理员可修改）
+    const sensitiveFields = ["rpm", "dailyQuota", "providerGroup"] as const;
+    const hasSensitiveFields = sensitiveFields.some((field) => data[field] !== undefined);
 
-    await updateUser(userId, {
-      name: validatedData.name,
-      description: validatedData.note,
-      providerGroup: validatedData.providerGroup,
-      rpm: validatedData.rpm,
-      dailyQuota: validatedData.dailyQuota,
-    });
+    // 权限检查：区分三种情况
+    if (session.user.role === "admin") {
+      // 管理员可以修改所有用户的所有字段
+      const validatedData = UpdateUserSchema.parse(data);
+
+      await updateUser(userId, {
+        name: validatedData.name,
+        description: validatedData.note,
+        providerGroup: validatedData.providerGroup,
+        rpm: validatedData.rpm,
+        dailyQuota: validatedData.dailyQuota,
+      });
+    } else if (session.user.id === userId) {
+      // 普通用户修改自己的信息
+      if (hasSensitiveFields) {
+        return {
+          ok: false,
+          error: "普通用户不能修改账户限额和供应商分组",
+        };
+      }
+
+      // 仅允许修改非敏感字段（name, description）
+      const validatedData = UpdateUserSchema.parse({
+        name: data.name,
+        note: data.note,
+      });
+
+      await updateUser(userId, {
+        name: validatedData.name,
+        description: validatedData.note,
+      });
+    } else {
+      // 普通用户尝试修改他人信息
+      return { ok: false, error: "无权限执行此操作" };
+    }
 
     revalidatePath("/dashboard");
     return { ok: true };
