@@ -207,7 +207,8 @@ export class ProxyForwarder {
               error: errorMessage,
               attemptNumber: attemptCount,
               totalProvidersAttempted,
-              reason: "White-listed client error (prompt length, content filter, PDF limit, or thinking format)",
+              reason:
+                "White-listed client error (prompt length, content filter, PDF limit, or thinking format)",
             });
 
             // 记录到决策链（标记为不可重试的客户端错误）
