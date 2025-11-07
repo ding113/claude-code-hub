@@ -15,12 +15,12 @@ export default getRequestConfig(async ({ requestLocale }) => {
     locale = routing.defaultLocale;
   }
 
+  // Dynamically import all translation files for the current locale
+  const messages = await import(`../../messages/${locale}`).then((module) => module.default);
+
   return {
     locale,
-    // Load translation messages for the current locale
-    // For now, we return an empty object since we haven't created translation files yet
-    // This will be populated in the next task (IMPL-002)
-    messages: {},
+    messages,
     // Optional: Configure date/time/number formatting
     // formats: {
     //   dateTime: {
