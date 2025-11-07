@@ -195,7 +195,48 @@ export class ProxyForwarder {
             throw lastError;
           }
 
-          // ⭐ 3. 系统错误处理（不计入熔断器，先重试1次当前供应商）
+          // ⭐ 3. 不可重试的客户端输入错误处理（不计入熔断器，不重试，立即返回）
+          if (errorCategory === ErrorCategory.NON_RETRYABLE_CLIENT_ERROR) {
+            const proxyError = lastError as ProxyError;
+            const statusCode = proxyError.statusCode;
+
+            logger.warn("ProxyForwarder: Non-retryable client error, stopping immediately", {
+              providerId: currentProvider.id,
+              providerName: currentProvider.name,
+              statusCode: statusCode,
+              error: errorMessage,
+              attemptNumber: attemptCount,
+              totalProvidersAttempted,
+              reason: "White-listed client error (prompt length, content filter, PDF limit, or thinking format)",
+            });
+
+            // 记录到决策链（标记为不可重试的客户端错误）
+            // 注意：不调用 recordFailure()，因为这不是供应商的问题，是客户端输入问题
+            session.addProviderToChain(currentProvider, {
+              reason: "client_error_non_retryable", // 新增的 reason 值
+              circuitState: getCircuitState(currentProvider.id),
+              attemptNumber: attemptCount,
+              errorMessage: errorMessage,
+              statusCode: statusCode,
+              errorDetails: {
+                provider: {
+                  id: currentProvider.id,
+                  name: currentProvider.name,
+                  statusCode: statusCode,
+                  statusText: proxyError.message,
+                  upstreamBody: proxyError.upstreamError?.body,
+                  upstreamParsed: proxyError.upstreamError?.parsed,
+                },
+                clientError: proxyError.getDetailedErrorMessage(),
+              },
+            });
+
+            // 立即抛出错误，不重试，不切换供应商
+            // 白名单错误不计入熔断器，因为是客户端输入问题，不是供应商故障
+            throw lastError;
+          }
+
+          // ⭐ 4. 系统错误处理（不计入熔断器，先重试1次当前供应商）
           if (errorCategory === ErrorCategory.SYSTEM_ERROR) {
             const err = lastError as Error & {
               code?: string;
@@ -272,7 +313,7 @@ export class ProxyForwarder {
             break; // ⭐ 跳出内层循环，进入供应商切换逻辑
           }
 
-          // ⭐ 4. 供应商错误处理（所有 4xx/5xx HTTP 错误，计入熔断器，直接切换）
+          // ⭐ 5. 供应商错误处理（所有 4xx/5xx HTTP 错误，计入熔断器，直接切换）
           if (errorCategory === ErrorCategory.PROVIDER_ERROR) {
             const proxyError = lastError as ProxyError;
             const statusCode = proxyError.statusCode;

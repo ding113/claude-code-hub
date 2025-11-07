@@ -18,7 +18,8 @@ export interface ProviderChainItem {
     | "retry_failed" // 重试失败（供应商错误，已计入熔断器）
     | "system_error" // 系统/网络错误（不计入熔断器）
     | "retry_with_official_instructions" // Codex instructions 自动重试（官方）
-    | "retry_with_cached_instructions"; // Codex instructions 智能重试（缓存）
+    | "retry_with_cached_instructions" // Codex instructions 智能重试（缓存）
+    | "client_error_non_retryable"; // 不可重试的客户端错误（Prompt 超限、内容过滤、PDF 限制、Thinking 格式）
 
   // === 选择方法（细化） ===
   selectionMethod?:
@@ -73,6 +74,9 @@ export interface ProviderChainItem {
       errorSyscall?: string; // 如 "getaddrinfo"
       errorStack?: string; // 堆栈前3行
     };
+
+    // 客户端输入错误（不可重试）
+    clientError?: string; // 详细的客户端错误消息（包含匹配的白名单模式）
   };
 
   // === 决策上下文（完整记录） ===
