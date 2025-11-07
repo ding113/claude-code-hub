@@ -1,5 +1,7 @@
 import { getRedisClient } from "./client";
 import { logger } from "@/lib/logger";
+import { formatInTimeZone } from "date-fns-tz";
+import { getEnvConfig } from "@/lib/config";
 import {
   findDailyLeaderboard,
   findMonthlyLeaderboard,
@@ -16,14 +18,15 @@ type LeaderboardPeriod = "daily" | "monthly";
  */
 function buildCacheKey(period: LeaderboardPeriod, currencyDisplay: string): string {
   const now = new Date();
+  const tz = getEnvConfig().TZ; // ensure date formatting aligns with configured timezone
 
   if (period === "daily") {
     // leaderboard:daily:2025-01-15:USD
-    const dateStr = now.toISOString().split("T")[0];
+    const dateStr = formatInTimeZone(now, tz, "yyyy-MM-dd");
     return `leaderboard:daily:${dateStr}:${currencyDisplay}`;
   } else {
     // leaderboard:monthly:2025-01:USD
-    const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const monthStr = formatInTimeZone(now, tz, "yyyy-MM");
     return `leaderboard:monthly:${monthStr}:${currencyDisplay}`;
   }
 }
