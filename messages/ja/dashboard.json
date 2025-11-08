@@ -55,18 +55,110 @@
       "provider": "プロバイダー",
       "model": "モデル",
       "status": "ステータス",
-      "timeRange": "時間範囲"
+      "timeRange": "時間範囲",
+      "startTime": "開始時間",
+      "endTime": "終了時間",
+      "allUsers": "すべてのユーザー",
+      "allKeys": "すべてのキー",
+      "selectUserFirst": "まずユーザーを選択してください",
+      "allProviders": "すべてのプロバイダー",
+      "allModels": "すべてのモデル",
+      "allStatusCodes": "すべてのステータスコード",
+      "apiKey": "API キー",
+      "statusCode": "ステータスコード",
+      "apply": "フィルターを適用",
+      "reset": "リセット"
     },
     "columns": {
       "time": "時間",
       "user": "ユーザー",
+      "key": "キー",
       "provider": "プロバイダー",
       "model": "モデル",
-      "inputTokens": "入力トークン",
-      "outputTokens": "出力トークン",
+      "inputTokens": "入力",
+      "outputTokens": "出力",
+      "cacheWrite": "キャッシュ書き込み",
+      "cacheRead": "キャッシュ読み取り",
       "cost": "コスト",
-      "status": "ステータス",
-      "duration": "期間"
+      "duration": "所要時間",
+      "status": "ステータス"
+    },
+    "stats": {
+      "totalAmount": "総消費金額",
+      "totalTokens": "総トークン数",
+      "cacheTokens": "キャッシュトークン",
+      "input": "入力",
+      "output": "出力",
+      "write": "書き込み",
+      "read": "読み取り"
+    },
+    "table": {
+      "noData": "データなし",
+      "pagination": "{total} 件中 {page} / {totalPages} ページ",
+      "prevPage": "前へ",
+      "nextPage": "次へ",
+      "blocked": "ブロック済み",
+      "times": "回"
+    },
+    "actions": {
+      "refresh": "更新",
+      "refreshing": "更新中...",
+      "stopAutoRefresh": "自動更新を停止",
+      "startAutoRefresh": "自動更新を開始",
+      "view": "表示"
+    },
+    "error": {
+      "loadFailed": "読み込み失敗"
+    },
+    "details": {
+      "title": "リクエスト詳細",
+      "statusTitle": "リクエスト詳細 - ステータスコード {status}",
+      "inProgress": "処理中",
+      "unknown": "不明",
+      "success": "リクエストが正常に完了しました",
+      "error": "リクエスト失敗、詳細なエラー情報とプロバイダー決定チェーンは以下の通りです",
+      "processing": "リクエストは処理中であり、まだ完了していません",
+      "blocked": {
+        "title": "ブロック情報",
+        "type": "ブロックタイプ",
+        "sensitiveWord": "機密語句ブロック",
+        "word": "機密語句",
+        "matchType": "一致タイプ",
+        "matchTypeContains": "部分一致",
+        "matchTypeExact": "完全一致",
+        "matchTypeRegex": "正規表現",
+        "matchedText": "一致した内容"
+      },
+      "sessionId": "セッション ID",
+      "messagesCount": "メッセージ数",
+      "messagesLabel": "メッセージ",
+      "messagesUnit": "件",
+      "clientInfo": "クライアント情報",
+      "modelRedirect": {
+        "title": "モデルリダイレクト",
+        "requestModel": "リクエストモデル",
+        "actualModel": "実際の呼び出し",
+        "billing": "課金説明",
+        "billingDescription": "システムはリクエストモデル（{original}）の価格を優先して課金します。価格表にそのモデルが存在しない場合、実際の呼び出しモデル（{current}）の価格を使用します。"
+      },
+      "errorMessage": "エラーメッセージ",
+      "providerChain": {
+        "title": "プロバイダー決定チェーンタイムライン",
+        "totalDuration": "合計所要時間: {duration}ms"
+      },
+      "noError": {
+        "processing": "リクエストは処理中であり、応答を待っています...",
+        "success": "リクエスト成功、エラー情報なし",
+        "default": "詳細なエラー情報はありません"
+      },
+      "clickStatusCode": "ステータスコードをクリックして完全なタイムラインを表示"
+    },
+    "providerChain": {
+      "decisionChain": "プロバイダー決定チェーン"
+    },
+    "modelRedirect": {
+      "redirected": "リダイレクト済み",
+      "targetModel": "ターゲットモデル"
     }
   },
   "leaderboard": {
@@ -74,7 +166,11 @@
     "description": "ユーザーとキーのコスト統計ランキングを表示します",
     "tabs": {
       "users": "ユーザー ランキング",
-      "keys": "キー ランキング"
+      "keys": "キー ランキング",
+      "userRanking": "ユーザーランキング",
+      "providerRanking": "プロバイダーランキング",
+      "dailyRanking": "今日のランキング",
+      "monthlyRanking": "今月のランキング"
     },
     "columns": {
       "rank": "ランク",
@@ -82,62 +178,120 @@
       "totalCost": "合計コスト",
       "totalRequests": "リクエスト総数",
       "avgCost": "平均コスト",
-      "lastActive": "最後のアクティビティ"
+      "lastActive": "最終アクティビティ",
+      "user": "ユーザー",
+      "requests": "リクエスト数",
+      "tokens": "トークン数",
+      "consumedAmount": "消費金額",
+      "provider": "プロバイダー",
+      "cost": "コスト",
+      "successRate": "成功率",
+      "avgResponseTime": "平均応答時間"
+    },
+    "states": {
+      "loading": "読み込み中...",
+      "noData": "データなし",
+      "todayNoData": "今日のデータなし",
+      "monthNoData": "今月のデータなし",
+      "fetchFailed": "ランキングデータの取得に失敗しました"
+    },
+    "permission": {
+      "title": "権限が必要です",
+      "restricted": "アクセス制限",
+      "description": "ランキング機能には、管理者が「サイト全体の利用状況の表示を許可」権限を有効にする必要があります。",
+      "adminAction": "この権限を有効にします。",
+      "userAction": "この権限を有効にするには、管理者に連絡してください。",
+      "systemSettings": "システム設定"
     }
   },
   "sessions": {
     "title": "アクティブ セッション",
     "description": "アクティブな API セッションをリアルタイムで監視します",
+    "monitoring": "セッション監視",
+    "monitoringDescription": "アクティブおよび非アクティブ セッションをリアルタイムで表示します (3 秒ごとに自動更新)",
+    "activeSessions": "アクティブ セッション (最近 5 分間)",
+    "inactiveSessions": "非アクティブ セッション (5 分以上、表示のみ)",
     "columns": {
       "sessionId": "セッション ID",
       "user": "ユーザー",
+      "key": "キー",
       "provider": "プロバイダー",
       "model": "モデル",
-      "startTime": "開始時刻",
-      "lastActivity": "最後のアクティビティ",
+      "startTime": "開始時間",
+      "lastActivity": "最終アクティビティ",
       "requestCount": "リクエスト数",
-      "status": "ステータス"
+      "totalInput": "総入力",
+      "totalOutput": "総出力",
+      "totalCost": "総コスト",
+      "totalDuration": "総所要時間",
+      "status": "ステータス",
+      "actions": "アクション"
+    },
+    "table": {
+      "count": "{count} 個の{type} セッション",
+      "active": "アクティブ",
+      "inactive": "非アクティブ",
+      "notCountedInConcurrency": "(同時実行数には含まれません)",
+      "refreshing": "更新中...",
+      "noActiveSessions": "アクティブなセッションはありません"
     },
     "details": {
-      "title": "セッション詳細",
-      "messages": "メッセージ",
+      "title": "セッション メッセージ",
+      "messages": "メッセージリスト",
       "info": "セッション情報",
       "timeline": "タイムライン",
       "overview": "セッション概要",
-      "overviewDescription": "集計統計",
+      "overviewDescription": "集計統計情報",
       "providersAndModels": "プロバイダーとモデル",
       "providersAndModelsDescription": "使用されたプロバイダーとモデル",
       "tokenUsage": "トークン使用量 (合計)",
       "tokenUsageDescription": "すべてのリクエストの累積統計",
       "costInfo": "コスト情報 (合計)",
-      "costInfoDescription": "すべてのリクエストの累積コスト",
-      "totalRequests": "リクエスト総数",
+      "costInfoDescription": "すべてのリクエストの累積費用",
+      "totalRequests": "総リクエスト数",
       "firstRequest": "最初のリクエスト",
-      "lastRequest": "最後のリクエスト",
-      "totalDuration": "合計期間",
-      "totalInput": "入力合計",
-      "totalOutput": "出力合計",
+      "lastRequest": "最終リクエスト",
+      "totalDuration": "総所要時間",
+      "totalInput": "総入力",
+      "totalOutput": "総出力",
       "cacheCreation": "キャッシュ作成",
       "cacheRead": "キャッシュ読み取り",
       "total": "合計",
-      "totalFee": "合計料金",
+      "totalFee": "総費用",
       "providers": "プロバイダー",
       "models": "モデル",
-      "noDetailedData": "詳細データはありません",
-      "storageTip": "ヒント: メッセージとレスポンス ストレージを有効にするには、環境変数 STORE_SESSION_MESSAGES=true を設定してください"
+      "noDetailedData": "詳細データなし",
+      "storageTip": "ヒント: メッセージとレスポンスの保存を有効にするには、環境変数 STORE_SESSION_MESSAGES=true を設定してください",
+      "clientInfo": "クライアント情報",
+      "requestMessages": "リクエスト メッセージ",
+      "requestMessagesDescription": "クライアントが送信したメッセージ内容",
+      "responseBody": "レスポンスボディ内容",
+      "responseBodyDescription": "サーバーからの完全なレスポンス (5 分間の TTL)",
+      "noData": "データなし"
     },
-    "noActiveSessions": "アクティブなセッションがありません",
-    "back": "戻る",
-    "copyMessages": "メッセージをコピー",
-    "downloadMessages": "メッセージをダウンロード",
-    "copied": "コピーしました",
-    "copyResponse": "レスポンスをコピー",
-    "loading": "読み込み中...",
-    "loadError": "読み込みに失敗しました"
+    "actions": {
+      "back": "戻る",
+      "view": "表示",
+      "copyMessages": "メッセージをコピー",
+      "downloadMessages": "メッセージをダウンロード",
+      "copied": "コピーしました",
+      "copyResponse": "レスポンスボディをコピー"
+    },
+    "status": {
+      "loading": "読み込み中...",
+      "loadError": "読み込み失敗",
+      "fetchFailed": "取得失敗",
+      "unknownError": "不明なエラー",
+      "storageNotEnabled": "未保存",
+      "storageNotEnabledHint": "ヒント: メッセージの保存を有効にするには、環境変数 STORE_SESSION_MESSAGES=true を設定してください"
+    },
+    "errors": {
+      "copyFailed": "コピー失敗"
+    }
   },
   "quotas": {
     "title": "クォータ管理",
-    "description": "すべてのレベルのクォータを管理します",
+    "description": "ユーザー、キー、プロバイダーの使用クォータを管理します",
     "tabs": {
       "overview": "概要",
       "users": "ユーザー クォータ",
@@ -149,7 +303,7 @@
       "limit": "制限",
       "used": "使用済み",
       "remaining": "残り",
-      "resetTime": "リセット時刻",
+      "resetTime": "リセット時間",
       "status": "ステータス"
     },
     "labels": {
@@ -182,9 +336,50 @@
     "byUsageRate": "使用率順"
   },
   "all": "すべて",
+  "nav": {
+    "dashboard": "ダッシュボード",
+    "usageLogs": "使用ログ",
+    "leaderboard": "ランキング",
+    "quotasManagement": "クォータ管理",
+    "documentation": "ドキュメント",
+    "systemSettings": "システム設定",
+    "feedback": "フィードバック",
+    "login": "ログイン",
+    "logout": "ログアウト"
+  },
+  "statistics": {
+    "title": "使用統計",
+    "cost": "消費金額",
+    "calls": "API呼び出し回数",
+    "totalCost": "総消費金額",
+    "totalCalls": "総API呼び出し回数",
+    "timeRange": {
+      "today": "今日",
+      "todayDescription": "今日の使用状況",
+      "7days": "過去 7 日間",
+      "7daysDescription": "過去 7 日間の使用状況",
+      "30days": "過去 30 日間",
+      "30daysDescription": "過去 30 日間の使用状況",
+      "default": "使用状況"
+    },
+    "mode": {
+      "keys": "あなたのキーのみの使用統計を表示",
+      "mixed": "あなたのキーの詳細と他のユーザーの集計を表示",
+      "users": "すべてのユーザーの使用統計を表示"
+    },
+    "legend": {
+      "selectAll": "すべて選択",
+      "deselectAll": "すべてクリア",
+      "selected": "選択済み"
+    },
+    "states": {
+      "noData": "統計データなし",
+      "fetchFailed": "統計データの取得に失敗しました"
+    }
+  },
   "errors": {
     "fetchSystemSettingsFailed": "システム設定の取得に失敗しました",
-    "fetchFailed": "取得に失敗しました",
-    "fetchSessionListFailed": "セッション リストの取得に失敗しました"
+    "fetchFailed": "取得失敗",
+    "fetchSessionListFailed": "セッションリストの取得に失敗しました"
   }
 }

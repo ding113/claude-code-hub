@@ -14,18 +14,16 @@ export default async function SettingsLayout({
   params: Promise<{ locale: string }>;
 }) {
   // Await params to ensure locale is available in the async context
-  await params;
+  const { locale } = await params;
 
   const session = await getSession();
 
   if (!session) {
-    redirect("/login" as any);
-    return null; // TypeScript doesn't know redirect throws
+    return redirect({ href: "/login", locale });
   }
 
   if (session.user.role !== "admin") {
-    redirect("/dashboard" as any);
-    return null;
+    return redirect({ href: "/dashboard", locale });
   }
 
   return (

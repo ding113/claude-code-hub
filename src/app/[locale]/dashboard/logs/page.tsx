@@ -19,11 +19,11 @@ export default async function UsageLogsPage({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   // Await params to ensure locale is available in the async context
-  await params;
+  const { locale } = await params;
 
   const session = await getSession();
   if (!session) {
-    redirect("/login");
+    return redirect({ href: "/login", locale });
   }
 
   const isAdmin = session.user.role === "admin";

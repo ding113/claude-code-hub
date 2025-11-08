@@ -6,6 +6,6 @@ export default async function QuotasPage({
   params: Promise<{ locale: string }>;
 }) {
   // Await params to ensure locale is available in the async context
-  await params;
-  redirect("/dashboard/quotas/users" as any);
+  const { locale } = await params;
+  return redirect({ href: "/dashboard/quotas/users", locale });
 }

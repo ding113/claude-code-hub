@@ -10,12 +10,12 @@ export default async function Page({
   params: Promise<{ locale: string }>;
 }) {
   // Await params to ensure locale is available in the async context
-  await params;
+  const { locale } = await params;
 
   const session = await getSession();
 
   if (!session || session.user.role !== "admin") {
-    redirect("/login" as any);
+    return redirect({ href: "/login", locale });
   }
 
   return <DataGeneratorPage />;

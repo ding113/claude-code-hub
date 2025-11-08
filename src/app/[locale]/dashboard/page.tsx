@@ -20,14 +20,14 @@ export default async function DashboardPage({
   params: Promise<{ locale: string }>;
 }) {
   // Await params to ensure locale is available in the async context
-  await params;
+  const { locale } = await params;
 
   const t = await getTranslations("dashboard");
 
   // 检查价格表是否存在，如果不存在则跳转到价格上传页面
   const hasPrices = await hasPriceTable();
   if (!hasPrices) {
-    redirect("/settings/prices?required=true" as any);
+    return redirect({ href: "/settings/prices?required=true", locale });
   }
 
   const [users, session, statistics, systemSettings] = await Promise.all([
