@@ -4,6 +4,7 @@ export interface SettingsNavItem {
   href: string;
   label: string;
   labelKey?: string; // Add key for client-side translation fallback
+  external?: boolean; // Mark if this is an external link (bypasses i18n routing)
 }
 
 // Static navigation items for navigation structure
@@ -16,7 +17,7 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   { href: "/settings/data", labelKey: "nav.data", label: "数据管理" },
   { href: "/settings/logs", labelKey: "nav.logs", label: "日志" },
   { href: "/settings/notifications", labelKey: "nav.notifications", label: "消息推送" },
-  { href: "/api/actions/scalar", labelKey: "nav.api", label: "API 文档" },
+  { href: "/api/actions/scalar", labelKey: "nav.api", label: "API 文档", external: true },
 ];
 
 // Helper function to get translated nav items

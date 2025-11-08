@@ -3,6 +3,7 @@
     "costRanking": "Cost Leaderboard",
     "costRankingDescription": "View user cost rankings, data updates every 5 minutes",
     "usageLogs": "Usage Logs",
+    "usageLogsDescription": "View API call logs and usage statistics",
     "clients": "Clients",
     "userAndKeyManagement": "User and Key Management",
     "requestMessages": "Request Messages",
@@ -14,7 +15,8 @@
     "quotasManagementDescription": "View and manage quotas at all levels",
     "usersQuotas": "User Quota Statistics",
     "keysQuotas": "Key Quota Statistics",
-    "providersQuotas": "Provider Quota Statistics"
+    "providersQuotas": "Provider Quota Statistics",
+    "filterCriteria": "Filter Criteria"
   },
   "description": {
     "viewApiCallLogs": "View API call logs and usage statistics",
@@ -84,13 +86,15 @@
       "status": "Status"
     },
     "stats": {
+      "totalRequests": "Total Requests",
       "totalAmount": "Total Consumption",
       "totalTokens": "Total Tokens",
       "cacheTokens": "Cached Tokens",
       "input": "Input",
       "output": "Output",
       "write": "Write",
-      "read": "Read"
+      "read": "Read",
+      "loading": "Loading..."
     },
     "table": {
       "noData": "No Data",
@@ -151,7 +155,9 @@
         "success": "Request successful, no error message",
         "default": "No detailed error message available"
       },
-      "clickStatusCode": "Click status code to view full timeline"
+      "clickStatusCode": "Click status code to view full timeline",
+      "viewDetails": "View Details",
+      "unknown": "Unknown"
     },
     "providerChain": {
       "decisionChain": "Provider Decision Chain"
@@ -159,6 +165,13 @@
     "modelRedirect": {
       "redirected": "Redirected",
       "targetModel": "Target Model"
+    },
+    "statusCodes": {
+      "200": "200 (Success)",
+      "400": "400 (Bad Request)",
+      "401": "401 (Unauthorized)",
+      "429": "429 (Rate Limited)",
+      "500": "500 (Server Error)"
     }
   },
   "leaderboard": {

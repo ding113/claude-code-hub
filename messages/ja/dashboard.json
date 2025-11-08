@@ -14,7 +14,9 @@
     "quotasManagementDescription": "すべてのレベルのクォータを表示および管理します",
     "usersQuotas": "ユーザー クォータ統計",
     "keysQuotas": "キー クォータ統計",
-    "providersQuotas": "プロバイダー クォータ統計"
+    "providersQuotas": "プロバイダー クォータ統計",
+    "usageLogsDescription": "API 呼び出しログと使用統計を表示します",
+    "filterCriteria": "フィルター条件"
   },
   "description": {
     "viewApiCallLogs": "API 呼び出しログと使用統計を表示します",
@@ -90,7 +92,9 @@
       "input": "入力",
       "output": "出力",
       "write": "書き込み",
-      "read": "読み取り"
+      "read": "読み取り",
+      "totalRequests": "総リクエスト数",
+      "loading": "読み込み中..."
     },
     "table": {
       "noData": "データなし",
@@ -151,7 +155,8 @@
         "success": "リクエスト成功、エラー情報なし",
         "default": "詳細なエラー情報はありません"
       },
-      "clickStatusCode": "ステータスコードをクリックして完全なタイムラインを表示"
+      "clickStatusCode": "ステータスコードをクリックして完全なタイムラインを表示",
+      "viewDetails": "詳細を表示"
     },
     "providerChain": {
       "decisionChain": "プロバイダー決定チェーン"
@@ -159,6 +164,13 @@
     "modelRedirect": {
       "redirected": "リダイレクト済み",
       "targetModel": "ターゲットモデル"
+    },
+    "statusCodes": {
+      "200": "200 (成功)",
+      "400": "400 (不正なリクエスト)",
+      "401": "401 (未認証)",
+      "429": "429 (レート制限)",
+      "500": "500 (サーバーエラー)"
     }
   },
   "leaderboard": {

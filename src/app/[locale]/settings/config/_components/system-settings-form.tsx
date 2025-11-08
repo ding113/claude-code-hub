@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useTranslations } from "next-intl";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -23,6 +24,7 @@ interface SystemSettingsFormProps {
 }
 
 export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps) {
+  const t = useTranslations("settings.config.form");
   const [siteTitle, setSiteTitle] = useState(initialSettings.siteTitle);
   const [allowGlobalUsageView, setAllowGlobalUsageView] = useState(
     initialSettings.allowGlobalUsageView
@@ -36,7 +38,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
     event.preventDefault();
 
     if (!siteTitle.trim()) {
-      toast.error("站点标题不能为空");
+      toast.error(t("siteTitleRequired"));
       return;
     }
 
@@ -48,7 +50,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
       });
 
       if (!result.ok) {
-        toast.error(result.error || "保存失败");
+        toast.error(result.error || t("saveFailed"));
         return;
       }
 
@@ -58,7 +60,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setCurrencyDisplay(result.data.currencyDisplay);
       }
 
-      toast.success("系统设置已更新，页面将刷新以应用货币显示变更");
+      toast.success(t("configUpdated"));
       // 刷新页面以应用货币显示变更
       setTimeout(() => {
         window.location.reload();
@@ -69,30 +71,30 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="space-y-2">
-        <Label htmlFor="site-title">站点标题</Label>
+        <Label htmlFor="site-title">{t("siteTitle")}</Label>
         <Input
           id="site-title"
           value={siteTitle}
           onChange={(event) => setSiteTitle(event.target.value)}
-          placeholder="例如：Claude Code Hub"
+          placeholder={t("siteTitlePlaceholder")}
           disabled={isPending}
           maxLength={128}
           required
         />
         <p className="text-xs text-muted-foreground">
-          用于设置浏览器标签页标题以及系统默认显示名称。
+          {t("siteTitleDesc")}
         </p>
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="currency-display">货币显示单位</Label>
+        <Label htmlFor="currency-display">{t("currencyDisplay")}</Label>
         <Select
           value={currencyDisplay}
           onValueChange={(value) => setCurrencyDisplay(value as CurrencyCode)}
           disabled={isPending}
         >
           <SelectTrigger id="currency-display">
-            <SelectValue placeholder="选择货币单位" />
+            <SelectValue placeholder={t("currencyDisplayPlaceholder")} />
           </SelectTrigger>
           <SelectContent>
             {(Object.keys(CURRENCY_CONFIG) as CurrencyCode[]).map((code) => {
@@ -106,18 +108,17 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">
-          修改后，系统所有页面和 API
-          接口的金额显示将使用对应的货币符号（仅修改符号，不进行汇率转换）。
+          {t("currencyDisplayDesc")}
         </p>
       </div>
 
       <div className="flex items-start justify-between gap-4 rounded-lg border border-dashed border-border px-4 py-3">
         <div>
           <Label htmlFor="allow-global-usage" className="text-sm font-medium">
-            允许查看全站使用量
+            {t("allowGlobalView")}
           </Label>
           <p className="text-xs text-muted-foreground mt-1">
-            关闭后，普通用户在仪表盘仅能查看自己密钥的使用统计。
+            {t("allowGlobalViewDesc")}
           </p>
         </div>
         <Switch
@@ -130,7 +131,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
 
       <div className="flex justify-end">
         <Button type="submit" disabled={isPending}>
-          {isPending ? "保存中..." : "保存设置"}
+          {isPending ? t("common.saving") : t("saveSettings")}
         </Button>
       </div>
     </form>

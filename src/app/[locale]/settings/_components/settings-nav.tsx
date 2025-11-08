@@ -25,17 +25,42 @@ export function SettingsNav({ items }: SettingsNavProps) {
       <ul className="flex flex-col gap-1">
         {items.map((item) => {
           const isActive = getIsActive(item.href);
+          const linkClassName = cn(
+            "flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-all hover:text-foreground",
+            isActive && "bg-primary/5 text-foreground shadow-[0_1px_0_rgba(0,0,0,0.03)]"
+          );
+
           return (
             <li key={item.href}>
-              <Link
-                href={item.href}
-                className={cn(
-                  "flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-all hover:text-foreground",
-                  isActive && "bg-primary/5 text-foreground shadow-[0_1px_0_rgba(0,0,0,0.03)]"
-                )}
-              >
-                {item.label}
-              </Link>
+              {item.external ? (
+                // External link: use native <a> tag, open in new tab
+                <a
+                  href={item.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={linkClassName}
+                >
+                  <span>{item.label}</span>
+                  <svg
+                    className="h-3 w-3 opacity-50"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                    />
+                  </svg>
+                </a>
+              ) : (
+                // Internal link: use i18n Link
+                <Link href={item.href} className={linkClassName}>
+                  {item.label}
+                </Link>
+              )}
             </li>
           );
         })}

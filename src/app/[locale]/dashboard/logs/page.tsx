@@ -8,6 +8,7 @@ import { getUsers } from "@/actions/users";
 import { getProviders } from "@/actions/providers";
 import { getKeys } from "@/actions/keys";
 import { getSystemSettings } from "@/repository/system-config";
+import { getTranslations } from "next-intl/server";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,8 @@ export default async function UsageLogsPage({
 
   const isAdmin = session.user.role === "admin";
 
+  const t = await getTranslations("dashboard");
+
   // 管理员：获取用户和供应商列表
   // 非管理员：获取当前用户的 Keys 列表
   const [users, providers, initialKeys, resolvedSearchParams, systemSettings] = isAdmin
@@ -45,10 +48,10 @@ export default async function UsageLogsPage({
       <ActiveSessionsPanel currencyCode={systemSettings.currencyDisplay} />
 
       <Section
-        title="使用记录"
-        description="查看 API 调用日志和使用统计"
+        title={t("title.usageLogs")}
+        description={t("title.usageLogsDescription")}
       >
-        <Suspense fallback={<div className="text-center py-8 text-muted-foreground">加载中...</div>}>
+        <Suspense fallback={<div className="text-center py-8 text-muted-foreground">{t("logs.stats.loading")}</div>}>
           <UsageLogsView
             isAdmin={isAdmin}
             users={users}

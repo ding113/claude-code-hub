@@ -14,7 +14,9 @@
     "quotasManagementDescription": "查看和管理所有層級的額度使用情況",
     "usersQuotas": "用户額度統計",
     "keysQuotas": "密鑰額度統計",
-    "providersQuotas": "供應商額度統計"
+    "providersQuotas": "供應商額度統計",
+    "usageLogsDescription": "查看 API 調用日誌和使用統計",
+    "filterCriteria": "篩選條件"
   },
   "description": {
     "viewApiCallLogs": "查看 API 呼叫日誌和使用統計",
@@ -90,7 +92,9 @@
       "input": "輸入",
       "output": "輸出",
       "write": "寫入",
-      "read": "讀取"
+      "read": "讀取",
+      "totalRequests": "總請求數",
+      "loading": "加載中..."
     },
     "table": {
       "noData": "暫無資料",
@@ -151,7 +155,8 @@
         "success": "請求成功，無錯誤訊息",
         "default": "暫無詳細錯誤訊息"
       },
-      "clickStatusCode": "點擊狀態碼查看完整時間軸"
+      "clickStatusCode": "點擊狀態碼查看完整時間軸",
+      "viewDetails": "查看詳情"
     },
     "providerChain": {
       "decisionChain": "供應商決策鏈"
@@ -159,6 +164,13 @@
     "modelRedirect": {
       "redirected": "已重新導向",
       "targetModel": "目標模型"
+    },
+    "statusCodes": {
+      "200": "200 (成功)",
+      "400": "400 (錯誤請求)",
+      "401": "401 (未授權)",
+      "429": "429 (限流)",
+      "500": "500 (服務器錯誤)"
     }
   },
   "leaderboard": {

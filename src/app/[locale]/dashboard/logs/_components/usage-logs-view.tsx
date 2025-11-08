@@ -15,6 +15,7 @@ import type { Key } from "@/types/key";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
 import { formatTokenAmount } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 
 /**
  * 将 Date 对象格式化为 datetime-local 格式的字符串
@@ -46,6 +47,7 @@ export function UsageLogsView({
   searchParams,
   currencyCode = "USD",
 }: UsageLogsViewProps) {
+  const t = useTranslations("dashboard");
   const router = useRouter();
   const params = useSearchParams();
   const [isPending, startTransition] = useTransition();
@@ -117,7 +119,7 @@ export function UsageLogsView({
         setData(result.data);
         setError(null);
       } else {
-        setError(!result.ok && 'error' in result ? result.error : "加载失败");
+        setError(!result.ok && 'error' in result ? result.error : t("logs.error.loadFailed"));
         setData(null);
       }
     });
@@ -189,7 +191,7 @@ export function UsageLogsView({
         <div className="grid gap-4 md:grid-cols-4">
           <Card>
             <CardHeader className="pb-3">
-              <CardDescription>总请求数</CardDescription>
+              <CardDescription>{t("logs.stats.totalRequests")}</CardDescription>
               <CardTitle className="text-3xl font-mono">
                 {data.summary.totalRequests.toLocaleString()}
               </CardTitle>
@@ -198,7 +200,7 @@ export function UsageLogsView({
 
           <Card>
             <CardHeader className="pb-3">
-              <CardDescription>总消耗金额</CardDescription>
+              <CardDescription>{t("logs.stats.totalAmount")}</CardDescription>
               <CardTitle className="text-3xl font-mono">
                 {formatCurrency(data.summary.totalCost, currencyCode)}
               </CardTitle>
@@ -207,18 +209,18 @@ export function UsageLogsView({
 
           <Card>
             <CardHeader className="pb-3">
-              <CardDescription>总 Token 数</CardDescription>
+              <CardDescription>{t("logs.stats.totalTokens")}</CardDescription>
               <CardTitle className="text-3xl font-mono">
                 {formatTokenAmount(data.summary.totalTokens)}
               </CardTitle>
             </CardHeader>
             <CardContent className="text-xs text-muted-foreground space-y-1">
               <div className="flex justify-between">
-                <span>输入:</span>
+                <span>{t("logs.stats.input")}:</span>
                 <span className="font-mono">{formatTokenAmount(data.summary.totalInputTokens)}</span>
               </div>
               <div className="flex justify-between">
-                <span>输出:</span>
+                <span>{t("logs.stats.output")}:</span>
                 <span className="font-mono">{formatTokenAmount(data.summary.totalOutputTokens)}</span>
               </div>
             </CardContent>
@@ -226,7 +228,7 @@ export function UsageLogsView({
 
           <Card>
             <CardHeader className="pb-3">
-              <CardDescription>缓存 Token</CardDescription>
+              <CardDescription>{t("logs.stats.cacheTokens")}</CardDescription>
               <CardTitle className="text-3xl font-mono">
                 {formatTokenAmount(
                   data.summary.totalCacheCreationTokens + data.summary.totalCacheReadTokens
@@ -235,13 +237,13 @@ export function UsageLogsView({
             </CardHeader>
             <CardContent className="text-xs text-muted-foreground space-y-1">
               <div className="flex justify-between">
-                <span>写入:</span>
+                <span>{t("logs.stats.write")}:</span>
                 <span className="font-mono">
                   {formatTokenAmount(data.summary.totalCacheCreationTokens)}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span>读取:</span>
+                <span>{t("logs.stats.read")}:</span>
                 <span className="font-mono">
                   {formatTokenAmount(data.summary.totalCacheReadTokens)}
                 </span>
@@ -254,7 +256,7 @@ export function UsageLogsView({
       {/* 筛选器 */}
       <Card>
         <CardHeader>
-          <CardTitle>筛选条件</CardTitle>
+          <CardTitle>{t("title.filterCriteria")}</CardTitle>
         </CardHeader>
         <CardContent>
           <UsageLogsFilters
@@ -273,7 +275,7 @@ export function UsageLogsView({
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>使用记录</CardTitle>
+            <CardTitle>{t("title.usageLogs")}</CardTitle>
             <div className="flex items-center gap-2">
               {/* 手动刷新按钮 */}
               <Button
@@ -286,7 +288,7 @@ export function UsageLogsView({
                 <RefreshCw
                   className={`h-4 w-4 ${isManualRefreshing ? 'animate-spin' : ''}`}
                 />
-                刷新
+                {t("logs.actions.refresh")}
               </Button>
 
               {/* 自动刷新开关 */}
@@ -299,12 +301,12 @@ export function UsageLogsView({
                 {isAutoRefresh ? (
                   <>
                     <Pause className="h-4 w-4" />
-                    停止自动刷新
+                    {t("logs.actions.stopAutoRefresh")}
                   </>
                 ) : (
                   <>
                     <Play className="h-4 w-4" />
-                    开启自动刷新
+                    {t("logs.actions.startAutoRefresh")}
                   </>
                 )}
               </Button>
@@ -315,7 +317,7 @@ export function UsageLogsView({
           {error ? (
             <div className="text-center py-8 text-destructive">{error}</div>
           ) : !data ? (
-            <div className="text-center py-8 text-muted-foreground">加载中...</div>
+            <div className="text-center py-8 text-muted-foreground">{t("logs.stats.loading")}</div>
           ) : (
             <UsageLogsTable
               logs={data.logs}

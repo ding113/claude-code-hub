@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Trash2, AlertTriangle, Loader2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -24,6 +25,7 @@ import {
 import { toast } from "sonner";
 
 export function LogCleanupPanel() {
+  const t = useTranslations("settings.data.cleanup");
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
@@ -91,18 +93,22 @@ export function LogCleanupPanel() {
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || '清理失败');
+        throw new Error(result.error || t('failed'));
       }
 
       if (result.success) {
-        toast.success(`成功清理 ${result.totalDeleted.toLocaleString()} 条日志记录（${result.batchCount} 批次，耗时 ${(result.durationMs / 1000).toFixed(2)}s）`);
+        toast.success(t('successMessage', {
+          count: result.totalDeleted.toLocaleString(),
+          batches: result.batchCount,
+          duration: (result.durationMs / 1000).toFixed(2)
+        }));
         setIsOpen(false);
       } else {
-        toast.error(result.error || '清理失败');
+        toast.error(result.error || t('failed'));
       }
     } catch (error) {
       console.error('Cleanup error:', error);
-      toast.error(error instanceof Error ? error.message : '清理日志失败');
+      toast.error(error instanceof Error ? error.message : t('error'));
     } finally {
       setIsLoading(false);
     }
@@ -110,35 +116,35 @@ export function LogCleanupPanel() {
 
   const getTimeRangeDescription = () => {
     const days = parseInt(timeRange);
-    if (days === 7) return '一周前';
-    if (days === 30) return '一个月前';
-    if (days === 90) return '三个月前';
-    if (days === 180) return '六个月前';
-    return `${days} 天前`;
+    if (days === 7) return t('rangeDescription.7days');
+    if (days === 30) return t('rangeDescription.30days');
+    if (days === 90) return t('rangeDescription.90days');
+    if (days === 180) return t('rangeDescription.180days');
+    return t('rangeDescription.default', { days });
   };
 
   return (
     <div className="flex flex-col gap-4">
       <p className="text-sm text-muted-foreground">
-        清理历史日志数据以释放数据库存储空间。
-        <strong>注意：统计数据将被保留，但日志详情将被永久删除。</strong>
+        {t('descriptionWarning').split('注意：')[0]}
+        <strong>{t('descriptionWarning').includes('注意：') ? t('descriptionWarning').split('注意：')[1] : ''}</strong>
       </p>
 
       <div className="flex flex-col gap-3">
-        <Label htmlFor="time-range">清理范围</Label>
+        <Label htmlFor="time-range">{t('rangeLabel')}</Label>
         <Select value={timeRange} onValueChange={setTimeRange}>
           <SelectTrigger id="time-range" className="w-full sm:w-[300px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="7">一周前的日志 (7 天)</SelectItem>
-            <SelectItem value="30">一个月前的日志 (30 天)</SelectItem>
-            <SelectItem value="90">三个月前的日志 (90 天)</SelectItem>
-            <SelectItem value="180">六个月前的日志 (180 天)</SelectItem>
+            <SelectItem value="7">{t('range.7days')}</SelectItem>
+            <SelectItem value="30">{t('range.30days')}</SelectItem>
+            <SelectItem value="90">{t('range.90days')}</SelectItem>
+            <SelectItem value="180">{t('range.180days')}</SelectItem>
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">
-          将清理 {getTimeRangeDescription()} 的所有日志记录
+          {t('willClean', { range: getTimeRangeDescription() })}
         </p>
       </div>
 
@@ -148,7 +154,7 @@ export function LogCleanupPanel() {
         className="w-full sm:w-auto"
       >
         <Trash2 className="mr-2 h-4 w-4" />
-        清理日志
+        {t('button')}
       </Button>
 
       <AlertDialog open={isOpen} onOpenChange={setIsOpen}>
@@ -156,44 +162,44 @@ export function LogCleanupPanel() {
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-destructive" />
-              确认清理日志
+              {t('confirmTitle')}
             </AlertDialogTitle>
             <AlertDialogDescription className="space-y-3">
               <p>
-                此操作将<strong className="text-destructive">永久删除</strong>{" "}
-                {getTimeRangeDescription()}的所有日志记录，
-                且<strong className="text-destructive">无法恢复</strong>。
+                {t('confirmWarning', { range: getTimeRangeDescription() })}
               </p>
 
-              {/* 预览信息 */}
+              {/* Preview info */}
               <div className="bg-muted p-3 rounded-md">
                 {isPreviewLoading ? (
                   <div className="flex items-center gap-2 text-sm">
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>正在统计...</span>
+                    <span>{t('previewLoading')}</span>
                   </div>
                 ) : previewCount !== null ? (
                   <p className="text-sm font-medium">
-                    将删除 <span className="text-destructive text-lg">{previewCount.toLocaleString()}</span> 条日志记录
+                    {t('previewCount', { count: previewCount.toLocaleString() }).split(' ')[0]}{" "}
+                    <span className="text-destructive text-lg">{previewCount.toLocaleString()}</span>{" "}
+                    {t('previewCount', { count: previewCount.toLocaleString() }).split(' ').slice(-2).join(' ')}
                   </p>
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    无法获取预览信息
+                    {t('previewError')}
                   </p>
                 )}
               </div>
 
               <p className="text-sm">
-                ✓ 统计数据将被保留（用于趋势分析）<br />
-                ✗ 日志详情将被删除（请求/响应内容、错误信息等）
+                {t('statisticsRetained')}<br />
+                {t('logsDeleted')}
               </p>
               <p className="text-sm text-muted-foreground">
-                建议：在清理前先<strong>导出数据库备份</strong>，以防需要恢复数据。
+                {t('backupRecommendation')}
               </p>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isLoading}>取消</AlertDialogCancel>
+            <AlertDialogCancel disabled={isLoading}>{t('cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault();
@@ -205,10 +211,10 @@ export function LogCleanupPanel() {
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  正在清理...
+                  {t('cleaning')}
                 </>
               ) : (
-                '确认清理'
+                t('confirm')
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

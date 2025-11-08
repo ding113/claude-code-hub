@@ -84,7 +84,7 @@ export default function NotificationsPage() {
       setValue("costAlertThreshold", parseFloat(data.costAlertThreshold || "0.80"));
       setValue("costAlertCheckInterval", data.costAlertCheckInterval || 60);
     } catch (error) {
-      toast.error(t("notifications.error.loadFailed"));
+      toast.error(t("notifications.form.loadError"));
       console.error(error);
     } finally {
       setIsLoading(false);
@@ -115,14 +115,14 @@ export default function NotificationsPage() {
       });
 
       if (result.success) {
-        toast.success(t("notifications.success.saved"));
+        toast.success(t("notifications.form.success"));
         loadSettings();
       } else {
-        toast.error(result.error || t("notifications.error.saveFailed"));
+        toast.error(result.error || t("notifications.form.saveFailed"));
       }
     } catch (error) {
       console.error("Save error:", error);
-      toast.error(t("notifications.error.saveFailed"));
+      toast.error(t("notifications.form.saveFailed"));
     } finally {
       setIsSubmitting(false);
     }
@@ -130,7 +130,7 @@ export default function NotificationsPage() {
 
   const handleTestWebhook = async (webhookUrl: string, type: string) => {
     if (!webhookUrl || !webhookUrl.trim()) {
-      toast.error(t("notifications.error.webhookEmpty"));
+      toast.error(t("notifications.form.webhookRequired"));
       return;
     }
 
@@ -140,13 +140,13 @@ export default function NotificationsPage() {
       const result = await testWebhookAction(webhookUrl);
 
       if (result.success) {
-        toast.success(t("notifications.success.testSent"));
+        toast.success(t("notifications.form.testSuccess"));
       } else {
-        toast.error(result.error || t("notifications.error.testFailed"));
+        toast.error(result.error || t("notifications.form.testFailed"));
       }
     } catch (error) {
       console.error("Test error:", error);
-      toast.error(t("notifications.error.testConnectionFailed"));
+      toast.error(t("notifications.form.testError"));
     } finally {
       setTestingWebhook(null);
     }
@@ -173,13 +173,13 @@ export default function NotificationsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Bell className="w-5 h-5" />
-              {t("notifications.section.globalSwitch.title")}
+              {t("notifications.global.title")}
             </CardTitle>
-            <CardDescription>{t("notifications.section.globalSwitch.description")}</CardDescription>
+            <CardDescription>{t("notifications.global.description")}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between">
-              <Label htmlFor="enabled">{t("notifications.section.globalSwitch.label")}</Label>
+              <Label htmlFor="enabled">{t("notifications.global.enable")}</Label>
               <Switch
                 id="enabled"
                 checked={enabled}
@@ -194,16 +194,16 @@ export default function NotificationsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-red-500" />
-              {t("notifications.section.circuitBreaker.title")}
+              {t("notifications.circuitBreaker.title")}
             </CardTitle>
             <CardDescription>
-              {t("notifications.section.circuitBreaker.description")}
+              {t("notifications.circuitBreaker.description")}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
               <Label htmlFor="circuitBreakerEnabled">
-                {t("notifications.section.circuitBreaker.label")}
+                {t("notifications.circuitBreaker.enable")}
               </Label>
               <Switch
                 id="circuitBreakerEnabled"
@@ -217,11 +217,11 @@ export default function NotificationsPage() {
               <div className="space-y-4 pt-4">
                 <Separator />
                 <div className="space-y-2">
-                  <Label htmlFor="circuitBreakerWebhook">Webhook URL</Label>
+                  <Label htmlFor="circuitBreakerWebhook">{t("notifications.circuitBreaker.webhook")}</Label>
                   <Input
                     id="circuitBreakerWebhook"
                     {...register("circuitBreakerWebhook")}
-                    placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..."
+                    placeholder={t("notifications.circuitBreaker.webhookPlaceholder")}
                     disabled={!enabled}
                   />
                   {errors.circuitBreakerWebhook && (
@@ -241,12 +241,12 @@ export default function NotificationsPage() {
                   {testingWebhook === "circuitBreaker" ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      {t("notifications.button.testing")}
+                      {t("common.testing")}
                     </>
                   ) : (
                     <>
                       <TestTube className="w-4 h-4 mr-2" />
-                      {t("notifications.button.test")}
+                      {t("notifications.circuitBreaker.test")}
                     </>
                   )}
                 </Button>
@@ -260,16 +260,16 @@ export default function NotificationsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-blue-500" />
-              {t("notifications.section.dailyLeaderboard.title")}
+              {t("notifications.dailyLeaderboard.title")}
             </CardTitle>
             <CardDescription>
-              {t("notifications.section.dailyLeaderboard.description")}
+              {t("notifications.dailyLeaderboard.description")}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
               <Label htmlFor="dailyLeaderboardEnabled">
-                {t("notifications.section.dailyLeaderboard.label")}
+                {t("notifications.dailyLeaderboard.enable")}
               </Label>
               <Switch
                 id="dailyLeaderboardEnabled"
@@ -283,11 +283,11 @@ export default function NotificationsPage() {
               <div className="space-y-4 pt-4">
                 <Separator />
                 <div className="space-y-2">
-                  <Label htmlFor="dailyLeaderboardWebhook">Webhook URL</Label>
+                  <Label htmlFor="dailyLeaderboardWebhook">{t("notifications.dailyLeaderboard.webhook")}</Label>
                   <Input
                     id="dailyLeaderboardWebhook"
                     {...register("dailyLeaderboardWebhook")}
-                    placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..."
+                    placeholder={t("notifications.dailyLeaderboard.webhookPlaceholder")}
                     disabled={!enabled}
                   />
                   {errors.dailyLeaderboardWebhook && (
@@ -298,12 +298,12 @@ export default function NotificationsPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="dailyLeaderboardTime">
-                      {t("notifications.section.dailyLeaderboard.timeLabel")}
+                      {t("notifications.dailyLeaderboard.time")}
                     </Label>
                     <Input
                       id="dailyLeaderboardTime"
                       {...register("dailyLeaderboardTime")}
-                      placeholder="09:00"
+                      placeholder={t("notifications.dailyLeaderboard.timePlaceholder")}
                       disabled={!enabled}
                     />
                     {errors.dailyLeaderboardTime && (
@@ -313,7 +313,7 @@ export default function NotificationsPage() {
 
                   <div className="space-y-2">
                     <Label htmlFor="dailyLeaderboardTopN">
-                      {t("notifications.section.dailyLeaderboard.topNLabel")}
+                      {t("notifications.dailyLeaderboard.topN")}
                     </Label>
                     <Input
                       id="dailyLeaderboardTopN"
@@ -341,12 +341,12 @@ export default function NotificationsPage() {
                   {testingWebhook === "leaderboard" ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      {t("notifications.button.testing")}
+                      {t("common.testing")}
                     </>
                   ) : (
                     <>
                       <TestTube className="w-4 h-4 mr-2" />
-                      {t("notifications.button.test")}
+                      {t("notifications.dailyLeaderboard.test")}
                     </>
                   )}
                 </Button>
@@ -360,13 +360,13 @@ export default function NotificationsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-yellow-500" />
-              {t("notifications.section.costAlert.title")}
+              {t("notifications.costAlert.title")}
             </CardTitle>
-            <CardDescription>{t("notifications.section.costAlert.description")}</CardDescription>
+            <CardDescription>{t("notifications.costAlert.description")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
-              <Label htmlFor="costAlertEnabled">{t("notifications.section.costAlert.label")}</Label>
+              <Label htmlFor="costAlertEnabled">{t("notifications.costAlert.enable")}</Label>
               <Switch
                 id="costAlertEnabled"
                 checked={costAlertEnabled}
@@ -379,11 +379,11 @@ export default function NotificationsPage() {
               <div className="space-y-4 pt-4">
                 <Separator />
                 <div className="space-y-2">
-                  <Label htmlFor="costAlertWebhook">Webhook URL</Label>
+                  <Label htmlFor="costAlertWebhook">{t("notifications.costAlert.webhook")}</Label>
                   <Input
                     id="costAlertWebhook"
                     {...register("costAlertWebhook")}
-                    placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..."
+                    placeholder={t("notifications.costAlert.webhookPlaceholder")}
                     disabled={!enabled}
                   />
                   {errors.costAlertWebhook && (
@@ -393,8 +393,8 @@ export default function NotificationsPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="costAlertThreshold">
-                    {t("notifications.section.costAlert.thresholdLabel", {
-                      value: ((costAlertThreshold || 0.8) * 100).toFixed(0),
+                    {t("notifications.costAlert.thresholdLabel", {
+                      percent: ((costAlertThreshold || 0.8) * 100).toFixed(0),
                     })}
                   </Label>
                   <Slider
@@ -408,15 +408,15 @@ export default function NotificationsPage() {
                     className="w-full"
                   />
                   <p className="text-sm text-muted-foreground">
-                    {t("notifications.section.costAlert.thresholdHelp", {
-                      value: ((costAlertThreshold || 0.8) * 100).toFixed(0),
+                    {t("notifications.costAlert.thresholdHelp", {
+                      percent: ((costAlertThreshold || 0.8) * 100).toFixed(0),
                     })}
                   </p>
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="costAlertCheckInterval">
-                    {t("notifications.section.costAlert.checkIntervalLabel")}
+                    {t("notifications.costAlert.interval")}
                   </Label>
                   <Input
                     id="costAlertCheckInterval"
@@ -441,12 +441,12 @@ export default function NotificationsPage() {
                   {testingWebhook === "cost" ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      {t("notifications.button.testing")}
+                      {t("common.testing")}
                     </>
                   ) : (
                     <>
                       <TestTube className="w-4 h-4 mr-2" />
-                      {t("notifications.button.test")}
+                      {t("notifications.costAlert.test")}
                     </>
                   )}
                 </Button>
@@ -461,10 +461,10 @@ export default function NotificationsPage() {
             {isSubmitting ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                {t("notifications.button.saving")}
+                {t("notifications.form.saving")}
               </>
             ) : (
-              t("notifications.button.save")
+              t("notifications.form.save")
             )}
           </Button>
         </div>

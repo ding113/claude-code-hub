@@ -87,8 +87,8 @@ export function AutoCleanupForm({ settings, onSuccess }: AutoCleanupFormProps) {
       {/* 启用开关 */}
       <div className="flex items-center justify-between">
         <div className="space-y-0.5">
-          <Label htmlFor="enableAutoCleanup">启用自动清理</Label>
-          <p className="text-sm text-muted-foreground">定时自动清理历史日志数据</p>
+          <Label htmlFor="enableAutoCleanup">{t("enableAutoCleanup")}</Label>
+          <p className="text-sm text-muted-foreground">{t("enableAutoCleanupDesc")}</p>
         </div>
         <Switch
           id="enableAutoCleanup"
@@ -103,7 +103,7 @@ export function AutoCleanupForm({ settings, onSuccess }: AutoCleanupFormProps) {
           {/* 保留天数 */}
           <div className="space-y-2">
             <Label htmlFor="cleanupRetentionDays">
-              保留天数 <span className="text-destructive">*</span>
+              {t("cleanupRetentionDaysRequired")}
             </Label>
             <Input
               id="cleanupRetentionDays"
@@ -111,41 +111,41 @@ export function AutoCleanupForm({ settings, onSuccess }: AutoCleanupFormProps) {
               min={1}
               max={365}
               {...register("cleanupRetentionDays", { valueAsNumber: true })}
-              placeholder="30"
+              placeholder={t("cleanupRetentionDaysPlaceholder")}
             />
             {errors.cleanupRetentionDays && (
               <p className="text-sm text-destructive">{errors.cleanupRetentionDays.message}</p>
             )}
             <p className="text-xs text-muted-foreground">
-              超过此天数的日志将被自动清理（范围：1-365 天）
+              {t("cleanupRetentionDaysDesc")}
             </p>
           </div>
 
           {/* Cron 表达式 */}
           <div className="space-y-2">
             <Label htmlFor="cleanupSchedule">
-              执行时间 (Cron) <span className="text-destructive">*</span>
+              {t("cleanupScheduleRequired")}
             </Label>
             <Input
               id="cleanupSchedule"
               type="text"
               {...register("cleanupSchedule")}
-              placeholder="0 2 * * *"
+              placeholder={t("cleanupSchedulePlaceholder")}
             />
             {errors.cleanupSchedule && (
               <p className="text-sm text-destructive">{errors.cleanupSchedule.message}</p>
             )}
             <p className="text-xs text-muted-foreground">
-              Cron 表达式，默认：0 2 * * *（每天凌晨 2 点）
+              {t("cleanupScheduleCronDesc")}
               <br />
-              示例：0 3 * * 0（每周日凌晨 3 点）
+              {t("cleanupScheduleCronExample")}
             </p>
           </div>
 
           {/* 批量大小 */}
           <div className="space-y-2">
             <Label htmlFor="cleanupBatchSize">
-              批量大小 <span className="text-destructive">*</span>
+              {t("cleanupBatchSizeRequired")}
             </Label>
             <Input
               id="cleanupBatchSize"
@@ -153,13 +153,13 @@ export function AutoCleanupForm({ settings, onSuccess }: AutoCleanupFormProps) {
               min={1000}
               max={100000}
               {...register("cleanupBatchSize", { valueAsNumber: true })}
-              placeholder="10000"
+              placeholder={t("cleanupBatchSizePlaceholder")}
             />
             {errors.cleanupBatchSize && (
               <p className="text-sm text-destructive">{errors.cleanupBatchSize.message}</p>
             )}
             <p className="text-xs text-muted-foreground">
-              每批删除的记录数（范围：1000-100000，推荐 10000）
+              {t("cleanupBatchSizeDesc")}
             </p>
           </div>
         </>
@@ -170,10 +170,10 @@ export function AutoCleanupForm({ settings, onSuccess }: AutoCleanupFormProps) {
         {isSubmitting ? (
           <>
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            保存中...
+            {t("common.saving")}
           </>
         ) : (
-          "保存配置"
+          t("saveConfig")
         )}
       </Button>
     </form>

@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { Database, Table, AlertCircle, RefreshCw } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import type { DatabaseStatus } from "@/types/database-backup";
 
 export function DatabaseStatusDisplay() {
+  const t = useTranslations("settings.data.status");
   const [status, setStatus] = useState<DatabaseStatus | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -22,14 +24,14 @@ export function DatabaseStatusDisplay() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || '获取状态失败');
+        throw new Error(errorData.error || t('error'));
       }
 
       const data: DatabaseStatus = await response.json();
       setStatus(data);
     } catch (err) {
       console.error('Fetch status error:', err);
-      setError(err instanceof Error ? err.message : '获取数据库状态失败');
+      setError(err instanceof Error ? err.message : t('error'));
     } finally {
       setIsLoading(false);
     }
@@ -42,7 +44,7 @@ export function DatabaseStatusDisplay() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-8">
-        <div className="text-sm text-muted-foreground">加载中...</div>
+        <div className="text-sm text-muted-foreground">{t('loading')}</div>
       </div>
     );
   }
@@ -55,7 +57,7 @@ export function DatabaseStatusDisplay() {
           <p className="text-sm font-medium text-destructive">{error}</p>
         </div>
         <Button variant="outline" size="sm" onClick={fetchStatus}>
-          重试
+          {t('retry')}
         </Button>
       </div>
     );
@@ -67,46 +69,46 @@ export function DatabaseStatusDisplay() {
 
   return (
     <div className="space-y-3">
-      {/* 紧凑的横向状态栏 */}
+      {/* Compact horizontal status bar */}
       <div className="flex items-center gap-6 rounded-lg border border-border bg-muted/30 px-4 py-3">
-        {/* 连接状态 */}
+        {/* Connection status */}
         <div className="flex items-center gap-2">
           {status.isAvailable ? (
             <>
               <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-              <span className="text-sm font-medium">数据库连接正常</span>
+              <span className="text-sm font-medium">{t('connected')}</span>
             </>
           ) : (
             <>
               <div className="h-2 w-2 rounded-full bg-orange-500 animate-pulse" />
-              <span className="text-sm font-medium text-orange-500">数据库不可用</span>
+              <span className="text-sm font-medium text-orange-500">{t('unavailable')}</span>
             </>
           )}
         </div>
 
-        {/* 分隔符 */}
+        {/* Separator */}
         {status.isAvailable && (
           <>
             <div className="h-4 w-px bg-border" />
 
-            {/* 数据库大小 */}
+            {/* Database size */}
             <div className="flex items-center gap-2">
               <Database className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-semibold">{status.databaseSize}</span>
             </div>
 
-            {/* 分隔符 */}
+            {/* Separator */}
             <div className="h-4 w-px bg-border" />
 
-            {/* 表数量 */}
+            {/* Table count */}
             <div className="flex items-center gap-2">
               <Table className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-semibold">{status.tableCount} 个表</span>
+              <span className="text-sm font-semibold">{t('tables', { count: status.tableCount })}</span>
             </div>
           </>
         )}
 
-        {/* 刷新按钮 */}
+        {/* Refresh button */}
         <Button
           variant="ghost"
           size="sm"

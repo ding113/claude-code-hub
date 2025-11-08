@@ -52,16 +52,38 @@
       "siteTitle": "站点标题",
       "siteTitlePlaceholder": "例如：Claude Code Hub",
       "siteTitleRequired": "站点标题不能为空",
+      "siteTitleDesc": "用于设置浏览器标签页标题以及系统默认显示名称。",
       "currencyDisplay": "货币显示单位",
-      "allowGlobalView": "允许全局统计显示",
-      "allowGlobalViewDesc": "允许非管理员用户查看全局使用统计信息",
+      "currencyDisplayPlaceholder": "选择货币单位",
+      "currencyDisplayDesc": "修改后，系统所有页面和 API 接口的金额显示将使用对应的货币符号（仅修改符号，不进行汇率转换）。",
+      "allowGlobalView": "允许查看全站使用量",
+      "allowGlobalViewDesc": "关闭后，普通用户在仪表盘仅能查看自己密钥的使用统计。",
+      "saveSettings": "保存设置",
       "keepDays": "保留天数",
       "keepDaysDesc": "清理超过此天数的历史日志",
       "cleanupSchedule": "清理周期",
       "cleanupScheduleDesc": "选择自动清理的执行周期",
       "saveSuccess": "保存成功",
       "saveFailed": "保存失败",
-      "configUpdated": "系统设置已更新，页面将刷新以应用货币显示变更"
+      "saveError": "保存失败",
+      "configUpdated": "系统设置已更新，页面将刷新以应用货币显示变更",
+      "enableAutoCleanup": "启用自动清理",
+      "enableAutoCleanupDesc": "定时自动清理历史日志数据",
+      "cleanupRetentionDays": "保留天数",
+      "cleanupRetentionDaysRequired": "保留天数 *",
+      "cleanupRetentionDaysPlaceholder": "30",
+      "cleanupRetentionDaysDesc": "超过此天数的日志将被自动清理（范围：1-365 天）",
+      "cleanupScheduleLabel": "执行时间 (Cron)",
+      "cleanupScheduleRequired": "执行时间 (Cron) *",
+      "cleanupSchedulePlaceholder": "0 2 * * *",
+      "cleanupScheduleCronDesc": "Cron 表达式，默认：0 2 * * *（每天凌晨 2 点）",
+      "cleanupScheduleCronExample": "示例：0 3 * * 0（每周日凌晨 3 点）",
+      "cleanupBatchSize": "批量大小",
+      "cleanupBatchSizeRequired": "批量大小 *",
+      "cleanupBatchSizePlaceholder": "10000",
+      "cleanupBatchSizeDesc": "每批删除的记录数（范围：1000-100000，推荐 10000）",
+      "saveConfig": "保存配置",
+      "autoCleanupSaved": "自动清理配置已保存"
     }
   },
   "providers": {
@@ -536,52 +558,132 @@
     "description": "动态调整系统日志级别，实时控制日志输出详细程度。",
     "subtitle": "日志级别控制",
     "subtitleDesc": "调整后立即生效，无需重启服务。适合生产环境排查问题时使用。",
+    "section": {
+      "title": "日志级别控制",
+      "description": "调整后立即生效，无需重启服务。"
+    },
+    "levels": {
+      "fatal": {
+        "label": "Fatal",
+        "description": "仅致命错误"
+      },
+      "error": {
+        "label": "Error",
+        "description": "错误信息"
+      },
+      "warn": {
+        "label": "Warn",
+        "description": "警告 + 错误"
+      },
+      "info": {
+        "label": "Info",
+        "description": "关键业务事件 + 警告 + 错误（推荐生产）"
+      },
+      "debug": {
+        "label": "Debug",
+        "description": "调试信息 + 所有级别（推荐开发）"
+      },
+      "trace": {
+        "label": "Trace",
+        "description": "极详细追踪 + 所有级别"
+      }
+    },
     "form": {
       "currentLevel": "当前日志级别",
       "selectLevel": "选择日志级别",
       "save": "保存设置",
       "saving": "保存中...",
-      "success": "日志级别已更新",
-      "failed": "更新失败",
-      "failedError": "更新失败:"
+      "success": "日志级别已设置为: {level}",
+      "failed": "设置失败",
+      "failedError": "设置日志级别失败",
+      "fetchFailed": "获取日志级别失败",
+      "effectiveImmediately": "调整日志级别后立即生效，无需重启服务。",
+      "levelGuideTitle": "日志级别说明",
+      "levelGuideFatal": "Fatal/Error: 仅显示错误，日志最少，适合高负载生产环境",
+      "levelGuideWarn": "Warn: 包含警告（限流触发、熔断器打开等）+ 错误",
+      "levelGuideInfo": "Info（推荐生产）: 显示关键业务事件（供应商选择、Session 复用、价格同步）+ 警告 + 错误",
+      "levelGuideDebug": "Debug（推荐开发）: 包含详细调试信息，适合排查问题时使用",
+      "levelGuideTrace": "Trace: 极详细的追踪信息，包含所有细节",
+      "changeNotice": "当前级别为 {current}，点击保存后将切换到 {selected}"
     }
   },
   "data": {
     "title": "数据管理",
     "description": "管理数据库的备份与恢复，支持完整数据导入导出和日志清理。",
     "status": {
-      "title": "数据库状态",
-      "description": "查看当前数据库的连接状态和基本信息。"
+      "loading": "加载中...",
+      "error": "获取数据库状态失败",
+      "retry": "重试",
+      "connected": "数据库连接正常",
+      "unavailable": "数据库不可用",
+      "tables": "{count} 个表"
     },
     "cleanup": {
-      "title": "日志清理",
-      "description": "清理历史日志数据以释放数据库存储空间，统计数据将被保留。",
-      "preview": "将删除 {count} 条日志记录",
-      "confirmDelete": "确定要清理历史日志吗?此操作不可逆。",
-      "clean": "清理",
-      "cleaning": "清理中...",
-      "success": "日志清理完成",
-      "failed": "清理失败"
+      "descriptionWarning": "清理历史日志数据以释放数据库存储空间。注意：统计数据将被保留，但日志详情将被永久删除。",
+      "rangeLabel": "清理范围",
+      "range": {
+        "7days": "一周前的日志 (7 天)",
+        "30days": "一个月前的日志 (30 天)",
+        "90days": "三个月前的日志 (90 天)",
+        "180days": "六个月前的日志 (180 天)"
+      },
+      "rangeDescription": {
+        "7days": "一周前",
+        "30days": "一个月前",
+        "90days": "三个月前",
+        "180days": "六个月前",
+        "default": "{days} 天前"
+      },
+      "willClean": "将清理 {range} 的所有日志记录",
+      "button": "清理日志",
+      "confirmTitle": "确认清理日志",
+      "confirmWarning": "此操作将永久删除 {range}的所有日志记录，且无法恢复。",
+      "previewLoading": "正在统计...",
+      "previewCount": "将删除 {count} 条日志记录",
+      "previewError": "无法获取预览信息",
+      "statisticsRetained": "✓ 统计数据将被保留（用于趋势分析）",
+      "logsDeleted": "✗ 日志详情将被删除（请求/响应内容、错误信息等）",
+      "backupRecommendation": "建议：在清理前先导出数据库备份，以防需要恢复数据。",
+      "cancel": "取消",
+      "confirm": "确认清理",
+      "cleaning": "正在清理...",
+      "successMessage": "成功清理 {count} 条日志记录（{batches} 批次，耗时 {duration}s）",
+      "failed": "清理失败",
+      "error": "清理日志失败"
     },
     "export": {
-      "title": "数据导出",
-      "description": "将数据库导出为备份文件，用于数据迁移或灾难恢复。",
-      "export": "导出数据",
-      "exporting": "导出中...",
-      "success": "数据导出成功",
-      "failed": "导出失败"
+      "descriptionFull": "导出完整的数据库备份文件（.dump 格式），可用于数据迁移或恢复。备份文件使用 PostgreSQL custom format，自动压缩且兼容不同版本的数据库结构。",
+      "button": "导出数据库",
+      "exporting": "正在导出...",
+      "successMessage": "数据库导出成功！",
+      "failed": "导出失败",
+      "error": "导出数据库失败"
     },
     "import": {
-      "title": "数据导入",
-      "description": "从备份文件恢复数据库，支持覆盖和合并两种模式。",
-      "selectFile": "点击选择JSON文件或拖拽到此处",
-      "import": "导入数据",
-      "importing": "导入中...",
-      "mode": "导入模式",
-      "modeOverwrite": "覆盖（清空所有数据后导入）",
-      "modeMerge": "合并（保留现有数据）",
-      "success": "数据导入成功",
-      "failed": "导入失败"
+      "descriptionFull": "从备份文件恢复数据库。支持 PostgreSQL custom format (.dump) 格式的备份文件。",
+      "selectFileLabel": "选择备份文件",
+      "fileSelected": "已选择: {name} ({size} MB)",
+      "fileError": "请选择 .dump 格式的备份文件",
+      "noFileSelected": "请先选择备份文件",
+      "cleanFirstLabel": "清除现有数据（覆盖模式）",
+      "cleanFirstDescription": "导入前删除所有现有数据，确保数据库与备份文件完全一致。如果不勾选，将尝试合并数据，但可能因主键冲突而失败。",
+      "button": "导入数据库",
+      "importing": "正在导入...",
+      "progressTitle": "导入进度",
+      "confirmTitle": "确认导入数据库",
+      "confirmOverwrite": "您选择了「覆盖模式」，这将会删除所有现有数据后导入备份。",
+      "confirmMerge": "您选择了「合并模式」，这将尝试在保留现有数据的基础上导入备份。",
+      "warningOverwrite": "⚠️ 警告：此操作不可逆，所有当前数据将被永久删除！",
+      "warningMerge": "⚠️ 注意：如果存在主键冲突，导入可能会失败。",
+      "backupFile": "备份文件:",
+      "backupRecommendation": "建议在执行此操作前，先导出当前数据库作为备份。",
+      "cancel": "取消",
+      "confirm": "确认导入",
+      "successMessage": "数据导入完成！",
+      "failedMessage": "数据导入失败，请查看详细日志",
+      "error": "导入数据库失败",
+      "streamError": "无法读取响应流",
+      "errorUnknown": "未知错误"
     },
     "guide": {
       "title": "使用说明与注意事项",
@@ -591,6 +693,24 @@
       "merge": "合并模式: 保留现有数据，尝试插入备份中的数据。如果存在主键冲突可能导致导入失败。",
       "backup": "安全建议: 在执行导入操作前，建议先导出当前数据库作为备份，避免数据丢失。",
       "docker": "环境要求: 此功能需要 Docker Compose 部署环境。本地开发环境可能无法使用。"
+    },
+    "section": {
+      "status": {
+        "title": "数据库状态",
+        "description": "查看当前数据库的连接状态和基本信息。"
+      },
+      "cleanup": {
+        "title": "日志清理",
+        "description": "清理历史日志数据以释放数据库存储空间。注意：统计数据将被保留，但日志详情将被永久删除。"
+      },
+      "export": {
+        "title": "数据导出",
+        "description": "导出完整的数据库备份文件（.dump 格式），可用于数据迁移或恢复。"
+      },
+      "import": {
+        "title": "数据导入",
+        "description": "从备份文件恢复数据库。支持 PostgreSQL custom format (.dump) 格式的备份文件。"
+      }
     }
   },
   "clientVersions": {

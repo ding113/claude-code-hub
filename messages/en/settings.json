@@ -86,19 +86,41 @@
     "autoCleanupDesc": "Automatically clean up historical log data on schedule to free up database storage space.",
     "description": "Manage system basic parameters that affect site display and statistics behavior.",
     "form": {
-      "allowGlobalView": "Allow Global Statistics View",
-      "allowGlobalViewDesc": "Allow non-admin users to view global usage statistics",
+      "allowGlobalView": "Allow Global Usage View",
+      "allowGlobalViewDesc": "When disabled, regular users can only view their own key usage statistics in the dashboard.",
       "cleanupSchedule": "Cleanup Schedule",
       "cleanupScheduleDesc": "Select the execution schedule for automatic cleanup",
       "configUpdated": "System settings updated. The page will refresh to apply currency display changes.",
       "currencyDisplay": "Currency Display Unit",
+      "currencyDisplayPlaceholder": "Select currency unit",
+      "currencyDisplayDesc": "After modification, all pages and API interfaces will use the corresponding currency symbol (symbol only, no exchange rate conversion).",
       "keepDays": "Retention Days",
       "keepDaysDesc": "Clean up logs older than this number of days",
       "saveFailed": "Save failed",
       "saveSuccess": "Saved successfully",
+      "saveError": "Save failed",
+      "saveSettings": "Save Settings",
       "siteTitle": "Site Title",
       "siteTitlePlaceholder": "e.g. Claude Code Hub",
-      "siteTitleRequired": "Site title cannot be empty"
+      "siteTitleRequired": "Site title cannot be empty",
+      "siteTitleDesc": "Used to set browser tab title and system default display name.",
+      "enableAutoCleanup": "Enable Auto Cleanup",
+      "enableAutoCleanupDesc": "Automatically clean up historical log data on schedule",
+      "cleanupRetentionDays": "Retention Days",
+      "cleanupRetentionDaysRequired": "Retention Days *",
+      "cleanupRetentionDaysPlaceholder": "30",
+      "cleanupRetentionDaysDesc": "Logs older than this number of days will be automatically cleaned (range: 1-365 days)",
+      "cleanupScheduleLabel": "Execution Time (Cron)",
+      "cleanupScheduleRequired": "Execution Time (Cron) *",
+      "cleanupSchedulePlaceholder": "0 2 * * *",
+      "cleanupScheduleCronDesc": "Cron expression, default: 0 2 * * * (2 AM daily)",
+      "cleanupScheduleCronExample": "Example: 0 3 * * 0 (3 AM every Sunday)",
+      "cleanupBatchSize": "Batch Size",
+      "cleanupBatchSizeRequired": "Batch Size *",
+      "cleanupBatchSizePlaceholder": "10000",
+      "cleanupBatchSizeDesc": "Number of records to delete per batch (range: 1000-100000, recommended 10000)",
+      "saveConfig": "Save Configuration",
+      "autoCleanupSaved": "Auto cleanup configuration saved"
     },
     "siteSettings": "Site Parameters",
     "siteSettingsDesc": "Configure site title, currency display unit, and dashboard statistics display policy.",
@@ -106,23 +128,46 @@
   },
   "data": {
     "cleanup": {
-      "clean": "Cleanup",
+      "descriptionWarning": "Clean up historical log data to free up database storage. Note: Statistics data will be retained, but log details will be permanently deleted.",
+      "rangeLabel": "Cleanup Range",
+      "range": {
+        "7days": "Logs older than 1 week (7 days)",
+        "30days": "Logs older than 1 month (30 days)",
+        "90days": "Logs older than 3 months (90 days)",
+        "180days": "Logs older than 6 months (180 days)"
+      },
+      "rangeDescription": {
+        "7days": "1 week ago",
+        "30days": "1 month ago",
+        "90days": "3 months ago",
+        "180days": "6 months ago",
+        "default": "{days} days ago"
+      },
+      "willClean": "Will clean all log records from {range}",
+      "button": "Clean Logs",
+      "confirmTitle": "Confirm Log Cleanup",
+      "confirmWarning": "This operation will permanently delete all log records from {range} and cannot be recovered.",
+      "previewLoading": "Counting...",
+      "previewCount": "Will delete {count} log records",
+      "previewError": "Unable to get preview",
+      "statisticsRetained": "✓ Statistics data will be retained (for trend analysis)",
+      "logsDeleted": "✗ Log details will be deleted (request/response content, error info, etc.)",
+      "backupRecommendation": "Recommendation: Export database backup before cleanup in case recovery is needed.",
+      "cancel": "Cancel",
+      "confirm": "Confirm Cleanup",
       "cleaning": "Cleaning...",
-      "confirmDelete": "Are you sure you want to clean up historical logs? This action is irreversible.",
-      "description": "Clean up historical log data to free up database storage. Statistics data will be retained.",
+      "successMessage": "Successfully cleaned {count} log records ({batches} batches, took {duration}s)",
       "failed": "Cleanup failed",
-      "preview": "Will delete {count} log records",
-      "success": "Log cleanup completed",
-      "title": "Log Cleanup"
+      "error": "Failed to clean logs"
     },
     "description": "Manage database backup and recovery with full data import/export and log cleanup.",
     "export": {
-      "description": "Export database as backup file for data migration or disaster recovery.",
-      "export": "Export Data",
+      "descriptionFull": "Export complete database backup file (.dump format) for data migration or recovery. Backup uses PostgreSQL custom format, auto-compressed and compatible with different database versions.",
+      "button": "Export Database",
       "exporting": "Exporting...",
+      "successMessage": "Database exported successfully!",
       "failed": "Export failed",
-      "success": "Data exported successfully",
-      "title": "Data Export"
+      "error": "Failed to export database"
     },
     "guide": {
       "backup": "Security Recommendation: Before importing, recommend exporting current database as backup to avoid data loss.",
@@ -134,22 +179,58 @@
       "title": "Usage Instructions and Precautions"
     },
     "import": {
-      "description": "Restore database from backup file with support for overwrite and merge modes.",
-      "failed": "Import failed",
-      "import": "Import Data",
+      "descriptionFull": "Restore database from backup file. Supports PostgreSQL custom format (.dump) backup files.",
+      "selectFileLabel": "Select Backup File",
+      "fileSelected": "Selected: {name} ({size} MB)",
+      "fileError": "Please select .dump format backup file",
+      "noFileSelected": "Please select backup file first",
+      "cleanFirstLabel": "Clear existing data (overwrite mode)",
+      "cleanFirstDescription": "Delete all existing data before importing to ensure database matches backup exactly. If unchecked, will attempt to merge data but may fail due to primary key conflicts.",
+      "button": "Import Database",
       "importing": "Importing...",
-      "mode": "Import Mode",
-      "modeMerge": "Merge (keep existing data)",
-      "modeOverwrite": "Overwrite (clear all data before importing)",
-      "selectFile": "Click to select JSON file or drag and drop here",
-      "success": "Data imported successfully",
-      "title": "Data Import"
+      "progressTitle": "Import Progress",
+      "confirmTitle": "Confirm Database Import",
+      "confirmOverwrite": "You selected 'Overwrite Mode', which will delete all existing data before importing backup.",
+      "confirmMerge": "You selected 'Merge Mode', which will attempt to import backup while keeping existing data.",
+      "warningOverwrite": "⚠️ Warning: This action is irreversible, all current data will be permanently deleted!",
+      "warningMerge": "⚠️ Note: Import may fail if primary key conflicts exist.",
+      "backupFile": "Backup file:",
+      "backupRecommendation": "Recommend exporting current database as backup before proceeding.",
+      "cancel": "Cancel",
+      "confirm": "Confirm Import",
+      "successMessage": "Data import completed!",
+      "failedMessage": "Data import failed, check detailed logs",
+      "error": "Failed to import database",
+      "streamError": "Cannot read response stream",
+      "errorUnknown": "Unknown error"
     },
     "status": {
-      "description": "View current database connection status and basic information.",
-      "title": "Database Status"
+      "loading": "Loading...",
+      "error": "Failed to get database status",
+      "retry": "Retry",
+      "connected": "Database connected",
+      "unavailable": "Database unavailable",
+      "tables": "{count} tables"
     },
-    "title": "Data Management"
+    "title": "Data Management",
+    "section": {
+      "status": {
+        "title": "Database Status",
+        "description": "View current database connection status and basic information."
+      },
+      "cleanup": {
+        "title": "Log Cleanup",
+        "description": "Clean up historical log data to free up database storage. Note: Statistics data will be retained, but log details will be permanently deleted."
+      },
+      "export": {
+        "title": "Data Export",
+        "description": "Export complete database backup file (.dump format) for data migration or recovery."
+      },
+      "import": {
+        "title": "Data Import",
+        "description": "Restore database from backup file. Supports PostgreSQL custom format (.dump) backup files."
+      }
+    }
   },
   "errors": {
     "addFailed": "Failed to add provider",
@@ -170,17 +251,56 @@
   },
   "logs": {
     "description": "Dynamically adjust system log level to control logging verbosity in real-time.",
-    "form": {
-      "currentLevel": "Current Log Level",
-      "failed": "Update failed",
-      "failedError": "Update failed:",
-      "save": "Save Settings",
-      "saving": "Saving...",
-      "selectLevel": "Select Log Level",
-      "success": "Log level updated"
-    },
     "subtitle": "Log Level Control",
     "subtitleDesc": "Changes take effect immediately without restart. Useful for troubleshooting in production.",
+    "section": {
+      "title": "Log Level Control",
+      "description": "Changes take effect immediately without service restart."
+    },
+    "levels": {
+      "fatal": {
+        "label": "Fatal",
+        "description": "Fatal errors only"
+      },
+      "error": {
+        "label": "Error",
+        "description": "Error messages"
+      },
+      "warn": {
+        "label": "Warn",
+        "description": "Warnings + Errors"
+      },
+      "info": {
+        "label": "Info",
+        "description": "Key business events + Warnings + Errors (Recommended for Production)"
+      },
+      "debug": {
+        "label": "Debug",
+        "description": "Debug info + All levels (Recommended for Development)"
+      },
+      "trace": {
+        "label": "Trace",
+        "description": "Extremely detailed tracing + All levels"
+      }
+    },
+    "form": {
+      "currentLevel": "Current Log Level",
+      "selectLevel": "Select Log Level",
+      "save": "Save Settings",
+      "saving": "Saving...",
+      "success": "Log level set to: {level}",
+      "failed": "Failed to set",
+      "failedError": "Failed to set log level",
+      "fetchFailed": "Failed to fetch log level",
+      "effectiveImmediately": "Log level changes take effect immediately without service restart.",
+      "levelGuideTitle": "Log Level Guide",
+      "levelGuideFatal": "Fatal/Error: Only errors shown, minimal logging, suitable for high-load production",
+      "levelGuideWarn": "Warn: Includes warnings (rate limiting, circuit breaker opening, etc.) + Errors",
+      "levelGuideInfo": "Info (Recommended for Production): Shows key business events (provider selection, Session reuse, price sync) + Warnings + Errors",
+      "levelGuideDebug": "Debug (Recommended for Development): Includes detailed debug info, suitable for troubleshooting",
+      "levelGuideTrace": "Trace: Extremely detailed trace information, includes all details",
+      "changeNotice": "Current level is {current}, will switch to {selected} after saving"
+    },
     "title": "Log Management"
   },
   "nav": {
@@ -716,5 +836,78 @@
     "title": "Sensitive Words Management",
     "toggleFailed": "Toggle failed",
     "toggleFailedError": "Toggle failed:"
+  },
+  "notifications": {
+    "title": "Push Notifications",
+    "description": "Configure WeChat Work robot push notifications",
+    "global": {
+      "title": "Notification Master Switch",
+      "description": "Enable or disable all push notification features",
+      "enable": "Enable Push Notifications"
+    },
+    "circuitBreaker": {
+      "title": "Circuit Breaker Alert",
+      "description": "Send alert immediately when provider is fully circuit broken",
+      "enable": "Enable Circuit Breaker Alert",
+      "webhook": "Webhook URL",
+      "webhookPlaceholder": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...",
+      "test": "Test Connection"
+    },
+    "dailyLeaderboard": {
+      "title": "Daily User Consumption Leaderboard",
+      "description": "Send daily scheduled user consumption Top N leaderboard",
+      "enable": "Enable Daily Leaderboard",
+      "webhook": "Webhook URL",
+      "webhookPlaceholder": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...",
+      "time": "Send Time",
+      "timePlaceholder": "09:00",
+      "timeError": "Time format error, should be HH:mm",
+      "topN": "Show Top N",
+      "test": "Test Connection"
+    },
+    "costAlert": {
+      "title": "Cost Alert",
+      "description": "Trigger alert when user/provider consumption exceeds quota threshold",
+      "enable": "Enable Cost Alert",
+      "webhook": "Webhook URL",
+      "webhookPlaceholder": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...",
+      "threshold": "Alert Threshold",
+      "thresholdLabel": "Alert Threshold: {percent}%",
+      "thresholdHelp": "Alert when consumption reaches {percent}% of quota",
+      "interval": "Check Interval (minutes)",
+      "test": "Test Connection"
+    },
+    "form": {
+      "save": "Save Settings",
+      "saving": "Saving...",
+      "loading": "Loading...",
+      "success": "Notification settings saved and tasks rescheduled",
+      "saveFailed": "Save failed",
+      "saveError": "Failed to save settings",
+      "loadError": "Failed to load notification settings",
+      "webhookRequired": "Please fill in Webhook URL first",
+      "testSuccess": "Test message sent, please check WeChat Work",
+      "testFailed": "Test failed",
+      "testFailedRetry": "Test failed, please retry",
+      "testError": "Test connection failed",
+      "testNoResult": "Test succeeded but no result returned"
+    }
+  },
+  "errors": {
+    "saveSuccess": "Save succeeded",
+    "saveFailed": "Save failed",
+    "saveFailed_error": "Failed to save settings",
+    "addSuccess": "Add succeeded",
+    "addFailed": "Failed to add provider",
+    "editSuccess": "Update succeeded",
+    "editFailed": "Failed to update provider",
+    "deleteSuccess": "Delete succeeded",
+    "deleteFailed": "Failed to delete provider",
+    "syncSuccess": "Sync succeeded",
+    "syncFailed": "Sync failed",
+    "testFailed": "Test failed",
+    "testFailedRetry": "Test failed, please retry",
+    "loadFailed": "Failed to load notification settings",
+    "unknownError": "An exception occurred during the operation"
   }
 }

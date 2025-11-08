@@ -3,6 +3,7 @@
     "costRanking": "消耗排行榜",
     "costRankingDescription": "查看用户消耗排名，数据每 5 分钟更新一次",
     "usageLogs": "使用记录",
+    "usageLogsDescription": "查看 API 调用日志和使用统计",
     "clients": "客户端",
     "userAndKeyManagement": "用户和密钥管理",
     "requestMessages": "请求 Messages",
@@ -14,7 +15,8 @@
     "quotasManagementDescription": "查看和管理所有层级的限额使用情况",
     "usersQuotas": "用户限额统计",
     "keysQuotas": "密钥限额统计",
-    "providersQuotas": "供应商限额统计"
+    "providersQuotas": "供应商限额统计",
+    "filterCriteria": "筛选条件"
   },
   "description": {
     "viewApiCallLogs": "查看 API 调用日志和使用统计",
@@ -84,13 +86,15 @@
       "status": "状态"
     },
     "stats": {
+      "totalRequests": "总请求数",
       "totalAmount": "总消耗金额",
       "totalTokens": "总 Token 数",
       "cacheTokens": "缓存 Token",
       "input": "输入",
       "output": "输出",
       "write": "写入",
-      "read": "读取"
+      "read": "读取",
+      "loading": "加载中..."
     },
     "table": {
       "noData": "暂无数据",
@@ -151,7 +155,9 @@
         "success": "请求成功，无错误信息",
         "default": "暂无详细错误信息"
       },
-      "clickStatusCode": "点击状态码查看完整时间线"
+      "clickStatusCode": "点击状态码查看完整时间线",
+      "viewDetails": "查看详情",
+      "unknown": "未知"
     },
     "providerChain": {
       "decisionChain": "供应商决策链"
@@ -159,6 +165,13 @@
     "modelRedirect": {
       "redirected": "已重定向",
       "targetModel": "目标模型"
+    },
+    "statusCodes": {
+      "200": "200 (成功)",
+      "400": "400 (错误请求)",
+      "401": "401 (未授权)",
+      "429": "429 (限流)",
+      "500": "500 (服务器错误)"
     }
   },
   "leaderboard": {

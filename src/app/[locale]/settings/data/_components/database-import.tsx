@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Upload, AlertCircle } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -19,6 +20,7 @@ import { toast } from "sonner";
 import type { ImportProgressEvent } from "@/types/database-backup";
 
 export function DatabaseImport() {
+  const t = useTranslations("settings.data.import");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [cleanFirst, setCleanFirst] = useState(true);
   const [isImporting, setIsImporting] = useState(false);
@@ -38,7 +40,7 @@ export function DatabaseImport() {
     const file = event.target.files?.[0];
     if (file) {
       if (!file.name.endsWith('.dump')) {
-        toast.error('请选择 .dump 格式的备份文件');
+        toast.error(t('fileError'));
         return;
       }
       setSelectedFile(file);
@@ -47,7 +49,7 @@ export function DatabaseImport() {
 
   const handleImportClick = () => {
     if (!selectedFile) {
-      toast.error('请先选择备份文件');
+      toast.error(t('noFileSelected'));
       return;
     }
     setShowConfirmDialog(true);
@@ -75,15 +77,15 @@ export function DatabaseImport() {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || '导入失败');
+        throw new Error(error.error || t('failed'));
       }
 
-      // 处理 SSE 流
+      // Handle SSE stream
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
 
       if (!reader) {
-        throw new Error('无法读取响应流');
+        throw new Error(t('streamError'));
       }
 
       while (true) {
@@ -105,10 +107,10 @@ export function DatabaseImport() {
                 setProgressMessages(prev => [...prev, data.message]);
               } else if (data.type === 'complete') {
                 setProgressMessages(prev => [...prev, `✅ ${data.message}`]);
-                toast.success('数据导入完成！');
+                toast.success(t('successMessage'));
               } else if (data.type === 'error') {
                 setProgressMessages(prev => [...prev, `❌ ${data.message}`]);
-                toast.error('数据导入失败，请查看详细日志');
+                toast.error(t('failedMessage'));
               }
             } catch (parseError) {
               console.error('Parse SSE error:', parseError);
@@ -124,10 +126,10 @@ export function DatabaseImport() {
       }
     } catch (error) {
       console.error('Import error:', error);
-      toast.error(error instanceof Error ? error.message : '导入数据库失败');
+      toast.error(error instanceof Error ? error.message : t('error'));
       setProgressMessages(prev => [
         ...prev,
-        `❌ 错误: ${error instanceof Error ? error.message : '未知错误'}`
+        `❌ ${t('error')}: ${error instanceof Error ? error.message : t('errorUnknown')}`
       ]);
     } finally {
       setIsImporting(false);
@@ -137,12 +139,12 @@ export function DatabaseImport() {
   return (
     <div className="flex flex-col gap-4">
       <p className="text-sm text-muted-foreground">
-        从备份文件恢复数据库。支持 PostgreSQL custom format (.dump) 格式的备份文件。
+        {t('descriptionFull')}
       </p>
 
-      {/* 文件选择 */}
+      {/* File selection */}
       <div className="flex flex-col gap-2">
-        <Label htmlFor="backup-file">选择备份文件</Label>
+        <Label htmlFor="backup-file">{t('selectFileLabel')}</Label>
         <div className="flex gap-2">
           <input
             ref={fileInputRef}
@@ -156,12 +158,15 @@ export function DatabaseImport() {
         </div>
         {selectedFile && (
           <p className="text-xs text-muted-foreground">
-            已选择: {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
+            {t('fileSelected', {
+              name: selectedFile.name,
+              size: (selectedFile.size / 1024 / 1024).toFixed(2)
+            })}
           </p>
         )}
       </div>
 
-      {/* 导入选项 */}
+      {/* Import options */}
       <div className="flex items-start gap-2">
         <Checkbox
           id="clean-first"
@@ -174,29 +179,28 @@ export function DatabaseImport() {
             htmlFor="clean-first"
             className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
           >
-            清除现有数据（覆盖模式）
+            {t('cleanFirstLabel')}
           </Label>
           <p className="text-xs text-muted-foreground">
-            导入前删除所有现有数据，确保数据库与备份文件完全一致。
-            如果不勾选，将尝试合并数据，但可能因主键冲突而失败。
+            {t('cleanFirstDescription')}
           </p>
         </div>
       </div>
 
-      {/* 导入按钮 */}
+      {/* Import button */}
       <Button
         onClick={handleImportClick}
         disabled={!selectedFile || isImporting}
         className="w-full sm:w-auto"
       >
         <Upload className="mr-2 h-4 w-4" />
-        {isImporting ? '正在导入...' : '导入数据库'}
+        {isImporting ? t('importing') : t('button')}
       </Button>
 
-      {/* 进度显示 */}
+      {/* Progress display */}
       {progressMessages.length > 0 && (
         <div className="mt-2 rounded-md border border-border bg-muted/30 p-3">
-          <h3 className="text-sm font-medium mb-2">导入进度</h3>
+          <h3 className="text-sm font-medium mb-2">{t('progressTitle')}</h3>
           <div
             ref={progressContainerRef}
             className="max-h-60 overflow-y-auto rounded bg-background p-2 font-mono text-xs space-y-1"
@@ -210,40 +214,36 @@ export function DatabaseImport() {
         </div>
       )}
 
-      {/* 确认对话框 */}
+      {/* Confirm dialog */}
       <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <AlertCircle className="h-5 w-5 text-orange-500" />
-              确认导入数据库
+              {t('confirmTitle')}
             </AlertDialogTitle>
             <AlertDialogDescription className="space-y-2">
               <p>
-                {cleanFirst
-                  ? '您选择了「覆盖模式」，这将会删除所有现有数据后导入备份。'
-                  : '您选择了「合并模式」，这将尝试在保留现有数据的基础上导入备份。'}
+                {cleanFirst ? t('confirmOverwrite') : t('confirmMerge')}
               </p>
               <p className="font-semibold text-foreground">
-                {cleanFirst
-                  ? '⚠️ 警告：此操作不可逆，所有当前数据将被永久删除！'
-                  : '⚠️ 注意：如果存在主键冲突，导入可能会失败。'}
+                {cleanFirst ? t('warningOverwrite') : t('warningMerge')}
               </p>
               <p>
-                备份文件: <span className="font-mono text-xs">{selectedFile?.name}</span>
+                {t('backupFile')} <span className="font-mono text-xs">{selectedFile?.name}</span>
               </p>
               <p className="text-xs text-muted-foreground">
-                建议在执行此操作前，先导出当前数据库作为备份。
+                {t('backupRecommendation')}
               </p>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmImport}
               className="bg-orange-500 hover:bg-orange-600 text-white"
             >
-              确认导入
+              {t('confirm')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
