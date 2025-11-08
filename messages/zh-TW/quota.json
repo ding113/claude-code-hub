@@ -1,9 +1,9 @@
 {
   "header": {
-    "title": "用户配额",
+    "title": "用戶配额",
     "role": {
       "admin": "管理员",
-      "user": "用户"
+      "user": "用戶"
     },
     "keysCountSuffix": "个密钥",
     "rpm": "请求限流",
@@ -32,7 +32,7 @@
     }
   },
   "toolbar": {
-    "searchPlaceholder": "搜索用户名或密钥",
+    "searchPlaceholder": "搜索用戶名或密钥",
     "filter": "筛选",
     "sort": "排序",
     "refresh": "刷新",
