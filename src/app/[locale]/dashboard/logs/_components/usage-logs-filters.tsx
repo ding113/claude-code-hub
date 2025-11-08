@@ -69,6 +69,7 @@ export function UsageLogsFilters({
   onChange,
   onReset,
 }: UsageLogsFiltersProps) {
+  const t = useTranslations("dashboard");
   const [models, setModels] = useState<string[]>([]);
   const [statusCodes, setStatusCodes] = useState<number[]>([]);
   const [keys, setKeys] = useState<Key[]>(initialKeys);
@@ -135,7 +136,7 @@ export function UsageLogsFilters({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {/* 时间范围 */}
         <div className="space-y-2">
-          <Label>开始时间</Label>
+          <Label>{t("logs.filters.startTime")}</Label>
           <Input
             type="datetime-local"
             value={localFilters.startDate ? formatDateTimeLocal(localFilters.startDate) : ""}
@@ -149,7 +150,7 @@ export function UsageLogsFilters({
         </div>
 
         <div className="space-y-2">
-          <Label>结束时间</Label>
+          <Label>{t("logs.filters.endTime")}</Label>
           <Input
             type="datetime-local"
             value={localFilters.endDate ? formatDateTimeLocal(localFilters.endDate) : ""}
@@ -165,13 +166,13 @@ export function UsageLogsFilters({
         {/* 用户选择（仅 Admin） */}
         {isAdmin && (
           <div className="space-y-2">
-            <Label>用户</Label>
+            <Label>{t("logs.filters.user")}</Label>
             <Select
               value={localFilters.userId?.toString() || ""}
               onValueChange={handleUserChange}
             >
               <SelectTrigger>
-                <SelectValue placeholder="全部用户" />
+                <SelectValue placeholder={t("logs.filters.allUsers")} />
               </SelectTrigger>
               <SelectContent>
                 {users.map((user) => (
@@ -186,7 +187,7 @@ export function UsageLogsFilters({
 
         {/* Key 选择 */}
         <div className="space-y-2">
-          <Label>API 密钥</Label>
+          <Label>{t("logs.filters.apiKey")}</Label>
           <Select
             value={localFilters.keyId?.toString() || ""}
             onValueChange={(value: string) =>
@@ -198,7 +199,7 @@ export function UsageLogsFilters({
             disabled={isAdmin && !localFilters.userId && keys.length === 0}
           >
             <SelectTrigger>
-              <SelectValue placeholder={isAdmin && !localFilters.userId && keys.length === 0 ? "请先选择用户" : "全部密钥"} />
+              <SelectValue placeholder={isAdmin && !localFilters.userId && keys.length === 0 ? t("logs.filters.selectUserFirst") : t("logs.filters.allKeys")} />
             </SelectTrigger>
             <SelectContent>
               {keys.map((key) => (
@@ -213,7 +214,7 @@ export function UsageLogsFilters({
         {/* 供应商选择 */}
         {isAdmin && (
           <div className="space-y-2">
-            <Label>供应商</Label>
+            <Label>{t("logs.filters.provider")}</Label>
             <Select
               value={localFilters.providerId?.toString() || ""}
               onValueChange={(value: string) =>
@@ -224,7 +225,7 @@ export function UsageLogsFilters({
               }
             >
               <SelectTrigger>
-                <SelectValue placeholder="全部供应商" />
+                <SelectValue placeholder={t("logs.filters.allProviders")} />
               </SelectTrigger>
               <SelectContent>
                 {providers.map((provider) => (
@@ -239,7 +240,7 @@ export function UsageLogsFilters({
 
         {/* 模型选择 */}
         <div className="space-y-2">
-          <Label>模型</Label>
+          <Label>{t("logs.filters.model")}</Label>
           <Select
             value={localFilters.model || ""}
             onValueChange={(value: string) =>
@@ -247,7 +248,7 @@ export function UsageLogsFilters({
             }
           >
             <SelectTrigger>
-              <SelectValue placeholder="全部模型" />
+              <SelectValue placeholder={t("logs.filters.allModels")} />
             </SelectTrigger>
             <SelectContent>
               {models.map((model) => (
@@ -261,7 +262,7 @@ export function UsageLogsFilters({
 
         {/* 状态码选择 */}
         <div className="space-y-2">
-          <Label>状态码</Label>
+          <Label>{t("logs.filters.statusCode")}</Label>
           <Select
             value={localFilters.statusCode?.toString() || ""}
             onValueChange={(value: string) =>
@@ -272,14 +273,14 @@ export function UsageLogsFilters({
             }
           >
             <SelectTrigger>
-              <SelectValue placeholder="全部状态码" />
+              <SelectValue placeholder={t("logs.filters.allStatusCodes")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="200">200 (成功)</SelectItem>
-              <SelectItem value="400">400 (错误请求)</SelectItem>
-              <SelectItem value="401">401 (未授权)</SelectItem>
-              <SelectItem value="429">429 (限流)</SelectItem>
-              <SelectItem value="500">500 (服务器错误)</SelectItem>
+              <SelectItem value="200">{t("logs.statusCodes.200")}</SelectItem>
+              <SelectItem value="400">{t("logs.statusCodes.400")}</SelectItem>
+              <SelectItem value="401">{t("logs.statusCodes.401")}</SelectItem>
+              <SelectItem value="429">{t("logs.statusCodes.429")}</SelectItem>
+              <SelectItem value="500">{t("logs.statusCodes.500")}</SelectItem>
               {statusCodes
                 .filter((code) => ![200, 400, 401, 429, 500].includes(code))
                 .map((code) => (
@@ -294,9 +295,9 @@ export function UsageLogsFilters({
 
       {/* 操作按钮 */}
       <div className="flex gap-2">
-        <Button onClick={handleApply}>应用筛选</Button>
+        <Button onClick={handleApply}>{t("logs.filters.apply")}</Button>
         <Button variant="outline" onClick={handleReset}>
-          重置
+          {t("logs.filters.reset")}
         </Button>
       </div>
     </div>

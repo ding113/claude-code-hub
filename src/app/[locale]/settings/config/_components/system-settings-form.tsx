@@ -98,10 +98,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
           </SelectTrigger>
           <SelectContent>
             {(Object.keys(CURRENCY_CONFIG) as CurrencyCode[]).map((code) => {
-              const config = CURRENCY_CONFIG[code];
               return (
                 <SelectItem key={code} value={code}>
-                  {config.symbol} {config.name} ({code})
+                  {t(`currencies.${code}`)}
                 </SelectItem>
               );
             })}

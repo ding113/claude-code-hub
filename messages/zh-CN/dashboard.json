@@ -394,5 +394,34 @@
     "fetchSystemSettingsFailed": "获取系统设置失败",
     "fetchFailed": "获取失败",
     "fetchSessionListFailed": "获取 session 列表失败"
+  },
+  "keyList": {
+    "columns": {
+      "name": "名称",
+      "key": "Key",
+      "todayCalls": "今日调用",
+      "todayCost": "今日消耗",
+      "lastUsed": "最后使用",
+      "actions": "操作"
+    },
+    "detailsButton": "详细信息",
+    "modelStats": "模型统计",
+    "modelStatsColumns": {
+      "model": "模型",
+      "calls": "调用次数",
+      "cost": "消耗"
+    },
+    "limitUsage": "限额使用情况",
+    "copyKeyTooltip": "复制完整密钥",
+    "copyFailed": "复制失败:",
+    "timesUnit": "次",
+    "provider": "供应商",
+    "neverUsed": "未使用",
+    "viewLogsTooltip": "查看详细日志",
+    "logsButton": "日志",
+    "emptyState": {
+      "title": "暂无 Key",
+      "description": "可点击右上角 \"新增 Key\" 按钮添加密钥"
+    }
   }
 }

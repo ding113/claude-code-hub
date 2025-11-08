@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import {
   Table,
   TableBody,
@@ -64,6 +65,7 @@ export function UsageLogsTable({
   newLogIds,
   currencyCode = "USD",
 }: UsageLogsTableProps) {
+  const t = useTranslations("dashboard");
   const totalPages = Math.ceil(total / pageSize);
 
   return (
@@ -72,25 +74,25 @@ export function UsageLogsTable({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>时间</TableHead>
-              <TableHead>用户</TableHead>
-              <TableHead>密钥</TableHead>
-              <TableHead>供应商</TableHead>
-              <TableHead>模型</TableHead>
-              <TableHead className="text-right">输入</TableHead>
-              <TableHead className="text-right">输出</TableHead>
-              <TableHead className="text-right">缓存写入</TableHead>
-              <TableHead className="text-right">缓存读取</TableHead>
-              <TableHead className="text-right">成本</TableHead>
-              <TableHead className="text-right">耗时</TableHead>
-              <TableHead>状态</TableHead>
+              <TableHead>{t("logs.columns.time")}</TableHead>
+              <TableHead>{t("logs.columns.user")}</TableHead>
+              <TableHead>{t("logs.columns.key")}</TableHead>
+              <TableHead>{t("logs.columns.provider")}</TableHead>
+              <TableHead>{t("logs.columns.model")}</TableHead>
+              <TableHead className="text-right">{t("logs.columns.inputTokens")}</TableHead>
+              <TableHead className="text-right">{t("logs.columns.outputTokens")}</TableHead>
+              <TableHead className="text-right">{t("logs.columns.cacheWrite")}</TableHead>
+              <TableHead className="text-right">{t("logs.columns.cacheRead")}</TableHead>
+              <TableHead className="text-right">{t("logs.columns.cost")}</TableHead>
+              <TableHead className="text-right">{t("logs.columns.duration")}</TableHead>
+              <TableHead>{t("logs.columns.status")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {logs.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={12} className="text-center text-muted-foreground">
-                  暂无数据
+                  {t("logs.table.noData")}
                 </TableCell>
               </TableRow>
             ) : (
@@ -109,7 +111,7 @@ export function UsageLogsTable({
                       // 被拦截的请求显示拦截标记
                       <span className="inline-flex items-center gap-1 rounded-md bg-orange-100 dark:bg-orange-950 px-2 py-1 text-xs font-medium text-orange-700 dark:text-orange-300">
                         <span className="h-1.5 w-1.5 rounded-full bg-orange-600 dark:bg-orange-400" />
-                        被拦截
+                        {t("logs.table.blocked")}
                       </span>
                     ) : (
                       <div className="flex items-start gap-2">
@@ -227,7 +229,7 @@ export function UsageLogsTable({
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
           <div className="text-sm text-muted-foreground">
-            共 {total} 条记录，第 {page} / {totalPages} 页
+            {t("logs.table.pagination", { total, page, totalPages })}
           </div>
           <div className="flex gap-2">
             <Button
@@ -236,7 +238,7 @@ export function UsageLogsTable({
               onClick={() => onPageChange(page - 1)}
               disabled={page === 1 || isPending}
             >
-              上一页
+              {t("logs.table.prevPage")}
             </Button>
             <Button
               variant="outline"
@@ -244,7 +246,7 @@ export function UsageLogsTable({
               onClick={() => onPageChange(page + 1)}
               disabled={page === totalPages || isPending}
             >
-              下一页
+              {t("logs.table.nextPage")}
             </Button>
           </div>
         </div>

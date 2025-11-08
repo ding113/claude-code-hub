@@ -393,5 +393,34 @@
     "fetchSystemSettingsFailed": "システム設定の取得に失敗しました",
     "fetchFailed": "取得失敗",
     "fetchSessionListFailed": "セッションリストの取得に失敗しました"
+  },
+  "keyList": {
+    "columns": {
+      "name": "名前",
+      "key": "キー",
+      "todayCalls": "今日の呼び出し",
+      "todayCost": "今日の消費",
+      "lastUsed": "最終使用",
+      "actions": "操作"
+    },
+    "detailsButton": "詳細情報",
+    "modelStats": "モデル統計",
+    "modelStatsColumns": {
+      "model": "モデル",
+      "calls": "呼び出し回数",
+      "cost": "消費"
+    },
+    "limitUsage": "制限使用状況",
+    "copyKeyTooltip": "完全なキーをコピー",
+    "copyFailed": "コピーに失敗しました:",
+    "timesUnit": "回",
+    "provider": "プロバイダー",
+    "neverUsed": "未使用",
+    "viewLogsTooltip": "詳細なログを表示",
+    "logsButton": "ログ",
+    "emptyState": {
+      "title": "キーがありません",
+      "description": "右上の「キーを追加」ボタンをクリックしてキーを追加できます"
+    }
   }
 }

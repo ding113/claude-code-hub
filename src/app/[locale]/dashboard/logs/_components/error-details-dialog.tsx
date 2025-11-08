@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/routing";
 import {
   Dialog,
@@ -46,6 +47,7 @@ export function ErrorDetailsDialog({
   userAgent,
   messagesCount,
 }: ErrorDetailsDialogProps) {
+  const t = useTranslations("dashboard");
   const [open, setOpen] = useState(false);
   const [hasMessages, setHasMessages] = useState(false);
   const [checkingMessages, setCheckingMessages] = useState(false);
@@ -103,7 +105,7 @@ export function ErrorDetailsDialog({
           className="h-auto p-0 font-normal hover:bg-transparent"
         >
           <Badge variant={getStatusBadgeVariant()} className="cursor-pointer">
-            {isInProgress ? "请求中" : statusCode}
+            {isInProgress ? t("logs.details.inProgress") : statusCode}
           </Badge>
         </Button>
       </DialogTrigger>
@@ -117,14 +119,16 @@ export function ErrorDetailsDialog({
             ) : (
               <AlertCircle className="h-5 w-5 text-destructive" />
             )}
-            请求详情 - 状态码 {isInProgress ? "请求中" : statusCode || "未知"}
+            {t("logs.details.statusTitle", {
+              status: isInProgress ? t("logs.details.inProgress") : statusCode || t("logs.details.unknown")
+            })}
           </DialogTitle>
           <DialogDescription>
             {isInProgress
-              ? "请求正在进行中，尚未完成"
+              ? t("logs.details.processing")
               : isSuccess
-              ? "请求成功完成"
-              : "请求失败，以下是详细的错误信息和供应商决策链"}
+              ? t("logs.details.success")
+              : t("logs.details.error")}
           </DialogDescription>
         </DialogHeader>
 
@@ -134,15 +138,15 @@ export function ErrorDetailsDialog({
             <div className="space-y-2">
               <h4 className="font-semibold text-sm flex items-center gap-2">
                 <AlertCircle className="h-4 w-4 text-orange-600" />
-                拦截信息
+                {t("logs.details.blocked.title")}
               </h4>
               <div className="rounded-md border bg-orange-50 dark:bg-orange-950/20 p-4 space-y-2">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-medium text-orange-900 dark:text-orange-100">
-                    拦截类型:
+                    {t("logs.details.blocked.type")}:
                   </span>
                   <Badge variant="outline" className="border-orange-600 text-orange-600">
-                    {blockedByLabels[blockedBy] || blockedBy}
+                    {blockedBy === 'sensitive_word' ? t("logs.details.blocked.sensitiveWord") : blockedBy}
                   </Badge>
                 </div>
                 {parsedBlockedReason && (
@@ -150,7 +154,7 @@ export function ErrorDetailsDialog({
                     {parsedBlockedReason.word && (
                       <div className="flex items-baseline gap-2">
                         <span className="font-medium text-orange-900 dark:text-orange-100">
-                          敏感词:
+                          {t("logs.details.blocked.word")}:
                         </span>
                         <code className="bg-orange-100 dark:bg-orange-900/50 px-2 py-0.5 rounded text-orange-900 dark:text-orange-100">
                           {parsedBlockedReason.word}
@@ -160,19 +164,19 @@ export function ErrorDetailsDialog({
                     {parsedBlockedReason.matchType && (
                       <div className="flex items-baseline gap-2">
                         <span className="font-medium text-orange-900 dark:text-orange-100">
-                          匹配类型:
+                          {t("logs.details.blocked.matchType")}:
                         </span>
                         <span className="text-orange-800 dark:text-orange-200">
-                          {parsedBlockedReason.matchType === 'contains' && '包含匹配'}
-                          {parsedBlockedReason.matchType === 'exact' && '精确匹配'}
-                          {parsedBlockedReason.matchType === 'regex' && '正则表达式'}
+                          {parsedBlockedReason.matchType === 'contains' && t("logs.details.blocked.matchTypeContains")}
+                          {parsedBlockedReason.matchType === 'exact' && t("logs.details.blocked.matchTypeExact")}
+                          {parsedBlockedReason.matchType === 'regex' && t("logs.details.blocked.matchTypeRegex")}
                         </span>
                       </div>
                     )}
                     {parsedBlockedReason.matchedText && (
                       <div className="flex flex-col gap-1">
                         <span className="font-medium text-orange-900 dark:text-orange-100">
-                          匹配内容:
+                          {t("logs.details.blocked.matchedText")}:
                         </span>
                         <pre className="bg-orange-100 dark:bg-orange-900/50 px-2 py-1 rounded text-orange-900 dark:text-orange-100 whitespace-pre-wrap break-words">
                           {parsedBlockedReason.matchedText}
@@ -188,7 +192,7 @@ export function ErrorDetailsDialog({
           {/* Session 信息 */}
           {sessionId && (
             <div className="space-y-2">
-              <h4 className="font-semibold text-sm">会话 ID</h4>
+              <h4 className="font-semibold text-sm">{t("logs.details.sessionId")}</h4>
               <div className="flex items-center gap-3">
                 <div className="flex-1 rounded-md border bg-muted/50 p-3">
                   <code className="text-xs font-mono break-all">
@@ -199,7 +203,7 @@ export function ErrorDetailsDialog({
                   <Link href={`/dashboard/sessions/${sessionId}/messages`}>
                     <Button variant="outline" size="sm">
                       <ExternalLink className="h-4 w-4 mr-2" />
-                      查看详情
+                      {t("logs.details.viewDetails")}
                     </Button>
                   </Link>
                 )}
@@ -210,11 +214,11 @@ export function ErrorDetailsDialog({
           {/* Messages 数量 */}
           {messagesCount !== null && messagesCount !== undefined && (
             <div className="space-y-2">
-              <h4 className="font-semibold text-sm">消息数量</h4>
+              <h4 className="font-semibold text-sm">{t("logs.details.messagesCount")}</h4>
               <div className="rounded-md border bg-muted/50 p-3">
                 <div className="text-sm">
-                  <span className="font-medium">Messages:</span>{" "}
-                  <code className="text-base font-mono font-semibold">{messagesCount}</code> 条
+                  <span className="font-medium">{t("logs.details.messagesLabel")}:</span>{" "}
+                  <code className="text-base font-mono font-semibold">{messagesCount}</code> {t("logs.details.messagesUnit")}
                 </div>
               </div>
             </div>
@@ -225,7 +229,7 @@ export function ErrorDetailsDialog({
             <div className="space-y-2">
               <h4 className="font-semibold text-sm flex items-center gap-2">
                 <Monitor className="h-4 w-4 text-blue-600" />
-                客户端信息
+                {t("logs.details.clientInfo")}
               </h4>
               <div className="rounded-md border bg-muted/50 p-3">
                 <code className="text-xs font-mono break-all">
@@ -240,13 +244,13 @@ export function ErrorDetailsDialog({
             <div className="space-y-2">
               <h4 className="font-semibold text-sm flex items-center gap-2">
                 <ArrowRight className="h-4 w-4 text-blue-600" />
-                模型重定向
+                {t("logs.details.modelRedirect.title")}
               </h4>
               <div className="rounded-md border bg-blue-50 dark:bg-blue-950/20 p-4 space-y-3">
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <span className="font-medium text-blue-900 dark:text-blue-100">
-                      请求模型:
+                      {t("logs.details.modelRedirect.requestModel")}:
                     </span>
                     <div className="mt-1">
                       <code className="bg-blue-100 dark:bg-blue-900/50 px-2 py-1 rounded text-blue-900 dark:text-blue-100">
@@ -256,7 +260,7 @@ export function ErrorDetailsDialog({
                   </div>
                   <div>
                     <span className="font-medium text-blue-900 dark:text-blue-100">
-                      实际调用:
+                      {t("logs.details.modelRedirect.actualModel")}:
                     </span>
                     <div className="mt-1">
                       <code className="bg-blue-100 dark:bg-blue-900/50 px-2 py-1 rounded text-blue-900 dark:text-blue-100">
@@ -266,9 +270,8 @@ export function ErrorDetailsDialog({
                   </div>
                 </div>
                 <div className="text-xs text-blue-800 dark:text-blue-200 border-t border-blue-200 dark:border-blue-800 pt-2">
-                  <span className="font-medium">计费说明:</span>{" "}
-                  系统优先使用请求模型（{originalModel}）的价格计费。
-                  如果价格表中不存在该模型，则使用实际调用模型（{currentModel}）的价格。
+                  <span className="font-medium">{t("logs.details.modelRedirect.billing")}:</span>{" "}
+                  {t("logs.details.modelRedirect.billingDescription", { original: originalModel, current: currentModel })}
                 </div>
               </div>
             </div>
@@ -279,7 +282,7 @@ export function ErrorDetailsDialog({
             <div className="space-y-2">
               <h4 className="font-semibold text-sm flex items-center gap-2">
                 <AlertCircle className="h-4 w-4" />
-                错误信息
+                {t("logs.details.errorMessage")}
               </h4>
               <div className="rounded-md border bg-destructive/10 p-4">
                 <pre className="text-xs text-destructive whitespace-pre-wrap break-words font-mono">
@@ -292,7 +295,7 @@ export function ErrorDetailsDialog({
           {/* 供应商决策链时间线 */}
           {providerChain && providerChain.length > 0 && (
             <div className="space-y-2">
-              <h4 className="font-semibold text-sm">供应商决策链时间线</h4>
+              <h4 className="font-semibold text-sm">{t("logs.details.providerChain.title")}</h4>
 
               {(() => {
                 const { timeline, totalDuration } = formatProviderTimeline(providerChain);
@@ -306,7 +309,7 @@ export function ErrorDetailsDialog({
 
                     {totalDuration > 0 && (
                       <div className="text-xs text-muted-foreground text-right">
-                        总耗时: {totalDuration}ms
+                        {t("logs.details.providerChain.totalDuration", { duration: totalDuration })}
                       </div>
                     )}
                   </>
@@ -319,10 +322,10 @@ export function ErrorDetailsDialog({
           {!errorMessage && (!providerChain || providerChain.length === 0) && (
             <div className="text-center py-8 text-muted-foreground">
               {isInProgress
-                ? "请求正在处理中，等待响应..."
+                ? t("logs.details.noError.processing")
                 : isSuccess
-                ? "请求成功，无错误信息"
-                : "暂无详细错误信息"}
+                ? t("logs.details.noError.success")
+                : t("logs.details.noError.default")}
             </div>
           )}
         </div>

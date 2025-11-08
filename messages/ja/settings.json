@@ -120,7 +120,18 @@
       "cleanupBatchSizePlaceholder": "10000",
       "cleanupBatchSizeDesc": "バッチごとに削除するレコード数（範囲：1000-100000、推奨10000）",
       "saveConfig": "設定を保存",
-      "autoCleanupSaved": "自動クリーンアップ設定が保存されました"
+      "autoCleanupSaved": "自動クリーンアップ設定が保存されました",
+      "currencies": {
+        "USD": "$ 米ドル (USD)",
+        "CNY": "¥ 人民元 (CNY)",
+        "EUR": "€ ユーロ (EUR)",
+        "JPY": "¥ 日本円 (JPY)",
+        "GBP": "£ 英ポンド (GBP)",
+        "HKD": "HK$ 香港ドル (HKD)",
+        "TWD": "NT$ 新台湾ドル (TWD)",
+        "KRW": "₩ 韓国ウォン (KRW)",
+        "SGD": "S$ シンガポールドル (SGD)"
+      }
     },
     "siteSettings": "サイトパラメータ",
     "siteSettingsDesc": "サイトタイトル、通貨表示単位、ダッシュボード統計表示方針を設定します。",

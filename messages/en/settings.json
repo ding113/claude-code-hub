@@ -120,7 +120,18 @@
       "cleanupBatchSizePlaceholder": "10000",
       "cleanupBatchSizeDesc": "Number of records to delete per batch (range: 1000-100000, recommended 10000)",
       "saveConfig": "Save Configuration",
-      "autoCleanupSaved": "Auto cleanup configuration saved"
+      "autoCleanupSaved": "Auto cleanup configuration saved",
+      "currencies": {
+        "USD": "$ US Dollar (USD)",
+        "CNY": "¥ Chinese Yuan (CNY)",
+        "EUR": "€ Euro (EUR)",
+        "JPY": "¥ Japanese Yen (JPY)",
+        "GBP": "£ British Pound (GBP)",
+        "HKD": "HK$ Hong Kong Dollar (HKD)",
+        "TWD": "NT$ New Taiwan Dollar (TWD)",
+        "KRW": "₩ South Korean Won (KRW)",
+        "SGD": "S$ Singapore Dollar (SGD)"
+      }
     },
     "siteSettings": "Site Parameters",
     "siteSettingsDesc": "Configure site title, currency display unit, and dashboard statistics display policy.",

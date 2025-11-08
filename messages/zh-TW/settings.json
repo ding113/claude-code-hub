@@ -120,7 +120,18 @@
       "cleanupBatchSizePlaceholder": "10000",
       "cleanupBatchSizeDesc": "每批刪除的記錄數（範圍：1000-100000，建議 10000）",
       "saveConfig": "保存設定",
-      "autoCleanupSaved": "自動清理設定已保存"
+      "autoCleanupSaved": "自動清理設定已保存",
+      "currencies": {
+        "USD": "$ 美元 (USD)",
+        "CNY": "¥ 人民幣 (CNY)",
+        "EUR": "€ 歐元 (EUR)",
+        "JPY": "¥ 日圓 (JPY)",
+        "GBP": "£ 英鎊 (GBP)",
+        "HKD": "HK$ 港幣 (HKD)",
+        "TWD": "NT$ 新台幣 (TWD)",
+        "KRW": "₩ 韓元 (KRW)",
+        "SGD": "S$ 新加坡元 (SGD)"
+      }
     },
     "siteSettings": "站台參數",
     "siteSettingsDesc": "設定站台標題、貨幣顯示單位與儀表板統計顯示策略。",

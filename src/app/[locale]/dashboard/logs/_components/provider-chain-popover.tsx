@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,8 @@ function isActualRequest(item: ProviderChainItem): boolean {
 }
 
 export function ProviderChainPopover({ chain, finalProvider }: ProviderChainPopoverProps) {
+  const t = useTranslations("dashboard");
+
   // 计算实际请求次数（排除中间状态）
   const requestCount = chain.filter(isActualRequest).length;
 
@@ -47,7 +50,7 @@ export function ProviderChainPopover({ chain, finalProvider }: ProviderChainPopo
           <span className="flex items-center gap-1">
             {finalProvider}
             <Badge variant="secondary" className="ml-1">
-              {requestCount}次
+              {requestCount}{t("logs.table.times")}
             </Badge>
             <InfoIcon className="h-3 w-3 text-muted-foreground" />
           </span>
@@ -57,8 +60,8 @@ export function ProviderChainPopover({ chain, finalProvider }: ProviderChainPopo
       <PopoverContent className="w-[500px]" align="start">
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h4 className="font-semibold text-sm">供应商决策链</h4>
-            <Badge variant="outline">{requestCount}次</Badge>
+            <h4 className="font-semibold text-sm">{t("logs.providerChain.decisionChain")}</h4>
+            <Badge variant="outline">{requestCount}{t("logs.table.times")}</Badge>
           </div>
 
           <div className="rounded-md border bg-muted/50 p-4 max-h-[300px] overflow-y-auto overflow-x-hidden">
@@ -68,7 +71,7 @@ export function ProviderChainPopover({ chain, finalProvider }: ProviderChainPopo
           </div>
 
           <div className="text-xs text-muted-foreground text-center">
-            点击状态码查看完整时间线
+            {t("logs.details.clickStatusCode")}
           </div>
         </div>
       </PopoverContent>

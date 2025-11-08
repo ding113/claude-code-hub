@@ -393,5 +393,34 @@
     "fetchSystemSettingsFailed": "Не удалось получить параметры системы",
     "fetchFailed": "Ошибка загрузки",
     "fetchSessionListFailed": "Не удалось получить список сеансов"
+  },
+  "keyList": {
+    "columns": {
+      "name": "Название",
+      "key": "Ключ",
+      "todayCalls": "Вызовы сегодня",
+      "todayCost": "Расходы сегодня",
+      "lastUsed": "Последнее использование",
+      "actions": "Действия"
+    },
+    "detailsButton": "Подробная информация",
+    "modelStats": "Статистика моделей",
+    "modelStatsColumns": {
+      "model": "Модель",
+      "calls": "Вызовы",
+      "cost": "Расходы"
+    },
+    "limitUsage": "Использование лимита",
+    "copyKeyTooltip": "Скопировать полный ключ",
+    "copyFailed": "Не удалось скопировать:",
+    "timesUnit": "раз",
+    "provider": "Провайдер",
+    "neverUsed": "Не использовался",
+    "viewLogsTooltip": "Просмотр подробных журналов",
+    "logsButton": "Журналы",
+    "emptyState": {
+      "title": "Нет ключей",
+      "description": "Нажмите кнопку \"Добавить ключ\" в правом верхнем углу, чтобы добавить ключ"
+    }
   }
 }

@@ -394,5 +394,34 @@
     "fetchSystemSettingsFailed": "Failed to fetch system settings",
     "fetchFailed": "Fetch failed",
     "fetchSessionListFailed": "Failed to fetch session list"
+  },
+  "keyList": {
+    "columns": {
+      "name": "Name",
+      "key": "Key",
+      "todayCalls": "Today's Calls",
+      "todayCost": "Today's Cost",
+      "lastUsed": "Last Used",
+      "actions": "Actions"
+    },
+    "detailsButton": "Details",
+    "modelStats": "Model Statistics",
+    "modelStatsColumns": {
+      "model": "Model",
+      "calls": "Calls",
+      "cost": "Cost"
+    },
+    "limitUsage": "Limit Usage",
+    "copyKeyTooltip": "Copy full key",
+    "copyFailed": "Copy failed:",
+    "timesUnit": "times",
+    "provider": "Provider",
+    "neverUsed": "Never used",
+    "viewLogsTooltip": "View detailed logs",
+    "logsButton": "Logs",
+    "emptyState": {
+      "title": "No Keys",
+      "description": "Click the \"Add Key\" button in the top right corner to add a key"
+    }
   }
 }

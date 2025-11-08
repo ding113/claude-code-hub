@@ -83,7 +83,18 @@
       "cleanupBatchSizePlaceholder": "10000",
       "cleanupBatchSizeDesc": "每批删除的记录数（范围：1000-100000，推荐 10000）",
       "saveConfig": "保存配置",
-      "autoCleanupSaved": "自动清理配置已保存"
+      "autoCleanupSaved": "自动清理配置已保存",
+      "currencies": {
+        "USD": "$ 美元 (USD)",
+        "CNY": "¥ 人民币 (CNY)",
+        "EUR": "€ 欧元 (EUR)",
+        "JPY": "¥ 日元 (JPY)",
+        "GBP": "£ 英镑 (GBP)",
+        "HKD": "HK$ 港币 (HKD)",
+        "TWD": "NT$ 新台币 (TWD)",
+        "KRW": "₩ 韩元 (KRW)",
+        "SGD": "S$ 新加坡元 (SGD)"
+      }
     }
   },
   "providers": {

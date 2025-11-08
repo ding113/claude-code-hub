@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
@@ -18,6 +19,8 @@ export function ModelDisplayWithRedirect({
   originalModel,
   currentModel,
 }: ModelDisplayWithRedirectProps) {
+  const t = useTranslations("dashboard");
+
   // 判断是否发生重定向
   const isRedirected =
     originalModel && currentModel && originalModel !== currentModel;
@@ -37,13 +40,13 @@ export function ModelDisplayWithRedirect({
               className="cursor-help text-xs border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300"
             >
               <ArrowRight className="h-3 w-3 mr-1" />
-              已重定向
+              {t("logs.modelRedirect.redirected")}
             </Badge>
           </TooltipTrigger>
           <TooltipContent>
             <div className="text-xs space-y-1">
               <div>
-                <span className="font-medium">目标模型:</span> {currentModel}
+                <span className="font-medium">{t("logs.modelRedirect.targetModel")}:</span> {currentModel}
               </div>
             </div>
           </TooltipContent>

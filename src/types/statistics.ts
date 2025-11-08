@@ -7,24 +7,26 @@ export interface TimeRangeConfig {
   description?: string;
 }
 
+// Note: Labels and descriptions are now managed through i18n translations
+// See messages/*/dashboard.json under statistics.timeRange
 export const TIME_RANGE_OPTIONS: TimeRangeConfig[] = [
   {
-    label: "今天",
+    label: "today", // Translation key
     key: "today",
     resolution: "hour",
-    description: "今日用量",
+    description: "todayDescription", // Translation key
   },
   {
-    label: "7天",
+    label: "7days", // Translation key
     key: "7days",
     resolution: "day",
-    description: "近七天",
+    description: "7daysDescription", // Translation key
   },
   {
-    label: "30天",
+    label: "30days", // Translation key
     key: "30days",
     resolution: "day",
-    description: "近三十天",
+    description: "30daysDescription", // Translation key
   },
 ];
 

@@ -393,5 +393,34 @@
     "fetchSystemSettingsFailed": "取得系統設定失敗",
     "fetchFailed": "取得失敗",
     "fetchSessionListFailed": "取得 session 清單失敗"
+  },
+  "keyList": {
+    "columns": {
+      "name": "名稱",
+      "key": "金鑰",
+      "todayCalls": "今日呼叫",
+      "todayCost": "今日消耗",
+      "lastUsed": "最後使用",
+      "actions": "操作"
+    },
+    "detailsButton": "詳細資訊",
+    "modelStats": "模型統計",
+    "modelStatsColumns": {
+      "model": "模型",
+      "calls": "呼叫次數",
+      "cost": "消耗"
+    },
+    "limitUsage": "額度使用情況",
+    "copyKeyTooltip": "複製完整金鑰",
+    "copyFailed": "複製失敗:",
+    "timesUnit": "次",
+    "provider": "供應商",
+    "neverUsed": "未使用",
+    "viewLogsTooltip": "查看詳細記錄",
+    "logsButton": "記錄",
+    "emptyState": {
+      "title": "暫無金鑰",
+      "description": "可點選右上角「新增金鑰」按鈕新增金鑰"
+    }
   }
 }
