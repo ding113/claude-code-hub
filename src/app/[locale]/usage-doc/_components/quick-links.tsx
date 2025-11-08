@@ -1,5 +1,7 @@
 "use client";
 
+import { Link } from "@/i18n/routing";
+
 interface QuickLinksProps {
   isLoggedIn: boolean;
   onBackToTop?: () => void;
@@ -18,12 +20,12 @@ export function QuickLinks({ isLoggedIn, onBackToTop }: QuickLinksProps) {
   return (
     <div className="space-y-2">
       {isLoggedIn && (
-        <a
+        <Link
           href="/dashboard"
           className="block text-sm text-muted-foreground hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded px-2 py-1"
         >
           返回仪表盘
-        </a>
+        </Link>
       )}
       <button
         onClick={handleBackToTop}

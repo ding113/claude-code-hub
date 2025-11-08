@@ -4,6 +4,7 @@ import { logger } from "@/lib/logger";
 import { isDevelopment } from "@/lib/config/env.schema";
 import { validateKey } from "@/lib/auth";
 import { routing } from "@/i18n/routing";
+import type { Locale } from "@/i18n/config";
 
 // 使用 Node.js runtime 以支持数据库连接（postgres-js 需要 net 模块）
 export const runtime = "nodejs";
@@ -41,7 +42,7 @@ export async function middleware(request: NextRequest) {
   // Extract locale from pathname (format: /[locale]/path or just /path)
   const localeMatch = pathname.match(/^\/([^/]+)/);
   const potentialLocale = localeMatch?.[1];
-  const isLocaleInPath = routing.locales.includes(potentialLocale as any);
+  const isLocaleInPath = routing.locales.includes(potentialLocale as Locale);
 
   // Get the pathname without locale prefix
   const pathWithoutLocale = isLocaleInPath ? pathname.slice(potentialLocale!.length + 1) : pathname;

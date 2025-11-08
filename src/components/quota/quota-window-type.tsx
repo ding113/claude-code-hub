@@ -58,8 +58,8 @@ export function QuotaWindowType({
   const t = useTranslations("quota");
   const style = WINDOW_STYLE[type];
   const Icon = style.icon;
-  const label = t(`windowType.${type}.label` as any);
-  const description = t(`windowType.${type}.description` as any);
+  const label = t(`windowType.${type}.label` as `windowType.${WindowType}.label`);
+  const description = t(`windowType.${type}.description` as `windowType.${WindowType}.description`);
 
   if (showDescription) {
     return (
@@ -92,7 +92,7 @@ export function QuotaWindowTypeCompact({
   className?: string;
 }) {
   const t = useTranslations("quota");
-  const label = t(`windowType.${type}.label` as any);
+  const label = t(`windowType.${type}.label` as `windowType.${WindowType}.label`);
   return <span className={cn("text-xs text-muted-foreground", className)}>{label}</span>;
 }
 
@@ -109,8 +109,8 @@ export function QuotaWindowTypeWithTooltip({
   const t = useTranslations("quota");
   const style = WINDOW_STYLE[type];
   const Icon = style.icon;
-  const label = t(`windowType.${type}.label` as any);
-  const description = t(`windowType.${type}.description` as any);
+  const label = t(`windowType.${type}.label` as `windowType.${WindowType}.label`);
+  const description = t(`windowType.${type}.description` as `windowType.${WindowType}.description`);
 
   return (
     <div

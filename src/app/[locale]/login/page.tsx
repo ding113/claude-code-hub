@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useState, useEffect } from "react";
-import { useRouter } from "@/i18n/routing";
+import { useRouter, Link } from "@/i18n/routing";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -161,13 +161,13 @@ function LoginPageContent() {
 
             {/* 文档页入口 */}
             <div className="mt-6 pt-6 border-t flex justify-center">
-              <a
+              <Link
                 href="/usage-doc"
                 className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
                 <Book className="h-4 w-4" />
                 {t("actions.viewUsageDoc")}
-              </a>
+              </Link>
             </div>
           </CardContent>
         </Card>
