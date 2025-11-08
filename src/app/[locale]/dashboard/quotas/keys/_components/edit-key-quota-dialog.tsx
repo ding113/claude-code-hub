@@ -130,9 +130,7 @@ export function EditKeyQuotaDialog({
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>{t("title")}</DialogTitle>
-            <DialogDescription>
-              {t("description", { keyName, userName })}
-            </DialogDescription>
+            <DialogDescription>{t("description", { keyName, userName })}</DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">

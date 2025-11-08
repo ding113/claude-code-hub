@@ -202,7 +202,10 @@ export default function SessionMessagesPage() {
 
             {/* Messages 数据 */}
             {messages !== null && (
-              <Section title={t("details.requestMessages")} description={t("details.requestMessagesDescription")}>
+              <Section
+                title={t("details.requestMessages")}
+                description={t("details.requestMessagesDescription")}
+              >
                 <>
                   <div className="rounded-md border bg-muted/50 p-6">
                     <pre className="text-xs overflow-x-auto whitespace-pre-wrap break-words font-mono">
@@ -252,10 +255,10 @@ export default function SessionMessagesPage() {
             {/* 无数据提示 */}
             {!sessionStats?.userAgent && !messages && !response && (
               <div className="text-center py-16">
-                <div className="text-muted-foreground text-lg mb-2">{t("details.noDetailedData")}</div>
-                <p className="text-sm text-muted-foreground">
-                  {t("details.storageTip")}
-                </p>
+                <div className="text-muted-foreground text-lg mb-2">
+                  {t("details.noDetailedData")}
+                </div>
+                <p className="text-sm text-muted-foreground">{t("details.storageTip")}</p>
               </div>
             )}
           </div>
@@ -272,7 +275,9 @@ export default function SessionMessagesPage() {
                 <CardContent className="space-y-3">
                   {/* 请求数量 */}
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">{t("details.totalRequests")}</span>
+                    <span className="text-sm text-muted-foreground">
+                      {t("details.totalRequests")}
+                    </span>
                     <Badge variant="secondary" className="font-mono font-semibold">
                       <Hash className="h-3 w-3 mr-1" />
                       {sessionStats.requestCount}
@@ -285,13 +290,17 @@ export default function SessionMessagesPage() {
                       <div className="border-t my-3" />
                       <div className="flex flex-col gap-2">
                         <div className="flex items-center justify-between">
-                          <span className="text-sm text-muted-foreground">{t("details.firstRequest")}</span>
+                          <span className="text-sm text-muted-foreground">
+                            {t("details.firstRequest")}
+                          </span>
                           <code className="text-xs font-mono">
                             {new Date(sessionStats.firstRequestAt).toLocaleString("zh-CN")}
                           </code>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-sm text-muted-foreground">{t("details.lastRequest")}</span>
+                          <span className="text-sm text-muted-foreground">
+                            {t("details.lastRequest")}
+                          </span>
                           <code className="text-xs font-mono">
                             {new Date(sessionStats.lastRequestAt).toLocaleString("zh-CN")}
                           </code>
@@ -305,7 +314,9 @@ export default function SessionMessagesPage() {
                     <>
                       <div className="border-t my-3" />
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">{t("details.totalDuration")}</span>
+                        <span className="text-sm text-muted-foreground">
+                          {t("details.totalDuration")}
+                        </span>
                         <code className="text-sm font-mono font-semibold">
                           {sessionStats.totalDurationMs < 1000
                             ? `${sessionStats.totalDurationMs}ms`
@@ -327,7 +338,9 @@ export default function SessionMessagesPage() {
                   {/* 供应商列表 */}
                   {sessionStats.providers.length > 0 && (
                     <div className="flex flex-col gap-2">
-                      <span className="text-sm text-muted-foreground">{t("details.providers")}</span>
+                      <span className="text-sm text-muted-foreground">
+                        {t("details.providers")}
+                      </span>
                       <div className="flex flex-wrap gap-2">
                         {sessionStats.providers.map((provider: { id: number; name: string }) => (
                           <Badge key={provider.id} variant="outline" className="text-xs">
@@ -366,7 +379,9 @@ export default function SessionMessagesPage() {
                 <CardContent className="space-y-3">
                   {sessionStats.totalInputTokens > 0 && (
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">{t("details.totalInput")}</span>
+                      <span className="text-sm text-muted-foreground">
+                        {t("details.totalInput")}
+                      </span>
                       <code className="text-sm font-mono">
                         {sessionStats.totalInputTokens.toLocaleString()}
                       </code>
@@ -375,7 +390,9 @@ export default function SessionMessagesPage() {
 
                   {sessionStats.totalOutputTokens > 0 && (
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">{t("details.totalOutput")}</span>
+                      <span className="text-sm text-muted-foreground">
+                        {t("details.totalOutput")}
+                      </span>
                       <code className="text-sm font-mono">
                         {sessionStats.totalOutputTokens.toLocaleString()}
                       </code>
@@ -384,7 +401,9 @@ export default function SessionMessagesPage() {
 
                   {sessionStats.totalCacheCreationTokens > 0 && (
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">{t("details.cacheCreation")}</span>
+                      <span className="text-sm text-muted-foreground">
+                        {t("details.cacheCreation")}
+                      </span>
                       <code className="text-sm font-mono">
                         {sessionStats.totalCacheCreationTokens.toLocaleString()}
                       </code>
@@ -393,7 +412,9 @@ export default function SessionMessagesPage() {
 
                   {sessionStats.totalCacheReadTokens > 0 && (
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">{t("details.cacheRead")}</span>
+                      <span className="text-sm text-muted-foreground">
+                        {t("details.cacheRead")}
+                      </span>
                       <code className="text-sm font-mono">
                         {sessionStats.totalCacheReadTokens.toLocaleString()}
                       </code>

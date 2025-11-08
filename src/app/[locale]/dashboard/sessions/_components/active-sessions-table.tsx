@@ -54,10 +54,15 @@ export function ActiveSessionsTable({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="text-sm text-muted-foreground">
-          {t("table.count", { count: sessions.length, type: t(inactive ? "table.inactive" : "table.active") })}
+          {t("table.count", {
+            count: sessions.length,
+            type: t(inactive ? "table.inactive" : "table.active"),
+          })}
           {inactive && <span className="ml-2 text-xs">{t("table.notCountedInConcurrency")}</span>}
         </div>
-        {isLoading && <div className="text-sm text-muted-foreground animate-pulse">{t("table.refreshing")}</div>}
+        {isLoading && (
+          <div className="text-sm text-muted-foreground animate-pulse">{t("table.refreshing")}</div>
+        )}
       </div>
 
       <div

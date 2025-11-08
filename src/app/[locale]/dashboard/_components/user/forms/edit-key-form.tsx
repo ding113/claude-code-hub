@@ -115,9 +115,7 @@ export function EditKeyForm({ keyData, onSuccess }: EditKeyFormProps) {
           <Label htmlFor="can-login-web-ui" className="text-sm font-medium">
             {t("canLoginWebUi.label")}
           </Label>
-          <p className="text-xs text-muted-foreground mt-1">
-            {t("canLoginWebUi.description")}
-          </p>
+          <p className="text-xs text-muted-foreground mt-1">{t("canLoginWebUi.description")}</p>
         </div>
         <Switch
           id="can-login-web-ui"
