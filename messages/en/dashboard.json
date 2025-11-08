@@ -55,18 +55,110 @@
       "provider": "Provider",
       "model": "Model",
       "status": "Status",
-      "timeRange": "Time Range"
+      "timeRange": "Time Range",
+      "startTime": "Start Time",
+      "endTime": "End Time",
+      "allUsers": "All Users",
+      "allKeys": "All Keys",
+      "selectUserFirst": "Please select a user first",
+      "allProviders": "All Providers",
+      "allModels": "All Models",
+      "allStatusCodes": "All Status Codes",
+      "apiKey": "API Key",
+      "statusCode": "Status Code",
+      "apply": "Apply Filter",
+      "reset": "Reset"
     },
     "columns": {
       "time": "Time",
       "user": "User",
+      "key": "Key",
       "provider": "Provider",
       "model": "Model",
       "inputTokens": "Input Tokens",
       "outputTokens": "Output Tokens",
+      "cacheWrite": "Cache Write",
+      "cacheRead": "Cache Read",
       "cost": "Cost",
-      "status": "Status",
-      "duration": "Duration"
+      "duration": "Duration",
+      "status": "Status"
+    },
+    "stats": {
+      "totalAmount": "Total Consumption",
+      "totalTokens": "Total Tokens",
+      "cacheTokens": "Cached Tokens",
+      "input": "Input",
+      "output": "Output",
+      "write": "Write",
+      "read": "Read"
+    },
+    "table": {
+      "noData": "No Data",
+      "pagination": "Total {total} records, Page {page} / {totalPages}",
+      "prevPage": "Previous Page",
+      "nextPage": "Next Page",
+      "blocked": "Blocked",
+      "times": "times"
+    },
+    "actions": {
+      "refresh": "Refresh",
+      "refreshing": "Refreshing...",
+      "stopAutoRefresh": "Stop Auto-Refresh",
+      "startAutoRefresh": "Start Auto-Refresh",
+      "view": "View"
+    },
+    "error": {
+      "loadFailed": "Load Failed"
+    },
+    "details": {
+      "title": "Request Details",
+      "statusTitle": "Request Details - Status Code {status}",
+      "inProgress": "In Progress",
+      "unknown": "Unknown",
+      "success": "Request completed successfully",
+      "error": "Request failed, here are the detailed error messages and provider decision chain",
+      "processing": "Request is in progress, not yet completed",
+      "blocked": {
+        "title": "Blocking Information",
+        "type": "Blocking Type",
+        "sensitiveWord": "Sensitive Word Blocking",
+        "word": "Sensitive Word",
+        "matchType": "Match Type",
+        "matchTypeContains": "Contains Match",
+        "matchTypeExact": "Exact Match",
+        "matchTypeRegex": "Regular Expression",
+        "matchedText": "Matched Content"
+      },
+      "sessionId": "Session ID",
+      "messagesCount": "Message Count",
+      "messagesLabel": "Messages",
+      "messagesUnit": "items",
+      "clientInfo": "Client Info",
+      "modelRedirect": {
+        "title": "Model Redirection",
+        "requestModel": "Requested Model",
+        "actualModel": "Actual Call",
+        "billing": "Billing Description",
+        "billingDescription": "The system prioritizes billing based on the price of the requested model ({original}). If the model is not found in the price list, the price of the actually called model ({current}) is used."
+      },
+      "errorMessage": "Error Message",
+      "providerChain": {
+        "title": "Provider Decision Chain Timeline",
+        "totalDuration": "Total Duration: {duration}ms"
+      },
+      "noError": {
+        "processing": "Request is being processed, awaiting response...",
+        "success": "Request successful, no error message",
+        "default": "No detailed error message available"
+      },
+      "clickStatusCode": "Click status code to view full timeline"
+    },
+    "providerChain": {
+      "decisionChain": "Provider Decision Chain"
+    },
+    "modelRedirect": {
+      "redirected": "Redirected",
+      "targetModel": "Target Model"
     }
   },
   "leaderboard": {
@@ -115,18 +207,36 @@
   "sessions": {
     "title": "Active Sessions",
     "description": "Monitor current active API sessions in real-time",
+    "monitoring": "Session Monitoring",
+    "monitoringDescription": "Real-time display of active and inactive sessions (auto-refresh every 3 seconds)",
+    "activeSessions": "Active Sessions (Last 5 Minutes)",
+    "inactiveSessions": "Inactive Sessions (Over 5 Minutes, View Only)",
     "columns": {
       "sessionId": "Session ID",
       "user": "User",
+      "key": "Key",
       "provider": "Provider",
       "model": "Model",
       "startTime": "Start Time",
       "lastActivity": "Last Activity",
       "requestCount": "Requests",
-      "status": "Status"
+      "totalInput": "Total Input",
+      "totalOutput": "Total Output",
+      "totalCost": "Total Cost",
+      "totalDuration": "Total Duration",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "table": {
+      "count": "Total {count} {type} Sessions",
+      "active": "Active",
+      "inactive": "Inactive",
+      "notCountedInConcurrency": "(Not counted in concurrency)",
+      "refreshing": "Refreshing...",
+      "noActiveSessions": "No active sessions"
     },
     "details": {
-      "title": "Session Details",
+      "title": "Session Messages",
       "messages": "Messages",
       "info": "Session Info",
       "timeline": "Timeline",
@@ -151,7 +261,13 @@
       "providers": "Providers",
       "models": "Models",
       "noDetailedData": "No detailed data available",
-      "storageTip": "Tip: Set environment variable STORE_SESSION_MESSAGES=true to enable messages and response storage"
+      "storageTip": "Tip: Set environment variable STORE_SESSION_MESSAGES=true to enable messages and response storage",
+      "clientInfo": "Client Info",
+      "requestMessages": "Request Messages",
+      "requestMessagesDescription": "Message content sent by the client",
+      "responseBody": "Response Body Content",
+      "responseBodyDescription": "Complete server response (5-minute TTL)",
+      "noData": "No Data"
     },
     "noActiveSessions": "No active sessions",
     "back": "Back",
@@ -160,11 +276,30 @@
     "copied": "Copied",
     "copyResponse": "Copy Response",
     "loading": "Loading...",
-    "loadError": "Load failed"
+    "loadError": "Load failed",
+    "actions": {
+      "back": "Back",
+      "view": "View",
+      "copyMessages": "Copy Messages",
+      "downloadMessages": "Download Messages",
+      "copied": "Copied",
+      "copyResponse": "Copy Response"
+    },
+    "status": {
+      "loading": "Loading...",
+      "loadError": "Load failed",
+      "fetchFailed": "Fetch Failed",
+      "unknownError": "Unknown Error",
+      "storageNotEnabled": "Not Stored",
+      "storageNotEnabledHint": "Tip: Set environment variable STORE_SESSION_MESSAGES=true to enable messages storage"
+    },
+    "errors": {
+      "copyFailed": "Copy Failed"
+    }
   },
   "quotas": {
     "title": "Quota Management",
-    "description": "Manage quotas at all levels",
+    "description": "Manage user, key, and provider usage quotas",
     "tabs": {
       "overview": "Overview",
       "users": "User Quotas",
@@ -188,11 +323,11 @@
     },
     "users": {
       "title": "User Quota Statistics",
-      "totalUsers": "{count} users total"
+      "totalUsers": "Total {count} users"
     },
     "keys": {
       "title": "Key Quota Statistics",
-      "totalKeysInfo": "{userCount} users, {keyCount} keys total",
+      "totalKeysInfo": "Total {userCount} users, {keyCount} keys",
       "setKeyQuota": "Set Key Quota",
       "setUserQuota": "Set User Quota",
       "onlyKeyQuota": "Key Quota Only",
@@ -201,7 +336,7 @@
     },
     "providers": {
       "title": "Provider Quota Statistics",
-      "totalProviders": "{count} providers total"
+      "totalProviders": "Total {count} providers"
     }
   },
   "labels": {
@@ -213,18 +348,18 @@
     "dashboard": "Dashboard",
     "usageLogs": "Usage Logs",
     "leaderboard": "Leaderboard",
-    "quotasManagement": "Quotas",
+    "quotasManagement": "Quota Management",
     "documentation": "Documentation",
-    "systemSettings": "Settings",
+    "systemSettings": "System Settings",
     "feedback": "Feedback",
     "login": "Login",
     "logout": "Logout"
   },
   "statistics": {
     "title": "Usage Statistics",
-    "cost": "Cost",
+    "cost": "Consumption Amount",
     "calls": "API Calls",
-    "totalCost": "Total Cost",
+    "totalCost": "Total Consumption Amount",
     "totalCalls": "Total API Calls",
     "timeRange": {
       "today": "Today",
@@ -236,9 +371,9 @@
       "default": "Usage"
     },
     "mode": {
-      "keys": "Showing only usage statistics for your keys",
-      "mixed": "Showing your key details and other users' aggregated data",
-      "users": "Showing usage statistics for all users"
+      "keys": "Only display usage statistics for your keys",
+      "mixed": "Display your key details and aggregated data from other users",
+      "users": "Display usage statistics for all users"
     },
     "legend": {
       "selectAll": "Select All",
