@@ -22,6 +22,12 @@ export function getRedisClient(): Redis | null {
   }
 
   try {
+    const useTls = redisUrl.startsWith("rediss://");
+
+    if (useTls) {
+      logger.info("[Redis] Using TLS connection (rediss://)");
+    }
+
     redisClient = new Redis(redisUrl, {
       enableOfflineQueue: false, // 快速失败
       maxRetriesPerRequest: 3,
@@ -34,6 +40,7 @@ export function getRedisClient(): Redis | null {
         logger.warn(`[Redis] Retry ${times}/5 after ${delay}ms`);
         return delay;
       },
+      ...(useTls && { tls: {} }),
     });
 
     redisClient.on("connect", () => {
