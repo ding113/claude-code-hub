@@ -307,9 +307,9 @@ curl -fsSL https://claude.ai/install.sh | bash -s 1.0.58`}
                 </p>
                 <CodeBlock
                   language="bash"
-                  code={(t.raw("claudeCode.installation.nativeInstall.linux.curls") as string[]).join(
-                    "\n"
-                  )}
+                  code={(
+                    t.raw("claudeCode.installation.nativeInstall.linux.curls") as string[]
+                  ).join("\n")}
                 />
               </div>
 
@@ -317,7 +317,9 @@ curl -fsSL https://claude.ai/install.sh | bash -s 1.0.58`}
                 <p className="font-semibold text-foreground">
                   {t("claudeCode.installation.nativeInstall.linux.alpine")}
                 </p>
-                <p className="text-sm">{t("claudeCode.installation.nativeInstall.linux.alpineText")}</p>
+                <p className="text-sm">
+                  {t("claudeCode.installation.nativeInstall.linux.alpineText")}
+                </p>
                 <CodeBlock
                   language="bash"
                   code={(
@@ -385,9 +387,7 @@ curl -fsSL https://claude.ai/install.sh | bash -s 1.0.58`}
           </div>
 
           <div className="space-y-3">
-            <p className="font-semibold text-foreground">
-              {t("claudeCode.installation.title")}
-            </p>
+            <p className="font-semibold text-foreground">{t("claudeCode.installation.title")}</p>
             <CodeBlock language={lang} code={t("claudeCode.installation.npmInstall.command")} />
           </div>
 
@@ -414,7 +414,10 @@ curl -fsSL https://claude.ai/install.sh | bash -s 1.0.58`}
               {t("claudeCode.installation.npmInstall.migration.title")}
             </p>
             <p>{t("claudeCode.installation.npmInstall.migration.description")}</p>
-            <CodeBlock language={lang} code={t("claudeCode.installation.npmInstall.migration.command")} />
+            <CodeBlock
+              language={lang}
+              code={t("claudeCode.installation.npmInstall.migration.command")}
+            />
             <p className="text-sm text-muted-foreground">
               {t("claudeCode.installation.npmInstall.migration.note")}
             </p>
@@ -441,9 +444,7 @@ curl -fsSL https://claude.ai/install.sh | bash -s 1.0.58`}
 
     return (
       <div className="space-y-4">
-        <h4 className={headingClasses.h4}>
-          {t("claudeCode.configuration.settingsJson.title")}
-        </h4>
+        <h4 className={headingClasses.h4}>{t("claudeCode.configuration.settingsJson.title")}</h4>
         <div className="space-y-3">
           <p>{t("claudeCode.configuration.settingsJson.description")}</p>
           <CodeBlock language="text" code={configPath} />
@@ -711,7 +712,9 @@ source ${shellConfig.split(" ")[0]}`}
           <CodeBlock language="bash" code={`curl -fsSL https://app.factory.ai/cli | sh`} />
           {os === "linux" && (
             <blockquote className="space-y-1 rounded-lg border-l-2 border-primary/50 bg-muted/40 px-4 py-3">
-              <p className="font-semibold text-foreground">{t("claudeCode.installation.nativeInstall.tip")}</p>
+              <p className="font-semibold text-foreground">
+                {t("claudeCode.installation.nativeInstall.tip")}
+              </p>
               <p>{t("droid.installation.linux.note")}</p>
               <CodeBlock language="bash" code={t("droid.installation.linux.command")} />
             </blockquote>
@@ -847,11 +850,9 @@ source ${shellConfig.split(" ")[0]}`}
         <div className="space-y-3">
           <h4 className={headingClasses.h4}>{t("codex.vsCodeExtension.title")}</h4>
           <ol className="list-decimal space-y-2 pl-6">
-            {(t.raw("codex.vsCodeExtension.steps") as string[]).map(
-              (step: string, i: number) => (
-                <li key={i}>{step}</li>
-              )
-            )}
+            {(t.raw("codex.vsCodeExtension.steps") as string[]).map((step: string, i: number) => (
+              <li key={i}>{step}</li>
+            ))}
           </ol>
           <blockquote className="space-y-1 rounded-lg border-l-2 border-primary/50 bg-muted/40 px-4 py-3">
             <p className="font-semibold text-foreground">{t("codex.vsCodeExtension.important")}</p>
@@ -1124,16 +1125,16 @@ curl -I ${resolvedOrigin}`}
         </h2>
         <p>{t("commonCommands.description")}</p>
         <ul className="list-disc space-y-2 pl-6">
-          {(t.raw("commonCommands.commands") as Array<{ command: string; description: string }>).map(
-            (cmd: { command: string; description: string }, i: number) => (
-              <li key={i}>
-                <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
-                  {cmd.command}
-                </code>{" "}
-                - {cmd.description}
-              </li>
-            )
-          )}
+          {(
+            t.raw("commonCommands.commands") as Array<{ command: string; description: string }>
+          ).map((cmd: { command: string; description: string }, i: number) => (
+            <li key={i}>
+              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
+                {cmd.command}
+              </code>{" "}
+              - {cmd.description}
+            </li>
+          ))}
           <li>
             {t("commonCommands.moreCommands")}{" "}
             <a
@@ -1168,7 +1169,9 @@ curl -I ${resolvedOrigin}`}
         </div>
 
         <div className="space-y-3">
-          <p className="font-semibold text-foreground">{t("troubleshooting.invalidApiKey.title")}</p>
+          <p className="font-semibold text-foreground">
+            {t("troubleshooting.invalidApiKey.title")}
+          </p>
           <ul className="list-disc space-y-2 pl-6">
             {(t.raw("troubleshooting.invalidApiKey.steps") as string[]).map(
               (step: string, i: number) => (

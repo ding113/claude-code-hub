@@ -23,7 +23,11 @@ export function DashboardHeader({ session }: DashboardHeaderProps) {
     { href: "/dashboard/quotas", label: t("quotasManagement") },
     { href: "/usage-doc", label: t("documentation") },
     { href: "/settings", label: t("systemSettings"), adminOnly: true },
-    { href: "https://github.com/ding113/claude-code-hub/issues", label: t("feedback"), external: true },
+    {
+      href: "https://github.com/ding113/claude-code-hub/issues",
+      label: t("feedback"),
+      external: true,
+    },
   ];
 
   const items = NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin);

@@ -148,9 +148,7 @@ export function UsersQuotaClient({
       {sortedUsers.length === 0 && (
         <Card>
           <CardContent className="flex items-center justify-center py-10">
-            <p className="text-muted-foreground">
-              {searchQuery ? t("noMatches") : t("noData")}
-            </p>
+            <p className="text-muted-foreground">{searchQuery ? t("noMatches") : t("noData")}</p>
           </CardContent>
         </Card>
       )}

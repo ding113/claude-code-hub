@@ -37,7 +37,9 @@ export default async function ProvidersQuotaPage() {
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-medium">{t("title")}</h3>
-          <p className="text-sm text-muted-foreground">{t("totalCount", { count: providers.length })}</p>
+          <p className="text-sm text-muted-foreground">
+            {t("totalCount", { count: providers.length })}
+          </p>
         </div>
       </div>
 

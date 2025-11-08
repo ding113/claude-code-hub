@@ -223,7 +223,9 @@ export function DataGeneratorPage() {
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="startDate">{t("params.startDate")} {t("params.required")}</Label>
+                <Label htmlFor="startDate">
+                  {t("params.startDate")} {t("params.required")}
+                </Label>
                 <Input
                   id="startDate"
                   type="datetime-local"
@@ -232,7 +234,9 @@ export function DataGeneratorPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="endDate">{t("params.endDate")} {t("params.required")}</Label>
+                <Label htmlFor="endDate">
+                  {t("params.endDate")} {t("params.required")}
+                </Label>
                 <Input
                   id="endDate"
                   type="datetime-local"
@@ -364,7 +368,9 @@ export function DataGeneratorPage() {
           <Card>
             <CardHeader>
               <CardTitle>{t("table.usageLogs.title")}</CardTitle>
-              <CardDescription>{t("table.usageLogs.description", { count: result.logs.length })}</CardDescription>
+              <CardDescription>
+                {t("table.usageLogs.description", { count: result.logs.length })}
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="rounded-md border max-h-[600px] overflow-auto">
@@ -376,12 +382,24 @@ export function DataGeneratorPage() {
                       <TableHead>{t("table.usageLogs.columns.key")}</TableHead>
                       <TableHead>{t("table.usageLogs.columns.provider")}</TableHead>
                       <TableHead>{t("table.usageLogs.columns.model")}</TableHead>
-                      <TableHead className="text-right">{t("table.usageLogs.columns.input")}</TableHead>
-                      <TableHead className="text-right">{t("table.usageLogs.columns.output")}</TableHead>
-                      <TableHead className="text-right">{t("table.usageLogs.columns.cacheWrite")}</TableHead>
-                      <TableHead className="text-right">{t("table.usageLogs.columns.cacheRead")}</TableHead>
-                      <TableHead className="text-right">{t("table.usageLogs.columns.cost")}</TableHead>
-                      <TableHead className="text-right">{t("table.usageLogs.columns.duration")}</TableHead>
+                      <TableHead className="text-right">
+                        {t("table.usageLogs.columns.input")}
+                      </TableHead>
+                      <TableHead className="text-right">
+                        {t("table.usageLogs.columns.output")}
+                      </TableHead>
+                      <TableHead className="text-right">
+                        {t("table.usageLogs.columns.cacheWrite")}
+                      </TableHead>
+                      <TableHead className="text-right">
+                        {t("table.usageLogs.columns.cacheRead")}
+                      </TableHead>
+                      <TableHead className="text-right">
+                        {t("table.usageLogs.columns.cost")}
+                      </TableHead>
+                      <TableHead className="text-right">
+                        {t("table.usageLogs.columns.duration")}
+                      </TableHead>
                       <TableHead>{t("table.usageLogs.columns.status")}</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -511,7 +529,9 @@ export function DataGeneratorPage() {
                   <CardTitle>{t("table.userBreakdown.title")}</CardTitle>
                   <CardDescription>
                     {t("table.userBreakdown.description", {
-                      count: collapseByUser ? collapsedUserData?.length : userBreakdownResult.items.length
+                      count: collapseByUser
+                        ? collapsedUserData?.length
+                        : userBreakdownResult.items.length,
                     })}
                   </CardDescription>
                 </div>
@@ -533,10 +553,16 @@ export function DataGeneratorPage() {
                   <TableHeader className="sticky top-0 bg-background">
                     <TableRow>
                       <TableHead>{t("table.userBreakdown.columns.userName")}</TableHead>
-                      {!collapseByUser && <TableHead>{t("table.userBreakdown.columns.key")}</TableHead>}
+                      {!collapseByUser && (
+                        <TableHead>{t("table.userBreakdown.columns.key")}</TableHead>
+                      )}
                       <TableHead>{t("table.userBreakdown.columns.serviceModel")}</TableHead>
-                      <TableHead className="text-right">{t("table.userBreakdown.columns.totalCalls")}</TableHead>
-                      <TableHead className="text-right">{t("table.userBreakdown.columns.totalCost")}</TableHead>
+                      <TableHead className="text-right">
+                        {t("table.userBreakdown.columns.totalCalls")}
+                      </TableHead>
+                      <TableHead className="text-right">
+                        {t("table.userBreakdown.columns.totalCost")}
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

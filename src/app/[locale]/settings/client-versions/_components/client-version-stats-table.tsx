@@ -53,14 +53,18 @@ export function ClientVersionStatsTable({ data }: ClientVersionStatsTableProps) 
                   {displayName}
                 </h3>
                 <p className="text-sm text-muted-foreground">
-                  {t("internalType")}<code className="text-xs">{clientStats.clientType}</code>
-                  {" · "}{t("currentGA")}
+                  {t("internalType")}
+                  <code className="text-xs">{clientStats.clientType}</code>
+                  {" · "}
+                  {t("currentGA")}
                   <Badge variant="outline" className="ml-2">
                     {clientStats.gaVersion || tCommon("none")}
                   </Badge>
                 </p>
               </div>
-              <Badge variant="secondary">{t("usersCount", { count: clientStats.totalUsers })}</Badge>
+              <Badge variant="secondary">
+                {t("usersCount", { count: clientStats.totalUsers })}
+              </Badge>
             </div>
 
             {/* 用户版本列表 */}

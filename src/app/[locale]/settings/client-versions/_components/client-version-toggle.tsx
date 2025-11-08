@@ -60,10 +60,12 @@ export function ClientVersionToggle({ enabled }: ClientVersionToggleProps) {
           <ul className="list-inside list-disc space-y-1">
             <li>{t("features.autoDetect")}</li>
             <li>
-              <strong>{t("features.gaRule")}</strong>{t("features.gaRuleDesc")}
+              <strong>{t("features.gaRule")}</strong>
+              {t("features.gaRuleDesc")}
             </li>
             <li>
-              <strong>{t("features.activeWindow")}</strong>{t("features.activeWindowDesc")}
+              <strong>{t("features.activeWindow")}</strong>
+              {t("features.activeWindowDesc")}
             </li>
             <li className={isEnabled ? "text-destructive font-semibold" : ""}>
               {t("features.blockOldVersion")}

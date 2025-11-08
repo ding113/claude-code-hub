@@ -115,7 +115,9 @@ export function EditWordDialog({ word, open, onOpenChange }: EditWordDialogProps
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="edit-description">{t("sensitiveWords.dialog.descriptionLabel")}</Label>
+              <Label htmlFor="edit-description">
+                {t("sensitiveWords.dialog.descriptionLabel")}
+              </Label>
               <Textarea
                 id="edit-description"
                 value={description}
