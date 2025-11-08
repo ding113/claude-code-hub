@@ -100,9 +100,15 @@ export function KeyList({ keys, currentUser, keyOwnerUserId, currencyCode = "USD
                         <Table>
                           <TableHeader>
                             <TableRow>
-                              <TableHead className="text-xs py-1.5">{t("modelStatsColumns.model")}</TableHead>
-                              <TableHead className="text-xs py-1.5 text-right">{t("modelStatsColumns.calls")}</TableHead>
-                              <TableHead className="text-xs py-1.5 text-right">{t("modelStatsColumns.cost")}</TableHead>
+                              <TableHead className="text-xs py-1.5">
+                                {t("modelStatsColumns.model")}
+                              </TableHead>
+                              <TableHead className="text-xs py-1.5 text-right">
+                                {t("modelStatsColumns.calls")}
+                              </TableHead>
+                              <TableHead className="text-xs py-1.5 text-right">
+                                {t("modelStatsColumns.cost")}
+                              </TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -167,7 +173,9 @@ export function KeyList({ keys, currentUser, keyOwnerUserId, currencyCode = "USD
     }),
     TableColumnTypes.text<UserKeyDisplay>("todayCallCount", t("columns.todayCalls"), {
       render: (value) => (
-        <div className="text-sm">{typeof value === "number" ? value.toLocaleString() : 0} {t("timesUnit")}</div>
+        <div className="text-sm">
+          {typeof value === "number" ? value.toLocaleString() : 0} {t("timesUnit")}
+        </div>
       ),
     }),
     TableColumnTypes.number<UserKeyDisplay>("todayUsage", t("columns.todayCost"), {

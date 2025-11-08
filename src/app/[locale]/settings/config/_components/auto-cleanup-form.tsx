@@ -102,9 +102,7 @@ export function AutoCleanupForm({ settings, onSuccess }: AutoCleanupFormProps) {
         <>
           {/* 保留天数 */}
           <div className="space-y-2">
-            <Label htmlFor="cleanupRetentionDays">
-              {t("cleanupRetentionDaysRequired")}
-            </Label>
+            <Label htmlFor="cleanupRetentionDays">{t("cleanupRetentionDaysRequired")}</Label>
             <Input
               id="cleanupRetentionDays"
               type="number"
@@ -116,16 +114,12 @@ export function AutoCleanupForm({ settings, onSuccess }: AutoCleanupFormProps) {
             {errors.cleanupRetentionDays && (
               <p className="text-sm text-destructive">{errors.cleanupRetentionDays.message}</p>
             )}
-            <p className="text-xs text-muted-foreground">
-              {t("cleanupRetentionDaysDesc")}
-            </p>
+            <p className="text-xs text-muted-foreground">{t("cleanupRetentionDaysDesc")}</p>
           </div>
 
           {/* Cron 表达式 */}
           <div className="space-y-2">
-            <Label htmlFor="cleanupSchedule">
-              {t("cleanupScheduleRequired")}
-            </Label>
+            <Label htmlFor="cleanupSchedule">{t("cleanupScheduleRequired")}</Label>
             <Input
               id="cleanupSchedule"
               type="text"
@@ -144,9 +138,7 @@ export function AutoCleanupForm({ settings, onSuccess }: AutoCleanupFormProps) {
 
           {/* 批量大小 */}
           <div className="space-y-2">
-            <Label htmlFor="cleanupBatchSize">
-              {t("cleanupBatchSizeRequired")}
-            </Label>
+            <Label htmlFor="cleanupBatchSize">{t("cleanupBatchSizeRequired")}</Label>
             <Input
               id="cleanupBatchSize"
               type="number"
@@ -158,9 +150,7 @@ export function AutoCleanupForm({ settings, onSuccess }: AutoCleanupFormProps) {
             {errors.cleanupBatchSize && (
               <p className="text-sm text-destructive">{errors.cleanupBatchSize.message}</p>
             )}
-            <p className="text-xs text-muted-foreground">
-              {t("cleanupBatchSizeDesc")}
-            </p>
+            <p className="text-xs text-muted-foreground">{t("cleanupBatchSizeDesc")}</p>
           </div>
         </>
       )}

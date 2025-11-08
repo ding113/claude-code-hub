@@ -196,9 +196,7 @@ export default function NotificationsPage() {
               <AlertTriangle className="w-5 h-5 text-red-500" />
               {t("notifications.circuitBreaker.title")}
             </CardTitle>
-            <CardDescription>
-              {t("notifications.circuitBreaker.description")}
-            </CardDescription>
+            <CardDescription>{t("notifications.circuitBreaker.description")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
@@ -217,7 +215,9 @@ export default function NotificationsPage() {
               <div className="space-y-4 pt-4">
                 <Separator />
                 <div className="space-y-2">
-                  <Label htmlFor="circuitBreakerWebhook">{t("notifications.circuitBreaker.webhook")}</Label>
+                  <Label htmlFor="circuitBreakerWebhook">
+                    {t("notifications.circuitBreaker.webhook")}
+                  </Label>
                   <Input
                     id="circuitBreakerWebhook"
                     {...register("circuitBreakerWebhook")}
@@ -262,9 +262,7 @@ export default function NotificationsPage() {
               <TrendingUp className="w-5 h-5 text-blue-500" />
               {t("notifications.dailyLeaderboard.title")}
             </CardTitle>
-            <CardDescription>
-              {t("notifications.dailyLeaderboard.description")}
-            </CardDescription>
+            <CardDescription>{t("notifications.dailyLeaderboard.description")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
@@ -283,7 +281,9 @@ export default function NotificationsPage() {
               <div className="space-y-4 pt-4">
                 <Separator />
                 <div className="space-y-2">
-                  <Label htmlFor="dailyLeaderboardWebhook">{t("notifications.dailyLeaderboard.webhook")}</Label>
+                  <Label htmlFor="dailyLeaderboardWebhook">
+                    {t("notifications.dailyLeaderboard.webhook")}
+                  </Label>
                   <Input
                     id="dailyLeaderboardWebhook"
                     {...register("dailyLeaderboardWebhook")}

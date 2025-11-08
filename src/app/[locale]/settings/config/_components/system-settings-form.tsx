@@ -81,9 +81,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
           maxLength={128}
           required
         />
-        <p className="text-xs text-muted-foreground">
-          {t("siteTitleDesc")}
-        </p>
+        <p className="text-xs text-muted-foreground">{t("siteTitleDesc")}</p>
       </div>
 
       <div className="space-y-2">
@@ -106,9 +104,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
             })}
           </SelectContent>
         </Select>
-        <p className="text-xs text-muted-foreground">
-          {t("currencyDisplayDesc")}
-        </p>
+        <p className="text-xs text-muted-foreground">{t("currencyDisplayDesc")}</p>
       </div>
 
       <div className="flex items-start justify-between gap-4 rounded-lg border border-dashed border-border px-4 py-3">
@@ -116,9 +112,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
           <Label htmlFor="allow-global-usage" className="text-sm font-medium">
             {t("allowGlobalView")}
           </Label>
-          <p className="text-xs text-muted-foreground mt-1">
-            {t("allowGlobalViewDesc")}
-          </p>
+          <p className="text-xs text-muted-foreground mt-1">{t("allowGlobalViewDesc")}</p>
         </div>
         <Switch
           id="allow-global-usage"
