@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { Menu } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { TocNav, type TocItem } from "./_components/toc-nav";
 import { QuickLinks } from "./_components/quick-links";
+import { LanguageSwitcher } from "@/components/ui/language-switcher";
 
 const headingClasses = {
   h2: "scroll-m-20 text-2xl font-semibold leading-snug text-foreground",
@@ -20,12 +22,14 @@ interface CodeBlockProps {
 }
 
 function CodeBlock({ code, language }: CodeBlockProps) {
+  const t = useTranslations("usage");
+
   return (
     <pre
       data-language={language}
       className="group relative my-5 overflow-x-auto rounded-md bg-black px-3 py-4 sm:px-4 sm:py-5 font-mono text-[11px] sm:text-[13px] text-white"
       role="region"
-      aria-label={`代码示例 - ${language}`}
+      aria-label={t("codeExamples.label", { language })}
       tabIndex={0}
     >
       <code className="block whitespace-pre leading-relaxed">{code.trim()}</code>
@@ -58,53 +62,60 @@ interface CLIConfig {
 /**
  * 三个 CLI 工具的配置定义
  */
-const CLI_CONFIGS: Record<string, CLIConfig> = {
-  claudeCode: {
-    title: "Claude Code 使用指南",
-    id: "claude-code",
-    cliName: "claude",
-    packageName: "@anthropic-ai/claude-code",
-    vsCodeExtension: {
-      name: "Claude Code for VS Code",
-      configFile: "config.json",
-      configPath: {
-        macos: "~/.claude",
-        windows: "C:\\Users\\你的用户名\\.claude",
+/**
+ * Get CLI configurations with translated titles
+ */
+function getCLIConfigs(t: (key: string) => string): Record<string, CLIConfig> {
+  return {
+    claudeCode: {
+      title: t("claudeCode.title"),
+      id: "claude-code",
+      cliName: "claude",
+      packageName: "@anthropic-ai/claude-code",
+      vsCodeExtension: {
+        name: "Claude Code for VS Code",
+        configFile: "config.json",
+        configPath: {
+          macos: "~/.claude",
+          windows: "C:\\Users\\你的用户名\\.claude",
+        },
       },
     },
-  },
-  codex: {
-    title: "Codex CLI 使用指南",
-    id: "codex",
-    cliName: "codex",
-    packageName: "@openai/codex",
-    vsCodeExtension: {
-      name: "Codex – OpenAI's coding agent",
-      configFile: "config.toml 和 auth.json",
-      configPath: {
-        macos: "~/.codex",
-        windows: "C:\\Users\\你的用户名\\.codex",
+    codex: {
+      title: t("codex.title"),
+      id: "codex",
+      cliName: "codex",
+      packageName: "@openai/codex",
+      vsCodeExtension: {
+        name: "Codex – OpenAI's coding agent",
+        configFile: "config.toml 和 auth.json",
+        configPath: {
+          macos: "~/.codex",
+          windows: "C:\\Users\\你的用户名\\.codex",
+        },
       },
     },
-  },
-  droid: {
-    title: "Droid CLI 使用指南",
-    id: "droid",
-    cliName: "droid",
-    officialInstallUrl: {
-      macos: "https://app.factory.ai/cli",
-      windows: "https://app.factory.ai/cli/windows",
+    droid: {
+      title: t("droid.title"),
+      id: "droid",
+      cliName: "droid",
+      officialInstallUrl: {
+        macos: "https://app.factory.ai/cli",
+        windows: "https://app.factory.ai/cli/windows",
+      },
+      requiresOfficialLogin: true,
     },
-    requiresOfficialLogin: true,
-  },
-};
+  };
+}
 
 interface UsageDocContentProps {
   origin: string;
 }
 
 function UsageDocContent({ origin }: UsageDocContentProps) {
-  const resolvedOrigin = origin || "当前站点地址";
+  const t = useTranslations("usage");
+  const resolvedOrigin = origin || t("ui.currentSiteAddress");
+  const CLI_CONFIGS = getCLIConfigs(t);
 
   /**
    * 渲染 Node.js 安装步骤
@@ -113,7 +124,7 @@ function UsageDocContent({ origin }: UsageDocContentProps) {
     if (os === "macos") {
       return (
         <div className="space-y-3">
-          <h4 className={headingClasses.h4}>方法一：使用 Homebrew（推荐）</h4>
+          <h4 className={headingClasses.h4}>{t("claudeCode.environmentSetup.macos.homebrew")}</h4>
           <CodeBlock
             language="bash"
             code={`# 更新 Homebrew
@@ -121,10 +132,10 @@ brew update
 # 安装 Node.js
 brew install node`}
           />
-          <h4 className={headingClasses.h4}>方法二：官网下载</h4>
+          <h4 className={headingClasses.h4}>{t("claudeCode.environmentSetup.macos.official")}</h4>
           <ol className="list-decimal space-y-2 pl-6">
             <li>
-              访问{" "}
+              {t("claudeCode.environmentSetup.macos.officialSteps.0")}{" "}
               <a
                 href="https://nodejs.org/"
                 target="_blank"
@@ -134,18 +145,18 @@ brew install node`}
                 https://nodejs.org/
               </a>
             </li>
-            <li>下载适合 macOS 的 LTS 版本（需 v18 或更高）</li>
-            <li>打开下载的 .pkg 文件，按照安装向导完成</li>
+            <li>{t("claudeCode.environmentSetup.macos.officialSteps.1")}</li>
+            <li>{t("claudeCode.environmentSetup.macos.officialSteps.2")}</li>
           </ol>
         </div>
       );
     } else if (os === "windows") {
       return (
         <div className="space-y-3">
-          <h4 className={headingClasses.h4}>方法一：官网下载（推荐）</h4>
+          <h4 className={headingClasses.h4}>{t("claudeCode.environmentSetup.windows.official")}</h4>
           <ol className="list-decimal space-y-2 pl-6">
             <li>
-              访问{" "}
+              {t("claudeCode.environmentSetup.windows.officialSteps.0")}{" "}
               <a
                 href="https://nodejs.org/"
                 target="_blank"
@@ -155,10 +166,12 @@ brew install node`}
                 https://nodejs.org/
               </a>
             </li>
-            <li>下载 LTS 版本（需 v18 或更高）</li>
-            <li>双击 .msi 文件，按向导安装（保持默认设置）</li>
+            <li>{t("claudeCode.environmentSetup.windows.officialSteps.1")}</li>
+            <li>{t("claudeCode.environmentSetup.windows.officialSteps.2")}</li>
           </ol>
-          <h4 className={headingClasses.h4}>方法二：使用包管理器</h4>
+          <h4 className={headingClasses.h4}>
+            {t("claudeCode.environmentSetup.windows.packageManager")}
+          </h4>
           <CodeBlock
             language="powershell"
             code={`# 使用 Chocolatey
@@ -168,8 +181,10 @@ choco install nodejs
 scoop install nodejs`}
           />
           <blockquote className="space-y-1 rounded-lg border-l-2 border-primary/50 bg-muted/40 px-4 py-3">
-            <p className="font-semibold text-foreground">提示</p>
-            <p>建议使用 PowerShell 而不是 CMD，以获得更好的体验</p>
+            <p className="font-semibold text-foreground">
+              {t("claudeCode.installation.nativeInstall.tip")}
+            </p>
+            <p>{t("claudeCode.environmentSetup.windows.note")}</p>
           </blockquote>
         </div>
       );
@@ -177,7 +192,7 @@ scoop install nodejs`}
       // linux
       return (
         <div className="space-y-3">
-          <h4 className={headingClasses.h4}>方法一：使用官方仓库（推荐）</h4>
+          <h4 className={headingClasses.h4}>{t("claudeCode.environmentSetup.linux.official")}</h4>
           <CodeBlock
             language="bash"
             code={`# 添加 NodeSource 仓库
@@ -185,7 +200,9 @@ curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
 # 安装 Node.js
 sudo apt-get install -y nodejs`}
           />
-          <h4 className={headingClasses.h4}>方法二：使用系统包管理器</h4>
+          <h4 className={headingClasses.h4}>
+            {t("claudeCode.environmentSetup.linux.packageManager")}
+          </h4>
           <CodeBlock
             language="bash"
             code={`# Ubuntu/Debian
@@ -207,13 +224,13 @@ sudo dnf install nodejs npm`}
     const lang = os === "windows" ? "powershell" : "bash";
     return (
       <div className="space-y-3">
-        <p>安装完成后，打开终端/命令行，输入以下命令验证：</p>
+        <p>{t("claudeCode.environmentSetup.verification.description")}</p>
         <CodeBlock
           language={lang}
           code={`node --version
 npm --version`}
         />
-        <p>如果显示版本号，说明安装成功了！</p>
+        <p>{t("claudeCode.environmentSetup.verification.success")}</p>
       </div>
     );
   };
@@ -227,18 +244,20 @@ npm --version`}
     return (
       <Tabs defaultValue="native" className="w-full">
         <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="native">Native Install (推荐)</TabsTrigger>
-          <TabsTrigger value="npm">NPM</TabsTrigger>
+          <TabsTrigger value="native">
+            {t("claudeCode.installation.nativeInstall.title")}
+          </TabsTrigger>
+          <TabsTrigger value="npm">{t("claudeCode.installation.npmInstall.title")}</TabsTrigger>
         </TabsList>
 
         {/* Native Install 标签页 */}
         <TabsContent value="native" className="space-y-4 mt-4">
           <div className="space-y-3">
-            <p>官方推荐使用 Native 安装方式，具有以下优势：</p>
+            <p>{t("claudeCode.installation.nativeInstall.description")}</p>
             <ul className="list-disc space-y-1 pl-6">
-              <li>单个可执行文件，无需 Node.js 依赖</li>
-              <li>自动更新机制更稳定</li>
-              <li>启动速度更快</li>
+              <li>{t("claudeCode.installation.nativeInstall.advantages.0")}</li>
+              <li>{t("claudeCode.installation.nativeInstall.advantages.1")}</li>
+              <li>{t("claudeCode.installation.nativeInstall.advantages.2")}</li>
             </ul>
           </div>
 
@@ -246,22 +265,24 @@ npm --version`}
           {os === "macos" && (
             <div className="space-y-4">
               <div className="space-y-3">
-                <p className="font-semibold text-foreground">方法一：Homebrew（推荐）</p>
+                <p className="font-semibold text-foreground">
+                  {t("claudeCode.installation.nativeInstall.macos.homebrew")}
+                </p>
                 <CodeBlock language="bash" code={`brew install --cask claude-code`} />
                 <blockquote className="space-y-2 rounded-lg border-l-2 border-primary/50 bg-muted/40 px-4 py-3">
-                  <p className="font-semibold text-foreground">自动更新说明</p>
+                  <p className="font-semibold text-foreground">
+                    {t("claudeCode.installation.nativeInstall.macos.autoUpdate")}
+                  </p>
                   <p className="text-sm">
-                    通过 Homebrew 安装的 Claude Code 会在 brew 目录外自动更新，除非使用{" "}
-                    <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                      DISABLE_AUTOUPDATER
-                    </code>{" "}
-                    环境变量显式禁用。
+                    {t("claudeCode.installation.nativeInstall.macos.autoUpdateText")}
                   </p>
                 </blockquote>
               </div>
 
               <div className="space-y-3">
-                <p className="font-semibold text-foreground">方法二：curl 脚本</p>
+                <p className="font-semibold text-foreground">
+                  {t("claudeCode.installation.nativeInstall.macos.curl")}
+                </p>
                 <CodeBlock
                   language="bash"
                   code={`# 安装稳定版（默认）
@@ -281,29 +302,27 @@ curl -fsSL https://claude.ai/install.sh | bash -s 1.0.58`}
           {os === "linux" && (
             <div className="space-y-4">
               <div className="space-y-3">
-                <p className="font-semibold text-foreground">curl 脚本安装</p>
+                <p className="font-semibold text-foreground">
+                  {t("claudeCode.installation.nativeInstall.linux.curl")}
+                </p>
                 <CodeBlock
                   language="bash"
-                  code={`# 安装稳定版（默认）
-curl -fsSL https://claude.ai/install.sh | bash
-
-# 安装最新版
-curl -fsSL https://claude.ai/install.sh | bash -s latest
-
-# 安装指定版本
-curl -fsSL https://claude.ai/install.sh | bash -s 1.0.58`}
+                  code={(t.raw("claudeCode.installation.nativeInstall.linux.curls") as string[]).join(
+                    "\n"
+                  )}
                 />
               </div>
 
               <blockquote className="space-y-2 rounded-lg border-l-2 border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20 px-4 py-3">
-                <p className="font-semibold text-foreground">Alpine Linux 特殊说明</p>
-                <p className="text-sm">
-                  基于 musl/uClibc 的发行版（如 Alpine Linux）需要安装额外依赖：
+                <p className="font-semibold text-foreground">
+                  {t("claudeCode.installation.nativeInstall.linux.alpine")}
                 </p>
+                <p className="text-sm">{t("claudeCode.installation.nativeInstall.linux.alpineText")}</p>
                 <CodeBlock
                   language="bash"
-                  code={`apk add libgcc libstdc++ ripgrep
-export USE_BUILTIN_RIPGREP=0`}
+                  code={(
+                    t.raw("claudeCode.installation.nativeInstall.linux.alpineCode") as string[]
+                  ).join("\n")}
                 />
               </blockquote>
             </div>
@@ -313,32 +332,26 @@ export USE_BUILTIN_RIPGREP=0`}
           {os === "windows" && (
             <div className="space-y-4">
               <div className="space-y-3">
-                <p className="font-semibold text-foreground">方法一：PowerShell</p>
+                <p className="font-semibold text-foreground">
+                  {t("claudeCode.installation.nativeInstall.windows.powershell")}
+                </p>
                 <CodeBlock
                   language="powershell"
-                  code={`# 安装稳定版（默认）
-irm https://claude.ai/install.ps1 | iex
-
-# 安装最新版
-& ([scriptblock]::Create((irm https://claude.ai/install.ps1))) latest
-
-# 安装指定版本
-& ([scriptblock]::Create((irm https://claude.ai/install.ps1))) 1.0.58`}
+                  code={(
+                    t.raw("claudeCode.installation.nativeInstall.windows.powershells") as string[]
+                  ).join("\n")}
                 />
               </div>
 
               <div className="space-y-3">
-                <p className="font-semibold text-foreground">方法二：CMD</p>
+                <p className="font-semibold text-foreground">
+                  {t("claudeCode.installation.nativeInstall.windows.cmd")}
+                </p>
                 <CodeBlock
                   language="batch"
-                  code={`REM 安装稳定版（默认）
-curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd && del install.cmd
-
-REM 安装最新版
-curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd latest && del install.cmd
-
-REM 安装指定版本
-curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd 1.0.58 && del install.cmd`}
+                  code={(
+                    t.raw("claudeCode.installation.nativeInstall.windows.cmds") as string[]
+                  ).join("\n")}
                 />
               </div>
             </div>
@@ -346,65 +359,64 @@ curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd 1.0.58 &&
 
           {/* 验证安装 */}
           <div className="space-y-3">
-            <p className="font-semibold text-foreground">验证安装</p>
-            <p>安装完成后，运行以下命令验证：</p>
-            <CodeBlock language={lang} code={`claude --version`} />
-            <p>如果显示版本号，恭喜！Claude Code 已成功安装。</p>
+            <p className="font-semibold text-foreground">
+              {t("claudeCode.installation.nativeInstall.verification.title")}
+            </p>
+            <p>{t("claudeCode.installation.nativeInstall.verification.description")}</p>
+            <CodeBlock
+              language={lang}
+              code={t("claudeCode.installation.nativeInstall.verification.command")}
+            />
+            <p>{t("claudeCode.installation.nativeInstall.verification.success")}</p>
           </div>
 
           <blockquote className="space-y-2 rounded-lg border-l-2 border-primary/50 bg-muted/40 px-4 py-3">
-            <p className="font-semibold text-foreground">提示</p>
-            <p className="text-sm">
-              安装前请确保移除任何过期的别名或符号链接。使用{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs">claude doctor</code>{" "}
-              命令可以检查安装类型和版本。
+            <p className="font-semibold text-foreground">
+              {t("claudeCode.installation.nativeInstall.tip")}
             </p>
+            <p className="text-sm">{t("claudeCode.installation.nativeInstall.tipText")}</p>
           </blockquote>
         </TabsContent>
 
         {/* NPM 标签页 */}
         <TabsContent value="npm" className="space-y-4 mt-4">
           <div className="space-y-3">
-            <p>
-              使用 NPM 安装需要先安装 Node.js 18 或更高版本。适合偏好使用 NPM 管理工具的开发者。
-            </p>
+            <p>{t("claudeCode.installation.npmInstall.description")}</p>
           </div>
 
           <div className="space-y-3">
-            <p className="font-semibold text-foreground">安装命令</p>
-            <CodeBlock language={lang} code={`npm install -g @anthropic-ai/claude-code`} />
+            <p className="font-semibold text-foreground">
+              {t("claudeCode.installation.title")}
+            </p>
+            <CodeBlock language={lang} code={t("claudeCode.installation.npmInstall.command")} />
           </div>
 
           <blockquote className="space-y-2 rounded-lg border-l-2 border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20 px-4 py-3">
-            <p className="font-semibold text-foreground">警告</p>
-            <p className="text-sm">
-              <strong>不要使用</strong>{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs">sudo npm install -g</code>，
-              这可能导致权限问题和安全风险。如果遇到权限错误，请参考{" "}
-              <a
-                href="https://docs.npmjs.com/resolving-eacces-permissions-errors-when-installing-packages-globally"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-medium text-primary underline underline-offset-4 transition-colors hover:text-primary/80"
-              >
-                NPM 官方解决方案
-              </a>
-              。
+            <p className="font-semibold text-foreground">
+              {t("claudeCode.installation.npmInstall.warning")}
             </p>
+            <p className="text-sm">{t("claudeCode.installation.npmInstall.warningText")}</p>
           </blockquote>
 
           <div className="space-y-3">
-            <p className="font-semibold text-foreground">验证安装</p>
-            <CodeBlock language={lang} code={`claude --version`} />
-            <p>如果显示版本号，恭喜！Claude Code 已成功安装。</p>
+            <p className="font-semibold text-foreground">
+              {t("claudeCode.installation.npmInstall.verification.title")}
+            </p>
+            <CodeBlock
+              language={lang}
+              code={t("claudeCode.installation.nativeInstall.verification.command")}
+            />
+            <p>{t("claudeCode.installation.npmInstall.verification.success")}</p>
           </div>
 
           <div className="space-y-3">
-            <p className="font-semibold text-foreground">迁移到 Native Install</p>
-            <p>如果你已通过 NPM 全局安装，可以使用以下命令迁移到 Native 安装：</p>
-            <CodeBlock language={lang} code={`claude install`} />
+            <p className="font-semibold text-foreground">
+              {t("claudeCode.installation.npmInstall.migration.title")}
+            </p>
+            <p>{t("claudeCode.installation.npmInstall.migration.description")}</p>
+            <CodeBlock language={lang} code={t("claudeCode.installation.npmInstall.migration.command")} />
             <p className="text-sm text-muted-foreground">
-              部分用户可能会被自动迁移到这种安装方式。
+              {t("claudeCode.installation.npmInstall.migration.note")}
             </p>
           </div>
         </TabsContent>
@@ -429,29 +441,25 @@ curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd 1.0.58 &&
 
     return (
       <div className="space-y-4">
-        <h4 className={headingClasses.h4}>方法一：settings.json 配置（推荐）</h4>
+        <h4 className={headingClasses.h4}>
+          {t("claudeCode.configuration.settingsJson.title")}
+        </h4>
         <div className="space-y-3">
-          <p>配置文件路径：</p>
+          <p>{t("claudeCode.configuration.settingsJson.description")}</p>
           <CodeBlock language="text" code={configPath} />
           <blockquote className="space-y-2 rounded-lg border-l-2 border-primary/50 bg-muted/40 px-4 py-3">
-            <p className="font-semibold text-foreground">路径说明</p>
+            <p className="font-semibold text-foreground">
+              {t("claudeCode.configuration.settingsJson.pathNote")}
+            </p>
             <ul className="list-disc space-y-1 pl-4">
-              <li>
-                <strong>Windows：</strong>{" "}
-                <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
-                  C:/Users/你的用户名/.claude
-                </code>
-              </li>
-              <li>
-                <strong>Linux 或 macOS：</strong>{" "}
-                <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
-                  ~/.claude
-                </code>
-              </li>
-              <li>如果 settings.json 文件不存在，请自行创建</li>
+              {(t.raw("claudeCode.configuration.settingsJson.paths") as string[]).map(
+                (path: string, i: number) => (
+                  <li key={i}>{path}</li>
+                )
+              )}
             </ul>
           </blockquote>
-          <p>编辑 settings.json 文件，添加以下内容：</p>
+          <p>{t("claudeCode.configuration.settingsJson.instruction")}</p>
           <CodeBlock
             language="json"
             code={`{
@@ -467,50 +475,51 @@ curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd 1.0.58 &&
 }`}
           />
           <blockquote className="space-y-2 rounded-lg border-l-2 border-primary/50 bg-muted/40 px-4 py-3">
-            <p className="font-semibold text-foreground">重要提示</p>
+            <p className="font-semibold text-foreground">
+              {t("claudeCode.configuration.settingsJson.important")}
+            </p>
             <ul className="list-disc space-y-1 pl-4">
-              <li>
-                将{" "}
-                <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
-                  your-api-key-here
-                </code>{" "}
-                替换为您的实际 API 密钥
-              </li>
-              <li>密钥获取方式：登录控制台 → API 密钥管理 → 创建密钥</li>
+              {(t.raw("claudeCode.configuration.settingsJson.importantPoints") as string[]).map(
+                (point: string, i: number) => (
+                  <li key={i}>{point}</li>
+                )
+              )}
             </ul>
           </blockquote>
         </div>
 
-        <h4 className={headingClasses.h4}>方法二：环境变量配置</h4>
+        <h4 className={headingClasses.h4}>{t("claudeCode.configuration.envVars.title")}</h4>
         <div className="space-y-3">
           {os === "windows" ? (
             <>
-              <p>临时设置（当前会话）：</p>
+              <p>{t("claudeCode.configuration.envVars.windows.temporary")}</p>
               <CodeBlock
                 language="powershell"
                 code={`$env:ANTHROPIC_BASE_URL = "${resolvedOrigin}"
 $env:ANTHROPIC_AUTH_TOKEN = "your-api-key-here"`}
               />
-              <p>永久设置（用户级）：</p>
+              <p>{t("claudeCode.configuration.envVars.windows.permanent")}</p>
               <CodeBlock
                 language="powershell"
                 code={`[System.Environment]::SetEnvironmentVariable("ANTHROPIC_BASE_URL", "${resolvedOrigin}", [System.EnvironmentVariableTarget]::User)
 [System.Environment]::SetEnvironmentVariable("ANTHROPIC_AUTH_TOKEN", "your-api-key-here", [System.EnvironmentVariableTarget]::User)`}
               />
               <p className="text-sm text-muted-foreground">
-                设置后需要重新打开 PowerShell 窗口才能生效。
+                {t("claudeCode.configuration.envVars.windows.note")}
               </p>
             </>
           ) : (
             <>
-              <p>临时设置（当前会话）：</p>
+              <p>{t("claudeCode.configuration.envVars.unix.temporary")}</p>
               <CodeBlock
                 language="bash"
                 code={`export ANTHROPIC_BASE_URL="${resolvedOrigin}"
 export ANTHROPIC_AUTH_TOKEN="your-api-key-here"`}
               />
-              <p>永久设置：</p>
-              <p className="text-sm">添加到您的 shell 配置文件（{shellConfig}）：</p>
+              <p>{t("claudeCode.configuration.envVars.unix.permanent")}</p>
+              <p className="text-sm">
+                {t("claudeCode.configuration.envVars.unix.permanentNote", { shellConfig })}
+              </p>
               <CodeBlock
                 language="bash"
                 code={`echo 'export ANTHROPIC_BASE_URL="${resolvedOrigin}"' >> ${shellConfig.split(" ")[0]}
@@ -521,18 +530,18 @@ source ${shellConfig.split(" ")[0]}`}
           )}
         </div>
 
-        <h4 className={headingClasses.h4}>验证配置</h4>
+        <h4 className={headingClasses.h4}>{t("claudeCode.configuration.verification.title")}</h4>
         <div className="space-y-3">
-          <p>配置完成后，验证环境变量是否设置成功：</p>
+          <p>{t("claudeCode.configuration.verification.description")}</p>
           {os === "windows" ? (
             <>
-              <p>在 PowerShell 中执行：</p>
+              <p>{t("claudeCode.configuration.verification.windowsPowerShell")}</p>
               <CodeBlock
                 language="powershell"
                 code={`echo $env:ANTHROPIC_BASE_URL
 echo $env:ANTHROPIC_AUTH_TOKEN`}
               />
-              <p>在 CMD 中执行：</p>
+              <p>{t("claudeCode.configuration.verification.windowsCmd")}</p>
               <CodeBlock
                 language="cmd"
                 code={`echo %ANTHROPIC_BASE_URL%
@@ -546,15 +555,17 @@ echo %ANTHROPIC_AUTH_TOKEN%`}
 echo $ANTHROPIC_AUTH_TOKEN`}
             />
           )}
-          <p>预期输出示例：</p>
+          <p>{t("claudeCode.configuration.verification.expectedOutput")}</p>
           <CodeBlock
             language="text"
             code={`${resolvedOrigin}
 sk_xxxxxxxxxxxxxxxxxx`}
           />
           <blockquote className="space-y-2 rounded-lg border-l-2 border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20 px-4 py-3">
-            <p className="font-semibold text-foreground">注意</p>
-            <p>如果输出为空或显示变量名本身，说明环境变量设置失败，请重新按照上述步骤设置。</p>
+            <p className="font-semibold text-foreground">
+              {t("claudeCode.configuration.verification.note")}
+            </p>
+            <p>{t("claudeCode.configuration.verification.noteText")}</p>
           </blockquote>
         </div>
       </div>
@@ -566,17 +577,20 @@ sk_xxxxxxxxxxxxxxxxxx`}
    */
   const renderCodexInstallation = (os: OS) => {
     const lang = os === "windows" ? "powershell" : "bash";
-    const adminNote = os === "windows" ? "以管理员身份运行 PowerShell，" : "";
+    const adminNote = os === "windows" ? t("codex.installation.adminNote") : "";
 
     return (
       <div className="space-y-3">
-        <p>{adminNote}执行：</p>
+        <p>
+          {adminNote}
+          {t("codex.installation.instruction")}
+        </p>
         <CodeBlock
           language={lang}
           code={`npm i -g @openai/codex --registry=https://registry.npmmirror.com`}
         />
-        <p>验证安装：</p>
-        <CodeBlock language={lang} code={`codex --version`} />
+        <p>{t("codex.installation.verification")}</p>
+        <CodeBlock language={lang} code={t("codex.installation.command")} />
       </div>
     );
   };
@@ -595,24 +609,14 @@ sk_xxxxxxxxxxxxxxxxxx`}
 
     return (
       <div className="space-y-4">
-        <h4 className={headingClasses.h4}>方法一：配置文件方式（推荐）</h4>
+        <h4 className={headingClasses.h4}>{t("codex.configuration.configFile.title")}</h4>
         <div className="space-y-3">
           <ol className="list-decimal space-y-2 pl-6">
-            <li>
-              打开文件资源管理器，找到{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
-                {configPath}
-              </code>{" "}
-              文件夹（不存在则创建）
-            </li>
-            <li>
-              创建{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
-                config.toml
-              </code>{" "}
-              文件
-            </li>
-            <li>使用文本编辑器打开，添加以下内容：</li>
+            {(t.raw("codex.configuration.configFile.steps") as string[]).map(
+              (step: string, i: number) => (
+                <li key={i}>{step.replace("${configPath}", configPath)}</li>
+              )
+            )}
           </ol>
           <CodeBlock
             language="toml"
@@ -646,13 +650,7 @@ requires_openai_auth = true
 network_access = true`}
           />
           <ol className="list-decimal space-y-2 pl-6" start={4}>
-            <li>
-              创建{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
-                auth.json
-              </code>{" "}
-              文件，添加：
-            </li>
+            <li>{t("codex.configuration.configFile.step4")}</li>
           </ol>
           <CodeBlock
             language="json"
@@ -661,40 +659,35 @@ network_access = true`}
 }`}
           />
           <blockquote className="space-y-2 rounded-lg border-l-2 border-primary/50 bg-muted/40 px-4 py-3">
-            <p className="font-semibold text-foreground">重要提示</p>
+            <p className="font-semibold text-foreground">
+              {t("codex.configuration.configFile.important")}
+            </p>
             <ul className="list-disc space-y-2 pl-4">
-              <li>
-                将{" "}
-                <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
-                  your-api-key-here
-                </code>{" "}
-                替换为您的 cch API 密钥
-              </li>
-              <li>
-                <strong>注意：</strong>Codex 使用 OpenAI 兼容格式，端点包含{" "}
-                <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">/v1</code>{" "}
-                路径
-              </li>
+              {(t.raw("codex.configuration.configFile.importantPoints") as string[]).map(
+                (point: string, i: number) => (
+                  <li key={i}>{point}</li>
+                )
+              )}
             </ul>
           </blockquote>
         </div>
 
-        <h4 className={headingClasses.h4}>方法二：环境变量配置</h4>
+        <h4 className={headingClasses.h4}>{t("codex.configuration.envVars.title")}</h4>
         <div className="space-y-3">
           {os === "windows" ? (
             <>
-              <p>在 PowerShell 中运行：</p>
+              <p>{t("codex.configuration.envVars.windows.instruction")}</p>
               <CodeBlock
                 language="powershell"
                 code={`[System.Environment]::SetEnvironmentVariable("CCH_API_KEY", "your-api-key-here", [System.EnvironmentVariableTarget]::User)`}
               />
               <p className="text-sm text-muted-foreground">
-                设置后需要重新打开 PowerShell 窗口才能生效。
+                {t("codex.configuration.envVars.windows.note")}
               </p>
             </>
           ) : (
             <>
-              <p>设置环境变量：</p>
+              <p>{t("codex.configuration.envVars.unix.instruction")}</p>
               <CodeBlock
                 language="bash"
                 code={`echo 'export CCH_API_KEY="your-api-key-here"' >> ${shellConfig.split(" ")[0]}
@@ -714,18 +707,13 @@ source ${shellConfig.split(" ")[0]}`}
     if (os === "macos" || os === "linux") {
       return (
         <div className="space-y-3">
+          <p>{t("droid.installation.linux.instruction")}</p>
           <CodeBlock language="bash" code={`curl -fsSL https://app.factory.ai/cli | sh`} />
           {os === "linux" && (
             <blockquote className="space-y-1 rounded-lg border-l-2 border-primary/50 bg-muted/40 px-4 py-3">
-              <p className="font-semibold text-foreground">提示</p>
-              <p>
-                Linux 用户需确保已安装{" "}
-                <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
-                  xdg-utils
-                </code>
-                ：
-              </p>
-              <CodeBlock language="bash" code={`sudo apt-get install xdg-utils`} />
+              <p className="font-semibold text-foreground">{t("claudeCode.installation.nativeInstall.tip")}</p>
+              <p>{t("droid.installation.linux.note")}</p>
+              <CodeBlock language="bash" code={t("droid.installation.linux.command")} />
             </blockquote>
           )}
         </div>
@@ -734,7 +722,7 @@ source ${shellConfig.split(" ")[0]}`}
       // windows
       return (
         <div className="space-y-3">
-          <p>在 PowerShell 中执行：</p>
+          <p>{t("droid.installation.windows.instruction")}</p>
           <CodeBlock language="powershell" code={`irm https://app.factory.ai/cli/windows | iex`} />
         </div>
       );
@@ -751,23 +739,21 @@ source ${shellConfig.split(" ")[0]}`}
     return (
       <div className="space-y-4">
         <blockquote className="space-y-2 rounded-lg border-l-2 border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20 px-4 py-3">
-          <p className="font-semibold text-foreground">前置步骤：必须先登录 Droid 官方账号</p>
+          <p className="font-semibold text-foreground">{t("droid.configuration.prerequisite")}</p>
           <ol className="list-decimal space-y-2 pl-4">
-            <li>
-              运行{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">droid</code>{" "}
-              命令
-            </li>
-            <li>按提示通过浏览器登录 Factory 官方账号</li>
-            <li>登录成功后，才能继续配置自定义模型</li>
+            {(t.raw("droid.configuration.prerequisiteSteps") as string[]).map(
+              (step: string, i: number) => (
+                <li key={i}>{step}</li>
+              )
+            )}
           </ol>
         </blockquote>
 
-        <h4 className={headingClasses.h4}>配置自定义模型</h4>
+        <h4 className={headingClasses.h4}>{t("droid.configuration.customModels.title")}</h4>
         <div className="space-y-3">
-          <p>配置文件路径：</p>
+          <p>{t("droid.configuration.customModels.path")}</p>
           <CodeBlock language={os === "windows" ? "powershell" : "bash"} code={configPath} />
-          <p>编辑配置文件，添加以下内容：</p>
+          <p>{t("droid.configuration.customModels.instruction")}</p>
           <CodeBlock
             language="json"
             code={`{
@@ -790,46 +776,27 @@ source ${shellConfig.split(" ")[0]}`}
 }`}
           />
           <blockquote className="space-y-2 rounded-lg border-l-2 border-primary/50 bg-muted/40 px-4 py-3">
-            <p className="font-semibold text-foreground">重要说明</p>
+            <p className="font-semibold text-foreground">
+              {t("droid.configuration.customModels.important")}
+            </p>
             <ul className="list-disc space-y-2 pl-4">
-              <li>
-                将{" "}
-                <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
-                  your-api-key-here
-                </code>{" "}
-                替换为您的 cch API 密钥
-              </li>
-              <li>
-                <strong>Anthropic 格式：</strong>使用{" "}
-                <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
-                  {resolvedOrigin}
-                </code>
-                （无 /v1）
-              </li>
-              <li>
-                <strong>OpenAI 格式：</strong>使用{" "}
-                <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
-                  {resolvedOrigin}/v1
-                </code>
-                （需要 /v1）
-              </li>
+              {(t.raw("droid.configuration.customModels.importantPoints") as string[]).map(
+                (point: string, i: number) => (
+                  <li key={i}>{point.replace("${resolvedOrigin}", resolvedOrigin)}</li>
+                )
+              )}
             </ul>
           </blockquote>
         </div>
 
-        <h4 className={headingClasses.h4}>切换模型</h4>
+        <h4 className={headingClasses.h4}>{t("droid.configuration.switching.title")}</h4>
         <div className="space-y-3">
           <ol className="list-decimal space-y-2 pl-6">
-            <li>重启 Droid</li>
-            <li>
-              输入{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">/model</code>{" "}
-              命令
-            </li>
-            <li>
-              选择 <strong>GPT-5-Codex [cch]</strong> 或 <strong>Sonnet 4.5 [cch]</strong>
-            </li>
-            <li>开始使用！</li>
+            {(t.raw("droid.configuration.switching.steps") as string[]).map(
+              (step: string, i: number) => (
+                <li key={i}>{step}</li>
+              )
+            )}
           </ol>
         </div>
       </div>
@@ -848,23 +815,13 @@ source ${shellConfig.split(" ")[0]}`}
     if (cli.id === "claude-code") {
       return (
         <div className="space-y-3">
-          <h4 className={headingClasses.h4}>VS Code 扩展配置</h4>
+          <h4 className={headingClasses.h4}>{t("claudeCode.vsCodeExtension.title")}</h4>
           <ol className="list-decimal space-y-2 pl-6">
-            <li>
-              在 VS Code 扩展中搜索并安装 <strong>{config.name}</strong>
-            </li>
-            <li>
-              在{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
-                {configPath}
-              </code>{" "}
-              目录下创建{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
-                config.json
-              </code>{" "}
-              文件（如果没有）
-            </li>
-            <li>添加以下内容：</li>
+            {(t.raw("claudeCode.vsCodeExtension.steps") as string[]).map(
+              (step: string, i: number) => (
+                <li key={i}>{step}</li>
+              )
+            )}
           </ol>
           <CodeBlock
             language="json"
@@ -873,23 +830,14 @@ source ${shellConfig.split(" ")[0]}`}
 }`}
           />
           <blockquote className="space-y-1 rounded-lg border-l-2 border-primary/50 bg-muted/40 px-4 py-3">
-            <p className="font-semibold text-foreground">注意</p>
-            <p>
-              是{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
-                config.json
-              </code>
-              ，不是{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
-                settings.json
-              </code>
-            </p>
-            <p>
-              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
-                primaryApiKey
-              </code>{" "}
-              字段值可以为任意内容，只要存在即可
-            </p>
+            <p className="font-semibold text-foreground">{t("claudeCode.vsCodeExtension.note")}</p>
+            <ul className="list-disc space-y-1 pl-4">
+              {(t.raw("claudeCode.vsCodeExtension.notePoints") as string[]).map(
+                (point: string, i: number) => (
+                  <li key={i}>{point}</li>
+                )
+              )}
+            </ul>
           </blockquote>
         </div>
       );
@@ -897,35 +845,17 @@ source ${shellConfig.split(" ")[0]}`}
       // codex
       return (
         <div className="space-y-3">
-          <h4 className={headingClasses.h4}>VS Code 扩展配置</h4>
+          <h4 className={headingClasses.h4}>{t("codex.vsCodeExtension.title")}</h4>
           <ol className="list-decimal space-y-2 pl-6">
-            <li>
-              在 VS Code 扩展中搜索并安装 <strong>{config.name}</strong>
-            </li>
-            <li>
-              确保已按照上述步骤配置好{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
-                config.toml
-              </code>{" "}
-              和{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
-                auth.json
-              </code>
-            </li>
-            <li>
-              设置环境变量{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
-                CCH_API_KEY
-              </code>
-            </li>
+            {(t.raw("codex.vsCodeExtension.steps") as string[]).map(
+              (step: string, i: number) => (
+                <li key={i}>{step}</li>
+              )
+            )}
           </ol>
           <blockquote className="space-y-1 rounded-lg border-l-2 border-primary/50 bg-muted/40 px-4 py-3">
-            <p className="font-semibold text-foreground">重要</p>
-            <p>
-              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">env_key</code>{" "}
-              只能是环境变量名称（如 CCH_API_KEY），不能是完整的密钥
-            </p>
-            <p>如果直接填写密钥，会报错找不到令牌或令牌配置错误</p>
+            <p className="font-semibold text-foreground">{t("codex.vsCodeExtension.important")}</p>
+            <p>{t("codex.vsCodeExtension.importantText")}</p>
           </blockquote>
         </div>
       );
@@ -937,16 +867,35 @@ source ${shellConfig.split(" ")[0]}`}
    */
   const renderStartupVerification = (cli: CLIConfig, os: OS) => {
     const lang = os === "windows" ? "powershell" : "bash";
+    const titleKey =
+      cli.id === "claude-code"
+        ? "claudeCode.startup.title"
+        : cli.id === "codex"
+          ? "codex.startup.title"
+          : "droid.startup.title";
+    const descKey =
+      cli.id === "claude-code"
+        ? "claudeCode.startup.description"
+        : cli.id === "codex"
+          ? "codex.startup.description"
+          : "droid.startup.description";
+    const initKey =
+      cli.id === "claude-code"
+        ? "claudeCode.startup.initNote"
+        : cli.id === "codex"
+          ? "codex.startup.initNote"
+          : "droid.startup.initNote";
+
     return (
       <div className="space-y-3">
-        <h4 className={headingClasses.h4}>启动 {cli.cliName}</h4>
-        <p>在项目目录下运行：</p>
+        <h4 className={headingClasses.h4}>{t(titleKey)}</h4>
+        <p>{t(descKey)}</p>
         <CodeBlock
           language={lang}
           code={`cd ${os === "windows" ? "C:\\path\\to\\your\\project" : "/path/to/your/project"}
 ${cli.cliName}`}
         />
-        <p>首次启动时，{cli.cliName} 会进行初始化配置。</p>
+        <p>{t(initKey)}</p>
       </div>
     );
   };
@@ -956,42 +905,69 @@ ${cli.cliName}`}
    */
   const renderCommonIssues = (cli: CLIConfig, os: OS) => {
     const lang = os === "windows" ? "powershell" : "bash";
+    const titleKey =
+      cli.id === "claude-code"
+        ? "claudeCode.commonIssues.title"
+        : cli.id === "codex"
+          ? "codex.commonIssues.title"
+          : "droid.commonIssues.title";
+    const cmdNotFoundKey =
+      cli.id === "claude-code"
+        ? "claudeCode.commonIssues.commandNotFound"
+        : cli.id === "codex"
+          ? "codex.commonIssues.commandNotFound"
+          : "droid.commonIssues.commandNotFound";
+    const cmdNotFoundWinKey =
+      cli.id === "claude-code"
+        ? "claudeCode.commonIssues.commandNotFoundWindows"
+        : cli.id === "codex"
+          ? "codex.commonIssues.commandNotFoundWindows"
+          : "droid.commonIssues.commandNotFoundWindows";
+    const cmdNotFoundUnixKey =
+      cli.id === "claude-code"
+        ? "claudeCode.commonIssues.commandNotFoundUnix"
+        : cli.id === "codex"
+          ? "codex.commonIssues.commandNotFoundUnix"
+          : "droid.commonIssues.commandNotFoundUnix";
+    const connFailedKey =
+      cli.id === "claude-code"
+        ? "claudeCode.commonIssues.connectionFailed"
+        : "codex.commonIssues.connectionFailed";
+    const updateKey =
+      cli.id === "claude-code"
+        ? "claudeCode.commonIssues.updateCli"
+        : cli.id === "codex"
+          ? "codex.commonIssues.updateCli"
+          : "droid.commonIssues.updateCli";
 
     return (
       <div className="space-y-4">
-        <h4 className={headingClasses.h4}>常见问题</h4>
+        <h4 className={headingClasses.h4}>{t(titleKey)}</h4>
 
         <div className="space-y-3">
-          <p className="font-semibold text-foreground">1. 命令未找到</p>
+          <p className="font-semibold text-foreground">{t(cmdNotFoundKey)}</p>
           {os === "windows" ? (
             <ul className="list-disc space-y-2 pl-6">
-              <li>
-                确保 npm 全局路径（通常是{" "}
-                <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
-                  C:\Users\你的用户名\AppData\Roaming\npm
-                </code>
-                ）已添加到系统 PATH
-              </li>
-              <li>重新打开 PowerShell 窗口</li>
+              {(t.raw(cmdNotFoundWinKey) as string[]).map((item: string, i: number) => (
+                <li key={i}>{item}</li>
+              ))}
             </ul>
           ) : (
-            <>
-              <CodeBlock
-                language="bash"
-                code={`# 检查 npm 全局安装路径
+            <CodeBlock
+              language="bash"
+              code={`# ${t(cmdNotFoundUnixKey)}
 npm config get prefix
 
 # 添加到 PATH（如果不在）
 echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> ~/.${os === "macos" ? "zshrc" : "bashrc"}
 source ~/.${os === "macos" ? "zshrc" : "bashrc"}`}
-              />
-            </>
+            />
           )}
         </div>
 
         {cli.id !== "droid" && (
           <div className="space-y-3">
-            <p className="font-semibold text-foreground">2. API 连接失败</p>
+            <p className="font-semibold text-foreground">{t(connFailedKey)}</p>
             {os === "windows" ? (
               <CodeBlock
                 language="powershell"
@@ -1015,20 +991,15 @@ curl -I ${resolvedOrigin}`}
         )}
 
         <div className="space-y-3">
-          <p className="font-semibold text-foreground">
-            {cli.id === "droid" ? "2" : "3"}. 更新 {cli.cliName}
-          </p>
+          <p className="font-semibold text-foreground">{t(updateKey)}</p>
           {cli.packageName ? (
-            <CodeBlock
-              language={lang}
-              code={
-                cli.id === "codex"
-                  ? `npm i -g ${cli.packageName} --registry=https://registry.npmmirror.com`
-                  : `npm install -g ${cli.packageName}`
-              }
-            />
+            cli.id === "codex" ? (
+              <CodeBlock language={lang} code={t("codex.commonIssues.updateCommand")} />
+            ) : (
+              <CodeBlock language={lang} code={`npm install -g ${cli.packageName}`} />
+            )
           ) : (
-            <p>重新运行安装脚本即可更新到最新版本。</p>
+            <p>{t("claudeCode.commonIssues.updateNote")}</p>
           )}
         </div>
       </div>
@@ -1040,9 +1011,9 @@ curl -I ${resolvedOrigin}`}
    */
   const renderPlatformGuide = (cli: CLIConfig, os: OS) => {
     const osNames = {
-      macos: "macOS",
-      windows: "Windows",
-      linux: "Linux",
+      macos: t("platforms.macos"),
+      windows: t("platforms.windows"),
+      linux: t("platforms.linux"),
     };
 
     return (
@@ -1054,8 +1025,8 @@ curl -I ${resolvedOrigin}`}
         {/* 环境准备 */}
         {cli.packageName && (
           <div className="space-y-3">
-            <h4 className={headingClasses.h4}>环境准备：安装 Node.js</h4>
-            <p>{cli.cliName} 需要 Node.js 环境才能运行（需 v18 或更高版本）。</p>
+            <h4 className={headingClasses.h4}>{t("claudeCode.environmentSetup.title")}</h4>
+            <p>{t("claudeCode.environmentSetup.description")}</p>
             {renderNodeJsInstallation(os)}
             {renderNodeJsVerification(os)}
           </div>
@@ -1063,7 +1034,14 @@ curl -I ${resolvedOrigin}`}
 
         {/* CLI 安装 */}
         <div className="space-y-3">
-          <h4 className={headingClasses.h4}>安装 {cli.cliName}</h4>
+          <h4 className={headingClasses.h4}>
+            {cli.id === "claude-code"
+              ? t("claudeCode.installation.title")
+              : cli.id === "codex"
+                ? t("codex.installation.title")
+                : t("droid.installation.title")}{" "}
+            {cli.cliName}
+          </h4>
           {cli.id === "claude-code" && renderClaudeCodeInstallation(os)}
           {cli.id === "codex" && renderCodexInstallation(os)}
           {cli.id === "droid" && renderDroidInstallation(os)}
@@ -1071,7 +1049,13 @@ curl -I ${resolvedOrigin}`}
 
         {/* 连接 cch 服务配置 */}
         <div className="space-y-3">
-          <h4 className={headingClasses.h4}>连接 cch 服务</h4>
+          <h4 className={headingClasses.h4}>
+            {cli.id === "claude-code"
+              ? t("claudeCode.configuration.title")
+              : cli.id === "codex"
+                ? t("codex.configuration.title")
+                : t("droid.configuration.title")}
+          </h4>
           {cli.id === "claude-code" && renderClaudeCodeConfiguration(os)}
           {cli.id === "codex" && renderCodexConfiguration(os)}
           {cli.id === "droid" && renderDroidConfiguration(os)}
@@ -1099,10 +1083,7 @@ curl -I ${resolvedOrigin}`}
         <h2 id={CLI_CONFIGS.claudeCode.id} className={headingClasses.h2}>
           📚 {CLI_CONFIGS.claudeCode.title}
         </h2>
-        <p>
-          Claude Code 是 Anthropic 官方推出的 AI 编程助手，支持通过 cch
-          代理服务使用。本指南将帮助您在不同操作系统上完成安装和配置。
-        </p>
+        <p>{t("claudeCode.description")}</p>
         {(["macos", "windows", "linux"] as OS[]).map((os) =>
           renderPlatformGuide(CLI_CONFIGS.claudeCode, os)
         )}
@@ -1115,13 +1096,7 @@ curl -I ${resolvedOrigin}`}
         <h2 id={CLI_CONFIGS.codex.id} className={headingClasses.h2}>
           📚 {CLI_CONFIGS.codex.title}
         </h2>
-        <p>
-          Codex 是 OpenAI 官方的命令行 AI 编程助手，支持通过 cch 代理使用。
-          <strong className="text-foreground">
-            {" "}
-            注意：Codex 使用 OpenAI 兼容格式，端点需要包含 /v1 路径。
-          </strong>
-        </p>
+        <p>{t("codex.description")}</p>
         {(["macos", "windows", "linux"] as OS[]).map((os) =>
           renderPlatformGuide(CLI_CONFIGS.codex, os)
         )}
@@ -1134,10 +1109,7 @@ curl -I ${resolvedOrigin}`}
         <h2 id={CLI_CONFIGS.droid.id} className={headingClasses.h2}>
           📚 {CLI_CONFIGS.droid.title}
         </h2>
-        <p>
-          Droid 是 Factory AI 开发的交互式终端 AI 编程助手，支持通过 cch 代理服务使用。
-          <strong className="text-foreground"> 使用前必须先注册并登录 Droid 官方账号。</strong>
-        </p>
+        <p>{t("droid.description")}</p>
         {(["macos", "windows", "linux"] as OS[]).map((os) =>
           renderPlatformGuide(CLI_CONFIGS.droid, os)
         )}
@@ -1148,39 +1120,29 @@ curl -I ${resolvedOrigin}`}
       {/* 常用命令 */}
       <section className="space-y-4">
         <h2 id="common-commands" className={headingClasses.h2}>
-          📚 常用命令
+          📚 {t("commonCommands.title")}
         </h2>
-        <p>启动 Claude Code 后，您可以使用以下常用命令：</p>
+        <p>{t("commonCommands.description")}</p>
         <ul className="list-disc space-y-2 pl-6">
+          {(t.raw("commonCommands.commands") as Array<{ command: string; description: string }>).map(
+            (cmd: { command: string; description: string }, i: number) => (
+              <li key={i}>
+                <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
+                  {cmd.command}
+                </code>{" "}
+                - {cmd.description}
+              </li>
+            )
+          )}
           <li>
-            <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">/help</code> -
-            查看帮助信息
-          </li>
-          <li>
-            <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">/clear</code> -
-            清空对话历史，开启新对话
-          </li>
-          <li>
-            <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">/compact</code> -
-            总结当前对话
-          </li>
-          <li>
-            <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">/cost</code> -
-            查看当前对话已使用的金额
-          </li>
-          <li>
-            <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">/model</code> -
-            切换模型（Droid 专用）
-          </li>
-          <li>
-            更多命令查看{" "}
+            {t("commonCommands.moreCommands")}{" "}
             <a
               href="https://docs.claude.com/zh-CN/docs/claude-code/overview"
               target="_blank"
               rel="noopener noreferrer"
               className="font-medium text-primary underline underline-offset-4 transition-colors hover:text-primary/80"
             >
-              官方文档
+              {t("commonCommands.moreCommands")}
             </a>
           </li>
         </ul>
@@ -1189,45 +1151,43 @@ curl -I ${resolvedOrigin}`}
       {/* 通用故障排查 */}
       <section className="space-y-4">
         <h2 id="troubleshooting" className={headingClasses.h2}>
-          🔍 通用故障排查
+          🔍 {t("troubleshooting.title")}
         </h2>
 
         <div className="space-y-3">
-          <p className="font-semibold text-foreground">安装失败</p>
+          <p className="font-semibold text-foreground">
+            {t("troubleshooting.installationFailed.title")}
+          </p>
           <ul className="list-disc space-y-2 pl-6">
-            <li>检查网络连接是否正常</li>
-            <li>确保有管理员权限（Windows）或使用 sudo（macOS / Linux）</li>
-            <li>尝试使用代理或镜像源（npm 可使用 --registry 参数）</li>
+            {(t.raw("troubleshooting.installationFailed.steps") as string[]).map(
+              (step: string, i: number) => (
+                <li key={i}>{step}</li>
+              )
+            )}
           </ul>
         </div>
 
         <div className="space-y-3">
-          <p className="font-semibold text-foreground">API 密钥无效</p>
+          <p className="font-semibold text-foreground">{t("troubleshooting.invalidApiKey.title")}</p>
           <ul className="list-disc space-y-2 pl-6">
-            <li>确认密钥已正确复制（无多余空格）</li>
-            <li>检查密钥是否在有效期内</li>
-            <li>验证账户权限是否正常</li>
-            <li>确认使用了正确的端点格式（Anthropic 无 /v1，OpenAI 有 /v1）</li>
+            {(t.raw("troubleshooting.invalidApiKey.steps") as string[]).map(
+              (step: string, i: number) => (
+                <li key={i}>{step}</li>
+              )
+            )}
           </ul>
         </div>
 
         <div className="space-y-3">
-          <p className="font-semibold text-foreground">端点配置错误</p>
+          <p className="font-semibold text-foreground">
+            {t("troubleshooting.endpointConfigError.title")}
+          </p>
           <ul className="list-disc space-y-2 pl-6">
-            <li>
-              <strong>Claude Code / Droid Anthropic 模型：</strong>使用{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
-                {resolvedOrigin}
-              </code>
-              （无 /v1）
-            </li>
-            <li>
-              <strong>Codex / Droid OpenAI 模型：</strong>使用{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">
-                {resolvedOrigin}/v1
-              </code>
-              （必须包含 /v1）
-            </li>
+            {(t.raw("troubleshooting.endpointConfigError.points") as string[]).map(
+              (point: string, i: number) => (
+                <li key={i}>{point.replace("${resolvedOrigin}", resolvedOrigin)}</li>
+              )
+            )}
           </ul>
         </div>
       </section>
@@ -1242,6 +1202,7 @@ curl -I ${resolvedOrigin}`}
  * 提供完整的无障碍支持（ARIA 标签、键盘导航、skip links）
  */
 export default function UsageDocPage() {
+  const t = useTranslations("usage");
   const [activeId, setActiveId] = useState<string>("");
   const [tocItems, setTocItems] = useState<TocItem[]>([]);
   const [tocReady, setTocReady] = useState(false);
@@ -1318,14 +1279,19 @@ export default function UsageDocPage() {
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
       >
-        跳转到主要内容
+        {t("skipLinks.mainContent")}
       </a>
       <a
         href="#toc-navigation"
         className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-40 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
       >
-        跳转到目录导航
+        {t("skipLinks.tableOfContents")}
       </a>
+
+      {/* Language Switcher - Fixed position */}
+      <div className="fixed top-4 right-4 z-50 lg:top-6 lg:right-8">
+        <LanguageSwitcher size="sm" />
+      </div>
 
       <div className="relative flex gap-6 lg:gap-8">
         {/* 左侧主文档 */}
@@ -1333,17 +1299,21 @@ export default function UsageDocPage() {
           {/* 文档容器 */}
           <div className="relative bg-card rounded-xl shadow-sm border p-4 sm:p-6 md:p-8 lg:p-12">
             {/* 文档内容 */}
-            <main id="main-content" role="main" aria-label="文档内容">
+            <main id="main-content" role={t("ui.main")} aria-label={t("ui.mainContent")}>
               <UsageDocContent origin={serviceOrigin} />
             </main>
           </div>
         </div>
 
         {/* 右侧目录导航 - 桌面端 */}
-        <aside id="toc-navigation" className="hidden lg:block w-64 shrink-0" aria-label="页面导航">
+        <aside
+          id="toc-navigation"
+          className="hidden lg:block w-64 shrink-0"
+          aria-label={t("navigation.pageNavigation")}
+        >
           <div className="sticky top-24 space-y-4">
             <div className="bg-card rounded-lg border p-4">
-              <h4 className="font-semibold text-sm mb-3">本页导航</h4>
+              <h4 className="font-semibold text-sm mb-3">{t("navigation.tableOfContents")}</h4>
               <TocNav
                 tocItems={tocItems}
                 activeId={activeId}
@@ -1354,7 +1324,7 @@ export default function UsageDocPage() {
 
             {/* 快速操作 */}
             <div className="bg-card rounded-lg border p-4">
-              <h4 className="font-semibold text-sm mb-3">快速链接</h4>
+              <h4 className="font-semibold text-sm mb-3">{t("navigation.quickLinks")}</h4>
               <QuickLinks isLoggedIn={isLoggedIn} />
             </div>
           </div>
@@ -1367,18 +1337,18 @@ export default function UsageDocPage() {
               variant="default"
               size="icon"
               className="fixed bottom-6 right-6 z-40 lg:hidden shadow-lg"
-              aria-label="打开目录导航"
+              aria-label={t("navigation.openTableOfContents")}
             >
               <Menu className="h-5 w-5" />
             </Button>
           </SheetTrigger>
           <SheetContent side="right" className="w-[85vw] sm:w-[400px] overflow-y-auto">
             <SheetHeader>
-              <SheetTitle>文档导航</SheetTitle>
+              <SheetTitle>{t("navigation.documentNavigation")}</SheetTitle>
             </SheetHeader>
             <div className="mt-6 space-y-6">
               <div>
-                <h4 className="font-semibold text-sm mb-3">本页导航</h4>
+                <h4 className="font-semibold text-sm mb-3">{t("navigation.tableOfContents")}</h4>
                 <TocNav
                   tocItems={tocItems}
                   activeId={activeId}
@@ -1388,7 +1358,7 @@ export default function UsageDocPage() {
               </div>
 
               <div className="border-t pt-4">
-                <h4 className="font-semibold text-sm mb-3">快速链接</h4>
+                <h4 className="font-semibold text-sm mb-3">{t("navigation.quickLinks")}</h4>
                 <QuickLinks isLoggedIn={isLoggedIn} onBackToTop={() => setSheetOpen(false)} />
               </div>
             </div>

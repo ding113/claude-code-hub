@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useTranslations } from "next-intl";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +31,7 @@ interface AutoCleanupFormProps {
 }
 
 export function AutoCleanupForm({ settings, onSuccess }: AutoCleanupFormProps) {
+  const t = useTranslations("settings.config.form");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const {
@@ -67,14 +69,14 @@ export function AutoCleanupForm({ settings, onSuccess }: AutoCleanupFormProps) {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || "保存失败");
+        throw new Error(error.error || t("saveFailed"));
       }
 
-      toast.success("自动清理配置已保存");
+      toast.success(t("autoCleanupSaved"));
       onSuccess?.();
     } catch (error) {
       console.error("Save error:", error);
-      toast.error(error instanceof Error ? error.message : "保存配置失败");
+      toast.error(error instanceof Error ? error.message : t("saveError"));
     } finally {
       setIsSubmitting(false);
     }

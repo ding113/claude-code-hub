@@ -391,6 +391,23 @@
           "Начните использовать!"
         ]
       }
+    },
+
+    "startup": {
+      "title": "Запуск droid",
+      "description": "Выполните следующую команду в каталоге вашего проекта:",
+      "initNote": "При первом запуске droid выполнит первоначальную настройку."
+    },
+
+    "commonIssues": {
+      "title": "Часто задаваемые вопросы",
+      "commandNotFound": "1. Команда не найдена",
+      "commandNotFoundWindows": [
+        "Убедитесь, что глобальный путь npm (обычно C:\\Users\\your-username\\AppData\\Roaming\\npm) добавлен в системный PATH",
+        "Перезапустите окно PowerShell"
+      ],
+      "commandNotFoundUnix": "Проверьте глобальный путь установки npm и добавьте его в PATH (если еще не добавлен)",
+      "updateCli": "2. Обновление droid"
     }
   },
 
@@ -448,6 +465,7 @@
 
   "ui": {
     "mainContent": "Содержимое документации",
-    "main": "main"
+    "main": "main",
+    "currentSiteAddress": "Текущий адрес сайта"
   }
 }

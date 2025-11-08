@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { redirect } from "next/navigation";
+import { redirect } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
 import { Section } from "@/components/section";
 import { UsageLogsView } from "./_components/usage-logs-view";
@@ -12,10 +12,15 @@ import { getSystemSettings } from "@/repository/system-config";
 export const dynamic = "force-dynamic";
 
 export default async function UsageLogsPage({
+  params,
   searchParams,
 }: {
+  params: Promise<{ locale: string }>;
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
+  // Await params to ensure locale is available in the async context
+  await params;
+
   const session = await getSession();
   if (!session) {
     redirect("/login");

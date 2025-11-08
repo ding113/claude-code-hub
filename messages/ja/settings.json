@@ -201,24 +201,66 @@
     "description": "プラットフォーム基本設定とモデル価格を管理します",
     "subtitle": "モデル価格",
     "subtitleDesc": "AIモデルの価格設定を管理します",
-    "search": "モデル名で検索...",
-    "sync": "LiteLLM価格を同期",
+    "search": {
+      "placeholder": "モデル名を検索...",
+      "totalModels": "合計{total}件のモデル価格",
+      "searchResults": "（検索結果：{count}件）",
+      "lastUpdated": "最終更新："
+    },
+    "sync": {
+      "button": "LiteLLM価格を同期",
+      "syncing": "同期中...",
+      "successWithChanges": "同期成功：追加{added}件、更新{updated}件、未変更{unchanged}件",
+      "successNoChanges": "すべて{unchanged}件のモデル価格は最新です",
+      "noModels": "サポートされているモデル価格が見つかりません",
+      "failed": "同期に失敗しました",
+      "failedError": "同期に失敗しました。再試行してください",
+      "failedNoResult": "同期は成功しましたが、結果が返されませんでした",
+      "partialFailure": "{failed}件のモデル処理に失敗しました"
+    },
     "syncing": "同期中...",
     "syncSuccess": "価格表が正常に更新されました",
     "syncFailed": "同期に失敗しました",
     "syncFailedError": "同期に失敗しました：",
     "syncNoResult": "価格表は更新されましたが結果が返されていません",
-    "upload": "モデル価格表を更新",
+    "upload": {
+      "button": "価格表を更新",
+      "updating": "更新中...",
+      "dialogTitle": "モデル価格表を更新",
+      "dialogDescription": "モデル価格データを含むJSONファイルを選択して価格表を更新",
+      "selectFile": "クリックしてJSONファイルを選択するか、ここにドラッグ＆ドロップ",
+      "fileSizeLimit": "ファイルサイズは10MBを超えないでください",
+      "selectFileButton": "ファイルを選択",
+      "invalidFileType": "JSONファイルを選択してください",
+      "fileTooLarge": "ファイルサイズは10MBを超えないでください",
+      "success": "価格表の更新に成功しました",
+      "failed": "更新に失敗しました。再試行してください",
+      "failedError": "更新に失敗しました：",
+      "noResult": "価格表の更新に成功しましたが、結果が返されませんでした",
+      "updateInProgress": "モデル価格を更新中...",
+      "enterDashboard": "ダッシュボードに移動",
+      "completed": "完了"
+    },
     "uploadSuccess": "価格表が正常に更新されました",
     "uploadFailed": "価格データの取得に失敗しました：",
     "noData": "システムは組み込み価格表を持っています。上のボタンを使用して同期または更新してください。",
     "noModels": "モデル価格が見つかりません",
     "table": {
-      "model": "モデル",
-      "inputPrice": "入力価格",
-      "outputPrice": "出力価格",
-      "cachePrice": "キャッシュ価格",
-      "updatedAt": "更新日"
+      "modelName": "モデル名",
+      "type": "タイプ",
+      "provider": "プロバイダー",
+      "inputPrice": "入力価格 ($/M)",
+      "outputPrice": "出力価格 ($/M)",
+      "updatedAt": "更新日時",
+      "typeChat": "チャット",
+      "typeImageGen": "画像生成",
+      "typeCompletion": "補完",
+      "typeUnknown": "不明",
+      "imagePrice": "${price}/img",
+      "loading": "読み込み中...",
+      "noResults": "一致するモデルが見つかりません",
+      "noData": "価格データがありません",
+      "noDataHint": "組み込みの価格表が利用可能です。上記のボタンを使用して同期または更新してください"
     },
     "dialog": {
       "title": "モデル価格表を更新",
@@ -230,6 +272,33 @@
       "uploading": "アップロード中...",
       "readError": "キーの取得に失敗しました",
       "getError": "キーの取得に失敗しました"
+    },
+    "section": {
+      "title": "モデル価格",
+      "description": "AIモデルの価格設定を管理"
+    },
+    "pagination": {
+      "perPage": "ページあたり：",
+      "showing": "{total}件中{start} - {end}件を表示",
+      "previous": "前へ",
+      "next": "次へ"
+    },
+    "uploadDialog": {
+      "notes": {
+        "litellm": "• 組み込みのLiteLLM価格表があります。左側の「LiteLLM価格を同期」ボタンを使用して更新できます",
+        "manual": "• 手動でダウンロードすることもできます",
+        "link": "最新の価格表",
+        "linkAnd": "このボタンから更新",
+        "support": "• ClaudeとOpenAIモデルをサポート（claude-, gpt-, o1-, o3-プレフィックス）"
+      },
+      "result": {
+        "total": "処理総数",
+        "added": "追加されたモデル（{count}件）",
+        "updated": "更新されたモデル（{count}件）",
+        "unchanged": "未変更（{count}件）",
+        "failed": "失敗（{count}件）",
+        "showMore": "他{count}件"
+      }
     }
   },
   "sensitiveWords": {
@@ -276,6 +345,43 @@
       "totalChecks": "総チェック数",
       "cacheSize": "キャッシュサイズ",
       "lastUpdated": "最終更新"
+    },
+    "section": {
+      "title": "センシティブワードリスト",
+      "description": "センシティブワードによってブロックされたリクエストはアップストリームに転送されず、課金もされません。部分一致、完全一致、正規表現の3つのモードをサポートしています。"
+    },
+    "refreshCacheSuccess": "キャッシュのリフレッシュに成功しました。{count}個のセンシティブワードを読み込みました",
+    "refreshCacheFailed": "キャッシュのリフレッシュに失敗しました",
+    "cacheStats": "キャッシュ統計：部分一致({containsCount}) 完全一致({exactCount}) 正規表現({regexCount})",
+    "emptyState": "センシティブワードがありません。右上の「センシティブワードを追加」をクリックして設定を開始してください。",
+    "confirmDelete": "センシティブワード「{word}」を削除してもよろしいですか？",
+    "dialog": {
+      "addTitle": "センシティブワードを追加",
+      "addDescription": "センシティブワードフィルタリングルールを設定します。マッチしたリクエストはアップストリームに転送されません。",
+      "editTitle": "センシティブワードを編集",
+      "editDescription": "センシティブワード設定を変更します。変更後、自動的にキャッシュがリフレッシュされます。",
+      "wordLabel": "センシティブワード *",
+      "wordPlaceholder": "センシティブワードを入力...",
+      "wordRequired": "センシティブワードを入力してください",
+      "matchTypeLabel": "マッチタイプ *",
+      "matchTypeContains": "部分一致 - テキストにこの単語が含まれている場合ブロック",
+      "matchTypeExact": "完全一致 - 完全に一致する場合のみブロック",
+      "matchTypeRegex": "正規表現 - 複雑なパターンマッチングをサポート",
+      "descriptionLabel": "説明",
+      "descriptionPlaceholder": "オプション：説明を追加...",
+      "creating": "作成中...",
+      "saving": "保存中..."
+    },
+    "table": {
+      "word": "センシティブワード",
+      "matchType": "マッチタイプ",
+      "matchTypeContains": "部分一致",
+      "matchTypeExact": "完全一致",
+      "matchTypeRegex": "正規表現",
+      "description": "説明",
+      "status": "ステータス",
+      "createdAt": "作成日時",
+      "actions": "操作"
     }
   },
   "logs": {

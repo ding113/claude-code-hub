@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,10 +21,11 @@ import { AlertCircle, Download, FileDown, Loader2, Settings } from "lucide-react
 import type { GeneratorResult, UserBreakdownResult } from "@/lib/data-generator/types";
 
 export function DataGeneratorPage() {
+  const t = useTranslations("internal.dataGenerator");
   const [mode, setMode] = useState<"usage" | "userBreakdown">("usage");
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
-  const [serviceName, setServiceName] = useState<string>("AI大模型推理服务");
+  const [serviceName, setServiceName] = useState<string>("");
   const [totalCostCny, setTotalCostCny] = useState<string>("");
   const [totalRecords, setTotalRecords] = useState<string>("");
   const [models, setModels] = useState<string>("");
@@ -87,7 +89,7 @@ export function DataGeneratorPage() {
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || "Failed to generate logs");
+        throw new Error(data.error || t("errors.failed"));
       }
 
       if (mode === "userBreakdown") {
@@ -198,8 +200,8 @@ export function DataGeneratorPage() {
     <div className="space-y-6 p-6">
       <Tabs value={mode} onValueChange={(v) => setMode(v as "usage" | "userBreakdown")}>
         <TabsList>
-          <TabsTrigger value="usage">用量数据生成</TabsTrigger>
-          <TabsTrigger value="userBreakdown">按用户显示用量</TabsTrigger>
+          <TabsTrigger value="usage">{t("tabs.usage")}</TabsTrigger>
+          <TabsTrigger value="userBreakdown">{t("tabs.userBreakdown")}</TabsTrigger>
         </TabsList>
       </Tabs>
 
@@ -207,7 +209,7 @@ export function DataGeneratorPage() {
         <div className="flex justify-end">
           <Button variant="outline" size="sm" onClick={() => setShowParams(true)}>
             <Settings className="mr-2 h-4 w-4" />
-            重新配置参数
+            {t("actions.reconfigure")}
           </Button>
         </div>
       )}
@@ -215,13 +217,13 @@ export function DataGeneratorPage() {
       {showParams && (
         <Card>
           <CardHeader>
-            <CardTitle>生成参数</CardTitle>
-            <CardDescription>配置生成参数以创建模拟日志数据</CardDescription>
+            <CardTitle>{t("params.title")}</CardTitle>
+            <CardDescription>{t("params.description")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="startDate">起始时间 *</Label>
+                <Label htmlFor="startDate">{t("params.startDate")} {t("params.required")}</Label>
                 <Input
                   id="startDate"
                   type="datetime-local"
@@ -230,7 +232,7 @@ export function DataGeneratorPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="endDate">结束时间 *</Label>
+                <Label htmlFor="endDate">{t("params.endDate")} {t("params.required")}</Label>
                 <Input
                   id="endDate"
                   type="datetime-local"
@@ -239,58 +241,58 @@ export function DataGeneratorPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="totalCostCny">总金额（人民币）</Label>
+                <Label htmlFor="totalCostCny">{t("params.totalCostCny")}</Label>
                 <Input
                   id="totalCostCny"
                   type="number"
-                  placeholder="如：1000"
+                  placeholder={t("params.placeholders.totalCostCny")}
                   value={totalCostCny}
                   onChange={(e) => setTotalCostCny(e.target.value)}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="totalRecords">总记录数</Label>
+                <Label htmlFor="totalRecords">{t("params.totalRecords")}</Label>
                 <Input
                   id="totalRecords"
                   type="number"
-                  placeholder="如：500（不填则根据金额计算）"
+                  placeholder={t("params.placeholders.totalRecords")}
                   value={totalRecords}
                   onChange={(e) => setTotalRecords(e.target.value)}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="models">包含模型（逗号分隔）</Label>
+                <Label htmlFor="models">{t("params.models")}</Label>
                 <Input
                   id="models"
-                  placeholder="如：claude-3-5-sonnet,gpt-4（留空则全部）"
+                  placeholder={t("params.placeholders.models")}
                   value={models}
                   onChange={(e) => setModels(e.target.value)}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="userIds">用户ID（逗号分隔）</Label>
+                <Label htmlFor="userIds">{t("params.userIds")}</Label>
                 <Input
                   id="userIds"
-                  placeholder="如：1,2,3（留空则全部）"
+                  placeholder={t("params.placeholders.userIds")}
                   value={userIds}
                   onChange={(e) => setUserIds(e.target.value)}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="providerIds">供应商ID（逗号分隔）</Label>
+                <Label htmlFor="providerIds">{t("params.providerIds")}</Label>
                 <Input
                   id="providerIds"
-                  placeholder="如：1,2（留空则全部）"
+                  placeholder={t("params.placeholders.providerIds")}
                   value={providerIds}
                   onChange={(e) => setProviderIds(e.target.value)}
                 />
               </div>
               {mode === "userBreakdown" && (
                 <div className="space-y-2">
-                  <Label htmlFor="serviceName">服务名称</Label>
+                  <Label htmlFor="serviceName">{t("params.serviceName")}</Label>
                   <Input
                     id="serviceName"
-                    placeholder="AI大模型推理服务"
+                    placeholder={t("params.placeholders.serviceName")}
                     value={serviceName}
                     onChange={(e) => setServiceName(e.target.value)}
                   />
@@ -300,7 +302,7 @@ export function DataGeneratorPage() {
 
             <Button onClick={handleGenerate} disabled={loading || !startDate || !endDate}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              生成数据
+              {t("actions.generate")}
             </Button>
           </CardContent>
         </Card>
@@ -318,18 +320,18 @@ export function DataGeneratorPage() {
           <div className="flex justify-end gap-2">
             <Button variant="outline" size="sm" onClick={handleExportScreenshot}>
               <Download className="mr-2 h-4 w-4" />
-              导出截图
+              {t("actions.exportScreenshot")}
             </Button>
             <Button variant="outline" size="sm" onClick={handleExportPDF}>
               <FileDown className="mr-2 h-4 w-4" />
-              导出 PDF
+              {t("actions.exportPDF")}
             </Button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <Card>
               <CardHeader className="pb-2">
-                <CardDescription>总记录数</CardDescription>
+                <CardDescription>{t("summary.totalRecords")}</CardDescription>
                 <CardTitle className="text-2xl">
                   {result.summary.totalRecords.toLocaleString()}
                 </CardTitle>
@@ -337,13 +339,13 @@ export function DataGeneratorPage() {
             </Card>
             {/* <Card>
               <CardHeader className="pb-2">
-                <CardDescription>总成本</CardDescription>
+                <CardDescription>{t("summary.totalCost")}</CardDescription>
                 <CardTitle className="text-2xl">${result.summary.totalCost.toFixed(4)}</CardTitle>
               </CardHeader>
             </Card> */}
             <Card>
               <CardHeader className="pb-2">
-                <CardDescription>总成本（人民币）</CardDescription>
+                <CardDescription>{t("summary.totalCostCny")}</CardDescription>
                 <CardTitle className="text-2xl">
                   ¥{(result.summary.totalCost * 7.1).toFixed(2)}
                 </CardTitle>
@@ -351,7 +353,7 @@ export function DataGeneratorPage() {
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <CardDescription>总 Token</CardDescription>
+                <CardDescription>{t("summary.totalTokens")}</CardDescription>
                 <CardTitle className="text-2xl">
                   {result.summary.totalTokens.toLocaleString()}
                 </CardTitle>
@@ -361,26 +363,26 @@ export function DataGeneratorPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>使用日志</CardTitle>
-              <CardDescription>共 {result.logs.length} 条记录</CardDescription>
+              <CardTitle>{t("table.usageLogs.title")}</CardTitle>
+              <CardDescription>{t("table.usageLogs.description", { count: result.logs.length })}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="rounded-md border max-h-[600px] overflow-auto">
                 <Table>
                   <TableHeader className="sticky top-0 bg-background">
                     <TableRow>
-                      <TableHead>时间</TableHead>
-                      <TableHead>用户</TableHead>
-                      <TableHead>密钥</TableHead>
-                      <TableHead>供应商</TableHead>
-                      <TableHead>模型</TableHead>
-                      <TableHead className="text-right">输入</TableHead>
-                      <TableHead className="text-right">输出</TableHead>
-                      <TableHead className="text-right">缓存写</TableHead>
-                      <TableHead className="text-right">缓存读</TableHead>
-                      <TableHead className="text-right">成本</TableHead>
-                      <TableHead className="text-right">耗时</TableHead>
-                      <TableHead>状态</TableHead>
+                      <TableHead>{t("table.usageLogs.columns.time")}</TableHead>
+                      <TableHead>{t("table.usageLogs.columns.user")}</TableHead>
+                      <TableHead>{t("table.usageLogs.columns.key")}</TableHead>
+                      <TableHead>{t("table.usageLogs.columns.provider")}</TableHead>
+                      <TableHead>{t("table.usageLogs.columns.model")}</TableHead>
+                      <TableHead className="text-right">{t("table.usageLogs.columns.input")}</TableHead>
+                      <TableHead className="text-right">{t("table.usageLogs.columns.output")}</TableHead>
+                      <TableHead className="text-right">{t("table.usageLogs.columns.cacheWrite")}</TableHead>
+                      <TableHead className="text-right">{t("table.usageLogs.columns.cacheRead")}</TableHead>
+                      <TableHead className="text-right">{t("table.usageLogs.columns.cost")}</TableHead>
+                      <TableHead className="text-right">{t("table.usageLogs.columns.duration")}</TableHead>
+                      <TableHead>{t("table.usageLogs.columns.status")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -420,7 +422,7 @@ export function DataGeneratorPage() {
                         <TableCell>
                           {log.statusCode === 200 ? (
                             <span className="inline-flex items-center rounded-md bg-green-100 dark:bg-green-950 px-2 py-1 text-xs font-medium text-green-700 dark:text-green-300">
-                              成功
+                              {t("status.success")}
                             </span>
                           ) : (
                             <span className="inline-flex items-center rounded-md bg-red-100 dark:bg-red-950 px-2 py-1 text-xs font-medium text-red-700 dark:text-red-300">
@@ -443,18 +445,18 @@ export function DataGeneratorPage() {
           <div className="flex justify-end gap-2">
             <Button variant="outline" size="sm" onClick={handleExportScreenshot}>
               <Download className="mr-2 h-4 w-4" />
-              导出截图
+              {t("actions.exportScreenshot")}
             </Button>
             <Button variant="outline" size="sm" onClick={handleExportPDF}>
               <FileDown className="mr-2 h-4 w-4" />
-              导出 PDF
+              {t("actions.exportPDF")}
             </Button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <Card>
               <CardHeader className="pb-2">
-                <CardDescription>时间范围</CardDescription>
+                <CardDescription>{t("summary.timeRange")}</CardDescription>
                 <CardTitle className="text-sm">
                   <div>
                     {new Date(startDate).toLocaleString("zh-CN", {
@@ -464,7 +466,7 @@ export function DataGeneratorPage() {
                       minute: "2-digit",
                     })}
                   </div>
-                  <div className="text-muted-foreground text-xs">至</div>
+                  <div className="text-muted-foreground text-xs">{t("summary.to")}</div>
                   <div>
                     {new Date(endDate).toLocaleString("zh-CN", {
                       month: "numeric",
@@ -478,7 +480,7 @@ export function DataGeneratorPage() {
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <CardDescription>总用户数</CardDescription>
+                <CardDescription>{t("summary.uniqueUsers")}</CardDescription>
                 <CardTitle className="text-2xl">
                   {userBreakdownResult.summary.uniqueUsers.toLocaleString()}
                 </CardTitle>
@@ -486,7 +488,7 @@ export function DataGeneratorPage() {
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <CardDescription>总调用数</CardDescription>
+                <CardDescription>{t("summary.totalCalls")}</CardDescription>
                 <CardTitle className="text-2xl">
                   {userBreakdownResult.summary.totalCalls.toLocaleString()}
                 </CardTitle>
@@ -494,7 +496,7 @@ export function DataGeneratorPage() {
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <CardDescription>总成本（人民币）</CardDescription>
+                <CardDescription>{t("summary.totalCostCny")}</CardDescription>
                 <CardTitle className="text-2xl">
                   ¥{(userBreakdownResult.summary.totalCost * 7.1).toFixed(2)}
                 </CardTitle>
@@ -506,11 +508,11 @@ export function DataGeneratorPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>用户用量明细</CardTitle>
+                  <CardTitle>{t("table.userBreakdown.title")}</CardTitle>
                   <CardDescription>
-                    共{" "}
-                    {collapseByUser ? collapsedUserData?.length : userBreakdownResult.items.length}{" "}
-                    条记录
+                    {t("table.userBreakdown.description", {
+                      count: collapseByUser ? collapsedUserData?.length : userBreakdownResult.items.length
+                    })}
                   </CardDescription>
                 </div>
                 <div className="flex items-center space-x-2">
@@ -520,7 +522,7 @@ export function DataGeneratorPage() {
                     onCheckedChange={setCollapseByUser}
                   />
                   <Label htmlFor="collapse-mode" className="cursor-pointer">
-                    按用户折叠
+                    {t("table.userBreakdown.collapseByUser")}
                   </Label>
                 </div>
               </div>
@@ -530,11 +532,11 @@ export function DataGeneratorPage() {
                 <Table>
                   <TableHeader className="sticky top-0 bg-background">
                     <TableRow>
-                      <TableHead>用户名</TableHead>
-                      {!collapseByUser && <TableHead>密钥</TableHead>}
-                      <TableHead>服务模型</TableHead>
-                      <TableHead className="text-right">总调用数</TableHead>
-                      <TableHead className="text-right">总调用额度</TableHead>
+                      <TableHead>{t("table.userBreakdown.columns.userName")}</TableHead>
+                      {!collapseByUser && <TableHead>{t("table.userBreakdown.columns.key")}</TableHead>}
+                      <TableHead>{t("table.userBreakdown.columns.serviceModel")}</TableHead>
+                      <TableHead className="text-right">{t("table.userBreakdown.columns.totalCalls")}</TableHead>
+                      <TableHead className="text-right">{t("table.userBreakdown.columns.totalCost")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

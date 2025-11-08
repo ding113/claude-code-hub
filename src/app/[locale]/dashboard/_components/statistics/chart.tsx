@@ -10,6 +10,7 @@ import { ChartConfig, ChartContainer, ChartLegend, ChartTooltip } from "@/compon
 
 import type { UserStatisticsData, TimeRange } from "@/types/statistics";
 import { TimeRangeSelector } from "./time-range-selector";
+import { useTranslations } from "next-intl";
 
 // 固定的调色盘，确保新增用户也能获得可辨识的颜色
 const USER_COLOR_PALETTE = [
@@ -57,6 +58,7 @@ export function UserStatisticsChart({
   onTimeRangeChange,
   currencyCode = "USD",
 }: UserStatisticsChartProps) {
+  const t = useTranslations("dashboard.statistics");
   const [activeChart, setActiveChart] = React.useState<"cost" | "calls">("cost");
 
   // 用户选择状态(仅 Admin 用 users 模式时启用)
@@ -102,10 +104,10 @@ export function UserStatisticsChart({
   const chartConfig = React.useMemo(() => {
     const config: ChartConfig = {
       cost: {
-        label: "消费金额",
+        label: t("cost"),
       },
       calls: {
-        label: "API调用次数",
+        label: t("calls"),
       },
     };
 
@@ -263,23 +265,23 @@ export function UserStatisticsChart({
   const getTimeRangeDescription = () => {
     switch (data.timeRange) {
       case "today":
-        return "今天的使用情况";
+        return t("timeRange.todayDescription");
       case "7days":
-        return "过去 7 天的使用情况";
+        return t("timeRange.7daysDescription");
       case "30days":
-        return "过去 30 天的使用情况";
+        return t("timeRange.30daysDescription");
       default:
-        return "使用情况";
+        return t("timeRange.default");
     }
   };
 
   const getAggregationLabel = () => {
     if (data.mode === "keys") {
-      return "仅显示您名下各密钥的使用统计";
+      return t("mode.keys");
     } else if (data.mode === "mixed") {
-      return "展示您的密钥明细和其他用户汇总";
+      return t("mode.mixed");
     } else {
-      return "展示所有用户的使用统计";
+      return t("mode.users");
     }
   };
 
@@ -292,7 +294,7 @@ export function UserStatisticsChart({
         )}
       >
         <div className="flex flex-1 flex-col justify-center gap-1 px-6 pt-4 pb-3 lg:!py-0">
-          <CardTitle>使用统计</CardTitle>
+          <CardTitle>{t("title")}</CardTitle>
           <CardDescription>
             {getTimeRangeDescription()} · {getAggregationLabel()}
           </CardDescription>
@@ -313,7 +315,7 @@ export function UserStatisticsChart({
               className="data-[active=true]:bg-muted/50 relative z-30 flex flex-1 flex-col justify-center gap-1 border-t px-6 py-4 text-left even:border-l lg:border-t-0 lg:border-l lg:px-8 lg:py-6"
               onClick={() => setActiveChart("cost")}
             >
-              <span className="text-muted-foreground text-xs">总消费金额</span>
+              <span className="text-muted-foreground text-xs">{t("totalCost")}</span>
               <span className="text-lg leading-none font-bold sm:text-3xl">
                 {formatCurrency(visibleTotals.cost, currencyCode)}
               </span>
@@ -323,7 +325,7 @@ export function UserStatisticsChart({
               className="data-[active=true]:bg-muted/50 relative z-30 flex flex-1 flex-col justify-center gap-1 border-t px-6 py-4 text-left even:border-l lg:border-t-0 lg:border-l lg:px-8 lg:py-6"
               onClick={() => setActiveChart("calls")}
             >
-              <span className="text-muted-foreground text-xs">总API调用次数</span>
+              <span className="text-muted-foreground text-xs">{t("totalCalls")}</span>
               <span className="text-lg leading-none font-bold sm:text-3xl">
                 {visibleTotals.calls.toLocaleString()}
               </span>
@@ -339,7 +341,7 @@ export function UserStatisticsChart({
             className="data-[active=true]:bg-muted/50 relative z-30 flex flex-1 flex-col justify-center gap-1 px-6 py-3 text-left even:border-l transition-colors hover:bg-muted/30"
             onClick={() => setActiveChart("cost")}
           >
-            <span className="text-muted-foreground text-xs">总消费金额</span>
+            <span className="text-muted-foreground text-xs">{t("totalCost")}</span>
             <span className="text-lg leading-none font-bold sm:text-xl">
               {formatCurrency(visibleTotals.cost, currencyCode)}
             </span>
@@ -349,7 +351,7 @@ export function UserStatisticsChart({
             className="data-[active=true]:bg-muted/50 relative z-30 flex flex-1 flex-col justify-center gap-1 px-6 py-3 text-left even:border-l transition-colors hover:bg-muted/30"
             onClick={() => setActiveChart("calls")}
           >
-            <span className="text-muted-foreground text-xs">总API调用次数</span>
+            <span className="text-muted-foreground text-xs">{t("totalCalls")}</span>
             <span className="text-lg leading-none font-bold sm:text-xl">
               {visibleTotals.calls.toLocaleString()}
             </span>
@@ -491,18 +493,18 @@ export function UserStatisticsChart({
                         onClick={selectAllUsers}
                         className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded hover:bg-muted/50 transition-colors"
                       >
-                        全选 ({data.users.length})
+                        {t("legend.selectAll")} ({data.users.length})
                       </button>
                       <span className="text-muted-foreground">·</span>
                       <button
                         onClick={deselectAllUsers}
                         className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded hover:bg-muted/50 transition-colors"
                       >
-                        清空
+                        {t("legend.deselectAll")}
                       </button>
                       <span className="text-muted-foreground">·</span>
                       <span className="text-xs text-muted-foreground">
-                        已选 {selectedUserIds.size}/{data.users.length}
+                        {t("legend.selected")} {selectedUserIds.size}/{data.users.length}
                       </span>
                     </div>
                   )}

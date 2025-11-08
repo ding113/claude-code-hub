@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Key, Loader2, AlertTriangle, Book } from "lucide-react";
+import { LanguageSwitcher } from "@/components/ui/language-switcher";
 
 export default function LoginPage() {
   return (
@@ -71,6 +72,11 @@ function LoginPageContent() {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-background via-background to-muted/40">
+      {/* Language Switcher - Fixed Top Right */}
+      <div className="fixed top-4 right-4 z-50">
+        <LanguageSwitcher size="sm" />
+      </div>
+
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute right-[10%] top-[-6rem] h-72 w-72 rounded-full bg-orange-500/10 blur-3xl" />
         <div className="absolute bottom-[-4rem] left-[15%] h-80 w-80 rounded-full bg-orange-400/10 blur-3xl" />

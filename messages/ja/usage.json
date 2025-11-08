@@ -391,6 +391,23 @@
           "使用開始!"
         ]
       }
+    },
+
+    "startup": {
+      "title": "droid を起動",
+      "description": "プロジェクトディレクトリで以下のコマンドを実行:",
+      "initNote": "初回起動時、droid は初期設定を実行します。"
+    },
+
+    "commonIssues": {
+      "title": "よくある質問",
+      "commandNotFound": "1. コマンドが見つかりません",
+      "commandNotFoundWindows": [
+        "npm グローバルパス (通常 C:\\Users\\your-username\\AppData\\Roaming\\npm) がシステム PATH に追加されていることを確認",
+        "PowerShell ウィンドウを再起動"
+      ],
+      "commandNotFoundUnix": "npm グローバルインストールパスを確認し、PATH に追加 (まだの場合)",
+      "updateCli": "2. droid を更新"
     }
   },
 
@@ -448,6 +465,7 @@
 
   "ui": {
     "mainContent": "ドキュメントコンテンツ",
-    "main": "main"
+    "main": "main",
+    "currentSiteAddress": "現在のサイトアドレス"
   }
 }

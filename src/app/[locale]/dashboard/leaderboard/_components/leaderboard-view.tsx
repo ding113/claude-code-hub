@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { LeaderboardTable, type ColumnDef } from "./leaderboard-table";
 import type { LeaderboardEntry, ProviderLeaderboardEntry } from "@/repository/leaderboard";
 import { formatTokenAmount } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 
 interface LeaderboardViewProps {
   isAdmin: boolean;
@@ -15,6 +16,7 @@ type UserEntry = LeaderboardEntry & { totalCostFormatted?: string };
 type ProviderEntry = ProviderLeaderboardEntry & { totalCostFormatted?: string };
 
 export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
+  const t = useTranslations("dashboard.leaderboard");
   const [scope, setScope] = useState<"user" | "provider">("user");
   const [period, setPeriod] = useState<"daily" | "monthly">("daily");
   const [dailyData, setDailyData] = useState<Array<UserEntry | ProviderEntry>>([]);
@@ -33,7 +35,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
         ]);
 
         if (!dailyRes.ok || !monthlyRes.ok) {
-          throw new Error("获取排行榜数据失败");
+          throw new Error(t("states.fetchFailed"));
         }
 
         const [daily, monthly] = await Promise.all([dailyRes.json(), monthlyRes.json()]);
@@ -44,8 +46,8 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
           setError(null);
         }
       } catch (err) {
-        console.error("获取排行榜数据失败:", err);
-        if (!cancelled) setError(err instanceof Error ? err.message : "获取排行榜数据失败");
+        console.error(t("states.fetchFailed"), err);
+        if (!cancelled) setError(err instanceof Error ? err.message : t("states.fetchFailed"));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -61,7 +63,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     return (
       <Card>
         <CardContent className="py-8">
-          <div className="text-center text-muted-foreground">加载中...</div>
+          <div className="text-center text-muted-foreground">{t("states.loading")}</div>
         </CardContent>
       </Card>
     );
@@ -80,23 +82,23 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
   // 列定义（根据 scope 动态切换）
   const userColumns: ColumnDef<UserEntry>[] = [
     {
-      header: "用户",
+      header: t("columns.user"),
       cell: (row, index) => (
         <span className={index < 3 ? "font-semibold" : ""}>{(row as UserEntry).userName}</span>
       ),
     },
     {
-      header: "请求数",
+      header: t("columns.requests"),
       className: "text-right",
       cell: (row) => (row as UserEntry).totalRequests.toLocaleString(),
     },
     {
-      header: "Token 数",
+      header: t("columns.tokens"),
       className: "text-right",
       cell: (row) => formatTokenAmount((row as UserEntry).totalTokens),
     },
     {
-      header: "消耗金额",
+      header: t("columns.consumedAmount"),
       className: "text-right font-mono font-semibold",
       cell: (row) => {
         const r = row as UserEntry & { totalCostFormatted?: string };
@@ -107,7 +109,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
 
   const providerColumns: ColumnDef<ProviderEntry>[] = [
     {
-      header: "供应商",
+      header: t("columns.provider"),
       cell: (row, index) => (
         <span className={index < 3 ? "font-semibold" : ""}>
           {(row as ProviderEntry).providerName}
@@ -115,12 +117,12 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
       ),
     },
     {
-      header: "请求数",
+      header: t("columns.requests"),
       className: "text-right",
       cell: (row) => (row as ProviderEntry).totalRequests.toLocaleString(),
     },
     {
-      header: "成本",
+      header: t("columns.cost"),
       className: "text-right font-mono font-semibold",
       cell: (row) => {
         const r = row as ProviderEntry & { totalCostFormatted?: string };
@@ -128,17 +130,17 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
       },
     },
     {
-      header: "Token 数",
+      header: t("columns.tokens"),
       className: "text-right",
       cell: (row) => formatTokenAmount((row as ProviderEntry).totalTokens),
     },
     {
-      header: "成功率",
+      header: t("columns.successRate"),
       className: "text-right",
       cell: (row) => `${(((row as ProviderEntry).successRate || 0) * 100).toFixed(1)}%`,
     },
     {
-      header: "平均响应时间",
+      header: t("columns.avgResponseTime"),
       className: "text-right",
       cell: (row) =>
         `${Math.round((row as ProviderEntry).avgResponseTime || 0).toLocaleString()} ms`,
@@ -161,15 +163,15 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
       <div className="flex flex-wrap gap-4 items-center">
         <Tabs value={scope} onValueChange={(v) => setScope(v as typeof scope)}>
           <TabsList className={isAdmin ? "grid grid-cols-2" : ""}>
-            <TabsTrigger value="user">用户排行</TabsTrigger>
-            {isAdmin && <TabsTrigger value="provider">供应商排行</TabsTrigger>}
+            <TabsTrigger value="user">{t("tabs.userRanking")}</TabsTrigger>
+            {isAdmin && <TabsTrigger value="provider">{t("tabs.providerRanking")}</TabsTrigger>}
           </TabsList>
         </Tabs>
 
         <Tabs value={period} onValueChange={(v) => setPeriod(v as typeof period)}>
           <TabsList className="grid grid-cols-2">
-            <TabsTrigger value="daily">今日排行</TabsTrigger>
-            <TabsTrigger value="monthly">本月排行</TabsTrigger>
+            <TabsTrigger value="daily">{t("tabs.dailyRanking")}</TabsTrigger>
+            <TabsTrigger value="monthly">{t("tabs.monthlyRanking")}</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>

@@ -11,6 +11,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Trophy, Medal, Award } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 // 支持动态列定义
 export interface ColumnDef<T> {
@@ -32,12 +33,14 @@ export function LeaderboardTable<T>({
   columns,
   getRowKey,
 }: LeaderboardTableProps<T>) {
+  const t = useTranslations("dashboard.leaderboard");
+
   if (data.length === 0) {
     return (
       <Card>
         <CardContent className="py-8">
           <div className="text-center text-muted-foreground">
-            {period === "daily" ? "今日" : "本月"}暂无数据
+            {t(period === "daily" ? "states.todayNoData" : "states.monthNoData")}
           </div>
         </CardContent>
       </Card>
@@ -84,7 +87,7 @@ export function LeaderboardTable<T>({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-24">排名</TableHead>
+                <TableHead className="w-24">{t("columns.rank")}</TableHead>
                 {columns.map((col, idx) => (
                   <TableHead key={idx} className={col.className || ""}>
                     {col.header}

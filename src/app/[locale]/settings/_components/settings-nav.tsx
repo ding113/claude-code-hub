@@ -1,7 +1,6 @@
 "use client";
 
-import { Link } from "@/i18n/routing";
-import { usePathname } from "next/navigation";
+import { Link, usePathname } from "@/i18n/routing";
 
 import { cn } from "@/lib/utils";
 import type { SettingsNavItem } from "../_lib/nav-items";

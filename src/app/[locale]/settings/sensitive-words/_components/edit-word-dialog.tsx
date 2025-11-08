@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -31,6 +32,7 @@ interface EditWordDialogProps {
 }
 
 export function EditWordDialog({ word, open, onOpenChange }: EditWordDialogProps) {
+  const t = useTranslations("settings");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [wordText, setWordText] = useState("");
   const [matchType, setMatchType] = useState<string>("");
@@ -49,7 +51,7 @@ export function EditWordDialog({ word, open, onOpenChange }: EditWordDialogProps
     e.preventDefault();
 
     if (!wordText.trim()) {
-      toast.error("请输入敏感词");
+      toast.error(t("sensitiveWords.dialog.wordRequired"));
       return;
     }
 
@@ -63,13 +65,13 @@ export function EditWordDialog({ word, open, onOpenChange }: EditWordDialogProps
       });
 
       if (result.ok) {
-        toast.success("敏感词更新成功");
+        toast.success(t("sensitiveWords.editSuccess"));
         onOpenChange(false);
       } else {
         toast.error(result.error);
       }
     } catch {
-      toast.error("更新敏感词失败");
+      toast.error(t("sensitiveWords.editFailed"));
     } finally {
       setIsSubmitting(false);
     }
@@ -80,43 +82,45 @@ export function EditWordDialog({ word, open, onOpenChange }: EditWordDialogProps
       <DialogContent>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>编辑敏感词</DialogTitle>
-            <DialogDescription>修改敏感词配置，更改后将自动刷新缓存。</DialogDescription>
+            <DialogTitle>{t("sensitiveWords.dialog.editTitle")}</DialogTitle>
+            <DialogDescription>{t("sensitiveWords.dialog.editDescription")}</DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="edit-word">敏感词 *</Label>
+              <Label htmlFor="edit-word">{t("sensitiveWords.dialog.wordLabel")}</Label>
               <Input
                 id="edit-word"
                 value={wordText}
                 onChange={(e) => setWordText(e.target.value)}
-                placeholder="输入敏感词..."
+                placeholder={t("sensitiveWords.dialog.wordPlaceholder")}
                 required
               />
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="edit-matchType">匹配类型 *</Label>
+              <Label htmlFor="edit-matchType">{t("sensitiveWords.dialog.matchTypeLabel")}</Label>
               <Select value={matchType} onValueChange={(value) => setMatchType(value)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="contains">包含匹配 - 文本中包含该词即拦截</SelectItem>
-                  <SelectItem value="exact">精确匹配 - 完全匹配该词才拦截</SelectItem>
-                  <SelectItem value="regex">正则表达式 - 支持复杂模式匹配</SelectItem>
+                  <SelectItem value="contains">
+                    {t("sensitiveWords.dialog.matchTypeContains")}
+                  </SelectItem>
+                  <SelectItem value="exact">{t("sensitiveWords.dialog.matchTypeExact")}</SelectItem>
+                  <SelectItem value="regex">{t("sensitiveWords.dialog.matchTypeRegex")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="edit-description">说明</Label>
+              <Label htmlFor="edit-description">{t("sensitiveWords.dialog.descriptionLabel")}</Label>
               <Textarea
                 id="edit-description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="可选：添加说明..."
+                placeholder={t("sensitiveWords.dialog.descriptionPlaceholder")}
                 rows={3}
               />
             </div>
@@ -129,10 +133,10 @@ export function EditWordDialog({ word, open, onOpenChange }: EditWordDialogProps
               onClick={() => onOpenChange(false)}
               disabled={isSubmitting}
             >
-              取消
+              {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "保存中..." : "保存"}
+              {isSubmitting ? t("sensitiveWords.dialog.saving") : t("common.save")}
             </Button>
           </DialogFooter>
         </form>

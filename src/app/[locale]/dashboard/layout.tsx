@@ -11,6 +11,9 @@ export default async function DashboardLayout({
   children: ReactNode;
   params: Promise<{ locale: string }>;
 }) {
+  // Await params to ensure locale is available in the async context
+  await params;
+
   const session = await getSession();
 
   if (!session) {

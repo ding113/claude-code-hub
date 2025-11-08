@@ -74,7 +74,11 @@
     "description": "View cost statistics rankings for users and keys",
     "tabs": {
       "users": "User Rankings",
-      "keys": "Key Rankings"
+      "keys": "Key Rankings",
+      "userRanking": "User Rankings",
+      "providerRanking": "Provider Rankings",
+      "dailyRanking": "Daily Rankings",
+      "monthlyRanking": "Monthly Rankings"
     },
     "columns": {
       "rank": "Rank",
@@ -82,7 +86,30 @@
       "totalCost": "Total Cost",
       "totalRequests": "Total Requests",
       "avgCost": "Average Cost",
-      "lastActive": "Last Active"
+      "lastActive": "Last Active",
+      "user": "User",
+      "requests": "Requests",
+      "tokens": "Tokens",
+      "consumedAmount": "Consumed Amount",
+      "provider": "Provider",
+      "cost": "Cost",
+      "successRate": "Success Rate",
+      "avgResponseTime": "Avg Response Time"
+    },
+    "states": {
+      "loading": "Loading...",
+      "noData": "No data available",
+      "todayNoData": "No data available for today",
+      "monthNoData": "No data available for this month",
+      "fetchFailed": "Failed to fetch leaderboard data"
+    },
+    "permission": {
+      "title": "Permission Required",
+      "restricted": "Access Restricted",
+      "description": "The leaderboard feature requires administrators to enable the \"Allow Global Usage View\" permission.",
+      "adminAction": "Enable this permission.",
+      "userAction": "Please contact an administrator to enable this permission.",
+      "systemSettings": "System Settings"
     }
   },
   "sessions": {
@@ -182,6 +209,47 @@
     "byUsageRate": "By Usage Rate"
   },
   "all": "All",
+  "nav": {
+    "dashboard": "Dashboard",
+    "usageLogs": "Usage Logs",
+    "leaderboard": "Leaderboard",
+    "quotasManagement": "Quotas",
+    "documentation": "Documentation",
+    "systemSettings": "Settings",
+    "feedback": "Feedback",
+    "login": "Login",
+    "logout": "Logout"
+  },
+  "statistics": {
+    "title": "Usage Statistics",
+    "cost": "Cost",
+    "calls": "API Calls",
+    "totalCost": "Total Cost",
+    "totalCalls": "Total API Calls",
+    "timeRange": {
+      "today": "Today",
+      "todayDescription": "Today's usage",
+      "7days": "Last 7 Days",
+      "7daysDescription": "Usage for the last 7 days",
+      "30days": "Last 30 Days",
+      "30daysDescription": "Usage for the last 30 days",
+      "default": "Usage"
+    },
+    "mode": {
+      "keys": "Showing only usage statistics for your keys",
+      "mixed": "Showing your key details and other users' aggregated data",
+      "users": "Showing usage statistics for all users"
+    },
+    "legend": {
+      "selectAll": "Select All",
+      "deselectAll": "Clear",
+      "selected": "Selected"
+    },
+    "states": {
+      "noData": "No statistics data available",
+      "fetchFailed": "Failed to fetch statistics"
+    }
+  },
   "errors": {
     "fetchSystemSettingsFailed": "Failed to fetch system settings",
     "fetchFailed": "Fetch failed",

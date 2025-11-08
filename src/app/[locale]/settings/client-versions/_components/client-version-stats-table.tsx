@@ -13,7 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDateDistance } from "@/lib/utils/date-format";
-import { useLocale } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 
 interface ClientVersionStatsTableProps {
   data: ClientVersionStats[];
@@ -34,6 +34,8 @@ function getClientTypeIcon(clientType: string): React.ComponentType<{ className?
 
 export function ClientVersionStatsTable({ data }: ClientVersionStatsTableProps) {
   const locale = useLocale();
+  const t = useTranslations("settings.clientVersions.table");
+  const tCommon = useTranslations("settings.common");
 
   return (
     <div className="space-y-8">
@@ -51,14 +53,14 @@ export function ClientVersionStatsTable({ data }: ClientVersionStatsTableProps) 
                   {displayName}
                 </h3>
                 <p className="text-sm text-muted-foreground">
-                  内部类型：<code className="text-xs">{clientStats.clientType}</code>
-                  {" · "}当前 GA 版本：
+                  {t("internalType")}<code className="text-xs">{clientStats.clientType}</code>
+                  {" · "}{t("currentGA")}
                   <Badge variant="outline" className="ml-2">
-                    {clientStats.gaVersion || "无（暂无用户使用该版本）"}
+                    {clientStats.gaVersion || tCommon("none")}
                   </Badge>
                 </p>
               </div>
-              <Badge variant="secondary">{clientStats.totalUsers} 位用户</Badge>
+              <Badge variant="secondary">{t("usersCount", { count: clientStats.totalUsers })}</Badge>
             </div>
 
             {/* 用户版本列表 */}
@@ -66,17 +68,17 @@ export function ClientVersionStatsTable({ data }: ClientVersionStatsTableProps) 
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>用户</TableHead>
-                    <TableHead>当前版本</TableHead>
-                    <TableHead>最后活跃时间</TableHead>
-                    <TableHead>状态</TableHead>
+                    <TableHead>{t("user")}</TableHead>
+                    <TableHead>{t("version")}</TableHead>
+                    <TableHead>{t("lastActive")}</TableHead>
+                    <TableHead>{t("status")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {clientStats.users.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={4} className="text-center text-muted-foreground">
-                        暂无用户数据
+                        {t("noUsers")}
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -96,17 +98,17 @@ export function ClientVersionStatsTable({ data }: ClientVersionStatsTableProps) 
                               className="bg-green-500 hover:bg-green-600 gap-1"
                             >
                               <Check className="h-3 w-3" />
-                              最新
+                              {t("latest")}
                             </Badge>
                           ) : user.needsUpgrade ? (
                             <Badge variant="destructive" className="gap-1">
                               <AlertTriangle className="h-3 w-3" />
-                              需升级
+                              {t("needsUpgrade")}
                             </Badge>
                           ) : (
                             <Badge variant="outline" className="gap-1">
                               <HelpCircle className="h-3 w-3" />
-                              未知
+                              {t("unknown")}
                             </Badge>
                           )}
                         </TableCell>

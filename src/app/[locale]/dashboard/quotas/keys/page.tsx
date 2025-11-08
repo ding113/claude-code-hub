@@ -2,6 +2,7 @@ import { getUsers, getUserLimitUsage } from "@/actions/users";
 import { getKeyLimitUsage } from "@/actions/keys";
 import { KeysQuotaManager } from "./_components/keys-quota-manager";
 import { getSystemSettings } from "@/repository/system-config";
+import { getTranslations } from "next-intl/server";
 
 async function getUsersWithKeysQuotas() {
   const users = await getUsers();
@@ -45,14 +46,15 @@ export default async function KeysQuotaPage() {
     getSystemSettings(),
   ]);
   const totalKeys = users.reduce((sum, user) => sum + user.keys.length, 0);
+  const t = await getTranslations("quota.keys");
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-medium">密钥限额统计</h3>
+          <h3 className="text-lg font-medium">{t("title")}</h3>
           <p className="text-sm text-muted-foreground">
-            共 {users.length} 个用户，{totalKeys} 个密钥
+            {t("totalCount", { users: users.length, keys: totalKeys })}
           </p>
         </div>
       </div>

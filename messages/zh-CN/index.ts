@@ -4,6 +4,7 @@ import customs from "./customs.json";
 import dashboard from "./dashboard.json";
 import errors from "./errors.json";
 import forms from "./forms.json";
+import internal from "./internal.json";
 import notifications from "./notifications.json";
 import quota from "./quota.json";
 import settings from "./settings.json";
@@ -18,6 +19,7 @@ export default {
   dashboard,
   errors,
   forms,
+  internal,
   notifications,
   quota,
   settings,

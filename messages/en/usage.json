@@ -391,6 +391,23 @@
           "Start using!"
         ]
       }
+    },
+
+    "startup": {
+      "title": "Start droid",
+      "description": "Run the following command in your project directory:",
+      "initNote": "During the first startup, droid will perform initial configuration."
+    },
+
+    "commonIssues": {
+      "title": "Common questions",
+      "commandNotFound": "1. Command not found",
+      "commandNotFoundWindows": [
+        "Make sure the npm global path (usually C:\\Users\\your-username\\AppData\\Roaming\\npm) has been added to the system PATH",
+        "Reopen the PowerShell window"
+      ],
+      "commandNotFoundUnix": "Check the npm global installation path and add it to PATH (if not already there)",
+      "updateCli": "2. Update droid"
     }
   },
 
@@ -448,6 +465,7 @@
 
   "ui": {
     "mainContent": "Documentation content",
-    "main": "main"
+    "main": "main",
+    "currentSiteAddress": "Current site address"
   }
 }

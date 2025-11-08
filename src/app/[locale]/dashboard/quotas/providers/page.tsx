@@ -2,6 +2,7 @@ import { getProviders } from "@/actions/providers";
 import { getProviderLimitUsage } from "@/actions/providers";
 import { ProvidersQuotaManager } from "./_components/providers-quota-manager";
 import { getSystemSettings } from "@/repository/system-config";
+import { getTranslations } from "next-intl/server";
 
 async function getProvidersWithQuotas() {
   const providers = await getProviders();
@@ -29,13 +30,14 @@ export default async function ProvidersQuotaPage() {
     getProvidersWithQuotas(),
     getSystemSettings(),
   ]);
+  const t = await getTranslations("quota.providers");
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-medium">供应商限额统计</h3>
-          <p className="text-sm text-muted-foreground">共 {providers.length} 个供应商</p>
+          <h3 className="text-lg font-medium">{t("title")}</h3>
+          <p className="text-sm text-muted-foreground">{t("totalCount", { count: providers.length })}</p>
         </div>
       </div>
 

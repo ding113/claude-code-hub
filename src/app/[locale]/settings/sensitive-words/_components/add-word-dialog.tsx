@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,6 +27,7 @@ import { createSensitiveWordAction } from "@/actions/sensitive-words";
 import { toast } from "sonner";
 
 export function AddWordDialog() {
+  const t = useTranslations("settings");
   const [open, setOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [word, setWord] = useState("");
@@ -36,7 +38,7 @@ export function AddWordDialog() {
     e.preventDefault();
 
     if (!word.trim()) {
-      toast.error("请输入敏感词");
+      toast.error(t("sensitiveWords.dialog.wordRequired"));
       return;
     }
 
@@ -50,7 +52,7 @@ export function AddWordDialog() {
       });
 
       if (result.ok) {
-        toast.success("敏感词创建成功");
+        toast.success(t("sensitiveWords.addSuccess"));
         setOpen(false);
         // 重置表单
         setWord("");
@@ -60,7 +62,7 @@ export function AddWordDialog() {
         toast.error(result.error);
       }
     } catch {
-      toast.error("创建敏感词失败");
+      toast.error(t("sensitiveWords.addFailed"));
     } finally {
       setIsSubmitting(false);
     }
@@ -71,32 +73,30 @@ export function AddWordDialog() {
       <DialogTrigger asChild>
         <Button>
           <Plus className="mr-2 h-4 w-4" />
-          添加敏感词
+          {t("sensitiveWords.add")}
         </Button>
       </DialogTrigger>
       <DialogContent>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>添加敏感词</DialogTitle>
-            <DialogDescription>
-              配置敏感词过滤规则，被命中的请求将不会转发到上游。
-            </DialogDescription>
+            <DialogTitle>{t("sensitiveWords.dialog.addTitle")}</DialogTitle>
+            <DialogDescription>{t("sensitiveWords.dialog.addDescription")}</DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="word">敏感词 *</Label>
+              <Label htmlFor="word">{t("sensitiveWords.dialog.wordLabel")}</Label>
               <Input
                 id="word"
                 value={word}
                 onChange={(e) => setWord(e.target.value)}
-                placeholder="输入敏感词..."
+                placeholder={t("sensitiveWords.dialog.wordPlaceholder")}
                 required
               />
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="matchType">匹配类型 *</Label>
+              <Label htmlFor="matchType">{t("sensitiveWords.dialog.matchTypeLabel")}</Label>
               <Select
                 value={matchType}
                 onValueChange={(value) => setMatchType(value as "contains" | "exact" | "regex")}
@@ -105,20 +105,22 @@ export function AddWordDialog() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="contains">包含匹配 - 文本中包含该词即拦截</SelectItem>
-                  <SelectItem value="exact">精确匹配 - 完全匹配该词才拦截</SelectItem>
-                  <SelectItem value="regex">正则表达式 - 支持复杂模式匹配</SelectItem>
+                  <SelectItem value="contains">
+                    {t("sensitiveWords.dialog.matchTypeContains")}
+                  </SelectItem>
+                  <SelectItem value="exact">{t("sensitiveWords.dialog.matchTypeExact")}</SelectItem>
+                  <SelectItem value="regex">{t("sensitiveWords.dialog.matchTypeRegex")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="description">说明</Label>
+              <Label htmlFor="description">{t("sensitiveWords.dialog.descriptionLabel")}</Label>
               <Textarea
                 id="description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="可选：添加说明..."
+                placeholder={t("sensitiveWords.dialog.descriptionPlaceholder")}
                 rows={3}
               />
             </div>
@@ -131,10 +133,10 @@ export function AddWordDialog() {
               onClick={() => setOpen(false)}
               disabled={isSubmitting}
             >
-              取消
+              {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "创建中..." : "创建"}
+              {isSubmitting ? t("sensitiveWords.dialog.creating") : t("common.create")}
             </Button>
           </DialogFooter>
         </form>

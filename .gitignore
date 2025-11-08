@@ -59,3 +59,7 @@ next-env.d.ts
 
 # dev tools (local development utilities)
 /dev/
+
+# translation checklists and temporary docs
+TRANSLATIONS_CHECKLIST.txt
+TRANSLATIONS_CHECKLIST.md

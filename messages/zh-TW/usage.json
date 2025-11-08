@@ -387,6 +387,23 @@
           "開始使用！"
         ]
       }
+    },
+
+    "startup": {
+      "title": "啟動 droid",
+      "description": "在項目目錄下運行以下命令：",
+      "initNote": "首次啟動時，droid 會進行初始化配置。"
+    },
+
+    "commonIssues": {
+      "title": "常見問題",
+      "commandNotFound": "1. 找不到命令",
+      "commandNotFoundWindows": [
+        "確保 npm 全局路徑（通常為 C:\\Users\\your-username\\AppData\\Roaming\\npm）已添加到系統 PATH",
+        "重新打開 PowerShell 窗口"
+      ],
+      "commandNotFoundUnix": "檢查 npm 全局安裝路徑，並添加到 PATH（如果尚未添加）",
+      "updateCli": "2. 更新 droid"
     }
   },
 
@@ -444,6 +461,7 @@
 
   "ui": {
     "mainContent": "文檔內容",
-    "main": "main"
+    "main": "main",
+    "currentSiteAddress": "當前站點地址"
   }
 }

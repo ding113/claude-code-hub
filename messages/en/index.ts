@@ -10,6 +10,7 @@ import settings from "./settings.json";
 import ui from "./ui.json";
 import usage from "./usage.json";
 import validation from "./validation.json";
+import internal from "./internal.json";
 
 export default {
   auth,
@@ -24,4 +25,5 @@ export default {
   ui,
   usage,
   validation,
+  internal,
 };

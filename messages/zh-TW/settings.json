@@ -201,24 +201,66 @@
     "description": "管理平台基礎設定與模型價格",
     "subtitle": "模型價格",
     "subtitleDesc": "管理 AI 模型的價格設定",
-    "search": "搜尋模型名稱...",
-    "sync": "同步 LiteLLM 價格",
+    "search": {
+      "placeholder": "搜尋模型名稱...",
+      "totalModels": "共 {total} 個模型價格",
+      "searchResults": "（搜尋結果：{count} 個）",
+      "lastUpdated": "最後更新："
+    },
+    "sync": {
+      "button": "同步 LiteLLM 價格",
+      "syncing": "同步中...",
+      "successWithChanges": "同步成功：新增 {added} 個，更新 {updated} 個，未變化 {unchanged} 個",
+      "successNoChanges": "所有 {unchanged} 個模型價格均為最新",
+      "noModels": "未找到支援的模型價格",
+      "failed": "同步失敗",
+      "failedError": "同步失敗，請重試",
+      "failedNoResult": "同步成功但未返回處理結果",
+      "partialFailure": "{failed} 個模型處理失敗"
+    },
     "syncing": "同步中...",
     "syncSuccess": "價格表更新成功",
     "syncFailed": "同步失敗",
     "syncFailedError": "同步失敗:",
     "syncNoResult": "價格表更新成功但未返回處理結果",
-    "upload": "更新模型價格表",
+    "upload": {
+      "button": "更新價格表",
+      "updating": "更新中...",
+      "dialogTitle": "更新模型價格表",
+      "dialogDescription": "選擇包含模型價格資料的 JSON 檔案以更新價格表",
+      "selectFile": "點選選擇JSON檔案或拖曳到此處",
+      "fileSizeLimit": "檔案大小不超過10MB",
+      "selectFileButton": "選擇檔案",
+      "invalidFileType": "請選擇JSON檔案",
+      "fileTooLarge": "檔案大小不能超過10MB",
+      "success": "價格表更新成功",
+      "failed": "更新失敗，請重試",
+      "failedError": "更新失敗：",
+      "noResult": "價格表更新成功但未返回處理結果",
+      "updateInProgress": "正在更新模型價格...",
+      "enterDashboard": "進入控制面板",
+      "completed": "完成"
+    },
     "uploadSuccess": "價格表更新成功",
     "uploadFailed": "取得價格資料失敗:",
     "noData": "系統已內置價格表，請透過上方按鈕同步或更新",
     "noModels": "未找到支援的模型價格",
     "table": {
-      "model": "模型",
-      "inputPrice": "輸入價格",
-      "outputPrice": "輸出價格",
-      "cachePrice": "快取價格",
-      "updatedAt": "更新時間"
+      "modelName": "模型名稱",
+      "type": "類型",
+      "provider": "提供商",
+      "inputPrice": "輸入價格 ($/M)",
+      "outputPrice": "輸出價格 ($/M)",
+      "updatedAt": "更新時間",
+      "typeChat": "對話",
+      "typeImageGen": "影像生成",
+      "typeCompletion": "補全",
+      "typeUnknown": "未知",
+      "imagePrice": "${price}/img",
+      "loading": "載入中...",
+      "noResults": "未找到匹配的模型",
+      "noData": "暫無價格資料",
+      "noDataHint": "系統已內建價格表，請透過上方按鈕同步或更新"
     },
     "dialog": {
       "title": "更新模型價格表",
@@ -230,6 +272,33 @@
       "uploading": "上傳中...",
       "readError": "取得金鑰失敗",
       "getError": "取得金鑰失敗"
+    },
+    "section": {
+      "title": "模型價格",
+      "description": "管理 AI 模型的價格配置"
+    },
+    "pagination": {
+      "perPage": "每頁顯示：",
+      "showing": "顯示第 {start} - {end} 條，共 {total} 條記錄",
+      "previous": "上一頁",
+      "next": "下一頁"
+    },
+    "uploadDialog": {
+      "notes": {
+        "litellm": "• 系統已內建 LiteLLM 價格表，如需更新可使用左側「同步 LiteLLM 價格」按鈕",
+        "manual": "• 也可以手動下載",
+        "link": "最新價格表",
+        "linkAnd": "並透過此按鈕更新",
+        "support": "• 支援 Claude 和 OpenAI 模型（claude-, gpt-, o1-, o3- 前綴）"
+      },
+      "result": {
+        "total": "處理總數",
+        "added": "新增模型 ({count})",
+        "updated": "更新模型 ({count})",
+        "unchanged": "未變化 ({count})",
+        "failed": "處理失敗 ({count})",
+        "showMore": "等{count}個"
+      }
     }
   },
   "sensitiveWords": {
@@ -276,6 +345,43 @@
       "totalChecks": "總檢查數",
       "cacheSize": "快取大小",
       "lastUpdated": "最後更新"
+    },
+    "section": {
+      "title": "敏感詞列表",
+      "description": "被敏感詞攔截的請求不會轉發到上游，也不會計費。支援包含匹配、精確匹配和正則表達式三種模式。"
+    },
+    "refreshCacheSuccess": "快取刷新成功，已載入 {count} 個敏感詞",
+    "refreshCacheFailed": "刷新快取失敗",
+    "cacheStats": "快取統計：包含({containsCount}) 精確({exactCount}) 正則({regexCount})",
+    "emptyState": "暫無敏感詞，點選右上角「新增敏感詞」開始配置。",
+    "confirmDelete": "確定要刪除敏感詞「{word}」嗎？",
+    "dialog": {
+      "addTitle": "新增敏感詞",
+      "addDescription": "配置敏感詞過濾規則，被命中的請求將不會轉發到上游。",
+      "editTitle": "編輯敏感詞",
+      "editDescription": "修改敏感詞配置，更改後將自動刷新快取。",
+      "wordLabel": "敏感詞 *",
+      "wordPlaceholder": "輸入敏感詞...",
+      "wordRequired": "請輸入敏感詞",
+      "matchTypeLabel": "匹配類型 *",
+      "matchTypeContains": "包含匹配 - 文字中包含該詞即攔截",
+      "matchTypeExact": "精確匹配 - 完全匹配該詞才攔截",
+      "matchTypeRegex": "正則表達式 - 支援複雜模式匹配",
+      "descriptionLabel": "說明",
+      "descriptionPlaceholder": "選填：新增說明...",
+      "creating": "建立中...",
+      "saving": "儲存中..."
+    },
+    "table": {
+      "word": "敏感詞",
+      "matchType": "匹配類型",
+      "matchTypeContains": "包含匹配",
+      "matchTypeExact": "精確匹配",
+      "matchTypeRegex": "正則表達式",
+      "description": "說明",
+      "status": "狀態",
+      "createdAt": "建立時間",
+      "actions": "操作"
     }
   },
   "logs": {

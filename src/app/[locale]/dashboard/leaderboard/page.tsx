@@ -6,10 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertCircle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Link } from "@/i18n/routing";
+import { getTranslations } from "next-intl/server";
 
 export const dynamic = "force-dynamic";
 
 export default async function LeaderboardPage() {
+  const t = await getTranslations("dashboard");
   // 获取用户 session 和系统设置
   const session = await getSession();
   const systemSettings = await getSystemSettings();
@@ -22,30 +24,30 @@ export default async function LeaderboardPage() {
   if (!hasPermission) {
     return (
       <div className="space-y-6">
-        <Section title="消耗排行榜" description="查看用户消耗排名，数据每 5 分钟更新一次">
+        <Section title={t("title.costRanking")} description={t("title.costRankingDescription")}>
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <AlertCircle className="h-5 w-5 text-muted-foreground" />
-                需要权限
+                {t("leaderboard.permission.title")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <Alert>
                 <AlertCircle className="h-4 w-4" />
-                <AlertTitle>访问受限</AlertTitle>
+                <AlertTitle>{t("leaderboard.permission.restricted")}</AlertTitle>
                 <AlertDescription>
-                  排行榜功能需要管理员开启&nbsp;&quot;允许查看全站使用量&quot;&nbsp;权限。
+                  {t("leaderboard.permission.description")}
                   {isAdmin && (
                     <span>
-                      请前往{" "}
+                      {" "}
                       <Link href="/settings/config" className="underline font-medium">
-                        系统设置
+                        {t("leaderboard.permission.systemSettings")}
                       </Link>{" "}
-                      开启此权限。
+                      {t("leaderboard.permission.adminAction")}
                     </span>
                   )}
-                  {!isAdmin && <span>请联系管理员开启此权限。</span>}
+                  {!isAdmin && <span> {t("leaderboard.permission.userAction")}</span>}
                 </AlertDescription>
               </Alert>
             </CardContent>
@@ -58,7 +60,7 @@ export default async function LeaderboardPage() {
   // 有权限时渲染排行榜
   return (
     <div className="space-y-6">
-      <Section title="消耗排行榜" description="查看用户消耗排名，数据每 5 分钟更新一次">
+      <Section title={t("title.costRanking")} description={t("title.costRankingDescription")}>
         <LeaderboardView isAdmin={isAdmin} />
       </Section>
     </div>

@@ -8,6 +8,7 @@ import type { TimeRange, UserStatisticsData } from "@/types/statistics";
 import type { CurrencyCode } from "@/lib/utils";
 import { DEFAULT_TIME_RANGE } from "@/types/statistics";
 import { toast } from "sonner";
+import { useTranslations } from "next-intl";
 
 interface StatisticsWrapperProps {
   initialData?: UserStatisticsData;
@@ -16,21 +17,25 @@ interface StatisticsWrapperProps {
 
 const STATISTICS_REFRESH_INTERVAL = 5000; // 5秒刷新一次
 
-async function fetchStatistics(timeRange: TimeRange): Promise<UserStatisticsData> {
-  const result = await getUserStatistics(timeRange);
-  if (!result.ok) {
-    throw new Error(result.error || "获取统计数据失败");
-  }
-  return result.data;
-}
-
 /**
  * 统计组件包装器
  * 处理时间范围状态管理和数据获取
  */
 export function StatisticsWrapper({ initialData, currencyCode = "USD" }: StatisticsWrapperProps) {
+  const t = useTranslations("dashboard.statistics");
   const [timeRange, setTimeRange] = React.useState<TimeRange>(
     initialData?.timeRange ?? DEFAULT_TIME_RANGE
+  );
+
+  const fetchStatistics = React.useCallback(
+    async (timeRange: TimeRange): Promise<UserStatisticsData> => {
+      const result = await getUserStatistics(timeRange);
+      if (!result.ok) {
+        throw new Error(result.error || t("states.fetchFailed"));
+      }
+      return result.data;
+    },
+    [t]
   );
 
   const { data, error } = useQuery<UserStatisticsData, Error>({
@@ -54,7 +59,7 @@ export function StatisticsWrapper({ initialData, currencyCode = "USD" }: Statist
 
   // 如果没有数据，显示空状态
   if (!data) {
-    return <div className="text-center py-8 text-muted-foreground">暂无统计数据</div>;
+    return <div className="text-center py-8 text-muted-foreground">{t("states.noData")}</div>;
   }
 
   return (

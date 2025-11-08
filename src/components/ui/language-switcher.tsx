@@ -58,7 +58,8 @@ export function LanguageSwitcher({ className, size = "sm" }: LanguageSwitcherPro
         // 2. Sets the NEXT_LOCALE cookie
         // 3. Maintains the current pathname
         // 4. Preserves query parameters and hash
-        router.push(pathname, { locale: newLocale as Locale });
+        // Fallback to dashboard if pathname is undefined
+        router.push(pathname || "/dashboard", { locale: newLocale as Locale });
       } catch (error) {
         console.error("Failed to switch locale:", error);
         setIsTransitioning(false);

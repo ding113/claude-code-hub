@@ -6,23 +6,26 @@ import { DashboardNav, type DashboardNavItem } from "./dashboard-nav";
 import { UserMenu } from "./user-menu";
 import { VersionUpdateNotifier } from "@/components/customs/version-update-notifier";
 import { LanguageSwitcher } from "@/components/ui/language-switcher";
+import { useTranslations } from "next-intl";
 
 interface DashboardHeaderProps {
   session: AuthSession | null;
 }
 
-const NAV_ITEMS: (DashboardNavItem & { adminOnly?: boolean })[] = [
-  { href: "/dashboard", label: "仪表盘" },
-  { href: "/dashboard/logs", label: "使用记录" },
-  { href: "/dashboard/leaderboard", label: "排行榜" },
-  { href: "/dashboard/quotas", label: "限额管理" },
-  { href: "/usage-doc", label: "文档" },
-  { href: "/settings", label: "系统设置", adminOnly: true },
-  { href: "https://github.com/ding113/claude-code-hub/issues", label: "反馈问题", external: true },
-];
-
 export function DashboardHeader({ session }: DashboardHeaderProps) {
+  const t = useTranslations("dashboard.nav");
   const isAdmin = session?.user.role === "admin";
+
+  const NAV_ITEMS: (DashboardNavItem & { adminOnly?: boolean })[] = [
+    { href: "/dashboard", label: t("dashboard") },
+    { href: "/dashboard/logs", label: t("usageLogs") },
+    { href: "/dashboard/leaderboard", label: t("leaderboard") },
+    { href: "/dashboard/quotas", label: t("quotasManagement") },
+    { href: "/usage-doc", label: t("documentation") },
+    { href: "/settings", label: t("systemSettings"), adminOnly: true },
+    { href: "https://github.com/ding113/claude-code-hub/issues", label: t("feedback"), external: true },
+  ];
+
   const items = NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin);
 
   return (
@@ -36,7 +39,7 @@ export function DashboardHeader({ session }: DashboardHeaderProps) {
             <UserMenu user={session.user} />
           ) : (
             <Button asChild size="sm" variant="outline">
-              <Link href="/login">登录</Link>
+              <Link href="/login">{t("login")}</Link>
             </Button>
           )}
         </div>

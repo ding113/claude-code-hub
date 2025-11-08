@@ -1,0 +1,83 @@
+{
+  "dataGenerator": {
+    "tabs": {
+      "usage": "Генерация данных использования",
+      "userBreakdown": "Детализация по пользователям"
+    },
+    "actions": {
+      "reconfigure": "Перенастроить параметры",
+      "generate": "Генерировать данные",
+      "exportScreenshot": "Экспорт скриншота",
+      "exportPDF": "Экспорт PDF"
+    },
+    "params": {
+      "title": "Параметры генерации",
+      "description": "Настройте параметры для создания симулированных данных журнала",
+      "startDate": "Время начала",
+      "endDate": "Время окончания",
+      "totalCostCny": "Общая сумма (CNY)",
+      "totalRecords": "Всего записей",
+      "models": "Включить модели (через запятую)",
+      "userIds": "ID пользователей (через запятую)",
+      "providerIds": "ID провайдеров (через запятую)",
+      "serviceName": "Название сервиса",
+      "required": "*",
+      "placeholders": {
+        "totalCostCny": "напр., 1000",
+        "totalRecords": "напр., 500 (оставьте пустым для расчета по сумме)",
+        "models": "напр., claude-3-5-sonnet,gpt-4 (пусто = все)",
+        "userIds": "напр., 1,2,3 (пусто = все)",
+        "providerIds": "напр., 1,2 (пусто = все)",
+        "serviceName": "Сервис вывода AI моделей"
+      }
+    },
+    "summary": {
+      "totalRecords": "Всего записей",
+      "totalCost": "Общая стоимость",
+      "totalCostCny": "Общая стоимость (CNY)",
+      "totalTokens": "Всего токенов",
+      "timeRange": "Временной диапазон",
+      "to": "до",
+      "uniqueUsers": "Всего пользователей",
+      "totalCalls": "Всего вызовов"
+    },
+    "table": {
+      "usageLogs": {
+        "title": "Журнал использования",
+        "description": "Всего {count} записей",
+        "columns": {
+          "time": "Время",
+          "user": "Пользователь",
+          "key": "Ключ",
+          "provider": "Провайдер",
+          "model": "Модель",
+          "input": "Ввод",
+          "output": "Вывод",
+          "cacheWrite": "Запись кэша",
+          "cacheRead": "Чтение кэша",
+          "cost": "Стоимость",
+          "duration": "Длительность",
+          "status": "Статус"
+        }
+      },
+      "userBreakdown": {
+        "title": "Детали использования пользователей",
+        "description": "Всего {count} записей",
+        "collapseByUser": "Свернуть по пользователям",
+        "columns": {
+          "userName": "Имя пользователя",
+          "key": "Ключ",
+          "serviceModel": "Модель сервиса",
+          "totalCalls": "Всего вызовов",
+          "totalCost": "Общая стоимость"
+        }
+      }
+    },
+    "status": {
+      "success": "Успешно"
+    },
+    "errors": {
+      "failed": "Не удалось сгенерировать журналы"
+    }
+  }
+}

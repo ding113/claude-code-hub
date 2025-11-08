@@ -8,7 +8,14 @@ import { ClientVersionToggle } from "./_components/client-version-toggle";
 import { ClientVersionStatsTable } from "./_components/client-version-stats-table";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
-export default async function ClientVersionsPage() {
+export default async function ClientVersionsPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  // Await params to ensure locale is available in the async context
+  await params;
+
   const t = await getTranslations("settings");
   const session = await getSession();
 

@@ -55,18 +55,110 @@
       "provider": "供应商",
       "model": "模型",
       "status": "状态",
-      "timeRange": "时间范围"
+      "timeRange": "时间范围",
+      "startTime": "开始时间",
+      "endTime": "结束时间",
+      "allUsers": "全部用户",
+      "allKeys": "全部密钥",
+      "selectUserFirst": "请先选择用户",
+      "allProviders": "全部供应商",
+      "allModels": "全部模型",
+      "allStatusCodes": "全部状态码",
+      "apiKey": "API 密钥",
+      "statusCode": "状态码",
+      "apply": "应用筛选",
+      "reset": "重置"
     },
     "columns": {
       "time": "时间",
       "user": "用户",
+      "key": "密钥",
       "provider": "供应商",
       "model": "模型",
-      "inputTokens": "输入 Tokens",
-      "outputTokens": "输出 Tokens",
+      "inputTokens": "输入",
+      "outputTokens": "输出",
+      "cacheWrite": "缓存写入",
+      "cacheRead": "缓存读取",
       "cost": "成本",
-      "status": "状态",
-      "duration": "耗时"
+      "duration": "耗时",
+      "status": "状态"
+    },
+    "stats": {
+      "totalAmount": "总消耗金额",
+      "totalTokens": "总 Token 数",
+      "cacheTokens": "缓存 Token",
+      "input": "输入",
+      "output": "输出",
+      "write": "写入",
+      "read": "读取"
+    },
+    "table": {
+      "noData": "暂无数据",
+      "pagination": "共 {total} 条记录，第 {page} / {totalPages} 页",
+      "prevPage": "上一页",
+      "nextPage": "下一页",
+      "blocked": "被拦截",
+      "times": "次"
+    },
+    "actions": {
+      "refresh": "刷新",
+      "refreshing": "刷新中...",
+      "stopAutoRefresh": "停止自动刷新",
+      "startAutoRefresh": "开启自动刷新",
+      "view": "查看"
+    },
+    "error": {
+      "loadFailed": "加载失败"
+    },
+    "details": {
+      "title": "请求详情",
+      "statusTitle": "请求详情 - 状态码 {status}",
+      "inProgress": "请求中",
+      "unknown": "未知",
+      "success": "请求成功完成",
+      "error": "请求失败，以下是详细的错误信息和供应商决策链",
+      "processing": "请求正在进行中，尚未完成",
+      "blocked": {
+        "title": "拦截信息",
+        "type": "拦截类型",
+        "sensitiveWord": "敏感词拦截",
+        "word": "敏感词",
+        "matchType": "匹配类型",
+        "matchTypeContains": "包含匹配",
+        "matchTypeExact": "精确匹配",
+        "matchTypeRegex": "正则表达式",
+        "matchedText": "匹配内容"
+      },
+      "sessionId": "会话 ID",
+      "messagesCount": "消息数量",
+      "messagesLabel": "Messages",
+      "messagesUnit": "条",
+      "clientInfo": "客户端信息",
+      "modelRedirect": {
+        "title": "模型重定向",
+        "requestModel": "请求模型",
+        "actualModel": "实际调用",
+        "billing": "计费说明",
+        "billingDescription": "系统优先使用请求模型（{original}）的价格计费。如果价格表中不存在该模型，则使用实际调用模型（{current}）的价格。"
+      },
+      "errorMessage": "错误信息",
+      "providerChain": {
+        "title": "供应商决策链时间线",
+        "totalDuration": "总耗时: {duration}ms"
+      },
+      "noError": {
+        "processing": "请求正在处理中，等待响应...",
+        "success": "请求成功，无错误信息",
+        "default": "暂无详细错误信息"
+      },
+      "clickStatusCode": "点击状态码查看完整时间线"
+    },
+    "providerChain": {
+      "decisionChain": "供应商决策链"
+    },
+    "modelRedirect": {
+      "redirected": "已重定向",
+      "targetModel": "目标模型"
     }
   },
   "leaderboard": {
@@ -74,7 +166,11 @@
     "description": "查看用户和密钥的成本统计排名",
     "tabs": {
       "users": "用户排行",
-      "keys": "密钥排行"
+      "keys": "密钥排行",
+      "userRanking": "用户排行",
+      "providerRanking": "供应商排行",
+      "dailyRanking": "今日排行",
+      "monthlyRanking": "本月排行"
     },
     "columns": {
       "rank": "排名",
@@ -82,24 +178,65 @@
       "totalCost": "总成本",
       "totalRequests": "总请求数",
       "avgCost": "平均成本",
-      "lastActive": "最后活跃时间"
+      "lastActive": "最后活跃时间",
+      "user": "用户",
+      "requests": "请求数",
+      "tokens": "Token 数",
+      "consumedAmount": "消耗金额",
+      "provider": "供应商",
+      "cost": "成本",
+      "successRate": "成功率",
+      "avgResponseTime": "平均响应时间"
+    },
+    "states": {
+      "loading": "加载中...",
+      "noData": "暂无数据",
+      "todayNoData": "今日暂无数据",
+      "monthNoData": "本月暂无数据",
+      "fetchFailed": "获取排行榜数据失败"
+    },
+    "permission": {
+      "title": "需要权限",
+      "restricted": "访问受限",
+      "description": "排行榜功能需要管理员开启\"允许查看全站使用量\"权限。",
+      "adminAction": "开启此权限。",
+      "userAction": "请联系管理员开启此权限。",
+      "systemSettings": "系统设置"
     }
   },
   "sessions": {
     "title": "活跃会话",
     "description": "实时监控当前活跃的 API 会话",
+    "monitoring": "Session 监控",
+    "monitoringDescription": "实时显示活跃和非活跃 Session（每 3 秒自动刷新）",
+    "activeSessions": "活跃 Session（最近 5 分钟）",
+    "inactiveSessions": "非活跃 Session（超过 5 分钟，仅供查看）",
     "columns": {
-      "sessionId": "会话 ID",
+      "sessionId": "Session ID",
       "user": "用户",
+      "key": "密钥",
       "provider": "供应商",
       "model": "模型",
       "startTime": "开始时间",
       "lastActivity": "最后活动",
       "requestCount": "请求数",
-      "status": "状态"
+      "totalInput": "总输入",
+      "totalOutput": "总输出",
+      "totalCost": "总成本",
+      "totalDuration": "总耗时",
+      "status": "状态",
+      "actions": "操作"
+    },
+    "table": {
+      "count": "共 {count} 个{type} Session",
+      "active": "活跃",
+      "inactive": "非活跃",
+      "notCountedInConcurrency": "(不计入并发数)",
+      "refreshing": "刷新中...",
+      "noActiveSessions": "暂无活跃 Session"
     },
     "details": {
-      "title": "会话详情",
+      "title": "Session Messages",
       "messages": "消息列表",
       "info": "会话信息",
       "timeline": "时间线",
@@ -124,16 +261,33 @@
       "providers": "供应商",
       "models": "模型",
       "noDetailedData": "暂无详细数据",
-      "storageTip": "提示：请设置环境变量 STORE_SESSION_MESSAGES=true 以启用 messages 和 response 存储"
+      "storageTip": "提示：请设置环境变量 STORE_SESSION_MESSAGES=true 以启用 messages 和 response 存储",
+      "clientInfo": "客户端信息",
+      "requestMessages": "请求 Messages",
+      "requestMessagesDescription": "客户端发送的消息内容",
+      "responseBody": "响应体内容",
+      "responseBodyDescription": "服务器返回的完整响应（5分钟 TTL）",
+      "noData": "暂无数据"
     },
-    "noActiveSessions": "暂无活跃 Session",
-    "back": "返回",
-    "copyMessages": "复制 Messages",
-    "downloadMessages": "下载 Messages",
-    "copied": "已复制",
-    "copyResponse": "复制响应体",
-    "loading": "加载中...",
-    "loadError": "加载失败"
+    "actions": {
+      "back": "返回",
+      "view": "查看",
+      "copyMessages": "复制 Messages",
+      "downloadMessages": "下载 Messages",
+      "copied": "已复制",
+      "copyResponse": "复制响应体"
+    },
+    "status": {
+      "loading": "加载中...",
+      "loadError": "加载失败",
+      "fetchFailed": "获取失败",
+      "unknownError": "未知错误",
+      "storageNotEnabled": "未存储",
+      "storageNotEnabledHint": "提示：请设置环境变量 STORE_SESSION_MESSAGES=true 以启用 messages 存储"
+    },
+    "errors": {
+      "copyFailed": "复制失败"
+    }
   },
   "quotas": {
     "title": "配额管理",
@@ -182,6 +336,47 @@
     "byUsageRate": "按使用率"
   },
   "all": "全部",
+  "nav": {
+    "dashboard": "仪表盘",
+    "usageLogs": "使用记录",
+    "leaderboard": "排行榜",
+    "quotasManagement": "限额管理",
+    "documentation": "文档",
+    "systemSettings": "系统设置",
+    "feedback": "反馈问题",
+    "login": "登录",
+    "logout": "退出登录"
+  },
+  "statistics": {
+    "title": "使用统计",
+    "cost": "消费金额",
+    "calls": "API调用次数",
+    "totalCost": "总消费金额",
+    "totalCalls": "总API调用次数",
+    "timeRange": {
+      "today": "今天",
+      "todayDescription": "今天的使用情况",
+      "7days": "过去 7 天",
+      "7daysDescription": "过去 7 天的使用情况",
+      "30days": "过去 30 天",
+      "30daysDescription": "过去 30 天的使用情况",
+      "default": "使用情况"
+    },
+    "mode": {
+      "keys": "仅显示您名下各密钥的使用统计",
+      "mixed": "展示您的密钥明细和其他用户汇总",
+      "users": "展示所有用户的使用统计"
+    },
+    "legend": {
+      "selectAll": "全选",
+      "deselectAll": "清空",
+      "selected": "已选"
+    },
+    "states": {
+      "noData": "暂无统计数据",
+      "fetchFailed": "获取统计数据失败"
+    }
+  },
   "errors": {
     "fetchSystemSettingsFailed": "获取系统设置失败",
     "fetchFailed": "获取失败",

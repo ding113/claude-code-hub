@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import type { SensitiveWord } from "@/repository/sensitive-words";
 import { updateSensitiveWordAction, deleteSensitiveWordAction } from "@/actions/sensitive-words";
 import { Button } from "@/components/ui/button";
@@ -14,12 +15,6 @@ interface WordListTableProps {
   words: SensitiveWord[];
 }
 
-const matchTypeLabels = {
-  contains: "包含匹配",
-  exact: "精确匹配",
-  regex: "正则表达式",
-};
-
 const matchTypeColors = {
   contains: "default" as const,
   exact: "secondary" as const,
@@ -27,28 +22,35 @@ const matchTypeColors = {
 };
 
 export function WordListTable({ words }: WordListTableProps) {
+  const t = useTranslations("settings");
   const [selectedWord, setSelectedWord] = useState<SensitiveWord | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+
+  const matchTypeLabels = {
+    contains: t("sensitiveWords.table.matchTypeContains"),
+    exact: t("sensitiveWords.table.matchTypeExact"),
+    regex: t("sensitiveWords.table.matchTypeRegex"),
+  };
 
   const handleToggleEnabled = async (id: number, isEnabled: boolean) => {
     const result = await updateSensitiveWordAction(id, { isEnabled });
 
     if (result.ok) {
-      toast.success(isEnabled ? "敏感词已启用" : "敏感词已禁用");
+      toast.success(isEnabled ? t("sensitiveWords.enable") : t("sensitiveWords.disable"));
     } else {
       toast.error(result.error);
     }
   };
 
   const handleDelete = async (id: number, word: string) => {
-    if (!confirm(`确定要删除敏感词"${word}"吗？`)) {
+    if (!confirm(t("sensitiveWords.confirmDelete", { word }))) {
       return;
     }
 
     const result = await deleteSensitiveWordAction(id);
 
     if (result.ok) {
-      toast.success("敏感词删除成功");
+      toast.success(t("sensitiveWords.deleteSuccess"));
     } else {
       toast.error(result.error);
     }
@@ -62,7 +64,7 @@ export function WordListTable({ words }: WordListTableProps) {
   if (words.length === 0) {
     return (
       <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">
-        暂无敏感词，点击右上角&ldquo;添加敏感词&rdquo;开始配置。
+        {t("sensitiveWords.emptyState")}
       </div>
     );
   }
@@ -73,12 +75,24 @@ export function WordListTable({ words }: WordListTableProps) {
         <table className="w-full border-collapse">
           <thead>
             <tr className="border-b bg-muted/50">
-              <th className="px-4 py-3 text-left text-sm font-medium">敏感词</th>
-              <th className="px-4 py-3 text-left text-sm font-medium">匹配类型</th>
-              <th className="px-4 py-3 text-left text-sm font-medium">说明</th>
-              <th className="px-4 py-3 text-left text-sm font-medium">状态</th>
-              <th className="px-4 py-3 text-left text-sm font-medium">创建时间</th>
-              <th className="px-4 py-3 text-right text-sm font-medium">操作</th>
+              <th className="px-4 py-3 text-left text-sm font-medium">
+                {t("sensitiveWords.table.word")}
+              </th>
+              <th className="px-4 py-3 text-left text-sm font-medium">
+                {t("sensitiveWords.table.matchType")}
+              </th>
+              <th className="px-4 py-3 text-left text-sm font-medium">
+                {t("sensitiveWords.table.description")}
+              </th>
+              <th className="px-4 py-3 text-left text-sm font-medium">
+                {t("sensitiveWords.table.status")}
+              </th>
+              <th className="px-4 py-3 text-left text-sm font-medium">
+                {t("sensitiveWords.table.createdAt")}
+              </th>
+              <th className="px-4 py-3 text-right text-sm font-medium">
+                {t("sensitiveWords.table.actions")}
+              </th>
             </tr>
           </thead>
           <tbody>

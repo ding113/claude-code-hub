@@ -10,10 +10,20 @@ import { ListErrorBoundary } from "@/components/error-boundary";
 import { StatisticsWrapper } from "./_components/statistics";
 import { OverviewPanel } from "@/components/customs/overview-panel";
 import { DEFAULT_TIME_RANGE } from "@/types/statistics";
+import { getTranslations } from "next-intl/server";
 
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  // Await params to ensure locale is available in the async context
+  await params;
+
+  const t = await getTranslations("dashboard");
+
   // 检查价格表是否存在，如果不存在则跳转到价格上传页面
   const hasPrices = await hasPriceTable();
   if (!hasPrices) {
@@ -41,7 +51,7 @@ export default async function DashboardPage() {
         />
       </div>
 
-      <Section title="客户端" description="用户和密钥管理">
+      <Section title={t("title.clients")} description={t("title.userAndKeyManagement")}>
         <ListErrorBoundary>
           <UserKeyManager
             users={users}

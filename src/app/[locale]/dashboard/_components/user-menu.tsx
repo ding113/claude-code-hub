@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { LogOut } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 interface UserMenuProps {
   user: {
@@ -14,6 +15,7 @@ interface UserMenuProps {
 }
 
 export function UserMenu({ user }: UserMenuProps) {
+  const t = useTranslations("dashboard.nav");
   const router = useRouter();
 
   const handleLogout = () => {
@@ -49,7 +51,7 @@ export function UserMenu({ user }: UserMenuProps) {
         size="icon"
         onClick={handleLogout}
         className="h-9 w-9 rounded-full hover:bg-destructive/10 hover:text-destructive transition-all duration-200"
-        title="退出登录"
+        title={t("logout")}
       >
         <LogOut className="h-4 w-4" />
       </Button>
