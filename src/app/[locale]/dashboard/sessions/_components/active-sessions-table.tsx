@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import type { ActiveSessionInfo } from "@/types/session";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
+import { useTranslations } from "next-intl";
 
 interface ActiveSessionsTableProps {
   sessions: ActiveSessionInfo[];
@@ -44,6 +45,8 @@ export function ActiveSessionsTable({
   inactive = false,
   currencyCode = "USD",
 }: ActiveSessionsTableProps) {
+  const t = useTranslations("dashboard.sessions");
+
   // 按开始时间降序排序（最新的在前）
   const sortedSessions = [...sessions].sort((a, b) => b.startTime - a.startTime);
 
@@ -51,10 +54,10 @@ export function ActiveSessionsTable({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="text-sm text-muted-foreground">
-          共 {sessions.length} 个{inactive ? "非活跃" : "活跃"} Session
-          {inactive && <span className="ml-2 text-xs">(不计入并发数)</span>}
+          {t("table.count", { count: sessions.length, type: t(inactive ? "table.inactive" : "table.active") })}
+          {inactive && <span className="ml-2 text-xs">{t("table.notCountedInConcurrency")}</span>}
         </div>
-        {isLoading && <div className="text-sm text-muted-foreground animate-pulse">刷新中...</div>}
+        {isLoading && <div className="text-sm text-muted-foreground animate-pulse">{t("table.refreshing")}</div>}
       </div>
 
       <div
@@ -66,24 +69,24 @@ export function ActiveSessionsTable({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Session ID</TableHead>
-              <TableHead>用户</TableHead>
-              <TableHead>密钥</TableHead>
-              <TableHead>供应商</TableHead>
-              <TableHead>模型</TableHead>
-              <TableHead className="text-center">请求数</TableHead>
-              <TableHead className="text-right">总输入</TableHead>
-              <TableHead className="text-right">总输出</TableHead>
-              <TableHead className="text-right">总成本</TableHead>
-              <TableHead className="text-right">总耗时</TableHead>
-              <TableHead className="text-center">操作</TableHead>
+              <TableHead>{t("columns.sessionId")}</TableHead>
+              <TableHead>{t("columns.user")}</TableHead>
+              <TableHead>{t("columns.key")}</TableHead>
+              <TableHead>{t("columns.provider")}</TableHead>
+              <TableHead>{t("columns.model")}</TableHead>
+              <TableHead className="text-center">{t("columns.requestCount")}</TableHead>
+              <TableHead className="text-right">{t("columns.totalInput")}</TableHead>
+              <TableHead className="text-right">{t("columns.totalOutput")}</TableHead>
+              <TableHead className="text-right">{t("columns.totalCost")}</TableHead>
+              <TableHead className="text-right">{t("columns.totalDuration")}</TableHead>
+              <TableHead className="text-center">{t("columns.actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {sortedSessions.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={11} className="text-center text-muted-foreground">
-                  暂无活跃 Session
+                  {t("table.noActiveSessions")}
                 </TableCell>
               </TableRow>
             ) : (
@@ -127,7 +130,7 @@ export function ActiveSessionsTable({
                     <Link href={`/dashboard/sessions/${session.sessionId}/messages`}>
                       <Button variant="ghost" size="sm">
                         <Eye className="h-4 w-4 mr-1" />
-                        查看
+                        {t("actions.view")}
                       </Button>
                     </Link>
                   </TableCell>

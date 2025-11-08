@@ -13,6 +13,7 @@ import {
 import { Search } from "lucide-react";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { hasKeyQuotaSet, isWarning, isExceeded } from "@/lib/utils/quota-helpers";
+import { useTranslations } from "next-intl";
 
 interface KeyQuota {
   cost5h: { current: number; limit: number | null };
@@ -48,6 +49,7 @@ interface KeysQuotaManagerProps {
 }
 
 export function KeysQuotaManager({ users, currencyCode = "USD" }: KeysQuotaManagerProps) {
+  const t = useTranslations("quota.keys");
   const [searchQuery, setSearchQuery] = useState("");
   const [filter, setFilter] = useState<
     "all" | "key-quota" | "user-quota-only" | "warning" | "exceeded"
@@ -107,7 +109,7 @@ export function KeysQuotaManager({ users, currencyCode = "USD" }: KeysQuotaManag
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="搜索用户或密钥..."
+            placeholder={t("searchPlaceholder")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9"
@@ -117,20 +119,20 @@ export function KeysQuotaManager({ users, currencyCode = "USD" }: KeysQuotaManag
         {/* 筛选器 */}
         <Select value={filter} onValueChange={(value: typeof filter) => setFilter(value)}>
           <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="筛选条件" />
+            <SelectValue placeholder={t("filterLabel")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">全部密钥</SelectItem>
-            <SelectItem value="key-quota">仅密钥限额</SelectItem>
-            <SelectItem value="user-quota-only">仅用户限额</SelectItem>
-            <SelectItem value="warning">预警（≥60%）</SelectItem>
-            <SelectItem value="exceeded">超限（≥100%）</SelectItem>
+            <SelectItem value="all">{t("filter.all")}</SelectItem>
+            <SelectItem value="key-quota">{t("filter.keyQuota")}</SelectItem>
+            <SelectItem value="user-quota-only">{t("filter.userQuotaOnly")}</SelectItem>
+            <SelectItem value="warning">{t("filter.warning")}</SelectItem>
+            <SelectItem value="exceeded">{t("filter.exceeded")}</SelectItem>
           </SelectContent>
         </Select>
 
         {/* 统计信息 */}
         <div className="text-sm text-muted-foreground ml-auto">
-          显示 {totalFilteredUsers} 个用户，{totalFilteredKeys} 个密钥
+          {t("filterCount", { users: totalFilteredUsers, keys: totalFilteredKeys })}
         </div>
       </div>
 

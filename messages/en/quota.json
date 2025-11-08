@@ -200,6 +200,50 @@
       "success": "User quota set successfully",
       "error": "Failed to set",
       "retryError": "Failed to set, please try again later"
+    },
+    "editKeyForm": {
+      "title": "Edit Key",
+      "description": "Modify the key's name, expiration time, and rate limit configuration.",
+      "keyName": {
+        "label": "Key Name",
+        "placeholder": "Enter key name",
+        "required": "Key Name *"
+      },
+      "expiresAt": {
+        "label": "Expiration Time",
+        "placeholder": "Select expiration time",
+        "description": "Leave blank for never expires"
+      },
+      "canLoginWebUi": {
+        "label": "Allow Web UI Login",
+        "description": "When disabled, this key can only be used for API calls and cannot login to the admin panel"
+      },
+      "limit5hUsd": {
+        "label": "5-Hour Cost Limit (USD)",
+        "placeholder": "Leave blank for unlimited",
+        "description": "Maximum cost within 5 hours"
+      },
+      "limitWeeklyUsd": {
+        "label": "Weekly Cost Limit (USD)",
+        "placeholder": "Leave blank for unlimited",
+        "description": "Maximum cost per week"
+      },
+      "limitMonthlyUsd": {
+        "label": "Monthly Cost Limit (USD)",
+        "placeholder": "Leave blank for unlimited",
+        "description": "Maximum cost per month"
+      },
+      "limitConcurrentSessions": {
+        "label": "Concurrent Session Limit",
+        "placeholder": "0 means unlimited",
+        "description": "Number of simultaneous conversations"
+      },
+      "submitText": "Save Changes",
+      "loadingText": "Saving...",
+      "success": "Key updated successfully",
+      "error": "Failed to update key",
+      "retryError": "Save failed, please try again later",
+      "keyInfoMissing": "Key information does not exist"
     }
   }
 }

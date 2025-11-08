@@ -18,6 +18,7 @@ import { Settings, Loader2 } from "lucide-react";
 import { editUser } from "@/actions/users";
 import { toast } from "sonner";
 import { type CurrencyCode, CURRENCY_CONFIG } from "@/lib/utils/currency";
+import { useTranslations } from "next-intl";
 
 interface UserQuota {
   rpm: { current: number; limit: number; window: "per_minute" };
@@ -42,6 +43,7 @@ export function EditUserQuotaDialog({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
+  const t = useTranslations("quota.keys.editUserDialog");
 
   const currencySymbol = CURRENCY_CONFIG[currencyCode].symbol;
 
@@ -62,14 +64,14 @@ export function EditUserQuotaDialog({
         });
 
         if (result.ok) {
-          toast.success("用户限额设置成功");
+          toast.success(t("success"));
           setOpen(false);
           router.refresh();
         } else {
-          toast.error(result.error || "设置失败");
+          toast.error(result.error || t("error"));
         }
       } catch (error) {
-        toast.error("设置失败，请稍后重试");
+        toast.error(t("retryError"));
         console.error(error);
       }
     });
@@ -81,55 +83,60 @@ export function EditUserQuotaDialog({
         {trigger || (
           <Button variant="outline" size="sm">
             <Settings className="h-4 w-4" />
-            <span className="ml-2">编辑限额</span>
+            <span className="ml-2">{t("editQuota")}</span>
           </Button>
         )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-[500px]">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>设置用户限额</DialogTitle>
-            <DialogDescription>用户: {userName}</DialogDescription>
+            <DialogTitle>{t("title")}</DialogTitle>
+            <DialogDescription>{t("description", { userName })}</DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
             {/* RPM 限制 */}
             <div className="grid gap-2">
-              <Label htmlFor="rpmLimit">每分钟请求数 (RPM)</Label>
+              <Label htmlFor="rpmLimit">{t("rpm.label")}</Label>
               <Input
                 id="rpmLimit"
                 type="number"
                 min="1"
-                placeholder="60"
+                placeholder={t("rpm.placeholder")}
                 value={rpmLimit}
                 onChange={(e) => setRpmLimit(e.target.value)}
                 required
               />
               {currentQuota && (
                 <p className="text-xs text-muted-foreground">
-                  当前: {currentQuota.rpm.current} / {currentQuota.rpm.limit} 请求/分钟
+                  {t("rpm.current", {
+                    current: currentQuota.rpm.current,
+                    limit: currentQuota.rpm.limit,
+                  })}
                 </p>
               )}
             </div>
 
             {/* 每日消费限额 */}
             <div className="grid gap-2">
-              <Label htmlFor="dailyQuota">每日消费限额（USD）</Label>
+              <Label htmlFor="dailyQuota">{t("dailyQuota.label")}</Label>
               <Input
                 id="dailyQuota"
                 type="number"
                 step="0.01"
                 min="0"
-                placeholder="100"
+                placeholder={t("dailyQuota.placeholder")}
                 value={dailyQuota}
                 onChange={(e) => setDailyQuota(e.target.value)}
                 required
               />
               {currentQuota && (
                 <p className="text-xs text-muted-foreground">
-                  今日已用: {currencySymbol}
-                  {currentQuota.dailyCost.current.toFixed(4)} / {currencySymbol}
-                  {currentQuota.dailyCost.limit.toFixed(2)}
+                  {t("dailyQuota.current", {
+                    currency: currencySymbol,
+                    current: currentQuota.dailyCost.current.toFixed(4),
+                    limit: currentQuota.dailyCost.limit.toFixed(2),
+                  })}
                 </p>
               )}
             </div>
@@ -138,7 +145,7 @@ export function EditUserQuotaDialog({
           <DialogFooter>
             <Button type="submit" disabled={isPending}>
               {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              保存
+              {t("save")}
             </Button>
           </DialogFooter>
         </form>

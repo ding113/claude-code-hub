@@ -18,6 +18,7 @@ import { Settings, Loader2 } from "lucide-react";
 import { editKey } from "@/actions/keys";
 import { toast } from "sonner";
 import { type CurrencyCode, CURRENCY_CONFIG } from "@/lib/utils/currency";
+import { useTranslations } from "next-intl";
 
 interface KeyQuota {
   cost5h: { current: number; limit: number | null };
@@ -46,6 +47,7 @@ export function EditKeyQuotaDialog({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
+  const t = useTranslations("quota.keys.editDialog");
 
   const currencySymbol = CURRENCY_CONFIG[currencyCode].symbol;
 
@@ -76,14 +78,14 @@ export function EditKeyQuotaDialog({
         });
 
         if (result.ok) {
-          toast.success("限额设置成功");
+          toast.success(t("success"));
           setOpen(false);
           router.refresh();
         } else {
-          toast.error(result.error || "设置失败");
+          toast.error(result.error || t("error"));
         }
       } catch (error) {
-        toast.error("设置失败，请稍后重试");
+        toast.error(t("retryError"));
         console.error(error);
       }
     });
@@ -101,14 +103,14 @@ export function EditKeyQuotaDialog({
         });
 
         if (result.ok) {
-          toast.success("限额已清除");
+          toast.success(t("clearSuccess"));
           setOpen(false);
           router.refresh();
         } else {
-          toast.error(result.error || "清除失败");
+          toast.error(result.error || t("clearError"));
         }
       } catch (error) {
-        toast.error("清除失败，请稍后重试");
+        toast.error(t("retryError"));
         console.error(error);
       }
     });
@@ -120,98 +122,106 @@ export function EditKeyQuotaDialog({
         {trigger || (
           <Button variant="outline" size="sm">
             <Settings className="h-4 w-4" />
-            <span className="ml-2">设置限额</span>
+            <span className="ml-2">{t("setQuota")}</span>
           </Button>
         )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-[500px]">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>设置密钥限额</DialogTitle>
+            <DialogTitle>{t("title")}</DialogTitle>
             <DialogDescription>
-              密钥: {keyName} ({userName})
+              {t("description", { keyName, userName })}
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
             {/* 5小时限额 */}
             <div className="grid gap-2">
-              <Label htmlFor="limit5h">5小时限额（USD）</Label>
+              <Label htmlFor="limit5h">{t("cost5h.label")}</Label>
               <Input
                 id="limit5h"
                 type="number"
                 step="0.01"
                 min="0"
-                placeholder="不限制"
+                placeholder={t("cost5h.placeholder")}
                 value={limit5h}
                 onChange={(e) => setLimit5h(e.target.value)}
               />
               {currentQuota?.cost5h.limit && (
                 <p className="text-xs text-muted-foreground">
-                  当前已用: {currencySymbol}
-                  {currentQuota.cost5h.current.toFixed(4)} / {currencySymbol}
-                  {currentQuota.cost5h.limit.toFixed(2)}
+                  {t("cost5h.current", {
+                    currency: currencySymbol,
+                    current: currentQuota.cost5h.current.toFixed(4),
+                    limit: currentQuota.cost5h.limit.toFixed(2),
+                  })}
                 </p>
               )}
             </div>
 
             {/* 周限额 */}
             <div className="grid gap-2">
-              <Label htmlFor="limitWeekly">周限额（USD）</Label>
+              <Label htmlFor="limitWeekly">{t("costWeekly.label")}</Label>
               <Input
                 id="limitWeekly"
                 type="number"
                 step="0.01"
                 min="0"
-                placeholder="不限制"
+                placeholder={t("costWeekly.placeholder")}
                 value={limitWeekly}
                 onChange={(e) => setLimitWeekly(e.target.value)}
               />
               {currentQuota?.costWeekly.limit && (
                 <p className="text-xs text-muted-foreground">
-                  当前已用: {currencySymbol}
-                  {currentQuota.costWeekly.current.toFixed(4)} / {currencySymbol}
-                  {currentQuota.costWeekly.limit.toFixed(2)}
+                  {t("costWeekly.current", {
+                    currency: currencySymbol,
+                    current: currentQuota.costWeekly.current.toFixed(4),
+                    limit: currentQuota.costWeekly.limit.toFixed(2),
+                  })}
                 </p>
               )}
             </div>
 
             {/* 月限额 */}
             <div className="grid gap-2">
-              <Label htmlFor="limitMonthly">月限额（USD）</Label>
+              <Label htmlFor="limitMonthly">{t("costMonthly.label")}</Label>
               <Input
                 id="limitMonthly"
                 type="number"
                 step="0.01"
                 min="0"
-                placeholder="不限制"
+                placeholder={t("costMonthly.placeholder")}
                 value={limitMonthly}
                 onChange={(e) => setLimitMonthly(e.target.value)}
               />
               {currentQuota?.costMonthly.limit && (
                 <p className="text-xs text-muted-foreground">
-                  当前已用: {currencySymbol}
-                  {currentQuota.costMonthly.current.toFixed(4)} / {currencySymbol}
-                  {currentQuota.costMonthly.limit.toFixed(2)}
+                  {t("costMonthly.current", {
+                    currency: currencySymbol,
+                    current: currentQuota.costMonthly.current.toFixed(4),
+                    limit: currentQuota.costMonthly.limit.toFixed(2),
+                  })}
                 </p>
               )}
             </div>
 
             {/* 并发限额 */}
             <div className="grid gap-2">
-              <Label htmlFor="limitConcurrent">并发 Session 限额</Label>
+              <Label htmlFor="limitConcurrent">{t("concurrentSessions.label")}</Label>
               <Input
                 id="limitConcurrent"
                 type="number"
                 min="0"
-                placeholder="0 = 不限制"
+                placeholder={t("concurrentSessions.placeholder")}
                 value={limitConcurrent}
                 onChange={(e) => setLimitConcurrent(e.target.value)}
               />
               {currentQuota && currentQuota.concurrentSessions.limit > 0 && (
                 <p className="text-xs text-muted-foreground">
-                  当前并发: {currentQuota.concurrentSessions.current} /{" "}
-                  {currentQuota.concurrentSessions.limit}
+                  {t("concurrentSessions.current", {
+                    current: currentQuota.concurrentSessions.current,
+                    limit: currentQuota.concurrentSessions.limit,
+                  })}
                 </p>
               )}
             </div>
@@ -228,12 +238,12 @@ export function EditKeyQuotaDialog({
                 onClick={handleClearQuota}
                 disabled={isPending}
               >
-                清除所有限额
+                {t("clearAll")}
               </Button>
             )}
             <Button type="submit" disabled={isPending}>
               {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              保存
+              {t("save")}
             </Button>
           </DialogFooter>
         </form>

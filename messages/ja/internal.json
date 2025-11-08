@@ -6,7 +6,7 @@
     },
     "actions": {
       "reconfigure": "パラメータを再設定",
-      "generate": "データ生成",
+      "generate": "データを生成",
       "exportScreenshot": "スクリーンショットをエクスポート",
       "exportPDF": "PDFをエクスポート"
     },

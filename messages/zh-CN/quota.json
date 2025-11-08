@@ -200,6 +200,50 @@
       "success": "用户限额设置成功",
       "error": "设置失败",
       "retryError": "设置失败,请稍后重试"
+    },
+    "editKeyForm": {
+      "title": "编辑密钥",
+      "description": "修改密钥的名称、过期时间和限流配置。",
+      "keyName": {
+        "label": "密钥名称",
+        "placeholder": "请输入密钥名称",
+        "required": "密钥名称 *"
+      },
+      "expiresAt": {
+        "label": "过期时间",
+        "placeholder": "选择过期时间",
+        "description": "留空表示永不过期"
+      },
+      "canLoginWebUi": {
+        "label": "允许登录 Web UI",
+        "description": "关闭后,此 Key 仅可用于 API 调用,无法登录管理后台"
+      },
+      "limit5hUsd": {
+        "label": "5小时消费上限 (USD)",
+        "placeholder": "留空表示无限制",
+        "description": "5小时内最大消费金额"
+      },
+      "limitWeeklyUsd": {
+        "label": "周消费上限 (USD)",
+        "placeholder": "留空表示无限制",
+        "description": "每周最大消费金额"
+      },
+      "limitMonthlyUsd": {
+        "label": "月消费上限 (USD)",
+        "placeholder": "留空表示无限制",
+        "description": "每月最大消费金额"
+      },
+      "limitConcurrentSessions": {
+        "label": "并发 Session 上限",
+        "placeholder": "0 表示无限制",
+        "description": "同时运行的对话数量"
+      },
+      "submitText": "保存修改",
+      "loadingText": "保存中...",
+      "success": "密钥更新成功",
+      "error": "密钥更新失败",
+      "retryError": "保存失败,请稍后重试",
+      "keyInfoMissing": "密钥信息不存在"
     }
   }
 }

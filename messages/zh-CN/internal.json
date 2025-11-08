@@ -77,7 +77,7 @@
       "success": "成功"
     },
     "errors": {
-      "failed": "Failed to generate logs"
+      "failed": "生成日志失败"
     }
   }
 }

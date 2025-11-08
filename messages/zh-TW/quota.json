@@ -152,54 +152,98 @@
     "noMatches": "沒有匹配的用戶或密鑰",
     "editDialog": {
       "title": "設置密鑰限額",
-      "description": "密钥: {keyName} ({userName})",
+      "description": "密鑰: {keyName} ({userName})",
       "cost5h": {
-        "label": "5小时限额(USD)",
+        "label": "5小時限額 (USD)",
         "placeholder": "不限制",
-        "current": "当前已用: {currency}{current} / {currency}{limit}"
+        "current": "當前已用: {currency}{current} / {currency}{limit}"
       },
       "costWeekly": {
-        "label": "周限额(USD)",
+        "label": "周限額 (USD)",
         "placeholder": "不限制",
-        "current": "当前已用: {currency}{current} / {currency}{limit}"
+        "current": "當前已用: {currency}{current} / {currency}{limit}"
       },
       "costMonthly": {
-        "label": "月限额(USD)",
+        "label": "月限額 (USD)",
         "placeholder": "不限制",
-        "current": "当前已用: {currency}{current} / {currency}{limit}"
+        "current": "當前已用: {currency}{current} / {currency}{limit}"
       },
       "concurrentSessions": {
-        "label": "并发 Session 限额",
+        "label": "並發 Session 限額",
         "placeholder": "0 = 不限制",
-        "current": "当前并发: {current} / {limit}"
+        "current": "當前並發: {current} / {limit}"
       },
-      "clearAll": "清除所有限额",
+      "clearAll": "清除所有限額",
       "save": "保存",
-      "setQuota": "设置限额",
+      "setQuota": "設置限額",
       "success": "限額設置成功",
-      "clearSuccess": "限额已清除",
-      "error": "设置失败",
-      "clearError": "清除失败",
-      "retryError": "设置失败,请稍后重试"
+      "clearSuccess": "限額已清除",
+      "error": "設置失敗",
+      "clearError": "清除失敗",
+      "retryError": "設置失敗,請稍後重試"
     },
     "editUserDialog": {
       "title": "設置用戶限額",
-      "description": "用户: {userName}",
+      "description": "用戶: {userName}",
       "rpm": {
-        "label": "每分钟请求数 (RPM)",
+        "label": "每分鐘請求數 (RPM)",
         "placeholder": "60",
-        "current": "当前: {current} / {limit} 请求/分钟"
+        "current": "當前: {current} / {limit} 請求/分鐘"
       },
       "dailyQuota": {
-        "label": "每日消费限额(USD)",
+        "label": "每日消費限額 (USD)",
         "placeholder": "100",
         "current": "今日已用: {currency}{current} / {currency}{limit}"
       },
       "save": "保存",
-      "editQuota": "编辑限额",
-      "success": "用户限额设置成功",
-      "error": "设置失败",
-      "retryError": "设置失败,请稍后重试"
+      "editQuota": "編輯限額",
+      "success": "用戶限額設置成功",
+      "error": "設置失敗",
+      "retryError": "設置失敗,請稍後重試"
+    },
+    "editKeyForm": {
+      "title": "編輯金鑰",
+      "description": "修改金鑰的名稱、過期時間和流量限制設定。",
+      "keyName": {
+        "label": "金鑰名稱",
+        "placeholder": "請輸入金鑰名稱",
+        "required": "金鑰名稱 *"
+      },
+      "expiresAt": {
+        "label": "過期時間",
+        "placeholder": "選擇過期時間",
+        "description": "留空表示永不過期"
+      },
+      "canLoginWebUi": {
+        "label": "允許登入 Web UI",
+        "description": "關閉後，此金鑰僅可用於 API 呼叫，無法登入管理後台"
+      },
+      "limit5hUsd": {
+        "label": "5小時消費上限 (USD)",
+        "placeholder": "留空表示無限制",
+        "description": "5小時內最大消費金額"
+      },
+      "limitWeeklyUsd": {
+        "label": "週消費上限 (USD)",
+        "placeholder": "留空表示無限制",
+        "description": "每週最大消費金額"
+      },
+      "limitMonthlyUsd": {
+        "label": "月消費上限 (USD)",
+        "placeholder": "留空表示無限制",
+        "description": "每月最大消費金額"
+      },
+      "limitConcurrentSessions": {
+        "label": "並發 Session 上限",
+        "placeholder": "0 表示無限制",
+        "description": "同時運行的對話數量"
+      },
+      "submitText": "儲存修改",
+      "loadingText": "儲存中...",
+      "success": "金鑰更新成功",
+      "error": "金鑰更新失敗",
+      "retryError": "儲存失敗，請稍後重試",
+      "keyInfoMissing": "金鑰資訊不存在"
     }
   }
 }

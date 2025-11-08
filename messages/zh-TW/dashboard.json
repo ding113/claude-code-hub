@@ -1,10 +1,10 @@
 {
   "title": {
     "costRanking": "消耗排行榜",
-    "costRankingDescription": "查看用户消耗排名，資料每 5 分鐘更新一次",
+    "costRankingDescription": "查看用戶消耗排名，資料每 5 分鐘更新一次",
     "usageLogs": "使用記錄",
-    "clients": "用户端",
-    "userAndKeyManagement": "用户和密鑰管理",
+    "clients": "用戶端",
+    "userAndKeyManagement": "用戶和密鑰管理",
     "requestMessages": "請求 Messages",
     "activeSessions": "活躍 Session（最近 5 分鐘）",
     "sessionMonitoring": "Session 監控",
@@ -12,7 +12,7 @@
     "inactiveSessions": "非活躍 Session（超過 5 分鐘，僅供查看）",
     "quotasManagement": "額度管理",
     "quotasManagementDescription": "查看和管理所有層級的額度使用情況",
-    "usersQuotas": "用户額度統計",
+    "usersQuotas": "用戶額度統計",
     "keysQuotas": "密鑰額度統計",
     "providersQuotas": "供應商額度統計",
     "usageLogsDescription": "查看 API 調用日誌和使用統計",
@@ -23,16 +23,16 @@
     "dashboard": "查看系統統計資料和監控資訊",
     "quotas": "查看和管理所有層級的額度使用情況",
     "clientInfo": "User-Agent 請求頭",
-    "requestMessagesDescription": "用户端傳送的訊息內容",
+    "requestMessagesDescription": "用戶端傳送的訊息內容",
     "responseBodyDescription": "伺服器傳回的完整回應（5分鐘 TTL）"
   },
   "overview": {
     "title": "概覽",
     "totalRequests": "總請求數",
     "totalCost": "總成本",
-    "totalUsers": "總用户數",
+    "totalUsers": "總用戶數",
     "totalProviders": "總供應商數",
-    "activeUsers": "活躍用户",
+    "activeUsers": "活躍用戶",
     "activeSessions": "活躍工作階段",
     "errorRate": "錯誤率",
     "avgResponseTime": "平均回應時間"
@@ -175,7 +175,7 @@
   },
   "leaderboard": {
     "title": "成本排行榜",
-    "description": "查看用户和密鑰的成本統計排名",
+    "description": "查看用戶和密鑰的成本統計排名",
     "tabs": {
       "users": "使用者排名",
       "keys": "密鑰排名",
@@ -306,7 +306,7 @@
     "description": "管理使用者、金鑰和供應商的使用額度",
     "tabs": {
       "overview": "概覽",
-      "users": "用户額度",
+      "users": "用戶額度",
       "keys": "密鑰額度",
       "providers": "供應商額度"
     },
@@ -326,8 +326,8 @@
       "exceeded": "已超額 (≥100%)"
     },
     "users": {
-      "title": "用户額度統計",
-      "totalUsers": "共 {count} 個用户"
+      "title": "用戶額度統計",
+      "totalUsers": "共 {count} 個用戶"
     },
     "keys": {
       "title": "密鑰額度統計",

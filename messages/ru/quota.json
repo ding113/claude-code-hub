@@ -1,55 +1,55 @@
 {
   "header": {
-    "title": "用户配额",
+    "title": "Квоты пользователей",
     "role": {
-      "admin": "管理员",
-      "user": "用户"
+      "admin": "Администратор",
+      "user": "Пользователь"
     },
-    "keysCountSuffix": "个密钥",
-    "rpm": "请求限流",
-    "todayCost": "今日消费",
-    "exceededNotice": "已超过限额,请联系管理员处理"
+    "keysCountSuffix": " ключей",
+    "rpm": "Ограничение запросов",
+    "todayCost": "Расходы за сегодня",
+    "exceededNotice": "Квота превышена, обратитесь к администратору"
   },
   "countdown": {
-    "reset": "重置倒计时"
+    "reset": "Обратный отсчет до сброса"
   },
   "windowType": {
     "5h": {
-      "label": "5小时滚动",
-      "description": "统计过去5小时内的消费,每小时滚动更新"
+      "label": "5-часовое скользящее окно",
+      "description": "Учет расходов за последние 5 часов, обновляется ежечасно"
     },
     "weekly": {
-      "label": "每周重置",
-      "description": "自然周制(周一00:00重置),整周统计"
+      "label": "Еженедельный сброс",
+      "description": "Календарная неделя (сброс в понедельник 00:00), статистика за неделю"
     },
     "monthly": {
-      "label": "每月重置",
-      "description": "自然月制(每月1日00:00重置),整月统计"
+      "label": "Ежемесячный сброс",
+      "description": "Календарный месяц (сброс 1-го числа в 00:00), статистика за месяц"
     },
     "daily": {
-      "label": "每日重置",
-      "description": "自然日制(每日00:00重置),按日统计"
+      "label": "Ежедневный сброс",
+      "description": "Календарный день (сброс ежедневно в 00:00), статистика за день"
     }
   },
   "toolbar": {
-    "searchPlaceholder": "搜索用户名或密钥",
-    "filter": "筛选",
-    "sort": "排序",
-    "refresh": "刷新",
-    "autoRefresh": "自动刷新",
+    "searchPlaceholder": "Поиск по имени пользователя или ключу",
+    "filter": "Фильтр",
+    "sort": "Сортировка",
+    "refresh": "Обновить",
+    "autoRefresh": "Автообновление",
     "filterOptions": {
-      "all": "全部",
-      "warning": "预警",
-      "exceeded": "已超限"
+      "all": "Все",
+      "warning": "Предупреждение",
+      "exceeded": "Превышено"
     },
     "sortOptions": {
-      "name": "按名称",
-      "usage": "按使用率"
+      "name": "По имени",
+      "usage": "По использованию"
     },
     "interval": {
-      "10s": "10秒",
-      "30s": "30秒",
-      "60s": "60秒"
+      "10s": "10 сек",
+      "30s": "30 сек",
+      "60s": "60 сек"
     }
   },
   "layout": {
@@ -64,35 +64,35 @@
   "users": {
     "title": "Статистика квот пользователей",
     "totalCount": "Всего пользователей: {count}",
-    "noNote": "Нет заметок",
+    "noNote": "Без заметок",
     "rpm": {
-      "label": "Квота RPM",
+      "label": "RPM квота",
       "description": "Запросов в минуту"
     },
     "dailyCost": {
-      "label": "Дневные расходы",
+      "label": "Ежедневные расходы",
       "resetAt": "Сброс в"
     },
-    "noQuotaData": "Невозможно получить информацию о квоте",
-    "noMatches": "Совпадающие пользователи не найдены",
-    "noData": "Нет данных пользователей",
+    "noQuotaData": "Не удалось получить информацию о квоте",
+    "noMatches": "Пользователи не найдены",
+    "noData": "Нет данных о пользователях",
     "sort": {
       "name": "По имени",
       "usage": "По использованию"
     },
     "filter": {
       "all": "Все",
-      "warning": "Близко к лимиту (>60%)",
+      "warning": "Приближение к лимиту (>60%)",
       "exceeded": "Превышено (≥100%)"
     }
   },
   "providers": {
     "title": "Статистика квот провайдеров",
     "totalCount": "Всего провайдеров: {count}",
-    "filterCount": "Показано {filtered} / {total} провайдеров",
+    "filterCount": "Показано {filtered} из {total} провайдеров",
     "status": {
-      "enabled": "Включено",
-      "disabled": "Отключено"
+      "enabled": "Включен",
+      "disabled": "Отключен"
     },
     "card": {
       "priority": "Приоритет",
@@ -102,26 +102,26 @@
       "label": "Расходы за 5 часов"
     },
     "costWeekly": {
-      "label": "Недельные расходы",
+      "label": "Еженедельные расходы",
       "resetAt": "Сброс в"
     },
     "costMonthly": {
-      "label": "Месячные расходы",
+      "label": "Ежемесячные расходы",
       "resetAt": "Сброс в"
     },
     "concurrentSessions": {
-      "label": "Одновременные сессии"
+      "label": "Параллельные сессии"
     },
     "noQuotaSet": "Квота не установлена",
-    "noQuotaData": "Невозможно получить информацию о квоте",
-    "noMatches": "Совпадающие провайдеры не найдены",
-    "unlimitedSection": "Провайдеры без квоты ({count})"
+    "noQuotaData": "Не удалось получить информацию о квоте",
+    "noMatches": "Провайдеры не найдены",
+    "unlimitedSection": "Провайдеры без квот ({count})"
   },
   "keys": {
     "title": "Статистика квот ключей",
     "totalCount": "Всего {users} пользователей, {keys} ключей",
     "searchPlaceholder": "Поиск пользователя или ключа...",
-    "filterLabel": "Условия фильтра",
+    "filterLabel": "Фильтры",
     "filterCount": "Показано {users} пользователей, {keys} ключей",
     "filter": {
       "all": "Все ключи",
@@ -131,12 +131,12 @@
       "exceeded": "Превышено (≥100%)"
     },
     "table": {
-      "keyName": "Имя ключа",
+      "keyName": "Название ключа",
       "quotaType": "Тип квоты",
-      "cost5h": "Квота за 5 часов",
-      "costWeekly": "Недельная квота",
-      "costMonthly": "Месячная квота",
-      "concurrentSessions": "Лимит одновременных",
+      "cost5h": "5-часовая квота",
+      "costWeekly": "Еженедельная квота",
+      "costMonthly": "Ежемесячная квота",
+      "concurrentSessions": "Лимит параллельных",
       "status": "Статус",
       "actions": "Действия"
     },
@@ -145,61 +145,105 @@
       "inherited": "Унаследовано от пользователя"
     },
     "status": {
-      "disabled": "Отключено",
-      "restricted": "Ограничено",
+      "disabled": "Отключен",
+      "restricted": "Ограничен",
       "normal": "Нормально"
     },
-    "noMatches": "Совпадающие пользователи или ключи не найдены",
+    "noMatches": "Пользователи или ключи не найдены",
     "editDialog": {
       "title": "Установить квоту ключа",
-      "description": "密钥: {keyName} ({userName})",
+      "description": "Ключ: {keyName} ({userName})",
       "cost5h": {
-        "label": "5小时限额(USD)",
-        "placeholder": "不限制",
-        "current": "当前已用: {currency}{current} / {currency}{limit}"
+        "label": "5-часовая квота (USD)",
+        "placeholder": "Неограниченно",
+        "current": "Использовано: {currency}{current} из {currency}{limit}"
       },
       "costWeekly": {
-        "label": "周限额(USD)",
-        "placeholder": "不限制",
-        "current": "当前已用: {currency}{current} / {currency}{limit}"
+        "label": "Еженедельная квота (USD)",
+        "placeholder": "Неограниченно",
+        "current": "Использовано: {currency}{current} из {currency}{limit}"
       },
       "costMonthly": {
-        "label": "月限额(USD)",
-        "placeholder": "不限制",
-        "current": "当前已用: {currency}{current} / {currency}{limit}"
+        "label": "Ежемесячная квота (USD)",
+        "placeholder": "Неограниченно",
+        "current": "Использовано: {currency}{current} из {currency}{limit}"
       },
       "concurrentSessions": {
-        "label": "并发 Session 限额",
-        "placeholder": "0 = 不限制",
-        "current": "当前并发: {current} / {limit}"
+        "label": "Квота параллельных сессий",
+        "placeholder": "0 = без ограничений",
+        "current": "Текущие параллельные: {current} из {limit}"
       },
-      "clearAll": "清除所有限额",
+      "clearAll": "Очистить все квоты",
       "save": "Сохранить",
-      "setQuota": "设置限额",
+      "setQuota": "Установить квоту",
       "success": "Квота успешно установлена",
-      "clearSuccess": "限额已清除",
-      "error": "设置失败",
-      "clearError": "清除失败",
-      "retryError": "设置失败,请稍后重试"
+      "clearSuccess": "Квота очищена",
+      "error": "Не удалось установить",
+      "clearError": "Не удалось очистить",
+      "retryError": "Не удалось установить, попробуйте позже"
     },
     "editUserDialog": {
       "title": "Установить квоту пользователя",
-      "description": "用户: {userName}",
+      "description": "Пользователь: {userName}",
       "rpm": {
-        "label": "每分钟请求数 (RPM)",
+        "label": "Запросов в минуту (RPM)",
         "placeholder": "60",
-        "current": "当前: {current} / {limit} 请求/分钟"
+        "current": "Текущее: {current} из {limit} запросов/минуту"
       },
       "dailyQuota": {
-        "label": "每日消费限额(USD)",
+        "label": "Ежедневная квота расходов (USD)",
         "placeholder": "100",
-        "current": "今日已用: {currency}{current} / {currency}{limit}"
+        "current": "Использовано сегодня: {currency}{current} из {currency}{limit}"
       },
       "save": "Сохранить",
-      "editQuota": "编辑限额",
-      "success": "用户限额设置成功",
-      "error": "设置失败",
-      "retryError": "设置失败,请稍后重试"
+      "editQuota": "Редактировать квоту",
+      "success": "Квота пользователя успешно установлена",
+      "error": "Не удалось установить",
+      "retryError": "Не удалось установить, попробуйте позже"
+    },
+    "editKeyForm": {
+      "title": "Редактировать ключ",
+      "description": "Измените название ключа, срок действия и настройки ограничения трафика.",
+      "keyName": {
+        "label": "Название ключа",
+        "placeholder": "Введите название ключа",
+        "required": "Название ключа *"
+      },
+      "expiresAt": {
+        "label": "Срок действия",
+        "placeholder": "Выберите срок действия",
+        "description": "Оставьте пустым для бессрочного действия"
+      },
+      "canLoginWebUi": {
+        "label": "Разрешить вход в веб-интерфейс",
+        "description": "При отключении этот ключ можно использовать только для вызовов API, вход в панель управления невозможен"
+      },
+      "limit5hUsd": {
+        "label": "Лимит расходов за 5 часов (USD)",
+        "placeholder": "Оставьте пустым для отсутствия ограничений",
+        "description": "Максимальная сумма расходов за 5 часов"
+      },
+      "limitWeeklyUsd": {
+        "label": "Еженедельный лимит расходов (USD)",
+        "placeholder": "Оставьте пустым для отсутствия ограничений",
+        "description": "Максимальная сумма расходов в неделю"
+      },
+      "limitMonthlyUsd": {
+        "label": "Ежемесячный лимит расходов (USD)",
+        "placeholder": "Оставьте пустым для отсутствия ограничений",
+        "description": "Максимальная сумма расходов в месяц"
+      },
+      "limitConcurrentSessions": {
+        "label": "Лимит параллельных сессий",
+        "placeholder": "0 = без ограничений",
+        "description": "Количество одновременных диалогов"
+      },
+      "submitText": "Сохранить изменения",
+      "loadingText": "Сохранение...",
+      "success": "Ключ успешно обновлен",
+      "error": "Не удалось обновить ключ",
+      "retryError": "Не удалось сохранить, попробуйте позже",
+      "keyInfoMissing": "Информация о ключе отсутствует"
     }
   }
 }

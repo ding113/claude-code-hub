@@ -12,11 +12,12 @@ import { Section } from "@/components/section";
 import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
 import { formatCurrency, type CurrencyCode } from "@/lib/utils/currency";
+import { useTranslations } from "next-intl";
 
 async function fetchSystemSettings(): Promise<{ currencyDisplay: CurrencyCode }> {
   const response = await fetch("/api/system-settings");
   if (!response.ok) {
-    throw new Error("获取系统设置失败");
+    throw new Error("Failed to fetch system settings");
   }
   return response.json();
 }
@@ -26,6 +27,8 @@ async function fetchSystemSettings(): Promise<{ currencyDisplay: CurrencyCode }>
  * 双栏布局：左侧完整内容 + 右侧信息卡片
  */
 export default function SessionMessagesPage() {
+  const t = useTranslations("dashboard.sessions");
+  const tDesc = useTranslations("dashboard.description");
   const params = useParams();
   const router = useRouter();
   const sessionId = params.sessionId as string;
@@ -60,17 +63,17 @@ export default function SessionMessagesPage() {
           setResponse(result.data.response);
           setSessionStats(result.data.sessionStats);
         } else {
-          setError(result.error || "获取失败");
+          setError(result.error || t("status.fetchFailed"));
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "未知错误");
+        setError(err instanceof Error ? err.message : t("status.unknownError"));
       } finally {
         setIsLoading(false);
       }
     };
 
     void fetchDetails();
-  }, [sessionId]);
+  }, [sessionId, t]);
 
   const handleCopyMessages = async () => {
     if (!messages) return;
@@ -80,7 +83,7 @@ export default function SessionMessagesPage() {
       setCopiedMessages(true);
       setTimeout(() => setCopiedMessages(false), 2000);
     } catch (err) {
-      console.error("复制失败:", err);
+      console.error(t("errors.copyFailed"), err);
     }
   };
 
@@ -92,7 +95,7 @@ export default function SessionMessagesPage() {
       setCopiedResponse(true);
       setTimeout(() => setCopiedResponse(false), 2000);
     } catch (err) {
-      console.error("复制失败:", err);
+      console.error(t("errors.copyFailed"), err);
     }
   };
 
@@ -135,10 +138,10 @@ export default function SessionMessagesPage() {
         <div className="flex items-center gap-4">
           <Button variant="outline" size="sm" onClick={() => router.back()}>
             <ArrowLeft className="h-4 w-4 mr-2" />
-            返回
+            {t("actions.back")}
           </Button>
           <div>
-            <h1 className="text-2xl font-bold">Session Messages</h1>
+            <h1 className="text-2xl font-bold">{t("details.title")}</h1>
             <p className="text-sm text-muted-foreground font-mono mt-1">{sessionId}</p>
           </div>
         </div>
@@ -155,18 +158,18 @@ export default function SessionMessagesPage() {
               {copiedMessages ? (
                 <>
                   <Check className="h-4 w-4 mr-2" />
-                  已复制
+                  {t("actions.copied")}
                 </>
               ) : (
                 <>
                   <Copy className="h-4 w-4 mr-2" />
-                  复制 Messages
+                  {t("actions.copyMessages")}
                 </>
               )}
             </Button>
             <Button variant="outline" size="sm" onClick={handleDownload}>
               <Download className="h-4 w-4 mr-2" />
-              下载 Messages
+              {t("actions.downloadMessages")}
             </Button>
           </div>
         )}
@@ -174,7 +177,7 @@ export default function SessionMessagesPage() {
 
       {/* 内容区域 */}
       {isLoading ? (
-        <div className="text-center py-16 text-muted-foreground">加载中...</div>
+        <div className="text-center py-16 text-muted-foreground">{t("status.loading")}</div>
       ) : error ? (
         <div className="text-center py-16">
           <div className="text-destructive text-lg mb-2">{error}</div>
@@ -185,7 +188,7 @@ export default function SessionMessagesPage() {
           <div className="lg:col-span-2 space-y-6">
             {/* User-Agent 信息 */}
             {sessionStats?.userAgent && (
-              <Section title="客户端信息" description="User-Agent 请求头">
+              <Section title={t("details.clientInfo")} description={tDesc("clientInfo")}>
                 <>
                   <div className="rounded-md border bg-muted/50 p-4">
                     <div className="flex items-start gap-3">
@@ -199,7 +202,7 @@ export default function SessionMessagesPage() {
 
             {/* Messages 数据 */}
             {messages !== null && (
-              <Section title="请求 Messages" description="客户端发送的消息内容">
+              <Section title={t("details.requestMessages")} description={t("details.requestMessagesDescription")}>
                 <>
                   <div className="rounded-md border bg-muted/50 p-6">
                     <pre className="text-xs overflow-x-auto whitespace-pre-wrap break-words font-mono">
@@ -213,8 +216,8 @@ export default function SessionMessagesPage() {
             {/* Response Body */}
             {response !== null && (
               <Section
-                title="响应体内容"
-                description="服务器返回的完整响应（5分钟 TTL）"
+                title={t("details.responseBody")}
+                description={t("details.responseBodyDescription")}
                 actions={
                   <Button
                     variant="ghost"
@@ -225,12 +228,12 @@ export default function SessionMessagesPage() {
                     {copiedResponse ? (
                       <>
                         <Check className="h-4 w-4 mr-2" />
-                        已复制
+                        {t("actions.copied")}
                       </>
                     ) : (
                       <>
                         <Copy className="h-4 w-4 mr-2" />
-                        复制响应体
+                        {t("actions.copyResponse")}
                       </>
                     )}
                   </Button>
@@ -249,9 +252,9 @@ export default function SessionMessagesPage() {
             {/* 无数据提示 */}
             {!sessionStats?.userAgent && !messages && !response && (
               <div className="text-center py-16">
-                <div className="text-muted-foreground text-lg mb-2">暂无详细数据</div>
+                <div className="text-muted-foreground text-lg mb-2">{t("details.noDetailedData")}</div>
                 <p className="text-sm text-muted-foreground">
-                  提示：请设置环境变量 STORE_SESSION_MESSAGES=true 以启用 messages 和 response 存储
+                  {t("details.storageTip")}
                 </p>
               </div>
             )}
@@ -263,13 +266,13 @@ export default function SessionMessagesPage() {
               {/* Session 概览卡片 */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Session 概览</CardTitle>
-                  <CardDescription>聚合统计信息</CardDescription>
+                  <CardTitle className="text-base">{t("details.overview")}</CardTitle>
+                  <CardDescription>{t("details.overviewDescription")}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {/* 请求数量 */}
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">总请求数</span>
+                    <span className="text-sm text-muted-foreground">{t("details.totalRequests")}</span>
                     <Badge variant="secondary" className="font-mono font-semibold">
                       <Hash className="h-3 w-3 mr-1" />
                       {sessionStats.requestCount}
@@ -282,13 +285,13 @@ export default function SessionMessagesPage() {
                       <div className="border-t my-3" />
                       <div className="flex flex-col gap-2">
                         <div className="flex items-center justify-between">
-                          <span className="text-sm text-muted-foreground">首次请求</span>
+                          <span className="text-sm text-muted-foreground">{t("details.firstRequest")}</span>
                           <code className="text-xs font-mono">
                             {new Date(sessionStats.firstRequestAt).toLocaleString("zh-CN")}
                           </code>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-sm text-muted-foreground">最后请求</span>
+                          <span className="text-sm text-muted-foreground">{t("details.lastRequest")}</span>
                           <code className="text-xs font-mono">
                             {new Date(sessionStats.lastRequestAt).toLocaleString("zh-CN")}
                           </code>
@@ -302,7 +305,7 @@ export default function SessionMessagesPage() {
                     <>
                       <div className="border-t my-3" />
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">总耗时</span>
+                        <span className="text-sm text-muted-foreground">{t("details.totalDuration")}</span>
                         <code className="text-sm font-mono font-semibold">
                           {sessionStats.totalDurationMs < 1000
                             ? `${sessionStats.totalDurationMs}ms`
@@ -317,14 +320,14 @@ export default function SessionMessagesPage() {
               {/* 供应商和模型卡片 */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">供应商与模型</CardTitle>
-                  <CardDescription>使用的提供商和模型</CardDescription>
+                  <CardTitle className="text-base">{t("details.providersAndModels")}</CardTitle>
+                  <CardDescription>{t("details.providersAndModelsDescription")}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {/* 供应商列表 */}
                   {sessionStats.providers.length > 0 && (
                     <div className="flex flex-col gap-2">
-                      <span className="text-sm text-muted-foreground">供应商</span>
+                      <span className="text-sm text-muted-foreground">{t("details.providers")}</span>
                       <div className="flex flex-wrap gap-2">
                         {sessionStats.providers.map((provider: { id: number; name: string }) => (
                           <Badge key={provider.id} variant="outline" className="text-xs">
@@ -340,7 +343,7 @@ export default function SessionMessagesPage() {
                     <>
                       <div className="border-t my-3" />
                       <div className="flex flex-col gap-2">
-                        <span className="text-sm text-muted-foreground">模型</span>
+                        <span className="text-sm text-muted-foreground">{t("details.models")}</span>
                         <div className="flex flex-wrap gap-2">
                           {sessionStats.models.map((model: string, idx: number) => (
                             <Badge key={idx} variant="secondary" className="text-xs font-mono">
@@ -357,13 +360,13 @@ export default function SessionMessagesPage() {
               {/* Token 使用卡片 */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Token 使用（总量）</CardTitle>
-                  <CardDescription>所有请求的累计统计</CardDescription>
+                  <CardTitle className="text-base">{t("details.tokenUsage")}</CardTitle>
+                  <CardDescription>{t("details.tokenUsageDescription")}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {sessionStats.totalInputTokens > 0 && (
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">总输入</span>
+                      <span className="text-sm text-muted-foreground">{t("details.totalInput")}</span>
                       <code className="text-sm font-mono">
                         {sessionStats.totalInputTokens.toLocaleString()}
                       </code>
@@ -372,7 +375,7 @@ export default function SessionMessagesPage() {
 
                   {sessionStats.totalOutputTokens > 0 && (
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">总输出</span>
+                      <span className="text-sm text-muted-foreground">{t("details.totalOutput")}</span>
                       <code className="text-sm font-mono">
                         {sessionStats.totalOutputTokens.toLocaleString()}
                       </code>
@@ -381,7 +384,7 @@ export default function SessionMessagesPage() {
 
                   {sessionStats.totalCacheCreationTokens > 0 && (
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">缓存创建</span>
+                      <span className="text-sm text-muted-foreground">{t("details.cacheCreation")}</span>
                       <code className="text-sm font-mono">
                         {sessionStats.totalCacheCreationTokens.toLocaleString()}
                       </code>
@@ -390,7 +393,7 @@ export default function SessionMessagesPage() {
 
                   {sessionStats.totalCacheReadTokens > 0 && (
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">缓存读取</span>
+                      <span className="text-sm text-muted-foreground">{t("details.cacheRead")}</span>
                       <code className="text-sm font-mono">
                         {sessionStats.totalCacheReadTokens.toLocaleString()}
                       </code>
@@ -401,7 +404,7 @@ export default function SessionMessagesPage() {
                     <>
                       <div className="border-t my-3" />
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-semibold">总计</span>
+                        <span className="text-sm font-semibold">{t("details.total")}</span>
                         <code className="text-sm font-mono font-semibold">
                           {totalTokens.toLocaleString()}
                         </code>
@@ -415,12 +418,12 @@ export default function SessionMessagesPage() {
               {sessionStats.totalCostUsd && parseFloat(sessionStats.totalCostUsd) > 0 && (
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base">成本信息（总计）</CardTitle>
-                    <CardDescription>所有请求的累计费用</CardDescription>
+                    <CardTitle className="text-base">{t("details.costInfo")}</CardTitle>
+                    <CardDescription>{t("details.costInfoDescription")}</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">总费用</span>
+                      <span className="text-sm text-muted-foreground">{t("details.totalFee")}</span>
                       <code className="text-lg font-mono font-semibold text-green-600">
                         {formatCurrency(sessionStats.totalCostUsd, currencyCode, 6)}
                       </code>

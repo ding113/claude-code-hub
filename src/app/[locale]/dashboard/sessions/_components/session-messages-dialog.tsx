@@ -13,12 +13,14 @@ import {
 import { Eye } from "lucide-react";
 import { getSessionMessages } from "@/actions/active-sessions";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 
 interface SessionMessagesDialogProps {
   sessionId: string;
 }
 
 export function SessionMessagesDialog({ sessionId }: SessionMessagesDialogProps) {
+  const t = useTranslations("dashboard.sessions");
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<unknown | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -34,10 +36,10 @@ export function SessionMessagesDialog({ sessionId }: SessionMessagesDialogProps)
       if (result.ok) {
         setMessages(result.data);
       } else {
-        setError(result.error || "获取失败");
+        setError(result.error || t("status.fetchFailed"));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "未知错误");
+      setError(err instanceof Error ? err.message : t("status.unknownError"));
     } finally {
       setIsLoading(false);
     }
@@ -63,24 +65,24 @@ export function SessionMessagesDialog({ sessionId }: SessionMessagesDialogProps)
       <DialogTrigger asChild>
         <Button variant="ghost" size="sm">
           <Eye className="h-4 w-4 mr-1" />
-          查看
+          {t("actions.view")}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Session Messages</DialogTitle>
+          <DialogTitle>{t("details.title")}</DialogTitle>
           <DialogDescription className="font-mono text-xs">{sessionId}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           {isLoading ? (
-            <div className="text-center py-8 text-muted-foreground">加载中...</div>
+            <div className="text-center py-8 text-muted-foreground">{t("status.loading")}</div>
           ) : error ? (
             <div className="text-center py-8 text-destructive">
               {error}
-              {error.includes("未存储") && (
+              {error.includes(t("status.storageNotEnabled")) && (
                 <p className="text-sm text-muted-foreground mt-2">
-                  提示：请设置环境变量 STORE_SESSION_MESSAGES=true 以启用 messages 存储
+                  {t("status.storageNotEnabledHint")}
                 </p>
               )}
             </div>
@@ -89,7 +91,7 @@ export function SessionMessagesDialog({ sessionId }: SessionMessagesDialogProps)
               <pre className="text-xs overflow-x-auto">{JSON.stringify(messages, null, 2)}</pre>
             </div>
           ) : (
-            <div className="text-center py-8 text-muted-foreground">暂无数据</div>
+            <div className="text-center py-8 text-muted-foreground">{t("details.noData")}</div>
           )}
         </div>
       </DialogContent>
