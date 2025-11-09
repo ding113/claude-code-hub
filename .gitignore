@@ -63,3 +63,6 @@ next-env.d.ts
 # translation checklists and temporary docs
 TRANSLATIONS_CHECKLIST.txt
 TRANSLATIONS_CHECKLIST.md
+
+# i18n verification screenshots (temporary)
+/i18n-verification/
