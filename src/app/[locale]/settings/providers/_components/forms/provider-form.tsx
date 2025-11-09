@@ -476,8 +476,8 @@ export function ProviderForm({
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor={isEdit ? "edit-provider-type" : "provider-type"}>
-                  供应商类型
-                  <span className="text-xs text-muted-foreground ml-1">(决定调度策略)</span>
+                  {t("sections.routing.providerType.label")}
+                  <span className="text-xs text-muted-foreground ml-1">{t("sections.routing.providerType.desc")}</span>
                 </Label>
                 <Select
                   value={providerType}
@@ -485,34 +485,36 @@ export function ProviderForm({
                   disabled={isPending}
                 >
                   <SelectTrigger id={isEdit ? "edit-provider-type" : "provider-type"}>
-                    <SelectValue placeholder="选择供应商类型" />
+                    <SelectValue placeholder={t("sections.routing.providerType.placeholder")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="claude">Claude (Anthropic Messages API)</SelectItem>
-                    <SelectItem value="claude-auth">Claude (Anthropic Auth Token)</SelectItem>
-                    <SelectItem value="codex">Codex (Response API)</SelectItem>
+                    <SelectItem value="claude">{t("providerTypes.claude")}</SelectItem>
+                    <SelectItem value="claude-auth">{t("providerTypes.claudeAuth")}</SelectItem>
+                    <SelectItem value="codex">{t("providerTypes.codex")}</SelectItem>
                     <SelectItem value="gemini-cli" disabled={!enableMultiProviderTypes}>
-                      Gemini CLI{!enableMultiProviderTypes && " - 功能开发中"}
+                      <>
+                        {t("providerTypes.geminiCli")} { !enableMultiProviderTypes && t("providerTypes.geminiCliDisabled") }
+                      </>
                     </SelectItem>
                     <SelectItem value="openai-compatible" disabled={!enableMultiProviderTypes}>
-                      OpenAI Compatible{!enableMultiProviderTypes && " - 功能开发中"}
+                      <>
+                        {t("providerTypes.openaiCompatible")} { !enableMultiProviderTypes && t("providerTypes.openaiCompatibleDisabled") }
+                      </>
                     </SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  选择供应商的 API 格式类型。
+                  {t("sections.routing.providerTypeDesc")}
                   {!enableMultiProviderTypes && (
-                    <span className="text-amber-600 ml-1">
-                      注：Gemini CLI 和 OpenAI Compatible 类型功能正在开发中，暂不可用
-                    </span>
+                    <span className="text-amber-600 ml-1">{t("sections.routing.providerTypeDisabledNote")}</span>
                   )}
                 </p>
               </div>
 
               <div className="space-y-2">
                 <Label>
-                  模型重定向配置
-                  <span className="text-xs text-muted-foreground ml-1">(可选)</span>
+                  {t("sections.routing.modelRedirects.label")}
+                  <span className="text-xs text-muted-foreground ml-1">{t("sections.routing.modelRedirects.optional")}</span>
                 </Label>
                 <ModelRedirectEditor
                   value={modelRedirects}
@@ -536,11 +538,9 @@ export function ProviderForm({
                       <div className="flex items-center justify-between">
                         <div className="space-y-0.5">
                           <Label htmlFor={isEdit ? "edit-join-claude-pool" : "join-claude-pool"}>
-                            加入 Claude 调度池
+                            {t("sections.routing.joinClaudePool.label")}
                           </Label>
-                          <p className="text-xs text-muted-foreground">
-                            启用后，此供应商将与 Claude 类型供应商一起参与负载均衡调度
-                          </p>
+                          <p className="text-xs text-muted-foreground">{t("sections.routing.joinClaudePool.desc")}</p>
                         </div>
                         <Switch
                           id={isEdit ? "edit-join-claude-pool" : "join-claude-pool"}
@@ -549,26 +549,21 @@ export function ProviderForm({
                           disabled={isPending}
                         />
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        仅当模型重定向配置中存在映射到 claude-* 模型时可用。启用后，当用户请求
-                        claude-* 模型时，此供应商也会参与调度选择。
-                      </p>
+                      <p className="text-xs text-muted-foreground">{t("sections.routing.joinClaudePool.help")}</p>
                     </div>
                   );
                 })()}
 
               {/* 模型白名单配置 */}
               <div className="space-y-1">
-                <div className="text-sm font-medium">模型白名单</div>
-                <p className="text-xs text-muted-foreground">
-                  限制此供应商可以处理的模型。默认情况下，供应商可以处理该类型下的所有模型。
-                </p>
+                <div className="text-sm font-medium">{t("sections.routing.modelWhitelist.title")}</div>
+                <p className="text-xs text-muted-foreground">{t("sections.routing.modelWhitelist.desc")}</p>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="allowed-models">
-                  允许的模型
-                  <span className="text-xs text-muted-foreground ml-1">(可选)</span>
+                  {t("sections.routing.modelWhitelist.label")} 
+                  <span className="text-xs text-muted-foreground ml-1">{t("sections.routing.modelWhitelist.optional")}</span>
                 </Label>
 
                 <ModelMultiSelect
@@ -589,7 +584,7 @@ export function ProviderForm({
                     ))}
                     {allowedModels.length > 5 && (
                       <Badge variant="secondary" className="text-xs">
-                        +{allowedModels.length - 5} 更多
+                        {t("sections.routing.modelWhitelist.moreModels", { count: allowedModels.length - 5 })}
                       </Badge>
                     )}
                   </div>
@@ -597,84 +592,70 @@ export function ProviderForm({
 
                 <p className="text-xs text-muted-foreground">
                   {allowedModels.length === 0 ? (
-                    <span className="text-green-600">✓ 允许所有模型（推荐）</span>
+                    <span className="text-green-600">{t("sections.routing.modelWhitelist.allowAll")}</span>
                   ) : (
-                    <span>
-                      仅允许选中的 {allowedModels.length} 个模型。其他模型的请求不会调度到此供应商。
-                    </span>
+                    <span>{t("sections.routing.modelWhitelist.selectedOnly", { count: allowedModels.length })}</span>
                   )}
                 </p>
               </div>
 
               {/* 路由配置 - 优先级、权重、成本 */}
               <div className="space-y-4">
-                <div className="text-sm font-medium">调度参数</div>
+                <div className="text-sm font-medium">{t("sections.routing.scheduleParams.title")}</div>
                 <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor={isEdit ? "edit-priority" : "priority"}>优先级</Label>
+                    <Label htmlFor={isEdit ? "edit-priority" : "priority"}>{t("sections.routing.scheduleParams.priority.label")}</Label>
                     <Input
                       id={isEdit ? "edit-priority" : "priority"}
                       type="number"
                       value={priority}
                       onChange={(e) => setPriority(parseInt(e.target.value) || 0)}
-                      placeholder="0"
+                      placeholder={t("sections.routing.scheduleParams.priority.placeholder")}
                       disabled={isPending}
                       min="0"
                       step="1"
                     />
-                    <p className="text-xs text-muted-foreground">
-                      数值越小优先级越高（0
-                      最高）。系统只从最高优先级的供应商中选择。建议：主力=0，备用=1，紧急备份=2
-                    </p>
+                    <p className="text-xs text-muted-foreground">{t("sections.routing.scheduleParams.priority.desc")}</p>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor={isEdit ? "edit-weight" : "weight"}>权重</Label>
+                    <Label htmlFor={isEdit ? "edit-weight" : "weight"}>{t("sections.routing.scheduleParams.weight.label")}</Label>
                     <Input
                       id={isEdit ? "edit-weight" : "weight"}
                       type="number"
                       value={weight}
                       onChange={(e) => setWeight(parseInt(e.target.value) || 1)}
-                      placeholder="1"
+                      placeholder={t("sections.routing.scheduleParams.weight.placeholder")}
                       disabled={isPending}
                       min="1"
                       step="1"
                     />
-                    <p className="text-xs text-muted-foreground">
-                      加权随机概率。同优先级内，权重越高被选中概率越大。例如权重 1:2:3 的概率为
-                      16%:33%:50%
-                    </p>
+                    <p className="text-xs text-muted-foreground">{t("sections.routing.scheduleParams.weight.desc")}</p>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor={isEdit ? "edit-cost" : "cost"}>成本倍率</Label>
+                    <Label htmlFor={isEdit ? "edit-cost" : "cost"}>{t("sections.routing.scheduleParams.costMultiplier.label")}</Label>
                     <Input
                       id={isEdit ? "edit-cost" : "cost"}
                       type="number"
                       value={costMultiplier}
                       onChange={(e) => setCostMultiplier(parseFloat(e.target.value) || 1.0)}
-                      placeholder="1.0"
+                      placeholder={t("sections.routing.scheduleParams.costMultiplier.placeholder")}
                       disabled={isPending}
                       min="0"
                       step="0.0001"
                     />
-                    <p className="text-xs text-muted-foreground">
-                      成本计算倍数。官方供应商=1.0，便宜 20%=0.8，贵 20%=1.2（支持最多 4 位小数）
-                    </p>
+                    <p className="text-xs text-muted-foreground">{t("sections.routing.scheduleParams.costMultiplier.desc")}</p>
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor={isEdit ? "edit-group" : "group"}>供应商分组</Label>
+                  <Label htmlFor={isEdit ? "edit-group" : "group"}>{t("sections.routing.scheduleParams.group.label")}</Label>
                   <Input
                     id={isEdit ? "edit-group" : "group"}
                     value={groupTag}
                     onChange={(e) => setGroupTag(e.target.value)}
-                    placeholder="例如: premium, economy"
+                    placeholder={t("sections.routing.scheduleParams.group.placeholder")}
                     disabled={isPending}
                   />
-                  <p className="text-xs text-muted-foreground">
-                    供应商分组标签。只有用户的 providerGroup
-                    与此值匹配时，该用户才能使用此供应商。示例：设置为 &quot;premium&quot; 表示只供
-                    providerGroup=&quot;premium&quot; 的用户使用
-                  </p>
+                  <p className="text-xs text-muted-foreground">{t("sections.routing.scheduleParams.group.desc")}</p>
                 </div>
               </div>
             </div>
@@ -698,16 +679,16 @@ export function ProviderForm({
                     openSections.rateLimit ? "rotate-180" : ""
                   }`}
                 />
-                <span className="text-sm font-medium">限流配置</span>
+                <span className="text-sm font-medium">{t("sections.rateLimit.title")}</span>
               </div>
               <span className="text-xs text-muted-foreground">
                 {(() => {
-                  const limits = [];
-                  if (limit5hUsd) limits.push(`5h: $${limit5hUsd}`);
-                  if (limitWeeklyUsd) limits.push(`周: $${limitWeeklyUsd}`);
-                  if (limitMonthlyUsd) limits.push(`月: $${limitMonthlyUsd}`);
-                  if (limitConcurrentSessions) limits.push(`并发: ${limitConcurrentSessions}`);
-                  return limits.length > 0 ? limits.join(", ") : "无限制";
+                  const limits: string[] = [];
+                  if (limit5hUsd) limits.push(t("sections.rateLimit.summary.fiveHour", { amount: limit5hUsd }));
+                  if (limitWeeklyUsd) limits.push(t("sections.rateLimit.summary.weekly", { amount: limitWeeklyUsd }));
+                  if (limitMonthlyUsd) limits.push(t("sections.rateLimit.summary.monthly", { amount: limitMonthlyUsd }));
+                  if (limitConcurrentSessions) limits.push(t("sections.rateLimit.summary.concurrent", { count: limitConcurrentSessions }));
+                  return limits.length > 0 ? limits.join(", ") : t("sections.rateLimit.summary.none");
                 })()}
               </span>
             </button>
@@ -716,28 +697,26 @@ export function ProviderForm({
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor={isEdit ? "edit-limit-5h" : "limit-5h"}>5小时消费上限 (USD)</Label>
+                  <Label htmlFor={isEdit ? "edit-limit-5h" : "limit-5h"}>{t("sections.rateLimit.limit5h.label")}</Label>
                   <Input
                     id={isEdit ? "edit-limit-5h" : "limit-5h"}
                     type="number"
                     value={limit5hUsd?.toString() ?? ""}
                     onChange={(e) => setLimit5hUsd(validateNumericField(e.target.value))}
-                    placeholder="留空表示无限制"
+                    placeholder={t("sections.rateLimit.limit5h.placeholder")}
                     disabled={isPending}
                     min="0"
                     step="0.01"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor={isEdit ? "edit-limit-weekly" : "limit-weekly"}>
-                    周消费上限 (USD)
-                  </Label>
+                  <Label htmlFor={isEdit ? "edit-limit-weekly" : "limit-weekly"}>{t("sections.rateLimit.limitWeekly.label")}</Label>
                   <Input
                     id={isEdit ? "edit-limit-weekly" : "limit-weekly"}
                     type="number"
                     value={limitWeeklyUsd?.toString() ?? ""}
                     onChange={(e) => setLimitWeeklyUsd(validateNumericField(e.target.value))}
-                    placeholder="留空表示无限制"
+                    placeholder={t("sections.rateLimit.limitWeekly.placeholder")}
                     disabled={isPending}
                     min="0"
                     step="0.01"
@@ -747,24 +726,20 @@ export function ProviderForm({
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor={isEdit ? "edit-limit-monthly" : "limit-monthly"}>
-                    月消费上限 (USD)
-                  </Label>
+                  <Label htmlFor={isEdit ? "edit-limit-monthly" : "limit-monthly"}>{t("sections.rateLimit.limitMonthly.label")}</Label>
                   <Input
                     id={isEdit ? "edit-limit-monthly" : "limit-monthly"}
                     type="number"
                     value={limitMonthlyUsd?.toString() ?? ""}
                     onChange={(e) => setLimitMonthlyUsd(validateNumericField(e.target.value))}
-                    placeholder="留空表示无限制"
+                    placeholder={t("sections.rateLimit.limitMonthly.placeholder")}
                     disabled={isPending}
                     min="0"
                     step="0.01"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor={isEdit ? "edit-limit-concurrent" : "limit-concurrent"}>
-                    并发 Session 上限
-                  </Label>
+                  <Label htmlFor={isEdit ? "edit-limit-concurrent" : "limit-concurrent"}>{t("sections.rateLimit.limitConcurrent.label")}</Label>
                   <Input
                     id={isEdit ? "edit-limit-concurrent" : "limit-concurrent"}
                     type="number"
@@ -772,7 +747,7 @@ export function ProviderForm({
                     onChange={(e) =>
                       setLimitConcurrentSessions(validateNumericField(e.target.value))
                     }
-                    placeholder="0 表示无限制"
+                    placeholder={t("sections.rateLimit.limitConcurrent.placeholder")}
                     disabled={isPending}
                     min="0"
                     step="1"
@@ -800,26 +775,25 @@ export function ProviderForm({
                     openSections.circuitBreaker ? "rotate-180" : ""
                   }`}
                 />
-                <span className="text-sm font-medium">熔断器配置</span>
+                <span className="text-sm font-medium">{t("sections.circuitBreaker.title")}</span>
               </div>
               <span className="text-xs text-muted-foreground">
-                {failureThreshold ?? 5} 次失败 / {openDurationMinutes ?? 30} 分钟熔断 /{" "}
-                {halfOpenSuccessThreshold ?? 2} 次成功恢复
+                {t("sections.circuitBreaker.summary", {
+                  failureThreshold: failureThreshold ?? 5,
+                  openDuration: openDurationMinutes ?? 30,
+                  successThreshold: halfOpenSuccessThreshold ?? 2,
+                })}
               </span>
             </button>
           </CollapsibleTrigger>
           <CollapsibleContent className="space-y-4 pb-4">
             <div className="space-y-4">
               <div className="space-y-1">
-                <p className="text-xs text-muted-foreground">
-                  供应商连续失败时自动熔断，避免影响整体服务质量
-                </p>
+                <p className="text-xs text-muted-foreground">{t("sections.circuitBreaker.desc")}</p>
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor={isEdit ? "edit-failure-threshold" : "failure-threshold"}>
-                    失败阈值（次）
-                  </Label>
+                  <Label htmlFor={isEdit ? "edit-failure-threshold" : "failure-threshold"}>{t("sections.circuitBreaker.failureThreshold.label")}</Label>
                   <Input
                     id={isEdit ? "edit-failure-threshold" : "failure-threshold"}
                     type="number"
@@ -828,18 +802,16 @@ export function ProviderForm({
                       const val = e.target.value;
                       setFailureThreshold(val === "" ? undefined : parseInt(val));
                     }}
-                    placeholder="5"
+                    placeholder={t("sections.circuitBreaker.failureThreshold.placeholder")}
                     disabled={isPending}
                     min="1"
                     max="100"
                     step="1"
                   />
-                  <p className="text-xs text-muted-foreground">连续失败多少次后触发熔断</p>
+                  <p className="text-xs text-muted-foreground">{t("sections.circuitBreaker.failureThreshold.desc")}</p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor={isEdit ? "edit-open-duration" : "open-duration"}>
-                    熔断时长（分钟）
-                  </Label>
+                  <Label htmlFor={isEdit ? "edit-open-duration" : "open-duration"}>{t("sections.circuitBreaker.openDuration.label")}</Label>
                   <Input
                     id={isEdit ? "edit-open-duration" : "open-duration"}
                     type="number"
@@ -848,18 +820,16 @@ export function ProviderForm({
                       const val = e.target.value;
                       setOpenDurationMinutes(val === "" ? undefined : parseInt(val));
                     }}
-                    placeholder="30"
+                    placeholder={t("sections.circuitBreaker.openDuration.placeholder")}
                     disabled={isPending}
                     min="1"
                     max="1440"
                     step="1"
                   />
-                  <p className="text-xs text-muted-foreground">熔断后多久自动进入半开状态</p>
+                  <p className="text-xs text-muted-foreground">{t("sections.circuitBreaker.openDuration.desc")}</p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor={isEdit ? "edit-success-threshold" : "success-threshold"}>
-                    恢复阈值（次）
-                  </Label>
+                  <Label htmlFor={isEdit ? "edit-success-threshold" : "success-threshold"}>{t("sections.circuitBreaker.successThreshold.label")}</Label>
                   <Input
                     id={isEdit ? "edit-success-threshold" : "success-threshold"}
                     type="number"
@@ -868,13 +838,13 @@ export function ProviderForm({
                       const val = e.target.value;
                       setHalfOpenSuccessThreshold(val === "" ? undefined : parseInt(val));
                     }}
-                    placeholder="2"
+                    placeholder={t("sections.circuitBreaker.successThreshold.placeholder")}
                     disabled={isPending}
                     min="1"
                     max="10"
                     step="1"
                   />
-                  <p className="text-xs text-muted-foreground">半开状态下成功多少次后完全恢复</p>
+                  <p className="text-xs text-muted-foreground">{t("sections.circuitBreaker.successThreshold.desc")}</p>
                 </div>
               </div>
             </div>
@@ -895,37 +865,35 @@ export function ProviderForm({
                     openSections.proxy ? "rotate-180" : ""
                   }`}
                 />
-                <span className="text-sm font-medium">代理配置</span>
+                <span className="text-sm font-medium">{t("sections.proxy.title")}</span>
               </div>
               <span className="text-xs text-muted-foreground">
-                {proxyUrl.trim() ? "已配置代理" : "未配置"}
-                {proxyUrl.trim() && proxyFallbackToDirect ? " (启用降级)" : ""}
+                {proxyUrl.trim() ? t("sections.proxy.summary.configured") : t("sections.proxy.summary.none")}
+                {proxyUrl.trim() && proxyFallbackToDirect ? t("sections.proxy.summary.fallback") : ""}
               </span>
             </button>
           </CollapsibleTrigger>
           <CollapsibleContent className="space-y-4 pb-4">
             <div className="space-y-4">
               <div className="space-y-1">
-                <p className="text-xs text-muted-foreground">
-                  配置代理服务器以改善供应商连接性（支持 HTTP、HTTPS、SOCKS4、SOCKS5）
-                </p>
+                <p className="text-xs text-muted-foreground">{t("sections.proxy.desc")}</p>
               </div>
 
               {/* 代理地址输入 */}
               <div className="space-y-2">
                 <Label htmlFor={isEdit ? "edit-proxy-url" : "proxy-url"}>
-                  代理地址
-                  <span className="text-xs text-muted-foreground ml-1">(可选)</span>
+                  {t("sections.proxy.url.label")} 
+                  <span className="text-xs text-muted-foreground ml-1">{t("sections.proxy.url.optional")}</span>
                 </Label>
                 <Input
                   id={isEdit ? "edit-proxy-url" : "proxy-url"}
                   value={proxyUrl}
                   onChange={(e) => setProxyUrl(e.target.value)}
-                  placeholder="例如: http://proxy.example.com:8080 或 socks5://127.0.0.1:1080"
+                  placeholder={t("sections.proxy.url.placeholder")}
                   disabled={isPending}
                 />
                 <p className="text-xs text-muted-foreground">
-                  支持格式: <code className="bg-muted px-1 rounded">http://</code>、
+                  {t("sections.proxy.url.formats")} <code className="bg-muted px-1 rounded">http://</code>、
                   <code className="bg-muted px-1 rounded">https://</code>、
                   <code className="bg-muted px-1 rounded">socks4://</code>、
                   <code className="bg-muted px-1 rounded">socks5://</code>
@@ -936,12 +904,8 @@ export function ProviderForm({
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <Label htmlFor={isEdit ? "edit-proxy-fallback" : "proxy-fallback"}>
-                      代理失败时降级到直连
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      启用后，代理连接失败时自动尝试直接连接供应商
-                    </p>
+                    <Label htmlFor={isEdit ? "edit-proxy-fallback" : "proxy-fallback"}>{t("sections.proxy.fallback.label")}</Label>
+                    <p className="text-xs text-muted-foreground">{t("sections.proxy.fallback.desc")}</p>
                   </div>
                   <Switch
                     id={isEdit ? "edit-proxy-fallback" : "proxy-fallback"}
@@ -954,16 +918,14 @@ export function ProviderForm({
 
               {/* 测试连接按钮 */}
               <div className="space-y-2">
-                <Label>连接测试</Label>
+                <Label>{t("sections.proxy.test.label")}</Label>
                 <ProxyTestButton
                   providerUrl={url}
                   proxyUrl={proxyUrl}
                   proxyFallbackToDirect={proxyFallbackToDirect}
                   disabled={isPending || !url.trim()}
                 />
-                <p className="text-xs text-muted-foreground">
-                  测试通过配置的代理访问供应商 URL（使用 HEAD 请求，不消耗额度）
-                </p>
+                <p className="text-xs text-muted-foreground">{t("sections.proxy.test.desc")}</p>
               </div>
             </div>
           </CollapsibleContent>
@@ -987,27 +949,23 @@ export function ProviderForm({
                       openSections.codexStrategy ? "rotate-180" : ""
                     }`}
                   />
-                  <span className="text-sm font-medium">Codex Instructions 策略</span>
+                  <span className="text-sm font-medium">{t("sections.codexStrategy.title")}</span>
                 </div>
                 <span className="text-xs text-muted-foreground">
-                  {codexInstructionsStrategy === "auto" && "自动 (推荐)"}
-                  {codexInstructionsStrategy === "force_official" && "强制官方"}
-                  {codexInstructionsStrategy === "keep_original" && "透传原样"}
+                  {codexInstructionsStrategy === "auto" && t("sections.codexStrategy.summary.auto")}
+                  {codexInstructionsStrategy === "force_official" && t("sections.codexStrategy.summary.force")}
+                  {codexInstructionsStrategy === "keep_original" && t("sections.codexStrategy.summary.keep")}
                 </span>
               </button>
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-4 pb-4">
               <div className="space-y-4">
                 <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">
-                    控制如何处理 Codex 请求的 instructions 字段，影响与上游中转站的兼容性
-                  </p>
+                  <p className="text-xs text-muted-foreground">{t("sections.codexStrategy.desc")}</p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor={isEdit ? "edit-codex-strategy" : "codex-strategy"}>
-                    策略选择
-                  </Label>
+                  <Label htmlFor={isEdit ? "edit-codex-strategy" : "codex-strategy"}>{t("sections.codexStrategy.select.label")}</Label>
                   <Select
                     value={codexInstructionsStrategy}
                     onValueChange={(value) =>
@@ -1016,39 +974,30 @@ export function ProviderForm({
                     disabled={isPending}
                   >
                     <SelectTrigger id={isEdit ? "edit-codex-strategy" : "codex-strategy"}>
-                      <SelectValue placeholder="选择策略" />
+                      <SelectValue placeholder={t("sections.codexStrategy.select.placeholder")} />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="auto">
                         <div className="space-y-1">
-                          <div className="font-medium">自动 (推荐)</div>
-                          <div className="text-xs text-muted-foreground max-w-xs">
-                            透传客户端 instructions，400 错误时自动重试官方 prompt
-                          </div>
+                          <div className="font-medium">{t("sections.codexStrategy.select.auto.label")}</div>
+                          <div className="text-xs text-muted-foreground max-w-xs">{t("sections.codexStrategy.select.auto.desc")}</div>
                         </div>
                       </SelectItem>
                       <SelectItem value="force_official">
                         <div className="space-y-1">
-                          <div className="font-medium">强制官方</div>
-                          <div className="text-xs text-muted-foreground max-w-xs">
-                            始终使用官方 Codex CLI instructions（约 4000+ 字）
-                          </div>
+                          <div className="font-medium">{t("sections.codexStrategy.select.force.label")}</div>
+                          <div className="text-xs text-muted-foreground max-w-xs">{t("sections.codexStrategy.select.force.desc")}</div>
                         </div>
                       </SelectItem>
                       <SelectItem value="keep_original">
                         <div className="space-y-1">
-                          <div className="font-medium">透传原样</div>
-                          <div className="text-xs text-muted-foreground max-w-xs">
-                            始终透传客户端 instructions，不自动重试（适用于宽松中转站）
-                          </div>
+                          <div className="font-medium">{t("sections.codexStrategy.select.keep.label")}</div>
+                          <div className="text-xs text-muted-foreground max-w-xs">{t("sections.codexStrategy.select.keep.desc")}</div>
                         </div>
                       </SelectItem>
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">
-                    <strong>提示</strong>: 部分严格的 Codex 中转站（如 88code、foxcode）需要官方
-                    instructions，选择&quot;自动&quot;或&quot;强制官方&quot;策略
-                  </p>
+                  <p className="text-xs text-muted-foreground">{t("sections.codexStrategy.hint")}</p>
                 </div>
               </div>
             </CollapsibleContent>
@@ -1060,18 +1009,18 @@ export function ProviderForm({
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button type="button" variant="destructive" disabled={isPending}>
-                  删除
+                  {t("buttons.delete")}
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertHeader>
-                  <AlertTitle>删除服务商</AlertTitle>
+                  <AlertTitle>{t("deleteDialog.title")}</AlertTitle>
                   <AlertDialogDescription>
-                    确定要删除服务商&ldquo;{provider?.name}&rdquo;吗？此操作不可恢复。
+                    {t("deleteDialog.description", { name: provider?.name ?? "" })}
                   </AlertDialogDescription>
                 </AlertHeader>
                 <div className="flex gap-2 justify-end">
-                  <AlertDialogCancel>取消</AlertDialogCancel>
+                  <AlertDialogCancel>{t("deleteDialog.cancel")}</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={() => {
                       if (!provider) return;
@@ -1079,31 +1028,31 @@ export function ProviderForm({
                         try {
                           const res = await removeProvider(provider.id);
                           if (!res.ok) {
-                            toast.error(res.error || "删除服务商失败");
+                            toast.error(res.error || t("errors.deleteFailed"));
                             return;
                           }
                           onSuccess?.();
                         } catch (e) {
-                          console.error("删除服务商失败", e);
-                          toast.error("删除服务商失败");
+                          console.error(t("errors.deleteFailed"), e);
+                          toast.error(t("errors.deleteFailed"));
                         }
                       });
                     }}
                   >
-                    确认删除
+                    {t("deleteDialog.confirm")}
                   </AlertDialogAction>
                 </div>
               </AlertDialogContent>
             </AlertDialog>
 
             <Button type="submit" disabled={isPending}>
-              {isPending ? "更新中..." : "确认更新"}
+              {isPending ? t("buttons.updating") : t("buttons.update")}
             </Button>
           </div>
         ) : (
           <div className="flex justify-end gap-2 pt-4">
             <Button type="submit" disabled={isPending}>
-              {isPending ? "添加中..." : "确认添加"}
+              {isPending ? t("buttons.submitting") : t("buttons.submit")}
             </Button>
           </div>
         )}

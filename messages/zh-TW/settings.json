@@ -596,7 +596,10 @@
       "modelWhitelistSelectAll": "全选 ({count})",
       "modelWhitelistSelected": "已选择 {count} 个模型",
       "modelWhitelistSelectedOnly": "仅允许选中的 {count} 个模型。其他模型的请求不会调度到此供应商。",
-      "name": "名稱",
+      "name": {
+        "label": "供應商名稱 *",
+        "placeholder": "例如：智譜"
+      },
       "namePlaceholder": "輸入供應商名稱",
       "openDuration": "熔断时长（分钟）",
       "openDurationDesc": "熔断后多久自动进入半开状态",
@@ -687,14 +690,221 @@
       "testProxyFailedError": "測試連線失敗:",
       "testProxySuccess": "代理連線成功",
       "validUrlRequired": "请输入有效的 API 地址",
-      "websiteUrl": "供应商官网地址",
+      "websiteUrl": {
+        "label": "供應商官網",
+        "placeholder": "https://example.com",
+        "desc": "供應商官方網站，便於快速跳轉管理"
+      },
       "websiteUrlDesc": "供应商官网地址，用于快速跳转管理",
       "websiteUrlInvalid": "请输入有效的供应商官网地址",
       "websiteUrlPlaceholder": "https://example.com",
       "weight": "權重",
       "weightDesc": "加權隨機概率。同優先級內，權重越高被選中概率越大。",
       "weightLabel": "权重",
-      "weightPlaceholder": "1"
+      "weightPlaceholder": "1",
+      "title": {
+        "create": "新增供應商",
+        "edit": "編輯供應商"
+      },
+      "url": {
+        "label": "API 位址 *",
+        "placeholder": "例如：https://open.bigmodel.cn/api/anthropic"
+      },
+      "key": {
+        "label": "API 金鑰",
+        "leaveEmpty": "（留空不變更）",
+        "placeholder": "輸入 API 金鑰",
+        "leaveEmptyDesc": "留空則不變更金鑰",
+        "currentKey": "當前金鑰：{key}"
+      },
+      "buttons": {
+        "expandAll": "展開全部進階設定",
+        "collapseAll": "收合全部進階設定",
+        "submit": "確認新增",
+        "submitting": "新增中...",
+        "update": "確認更新",
+        "updating": "更新中...",
+        "delete": "刪除"
+      },
+      "sections": {
+        "routing": {
+          "title": "路由設定",
+          "summary": {
+            "models": "{count} 個允許模型",
+            "redirects": "{count} 個重定向",
+            "none": "未設定"
+          },
+          "providerType": {
+            "label": "供應商類型",
+            "desc": "（決定調度策略）",
+            "placeholder": "選擇供應商類型"
+          },
+          "providerTypeDesc": "選擇供應商的 API 格式類型。",
+          "providerTypeDisabledNote": "註：Gemini CLI 與 OpenAI Compatible 類型開發中，暫不可用",
+          "modelRedirects": {
+            "label": "模型重定向設定",
+            "optional": "（選填）"
+          },
+          "joinClaudePool": {
+            "label": "加入 Claude 調度池",
+            "desc": "啟用後，此供應商將與 Claude 類型供應商共同參與負載均衡",
+            "help": "僅當存在映射至 claude-* 的規則時可用。當用戶請求 claude-* 模型時，此供應商也會被納入調度。"
+          },
+          "modelWhitelist": {
+            "title": "模型允許清單",
+            "desc": "限制此供應商可處理的模型。預設可處理該類型下的所有模型。",
+            "label": "允許的模型",
+            "optional": "（選填）",
+            "allowAll": "✓ 允許所有模型（建議）",
+            "selectedOnly": "僅允許所選的 {count} 個模型。其他模型將不會被路由到此供應商。",
+            "moreModels": "+{count} 更多"
+          },
+          "scheduleParams": {
+            "title": "調度參數",
+            "priority": {
+              "label": "優先級",
+              "placeholder": "0",
+              "desc": "數值越小，優先級越高（0 最高）。系統只會從最高優先級的供應商中選擇。建議：主力=0，備用=1，緊急備援=2"
+            },
+            "weight": {
+              "label": "權重",
+              "placeholder": "1",
+              "desc": "加權隨機。同一優先級內，權重越高被選中機率越大。例如 1:2:3 約為 16%:33%:50%"
+            },
+            "costMultiplier": {
+              "label": "成本倍率",
+              "placeholder": "1.0",
+              "desc": "成本計算倍率。官方供應商=1.0，便宜 20%=0.8，貴 20%=1.2（最多 4 位小數）"
+            },
+            "group": {
+              "label": "供應商分組",
+              "placeholder": "例如：premium, economy",
+              "desc": "分組標籤。僅供 providerGroup 與此值相符的用戶使用。例：設為「premium」表示僅供 providerGroup=\"premium\" 的用戶使用"
+            }
+          }
+        },
+        "rateLimit": {
+          "title": "流量限制",
+          "summary": {
+            "fiveHour": "5h：${amount}",
+            "weekly": "週：${amount}",
+            "monthly": "月：${amount}",
+            "concurrent": "並發：{count}",
+            "none": "無限制"
+          },
+          "limit5h": {
+            "label": "5 小時消費上限 (USD)",
+            "placeholder": "留空表示無限制"
+          },
+          "limitWeekly": {
+            "label": "週消費上限 (USD)",
+            "placeholder": "留空表示無限制"
+          },
+          "limitMonthly": {
+            "label": "月消費上限 (USD)",
+            "placeholder": "留空表示無限制"
+          },
+          "limitConcurrent": {
+            "label": "並發 Session 上限",
+            "placeholder": "0 表示無限制"
+          }
+        },
+        "circuitBreaker": {
+          "title": "斷路器設定",
+          "summary": "{failureThreshold} 次失敗 / {openDuration} 分鐘熔斷 / {successThreshold} 次成功恢復",
+          "desc": "連續失敗時自動熔斷，避免影響整體服務品質",
+          "failureThreshold": {
+            "label": "失敗閾值（次）",
+            "placeholder": "5",
+            "desc": "連續失敗多少次後觸發熔斷"
+          },
+          "openDuration": {
+            "label": "熔斷時長（分鐘）",
+            "placeholder": "30",
+            "desc": "熔斷後多久自動進入半開狀態"
+          },
+          "successThreshold": {
+            "label": "恢復閾值（次）",
+            "placeholder": "2",
+            "desc": "半開狀態下成功多少次後完全恢復"
+          }
+        },
+        "proxy": {
+          "title": "代理設定",
+          "summary": {
+            "configured": "已設定代理",
+            "fallback": "（啟用降級）",
+            "none": "未設定"
+          },
+          "desc": "設定代理伺服器以改善連線（支援 HTTP、HTTPS、SOCKS4、SOCKS5）",
+          "url": {
+            "label": "代理位址",
+            "optional": "（選填）",
+            "placeholder": "例如：http://proxy.example.com:8080 或 socks5://127.0.0.1:1080",
+            "formats": "支援格式："
+          },
+          "fallback": {
+            "label": "代理失敗時降級為直連",
+            "desc": "啟用後，代理連線失敗時自動嘗試直接連線供應商"
+          },
+          "test": {
+            "label": "連線測試",
+            "desc": "透過代理測試訪問供應商 URL（HEAD 請求，不消耗額度）"
+          }
+        },
+        "codexStrategy": {
+          "title": "Codex Instructions 策略",
+          "summary": {
+            "auto": "自動（建議）",
+            "force": "強制官方",
+            "keep": "原樣透傳"
+          },
+          "desc": "控制如何處理 Codex 請求的 instructions 欄位，影響與上游中轉站的相容性",
+          "select": {
+            "label": "策略選擇",
+            "placeholder": "選擇策略",
+            "auto": {
+              "label": "自動（建議）",
+              "desc": "透傳客戶端 instructions，400 錯誤時自動重試官方 prompt"
+            },
+            "force": {
+              "label": "強制官方",
+              "desc": "始終使用官方 Codex CLI instructions（約 4000+ 字）"
+            },
+            "keep": {
+              "label": "原樣透傳",
+              "desc": "始終透傳客戶端 instructions，不自動重試（適用於寬鬆中轉站）"
+            }
+          },
+          "hint": "提示：部分嚴格的 Codex 中轉站（如 88code、foxcode）需要官方 instructions，請選擇「自動」或「強制官方」策略"
+        }
+      },
+      "providerTypes": {
+        "claude": "Claude (Anthropic Messages API)",
+        "claudeAuth": "Claude (Anthropic Auth Token)",
+        "codex": "Codex (Response API)",
+        "geminiCli": "Gemini CLI",
+        "geminiCliDisabled": " - 功能開發中",
+        "openaiCompatible": "OpenAI Compatible",
+        "openaiCompatibleDisabled": " - 功能開發中"
+      },
+      "deleteDialog": {
+        "title": "刪除供應商",
+        "description": "確定要刪除供應商「{name}」嗎？此操作不可復原。",
+        "cancel": "取消",
+        "confirm": "確認刪除"
+      },
+      "errors": {
+        "invalidUrl": "請輸入有效的 API 位址",
+        "invalidWebsiteUrl": "請輸入有效的供應商官網",
+        "addFailed": "新增供應商失敗",
+        "updateFailed": "更新供應商失敗",
+        "deleteFailed": "刪除供應商失敗"
+      },
+      "success": {
+        "created": "新增供應商成功",
+        "createdDesc": "供應商「{name}」已新增"
+      }
     },
     "guide": {
       "after": "过滤后：",

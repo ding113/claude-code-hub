@@ -659,7 +659,10 @@
       "modelWhitelistSelectAll": "Select All ({count})",
       "modelWhitelistSelected": "Selected {count} models",
       "modelWhitelistSelectedOnly": "Only allow selected {count} models. Requests for other models won't be routed to this provider.",
-      "name": "Name",
+      "name": {
+        "label": "Provider Name *",
+        "placeholder": "e.g. Zhipu"
+      },
       "namePlaceholder": "Enter provider name",
       "openDuration": "Circuit Break Duration (minutes)",
       "openDurationDesc": "How long before auto entering half-open state",
@@ -750,14 +753,221 @@
       "testProxyFailedError": "Connection test failed:",
       "testProxySuccess": "Proxy connection successful",
       "validUrlRequired": "Please enter a valid API address",
-      "websiteUrl": "Provider Website URL",
+      "websiteUrl": {
+        "label": "Provider Website",
+        "placeholder": "https://example.com",
+        "desc": "Provider official website for quick access"
+      },
       "websiteUrlDesc": "Provider website URL for quick access",
       "websiteUrlInvalid": "Please enter a valid provider website URL",
       "websiteUrlPlaceholder": "https://example.com",
       "weight": "Weight",
       "weightDesc": "Weighted random probability. Within same priority, higher weight = higher selection probability. E.g. weights 1:2:3 = probabilities 16%:33%:50%",
       "weightLabel": "Weight",
-      "weightPlaceholder": "1"
+      "weightPlaceholder": "1",
+      "title": {
+        "create": "Add Provider",
+        "edit": "Edit Provider"
+      },
+      "url": {
+        "label": "API Address *",
+        "placeholder": "e.g. https://open.bigmodel.cn/api/anthropic"
+      },
+      "key": {
+        "label": "API Key",
+        "leaveEmpty": "(Leave empty to keep unchanged)",
+        "placeholder": "Enter API Key",
+        "leaveEmptyDesc": "Leave empty to keep existing key",
+        "currentKey": "Current key: {key}"
+      },
+      "buttons": {
+        "expandAll": "Expand All Advanced Settings",
+        "collapseAll": "Collapse All Advanced Settings",
+        "submit": "Confirm Add",
+        "submitting": "Adding...",
+        "update": "Confirm Update",
+        "updating": "Updating...",
+        "delete": "Delete"
+      },
+      "sections": {
+        "routing": {
+          "title": "Routing",
+          "summary": {
+            "models": "{count} whitelisted models",
+            "redirects": "{count} redirects",
+            "none": "Not configured"
+          },
+          "providerType": {
+            "label": "Provider Type",
+            "desc": "(determines scheduling policy)",
+            "placeholder": "Select provider type"
+          },
+          "providerTypeDesc": "Choose the API format type of the provider.",
+          "providerTypeDisabledNote": "Note: Gemini CLI and OpenAI Compatible are under development and currently unavailable",
+          "modelRedirects": {
+            "label": "Model Redirects",
+            "optional": "(optional)"
+          },
+          "joinClaudePool": {
+            "label": "Join Claude Routing Pool",
+            "desc": "When enabled, this provider will participate in load balancing with Claude-type providers",
+            "help": "Available only when there is a redirect mapping to claude-* models. When users request claude-* models, this provider also joins scheduling."
+          },
+          "modelWhitelist": {
+            "title": "Model Allowlist",
+            "desc": "Restrict which models this provider can serve. By default, a provider can serve all models of its type.",
+            "label": "Allowed Models",
+            "optional": "(optional)",
+            "allowAll": "✓ Allow all models (recommended)",
+            "selectedOnly": "Only the selected {count} models are allowed. Other models will not be routed to this provider.",
+            "moreModels": "+{count} more"
+          },
+          "scheduleParams": {
+            "title": "Scheduling",
+            "priority": {
+              "label": "Priority",
+              "placeholder": "0",
+              "desc": "Lower value = higher priority (0 is highest). The system only chooses from the highest priority tier. Suggested: primary=0, standby=1, emergency=2"
+            },
+            "weight": {
+              "label": "Weight",
+              "placeholder": "1",
+              "desc": "Weighted random. Within the same priority, higher weight increases selection probability. Example 1:2:3 ≈ 16%:33%:50%"
+            },
+            "costMultiplier": {
+              "label": "Cost Multiplier",
+              "placeholder": "1.0",
+              "desc": "Cost multiplier. Official provider = 1.0, 20% cheaper = 0.8, 20% more expensive = 1.2 (up to 4 decimals)"
+            },
+            "group": {
+              "label": "Provider Group",
+              "placeholder": "e.g. premium, economy",
+              "desc": "Group tag. Only users whose providerGroup matches can use this provider. Example: set to \"premium\" to serve users with providerGroup=\"premium\" only"
+            }
+          }
+        },
+        "rateLimit": {
+          "title": "Rate Limit",
+          "summary": {
+            "fiveHour": "5h: ${amount}",
+            "weekly": "Week: ${amount}",
+            "monthly": "Month: ${amount}",
+            "concurrent": "Concurrent: {count}",
+            "none": "Unlimited"
+          },
+          "limit5h": {
+            "label": "5h Spend Limit (USD)",
+            "placeholder": "Leave empty for unlimited"
+          },
+          "limitWeekly": {
+            "label": "Weekly Spend Limit (USD)",
+            "placeholder": "Leave empty for unlimited"
+          },
+          "limitMonthly": {
+            "label": "Monthly Spend Limit (USD)",
+            "placeholder": "Leave empty for unlimited"
+          },
+          "limitConcurrent": {
+            "label": "Concurrent Sessions Limit",
+            "placeholder": "0 means unlimited"
+          }
+        },
+        "circuitBreaker": {
+          "title": "Circuit Breaker",
+          "summary": "{failureThreshold} failures / {openDuration} min break / {successThreshold} successes to recover",
+          "desc": "Automatically break on consecutive failures to protect overall service quality",
+          "failureThreshold": {
+            "label": "Failure Threshold",
+            "placeholder": "5",
+            "desc": "Number of consecutive failures to trigger break"
+          },
+          "openDuration": {
+            "label": "Break Duration (minutes)",
+            "placeholder": "30",
+            "desc": "Time before switching to half-open"
+          },
+          "successThreshold": {
+            "label": "Recovery Threshold",
+            "placeholder": "2",
+            "desc": "Number of successes in half-open to fully recover"
+          }
+        },
+        "proxy": {
+          "title": "Proxy",
+          "summary": {
+            "configured": "Proxy configured",
+            "fallback": " (fallback enabled)",
+            "none": "Not configured"
+          },
+          "desc": "Configure a proxy to improve connectivity (HTTP, HTTPS, SOCKS4, SOCKS5 supported)",
+          "url": {
+            "label": "Proxy URL",
+            "optional": "(optional)",
+            "placeholder": "e.g. http://proxy.example.com:8080 or socks5://127.0.0.1:1080",
+            "formats": "Supported formats:"
+          },
+          "fallback": {
+            "label": "Fallback to direct on proxy failure",
+            "desc": "When enabled, will try direct connection if proxy fails"
+          },
+          "test": {
+            "label": "Connectivity Test",
+            "desc": "Test accessing provider URL via proxy (HEAD request, no credits consumed)"
+          }
+        },
+        "codexStrategy": {
+          "title": "Codex Instructions Policy",
+          "summary": {
+            "auto": "Auto (recommended)",
+            "force": "Force official",
+            "keep": "Pass-through"
+          },
+          "desc": "Control how to handle the instructions field in Codex requests; affects gateway compatibility",
+          "select": {
+            "label": "Strategy",
+            "placeholder": "Select a strategy",
+            "auto": {
+              "label": "Auto (recommended)",
+              "desc": "Pass through client instructions; on 400 error, retry with official prompt"
+            },
+            "force": {
+              "label": "Force official",
+              "desc": "Always use official Codex CLI instructions (~4000+ chars)"
+            },
+            "keep": {
+              "label": "Pass-through",
+              "desc": "Always pass through client instructions, no auto retry (for permissive gateways)"
+            }
+          },
+          "hint": "Hint: Some strict Codex gateways (e.g. 88code, foxcode) require official instructions. Choose \"Auto\" or \"Force official\"."
+        }
+      },
+      "providerTypes": {
+        "claude": "Claude (Anthropic Messages API)",
+        "claudeAuth": "Claude (Anthropic Auth Token)",
+        "codex": "Codex (Response API)",
+        "geminiCli": "Gemini CLI",
+        "geminiCliDisabled": " - in development",
+        "openaiCompatible": "OpenAI Compatible",
+        "openaiCompatibleDisabled": " - in development"
+      },
+      "deleteDialog": {
+        "title": "Delete Provider",
+        "description": "Are you sure you want to delete provider \"{name}\"? This action cannot be undone.",
+        "cancel": "Cancel",
+        "confirm": "Confirm Delete"
+      },
+      "errors": {
+        "invalidUrl": "Please enter a valid API address",
+        "invalidWebsiteUrl": "Please enter a valid provider website URL",
+        "addFailed": "Failed to add provider",
+        "updateFailed": "Failed to update provider",
+        "deleteFailed": "Failed to delete provider"
+      },
+      "success": {
+        "created": "Provider added successfully",
+        "createdDesc": "Provider \"{name}\" has been added"
+      }
     },
     "guide": {
       "after": "After:",
