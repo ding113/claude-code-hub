@@ -73,7 +73,6 @@ export function getRedisClient(): Redis | null {
 
     // 5. 返回客户端实例
     return redisClient;
-
   } catch (error) {
     logger.error("[Redis] Failed to initialize:", error);
     return null;
