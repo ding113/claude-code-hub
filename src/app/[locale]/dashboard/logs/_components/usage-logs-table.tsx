@@ -66,6 +66,7 @@ export function UsageLogsTable({
   currencyCode = "USD",
 }: UsageLogsTableProps) {
   const t = useTranslations("dashboard");
+  const tChain = useTranslations("provider-chain");
   const totalPages = Math.ceil(total / pageSize);
 
   return (
@@ -127,18 +128,18 @@ export function UsageLogsTable({
                                 />
                               </div>
                               {/* 摘要文字（第二行显示，左对齐） */}
-                              {formatProviderSummary(log.providerChain) && (
+                              {formatProviderSummary(log.providerChain, tChain) && (
                                 <div className="w-full">
                                   <TooltipProvider>
                                     <Tooltip delayDuration={300}>
                                       <TooltipTrigger asChild>
                                         <span className="text-xs text-muted-foreground cursor-help truncate max-w-[200px] block text-left">
-                                          {formatProviderSummary(log.providerChain)}
+                                          {formatProviderSummary(log.providerChain, tChain)}
                                         </span>
                                       </TooltipTrigger>
                                       <TooltipContent side="bottom" align="start" className="max-w-[500px]">
                                         <p className="text-xs whitespace-normal break-words font-mono">
-                                          {formatProviderSummary(log.providerChain)}
+                                          {formatProviderSummary(log.providerChain, tChain)}
                                         </p>
                                       </TooltipContent>
                                     </Tooltip>

@@ -545,68 +545,19 @@
     "resetCircuit": "熔断器已重置",
     "resetCircuitDesc": "供应商 \"{name}\" 的熔断状态已解除",
     "resetCircuitFailed": "重置熔断器失败",
-    "types": {
-      "claude": {
-        "label": "Claude",
-        "description": "Anthropic 官方 API"
-      },
-      "claudeAuth": {
-        "label": "Claude Auth",
-        "description": "Claude 中转服务"
-      },
-      "codex": {
-        "label": "Codex",
-        "description": "Codex CLI API"
-      },
-      "geminiCli": {
-        "label": "Gemini CLI",
-        "description": "Gemini CLI API"
-      },
-      "openaiCompatible": {
-        "label": "OpenAI Compatible",
-        "description": "OpenAI 兼容 API"
-      }
+    "sort": {
+      "byName": "按名称 (A-Z)",
+      "byPriority": "按优先级 (高-低)",
+      "byWeight": "按权重 (高-低)",
+      "byCreatedAt": "按创建时间 (新-旧)",
+      "placeholder": "排序供应商"
     },
-    "list": {
-      "priority": "优先级",
-      "weight": "权重",
-      "costMultiplier": "成本倍数",
-      "todayUsageLabel": "今日用量",
-      "todayUsageCount": "{count} 次",
-      "circuitBroken": "熔断中",
-      "officialWebsite": "官网",
-      "viewFullKey": "查看完整 API Key",
-      "viewFullKeyDesc": "请妥善保管，不要泄露给他人",
-      "keyLoading": "加载中...",
-      "confirmDeleteTitle": "确认删除供应商？",
-      "confirmDeleteMessage": "确定要删除供应商 \"{name}\" 吗？此操作无法撤销。",
-      "deleteButton": "删除",
-      "cancelButton": "取消",
-      "deleteSuccess": "删除成功",
-      "deleteSuccessDesc": "供应商 \"{name}\" 已删除",
-      "deleteFailed": "删除失败",
-      "deleteError": "操作过程中出现异常",
-      "unknownError": "未知错误",
-      "getKeyFailed": "获取密钥失败",
-      "keyCopied": "密钥已复制到剪贴板",
-      "copyFailed": "复制失败",
-      "resetCircuitSuccess": "熔断器已重置",
-      "resetCircuitSuccessDesc": "供应商 \"{name}\" 的熔断状态已解除",
-      "resetCircuitFailed": "重置熔断器失败",
-      "toggleSuccess": "供应商已{status}",
-      "toggleSuccessDesc": "供应商 \"{name}\" 状态已更新",
-      "toggleFailed": "状态切换失败",
-      "statusEnabled": "启用",
-      "statusDisabled": "禁用"
-    },
-    "schedulingDialog": {
-      "title": "供应商调度规则说明",
-      "description": "了解系统如何智能选择上游供应商，确保高可用性和成本优化",
-      "triggerButton": "调度规则说明",
-      "step": "步骤",
-      "before": "过滤前：",
-      "after": "过滤后：",
-      "decision": "决策："
+    "search": {
+      "placeholder": "搜索供应商名称、URL、备注...",
+      "clear": "清除搜索",
+      "found": "找到 {count} 个匹配的供应商",
+      "notFound": "未找到匹配的供应商",
+      "showing": "显示 {filtered} / {total} 个供应商"
     }
   },
   "prices": {

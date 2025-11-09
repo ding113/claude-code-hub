@@ -34,6 +34,7 @@ function isActualRequest(item: ProviderChainItem): boolean {
 
 export function ProviderChainPopover({ chain, finalProvider }: ProviderChainPopoverProps) {
   const t = useTranslations("dashboard");
+  const tChain = useTranslations("provider-chain");
 
   // 计算实际请求次数（排除中间状态）
   const requestCount = chain.filter(isActualRequest).length;
@@ -66,7 +67,7 @@ export function ProviderChainPopover({ chain, finalProvider }: ProviderChainPopo
 
           <div className="rounded-md border bg-muted/50 p-4 max-h-[300px] overflow-y-auto overflow-x-hidden">
             <pre className="text-xs whitespace-pre-wrap break-words leading-relaxed">
-              {formatProviderDescription(chain)}
+              {formatProviderDescription(chain, tChain)}
             </pre>
           </div>
 

@@ -299,7 +299,9 @@
     },
     "errors": {
       "copyFailed": "コピー失敗"
-    }
+    },
+    "back": "戻る",
+    "loadingError": "読み込み失敗"
   },
   "quotas": {
     "title": "クォータ管理",

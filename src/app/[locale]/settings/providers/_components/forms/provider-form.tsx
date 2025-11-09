@@ -33,6 +33,7 @@ import { ModelMultiSelect } from "../model-multi-select";
 import { ModelRedirectEditor } from "../model-redirect-editor";
 import { ProxyTestButton } from "./proxy-test-button";
 import { ChevronDown } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 type Mode = "create" | "edit";
 
@@ -51,6 +52,7 @@ export function ProviderForm({
   cloneProvider,
   enableMultiProviderTypes,
 }: ProviderFormProps) {
+  const t = useTranslations("settings.providers.form");
   const isEdit = mode === "edit";
   const [isPending, startTransition] = useTransition();
 
@@ -191,13 +193,13 @@ export function ProviderForm({
     }
 
     if (!isValidUrl(url.trim())) {
-      toast.error("请输入有效的 API 地址");
+      toast.error(t("errors.invalidUrl"));
       return;
     }
 
     // 验证 websiteUrl（可选，但如果填写了必须是有效 URL）
     if (websiteUrl.trim() && !isValidUrl(websiteUrl.trim())) {
-      toast.error("请输入有效的供应商官网地址");
+      toast.error(t("errors.invalidWebsiteUrl"));
       return;
     }
 
@@ -268,7 +270,7 @@ export function ProviderForm({
           }
           const res = await editProvider(provider.id, updateData);
           if (!res.ok) {
-            toast.error(res.error || "更新服务商失败");
+            toast.error(res.error || t("errors.updateFailed"));
             return;
           }
         } else {
@@ -305,12 +307,12 @@ export function ProviderForm({
             cc: null,
           });
           if (!res.ok) {
-            toast.error(res.error || "添加服务商失败");
+            toast.error(res.error || t("errors.addFailed"));
             return;
           }
           // 添加成功提示
-          toast.success("添加服务商成功", {
-            description: `服务商 "${name.trim()}" 已添加`,
+          toast.success(t("success.created"), {
+            description: t("success.createdDesc", { name: name.trim() }),
           });
           // 重置表单（仅新增）
           setName("");
@@ -338,8 +340,8 @@ export function ProviderForm({
         }
         onSuccess?.();
       } catch (error) {
-        console.error(isEdit ? "更新服务商失败:" : "添加服务商失败:", error);
-        toast.error(isEdit ? "更新服务商失败" : "添加服务商失败");
+        console.error(isEdit ? t("errors.updateFailed") : t("errors.addFailed"), error);
+        toast.error(isEdit ? t("errors.updateFailed") : t("errors.addFailed"));
       }
     });
   };
@@ -347,18 +349,18 @@ export function ProviderForm({
   return (
     <div className="space-y-4">
       <DialogHeader>
-        <DialogTitle>{isEdit ? "编辑服务商" : "新增服务商"}</DialogTitle>
+        <DialogTitle>{isEdit ? t("title.edit") : t("title.create")}</DialogTitle>
       </DialogHeader>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor={isEdit ? "edit-name" : "name"}>服务商名称 *</Label>
+          <Label htmlFor={isEdit ? "edit-name" : "name"}>{t("name.label")}</Label>
           <Input
             ref={nameInputRef}
             id={isEdit ? "edit-name" : "name"}
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="例如: 智谱"
+            placeholder={t("name.placeholder")}
             disabled={isPending}
             required
           />
@@ -367,12 +369,12 @@ export function ProviderForm({
         {/* 移除描述字段 */}
 
         <div className="space-y-2">
-          <Label htmlFor={isEdit ? "edit-url" : "url"}>API 地址 *</Label>
+          <Label htmlFor={isEdit ? "edit-url" : "url"}>{t("url.label")}</Label>
           <Input
             id={isEdit ? "edit-url" : "url"}
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="例如: https://open.bigmodel.cn/api/anthropic"
+            placeholder={t("url.placeholder")}
             disabled={isPending}
             required
           />
@@ -380,33 +382,33 @@ export function ProviderForm({
 
         <div className="space-y-2">
           <Label htmlFor={isEdit ? "edit-key" : "key"}>
-            API 密钥{isEdit ? "（留空不更改）" : " *"}
+            {t("key.label")}{isEdit ? t("key.leaveEmpty") : ""}
           </Label>
           <Input
             id={isEdit ? "edit-key" : "key"}
             type="password"
             value={key}
             onChange={(e) => setKey(e.target.value)}
-            placeholder={isEdit ? "留空则不更改密钥" : "输入 API 密钥"}
+            placeholder={isEdit ? t("key.leaveEmptyDesc") : t("key.placeholder")}
             disabled={isPending}
             required={!isEdit}
           />
           {isEdit && provider ? (
-            <div className="text-xs text-muted-foreground">当前密钥: {provider.maskedKey}</div>
+            <div className="text-xs text-muted-foreground">{t("key.currentKey", { key: provider.maskedKey })}</div>
           ) : null}
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor={isEdit ? "edit-website-url" : "website-url"}>供应商官网地址</Label>
+          <Label htmlFor={isEdit ? "edit-website-url" : "website-url"}>{t("websiteUrl.label")}</Label>
           <Input
             id={isEdit ? "edit-website-url" : "website-url"}
             type="url"
             value={websiteUrl}
             onChange={(e) => setWebsiteUrl(e.target.value)}
-            placeholder="https://example.com"
+            placeholder={t("websiteUrl.placeholder")}
             disabled={isPending}
           />
-          <div className="text-xs text-muted-foreground">供应商官网地址，用于快速跳转管理</div>
+          <div className="text-xs text-muted-foreground">{t("websiteUrl.desc")}</div>
         </div>
 
         {/* 展开/折叠全部按钮 */}
@@ -418,7 +420,7 @@ export function ProviderForm({
             onClick={expandAll}
             disabled={isPending}
           >
-            展开全部高级配置
+            {t("buttons.expandAll")}
           </Button>
           <Button
             type="button"
@@ -427,7 +429,7 @@ export function ProviderForm({
             onClick={collapseAll}
             disabled={isPending}
           >
-            折叠全部高级配置
+            {t("buttons.collapseAll")}
           </Button>
         </div>
 
@@ -445,15 +447,15 @@ export function ProviderForm({
                     openSections.routing ? "rotate-180" : ""
                   }`}
                 />
-                <span className="text-sm font-medium">路由配置</span>
+                <span className="text-sm font-medium">{t("sections.routing.title")}</span>
               </div>
               <span className="text-xs text-muted-foreground">
                 {(() => {
                   const parts = [];
-                  if (allowedModels.length > 0) parts.push(`${allowedModels.length} 个模型白名单`);
+                  if (allowedModels.length > 0) parts.push(t("sections.routing.summary.models", { count: allowedModels.length }));
                   if (Object.keys(modelRedirects).length > 0)
-                    parts.push(`${Object.keys(modelRedirects).length} 个重定向`);
-                  return parts.length > 0 ? parts.join(", ") : "未配置";
+                    parts.push(t("sections.routing.summary.redirects", { count: Object.keys(modelRedirects).length }));
+                  return parts.length > 0 ? parts.join(", ") : t("sections.routing.summary.none");
                 })()}
               </span>
             </button>

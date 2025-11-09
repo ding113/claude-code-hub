@@ -299,7 +299,9 @@
     },
     "errors": {
       "copyFailed": "複製失敗"
-    }
+    },
+    "back": "返回",
+    "loadingError": "載入失敗"
   },
   "quotas": {
     "title": "額度管理",

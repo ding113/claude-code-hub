@@ -156,8 +156,7 @@
         "default": "暂无详细错误信息"
       },
       "clickStatusCode": "点击状态码查看完整时间线",
-      "viewDetails": "查看详情",
-      "unknown": "未知"
+      "viewDetails": "查看详情"
     },
     "providerChain": {
       "decisionChain": "供应商决策链"
@@ -300,7 +299,9 @@
     },
     "errors": {
       "copyFailed": "复制失败"
-    }
+    },
+    "back": "返回",
+    "loadingError": "加载失败"
   },
   "quotas": {
     "title": "配额管理",

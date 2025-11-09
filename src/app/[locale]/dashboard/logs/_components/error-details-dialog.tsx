@@ -48,6 +48,7 @@ export function ErrorDetailsDialog({
   messagesCount,
 }: ErrorDetailsDialogProps) {
   const t = useTranslations("dashboard");
+  const tChain = useTranslations("provider-chain");
   const [open, setOpen] = useState(false);
   const [hasMessages, setHasMessages] = useState(false);
   const [checkingMessages, setCheckingMessages] = useState(false);
@@ -298,7 +299,7 @@ export function ErrorDetailsDialog({
               <h4 className="font-semibold text-sm">{t("logs.details.providerChain.title")}</h4>
 
               {(() => {
-                const { timeline, totalDuration } = formatProviderTimeline(providerChain);
+                const { timeline, totalDuration } = formatProviderTimeline(providerChain, tChain);
                 return (
                   <>
                     <div className="rounded-md border bg-muted/50 p-4 max-h-[500px] overflow-y-auto overflow-x-hidden">

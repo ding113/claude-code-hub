@@ -905,6 +905,20 @@
       "before": "前:",
       "after": "後:",
       "decision": "決定:"
+    },
+    "sort": {
+      "byName": "名前順 (A-Z)",
+      "byPriority": "優先度順 (高-低)",
+      "byWeight": "重み順 (高-低)",
+      "byCreatedAt": "作成日時順 (新-旧)",
+      "placeholder": "プロバイダーを並べ替え"
+    },
+    "search": {
+      "placeholder": "プロバイダー名、URL、メモを検索...",
+      "clear": "検索をクリア",
+      "found": "{count}件のプロバイダーが見つかりました",
+      "notFound": "一致するプロバイダーが見つかりません",
+      "showing": "{filtered} / {total} プロバイダーを表示"
     }
   },
   "sensitiveWords": {

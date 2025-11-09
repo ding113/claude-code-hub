@@ -905,6 +905,20 @@
       "before": "過濾前：",
       "after": "過濾後：",
       "decision": "決策："
+    },
+    "sort": {
+      "byName": "按名稱 (A-Z)",
+      "byPriority": "按優先級 (高-低)",
+      "byWeight": "按權重 (高-低)",
+      "byCreatedAt": "按建立時間 (新-舊)",
+      "placeholder": "排序供應商"
+    },
+    "search": {
+      "placeholder": "搜尋供應商名稱、URL、備註...",
+      "clear": "清除搜尋",
+      "found": "找到 {count} 個匹配的供應商",
+      "notFound": "未找到匹配的供應商",
+      "showing": "顯示 {filtered} / {total} 個供應商"
     }
   },
   "sensitiveWords": {

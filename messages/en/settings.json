@@ -906,68 +906,19 @@
     "updateFailed": "Failed to update provider",
     "viewKey": "View Complete API Key",
     "viewKeyDesc": "Please keep it safe and don't share it with others",
-    "types": {
-      "claude": {
-        "label": "Claude",
-        "description": "Anthropic Official API"
-      },
-      "claudeAuth": {
-        "label": "Claude Auth",
-        "description": "Claude Relay Service"
-      },
-      "codex": {
-        "label": "Codex",
-        "description": "Codex CLI API"
-      },
-      "geminiCli": {
-        "label": "Gemini CLI",
-        "description": "Gemini CLI API"
-      },
-      "openaiCompatible": {
-        "label": "OpenAI Compatible",
-        "description": "OpenAI Compatible API"
-      }
+    "sort": {
+      "byName": "By Name (A-Z)",
+      "byPriority": "By Priority (High-Low)",
+      "byWeight": "By Weight (High-Low)",
+      "byCreatedAt": "By Created Time (New-Old)",
+      "placeholder": "Sort Providers"
     },
-    "list": {
-      "priority": "Priority",
-      "weight": "Weight",
-      "costMultiplier": "Cost Multiplier",
-      "todayUsageLabel": "Today's Usage",
-      "todayUsageCount": "{count} times",
-      "circuitBroken": "Circuit Broken",
-      "officialWebsite": "Official",
-      "viewFullKey": "View Complete API Key",
-      "viewFullKeyDesc": "Please keep it safe and don't share it with others",
-      "keyLoading": "Loading...",
-      "confirmDeleteTitle": "Confirm Delete Provider?",
-      "confirmDeleteMessage": "Are you sure you want to delete provider \"{name}\"? This action cannot be undone.",
-      "deleteButton": "Delete",
-      "cancelButton": "Cancel",
-      "deleteSuccess": "Deleted successfully",
-      "deleteSuccessDesc": "Provider \"{name}\" has been deleted",
-      "deleteFailed": "Delete failed",
-      "deleteError": "An error occurred during operation",
-      "unknownError": "Unknown error",
-      "getKeyFailed": "Failed to get key",
-      "keyCopied": "Key copied to clipboard",
-      "copyFailed": "Copy failed",
-      "resetCircuitSuccess": "Circuit breaker reset",
-      "resetCircuitSuccessDesc": "Provider \"{name}\" circuit breaker status cleared",
-      "resetCircuitFailed": "Failed to reset circuit breaker",
-      "toggleSuccess": "Provider {status}",
-      "toggleSuccessDesc": "Provider \"{name}\" status updated",
-      "toggleFailed": "Toggle failed",
-      "statusEnabled": "enabled",
-      "statusDisabled": "disabled"
-    },
-    "schedulingDialog": {
-      "title": "Provider Scheduling Rules",
-      "description": "Understand how the system intelligently selects upstream providers for high availability and cost optimization",
-      "triggerButton": "Scheduling Rules",
-      "step": "Step",
-      "before": "Before:",
-      "after": "After:",
-      "decision": "Decision:"
+    "search": {
+      "placeholder": "Search provider name, URL, notes...",
+      "clear": "Clear search",
+      "found": "Found {count} matching provider(s)",
+      "notFound": "No matching providers found",
+      "showing": "Showing {filtered} / {total} providers"
     }
   },
   "sensitiveWords": {

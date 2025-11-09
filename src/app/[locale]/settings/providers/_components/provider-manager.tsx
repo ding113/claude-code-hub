@@ -9,6 +9,7 @@ import { useDebounce } from "@/lib/hooks/use-debounce";
 import type { ProviderDisplay, ProviderType } from "@/types/provider";
 import type { User } from "@/types/user";
 import type { CurrencyCode } from "@/lib/utils/currency";
+import { useTranslations } from "next-intl";
 
 interface ProviderManagerProps {
   providers: ProviderDisplay[];
@@ -34,6 +35,7 @@ export function ProviderManager({
   currencyCode = "USD",
   enableMultiProviderTypes,
 }: ProviderManagerProps) {
+  const t = useTranslations("settings.providers.search");
   const [typeFilter, setTypeFilter] = useState<ProviderType | "all">("all");
   const [sortBy, setSortBy] = useState<SortKey>("priority");
   const [searchTerm, setSearchTerm] = useState("");
@@ -95,7 +97,7 @@ export function ProviderManager({
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               type="search"
-              placeholder="搜索供应商名称、URL、备注..."
+              placeholder={t("placeholder")}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-9 pr-9"
@@ -104,7 +106,7 @@ export function ProviderManager({
               <button
                 onClick={() => setSearchTerm("")}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                aria-label="清除搜索"
+                aria-label={t("clear")}
               >
                 <X className="h-4 w-4" />
               </button>
@@ -115,13 +117,13 @@ export function ProviderManager({
         {debouncedSearchTerm && (
           <p className="text-sm text-muted-foreground">
             {filteredProviders.length > 0
-              ? `找到 ${filteredProviders.length} 个匹配的供应商`
-              : "未找到匹配的供应商"}
+              ? t("found", { count: filteredProviders.length })
+              : t("notFound")}
           </p>
         )}
         {!debouncedSearchTerm && (
           <div className="text-sm text-muted-foreground">
-            显示 {filteredProviders.length} / {providers.length} 个供应商
+            {t("showing", { filtered: filteredProviders.length, total: providers.length })}
           </div>
         )}
       </div>

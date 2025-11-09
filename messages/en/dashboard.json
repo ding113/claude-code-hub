@@ -156,8 +156,7 @@
         "default": "No detailed error message available"
       },
       "clickStatusCode": "Click status code to view full timeline",
-      "viewDetails": "View Details",
-      "unknown": "Unknown"
+      "viewDetails": "View Details"
     },
     "providerChain": {
       "decisionChain": "Provider Decision Chain"
@@ -300,7 +299,9 @@
     },
     "errors": {
       "copyFailed": "Copy Failed"
-    }
+    },
+    "back": "Back",
+    "loadingError": "Loading failed"
   },
   "quotas": {
     "title": "Quota Management",
