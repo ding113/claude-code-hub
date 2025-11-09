@@ -477,7 +477,9 @@ export function ProviderForm({
               <div className="space-y-2">
                 <Label htmlFor={isEdit ? "edit-provider-type" : "provider-type"}>
                   {t("sections.routing.providerType.label")}
-                  <span className="text-xs text-muted-foreground ml-1">{t("sections.routing.providerType.desc")}</span>
+                  <span className="text-xs text-muted-foreground ml-1">
+                    {t("sections.routing.providerType.desc")}
+                  </span>
                 </Label>
                 <Select
                   value={providerType}
@@ -493,12 +495,14 @@ export function ProviderForm({
                     <SelectItem value="codex">{t("providerTypes.codex")}</SelectItem>
                     <SelectItem value="gemini-cli" disabled={!enableMultiProviderTypes}>
                       <>
-                        {t("providerTypes.geminiCli")} { !enableMultiProviderTypes && t("providerTypes.geminiCliDisabled") }
+                        {t("providerTypes.geminiCli")}{" "}
+                        {!enableMultiProviderTypes && t("providerTypes.geminiCliDisabled")}
                       </>
                     </SelectItem>
                     <SelectItem value="openai-compatible" disabled={!enableMultiProviderTypes}>
                       <>
-                        {t("providerTypes.openaiCompatible")} { !enableMultiProviderTypes && t("providerTypes.openaiCompatibleDisabled") }
+                        {t("providerTypes.openaiCompatible")}{" "}
+                        {!enableMultiProviderTypes && t("providerTypes.openaiCompatibleDisabled")}
                       </>
                     </SelectItem>
                   </SelectContent>
@@ -506,7 +510,9 @@ export function ProviderForm({
                 <p className="text-xs text-muted-foreground">
                   {t("sections.routing.providerTypeDesc")}
                   {!enableMultiProviderTypes && (
-                    <span className="text-amber-600 ml-1">{t("sections.routing.providerTypeDisabledNote")}</span>
+                    <span className="text-amber-600 ml-1">
+                      {t("sections.routing.providerTypeDisabledNote")}
+                    </span>
                   )}
                 </p>
               </div>
@@ -514,7 +520,9 @@ export function ProviderForm({
               <div className="space-y-2">
                 <Label>
                   {t("sections.routing.modelRedirects.label")}
-                  <span className="text-xs text-muted-foreground ml-1">{t("sections.routing.modelRedirects.optional")}</span>
+                  <span className="text-xs text-muted-foreground ml-1">
+                    {t("sections.routing.modelRedirects.optional")}
+                  </span>
                 </Label>
                 <ModelRedirectEditor
                   value={modelRedirects}
@@ -540,7 +548,9 @@ export function ProviderForm({
                           <Label htmlFor={isEdit ? "edit-join-claude-pool" : "join-claude-pool"}>
                             {t("sections.routing.joinClaudePool.label")}
                           </Label>
-                          <p className="text-xs text-muted-foreground">{t("sections.routing.joinClaudePool.desc")}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {t("sections.routing.joinClaudePool.desc")}
+                          </p>
                         </div>
                         <Switch
                           id={isEdit ? "edit-join-claude-pool" : "join-claude-pool"}
@@ -549,21 +559,29 @@ export function ProviderForm({
                           disabled={isPending}
                         />
                       </div>
-                      <p className="text-xs text-muted-foreground">{t("sections.routing.joinClaudePool.help")}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {t("sections.routing.joinClaudePool.help")}
+                      </p>
                     </div>
                   );
                 })()}
 
               {/* 模型白名单配置 */}
               <div className="space-y-1">
-                <div className="text-sm font-medium">{t("sections.routing.modelWhitelist.title")}</div>
-                <p className="text-xs text-muted-foreground">{t("sections.routing.modelWhitelist.desc")}</p>
+                <div className="text-sm font-medium">
+                  {t("sections.routing.modelWhitelist.title")}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {t("sections.routing.modelWhitelist.desc")}
+                </p>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="allowed-models">
-                  {t("sections.routing.modelWhitelist.label")} 
-                  <span className="text-xs text-muted-foreground ml-1">{t("sections.routing.modelWhitelist.optional")}</span>
+                  {t("sections.routing.modelWhitelist.label")}
+                  <span className="text-xs text-muted-foreground ml-1">
+                    {t("sections.routing.modelWhitelist.optional")}
+                  </span>
                 </Label>
 
                 <ModelMultiSelect
@@ -584,7 +602,9 @@ export function ProviderForm({
                     ))}
                     {allowedModels.length > 5 && (
                       <Badge variant="secondary" className="text-xs">
-                        {t("sections.routing.modelWhitelist.moreModels", { count: allowedModels.length - 5 })}
+                        {t("sections.routing.modelWhitelist.moreModels", {
+                          count: allowedModels.length - 5,
+                        })}
                       </Badge>
                     )}
                   </div>
@@ -592,19 +612,29 @@ export function ProviderForm({
 
                 <p className="text-xs text-muted-foreground">
                   {allowedModels.length === 0 ? (
-                    <span className="text-green-600">{t("sections.routing.modelWhitelist.allowAll")}</span>
+                    <span className="text-green-600">
+                      {t("sections.routing.modelWhitelist.allowAll")}
+                    </span>
                   ) : (
-                    <span>{t("sections.routing.modelWhitelist.selectedOnly", { count: allowedModels.length })}</span>
+                    <span>
+                      {t("sections.routing.modelWhitelist.selectedOnly", {
+                        count: allowedModels.length,
+                      })}
+                    </span>
                   )}
                 </p>
               </div>
 
               {/* 路由配置 - 优先级、权重、成本 */}
               <div className="space-y-4">
-                <div className="text-sm font-medium">{t("sections.routing.scheduleParams.title")}</div>
+                <div className="text-sm font-medium">
+                  {t("sections.routing.scheduleParams.title")}
+                </div>
                 <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor={isEdit ? "edit-priority" : "priority"}>{t("sections.routing.scheduleParams.priority.label")}</Label>
+                    <Label htmlFor={isEdit ? "edit-priority" : "priority"}>
+                      {t("sections.routing.scheduleParams.priority.label")}
+                    </Label>
                     <Input
                       id={isEdit ? "edit-priority" : "priority"}
                       type="number"
@@ -615,10 +645,14 @@ export function ProviderForm({
                       min="0"
                       step="1"
                     />
-                    <p className="text-xs text-muted-foreground">{t("sections.routing.scheduleParams.priority.desc")}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {t("sections.routing.scheduleParams.priority.desc")}
+                    </p>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor={isEdit ? "edit-weight" : "weight"}>{t("sections.routing.scheduleParams.weight.label")}</Label>
+                    <Label htmlFor={isEdit ? "edit-weight" : "weight"}>
+                      {t("sections.routing.scheduleParams.weight.label")}
+                    </Label>
                     <Input
                       id={isEdit ? "edit-weight" : "weight"}
                       type="number"
@@ -629,10 +663,14 @@ export function ProviderForm({
                       min="1"
                       step="1"
                     />
-                    <p className="text-xs text-muted-foreground">{t("sections.routing.scheduleParams.weight.desc")}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {t("sections.routing.scheduleParams.weight.desc")}
+                    </p>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor={isEdit ? "edit-cost" : "cost"}>{t("sections.routing.scheduleParams.costMultiplier.label")}</Label>
+                    <Label htmlFor={isEdit ? "edit-cost" : "cost"}>
+                      {t("sections.routing.scheduleParams.costMultiplier.label")}
+                    </Label>
                     <Input
                       id={isEdit ? "edit-cost" : "cost"}
                       type="number"
@@ -643,11 +681,15 @@ export function ProviderForm({
                       min="0"
                       step="0.0001"
                     />
-                    <p className="text-xs text-muted-foreground">{t("sections.routing.scheduleParams.costMultiplier.desc")}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {t("sections.routing.scheduleParams.costMultiplier.desc")}
+                    </p>
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor={isEdit ? "edit-group" : "group"}>{t("sections.routing.scheduleParams.group.label")}</Label>
+                  <Label htmlFor={isEdit ? "edit-group" : "group"}>
+                    {t("sections.routing.scheduleParams.group.label")}
+                  </Label>
                   <Input
                     id={isEdit ? "edit-group" : "group"}
                     value={groupTag}
@@ -655,7 +697,9 @@ export function ProviderForm({
                     placeholder={t("sections.routing.scheduleParams.group.placeholder")}
                     disabled={isPending}
                   />
-                  <p className="text-xs text-muted-foreground">{t("sections.routing.scheduleParams.group.desc")}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("sections.routing.scheduleParams.group.desc")}
+                  </p>
                 </div>
               </div>
             </div>
@@ -684,11 +728,21 @@ export function ProviderForm({
               <span className="text-xs text-muted-foreground">
                 {(() => {
                   const limits: string[] = [];
-                  if (limit5hUsd) limits.push(t("sections.rateLimit.summary.fiveHour", { amount: limit5hUsd }));
-                  if (limitWeeklyUsd) limits.push(t("sections.rateLimit.summary.weekly", { amount: limitWeeklyUsd }));
-                  if (limitMonthlyUsd) limits.push(t("sections.rateLimit.summary.monthly", { amount: limitMonthlyUsd }));
-                  if (limitConcurrentSessions) limits.push(t("sections.rateLimit.summary.concurrent", { count: limitConcurrentSessions }));
-                  return limits.length > 0 ? limits.join(", ") : t("sections.rateLimit.summary.none");
+                  if (limit5hUsd)
+                    limits.push(t("sections.rateLimit.summary.fiveHour", { amount: limit5hUsd }));
+                  if (limitWeeklyUsd)
+                    limits.push(t("sections.rateLimit.summary.weekly", { amount: limitWeeklyUsd }));
+                  if (limitMonthlyUsd)
+                    limits.push(
+                      t("sections.rateLimit.summary.monthly", { amount: limitMonthlyUsd })
+                    );
+                  if (limitConcurrentSessions)
+                    limits.push(
+                      t("sections.rateLimit.summary.concurrent", { count: limitConcurrentSessions })
+                    );
+                  return limits.length > 0
+                    ? limits.join(", ")
+                    : t("sections.rateLimit.summary.none");
                 })()}
               </span>
             </button>
@@ -697,7 +751,9 @@ export function ProviderForm({
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor={isEdit ? "edit-limit-5h" : "limit-5h"}>{t("sections.rateLimit.limit5h.label")}</Label>
+                  <Label htmlFor={isEdit ? "edit-limit-5h" : "limit-5h"}>
+                    {t("sections.rateLimit.limit5h.label")}
+                  </Label>
                   <Input
                     id={isEdit ? "edit-limit-5h" : "limit-5h"}
                     type="number"
@@ -710,7 +766,9 @@ export function ProviderForm({
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor={isEdit ? "edit-limit-weekly" : "limit-weekly"}>{t("sections.rateLimit.limitWeekly.label")}</Label>
+                  <Label htmlFor={isEdit ? "edit-limit-weekly" : "limit-weekly"}>
+                    {t("sections.rateLimit.limitWeekly.label")}
+                  </Label>
                   <Input
                     id={isEdit ? "edit-limit-weekly" : "limit-weekly"}
                     type="number"
@@ -726,7 +784,9 @@ export function ProviderForm({
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor={isEdit ? "edit-limit-monthly" : "limit-monthly"}>{t("sections.rateLimit.limitMonthly.label")}</Label>
+                  <Label htmlFor={isEdit ? "edit-limit-monthly" : "limit-monthly"}>
+                    {t("sections.rateLimit.limitMonthly.label")}
+                  </Label>
                   <Input
                     id={isEdit ? "edit-limit-monthly" : "limit-monthly"}
                     type="number"
@@ -739,7 +799,9 @@ export function ProviderForm({
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor={isEdit ? "edit-limit-concurrent" : "limit-concurrent"}>{t("sections.rateLimit.limitConcurrent.label")}</Label>
+                  <Label htmlFor={isEdit ? "edit-limit-concurrent" : "limit-concurrent"}>
+                    {t("sections.rateLimit.limitConcurrent.label")}
+                  </Label>
                   <Input
                     id={isEdit ? "edit-limit-concurrent" : "limit-concurrent"}
                     type="number"
@@ -793,7 +855,9 @@ export function ProviderForm({
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor={isEdit ? "edit-failure-threshold" : "failure-threshold"}>{t("sections.circuitBreaker.failureThreshold.label")}</Label>
+                  <Label htmlFor={isEdit ? "edit-failure-threshold" : "failure-threshold"}>
+                    {t("sections.circuitBreaker.failureThreshold.label")}
+                  </Label>
                   <Input
                     id={isEdit ? "edit-failure-threshold" : "failure-threshold"}
                     type="number"
@@ -808,10 +872,14 @@ export function ProviderForm({
                     max="100"
                     step="1"
                   />
-                  <p className="text-xs text-muted-foreground">{t("sections.circuitBreaker.failureThreshold.desc")}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("sections.circuitBreaker.failureThreshold.desc")}
+                  </p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor={isEdit ? "edit-open-duration" : "open-duration"}>{t("sections.circuitBreaker.openDuration.label")}</Label>
+                  <Label htmlFor={isEdit ? "edit-open-duration" : "open-duration"}>
+                    {t("sections.circuitBreaker.openDuration.label")}
+                  </Label>
                   <Input
                     id={isEdit ? "edit-open-duration" : "open-duration"}
                     type="number"
@@ -826,10 +894,14 @@ export function ProviderForm({
                     max="1440"
                     step="1"
                   />
-                  <p className="text-xs text-muted-foreground">{t("sections.circuitBreaker.openDuration.desc")}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("sections.circuitBreaker.openDuration.desc")}
+                  </p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor={isEdit ? "edit-success-threshold" : "success-threshold"}>{t("sections.circuitBreaker.successThreshold.label")}</Label>
+                  <Label htmlFor={isEdit ? "edit-success-threshold" : "success-threshold"}>
+                    {t("sections.circuitBreaker.successThreshold.label")}
+                  </Label>
                   <Input
                     id={isEdit ? "edit-success-threshold" : "success-threshold"}
                     type="number"
@@ -844,7 +916,9 @@ export function ProviderForm({
                     max="10"
                     step="1"
                   />
-                  <p className="text-xs text-muted-foreground">{t("sections.circuitBreaker.successThreshold.desc")}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("sections.circuitBreaker.successThreshold.desc")}
+                  </p>
                 </div>
               </div>
             </div>
@@ -868,8 +942,12 @@ export function ProviderForm({
                 <span className="text-sm font-medium">{t("sections.proxy.title")}</span>
               </div>
               <span className="text-xs text-muted-foreground">
-                {proxyUrl.trim() ? t("sections.proxy.summary.configured") : t("sections.proxy.summary.none")}
-                {proxyUrl.trim() && proxyFallbackToDirect ? t("sections.proxy.summary.fallback") : ""}
+                {proxyUrl.trim()
+                  ? t("sections.proxy.summary.configured")
+                  : t("sections.proxy.summary.none")}
+                {proxyUrl.trim() && proxyFallbackToDirect
+                  ? t("sections.proxy.summary.fallback")
+                  : ""}
               </span>
             </button>
           </CollapsibleTrigger>
@@ -882,8 +960,10 @@ export function ProviderForm({
               {/* 代理地址输入 */}
               <div className="space-y-2">
                 <Label htmlFor={isEdit ? "edit-proxy-url" : "proxy-url"}>
-                  {t("sections.proxy.url.label")} 
-                  <span className="text-xs text-muted-foreground ml-1">{t("sections.proxy.url.optional")}</span>
+                  {t("sections.proxy.url.label")}
+                  <span className="text-xs text-muted-foreground ml-1">
+                    {t("sections.proxy.url.optional")}
+                  </span>
                 </Label>
                 <Input
                   id={isEdit ? "edit-proxy-url" : "proxy-url"}
@@ -893,7 +973,8 @@ export function ProviderForm({
                   disabled={isPending}
                 />
                 <p className="text-xs text-muted-foreground">
-                  {t("sections.proxy.url.formats")} <code className="bg-muted px-1 rounded">http://</code>、
+                  {t("sections.proxy.url.formats")}{" "}
+                  <code className="bg-muted px-1 rounded">http://</code>、
                   <code className="bg-muted px-1 rounded">https://</code>、
                   <code className="bg-muted px-1 rounded">socks4://</code>、
                   <code className="bg-muted px-1 rounded">socks5://</code>
@@ -904,8 +985,12 @@ export function ProviderForm({
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <Label htmlFor={isEdit ? "edit-proxy-fallback" : "proxy-fallback"}>{t("sections.proxy.fallback.label")}</Label>
-                    <p className="text-xs text-muted-foreground">{t("sections.proxy.fallback.desc")}</p>
+                    <Label htmlFor={isEdit ? "edit-proxy-fallback" : "proxy-fallback"}>
+                      {t("sections.proxy.fallback.label")}
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      {t("sections.proxy.fallback.desc")}
+                    </p>
                   </div>
                   <Switch
                     id={isEdit ? "edit-proxy-fallback" : "proxy-fallback"}
@@ -953,19 +1038,25 @@ export function ProviderForm({
                 </div>
                 <span className="text-xs text-muted-foreground">
                   {codexInstructionsStrategy === "auto" && t("sections.codexStrategy.summary.auto")}
-                  {codexInstructionsStrategy === "force_official" && t("sections.codexStrategy.summary.force")}
-                  {codexInstructionsStrategy === "keep_original" && t("sections.codexStrategy.summary.keep")}
+                  {codexInstructionsStrategy === "force_official" &&
+                    t("sections.codexStrategy.summary.force")}
+                  {codexInstructionsStrategy === "keep_original" &&
+                    t("sections.codexStrategy.summary.keep")}
                 </span>
               </button>
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-4 pb-4">
               <div className="space-y-4">
                 <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">{t("sections.codexStrategy.desc")}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("sections.codexStrategy.desc")}
+                  </p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor={isEdit ? "edit-codex-strategy" : "codex-strategy"}>{t("sections.codexStrategy.select.label")}</Label>
+                  <Label htmlFor={isEdit ? "edit-codex-strategy" : "codex-strategy"}>
+                    {t("sections.codexStrategy.select.label")}
+                  </Label>
                   <Select
                     value={codexInstructionsStrategy}
                     onValueChange={(value) =>
@@ -979,25 +1070,39 @@ export function ProviderForm({
                     <SelectContent>
                       <SelectItem value="auto">
                         <div className="space-y-1">
-                          <div className="font-medium">{t("sections.codexStrategy.select.auto.label")}</div>
-                          <div className="text-xs text-muted-foreground max-w-xs">{t("sections.codexStrategy.select.auto.desc")}</div>
+                          <div className="font-medium">
+                            {t("sections.codexStrategy.select.auto.label")}
+                          </div>
+                          <div className="text-xs text-muted-foreground max-w-xs">
+                            {t("sections.codexStrategy.select.auto.desc")}
+                          </div>
                         </div>
                       </SelectItem>
                       <SelectItem value="force_official">
                         <div className="space-y-1">
-                          <div className="font-medium">{t("sections.codexStrategy.select.force.label")}</div>
-                          <div className="text-xs text-muted-foreground max-w-xs">{t("sections.codexStrategy.select.force.desc")}</div>
+                          <div className="font-medium">
+                            {t("sections.codexStrategy.select.force.label")}
+                          </div>
+                          <div className="text-xs text-muted-foreground max-w-xs">
+                            {t("sections.codexStrategy.select.force.desc")}
+                          </div>
                         </div>
                       </SelectItem>
                       <SelectItem value="keep_original">
                         <div className="space-y-1">
-                          <div className="font-medium">{t("sections.codexStrategy.select.keep.label")}</div>
-                          <div className="text-xs text-muted-foreground max-w-xs">{t("sections.codexStrategy.select.keep.desc")}</div>
+                          <div className="font-medium">
+                            {t("sections.codexStrategy.select.keep.label")}
+                          </div>
+                          <div className="text-xs text-muted-foreground max-w-xs">
+                            {t("sections.codexStrategy.select.keep.desc")}
+                          </div>
                         </div>
                       </SelectItem>
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">{t("sections.codexStrategy.hint")}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("sections.codexStrategy.hint")}
+                  </p>
                 </div>
               </div>
             </CollapsibleContent>
