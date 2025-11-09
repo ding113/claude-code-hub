@@ -382,7 +382,8 @@ export function ProviderForm({
 
         <div className="space-y-2">
           <Label htmlFor={isEdit ? "edit-key" : "key"}>
-            {t("key.label")}{isEdit ? t("key.leaveEmpty") : ""}
+            {t("key.label")}
+            {isEdit ? t("key.leaveEmpty") : ""}
           </Label>
           <Input
             id={isEdit ? "edit-key" : "key"}
@@ -394,12 +395,16 @@ export function ProviderForm({
             required={!isEdit}
           />
           {isEdit && provider ? (
-            <div className="text-xs text-muted-foreground">{t("key.currentKey", { key: provider.maskedKey })}</div>
+            <div className="text-xs text-muted-foreground">
+              {t("key.currentKey", { key: provider.maskedKey })}
+            </div>
           ) : null}
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor={isEdit ? "edit-website-url" : "website-url"}>{t("websiteUrl.label")}</Label>
+          <Label htmlFor={isEdit ? "edit-website-url" : "website-url"}>
+            {t("websiteUrl.label")}
+          </Label>
           <Input
             id={isEdit ? "edit-website-url" : "website-url"}
             type="url"
@@ -452,9 +457,16 @@ export function ProviderForm({
               <span className="text-xs text-muted-foreground">
                 {(() => {
                   const parts = [];
-                  if (allowedModels.length > 0) parts.push(t("sections.routing.summary.models", { count: allowedModels.length }));
+                  if (allowedModels.length > 0)
+                    parts.push(
+                      t("sections.routing.summary.models", { count: allowedModels.length })
+                    );
                   if (Object.keys(modelRedirects).length > 0)
-                    parts.push(t("sections.routing.summary.redirects", { count: Object.keys(modelRedirects).length }));
+                    parts.push(
+                      t("sections.routing.summary.redirects", {
+                        count: Object.keys(modelRedirects).length,
+                      })
+                    );
                   return parts.length > 0 ? parts.join(", ") : t("sections.routing.summary.none");
                 })()}
               </span>

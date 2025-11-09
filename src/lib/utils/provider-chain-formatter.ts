@@ -46,10 +46,7 @@ function isActualRequest(item: ProviderChainItem): boolean {
 /**
  * 辅助函数：翻译熔断状态
  */
-function translateCircuitState(
-  state: string | undefined,
-  t: (key: string) => string
-): string {
+function translateCircuitState(state: string | undefined, t: (key: string) => string): string {
   switch (state) {
     case "closed":
       return t("circuit.closed");
@@ -65,10 +62,7 @@ function translateCircuitState(
 /**
  * 辅助函数：获取错误码含义
  */
-function getErrorCodeMeaning(
-  code: string,
-  t: (key: string) => string
-): string | null {
+function getErrorCodeMeaning(code: string, t: (key: string) => string): string | null {
   const errorKey = `errors.${code}`;
   // 尝试获取翻译，如果不存在则返回 null
   try {
@@ -155,9 +149,10 @@ export function formatProviderDescription(
   // === 部分1: 首次选择逻辑 ===
   if (first.reason === "session_reuse" && ctx) {
     desc += t("description.sessionReuse") + "\n\n";
-    desc += t("description.sessionId", {
-      id: ctx.sessionId?.slice(-6) || t("description.unknown"),
-    }) + "\n";
+    desc +=
+      t("description.sessionId", {
+        id: ctx.sessionId?.slice(-6) || t("description.unknown"),
+      }) + "\n";
     desc += t("description.reuseProvider", { provider: first.name }) + "\n";
   } else if (first.reason === "initial_selection" && ctx) {
     desc += t("description.initialSelection", { provider: first.name }) + "\n\n";
@@ -259,11 +254,12 @@ export function formatProviderTimeline(
       timeline += t("timeline.sessionReuseTitle") + "\n\n";
       timeline += t("timeline.sessionId", { id: ctx.sessionId || t("timeline.unknown") }) + "\n";
       timeline += t("timeline.reuseProvider", { provider: item.name }) + "\n";
-      timeline += t("timeline.providerConfig", {
-        priority: item.priority ?? 0,
-        weight: item.weight ?? 0,
-        cost: item.costMultiplier ?? 1,
-      }) + "\n";
+      timeline +=
+        t("timeline.providerConfig", {
+          priority: item.priority ?? 0,
+          weight: item.weight ?? 0,
+          cost: item.costMultiplier ?? 1,
+        }) + "\n";
       timeline += t("timeline.sessionCache") + "\n";
       timeline += "\n" + t("timeline.waiting");
       continue;
@@ -276,16 +272,18 @@ export function formatProviderTimeline(
       // 系统状态
       timeline += t("timeline.systemStatus") + ":\n";
       timeline += t("timeline.totalProviders", { count: ctx.totalProviders }) + "\n";
-      timeline += t("timeline.enabledProviders", {
-        count: ctx.enabledProviders,
-        type: ctx.targetType,
-      }) + "\n";
+      timeline +=
+        t("timeline.enabledProviders", {
+          count: ctx.enabledProviders,
+          type: ctx.targetType,
+        }) + "\n";
 
       if (ctx.userGroup) {
-        timeline += t("timeline.userGroup", {
-          group: ctx.userGroup,
-          count: ctx.afterGroupFilter ?? 0,
-        }) + "\n";
+        timeline +=
+          t("timeline.userGroup", {
+            group: ctx.userGroup,
+            count: ctx.afterGroupFilter ?? 0,
+          }) + "\n";
       }
 
       timeline += t("timeline.healthCheck", { count: ctx.afterHealthCheck }) + "\n";
@@ -301,17 +299,21 @@ export function formatProviderTimeline(
 
       // 优先级候选
       if (ctx.candidatesAtPriority && ctx.candidatesAtPriority.length > 0) {
-        timeline += "\n" + t("timeline.priorityCandidates", {
-          priority: ctx.selectedPriority,
-          count: ctx.candidatesAtPriority.length,
-        }) + ":\n";
+        timeline +=
+          "\n" +
+          t("timeline.priorityCandidates", {
+            priority: ctx.selectedPriority,
+            count: ctx.candidatesAtPriority.length,
+          }) +
+          ":\n";
         for (const c of ctx.candidatesAtPriority) {
-          timeline += t("timeline.candidateInfo", {
-            name: c.name,
-            weight: c.weight,
-            cost: c.costMultiplier,
-            probability: c.probability || "",
-          }) + "\n";
+          timeline +=
+            t("timeline.candidateInfo", {
+              name: c.name,
+              weight: c.weight,
+              cost: c.costMultiplier,
+              probability: c.probability || "",
+            }) + "\n";
         }
       }
 
@@ -340,13 +342,15 @@ export function formatProviderTimeline(
         // 熔断状态
         if (item.circuitFailureCount !== undefined && item.circuitFailureThreshold) {
           timeline += "\n" + t("timeline.circuitStatus") + ":\n";
-          timeline += t("timeline.circuitCurrent", {
-            state: translateCircuitState(item.circuitState, t),
-          }) + "\n";
-          timeline += t("timeline.failureCount", {
-            current: item.circuitFailureCount,
-            threshold: item.circuitFailureThreshold,
-          }) + "\n";
+          timeline +=
+            t("timeline.circuitCurrent", {
+              state: translateCircuitState(item.circuitState, t),
+            }) + "\n";
+          timeline +=
+            t("timeline.failureCount", {
+              current: item.circuitFailureCount,
+              threshold: item.circuitFailureThreshold,
+            }) + "\n";
           const remaining = item.circuitFailureThreshold - item.circuitFailureCount;
           if (remaining > 0) {
             timeline += t("timeline.circuitRemaining", { remaining }) + "\n";
@@ -394,9 +398,10 @@ export function formatProviderTimeline(
         if (s.errorCode) {
           timeline += "\n" + t("timeline.errorDetails") + ":\n";
           timeline += t("timeline.errorCode", { code: s.errorCode }) + "\n";
-          timeline += t("timeline.errorSyscall", {
-            syscall: s.errorSyscall || t("timeline.unknown"),
-          }) + "\n";
+          timeline +=
+            t("timeline.errorSyscall", {
+              syscall: s.errorSyscall || t("timeline.unknown"),
+            }) + "\n";
 
           const meaning = getErrorCodeMeaning(s.errorCode, t);
           if (meaning) {
@@ -408,7 +413,8 @@ export function formatProviderTimeline(
       } else {
         // 降级
         timeline += t("timeline.provider", { provider: item.name }) + "\n";
-        timeline += t("timeline.error", { error: item.errorMessage || t("timeline.unknown") }) + "\n";
+        timeline +=
+          t("timeline.error", { error: item.errorMessage || t("timeline.unknown") }) + "\n";
         timeline += "\n" + t("timeline.systemErrorNote");
       }
 
@@ -465,9 +471,10 @@ export function formatProviderTimeline(
       // 计算请求耗时
       if (i > 0 && item.timestamp && chain[i - 1]?.timestamp) {
         const duration = item.timestamp - (chain[i - 1]?.timestamp || 0);
-        timeline += t("timeline.requestDurationSeconds", {
-          duration: (duration / 1000).toFixed(2),
-        }) + "\n";
+        timeline +=
+          t("timeline.requestDurationSeconds", {
+            duration: (duration / 1000).toFixed(2),
+          }) + "\n";
       }
 
       timeline += "\n" + t("timeline.completed");
@@ -480,13 +487,16 @@ export function formatProviderTimeline(
       timeline += t("timeline.provider", { provider: item.name }) + "\n";
 
       if (ctx?.concurrentLimit) {
-        timeline += t("timeline.concurrentLimitInfo", {
-          current: ctx.currentConcurrent ?? 0,
-          limit: ctx.concurrentLimit,
-        }) + "\n";
+        timeline +=
+          t("timeline.concurrentLimitInfo", {
+            current: ctx.currentConcurrent ?? 0,
+            limit: ctx.concurrentLimit,
+          }) + "\n";
       }
 
-      timeline += t("timeline.error", { error: item.errorMessage || t("timeline.concurrentLimit") });
+      timeline += t("timeline.error", {
+        error: item.errorMessage || t("timeline.concurrentLimit"),
+      });
       continue;
     }
 
