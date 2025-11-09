@@ -161,24 +161,28 @@ export enum ErrorCategory {
   PROVIDER_ERROR, // 供应商问题（所有 4xx/5xx HTTP 错误）→ 计入熔断器 + 直接切换
   SYSTEM_ERROR, // 系统/网络问题（fetch 网络异常）→ 不计入熔断器 + 先重试1次
   CLIENT_ABORT, // 客户端主动中断 → 不计入熔断器 + 不重试 + 直接返回
-  NON_RETRYABLE_CLIENT_ERROR, // 客户端输入错误（Prompt 超限、内容过滤、PDF 限制、Thinking 格式）→ 不计入熔断器 + 不重试 + 直接返回
+  NON_RETRYABLE_CLIENT_ERROR, // 客户端输入错误（Prompt 超限、内容过滤、PDF 限制、Thinking 格式、参数缺失、非法请求）→ 不计入熔断器 + 不重试 + 直接返回
 }
 
 /**
  * 预编译的不可重试客户端错误正则表达式数组
  * 用于高性能的白名单错误匹配，避免每次调用时重新编译正则
  *
- * 包含 4 类错误模式：
+ * 包含 6 类错误模式：
  * 1. Prompt 长度超限
  * 2. 内容过滤拦截
  * 3. PDF 页数限制
  * 4. Thinking 格式错误
+ * 5. 参数缺失/验证错误
+ * 6. 非法请求
  */
 const NON_RETRYABLE_ERROR_PATTERNS = [
   /prompt is too long: \d+ tokens > \d+ maximum/i,
   /Request blocked by content filter|permission_error.*content filter/i,
   /A maximum of \d+ PDF pages may be provided/i,
   /Expected.*thinking.*but found|thinking.*must start with a thinking block/i,
+  /Field required|required field|missing required/i,
+  /非法请求|illegal request|invalid request/i,
 ];
 
 /**
@@ -187,17 +191,27 @@ const NON_RETRYABLE_ERROR_PATTERNS = [
  * 采用白名单模式，检测明确不应重试的客户端错误（如输入超限、内容过滤等），
  * 这些错误即使重试也不会成功，应直接返回给客户端，且不计入熔断器。
  *
- * 检测的 4 类错误：
+ * 检测的 6 类错误：
  * 1. Prompt 长度超限：`prompt is too long: {tokens} tokens > {max} maximum`
  * 2. 内容过滤拦截：`Request blocked by content filter` 或 `permission_error.*content filter`
  * 3. PDF 页数限制：`A maximum of {n} PDF pages may be provided`
  * 4. Thinking 格式错误：`Expected.*thinking.*but found` 或 `thinking.*must start with a thinking block`
+ * 5. 参数缺失/验证错误：`Field required`、`required field`、`missing required`
+ * 6. 非法请求：`非法请求`、`illegal request`、`invalid request`
  *
  * @param error - 错误对象
  * @returns 是否为不可重试的客户端错误
  *
  * @example
  * isNonRetryableClientError(new ProxyError('prompt is too long: 207406 tokens > 200000 maximum', 400))
+ * // => true
+ *
+ * @example
+ * isNonRetryableClientError(new ProxyError('max_tokens: Field required', 400))
+ * // => true
+ *
+ * @example
+ * isNonRetryableClientError(new ProxyError('非法请求', 400))
  * // => true
  *
  * @example
@@ -271,7 +285,7 @@ export function isClientAbortError(error: Error): boolean {
  *    → 不应重试（客户端已经不想要结果了）
  *    → 应立即返回错误
  *
- * 2. 不可重试的客户端输入错误（Prompt 超限、内容过滤、PDF 限制、Thinking 格式）
+ * 2. 不可重试的客户端输入错误（Prompt 超限、内容过滤、PDF 限制、Thinking 格式、参数缺失、非法请求）
  *    → 客户端输入违反了 API 的硬性限制或安全策略
  *    → 不应计入熔断器（不是供应商故障）
  *    → 不应重试（重试也会失败）
