@@ -123,7 +123,7 @@ export function UsageLogsTable({
                                 <ProviderChainPopover
                                   chain={log.providerChain}
                                   finalProvider={
-                                    log.providerChain[log.providerChain.length - 1].name || log.providerName || "未知"
+                                    log.providerChain[log.providerChain.length - 1].name || log.providerName || tChain("circuit.unknown")
                                   }
                                 />
                               </div>

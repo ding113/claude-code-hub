@@ -31,10 +31,6 @@ interface ErrorDetailsDialogProps {
   messagesCount?: number | null; // Messages 数量
 }
 
-const blockedByLabels: Record<string, string> = {
-  sensitive_word: '敏感词拦截',
-};
-
 export function ErrorDetailsDialog({
   statusCode,
   errorMessage,
