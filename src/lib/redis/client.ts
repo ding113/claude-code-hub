@@ -3,6 +3,56 @@ import { logger } from "@/lib/logger";
 
 let redisClient: Redis | null = null;
 
+/**
+ * Mask password in a URL for safe logging.
+ * Example: rediss://user:pass@host:6379 -> rediss://user:***@host:6379
+ */
+function maskRedisUrl(urlStr: string): string {
+  try {
+    const u = new URL(urlStr);
+    if (u.password) u.password = "***";
+    return u.toString();
+  } catch {
+    return urlStr.replace(/:(?:[^:@]+)@/, ":***@");
+  }
+}
+
+/**
+ * Build ioredis connection options with protocol-based TLS detection.
+ * - When `rediss://` is used, explicitly enable TLS via `tls: {}`
+ * - When `redis://` is used, keep plaintext TCP (no TLS option)
+ */
+export function buildRedisOptionsForUrl(redisUrl: string) {
+  const isTLS = (() => {
+    try {
+      const parsed = new URL(redisUrl);
+      return parsed.protocol === "rediss:";
+    } catch {
+      // fallback when URL cannot be parsed; conservative detection
+      return redisUrl.startsWith("rediss://");
+    }
+  })();
+
+  const baseOptions = {
+    enableOfflineQueue: false, // 快速失败
+    maxRetriesPerRequest: 3,
+    retryStrategy(times: number) {
+      if (times > 5) {
+        logger.error("[Redis] Max retries reached, giving up");
+        return null; // 停止重试，降级
+      }
+      const delay = Math.min(times * 200, 2000);
+      logger.warn(`[Redis] Retry ${times}/5 after ${delay}ms`);
+      return delay;
+    },
+  } as const;
+
+  // Explicit TLS config for Upstash and other managed Redis providers
+  const tlsOptions = isTLS ? { tls: {} as Record<string, unknown> } : {};
+
+  return { isTLS, options: { ...baseOptions, ...tlsOptions } };
+}
+
 export function getRedisClient(): Redis | null {
   // Skip Redis connection during CI/build phase (avoid connection attempts)
   if (process.env.CI === "true" || process.env.NEXT_PHASE === "phase-production-build") {
@@ -60,11 +110,22 @@ export function getRedisClient(): Redis | null {
 
     // 4. 保持原始的事件监听器
     redisClient.on("connect", () => {
-      logger.info("[Redis] Connected successfully");
+      logger.info("[Redis] Connected successfully", {
+        protocol: proto || (options as unknown as { tls?: object }).tls ? "rediss" : "redis",
+        host,
+        port,
+        tlsEnabled: Boolean((options as unknown as { tls?: object }).tls),
+      });
     });
 
     redisClient.on("error", (error) => {
-      logger.error("[Redis] Connection error:", error);
+      logger.error("[Redis] Connection error", {
+        error: error instanceof Error ? error.message : String(error),
+        protocol: proto || (isTLS ? "rediss" : "redis"),
+        host,
+        port,
+        tlsEnabled: isTLS,
+      });
     });
 
     redisClient.on("close", () => {

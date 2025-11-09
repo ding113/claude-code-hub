@@ -398,7 +398,11 @@ DSN="postgres://..."               # PostgreSQL 连接字符串
 AUTO_MIGRATE=true                  # 启动时自动执行迁移
 
 # Redis 配置
-REDIS_URL=redis://localhost:6379   # Redis 连接地址
+# - TCP：使用 redis://
+# - TLS（Upstash 等云服务）：使用 rediss://，客户端会显式启用 tls: {}
+REDIS_URL=redis://localhost:6379   # Redis 连接地址（本地/容器）
+# 例：Upstash TLS 连接（请替换密码和主机）
+# REDIS_URL=rediss://default:your_password@your-subdomain.upstash.io:6379
 ENABLE_RATE_LIMIT=true             # 启用限流功能
 
 # Session 配置

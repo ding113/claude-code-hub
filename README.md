@@ -6,545 +6,219 @@
 
 # Claude Code Hub
 
-**🚀 智能 AI API 代理中转服务平台**
-
-专为需要统一管理多个 AI 服务提供商的团队和企业设计
+**🚀 智能 AI API 代理中转服务平台｜面向团队的多供应商统一接入、弹性调度与精细化运营中心**
 
 [![Container Image](https://img.shields.io/badge/ghcr.io-ding113%2Fclaude--code--hub-181717?logo=github)](https://github.com/ding113/claude-code-hub/pkgs/container/claude-code-hub)
 [![License](https://img.shields.io/github/license/ding113/claude-code-hub)](LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/ding113/claude-code-hub)](https://github.com/ding113/claude-code-hub/stargazers)
-[![Telegram](https://img.shields.io/badge/Telegram-@ygxz__group-26A5E4?logo=telegram)](https://t.me/ygxz_group)
+[![Telegram Group](https://img.shields.io/badge/Telegram-交流群-blue?logo=telegram)](https://t.me/ygxz_group)
 
-[功能特性](#-功能特性) •
-[快速部署](#-快速部署) •
-[使用指南](#-使用指南) •
-[常见问题](#-常见问题)
+Claude Code Hub 通过 Next.js 15 + Hono + PostgreSQL + Redis 组合，实现 Claude/OpenAI 兼容 API 代理、智能负载均衡、实时监控、价格管理与自动化文档，帮助团队安全、可观测地管理多家 AI 服务商。
+
+💬 **加入讨论**：有部署、功能或技术问题？欢迎加入 [Telegram 交流群](https://t.me/ygxz_group) 与社区一起讨论！
 
 </div>
-
-> **💡 致谢**
-> 本项目基于 [zsio/claude-code-hub](https://github.com/zsio/claude-code-hub) 二次开发而来。
-> 感谢原作者 [@zsio](https://github.com/zsio) 的开源贡献!
-
-> **💬 加入交流群**
->
-> 欢迎加入 Telegram 交流群讨论项目使用、功能建议和技术问题：
->
-> <div align="center">
->
-> **📱 [点击加入 @ygxz_group](https://t.me/ygxz_group)**
->
-> </div>
 
 ---
 
-## ✨ 功能特性
+## ✨ 核心功能 Highlights
 
-### 核心能力
+- 🤖 **智能负载均衡**：权重 + 优先级 + 分组调度，内置熔断保护与最多 3 次故障转移，保障请求稳定。
+- 🧩 **多供应商管理**：同时接入 Claude、Codex、Gemini CLI、OpenAI Compatible，自定义模型重定向与 HTTP/HTTPS/SOCKS 代理。
+- 🛡️ **限流与并发控制**：RPM、金额（5 小时/周/月）、并发 Session 多维限制，Redis Lua 脚本确保原子性与 Fail-Open 降级。
+- 📘 **自动化 OpenAPI 文档**：39 个 REST 端点由 Server Actions 自动生成 OpenAPI 3.1.0，Swagger + Scalar UI 双界面即刻试用。
+- 📊 **实时监控与统计**：仪表盘、活跃 Session、消耗排行榜、决策链记录、代理状态追踪，秒级掌控运行态势。
+- 💰 **价格表管理**：分页查询 + SQL 优化，支持搜索防抖、LiteLLM 同步，千级模型也能快速检索。
+- 🔁 **Session 管理**：5 分钟上下文缓存，记录决策链，避免频繁切换供应商并保留全链路审计。
+- 🔄 **OpenAI 兼容层**：支持 `/v1/chat/completions`，自动格式转换、工具调用、reasoning 字段与 Codex CLI 指令注入。
 
-- **🔄 统一代理** - 一个 API 接口管理所有 AI 服务提供商（OpenAI、Claude、Gemini 等）
-- **⚖️ 智能负载** - 基于权重的智能分发 + 自动故障转移 + 会话保持
-- **👥 多租户** - 完整的用户体系，细粒度权限控制和配额管理
-- **🔑 密钥管理** - API Key 生成、轮换、过期管理
-- **📊 实时监控** - 请求统计、成本追踪、性能分析、可视化报表
-- **🎨 现代 UI** - 基于 Shadcn UI 的响应式管理面板，深色模式
-- **🚀 生产就绪** - Docker 一键部署、自动数据库迁移、健康检查
+## ⚡️ 快速开始 Quick Start
 
-本项目基于 [zsio/claude-code-hub](https://github.com/zsio/claude-code-hub) 进行了大量增强和优化：
+### 环境要求
 
-- **📋 详细日志记录** - 完整的请求日志，包含 Token 使用、成本计算、缓存命中等详细信息
-- **🔒 并发控制** - 支持为用户和供应商设置并发 Session 限制
-- **⏱️ 多时段限流** - 5小时/周/月 三个时间窗口的金额限制，更灵活的配额管理
-- **📈 统计排行榜** - 日统计、月统计排行榜，快速了解用户和供应商使用情况
-- **🎚️ 优先级路由** - 支持多供应商优先级和权重设置，精细化流量分配
-- **🔗 决策链追踪** - 完整的供应商调用链记录，支持错误切换决策链显示
-- **🛡️ 熔断保护** - 供应商出错时自动临时熔断，避免重复调用失败的服务
-- **💰 价格同步** - 一键拉取 LiteLLM 模型价格表，支持所有模型类型（Claude、OpenAI、Codex 等）
-- **🤖 OpenAI 兼容** - 支持 Codex CLI 等 OpenAI 格式的 AI 编程工具，包括模型重定向、价格管理
-- **💵 货币符号配置** - 可选前端展示货币符号，配合供应商成本倍率清晰掌握调用成本
-- **🎯 模型白名单** - 为特定供应商配置可调用的模型白名单，精细化权限控制
-- **🧹 日志清理** - 自动清理历史日志，优化数据库性能
-- **🛡️ 敏感词拦截** - 内置敏感词过滤功能，保障服务安全合规
-- **📝 Session 详情** - 记录 UA、请求体和响应体（可选，默认关闭），便于排查供应商模型性能问题
-- **🔐 密钥权限控制** - 可选特定密钥不允许登录 Web UI，为分享划清权限边界
-- **📖 公开使用文档** - 使用文档重写并支持免登录访问，便于用户快速上手
-- **📚 自动化 API 文档** - OpenAPI 3.1.0 规范 + Swagger UI + Scalar UI 双界面，支持 39 个 REST API 端点
-- **📄 价格表分页** - 支持大规模模型数据查询，搜索防抖，SQL 层面性能优化
+- Docker 与 Docker Compose（推荐使用最新版本）
+- 可选（本地开发）：Node.js ≥ 20，pnpm ≥ 9.15
 
-### 界面预览
+### 三步启动（Docker Compose）
 
-<div align="center">
-
-![首页](/public/readme/首页.png)
-
-_首页面板 - 系统概览与快速访问_
-
-![供应商管理](/public/readme/供应商管理.png)
-
-_供应商管理 - 配置上游服务、权重分配、流量限制_
-
-![排行榜](/public/readme/排行榜.png)
-
-_统计排行榜 - 用户和供应商使用情况一目了然_
-
-![日志](/public/readme/日志.png)
-
-_详细日志记录 - Token 使用、成本计算、调用链追踪_
-
-</div>
-
-## 🚀 快速部署
-
-### 前置要求
-
-- Docker 和 Docker Compose
-- ⏱️ 仅需 **2 分钟**即可启动完整服务
-
-### 一键部署
-
-**1. 配置环境变量**
-
-复制 `.env.example` 为 `.env` 并修改必要配置：
-
-```bash
-cp .env.example .env
-```
-
-**⚠️ 必须修改 `ADMIN_TOKEN` 为强密码！**
-
-查看完整环境变量说明：[.env.example](.env.example)
-
-**2. 启动服务**
-
-```bash
-# 启动所有服务（后台运行）
-docker compose up -d
-
-# 查看启动日志
-docker compose logs -f
-```
-
-**3. 验证部署**
-
-```bash
-docker compose ps
-```
-
-确保三个容器都是 `healthy` 或 `running` 状态：
-
-- `claude-code-hub-db` (PostgreSQL)
-- `claude-code-hub-redis` (Redis)
-- `claude-code-hub-app` (应用服务)
-
-### 配置文件说明
-
-- **[docker-compose.yaml](docker-compose.yaml)** - Docker Compose 配置文件
-- **[.env.example](.env.example)** - 环境变量配置模板
-
-### 常用管理命令
-
-```bash
-# 查看日志
-docker compose logs -f          # 所有服务
-docker compose logs -f app      # 仅应用
-
-# 重启服务
-docker compose restart app      # 重启应用
-
-# 升级到最新版本
-docker compose pull && docker compose up -d
-
-# 备份数据（数据持久化在宿主机 ./data/ 目录）
-# - ./data/postgres 映射到容器 /data (PostgreSQL 数据目录: /data/pgdata)
-# - ./data/redis 映射到容器 /data (Redis AOF 持久化文件)
-tar -czf backup_$(date +%Y%m%d_%H%M%S).tar.gz ./data/
-```
-
-<details>
-<summary><b>更多管理命令</b></summary>
-
-**服务管理**：
-
-```bash
-docker compose stop             # 停止服务
-docker compose down             # 停止并删除容器
-docker compose restart redis    # 重启 Redis
-```
-
-**数据库操作**：
-
-```bash
-# SQL 备份
-docker exec claude-code-hub-db pg_dump -U postgres claude_code_hub > backup.sql
-
-# 恢复数据
-docker exec -i claude-code-hub-db psql -U postgres claude_code_hub < backup.sql
-```
-
-**Redis 操作**：
-
-```bash
-docker compose exec redis redis-cli ping           # 检查连接
-docker compose exec redis redis-cli info stats     # 查看统计
-docker compose exec redis redis-cli --scan         # 查看所有 key
-docker compose exec redis redis-cli FLUSHALL       # ⚠️ 清空数据
-```
-
-**完全重置**（⚠️ 会删除所有数据）：
-
-```bash
-docker compose down && rm -rf ./data/ && docker compose up -d
-```
-
-</details>
-
-## 📖 使用指南
-
-### 1️⃣ 初始设置
-
-首次访问 http://localhost:23000
-使用 `ADMIN_TOKEN` 登录管理后台。
-
-### 2️⃣ 添加 AI 服务提供商
-
-进入 **设置 → 供应商管理**，点击"添加供应商"：
-
-> **📌 重要说明：API 格式兼容性**
->
-> 本服务**仅支持 Claude Code 格式**的 API 接口（如智谱 GLM、Kimi、Packy 等）。如果您需要使用其他格式的 AI 服务，比如 Gemini、OpenAI、 Ollama 等格式，请先使用 `claude-code-router` 进行格式转换，然后将转换后的服务地址添加到本系统。
-
-### 3️⃣ 创建用户和密钥
-
-**添加用户**：
-
-1. 进入 **设置 → 用户管理**
-2. 点击"添加用户"
-3. 配置：
-   - 用户名称
-   - 描述信息
-   - RPM 限制（每分钟请求数）
-   - 每日额度（USD）
-
-**生成 API 密钥**：
-
-1. 选择用户，点击"生成密钥"
-2. 设置密钥名称
-3. 设置过期时间（可选）
-4. **⚠️ 复制并保存密钥**（仅显示一次）
-
-### 4️⃣ 使用代理 API
-
-用户使用生成的密钥调用服务：
-查看 `http://localhost:23000/usage-doc`
-
-### 5️⃣ 监控和统计
-
-**仪表盘**页面提供：
-
-- 📈 实时请求量趋势
-- 💰 成本统计和分析
-- 👤 用户活跃度排行
-- 🔧 供应商性能对比
-- ⚠️ 异常请求监控
-
-### 6️⃣ 配置模型价格
-
-进入 **设置 → 价格管理**，配置各模型的计费单价：
-
-- 支持按模型配置输入/输出 Token 单价（包括 Claude 和 OpenAI 格式模型）
-- 支持缓存 Token 单独定价（`cache_creation_input_tokens`、`cache_read_input_tokens`）
-- 自动计算请求成本
-- 导出成本报表
-
-**OpenAI 模型价格配置示例**：
-
-- 模型名称：`gpt-5-codex`
-- 输入价格（USD/M tokens）：`0.003`
-- 输出价格（USD/M tokens）：`0.006`
-
-### 7️⃣ API 文档和集成
-
-本系统提供完整的 REST API 接口，支持通过 HTTP 请求进行所有管理操作。
-
-**访问 API 文档**：
-
-登录后，进入 **设置 → API 文档** 或直接访问：
-
-- **Scalar UI**（推荐）：`http://localhost:23000/api/actions/scalar`
-- **Swagger UI**：`http://localhost:23000/api/actions/docs`
-- **OpenAPI JSON**：`http://localhost:23000/api/actions/openapi.json`
-
-**功能特性**：
-
-- 📋 **39 个 REST API 端点**，覆盖所有管理功能
-- 🔐 Cookie 认证保护
-- 📝 完整的请求/响应示例
-- 🧪 交互式 API 测试界面
-- 📦 自动类型验证（Zod schemas）
-
-**支持的功能模块**：
-
-- 用户管理、密钥管理、供应商管理
-- 模型价格、统计数据、使用日志
-- 敏感词管理、Session 管理、通知管理
-
-**API 调用示例**：
-
-```bash
-# 创建用户（需要先登录获取 session cookie）
-curl -X POST http://localhost:23000/api/actions/users/addUser \
-  -H "Content-Type: application/json" \
-  -H "Cookie: session=your-session-cookie" \
-  -d '{
-    "name": "Alice",
-    "rpm": 60,
-    "dailyQuota": 10
-  }'
-```
-
-**详细文档**：参见 [API 文档使用指南](docs/api-documentation.md)
-
-## 🛠️ 常见问题
-
-<details>
-<summary><b>❓ 如何重置管理员密码？</b></summary>
-
-编辑 `.env` 文件，修改 `ADMIN_TOKEN`，然后重启：
-
-```bash
-docker compose restart app
-```
-
-</details>
-
-<details>
-<summary><b>❓ 端口已被占用怎么办？</b></summary>
-
-编辑 `docker-compose.yaml`，修改端口映射：
-
-```yaml
-services:
-  app:
-    ports:
-      - "8080:23000" # 修改左侧端口为可用端口
-```
-
-</details>
-
-<details>
-<summary><b>❓ 数据库迁移失败怎么办？</b></summary>
-
-1. 检查应用日志：
+1. **克隆项目并配置环境**
 
    ```bash
-   docker compose logs app | grep -i migration
+   git clone https://github.com/ding113/claude-code-hub.git
+   cd claude-code-hub
+   cp .env.example .env
    ```
 
-2. 手动执行迁移：
+2. **修改配置文件**
+
+   编辑 `.env` 文件，**必须修改** `ADMIN_TOKEN`（后台登录令牌）：
 
    ```bash
-   docker compose exec app pnpm db:migrate
+   # 必须修改此项！
+   ADMIN_TOKEN=your-secure-token-here
+
+   # Docker Compose 默认配置（通常无需修改）
+   DSN=postgres://postgres:postgres@postgres:5432/claude_code_hub
+   REDIS_URL=redis://redis:6379
    ```
 
-3. 如果持续失败，重置数据库（⚠️ 会丢失数据）：
+3. **启动服务**
+
    ```bash
-   docker compose down && rm -rf ./data/postgres && docker compose up -d
+   docker compose up -d
    ```
 
-</details>
+   查看启动状态：
 
-<details>
-<summary><b>❓ Redis 连接失败怎么办？</b></summary>
+   ```bash
+   docker compose ps
+   docker compose logs -f app
+   ```
 
-本服务采用 **Fail Open 策略**，Redis 连接失败不会影响服务可用性。
+### 访问应用
 
-检查 Redis 状态：
+启动成功后：
 
-```bash
-docker compose ps redis
-docker compose exec redis redis-cli ping  # 应返回 PONG
+- **管理后台**：`http://localhost:23000`（使用 `.env` 中的 `ADMIN_TOKEN` 登录）
+- **API 文档（Scalar UI）**：`http://localhost:23000/api/actions/scalar`
+- **API 文档（Swagger UI）**：`http://localhost:23000/api/actions/docs`
+
+> 💡 **提示**：如需修改端口，请编辑 `docker-compose.yml` 中的 `ports` 配置。
+
+## 🖼️ 界面预览 Screenshots
+
+| 功能       | 截图                                                 | 说明                                                                              |
+| ---------- | ---------------------------------------------------- | --------------------------------------------------------------------------------- |
+| 仪表盘     | ![Dashboard](public/readme/首页.png)                 | 汇总调用量、成本、活跃 Session 与时间分布，实时洞察整体使用情况。                 |
+| 供应商管理 | ![Provider Management](public/readme/供应商管理.png) | 为每个供应商配置权重、成本系数、并发限制、代理及模型重定向，实现精细调度。        |
+| 日志与审计 | ![Logs](public/readme/日志.png)                      | 统一查询请求日志，支持时间/用户/供应商/模型筛选，查看 Token、成本与缓冲命中情况。 |
+| 排行榜     | ![Leaderboard](public/readme/排行榜.png)             | 按用户统计请求数、Token 与成本，用于费用分摊与用量治理。                          |
+
+## 🏗️ 架构说明 Architecture
+
+### 高层架构
+
+```
+客户端 / CLI / 第三方系统
+        │
+        ▼
+Next.js 15 App Router (v1 API 路由)
+        │
+Hono + Proxy Pipeline (认证 → Session 分配 → 限流 → 供应商选择 → 请求转发 → 响应处理)
+        │
+多供应商 (Claude / OpenAI / Gemini / 第三方) + PostgreSQL + Redis
 ```
 
-Redis 不可用时，限流功能会自动降级，所有请求仍然正常通过。
+- **App 层**：`src/app` 中的 dashboard、settings、api actions，提供 UI 与内部 API。
+- **Proxy 核心**：`src/app/v1/_lib/proxy-handler.ts` 串联 Auth、SessionGuard、RateLimitGuard、ProviderResolver、Forwarder、ResponseHandler。
+- **业务逻辑**：`src/lib` 存放限流、Session、熔断器、代理、price-sync；`src/repository` 封装 Drizzle ORM 查询。
+- **文档体系**：`src/app/api/actions/[...route]/route.ts` 自动注册 Action → OpenAPI 端点。
 
-更多 Redis 操作请参考[常用管理命令](#常用管理命令)部分。
+### 数据流与组件
 
-</details>
+1. **入口**：请求携带 API Key 命中 Next.js API Route → `ProxyAuthenticator` 校验身份。
+2. **上下文管理**：`SessionManager` 从 Redis 读取 5 分钟缓存，控制并发并记录决策链。
+3. **限流**：`RateLimitService` 使用 Lua 脚本原子写入 RPM/金额/并发指标，Redis 不可用则 Fail-Open 降级。
+4. **调度**：`ProviderResolver` 根据权重、优先级、熔断状态与 Session 复用策略选择最佳供应商，至多 3 次重试。
+5. **转发与兼容**：`ProxyForwarder` + `ResponseTransformer` 适配 Claude/OpenAI/Response API，支持代理与模型重定向。
+6. **监控**：日志、排行榜、价格表等 UI 通过 `repository` 查询 PostgreSQL，以小时级聚合呈现指标。
 
-<details>
-<summary><b>❓ HTTP 访问时无法登录怎么办？</b></summary>
+## 🚢 部署指南 Deployment
 
-**问题现象**：使用 HTTP 访问系统（非 localhost）时，登录页面显示 Cookie 安全警告，无法登录。
+### 🐳 Docker Compose（✨ 推荐方式，开箱即用）
 
-**原因**：默认情况下，系统启用了 Cookie 安全策略（`ENABLE_SECURE_COOKIES=true`），仅允许 HTTPS 传输 Cookie。浏览器会自动放行 localhost 的 HTTP 访问，但拒绝远程 HTTP。
+Docker Compose 是**首选部署方式**，自动配置数据库、Redis 和应用服务，无需手动安装依赖，适合生产环境快速部署。
 
-**解决方案**：
+1. 准备 `.env`（参考 `.env.example`）；确认 `DSN` 与 `REDIS_URL` 指向 Compose 内的服务。
+2. 启动：
+   ```bash
+   docker compose up -d
+   ```
+3. 查看日志与状态：
+   ```bash
+   docker compose logs -f app
+   docker compose ps
+   ```
+4. 升级：
+   ```bash
+   docker compose pull && docker compose up -d
+   ```
+   若需停止并清理，执行 `docker compose down`.
 
-**方案 1：使用 HTTPS 访问（推荐）**
+### 本地开发（dev 工具链）
 
-配置反向代理（如 Nginx）并启用 HTTPS，参见下方 [如何配置反向代理（Nginx + HTTPS）](#-如何配置反向代理nginx--https) 部分。
+1. 进入 `dev/` 目录：`cd dev`.
+2. `make dev` 一键启动 PostgreSQL + Redis + pnpm dev。
+3. 常用命令：
+   - `make db`：仅启动数据库与 Redis
+   - `make logs` / `make logs-app`：快速查看服务日志
+   - `make clean` / `make reset`：清理或重置环境
+4. 推荐使用 `make migrate`、`make db-shell` 处理数据库变更。
 
-**方案 2：允许 HTTP Cookie（降低安全性）**
+### 手动部署（pnpm build + start）
 
-编辑 `.env` 文件，添加或修改：
+1. 安装依赖并构建：
+   ```bash
+   pnpm install
+   pnpm build         # 自动复制 VERSION
+   ```
+2. 设置环境变量（建议通过系统服务或 PM2 注入），确保数据库、Redis 可访问。
+3. 启动生产服务器：
+   ```bash
+   pnpm start
+   ```
+4. 注意：首次运行可开启 `AUTO_MIGRATE=true` 自动迁移，生产环境完成后建议改为 `false` 并使用 Drizzle CLI 手动管理。
 
-```bash
-ENABLE_SECURE_COOKIES=false
-```
+## ⚙️ 配置说明 Configuration
 
-重启应用：
+| 变量                                       | 默认值                   | 说明与建议                                                                   |
+| ------------------------------------------ | ------------------------ | ---------------------------------------------------------------------------- |
+| `ADMIN_TOKEN`                              | `change-me`              | 后台登录令牌，部署前必须修改。                                               |
+| `DSN`                                      | -                        | PostgreSQL 连接串，如 `postgres://user:pass@host:5432/db`.                   |
+| `AUTO_MIGRATE`                             | `true`                   | 启动时自动执行 Drizzle 迁移；生产环境可关闭以人工控制。                      |
+| `REDIS_URL`                                | `redis://localhost:6379` | Redis 地址，支持 `rediss://` 用于 TLS。                                      |
+| `ENABLE_RATE_LIMIT`                        | `true`                   | 控制多维限流开关；Fail-Open 策略在 Redis 不可用时自动降级。                  |
+| `SESSION_TTL`                              | `300`                    | Session 缓存时间（秒），影响供应商复用策略。                                 |
+| `ENABLE_SECURE_COOKIES`                    | `true`                   | 仅 HTTPS 场景能设置 Secure Cookie；HTTP 访问（非 localhost）需改为 `false`。 |
+| `ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS` | `false`                  | 是否将网络错误计入熔断器；开启后能更激进地阻断异常线路。                     |
+| `APP_PORT`                                 | `23000`                  | 生产端口，可被容器或进程管理器覆盖。                                         |
+| `APP_URL`                                  | 空                       | 设置后 OpenAPI 文档 `servers` 将展示正确域名/端口。                          |
 
-```bash
-docker compose restart app
-```
+> 布尔变量请直接写 `true/false` 或 `1/0`，勿加引号，避免被 Zod 转换为真值。更多字段参考 `.env.example`。
 
-⚠️ **安全警告**：设置为 `false` 会允许 HTTP 传输 Cookie，仅推荐用于内网部署或测试环境。
+## ❓ FAQ
 
-</details>
+1. **数据库连接失败怎么办？**
+   - 确认 `DSN` 格式与凭据无误；Docker 场景下使用服务名（如 `postgres:5432`）。
+   - 查看 `docker compose ps` 或本地 PostgreSQL 状态，必要时通过 `make db-shell` 诊断。
 
-<details>
-<summary><b>❓ 支持哪些 AI 服务提供商？</b></summary>
+2. **Redis 离线会影响服务吗？**
+   - 平台采用 Fail-Open 策略：限流与会话统计会降级，但请求仍会继续；建议监控日志中的 Redis Error 并尽快恢复。
 
-**本服务仅支持 Claude Code 格式的 API 接口。**
+3. **熔断器持续打开如何排查？**
+   - 查看日志中的 `[CircuitBreaker]` 记录，确认是否由于 4xx/5xx 或网络错误导致。
+   - 在管理后台检查供应商健康状态，等待 30 分钟或重启应用重置状态。
 
-**直接支持**：
+4. **提示“无可用供应商”该怎么办？**
+   - 检查供应商是否启用、权重/优先级设置合理，以及是否达到并发/金额限制。
+   - 查看决策链日志，确认是否被熔断或代理失败导致。
 
-- 原生提供 Claude Code 格式接口的服务商
+5. **代理配置失败？**
+   - 确认 URL 含协议前缀（`http://`、`socks5://` 等），并使用后台“测试连接”按钮验证。
+   - 若启用降级策略（`proxy_fallback_to_direct`），请在日志中确认是否已自动切换至直连。
 
-**间接支持**（需要先部署 [claude-code-router](https://github.com/zsio/claude-code-router) 进行协议转换）：
+## 🤝 贡献指南 Contributing
 
-- 🔄 智谱 AI (GLM)、Moonshot AI (Kimi)、Packy 等
-- 🔄 阿里通义千问、百度文心一言等
-- 🔄 其他非 Claude Code 格式的 AI 服务
+欢迎通过 Issue / PR 参与开发，提交前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)，遵循双语目录、分支命名和 Conventional Commits 规则。
 
-</details>
+## 🌐 致谢 Acknowledgments
 
-<details>
-<summary><b>❓ 如何配置反向代理（Nginx + HTTPS）？</b></summary>
+项目基于 [zsio/claude-code-hub](https://github.com/zsio/claude-code-hub) 深度改进，OpenAI 兼容层参考 [router-for-me/CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)。感谢原作者及社区贡献者！
 
-Nginx 配置示例：
-
-```nginx
-server {
-    listen 443 ssl http2;
-    server_name your-domain.com;
-
-    ssl_certificate /path/to/cert.pem;
-    ssl_certificate_key /path/to/key.pem;
-
-    location / {
-        proxy_pass http://localhost:23000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
-
-配置 HTTPS 后，确保 `.env` 中 `ENABLE_SECURE_COOKIES=true`（默认值），以启用 Cookie 安全传输。
-
-</details>
-
-<details>
-<summary><b>❓ 如何使用 API 文档？</b></summary>
-
-本系统提供完整的 REST API 文档，方便第三方系统集成和自动化管理。
-
-**访问方式**：
-
-1. 登录管理后台
-2. 进入 **设置 → API 文档**
-3. 选择 Scalar UI（推荐）或 Swagger UI
-4. 在文档页面直接测试 API
-
-**认证说明**：
-
-- 所有 API 端点使用 Cookie 认证
-- 需要先通过 Web UI 登录获取 session cookie
-- 在 API 请求中包含 cookie 即可调用
-
-**支持的功能**：
-
-- 39 个 REST API 端点
-- 覆盖用户、密钥、供应商、价格、日志、统计等所有管理功能
-- 交互式测试界面，无需额外工具
-
-**详细文档**：参见 [API 文档使用指南](docs/api-documentation.md)
-
-</details>
-
-<details>
-<summary><b>❓ 价格表数据量大，加载很慢？</b></summary>
-
-系统已支持价格表分页功能（v0.2.21+），可显著提升大规模数据加载性能。
-
-**功能特性**：
-
-- 默认每页显示 50 条记录
-- 支持搜索模型名称（自动防抖，避免频繁请求）
-- 可选每页 20/50/100/200 条
-- URL 参数同步，刷新页面不丢失状态
-
-**使用方式**：
-
-1. 进入 **设置 → 价格管理**
-2. 使用顶部搜索框过滤模型
-3. 通过分页控件浏览数据
-4. 可调整每页显示数量
-
-**性能优化**：
-
-- SQL 层面分页查询，避免全表扫描
-- 搜索防抖（500ms），减少不必要的请求
-- 服务端渲染 + 客户端交互，首屏加载快
-
-</details>
-
-## 🤝 贡献
-
-欢迎提交 Issue 和 Pull Request！
-
-1. Fork 本仓库
-2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启 Pull Request
-
-## 🙏 致谢
-
-本项目的开发过程中参考和借鉴了以下优秀的开源项目：
-
-- **[zsio/claude-code-hub](https://github.com/zsio/claude-code-hub)** - 本项目的基础框架，感谢 [@zsio](https://github.com/zsio) 提供的优秀架构设计
-- **[router-for-me/CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)** - Codex CLI OpenAI 兼容层的实现参考了该项目，感谢其在 MIT 协议下的开源贡献
-
-特别感谢上述项目的作者和贡献者！
-
-## 📄 许可证
-
-本项目采用 [MIT 许可证](LICENSE)
-
-**关于引用和参考**：
-
-- Codex CLI 的 OpenAI 兼容层实现参考了 [router-for-me/CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) 项目（MIT 协议）
-
-## 🌟 Star History
-
-如果这个项目对你有帮助，请给它一个 ⭐
+## ⭐ Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=ding113/claude-code-hub&type=Date)](https://star-history.com/#ding113/claude-code-hub&Date)
 
-## 📞 支持与反馈
+## 📜 许可证 License
 
-<div align="center">
-
-**[🐛 报告问题](https://github.com/ding113/claude-code-hub/issues)** •
-**[💡 功能建议](https://github.com/ding113/claude-code-hub/issues/new)** •
-**[📖 查看文档](https://github.com/ding113/claude-code-hub/wiki)**
-
-Based on [zsio/claude-code-hub](https://github.com/zsio/claude-code-hub) • Modified by [ding113](https://github.com/ding113)
-
-</div>
+本项目采用 [MIT License](LICENSE)，可自由使用与二次开发，仍需遵守条款并保留致谢信息。
