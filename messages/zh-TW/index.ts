@@ -5,6 +5,7 @@ import dashboard from "./dashboard.json";
 import errors from "./errors.json";
 import forms from "./forms.json";
 import notifications from "./notifications.json";
+import providerChain from "./provider-chain.json";
 import quota from "./quota.json";
 import settings from "./settings.json";
 import ui from "./ui.json";
@@ -20,6 +21,7 @@ export default {
   errors,
   forms,
   notifications,
+  "provider-chain": providerChain,
   quota,
   settings,
   ui,
