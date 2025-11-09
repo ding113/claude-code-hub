@@ -47,5 +47,12 @@
   "RATE_LIMIT_EXCEEDED": "リクエストが多すぎます。後でもう一度お試しください",
   "RESOURCE_BUSY": "リソースは現在使用中です",
   "INVALID_STATE": "現在の状態では操作が許可されていません",
-  "CONFLICT": "操作の競合"
+  "CONFLICT": "操作の競合",
+
+  "USER_NOT_FOUND": "ユーザーが見つかりません",
+  "USER_CANNOT_MODIFY_SENSITIVE_FIELDS": "一般ユーザーはクォータ制限とプロバイダーグループを変更できません",
+  "CREATE_USER_FAILED": "ユーザーの作成に失敗しました。後でもう一度お試しください",
+  "UPDATE_USER_FAILED": "ユーザーの更新に失敗しました。後でもう一度お試しください",
+  "DELETE_USER_FAILED": "ユーザーの削除に失敗しました。後でもう一度お試しください",
+  "GET_USER_QUOTA_FAILED": "ユーザークォータ情報の取得に失敗しました"
 }

@@ -47,5 +47,12 @@
   "RATE_LIMIT_EXCEEDED": "Too many requests, please try again later",
   "RESOURCE_BUSY": "Resource is currently in use",
   "INVALID_STATE": "Operation not allowed in current state",
-  "CONFLICT": "Operation conflict"
+  "CONFLICT": "Operation conflict",
+
+  "USER_NOT_FOUND": "User not found",
+  "USER_CANNOT_MODIFY_SENSITIVE_FIELDS": "Regular users cannot modify quota limits and provider groups",
+  "CREATE_USER_FAILED": "Failed to create user, please try again later",
+  "UPDATE_USER_FAILED": "Failed to update user, please try again later",
+  "DELETE_USER_FAILED": "Failed to delete user, please try again later",
+  "GET_USER_QUOTA_FAILED": "Failed to get user quota information"
 }

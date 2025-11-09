@@ -47,5 +47,12 @@
   "RATE_LIMIT_EXCEEDED": "请求过于频繁，请稍后重试",
   "RESOURCE_BUSY": "资源正在使用中",
   "INVALID_STATE": "当前状态不允许此操作",
-  "CONFLICT": "操作冲突"
+  "CONFLICT": "操作冲突",
+
+  "USER_NOT_FOUND": "用户不存在",
+  "USER_CANNOT_MODIFY_SENSITIVE_FIELDS": "普通用户不能修改账户限额和供应商分组",
+  "CREATE_USER_FAILED": "创建用户失败，请稍后重试",
+  "UPDATE_USER_FAILED": "更新用户失败，请稍后重试",
+  "DELETE_USER_FAILED": "删除用户失败，请稍后重试",
+  "GET_USER_QUOTA_FAILED": "获取用户限额使用情况失败"
 }

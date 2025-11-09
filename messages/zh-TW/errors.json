@@ -47,5 +47,12 @@
   "RATE_LIMIT_EXCEEDED": "請求過於頻繁，請稍後重試",
   "RESOURCE_BUSY": "資源正在使用中",
   "INVALID_STATE": "當前狀態不允許此操作",
-  "CONFLICT": "操作衝突"
+  "CONFLICT": "操作衝突",
+
+  "USER_NOT_FOUND": "使用者不存在",
+  "USER_CANNOT_MODIFY_SENSITIVE_FIELDS": "普通使用者不能修改帳戶額度和供應商分組",
+  "CREATE_USER_FAILED": "創建使用者失敗，請稍後重試",
+  "UPDATE_USER_FAILED": "更新使用者失敗，請稍後重試",
+  "DELETE_USER_FAILED": "刪除使用者失敗，請稍後重試",
+  "GET_USER_QUOTA_FAILED": "獲取使用者額度使用情況失敗"
 }
