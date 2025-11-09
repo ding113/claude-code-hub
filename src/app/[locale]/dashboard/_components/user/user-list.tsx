@@ -3,6 +3,7 @@ import type { UserDisplay } from "@/types/user";
 import type { User } from "@/types/user";
 import { ListContainer, ListItem, ListItemData } from "@/components/ui/list";
 import { AddUserDialog } from "./add-user-dialog";
+import { useTranslations } from "next-intl";
 
 interface UserListProps {
   users: UserDisplay[];
@@ -12,22 +13,24 @@ interface UserListProps {
 }
 
 export function UserList({ users, activeUserId, onUserSelect, currentUser }: UserListProps) {
+  const t = useTranslations("dashboard.userList");
+
   // 转换数据格式
   const listItems: ListItemData[] = users.map((user) => ({
     id: user.id,
     title: user.name,
     subtitle: user.note,
     badge: {
-      text: `${user.keys.length} 个 Key`,
+      text: t("badge", { count: user.keys.length }),
       variant: "outline" as const,
     },
     metadata: [
       {
-        label: "活跃密钥",
+        label: t("activeKeys"),
         value: user.keys.filter((k) => k.status === "enabled").length.toString(),
       },
       {
-        label: "总密钥",
+        label: t("totalKeys"),
         value: user.keys.length.toString(),
       },
     ],
@@ -37,8 +40,8 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
     <div className="space-y-3">
       <ListContainer
         emptyState={{
-          title: "暂无用户",
-          description: "点击下方按钮创建第一个用户",
+          title: t("emptyState.title"),
+          description: t("emptyState.description"),
         }}
       >
         <div className="space-y-2">

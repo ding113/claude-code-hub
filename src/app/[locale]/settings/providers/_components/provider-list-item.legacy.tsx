@@ -15,7 +15,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Edit, Globe, Key, RotateCcw, Copy, CheckCircle } from "lucide-react";
 import type { ProviderDisplay } from "@/types/provider";
 import type { User } from "@/types/user";
-import { getProviderTypeConfig } from "@/lib/provider-type-utils";
+import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
+import { useTranslations } from "next-intl";
 import { ProviderForm } from "./forms/provider-form";
 import { Switch } from "@/components/ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -67,6 +68,7 @@ export function ProviderListItem({
   const [copied, setCopied] = useState(false);
   const [resetPending, startResetTransition] = useTransition();
   const canEdit = currentUser?.role === "admin";
+  const t = useTranslations("providers.types");
 
   const {
     enabled,
@@ -105,6 +107,9 @@ export function ProviderListItem({
   // 获取供应商类型配置
   const typeConfig = getProviderTypeConfig(item.providerType);
   const TypeIcon = typeConfig.icon;
+  const typeKey = getProviderTypeTranslationKey(item.providerType);
+  const typeLabel = t(`${typeKey}.label`);
+  const typeDescription = t(`${typeKey}.description`);
 
   // 处理手动解除熔断
   const handleResetCircuit = () => {
@@ -179,7 +184,7 @@ export function ProviderListItem({
             {/* 供应商类型图标 */}
             <span
               className={`inline-flex h-5 w-5 items-center justify-center rounded-md ${typeConfig.bgColor}`}
-              title={typeConfig.description}
+              title={typeDescription}
             >
               <TypeIcon className={`h-3 w-3 ${typeConfig.iconColor}`} />
             </span>
@@ -188,7 +193,7 @@ export function ProviderListItem({
             </h3>
             {/* 供应商类型标签 */}
             <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-normal">
-              {typeConfig.label}
+              {typeLabel}
             </Badge>
 
             {/* 熔断器状态徽章 */}

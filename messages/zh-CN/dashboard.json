@@ -423,5 +423,160 @@
       "title": "暂无 Key",
       "description": "可点击右上角 \"新增 Key\" 按钮添加密钥"
     }
+  },
+  "userList": {
+    "badge": "{count} 个 Key",
+    "activeKeys": "活跃密钥",
+    "totalKeys": "总密钥",
+    "emptyState": {
+      "title": "暂无用户",
+      "description": "点击下方按钮创建第一个用户"
+    },
+    "addUser": "新增用户"
+  },
+  "keyListHeader": {
+    "todayUsage": "今日用量",
+    "proxyStatus": {
+      "loading": "代理状态加载中",
+      "fetchFailed": "代理状态获取失败",
+      "noStatus": "暂无代理状态",
+      "activeRequests": "活跃请求",
+      "lastRequest": "最近请求",
+      "noRecord": "暂无记录",
+      "timeAgo": {
+        "justNow": "刚刚",
+        "secondsAgo": "{count}s前",
+        "minutesAgo": "{count}分钟前",
+        "hoursAgo": "{count}小时前",
+        "daysAgo": "{count}天前"
+      }
+    },
+    "addKey": "新增 Key",
+    "keyCreatedDialog": {
+      "title": "Key 创建成功",
+      "description": "你的 API Key 已成功创建。请务必复制并妥善保存，此密钥仅显示一次。",
+      "apiKeyLabel": "API Key",
+      "warningText": "请在关闭前复制并保存，关闭后将无法再次查看此密钥",
+      "closeButton": "关闭"
+    }
+  },
+  "keyLimitUsage": {
+    "loading": "加载中...",
+    "error": "获取失败",
+    "networkError": "网络错误",
+    "cost5h": "5小时消费",
+    "costWeekly": "周消费",
+    "costMonthly": "月消费",
+    "concurrentSessions": "并发 Session",
+    "noLimit": "无限额限制"
+  },
+  "addKeyForm": {
+    "title": "新增 Key",
+    "description": "为当前用户创建新的API密钥，Key值将自动生成。",
+    "submitText": "确认创建",
+    "loadingText": "创建中...",
+    "keyName": {
+      "label": "Key名称",
+      "placeholder": "请输入Key名称"
+    },
+    "expiresAt": {
+      "label": "过期时间",
+      "placeholder": "选择过期时间",
+      "description": "留空表示永不过期"
+    },
+    "canLoginWebUi": {
+      "label": "允许登录 Web UI",
+      "description": "关闭后，此 Key 仅可用于 API 调用，无法登录管理后台"
+    },
+    "limit5hUsd": {
+      "label": "5小时消费上限 (USD)",
+      "placeholder": "留空表示无限制",
+      "description": "5小时内最大消费金额"
+    },
+    "limitWeeklyUsd": {
+      "label": "周消费上限 (USD)",
+      "placeholder": "留空表示无限制",
+      "description": "每周最大消费金额"
+    },
+    "limitMonthlyUsd": {
+      "label": "月消费上限 (USD)",
+      "placeholder": "留空表示无限制",
+      "description": "每月最大消费金额"
+    },
+    "limitConcurrentSessions": {
+      "label": "并发 Session 上限",
+      "placeholder": "0 表示无限制",
+      "description": "同时运行的对话数量"
+    },
+    "errors": {
+      "userIdMissing": "用户ID不存在",
+      "createFailed": "创建失败，请稍后重试",
+      "noKeyReturned": "创建成功但未返回密钥"
+    }
+  },
+  "userForm": {
+    "title": {
+      "add": "新增用户",
+      "edit": "编辑用户"
+    },
+    "description": {
+      "add": "创建新用户，系统将自动为其生成默认密钥。",
+      "edit": "修改用户的基本信息。"
+    },
+    "submitText": {
+      "add": "确认创建",
+      "edit": "保存修改"
+    },
+    "loadingText": {
+      "add": "创建中...",
+      "edit": "保存中..."
+    },
+    "username": {
+      "label": "用户名",
+      "placeholder": "请输入用户名"
+    },
+    "note": {
+      "label": "备注",
+      "placeholder": "请输入备注（可选）",
+      "description": "用于描述用户的用途或备注信息"
+    },
+    "providerGroup": {
+      "label": "供应商分组",
+      "placeholder": "例如: premium 或 premium,economy（可选）",
+      "description": "指定用户专属的供应商分组（支持多个，逗号分隔）。系统将只从 groupTag 匹配的供应商中选择。留空=使用所有供应商"
+    },
+    "rpm": {
+      "label": "RPM限制",
+      "placeholder": "每分钟请求数限制",
+      "description": "默认值: {default}，范围: 1-10000"
+    },
+    "dailyQuota": {
+      "label": "每日额度",
+      "placeholder": "每日消费额度限制",
+      "description": "默认值: ${default}，范围: $0.01-$1000"
+    }
+  },
+  "deleteKeyConfirm": {
+    "title": "确认删除密钥",
+    "description": "您确定要删除密钥 \"{name}\" 吗？\n{maskedKey}\n此操作无法撤销，删除后所有使用此密钥的应用将无法访问。",
+    "cancel": "取消",
+    "confirm": "确认删除",
+    "confirmLoading": "删除中...",
+    "errors": {
+      "deleteFailed": "删除失败",
+      "retryError": "删除失败，请稍后重试"
+    }
+  },
+  "keyActions": {
+    "edit": "编辑",
+    "delete": "删除",
+    "editAriaLabel": "编辑密钥",
+    "deleteAriaLabel": "删除密钥"
+  },
+  "userActions": {
+    "edit": "编辑用户",
+    "delete": "删除用户",
+    "editAriaLabel": "编辑用户",
+    "deleteAriaLabel": "删除用户"
   }
 }

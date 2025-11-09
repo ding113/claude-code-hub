@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import type { ProviderDisplay } from "@/types/provider";
 import type { User } from "@/types/user";
-import { getProviderTypeConfig } from "@/lib/provider-type-utils";
+import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
 import {
   Dialog,
   DialogContent,
@@ -24,6 +24,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { useTranslations } from "next-intl";
 import { ProviderForm } from "./forms/provider-form";
 import { FormErrorBoundary } from "@/components/form-error-boundary";
 import { getUnmaskedProviderKey, resetProviderCircuit, removeProvider } from "@/actions/providers";
@@ -81,10 +82,16 @@ export function ProviderRichListItem({
   const [togglePending, startToggleTransition] = useTransition();
 
   const canEdit = currentUser?.role === "admin";
+  const tTypes = useTranslations("providers.types");
+  const tList = useTranslations("settings.providers.list");
+  const tCommon = useTranslations("settings.common");
 
   // 获取供应商类型配置
   const typeConfig = getProviderTypeConfig(provider.providerType);
   const TypeIcon = typeConfig.icon;
+  const typeKey = getProviderTypeTranslationKey(provider.providerType);
+  const typeLabel = tTypes(`${typeKey}.label`);
+  const typeDescription = tTypes(`${typeKey}.description`);
 
   // 处理编辑
   const handleEdit = () => {
@@ -113,19 +120,19 @@ export function ProviderRichListItem({
         try {
           const res = await removeProvider(provider.id);
           if (res.ok) {
-            toast.success("删除成功", {
-              description: `供应商 "${provider.name}" 已删除`,
+            toast.success(tList("deleteSuccess"), {
+              description: tList("deleteSuccessDesc", { name: provider.name }),
             });
             router.refresh();
           } else {
-            toast.error("删除失败", {
-              description: res.error || "未知错误",
+            toast.error(tList("deleteFailed"), {
+              description: res.error || tList("unknownError"),
             });
           }
         } catch (error) {
           console.error("删除供应商失败:", error);
-          toast.error("删除失败", {
-            description: "操作过程中出现异常",
+          toast.error(tList("deleteFailed"), {
+            description: tList("deleteError"),
           });
         }
       });
@@ -139,8 +146,8 @@ export function ProviderRichListItem({
     if (result.ok) {
       setUnmaskedKey(result.data.key);
     } else {
-      toast.error("获取密钥失败", {
-        description: result.error || "未知错误",
+      toast.error(tList("getKeyFailed"), {
+        description: result.error || tList("unknownError"),
       });
       setShowKeyDialog(false);
     }
@@ -152,11 +159,11 @@ export function ProviderRichListItem({
       try {
         await navigator.clipboard.writeText(unmaskedKey);
         setCopied(true);
-        toast.success("密钥已复制到剪贴板");
+        toast.success(tList("keyCopied"));
         setTimeout(() => setCopied(false), 3000);
       } catch (error) {
         console.error("复制失败:", error);
-        toast.error("复制失败");
+        toast.error(tList("copyFailed"));
       }
     }
   };
@@ -174,19 +181,19 @@ export function ProviderRichListItem({
       try {
         const res = await resetProviderCircuit(provider.id);
         if (res.ok) {
-          toast.success("熔断器已重置", {
-            description: `供应商 "${provider.name}" 的熔断状态已解除`,
+          toast.success(tList("resetCircuitSuccess"), {
+            description: tList("resetCircuitSuccessDesc", { name: provider.name }),
           });
           router.refresh();
         } else {
-          toast.error("重置熔断器失败", {
-            description: res.error || "未知错误",
+          toast.error(tList("resetCircuitFailed"), {
+            description: res.error || tList("unknownError"),
           });
         }
       } catch (error) {
         console.error("重置熔断器失败:", error);
-        toast.error("重置熔断器失败", {
-          description: "操作过程中出现异常",
+        toast.error(tList("resetCircuitFailed"), {
+          description: tList("deleteError"),
         });
       }
     });
@@ -200,19 +207,20 @@ export function ProviderRichListItem({
           is_enabled: !provider.isEnabled,
         });
         if (res.ok) {
-          toast.success(`供应商已${!provider.isEnabled ? "启用" : "禁用"}`, {
-            description: `供应商 "${provider.name}" 状态已更新`,
+          const status = !provider.isEnabled ? tList("statusEnabled") : tList("statusDisabled");
+          toast.success(tList("toggleSuccess", { status }), {
+            description: tList("toggleSuccessDesc", { name: provider.name }),
           });
           router.refresh();
         } else {
-          toast.error("状态切换失败", {
-            description: res.error || "未知错误",
+          toast.error(tList("toggleFailed"), {
+            description: res.error || tList("unknownError"),
           });
         }
       } catch (error) {
         console.error("状态切换失败:", error);
-        toast.error("状态切换失败", {
-          description: "操作过程中出现异常",
+        toast.error(tList("toggleFailed"), {
+          description: tList("deleteError"),
         });
       }
     });
@@ -268,7 +276,7 @@ export function ProviderRichListItem({
             {healthStatus && healthStatus.circuitState === "open" && (
               <Badge variant="destructive" className="flex items-center gap-1 flex-shrink-0">
                 <AlertTriangle className="h-3 w-3" />
-                熔断中
+                {tList("circuitBroken")}
               </Badge>
             )}
           </div>
@@ -287,7 +295,7 @@ export function ProviderRichListItem({
                 onClick={(e) => e.stopPropagation()}
               >
                 <Globe className="h-3 w-3" />
-                官网
+                {tList("officialWebsite")}
               </a>
             )}
 
@@ -310,23 +318,25 @@ export function ProviderRichListItem({
         {/* 右侧：指标（仅桌面端） */}
         <div className="hidden md:grid grid-cols-3 gap-4 text-center flex-shrink-0">
           <div>
-            <div className="text-xs text-muted-foreground">优先级</div>
+            <div className="text-xs text-muted-foreground">{tList("priority")}</div>
             <div className="font-medium">{provider.priority}</div>
           </div>
           <div>
-            <div className="text-xs text-muted-foreground">权重</div>
+            <div className="text-xs text-muted-foreground">{tList("weight")}</div>
             <div className="font-medium">{provider.weight}</div>
           </div>
           <div>
-            <div className="text-xs text-muted-foreground">成本倍数</div>
+            <div className="text-xs text-muted-foreground">{tList("costMultiplier")}</div>
             <div className="font-medium">{provider.costMultiplier}x</div>
           </div>
         </div>
 
         {/* 今日用量（仅大屏） */}
         <div className="hidden lg:block text-center flex-shrink-0 min-w-[100px]">
-          <div className="text-xs text-muted-foreground">今日用量</div>
-          <div className="font-medium">{provider.todayCallCount || 0} 次</div>
+          <div className="text-xs text-muted-foreground">{tList("todayUsageLabel")}</div>
+          <div className="font-medium">
+            {tList("todayUsageCount", { count: provider.todayCallCount || 0 })}
+          </div>
           <div className="text-xs font-mono text-muted-foreground mt-0.5">
             {formatCurrency(parseFloat(provider.todayTotalCostUsd || "0"), currencyCode)}
           </div>
@@ -404,13 +414,13 @@ export function ProviderRichListItem({
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>确认删除供应商？</AlertDialogTitle>
+                  <AlertDialogTitle>{tList("confirmDeleteTitle")}</AlertDialogTitle>
                   <AlertDialogDescription>
-                    确定要删除供应商 &quot;{provider.name}&quot; 吗？此操作无法撤销。
+                    {tList("confirmDeleteMessage", { name: provider.name })}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <div className="flex justify-end gap-2">
-                  <AlertDialogCancel>取消</AlertDialogCancel>
+                  <AlertDialogCancel>{tList("cancelButton")}</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={(e) => {
                       e.stopPropagation();
@@ -419,7 +429,7 @@ export function ProviderRichListItem({
                     className="bg-red-600 hover:bg-red-700"
                     disabled={deletePending}
                   >
-                    删除
+                    {tList("deleteButton")}
                   </AlertDialogAction>
                 </div>
               </AlertDialogContent>
@@ -466,13 +476,13 @@ export function ProviderRichListItem({
       <Dialog open={showKeyDialog} onOpenChange={handleCloseDialog}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>查看完整 API Key</DialogTitle>
-            <DialogDescription>请妥善保管，不要泄露给他人</DialogDescription>
+            <DialogTitle>{tList("viewFullKey")}</DialogTitle>
+            <DialogDescription>{tList("viewFullKeyDesc")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="flex items-center gap-2">
               <code className="flex-1 font-mono bg-muted px-3 py-2 rounded text-sm break-all">
-                {unmaskedKey || "加载中..."}
+                {unmaskedKey || tList("keyLoading")}
               </code>
               <Button onClick={handleCopy} disabled={!unmaskedKey} size="icon" variant="outline">
                 {copied ? (

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { getKeyLimitUsage } from "@/actions/keys";
 import { formatCurrency, type CurrencyCode } from "@/lib/utils/currency";
 import { Loader2, AlertCircle } from "lucide-react";
@@ -23,6 +24,7 @@ export function KeyLimitUsage({ keyId, currencyCode = "USD" }: KeyLimitUsageProp
   const [data, setData] = useState<LimitUsageData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const t = useTranslations("dashboard.keyLimitUsage");
 
   useEffect(() => {
     async function fetchData() {
@@ -35,23 +37,23 @@ export function KeyLimitUsage({ keyId, currencyCode = "USD" }: KeyLimitUsageProp
           setData(result.data);
         } else {
           // result.ok === false 时，result 是 { ok: false; error: string }
-          setError(result.error || "获取失败");
+          setError(result.error || t("error"));
         }
       } catch {
-        setError("网络错误");
+        setError(t("networkError"));
       } finally {
         setLoading(false);
       }
     }
 
     void fetchData();
-  }, [keyId]);
+  }, [keyId, t]);
 
   if (loading) {
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Loader2 className="h-3 w-3 animate-spin" />
-        <span>加载中...</span>
+        <span>{t("loading")}</span>
       </div>
     );
   }
@@ -69,25 +71,25 @@ export function KeyLimitUsage({ keyId, currencyCode = "USD" }: KeyLimitUsageProp
 
   const items = [
     {
-      label: "5小时消费",
+      label: t("cost5h"),
       current: data.cost5h.current,
       limit: data.cost5h.limit,
       isCost: true,
     },
     {
-      label: "周消费",
+      label: t("costWeekly"),
       current: data.costWeekly.current,
       limit: data.costWeekly.limit,
       isCost: true,
     },
     {
-      label: "月消费",
+      label: t("costMonthly"),
       current: data.costMonthly.current,
       limit: data.costMonthly.limit,
       isCost: true,
     },
     {
-      label: "并发 Session",
+      label: t("concurrentSessions"),
       current: data.concurrentSessions.current,
       limit: data.concurrentSessions.limit || null,
       isCost: false,
@@ -95,7 +97,7 @@ export function KeyLimitUsage({ keyId, currencyCode = "USD" }: KeyLimitUsageProp
   ].filter((item) => item.limit !== null && item.limit > 0); // 只显示有限额的项目
 
   if (items.length === 0) {
-    return <div className="text-xs text-muted-foreground">无限额限制</div>;
+    return <div className="text-xs text-muted-foreground">{t("noLimit")}</div>;
   }
 
   return (

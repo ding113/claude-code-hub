@@ -199,25 +199,21 @@ export function OverviewPanel({ currencyCode = "USD", isAdmin = false }: Overvie
           <MetricCard
             title={tc("metrics.concurrent")}
             value={metrics.concurrentSessions}
-            description={tc("activeSessions.recent")}
             icon={Activity}
           />
           <MetricCard
             title={tc("metrics.todayRequests")}
             value={metrics.todayRequests}
-            description={tc("metrics.requestsDescription")}
             icon={TrendingUp}
           />
           <MetricCard
             title={tc("metrics.todayCost")}
             value={formatCurrency(metrics.todayCost, currencyCode)}
-            description={tc("metrics.costDescription")}
             icon={DollarSign}
           />
           <MetricCard
             title={tc("metrics.avgResponse")}
             value={metrics.avgResponseTime}
-            description={tc("metrics.responseDescription")}
             icon={Clock}
             formatter={formatResponseTime}
           />

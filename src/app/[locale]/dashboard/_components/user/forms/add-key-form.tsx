@@ -2,6 +2,7 @@
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { useTranslations } from "next-intl";
 import { addKey } from "@/actions/keys";
 import { DialogFormLayout } from "@/components/form/form-layout";
 import { TextField, DateField, NumberField } from "@/components/form/form-field";
@@ -18,6 +19,7 @@ interface AddKeyFormProps {
 export function AddKeyForm({ userId, onSuccess }: AddKeyFormProps) {
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
+  const t = useTranslations("dashboard.addKeyForm");
 
   const form = useZodForm({
     schema: KeyFormSchema,
@@ -32,7 +34,7 @@ export function AddKeyForm({ userId, onSuccess }: AddKeyFormProps) {
     },
     onSubmit: async (data) => {
       if (!userId) {
-        throw new Error("用户ID不存在");
+        throw new Error(t("errors.userIdMissing"));
       }
 
       try {
@@ -48,13 +50,13 @@ export function AddKeyForm({ userId, onSuccess }: AddKeyFormProps) {
         });
 
         if (!result.ok) {
-          toast.error(result.error || "创建失败，请稍后重试");
+          toast.error(result.error || t("errors.createFailed"));
           return;
         }
 
         const payload = result.data;
         if (!payload) {
-          toast.error("创建成功但未返回密钥");
+          toast.error(t("errors.noKeyReturned"));
           return;
         }
 
@@ -65,7 +67,7 @@ export function AddKeyForm({ userId, onSuccess }: AddKeyFormProps) {
       } catch (err) {
         console.error("添加Key失败:", err);
         // 使用toast显示具体的错误信息
-        const errorMessage = err instanceof Error ? err.message : "创建失败，请稍后重试";
+        const errorMessage = err instanceof Error ? err.message : t("errors.createFailed");
         toast.error(errorMessage);
       }
     },
@@ -74,10 +76,10 @@ export function AddKeyForm({ userId, onSuccess }: AddKeyFormProps) {
   return (
     <DialogFormLayout
       config={{
-        title: "新增 Key",
-        description: "为当前用户创建新的API密钥，Key值将自动生成。",
-        submitText: "确认创建",
-        loadingText: "创建中...",
+        title: t("title"),
+        description: t("description"),
+        submitText: t("submitText"),
+        loadingText: t("loadingText"),
       }}
       onSubmit={form.handleSubmit}
       isSubmitting={isPending}
@@ -85,29 +87,27 @@ export function AddKeyForm({ userId, onSuccess }: AddKeyFormProps) {
       error={form.errors._form}
     >
       <TextField
-        label="Key名称"
+        label={t("keyName.label")}
         required
         maxLength={64}
         autoFocus
-        placeholder="请输入Key名称"
+        placeholder={t("keyName.placeholder")}
         {...form.getFieldProps("name")}
       />
 
       <DateField
-        label="过期时间"
-        placeholder="选择过期时间"
-        description="留空表示永不过期"
+        label={t("expiresAt.label")}
+        placeholder={t("expiresAt.placeholder")}
+        description={t("expiresAt.description")}
         {...form.getFieldProps("expiresAt")}
       />
 
       <div className="flex items-start justify-between gap-4 rounded-lg border border-dashed border-border px-4 py-3">
         <div>
           <Label htmlFor="can-login-web-ui" className="text-sm font-medium">
-            允许登录 Web UI
+            {t("canLoginWebUi.label")}
           </Label>
-          <p className="text-xs text-muted-foreground mt-1">
-            关闭后，此 Key 仅可用于 API 调用，无法登录管理后台
-          </p>
+          <p className="text-xs text-muted-foreground mt-1">{t("canLoginWebUi.description")}</p>
         </div>
         <Switch
           id="can-login-web-ui"
@@ -117,36 +117,36 @@ export function AddKeyForm({ userId, onSuccess }: AddKeyFormProps) {
       </div>
 
       <NumberField
-        label="5小时消费上限 (USD)"
-        placeholder="留空表示无限制"
-        description="5小时内最大消费金额"
+        label={t("limit5hUsd.label")}
+        placeholder={t("limit5hUsd.placeholder")}
+        description={t("limit5hUsd.description")}
         min={0}
         step={0.01}
         {...form.getFieldProps("limit5hUsd")}
       />
 
       <NumberField
-        label="周消费上限 (USD)"
-        placeholder="留空表示无限制"
-        description="每周最大消费金额"
+        label={t("limitWeeklyUsd.label")}
+        placeholder={t("limitWeeklyUsd.placeholder")}
+        description={t("limitWeeklyUsd.description")}
         min={0}
         step={0.01}
         {...form.getFieldProps("limitWeeklyUsd")}
       />
 
       <NumberField
-        label="月消费上限 (USD)"
-        placeholder="留空表示无限制"
-        description="每月最大消费金额"
+        label={t("limitMonthlyUsd.label")}
+        placeholder={t("limitMonthlyUsd.placeholder")}
+        description={t("limitMonthlyUsd.description")}
         min={0}
         step={0.01}
         {...form.getFieldProps("limitMonthlyUsd")}
       />
 
       <NumberField
-        label="并发 Session 上限"
-        placeholder="0 表示无限制"
-        description="同时运行的对话数量"
+        label={t("limitConcurrentSessions.label")}
+        placeholder={t("limitConcurrentSessions.placeholder")}
+        description={t("limitConcurrentSessions.description")}
         min={0}
         step={1}
         {...form.getFieldProps("limitConcurrentSessions")}

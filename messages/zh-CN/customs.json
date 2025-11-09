@@ -30,15 +30,11 @@
     "todayRequests": "今日请求",
     "todayCost": "今日消费",
     "avgResponse": "平均响应时间",
-    "requestsDescription": "过去24小时内的请求数",
-    "costDescription": "过去24小时内的消费成本",
-    "responseDescription": "平均响应时间（毫秒）",
     "viewDetails": "查看详情"
   },
   "activeSessions": {
     "title": "活跃 Session",
     "summary": "{count} 个 Session，{minutes} 分钟内",
-    "recent": "最近活跃",
     "empty": "暂无活跃 Session",
     "viewAll": "查看全部"
   }

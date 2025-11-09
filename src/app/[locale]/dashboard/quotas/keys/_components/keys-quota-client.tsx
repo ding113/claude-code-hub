@@ -22,6 +22,7 @@ import { QuotaWindowType } from "@/components/quota/quota-window-type";
 import { QuotaCountdownCompact } from "@/components/quota/quota-countdown";
 import { hasKeyQuotaSet, isUserExceeded, getUsageRate } from "@/lib/utils/quota-helpers";
 import { EditKeyQuotaDialog } from "./edit-key-quota-dialog";
+import { useTranslations } from "next-intl";
 
 interface KeyQuota {
   cost5h: { current: number; limit: number | null; resetAt?: Date };
@@ -57,6 +58,7 @@ interface KeysQuotaClientProps {
 }
 
 export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClientProps) {
+  const t = useTranslations("quota.keys");
   // 默认展开所有用户组
   const [openUsers, setOpenUsers] = useState<Set<number>>(new Set(users.map((user) => user.id)));
 
@@ -76,7 +78,7 @@ export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClient
     return (
       <Card>
         <CardContent className="flex items-center justify-center py-10">
-          <p className="text-muted-foreground">没有匹配的用户或密钥</p>
+          <p className="text-muted-foreground">{t("noMatches")}</p>
         </CardContent>
       </Card>
     );
@@ -115,14 +117,14 @@ export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClient
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-[200px]">密钥名称</TableHead>
-                      <TableHead className="w-[120px]">限额类型</TableHead>
-                      <TableHead className="w-[150px]">5小时限额</TableHead>
-                      <TableHead className="w-[150px]">周限额</TableHead>
-                      <TableHead className="w-[150px]">月限额</TableHead>
-                      <TableHead className="w-[120px]">并发限制</TableHead>
-                      <TableHead className="w-[100px]">状态</TableHead>
-                      <TableHead className="w-[100px] text-right">操作</TableHead>
+                      <TableHead className="w-[200px]">{t("table.keyName")}</TableHead>
+                      <TableHead className="w-[120px]">{t("table.quotaType")}</TableHead>
+                      <TableHead className="w-[150px]">{t("table.cost5h")}</TableHead>
+                      <TableHead className="w-[150px]">{t("table.costWeekly")}</TableHead>
+                      <TableHead className="w-[150px]">{t("table.costMonthly")}</TableHead>
+                      <TableHead className="w-[120px]">{t("table.concurrentSessions")}</TableHead>
+                      <TableHead className="w-[100px]">{t("table.status")}</TableHead>
+                      <TableHead className="w-[100px] text-right">{t("table.actions")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -138,9 +140,9 @@ export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClient
                           {/* 限额类型 */}
                           <TableCell>
                             {hasKeyQuota ? (
-                              <Badge variant="default">独立限额</Badge>
+                              <Badge variant="default">{t("quotaType.independent")}</Badge>
                             ) : (
-                              <Badge variant="outline">继承用户</Badge>
+                              <Badge variant="outline">{t("quotaType.inherited")}</Badge>
                             )}
                           </TableCell>
 
@@ -283,10 +285,10 @@ export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClient
                               className="text-xs"
                             >
                               {!key.isEnabled
-                                ? "已禁用"
+                                ? t("status.disabled")
                                 : userExceeded && !hasKeyQuota
-                                  ? "受限"
-                                  : "正常"}
+                                  ? t("status.restricted")
+                                  : t("status.normal")}
                             </Badge>
                           </TableCell>
 

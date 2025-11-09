@@ -11,6 +11,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { ListPlus, Copy, CheckCircle } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { AddKeyForm } from "./forms/add-key-form";
 import { UserActions } from "./user-actions";
 import type { UserDisplay } from "@/types/user";
@@ -29,41 +30,43 @@ async function fetchProxyStatus(): Promise<ProxyStatusResponse> {
     if (result.data) {
       return result.data;
     }
-    throw new Error("获取代理状态失败");
+    throw new Error("Failed to fetch proxy status");
   }
-  throw new Error(result.error || "获取代理状态失败");
+  throw new Error(result.error || "Failed to fetch proxy status");
 }
 
-function formatRelativeTime(timestamp: number): string {
-  const diff = Date.now() - timestamp;
-  if (diff <= 0) {
-    return "刚刚";
-  }
+function createFormatRelativeTime(t: (key: string, params?: Record<string, number>) => string) {
+  return (timestamp: number): string => {
+    const diff = Date.now() - timestamp;
+    if (diff <= 0) {
+      return t("proxyStatus.timeAgo.justNow");
+    }
 
-  const seconds = Math.floor(diff / 1000);
-  if (seconds < 5) {
-    return "刚刚";
-  }
-  if (seconds < 60) {
-    return `${seconds}s前`;
-  }
+    const seconds = Math.floor(diff / 1000);
+    if (seconds < 5) {
+      return t("proxyStatus.timeAgo.justNow");
+    }
+    if (seconds < 60) {
+      return t("proxyStatus.timeAgo.secondsAgo", { count: seconds });
+    }
 
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) {
-    return `${minutes}分钟前`;
-  }
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) {
+      return t("proxyStatus.timeAgo.minutesAgo", { count: minutes });
+    }
 
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) {
-    return `${hours}小时前`;
-  }
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) {
+      return t("proxyStatus.timeAgo.hoursAgo", { count: hours });
+    }
 
-  const days = Math.floor(hours / 24);
-  if (days < 7) {
-    return `${days}天前`;
-  }
+    const days = Math.floor(hours / 24);
+    if (days < 7) {
+      return t("proxyStatus.timeAgo.daysAgo", { count: days });
+    }
 
-  return new Date(timestamp).toLocaleDateString("zh-CN");
+    return new Date(timestamp).toLocaleDateString();
+  };
 }
 
 function StatusSpinner() {
@@ -89,9 +92,12 @@ export function KeyListHeader({
   const [openAdd, setOpenAdd] = useState(false);
   const [keyResult, setKeyResult] = useState<{ generatedKey: string; name: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const t = useTranslations("dashboard.keyListHeader");
 
   const totalTodayUsage =
     activeUser?.keys.reduce((sum, key) => sum + (key.todayUsage ?? 0), 0) ?? 0;
+
+  const formatRelativeTime = useMemo(() => createFormatRelativeTime(t), [t]);
 
   const proxyStatusEnabled = Boolean(activeUser);
   const {
@@ -120,18 +126,18 @@ export function KeyListHeader({
     if (proxyStatusLoading) {
       return (
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
-          <span>代理状态加载中</span>
+          <span>{t("proxyStatus.loading")}</span>
           <StatusSpinner />
         </div>
       );
     }
 
     if (proxyStatusError) {
-      return <div className="text-xs text-destructive">代理状态获取失败</div>;
+      return <div className="text-xs text-destructive">{t("proxyStatus.fetchFailed")}</div>;
     }
 
     if (!activeUserStatus) {
-      return <div className="text-xs text-muted-foreground">暂无代理状态</div>;
+      return <div className="text-xs text-muted-foreground">{t("proxyStatus.noStatus")}</div>;
     }
 
     const activeProviders = Array.from(
@@ -141,18 +147,18 @@ export function KeyListHeader({
     return (
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
         <div className="flex items-center gap-1">
-          <span>活跃请求</span>
+          <span>{t("proxyStatus.activeRequests")}</span>
           <span className="font-medium text-foreground">{activeUserStatus.activeCount}</span>
           {activeProviders.length > 0 && (
             <span className="text-muted-foreground">（{activeProviders.join("、")}）</span>
           )}
         </div>
         <div className="flex items-center gap-1">
-          <span>最近请求</span>
+          <span>{t("proxyStatus.lastRequest")}</span>
           <span className="text-foreground">
             {activeUserStatus.lastRequest
               ? `${activeUserStatus.lastRequest.providerName} / ${activeUserStatus.lastRequest.model}`
-              : "暂无记录"}
+              : t("proxyStatus.noRecord")}
           </span>
           {activeUserStatus.lastRequest && (
             <span className="text-muted-foreground">
@@ -162,7 +168,14 @@ export function KeyListHeader({
         </div>
       </div>
     );
-  }, [proxyStatusEnabled, proxyStatusLoading, proxyStatusError, activeUserStatus]);
+  }, [
+    proxyStatusEnabled,
+    proxyStatusLoading,
+    proxyStatusError,
+    activeUserStatus,
+    t,
+    formatRelativeTime,
+  ]);
 
   const handleKeyCreated = (result: { generatedKey: string; name: string }) => {
     setOpenAdd(false); // 关闭表单dialog
@@ -200,8 +213,8 @@ export function KeyListHeader({
           <div className="mt-1">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
               <div>
-                今日用量 {activeUser ? formatCurrency(totalTodayUsage, currencyCode) : "-"} /{" "}
-                {activeUser ? formatCurrency(activeUser.dailyQuota, currencyCode) : "-"}
+                {t("todayUsage")} {activeUser ? formatCurrency(totalTodayUsage, currencyCode) : "-"}{" "}
+                / {activeUser ? formatCurrency(activeUser.dailyQuota, currencyCode) : "-"}
               </div>
               {proxyStatusContent}
             </div>
@@ -216,7 +229,7 @@ export function KeyListHeader({
                 className="hover:bg-primary hover:text-primary-foreground cursor-pointer transition-colors"
                 disabled={!activeUser}
               >
-                <ListPlus className="h-3.5 w-3.5" /> 新增 Key
+                <ListPlus className="h-3.5 w-3.5" /> {t("addKey")}
               </Button>
             </DialogTrigger>
             <DialogContent>
@@ -234,17 +247,17 @@ export function KeyListHeader({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CheckCircle className="h-5 w-5 text-green-600" />
-              Key 创建成功
+              {t("keyCreatedDialog.title")}
             </DialogTitle>
-            <DialogDescription>
-              你的 API Key 已成功创建。请务必复制并妥善保存，此密钥仅显示一次。
-            </DialogDescription>
+            <DialogDescription>{t("keyCreatedDialog.description")}</DialogDescription>
           </DialogHeader>
 
           {keyResult && (
             <div className="space-y-4">
               <div>
-                <label className="text-sm font-medium mb-2 block">API Key</label>
+                <label className="text-sm font-medium mb-2 block">
+                  {t("keyCreatedDialog.apiKeyLabel")}
+                </label>
                 <div className="relative">
                   <div className="p-3 bg-muted/50 rounded-md font-mono text-sm break-all border-2 border-dashed border-orange-300 pr-12">
                     {keyResult.generatedKey}
@@ -263,7 +276,7 @@ export function KeyListHeader({
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground mt-2">
-                  请在关闭前复制并保存，关闭后将无法再次查看此密钥
+                  {t("keyCreatedDialog.warningText")}
                 </p>
               </div>
             </div>
@@ -271,7 +284,7 @@ export function KeyListHeader({
 
           <DialogFooter>
             <Button onClick={handleCloseSuccess} variant="secondary">
-              关闭
+              {t("keyCreatedDialog.closeButton")}
             </Button>
           </DialogFooter>
         </DialogContent>

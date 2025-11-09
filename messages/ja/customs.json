@@ -30,15 +30,11 @@
     "todayRequests": "本日のリクエスト",
     "todayCost": "本日のコスト",
     "avgResponse": "平均応答時間",
-    "requestsDescription": "過去24時間のリクエスト数",
-    "costDescription": "過去24時間の合計コスト",
-    "responseDescription": "平均応答時間（ミリ秒）",
     "viewDetails": "詳細を表示"
   },
   "activeSessions": {
     "title": "アクティブなセッション",
     "summary": "過去{minutes}分間の{count}個のセッション",
-    "recent": "最近アクティブ",
     "empty": "アクティブなセッションがありません",
     "viewAll": "すべて表示"
   }

@@ -422,5 +422,160 @@
       "title": "キーがありません",
       "description": "右上の「キーを追加」ボタンをクリックしてキーを追加できます"
     }
+  },
+  "userList": {
+    "badge": "{count} 個のキー",
+    "activeKeys": "アクティブキー",
+    "totalKeys": "総キー数",
+    "emptyState": {
+      "title": "ユーザーがいません",
+      "description": "下のボタンをクリックして最初のユーザーを作成してください"
+    },
+    "addUser": "ユーザーを追加"
+  },
+  "keyListHeader": {
+    "todayUsage": "本日の使用量",
+    "proxyStatus": {
+      "loading": "プロキシステータス読み込み中",
+      "fetchFailed": "プロキシステータスの取得に失敗しました",
+      "noStatus": "プロキシステータスなし",
+      "activeRequests": "アクティブリクエスト",
+      "lastRequest": "最新リクエスト",
+      "noRecord": "記録なし",
+      "timeAgo": {
+        "justNow": "たった今",
+        "secondsAgo": "{count}秒前",
+        "minutesAgo": "{count}分前",
+        "hoursAgo": "{count}時間前",
+        "daysAgo": "{count}日前"
+      }
+    },
+    "addKey": "キーを追加",
+    "keyCreatedDialog": {
+      "title": "キーの作成に成功しました",
+      "description": "APIキーが正常に作成されました。安全にコピーして保存してください。このキーは一度だけ表示されます。",
+      "apiKeyLabel": "API キー",
+      "warningText": "閉じる前にコピーして保存してください。閉じた後、このキーを再度表示することはできません",
+      "closeButton": "閉じる"
+    }
+  },
+  "keyLimitUsage": {
+    "loading": "読み込み中...",
+    "error": "取得に失敗しました",
+    "networkError": "ネットワークエラー",
+    "cost5h": "5時間消費",
+    "costWeekly": "週間消費",
+    "costMonthly": "月間消費",
+    "concurrentSessions": "同時セッション数",
+    "noLimit": "制限なし"
+  },
+  "addKeyForm": {
+    "title": "キーを追加",
+    "description": "現在のユーザーの新しいAPIキーを作成します。キー値は自動生成されます。",
+    "submitText": "作成を確認",
+    "loadingText": "作成中...",
+    "keyName": {
+      "label": "キー名",
+      "placeholder": "キー名を入力してください"
+    },
+    "expiresAt": {
+      "label": "有効期限",
+      "placeholder": "有効期限を選択",
+      "description": "空白の場合は無期限"
+    },
+    "canLoginWebUi": {
+      "label": "Web UI ログインを許可",
+      "description": "オフにすると、このキーはAPI呼び出しのみに使用でき、管理パネルにログインできません"
+    },
+    "limit5hUsd": {
+      "label": "5時間消費上限 (USD)",
+      "placeholder": "空白の場合は無制限",
+      "description": "5時間以内の最大消費金額"
+    },
+    "limitWeeklyUsd": {
+      "label": "週間消費上限 (USD)",
+      "placeholder": "空白の場合は無制限",
+      "description": "1週間あたりの最大消費金額"
+    },
+    "limitMonthlyUsd": {
+      "label": "月間消費上限 (USD)",
+      "placeholder": "空白の場合は無制限",
+      "description": "1ヶ月あたりの最大消費金額"
+    },
+    "limitConcurrentSessions": {
+      "label": "同時セッション上限",
+      "placeholder": "0 は無制限を意味します",
+      "description": "同時に実行される会話の数"
+    },
+    "errors": {
+      "userIdMissing": "ユーザーIDが存在しません",
+      "createFailed": "作成に失敗しました。後でもう一度お試しください",
+      "noKeyReturned": "作成に成功しましたが、キーが返されませんでした"
+    }
+  },
+  "userForm": {
+    "title": {
+      "add": "ユーザーを追加",
+      "edit": "ユーザーを編集"
+    },
+    "description": {
+      "add": "新しいユーザーを作成します。システムは自動的にデフォルトのキーを生成します。",
+      "edit": "ユーザーの基本情報を変更します。"
+    },
+    "submitText": {
+      "add": "作成を確認",
+      "edit": "変更を保存"
+    },
+    "loadingText": {
+      "add": "作成中...",
+      "edit": "保存中..."
+    },
+    "username": {
+      "label": "ユーザー名",
+      "placeholder": "ユーザー名を入力してください"
+    },
+    "note": {
+      "label": "備考",
+      "placeholder": "備考を入力してください（オプション）",
+      "description": "ユーザーの用途や備考情報を説明するために使用されます"
+    },
+    "providerGroup": {
+      "label": "プロバイダーグループ",
+      "placeholder": "例: premium または premium,economy（オプション）",
+      "description": "ユーザー専用のプロバイダーグループを指定します（複数可、カンマ区切り）。システムはgroupTagが一致するプロバイダーのみから選択します。空白=すべてのプロバイダーを使用"
+    },
+    "rpm": {
+      "label": "RPM制限",
+      "placeholder": "1分あたりのリクエスト数制限",
+      "description": "デフォルト値: {default}、範囲: 1-10000"
+    },
+    "dailyQuota": {
+      "label": "1日あたりの割当量",
+      "placeholder": "1日あたりの消費割当量制限",
+      "description": "デフォルト値: ${default}、範囲: $0.01-$1000"
+    }
+  },
+  "deleteKeyConfirm": {
+    "title": "キーの削除を確認",
+    "description": "キー「{name}」を削除してもよろしいですか？\n{maskedKey}\nこの操作は元に戻せません。削除後、このキーを使用しているすべてのアプリケーションはアクセスできなくなります。",
+    "cancel": "キャンセル",
+    "confirm": "削除を確認",
+    "confirmLoading": "削除中...",
+    "errors": {
+      "deleteFailed": "削除に失敗しました",
+      "retryError": "削除に失敗しました。後でもう一度お試しください"
+    }
+  },
+  "keyActions": {
+    "edit": "編集",
+    "delete": "削除",
+    "editAriaLabel": "キーを編集",
+    "deleteAriaLabel": "キーを削除"
+  },
+  "userActions": {
+    "edit": "ユーザーを編集",
+    "delete": "ユーザーを削除",
+    "editAriaLabel": "ユーザーを編集",
+    "deleteAriaLabel": "ユーザーを削除"
   }
 }

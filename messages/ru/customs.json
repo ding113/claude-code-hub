@@ -30,15 +30,11 @@
     "todayRequests": "Запросы сегодня",
     "todayCost": "Стоимость сегодня",
     "avgResponse": "Среднее время ответа",
-    "requestsDescription": "Количество запросов за последние 24 часа",
-    "costDescription": "Общая стоимость за последние 24 часа",
-    "responseDescription": "Среднее время ответа (миллисекунды)",
     "viewDetails": "Просмотр деталей"
   },
   "activeSessions": {
     "title": "Активные сеансы",
     "summary": "{count} сеансов в последние {minutes} минут",
-    "recent": "Недавно активные",
     "empty": "Нет активных сеансов",
     "viewAll": "Просмотреть все"
   }

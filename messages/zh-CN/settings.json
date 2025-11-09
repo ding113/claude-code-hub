@@ -48,6 +48,16 @@
     "siteSettingsDesc": "配置站点标题、货币显示单位与仪表盘统计展示策略。",
     "autoCleanup": "自动日志清理",
     "autoCleanupDesc": "定时自动清理历史日志数据，释放数据库存储空间。",
+    "section": {
+      "siteParams": {
+        "title": "站点参数",
+        "description": "配置站点标题、货币显示单位与仪表盘统计展示策略。"
+      },
+      "autoCleanup": {
+        "title": "自动日志清理",
+        "description": "定时自动清理历史日志数据，释放数据库存储空间。"
+      }
+    },
     "form": {
       "siteTitle": "站点标题",
       "siteTitlePlaceholder": "例如：Claude Code Hub",
@@ -103,6 +113,69 @@
     "subtitle": "服务商管理",
     "subtitleDesc": "配置上游服务商的金额限流和并发限制，留空表示无限制。",
     "add": "添加供应商",
+    "types": {
+      "claude": {
+        "label": "Claude",
+        "description": "Anthropic 官方 API"
+      },
+      "claudeAuth": {
+        "label": "Claude Auth",
+        "description": "Claude 中转服务"
+      },
+      "codex": {
+        "label": "Codex",
+        "description": "Codex CLI API"
+      },
+      "geminiCli": {
+        "label": "Gemini CLI",
+        "description": "Gemini CLI API"
+      },
+      "openaiCompatible": {
+        "label": "OpenAI Compatible",
+        "description": "OpenAI 兼容 API"
+      }
+    },
+    "list": {
+      "priority": "优先级",
+      "weight": "权重",
+      "costMultiplier": "成本倍数",
+      "todayUsageLabel": "今日用量",
+      "todayUsageCount": "{count} 次",
+      "circuitBroken": "熔断中",
+      "officialWebsite": "官网",
+      "viewFullKey": "查看完整 API Key",
+      "viewFullKeyDesc": "请妥善保管，不要泄露给他人",
+      "keyLoading": "加载中...",
+      "confirmDeleteTitle": "确认删除供应商？",
+      "confirmDeleteMessage": "确定要删除供应商 \"{name}\" 吗？此操作无法撤销。",
+      "deleteButton": "删除",
+      "cancelButton": "取消",
+      "deleteSuccess": "删除成功",
+      "deleteSuccessDesc": "供应商 \"{name}\" 已删除",
+      "deleteFailed": "删除失败",
+      "deleteError": "操作过程中出现异常",
+      "unknownError": "未知错误",
+      "getKeyFailed": "获取密钥失败",
+      "keyCopied": "密钥已复制到剪贴板",
+      "copyFailed": "复制失败",
+      "resetCircuitSuccess": "熔断器已重置",
+      "resetCircuitSuccessDesc": "供应商 \"{name}\" 的熔断状态已解除",
+      "resetCircuitFailed": "重置熔断器失败",
+      "toggleSuccess": "供应商已{status}",
+      "toggleSuccessDesc": "供应商 \"{name}\" 状态已更新",
+      "toggleFailed": "状态切换失败",
+      "statusEnabled": "启用",
+      "statusDisabled": "禁用"
+    },
+    "schedulingDialog": {
+      "title": "供应商调度规则说明",
+      "description": "了解系统如何智能选择上游供应商，确保高可用性和成本优化",
+      "triggerButton": "调度规则说明",
+      "step": "步骤",
+      "before": "过滤前：",
+      "after": "过滤后：",
+      "decision": "决策："
+    },
     "addSuccess": "添加服务商成功",
     "addFailed": "添加服务商失败",
     "edit": "编辑服务商",
@@ -471,42 +544,146 @@
     "keyLoading": "加载中...",
     "resetCircuit": "熔断器已重置",
     "resetCircuitDesc": "供应商 \"{name}\" 的熔断状态已解除",
-    "resetCircuitFailed": "重置熔断器失败"
+    "resetCircuitFailed": "重置熔断器失败",
+    "types": {
+      "claude": {
+        "label": "Claude",
+        "description": "Anthropic 官方 API"
+      },
+      "claudeAuth": {
+        "label": "Claude Auth",
+        "description": "Claude 中转服务"
+      },
+      "codex": {
+        "label": "Codex",
+        "description": "Codex CLI API"
+      },
+      "geminiCli": {
+        "label": "Gemini CLI",
+        "description": "Gemini CLI API"
+      },
+      "openaiCompatible": {
+        "label": "OpenAI Compatible",
+        "description": "OpenAI 兼容 API"
+      }
+    },
+    "list": {
+      "priority": "优先级",
+      "weight": "权重",
+      "costMultiplier": "成本倍数",
+      "todayUsageLabel": "今日用量",
+      "todayUsageCount": "{count} 次",
+      "circuitBroken": "熔断中",
+      "officialWebsite": "官网",
+      "viewFullKey": "查看完整 API Key",
+      "viewFullKeyDesc": "请妥善保管，不要泄露给他人",
+      "keyLoading": "加载中...",
+      "confirmDeleteTitle": "确认删除供应商？",
+      "confirmDeleteMessage": "确定要删除供应商 \"{name}\" 吗？此操作无法撤销。",
+      "deleteButton": "删除",
+      "cancelButton": "取消",
+      "deleteSuccess": "删除成功",
+      "deleteSuccessDesc": "供应商 \"{name}\" 已删除",
+      "deleteFailed": "删除失败",
+      "deleteError": "操作过程中出现异常",
+      "unknownError": "未知错误",
+      "getKeyFailed": "获取密钥失败",
+      "keyCopied": "密钥已复制到剪贴板",
+      "copyFailed": "复制失败",
+      "resetCircuitSuccess": "熔断器已重置",
+      "resetCircuitSuccessDesc": "供应商 \"{name}\" 的熔断状态已解除",
+      "resetCircuitFailed": "重置熔断器失败",
+      "toggleSuccess": "供应商已{status}",
+      "toggleSuccessDesc": "供应商 \"{name}\" 状态已更新",
+      "toggleFailed": "状态切换失败",
+      "statusEnabled": "启用",
+      "statusDisabled": "禁用"
+    },
+    "schedulingDialog": {
+      "title": "供应商调度规则说明",
+      "description": "了解系统如何智能选择上游供应商，确保高可用性和成本优化",
+      "triggerButton": "调度规则说明",
+      "step": "步骤",
+      "before": "过滤前：",
+      "after": "过滤后：",
+      "decision": "决策："
+    }
   },
   "prices": {
     "title": "价格表",
     "description": "管理平台基础配置与模型价格",
-    "subtitle": "模型价格",
-    "subtitleDesc": "管理 AI 模型的价格配置",
-    "search": "搜索模型名称...",
-    "sync": "同步 LiteLLM 价格",
-    "syncing": "同步中...",
-    "syncSuccess": "价格表更新成功",
-    "syncFailed": "同步失败",
-    "syncFailedError": "同步失败:",
-    "syncNoResult": "价格表更新成功但未返回处理结果",
-    "upload": "更新模型价格表",
-    "uploadSuccess": "价格表更新成功",
-    "uploadFailed": "获取价格数据失败:",
-    "noData": "系统已内置价格表，请通过上方按钮同步或更新",
-    "noModels": "未找到支持的模型价格",
+    "section": {
+      "title": "模型价格",
+      "description": "管理 AI 模型的价格配置"
+    },
+    "searchPlaceholder": "搜索模型名称...",
+    "sync": {
+      "button": "同步 LiteLLM 价格",
+      "syncing": "同步中...",
+      "successWithChanges": "价格表更新成功，共更新 {count} 个模型",
+      "successNoChanges": "价格表已是最新，无需更新",
+      "failed": "同步失败",
+      "failedError": "同步失败: {error}",
+      "failedNoResult": "价格表更新成功但未返回处理结果",
+      "noModels": "未找到支持的模型价格",
+      "partialFailure": "部分更新成功，但有 {count} 个模型失败"
+    },
     "table": {
-      "model": "模型",
-      "inputPrice": "输入价格",
-      "outputPrice": "输出价格",
-      "cachePrice": "缓存价格",
-      "updatedAt": "更新时间"
+      "modelName": "模型名称",
+      "type": "类型",
+      "provider": "提供商",
+      "inputPrice": "输入价格 ($/M)",
+      "outputPrice": "输出价格 ($/M)",
+      "updatedAt": "更新时间",
+      "typeChat": "对话",
+      "typeImage": "图像生成",
+      "typeCompletion": "补全",
+      "typeUnknown": "未知",
+      "loading": "加载中...",
+      "noMatch": "未找到匹配的模型",
+      "noDataTitle": "暂无价格数据",
+      "noDataHint": "系统已内置价格表，请通过上方按钮同步或更新"
+    },
+    "pagination": {
+      "showing": "显示 {from}-{to} 条，共 {total} 条",
+      "previous": "上一页",
+      "next": "下一页",
+      "perPage": "每页 {size} 条"
+    },
+    "stats": {
+      "totalModels": "共 {count} 个模型",
+      "searchResults": "搜索到 {count} 个结果",
+      "lastUpdated": "最后更新: {time}"
     },
     "dialog": {
       "title": "更新模型价格表",
-      "description": "上传 JSON 文件以更新模型价格配置",
-      "selectFile": "点击选择JSON文件或拖拽到此处",
-      "fileSizeLimit": "文件大小不能超过10MB",
-      "fileSizeLimitSmall": "文件大小不超过10MB",
-      "upload": "上传",
+      "description": "选择包含模型价格数据的 JSON 文件并上传",
+      "selectFile": "点击选择 JSON 文件或拖拽到此处",
+      "fileSizeLimit": "文件大小不能超过 10MB",
+      "fileSizeLimitSmall": "文件大小不超过 10MB",
+      "invalidFileType": "请选择 JSON 格式的文件",
+      "fileTooLarge": "文件大小超过 10MB 限制",
+      "upload": "上传并更新",
       "uploading": "上传中...",
-      "readError": "获取密钥失败",
-      "getError": "获取密钥失败"
+      "updatePriceTable": "更新价格表",
+      "updating": "更新中...",
+      "selectJson": "选择 JSON 文件",
+      "updateSuccess": "价格表更新成功，共更新 {count} 个模型",
+      "updateFailed": "更新失败",
+      "systemHasBuiltIn": "系统已内置价格表",
+      "manualDownload": "你也可以手动下载",
+      "latestPriceTable": "最新价格表",
+      "andUploadViaButton": "，并通过上方按钮上传",
+      "supportedModels": "当前支持 {count} 个模型",
+      "results": {
+        "title": "更新结果",
+        "total": "总计: {total} 个模型",
+        "success": "成功: {success}",
+        "failed": "失败: {failed}",
+        "skipped": "跳过: {skipped}",
+        "details": "详细信息",
+        "viewDetails": "查看详细日志"
+      }
     }
   },
   "sensitiveWords": {

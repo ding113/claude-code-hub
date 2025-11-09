@@ -30,15 +30,11 @@
     "todayRequests": "今日請求",
     "todayCost": "今日消費",
     "avgResponse": "平均回應時間",
-    "requestsDescription": "過去24小時內的請求數",
-    "costDescription": "過去24小時內的消費成本",
-    "responseDescription": "平均回應時間（毫秒）",
     "viewDetails": "查看詳情"
   },
   "activeSessions": {
     "title": "活躍 Session",
     "summary": "{count} 個 Session，{minutes} 分鐘內",
-    "recent": "最近活躍",
     "empty": "暫無活躍 Session",
     "viewAll": "查看全部"
   }

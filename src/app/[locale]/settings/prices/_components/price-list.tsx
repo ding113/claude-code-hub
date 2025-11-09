@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Search, Package, DollarSign, ChevronLeft, ChevronRight } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,6 +40,7 @@ export function PriceList({
   initialPage,
   initialPageSize,
 }: PriceListProps) {
+  const t = useTranslations("settings.prices");
   const [searchTerm, setSearchTerm] = useState("");
   const [prices, setPrices] = useState<ModelPrice[]>(initialPrices);
   const [total, setTotal] = useState(initialTotal);
@@ -169,13 +171,13 @@ export function PriceList({
   const getModeLabel = (mode?: string) => {
     switch (mode) {
       case "chat":
-        return <Badge variant="default">对话</Badge>;
+        return <Badge variant="default">{t("table.typeChat")}</Badge>;
       case "image_generation":
-        return <Badge variant="secondary">图像生成</Badge>;
+        return <Badge variant="secondary">{t("table.typeImage")}</Badge>;
       case "completion":
-        return <Badge variant="outline">补全</Badge>;
+        return <Badge variant="outline">{t("table.typeCompletion")}</Badge>;
       default:
-        return <Badge variant="outline">未知</Badge>;
+        return <Badge variant="outline">{t("table.typeUnknown")}</Badge>;
     }
   };
 
@@ -186,14 +188,16 @@ export function PriceList({
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="搜索模型名称..."
+            placeholder={t("searchPlaceholder")}
             value={searchTerm}
             onChange={(e) => handleSearchChange(e.target.value)}
             className="pl-9"
           />
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">每页显示:</span>
+          <span className="text-sm text-muted-foreground">
+            {t("pagination.perPage", { size: "" }).replace(/\d+/, "")}
+          </span>
           <Select
             value={pageSize.toString()}
             onValueChange={(value) => handlePageSizeChange(parseInt(value, 10))}
@@ -216,12 +220,12 @@ export function PriceList({
         <Table className="table-fixed">
           <TableHeader>
             <TableRow>
-              <TableHead className="w-48 whitespace-normal">模型名称</TableHead>
-              <TableHead className="w-24">类型</TableHead>
-              <TableHead className="w-32 whitespace-normal">提供商</TableHead>
-              <TableHead className="w-32 text-right">输入价格 ($/M)</TableHead>
-              <TableHead className="w-32 text-right">输出价格 ($/M)</TableHead>
-              <TableHead className="w-32">更新时间</TableHead>
+              <TableHead className="w-48 whitespace-normal">{t("table.modelName")}</TableHead>
+              <TableHead className="w-24">{t("table.type")}</TableHead>
+              <TableHead className="w-32 whitespace-normal">{t("table.provider")}</TableHead>
+              <TableHead className="w-32 text-right">{t("table.inputPrice")}</TableHead>
+              <TableHead className="w-32 text-right">{t("table.outputPrice")}</TableHead>
+              <TableHead className="w-32">{t("table.updatedAt")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -230,7 +234,7 @@ export function PriceList({
                 <TableCell colSpan={6} className="text-center py-8">
                   <div className="flex items-center justify-center gap-2 text-muted-foreground">
                     <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-current"></div>
-                    <span>加载中...</span>
+                    <span>{t("table.loading")}</span>
                   </div>
                 </TableCell>
               </TableRow>
@@ -276,13 +280,13 @@ export function PriceList({
                     {searchTerm ? (
                       <>
                         <Search className="h-8 w-8 opacity-50" />
-                        <p>未找到匹配的模型</p>
+                        <p>{t("table.noMatch")}</p>
                       </>
                     ) : (
                       <>
                         <Package className="h-8 w-8 opacity-50" />
-                        <p>暂无价格数据</p>
-                        <p className="text-sm">系统已内置价格表，请通过上方按钮同步或更新</p>
+                        <p>{t("table.noDataTitle")}</p>
+                        <p className="text-sm">{t("table.noDataHint")}</p>
                       </>
                     )}
                   </div>
@@ -297,8 +301,11 @@ export function PriceList({
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
           <div className="text-sm text-muted-foreground">
-            显示第 {(page - 1) * pageSize + 1} - {Math.min(page * pageSize, total)} 条，共 {total}{" "}
-            条记录
+            {t("pagination.showing", {
+              from: (page - 1) * pageSize + 1,
+              to: Math.min(page * pageSize, total),
+              total: total,
+            })}
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -308,7 +315,7 @@ export function PriceList({
               disabled={page <= 1 || isLoading}
             >
               <ChevronLeft className="h-4 w-4" />
-              上一页
+              {t("pagination.previous")}
             </Button>
 
             <div className="flex items-center gap-1">
@@ -346,7 +353,7 @@ export function PriceList({
               onClick={() => handlePageChange(page + 1)}
               disabled={page >= totalPages || isLoading}
             >
-              下一页
+              {t("pagination.next")}
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
@@ -357,18 +364,22 @@ export function PriceList({
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <div className="flex items-center gap-1">
           <DollarSign className="h-4 w-4" />
-          <span>共 {total} 个模型价格</span>
+          <span>{t("stats.totalModels", { count: total })}</span>
           {searchTerm && (
-            <span className="text-muted-foreground">（搜索结果：{filteredPrices.length} 个）</span>
+            <span className="text-muted-foreground">
+              ({t("stats.searchResults", { count: filteredPrices.length })})
+            </span>
           )}
         </div>
         <div>
-          最后更新：
-          {prices.length > 0
-            ? new Date(
-                Math.max(...prices.map((p) => new Date(p.createdAt).getTime()))
-              ).toLocaleDateString("zh-CN")
-            : "-"}
+          {t("stats.lastUpdated", {
+            time:
+              prices.length > 0
+                ? new Date(
+                    Math.max(...prices.map((p) => new Date(p.createdAt).getTime()))
+                  ).toLocaleDateString()
+                : "-",
+          })}
         </div>
       </div>
     </div>

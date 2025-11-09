@@ -85,6 +85,16 @@
     "autoCleanup": "Автоматическая очистка логов",
     "autoCleanupDesc": "Автоматически очищать исторические логи по расписанию для освобождения места в БД.",
     "description": "Управление основными параметрами системы, влияющими на отображение и поведение статистики.",
+    "section": {
+      "siteParams": {
+        "title": "Параметры сайта",
+        "description": "Настройка заголовка сайта, валюты отображения и политики отображения статистики на панели."
+      },
+      "autoCleanup": {
+        "title": "Автоматическая очистка логов",
+        "description": "Автоматически очищать исторические логи по расписанию для освобождения места в БД."
+      }
+    },
     "form": {
       "allowGlobalView": "Разрешить просмотр глобального использования",
       "allowGlobalViewDesc": "При отключении обычные пользователи могут видеть только статистику использования своих ключей на панели.",
@@ -244,21 +254,21 @@
     }
   },
   "errors": {
-    "addFailed": "Ошибка добавления поставщика",
-    "addSuccess": "Добавлено успешно",
-    "deleteFailed": "Ошибка удаления поставщика",
-    "deleteSuccess": "Удалено успешно",
-    "editFailed": "Ошибка обновления поставщика",
-    "editSuccess": "Обновлено успешно",
-    "loadFailed": "Ошибка загрузки параметров уведомлений",
+    "saveSuccess": "Сохранение успешно",
     "saveFailed": "Ошибка сохранения",
-    "saveFailed_error": "Ошибка сохранения параметров",
-    "saveSuccess": "Сохранено успешно",
-    "syncFailed": "Ошибка синхронизации",
+    "saveFailed_error": "Не удалось сохранить настройки",
+    "addSuccess": "Добавление успешно",
+    "addFailed": "Не удалось добавить провайдера",
+    "editSuccess": "Обновление успешно",
+    "editFailed": "Не удалось обновить провайдера",
+    "deleteSuccess": "Удаление успешно",
+    "deleteFailed": "Не удалось удалить провайдера",
     "syncSuccess": "Синхронизация успешна",
-    "testFailed": "Ошибка тестирования",
-    "testFailedRetry": "Ошибка тестирования. Пожалуйста, повторите.",
-    "unknownError": "Ошибка при выполнении операции"
+    "syncFailed": "Ошибка синхронизации",
+    "testFailed": "Тест не пройден",
+    "testFailedRetry": "Тест не пройден, попробуйте снова",
+    "loadFailed": "Не удалось загрузить настройки уведомлений",
+    "unknownError": "Во время операции произошло исключение"
   },
   "logs": {
     "description": "Динамическая регулировка уровня логирования для контроля подробности.",
@@ -326,96 +336,137 @@
     "sensitiveWords": "Чувствительные слова"
   },
   "notifications": {
-    "circuitBreaker": {
-      "description": "Немедленно отправить оповещение когда поставщик полностью замкнут",
-      "enable": "Включить оповещение автоматического выключателя",
-      "test": "Проверить соединение",
-      "title": "Оповещение автоматического выключателя",
-      "webhook": "URL Webhook",
-      "webhookPlaceholder": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..."
+    "title": "Push-уведомления",
+    "description": "Настройка push-уведомлений робота WeChat Work",
+    "global": {
+      "title": "Главный переключатель уведомлений",
+      "description": "Включить или отключить все функции push-уведомлений",
+      "enable": "Включить push-уведомления"
     },
-    "costAlert": {
-      "description": "Отправить оповещение когда расходы превышают порог квоты",
-      "enable": "Включить оповещение о стоимости",
-      "interval": "Интервал проверки (минуты)",
-      "test": "Проверить соединение",
-      "threshold": "Порог оповещения",
-      "thresholdHelp": "Оповестить когда расходы достигают {percent}% квоты",
-      "thresholdLabel": "Порог оповещения: {percent}%",
-      "title": "Оповещение о стоимости",
-      "webhook": "URL Webhook",
-      "webhookPlaceholder": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..."
+    "circuitBreaker": {
+      "title": "Оповещение о размыкателе цепи",
+      "description": "Отправить оповещение немедленно при полном размыкании провайдера",
+      "enable": "Включить оповещение о размыкателе цепи",
+      "webhook": "Webhook URL",
+      "webhookPlaceholder": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...",
+      "test": "Тест подключения"
     },
     "dailyLeaderboard": {
-      "description": "Отправлять ежедневно рейтинг Top N пользователей по расходам",
+      "title": "Ежедневный рейтинг потребления пользователей",
+      "description": "Ежедневная отправка рейтинга топ N пользователей по потреблению",
       "enable": "Включить ежедневный рейтинг",
-      "test": "Проверить соединение",
+      "webhook": "Webhook URL",
+      "webhookPlaceholder": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...",
       "time": "Время отправки",
-      "timeError": "Ошибка формата времени, должно быть HH:mm",
       "timePlaceholder": "09:00",
-      "title": "Ежедневный рейтинг расходов",
-      "topN": "Показать Top N",
-      "webhook": "URL Webhook",
-      "webhookPlaceholder": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..."
+      "timeError": "Ошибка формата времени, должен быть HH:mm",
+      "topN": "Показать топ N",
+      "test": "Тест подключения"
     },
-    "description": "Настройка отправки уведомлений через робота WeChat Work",
+    "costAlert": {
+      "title": "Оповещение о расходах",
+      "description": "Триггер оповещения при превышении порога квоты потребления пользователя/провайдера",
+      "enable": "Включить оповещение о расходах",
+      "webhook": "Webhook URL",
+      "webhookPlaceholder": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...",
+      "threshold": "Порог оповещения",
+      "thresholdLabel": "Порог оповещения: {percent}%",
+      "thresholdHelp": "Оповещение при достижении {percent}% квоты",
+      "interval": "Интервал проверки (минуты)",
+      "test": "Тест подключения"
+    },
     "form": {
-      "loadError": "Ошибка загрузки параметров уведомлений",
-      "loading": "Загрузка...",
-      "save": "Сохранить параметры",
-      "saveError": "Ошибка сохранения параметров",
-      "saveFailed": "Ошибка сохранения",
+      "save": "Сохранить настройки",
       "saving": "Сохранение...",
-      "success": "Параметры уведомлений сохранены и перепланы переданы",
-      "testError": "Ошибка проверки соединения",
-      "testFailed": "Ошибка тестирования",
-      "testFailedRetry": "Ошибка тестирования. Пожалуйста, повторите.",
-      "testNoResult": "Тестирование успешно но результат не возвращен",
-      "testSuccess": "Тестовое сообщение отправлено. Проверьте WeChat Work.",
-      "webhookRequired": "Пожалуйста, сначала заполните URL Webhook"
-    },
-    "global": {
-      "description": "Включить или отключить все функции отправки уведомлений",
-      "enable": "Включить отправку уведомлений",
-      "title": "Главный переключатель уведомлений"
-    },
-    "title": "Отправка уведомлений"
+      "loading": "Загрузка...",
+      "success": "Настройки уведомлений сохранены и задачи перепланированы",
+      "saveFailed": "Ошибка сохранения",
+      "saveError": "Не удалось сохранить настройки",
+      "loadError": "Не удалось загрузить настройки уведомлений",
+      "webhookRequired": "Сначала заполните Webhook URL",
+      "testSuccess": "Тестовое сообщение отправлено, проверьте WeChat Work",
+      "testFailed": "Тест не пройден",
+      "testFailedRetry": "Тест не пройден, попробуйте снова",
+      "testError": "Ошибка тестирования подключения",
+      "testNoResult": "Тест пройден, но результат не возвращен"
+    }
   },
   "prices": {
+    "title": "Прайс-лист",
     "description": "Управление конфигурацией платформы и ценами моделей",
+    "section": {
+      "title": "Цены моделей",
+      "description": "Управление ценами AI моделей"
+    },
+    "searchPlaceholder": "Поиск по названию модели...",
+    "sync": {
+      "button": "Синхронизировать цены LiteLLM",
+      "syncing": "Синхронизация...",
+      "successWithChanges": "Прайс-лист успешно обновлён, {count} моделей обновлено",
+      "successNoChanges": "Прайс-лист актуален, обновление не требуется",
+      "failed": "Ошибка синхронизации",
+      "failedError": "Ошибка синхронизации: {error}",
+      "failedNoResult": "Прайс-лист обновлен но результат не возвращен",
+      "noModels": "Цены моделей не найдены",
+      "partialFailure": "Частичное обновление выполнено, но {count} моделей не удалось обновить"
+    },
+    "table": {
+      "modelName": "Название модели",
+      "type": "Тип",
+      "provider": "Поставщик",
+      "inputPrice": "Цена ввода ($/M)",
+      "outputPrice": "Цена вывода ($/M)",
+      "updatedAt": "Обновлено",
+      "typeChat": "Чат",
+      "typeImage": "Генерация изображений",
+      "typeCompletion": "Дополнение",
+      "typeUnknown": "Неизвестно",
+      "loading": "Загрузка...",
+      "noMatch": "Соответствующие модели не найдены",
+      "noDataTitle": "Данные о ценах отсутствуют",
+      "noDataHint": "Система имеет встроенный прайс-лист. Используйте кнопки выше для синхронизации."
+    },
+    "pagination": {
+      "showing": "Показано {from}-{to} из {total}",
+      "previous": "Назад",
+      "next": "Вперёд",
+      "perPage": "{size} на странице"
+    },
+    "stats": {
+      "totalModels": "Всего моделей: {count}",
+      "searchResults": "Результатов поиска: {count}",
+      "lastUpdated": "Последнее обновление: {time}"
+    },
     "dialog": {
-      "description": "Загрузить JSON файл для обновления прайс-листа",
+      "title": "Обновить прайс-лист",
+      "description": "Выберите и загрузите JSON файл с данными о ценах моделей",
+      "selectFile": "Нажмите для выбора JSON или перетащите сюда",
       "fileSizeLimit": "Размер файла не может превышать 10MB",
       "fileSizeLimitSmall": "Размер файла не превышает 10MB",
-      "getError": "Ошибка получения ключа",
-      "readError": "Ошибка получения ключа",
-      "selectFile": "Нажмите для выбора JSON или перетащите сюда",
-      "title": "Обновить прайс-лист",
-      "upload": "Загрузить",
-      "uploading": "Загрузка..."
-    },
-    "noData": "Система имеет встроенный прайс-лист. Используйте кнопки выше для синхронизации.",
-    "noModels": "Цены моделей не найдены",
-    "search": "Поиск по названию модели...",
-    "subtitle": "Цены моделей",
-    "subtitleDesc": "Управление ценами AI моделей",
-    "sync": "Синхронизировать цены LiteLLM",
-    "syncFailed": "Ошибка синхронизации",
-    "syncFailedError": "Ошибка синхронизации:",
-    "syncNoResult": "Прайс-лист обновлен но результат не возвращен",
-    "syncSuccess": "Прайс-лист обновлен успешно",
-    "syncing": "Синхронизация...",
-    "table": {
-      "cachePrice": "Цена кэша",
-      "inputPrice": "Цена ввода ($/M)",
-      "model": "Модель",
-      "outputPrice": "Цена вывода ($/M)",
-      "updatedAt": "Обновлено"
-    },
-    "title": "Прайс-лист",
-    "upload": "Обновить прайс-лист моделей",
-    "uploadFailed": "Ошибка получения данных о ценах:",
-    "uploadSuccess": "Прайс-лист обновлен успешно"
+      "invalidFileType": "Пожалуйста, выберите файл в формате JSON",
+      "fileTooLarge": "Размер файла превышает лимит 10MB",
+      "upload": "Загрузить и обновить",
+      "uploading": "Загрузка...",
+      "updatePriceTable": "Обновить прайс-лист",
+      "updating": "Обновление...",
+      "selectJson": "Выбрать JSON файл",
+      "updateSuccess": "Прайс-лист успешно обновлён, {count} моделей обновлено",
+      "updateFailed": "Ошибка обновления",
+      "systemHasBuiltIn": "Система имеет встроенный прайс-лист",
+      "manualDownload": "Вы также можете скачать вручную",
+      "latestPriceTable": "последний прайс-лист",
+      "andUploadViaButton": ", и загрузить через кнопку выше",
+      "supportedModels": "Поддерживается {count} моделей",
+      "results": {
+        "title": "Результаты обновления",
+        "total": "Всего: {total} моделей",
+        "success": "Успешно: {success}",
+        "failed": "Ошибок: {failed}",
+        "skipped": "Пропущено: {skipped}",
+        "details": "Подробности",
+        "viewDetails": "Просмотреть подробный журнал"
+      }
+    }
   },
   "providers": {
     "add": "Добавить поставщика",
@@ -791,7 +842,70 @@
     "toggleSuccessDesc": "Статус поставщика \"{name}\" обновлен",
     "updateFailed": "Не удалось обновить поставщика",
     "viewKey": "Просмотреть полный API ключ",
-    "viewKeyDesc": "Пожалуйста, храните бережно и не раскрывайте другим"
+    "viewKeyDesc": "Пожалуйста, храните бережно и не раскрывайте другим",
+    "types": {
+      "claude": {
+        "label": "Claude",
+        "description": "Официальный API Anthropic"
+      },
+      "claudeAuth": {
+        "label": "Claude Auth",
+        "description": "Служба ретрансляции Claude"
+      },
+      "codex": {
+        "label": "Codex",
+        "description": "Codex CLI API"
+      },
+      "geminiCli": {
+        "label": "Gemini CLI",
+        "description": "Gemini CLI API"
+      },
+      "openaiCompatible": {
+        "label": "OpenAI Compatible",
+        "description": "Совместимый с OpenAI API"
+      }
+    },
+    "list": {
+      "priority": "Приоритет",
+      "weight": "Вес",
+      "costMultiplier": "Множитель стоимости",
+      "todayUsageLabel": "Использование сегодня",
+      "todayUsageCount": "{count} раз(а)",
+      "circuitBroken": "Разорвано",
+      "officialWebsite": "Официальный",
+      "viewFullKey": "Просмотр полного API-ключа",
+      "viewFullKeyDesc": "Пожалуйста, храните его в безопасности и не делитесь с другими",
+      "keyLoading": "Загрузка...",
+      "confirmDeleteTitle": "Подтвердить удаление провайдера?",
+      "confirmDeleteMessage": "Вы уверены, что хотите удалить провайдера \"{name}\"? Это действие нельзя отменить.",
+      "deleteButton": "Удалить",
+      "cancelButton": "Отмена",
+      "deleteSuccess": "Успешно удалено",
+      "deleteSuccessDesc": "Провайдер \"{name}\" был удален",
+      "deleteFailed": "Не удалось удалить",
+      "deleteError": "Произошла ошибка во время операции",
+      "unknownError": "Неизвестная ошибка",
+      "getKeyFailed": "Не удалось получить ключ",
+      "keyCopied": "Ключ скопирован в буфер обмена",
+      "copyFailed": "Не удалось скопировать",
+      "resetCircuitSuccess": "Автоматический выключатель сброшен",
+      "resetCircuitSuccessDesc": "Статус автоматического выключателя провайдера \"{name}\" очищен",
+      "resetCircuitFailed": "Не удалось сбросить автоматический выключатель",
+      "toggleSuccess": "Провайдер {status}",
+      "toggleSuccessDesc": "Статус провайдера \"{name}\" обновлен",
+      "toggleFailed": "Не удалось переключить",
+      "statusEnabled": "включен",
+      "statusDisabled": "отключен"
+    },
+    "schedulingDialog": {
+      "title": "Правила планирования провайдеров",
+      "description": "Узнайте, как система интеллектуально выбирает вышестоящих провайдеров для высокой доступности и оптимизации затрат",
+      "triggerButton": "Правила планирования",
+      "step": "Шаг",
+      "before": "До:",
+      "after": "После:",
+      "decision": "Решение:"
+    }
   },
   "sensitiveWords": {
     "add": "Добавить чувствительное слово",
@@ -847,78 +961,5 @@
     "title": "Управление чувствительными словами",
     "toggleFailed": "Ошибка переключения",
     "toggleFailedError": "Ошибка переключения:"
-  },
-  "notifications": {
-    "title": "Push-уведомления",
-    "description": "Настройка push-уведомлений робота WeChat Work",
-    "global": {
-      "title": "Главный переключатель уведомлений",
-      "description": "Включить или отключить все функции push-уведомлений",
-      "enable": "Включить push-уведомления"
-    },
-    "circuitBreaker": {
-      "title": "Оповещение о размыкателе цепи",
-      "description": "Отправить оповещение немедленно при полном размыкании провайдера",
-      "enable": "Включить оповещение о размыкателе цепи",
-      "webhook": "Webhook URL",
-      "webhookPlaceholder": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...",
-      "test": "Тест подключения"
-    },
-    "dailyLeaderboard": {
-      "title": "Ежедневный рейтинг потребления пользователей",
-      "description": "Ежедневная отправка рейтинга топ N пользователей по потреблению",
-      "enable": "Включить ежедневный рейтинг",
-      "webhook": "Webhook URL",
-      "webhookPlaceholder": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...",
-      "time": "Время отправки",
-      "timePlaceholder": "09:00",
-      "timeError": "Ошибка формата времени, должен быть HH:mm",
-      "topN": "Показать топ N",
-      "test": "Тест подключения"
-    },
-    "costAlert": {
-      "title": "Оповещение о расходах",
-      "description": "Триггер оповещения при превышении порога квоты потребления пользователя/провайдера",
-      "enable": "Включить оповещение о расходах",
-      "webhook": "Webhook URL",
-      "webhookPlaceholder": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...",
-      "threshold": "Порог оповещения",
-      "thresholdLabel": "Порог оповещения: {percent}%",
-      "thresholdHelp": "Оповещение при достижении {percent}% квоты",
-      "interval": "Интервал проверки (минуты)",
-      "test": "Тест подключения"
-    },
-    "form": {
-      "save": "Сохранить настройки",
-      "saving": "Сохранение...",
-      "loading": "Загрузка...",
-      "success": "Настройки уведомлений сохранены и задачи перепланированы",
-      "saveFailed": "Ошибка сохранения",
-      "saveError": "Не удалось сохранить настройки",
-      "loadError": "Не удалось загрузить настройки уведомлений",
-      "webhookRequired": "Сначала заполните Webhook URL",
-      "testSuccess": "Тестовое сообщение отправлено, проверьте WeChat Work",
-      "testFailed": "Тест не пройден",
-      "testFailedRetry": "Тест не пройден, попробуйте снова",
-      "testError": "Ошибка тестирования подключения",
-      "testNoResult": "Тест пройден, но результат не возвращен"
-    }
-  },
-  "errors": {
-    "saveSuccess": "Сохранение успешно",
-    "saveFailed": "Ошибка сохранения",
-    "saveFailed_error": "Не удалось сохранить настройки",
-    "addSuccess": "Добавление успешно",
-    "addFailed": "Не удалось добавить провайдера",
-    "editSuccess": "Обновление успешно",
-    "editFailed": "Не удалось обновить провайдера",
-    "deleteSuccess": "Удаление успешно",
-    "deleteFailed": "Не удалось удалить провайдера",
-    "syncSuccess": "Синхронизация успешна",
-    "syncFailed": "Ошибка синхронизации",
-    "testFailed": "Тест не пройден",
-    "testFailedRetry": "Тест не пройден, попробуйте снова",
-    "loadFailed": "Не удалось загрузить настройки уведомлений",
-    "unknownError": "Во время операции произошло исключение"
   }
 }

@@ -90,13 +90,16 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
     },
   });
 
+  // Use dashboard translations for form
+  const tForm = useTranslations("dashboard.userForm");
+
   return (
     <DialogFormLayout
       config={{
-        title: isEdit ? "编辑用户" : "新增用户",
-        description: isEdit ? "修改用户的基本信息。" : "创建新用户，系统将自动为其生成默认密钥。",
-        submitText: isEdit ? "保存修改" : "确认创建",
-        loadingText: isEdit ? "保存中..." : "创建中...",
+        title: tForm(isEdit ? "title.edit" : "title.add"),
+        description: tForm(isEdit ? "description.edit" : "description.add"),
+        submitText: tForm(isEdit ? "submitText.edit" : "submitText.add"),
+        loadingText: tForm(isEdit ? "loadingText.edit" : "loadingText.add"),
       }}
       onSubmit={form.handleSubmit}
       isSubmitting={isPending}
@@ -104,50 +107,50 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
       error={form.errors._form}
     >
       <TextField
-        label="用户名"
+        label={tForm("username.label")}
         required
         maxLength={64}
         autoFocus
-        placeholder="请输入用户名"
+        placeholder={tForm("username.placeholder")}
         {...form.getFieldProps("name")}
       />
 
       <TextField
-        label="备注"
+        label={tForm("note.label")}
         maxLength={200}
-        placeholder="请输入备注（可选）"
-        description="用于描述用户的用途或备注信息"
+        placeholder={tForm("note.placeholder")}
+        description={tForm("note.description")}
         {...form.getFieldProps("note")}
       />
 
       <TextField
-        label="供应商分组"
+        label={tForm("providerGroup.label")}
         maxLength={50}
-        placeholder="例如: premium 或 premium,economy（可选）"
-        description="指定用户专属的供应商分组（支持多个，逗号分隔）。系统将只从 groupTag 匹配的供应商中选择。留空=使用所有供应商"
+        placeholder={tForm("providerGroup.placeholder")}
+        description={tForm("providerGroup.description")}
         {...form.getFieldProps("providerGroup")}
       />
 
       <TextField
-        label="RPM限制"
+        label={tForm("rpm.label")}
         type="number"
         required
         min={1}
         max={10000}
-        placeholder="每分钟请求数限制"
-        description={`默认值: ${USER_DEFAULTS.RPM}，范围: 1-10000`}
+        placeholder={tForm("rpm.placeholder")}
+        description={tForm("rpm.description", { default: USER_DEFAULTS.RPM })}
         {...form.getFieldProps("rpm")}
       />
 
       <TextField
-        label="每日额度"
+        label={tForm("dailyQuota.label")}
         type="number"
         required
         min={0.01}
         max={1000}
         step={0.01}
-        placeholder="每日消费额度限制"
-        description={`默认值: $${USER_DEFAULTS.DAILY_QUOTA}，范围: $0.01-$1000`}
+        placeholder={tForm("dailyQuota.placeholder")}
+        description={tForm("dailyQuota.description", { default: USER_DEFAULTS.DAILY_QUOTA })}
         {...form.getFieldProps("dailyQuota")}
       />
     </DialogFormLayout>

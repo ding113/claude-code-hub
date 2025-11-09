@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { SquarePen, Trash } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { UserForm } from "./forms/user-form";
 import { DeleteUserConfirm } from "./forms/delete-user-confirm";
@@ -15,6 +16,7 @@ interface UserActionsProps {
 export function UserActions({ user, currentUser }: UserActionsProps) {
   const [openEdit, setOpenEdit] = useState(false);
   const [openDelete, setOpenDelete] = useState(false);
+  const t = useTranslations("dashboard.userActions");
 
   // 权限检查：只有管理员才能编辑用户信息
   const canEditUser = currentUser?.role === "admin";
@@ -31,9 +33,9 @@ export function UserActions({ user, currentUser }: UserActionsProps) {
         <DialogTrigger asChild>
           <button
             type="button"
-            aria-label="编辑用户"
+            aria-label={t("editAriaLabel")}
             className="inline-flex items-center justify-center p-1 text-muted-foreground hover:text-foreground transition-colors"
-            title="编辑用户"
+            title={t("edit")}
           >
             <SquarePen className="h-3.5 w-3.5" />
           </button>
@@ -50,9 +52,9 @@ export function UserActions({ user, currentUser }: UserActionsProps) {
         <DialogTrigger asChild>
           <button
             type="button"
-            aria-label="删除用户"
+            aria-label={t("deleteAriaLabel")}
             className="inline-flex items-center justify-center p-1 text-muted-foreground hover:text-red-600 transition-colors"
-            title="删除用户"
+            title={t("delete")}
           >
             <Trash className="h-3.5 w-3.5" />
           </button>

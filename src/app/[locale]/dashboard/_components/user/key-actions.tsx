@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { SquarePen, Trash2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { EditKeyForm } from "./forms/edit-key-form";
 import { DeleteKeyConfirm } from "./forms/delete-key-confirm";
@@ -18,6 +19,7 @@ interface KeyActionsProps {
 export function KeyActions({ keyData, currentUser, keyOwnerUserId, canDelete }: KeyActionsProps) {
   const [openEdit, setOpenEdit] = useState(false);
   const [openDelete, setOpenDelete] = useState(false);
+  const t = useTranslations("dashboard.keyActions");
 
   // 权限检查：只有管理员或Key的拥有者才能编辑/删除
   const canManageKey =
@@ -35,9 +37,9 @@ export function KeyActions({ keyData, currentUser, keyOwnerUserId, canDelete }: 
         <DialogTrigger asChild>
           <button
             type="button"
-            aria-label="编辑密钥"
+            aria-label={t("editAriaLabel")}
             className="inline-flex items-center justify-center p-1.5 text-muted-foreground hover:text-foreground transition-colors"
-            title="编辑"
+            title={t("edit")}
           >
             <SquarePen className="h-4 w-4" />
           </button>
@@ -55,9 +57,9 @@ export function KeyActions({ keyData, currentUser, keyOwnerUserId, canDelete }: 
           <DialogTrigger asChild>
             <button
               type="button"
-              aria-label="删除密钥"
+              aria-label={t("deleteAriaLabel")}
               className="inline-flex items-center justify-center p-1.5 text-muted-foreground hover:text-red-600"
-              title="删除"
+              title={t("delete")}
             >
               <Trash2 className="h-4 w-4" />
             </button>

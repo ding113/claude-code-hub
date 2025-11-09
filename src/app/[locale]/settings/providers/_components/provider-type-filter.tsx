@@ -8,7 +8,12 @@ import {
 } from "@/components/ui/select";
 import { Filter } from "lucide-react";
 import type { ProviderType } from "@/types/provider";
-import { PROVIDER_TYPE_CONFIG, getAllProviderTypes } from "@/lib/provider-type-utils";
+import {
+  PROVIDER_TYPE_CONFIG,
+  getAllProviderTypes,
+  getProviderTypeTranslationKey,
+} from "@/lib/provider-type-utils";
+import { useTranslations } from "next-intl";
 
 interface ProviderTypeFilterProps {
   value: ProviderType | "all";
@@ -16,23 +21,29 @@ interface ProviderTypeFilterProps {
 }
 
 export function ProviderTypeFilter({ value, onChange }: ProviderTypeFilterProps) {
+  const tTypes = useTranslations("providers.types");
+  const tForm = useTranslations("settings.providers.form");
+
   return (
     <div className="flex items-center gap-2">
       <Filter className="h-4 w-4 text-muted-foreground" />
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger className="w-[200px]">
-          <SelectValue placeholder="筛选供应商类型" />
+          <SelectValue placeholder={tForm("filterByType")} />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">全部供应商</SelectItem>
+          <SelectItem value="all">{tForm("filterAllProviders")}</SelectItem>
           {getAllProviderTypes().map((type) => {
             const config = PROVIDER_TYPE_CONFIG[type];
             const Icon = config.icon;
+            const typeKey = getProviderTypeTranslationKey(type);
+            const label = tTypes(`${typeKey}.label`);
+
             return (
               <SelectItem key={type} value={type}>
                 <div className="flex items-center gap-2">
                   <Icon className={`h-3.5 w-3.5 ${config.iconColor}`} />
-                  <span>{config.label}</span>
+                  <span>{label}</span>
                 </div>
               </SelectItem>
             );
