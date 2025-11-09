@@ -309,7 +309,11 @@ export async function removeUser(userId: number): Promise<ActionResult> {
 
     const session = await getSession();
     if (!session || session.user.role !== "admin") {
-      return { ok: false, error: tError("PERMISSION_DENIED"), errorCode: ERROR_CODES.PERMISSION_DENIED };
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
     }
 
     await deleteUser(userId);
@@ -348,7 +352,11 @@ export async function getUserLimitUsage(userId: number): Promise<
 
     // 权限检查：用户只能查看自己，管理员可以查看所有人
     if (session.user.role !== "admin" && session.user.id !== userId) {
-      return { ok: false, error: tError("PERMISSION_DENIED"), errorCode: ERROR_CODES.PERMISSION_DENIED };
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
     }
 
     // 动态导入避免循环依赖
