@@ -56,9 +56,35 @@ function getNotificationQueue(): Queue.Queue<NotificationJobData> {
     redisUrl: redisUrl.replace(/:[^:]*@/, ":***@"), // 隐藏密码
   });
 
+  // --- START SNI/TLS FIX ---
+  const useTls = redisUrl.startsWith("rediss://");
+  // Bull 需要一个 RedisOptions 对象
+  const redisQueueOptions: Queue.QueueOptions["redis"] = {};
+
+  try {
+    // 使用 Node.js 内置的 URL 解析器
+    const url = new URL(redisUrl);
+    redisQueueOptions.host = url.hostname;
+    redisQueueOptions.port = parseInt(url.port || (useTls ? "6379" : "6379"));
+    redisQueueOptions.password = url.password;
+    redisQueueOptions.username = url.username; // 传递用户名
+
+    if (useTls) {
+      logger.info("[NotificationQueue] Using TLS connection (rediss://)");
+      redisQueueOptions.tls = {
+        host: url.hostname, // 显式 SNI 修复
+      };
+    }
+  } catch (e) {
+    logger.error("[NotificationQueue] Failed to parse REDIS_URL, connection will fail:", e);
+    // 如果 URL 格式错误，则抛出异常停止启动
+    throw new Error("Invalid REDIS_URL format");
+  }
+  // --- END SNI/TLS FIX ---
+
   // 创建队列实例
   _notificationQueue = new Queue<NotificationJobData>("notifications", {
-    redis: redisUrl, // 直接使用 URL 字符串
+    redis: redisQueueOptions, // 替换：使用我们解析后的对象
     defaultJobOptions: {
       attempts: 3, // 失败重试 3 次
       backoff: {
