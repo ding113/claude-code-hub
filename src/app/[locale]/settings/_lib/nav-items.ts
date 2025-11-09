@@ -17,7 +17,7 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   { href: "/settings/data", labelKey: "nav.data", label: "数据管理" },
   { href: "/settings/logs", labelKey: "nav.logs", label: "日志" },
   { href: "/settings/notifications", labelKey: "nav.notifications", label: "消息推送" },
-  { href: "/api/actions/scalar", labelKey: "nav.api", label: "API 文档", external: true },
+  { href: "/api/actions/scalar", labelKey: "nav.apiDocs", label: "API 文档", external: true },
 ];
 
 // Helper function to get translated nav items
