@@ -111,20 +111,16 @@ export function getRedisClient(): Redis | null {
     // 4. 保持原始的事件监听器
     redisClient.on("connect", () => {
       logger.info("[Redis] Connected successfully", {
-        protocol: proto || (options as unknown as { tls?: object }).tls ? "rediss" : "redis",
-        host,
-        port,
-        tlsEnabled: Boolean((options as unknown as { tls?: object }).tls),
+        protocol: useTls ? "rediss" : "redis",
+        tlsEnabled: useTls,
       });
     });
 
     redisClient.on("error", (error) => {
       logger.error("[Redis] Connection error", {
         error: error instanceof Error ? error.message : String(error),
-        protocol: proto || (isTLS ? "rediss" : "redis"),
-        host,
-        port,
-        tlsEnabled: isTLS,
+        protocol: useTls ? "rediss" : "redis",
+        tlsEnabled: useTls,
       });
     });
 
