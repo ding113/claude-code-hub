@@ -73,7 +73,9 @@ export async function getUsers(): Promise<UserDisplay[]> {
                 maskedKey: maskKey(key.key),
                 fullKey: canUserManageKey ? key.key : undefined,
                 canCopy: canUserManageKey,
-                expiresAt: key.expiresAt ? key.expiresAt.toISOString().split("T")[0] : t("neverExpires"),
+                expiresAt: key.expiresAt
+                  ? key.expiresAt.toISOString().split("T")[0]
+                  : t("neverExpires"),
                 status: key.isEnabled ? "enabled" : ("disabled" as const),
                 createdAt: key.createdAt,
                 createdAtFormatted: key.createdAt.toLocaleString("zh-CN", {
