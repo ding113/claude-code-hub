@@ -102,7 +102,7 @@ export async function getUsers(): Promise<UserDisplay[]> {
             }),
           };
         } catch (error) {
-          logger.error(`获取用户 ${user.id} 的密钥失败:`, error);
+          logger.error(`Failed to fetch keys for user ${user.id}:`, error);
           return {
             id: user.id,
             name: user.name,
@@ -119,7 +119,7 @@ export async function getUsers(): Promise<UserDisplay[]> {
 
     return userDisplays;
   } catch (error) {
-    logger.error("获取用户数据失败:", error);
+    logger.error("Failed to fetch user data:", error);
     return [];
   }
 }
@@ -186,7 +186,7 @@ export async function addUser(data: {
     revalidatePath("/dashboard");
     return { ok: true };
   } catch (error) {
-    logger.error("添加用户失败:", error);
+    logger.error("Failed to create user:", error);
     const tError = await getTranslations("errors");
     const message = error instanceof Error ? error.message : tError("CREATE_USER_FAILED");
     return {
@@ -289,7 +289,7 @@ export async function editUser(
     revalidatePath("/dashboard");
     return { ok: true };
   } catch (error) {
-    logger.error("更新用户失败:", error);
+    logger.error("Failed to update user:", error);
     const tError = await getTranslations("errors");
     const message = error instanceof Error ? error.message : tError("UPDATE_USER_FAILED");
     return {
@@ -315,7 +315,7 @@ export async function removeUser(userId: number): Promise<ActionResult> {
     revalidatePath("/dashboard");
     return { ok: true };
   } catch (error) {
-    logger.error("删除用户失败:", error);
+    logger.error("Failed to delete user:", error);
     const tError = await getTranslations("errors");
     const message = error instanceof Error ? error.message : tError("DELETE_USER_FAILED");
     return { ok: false, error: message };
@@ -378,7 +378,7 @@ export async function getUserLimitUsage(userId: number): Promise<
       },
     };
   } catch (error) {
-    logger.error("获取用户限额使用情况失败:", error);
+    logger.error("Failed to fetch user limit usage:", error);
     const tError = await getTranslations("errors");
     const message = error instanceof Error ? error.message : tError("GET_USER_QUOTA_FAILED");
     return { ok: false, error: message };
