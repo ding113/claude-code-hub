@@ -14,7 +14,7 @@ import { getSession } from "@/lib/auth";
 import type { ActionResult } from "./types";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
 import { formatZodError } from "@/lib/utils/zod-i18n";
-import { getTranslations } from "next-intl/server";
+import { getTranslations, getLocale } from "next-intl/server";
 
 // 获取用户数据
 export async function getUsers(): Promise<UserDisplay[]> {
@@ -24,7 +24,8 @@ export async function getUsers(): Promise<UserDisplay[]> {
       return [];
     }
 
-    // Get translations for user-related texts
+    // Get current locale and translations
+    const locale = await getLocale();
     const t = await getTranslations("users");
 
     // 普通用户只能看到自己的数据
@@ -78,7 +79,7 @@ export async function getUsers(): Promise<UserDisplay[]> {
                   : t("neverExpires"),
                 status: key.isEnabled ? "enabled" : ("disabled" as const),
                 createdAt: key.createdAt,
-                createdAtFormatted: key.createdAt.toLocaleString("zh-CN", {
+                createdAtFormatted: key.createdAt.toLocaleString(locale, {
                   year: "numeric",
                   month: "2-digit",
                   day: "2-digit",
@@ -308,7 +309,7 @@ export async function removeUser(userId: number): Promise<ActionResult> {
 
     const session = await getSession();
     if (!session || session.user.role !== "admin") {
-      return { ok: false, error: tError("PERMISSION_DENIED") };
+      return { ok: false, error: tError("PERMISSION_DENIED"), errorCode: ERROR_CODES.PERMISSION_DENIED };
     }
 
     await deleteUser(userId);
@@ -318,7 +319,7 @@ export async function removeUser(userId: number): Promise<ActionResult> {
     logger.error("Failed to delete user:", error);
     const tError = await getTranslations("errors");
     const message = error instanceof Error ? error.message : tError("DELETE_USER_FAILED");
-    return { ok: false, error: message };
+    return { ok: false, error: message, errorCode: ERROR_CODES.DELETE_FAILED };
   }
 }
 
@@ -337,17 +338,17 @@ export async function getUserLimitUsage(userId: number): Promise<
 
     const session = await getSession();
     if (!session) {
-      return { ok: false, error: tError("UNAUTHORIZED") };
+      return { ok: false, error: tError("UNAUTHORIZED"), errorCode: ERROR_CODES.UNAUTHORIZED };
     }
 
     const user = await findUserById(userId);
     if (!user) {
-      return { ok: false, error: tError("USER_NOT_FOUND") };
+      return { ok: false, error: tError("USER_NOT_FOUND"), errorCode: ERROR_CODES.NOT_FOUND };
     }
 
     // 权限检查：用户只能查看自己，管理员可以查看所有人
     if (session.user.role !== "admin" && session.user.id !== userId) {
-      return { ok: false, error: tError("PERMISSION_DENIED") };
+      return { ok: false, error: tError("PERMISSION_DENIED"), errorCode: ERROR_CODES.PERMISSION_DENIED };
     }
 
     // 动态导入避免循环依赖
@@ -381,6 +382,6 @@ export async function getUserLimitUsage(userId: number): Promise<
     logger.error("Failed to fetch user limit usage:", error);
     const tError = await getTranslations("errors");
     const message = error instanceof Error ? error.message : tError("GET_USER_QUOTA_FAILED");
-    return { ok: false, error: message };
+    return { ok: false, error: message, errorCode: ERROR_CODES.OPERATION_FAILED };
   }
 }
