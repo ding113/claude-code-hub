@@ -87,12 +87,12 @@ Claude Code Hub 通过 Next.js 15 + Hono + PostgreSQL + Redis 组合，实现 Cl
 
 ## 🖼️ 界面预览 Screenshots
 
-| 功能 | 截图 | 说明 |
-| --- | --- | --- |
-| 仪表盘 | ![Dashboard](public/readme/首页.png) | 汇总调用量、成本、活跃 Session 与时间分布，实时洞察整体使用情况。 |
-| 供应商管理 | ![Provider Management](public/readme/供应商管理.png) | 为每个供应商配置权重、成本系数、并发限制、代理及模型重定向，实现精细调度。 |
-| 日志与审计 | ![Logs](public/readme/日志.png) | 统一查询请求日志，支持时间/用户/供应商/模型筛选，查看 Token、成本与缓冲命中情况。 |
-| 排行榜 | ![Leaderboard](public/readme/排行榜.png) | 按用户统计请求数、Token 与成本，用于费用分摊与用量治理。 |
+| 功能       | 截图                                                 | 说明                                                                              |
+| ---------- | ---------------------------------------------------- | --------------------------------------------------------------------------------- |
+| 仪表盘     | ![Dashboard](public/readme/首页.png)                 | 汇总调用量、成本、活跃 Session 与时间分布，实时洞察整体使用情况。                 |
+| 供应商管理 | ![Provider Management](public/readme/供应商管理.png) | 为每个供应商配置权重、成本系数、并发限制、代理及模型重定向，实现精细调度。        |
+| 日志与审计 | ![Logs](public/readme/日志.png)                      | 统一查询请求日志，支持时间/用户/供应商/模型筛选，查看 Token、成本与缓冲命中情况。 |
+| 排行榜     | ![Leaderboard](public/readme/排行榜.png)             | 按用户统计请求数、Token 与成本，用于费用分摊与用量治理。                          |
 
 ## 🏗️ 架构说明 Architecture
 
@@ -171,40 +171,40 @@ Docker Compose 是**首选部署方式**，自动配置数据库、Redis 和应�
 
 ## ⚙️ 配置说明 Configuration
 
-| 变量 | 默认值 | 说明与建议 |
-| --- | --- | --- |
-| `ADMIN_TOKEN` | `change-me` | 后台登录令牌，部署前必须修改。 |
-| `DSN` | - | PostgreSQL 连接串，如 `postgres://user:pass@host:5432/db`. |
-| `AUTO_MIGRATE` | `true` | 启动时自动执行 Drizzle 迁移；生产环境可关闭以人工控制。 |
-| `REDIS_URL` | `redis://localhost:6379` | Redis 地址，支持 `rediss://` 用于 TLS。 |
-| `ENABLE_RATE_LIMIT` | `true` | 控制多维限流开关；Fail-Open 策略在 Redis 不可用时自动降级。 |
-| `SESSION_TTL` | `300` | Session 缓存时间（秒），影响供应商复用策略。 |
-| `ENABLE_SECURE_COOKIES` | `true` | 仅 HTTPS 场景能设置 Secure Cookie；HTTP 访问（非 localhost）需改为 `false`。 |
-| `ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS` | `false` | 是否将网络错误计入熔断器；开启后能更激进地阻断异常线路。 |
-| `APP_PORT` | `23000` | 生产端口，可被容器或进程管理器覆盖。 |
-| `APP_URL` | 空 | 设置后 OpenAPI 文档 `servers` 将展示正确域名/端口。 |
+| 变量                                       | 默认值                   | 说明与建议                                                                   |
+| ------------------------------------------ | ------------------------ | ---------------------------------------------------------------------------- |
+| `ADMIN_TOKEN`                              | `change-me`              | 后台登录令牌，部署前必须修改。                                               |
+| `DSN`                                      | -                        | PostgreSQL 连接串，如 `postgres://user:pass@host:5432/db`.                   |
+| `AUTO_MIGRATE`                             | `true`                   | 启动时自动执行 Drizzle 迁移；生产环境可关闭以人工控制。                      |
+| `REDIS_URL`                                | `redis://localhost:6379` | Redis 地址，支持 `rediss://` 用于 TLS。                                      |
+| `ENABLE_RATE_LIMIT`                        | `true`                   | 控制多维限流开关；Fail-Open 策略在 Redis 不可用时自动降级。                  |
+| `SESSION_TTL`                              | `300`                    | Session 缓存时间（秒），影响供应商复用策略。                                 |
+| `ENABLE_SECURE_COOKIES`                    | `true`                   | 仅 HTTPS 场景能设置 Secure Cookie；HTTP 访问（非 localhost）需改为 `false`。 |
+| `ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS` | `false`                  | 是否将网络错误计入熔断器；开启后能更激进地阻断异常线路。                     |
+| `APP_PORT`                                 | `23000`                  | 生产端口，可被容器或进程管理器覆盖。                                         |
+| `APP_URL`                                  | 空                       | 设置后 OpenAPI 文档 `servers` 将展示正确域名/端口。                          |
 
 > 布尔变量请直接写 `true/false` 或 `1/0`，勿加引号，避免被 Zod 转换为真值。更多字段参考 `.env.example`。
 
 ## ❓ FAQ
 
-1. **数据库连接失败怎么办？**  
-   - 确认 `DSN` 格式与凭据无误；Docker 场景下使用服务名（如 `postgres:5432`）。  
+1. **数据库连接失败怎么办？**
+   - 确认 `DSN` 格式与凭据无误；Docker 场景下使用服务名（如 `postgres:5432`）。
    - 查看 `docker compose ps` 或本地 PostgreSQL 状态，必要时通过 `make db-shell` 诊断。
 
-2. **Redis 离线会影响服务吗？**  
+2. **Redis 离线会影响服务吗？**
    - 平台采用 Fail-Open 策略：限流与会话统计会降级，但请求仍会继续；建议监控日志中的 Redis Error 并尽快恢复。
 
-3. **熔断器持续打开如何排查？**  
-   - 查看日志中的 `[CircuitBreaker]` 记录，确认是否由于 4xx/5xx 或网络错误导致。  
+3. **熔断器持续打开如何排查？**
+   - 查看日志中的 `[CircuitBreaker]` 记录，确认是否由于 4xx/5xx 或网络错误导致。
    - 在管理后台检查供应商健康状态，等待 30 分钟或重启应用重置状态。
 
-4. **提示“无可用供应商”该怎么办？**  
-   - 检查供应商是否启用、权重/优先级设置合理，以及是否达到并发/金额限制。  
+4. **提示“无可用供应商”该怎么办？**
+   - 检查供应商是否启用、权重/优先级设置合理，以及是否达到并发/金额限制。
    - 查看决策链日志，确认是否被熔断或代理失败导致。
 
-5. **代理配置失败？**  
-   - 确认 URL 含协议前缀（`http://`、`socks5://` 等），并使用后台“测试连接”按钮验证。  
+5. **代理配置失败？**
+   - 确认 URL 含协议前缀（`http://`、`socks5://` 等），并使用后台“测试连接”按钮验证。
    - 若启用降级策略（`proxy_fallback_to_direct`），请在日志中确认是否已自动切换至直连。
 
 ## 🤝 贡献指南 Contributing

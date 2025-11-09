@@ -87,12 +87,12 @@ Once started:
 
 ## 🖼️ Screenshots
 
-| Feature | Screenshot | Description |
-| --- | --- | --- |
-| Dashboard | ![Dashboard](public/readme/首页.png) | Aggregates request volume, spending, active sessions, and time-series distribution for instant situational awareness. |
-| Provider management | ![Provider Management](public/readme/供应商管理.png) | Configure weight, cost multiplier, concurrency caps, proxies, and model redirection per vendor for precise routing. |
-| Logs & audit | ![Logs](public/readme/日志.png) | Unified request log with filters for time/user/provider/model plus token, cost, and cache-hit details. |
-| Leaderboard | ![Leaderboard](public/readme/排行榜.png) | Ranks users by requests, tokens, and spending to support chargeback and usage governance. |
+| Feature             | Screenshot                                           | Description                                                                                                           |
+| ------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Dashboard           | ![Dashboard](public/readme/首页.png)                 | Aggregates request volume, spending, active sessions, and time-series distribution for instant situational awareness. |
+| Provider management | ![Provider Management](public/readme/供应商管理.png) | Configure weight, cost multiplier, concurrency caps, proxies, and model redirection per vendor for precise routing.   |
+| Logs & audit        | ![Logs](public/readme/日志.png)                      | Unified request log with filters for time/user/provider/model plus token, cost, and cache-hit details.                |
+| Leaderboard         | ![Leaderboard](public/readme/排行榜.png)             | Ranks users by requests, tokens, and spending to support chargeback and usage governance.                             |
 
 ## 🏗️ Architecture
 
@@ -171,40 +171,40 @@ Docker Compose is the **preferred deployment method** — it automatically provi
 
 ## ⚙️ Configuration
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `ADMIN_TOKEN` | `change-me` | Admin console token — must be updated before deployment. |
-| `DSN` | - | PostgreSQL connection string, e.g., `postgres://user:pass@host:5432/db`. |
-| `AUTO_MIGRATE` | `true` | Executes Drizzle migrations on startup; consider disabling in production for manual control. |
-| `REDIS_URL` | `redis://localhost:6379` | Redis endpoint, supports `rediss://` for TLS providers. |
-| `ENABLE_RATE_LIMIT` | `true` | Toggles multi-dimensional rate limiting; Fail-Open handles Redis outages gracefully. |
-| `SESSION_TTL` | `300` | Session cache window (seconds) that drives vendor reuse. |
-| `ENABLE_SECURE_COOKIES` | `true` | Browsers require HTTPS for Secure cookies; set to `false` when serving plain HTTP outside localhost. |
-| `ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS` | `false` | When `true`, network errors also trip the circuit breaker for quicker isolation. |
-| `APP_PORT` | `23000` | Production port (override via container or process manager). |
-| `APP_URL` | empty | Populate to expose correct `servers` entries in OpenAPI docs. |
+| Variable                                   | Default                  | Description                                                                                          |
+| ------------------------------------------ | ------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `ADMIN_TOKEN`                              | `change-me`              | Admin console token — must be updated before deployment.                                             |
+| `DSN`                                      | -                        | PostgreSQL connection string, e.g., `postgres://user:pass@host:5432/db`.                             |
+| `AUTO_MIGRATE`                             | `true`                   | Executes Drizzle migrations on startup; consider disabling in production for manual control.         |
+| `REDIS_URL`                                | `redis://localhost:6379` | Redis endpoint, supports `rediss://` for TLS providers.                                              |
+| `ENABLE_RATE_LIMIT`                        | `true`                   | Toggles multi-dimensional rate limiting; Fail-Open handles Redis outages gracefully.                 |
+| `SESSION_TTL`                              | `300`                    | Session cache window (seconds) that drives vendor reuse.                                             |
+| `ENABLE_SECURE_COOKIES`                    | `true`                   | Browsers require HTTPS for Secure cookies; set to `false` when serving plain HTTP outside localhost. |
+| `ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS` | `false`                  | When `true`, network errors also trip the circuit breaker for quicker isolation.                     |
+| `APP_PORT`                                 | `23000`                  | Production port (override via container or process manager).                                         |
+| `APP_URL`                                  | empty                    | Populate to expose correct `servers` entries in OpenAPI docs.                                        |
 
 > Boolean values should be `true/false` or `1/0` without quotes; otherwise Zod may coerce strings incorrectly. See `.env.example` for the full list.
 
 ## ❓ FAQ
 
-1. **Database connection failures**  
-   - Verify the `DSN` format and credentials; use service names (e.g., `postgres:5432`) within Docker.  
+1. **Database connection failures**
+   - Verify the `DSN` format and credentials; use service names (e.g., `postgres:5432`) within Docker.
    - Inspect `docker compose ps` or local PostgreSQL status, and use `make db-shell` for deeper checks.
 
-2. **What if Redis goes offline?**  
+2. **What if Redis goes offline?**
    - The platform uses a fail-open policy: rate limiting and session metrics degrade gracefully while requests continue flowing. Monitor logs for Redis errors and restore the service asap.
 
-3. **Circuit breaker keeps opening**  
-   - Inspect `[CircuitBreaker]` logs to see whether repeated 4xx/5xx or network errors triggered it.  
+3. **Circuit breaker keeps opening**
+   - Inspect `[CircuitBreaker]` logs to see whether repeated 4xx/5xx or network errors triggered it.
    - Check provider health in the admin console and wait 30 minutes or restart the app to reset state.
 
-4. **“No provider available” errors**  
-   - Ensure providers are enabled, have reasonable weights/priorities, and haven’t hit concurrency or spend caps.  
+4. **“No provider available” errors**
+   - Ensure providers are enabled, have reasonable weights/priorities, and haven’t hit concurrency or spend caps.
    - Review the decision-chain log to confirm whether breakers or proxy failures removed them.
 
-5. **Proxy configuration issues**  
-   - Make sure URLs include a protocol (`http://`, `socks5://`, etc.) and validate via the “Test Connection” button in the UI.  
+5. **Proxy configuration issues**
+   - Make sure URLs include a protocol (`http://`, `socks5://`, etc.) and validate via the “Test Connection” button in the UI.
    - If `proxy_fallback_to_direct` is enabled, confirm via logs that the system retried without the proxy when failures occur.
 
 ## 🤝 Contributing
