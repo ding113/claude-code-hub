@@ -268,3 +268,16 @@ export async function getUsedStatusCodes(): Promise<number[]> {
 
   return results.map((r) => r.statusCode).filter((c): c is number => c !== null);
 }
+
+/**
+ * 获取所有使用过的 Endpoint 列表（用于筛选器）
+ */
+export async function getUsedEndpoints(): Promise<string[]> {
+  const results = await db
+    .selectDistinct({ endpoint: messageRequest.endpoint })
+    .from(messageRequest)
+    .where(and(isNull(messageRequest.deletedAt), sql`${messageRequest.endpoint} IS NOT NULL`))
+    .orderBy(messageRequest.endpoint);
+
+  return results.map((r) => r.endpoint).filter((e): e is string => e !== null);
+}
