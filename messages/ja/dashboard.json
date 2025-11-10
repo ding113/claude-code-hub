@@ -80,6 +80,7 @@
       "key": "キー",
       "provider": "プロバイダー",
       "model": "モデル",
+      "endpoint": "エンドポイント",
       "inputTokens": "入力",
       "outputTokens": "出力",
       "cacheWrite": "キャッシュ書き込み",

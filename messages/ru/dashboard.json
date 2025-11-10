@@ -80,6 +80,7 @@
       "key": "Ключ",
       "provider": "Поставщик",
       "model": "Модель",
+      "endpoint": "Эндпоинт",
       "inputTokens": "Вход",
       "outputTokens": "Выход",
       "cacheWrite": "Запись в кэш",

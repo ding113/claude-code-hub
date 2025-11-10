@@ -78,7 +78,6 @@ export function UsageLogsTable({
           <TableHeader>
             <TableRow>
               <TableHead>{t("logs.columns.time")}</TableHead>
-              <TableHead>{t("logs.columns.endpoint")}</TableHead>
               <TableHead>{t("logs.columns.user")}</TableHead>
               <TableHead>{t("logs.columns.key")}</TableHead>
               <TableHead>{t("logs.columns.provider")}</TableHead>
@@ -95,7 +94,7 @@ export function UsageLogsTable({
           <TableBody>
             {logs.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={13} className="text-center text-muted-foreground">
+                <TableCell colSpan={12} className="text-center text-muted-foreground">
                   {t("logs.table.noData")}
                 </TableCell>
               </TableRow>
@@ -114,19 +113,6 @@ export function UsageLogsTable({
                   >
                     <TableCell className="font-mono text-xs">
                       <RelativeTime date={log.createdAt} fallback="-" />
-                    </TableCell>
-                    <TableCell className="min-w-[200px] align-top">
-                      <div className="flex flex-col gap-1">
-                        <span className="font-mono text-xs break-words">{log.endpoint ?? "-"}</span>
-                        {isNonBilling && (
-                          <Badge
-                            variant="outline"
-                            className="w-fit border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-900/60 dark:bg-orange-950/30 dark:text-orange-200"
-                          >
-                            {t("logs.table.nonBilling")}
-                          </Badge>
-                        )}
-                      </div>
                     </TableCell>
                     <TableCell>{log.userName}</TableCell>
                     <TableCell className="font-mono text-xs">{log.keyName}</TableCell>
@@ -240,6 +226,7 @@ export function UsageLogsTable({
                         currentModel={log.model}
                         userAgent={log.userAgent}
                         messagesCount={log.messagesCount}
+                        endpoint={log.endpoint}
                       />
                     </TableCell>
                   </TableRow>

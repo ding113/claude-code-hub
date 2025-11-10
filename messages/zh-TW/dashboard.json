@@ -80,6 +80,7 @@
       "key": "金鑰",
       "provider": "供應商",
       "model": "模型",
+      "endpoint": "端點",
       "inputTokens": "輸入",
       "outputTokens": "輸出",
       "cacheWrite": "快取寫入",

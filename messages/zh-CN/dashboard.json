@@ -80,6 +80,7 @@
       "key": "密钥",
       "provider": "供应商",
       "model": "模型",
+      "endpoint": "端点",
       "inputTokens": "输入",
       "outputTokens": "输出",
       "cacheWrite": "缓存写入",
