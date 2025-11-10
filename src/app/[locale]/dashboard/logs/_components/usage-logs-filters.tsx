@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getModelList, getStatusCodeList } from "@/actions/usage-logs";
+import { getEndpointList, getModelList, getStatusCodeList } from "@/actions/usage-logs";
 import { getKeys } from "@/actions/keys";
 import type { UserDisplay } from "@/types/user";
 import type { ProviderDisplay } from "@/types/provider";
@@ -55,6 +55,7 @@ interface UsageLogsFiltersProps {
     endDate?: Date;
     statusCode?: number;
     model?: string;
+    endpoint?: string;
   };
   onChange: (filters: UsageLogsFiltersProps["filters"]) => void;
   onReset: () => void;
@@ -72,23 +73,49 @@ export function UsageLogsFilters({
   const t = useTranslations("dashboard");
   const [models, setModels] = useState<string[]>([]);
   const [statusCodes, setStatusCodes] = useState<number[]>([]);
+  const [endpoints, setEndpoints] = useState<string[]>([]);
+  const [isEndpointLoading, setIsEndpointLoading] = useState(false);
+  const [endpointError, setEndpointError] = useState<string | null>(null);
   const [keys, setKeys] = useState<Key[]>(initialKeys);
   const [localFilters, setLocalFilters] = useState(filters);
 
   // 加载筛选器选项
   useEffect(() => {
     const loadOptions = async () => {
-      const [modelsResult, codesResult] = await Promise.all([
-        getModelList(),
-        getStatusCodeList(),
-      ]);
+      setIsEndpointLoading(true);
+      setEndpointError(null);
 
-      if (modelsResult.ok && modelsResult.data) {
-        setModels(modelsResult.data);
-      }
+      try {
+        const [modelsResult, codesResult, endpointsResult] = await Promise.all([
+          getModelList(),
+          getStatusCodeList(),
+          getEndpointList(),
+        ]);
 
-      if (codesResult.ok && codesResult.data) {
-        setStatusCodes(codesResult.data);
+        if (modelsResult.ok && modelsResult.data) {
+          setModels(modelsResult.data);
+        }
+
+        if (codesResult.ok && codesResult.data) {
+          setStatusCodes(codesResult.data);
+        }
+
+        if (endpointsResult.ok && endpointsResult.data) {
+          setEndpoints(endpointsResult.data);
+        } else {
+          setEndpoints([]);
+          setEndpointError(
+            !endpointsResult.ok && "error" in endpointsResult
+              ? endpointsResult.error
+              : t("logs.error.loadFailed")
+          );
+        }
+      } catch (error) {
+        console.error("Failed to load filter options:", error);
+        setEndpoints([]);
+        setEndpointError(t("logs.error.loadFailed"));
+      } finally {
+        setIsEndpointLoading(false);
       }
 
       // 管理员：如果选择了用户，加载该用户的 keys
@@ -102,7 +129,7 @@ export function UsageLogsFilters({
     };
 
     loadOptions();
-  }, [isAdmin, localFilters.userId]);
+  }, [isAdmin, localFilters.userId, t]);
 
   // 处理用户选择变更
   const handleUserChange = async (userId: string) => {
@@ -258,6 +285,41 @@ export function UsageLogsFilters({
               ))}
             </SelectContent>
           </Select>
+        </div>
+
+        {/* Endpoint 选择 */}
+        <div className="space-y-2">
+          <Label>{t("logs.filters.endpoint")}</Label>
+          <Select
+            value={localFilters.endpoint || ""}
+            onValueChange={(value: string) =>
+              setLocalFilters({ ...localFilters, endpoint: value || undefined })
+            }
+            disabled={isEndpointLoading}
+          >
+            <SelectTrigger>
+              <SelectValue
+                placeholder={
+                  endpointError
+                    ? endpointError
+                    : isEndpointLoading
+                      ? t("logs.stats.loading")
+                      : t("logs.filters.allEndpoints")
+                }
+              />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">{t("logs.filters.allEndpoints")}</SelectItem>
+              {endpoints.map((endpoint) => (
+                <SelectItem key={endpoint} value={endpoint}>
+                  {endpoint}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {endpointError && (
+            <p className="text-xs text-destructive">{endpointError}</p>
+          )}
         </div>
 
         {/* 状态码选择 */}

@@ -56,6 +56,8 @@
       "user": "用户",
       "provider": "供应商",
       "model": "模型",
+      "endpoint": "端点",
+      "endpoint": "端点",
       "status": "状态",
       "timeRange": "时间范围",
       "startTime": "开始时间",
@@ -65,6 +67,7 @@
       "selectUserFirst": "请先选择用户",
       "allProviders": "全部供应商",
       "allModels": "全部模型",
+      "allEndpoints": "全部端点",
       "allStatusCodes": "全部状态码",
       "apiKey": "API 密钥",
       "statusCode": "状态码",
@@ -102,6 +105,7 @@
       "prevPage": "上一页",
       "nextPage": "下一页",
       "blocked": "被拦截",
+      "nonBilling": "非计费",
       "times": "次"
     },
     "actions": {

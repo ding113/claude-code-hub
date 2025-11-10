@@ -25,7 +25,9 @@ import { formatProviderSummary } from "@/lib/utils/provider-chain-formatter";
 import { ModelDisplayWithRedirect } from "./model-display-with-redirect";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
-import { formatTokenAmount } from "@/lib/utils";
+import { cn, formatTokenAmount } from "@/lib/utils";
+
+const NON_BILLING_ENDPOINT = "/v1/messages/count_tokens";
 
 /**
  * 格式化请求耗时
@@ -71,11 +73,12 @@ export function UsageLogsTable({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-md border">
+      <div className="rounded-md border overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>{t("logs.columns.time")}</TableHead>
+              <TableHead>{t("logs.columns.endpoint")}</TableHead>
               <TableHead>{t("logs.columns.user")}</TableHead>
               <TableHead>{t("logs.columns.key")}</TableHead>
               <TableHead>{t("logs.columns.provider")}</TableHead>
@@ -92,135 +95,156 @@ export function UsageLogsTable({
           <TableBody>
             {logs.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={12} className="text-center text-muted-foreground">
+                <TableCell colSpan={13} className="text-center text-muted-foreground">
                   {t("logs.table.noData")}
                 </TableCell>
               </TableRow>
             ) : (
-              logs.map((log) => (
-                <TableRow
-                  key={log.id}
-                  className={newLogIds?.has(log.id) ? 'animate-highlight-flash' : ''}
-                >
-                  <TableCell className="font-mono text-xs">
-                    <RelativeTime date={log.createdAt} fallback="-" />
-                  </TableCell>
-                  <TableCell>{log.userName}</TableCell>
-                  <TableCell className="font-mono text-xs">{log.keyName}</TableCell>
-                  <TableCell className="text-left">
-                    {log.blockedBy ? (
-                      // 被拦截的请求显示拦截标记
-                      <span className="inline-flex items-center gap-1 rounded-md bg-orange-100 dark:bg-orange-950 px-2 py-1 text-xs font-medium text-orange-700 dark:text-orange-300">
-                        <span className="h-1.5 w-1.5 rounded-full bg-orange-600 dark:bg-orange-400" />
-                        {t("logs.table.blocked")}
-                      </span>
-                    ) : (
-                      <div className="flex items-start gap-2">
-                        <div className="flex flex-col items-start gap-0.5 min-w-0 flex-1">
-                          {log.providerChain && log.providerChain.length > 0 ? (
-                            <>
-                              <div className="w-full">
-                                <ProviderChainPopover
-                                  chain={log.providerChain}
-                                  finalProvider={
-                                    log.providerChain[log.providerChain.length - 1].name || log.providerName || tChain("circuit.unknown")
-                                  }
-                                />
-                              </div>
-                              {/* 摘要文字（第二行显示，左对齐） */}
-                              {formatProviderSummary(log.providerChain, tChain) && (
-                                <div className="w-full">
-                                  <TooltipProvider>
-                                    <Tooltip delayDuration={300}>
-                                      <TooltipTrigger asChild>
-                                        <span className="text-xs text-muted-foreground cursor-help truncate max-w-[200px] block text-left">
-                                          {formatProviderSummary(log.providerChain, tChain)}
-                                        </span>
-                                      </TooltipTrigger>
-                                      <TooltipContent side="bottom" align="start" className="max-w-[500px]">
-                                        <p className="text-xs whitespace-normal break-words font-mono">
-                                          {formatProviderSummary(log.providerChain, tChain)}
-                                        </p>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-                                </div>
-                              )}
-                            </>
-                          ) : (
-                            <span>{log.providerName || "-"}</span>
-                          )}
-                        </div>
-                        {/* 显示供应商倍率 Badge（不为 1.0 时） */}
-                        {(() => {
-                          // 从决策链中找到最后一个成功的供应商，使用它的倍率
-                          const successfulProvider = log.providerChain && log.providerChain.length > 0
-                            ? [...log.providerChain]
-                                .reverse()
-                                .find(item =>
-                                  item.reason === 'request_success' ||
-                                  item.reason === 'retry_success'
-                                )
-                            : null;
+              logs.map((log) => {
+                const isNonBilling = log.endpoint === NON_BILLING_ENDPOINT;
 
-                          const actualCostMultiplier = successfulProvider?.costMultiplier ?? log.costMultiplier;
-
-                          return actualCostMultiplier && parseFloat(String(actualCostMultiplier)) !== 1.0 ? (
-                            <Badge
-                              variant="outline"
-                              className={
-                                parseFloat(String(actualCostMultiplier)) > 1.0
-                                  ? "text-xs bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800 shrink-0"
-                                  : "text-xs bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-300 dark:border-green-800 shrink-0"
-                              }
-                            >
-                              ×{parseFloat(String(actualCostMultiplier)).toFixed(2)}
-                            </Badge>
-                          ) : null;
-                        })()}
-                      </div>
+                return (
+                  <TableRow
+                    key={log.id}
+                    className={cn(
+                      newLogIds?.has(log.id) ? "animate-highlight-flash" : "",
+                      isNonBilling ? "bg-muted/60 text-muted-foreground dark:bg-muted/20" : ""
                     )}
-                  </TableCell>
-                  <TableCell className="font-mono text-xs">
-                    <ModelDisplayWithRedirect
-                      originalModel={log.originalModel}
-                      currentModel={log.model}
-                    />
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-xs">
-                    {formatTokenAmount(log.inputTokens)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-xs">
-                    {formatTokenAmount(log.outputTokens)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-xs">
-                    {formatTokenAmount(log.cacheCreationInputTokens)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-xs">
-                    {formatTokenAmount(log.cacheReadInputTokens)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-xs">
-                    {log.costUsd ? formatCurrency(log.costUsd, currencyCode, 6) : "-"}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-xs">
-                    {formatDuration(log.durationMs)}
-                  </TableCell>
-                  <TableCell>
-                    <ErrorDetailsDialog
-                      statusCode={log.statusCode}
-                      errorMessage={log.errorMessage}
-                      providerChain={log.providerChain}
-                      sessionId={log.sessionId}
-                      blockedBy={log.blockedBy}
-                      blockedReason={log.blockedReason}
-                      originalModel={log.originalModel}
-                      currentModel={log.model}
-                      userAgent={log.userAgent}
-                      messagesCount={log.messagesCount}
-                    />
-                  </TableCell>
-                </TableRow>
-              ))
+                    aria-label={isNonBilling ? t("logs.table.nonBilling") : undefined}
+                  >
+                    <TableCell className="font-mono text-xs">
+                      <RelativeTime date={log.createdAt} fallback="-" />
+                    </TableCell>
+                    <TableCell className="min-w-[200px] align-top">
+                      <div className="flex flex-col gap-1">
+                        <span className="font-mono text-xs break-words">{log.endpoint ?? "-"}</span>
+                        {isNonBilling && (
+                          <Badge
+                            variant="outline"
+                            className="w-fit border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-900/60 dark:bg-orange-950/30 dark:text-orange-200"
+                          >
+                            {t("logs.table.nonBilling")}
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>{log.userName}</TableCell>
+                    <TableCell className="font-mono text-xs">{log.keyName}</TableCell>
+                    <TableCell className="text-left">
+                      {log.blockedBy ? (
+                        // 被拦截的请求显示拦截标记
+                        <span className="inline-flex items-center gap-1 rounded-md bg-orange-100 dark:bg-orange-950 px-2 py-1 text-xs font-medium text-orange-700 dark:text-orange-300">
+                          <span className="h-1.5 w-1.5 rounded-full bg-orange-600 dark:bg-orange-400" />
+                          {t("logs.table.blocked")}
+                        </span>
+                      ) : (
+                        <div className="flex items-start gap-2">
+                          <div className="flex flex-col items-start gap-0.5 min-w-0 flex-1">
+                            {log.providerChain && log.providerChain.length > 0 ? (
+                              <>
+                                <div className="w-full">
+                                  <ProviderChainPopover
+                                    chain={log.providerChain}
+                                    finalProvider={
+                                      log.providerChain[log.providerChain.length - 1].name || log.providerName || tChain("circuit.unknown")
+                                    }
+                                  />
+                                </div>
+                                {/* 摘要文字（第二行显示，左对齐） */}
+                                {formatProviderSummary(log.providerChain, tChain) && (
+                                  <div className="w-full">
+                                    <TooltipProvider>
+                                      <Tooltip delayDuration={300}>
+                                        <TooltipTrigger asChild>
+                                          <span className="text-xs text-muted-foreground cursor-help truncate max-w-[200px] block text-left">
+                                            {formatProviderSummary(log.providerChain, tChain)}
+                                          </span>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="bottom" align="start" className="max-w-[500px]">
+                                          <p className="text-xs whitespace-normal break-words font-mono">
+                                            {formatProviderSummary(log.providerChain, tChain)}
+                                          </p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  </div>
+                                )}
+                              </>
+                            ) : (
+                              <span>{log.providerName || "-"}</span>
+                            )}
+                          </div>
+                          {/* 显示供应商倍率 Badge（不为 1.0 时） */}
+                          {(() => {
+                            // 从决策链中找到最后一个成功的供应商，使用它的倍率
+                            const successfulProvider = log.providerChain && log.providerChain.length > 0
+                              ? [...log.providerChain]
+                                  .reverse()
+                                  .find(item =>
+                                    item.reason === 'request_success' ||
+                                    item.reason === 'retry_success'
+                                  )
+                              : null;
+
+                            const actualCostMultiplier = successfulProvider?.costMultiplier ?? log.costMultiplier;
+
+                            return actualCostMultiplier && parseFloat(String(actualCostMultiplier)) !== 1.0 ? (
+                              <Badge
+                                variant="outline"
+                                className={
+                                  parseFloat(String(actualCostMultiplier)) > 1.0
+                                    ? "text-xs bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800 shrink-0"
+                                    : "text-xs bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-300 dark:border-green-800 shrink-0"
+                                }
+                              >
+                                ×{parseFloat(String(actualCostMultiplier)).toFixed(2)}
+                              </Badge>
+                            ) : null;
+                          })()}
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">
+                      <ModelDisplayWithRedirect
+                        originalModel={log.originalModel}
+                        currentModel={log.model}
+                      />
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-xs">
+                      {formatTokenAmount(log.inputTokens)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-xs">
+                      {formatTokenAmount(log.outputTokens)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-xs">
+                      {formatTokenAmount(log.cacheCreationInputTokens)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-xs">
+                      {formatTokenAmount(log.cacheReadInputTokens)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-xs">
+                      {isNonBilling ? "-" : log.costUsd ? formatCurrency(log.costUsd, currencyCode, 6) : "-"}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-xs">
+                      {formatDuration(log.durationMs)}
+                    </TableCell>
+                    <TableCell>
+                      <ErrorDetailsDialog
+                        statusCode={log.statusCode}
+                        errorMessage={log.errorMessage}
+                        providerChain={log.providerChain}
+                        sessionId={log.sessionId}
+                        blockedBy={log.blockedBy}
+                        blockedReason={log.blockedReason}
+                        originalModel={log.originalModel}
+                        currentModel={log.model}
+                        userAgent={log.userAgent}
+                        messagesCount={log.messagesCount}
+                      />
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
