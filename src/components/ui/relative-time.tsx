@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocale } from "next-intl";
+import { format as formatDate } from "date-fns";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatDateDistance } from "@/lib/utils/date-format";
 
 interface RelativeTimeProps {
@@ -31,6 +33,16 @@ export function RelativeTime({
   const [timeAgo, setTimeAgo] = useState<string>(fallback);
   const [mounted, setMounted] = useState(false);
   const locale = useLocale();
+
+  // Precompute an absolute timestamp string for tooltip content. Include timezone display.
+  const absolute = useMemo(() => {
+    if (!date) return fallback;
+    const dateObj = typeof date === "string" ? new Date(date) : date;
+    if (isNaN(dateObj.getTime())) return fallback;
+    // date-fns does not fully support `z` for IANA abbreviations; use `OOOO` to show GMT offset.
+    // Example output: 2024-05-01 13:45:12 GMT+08:00
+    return formatDate(dateObj, "yyyy-MM-dd HH:mm:ss OOOO");
+  }, [date, fallback]);
 
   useEffect(() => {
     // 如果 date 为 null，直接显示 fallback
@@ -62,6 +74,27 @@ export function RelativeTime({
     return <span className={className}>{fallback}</span>;
   }
 
-  // 客户端挂载后显示相对时间
-  return <span className={className}>{timeAgo}</span>;
+  // 客户端挂载后显示相对时间，并在悬停/聚焦时展示绝对时间 Tooltip。
+  // 为了键盘可访问性，使触发元素可聚焦（tabIndex=0）。
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <time
+          className={className}
+          tabIndex={0}
+          // HTMLTimeElement `dateTime` attribute for semantics/SEO
+          dateTime={
+            typeof date === "string"
+              ? new Date(date).toISOString()
+              : date
+              ? date.toISOString()
+              : undefined
+          }
+        >
+          {timeAgo}
+        </time>
+      </TooltipTrigger>
+      <TooltipContent>{absolute}</TooltipContent>
+    </Tooltip>
+  );
 }
