@@ -1036,12 +1036,32 @@
     },
     "guide": {
       "title": "使用说明与注意事项",
-      "cleanup": "日志清理: 物理删除历史日志数据，不可恢复。统计数据（statistics 表）将被保留。建议清理前先导出数据库备份。",
-      "format": "备份格式: 使用 PostgreSQL custom format (.dump)，自动压缩且能够兼容不同版本的数据库结构。",
-      "overwrite": "覆盖模式: 导入前会删除所有现有数据，确保数据库与备份文件完全一致。适合完整恢复场景。",
-      "merge": "合并模式: 保留现有数据，尝试插入备份中的数据。如果存在主键冲突可能导致导入失败。",
-      "backup": "安全建议: 在执行导入操作前，建议先导出当前数据库作为备份，避免数据丢失。",
-      "docker": "环境要求: 此功能需要 Docker Compose 部署环境。本地开发环境可能无法使用。"
+      "items": {
+        "cleanup": {
+          "title": "日志清理",
+          "description": "物理删除历史日志数据，不可恢复。统计数据（statistics 表）将被保留。建议清理前先导出数据库备份。"
+        },
+        "format": {
+          "title": "备份格式",
+          "description": "使用 PostgreSQL custom format (.dump)，自动压缩且能够兼容不同版本的数据库结构。"
+        },
+        "overwrite": {
+          "title": "覆盖模式",
+          "description": "导入前会删除所有现有数据，确保数据库与备份文件完全一致。适合完整恢复场景。"
+        },
+        "merge": {
+          "title": "合并模式",
+          "description": "保留现有数据，尝试插入备份中的数据。如果存在主键冲突可能导致导入失败。"
+        },
+        "safety": {
+          "title": "安全建议",
+          "description": "在执行导入操作前，建议先导出当前数据库作为备份，避免数据丢失。"
+        },
+        "environment": {
+          "title": "环境要求",
+          "description": "此功能需要 Docker Compose 部署环境。本地开发环境可能无法使用。"
+        }
+      }
     },
     "section": {
       "status": {

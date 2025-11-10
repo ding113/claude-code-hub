@@ -191,13 +191,33 @@
       "error": "Failed to export database"
     },
     "guide": {
-      "backup": "Security Recommendation: Before importing, recommend exporting current database as backup to avoid data loss.",
-      "cleanup": "Log Cleanup: Physically delete historical log data (irreversible). Statistics table will be retained. Recommend exporting database backup before cleanup.",
-      "docker": "Environment Requirements: This feature requires Docker Compose deployment. Local development may not support it.",
-      "format": "Backup Format: Uses PostgreSQL custom format (.dump), auto-compressed and compatible with different database versions.",
-      "merge": "Merge Mode: Retains existing data and attempts to insert backup data. Primary key conflicts may cause import failure.",
-      "overwrite": "Overwrite Mode: Deletes all existing data before importing, ensuring database matches backup exactly. Best for complete recovery.",
-      "title": "Usage Instructions and Precautions"
+      "title": "Usage Instructions and Precautions",
+      "items": {
+        "cleanup": {
+          "title": "Log Cleanup",
+          "description": "Physically delete historical log data (irreversible). Statistics table will be retained. Recommend exporting database backup before cleanup."
+        },
+        "format": {
+          "title": "Backup Format",
+          "description": "Uses PostgreSQL custom format (.dump), auto-compressed and compatible with different database versions."
+        },
+        "overwrite": {
+          "title": "Overwrite Mode",
+          "description": "Deletes all existing data before importing, ensuring database matches backup exactly. Best for complete recovery."
+        },
+        "merge": {
+          "title": "Merge Mode",
+          "description": "Retains existing data and attempts to insert backup data. Primary key conflicts may cause import failure."
+        },
+        "safety": {
+          "title": "Security Recommendation",
+          "description": "Before importing, recommend exporting current database as backup to avoid data loss."
+        },
+        "environment": {
+          "title": "Environment Requirements",
+          "description": "This feature requires Docker Compose deployment. Local development may not support it."
+        }
+      }
     },
     "import": {
       "descriptionFull": "Restore database from backup file. Supports PostgreSQL custom format (.dump) backup files.",
