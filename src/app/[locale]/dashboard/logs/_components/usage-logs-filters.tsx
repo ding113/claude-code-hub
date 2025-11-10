@@ -291,9 +291,9 @@ export function UsageLogsFilters({
         <div className="space-y-2">
           <Label>{t("logs.filters.endpoint")}</Label>
           <Select
-            value={localFilters.endpoint || ""}
+            value={localFilters.endpoint || "all"}
             onValueChange={(value: string) =>
-              setLocalFilters({ ...localFilters, endpoint: value || undefined })
+              setLocalFilters({ ...localFilters, endpoint: value === "all" ? undefined : value })
             }
             disabled={isEndpointLoading}
           >
@@ -309,7 +309,7 @@ export function UsageLogsFilters({
               />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">{t("logs.filters.allEndpoints")}</SelectItem>
+              <SelectItem value="all">{t("logs.filters.allEndpoints")}</SelectItem>
               {endpoints.map((endpoint) => (
                 <SelectItem key={endpoint} value={endpoint}>
                   {endpoint}
