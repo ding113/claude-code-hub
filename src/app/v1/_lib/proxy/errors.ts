@@ -231,6 +231,18 @@ export function isNonRetryableClientError(error: Error): boolean {
         message = errorObj.message;
       }
     }
+    // 兼容智谱等供应商的 FastAPI/Pydantic 验证错误格式：{ "detail": [{ "msg": "..." }] }
+    if (Array.isArray(parsed.detail)) {
+      for (const item of parsed.detail) {
+        if (item && typeof item === "object") {
+          const detailObj = item as Record<string, unknown>;
+          if (typeof detailObj.msg === "string") {
+            message = detailObj.msg;
+            break;
+          }
+        }
+      }
+    }
   }
 
   // 使用预编译正则数组进行匹配，短路优化（第一个匹配成功立即返回）
