@@ -1,0 +1,467 @@
+{
+  "pageTitle": "Claude Code Hub 使用文檔",
+  "pageDescription": "完整的 Claude Code、Codex 和 Droid CLI 集成指南",
+
+  "skipLinks": {
+    "mainContent": "跳轉到主要內容",
+    "tableOfContents": "跳轉到目錄導航"
+  },
+
+  "navigation": {
+    "tableOfContents": "本頁導航",
+    "tableOfContentsEmpty": "本頁暫無可用章節",
+    "quickLinks": "快速鏈接",
+    "backToDashboard": "返回儀表板",
+    "backToTop": "回到頂部",
+    "documentNavigation": "文檔導航",
+    "openTableOfContents": "打開目錄導航",
+    "pageNavigation": "頁面導航"
+  },
+
+  "codeExamples": {
+    "label": "代碼示例 - ${language}",
+    "description": "點擊代碼塊可複製到剪貼板"
+  },
+
+  "claudeCode": {
+    "title": "Claude Code 使用指南",
+    "description": "Claude Code 是 Anthropic 官方推出的 AI 編程助手，支持通過 cch 代理服務使用。本指南將幫助您在不同操作系統上完成安裝和配置。",
+
+    "environmentSetup": {
+      "title": "環境準備：安裝 Node.js",
+      "description": "claude 需要 Node.js 環境才能運行（需 v18 或更高版本）。",
+
+      "macos": {
+        "homebrew": "方法一：使用 Homebrew（推薦）",
+        "official": "方法二：官網下載",
+        "officialSteps": [
+          "訪問 https://nodejs.org/",
+          "下載適合 macOS 的 LTS 版本（需 v18 或更高）",
+          "打開下載的 .pkg 文件，按照安裝嚮導完成"
+        ]
+      },
+
+      "windows": {
+        "official": "方法一：官網下載（推薦）",
+        "officialSteps": [
+          "訪問 https://nodejs.org/",
+          "下載 LTS 版本（需 v18 或更高）",
+          "雙擊 .msi 文件，按嚮導安裝（保持默認設置）"
+        ],
+        "packageManager": "方法二：使用包管理器",
+        "note": "建議使用 PowerShell 而不是 CMD，以獲得更好的體驗"
+      },
+
+      "linux": {
+        "official": "方法一：使用官方倉庫（推薦）",
+        "packageManager": "方法二：使用系統包管理器"
+      },
+
+      "verification": {
+        "title": "驗證 Node.js 安裝",
+        "description": "安裝完成後，打開終端/命令行，輸入以下命令驗證：",
+        "success": "如果顯示版本號，說明安裝成功了！",
+        "command1": "node --version",
+        "command2": "npm --version"
+      }
+    },
+
+    "installation": {
+      "title": "安裝 claude",
+
+      "nativeInstall": {
+        "title": "Native Install（推薦）",
+        "description": "官方推薦使用 Native 安裝方式，具有以下優勢：",
+        "advantages": ["單個可執行文件，無需 Node.js 依賴", "自動更新機制更穩定", "啟動速度更快"],
+
+        "macos": {
+          "homebrew": "方法一：Homebrew（推薦）",
+          "autoUpdate": "自動更新說明",
+          "autoUpdateText": "通過 Homebrew 安裝的 Claude Code 會在 brew 目錄外自動更新，除非使用 DISABLE_AUTOUPDATER 環境變量顯式禁用。",
+          "curl": "方法二：curl 腳本",
+          "curls": [
+            "# 安裝穩定版（默認）",
+            "curl -fsSL https://claude.ai/install.sh | bash",
+            "",
+            "# 安裝最新版",
+            "curl -fsSL https://claude.ai/install.sh | bash -s latest",
+            "",
+            "# 安裝指定版本",
+            "curl -fsSL https://claude.ai/install.sh | bash -s 1.0.58"
+          ]
+        },
+
+        "linux": {
+          "curl": "curl 腳本安裝",
+          "curls": [
+            "# 安裝穩定版（默認）",
+            "curl -fsSL https://claude.ai/install.sh | bash",
+            "",
+            "# 安裝最新版",
+            "curl -fsSL https://claude.ai/install.sh | bash -s latest",
+            "",
+            "# 安裝指定版本",
+            "curl -fsSL https://claude.ai/install.sh | bash -s 1.0.58"
+          ],
+          "alpine": "Alpine Linux 特殊說明",
+          "alpineText": "基於 musl/uClibc 的發行版（如 Alpine Linux）需要安裝額外依賴：",
+          "alpineCode": ["apk add libgcc libstdc++ ripgrep", "export USE_BUILTIN_RIPGREP=0"]
+        },
+
+        "windows": {
+          "powershell": "方法一：PowerShell",
+          "powershells": [
+            "# 安裝穩定版（默認）",
+            "irm https://claude.ai/install.ps1 | iex",
+            "",
+            "# 安裝最新版",
+            "& ([scriptblock]::Create((irm https://claude.ai/install.ps1))) latest",
+            "",
+            "# 安裝指定版本",
+            "& ([scriptblock]::Create((irm https://claude.ai/install.ps1))) 1.0.58"
+          ],
+          "cmd": "方法二：CMD",
+          "cmds": [
+            "REM 安裝穩定版（默認）",
+            "curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd && del install.cmd",
+            "",
+            "REM 安裝最新版",
+            "curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd latest && del install.cmd",
+            "",
+            "REM 安裝指定版本",
+            "curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd 1.0.58 && del install.cmd"
+          ]
+        },
+
+        "verification": {
+          "title": "驗證安裝",
+          "description": "安裝完成後，運行以下命令驗證：",
+          "success": "如果顯示版本號，恭喜！Claude Code 已成功安裝。",
+          "command": "claude --version"
+        },
+
+        "tip": "提示",
+        "tipText": "安裝前請確保移除任何過期的別名或符號鏈接。使用 claude doctor 命令可以檢查安裝類型和版本。"
+      },
+
+      "npmInstall": {
+        "title": "NPM",
+        "description": "使用 NPM 安裝需要先安裝 Node.js 18 或更高版本。適合偏好使用 NPM 管理工具的開發者。",
+        "command": "npm install -g @anthropic-ai/claude-code",
+
+        "warning": "警告",
+        "warningText": "不要使用 sudo npm install -g，這可能導致權限問題和安全風險。如果遇到權限錯誤，請參考 NPM 官方解決方案。",
+
+        "verification": {
+          "title": "驗證安裝",
+          "description": "驗證安裝",
+          "success": "如果顯示版本號，恭喜！Claude Code 已成功安裝。"
+        },
+
+        "migration": {
+          "title": "遷移到 Native Install",
+          "description": "如果你已通過 NPM 全局安裝，可以使用以下命令遷移到 Native 安裝：",
+          "command": "claude install",
+          "note": "部分用戶可能會被自動遷移到這種安裝方式。"
+        }
+      }
+    },
+
+    "configuration": {
+      "title": "連接 cch 服務",
+
+      "settingsJson": {
+        "title": "方法一：settings.json 配置（推薦）",
+        "description": "配置文件路徑：",
+
+        "pathNote": "路徑說明",
+        "paths": [
+          "Windows：C:/Users/你的用戶名/.claude",
+          "Linux 或 macOS：~/.claude",
+          "如果 settings.json 文件不存在，請自行創建"
+        ],
+
+        "instruction": "編輯 settings.json 文件，添加以下內容：",
+
+        "important": "重要提示",
+        "importantPoints": [
+          "將 your-api-key-here 替換為您的實際 API 密鑰",
+          "密鑰獲取方式：登錄控制台 → API 密鑰管理 → 創建密鑰"
+        ]
+      },
+
+      "envVars": {
+        "title": "方法二：環境變量配置",
+
+        "windows": {
+          "temporary": "臨時設置（當前會話）：",
+          "permanent": "永久設置（用戶級）：",
+          "note": "設置後需要重新打開 PowerShell 窗口才能生效。"
+        },
+
+        "unix": {
+          "temporary": "臨時設置（當前會話）：",
+          "permanent": "永久設置：",
+          "permanentNote": "添加到您的 shell 配置文件（${shellConfig}）："
+        }
+      },
+
+      "verification": {
+        "title": "驗證配置",
+        "description": "配置完成後，驗證環境變量是否設置成功：",
+
+        "windowsPowerShell": "在 PowerShell 中執行：",
+        "windowsCmd": "在 CMD 中執行：",
+
+        "expectedOutput": "預期輸出示例：",
+
+        "note": "注意",
+        "noteText": "如果輸出為空或顯示變量名本身，說明環境變量設置失敗，請重新按照上述步驟設置。"
+      }
+    },
+
+    "vsCodeExtension": {
+      "title": "VS Code 擴展配置",
+      "steps": [
+        "在 VS Code 擴展中搜索並安裝 Claude Code for VS Code",
+        "在 ~/.claude 目錄下創建 config.json 文件（如果沒有）",
+        "添加以下內容："
+      ],
+
+      "note": "注意",
+      "notePoints": [
+        "是 config.json，不是 settings.json",
+        "primaryApiKey 字段值可以為任意內容，只要存在即可"
+      ]
+    },
+
+    "startup": {
+      "title": "啟動 claude",
+      "description": "在項目目錄下運行：",
+      "initNote": "首次啟動時，claude 會進行初始化配置。"
+    },
+
+    "commonIssues": {
+      "title": "常見問題",
+
+      "commandNotFound": "1. 命令未找到",
+      "commandNotFoundWindows": [
+        "確保 npm 全局路徑（通常是 C:\\Users\\你的用戶名\\AppData\\Roaming\\npm）已添加到系統 PATH",
+        "重新打開 PowerShell 窗口"
+      ],
+      "commandNotFoundUnix": "檢查 npm 全局安裝路徑並添加到 PATH（如果不在）",
+
+      "connectionFailed": "2. API 連接失敗",
+      "updateCli": "3. 更新 claude",
+      "updateNote": "重新運行安裝腳本即可更新到最新版本。"
+    }
+  },
+
+  "codex": {
+    "title": "Codex CLI 使用指南",
+    "description": "Codex 是 OpenAI 官方的命令行 AI 編程助手，支持通過 cch 代理使用。注意：Codex 使用 OpenAI 兼容格式，端點需要包含 /v1 路徑。",
+
+    "installation": {
+      "title": "安裝 codex",
+      "instruction": "執行：",
+      "adminNote": "以管理員身份運行 PowerShell，",
+      "verification": "驗證安裝：",
+      "command": "codex --version"
+    },
+
+    "configuration": {
+      "title": "連接 cch 服務",
+
+      "configFile": {
+        "title": "方法一：配置文件方式（推薦）",
+        "steps": [
+          "打開文件資源管理器，找到 ${configPath} 文件夾（不存在則創建）",
+          "創建 config.toml 文件",
+          "使用文本編輯器打開，添加以下內容："
+        ],
+
+        "step4": "創建 auth.json 文件，添加：",
+
+        "important": "重要提示",
+        "importantPoints": [
+          "將 your-api-key-here 替換為您的 cch API 密鑰",
+          "注意：Codex 使用 OpenAI 兼容格式，端點包含 /v1 路徑"
+        ]
+      },
+
+      "envVars": {
+        "title": "方法二：環境變量配置",
+
+        "windows": {
+          "instruction": "在 PowerShell 中運行：",
+          "note": "設置後需要重新打開 PowerShell 窗口才能生效。"
+        },
+
+        "unix": {
+          "instruction": "設置環境變量："
+        }
+      }
+    },
+
+    "vsCodeExtension": {
+      "title": "VS Code 擴展配置",
+      "steps": [
+        "在 VS Code 擴展中搜索並安裝 Codex – OpenAI's coding agent",
+        "確保已按照上述步驟配置好 config.toml 和 auth.json",
+        "設置環境變量 CCH_API_KEY"
+      ],
+
+      "important": "重要",
+      "importantText": "env_key 只能是環境變量名稱（如 CCH_API_KEY），不能是完整的密鑰。如果直接填寫密鑰，會報錯找不到令牌或令牌配置錯誤。"
+    },
+
+    "startup": {
+      "title": "啟動 codex",
+      "description": "在項目目錄下運行：",
+      "initNote": "首次啟動時，codex 會進行初始化配置。"
+    },
+
+    "commonIssues": {
+      "title": "常見問題",
+
+      "commandNotFound": "1. 命令未找到",
+      "commandNotFoundWindows": [
+        "確保 npm 全局路徑（通常是 C:\\Users\\你的用戶名\\AppData\\Roaming\\npm）已添加到系統 PATH",
+        "重新打開 PowerShell 窗口"
+      ],
+      "commandNotFoundUnix": "檢查 npm 全局安裝路徑並添加到 PATH（如果不在）",
+
+      "connectionFailed": "2. API 連接失敗",
+      "updateCli": "3. 更新 codex",
+      "updateCommand": "npm i -g @openai/codex --registry=https://registry.npmmirror.com"
+    }
+  },
+
+  "droid": {
+    "title": "Droid CLI 使用指南",
+    "description": "Droid 是 Factory AI 開發的交互式終端 AI 編程助手，支持通過 cch 代理服務使用。使用前必須先註冊並登錄 Droid 官方賬號。",
+
+    "installation": {
+      "title": "安裝 droid",
+
+      "linux": {
+        "instruction": "執行：",
+        "note": "Linux 用戶需確保已安裝 xdg-utils：",
+        "command": "sudo apt-get install xdg-utils"
+      },
+
+      "windows": {
+        "instruction": "在 PowerShell 中執行："
+      }
+    },
+
+    "configuration": {
+      "title": "連接 cch 服務",
+
+      "prerequisite": "前置步驟：必須先登錄 Droid 官方賬號",
+      "prerequisiteSteps": [
+        "運行 droid 命令",
+        "按提示通過瀏覽器登錄 Factory 官方賬號",
+        "登錄成功後，才能繼續配置自定義模型"
+      ],
+
+      "customModels": {
+        "title": "配置自定義模型",
+        "path": "配置文件路徑：",
+        "instruction": "編輯配置文件，添加以下內容：",
+
+        "important": "重要說明",
+        "importantPoints": [
+          "將 your-api-key-here 替換為您的 cch API 密鑰",
+          "Anthropic 格式：使用 ${resolvedOrigin}（無 /v1）",
+          "OpenAI 格式：使用 ${resolvedOrigin}/v1（需要 /v1）"
+        ]
+      },
+
+      "switching": {
+        "title": "切換模型",
+        "steps": [
+          "重啟 Droid",
+          "輸入 /model 命令",
+          "選擇 GPT-5-Codex [cch] 或 Sonnet 4.5 [cch]",
+          "開始使用！"
+        ]
+      }
+    },
+
+    "startup": {
+      "title": "啟動 droid",
+      "description": "在項目目錄下運行以下命令：",
+      "initNote": "首次啟動時，droid 會進行初始化配置。"
+    },
+
+    "commonIssues": {
+      "title": "常見問題",
+      "commandNotFound": "1. 找不到命令",
+      "commandNotFoundWindows": [
+        "確保 npm 全局路徑（通常為 C:\\Users\\your-username\\AppData\\Roaming\\npm）已添加到系統 PATH",
+        "重新打開 PowerShell 窗口"
+      ],
+      "commandNotFoundUnix": "檢查 npm 全局安裝路徑，並添加到 PATH（如果尚未添加）",
+      "updateCli": "2. 更新 droid"
+    }
+  },
+
+  "commonCommands": {
+    "title": "常用命令",
+    "description": "啟動 Claude Code 後，您可以使用以下常用命令：",
+
+    "commands": [
+      { "command": "/help", "description": "查看幫助信息" },
+      { "command": "/clear", "description": "清空對話歷史，開啟新對話" },
+      { "command": "/compact", "description": "總結當前對話" },
+      { "command": "/cost", "description": "查看當前對話已使用的金額" },
+      { "command": "/model", "description": "切換模型（Droid 專用）" }
+    ],
+
+    "moreCommands": "更多命令查看 官方文檔"
+  },
+
+  "troubleshooting": {
+    "title": "通用故障排查",
+
+    "installationFailed": {
+      "title": "安裝失敗",
+      "steps": [
+        "檢查網絡連接是否正常",
+        "確保有管理員權限（Windows）或使用 sudo（macOS / Linux）",
+        "嘗試使用代理或鏡像源（npm 可使用 --registry 參數）"
+      ]
+    },
+
+    "invalidApiKey": {
+      "title": "API 密鑰無效",
+      "steps": [
+        "確認密鑰已正確複製（無多餘空格）",
+        "檢查密鑰是否在有效期內",
+        "驗證賬戶權限是否正常",
+        "確認使用了正確的端點格式（Anthropic 無 /v1，OpenAI 有 /v1）"
+      ]
+    },
+
+    "endpointConfigError": {
+      "title": "端點配置錯誤",
+      "points": [
+        "Claude Code / Droid Anthropic 模型：使用 ${resolvedOrigin}（無 /v1）",
+        "Codex / Droid OpenAI 模型：使用 ${resolvedOrigin}/v1（必須包含 /v1）"
+      ]
+    }
+  },
+
+  "platforms": {
+    "macos": "macOS",
+    "windows": "Windows",
+    "linux": "Linux"
+  },
+
+  "ui": {
+    "mainContent": "文檔內容",
+    "main": "main",
+    "currentSiteAddress": "當前站點地址"
+  }
+}

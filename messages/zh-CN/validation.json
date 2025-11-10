@@ -1,0 +1,14 @@
+{
+  "_comment": "Form validation messages for Chinese Simplified",
+
+  "name_required": "名称不能为空",
+  "name_max_length": "名称不能超过{max}个字符",
+  "note_max_length": "备注不能超过{max}个字符",
+  "email_invalid": "请输入有效的邮箱地址",
+  "url_invalid": "请输入有效的URL地址",
+  "number_min": "不能低于{min}",
+  "number_max": "不能超过{max}",
+  "number_integer": "必须是整数",
+  "number_positive": "必须是正数",
+  "required": "此字段必填"
+}

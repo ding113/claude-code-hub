@@ -87,26 +87,46 @@ export function sumCosts(values: DecimalInput[]): Decimal {
 }
 
 /**
- * 格式化货币显示
+ * 格式化货币显示（浏览器环境 - 推荐使用 useFormatCurrency）
  * @param value - 金额数值
  * @param currencyCode - 货币代码（默认 USD）
- * @param fractionDigits - 小数位数（默认 2）
+ * @param fractionDigitsOrLocale - 小数位数或地区代码（向后兼容）
+ * @param fractionDigits - 小数位数（当第三参数为 locale 时使用）
  * @returns 格式化后的货币字符串（如 "$100.00" 或 "¥100.00"）
  */
 export function formatCurrency(
   value: DecimalInput,
   currencyCode: CurrencyCode = "USD",
-  fractionDigits = 2
+  fractionDigitsOrLocale?: number | string,
+  fractionDigits?: number
 ): string {
   const decimal = toDecimal(value) ?? new Decimal(0);
   const config = CURRENCY_CONFIG[currencyCode];
 
+  // 向后兼容：判断第三参数是数字还是字符串
+  let finalLocale: string;
+  let finalFractionDigits: number;
+
+  if (typeof fractionDigitsOrLocale === "number") {
+    // 旧版调用：formatCurrency(value, currency, fractionDigits)
+    finalLocale = config.locale;
+    finalFractionDigits = fractionDigitsOrLocale;
+  } else if (typeof fractionDigitsOrLocale === "string") {
+    // 新版调用：formatCurrency(value, currency, locale, fractionDigits)
+    finalLocale = fractionDigitsOrLocale;
+    finalFractionDigits = fractionDigits ?? 2;
+  } else {
+    // 默认调用：formatCurrency(value, currency)
+    finalLocale = config.locale;
+    finalFractionDigits = 2;
+  }
+
   const formatted = decimal
-    .toDecimalPlaces(fractionDigits)
+    .toDecimalPlaces(finalFractionDigits)
     .toNumber()
-    .toLocaleString(config.locale, {
-      minimumFractionDigits: fractionDigits,
-      maximumFractionDigits: fractionDigits,
+    .toLocaleString(finalLocale, {
+      minimumFractionDigits: finalFractionDigits,
+      maximumFractionDigits: finalFractionDigits,
     });
 
   return `${config.symbol}${formatted}`;

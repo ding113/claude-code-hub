@@ -1,0 +1,41 @@
+{
+  "concurrent": {
+    "title": "同時セッション数",
+    "description": "過去5分間のアクティブなセッション（クリックで詳細を表示）"
+  },
+  "sessions": {
+    "status": {
+      "inProgress": "処理中",
+      "completed": "完了",
+      "error": "エラー",
+      "unknown": "不明"
+    }
+  },
+  "version": {
+    "title": "バージョン管理",
+    "description": "アプリケーションのバージョンを確認および管理",
+    "current": "現在のバージョン",
+    "latest": "最新バージョン",
+    "checkUpdate": "アップデートを確認",
+    "updateAvailable": "アップデート利用可能",
+    "foundUpdate": "新しいバージョンが見つかりました",
+    "ariaUpdateAvailable": "新しいバージョンが利用可能です。クリックして表示",
+    "checking": "確認中...",
+    "errorNetwork": "ネットワークエラーが発生しました。バージョンを確認できません",
+    "publishedAt": "公開日",
+    "viewRelease": "リリースを表示"
+  },
+  "metrics": {
+    "concurrent": "同時実行",
+    "todayRequests": "本日のリクエスト",
+    "todayCost": "本日のコスト",
+    "avgResponse": "平均応答時間",
+    "viewDetails": "詳細を表示"
+  },
+  "activeSessions": {
+    "title": "アクティブなセッション",
+    "summary": "過去{minutes}分間の{count}個のセッション",
+    "empty": "アクティブなセッションがありません",
+    "viewAll": "すべて表示"
+  }
+}

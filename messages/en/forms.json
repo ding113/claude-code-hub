@@ -1,0 +1,51 @@
+{
+  "submit": "Submit",
+  "reset": "Reset",
+  "required": "Required",
+  "optional": "Optional",
+  "processing": "Processing...",
+  "common": {
+    "cancel": "Cancel",
+    "processing": "Processing..."
+  },
+  "errors": {
+    "formErrorTitle": "Form error",
+    "formErrorDescription": "An error occurred while processing the form. Please try again.",
+    "required": "This field is required",
+    "invalid": "Invalid input",
+    "minLength": "Minimum length is {min} characters",
+    "maxLength": "Maximum length is {max} characters",
+    "min": "Minimum value is {min}",
+    "max": "Maximum value is {max}",
+    "email": "Please enter a valid email address",
+    "url": "Please enter a valid URL",
+    "pattern": "Format does not match requirements"
+  },
+  "placeholder": {
+    "text": "Enter text",
+    "number": "Enter a number",
+    "email": "Enter your email",
+    "password": "Enter your password",
+    "search": "Search...",
+    "select": "Select an option",
+    "date": "Select a date",
+    "textarea": "Enter text here"
+  },
+  "validation": {
+    "required": "This field is required",
+    "invalid": "Invalid format",
+    "tooShort": "Input too short",
+    "tooLong": "Input too long",
+    "invalidEmail": "Invalid email format",
+    "invalidUrl": "Invalid URL format",
+    "invalidNumber": "Invalid number format"
+  },
+  "messages": {
+    "success": "Operation successful",
+    "error": "Operation failed",
+    "saved": "Saved successfully",
+    "deleted": "Deleted successfully",
+    "loading": "Processing...",
+    "submit": "Submitting..."
+  }
+}

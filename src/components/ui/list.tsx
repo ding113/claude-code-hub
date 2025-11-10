@@ -4,6 +4,7 @@ import { ReactNode } from 'react';
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 
 /**
  * 列表项数据结构
@@ -191,6 +192,7 @@ export function ListContainer({
   emptyState,
   maxHeight = "520px"
 }: ListContainerProps) {
+  const t = useTranslations('ui');
   return (
     <div className="space-y-3">
       {/* 标题和操作 */}
@@ -235,7 +237,7 @@ export function ListContainer({
           </div>
         ) : (
           <div className="text-center py-8 text-muted-foreground">
-            <p className="text-sm">暂无数据</p>
+            <p className="text-sm">{t('common.noData')}</p>
           </div>
         )}
       </div>

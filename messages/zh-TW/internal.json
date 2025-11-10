@@ -1,0 +1,83 @@
+{
+  "dataGenerator": {
+    "tabs": {
+      "usage": "用量數據生成",
+      "userBreakdown": "按用戶顯示用量"
+    },
+    "actions": {
+      "reconfigure": "重新配置參數",
+      "generate": "生成數據",
+      "exportScreenshot": "導出截圖",
+      "exportPDF": "導出 PDF"
+    },
+    "params": {
+      "title": "生成參數",
+      "description": "配置生成參數以創建模擬日誌數據",
+      "startDate": "起始時間",
+      "endDate": "結束時間",
+      "totalCostCny": "總金額（人民幣）",
+      "totalRecords": "總記錄數",
+      "models": "包含模型（逗號分隔）",
+      "userIds": "用戶ID（逗號分隔）",
+      "providerIds": "供應商ID（逗號分隔）",
+      "serviceName": "服務名稱",
+      "required": "*",
+      "placeholders": {
+        "totalCostCny": "如：1000",
+        "totalRecords": "如：500（不填則根據金額計算）",
+        "models": "如：claude-3-5-sonnet,gpt-4（留空則全部）",
+        "userIds": "如：1,2,3（留空則全部）",
+        "providerIds": "如：1,2（留空則全部）",
+        "serviceName": "AI大模型推理服務"
+      }
+    },
+    "summary": {
+      "totalRecords": "總記錄數",
+      "totalCost": "總成本",
+      "totalCostCny": "總成本（人民幣）",
+      "totalTokens": "總 Token",
+      "timeRange": "時間範圍",
+      "to": "至",
+      "uniqueUsers": "總用戶數",
+      "totalCalls": "總調用數"
+    },
+    "table": {
+      "usageLogs": {
+        "title": "使用日誌",
+        "description": "共 {count} 條記錄",
+        "columns": {
+          "time": "時間",
+          "user": "用戶",
+          "key": "密鑰",
+          "provider": "供應商",
+          "model": "模型",
+          "input": "輸入",
+          "output": "輸出",
+          "cacheWrite": "緩存寫",
+          "cacheRead": "緩存讀",
+          "cost": "成本",
+          "duration": "耗時",
+          "status": "狀態"
+        }
+      },
+      "userBreakdown": {
+        "title": "用戶用量明細",
+        "description": "共 {count} 條記錄",
+        "collapseByUser": "按用戶折疊",
+        "columns": {
+          "userName": "用戶名",
+          "key": "密鑰",
+          "serviceModel": "服務模型",
+          "totalCalls": "總調用數",
+          "totalCost": "總調用額度"
+        }
+      }
+    },
+    "status": {
+      "success": "成功"
+    },
+    "errors": {
+      "failed": "生成日誌失敗"
+    }
+  }
+}

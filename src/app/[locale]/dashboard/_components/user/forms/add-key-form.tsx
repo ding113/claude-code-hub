@@ -1,0 +1,156 @@
+"use client";
+import { useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { useTranslations } from "next-intl";
+import { addKey } from "@/actions/keys";
+import { DialogFormLayout } from "@/components/form/form-layout";
+import { TextField, DateField, NumberField } from "@/components/form/form-field";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { useZodForm } from "@/lib/hooks/use-zod-form";
+import { KeyFormSchema } from "@/lib/validation/schemas";
+
+interface AddKeyFormProps {
+  userId?: number;
+  onSuccess?: (result: { generatedKey: string; name: string }) => void;
+}
+
+export function AddKeyForm({ userId, onSuccess }: AddKeyFormProps) {
+  const [isPending, startTransition] = useTransition();
+  const router = useRouter();
+  const t = useTranslations("dashboard.addKeyForm");
+
+  const form = useZodForm({
+    schema: KeyFormSchema,
+    defaultValues: {
+      name: "",
+      expiresAt: "",
+      canLoginWebUi: true,
+      limit5hUsd: null,
+      limitWeeklyUsd: null,
+      limitMonthlyUsd: null,
+      limitConcurrentSessions: 0,
+    },
+    onSubmit: async (data) => {
+      if (!userId) {
+        throw new Error(t("errors.userIdMissing"));
+      }
+
+      try {
+        const result = await addKey({
+          userId: userId!,
+          name: data.name,
+          expiresAt: data.expiresAt || undefined,
+          canLoginWebUi: data.canLoginWebUi,
+          limit5hUsd: data.limit5hUsd,
+          limitWeeklyUsd: data.limitWeeklyUsd,
+          limitMonthlyUsd: data.limitMonthlyUsd,
+          limitConcurrentSessions: data.limitConcurrentSessions,
+        });
+
+        if (!result.ok) {
+          toast.error(result.error || t("errors.createFailed"));
+          return;
+        }
+
+        const payload = result.data;
+        if (!payload) {
+          toast.error(t("errors.noKeyReturned"));
+          return;
+        }
+
+        startTransition(() => {
+          onSuccess?.({ generatedKey: payload.generatedKey, name: payload.name });
+          router.refresh();
+        });
+      } catch (err) {
+        console.error("添加Key失败:", err);
+        // 使用toast显示具体的错误信息
+        const errorMessage = err instanceof Error ? err.message : t("errors.createFailed");
+        toast.error(errorMessage);
+      }
+    },
+  });
+
+  return (
+    <DialogFormLayout
+      config={{
+        title: t("title"),
+        description: t("description"),
+        submitText: t("submitText"),
+        loadingText: t("loadingText"),
+      }}
+      onSubmit={form.handleSubmit}
+      isSubmitting={isPending}
+      canSubmit={form.canSubmit && !!userId}
+      error={form.errors._form}
+    >
+      <TextField
+        label={t("keyName.label")}
+        required
+        maxLength={64}
+        autoFocus
+        placeholder={t("keyName.placeholder")}
+        {...form.getFieldProps("name")}
+      />
+
+      <DateField
+        label={t("expiresAt.label")}
+        placeholder={t("expiresAt.placeholder")}
+        description={t("expiresAt.description")}
+        {...form.getFieldProps("expiresAt")}
+      />
+
+      <div className="flex items-start justify-between gap-4 rounded-lg border border-dashed border-border px-4 py-3">
+        <div>
+          <Label htmlFor="can-login-web-ui" className="text-sm font-medium">
+            {t("canLoginWebUi.label")}
+          </Label>
+          <p className="text-xs text-muted-foreground mt-1">{t("canLoginWebUi.description")}</p>
+        </div>
+        <Switch
+          id="can-login-web-ui"
+          checked={form.values.canLoginWebUi}
+          onCheckedChange={(checked) => form.setValue("canLoginWebUi", checked)}
+        />
+      </div>
+
+      <NumberField
+        label={t("limit5hUsd.label")}
+        placeholder={t("limit5hUsd.placeholder")}
+        description={t("limit5hUsd.description")}
+        min={0}
+        step={0.01}
+        {...form.getFieldProps("limit5hUsd")}
+      />
+
+      <NumberField
+        label={t("limitWeeklyUsd.label")}
+        placeholder={t("limitWeeklyUsd.placeholder")}
+        description={t("limitWeeklyUsd.description")}
+        min={0}
+        step={0.01}
+        {...form.getFieldProps("limitWeeklyUsd")}
+      />
+
+      <NumberField
+        label={t("limitMonthlyUsd.label")}
+        placeholder={t("limitMonthlyUsd.placeholder")}
+        description={t("limitMonthlyUsd.description")}
+        min={0}
+        step={0.01}
+        {...form.getFieldProps("limitMonthlyUsd")}
+      />
+
+      <NumberField
+        label={t("limitConcurrentSessions.label")}
+        placeholder={t("limitConcurrentSessions.placeholder")}
+        description={t("limitConcurrentSessions.description")}
+        min={0}
+        step={1}
+        {...form.getFieldProps("limitConcurrentSessions")}
+      />
+    </DialogFormLayout>
+  );
+}

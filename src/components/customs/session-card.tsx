@@ -4,9 +4,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import type { ActiveSessionInfo } from "@/types/session";
-import Link from "next/link";
+import { Link } from "@/i18n/routing";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
+import { useTranslations } from "next-intl";
 
 interface SessionCardProps {
   session: ActiveSessionInfo;
@@ -34,22 +35,27 @@ function formatDuration(durationMs: number | undefined): string {
 /**
  * 获取状态Badge配置
  */
-function getStatusConfig(status: "in_progress" | "completed" | "error", statusCode?: number) {
+// Status badge config helper (labels translated inside component)
+function getStatusConfig(
+  status: "in_progress" | "completed" | "error",
+  statusCode?: number,
+  labels?: { inProgress: string; error: string; completed: string }
+) {
   if (status === "in_progress") {
     return {
-      label: "进行中",
+      label: labels?.inProgress || "in_progress",
       variant: "default" as const,
       className: "bg-blue-500 hover:bg-blue-600",
     };
   } else if (status === "error" || (statusCode && statusCode >= 400)) {
     return {
-      label: "错误",
+      label: labels?.error || "error",
       variant: "destructive" as const,
       className: "",
     };
   } else {
     return {
-      label: "完成",
+      label: labels?.completed || "completed",
       variant: "outline" as const,
       className: "text-green-600 border-green-600",
     };
@@ -61,7 +67,12 @@ function getStatusConfig(status: "in_progress" | "completed" | "error", statusCo
  * 用于概览面板的横向滚动展示
  */
 export function SessionCard({ session, className, currencyCode = "USD" }: SessionCardProps) {
-  const statusConfig = getStatusConfig(session.status, session.statusCode);
+  const t = useTranslations("customs");
+  const statusConfig = getStatusConfig(session.status, session.statusCode, {
+    inProgress: t("sessions.status.inProgress"),
+    error: t("sessions.status.error"),
+    completed: t("sessions.status.completed"),
+  });
   const inputTokensDisplay =
     session.inputTokens !== undefined ? formatTokenAmount(session.inputTokens) : null;
   const outputTokensDisplay =
@@ -95,7 +106,7 @@ export function SessionCard({ session, className, currencyCode = "USD" }: Sessio
           {/* 模型和供应商 */}
           <div className="flex items-center gap-1.5 text-xs">
             <Badge variant="secondary" className="truncate max-w-[120px] font-mono">
-              {session.model || "未知"}
+              {session.model || t("sessions.unknown")}
             </Badge>
             {session.providerName && (
               <span className="text-muted-foreground truncate flex-1">

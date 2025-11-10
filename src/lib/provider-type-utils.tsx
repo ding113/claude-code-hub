@@ -10,51 +10,39 @@ const AnthropicOrangeAvatar: React.FC<{ className?: string }> = ({ className }) 
   return <Anthropic.Avatar size={size} background="#ffffff" shape="circle" className={className} />;
 };
 
-// 供应商类型配置
+// 供应商类型 UI 配置（仅包含图标和颜色，不包含翻译文本）
 export const PROVIDER_TYPE_CONFIG: Record<
   ProviderType,
   {
-    label: string;
     icon: React.ComponentType<{ className?: string }>;
     iconColor: string;
     bgColor: string;
-    description: string;
   }
 > = {
   claude: {
-    label: "Claude",
     icon: Claude.Color,
     iconColor: "text-orange-600",
     bgColor: "bg-orange-500/15",
-    description: "Anthropic 官方 API",
   },
   "claude-auth": {
-    label: "Claude Auth",
     icon: AnthropicOrangeAvatar, // Anthropic Avatar 橙色圆形图标
     iconColor: "text-purple-600",
     bgColor: "bg-purple-500/15",
-    description: "Claude 中转服务",
   },
   codex: {
-    label: "Codex",
     icon: OpenAI, // OpenAI 无文字版本（默认 Mono）
     iconColor: "text-blue-600",
     bgColor: "bg-blue-500/15",
-    description: "Codex CLI API",
   },
   "gemini-cli": {
-    label: "Gemini CLI",
     icon: Gemini.Color,
     iconColor: "text-emerald-600",
     bgColor: "bg-emerald-500/15",
-    description: "Gemini CLI API",
   },
   "openai-compatible": {
-    label: "OpenAI Compatible",
     icon: OpenAI, // OpenAI 无文字版本（默认 Mono）
     iconColor: "text-cyan-600",
     bgColor: "bg-cyan-500/15",
-    description: "OpenAI 兼容 API",
   },
 };
 
@@ -66,4 +54,9 @@ export function getProviderTypeConfig(type: ProviderType) {
 // 获取所有供应商类型
 export function getAllProviderTypes(): ProviderType[] {
   return Object.keys(PROVIDER_TYPE_CONFIG) as ProviderType[];
+}
+
+// 将供应商类型转换为翻译键（claude-auth -> claudeAuth, gemini-cli -> geminiCli）
+export function getProviderTypeTranslationKey(type: ProviderType): string {
+  return type.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
 }

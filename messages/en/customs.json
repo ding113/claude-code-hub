@@ -1,0 +1,41 @@
+{
+  "concurrent": {
+    "title": "Concurrent Sessions",
+    "description": "Active sessions in the last 5 minutes (click for details)"
+  },
+  "sessions": {
+    "status": {
+      "inProgress": "In Progress",
+      "completed": "Completed",
+      "error": "Error",
+      "unknown": "Unknown"
+    }
+  },
+  "version": {
+    "title": "Version Management",
+    "description": "Check and manage application version",
+    "current": "Current Version",
+    "latest": "Latest Version",
+    "checkUpdate": "Check Update",
+    "updateAvailable": "Update Available",
+    "foundUpdate": "New version found",
+    "ariaUpdateAvailable": "A new version is available, click to view",
+    "checking": "Checking...",
+    "errorNetwork": "Network error, unable to check version",
+    "publishedAt": "Published at",
+    "viewRelease": "View Release"
+  },
+  "metrics": {
+    "concurrent": "Concurrent",
+    "todayRequests": "Today's Requests",
+    "todayCost": "Today's Cost",
+    "avgResponse": "Average Response Time",
+    "viewDetails": "View Details"
+  },
+  "activeSessions": {
+    "title": "Active Sessions",
+    "summary": "{count} sessions in the last {minutes} minutes",
+    "empty": "No active sessions",
+    "viewAll": "View All"
+  }
+}

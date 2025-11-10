@@ -1,0 +1,249 @@
+{
+  "header": {
+    "title": "用户配额",
+    "role": {
+      "admin": "管理员",
+      "user": "用户"
+    },
+    "keysCountSuffix": "个密钥",
+    "rpm": "请求限流",
+    "todayCost": "今日消费",
+    "exceededNotice": "已超过限额,请联系管理员处理"
+  },
+  "countdown": {
+    "reset": "重置倒计时"
+  },
+  "windowType": {
+    "5h": {
+      "label": "5小时滚动",
+      "description": "统计过去5小时内的消费,每小时滚动更新"
+    },
+    "weekly": {
+      "label": "每周重置",
+      "description": "自然周制(周一00:00重置),整周统计"
+    },
+    "monthly": {
+      "label": "每月重置",
+      "description": "自然月制(每月1日00:00重置),整月统计"
+    },
+    "daily": {
+      "label": "每日重置",
+      "description": "自然日制(每日00:00重置),按日统计"
+    }
+  },
+  "toolbar": {
+    "searchPlaceholder": "搜索用户名或密钥",
+    "filter": "筛选",
+    "sort": "排序",
+    "refresh": "刷新",
+    "autoRefresh": "自动刷新",
+    "filterOptions": {
+      "all": "全部",
+      "warning": "预警",
+      "exceeded": "已超限"
+    },
+    "sortOptions": {
+      "name": "按名称",
+      "usage": "按使用率"
+    },
+    "interval": {
+      "10s": "10秒",
+      "30s": "30秒",
+      "60s": "60秒"
+    }
+  },
+  "layout": {
+    "title": "限额管理",
+    "description": "查看和管理所有层级的限额使用情况",
+    "tabs": {
+      "users": "用户限额",
+      "keys": "密钥限额",
+      "providers": "供应商限额"
+    }
+  },
+  "users": {
+    "title": "用户限额统计",
+    "totalCount": "共 {count} 个用户",
+    "noNote": "无备注",
+    "rpm": {
+      "label": "RPM 限额",
+      "description": "每分钟请求数"
+    },
+    "dailyCost": {
+      "label": "每日消费",
+      "resetAt": "重置于"
+    },
+    "noQuotaData": "无法获取限额信息",
+    "noMatches": "未找到匹配的用户",
+    "noData": "暂无用户数据",
+    "sort": {
+      "name": "按名称",
+      "usage": "按使用率"
+    },
+    "filter": {
+      "all": "全部",
+      "warning": "接近限额 (>60%)",
+      "exceeded": "已超限 (≥100%)"
+    }
+  },
+  "providers": {
+    "title": "供应商限额统计",
+    "totalCount": "共 {count} 个供应商",
+    "filterCount": "显示 {filtered} / {total} 个供应商",
+    "status": {
+      "enabled": "启用",
+      "disabled": "禁用"
+    },
+    "card": {
+      "priority": "优先级",
+      "weight": "权重"
+    },
+    "cost5h": {
+      "label": "5小时消费"
+    },
+    "costWeekly": {
+      "label": "周消费",
+      "resetAt": "重置于"
+    },
+    "costMonthly": {
+      "label": "月消费",
+      "resetAt": "重置于"
+    },
+    "concurrentSessions": {
+      "label": "并发 Session"
+    },
+    "noQuotaSet": "未设置限额",
+    "noQuotaData": "无法获取限额信息",
+    "noMatches": "没有匹配的供应商",
+    "unlimitedSection": "未设置限额的供应商 ({count}个)"
+  },
+  "keys": {
+    "title": "密钥限额统计",
+    "totalCount": "共 {users} 个用户,{keys} 个密钥",
+    "searchPlaceholder": "搜索用户或密钥...",
+    "filterLabel": "筛选条件",
+    "filterCount": "显示 {users} 个用户,{keys} 个密钥",
+    "filter": {
+      "all": "全部密钥",
+      "keyQuota": "仅密钥限额",
+      "userQuotaOnly": "仅用户限额",
+      "warning": "预警(≥60%)",
+      "exceeded": "超限(≥100%)"
+    },
+    "table": {
+      "keyName": "密钥名称",
+      "quotaType": "限额类型",
+      "cost5h": "5小时限额",
+      "costWeekly": "周限额",
+      "costMonthly": "月限额",
+      "concurrentSessions": "并发限制",
+      "status": "状态",
+      "actions": "操作"
+    },
+    "quotaType": {
+      "independent": "独立限额",
+      "inherited": "继承用户"
+    },
+    "status": {
+      "disabled": "已禁用",
+      "restricted": "受限",
+      "normal": "正常"
+    },
+    "noMatches": "没有匹配的用户或密钥",
+    "editDialog": {
+      "title": "设置密钥限额",
+      "description": "密钥: {keyName} ({userName})",
+      "cost5h": {
+        "label": "5小时限额(USD)",
+        "placeholder": "不限制",
+        "current": "当前已用: {currency}{current} / {currency}{limit}"
+      },
+      "costWeekly": {
+        "label": "周限额(USD)",
+        "placeholder": "不限制",
+        "current": "当前已用: {currency}{current} / {currency}{limit}"
+      },
+      "costMonthly": {
+        "label": "月限额(USD)",
+        "placeholder": "不限制",
+        "current": "当前已用: {currency}{current} / {currency}{limit}"
+      },
+      "concurrentSessions": {
+        "label": "并发 Session 限额",
+        "placeholder": "0 = 不限制",
+        "current": "当前并发: {current} / {limit}"
+      },
+      "clearAll": "清除所有限额",
+      "save": "保存",
+      "setQuota": "设置限额",
+      "success": "限额设置成功",
+      "clearSuccess": "限额已清除",
+      "error": "设置失败",
+      "clearError": "清除失败",
+      "retryError": "设置失败,请稍后重试"
+    },
+    "editUserDialog": {
+      "title": "设置用户限额",
+      "description": "用户: {userName}",
+      "rpm": {
+        "label": "每分钟请求数 (RPM)",
+        "placeholder": "60",
+        "current": "当前: {current} / {limit} 请求/分钟"
+      },
+      "dailyQuota": {
+        "label": "每日消费限额(USD)",
+        "placeholder": "100",
+        "current": "今日已用: {currency}{current} / {currency}{limit}"
+      },
+      "save": "保存",
+      "editQuota": "编辑限额",
+      "success": "用户限额设置成功",
+      "error": "设置失败",
+      "retryError": "设置失败,请稍后重试"
+    },
+    "editKeyForm": {
+      "title": "编辑密钥",
+      "description": "修改密钥的名称、过期时间和限流配置。",
+      "keyName": {
+        "label": "密钥名称",
+        "placeholder": "请输入密钥名称",
+        "required": "密钥名称 *"
+      },
+      "expiresAt": {
+        "label": "过期时间",
+        "placeholder": "选择过期时间",
+        "description": "留空表示永不过期"
+      },
+      "canLoginWebUi": {
+        "label": "允许登录 Web UI",
+        "description": "关闭后,此 Key 仅可用于 API 调用,无法登录管理后台"
+      },
+      "limit5hUsd": {
+        "label": "5小时消费上限 (USD)",
+        "placeholder": "留空表示无限制",
+        "description": "5小时内最大消费金额"
+      },
+      "limitWeeklyUsd": {
+        "label": "周消费上限 (USD)",
+        "placeholder": "留空表示无限制",
+        "description": "每周最大消费金额"
+      },
+      "limitMonthlyUsd": {
+        "label": "月消费上限 (USD)",
+        "placeholder": "留空表示无限制",
+        "description": "每月最大消费金额"
+      },
+      "limitConcurrentSessions": {
+        "label": "并发 Session 上限",
+        "placeholder": "0 表示无限制",
+        "description": "同时运行的对话数量"
+      },
+      "submitText": "保存修改",
+      "loadingText": "保存中...",
+      "success": "密钥更新成功",
+      "error": "密钥更新失败",
+      "retryError": "保存失败,请稍后重试",
+      "keyInfoMissing": "密钥信息不存在"
+    }
+  }
+}

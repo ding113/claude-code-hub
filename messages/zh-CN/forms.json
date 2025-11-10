@@ -1,0 +1,51 @@
+{
+  "submit": "提交",
+  "reset": "重置",
+  "required": "必填",
+  "optional": "可选",
+  "processing": "处理中...",
+  "common": {
+    "cancel": "取消",
+    "processing": "处理中..."
+  },
+  "errors": {
+    "formErrorTitle": "表单错误",
+    "formErrorDescription": "处理表单时出错，请重试。",
+    "required": "此字段为必填项",
+    "invalid": "输入格式不正确",
+    "minLength": "最少输入 {min} 个字符",
+    "maxLength": "最多输入 {max} 个字符",
+    "min": "最小值为 {min}",
+    "max": "最大值为 {max}",
+    "email": "请输入有效的邮箱地址",
+    "url": "请输入有效的URL",
+    "pattern": "格式不符合要求"
+  },
+  "placeholder": {
+    "text": "请输入文本",
+    "number": "请输入数字",
+    "email": "请输入邮箱地址",
+    "password": "请输入密码",
+    "search": "搜索...",
+    "select": "请选择",
+    "date": "请选择日期",
+    "textarea": "请输入内容"
+  },
+  "validation": {
+    "required": "此字段为必填项",
+    "invalid": "输入格式不正确",
+    "tooShort": "输入过短",
+    "tooLong": "输入过长",
+    "invalidEmail": "邮箱格式无效",
+    "invalidUrl": "URL 格式无效",
+    "invalidNumber": "数字格式无效"
+  },
+  "messages": {
+    "success": "操作成功",
+    "error": "操作失败",
+    "saved": "保存成功",
+    "deleted": "删除成功",
+    "loading": "处理中...",
+    "submit": "提交中..."
+  }
+}

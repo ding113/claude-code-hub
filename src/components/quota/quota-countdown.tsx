@@ -3,6 +3,7 @@
 import { useCountdown } from "@/hooks/useCountdown";
 import { Clock, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 
 interface QuotaCountdownProps {
   resetAt: Date | null;
@@ -32,11 +33,13 @@ interface QuotaCountdownProps {
  */
 export function QuotaCountdown({
   resetAt,
-  label = "重置",
+  label,
   className,
   showIcon = true,
   size = "md",
 }: QuotaCountdownProps) {
+  const t = useTranslations("quota");
+  const resolvedLabel = label ?? t("countdown.reset");
   const countdown = useCountdown(resetAt);
 
   // 根据剩余时间判断状态
@@ -79,7 +82,7 @@ export function QuotaCountdown({
     <div className={cn("flex items-center gap-1.5", className)}>
       {showIcon && <Icon className={cn(iconSizes[size], statusStyles[status])} />}
       <div className={cn("flex flex-col", sizeStyles[size])}>
-        {label && <span className="text-muted-foreground">{label}:</span>}
+        {resolvedLabel && <span className="text-muted-foreground">{resolvedLabel}:</span>}
         <span className={cn("font-mono font-medium tabular-nums", statusStyles[status])}>
           {countdown.formatted}
         </span>
@@ -133,7 +136,7 @@ export function QuotaCountdownCompact({
 export function QuotaCountdownWithProgress({
   resetAt,
   startAt,
-  label = "重置",
+  label,
   className,
 }: {
   resetAt: Date | null;
@@ -141,7 +144,9 @@ export function QuotaCountdownWithProgress({
   label?: string;
   className?: string;
 }) {
+  const t = useTranslations("quota");
   const countdown = useCountdown(resetAt);
+  const resolvedLabel = label ?? t("countdown.reset");
 
   // 计算进度百分比
   const getProgress = () => {
@@ -172,7 +177,7 @@ export function QuotaCountdownWithProgress({
   return (
     <div className={cn("space-y-1", className)}>
       <div className="flex items-center justify-between">
-        <span className="text-xs text-muted-foreground">{label}</span>
+        <span className="text-xs text-muted-foreground">{resolvedLabel}</span>
         <QuotaCountdownCompact resetAt={resetAt} />
       </div>
       <div className="h-1 w-full bg-muted rounded-full overflow-hidden">

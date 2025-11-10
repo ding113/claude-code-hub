@@ -1,0 +1,249 @@
+{
+  "header": {
+    "title": "User Quota",
+    "role": {
+      "admin": "Admin",
+      "user": "User"
+    },
+    "keysCountSuffix": " keys",
+    "rpm": "Rate Limit",
+    "todayCost": "Today's Cost",
+    "exceededNotice": "Quota exceeded, please contact administrator"
+  },
+  "countdown": {
+    "reset": "Reset Countdown"
+  },
+  "windowType": {
+    "5h": {
+      "label": "5-Hour Rolling",
+      "description": "Tracks consumption over the past 5 hours, updated hourly"
+    },
+    "weekly": {
+      "label": "Weekly Reset",
+      "description": "Natural week cycle (resets Monday 00:00), weekly statistics"
+    },
+    "monthly": {
+      "label": "Monthly Reset",
+      "description": "Natural month cycle (resets 1st of month 00:00), monthly statistics"
+    },
+    "daily": {
+      "label": "Daily Reset",
+      "description": "Natural day cycle (resets daily 00:00), daily statistics"
+    }
+  },
+  "toolbar": {
+    "searchPlaceholder": "Search username or key",
+    "filter": "Filter",
+    "sort": "Sort",
+    "refresh": "Refresh",
+    "autoRefresh": "Auto Refresh",
+    "filterOptions": {
+      "all": "All",
+      "warning": "Warning",
+      "exceeded": "Exceeded"
+    },
+    "sortOptions": {
+      "name": "By Name",
+      "usage": "By Usage"
+    },
+    "interval": {
+      "10s": "10s",
+      "30s": "30s",
+      "60s": "60s"
+    }
+  },
+  "layout": {
+    "title": "Quota Management",
+    "description": "View and manage quota usage across all levels",
+    "tabs": {
+      "users": "User Quotas",
+      "keys": "Key Quotas",
+      "providers": "Provider Quotas"
+    }
+  },
+  "users": {
+    "title": "User Quota Statistics",
+    "totalCount": "{count} users total",
+    "noNote": "No note",
+    "rpm": {
+      "label": "RPM Quota",
+      "description": "Requests per minute"
+    },
+    "dailyCost": {
+      "label": "Daily Cost",
+      "resetAt": "Resets at"
+    },
+    "noQuotaData": "Unable to retrieve quota information",
+    "noMatches": "No matching users found",
+    "noData": "No user data available",
+    "sort": {
+      "name": "By Name",
+      "usage": "By Usage"
+    },
+    "filter": {
+      "all": "All",
+      "warning": "Near Limit (>60%)",
+      "exceeded": "Exceeded (≥100%)"
+    }
+  },
+  "providers": {
+    "title": "Provider Quota Statistics",
+    "totalCount": "{count} providers total",
+    "filterCount": "Showing {filtered} / {total} providers",
+    "status": {
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    },
+    "card": {
+      "priority": "Priority",
+      "weight": "Weight"
+    },
+    "cost5h": {
+      "label": "5-Hour Cost"
+    },
+    "costWeekly": {
+      "label": "Weekly Cost",
+      "resetAt": "Resets at"
+    },
+    "costMonthly": {
+      "label": "Monthly Cost",
+      "resetAt": "Resets at"
+    },
+    "concurrentSessions": {
+      "label": "Concurrent Sessions"
+    },
+    "noQuotaSet": "No quota set",
+    "noQuotaData": "Unable to retrieve quota information",
+    "noMatches": "No matching providers",
+    "unlimitedSection": "Providers without quota ({count})"
+  },
+  "keys": {
+    "title": "Key Quota Statistics",
+    "totalCount": "{users} users, {keys} keys total",
+    "searchPlaceholder": "Search user or key...",
+    "filterLabel": "Filter",
+    "filterCount": "Showing {users} users, {keys} keys",
+    "filter": {
+      "all": "All Keys",
+      "keyQuota": "Key Quota Only",
+      "userQuotaOnly": "User Quota Only",
+      "warning": "Warning (≥60%)",
+      "exceeded": "Exceeded (≥100%)"
+    },
+    "table": {
+      "keyName": "Key Name",
+      "quotaType": "Quota Type",
+      "cost5h": "5-Hour Quota",
+      "costWeekly": "Weekly Quota",
+      "costMonthly": "Monthly Quota",
+      "concurrentSessions": "Concurrent Limit",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "quotaType": {
+      "independent": "Independent Quota",
+      "inherited": "Inherited from User"
+    },
+    "status": {
+      "disabled": "Disabled",
+      "restricted": "Restricted",
+      "normal": "Normal"
+    },
+    "noMatches": "No matching users or keys",
+    "editDialog": {
+      "title": "Set Key Quota",
+      "description": "Key: {keyName} ({userName})",
+      "cost5h": {
+        "label": "5-Hour Quota (USD)",
+        "placeholder": "Unlimited",
+        "current": "Current usage: {currency}{current} / {currency}{limit}"
+      },
+      "costWeekly": {
+        "label": "Weekly Quota (USD)",
+        "placeholder": "Unlimited",
+        "current": "Current usage: {currency}{current} / {currency}{limit}"
+      },
+      "costMonthly": {
+        "label": "Monthly Quota (USD)",
+        "placeholder": "Unlimited",
+        "current": "Current usage: {currency}{current} / {currency}{limit}"
+      },
+      "concurrentSessions": {
+        "label": "Concurrent Session Quota",
+        "placeholder": "0 = Unlimited",
+        "current": "Current concurrent: {current} / {limit}"
+      },
+      "clearAll": "Clear All Quotas",
+      "save": "Save",
+      "setQuota": "Set Quota",
+      "success": "Quota set successfully",
+      "clearSuccess": "Quota cleared",
+      "error": "Failed to set",
+      "clearError": "Failed to clear",
+      "retryError": "Failed to set, please try again later"
+    },
+    "editUserDialog": {
+      "title": "Set User Quota",
+      "description": "User: {userName}",
+      "rpm": {
+        "label": "Requests Per Minute (RPM)",
+        "placeholder": "60",
+        "current": "Current: {current} / {limit} requests/minute"
+      },
+      "dailyQuota": {
+        "label": "Daily Cost Quota (USD)",
+        "placeholder": "100",
+        "current": "Today's usage: {currency}{current} / {currency}{limit}"
+      },
+      "save": "Save",
+      "editQuota": "Edit Quota",
+      "success": "User quota set successfully",
+      "error": "Failed to set",
+      "retryError": "Failed to set, please try again later"
+    },
+    "editKeyForm": {
+      "title": "Edit Key",
+      "description": "Modify the key's name, expiration time, and rate limit configuration.",
+      "keyName": {
+        "label": "Key Name",
+        "placeholder": "Enter key name",
+        "required": "Key Name *"
+      },
+      "expiresAt": {
+        "label": "Expiration Time",
+        "placeholder": "Select expiration time",
+        "description": "Leave blank for never expires"
+      },
+      "canLoginWebUi": {
+        "label": "Allow Web UI Login",
+        "description": "When disabled, this key can only be used for API calls and cannot login to the admin panel"
+      },
+      "limit5hUsd": {
+        "label": "5-Hour Cost Limit (USD)",
+        "placeholder": "Leave blank for unlimited",
+        "description": "Maximum cost within 5 hours"
+      },
+      "limitWeeklyUsd": {
+        "label": "Weekly Cost Limit (USD)",
+        "placeholder": "Leave blank for unlimited",
+        "description": "Maximum cost per week"
+      },
+      "limitMonthlyUsd": {
+        "label": "Monthly Cost Limit (USD)",
+        "placeholder": "Leave blank for unlimited",
+        "description": "Maximum cost per month"
+      },
+      "limitConcurrentSessions": {
+        "label": "Concurrent Session Limit",
+        "placeholder": "0 means unlimited",
+        "description": "Number of simultaneous conversations"
+      },
+      "submitText": "Save Changes",
+      "loadingText": "Saving...",
+      "success": "Key updated successfully",
+      "error": "Failed to update key",
+      "retryError": "Save failed, please try again later",
+      "keyInfoMissing": "Key information does not exist"
+    }
+  }
+}

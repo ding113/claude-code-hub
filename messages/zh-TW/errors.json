@@ -1,0 +1,58 @@
+{
+  "_comment": "Error messages for Chinese Traditional",
+
+  "REQUIRED_FIELD": "{field}不能為空",
+  "USER_NAME_REQUIRED": "使用者名稱不能為空",
+  "API_KEY_REQUIRED": "API金鑰不能為空",
+  "PROVIDER_NAME_REQUIRED": "服務商名稱不能為空",
+  "PROVIDER_URL_REQUIRED": "服務商URL不能為空",
+
+  "MIN_LENGTH": "{field}長度不能少於{min}個字符",
+  "MAX_LENGTH": "{field}長度不能超過{max}個字符",
+  "INVALID_EMAIL": "請輸入有效的電子郵件地址",
+  "INVALID_URL": "請輸入有效的URL地址",
+
+  "MIN_VALUE": "{field}不能低於{min}",
+  "MAX_VALUE": "{field}不能超過{max}",
+  "MUST_BE_INTEGER": "{field}必須是整數",
+  "MUST_BE_POSITIVE": "{field}必須是正數",
+
+  "INVALID_TYPE": "{field}類型不正確",
+  "INVALID_FORMAT": "{field}格式不正確",
+
+  "DUPLICATE_NAME": "名稱'{name}'已存在",
+  "INVALID_RANGE": "{field}必須在{min}到{max}之間",
+  "EMPTY_UPDATE": "更新內容為空",
+
+  "UNAUTHORIZED": "未授權，請先登入",
+  "INVALID_CREDENTIALS": "使用者名稱或密碼錯誤",
+  "SESSION_EXPIRED": "會話已過期，請重新登入",
+  "PERMISSION_DENIED": "權限不足",
+  "TOKEN_REQUIRED": "需要提供認證令牌",
+  "INVALID_TOKEN": "無效的認證令牌",
+
+  "INTERNAL_ERROR": "系統內部錯誤，請稍後重試",
+  "DATABASE_ERROR": "資料庫錯誤",
+  "NOT_FOUND": "資源不存在",
+  "OPERATION_FAILED": "操作失敗",
+  "CREATE_FAILED": "創建失敗，請稍後重試",
+  "UPDATE_FAILED": "更新失敗，請稍後重試",
+  "DELETE_FAILED": "刪除失敗，請稍後重試",
+
+  "CONNECTION_FAILED": "連接失敗",
+  "TIMEOUT": "請求逾時",
+  "NETWORK_ERROR": "網路錯誤",
+
+  "QUOTA_EXCEEDED": "配額已用盡",
+  "RATE_LIMIT_EXCEEDED": "請求過於頻繁，請稍後重試",
+  "RESOURCE_BUSY": "資源正在使用中",
+  "INVALID_STATE": "當前狀態不允許此操作",
+  "CONFLICT": "操作衝突",
+
+  "USER_NOT_FOUND": "使用者不存在",
+  "USER_CANNOT_MODIFY_SENSITIVE_FIELDS": "普通使用者不能修改帳戶額度和供應商分組",
+  "CREATE_USER_FAILED": "創建使用者失敗，請稍後重試",
+  "UPDATE_USER_FAILED": "更新使用者失敗，請稍後重試",
+  "DELETE_USER_FAILED": "刪除使用者失敗，請稍後重試",
+  "GET_USER_QUOTA_FAILED": "獲取使用者額度使用情況失敗"
+}

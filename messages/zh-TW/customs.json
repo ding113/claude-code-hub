@@ -1,0 +1,41 @@
+{
+  "concurrent": {
+    "title": "目前並發",
+    "description": "最近 5 分鐘活躍 Session（點擊查看詳情）"
+  },
+  "sessions": {
+    "status": {
+      "inProgress": "進行中",
+      "completed": "已完成",
+      "error": "出錯",
+      "unknown": "未知"
+    }
+  },
+  "version": {
+    "title": "版本管理",
+    "description": "檢查並管理應用版本",
+    "current": "目前版本",
+    "latest": "最新版本",
+    "checkUpdate": "檢查更新",
+    "updateAvailable": "發現新版本",
+    "foundUpdate": "發現新版本",
+    "ariaUpdateAvailable": "有新版本可用，點擊查看",
+    "checking": "檢查中...",
+    "errorNetwork": "網路錯誤，無法檢查版本",
+    "publishedAt": "發佈於",
+    "viewRelease": "查看發佈"
+  },
+  "metrics": {
+    "concurrent": "並發數",
+    "todayRequests": "今日請求",
+    "todayCost": "今日消費",
+    "avgResponse": "平均回應時間",
+    "viewDetails": "查看詳情"
+  },
+  "activeSessions": {
+    "title": "活躍 Session",
+    "summary": "{count} 個 Session，{minutes} 分鐘內",
+    "empty": "暫無活躍 Session",
+    "viewAll": "查看全部"
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "_comment": "Error messages for Japanese",
+
+  "REQUIRED_FIELD": "{field}は必須です",
+  "USER_NAME_REQUIRED": "ユーザー名は必須です",
+  "API_KEY_REQUIRED": "APIキーは必須です",
+  "PROVIDER_NAME_REQUIRED": "プロバイダー名は必須です",
+  "PROVIDER_URL_REQUIRED": "プロバイダーURLは必須です",
+
+  "MIN_LENGTH": "{field}は{min}文字以上である必要があります",
+  "MAX_LENGTH": "{field}は{max}文字を超えることはできません",
+  "INVALID_EMAIL": "有効なメールアドレスを入力してください",
+  "INVALID_URL": "有効なURLを入力してください",
+
+  "MIN_VALUE": "{field}は{min}以上である必要があります",
+  "MAX_VALUE": "{field}は{max}を超えることはできません",
+  "MUST_BE_INTEGER": "{field}は整数である必要があります",
+  "MUST_BE_POSITIVE": "{field}は正の数である必要があります",
+
+  "INVALID_TYPE": "{field}のタイプが無効です",
+  "INVALID_FORMAT": "{field}の形式が無効です",
+
+  "DUPLICATE_NAME": "名前'{name}'は既に存在します",
+  "INVALID_RANGE": "{field}は{min}から{max}の間である必要があります",
+  "EMPTY_UPDATE": "更新するフィールドがありません",
+
+  "UNAUTHORIZED": "未承認です。ログインしてください",
+  "INVALID_CREDENTIALS": "無効なユーザー名またはパスワード",
+  "SESSION_EXPIRED": "セッションが期限切れです。再度ログインしてください",
+  "PERMISSION_DENIED": "アクセス権限がありません",
+  "TOKEN_REQUIRED": "認証トークンが必要です",
+  "INVALID_TOKEN": "無効な認証トークン",
+
+  "INTERNAL_ERROR": "内部サーバーエラー、後でもう一度お試しください",
+  "DATABASE_ERROR": "データベースエラー",
+  "NOT_FOUND": "リソースが見つかりません",
+  "OPERATION_FAILED": "操作に失敗しました",
+  "CREATE_FAILED": "作成に失敗しました。後でもう一度お試しください",
+  "UPDATE_FAILED": "更新に失敗しました。後でもう一度お試しください",
+  "DELETE_FAILED": "削除に失敗しました。後でもう一度お試しください",
+
+  "CONNECTION_FAILED": "接続に失敗しました",
+  "TIMEOUT": "リクエストがタイムアウトしました",
+  "NETWORK_ERROR": "ネットワークエラー",
+
+  "QUOTA_EXCEEDED": "クォータを超過しました",
+  "RATE_LIMIT_EXCEEDED": "リクエストが多すぎます。後でもう一度お試しください",
+  "RESOURCE_BUSY": "リソースは現在使用中です",
+  "INVALID_STATE": "現在の状態では操作が許可されていません",
+  "CONFLICT": "操作の競合",
+
+  "USER_NOT_FOUND": "ユーザーが見つかりません",
+  "USER_CANNOT_MODIFY_SENSITIVE_FIELDS": "一般ユーザーはクォータ制限とプロバイダーグループを変更できません",
+  "CREATE_USER_FAILED": "ユーザーの作成に失敗しました。後でもう一度お試しください",
+  "UPDATE_USER_FAILED": "ユーザーの更新に失敗しました。後でもう一度お試しください",
+  "DELETE_USER_FAILED": "ユーザーの削除に失敗しました。後でもう一度お試しください",
+  "GET_USER_QUOTA_FAILED": "ユーザークォータ情報の取得に失敗しました"
+}

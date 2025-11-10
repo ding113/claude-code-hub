@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 /**
  * 表单布局配置
@@ -47,6 +48,7 @@ export function DialogFormLayout({
   canSubmit = true,
   error,
 }: FormLayoutProps) {
+  const t = useTranslations("forms");
   return (
     <form onSubmit={onSubmit} className="space-y-4" noValidate>
       <DialogHeader>
@@ -67,14 +69,14 @@ export function DialogFormLayout({
       <DialogFooter>
         <DialogClose asChild>
           <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
-            {config.cancelText || "取消"}
+            {config.cancelText || t("common.cancel")}
           </Button>
         </DialogClose>
         <Button type="submit" disabled={!canSubmit || isSubmitting} className="min-w-[100px]">
           {isSubmitting ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              {config.loadingText || "处理中..."}
+              {config.loadingText || t("common.processing")}
             </>
           ) : (
             config.submitText
@@ -97,6 +99,7 @@ export function PageFormLayout({
   canSubmit = true,
   error,
 }: FormLayoutProps) {
+  const t = useTranslations("forms");
   return (
     <div className="space-y-6">
       <div className="space-y-2">
@@ -118,14 +121,14 @@ export function PageFormLayout({
         <div className="flex gap-4">
           {onCancel && (
             <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
-              {config.cancelText || "取消"}
+              {config.cancelText || t("common.cancel")}
             </Button>
           )}
           <Button type="submit" disabled={!canSubmit || isSubmitting} className="min-w-[120px]">
             {isSubmitting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                {config.loadingText || "处理中..."}
+                {config.loadingText || t("common.processing")}
               </>
             ) : (
               config.submitText

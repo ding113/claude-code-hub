@@ -47,7 +47,6 @@ next-env.d.ts
 .cursor/
 .claude/
 .serena/
-logs/
 !src/app/dashboard/logs/
 !src/app/settings/logs/
 .idea/
@@ -60,3 +59,10 @@ logs/
 
 # dev tools (local development utilities)
 /dev/
+
+# translation checklists and temporary docs
+TRANSLATIONS_CHECKLIST.txt
+TRANSLATIONS_CHECKLIST.md
+
+# i18n verification screenshots (temporary)
+/i18n-verification/

@@ -3,46 +3,26 @@
 import { Badge } from "@/components/ui/badge";
 import { RefreshCw, Calendar, CalendarDays, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 
 type WindowType = "5h" | "weekly" | "monthly" | "daily";
 
 interface WindowTypeConfig {
-  label: string;
-  description: string;
   icon: typeof RefreshCw;
   variant: "default" | "secondary" | "outline";
   color: string;
 }
 
-const WINDOW_CONFIG: Record<WindowType, WindowTypeConfig> = {
-  "5h": {
-    label: "滚动窗口",
-    description: "统计过去5小时内的消费",
-    icon: RefreshCw,
-    variant: "default",
-    color: "text-blue-600 dark:text-blue-400",
-  },
+// Static icon/style config; labels/descriptions come from i18n
+const WINDOW_STYLE: Record<WindowType, WindowTypeConfig> = {
+  "5h": { icon: RefreshCw, variant: "default", color: "text-blue-600 dark:text-blue-400" },
   weekly: {
-    label: "自然周",
-    description: "周一 00:00 重置",
     icon: CalendarDays,
     variant: "secondary",
     color: "text-purple-600 dark:text-purple-400",
   },
-  monthly: {
-    label: "自然月",
-    description: "每月1日 00:00 重置",
-    icon: Calendar,
-    variant: "secondary",
-    color: "text-green-600 dark:text-green-400",
-  },
-  daily: {
-    label: "自然日",
-    description: "每日 00:00 重置",
-    icon: Clock,
-    variant: "secondary",
-    color: "text-orange-600 dark:text-orange-400",
-  },
+  monthly: { icon: Calendar, variant: "secondary", color: "text-green-600 dark:text-green-400" },
+  daily: { icon: Clock, variant: "secondary", color: "text-orange-600 dark:text-orange-400" },
 };
 
 interface QuotaWindowTypeProps {
@@ -75,27 +55,28 @@ export function QuotaWindowType({
   showDescription = false,
   size = "sm",
 }: QuotaWindowTypeProps) {
-  const config = WINDOW_CONFIG[type];
-  const Icon = config.icon;
+  const t = useTranslations("quota");
+  const style = WINDOW_STYLE[type];
+  const Icon = style.icon;
+  const label = t(`windowType.${type}.label` as `windowType.${WindowType}.label`);
+  const description = t(`windowType.${type}.description` as `windowType.${WindowType}.description`);
 
   if (showDescription) {
     return (
       <div className={cn("flex items-center gap-2", className)}>
-        {showIcon && <Icon className={cn("h-4 w-4", config.color)} />}
+        {showIcon && <Icon className={cn("h-4 w-4", style.color)} />}
         <div className="flex flex-col">
-          <span className={cn("font-medium", size === "sm" ? "text-xs" : "text-sm")}>
-            {config.label}
-          </span>
-          <span className="text-xs text-muted-foreground">{config.description}</span>
+          <span className={cn("font-medium", size === "sm" ? "text-xs" : "text-sm")}>{label}</span>
+          <span className="text-xs text-muted-foreground">{description}</span>
         </div>
       </div>
     );
   }
 
   return (
-    <Badge variant={config.variant} className={cn("gap-1", className)}>
+    <Badge variant={style.variant} className={cn("gap-1", className)}>
       {showIcon && <Icon className="h-3 w-3" />}
-      <span>{config.label}</span>
+      <span>{label}</span>
     </Badge>
   );
 }
@@ -110,9 +91,9 @@ export function QuotaWindowTypeCompact({
   type: WindowType;
   className?: string;
 }) {
-  const config = WINDOW_CONFIG[type];
-
-  return <span className={cn("text-xs text-muted-foreground", className)}>{config.label}</span>;
+  const t = useTranslations("quota");
+  const label = t(`windowType.${type}.label` as `windowType.${WindowType}.label`);
+  return <span className={cn("text-xs text-muted-foreground", className)}>{label}</span>;
 }
 
 /**
@@ -125,20 +106,23 @@ export function QuotaWindowTypeWithTooltip({
   type: WindowType;
   className?: string;
 }) {
-  const config = WINDOW_CONFIG[type];
-  const Icon = config.icon;
+  const t = useTranslations("quota");
+  const style = WINDOW_STYLE[type];
+  const Icon = style.icon;
+  const label = t(`windowType.${type}.label` as `windowType.${WindowType}.label`);
+  const description = t(`windowType.${type}.description` as `windowType.${WindowType}.description`);
 
   return (
     <div
       className={cn("group relative inline-flex items-center gap-1.5 cursor-help", className)}
-      title={config.description}
+      title={description}
     >
-      <Icon className={cn("h-3.5 w-3.5", config.color)} />
-      <span className="text-xs font-medium">{config.label}</span>
+      <Icon className={cn("h-3.5 w-3.5", style.color)} />
+      <span className="text-xs font-medium">{label}</span>
 
       {/* Tooltip */}
       <div className="invisible group-hover:visible absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-popover text-popover-foreground text-xs rounded shadow-md border whitespace-nowrap z-10">
-        {config.description}
+        {description}
         <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-popover" />
       </div>
     </div>

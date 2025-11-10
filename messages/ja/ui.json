@@ -1,0 +1,47 @@
+{
+  "common": {
+    "noData": "データがありません",
+    "actions": "アクション",
+    "loading": "読み込み中...",
+    "empty": "空",
+    "error": "エラー"
+  },
+  "table": {
+    "pagination": "ページネーション",
+    "sorting": "並べ替え",
+    "filtering": "フィルタリング",
+    "search": "検索",
+    "refresh": "更新",
+    "columns": "列",
+    "previousPage": "前へ",
+    "nextPage": "次へ",
+    "pageInfo": "{current} ページ目 / {total} ページ",
+    "itemsPerPage": "1ページあたりの項目数",
+    "selectAll": "すべて選択",
+    "deselectAll": "すべての選択を解除"
+  },
+  "errorBoundary": {
+    "title": "エラーが発生しました",
+    "defaultDescription": "予期しないエラーが発生しました。もう一度試してください。",
+    "refreshPage": "ページを更新",
+    "listErrorTitle": "リストの読み込みに失敗しました",
+    "listErrorDescription": "リストの読み込み中にエラーが発生しました。もう一度試してください。"
+  },
+  "pagination": {
+    "first": "最初",
+    "last": "最後",
+    "previous": "前へ",
+    "next": "次へ",
+    "goToPage": "ページへ移動",
+    "pageSize": "ページサイズ",
+    "total": "合計 {total} 項目"
+  },
+  "empty": {
+    "title": "データがありません",
+    "description": "表示するデータがありません"
+  },
+  "loading": {
+    "title": "読み込み中",
+    "description": "しばらくお待ちください..."
+  }
+}

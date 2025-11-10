@@ -1,0 +1,337 @@
+{
+  "zh-CN": {
+    "providers": {
+      "types": {
+        "claude": {
+          "label": "Claude",
+          "description": "Anthropic 官方 API"
+        },
+        "claudeAuth": {
+          "label": "Claude Auth",
+          "description": "Claude 中转服务"
+        },
+        "codex": {
+          "label": "Codex",
+          "description": "Codex CLI API"
+        },
+        "geminiCli": {
+          "label": "Gemini CLI",
+          "description": "Gemini CLI API"
+        },
+        "openaiCompatible": {
+          "label": "OpenAI Compatible",
+          "description": "OpenAI 兼容 API"
+        }
+      },
+      "list": {
+        "priority": "优先级",
+        "weight": "权重",
+        "costMultiplier": "成本倍数",
+        "todayUsageLabel": "今日用量",
+        "todayUsageCount": "{count} 次",
+        "circuitBroken": "熔断中",
+        "officialWebsite": "官网",
+        "viewFullKey": "查看完整 API Key",
+        "viewFullKeyDesc": "请妥善保管，不要泄露给他人",
+        "keyLoading": "加载中...",
+        "confirmDeleteTitle": "确认删除供应商？",
+        "confirmDeleteMessage": "确定要删除供应商 \"{name}\" 吗？此操作无法撤销。",
+        "deleteButton": "删除",
+        "cancelButton": "取消",
+        "deleteSuccess": "删除成功",
+        "deleteSuccessDesc": "供应商 \"{name}\" 已删除",
+        "deleteFailed": "删除失败",
+        "deleteError": "操作过程中出现异常",
+        "unknownError": "未知错误",
+        "getKeyFailed": "获取密钥失败",
+        "keyCopied": "密钥已复制到剪贴板",
+        "copyFailed": "复制失败",
+        "resetCircuitSuccess": "熔断器已重置",
+        "resetCircuitSuccessDesc": "供应商 \"{name}\" 的熔断状态已解除",
+        "resetCircuitFailed": "重置熔断器失败",
+        "toggleSuccess": "供应商已{status}",
+        "toggleSuccessDesc": "供应商 \"{name}\" 状态已更新",
+        "toggleFailed": "状态切换失败",
+        "statusEnabled": "启用",
+        "statusDisabled": "禁用"
+      },
+      "schedulingDialog": {
+        "title": "供应商调度规则说明",
+        "description": "了解系统如何智能选择上游供应商，确保高可用性和成本优化",
+        "triggerButton": "调度规则说明",
+        "step": "步骤",
+        "before": "过滤前：",
+        "after": "过滤后：",
+        "decision": "决策："
+      }
+    }
+  },
+  "en": {
+    "providers": {
+      "types": {
+        "claude": {
+          "label": "Claude",
+          "description": "Anthropic Official API"
+        },
+        "claudeAuth": {
+          "label": "Claude Auth",
+          "description": "Claude Relay Service"
+        },
+        "codex": {
+          "label": "Codex",
+          "description": "Codex CLI API"
+        },
+        "geminiCli": {
+          "label": "Gemini CLI",
+          "description": "Gemini CLI API"
+        },
+        "openaiCompatible": {
+          "label": "OpenAI Compatible",
+          "description": "OpenAI Compatible API"
+        }
+      },
+      "list": {
+        "priority": "Priority",
+        "weight": "Weight",
+        "costMultiplier": "Cost Multiplier",
+        "todayUsageLabel": "Today's Usage",
+        "todayUsageCount": "{count} times",
+        "circuitBroken": "Circuit Broken",
+        "officialWebsite": "Official",
+        "viewFullKey": "View Complete API Key",
+        "viewFullKeyDesc": "Please keep it safe and don't share it with others",
+        "keyLoading": "Loading...",
+        "confirmDeleteTitle": "Confirm Delete Provider?",
+        "confirmDeleteMessage": "Are you sure you want to delete provider \"{name}\"? This action cannot be undone.",
+        "deleteButton": "Delete",
+        "cancelButton": "Cancel",
+        "deleteSuccess": "Deleted successfully",
+        "deleteSuccessDesc": "Provider \"{name}\" has been deleted",
+        "deleteFailed": "Delete failed",
+        "deleteError": "An error occurred during operation",
+        "unknownError": "Unknown error",
+        "getKeyFailed": "Failed to get key",
+        "keyCopied": "Key copied to clipboard",
+        "copyFailed": "Copy failed",
+        "resetCircuitSuccess": "Circuit breaker reset",
+        "resetCircuitSuccessDesc": "Provider \"{name}\" circuit breaker status cleared",
+        "resetCircuitFailed": "Failed to reset circuit breaker",
+        "toggleSuccess": "Provider {status}",
+        "toggleSuccessDesc": "Provider \"{name}\" status updated",
+        "toggleFailed": "Toggle failed",
+        "statusEnabled": "enabled",
+        "statusDisabled": "disabled"
+      },
+      "schedulingDialog": {
+        "title": "Provider Scheduling Rules",
+        "description": "Understand how the system intelligently selects upstream providers for high availability and cost optimization",
+        "triggerButton": "Scheduling Rules",
+        "step": "Step",
+        "before": "Before:",
+        "after": "After:",
+        "decision": "Decision:"
+      }
+    }
+  },
+  "zh-TW": {
+    "providers": {
+      "types": {
+        "claude": {
+          "label": "Claude",
+          "description": "Anthropic 官方 API"
+        },
+        "claudeAuth": {
+          "label": "Claude Auth",
+          "description": "Claude 中繼服務"
+        },
+        "codex": {
+          "label": "Codex",
+          "description": "Codex CLI API"
+        },
+        "geminiCli": {
+          "label": "Gemini CLI",
+          "description": "Gemini CLI API"
+        },
+        "openaiCompatible": {
+          "label": "OpenAI Compatible",
+          "description": "OpenAI 相容 API"
+        }
+      },
+      "list": {
+        "priority": "優先級",
+        "weight": "權重",
+        "costMultiplier": "成本倍數",
+        "todayUsageLabel": "今日用量",
+        "todayUsageCount": "{count} 次",
+        "circuitBroken": "熔斷中",
+        "officialWebsite": "官網",
+        "viewFullKey": "查看完整 API Key",
+        "viewFullKeyDesc": "請妥善保管，不要洩露給他人",
+        "keyLoading": "載入中...",
+        "confirmDeleteTitle": "確認刪除供應商？",
+        "confirmDeleteMessage": "確定要刪除供應商 \"{name}\" 嗎？此操作無法撤銷。",
+        "deleteButton": "刪除",
+        "cancelButton": "取消",
+        "deleteSuccess": "刪除成功",
+        "deleteSuccessDesc": "供應商 \"{name}\" 已刪除",
+        "deleteFailed": "刪除失敗",
+        "deleteError": "操作過程中出現異常",
+        "unknownError": "未知錯誤",
+        "getKeyFailed": "獲取密鑰失敗",
+        "keyCopied": "密鑰已複製到剪貼板",
+        "copyFailed": "複製失敗",
+        "resetCircuitSuccess": "熔斷器已重置",
+        "resetCircuitSuccessDesc": "供應商 \"{name}\" 的熔斷狀態已解除",
+        "resetCircuitFailed": "重置熔斷器失敗",
+        "toggleSuccess": "供應商已{status}",
+        "toggleSuccessDesc": "供應商 \"{name}\" 狀態已更新",
+        "toggleFailed": "狀態切換失敗",
+        "statusEnabled": "啟用",
+        "statusDisabled": "禁用"
+      },
+      "schedulingDialog": {
+        "title": "供應商調度規則說明",
+        "description": "了解系統如何智慧選擇上游供應商，確保高可用性和成本優化",
+        "triggerButton": "調度規則說明",
+        "step": "步驟",
+        "before": "過濾前：",
+        "after": "過濾後：",
+        "decision": "決策："
+      }
+    }
+  },
+  "ru": {
+    "providers": {
+      "types": {
+        "claude": {
+          "label": "Claude",
+          "description": "Официальный API Anthropic"
+        },
+        "claudeAuth": {
+          "label": "Claude Auth",
+          "description": "Служба ретрансляции Claude"
+        },
+        "codex": {
+          "label": "Codex",
+          "description": "Codex CLI API"
+        },
+        "geminiCli": {
+          "label": "Gemini CLI",
+          "description": "Gemini CLI API"
+        },
+        "openaiCompatible": {
+          "label": "OpenAI Compatible",
+          "description": "Совместимый с OpenAI API"
+        }
+      },
+      "list": {
+        "priority": "Приоритет",
+        "weight": "Вес",
+        "costMultiplier": "Множитель стоимости",
+        "todayUsageLabel": "Использование сегодня",
+        "todayUsageCount": "{count} раз(а)",
+        "circuitBroken": "Разорвано",
+        "officialWebsite": "Официальный",
+        "viewFullKey": "Просмотр полного API-ключа",
+        "viewFullKeyDesc": "Пожалуйста, храните его в безопасности и не делитесь с другими",
+        "keyLoading": "Загрузка...",
+        "confirmDeleteTitle": "Подтвердить удаление провайдера?",
+        "confirmDeleteMessage": "Вы уверены, что хотите удалить провайдера \"{name}\"? Это действие нельзя отменить.",
+        "deleteButton": "Удалить",
+        "cancelButton": "Отмена",
+        "deleteSuccess": "Успешно удалено",
+        "deleteSuccessDesc": "Провайдер \"{name}\" был удален",
+        "deleteFailed": "Не удалось удалить",
+        "deleteError": "Произошла ошибка во время операции",
+        "unknownError": "Неизвестная ошибка",
+        "getKeyFailed": "Не удалось получить ключ",
+        "keyCopied": "Ключ скопирован в буфер обмена",
+        "copyFailed": "Не удалось скопировать",
+        "resetCircuitSuccess": "Автоматический выключатель сброшен",
+        "resetCircuitSuccessDesc": "Статус автоматического выключателя провайдера \"{name}\" очищен",
+        "resetCircuitFailed": "Не удалось сбросить автоматический выключатель",
+        "toggleSuccess": "Провайдер {status}",
+        "toggleSuccessDesc": "Статус провайдера \"{name}\" обновлен",
+        "toggleFailed": "Не удалось переключить",
+        "statusEnabled": "включен",
+        "statusDisabled": "отключен"
+      },
+      "schedulingDialog": {
+        "title": "Правила планирования провайдеров",
+        "description": "Узнайте, как система интеллектуально выбирает вышестоящих провайдеров для высокой доступности и оптимизации затрат",
+        "triggerButton": "Правила планирования",
+        "step": "Шаг",
+        "before": "До:",
+        "after": "После:",
+        "decision": "Решение:"
+      }
+    }
+  },
+  "ja": {
+    "providers": {
+      "types": {
+        "claude": {
+          "label": "Claude",
+          "description": "Anthropic 公式 API"
+        },
+        "claudeAuth": {
+          "label": "Claude Auth",
+          "description": "Claude リレーサービス"
+        },
+        "codex": {
+          "label": "Codex",
+          "description": "Codex CLI API"
+        },
+        "geminiCli": {
+          "label": "Gemini CLI",
+          "description": "Gemini CLI API"
+        },
+        "openaiCompatible": {
+          "label": "OpenAI Compatible",
+          "description": "OpenAI 互換 API"
+        }
+      },
+      "list": {
+        "priority": "優先度",
+        "weight": "重み",
+        "costMultiplier": "コスト倍率",
+        "todayUsageLabel": "本日の使用量",
+        "todayUsageCount": "{count} 回",
+        "circuitBroken": "遮断中",
+        "officialWebsite": "公式",
+        "viewFullKey": "完全な API キーを表示",
+        "viewFullKeyDesc": "安全に保管し、他人と共有しないでください",
+        "keyLoading": "読み込み中...",
+        "confirmDeleteTitle": "プロバイダーの削除を確認しますか?",
+        "confirmDeleteMessage": "プロバイダー \"{name}\" を削除してもよろしいですか？この操作は元に戻せません。",
+        "deleteButton": "削除",
+        "cancelButton": "キャンセル",
+        "deleteSuccess": "削除に成功しました",
+        "deleteSuccessDesc": "プロバイダー \"{name}\" が削除されました",
+        "deleteFailed": "削除に失敗しました",
+        "deleteError": "操作中にエラーが発生しました",
+        "unknownError": "不明なエラー",
+        "getKeyFailed": "キーの取得に失敗しました",
+        "keyCopied": "キーがクリップボードにコピーされました",
+        "copyFailed": "コピーに失敗しました",
+        "resetCircuitSuccess": "サーキットブレーカーがリセットされました",
+        "resetCircuitSuccessDesc": "プロバイダー \"{name}\" のサーキットブレーカーステータスがクリアされました",
+        "resetCircuitFailed": "サーキットブレーカーのリセットに失敗しました",
+        "toggleSuccess": "プロバイダーが{status}になりました",
+        "toggleSuccessDesc": "プロバイダー \"{name}\" のステータスが更新されました",
+        "toggleFailed": "切り替えに失敗しました",
+        "statusEnabled": "有効",
+        "statusDisabled": "無効"
+      },
+      "schedulingDialog": {
+        "title": "プロバイダースケジューリングルール",
+        "description": "システムが高可用性とコスト最適化のために上流プロバイダーをインテリジェントに選択する方法を理解する",
+        "triggerButton": "スケジューリングルール",
+        "step": "ステップ",
+        "before": "前:",
+        "after": "後:",
+        "decision": "決定:"
+      }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "_comment": "Form validation messages for Russian",
+
+  "name_required": "Имя обязательно",
+  "name_max_length": "Имя не должно превышать {max} символов",
+  "note_max_length": "Примечание не должно превышать {max} символов",
+  "email_invalid": "Пожалуйста, введите действительный адрес электронной почты",
+  "url_invalid": "Пожалуйста, введите действительный URL",
+  "number_min": "Должно быть не менее {min}",
+  "number_max": "Не должно превышать {max}",
+  "number_integer": "Должно быть целым числом",
+  "number_positive": "Должно быть положительным",
+  "required": "Это поле обязательно"
+}

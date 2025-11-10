@@ -1,0 +1,1209 @@
+{
+  "clientVersions": {
+    "description": "Manage client version requirements to ensure users use latest stable version. VSCode plugin and CLI are managed separately.",
+    "empty": {
+      "description": "No active users using recognizable clients in past 7 days",
+      "title": "No client data available"
+    },
+    "features": {
+      "activeWindow": "Active Window: ",
+      "activeWindowDesc": "Only counts users with requests in the past 7 days",
+      "autoDetect": "System automatically detects the latest stable version (GA version) for each client type",
+      "blockOldVersion": "Users with old versions will receive HTTP 400 error and cannot continue using the service",
+      "errorMessage": "Error message includes current version and required upgrade version",
+      "gaRule": "GA Rule: ",
+      "gaRuleDesc": "A version is considered GA when used by more than 1 user",
+      "recommendation": "Recommendation: ",
+      "recommendationDesc": "Monitor the version distribution below and confirm new version stability before enabling.",
+      "title": "Feature Description",
+      "whatHappens": "What happens when enabled:"
+    },
+    "section": {
+      "distribution": {
+        "description": "Shows client version info for active users in past 7 days. Each client type independently tracks GA versions.",
+        "title": "Client Version Distribution"
+      },
+      "settings": {
+        "description": "When enabled, system automatically detects client version and blocks old version users.",
+        "title": "Update Reminder Settings"
+      }
+    },
+    "table": {
+      "currentGA": "Current GA Version: ",
+      "internalType": "Internal Type: ",
+      "lastActive": "Last Active",
+      "latest": "Latest",
+      "needsUpgrade": "Needs Upgrade",
+      "noUsers": "No user data available",
+      "status": "Status",
+      "unknown": "Unknown",
+      "user": "User",
+      "usersCount": "{count} users",
+      "version": "Current Version"
+    },
+    "title": "Client Update Reminder",
+    "toggle": {
+      "description": "When enabled, system will block requests from old version clients",
+      "disableSuccess": "Client version check disabled",
+      "enable": "Enable Update Reminder",
+      "enableSuccess": "Client version check enabled",
+      "toggleFailed": "Update failed"
+    }
+  },
+  "common": {
+    "cancel": "Cancel",
+    "completed": "Completed",
+    "confirm": "Confirm",
+    "copied": "Key copied to clipboard",
+    "copy": "Copy",
+    "copyFailed": "Copy failed",
+    "create": "Create",
+    "creating": "Creating...",
+    "delete": "Delete",
+    "disabled": "Disabled",
+    "edit": "Edit",
+    "empty": "No matching results found",
+    "enabled": "Enabled",
+    "error": "Unknown error",
+    "failed": "Failed",
+    "loading": "Loading...",
+    "none": "None (No users using this version)",
+    "refresh": "Refresh",
+    "reset": "Reset",
+    "save": "Save",
+    "saving": "Saving...",
+    "submit": "Submit",
+    "success": "Success",
+    "test": "Test",
+    "testing": "Testing...",
+    "unlimited": "Unlimited",
+    "unlimited_desc": "Unlimited",
+    "update": "Update",
+    "updating": "Updating..."
+  },
+  "config": {
+    "autoCleanup": "Auto Log Cleanup",
+    "autoCleanupDesc": "Automatically clean up historical log data on schedule to free up database storage space.",
+    "description": "Manage system basic parameters that affect site display and statistics behavior.",
+    "section": {
+      "siteParams": {
+        "title": "Site Parameters",
+        "description": "Configure site title, currency display unit, and dashboard statistics display policy."
+      },
+      "autoCleanup": {
+        "title": "Auto Log Cleanup",
+        "description": "Automatically clean up historical log data on schedule to free up database storage space."
+      }
+    },
+    "form": {
+      "allowGlobalView": "Allow Global Usage View",
+      "allowGlobalViewDesc": "When disabled, regular users can only view their own key usage statistics in the dashboard.",
+      "cleanupSchedule": "Cleanup Schedule",
+      "cleanupScheduleDesc": "Select the execution schedule for automatic cleanup",
+      "configUpdated": "System settings updated. The page will refresh to apply currency display changes.",
+      "currencyDisplay": "Currency Display Unit",
+      "currencyDisplayPlaceholder": "Select currency unit",
+      "currencyDisplayDesc": "After modification, all pages and API interfaces will use the corresponding currency symbol (symbol only, no exchange rate conversion).",
+      "keepDays": "Retention Days",
+      "keepDaysDesc": "Clean up logs older than this number of days",
+      "saveFailed": "Save failed",
+      "saveSuccess": "Saved successfully",
+      "saveError": "Save failed",
+      "saveSettings": "Save Settings",
+      "siteTitle": "Site Title",
+      "siteTitlePlaceholder": "e.g. Claude Code Hub",
+      "siteTitleRequired": "Site title cannot be empty",
+      "siteTitleDesc": "Used to set browser tab title and system default display name.",
+      "enableAutoCleanup": "Enable Auto Cleanup",
+      "enableAutoCleanupDesc": "Automatically clean up historical log data on schedule",
+      "cleanupRetentionDays": "Retention Days",
+      "cleanupRetentionDaysRequired": "Retention Days *",
+      "cleanupRetentionDaysPlaceholder": "30",
+      "cleanupRetentionDaysDesc": "Logs older than this number of days will be automatically cleaned (range: 1-365 days)",
+      "cleanupScheduleLabel": "Execution Time (Cron)",
+      "cleanupScheduleRequired": "Execution Time (Cron) *",
+      "cleanupSchedulePlaceholder": "0 2 * * *",
+      "cleanupScheduleCronDesc": "Cron expression, default: 0 2 * * * (2 AM daily)",
+      "cleanupScheduleCronExample": "Example: 0 3 * * 0 (3 AM every Sunday)",
+      "cleanupBatchSize": "Batch Size",
+      "cleanupBatchSizeRequired": "Batch Size *",
+      "cleanupBatchSizePlaceholder": "10000",
+      "cleanupBatchSizeDesc": "Number of records to delete per batch (range: 1000-100000, recommended 10000)",
+      "saveConfig": "Save Configuration",
+      "autoCleanupSaved": "Auto cleanup configuration saved",
+      "currencies": {
+        "USD": "$ US Dollar (USD)",
+        "CNY": "¥ Chinese Yuan (CNY)",
+        "EUR": "€ Euro (EUR)",
+        "JPY": "¥ Japanese Yen (JPY)",
+        "GBP": "£ British Pound (GBP)",
+        "HKD": "HK$ Hong Kong Dollar (HKD)",
+        "TWD": "NT$ New Taiwan Dollar (TWD)",
+        "KRW": "₩ South Korean Won (KRW)",
+        "SGD": "S$ Singapore Dollar (SGD)"
+      }
+    },
+    "siteSettings": "Site Parameters",
+    "siteSettingsDesc": "Configure site title, currency display unit, and dashboard statistics display policy.",
+    "title": "Basic Configuration"
+  },
+  "data": {
+    "cleanup": {
+      "descriptionWarning": "Clean up historical log data to free up database storage. Note: Statistics data will be retained, but log details will be permanently deleted.",
+      "rangeLabel": "Cleanup Range",
+      "range": {
+        "7days": "Logs older than 1 week (7 days)",
+        "30days": "Logs older than 1 month (30 days)",
+        "90days": "Logs older than 3 months (90 days)",
+        "180days": "Logs older than 6 months (180 days)"
+      },
+      "rangeDescription": {
+        "7days": "1 week ago",
+        "30days": "1 month ago",
+        "90days": "3 months ago",
+        "180days": "6 months ago",
+        "default": "{days} days ago"
+      },
+      "willClean": "Will clean all log records from {range}",
+      "button": "Clean Logs",
+      "confirmTitle": "Confirm Log Cleanup",
+      "confirmWarning": "This operation will permanently delete all log records from {range} and cannot be recovered.",
+      "previewLoading": "Counting...",
+      "previewCount": "Will delete {count} log records",
+      "previewError": "Unable to get preview",
+      "statisticsRetained": "✓ Statistics data will be retained (for trend analysis)",
+      "logsDeleted": "✗ Log details will be deleted (request/response content, error info, etc.)",
+      "backupRecommendation": "Recommendation: Export database backup before cleanup in case recovery is needed.",
+      "cancel": "Cancel",
+      "confirm": "Confirm Cleanup",
+      "cleaning": "Cleaning...",
+      "successMessage": "Successfully cleaned {count} log records ({batches} batches, took {duration}s)",
+      "failed": "Cleanup failed",
+      "error": "Failed to clean logs"
+    },
+    "description": "Manage database backup and recovery with full data import/export and log cleanup.",
+    "export": {
+      "descriptionFull": "Export complete database backup file (.dump format) for data migration or recovery. Backup uses PostgreSQL custom format, auto-compressed and compatible with different database versions.",
+      "button": "Export Database",
+      "exporting": "Exporting...",
+      "successMessage": "Database exported successfully!",
+      "failed": "Export failed",
+      "error": "Failed to export database"
+    },
+    "guide": {
+      "title": "Usage Instructions and Precautions",
+      "items": {
+        "cleanup": {
+          "title": "Log Cleanup",
+          "description": "Physically delete historical log data (irreversible). Statistics table will be retained. Recommend exporting database backup before cleanup."
+        },
+        "format": {
+          "title": "Backup Format",
+          "description": "Uses PostgreSQL custom format (.dump), auto-compressed and compatible with different database versions."
+        },
+        "overwrite": {
+          "title": "Overwrite Mode",
+          "description": "Deletes all existing data before importing, ensuring database matches backup exactly. Best for complete recovery."
+        },
+        "merge": {
+          "title": "Merge Mode",
+          "description": "Retains existing data and attempts to insert backup data. Primary key conflicts may cause import failure."
+        },
+        "safety": {
+          "title": "Security Recommendation",
+          "description": "Before importing, recommend exporting current database as backup to avoid data loss."
+        },
+        "environment": {
+          "title": "Environment Requirements",
+          "description": "This feature requires Docker Compose deployment. Local development may not support it."
+        }
+      }
+    },
+    "import": {
+      "descriptionFull": "Restore database from backup file. Supports PostgreSQL custom format (.dump) backup files.",
+      "selectFileLabel": "Select Backup File",
+      "fileSelected": "Selected: {name} ({size} MB)",
+      "fileError": "Please select .dump format backup file",
+      "noFileSelected": "Please select backup file first",
+      "cleanFirstLabel": "Clear existing data (overwrite mode)",
+      "cleanFirstDescription": "Delete all existing data before importing to ensure database matches backup exactly. If unchecked, will attempt to merge data but may fail due to primary key conflicts.",
+      "button": "Import Database",
+      "importing": "Importing...",
+      "progressTitle": "Import Progress",
+      "confirmTitle": "Confirm Database Import",
+      "confirmOverwrite": "You selected 'Overwrite Mode', which will delete all existing data before importing backup.",
+      "confirmMerge": "You selected 'Merge Mode', which will attempt to import backup while keeping existing data.",
+      "warningOverwrite": "⚠️ Warning: This action is irreversible, all current data will be permanently deleted!",
+      "warningMerge": "⚠️ Note: Import may fail if primary key conflicts exist.",
+      "backupFile": "Backup file:",
+      "backupRecommendation": "Recommend exporting current database as backup before proceeding.",
+      "cancel": "Cancel",
+      "confirm": "Confirm Import",
+      "successMessage": "Data import completed!",
+      "failedMessage": "Data import failed, check detailed logs",
+      "error": "Failed to import database",
+      "streamError": "Cannot read response stream",
+      "errorUnknown": "Unknown error"
+    },
+    "status": {
+      "loading": "Loading...",
+      "error": "Failed to get database status",
+      "retry": "Retry",
+      "connected": "Database connected",
+      "unavailable": "Database unavailable",
+      "tables": "{count} tables"
+    },
+    "title": "Data Management",
+    "section": {
+      "status": {
+        "title": "Database Status",
+        "description": "View current database connection status and basic information."
+      },
+      "cleanup": {
+        "title": "Log Cleanup",
+        "description": "Clean up historical log data to free up database storage. Note: Statistics data will be retained, but log details will be permanently deleted."
+      },
+      "export": {
+        "title": "Data Export",
+        "description": "Export complete database backup file (.dump format) for data migration or recovery."
+      },
+      "import": {
+        "title": "Data Import",
+        "description": "Restore database from backup file. Supports PostgreSQL custom format (.dump) backup files."
+      }
+    }
+  },
+  "errors": {
+    "saveSuccess": "Save succeeded",
+    "saveFailed": "Save failed",
+    "saveFailed_error": "Failed to save settings",
+    "addSuccess": "Add succeeded",
+    "addFailed": "Failed to add provider",
+    "editSuccess": "Update succeeded",
+    "editFailed": "Failed to update provider",
+    "deleteSuccess": "Delete succeeded",
+    "deleteFailed": "Failed to delete provider",
+    "syncSuccess": "Sync succeeded",
+    "syncFailed": "Sync failed",
+    "testFailed": "Test failed",
+    "testFailedRetry": "Test failed, please retry",
+    "loadFailed": "Failed to load notification settings",
+    "unknownError": "An exception occurred during the operation"
+  },
+  "logs": {
+    "description": "Dynamically adjust system log level to control logging verbosity in real-time.",
+    "subtitle": "Log Level Control",
+    "subtitleDesc": "Changes take effect immediately without restart. Useful for troubleshooting in production.",
+    "section": {
+      "title": "Log Level Control",
+      "description": "Changes take effect immediately without service restart."
+    },
+    "levels": {
+      "fatal": {
+        "label": "Fatal",
+        "description": "Fatal errors only"
+      },
+      "error": {
+        "label": "Error",
+        "description": "Error messages"
+      },
+      "warn": {
+        "label": "Warn",
+        "description": "Warnings + Errors"
+      },
+      "info": {
+        "label": "Info",
+        "description": "Key business events + Warnings + Errors (Recommended for Production)"
+      },
+      "debug": {
+        "label": "Debug",
+        "description": "Debug info + All levels (Recommended for Development)"
+      },
+      "trace": {
+        "label": "Trace",
+        "description": "Extremely detailed tracing + All levels"
+      }
+    },
+    "form": {
+      "currentLevel": "Current Log Level",
+      "selectLevel": "Select Log Level",
+      "save": "Save Settings",
+      "saving": "Saving...",
+      "success": "Log level set to: {level}",
+      "failed": "Failed to set",
+      "failedError": "Failed to set log level",
+      "fetchFailed": "Failed to fetch log level",
+      "effectiveImmediately": "Log level changes take effect immediately without service restart.",
+      "levelGuideTitle": "Log Level Guide",
+      "levelGuideFatal": "Fatal/Error: Only errors shown, minimal logging, suitable for high-load production",
+      "levelGuideWarn": "Warn: Includes warnings (rate limiting, circuit breaker opening, etc.) + Errors",
+      "levelGuideInfo": "Info (Recommended for Production): Shows key business events (provider selection, Session reuse, price sync) + Warnings + Errors",
+      "levelGuideDebug": "Debug (Recommended for Development): Includes detailed debug info, suitable for troubleshooting",
+      "levelGuideTrace": "Trace: Extremely detailed trace information, includes all details",
+      "changeNotice": "Current level is {current}, will switch to {selected} after saving"
+    },
+    "title": "Log Management"
+  },
+  "nav": {
+    "apiDocs": "API Documentation",
+    "clientVersions": "Client Update Reminder",
+    "config": "Configuration",
+    "data": "Data Management",
+    "logs": "Logs",
+    "notifications": "Notifications",
+    "prices": "Pricing",
+    "providers": "Providers",
+    "sensitiveWords": "Sensitive Words"
+  },
+  "notifications": {
+    "title": "Push Notifications",
+    "description": "Configure WeChat Work robot push notifications",
+    "global": {
+      "title": "Notification Master Switch",
+      "description": "Enable or disable all push notification features",
+      "enable": "Enable Push Notifications"
+    },
+    "circuitBreaker": {
+      "title": "Circuit Breaker Alert",
+      "description": "Send alert immediately when provider is fully circuit broken",
+      "enable": "Enable Circuit Breaker Alert",
+      "webhook": "Webhook URL",
+      "webhookPlaceholder": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...",
+      "test": "Test Connection"
+    },
+    "dailyLeaderboard": {
+      "title": "Daily User Consumption Leaderboard",
+      "description": "Send daily scheduled user consumption Top N leaderboard",
+      "enable": "Enable Daily Leaderboard",
+      "webhook": "Webhook URL",
+      "webhookPlaceholder": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...",
+      "time": "Send Time",
+      "timePlaceholder": "09:00",
+      "timeError": "Time format error, should be HH:mm",
+      "topN": "Show Top N",
+      "test": "Test Connection"
+    },
+    "costAlert": {
+      "title": "Cost Alert",
+      "description": "Trigger alert when user/provider consumption exceeds quota threshold",
+      "enable": "Enable Cost Alert",
+      "webhook": "Webhook URL",
+      "webhookPlaceholder": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...",
+      "threshold": "Alert Threshold",
+      "thresholdLabel": "Alert Threshold: {percent}%",
+      "thresholdHelp": "Alert when consumption reaches {percent}% of quota",
+      "interval": "Check Interval (minutes)",
+      "test": "Test Connection"
+    },
+    "form": {
+      "save": "Save Settings",
+      "saving": "Saving...",
+      "loading": "Loading...",
+      "success": "Notification settings saved and tasks rescheduled",
+      "saveFailed": "Save failed",
+      "saveError": "Failed to save settings",
+      "loadError": "Failed to load notification settings",
+      "webhookRequired": "Please fill in Webhook URL first",
+      "testSuccess": "Test message sent, please check WeChat Work",
+      "testFailed": "Test failed",
+      "testFailedRetry": "Test failed, please retry",
+      "testError": "Test connection failed",
+      "testNoResult": "Test succeeded but no result returned"
+    }
+  },
+  "prices": {
+    "title": "Pricing",
+    "description": "Manage platform basic configuration and model pricing",
+    "section": {
+      "title": "Model Pricing",
+      "description": "Manage AI model pricing configuration"
+    },
+    "searchPlaceholder": "Search model name...",
+    "sync": {
+      "button": "Sync LiteLLM Prices",
+      "syncing": "Syncing...",
+      "successWithChanges": "Price table updated successfully, {count} models updated",
+      "successNoChanges": "Price table is up to date, no updates needed",
+      "failed": "Sync failed",
+      "failedError": "Sync failed: {error}",
+      "failedNoResult": "Price table updated but no result returned",
+      "noModels": "No model prices found",
+      "partialFailure": "Partial update succeeded, but {count} models failed"
+    },
+    "table": {
+      "modelName": "Model Name",
+      "type": "Type",
+      "provider": "Provider",
+      "inputPrice": "Input Price ($/M)",
+      "outputPrice": "Output Price ($/M)",
+      "updatedAt": "Updated At",
+      "typeChat": "Chat",
+      "typeImage": "Image",
+      "typeCompletion": "Completion",
+      "typeUnknown": "Unknown",
+      "loading": "Loading...",
+      "noMatch": "No matching models found",
+      "noDataTitle": "No price data available",
+      "noDataHint": "System has built-in price table. Use buttons above to sync or update."
+    },
+    "pagination": {
+      "showing": "Showing {from}-{to} of {total}",
+      "previous": "Previous",
+      "next": "Next",
+      "perPage": "{size} per page"
+    },
+    "stats": {
+      "totalModels": "{count} models total",
+      "searchResults": "{count} search results",
+      "lastUpdated": "Last updated: {time}"
+    },
+    "dialog": {
+      "title": "Update Model Price Table",
+      "description": "Select and upload JSON file containing model pricing data",
+      "selectFile": "Click to select JSON file or drag and drop here",
+      "fileSizeLimit": "File size cannot exceed 10MB",
+      "fileSizeLimitSmall": "File size not exceeding 10MB",
+      "invalidFileType": "Please select a JSON format file",
+      "fileTooLarge": "File size exceeds 10MB limit",
+      "upload": "Upload and Update",
+      "uploading": "Uploading...",
+      "updatePriceTable": "Update Price Table",
+      "updating": "Updating...",
+      "selectJson": "Select JSON File",
+      "updateSuccess": "Price table updated successfully, {count} models updated",
+      "updateFailed": "Update failed",
+      "systemHasBuiltIn": "System has built-in price table",
+      "manualDownload": "You can also manually download",
+      "latestPriceTable": "latest price table",
+      "andUploadViaButton": ", and upload via button above",
+      "supportedModels": "Currently supports {count} models",
+      "results": {
+        "title": "Update Results",
+        "total": "Total: {total} models",
+        "success": "Success: {success}",
+        "failed": "Failed: {failed}",
+        "skipped": "Skipped: {skipped}",
+        "details": "Details",
+        "viewDetails": "View detailed logs"
+      }
+    }
+  },
+  "providers": {
+    "add": "Add Provider",
+    "addFailed": "Failed to add provider",
+    "addProvider": "Add Provider",
+    "addSuccess": "Provider added successfully",
+    "types": {
+      "claude": {
+        "label": "Claude",
+        "description": "Anthropic Official API"
+      },
+      "claudeAuth": {
+        "label": "Claude Auth",
+        "description": "Claude Relay Service"
+      },
+      "codex": {
+        "label": "Codex",
+        "description": "Codex CLI API"
+      },
+      "geminiCli": {
+        "label": "Gemini CLI",
+        "description": "Gemini CLI API"
+      },
+      "openaiCompatible": {
+        "label": "OpenAI Compatible",
+        "description": "OpenAI Compatible API"
+      }
+    },
+    "list": {
+      "priority": "Priority",
+      "weight": "Weight",
+      "costMultiplier": "Cost Multiplier",
+      "todayUsageLabel": "Today's Usage",
+      "todayUsageCount": "{count} times",
+      "circuitBroken": "Circuit Broken",
+      "officialWebsite": "Official",
+      "viewFullKey": "View Complete API Key",
+      "viewFullKeyDesc": "Please keep it safe and don't share it with others",
+      "keyLoading": "Loading...",
+      "confirmDeleteTitle": "Confirm Delete Provider?",
+      "confirmDeleteMessage": "Are you sure you want to delete provider \"{name}\"? This action cannot be undone.",
+      "deleteButton": "Delete",
+      "cancelButton": "Cancel",
+      "deleteSuccess": "Deleted successfully",
+      "deleteSuccessDesc": "Provider \"{name}\" has been deleted",
+      "deleteFailed": "Delete failed",
+      "deleteError": "An error occurred during operation",
+      "unknownError": "Unknown error",
+      "getKeyFailed": "Failed to get key",
+      "keyCopied": "Key copied to clipboard",
+      "copyFailed": "Copy failed",
+      "resetCircuitSuccess": "Circuit breaker reset",
+      "resetCircuitSuccessDesc": "Provider \"{name}\" circuit breaker status cleared",
+      "resetCircuitFailed": "Failed to reset circuit breaker",
+      "toggleSuccess": "Provider {status}",
+      "toggleSuccessDesc": "Provider \"{name}\" status updated",
+      "toggleFailed": "Toggle failed",
+      "statusEnabled": "enabled",
+      "statusDisabled": "disabled"
+    },
+    "schedulingDialog": {
+      "title": "Provider Scheduling Rules",
+      "description": "Understand how the system intelligently selects upstream providers for high availability and cost optimization",
+      "triggerButton": "Scheduling Rules",
+      "step": "Step",
+      "before": "Before:",
+      "after": "After:",
+      "decision": "Decision:"
+    },
+    "circuitBroken": "Circuit Broken",
+    "clone": "Clone Provider",
+    "cloneFailed": "Copy failed",
+    "confirmDelete": "Are you sure you want to delete this provider?",
+    "confirmDeleteDesc": "Are you sure you want to delete provider \"{name}\"? This action cannot be undone.",
+    "confirmDeleteProvider": "Confirm Delete Provider?",
+    "confirmDeleteProviderDesc": "Are you sure you want to delete provider \"{name}\"? This action is irreversible.",
+    "createProvider": "Add Provider",
+    "delete": "Delete Provider",
+    "deleteFailed": "Failed to delete provider",
+    "deleteSuccess": "Deleted successfully",
+    "description": "Configure API service providers and maintain availability status.",
+    "disabledStatus": "disabled",
+    "displayCount": "Showing {filtered} / {total} providers",
+    "edit": "Edit Provider",
+    "editFailed": "Failed to update provider",
+    "editProvider": "Edit Provider",
+    "enabledStatus": "enabled",
+    "form": {
+      "addRedirect": "Add Redirect",
+      "allowAllModels": "✓ Allow All Models (Recommended)",
+      "apiAddress": "API Address",
+      "apiAddressPlaceholder": "e.g. https://open.bigmodel.cn/api/anthropic",
+      "apiAddressRequired": "API Address *",
+      "apiKey": "API Key",
+      "apiKeyCurrent": "Current key:",
+      "apiKeyLeaveEmpty": "(Leave empty to keep unchanged)",
+      "apiKeyLeaveEmptyDesc": "Leave empty to keep existing key",
+      "apiKeyOptional": "Leave empty to keep existing key",
+      "apiKeyPlaceholder": "Enter API key",
+      "apiKeyRequired": "API Key *",
+      "baseUrl": "Base URL",
+      "baseUrlPlaceholder": "e.g. https://open.bigmodel.cn/api/anthropic",
+      "baseUrlRequired": "Please fill in provider URL first",
+      "circuitBreakerConfig": "Circuit Breaker Configuration",
+      "circuitBreakerConfigSummary": "{failureThreshold} failures / {openDuration} min circuit break / {successThreshold} successes to recover",
+      "circuitBreakerDesc": "Auto circuit break on consecutive failures to avoid overall service quality impact",
+      "clearSearch": "Clear search",
+      "codexInstructions": "Codex Instructions Policy",
+      "codexInstructionsAuto": "Auto (Recommended)",
+      "codexInstructionsDesc": "(determines scheduling policy)",
+      "codexInstructionsForce": "Force Official",
+      "codexInstructionsKeep": "Keep Original",
+      "codexStrategyAutoDesc": "Pass through client instructions, auto retry with official prompt on 400 error",
+      "codexStrategyAutoLabel": "Auto (Recommended)",
+      "codexStrategyConfig": "Codex Instructions Strategy",
+      "codexStrategyConfigAuto": "Auto (Recommended)",
+      "codexStrategyConfigForce": "Force Official",
+      "codexStrategyConfigKeep": "Keep Original",
+      "codexStrategyDesc": "Control how to handle Codex request instructions field, affects upstream gateway compatibility",
+      "codexStrategyForceDesc": "Always use official Codex CLI instructions (~4000+ chars)",
+      "codexStrategyForceLabel": "Force Official",
+      "codexStrategyHint": "Hint: Some strict Codex gateways (e.g. 88code, foxcode) require official instructions. Choose \"Auto\" or \"Force Official\" strategy",
+      "codexStrategyKeepDesc": "Always pass through client instructions, no auto retry (for lenient gateways)",
+      "codexStrategyKeepLabel": "Keep Original",
+      "codexStrategySelect": "Strategy Selection",
+      "collapseAll": "Collapse All Advanced Configuration",
+      "confirmAdd": "Confirm Add",
+      "confirmAddPending": "Adding...",
+      "confirmUpdate": "Confirm Update",
+      "confirmUpdatePending": "Updating...",
+      "costMultiplier": "Cost Multiplier",
+      "costMultiplierDesc": "Cost calculation multiplier. Official=1.0, 20% cheaper=0.8, 20% more expensive=1.2 (up to 4 decimal places)",
+      "costMultiplierLabel": "Cost Multiplier",
+      "costMultiplierPlaceholder": "1.0",
+      "deleteButton": "Delete",
+      "enabled": "Enabled",
+      "expandAll": "Expand All Advanced Configuration",
+      "failureThreshold": "Failure Threshold (times)",
+      "failureThresholdDesc": "How many consecutive failures trigger circuit break",
+      "failureThresholdPlaceholder": "5",
+      "filterAllProviders": "All Providers",
+      "filterByType": "Filter by Provider Type",
+      "filterProvider": "Filter by Provider Type",
+      "group": "Group",
+      "groupPlaceholder": "e.g. premium, economy",
+      "joinClaudePool": "Join Claude Scheduling Pool",
+      "joinClaudePoolDesc": "When enabled, this provider will participate in load balancing with Claude type providers",
+      "joinClaudePoolHelp": "Only available when model redirect config contains mappings to claude-* models. When enabled, this provider will also participate in scheduling when users request claude-* models.",
+      "leaveEmpty": "Leave empty for unlimited",
+      "limit0Means": "0 means unlimited",
+      "limit5hLabel": "5-Hour Spending Limit (USD)",
+      "limitAmount5h": "5-Hour Spending Limit (USD)",
+      "limitAmount5hDesc": "e.g. Provider B has $10 limit, $9.8 consumed",
+      "limitAmountMonthly": "Monthly Spending Limit (USD)",
+      "limitAmountWeekly": "Weekly Spending Limit (USD)",
+      "limitConcurrent": "Concurrent Session Limit",
+      "limitConcurrentDesc": "e.g. Provider C has limit of 2, currently 2 active sessions",
+      "limitConcurrentLabel": "Concurrent Session Limit",
+      "limitMonthlyLabel": "Monthly Spending Limit (USD)",
+      "limitPlaceholder0": "0 means unlimited",
+      "limitPlaceholderUnlimited": "Leave empty for unlimited",
+      "limitWeeklyLabel": "Weekly Spending Limit (USD)",
+      "modelRedirects": "Model Redirects",
+      "modelRedirectsAddNew": "Add New Rule",
+      "modelRedirectsCurrentRules": "Current Rules ({count})",
+      "modelRedirectsDesc": "Redirect Claude Code client model requests (e.g. claude-sonnet-4.5) to upstream provider supported models (e.g. glm-4.6, gemini-pro). For cost optimization or third-party AI integration.",
+      "modelRedirectsEmpty": "No redirect rules yet. System will auto-rewrite model names after adding rules.",
+      "modelRedirectsExists": "Model \"{model}\" already has a redirect rule",
+      "modelRedirectsLabel": "Model Redirects Configuration",
+      "modelRedirectsOptional": "(Optional)",
+      "modelRedirectsSourceModel": "User Requested Model",
+      "modelRedirectsSourcePlaceholder": "e.g. claude-sonnet-4-5-20250929",
+      "modelRedirectsSourceRequired": "Source model name cannot be empty",
+      "modelRedirectsTargetModel": "Actual Forwarded Model",
+      "modelRedirectsTargetPlaceholder": "e.g. glm-4.6",
+      "modelRedirectsTargetRequired": "Target model name cannot be empty",
+      "modelWhitelist": "Model Whitelist",
+      "modelWhitelistAllowAll": "Allow all {type} models",
+      "modelWhitelistAllowAllClause": "Allow all Claude models",
+      "modelWhitelistAllowAllOpenAI": "Allow all OpenAI models",
+      "modelWhitelistClear": "Clear",
+      "modelWhitelistDesc": "Limit models this provider can handle. By default, provider can handle all models of its type.",
+      "modelWhitelistLabel": "Allowed Models",
+      "modelWhitelistLoading": "Loading...",
+      "modelWhitelistManualAdd": "Manually Add Model",
+      "modelWhitelistManualDesc": "Support adding any model name (not limited to price table)",
+      "modelWhitelistManualPlaceholder": "Enter model name (e.g. gpt-5-turbo)",
+      "modelWhitelistNotFound": "Model not found",
+      "modelWhitelistSearchPlaceholder": "Search model name...",
+      "modelWhitelistSelectAll": "Select All ({count})",
+      "modelWhitelistSelected": "Selected {count} models",
+      "modelWhitelistSelectedOnly": "Only allow selected {count} models. Requests for other models won't be routed to this provider.",
+      "name": {
+        "label": "Provider Name *",
+        "placeholder": "e.g. Zhipu"
+      },
+      "namePlaceholder": "Enter provider name",
+      "openDuration": "Circuit Break Duration (minutes)",
+      "openDurationDesc": "How long before auto entering half-open state",
+      "openDurationPlaceholder": "30",
+      "priority": "Priority",
+      "priorityDesc": "Lower number = higher priority (0 is highest). System only selects from highest priority providers. Recommendation: Main=0, Backup=1, Emergency=2",
+      "priorityLabel": "Priority",
+      "priorityPlaceholder": "0",
+      "providerGroupDesc": "Provider group tag. Only users with matching providerGroup can use this provider. Example: Set to \"premium\" to allow only providerGroup=\"premium\" users",
+      "providerGroupLabel": "Provider Group",
+      "providerGroupPlaceholder": "e.g. premium, economy",
+      "providerName": "Provider Name",
+      "providerNamePlaceholder": "e.g. Zhipu",
+      "providerNameRequired": "Provider Name *",
+      "providerType": "Provider Type",
+      "providerTypeDesc": "Select the API format type for the provider.",
+      "providerTypeDisabledNote": "Note: Gemini CLI and OpenAI Compatible types are under development",
+      "proxy": "Proxy",
+      "proxyAddressFormats": "Supported formats:",
+      "proxyAddressLabel": "Proxy Address",
+      "proxyAddressOptional": "(Optional)",
+      "proxyAddressPlaceholder": "e.g. http://proxy.example.com:8080 or socks5://127.0.0.1:1080",
+      "proxyConfig": "Proxy Configuration",
+      "proxyConfigDesc": "Configure proxy server to improve provider connectivity (supports HTTP, HTTPS, SOCKS4, SOCKS5)",
+      "proxyConfigNone": "Not configured",
+      "proxyConfigSummary": "Proxy configured",
+      "proxyConfigSummaryFallback": " (fallback enabled)",
+      "proxyConfigured": "Proxy configured",
+      "proxyFallback": "Proxy Fallback",
+      "proxyFallbackDesc": "When enabled, auto try direct connection on proxy failure",
+      "proxyFallbackLabel": "Fallback to direct on proxy failure",
+      "proxyNotConfigured": "Not configured",
+      "proxyTestButton": "Test Connection",
+      "proxyTestDesc": "Test provider URL access via configured proxy (uses HEAD request, no quota consumption)",
+      "proxyTestFailed": "Connection Failed",
+      "proxyTestFillUrl": "Please fill in provider URL first",
+      "proxyTestLabel": "Connection Test",
+      "proxyTestNetworkError": "Network error: {error}",
+      "proxyTestProxyError": "Proxy error: {error}",
+      "proxyTestResponseTime": "Response time: {time}",
+      "proxyTestResultConnectionMethod": "Connection method: {via}",
+      "proxyTestResultConnectionMethodDirect": "Direct",
+      "proxyTestResultConnectionMethodProxy": "Proxy",
+      "proxyTestResultErrorType": "Error type: {type}",
+      "proxyTestResultFailed": "Connection failed",
+      "proxyTestResultMessage": "{message}",
+      "proxyTestResultResponseTime": "Response time: {time}ms",
+      "proxyTestResultStatusCode": "Status code: {code}",
+      "proxyTestResultSuccess": "Connection successful {via}",
+      "proxyTestStatusCode": "| Status code: {code}",
+      "proxyTestSuccess": "Connection Successful",
+      "proxyTestTesting": "Testing...",
+      "proxyTestTimeout": "Connection timeout (5s). Please check:\n1. Is proxy server accessible\n2. Are proxy address and port correct\n3. Are proxy credentials correct",
+      "proxyTestViaDirect": "(direct)",
+      "proxyTestViaProxy": "(via proxy)",
+      "proxyUrl": "Proxy Address",
+      "proxyUrlPlaceholder": "e.g. http://proxy.example.com:8080 or socks5://127.0.0.1:1080",
+      "rateLimitConfig": "Rate Limit Configuration",
+      "rateLimitConfigNone": "Unlimited",
+      "rateLimitConfigSummary": "5h: ${fiveHour}, Weekly: ${weekly}, Monthly: ${monthly}, Concurrent: {concurrent}",
+      "remark": "Remark",
+      "remarkPlaceholder": "Optional: Add notes...",
+      "removeRedirect": "Remove Redirect",
+      "routingConfig": "Routing Configuration",
+      "routingConfigNone": "Not configured",
+      "routingConfigSummary": "{models} model whitelist, {redirects} redirects",
+      "scheduleParams": "Scheduling Parameters",
+      "searchClear": "Clear search",
+      "searchPlaceholder": "Search provider name, URL, remark...",
+      "selectProviderType": "Select provider type",
+      "sort": "Sort Providers",
+      "sortByCost": "By Cost",
+      "sortByCreated": "By Created (New-Old)",
+      "sortByName": "By Name (A-Z)",
+      "sortByPriority": "By Priority (High-Low)",
+      "sortByWeight": "By Weight (High-Low)",
+      "sourceModel": "Source Model Name",
+      "sourceModelPlaceholder": "e.g. claude-sonnet-4-5-20250929",
+      "sourceModelRequired": "Source model name cannot be empty",
+      "successThreshold": "Recovery Threshold (times)",
+      "successThresholdDesc": "How many successes in half-open state to fully recover",
+      "successThresholdPlaceholder": "2",
+      "targetModel": "Target Model Name",
+      "targetModelPlaceholder": "e.g. glm-4.6",
+      "targetModelRequired": "Target model name cannot be empty",
+      "testProxy": "Test Connection",
+      "testProxyFailed": "Failed to test proxy connection",
+      "testProxyFailedError": "Connection test failed:",
+      "testProxySuccess": "Proxy connection successful",
+      "validUrlRequired": "Please enter a valid API address",
+      "websiteUrl": {
+        "label": "Provider Website",
+        "placeholder": "https://example.com",
+        "desc": "Provider official website for quick access"
+      },
+      "websiteUrlDesc": "Provider website URL for quick access",
+      "websiteUrlInvalid": "Please enter a valid provider website URL",
+      "websiteUrlPlaceholder": "https://example.com",
+      "weight": "Weight",
+      "weightDesc": "Weighted random probability. Within same priority, higher weight = higher selection probability. E.g. weights 1:2:3 = probabilities 16%:33%:50%",
+      "weightLabel": "Weight",
+      "weightPlaceholder": "1",
+      "title": {
+        "create": "Add Provider",
+        "edit": "Edit Provider"
+      },
+      "url": {
+        "label": "API Address *",
+        "placeholder": "e.g. https://open.bigmodel.cn/api/anthropic"
+      },
+      "key": {
+        "label": "API Key",
+        "leaveEmpty": "(Leave empty to keep unchanged)",
+        "placeholder": "Enter API Key",
+        "leaveEmptyDesc": "Leave empty to keep existing key",
+        "currentKey": "Current key: {key}"
+      },
+      "buttons": {
+        "expandAll": "Expand All Advanced Settings",
+        "collapseAll": "Collapse All Advanced Settings",
+        "submit": "Confirm Add",
+        "submitting": "Adding...",
+        "update": "Confirm Update",
+        "updating": "Updating...",
+        "delete": "Delete"
+      },
+      "sections": {
+        "routing": {
+          "title": "Routing",
+          "summary": {
+            "models": "{count} whitelisted models",
+            "redirects": "{count} redirects",
+            "none": "Not configured"
+          },
+          "providerType": {
+            "label": "Provider Type",
+            "desc": "(determines scheduling policy)",
+            "placeholder": "Select provider type"
+          },
+          "providerTypeDesc": "Choose the API format type of the provider.",
+          "providerTypeDisabledNote": "Note: Gemini CLI and OpenAI Compatible are under development and currently unavailable",
+          "modelRedirects": {
+            "label": "Model Redirects",
+            "optional": "(optional)"
+          },
+          "joinClaudePool": {
+            "label": "Join Claude Routing Pool",
+            "desc": "When enabled, this provider will participate in load balancing with Claude-type providers",
+            "help": "Available only when there is a redirect mapping to claude-* models. When users request claude-* models, this provider also joins scheduling."
+          },
+          "modelWhitelist": {
+            "title": "Model Allowlist",
+            "desc": "Restrict which models this provider can serve. By default, a provider can serve all models of its type.",
+            "label": "Allowed Models",
+            "optional": "(optional)",
+            "allowAll": "✓ Allow all models (recommended)",
+            "selectedOnly": "Only the selected {count} models are allowed. Other models will not be routed to this provider.",
+            "moreModels": "+{count} more"
+          },
+          "scheduleParams": {
+            "title": "Scheduling",
+            "priority": {
+              "label": "Priority",
+              "placeholder": "0",
+              "desc": "Lower value = higher priority (0 is highest). The system only chooses from the highest priority tier. Suggested: primary=0, standby=1, emergency=2"
+            },
+            "weight": {
+              "label": "Weight",
+              "placeholder": "1",
+              "desc": "Weighted random. Within the same priority, higher weight increases selection probability. Example 1:2:3 ≈ 16%:33%:50%"
+            },
+            "costMultiplier": {
+              "label": "Cost Multiplier",
+              "placeholder": "1.0",
+              "desc": "Cost multiplier. Official provider = 1.0, 20% cheaper = 0.8, 20% more expensive = 1.2 (up to 4 decimals)"
+            },
+            "group": {
+              "label": "Provider Group",
+              "placeholder": "e.g. premium, economy",
+              "desc": "Group tag. Only users whose providerGroup matches can use this provider. Example: set to \"premium\" to serve users with providerGroup=\"premium\" only"
+            }
+          }
+        },
+        "rateLimit": {
+          "title": "Rate Limit",
+          "summary": {
+            "fiveHour": "5h: ${amount}",
+            "weekly": "Week: ${amount}",
+            "monthly": "Month: ${amount}",
+            "concurrent": "Concurrent: {count}",
+            "none": "Unlimited"
+          },
+          "limit5h": {
+            "label": "5h Spend Limit (USD)",
+            "placeholder": "Leave empty for unlimited"
+          },
+          "limitWeekly": {
+            "label": "Weekly Spend Limit (USD)",
+            "placeholder": "Leave empty for unlimited"
+          },
+          "limitMonthly": {
+            "label": "Monthly Spend Limit (USD)",
+            "placeholder": "Leave empty for unlimited"
+          },
+          "limitConcurrent": {
+            "label": "Concurrent Sessions Limit",
+            "placeholder": "0 means unlimited"
+          }
+        },
+        "circuitBreaker": {
+          "title": "Circuit Breaker",
+          "summary": "{failureThreshold} failures / {openDuration} min break / {successThreshold} successes to recover",
+          "desc": "Automatically break on consecutive failures to protect overall service quality",
+          "failureThreshold": {
+            "label": "Failure Threshold",
+            "placeholder": "5",
+            "desc": "Number of consecutive failures to trigger break"
+          },
+          "openDuration": {
+            "label": "Break Duration (minutes)",
+            "placeholder": "30",
+            "desc": "Time before switching to half-open"
+          },
+          "successThreshold": {
+            "label": "Recovery Threshold",
+            "placeholder": "2",
+            "desc": "Number of successes in half-open to fully recover"
+          }
+        },
+        "proxy": {
+          "title": "Proxy",
+          "summary": {
+            "configured": "Proxy configured",
+            "fallback": " (fallback enabled)",
+            "none": "Not configured"
+          },
+          "desc": "Configure a proxy to improve connectivity (HTTP, HTTPS, SOCKS4, SOCKS5 supported)",
+          "url": {
+            "label": "Proxy URL",
+            "optional": "(optional)",
+            "placeholder": "e.g. http://proxy.example.com:8080 or socks5://127.0.0.1:1080",
+            "formats": "Supported formats:"
+          },
+          "fallback": {
+            "label": "Fallback to direct on proxy failure",
+            "desc": "When enabled, will try direct connection if proxy fails"
+          },
+          "test": {
+            "label": "Connectivity Test",
+            "desc": "Test accessing provider URL via proxy (HEAD request, no credits consumed)"
+          }
+        },
+        "codexStrategy": {
+          "title": "Codex Instructions Policy",
+          "summary": {
+            "auto": "Auto (recommended)",
+            "force": "Force official",
+            "keep": "Pass-through"
+          },
+          "desc": "Control how to handle the instructions field in Codex requests; affects gateway compatibility",
+          "select": {
+            "label": "Strategy",
+            "placeholder": "Select a strategy",
+            "auto": {
+              "label": "Auto (recommended)",
+              "desc": "Pass through client instructions; on 400 error, retry with official prompt"
+            },
+            "force": {
+              "label": "Force official",
+              "desc": "Always use official Codex CLI instructions (~4000+ chars)"
+            },
+            "keep": {
+              "label": "Pass-through",
+              "desc": "Always pass through client instructions, no auto retry (for permissive gateways)"
+            }
+          },
+          "hint": "Hint: Some strict Codex gateways (e.g. 88code, foxcode) require official instructions. Choose \"Auto\" or \"Force official\"."
+        }
+      },
+      "providerTypes": {
+        "claude": "Claude (Anthropic Messages API)",
+        "claudeAuth": "Claude (Anthropic Auth Token)",
+        "codex": "Codex (Response API)",
+        "geminiCli": "Gemini CLI",
+        "geminiCliDisabled": " - in development",
+        "openaiCompatible": "OpenAI Compatible",
+        "openaiCompatibleDisabled": " - in development"
+      },
+      "deleteDialog": {
+        "title": "Delete Provider",
+        "description": "Are you sure you want to delete provider \"{name}\"? This action cannot be undone.",
+        "cancel": "Cancel",
+        "confirm": "Confirm Delete"
+      },
+      "errors": {
+        "invalidUrl": "Please enter a valid API address",
+        "invalidWebsiteUrl": "Please enter a valid provider website URL",
+        "addFailed": "Failed to add provider",
+        "updateFailed": "Failed to update provider",
+        "deleteFailed": "Failed to delete provider"
+      },
+      "success": {
+        "created": "Provider added successfully",
+        "createdDesc": "Provider \"{name}\" has been added"
+      }
+    },
+    "guide": {
+      "after": "After:",
+      "before": "Before:",
+      "bestPracticesConcurrent": "• Concurrent Control: Set session concurrency by provider API limits",
+      "bestPracticesCost": "• Cost Multiplier: Official=1.0, Self-hosted can be 0.8-1.2",
+      "bestPracticesLimit": "• Limit Settings: Set 5h, 7d, 30d limits based on budget",
+      "bestPracticesPriority": "• Priority Settings: Core providers=0, Backup=1-3",
+      "bestPracticesTitle": "Best Practices",
+      "bestPracticesWeight": "• Weight Config: Set weight by capacity (higher capacity = higher weight)",
+      "circuitBreaker": "Circuit Breaker Check",
+      "circuitBreakerOpen": "A filtered, remaining: B, C, D",
+      "circuitBreakerRecovery": "A automatically recovers to half-open after 60 seconds",
+      "circuitBreakerRecovery5h": "Auto recovery after 5-hour sliding window",
+      "costOptimize": "2️⃣ Cost Optimization: Within same priority, lower cost multiplier has higher probability",
+      "costSort": "Cost-based Sorting Fallback",
+      "costSortExample": "All providers: A (default), B (premium), C (premium), D (economy)",
+      "costSortProb": "Lower cost C has higher selection probability",
+      "costSortResult": "After sorting: C (0.8x), A (1.0x)",
+      "decision": "Decision:",
+      "group": "User Group Filtering",
+      "groupDesc": "If user has provider group specified, system prioritizes selection from that group",
+      "groupDowngrade": "Log warning and select from global provider pool",
+      "groupExample": "User configured providerGroup = 'premium'",
+      "groupFallback": "If no available providers in user group, fallback to all providers",
+      "groupFiltered": "Select only from A and C, B and D filtered",
+      "groupUnavailable": "All providers in user group 'vip' are disabled or over limit",
+      "health": "Health Filtering (Circuit Breaker + Rate Limit)",
+      "healthCheck": "Check if B is enabled and healthy",
+      "healthCheckAmountLimit": "Check if spending exceeds limits (5h, 7d, 30d)",
+      "healthCheckAmountLimitExample": "Provider B has $10 limit (5h), $9.8 consumed",
+      "healthCheckCircuit": "Provider A failed 5 times, circuit breaker: open",
+      "healthCheckConcurrent": "Check if current active session count exceeds limit",
+      "healthCheckConcurrentExample": "Provider C limit 2, currently 2 active sessions",
+      "healthFilter": "3️⃣ Health Filtering: Auto skip circuit-broken or over-limit providers",
+      "healthFiltered": "B filtered (near limit), remaining: C, D",
+      "healthFiltered2": "C filtered (full), remaining: D",
+      "history": "Check Request History",
+      "historyDesc": "Query providers used by this API Key in last 10 seconds",
+      "priority": "Priority Layering",
+      "priorityExample": "4 enabled providers with different priorities",
+      "priorityFirst": "1️⃣ Priority First: Select only from highest priority (lowest number) providers",
+      "priorityResult": "Filtered to highest priority (0) providers: A, C",
+      "priorityStep": "System first filters by priority, selecting only from highest priority providers",
+      "randomResult": "Finally selected C randomly",
+      "randomSelect": "Weighted Random",
+      "reset": "Manual Circuit Breaker Reset",
+      "resetSuccess": "Circuit breaker reset",
+      "scenario1Desc": "System first filters by priority, selecting only from highest priority providers",
+      "scenario1Step1": "Initial State",
+      "scenario1Step1After": "Filtered to highest priority (0) providers: A, C",
+      "scenario1Step1Before": "Provider A (priority 0), B (priority 1), C (priority 0), D (priority 2)",
+      "scenario1Step1Decision": "Select only from A and C, B and D filtered out",
+      "scenario1Step1Desc": "4 enabled providers with different priorities",
+      "scenario1Step2": "Cost Sorting",
+      "scenario1Step2After": "After sorting: C (0.8x), A (1.0x)",
+      "scenario1Step2Before": "A (cost 1.0x), C (cost 0.8x)",
+      "scenario1Step2Decision": "Lower cost C has higher selection probability",
+      "scenario1Step2Desc": "Within same priority, sort by cost multiplier low to high",
+      "scenario1Step3": "Weighted Random",
+      "scenario1Step3After": "C has 75% probability, A has 25%",
+      "scenario1Step3Before": "C (weight 3), A (weight 1)",
+      "scenario1Step3Decision": "Finally randomly selected C",
+      "scenario1Step3Desc": "Use weight for random selection, higher weight = higher probability",
+      "scenario1Title": "Priority Layering",
+      "scenario2Desc": "If user has provider group specified, system prioritizes selection from that group",
+      "scenario2Step1": "Check User Group",
+      "scenario2Step1After": "Filtered to 'premium' group: B, C",
+      "scenario2Step1Before": "All providers: A (default), B (premium), C (premium), D (economy)",
+      "scenario2Step1Decision": "Select only from B and C",
+      "scenario2Step1Desc": "User configured providerGroup = 'premium'",
+      "scenario2Step2": "Group Fallback",
+      "scenario2Step2After": "Fallback to all enabled providers: A, B, C, D",
+      "scenario2Step2Before": "All providers in user group 'vip' disabled or over limit",
+      "scenario2Step2Decision": "Log warning and select from global provider pool",
+      "scenario2Step2Desc": "If no available providers in user group, fallback to all providers",
+      "scenario2Title": "User Group Filtering",
+      "scenario3Desc": "System auto filters circuit-broken or over-limit providers",
+      "scenario3Step1": "Circuit Breaker Check",
+      "scenario3Step1After": "A filtered, remaining: B, C, D",
+      "scenario3Step1Before": "Provider A failed 5 times, circuit breaker: open",
+      "scenario3Step1Decision": "A auto recovers to half-open after 60s",
+      "scenario3Step1Desc": "Circuit breaker opens after 5 consecutive failures, unavailable for 60s",
+      "scenario3Step2": "Amount Rate Limit",
+      "scenario3Step2After": "B filtered (near limit), remaining: C, D",
+      "scenario3Step2Before": "Provider B 5h limit $10, consumed $9.8",
+      "scenario3Step2Decision": "Auto recovery after 5h sliding window",
+      "scenario3Step2Desc": "Check if spending exceeds limits (5h, 7d, 30d)",
+      "scenario3Step3": "Concurrent Session Limit",
+      "scenario3Step3After": "C filtered (full), remaining: D",
+      "scenario3Step3Before": "Provider C concurrent limit 2, currently 2 active sessions",
+      "scenario3Step3Decision": "Auto release after session expiry (5 min)",
+      "scenario3Step3Desc": "Check if active session count exceeds configured concurrent limit",
+      "scenario3Title": "Health Filtering (Circuit Breaker + Rate Limit)",
+      "scenario4Desc": "Consecutive chats prioritize using same provider, leveraging Claude context cache",
+      "scenario4Step1": "Check Request History",
+      "scenario4Step1After": "Check if B is enabled and healthy",
+      "scenario4Step1Before": "Last request used provider B",
+      "scenario4Step1Decision": "B available, reuse directly, skip random selection",
+      "scenario4Step1Desc": "Query providers used by this API Key in last 10 seconds",
+      "scenario4Step2": "Reuse Invalidation",
+      "scenario4Step2After": "Enter normal selection flow",
+      "scenario4Step2Before": "Last used provider B disabled or circuit-broken",
+      "scenario4Step2Decision": "Select from other available providers",
+      "scenario4Step2Desc": "If last used provider unavailable, reselect",
+      "scenario4Title": "Session Reuse Mechanism",
+      "scenariosTitle": "Interactive Scenario Demos",
+      "session": "Session Reuse Mechanism",
+      "sessionDesc": "If the last used provider is unavailable, reselect",
+      "sessionExample": "Last request used provider B",
+      "sessionExpired": "Session automatically released after expiration (5 minutes)",
+      "sessionFallback": "Select from other available providers",
+      "sessionLastUsed": "B is available, reuse directly, skip random selection",
+      "sessionReuse": "4️⃣ Session Reuse: Consecutive chats reuse same provider, saving context costs",
+      "sessionUnavailable": "Last used provider B is disabled or circuit-broken",
+      "step": "Step",
+      "title": "Core Principles",
+      "weight": "Weighted random selection based on weight",
+      "weightCalc": "C has 75% selection probability, A has 25%",
+      "weightExample": "C (weight 3), A (weight 1)"
+    },
+    "keyLoading": "Loading...",
+    "noProviders": "No providers configured",
+    "noProvidersDesc": "Add your first API provider",
+    "notFound": "No matching providers found",
+    "official": "Official",
+    "resetCircuit": "Circuit breaker reset",
+    "resetCircuitDesc": "Provider \"{name}\" circuit breaker status cleared",
+    "resetCircuitFailed": "Failed to reset circuit breaker",
+    "scheduling": "Scheduling Strategy Details",
+    "schedulingDesc": "Understand how provider selection works with priority layering, session reuse, load balancing and failover",
+    "searchNoResults": "No matching providers found",
+    "searchResults": "Found {count} matching providers",
+    "section": {
+      "description": "Configure upstream provider rate limiting and concurrent session limits. Leave empty for unlimited.",
+      "title": "Provider Management"
+    },
+    "subtitle": "Provider Management",
+    "subtitleDesc": "Configure upstream provider rate limiting and concurrent session limits. Leave empty for unlimited.",
+    "title": "Provider Management",
+    "todayUsage": "Today's Usage",
+    "todayUsageCount": "{count} times",
+    "toggleFailed": "Toggle failed",
+    "toggleSuccess": "Provider {status}",
+    "toggleSuccessDesc": "Provider \"{name}\" status updated",
+    "updateFailed": "Failed to update provider",
+    "viewKey": "View Complete API Key",
+    "viewKeyDesc": "Please keep it safe and don't share it with others",
+    "sort": {
+      "byName": "By Name (A-Z)",
+      "byPriority": "By Priority (High-Low)",
+      "byWeight": "By Weight (High-Low)",
+      "byCreatedAt": "By Created Time (New-Old)",
+      "placeholder": "Sort Providers"
+    },
+    "search": {
+      "placeholder": "Search provider name, URL, notes...",
+      "clear": "Clear search",
+      "found": "Found {count} matching provider(s)",
+      "notFound": "No matching providers found",
+      "showing": "Showing {filtered} / {total} providers"
+    }
+  },
+  "sensitiveWords": {
+    "add": "Add Sensitive Word",
+    "addFailed": "Failed to create sensitive word",
+    "addSuccess": "Sensitive word created successfully",
+    "cacheStats": "Cache stats: Contains({containsCount}) Exact({exactCount}) Regex({regexCount})",
+    "confirmDelete": "Are you sure you want to delete the sensitive word \"{word}\"?",
+    "delete": "Delete Sensitive Word",
+    "deleteFailed": "Delete failed",
+    "deleteSuccess": "Sensitive word deleted successfully",
+    "description": "Configure sensitive word filtering rules to block requests with sensitive content.",
+    "dialog": {
+      "addDescription": "Configure sensitive word filtering rules. Matched requests will not be forwarded upstream.",
+      "addTitle": "Add Sensitive Word",
+      "creating": "Creating...",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Optional: Add description...",
+      "editDescription": "Modify sensitive word configuration. Changes will automatically refresh the cache.",
+      "editTitle": "Edit Sensitive Word",
+      "matchTypeContains": "Contains Match - Block if text contains this word",
+      "matchTypeExact": "Exact Match - Block only if exact match",
+      "matchTypeLabel": "Match Type *",
+      "matchTypeRegex": "Regular Expression - Support complex pattern matching",
+      "saving": "Saving...",
+      "wordLabel": "Sensitive Word *",
+      "wordPlaceholder": "Enter sensitive word...",
+      "wordRequired": "Please enter a sensitive word"
+    },
+    "disable": "Sensitive word disabled",
+    "edit": "Edit Sensitive Word",
+    "editFailed": "Failed to update sensitive word",
+    "editSuccess": "Sensitive word updated successfully",
+    "emptyState": "No sensitive words yet. Click 'Add Sensitive Word' in the top right to start configuration.",
+    "enable": "Sensitive word enabled",
+    "refreshCache": "Refresh Cache",
+    "refreshCacheFailed": "Failed to refresh cache",
+    "refreshCacheSuccess": "Cache refreshed successfully, loaded {count} sensitive words",
+    "section": {
+      "description": "Requests blocked by sensitive words will not be forwarded upstream and will not be charged. Supports contains matching, exact matching, and regex patterns.",
+      "title": "Sensitive Words List"
+    },
+    "table": {
+      "actions": "Actions",
+      "createdAt": "Created At",
+      "description": "Description",
+      "matchType": "Match Type",
+      "matchTypeContains": "Contains Match",
+      "matchTypeExact": "Exact Match",
+      "matchTypeRegex": "Regular Expression",
+      "status": "Status",
+      "word": "Sensitive Word"
+    },
+    "title": "Sensitive Words Management",
+    "toggleFailed": "Toggle failed",
+    "toggleFailedError": "Toggle failed:"
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "dataGenerator": {
+    "tabs": {
+      "usage": "用量数据生成",
+      "userBreakdown": "按用户显示用量"
+    },
+    "actions": {
+      "reconfigure": "重新配置参数",
+      "generate": "生成数据",
+      "exportScreenshot": "导出截图",
+      "exportPDF": "导出 PDF"
+    },
+    "params": {
+      "title": "生成参数",
+      "description": "配置生成参数以创建模拟日志数据",
+      "startDate": "起始时间",
+      "endDate": "结束时间",
+      "totalCostCny": "总金额（人民币）",
+      "totalRecords": "总记录数",
+      "models": "包含模型（逗号分隔）",
+      "userIds": "用户ID（逗号分隔）",
+      "providerIds": "供应商ID（逗号分隔）",
+      "serviceName": "服务名称",
+      "required": "*",
+      "placeholders": {
+        "totalCostCny": "如：1000",
+        "totalRecords": "如：500（不填则根据金额计算）",
+        "models": "如：claude-3-5-sonnet,gpt-4（留空则全部）",
+        "userIds": "如：1,2,3（留空则全部）",
+        "providerIds": "如：1,2（留空则全部）",
+        "serviceName": "AI大模型推理服务"
+      }
+    },
+    "summary": {
+      "totalRecords": "总记录数",
+      "totalCost": "总成本",
+      "totalCostCny": "总成本（人民币）",
+      "totalTokens": "总 Token",
+      "timeRange": "时间范围",
+      "to": "至",
+      "uniqueUsers": "总用户数",
+      "totalCalls": "总调用数"
+    },
+    "table": {
+      "usageLogs": {
+        "title": "使用日志",
+        "description": "共 {count} 条记录",
+        "columns": {
+          "time": "时间",
+          "user": "用户",
+          "key": "密钥",
+          "provider": "供应商",
+          "model": "模型",
+          "input": "输入",
+          "output": "输出",
+          "cacheWrite": "缓存写",
+          "cacheRead": "缓存读",
+          "cost": "成本",
+          "duration": "耗时",
+          "status": "状态"
+        }
+      },
+      "userBreakdown": {
+        "title": "用户用量明细",
+        "description": "共 {count} 条记录",
+        "collapseByUser": "按用户折叠",
+        "columns": {
+          "userName": "用户名",
+          "key": "密钥",
+          "serviceModel": "服务模型",
+          "totalCalls": "总调用数",
+          "totalCost": "总调用额度"
+        }
+      }
+    },
+    "status": {
+      "success": "成功"
+    },
+    "errors": {
+      "failed": "生成日志失败"
+    }
+  }
+}

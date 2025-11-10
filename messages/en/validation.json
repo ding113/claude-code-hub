@@ -1,0 +1,14 @@
+{
+  "_comment": "Form validation messages for English",
+
+  "name_required": "Name is required",
+  "name_max_length": "Name must not exceed {max} characters",
+  "note_max_length": "Note must not exceed {max} characters",
+  "email_invalid": "Please enter a valid email address",
+  "url_invalid": "Please enter a valid URL",
+  "number_min": "Must be at least {min}",
+  "number_max": "Must not exceed {max}",
+  "number_integer": "Must be an integer",
+  "number_positive": "Must be positive",
+  "required": "This field is required"
+}

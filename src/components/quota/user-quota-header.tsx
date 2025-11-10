@@ -7,8 +7,9 @@ import { QuotaProgress } from "./quota-progress";
 import { User, ChevronDown, ChevronRight, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getUsageRate, getQuotaColorClass } from "@/lib/utils/quota-helpers";
-import { EditUserQuotaDialog } from "@/app/dashboard/quotas/keys/_components/edit-user-quota-dialog";
+import { EditUserQuotaDialog } from "@/app/[locale]/dashboard/quotas/keys/_components/edit-user-quota-dialog";
 import type { CurrencyCode } from "@/lib/utils/currency";
+import { useTranslations } from "next-intl";
 
 interface UserQuotaHeaderProps {
   userId: number;
@@ -39,6 +40,7 @@ export function UserQuotaHeader({
   currencyCode = "USD",
   className,
 }: UserQuotaHeaderProps) {
+  const t = useTranslations("quota");
   // 计算使用率
   const rpmRate = getUsageRate(rpmCurrent, rpmLimit);
   const dailyRate = getUsageRate(dailyCostCurrent, dailyCostLimit);
@@ -87,10 +89,10 @@ export function UserQuotaHeader({
               variant={userRole === "admin" ? "default" : "secondary"}
               className="flex-shrink-0"
             >
-              {userRole === "admin" ? "管理员" : "用户"}
+              {userRole === "admin" ? t("header.role.admin") : t("header.role.user")}
             </Badge>
             <Badge variant="outline" className="flex-shrink-0">
-              {keyCount} 个密钥
+              {keyCount} {t("header.keysCountSuffix")}
             </Badge>
           </div>
 
@@ -100,7 +102,7 @@ export function UserQuotaHeader({
               {/* RPM 进度条 */}
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground w-20 text-right flex-shrink-0">
-                  RPM:
+                  {t("header.rpm")}:
                 </span>
                 <QuotaProgress current={rpmCurrent} limit={rpmLimit} className="flex-1" />
                 <span className="text-sm font-mono w-24 text-right flex-shrink-0">
@@ -114,7 +116,7 @@ export function UserQuotaHeader({
               {/* 今日消费进度条 */}
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground w-20 text-right flex-shrink-0">
-                  今日消费:
+                  {t("header.todayCost")}:
                 </span>
                 <QuotaProgress
                   current={dailyCostCurrent}
@@ -157,7 +159,7 @@ export function UserQuotaHeader({
         {/* 超限提示 */}
         {colorClass === "exceeded" && (
           <div className="mt-2 text-sm text-red-600 dark:text-red-400 font-medium">
-            ⚠️ 用户已超限！所有密钥将受限
+            ⚠️ {t("header.exceededNotice")}
           </div>
         )}
       </CardHeader>

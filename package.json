@@ -57,6 +57,7 @@
     "jspdf": "^3.0.3",
     "lucide-react": "^0.547.0",
     "next": "15.5.6",
+    "next-intl": "^3.22.0",
     "next-themes": "^0.4.6",
     "pino": "^10.1.0",
     "pino-pretty": "^13.1.2",
