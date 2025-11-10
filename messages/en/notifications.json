@@ -1,0 +1,29 @@
+{
+  "_comment": "Toast notification messages for English",
+
+  "save_success": "Saved successfully",
+  "create_success": "Created successfully",
+  "update_success": "Updated successfully",
+  "delete_success": "Deleted successfully",
+  "copy_success": "Copied successfully",
+  "sync_success": "Synchronized successfully",
+  "export_success": "Exported successfully",
+  "import_success": "Imported successfully",
+  "refresh_success": "Refreshed successfully",
+  "test_success": "Test successful",
+
+  "user_created": "User {name} created successfully",
+  "user_updated": "User information updated",
+  "user_deleted": "User deleted",
+  "key_created": "API key created successfully",
+  "key_updated": "API key updated",
+  "key_deleted": "API key deleted",
+  "provider_created": "Provider created successfully",
+  "provider_updated": "Provider updated",
+  "provider_deleted": "Provider deleted",
+
+  "operation_success": "Operation successful",
+  "operation_failed": "Operation failed",
+  "processing": "Processing...",
+  "please_wait": "Please wait..."
+}

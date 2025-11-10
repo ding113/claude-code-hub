@@ -1,0 +1,583 @@
+{
+  "title": {
+    "costRanking": "コスト ランキング",
+    "costRankingDescription": "ユーザーコスト ランキングを表示します。データは 5 分ごとに更新されます",
+    "usageLogs": "使用ログ",
+    "clients": "クライアント",
+    "userAndKeyManagement": "ユーザーとキー管理",
+    "requestMessages": "リクエスト メッセージ",
+    "activeSessions": "アクティブ セッション (最近 5 分間)",
+    "sessionMonitoring": "セッション監視",
+    "sessionMonitoringDescription": "アクティブおよび非アクティブ セッションをリアルタイムで表示します (3 秒ごとに自動更新)",
+    "inactiveSessions": "非アクティブ セッション (5 分以上、表示のみ)",
+    "quotasManagement": "クォータ管理",
+    "quotasManagementDescription": "すべてのレベルのクォータを表示および管理します",
+    "usersQuotas": "ユーザー クォータ統計",
+    "keysQuotas": "キー クォータ統計",
+    "providersQuotas": "プロバイダー クォータ統計",
+    "usageLogsDescription": "API 呼び出しログと使用統計を表示します",
+    "filterCriteria": "フィルター条件"
+  },
+  "description": {
+    "viewApiCallLogs": "API 呼び出しログと使用統計を表示します",
+    "dashboard": "システム統計と監視情報を表示します",
+    "quotas": "すべてのレベルのクォータを表示および管理します",
+    "clientInfo": "User-Agent リクエスト ヘッダー",
+    "requestMessagesDescription": "クライアントが送信したメッセージ コンテンツ",
+    "responseBodyDescription": "サーバーからの完全なレスポンス (5 分間の TTL)"
+  },
+  "overview": {
+    "title": "概要",
+    "totalRequests": "リクエスト総数",
+    "totalCost": "合計コスト",
+    "totalUsers": "ユーザー総数",
+    "totalProviders": "プロバイダー総数",
+    "activeUsers": "アクティブ ユーザー",
+    "activeSessions": "アクティブ セッション",
+    "errorRate": "エラー率",
+    "avgResponseTime": "平均応答時間"
+  },
+  "stats": {
+    "title": "統計",
+    "requests": "リクエスト",
+    "cost": "コスト",
+    "tokens": "トークン",
+    "period": {
+      "hour": "最近 1 時間",
+      "day": "今日",
+      "week": "今週",
+      "month": "今月"
+    }
+  },
+  "logs": {
+    "title": "使用ログ",
+    "description": "API 呼び出しレコードを表示および分析します",
+    "filters": {
+      "user": "ユーザー",
+      "provider": "プロバイダー",
+      "model": "モデル",
+      "status": "ステータス",
+      "timeRange": "時間範囲",
+      "startTime": "開始時間",
+      "endTime": "終了時間",
+      "allUsers": "すべてのユーザー",
+      "allKeys": "すべてのキー",
+      "selectUserFirst": "まずユーザーを選択してください",
+      "allProviders": "すべてのプロバイダー",
+      "allModels": "すべてのモデル",
+      "allStatusCodes": "すべてのステータスコード",
+      "apiKey": "API キー",
+      "statusCode": "ステータスコード",
+      "apply": "フィルターを適用",
+      "reset": "リセット"
+    },
+    "columns": {
+      "time": "時間",
+      "user": "ユーザー",
+      "key": "キー",
+      "provider": "プロバイダー",
+      "model": "モデル",
+      "inputTokens": "入力",
+      "outputTokens": "出力",
+      "cacheWrite": "キャッシュ書き込み",
+      "cacheRead": "キャッシュ読み取り",
+      "cost": "コスト",
+      "duration": "所要時間",
+      "status": "ステータス"
+    },
+    "stats": {
+      "totalAmount": "総消費金額",
+      "totalTokens": "総トークン数",
+      "cacheTokens": "キャッシュトークン",
+      "input": "入力",
+      "output": "出力",
+      "write": "書き込み",
+      "read": "読み取り",
+      "totalRequests": "総リクエスト数",
+      "loading": "読み込み中..."
+    },
+    "table": {
+      "noData": "データなし",
+      "pagination": "{total} 件中 {page} / {totalPages} ページ",
+      "prevPage": "前へ",
+      "nextPage": "次へ",
+      "blocked": "ブロック済み",
+      "times": "回"
+    },
+    "actions": {
+      "refresh": "更新",
+      "refreshing": "更新中...",
+      "stopAutoRefresh": "自動更新を停止",
+      "startAutoRefresh": "自動更新を開始",
+      "view": "表示"
+    },
+    "error": {
+      "loadFailed": "読み込み失敗"
+    },
+    "details": {
+      "title": "リクエスト詳細",
+      "statusTitle": "リクエスト詳細 - ステータスコード {status}",
+      "inProgress": "処理中",
+      "unknown": "不明",
+      "success": "リクエストが正常に完了しました",
+      "error": "リクエスト失敗、詳細なエラー情報とプロバイダー決定チェーンは以下の通りです",
+      "processing": "リクエストは処理中であり、まだ完了していません",
+      "blocked": {
+        "title": "ブロック情報",
+        "type": "ブロックタイプ",
+        "sensitiveWord": "機密語句ブロック",
+        "word": "機密語句",
+        "matchType": "一致タイプ",
+        "matchTypeContains": "部分一致",
+        "matchTypeExact": "完全一致",
+        "matchTypeRegex": "正規表現",
+        "matchedText": "一致した内容"
+      },
+      "sessionId": "セッション ID",
+      "messagesCount": "メッセージ数",
+      "messagesLabel": "メッセージ",
+      "messagesUnit": "件",
+      "clientInfo": "クライアント情報",
+      "modelRedirect": {
+        "title": "モデルリダイレクト",
+        "requestModel": "リクエストモデル",
+        "actualModel": "実際の呼び出し",
+        "billing": "課金説明",
+        "billingDescription": "システムはリクエストモデル（{original}）の価格を優先して課金します。価格表にそのモデルが存在しない場合、実際の呼び出しモデル（{current}）の価格を使用します。"
+      },
+      "errorMessage": "エラーメッセージ",
+      "providerChain": {
+        "title": "プロバイダー決定チェーンタイムライン",
+        "totalDuration": "合計所要時間: {duration}ms"
+      },
+      "noError": {
+        "processing": "リクエストは処理中であり、応答を待っています...",
+        "success": "リクエスト成功、エラー情報なし",
+        "default": "詳細なエラー情報はありません"
+      },
+      "clickStatusCode": "ステータスコードをクリックして完全なタイムラインを表示",
+      "viewDetails": "詳細を表示"
+    },
+    "providerChain": {
+      "decisionChain": "プロバイダー決定チェーン"
+    },
+    "modelRedirect": {
+      "redirected": "リダイレクト済み",
+      "targetModel": "ターゲットモデル"
+    },
+    "statusCodes": {
+      "200": "200 (成功)",
+      "400": "400 (不正なリクエスト)",
+      "401": "401 (未認証)",
+      "429": "429 (レート制限)",
+      "500": "500 (サーバーエラー)"
+    }
+  },
+  "leaderboard": {
+    "title": "コスト ランキング",
+    "description": "ユーザーとキーのコスト統計ランキングを表示します",
+    "tabs": {
+      "users": "ユーザー ランキング",
+      "keys": "キー ランキング",
+      "userRanking": "ユーザーランキング",
+      "providerRanking": "プロバイダーランキング",
+      "dailyRanking": "今日のランキング",
+      "monthlyRanking": "今月のランキング"
+    },
+    "columns": {
+      "rank": "ランク",
+      "name": "名前",
+      "totalCost": "合計コスト",
+      "totalRequests": "リクエスト総数",
+      "avgCost": "平均コスト",
+      "lastActive": "最終アクティビティ",
+      "user": "ユーザー",
+      "requests": "リクエスト数",
+      "tokens": "トークン数",
+      "consumedAmount": "消費金額",
+      "provider": "プロバイダー",
+      "cost": "コスト",
+      "successRate": "成功率",
+      "avgResponseTime": "平均応答時間"
+    },
+    "states": {
+      "loading": "読み込み中...",
+      "noData": "データなし",
+      "todayNoData": "今日のデータなし",
+      "monthNoData": "今月のデータなし",
+      "fetchFailed": "ランキングデータの取得に失敗しました"
+    },
+    "permission": {
+      "title": "権限が必要です",
+      "restricted": "アクセス制限",
+      "description": "ランキング機能には、管理者が「サイト全体の利用状況の表示を許可」権限を有効にする必要があります。",
+      "adminAction": "この権限を有効にします。",
+      "userAction": "この権限を有効にするには、管理者に連絡してください。",
+      "systemSettings": "システム設定"
+    }
+  },
+  "sessions": {
+    "title": "アクティブ セッション",
+    "description": "アクティブな API セッションをリアルタイムで監視します",
+    "monitoring": "セッション監視",
+    "monitoringDescription": "アクティブおよび非アクティブ セッションをリアルタイムで表示します (3 秒ごとに自動更新)",
+    "activeSessions": "アクティブ セッション (最近 5 分間)",
+    "inactiveSessions": "非アクティブ セッション (5 分以上、表示のみ)",
+    "columns": {
+      "sessionId": "セッション ID",
+      "user": "ユーザー",
+      "key": "キー",
+      "provider": "プロバイダー",
+      "model": "モデル",
+      "startTime": "開始時間",
+      "lastActivity": "最終アクティビティ",
+      "requestCount": "リクエスト数",
+      "totalInput": "総入力",
+      "totalOutput": "総出力",
+      "totalCost": "総コスト",
+      "totalDuration": "総所要時間",
+      "status": "ステータス",
+      "actions": "アクション"
+    },
+    "table": {
+      "count": "{count} 個の{type} セッション",
+      "active": "アクティブ",
+      "inactive": "非アクティブ",
+      "notCountedInConcurrency": "(同時実行数には含まれません)",
+      "refreshing": "更新中...",
+      "noActiveSessions": "アクティブなセッションはありません"
+    },
+    "details": {
+      "title": "セッション メッセージ",
+      "messages": "メッセージリスト",
+      "info": "セッション情報",
+      "timeline": "タイムライン",
+      "overview": "セッション概要",
+      "overviewDescription": "集計統計情報",
+      "providersAndModels": "プロバイダーとモデル",
+      "providersAndModelsDescription": "使用されたプロバイダーとモデル",
+      "tokenUsage": "トークン使用量 (合計)",
+      "tokenUsageDescription": "すべてのリクエストの累積統計",
+      "costInfo": "コスト情報 (合計)",
+      "costInfoDescription": "すべてのリクエストの累積費用",
+      "totalRequests": "総リクエスト数",
+      "firstRequest": "最初のリクエスト",
+      "lastRequest": "最終リクエスト",
+      "totalDuration": "総所要時間",
+      "totalInput": "総入力",
+      "totalOutput": "総出力",
+      "cacheCreation": "キャッシュ作成",
+      "cacheRead": "キャッシュ読み取り",
+      "total": "合計",
+      "totalFee": "総費用",
+      "providers": "プロバイダー",
+      "models": "モデル",
+      "noDetailedData": "詳細データなし",
+      "storageTip": "ヒント: メッセージとレスポンスの保存を有効にするには、環境変数 STORE_SESSION_MESSAGES=true を設定してください",
+      "clientInfo": "クライアント情報",
+      "requestMessages": "リクエスト メッセージ",
+      "requestMessagesDescription": "クライアントが送信したメッセージ内容",
+      "responseBody": "レスポンスボディ内容",
+      "responseBodyDescription": "サーバーからの完全なレスポンス (5 分間の TTL)",
+      "noData": "データなし"
+    },
+    "actions": {
+      "back": "戻る",
+      "view": "表示",
+      "copyMessages": "メッセージをコピー",
+      "downloadMessages": "メッセージをダウンロード",
+      "copied": "コピーしました",
+      "copyResponse": "レスポンスボディをコピー"
+    },
+    "status": {
+      "loading": "読み込み中...",
+      "loadError": "読み込み失敗",
+      "fetchFailed": "取得失敗",
+      "unknownError": "不明なエラー",
+      "storageNotEnabled": "未保存",
+      "storageNotEnabledHint": "ヒント: メッセージの保存を有効にするには、環境変数 STORE_SESSION_MESSAGES=true を設定してください"
+    },
+    "errors": {
+      "copyFailed": "コピー失敗"
+    },
+    "back": "戻る",
+    "loadingError": "読み込み失敗"
+  },
+  "quotas": {
+    "title": "クォータ管理",
+    "description": "ユーザー、キー、プロバイダーの使用クォータを管理します",
+    "tabs": {
+      "overview": "概要",
+      "users": "ユーザー クォータ",
+      "keys": "キー クォータ",
+      "providers": "プロバイダー クォータ"
+    },
+    "columns": {
+      "name": "名前",
+      "limit": "制限",
+      "used": "使用済み",
+      "remaining": "残り",
+      "resetTime": "リセット時間",
+      "status": "ステータス"
+    },
+    "labels": {
+      "byName": "名前順",
+      "byUsageRate": "使用率順",
+      "all": "すべて",
+      "warning": "制限に近い (>60%)",
+      "exceeded": "超過 (≥100%)"
+    },
+    "users": {
+      "title": "ユーザー クォータ統計",
+      "totalUsers": "合計 {count} ユーザー"
+    },
+    "keys": {
+      "title": "キー クォータ統計",
+      "totalKeysInfo": "合計 {userCount} ユーザー、{keyCount} キー",
+      "setKeyQuota": "キー クォータを設定",
+      "setUserQuota": "ユーザー クォータを設定",
+      "onlyKeyQuota": "キー クォータのみ",
+      "onlyUserQuota": "ユーザー クォータのみ",
+      "success": "ユーザー クォータが正常に設定されました"
+    },
+    "providers": {
+      "title": "プロバイダー クォータ統計",
+      "totalProviders": "合計 {count} プロバイダー"
+    }
+  },
+  "labels": {
+    "byName": "名前順",
+    "byUsageRate": "使用率順"
+  },
+  "all": "すべて",
+  "nav": {
+    "dashboard": "ダッシュボード",
+    "usageLogs": "使用ログ",
+    "leaderboard": "ランキング",
+    "quotasManagement": "クォータ管理",
+    "documentation": "ドキュメント",
+    "systemSettings": "システム設定",
+    "feedback": "フィードバック",
+    "login": "ログイン",
+    "logout": "ログアウト"
+  },
+  "statistics": {
+    "title": "使用統計",
+    "cost": "消費金額",
+    "calls": "API呼び出し回数",
+    "totalCost": "総消費金額",
+    "totalCalls": "総API呼び出し回数",
+    "timeRange": {
+      "today": "今日",
+      "todayDescription": "今日の使用状況",
+      "7days": "過去 7 日間",
+      "7daysDescription": "過去 7 日間の使用状況",
+      "30days": "過去 30 日間",
+      "30daysDescription": "過去 30 日間の使用状況",
+      "default": "使用状況"
+    },
+    "mode": {
+      "keys": "あなたのキーのみの使用統計を表示",
+      "mixed": "あなたのキーの詳細と他のユーザーの集計を表示",
+      "users": "すべてのユーザーの使用統計を表示"
+    },
+    "legend": {
+      "selectAll": "すべて選択",
+      "deselectAll": "すべてクリア",
+      "selected": "選択済み"
+    },
+    "states": {
+      "noData": "統計データなし",
+      "fetchFailed": "統計データの取得に失敗しました"
+    }
+  },
+  "errors": {
+    "fetchSystemSettingsFailed": "システム設定の取得に失敗しました",
+    "fetchFailed": "取得失敗",
+    "fetchSessionListFailed": "セッションリストの取得に失敗しました"
+  },
+  "keyList": {
+    "columns": {
+      "name": "名前",
+      "key": "キー",
+      "todayCalls": "今日の呼び出し",
+      "todayCost": "今日の消費",
+      "lastUsed": "最終使用",
+      "actions": "操作"
+    },
+    "detailsButton": "詳細情報",
+    "modelStats": "モデル統計",
+    "modelStatsColumns": {
+      "model": "モデル",
+      "calls": "呼び出し回数",
+      "cost": "消費"
+    },
+    "limitUsage": "制限使用状況",
+    "copyKeyTooltip": "完全なキーをコピー",
+    "copyFailed": "コピーに失敗しました:",
+    "timesUnit": "回",
+    "provider": "プロバイダー",
+    "neverUsed": "未使用",
+    "viewLogsTooltip": "詳細なログを表示",
+    "logsButton": "ログ",
+    "emptyState": {
+      "title": "キーがありません",
+      "description": "右上の「キーを追加」ボタンをクリックしてキーを追加できます"
+    }
+  },
+  "userList": {
+    "badge": "{count} 個のキー",
+    "activeKeys": "アクティブキー",
+    "totalKeys": "総キー数",
+    "emptyState": {
+      "title": "ユーザーがいません",
+      "description": "下のボタンをクリックして最初のユーザーを作成してください"
+    },
+    "addUser": "ユーザーを追加"
+  },
+  "keyListHeader": {
+    "todayUsage": "本日の使用量",
+    "proxyStatus": {
+      "loading": "プロキシステータス読み込み中",
+      "fetchFailed": "プロキシステータスの取得に失敗しました",
+      "noStatus": "プロキシステータスなし",
+      "activeRequests": "アクティブリクエスト",
+      "lastRequest": "最新リクエスト",
+      "noRecord": "記録なし",
+      "timeAgo": {
+        "justNow": "たった今",
+        "secondsAgo": "{count}秒前",
+        "minutesAgo": "{count}分前",
+        "hoursAgo": "{count}時間前",
+        "daysAgo": "{count}日前"
+      }
+    },
+    "addKey": "キーを追加",
+    "keyCreatedDialog": {
+      "title": "キーの作成に成功しました",
+      "description": "APIキーが正常に作成されました。安全にコピーして保存してください。このキーは一度だけ表示されます。",
+      "apiKeyLabel": "API キー",
+      "warningText": "閉じる前にコピーして保存してください。閉じた後、このキーを再度表示することはできません",
+      "closeButton": "閉じる"
+    }
+  },
+  "keyLimitUsage": {
+    "loading": "読み込み中...",
+    "error": "取得に失敗しました",
+    "networkError": "ネットワークエラー",
+    "cost5h": "5時間消費",
+    "costWeekly": "週間消費",
+    "costMonthly": "月間消費",
+    "concurrentSessions": "同時セッション数",
+    "noLimit": "制限なし"
+  },
+  "addKeyForm": {
+    "title": "キーを追加",
+    "description": "現在のユーザーの新しいAPIキーを作成します。キー値は自動生成されます。",
+    "submitText": "作成を確認",
+    "loadingText": "作成中...",
+    "keyName": {
+      "label": "キー名",
+      "placeholder": "キー名を入力してください"
+    },
+    "expiresAt": {
+      "label": "有効期限",
+      "placeholder": "有効期限を選択",
+      "description": "空白の場合は無期限"
+    },
+    "canLoginWebUi": {
+      "label": "Web UI ログインを許可",
+      "description": "オフにすると、このキーはAPI呼び出しのみに使用でき、管理パネルにログインできません"
+    },
+    "limit5hUsd": {
+      "label": "5時間消費上限 (USD)",
+      "placeholder": "空白の場合は無制限",
+      "description": "5時間以内の最大消費金額"
+    },
+    "limitWeeklyUsd": {
+      "label": "週間消費上限 (USD)",
+      "placeholder": "空白の場合は無制限",
+      "description": "1週間あたりの最大消費金額"
+    },
+    "limitMonthlyUsd": {
+      "label": "月間消費上限 (USD)",
+      "placeholder": "空白の場合は無制限",
+      "description": "1ヶ月あたりの最大消費金額"
+    },
+    "limitConcurrentSessions": {
+      "label": "同時セッション上限",
+      "placeholder": "0 は無制限を意味します",
+      "description": "同時に実行される会話の数"
+    },
+    "errors": {
+      "userIdMissing": "ユーザーIDが存在しません",
+      "createFailed": "作成に失敗しました。後でもう一度お試しください",
+      "noKeyReturned": "作成に成功しましたが、キーが返されませんでした"
+    }
+  },
+  "userForm": {
+    "title": {
+      "add": "ユーザーを追加",
+      "edit": "ユーザーを編集"
+    },
+    "description": {
+      "add": "新しいユーザーを作成します。システムは自動的にデフォルトのキーを生成します。",
+      "edit": "ユーザーの基本情報を変更します。"
+    },
+    "submitText": {
+      "add": "作成を確認",
+      "edit": "変更を保存"
+    },
+    "loadingText": {
+      "add": "作成中...",
+      "edit": "保存中..."
+    },
+    "username": {
+      "label": "ユーザー名",
+      "placeholder": "ユーザー名を入力してください"
+    },
+    "note": {
+      "label": "備考",
+      "placeholder": "備考を入力してください（オプション）",
+      "description": "ユーザーの用途や備考情報を説明するために使用されます"
+    },
+    "providerGroup": {
+      "label": "プロバイダーグループ",
+      "placeholder": "例: premium または premium,economy（オプション）",
+      "description": "ユーザー専用のプロバイダーグループを指定します（複数可、カンマ区切り）。システムはgroupTagが一致するプロバイダーのみから選択します。空白=すべてのプロバイダーを使用"
+    },
+    "rpm": {
+      "label": "RPM制限",
+      "placeholder": "1分あたりのリクエスト数制限",
+      "description": "デフォルト値: {default}、範囲: 1-10000"
+    },
+    "dailyQuota": {
+      "label": "1日あたりの割当量",
+      "placeholder": "1日あたりの消費割当量制限",
+      "description": "デフォルト値: ${default}、範囲: $0.01-$1000"
+    }
+  },
+  "deleteKeyConfirm": {
+    "title": "キーの削除を確認",
+    "description": "キー「{name}」を削除してもよろしいですか？\n{maskedKey}\nこの操作は元に戻せません。削除後、このキーを使用しているすべてのアプリケーションはアクセスできなくなります。",
+    "cancel": "キャンセル",
+    "confirm": "削除を確認",
+    "confirmLoading": "削除中...",
+    "errors": {
+      "deleteFailed": "削除に失敗しました",
+      "retryError": "削除に失敗しました。後でもう一度お試しください"
+    }
+  },
+  "keyActions": {
+    "edit": "編集",
+    "delete": "削除",
+    "editAriaLabel": "キーを編集",
+    "deleteAriaLabel": "キーを削除"
+  },
+  "userActions": {
+    "edit": "ユーザーを編集",
+    "delete": "ユーザーを削除",
+    "editAriaLabel": "ユーザーを編集",
+    "deleteAriaLabel": "ユーザーを削除"
+  }
+}

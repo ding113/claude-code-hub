@@ -44,32 +44,34 @@ function isActualRequest(item: ProviderChainItem): boolean {
 }
 
 /**
- * 辅助函数：翻译熔断状态为中文
+ * 辅助函数：翻译熔断状态
  */
-function translateCircuitState(state?: string): string {
+function translateCircuitState(state: string | undefined, t: (key: string) => string): string {
   switch (state) {
     case "closed":
-      return "关闭（正常）";
+      return t("circuit.closed");
     case "half-open":
-      return "半开（试探中）";
+      return t("circuit.halfOpen");
     case "open":
-      return "全开（已熔断）";
+      return t("circuit.open");
     default:
-      return "未知";
+      return t("circuit.unknown");
   }
 }
 
 /**
  * 辅助函数：获取错误码含义
  */
-function getErrorCodeMeaning(code: string): string | null {
-  const meanings: Record<string, string> = {
-    ENOTFOUND: "DNS 解析失败",
-    ECONNREFUSED: "连接被拒绝",
-    ETIMEDOUT: "连接或读取超时",
-    ECONNRESET: "连接被重置",
-  };
-  return meanings[code] || null;
+function getErrorCodeMeaning(code: string, t: (key: string) => string): string | null {
+  const errorKey = `errors.${code}`;
+  // 尝试获取翻译，如果不存在则返回 null
+  try {
+    const translation = t(errorKey);
+    // next-intl 在找不到键时会返回键本身
+    return translation !== errorKey ? translation : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -77,7 +79,10 @@ function getErrorCodeMeaning(code: string): string | null {
  *
  * 前端用 CSS max-w + truncate 处理超长，Tooltip 显示完整内容
  */
-export function formatProviderSummary(chain: ProviderChainItem[]): string {
+export function formatProviderSummary(
+  chain: ProviderChainItem[],
+  t: (key: string, values?: Record<string, string | number>) => string
+): string {
   if (!chain || chain.length === 0) return "";
 
   // 过滤出实际请求记录（排除中间状态）
@@ -99,13 +104,17 @@ export function formatProviderSummary(chain: ProviderChainItem[]): string {
       const ctx = initialSelection.decisionContext;
       const total = ctx.enabledProviders || 0;
       const healthy = ctx.afterHealthCheck || 0;
-      return `${total}个候选→${healthy}个健康→${request.name}(✓)`;
+      return t("summary.singleSuccess", {
+        total: total.toString(),
+        healthy: healthy.toString(),
+        provider: request.name,
+      });
     }
 
     // 查找是否是会话复用
     const sessionReuse = chain.find((item) => item.reason === "session_reuse");
     if (sessionReuse) {
-      return `${request.name}(✓) [会话复用]`;
+      return t("summary.sessionReuse", { provider: request.name });
     }
   }
 
@@ -127,8 +136,11 @@ export function formatProviderSummary(chain: ProviderChainItem[]): string {
  * 只显示：首次选择逻辑 + 请求链路（成功/失败）
  * 不显示：错误详情、熔断详情
  */
-export function formatProviderDescription(chain: ProviderChainItem[]): string {
-  if (!chain || chain.length === 0) return "无决策记录";
+export function formatProviderDescription(
+  chain: ProviderChainItem[],
+  t: (key: string, values?: Record<string, string | number>) => string
+): string {
+  if (!chain || chain.length === 0) return t("description.noDecisionRecord");
 
   let desc = "";
   const first = chain[0];
@@ -136,20 +148,30 @@ export function formatProviderDescription(chain: ProviderChainItem[]): string {
 
   // === 部分1: 首次选择逻辑 ===
   if (first.reason === "session_reuse" && ctx) {
-    desc += `🔄 会话复用\n\n`;
-    desc += `Session ${ctx.sessionId?.slice(-6) || "未知"}\n`;
-    desc += `复用供应商: ${first.name}\n`;
+    desc += t("description.sessionReuse") + "\n\n";
+    desc +=
+      t("description.sessionId", {
+        id: ctx.sessionId?.slice(-6) || t("description.unknown"),
+      }) + "\n";
+    desc += t("description.reuseProvider", { provider: first.name }) + "\n";
   } else if (first.reason === "initial_selection" && ctx) {
-    desc += `🎯 首次选择: ${first.name}\n\n`;
-    desc += `${ctx.enabledProviders || 0}个候选`;
+    desc += t("description.initialSelection", { provider: first.name }) + "\n\n";
+    desc += t("description.candidateCount", { count: ctx.enabledProviders || 0 });
     if (ctx.userGroup) {
-      desc += ` → 分组${ctx.afterGroupFilter || 0}个`;
+      desc +=
+        " → " +
+        t("description.groupFiltered", {
+          group: ctx.userGroup,
+          count: ctx.afterGroupFilter || 0,
+        });
     }
-    desc += ` → 健康${ctx.afterHealthCheck || 0}个\n`;
+    desc += " → " + t("description.healthyCount", { count: ctx.afterHealthCheck || 0 }) + "\n";
 
     if (ctx.candidatesAtPriority && ctx.candidatesAtPriority.length > 0) {
-      desc += `优先级${ctx.selectedPriority}: `;
-      desc += ctx.candidatesAtPriority.map((c) => `${c.name}(${c.probability}%)`).join(" ");
+      desc += t("description.priority", { priority: ctx.selectedPriority ?? 0 }) + ": ";
+      desc += ctx.candidatesAtPriority
+        .map((c) => t("description.candidate", { name: c.name, probability: c.probability ?? 0 }))
+        .join(" ");
     }
   }
 
@@ -160,7 +182,7 @@ export function formatProviderDescription(chain: ProviderChainItem[]): string {
   // 只有多次请求或单次请求失败时才显示链路
   if (requests.length > 1 || (requests.length === 1 && getProviderStatus(requests[0]) !== "✓")) {
     if (desc) desc += "\n\n";
-    desc += `📍 请求链路:\n\n`;
+    desc += t("description.requestChain") + "\n\n";
 
     requests.forEach((item, index) => {
       const status = getProviderStatus(item);
@@ -170,9 +192,9 @@ export function formatProviderDescription(chain: ProviderChainItem[]): string {
 
       // 标注特殊情况
       if (item.reason === "system_error") {
-        desc += " (系统错误)";
+        desc += " " + t("description.systemError");
       } else if (item.reason === "concurrent_limit_failed") {
-        desc += " (并发限制)";
+        desc += " " + t("description.concurrentLimit");
       }
 
       desc += "\n";
@@ -187,12 +209,15 @@ export function formatProviderDescription(chain: ProviderChainItem[]): string {
  *
  * 显示：所有决策、所有请求详情、结构化错误、中文状态
  */
-export function formatProviderTimeline(chain: ProviderChainItem[]): {
+export function formatProviderTimeline(
+  chain: ProviderChainItem[],
+  t: (key: string, values?: Record<string, string | number>) => string
+): {
   timeline: string;
   totalDuration: number;
 } {
   if (!chain || chain.length === 0) {
-    return { timeline: "无决策记录", totalDuration: 0 };
+    return { timeline: t("timeline.noDecisionRecord"), totalDuration: 0 };
   }
 
   const startTime = chain[0].timestamp || 0;
@@ -226,33 +251,46 @@ export function formatProviderTimeline(chain: ProviderChainItem[]): {
 
     // === 会话复用选择 ===
     if (item.reason === "session_reuse" && ctx) {
-      timeline += `🔄 会话复用选择供应商\n\n`;
-      timeline += `Session ID: ${ctx.sessionId || "未知"}\n`;
-      timeline += `复用供应商: ${item.name}\n`;
-      timeline += `配置: 优先级${item.priority}, 权重${item.weight}, 成本${item.costMultiplier}x\n`;
-      timeline += `基于会话缓存复用此供应商（5分钟内）\n`;
-      timeline += `\n⏳ 等待请求结果...`;
+      timeline += t("timeline.sessionReuseTitle") + "\n\n";
+      timeline += t("timeline.sessionId", { id: ctx.sessionId || t("timeline.unknown") }) + "\n";
+      timeline += t("timeline.reuseProvider", { provider: item.name }) + "\n";
+      timeline +=
+        t("timeline.providerConfig", {
+          priority: item.priority ?? 0,
+          weight: item.weight ?? 0,
+          cost: item.costMultiplier ?? 1,
+        }) + "\n";
+      timeline += t("timeline.sessionCache") + "\n";
+      timeline += "\n" + t("timeline.waiting");
       continue;
     }
 
     // === 首次选择 ===
     if (item.reason === "initial_selection" && ctx) {
-      timeline += `🎯 首次选择供应商\n\n`;
+      timeline += t("timeline.initialSelectionTitle") + "\n\n";
 
       // 系统状态
-      timeline += `系统状态:\n`;
-      timeline += `• 总计 ${ctx.totalProviders} 个供应商\n`;
-      timeline += `• 启用 ${ctx.enabledProviders} 个 (${ctx.targetType}类型)\n`;
+      timeline += t("timeline.systemStatus") + ":\n";
+      timeline += t("timeline.totalProviders", { count: ctx.totalProviders }) + "\n";
+      timeline +=
+        t("timeline.enabledProviders", {
+          count: ctx.enabledProviders,
+          type: ctx.targetType,
+        }) + "\n";
 
       if (ctx.userGroup) {
-        timeline += `• 用户分组 '${ctx.userGroup}' → ${ctx.afterGroupFilter}个\n`;
+        timeline +=
+          t("timeline.userGroup", {
+            group: ctx.userGroup,
+            count: ctx.afterGroupFilter ?? 0,
+          }) + "\n";
       }
 
-      timeline += `• 健康检查 → ${ctx.afterHealthCheck}个\n`;
+      timeline += t("timeline.healthCheck", { count: ctx.afterHealthCheck }) + "\n";
 
       // 被过滤的供应商
       if (ctx.filteredProviders && ctx.filteredProviders.length > 0) {
-        timeline += `\n被过滤:\n`;
+        timeline += "\n" + t("timeline.filtered") + ":\n";
         for (const f of ctx.filteredProviders) {
           const icon = f.reason === "circuit_open" ? "⚡" : "💰";
           timeline += `  ${icon} ${f.name} (${f.details || f.reason})\n`;
@@ -261,65 +299,80 @@ export function formatProviderTimeline(chain: ProviderChainItem[]): {
 
       // 优先级候选
       if (ctx.candidatesAtPriority && ctx.candidatesAtPriority.length > 0) {
-        timeline += `\n优先级 ${ctx.selectedPriority} 候选 (${ctx.candidatesAtPriority.length}个):\n`;
+        timeline +=
+          "\n" +
+          t("timeline.priorityCandidates", {
+            priority: ctx.selectedPriority,
+            count: ctx.candidatesAtPriority.length,
+          }) +
+          ":\n";
         for (const c of ctx.candidatesAtPriority) {
-          timeline += `  • ${c.name} [权重${c.weight}, 成本${c.costMultiplier}x`;
-          if (c.probability) {
-            timeline += `, ${c.probability}%概率`;
-          }
-          timeline += `]\n`;
+          timeline +=
+            t("timeline.candidateInfo", {
+              name: c.name,
+              weight: c.weight,
+              cost: c.costMultiplier,
+              probability: c.probability || "",
+            }) + "\n";
         }
       }
 
-      timeline += `\n✓ 选择 ${item.name}`;
-      timeline += `\n\n⏳ 等待请求结果...`;
+      timeline += "\n" + t("timeline.selected", { provider: item.name });
+      timeline += "\n\n" + t("timeline.waiting");
       continue;
     }
 
     // === 供应商错误（请求失败） ===
     if (item.reason === "retry_failed") {
-      timeline += `❌ 第 ${actualAttemptNumber} 次请求失败\n\n`;
+      timeline += t("timeline.requestFailed", { attempt: actualAttemptNumber ?? 0 }) + "\n\n";
 
       // ⭐ 使用结构化错误数据
       if (item.errorDetails?.provider) {
         const p = item.errorDetails.provider;
-        timeline += `供应商: ${p.name}\n`;
-        timeline += `状态码: ${p.statusCode}\n`;
-        timeline += `错误: ${p.statusText}\n`;
+        timeline += t("timeline.provider", { provider: p.name }) + "\n";
+        timeline += t("timeline.statusCode", { code: p.statusCode }) + "\n";
+        timeline += t("timeline.error", { error: p.statusText }) + "\n";
 
         // 计算请求耗时
         if (i > 0 && item.timestamp && chain[i - 1]?.timestamp) {
           const duration = item.timestamp - (chain[i - 1]?.timestamp || 0);
-          timeline += `请求耗时: ${duration}ms\n`;
+          timeline += t("timeline.requestDuration", { duration }) + "\n";
         }
 
         // 熔断状态
         if (item.circuitFailureCount !== undefined && item.circuitFailureThreshold) {
-          timeline += `\n熔断状态:\n`;
-          timeline += `• 当前: ${translateCircuitState(item.circuitState)}\n`;
-          timeline += `• 失败计数: ${item.circuitFailureCount}/${item.circuitFailureThreshold}\n`;
+          timeline += "\n" + t("timeline.circuitStatus") + ":\n";
+          timeline +=
+            t("timeline.circuitCurrent", {
+              state: translateCircuitState(item.circuitState, t),
+            }) + "\n";
+          timeline +=
+            t("timeline.failureCount", {
+              current: item.circuitFailureCount,
+              threshold: item.circuitFailureThreshold,
+            }) + "\n";
           const remaining = item.circuitFailureThreshold - item.circuitFailureCount;
           if (remaining > 0) {
-            timeline += `• 距离熔断: 还有${remaining}次\n`;
+            timeline += t("timeline.circuitRemaining", { remaining }) + "\n";
           } else {
-            timeline += `• 状态: 已触发熔断\n`;
+            timeline += t("timeline.circuitTriggered") + "\n";
           }
         }
 
         // 错误详情（格式化 JSON）
         if (p.upstreamParsed) {
-          timeline += `\n错误详情:\n`;
+          timeline += "\n" + t("timeline.errorDetails") + ":\n";
           timeline += JSON.stringify(p.upstreamParsed, null, 2);
         } else if (p.upstreamBody) {
-          timeline += `\n错误详情:\n${p.upstreamBody}`;
+          timeline += "\n" + t("timeline.errorDetails") + ":\n" + p.upstreamBody;
         }
       } else {
         // 降级：使用 errorMessage
-        timeline += `供应商: ${item.name}\n`;
+        timeline += t("timeline.provider", { provider: item.name }) + "\n";
         if (item.statusCode) {
-          timeline += `状态码: ${item.statusCode}\n`;
+          timeline += t("timeline.statusCode", { code: item.statusCode }) + "\n";
         }
-        timeline += `错误: ${item.errorMessage || "未知"}`;
+        timeline += t("timeline.error", { error: item.errorMessage || t("timeline.unknown") });
       }
 
       continue;
@@ -327,38 +380,42 @@ export function formatProviderTimeline(chain: ProviderChainItem[]): {
 
     // === 系统错误 ===
     if (item.reason === "system_error") {
-      timeline += `❌ 第 ${actualAttemptNumber} 次请求失败（系统错误）\n\n`;
+      timeline += t("timeline.systemErrorFailed", { attempt: actualAttemptNumber ?? 0 }) + "\n\n";
 
       // ⭐ 使用结构化错误数据
       if (item.errorDetails?.system) {
         const s = item.errorDetails.system;
-        timeline += `供应商: ${item.name}\n`;
-        timeline += `错误类型: 系统/网络错误\n`;
-        timeline += `错误: ${s.errorName}\n`;
+        timeline += t("timeline.provider", { provider: item.name }) + "\n";
+        timeline += t("timeline.errorType") + "\n";
+        timeline += t("timeline.error", { error: s.errorName }) + "\n";
 
         // 计算请求耗时
         if (i > 0 && item.timestamp && chain[i - 1]?.timestamp) {
           const duration = item.timestamp - (chain[i - 1]?.timestamp || 0);
-          timeline += `请求耗时: ${duration}ms\n`;
+          timeline += t("timeline.requestDuration", { duration }) + "\n";
         }
 
         if (s.errorCode) {
-          timeline += `\n错误详情:\n`;
-          timeline += `• errorCode: ${s.errorCode}\n`;
-          timeline += `• errorSyscall: ${s.errorSyscall || "未知"}\n`;
+          timeline += "\n" + t("timeline.errorDetails") + ":\n";
+          timeline += t("timeline.errorCode", { code: s.errorCode }) + "\n";
+          timeline +=
+            t("timeline.errorSyscall", {
+              syscall: s.errorSyscall || t("timeline.unknown"),
+            }) + "\n";
 
-          const meaning = getErrorCodeMeaning(s.errorCode);
+          const meaning = getErrorCodeMeaning(s.errorCode, t);
           if (meaning) {
-            timeline += `• 含义: ${meaning}\n`;
+            timeline += t("timeline.errorMeaning", { meaning }) + "\n";
           }
         }
 
-        timeline += `\n⚠️ 此错误不计入供应商熔断器`;
+        timeline += "\n" + t("timeline.systemErrorNote");
       } else {
         // 降级
-        timeline += `供应商: ${item.name}\n`;
-        timeline += `错误: ${item.errorMessage || "未知"}\n`;
-        timeline += `\n⚠️ 此错误不计入供应商熔断器`;
+        timeline += t("timeline.provider", { provider: item.name }) + "\n";
+        timeline +=
+          t("timeline.error", { error: item.errorMessage || t("timeline.unknown") }) + "\n";
+        timeline += "\n" + t("timeline.systemErrorNote");
       }
 
       continue;
@@ -374,7 +431,7 @@ export function formatProviderTimeline(chain: ProviderChainItem[]): {
         // 插入重新选择的时间线
         timeline = timeline.substring(0, timeline.lastIndexOf("["));
         timeline += `\n\n[${(prevElapsed + 10).toString().padStart(4, "0")}ms] `;
-        timeline += `🔄 重新选择供应商\n\n`;
+        timeline += t("timeline.reselect") + "\n\n";
 
         const excludedNames =
           ctx.filteredProviders
@@ -382,54 +439,69 @@ export function formatProviderTimeline(chain: ProviderChainItem[]): {
             .map((f) => f.name) || [];
 
         if (excludedNames.length > 0) {
-          timeline += `排除: ${excludedNames.join(", ")}\n`;
+          timeline += t("timeline.excluded", { providers: excludedNames.join(", ") }) + "\n";
         }
 
-        timeline += `剩余候选: ${ctx.afterHealthCheck}个\n`;
-        timeline += `选择: ${item.name}`;
+        timeline += t("timeline.remainingCandidates", { count: ctx.afterHealthCheck }) + "\n";
+        timeline += t("timeline.selected", { provider: item.name });
 
         if (item.priority !== undefined && item.weight !== undefined) {
-          timeline += ` (优先级${item.priority}, 权重${item.weight})`;
+          timeline += t("timeline.withPriorityWeight", {
+            priority: item.priority,
+            weight: item.weight,
+          });
         }
 
-        timeline += `\n\n⏳ 等待请求结果...\n\n`;
+        timeline += "\n\n" + t("timeline.waiting") + "\n\n";
         timeline += `[${elapsed.toString().padStart(4, "0")}ms] `;
       }
     }
 
     // === 请求成功 ===
     if (item.reason === "request_success" || item.reason === "retry_success") {
-      const attemptLabel = actualAttemptNumber === 1 ? "首次" : `第 ${actualAttemptNumber} 次`;
-      timeline += `✅ ${attemptLabel}请求成功\n\n`;
+      const attemptLabel =
+        actualAttemptNumber === 1
+          ? t("timeline.firstAttempt")
+          : t("timeline.nthAttempt", { attempt: actualAttemptNumber ?? 0 });
+      timeline += t("timeline.requestSuccess", { label: attemptLabel }) + "\n\n";
 
-      timeline += `供应商: ${item.name}\n`;
-      timeline += `状态码: ${item.statusCode || 200} (OK)\n`;
+      timeline += t("timeline.provider", { provider: item.name }) + "\n";
+      timeline += t("timeline.successStatus", { code: item.statusCode || 200 }) + "\n";
 
       // 计算请求耗时
       if (i > 0 && item.timestamp && chain[i - 1]?.timestamp) {
         const duration = item.timestamp - (chain[i - 1]?.timestamp || 0);
-        timeline += `请求耗时: ${(duration / 1000).toFixed(2)}s\n`;
+        timeline +=
+          t("timeline.requestDurationSeconds", {
+            duration: (duration / 1000).toFixed(2),
+          }) + "\n";
       }
 
-      timeline += `\n✓ 请求成功完成`;
+      timeline += "\n" + t("timeline.completed");
       continue;
     }
 
     // 并发限制失败
     if (item.reason === "concurrent_limit_failed") {
-      timeline += `❌ 第 ${actualAttemptNumber} 次尝试失败\n\n`;
-      timeline += `供应商: ${item.name}\n`;
+      timeline += t("timeline.attemptFailed", { attempt: actualAttemptNumber ?? 0 }) + "\n\n";
+      timeline += t("timeline.provider", { provider: item.name }) + "\n";
 
       if (ctx?.concurrentLimit) {
-        timeline += `并发限制: ${ctx.currentConcurrent}/${ctx.concurrentLimit} 会话\n`;
+        timeline +=
+          t("timeline.concurrentLimitInfo", {
+            current: ctx.currentConcurrent ?? 0,
+            limit: ctx.concurrentLimit,
+          }) + "\n";
       }
 
-      timeline += `错误: ${item.errorMessage || "并发限制"}`;
+      timeline += t("timeline.error", {
+        error: item.errorMessage || t("timeline.concurrentLimit"),
+      });
       continue;
     }
 
     // 默认
-    timeline += `${item.name} (${item.reason || "未知"})`;
+    timeline += `${item.name} (${item.reason || t("timeline.unknown")})`;
   }
 
   return { timeline, totalDuration };

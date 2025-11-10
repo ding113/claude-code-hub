@@ -1,0 +1,47 @@
+{
+  "common": {
+    "noData": "暫無資料",
+    "actions": "操作",
+    "loading": "載入中...",
+    "empty": "為空",
+    "error": "錯誤"
+  },
+  "table": {
+    "pagination": "分頁",
+    "sorting": "排序",
+    "filtering": "篩選",
+    "search": "搜尋",
+    "refresh": "重新整理",
+    "columns": "欄位",
+    "previousPage": "上一頁",
+    "nextPage": "下一頁",
+    "pageInfo": "第 {current} 頁，共 {total} 頁",
+    "itemsPerPage": "每頁筆數",
+    "selectAll": "全選",
+    "deselectAll": "取消全選"
+  },
+  "errorBoundary": {
+    "title": "發生錯誤",
+    "defaultDescription": "遇到了一個意外錯誤，請重試。",
+    "refreshPage": "重新整理頁面",
+    "listErrorTitle": "載入清單失敗",
+    "listErrorDescription": "載入清單時出錯，請重試。"
+  },
+  "pagination": {
+    "first": "首頁",
+    "last": "末頁",
+    "previous": "上一頁",
+    "next": "下一頁",
+    "goToPage": "跳轉至頁",
+    "pageSize": "每頁數量",
+    "total": "共 {total} 項"
+  },
+  "empty": {
+    "title": "暫無資料",
+    "description": "沒有資料可顯示"
+  },
+  "loading": {
+    "title": "載入中",
+    "description": "請稍候..."
+  }
+}

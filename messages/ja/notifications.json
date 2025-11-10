@@ -1,0 +1,29 @@
+{
+  "_comment": "Toast notification messages for Japanese",
+
+  "save_success": "保存しました",
+  "create_success": "作成しました",
+  "update_success": "更新しました",
+  "delete_success": "削除しました",
+  "copy_success": "コピーしました",
+  "sync_success": "同期しました",
+  "export_success": "エクスポートしました",
+  "import_success": "インポートしました",
+  "refresh_success": "更新しました",
+  "test_success": "テスト成功",
+
+  "user_created": "ユーザー {name} を作成しました",
+  "user_updated": "ユーザー情報を更新しました",
+  "user_deleted": "ユーザーを削除しました",
+  "key_created": "APIキーを作成しました",
+  "key_updated": "APIキーを更新しました",
+  "key_deleted": "APIキーを削除しました",
+  "provider_created": "プロバイダーを作成しました",
+  "provider_updated": "プロバイダーを更新しました",
+  "provider_deleted": "プロバイダーを削除しました",
+
+  "operation_success": "操作が成功しました",
+  "operation_failed": "操作に失敗しました",
+  "processing": "処理中...",
+  "please_wait": "お待ちください..."
+}

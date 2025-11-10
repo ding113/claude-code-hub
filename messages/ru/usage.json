@@ -1,0 +1,471 @@
+{
+  "pageTitle": "Документация по использованию Claude Code Hub",
+  "pageDescription": "Полное руководство по интеграции Claude Code, Codex и Droid CLI",
+
+  "skipLinks": {
+    "mainContent": "Перейти к основному содержанию",
+    "tableOfContents": "Перейти к оглавлению"
+  },
+
+  "navigation": {
+    "tableOfContents": "На этой странице",
+    "tableOfContentsEmpty": "На этой странице нет доступных разделов",
+    "quickLinks": "Быстрые ссылки",
+    "backToDashboard": "Вернуться на панель управления",
+    "backToTop": "В начало",
+    "documentNavigation": "Навигация по документам",
+    "openTableOfContents": "Открыть оглавление",
+    "pageNavigation": "Навигация по странице"
+  },
+
+  "codeExamples": {
+    "label": "Пример кода - ${language}",
+    "description": "Нажмите на блок кода для копирования в буфер обмена"
+  },
+
+  "claudeCode": {
+    "title": "Руководство по использованию Claude Code",
+    "description": "Claude Code - это официальный помощник по программированию на основе ИИ от Anthropic, поддерживающий интеграцию через прокси-сервис cch. Это руководство поможет вам завершить установку и настройку на различных операционных системах.",
+
+    "environmentSetup": {
+      "title": "Подготовка окружения: установка Node.js",
+      "description": "claude требует среды выполнения Node.js (версия v18 или выше).",
+
+      "macos": {
+        "homebrew": "Способ 1: использование Homebrew (рекомендуется)",
+        "official": "Способ 2: загрузка с официального сайта",
+        "officialSteps": [
+          "Посетите https://nodejs.org/",
+          "Загрузите версию LTS для macOS (требуется v18 или выше)",
+          "Откройте загруженный файл .pkg и следуйте инструкциям мастера установки"
+        ]
+      },
+
+      "windows": {
+        "official": "Способ 1: загрузка с официального сайта (рекомендуется)",
+        "officialSteps": [
+          "Посетите https://nodejs.org/",
+          "Загрузите версию LTS (требуется v18 или выше)",
+          "Дважды щелкните файл .msi и следуйте инструкциям мастера установки (сохраните параметры по умолчанию)"
+        ],
+        "packageManager": "Способ 2: использование диспетчера пакетов",
+        "note": "Рекомендуется использовать PowerShell вместо CMD для лучшего опыта"
+      },
+
+      "linux": {
+        "official": "Способ 1: использование официального репозитория (рекомендуется)",
+        "packageManager": "Способ 2: использование диспетчера пакетов системы"
+      },
+
+      "verification": {
+        "title": "Проверка установки Node.js",
+        "description": "После установки откройте терминал/командную строку и выполните следующие команды для проверки:",
+        "success": "Если отображаются номера версий, установка выполнена успешно!",
+        "command1": "node --version",
+        "command2": "npm --version"
+      }
+    },
+
+    "installation": {
+      "title": "Установка claude",
+
+      "nativeInstall": {
+        "title": "Native Install (рекомендуется)",
+        "description": "Официально рекомендуемый метод установки со следующими преимуществами:",
+        "advantages": [
+          "Один исполняемый файл без зависимости Node.js",
+          "Более стабильный механизм автоматического обновления",
+          "Более быстрая скорость запуска"
+        ],
+
+        "macos": {
+          "homebrew": "Способ 1: Homebrew (рекомендуется)",
+          "autoUpdate": "Информация об автоматическом обновлении",
+          "autoUpdateText": "Claude Code, установленный через Homebrew, будет автоматически обновляться вне директории brew, если явно не отключить с помощью переменной окружения DISABLE_AUTOUPDATER.",
+          "curl": "Способ 2: скрипт curl",
+          "curls": [
+            "# Установка стабильной версии (по умолчанию)",
+            "curl -fsSL https://claude.ai/install.sh | bash",
+            "",
+            "# Установка последней версии",
+            "curl -fsSL https://claude.ai/install.sh | bash -s latest",
+            "",
+            "# Установка конкретной версии",
+            "curl -fsSL https://claude.ai/install.sh | bash -s 1.0.58"
+          ]
+        },
+
+        "linux": {
+          "curl": "Установка со скриптом curl",
+          "curls": [
+            "# Установка стабильной версии (по умолчанию)",
+            "curl -fsSL https://claude.ai/install.sh | bash",
+            "",
+            "# Установка последней версии",
+            "curl -fsSL https://claude.ai/install.sh | bash -s latest",
+            "",
+            "# Установка конкретной версии",
+            "curl -fsSL https://claude.ai/install.sh | bash -s 1.0.58"
+          ],
+          "alpine": "Особые примечания для Alpine Linux",
+          "alpineText": "Дистрибутивы на основе musl/uClibc (например Alpine Linux) требуют установки дополнительных зависимостей:",
+          "alpineCode": ["apk add libgcc libstdc++ ripgrep", "export USE_BUILTIN_RIPGREP=0"]
+        },
+
+        "windows": {
+          "powershell": "Способ 1: PowerShell",
+          "powershells": [
+            "# Установка стабильной версии (по умолчанию)",
+            "irm https://claude.ai/install.ps1 | iex",
+            "",
+            "# Установка последней версии",
+            "& ([scriptblock]::Create((irm https://claude.ai/install.ps1))) latest",
+            "",
+            "# Установка конкретной версии",
+            "& ([scriptblock]::Create((irm https://claude.ai/install.ps1))) 1.0.58"
+          ],
+          "cmd": "Способ 2: CMD",
+          "cmds": [
+            "REM Установка стабильной версии (по умолчанию)",
+            "curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd && del install.cmd",
+            "",
+            "REM Установка последней версии",
+            "curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd latest && del install.cmd",
+            "",
+            "REM Установка конкретной версии",
+            "curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd 1.0.58 && del install.cmd"
+          ]
+        },
+
+        "verification": {
+          "title": "Проверка установки",
+          "description": "После установки выполните следующую команду для проверки:",
+          "success": "Если отображается номер версии, поздравляем! Claude Code успешно установлен.",
+          "command": "claude --version"
+        },
+
+        "tip": "Совет",
+        "tipText": "Перед установкой убедитесь в удалении устаревших псевдонимов или символических ссылок. Используйте команду claude doctor для проверки типа установки и версии."
+      },
+
+      "npmInstall": {
+        "title": "NPM",
+        "description": "Использование установки NPM требует сначала установить Node.js 18 или выше. Подходит для разработчиков, которые предпочитают использовать диспетчер пакетов NPM.",
+        "command": "npm install -g @anthropic-ai/claude-code",
+
+        "warning": "Предупреждение",
+        "warningText": "НЕ используйте sudo npm install -g, так как это может вызвать проблемы с разрешениями и угрозы безопасности. Если вы столкнулись с ошибками разрешений, обратитесь к официальному решению NPM.",
+
+        "verification": {
+          "title": "Проверка установки",
+          "description": "Проверка установки",
+          "success": "Если отображается номер версии, поздравляем! Claude Code успешно установлен."
+        },
+
+        "migration": {
+          "title": "Переход на Native Install",
+          "description": "Если вы уже установили глобально через NPM, вы можете использовать следующую команду для миграции на установку Native:",
+          "command": "claude install",
+          "note": "Некоторые пользователи могут быть автоматически перенесены на этот метод установки."
+        }
+      }
+    },
+
+    "configuration": {
+      "title": "Подключение к сервису cch",
+
+      "settingsJson": {
+        "title": "Способ 1: конфигурация settings.json (рекомендуется)",
+        "description": "Путь к файлу конфигурации:",
+
+        "pathNote": "Пояснение пути",
+        "paths": [
+          "Windows: C:/Users/your-username/.claude",
+          "Linux или macOS: ~/.claude",
+          "Если файл settings.json не существует, создайте его"
+        ],
+
+        "instruction": "Отредактируйте файл settings.json и добавьте следующее содержимое:",
+
+        "important": "Важное примечание",
+        "importantPoints": [
+          "Замените your-api-key-here на ваш фактический ключ API",
+          "Как получить ключ: войдите в консоль → управление ключами API → создать ключ"
+        ]
+      },
+
+      "envVars": {
+        "title": "Способ 2: конфигурация переменных окружения",
+
+        "windows": {
+          "temporary": "Временная настройка (текущий сеанс):",
+          "permanent": "Постоянная настройка (уровень пользователя):",
+          "note": "Вам необходимо переоткрыть окно PowerShell, чтобы параметры вступили в силу."
+        },
+
+        "unix": {
+          "temporary": "Временная настройка (текущий сеанс):",
+          "permanent": "Постоянная настройка:",
+          "permanentNote": "Добавьте в файл конфигурации оболочки (${shellConfig}):"
+        }
+      },
+
+      "verification": {
+        "title": "Проверка конфигурации",
+        "description": "После конфигурации проверьте правильность установки переменных окружения:",
+
+        "windowsPowerShell": "Выполните в PowerShell:",
+        "windowsCmd": "Выполните в CMD:",
+
+        "expectedOutput": "Пример ожидаемого вывода:",
+
+        "note": "Примечание",
+        "noteText": "Если вывод пуст или показывает имя переменной, это означает, что установка переменной окружения не удалась. Повторите указанные выше действия."
+      }
+    },
+
+    "vsCodeExtension": {
+      "title": "Конфигурация расширения VS Code",
+      "steps": [
+        "Найдите и установите Claude Code for VS Code в расширениях VS Code",
+        "Создайте файл config.json в директории ~/.claude (если его нет)",
+        "Добавьте следующее содержимое:"
+      ],
+
+      "note": "Примечание",
+      "notePoints": [
+        "Это config.json, а не settings.json",
+        "Значение поля primaryApiKey может быть любым, если оно существует"
+      ]
+    },
+
+    "startup": {
+      "title": "Запуск claude",
+      "description": "Выполните следующую команду в директории вашего проекта:",
+      "initNote": "При первом запуске claude выполнит первоначальную конфигурацию."
+    },
+
+    "commonIssues": {
+      "title": "Часто задаваемые вопросы",
+
+      "commandNotFound": "1. Команда не найдена",
+      "commandNotFoundWindows": [
+        "Убедитесь, что глобальный путь npm (обычно C:\\Users\\your-username\\AppData\\Roaming\\npm) добавлен в PATH системы",
+        "Переоткройте окно PowerShell"
+      ],
+      "commandNotFoundUnix": "Проверьте глобальный путь установки npm и добавьте его в PATH (если его там нет)",
+
+      "connectionFailed": "2. Сбой подключения API",
+      "updateCli": "3. Обновление claude",
+      "updateNote": "Повторно запустите скрипт установки для обновления до последней версии."
+    }
+  },
+
+  "codex": {
+    "title": "Руководство по использованию Codex CLI",
+    "description": "Codex - это официальный помощник программирования на основе ИИ OpenAI, поддерживающий интеграцию через прокси cch. Примечание: Codex использует формат, совместимый с OpenAI, конечная точка должна включать путь /v1.",
+
+    "installation": {
+      "title": "Установка codex",
+      "instruction": "Выполните:",
+      "adminNote": "Запустите PowerShell с правами администратора,",
+      "verification": "Проверка установки:",
+      "command": "codex --version"
+    },
+
+    "configuration": {
+      "title": "Подключение к сервису cch",
+
+      "configFile": {
+        "title": "Способ 1: метод конфигурационного файла (рекомендуется)",
+        "steps": [
+          "Откройте проводник файлов, найдите папку ${configPath} (создайте, если она не существует)",
+          "Создайте файл config.toml",
+          "Откройте текстовым редактором и добавьте следующее содержимое:"
+        ],
+
+        "step4": "Создайте файл auth.json и добавьте:",
+
+        "important": "Важное примечание",
+        "importantPoints": [
+          "Замените your-api-key-here на ваш ключ API cch",
+          "Примечание: Codex использует формат, совместимый с OpenAI, конечная точка включает путь /v1"
+        ]
+      },
+
+      "envVars": {
+        "title": "Способ 2: конфигурация переменных окружения",
+
+        "windows": {
+          "instruction": "Выполните в PowerShell:",
+          "note": "Вам необходимо переоткрыть окно PowerShell, чтобы параметры вступили в силу."
+        },
+
+        "unix": {
+          "instruction": "Установите переменные окружения:"
+        }
+      }
+    },
+
+    "vsCodeExtension": {
+      "title": "Конфигурация расширения VS Code",
+      "steps": [
+        "Найдите и установите Codex – OpenAI's coding agent в расширениях VS Code",
+        "Убедитесь, что вы настроили config.toml и auth.json в соответствии с указанными выше шагами",
+        "Установите переменную окружения CCH_API_KEY"
+      ],
+
+      "important": "Важно",
+      "importantText": "env_key может быть только названием переменной окружения (например CCH_API_KEY), а не полным ключом. Если вы прямо укажете ключ, это приведет к ошибке токена."
+    },
+
+    "startup": {
+      "title": "Запуск codex",
+      "description": "Выполните следующую команду в директории вашего проекта:",
+      "initNote": "При первом запуске codex выполнит первоначальную конфигурацию."
+    },
+
+    "commonIssues": {
+      "title": "Часто задаваемые вопросы",
+
+      "commandNotFound": "1. Команда не найдена",
+      "commandNotFoundWindows": [
+        "Убедитесь, что глобальный путь npm (обычно C:\\Users\\your-username\\AppData\\Roaming\\npm) добавлен в PATH системы",
+        "Переоткройте окно PowerShell"
+      ],
+      "commandNotFoundUnix": "Проверьте глобальный путь установки npm и добавьте его в PATH (если его там нет)",
+
+      "connectionFailed": "2. Сбой подключения API",
+      "updateCli": "3. Обновление codex",
+      "updateCommand": "npm i -g @openai/codex --registry=https://registry.npmmirror.com"
+    }
+  },
+
+  "droid": {
+    "title": "Руководство по использованию Droid CLI",
+    "description": "Droid - это интерактивный помощник программирования на основе ИИ, разработанный Factory AI, поддерживающий интеграцию через прокси-сервис cch. Перед использованием вы должны зарегистрировать и войти в свой официальный аккаунт Droid.",
+
+    "installation": {
+      "title": "Установка droid",
+
+      "linux": {
+        "instruction": "Выполните:",
+        "note": "Пользователи Linux должны убедиться, что установлен xdg-utils:",
+        "command": "sudo apt-get install xdg-utils"
+      },
+
+      "windows": {
+        "instruction": "Выполните в PowerShell:"
+      }
+    },
+
+    "configuration": {
+      "title": "Подключение к сервису cch",
+
+      "prerequisite": "Предварительное условие: сначала необходимо войти в официальный аккаунт Droid",
+      "prerequisiteSteps": [
+        "Выполните команду droid",
+        "Следуйте подсказкам для входа в официальный аккаунт Factory через браузер",
+        "После успешного входа вы можете продолжить конфигурацию пользовательских моделей"
+      ],
+
+      "customModels": {
+        "title": "Конфигурация пользовательских моделей",
+        "path": "Путь к файлу конфигурации:",
+        "instruction": "Отредактируйте файл конфигурации и добавьте следующее содержимое:",
+
+        "important": "Важные примечания",
+        "importantPoints": [
+          "Замените your-api-key-here на ваш ключ API cch",
+          "Формат Anthropic: используйте ${resolvedOrigin} (без /v1)",
+          "Формат OpenAI: используйте ${resolvedOrigin}/v1 (требуется /v1)"
+        ]
+      },
+
+      "switching": {
+        "title": "Переключение моделей",
+        "steps": [
+          "Перезагрузите Droid",
+          "Введите команду /model",
+          "Выберите GPT-5-Codex [cch] или Sonnet 4.5 [cch]",
+          "Начните использовать!"
+        ]
+      }
+    },
+
+    "startup": {
+      "title": "Запуск droid",
+      "description": "Выполните следующую команду в каталоге вашего проекта:",
+      "initNote": "При первом запуске droid выполнит первоначальную настройку."
+    },
+
+    "commonIssues": {
+      "title": "Часто задаваемые вопросы",
+      "commandNotFound": "1. Команда не найдена",
+      "commandNotFoundWindows": [
+        "Убедитесь, что глобальный путь npm (обычно C:\\Users\\your-username\\AppData\\Roaming\\npm) добавлен в системный PATH",
+        "Перезапустите окно PowerShell"
+      ],
+      "commandNotFoundUnix": "Проверьте глобальный путь установки npm и добавьте его в PATH (если еще не добавлен)",
+      "updateCli": "2. Обновление droid"
+    }
+  },
+
+  "commonCommands": {
+    "title": "Часто используемые команды",
+    "description": "После запуска Claude Code вы можете использовать следующие часто используемые команды:",
+
+    "commands": [
+      { "command": "/help", "description": "Просмотр справочной информации" },
+      { "command": "/clear", "description": "Очистить историю чата и начать новый разговор" },
+      { "command": "/compact", "description": "Суммировать текущий разговор" },
+      { "command": "/cost", "description": "Просмотреть сумму расходов в текущем разговоре" },
+      { "command": "/model", "description": "Переключение моделей (только для Droid)" }
+    ],
+
+    "moreCommands": "Для получения дополнительных команд см. официальную документацию"
+  },
+
+  "troubleshooting": {
+    "title": "Общее устранение неполадок",
+
+    "installationFailed": {
+      "title": "Ошибка установки",
+      "steps": [
+        "Проверьте нормальность подключения к сети",
+        "Убедитесь, что у вас есть права администратора (Windows) или используйте sudo (macOS / Linux)",
+        "Попробуйте использовать прокси или зеркало источника (npm может использовать параметр --registry)"
+      ]
+    },
+
+    "invalidApiKey": {
+      "title": "Ключ API недействителен",
+      "steps": [
+        "Убедитесь, что ключ скопирован правильно (без лишних пробелов)",
+        "Проверьте, находится ли ключ в периоде действия",
+        "Убедитесь, что разрешения учетной записи в порядке",
+        "Убедитесь, что используется правильный формат конечной точки (Anthropic без /v1, OpenAI с /v1)"
+      ]
+    },
+
+    "endpointConfigError": {
+      "title": "Ошибка конфигурации конечной точки",
+      "points": [
+        "Claude Code / Droid модель Anthropic: используйте ${resolvedOrigin} (без /v1)",
+        "Codex / Droid модель OpenAI: используйте ${resolvedOrigin}/v1 (должна включать /v1)"
+      ]
+    }
+  },
+
+  "platforms": {
+    "macos": "macOS",
+    "windows": "Windows",
+    "linux": "Linux"
+  },
+
+  "ui": {
+    "mainContent": "Содержимое документации",
+    "main": "main",
+    "currentSiteAddress": "Текущий адрес сайта"
+  }
+}

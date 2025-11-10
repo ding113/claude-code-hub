@@ -1,0 +1,583 @@
+{
+  "title": {
+    "costRanking": "消耗排行榜",
+    "costRankingDescription": "查看用戶消耗排名，資料每 5 分鐘更新一次",
+    "usageLogs": "使用記錄",
+    "clients": "用戶端",
+    "userAndKeyManagement": "用戶和密鑰管理",
+    "requestMessages": "請求 Messages",
+    "activeSessions": "活躍 Session（最近 5 分鐘）",
+    "sessionMonitoring": "Session 監控",
+    "sessionMonitoringDescription": "即時顯示活躍和非活躍 Session（每 3 秒自動重新整理）",
+    "inactiveSessions": "非活躍 Session（超過 5 分鐘，僅供查看）",
+    "quotasManagement": "額度管理",
+    "quotasManagementDescription": "查看和管理所有層級的額度使用情況",
+    "usersQuotas": "用戶額度統計",
+    "keysQuotas": "密鑰額度統計",
+    "providersQuotas": "供應商額度統計",
+    "usageLogsDescription": "查看 API 調用日誌和使用統計",
+    "filterCriteria": "篩選條件"
+  },
+  "description": {
+    "viewApiCallLogs": "查看 API 呼叫日誌和使用統計",
+    "dashboard": "查看系統統計資料和監控資訊",
+    "quotas": "查看和管理所有層級的額度使用情況",
+    "clientInfo": "User-Agent 請求頭",
+    "requestMessagesDescription": "用戶端傳送的訊息內容",
+    "responseBodyDescription": "伺服器傳回的完整回應（5分鐘 TTL）"
+  },
+  "overview": {
+    "title": "概覽",
+    "totalRequests": "總請求數",
+    "totalCost": "總成本",
+    "totalUsers": "總用戶數",
+    "totalProviders": "總供應商數",
+    "activeUsers": "活躍用戶",
+    "activeSessions": "活躍工作階段",
+    "errorRate": "錯誤率",
+    "avgResponseTime": "平均回應時間"
+  },
+  "stats": {
+    "title": "統計",
+    "requests": "請求",
+    "cost": "成本",
+    "tokens": "Tokens",
+    "period": {
+      "hour": "最近1小時",
+      "day": "今天",
+      "week": "本週",
+      "month": "本月"
+    }
+  },
+  "logs": {
+    "title": "使用日誌",
+    "description": "查看和分析 API 呼叫記錄",
+    "filters": {
+      "user": "使用者",
+      "provider": "供應商",
+      "model": "模型",
+      "status": "狀態",
+      "timeRange": "時間範圍",
+      "startTime": "開始時間",
+      "endTime": "結束時間",
+      "allUsers": "所有使用者",
+      "allKeys": "所有金鑰",
+      "selectUserFirst": "請先選擇使用者",
+      "allProviders": "所有供應商",
+      "allModels": "所有模型",
+      "allStatusCodes": "所有狀態碼",
+      "apiKey": "API 金鑰",
+      "statusCode": "狀態碼",
+      "apply": "套用篩選",
+      "reset": "重設"
+    },
+    "columns": {
+      "time": "時間",
+      "user": "使用者",
+      "key": "金鑰",
+      "provider": "供應商",
+      "model": "模型",
+      "inputTokens": "輸入",
+      "outputTokens": "輸出",
+      "cacheWrite": "快取寫入",
+      "cacheRead": "快取讀取",
+      "cost": "成本",
+      "duration": "耗時",
+      "status": "狀態"
+    },
+    "stats": {
+      "totalAmount": "總消耗金額",
+      "totalTokens": "總 Token 數",
+      "cacheTokens": "快取 Token",
+      "input": "輸入",
+      "output": "輸出",
+      "write": "寫入",
+      "read": "讀取",
+      "totalRequests": "總請求數",
+      "loading": "加載中..."
+    },
+    "table": {
+      "noData": "暫無資料",
+      "pagination": "共 {total} 筆記錄，第 {page} / {totalPages} 頁",
+      "prevPage": "上一頁",
+      "nextPage": "下一頁",
+      "blocked": "已攔截",
+      "times": "次"
+    },
+    "actions": {
+      "refresh": "重新整理",
+      "refreshing": "重新整理中...",
+      "stopAutoRefresh": "停止自動重新整理",
+      "startAutoRefresh": "啟用自動重新整理",
+      "view": "檢視"
+    },
+    "error": {
+      "loadFailed": "載入失敗"
+    },
+    "details": {
+      "title": "請求詳情",
+      "statusTitle": "請求詳情 - 狀態碼 {status}",
+      "inProgress": "請求中",
+      "unknown": "未知",
+      "success": "請求成功完成",
+      "error": "請求失敗，以下是詳細的錯誤訊息和供應商決策鏈",
+      "processing": "請求正在進行中，尚未完成",
+      "blocked": {
+        "title": "攔截資訊",
+        "type": "攔截類型",
+        "sensitiveWord": "敏感詞攔截",
+        "word": "敏感詞",
+        "matchType": "匹配類型",
+        "matchTypeContains": "包含匹配",
+        "matchTypeExact": "精確匹配",
+        "matchTypeRegex": "正規表達式",
+        "matchedText": "匹配內容"
+      },
+      "sessionId": "會話 ID",
+      "messagesCount": "訊息數量",
+      "messagesLabel": "訊息",
+      "messagesUnit": "則",
+      "clientInfo": "用戶端資訊",
+      "modelRedirect": {
+        "title": "模型重新導向",
+        "requestModel": "請求模型",
+        "actualModel": "實際呼叫",
+        "billing": "計費說明",
+        "billingDescription": "系統優先使用請求模型（{original}）的價格計費。如果價格表中不存在該模型，則使用實際呼叫模型（{current}）的價格。"
+      },
+      "errorMessage": "錯誤訊息",
+      "providerChain": {
+        "title": "供應商決策鏈時間軸",
+        "totalDuration": "總耗時: {duration} 毫秒"
+      },
+      "noError": {
+        "processing": "請求正在處理中，等待回應...",
+        "success": "請求成功，無錯誤訊息",
+        "default": "暫無詳細錯誤訊息"
+      },
+      "clickStatusCode": "點擊狀態碼查看完整時間軸",
+      "viewDetails": "查看詳情"
+    },
+    "providerChain": {
+      "decisionChain": "供應商決策鏈"
+    },
+    "modelRedirect": {
+      "redirected": "已重新導向",
+      "targetModel": "目標模型"
+    },
+    "statusCodes": {
+      "200": "200 (成功)",
+      "400": "400 (錯誤請求)",
+      "401": "401 (未授權)",
+      "429": "429 (限流)",
+      "500": "500 (服務器錯誤)"
+    }
+  },
+  "leaderboard": {
+    "title": "成本排行榜",
+    "description": "查看用戶和密鑰的成本統計排名",
+    "tabs": {
+      "users": "使用者排名",
+      "keys": "密鑰排名",
+      "userRanking": "使用者排名",
+      "providerRanking": "供應商排名",
+      "dailyRanking": "今日排名",
+      "monthlyRanking": "本月排名"
+    },
+    "columns": {
+      "rank": "排名",
+      "name": "名稱",
+      "totalCost": "總成本",
+      "totalRequests": "總請求數",
+      "avgCost": "平均成本",
+      "lastActive": "最後活躍時間",
+      "user": "使用者",
+      "requests": "請求數",
+      "tokens": "Token 數",
+      "consumedAmount": "消耗金額",
+      "provider": "供應商",
+      "cost": "成本",
+      "successRate": "成功率",
+      "avgResponseTime": "平均回應時間"
+    },
+    "states": {
+      "loading": "載入中...",
+      "noData": "暫無資料",
+      "todayNoData": "今日暫無資料",
+      "monthNoData": "本月暫無資料",
+      "fetchFailed": "取得排行榜資料失敗"
+    },
+    "permission": {
+      "title": "需要權限",
+      "restricted": "存取受限",
+      "description": "排行榜功能需要管理員開啟「允許查看全站使用量」權限。",
+      "adminAction": "開啟此權限。",
+      "userAction": "請聯繫管理員開啟此權限。",
+      "systemSettings": "系統設定"
+    }
+  },
+  "sessions": {
+    "title": "活躍工作階段",
+    "description": "即時監控目前活躍的 API 工作階段",
+    "monitoring": "會話監控",
+    "monitoringDescription": "即時顯示活躍和非活躍會話（每 3 秒自動重新整理）",
+    "activeSessions": "活躍會話（最近 5 分鐘）",
+    "inactiveSessions": "非活躍會話（超過 5 分鐘，僅供查看）",
+    "columns": {
+      "sessionId": "會話 ID",
+      "user": "使用者",
+      "key": "金鑰",
+      "provider": "供應商",
+      "model": "模型",
+      "startTime": "開始時間",
+      "lastActivity": "最後活動",
+      "requestCount": "請求數",
+      "totalInput": "總輸入",
+      "totalOutput": "總輸出",
+      "totalCost": "總成本",
+      "totalDuration": "總耗時",
+      "status": "狀態",
+      "actions": "操作"
+    },
+    "table": {
+      "count": "共 {count} 個{type} 會話",
+      "active": "活躍",
+      "inactive": "非活躍",
+      "notCountedInConcurrency": "(不計入並發數)",
+      "refreshing": "重新整理中...",
+      "noActiveSessions": "暫無活躍 Session"
+    },
+    "details": {
+      "title": "會話訊息",
+      "messages": "訊息列表",
+      "info": "會話資訊",
+      "timeline": "時間線",
+      "overview": "Session 概覽",
+      "overviewDescription": "彙總統計資訊",
+      "providersAndModels": "供應商與模型",
+      "providersAndModelsDescription": "使用的提供商和模型",
+      "tokenUsage": "Token 使用（總量）",
+      "tokenUsageDescription": "所有請求的累計統計",
+      "costInfo": "成本資訊（總計）",
+      "costInfoDescription": "所有請求的累計費用",
+      "totalRequests": "總請求數",
+      "firstRequest": "首次請求",
+      "lastRequest": "最後請求",
+      "totalDuration": "總耗時",
+      "totalInput": "總輸入",
+      "totalOutput": "總輸出",
+      "cacheCreation": "快取建立",
+      "cacheRead": "快取讀取",
+      "total": "總計",
+      "totalFee": "總費用",
+      "providers": "供應商",
+      "models": "模型",
+      "noDetailedData": "暫無詳細資料",
+      "storageTip": "提示：請設定環境變數 STORE_SESSION_MESSAGES=true 以啟用 messages 和 response 儲存",
+      "clientInfo": "用戶端資訊",
+      "requestMessages": "請求訊息",
+      "requestMessagesDescription": "用戶端傳送的訊息內容",
+      "responseBody": "回應主體內容",
+      "responseBodyDescription": "伺服器傳回的完整回應（5分鐘 TTL）",
+      "noData": "暫無資料"
+    },
+    "actions": {
+      "back": "返回",
+      "view": "檢視",
+      "copyMessages": "複製 Messages",
+      "downloadMessages": "下載 Messages",
+      "copied": "已複製",
+      "copyResponse": "複製回應主體"
+    },
+    "status": {
+      "loading": "載入中...",
+      "loadError": "載入失敗",
+      "fetchFailed": "取得失敗",
+      "unknownError": "未知錯誤",
+      "storageNotEnabled": "未儲存",
+      "storageNotEnabledHint": "提示：請設定環境變數 STORE_SESSION_MESSAGES=true 以啟用訊息儲存"
+    },
+    "errors": {
+      "copyFailed": "複製失敗"
+    },
+    "back": "返回",
+    "loadingError": "載入失敗"
+  },
+  "quotas": {
+    "title": "額度管理",
+    "description": "管理使用者、金鑰和供應商的使用額度",
+    "tabs": {
+      "overview": "概覽",
+      "users": "用戶額度",
+      "keys": "密鑰額度",
+      "providers": "供應商額度"
+    },
+    "columns": {
+      "name": "名稱",
+      "limit": "額度",
+      "used": "已用",
+      "remaining": "剩餘",
+      "resetTime": "重設時間",
+      "status": "狀態"
+    },
+    "labels": {
+      "byName": "按名稱",
+      "byUsageRate": "按使用率",
+      "all": "全部",
+      "warning": "接近額度 (>60%)",
+      "exceeded": "已超額 (≥100%)"
+    },
+    "users": {
+      "title": "用戶額度統計",
+      "totalUsers": "共 {count} 個用戶"
+    },
+    "keys": {
+      "title": "密鑰額度統計",
+      "totalKeysInfo": "共 {userCount} 個使用者，{keyCount} 個金鑰",
+      "setKeyQuota": "設定金鑰額度",
+      "setUserQuota": "設定使用者額度",
+      "onlyKeyQuota": "僅金鑰額度",
+      "onlyUserQuota": "僅使用者額度",
+      "success": "使用者額度設定成功"
+    },
+    "providers": {
+      "title": "供應商額度統計",
+      "totalProviders": "共 {count} 個供應商"
+    }
+  },
+  "labels": {
+    "byName": "按名稱",
+    "byUsageRate": "按使用率"
+  },
+  "all": "全部",
+  "nav": {
+    "dashboard": "儀表板",
+    "usageLogs": "使用記錄",
+    "leaderboard": "排行榜",
+    "quotasManagement": "額度管理",
+    "documentation": "文件",
+    "systemSettings": "系統設定",
+    "feedback": "意見回饋",
+    "login": "登入",
+    "logout": "登出"
+  },
+  "statistics": {
+    "title": "使用統計",
+    "cost": "消費金額",
+    "calls": "API 呼叫次數",
+    "totalCost": "總消費金額",
+    "totalCalls": "總 API 呼叫次數",
+    "timeRange": {
+      "today": "今天",
+      "todayDescription": "今天的使用情況",
+      "7days": "過去 7 天",
+      "7daysDescription": "過去 7 天的使用情況",
+      "30days": "過去 30 天",
+      "30daysDescription": "過去 30 天的使用情況",
+      "default": "使用情況"
+    },
+    "mode": {
+      "keys": "僅顯示您名下各金鑰的使用統計",
+      "mixed": "展示您的金鑰明細和其他使用者彙總",
+      "users": "展示所有使用者使用統計"
+    },
+    "legend": {
+      "selectAll": "全選",
+      "deselectAll": "清空",
+      "selected": "已選"
+    },
+    "states": {
+      "noData": "暫無統計資料",
+      "fetchFailed": "取得統計資料失敗"
+    }
+  },
+  "errors": {
+    "fetchSystemSettingsFailed": "取得系統設定失敗",
+    "fetchFailed": "取得失敗",
+    "fetchSessionListFailed": "取得 session 清單失敗"
+  },
+  "keyList": {
+    "columns": {
+      "name": "名稱",
+      "key": "金鑰",
+      "todayCalls": "今日呼叫",
+      "todayCost": "今日消耗",
+      "lastUsed": "最後使用",
+      "actions": "操作"
+    },
+    "detailsButton": "詳細資訊",
+    "modelStats": "模型統計",
+    "modelStatsColumns": {
+      "model": "模型",
+      "calls": "呼叫次數",
+      "cost": "消耗"
+    },
+    "limitUsage": "額度使用情況",
+    "copyKeyTooltip": "複製完整金鑰",
+    "copyFailed": "複製失敗:",
+    "timesUnit": "次",
+    "provider": "供應商",
+    "neverUsed": "未使用",
+    "viewLogsTooltip": "查看詳細記錄",
+    "logsButton": "記錄",
+    "emptyState": {
+      "title": "暫無金鑰",
+      "description": "可點選右上角「新增金鑰」按鈕新增金鑰"
+    }
+  },
+  "userList": {
+    "badge": "{count} 個金鑰",
+    "activeKeys": "活躍金鑰",
+    "totalKeys": "總金鑰數",
+    "emptyState": {
+      "title": "暫無使用者",
+      "description": "點選下方按鈕建立第一個使用者"
+    },
+    "addUser": "新增使用者"
+  },
+  "keyListHeader": {
+    "todayUsage": "今日用量",
+    "proxyStatus": {
+      "loading": "代理狀態載入中",
+      "fetchFailed": "代理狀態取得失敗",
+      "noStatus": "暫無代理狀態",
+      "activeRequests": "活躍請求",
+      "lastRequest": "最近請求",
+      "noRecord": "暫無記錄",
+      "timeAgo": {
+        "justNow": "剛剛",
+        "secondsAgo": "{count}秒前",
+        "minutesAgo": "{count}分鐘前",
+        "hoursAgo": "{count}小時前",
+        "daysAgo": "{count}天前"
+      }
+    },
+    "addKey": "新增金鑰",
+    "keyCreatedDialog": {
+      "title": "金鑰建立成功",
+      "description": "您的 API 金鑰已成功建立。請務必複製並妥善保存，此金鑰僅顯示一次。",
+      "apiKeyLabel": "API 金鑰",
+      "warningText": "請在關閉前複製並儲存，關閉後將無法再次檢視此金鑰",
+      "closeButton": "關閉"
+    }
+  },
+  "keyLimitUsage": {
+    "loading": "載入中...",
+    "error": "取得失敗",
+    "networkError": "網路錯誤",
+    "cost5h": "5小時消費",
+    "costWeekly": "週消費",
+    "costMonthly": "月消費",
+    "concurrentSessions": "並發 Session",
+    "noLimit": "無額度限制"
+  },
+  "addKeyForm": {
+    "title": "新增金鑰",
+    "description": "為目前使用者建立新的 API 金鑰，金鑰值將自動產生。",
+    "submitText": "確認建立",
+    "loadingText": "建立中...",
+    "keyName": {
+      "label": "金鑰名稱",
+      "placeholder": "請輸入金鑰名稱"
+    },
+    "expiresAt": {
+      "label": "過期時間",
+      "placeholder": "選擇過期時間",
+      "description": "留空表示永不過期"
+    },
+    "canLoginWebUi": {
+      "label": "允許登入 Web UI",
+      "description": "關閉後，此金鑰僅可用於 API 呼叫，無法登入管理後台"
+    },
+    "limit5hUsd": {
+      "label": "5小時消費上限 (USD)",
+      "placeholder": "留空表示無限制",
+      "description": "5小時內最大消費金額"
+    },
+    "limitWeeklyUsd": {
+      "label": "週消費上限 (USD)",
+      "placeholder": "留空表示無限制",
+      "description": "每週最大消費金額"
+    },
+    "limitMonthlyUsd": {
+      "label": "月消費上限 (USD)",
+      "placeholder": "留空表示無限制",
+      "description": "每月最大消費金額"
+    },
+    "limitConcurrentSessions": {
+      "label": "並發 Session 上限",
+      "placeholder": "0 表示無限制",
+      "description": "同時執行的對話數量"
+    },
+    "errors": {
+      "userIdMissing": "使用者 ID 不存在",
+      "createFailed": "建立失敗，請稍後重試",
+      "noKeyReturned": "建立成功但未傳回金鑰"
+    }
+  },
+  "userForm": {
+    "title": {
+      "add": "新增使用者",
+      "edit": "編輯使用者"
+    },
+    "description": {
+      "add": "建立新使用者，系統將自動為其產生預設金鑰。",
+      "edit": "修改使用者的基本資訊。"
+    },
+    "submitText": {
+      "add": "確認建立",
+      "edit": "儲存修改"
+    },
+    "loadingText": {
+      "add": "建立中...",
+      "edit": "儲存中..."
+    },
+    "username": {
+      "label": "使用者名稱",
+      "placeholder": "請輸入使用者名稱"
+    },
+    "note": {
+      "label": "備註",
+      "placeholder": "請輸入備註（可選）",
+      "description": "用於描述使用者的用途或備註資訊"
+    },
+    "providerGroup": {
+      "label": "供應商分組",
+      "placeholder": "例如：premium 或 premium,economy（可選）",
+      "description": "指定使用者專屬的供應商分組（支援多個，逗號分隔）。系統將只從 groupTag 符合的供應商中選擇。留空=使用所有供應商"
+    },
+    "rpm": {
+      "label": "RPM 限制",
+      "placeholder": "每分鐘請求數限制",
+      "description": "預設值：{default}，範圍：1-10000"
+    },
+    "dailyQuota": {
+      "label": "每日額度",
+      "placeholder": "每日消費額度限制",
+      "description": "預設值：${default}，範圍：$0.01-$1000"
+    }
+  },
+  "deleteKeyConfirm": {
+    "title": "確認刪除金鑰",
+    "description": "您確定要刪除金鑰「{name}」嗎？\n{maskedKey}\n此操作無法復原，刪除後所有使用此金鑰的應用程式將無法存取。",
+    "cancel": "取消",
+    "confirm": "確認刪除",
+    "confirmLoading": "刪除中...",
+    "errors": {
+      "deleteFailed": "刪除失敗",
+      "retryError": "刪除失敗，請稍後重試"
+    }
+  },
+  "keyActions": {
+    "edit": "編輯",
+    "delete": "刪除",
+    "editAriaLabel": "編輯金鑰",
+    "deleteAriaLabel": "刪除金鑰"
+  },
+  "userActions": {
+    "edit": "編輯使用者",
+    "delete": "刪除使用者",
+    "editAriaLabel": "編輯使用者",
+    "deleteAriaLabel": "刪除使用者"
+  }
+}

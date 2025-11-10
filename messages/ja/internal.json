@@ -1,0 +1,83 @@
+{
+  "dataGenerator": {
+    "tabs": {
+      "usage": "使用量データ生成",
+      "userBreakdown": "ユーザー別使用量表示"
+    },
+    "actions": {
+      "reconfigure": "パラメータを再設定",
+      "generate": "データを生成",
+      "exportScreenshot": "スクリーンショットをエクスポート",
+      "exportPDF": "PDFをエクスポート"
+    },
+    "params": {
+      "title": "生成パラメータ",
+      "description": "シミュレートログデータを作成するためのパラメータを設定",
+      "startDate": "開始時刻",
+      "endDate": "終了時刻",
+      "totalCostCny": "合計金額（人民元）",
+      "totalRecords": "総レコード数",
+      "models": "含まれるモデル（カンマ区切り）",
+      "userIds": "ユーザーID（カンマ区切り）",
+      "providerIds": "プロバイダーID（カンマ区切り）",
+      "serviceName": "サービス名",
+      "required": "*",
+      "placeholders": {
+        "totalCostCny": "例：1000",
+        "totalRecords": "例：500（空欄の場合、金額から計算）",
+        "models": "例：claude-3-5-sonnet,gpt-4（空欄の場合、全て）",
+        "userIds": "例：1,2,3（空欄の場合、全て）",
+        "providerIds": "例：1,2（空欄の場合、全て）",
+        "serviceName": "AI大規模モデル推論サービス"
+      }
+    },
+    "summary": {
+      "totalRecords": "総レコード数",
+      "totalCost": "総コスト",
+      "totalCostCny": "総コスト（人民元）",
+      "totalTokens": "総トークン",
+      "timeRange": "時間範囲",
+      "to": "から",
+      "uniqueUsers": "総ユーザー数",
+      "totalCalls": "総呼び出し数"
+    },
+    "table": {
+      "usageLogs": {
+        "title": "使用ログ",
+        "description": "合計 {count} 件のレコード",
+        "columns": {
+          "time": "時刻",
+          "user": "ユーザー",
+          "key": "キー",
+          "provider": "プロバイダー",
+          "model": "モデル",
+          "input": "入力",
+          "output": "出力",
+          "cacheWrite": "キャッシュ書き込み",
+          "cacheRead": "キャッシュ読み取り",
+          "cost": "コスト",
+          "duration": "所要時間",
+          "status": "ステータス"
+        }
+      },
+      "userBreakdown": {
+        "title": "ユーザー使用量詳細",
+        "description": "合計 {count} 件のレコード",
+        "collapseByUser": "ユーザーごとに折りたたむ",
+        "columns": {
+          "userName": "ユーザー名",
+          "key": "キー",
+          "serviceModel": "サービスモデル",
+          "totalCalls": "総呼び出し数",
+          "totalCost": "総コスト"
+        }
+      }
+    },
+    "status": {
+      "success": "成功"
+    },
+    "errors": {
+      "failed": "ログの生成に失敗しました"
+    }
+  }
+}

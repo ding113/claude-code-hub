@@ -1,0 +1,305 @@
+"use client";
+
+import { useTranslations } from "next-intl";
+
+import { useState, useEffect } from "react";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { getModelList, getStatusCodeList } from "@/actions/usage-logs";
+import { getKeys } from "@/actions/keys";
+import type { UserDisplay } from "@/types/user";
+import type { ProviderDisplay } from "@/types/provider";
+import type { Key } from "@/types/key";
+
+/**
+ * 将 Date 对象格式化为 datetime-local 输入所需的格式
+ * 保持本地时区，不转换为 UTC
+ */
+function formatDateTimeLocal(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+/**
+ * 解析 datetime-local 输入的值为 Date 对象
+ * 保持本地时区语义
+ */
+function parseDateTimeLocal(value: string): Date {
+  // datetime-local 返回格式: "2025-10-23T10:30"
+  // 直接用 new Date() 会按照本地时区解析
+  return new Date(value);
+}
+
+interface UsageLogsFiltersProps {
+  isAdmin: boolean;
+  users: UserDisplay[];
+  providers: ProviderDisplay[];
+  initialKeys: Key[];
+  filters: {
+    userId?: number;
+    keyId?: number;
+    providerId?: number;
+    startDate?: Date;
+    endDate?: Date;
+    statusCode?: number;
+    model?: string;
+  };
+  onChange: (filters: UsageLogsFiltersProps["filters"]) => void;
+  onReset: () => void;
+}
+
+export function UsageLogsFilters({
+  isAdmin,
+  users,
+  providers,
+  initialKeys,
+  filters,
+  onChange,
+  onReset,
+}: UsageLogsFiltersProps) {
+  const t = useTranslations("dashboard");
+  const [models, setModels] = useState<string[]>([]);
+  const [statusCodes, setStatusCodes] = useState<number[]>([]);
+  const [keys, setKeys] = useState<Key[]>(initialKeys);
+  const [localFilters, setLocalFilters] = useState(filters);
+
+  // 加载筛选器选项
+  useEffect(() => {
+    const loadOptions = async () => {
+      const [modelsResult, codesResult] = await Promise.all([
+        getModelList(),
+        getStatusCodeList(),
+      ]);
+
+      if (modelsResult.ok && modelsResult.data) {
+        setModels(modelsResult.data);
+      }
+
+      if (codesResult.ok && codesResult.data) {
+        setStatusCodes(codesResult.data);
+      }
+
+      // 管理员：如果选择了用户，加载该用户的 keys
+      // 非管理员：已经有 initialKeys，不需要额外加载
+      if (isAdmin && localFilters.userId) {
+        const keysResult = await getKeys(localFilters.userId);
+        if (keysResult.ok && keysResult.data) {
+          setKeys(keysResult.data);
+        }
+      }
+    };
+
+    loadOptions();
+  }, [isAdmin, localFilters.userId]);
+
+  // 处理用户选择变更
+  const handleUserChange = async (userId: string) => {
+    const newUserId = userId ? parseInt(userId) : undefined;
+    const newFilters = { ...localFilters, userId: newUserId, keyId: undefined };
+    setLocalFilters(newFilters);
+
+    // 加载该用户的 keys
+    if (newUserId) {
+      const keysResult = await getKeys(newUserId);
+      if (keysResult.ok && keysResult.data) {
+        setKeys(keysResult.data);
+      }
+    } else {
+      setKeys([]);
+    }
+  };
+
+  const handleApply = () => {
+    onChange(localFilters);
+  };
+
+  const handleReset = () => {
+    setLocalFilters({});
+    setKeys([]);
+    onReset();
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {/* 时间范围 */}
+        <div className="space-y-2">
+          <Label>{t("logs.filters.startTime")}</Label>
+          <Input
+            type="datetime-local"
+            value={localFilters.startDate ? formatDateTimeLocal(localFilters.startDate) : ""}
+            onChange={(e) =>
+              setLocalFilters({
+                ...localFilters,
+                startDate: e.target.value ? parseDateTimeLocal(e.target.value) : undefined,
+              })
+            }
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label>{t("logs.filters.endTime")}</Label>
+          <Input
+            type="datetime-local"
+            value={localFilters.endDate ? formatDateTimeLocal(localFilters.endDate) : ""}
+            onChange={(e) =>
+              setLocalFilters({
+                ...localFilters,
+                endDate: e.target.value ? parseDateTimeLocal(e.target.value) : undefined,
+              })
+            }
+          />
+        </div>
+
+        {/* 用户选择（仅 Admin） */}
+        {isAdmin && (
+          <div className="space-y-2">
+            <Label>{t("logs.filters.user")}</Label>
+            <Select
+              value={localFilters.userId?.toString() || ""}
+              onValueChange={handleUserChange}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder={t("logs.filters.allUsers")} />
+              </SelectTrigger>
+              <SelectContent>
+                {users.map((user) => (
+                  <SelectItem key={user.id} value={user.id.toString()}>
+                    {user.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {/* Key 选择 */}
+        <div className="space-y-2">
+          <Label>{t("logs.filters.apiKey")}</Label>
+          <Select
+            value={localFilters.keyId?.toString() || ""}
+            onValueChange={(value: string) =>
+              setLocalFilters({
+                ...localFilters,
+                keyId: value ? parseInt(value) : undefined,
+              })
+            }
+            disabled={isAdmin && !localFilters.userId && keys.length === 0}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder={isAdmin && !localFilters.userId && keys.length === 0 ? t("logs.filters.selectUserFirst") : t("logs.filters.allKeys")} />
+            </SelectTrigger>
+            <SelectContent>
+              {keys.map((key) => (
+                <SelectItem key={key.id} value={key.id.toString()}>
+                  {key.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* 供应商选择 */}
+        {isAdmin && (
+          <div className="space-y-2">
+            <Label>{t("logs.filters.provider")}</Label>
+            <Select
+              value={localFilters.providerId?.toString() || ""}
+              onValueChange={(value: string) =>
+                setLocalFilters({
+                  ...localFilters,
+                  providerId: value ? parseInt(value) : undefined,
+                })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder={t("logs.filters.allProviders")} />
+              </SelectTrigger>
+              <SelectContent>
+                {providers.map((provider) => (
+                  <SelectItem key={provider.id} value={provider.id.toString()}>
+                    {provider.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {/* 模型选择 */}
+        <div className="space-y-2">
+          <Label>{t("logs.filters.model")}</Label>
+          <Select
+            value={localFilters.model || ""}
+            onValueChange={(value: string) =>
+              setLocalFilters({ ...localFilters, model: value || undefined })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder={t("logs.filters.allModels")} />
+            </SelectTrigger>
+            <SelectContent>
+              {models.map((model) => (
+                <SelectItem key={model} value={model}>
+                  {model}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* 状态码选择 */}
+        <div className="space-y-2">
+          <Label>{t("logs.filters.statusCode")}</Label>
+          <Select
+            value={localFilters.statusCode?.toString() || ""}
+            onValueChange={(value: string) =>
+              setLocalFilters({
+                ...localFilters,
+                statusCode: value ? parseInt(value) : undefined,
+              })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder={t("logs.filters.allStatusCodes")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="200">{t("logs.statusCodes.200")}</SelectItem>
+              <SelectItem value="400">{t("logs.statusCodes.400")}</SelectItem>
+              <SelectItem value="401">{t("logs.statusCodes.401")}</SelectItem>
+              <SelectItem value="429">{t("logs.statusCodes.429")}</SelectItem>
+              <SelectItem value="500">{t("logs.statusCodes.500")}</SelectItem>
+              {statusCodes
+                .filter((code) => ![200, 400, 401, 429, 500].includes(code))
+                .map((code) => (
+                  <SelectItem key={code} value={code.toString()}>
+                    {code}
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* 操作按钮 */}
+      <div className="flex gap-2">
+        <Button onClick={handleApply}>{t("logs.filters.apply")}</Button>
+        <Button variant="outline" onClick={handleReset}>
+          {t("logs.filters.reset")}
+        </Button>
+      </div>
+    </div>
+  );
+}

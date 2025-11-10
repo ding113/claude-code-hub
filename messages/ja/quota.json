@@ -1,0 +1,249 @@
+{
+  "header": {
+    "title": "ユーザークォータ",
+    "role": {
+      "admin": "管理者",
+      "user": "ユーザー"
+    },
+    "keysCountSuffix": "個のキー",
+    "rpm": "リクエストレート制限",
+    "todayCost": "本日の使用量",
+    "exceededNotice": "クォータを超過しました。管理者にお問い合わせください"
+  },
+  "countdown": {
+    "reset": "リセットまでのカウントダウン"
+  },
+  "windowType": {
+    "5h": {
+      "label": "5時間ローリング",
+      "description": "過去5時間の使用量を集計、毎時ローリング更新"
+    },
+    "weekly": {
+      "label": "毎週リセット",
+      "description": "暦週制(月曜日00:00にリセット)、週単位で集計"
+    },
+    "monthly": {
+      "label": "毎月リセット",
+      "description": "暦月制(毎月1日00:00にリセット)、月単位で集計"
+    },
+    "daily": {
+      "label": "毎日リセット",
+      "description": "暦日制(毎日00:00にリセット)、日単位で集計"
+    }
+  },
+  "toolbar": {
+    "searchPlaceholder": "ユーザー名またはキーを検索",
+    "filter": "フィルター",
+    "sort": "並び替え",
+    "refresh": "更新",
+    "autoRefresh": "自動更新",
+    "filterOptions": {
+      "all": "すべて",
+      "warning": "警告",
+      "exceeded": "超過"
+    },
+    "sortOptions": {
+      "name": "名前順",
+      "usage": "使用率順"
+    },
+    "interval": {
+      "10s": "10秒",
+      "30s": "30秒",
+      "60s": "60秒"
+    }
+  },
+  "layout": {
+    "title": "クォータ管理",
+    "description": "すべてのレベルでクォータ使用状況を表示および管理",
+    "tabs": {
+      "users": "ユーザークォータ",
+      "keys": "キークォータ",
+      "providers": "プロバイダークォータ"
+    }
+  },
+  "users": {
+    "title": "ユーザークォータ統計",
+    "totalCount": "合計 {count} 名のユーザー",
+    "noNote": "備考なし",
+    "rpm": {
+      "label": "RPM クォータ",
+      "description": "1分あたりのリクエスト数"
+    },
+    "dailyCost": {
+      "label": "日次コスト",
+      "resetAt": "リセット時刻"
+    },
+    "noQuotaData": "クォータ情報を取得できません",
+    "noMatches": "一致するユーザーが見つかりません",
+    "noData": "ユーザーデータがありません",
+    "sort": {
+      "name": "名前順",
+      "usage": "使用率順"
+    },
+    "filter": {
+      "all": "すべて",
+      "warning": "制限に近い (>60%)",
+      "exceeded": "超過 (≥100%)"
+    }
+  },
+  "providers": {
+    "title": "プロバイダークォータ統計",
+    "totalCount": "合計 {count} 個のプロバイダー",
+    "filterCount": "{filtered} / {total} 個のプロバイダーを表示",
+    "status": {
+      "enabled": "有効",
+      "disabled": "無効"
+    },
+    "card": {
+      "priority": "優先度",
+      "weight": "重み"
+    },
+    "cost5h": {
+      "label": "5時間コスト"
+    },
+    "costWeekly": {
+      "label": "週次コスト",
+      "resetAt": "リセット時刻"
+    },
+    "costMonthly": {
+      "label": "月次コスト",
+      "resetAt": "リセット時刻"
+    },
+    "concurrentSessions": {
+      "label": "同時セッション"
+    },
+    "noQuotaSet": "クォータ未設定",
+    "noQuotaData": "クォータ情報を取得できません",
+    "noMatches": "一致するプロバイダーがありません",
+    "unlimitedSection": "クォータ未設定のプロバイダー ({count}個)"
+  },
+  "keys": {
+    "title": "キークォータ統計",
+    "totalCount": "合計 {users} 名のユーザー、{keys} 個のキー",
+    "searchPlaceholder": "ユーザーまたはキーを検索...",
+    "filterLabel": "フィルター条件",
+    "filterCount": "{users} 名のユーザー、{keys} 個のキーを表示",
+    "filter": {
+      "all": "すべてのキー",
+      "keyQuota": "キークォータのみ",
+      "userQuotaOnly": "ユーザークォータのみ",
+      "warning": "警告 (≥60%)",
+      "exceeded": "超過 (≥100%)"
+    },
+    "table": {
+      "keyName": "キー名",
+      "quotaType": "クォータタイプ",
+      "cost5h": "5時間クォータ",
+      "costWeekly": "週次クォータ",
+      "costMonthly": "月次クォータ",
+      "concurrentSessions": "同時制限",
+      "status": "ステータス",
+      "actions": "アクション"
+    },
+    "quotaType": {
+      "independent": "独立クォータ",
+      "inherited": "ユーザーから継承"
+    },
+    "status": {
+      "disabled": "無効",
+      "restricted": "制限中",
+      "normal": "正常"
+    },
+    "noMatches": "一致するユーザーまたはキーがありません",
+    "editDialog": {
+      "title": "キークォータ設定",
+      "description": "キー: {keyName} ({userName})",
+      "cost5h": {
+        "label": "5時間クォータ (USD)",
+        "placeholder": "無制限",
+        "current": "現在使用: {currency}{current} / {currency}{limit}"
+      },
+      "costWeekly": {
+        "label": "週次クォータ (USD)",
+        "placeholder": "無制限",
+        "current": "現在使用: {currency}{current} / {currency}{limit}"
+      },
+      "costMonthly": {
+        "label": "月次クォータ (USD)",
+        "placeholder": "無制限",
+        "current": "現在使用: {currency}{current} / {currency}{limit}"
+      },
+      "concurrentSessions": {
+        "label": "同時セッションクォータ",
+        "placeholder": "0 = 無制限",
+        "current": "現在の同時接続: {current} / {limit}"
+      },
+      "clearAll": "すべてのクォータをクリア",
+      "save": "保存",
+      "setQuota": "クォータを設定",
+      "success": "クォータが正常に設定されました",
+      "clearSuccess": "クォータがクリアされました",
+      "error": "設定に失敗しました",
+      "clearError": "クリアに失敗しました",
+      "retryError": "設定に失敗しました。後でもう一度お試しください"
+    },
+    "editUserDialog": {
+      "title": "ユーザークォータ設定",
+      "description": "ユーザー: {userName}",
+      "rpm": {
+        "label": "1分あたりのリクエスト数 (RPM)",
+        "placeholder": "60",
+        "current": "現在: {current} / {limit} リクエスト/分"
+      },
+      "dailyQuota": {
+        "label": "日次コストクォータ (USD)",
+        "placeholder": "100",
+        "current": "今日の使用: {currency}{current} / {currency}{limit}"
+      },
+      "save": "保存",
+      "editQuota": "クォータを編集",
+      "success": "ユーザークォータが正常に設定されました",
+      "error": "設定に失敗しました",
+      "retryError": "設定に失敗しました。後でもう一度お試しください"
+    },
+    "editKeyForm": {
+      "title": "キーを編集",
+      "description": "キーの名前、有効期限、流量制限の設定を変更します。",
+      "keyName": {
+        "label": "キー名",
+        "placeholder": "キー名を入力してください",
+        "required": "キー名 *"
+      },
+      "expiresAt": {
+        "label": "有効期限",
+        "placeholder": "有効期限を選択",
+        "description": "空欄の場合は無期限"
+      },
+      "canLoginWebUi": {
+        "label": "Web UI へのログインを許可",
+        "description": "無効にすると、このキーは API 呼び出しにのみ使用でき、管理画面にはログインできません"
+      },
+      "limit5hUsd": {
+        "label": "5時間消費上限 (USD)",
+        "placeholder": "空欄の場合は無制限",
+        "description": "5時間以内の最大消費金額"
+      },
+      "limitWeeklyUsd": {
+        "label": "週間消費上限 (USD)",
+        "placeholder": "空欄の場合は無制限",
+        "description": "毎週の最大消費金額"
+      },
+      "limitMonthlyUsd": {
+        "label": "月間消費上限 (USD)",
+        "placeholder": "空欄の場合は無制限",
+        "description": "毎月の最大消費金額"
+      },
+      "limitConcurrentSessions": {
+        "label": "同時セッション上限",
+        "placeholder": "0 = 無制限",
+        "description": "同時実行可能な会話数"
+      },
+      "submitText": "変更を保存",
+      "loadingText": "保存中...",
+      "success": "キーが正常に更新されました",
+      "error": "キーの更新に失敗しました",
+      "retryError": "保存に失敗しました。後でもう一度お試しください",
+      "keyInfoMissing": "キー情報が存在しません"
+    }
+  }
+}

@@ -1,0 +1,217 @@
+{
+  "providers": {
+    "form": {
+      "title": {
+        "create": "新增服务商",
+        "edit": "编辑服务商"
+      },
+      "name": {
+        "label": "服务商名称 *",
+        "placeholder": "例如: 智谱"
+      },
+      "url": {
+        "label": "API 地址 *",
+        "placeholder": "例如: https://open.bigmodel.cn/api/anthropic"
+      },
+      "key": {
+        "label": "API 密钥",
+        "leaveEmpty": "（留空不更改）",
+        "placeholder": "输入 API 密钥",
+        "leaveEmptyDesc": "留空则不更改密钥",
+        "currentKey": "当前密钥: {key}"
+      },
+      "websiteUrl": {
+        "label": "供应商官网地址",
+        "placeholder": "https://example.com",
+        "desc": "供应商官网地址，用于快速跳转管理"
+      },
+      "buttons": {
+        "expandAll": "展开全部高级配置",
+        "collapseAll": "折叠全部高级配置",
+        "submit": "确认添加",
+        "submitting": "添加中...",
+        "update": "确认更新",
+        "updating": "更新中...",
+        "delete": "删除"
+      },
+      "sections": {
+        "routing": {
+          "title": "路由配置",
+          "summary": {
+            "models": "{count} 个模型白名单",
+            "redirects": "{count} 个重定向",
+            "none": "未配置"
+          },
+          "providerType": {
+            "label": "供应商类型",
+            "desc": "(决定调度策略)",
+            "placeholder": "选择供应商类型"
+          },
+          "providerTypeDesc": "选择供应商的 API 格式类型。",
+          "providerTypeDisabledNote": "注：Gemini CLI 和 OpenAI Compatible 类型功能正在开发中，暂不可用",
+          "modelRedirects": {
+            "label": "模型重定向配置",
+            "optional": "(可选)"
+          },
+          "joinClaudePool": {
+            "label": "加入 Claude 调度池",
+            "desc": "启用后，此供应商将与 Claude 类型供应商一起参与负载均衡调度",
+            "help": "仅当模型重定向配置中存在映射到 claude-* 模型时可用。启用后，当用户请求 claude-* 模型时，此供应商也会参与调度选择。"
+          },
+          "modelWhitelist": {
+            "title": "模型白名单",
+            "desc": "限制此供应商可以处理的模型。默认情况下，供应商可以处理该类型下的所有模型。",
+            "label": "允许的模型",
+            "optional": "(可选)",
+            "allowAll": "✓ 允许所有模型（推荐）",
+            "selectedOnly": "仅允许选中的 {count} 个模型。其他模型的请求不会调度到此供应商。",
+            "moreModels": "+{count} 更多"
+          },
+          "scheduleParams": {
+            "title": "调度参数",
+            "priority": {
+              "label": "优先级",
+              "placeholder": "0",
+              "desc": "数值越小优先级越高（0 最高）。系统只从最高优先级的供应商中选择。建议：主力=0，备用=1，紧急备份=2"
+            },
+            "weight": {
+              "label": "权重",
+              "placeholder": "1",
+              "desc": "加权随机概率。同优先级内，权重越高被选中概率越大。例如权重 1:2:3 的概率为 16%:33%:50%"
+            },
+            "costMultiplier": {
+              "label": "成本倍率",
+              "placeholder": "1.0",
+              "desc": "成本计算倍数。官方供应商=1.0，便宜 20%=0.8，贵 20%=1.2（支持最多 4 位小数）"
+            },
+            "group": {
+              "label": "供应商分组",
+              "placeholder": "例如: premium, economy",
+              "desc": "供应商分组标签。只有用户的 providerGroup 与此值匹配时，该用户才能使用此供应商。示例：设置为 \"premium\" 表示只供 providerGroup=\"premium\" 的用户使用"
+            }
+          }
+        },
+        "rateLimit": {
+          "title": "限流配置",
+          "summary": {
+            "fiveHour": "5h: ${amount}",
+            "weekly": "周: ${amount}",
+            "monthly": "月: ${amount}",
+            "concurrent": "并发: {count}",
+            "none": "无限制"
+          },
+          "limit5h": {
+            "label": "5小时消费上限 (USD)",
+            "placeholder": "留空表示无限制"
+          },
+          "limitWeekly": {
+            "label": "周消费上限 (USD)",
+            "placeholder": "留空表示无限制"
+          },
+          "limitMonthly": {
+            "label": "月消费上限 (USD)",
+            "placeholder": "留空表示无限制"
+          },
+          "limitConcurrent": {
+            "label": "并发 Session 上限",
+            "placeholder": "0 表示无限制"
+          }
+        },
+        "circuitBreaker": {
+          "title": "熔断器配置",
+          "summary": "{failureThreshold} 次失败 / {openDuration} 分钟熔断 / {successThreshold} 次成功恢复",
+          "desc": "供应商连续失败时自动熔断，避免影响整体服务质量",
+          "failureThreshold": {
+            "label": "失败阈值（次）",
+            "placeholder": "5",
+            "desc": "连续失败多少次后触发熔断"
+          },
+          "openDuration": {
+            "label": "熔断时长（分钟）",
+            "placeholder": "30",
+            "desc": "熔断后多久自动进入半开状态"
+          },
+          "successThreshold": {
+            "label": "恢复阈值（次）",
+            "placeholder": "2",
+            "desc": "半开状态下成功多少次后完全恢复"
+          }
+        },
+        "proxy": {
+          "title": "代理配置",
+          "summary": {
+            "configured": "已配置代理",
+            "fallback": " (启用降级)",
+            "none": "未配置"
+          },
+          "desc": "配置代理服务器以改善供应商连接性（支持 HTTP、HTTPS、SOCKS4、SOCKS5）",
+          "url": {
+            "label": "代理地址",
+            "optional": "(可选)",
+            "placeholder": "例如: http://proxy.example.com:8080 或 socks5://127.0.0.1:1080",
+            "formats": "支持格式:"
+          },
+          "fallback": {
+            "label": "代理失败时降级到直连",
+            "desc": "启用后，代理连接失败时自动尝试直接连接供应商"
+          },
+          "test": {
+            "label": "连接测试",
+            "desc": "测试通过配置的代理访问供应商 URL（使用 HEAD 请求，不消耗额度）"
+          }
+        },
+        "codexStrategy": {
+          "title": "Codex Instructions 策略",
+          "summary": {
+            "auto": "自动 (推荐)",
+            "force": "强制官方",
+            "keep": "透传原样"
+          },
+          "desc": "控制如何处理 Codex 请求的 instructions 字段，影响与上游中转站的兼容性",
+          "select": {
+            "label": "策略选择",
+            "auto": {
+              "label": "自动 (推荐)",
+              "desc": "透传客户端 instructions，400 错误时自动重试官方 prompt"
+            },
+            "force": {
+              "label": "强制官方",
+              "desc": "始终使用官方 Codex CLI instructions（约 4000+ 字）"
+            },
+            "keep": {
+              "label": "透传原样",
+              "desc": "始终透传客户端 instructions，不自动重试（适用于宽松中转站）"
+            }
+          },
+          "hint": "提示: 部分严格的 Codex 中转站（如 88code、foxcode）需要官方 instructions，选择\"自动\"或\"强制官方\"策略"
+        }
+      },
+      "providerTypes": {
+        "claude": "Claude (Anthropic Messages API)",
+        "claudeAuth": "Claude (Anthropic Auth Token)",
+        "codex": "Codex (Response API)",
+        "geminiCli": "Gemini CLI",
+        "geminiCliDisabled": " - 功能开发中",
+        "openaiCompatible": "OpenAI Compatible",
+        "openaiCompatibleDisabled": " - 功能开发中"
+      },
+      "deleteDialog": {
+        "title": "删除服务商",
+        "description": "确定要删除服务商 \"{name}\" 吗？此操作不可恢复。",
+        "cancel": "取消",
+        "confirm": "确认删除"
+      },
+      "errors": {
+        "invalidUrl": "请输入有效的 API 地址",
+        "invalidWebsiteUrl": "请输入有效的供应商官网地址",
+        "addFailed": "添加服务商失败",
+        "updateFailed": "更新服务商失败",
+        "deleteFailed": "删除服务商失败"
+      },
+      "success": {
+        "created": "添加服务商成功",
+        "createdDesc": "服务商 \"{name}\" 已添加"
+      }
+    }
+  }
+}

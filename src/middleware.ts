@@ -1,21 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
+import createMiddleware from "next-intl/middleware";
 import { logger } from "@/lib/logger";
 import { isDevelopment } from "@/lib/config/env.schema";
 import { validateKey } from "@/lib/auth";
+import { routing } from "@/i18n/routing";
+import type { Locale } from "@/i18n/config";
 
 // 使用 Node.js runtime 以支持数据库连接（postgres-js 需要 net 模块）
 export const runtime = "nodejs";
 
-const PUBLIC_PATHS = [
-  "/login",
-  "/usage-doc",
-  "/api/auth/login",
-  "/api/auth/logout",
-  "/_next",
-  "/favicon.ico",
-];
+// Public paths that don't require authentication
+// Note: These paths will be automatically prefixed with locale by next-intl middleware
+const PUBLIC_PATH_PATTERNS = ["/login", "/usage-doc", "/api/auth/login", "/api/auth/logout"];
 
 const API_PROXY_PATH = "/v1";
+
+// Create next-intl middleware for locale detection and routing
+const intlMiddleware = createMiddleware(routing);
 
 export async function middleware(request: NextRequest) {
   const method = request.method;
@@ -25,52 +26,77 @@ export async function middleware(request: NextRequest) {
     logger.info("Request received", { method: method.toUpperCase(), pathname });
   }
 
-  // API 代理路由不需要 Web 鉴权（使用自己的 Bearer token）
+  // API 代理路由不需要 locale 处理和 Web 鉴权（使用自己的 Bearer token）
   if (pathname.startsWith(API_PROXY_PATH)) {
     return NextResponse.next();
   }
 
-  // 公开路径不需要鉴权
-  const isPublicPath = PUBLIC_PATHS.some((path) => pathname.startsWith(path));
-  if (isPublicPath) {
+  // Skip locale handling for static files and Next.js internals
+  if (pathname.startsWith("/_next") || pathname === "/favicon.ico") {
     return NextResponse.next();
   }
 
-  // 检查认证 cookie
+  // Apply locale middleware first (handles locale detection and routing)
+  const localeResponse = intlMiddleware(request);
+
+  // Extract locale from pathname (format: /[locale]/path or just /path)
+  const localeMatch = pathname.match(/^\/([^/]+)/);
+  const potentialLocale = localeMatch?.[1];
+  const isLocaleInPath = routing.locales.includes(potentialLocale as Locale);
+
+  // Get the pathname without locale prefix
+  const pathWithoutLocale = isLocaleInPath ? pathname.slice(potentialLocale!.length + 1) : pathname;
+
+  // Check if current path (without locale) is a public path
+  const isPublicPath = PUBLIC_PATH_PATTERNS.some(
+    (pattern) => pathWithoutLocale === pattern || pathWithoutLocale.startsWith(pattern)
+  );
+
+  // Public paths don't require authentication
+  if (isPublicPath) {
+    return localeResponse;
+  }
+
+  // Check authentication for protected routes
   const authToken = request.cookies.get("auth-token");
 
   if (!authToken) {
-    // 未登录，重定向到登录页
+    // Not authenticated, redirect to login page
     const url = request.nextUrl.clone();
-    url.pathname = "/login";
+    // Preserve locale in redirect
+    const locale = isLocaleInPath ? potentialLocale : routing.defaultLocale;
+    url.pathname = `/${locale}/login`;
     url.searchParams.set("from", pathname);
     return NextResponse.redirect(url);
   }
 
-  // 验证 key 的完整权限（包括 canLoginWebUi、isEnabled、expiresAt 等）
+  // Validate key permissions (canLoginWebUi, isEnabled, expiresAt, etc.)
   const session = await validateKey(authToken.value);
   if (!session) {
-    // Key 无效或权限不足，清除 cookie 并重定向到登录页
+    // Invalid key or insufficient permissions, clear cookie and redirect to login
     const url = request.nextUrl.clone();
-    url.pathname = "/login";
+    // Preserve locale in redirect
+    const locale = isLocaleInPath ? potentialLocale : routing.defaultLocale;
+    url.pathname = `/${locale}/login`;
     url.searchParams.set("from", pathname);
     const response = NextResponse.redirect(url);
     response.cookies.delete("auth-token");
     return response;
   }
 
-  return NextResponse.next();
+  // Authentication passed, return locale response
+  return localeResponse;
 }
 
 export const config = {
   matcher: [
     /*
      * Match all request paths except for the ones starting with:
-     * - api (API routes)
+     * - api (API routes - handled separately)
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      */
-    "/((?!_next/static|_next/image|favicon.ico).*)",
+    "/((?!api|_next/static|_next/image|favicon.ico).*)",
   ],
 };

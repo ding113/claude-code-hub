@@ -1,0 +1,583 @@
+{
+  "title": {
+    "costRanking": "Cost Leaderboard",
+    "costRankingDescription": "View user cost rankings, data updates every 5 minutes",
+    "usageLogs": "Usage Logs",
+    "usageLogsDescription": "View API call logs and usage statistics",
+    "clients": "Clients",
+    "userAndKeyManagement": "User and Key Management",
+    "requestMessages": "Request Messages",
+    "activeSessions": "Active Sessions (Last 5 Minutes)",
+    "sessionMonitoring": "Session Monitoring",
+    "sessionMonitoringDescription": "Real-time display of active and inactive sessions (auto-refresh every 3 seconds)",
+    "inactiveSessions": "Inactive Sessions (Over 5 Minutes, View Only)",
+    "quotasManagement": "Quota Management",
+    "quotasManagementDescription": "View and manage quotas at all levels",
+    "usersQuotas": "User Quota Statistics",
+    "keysQuotas": "Key Quota Statistics",
+    "providersQuotas": "Provider Quota Statistics",
+    "filterCriteria": "Filter Criteria"
+  },
+  "description": {
+    "viewApiCallLogs": "View API call logs and usage statistics",
+    "dashboard": "View system statistics and monitoring information",
+    "quotas": "View and manage quotas at all levels",
+    "clientInfo": "User-Agent request header",
+    "requestMessagesDescription": "Message content sent by the client",
+    "responseBodyDescription": "Complete server response (5-minute TTL)"
+  },
+  "overview": {
+    "title": "Overview",
+    "totalRequests": "Total Requests",
+    "totalCost": "Total Cost",
+    "totalUsers": "Total Users",
+    "totalProviders": "Total Providers",
+    "activeUsers": "Active Users",
+    "activeSessions": "Active Sessions",
+    "errorRate": "Error Rate",
+    "avgResponseTime": "Average Response Time"
+  },
+  "stats": {
+    "title": "Statistics",
+    "requests": "Requests",
+    "cost": "Cost",
+    "tokens": "Tokens",
+    "period": {
+      "hour": "Last Hour",
+      "day": "Today",
+      "week": "This Week",
+      "month": "This Month"
+    }
+  },
+  "logs": {
+    "title": "Usage Logs",
+    "description": "View and analyze API call records",
+    "filters": {
+      "user": "User",
+      "provider": "Provider",
+      "model": "Model",
+      "status": "Status",
+      "timeRange": "Time Range",
+      "startTime": "Start Time",
+      "endTime": "End Time",
+      "allUsers": "All Users",
+      "allKeys": "All Keys",
+      "selectUserFirst": "Please select a user first",
+      "allProviders": "All Providers",
+      "allModels": "All Models",
+      "allStatusCodes": "All Status Codes",
+      "apiKey": "API Key",
+      "statusCode": "Status Code",
+      "apply": "Apply Filter",
+      "reset": "Reset"
+    },
+    "columns": {
+      "time": "Time",
+      "user": "User",
+      "key": "Key",
+      "provider": "Provider",
+      "model": "Model",
+      "inputTokens": "Input",
+      "outputTokens": "Output",
+      "cacheWrite": "Cache Write",
+      "cacheRead": "Cache Read",
+      "cost": "Cost",
+      "duration": "Duration",
+      "status": "Status"
+    },
+    "stats": {
+      "totalRequests": "Total Requests",
+      "totalAmount": "Total Consumption",
+      "totalTokens": "Total Tokens",
+      "cacheTokens": "Cached Tokens",
+      "input": "Input",
+      "output": "Output",
+      "write": "Write",
+      "read": "Read",
+      "loading": "Loading..."
+    },
+    "table": {
+      "noData": "No Data",
+      "pagination": "Total {total} records, Page {page} / {totalPages}",
+      "prevPage": "Previous Page",
+      "nextPage": "Next Page",
+      "blocked": "Blocked",
+      "times": "times"
+    },
+    "actions": {
+      "refresh": "Refresh",
+      "refreshing": "Refreshing...",
+      "stopAutoRefresh": "Stop Auto-Refresh",
+      "startAutoRefresh": "Start Auto-Refresh",
+      "view": "View"
+    },
+    "error": {
+      "loadFailed": "Load Failed"
+    },
+    "details": {
+      "title": "Request Details",
+      "statusTitle": "Request Details - Status Code {status}",
+      "inProgress": "In Progress",
+      "unknown": "Unknown",
+      "success": "Request completed successfully",
+      "error": "Request failed, here are the detailed error messages and provider decision chain",
+      "processing": "Request is in progress, not yet completed",
+      "blocked": {
+        "title": "Blocking Information",
+        "type": "Blocking Type",
+        "sensitiveWord": "Sensitive Word Blocking",
+        "word": "Sensitive Word",
+        "matchType": "Match Type",
+        "matchTypeContains": "Contains Match",
+        "matchTypeExact": "Exact Match",
+        "matchTypeRegex": "Regular Expression",
+        "matchedText": "Matched Content"
+      },
+      "sessionId": "Session ID",
+      "messagesCount": "Message Count",
+      "messagesLabel": "Messages",
+      "messagesUnit": "items",
+      "clientInfo": "Client Info",
+      "modelRedirect": {
+        "title": "Model Redirection",
+        "requestModel": "Requested Model",
+        "actualModel": "Actual Call",
+        "billing": "Billing Description",
+        "billingDescription": "The system prioritizes billing based on the price of the requested model ({original}). If the model is not found in the price list, the price of the actually called model ({current}) is used."
+      },
+      "errorMessage": "Error Message",
+      "providerChain": {
+        "title": "Provider Decision Chain Timeline",
+        "totalDuration": "Total Duration: {duration}ms"
+      },
+      "noError": {
+        "processing": "Request is being processed, awaiting response...",
+        "success": "Request successful, no error message",
+        "default": "No detailed error message available"
+      },
+      "clickStatusCode": "Click status code to view full timeline",
+      "viewDetails": "View Details"
+    },
+    "providerChain": {
+      "decisionChain": "Provider Decision Chain"
+    },
+    "modelRedirect": {
+      "redirected": "Redirected",
+      "targetModel": "Target Model"
+    },
+    "statusCodes": {
+      "200": "200 (Success)",
+      "400": "400 (Bad Request)",
+      "401": "401 (Unauthorized)",
+      "429": "429 (Rate Limited)",
+      "500": "500 (Server Error)"
+    }
+  },
+  "leaderboard": {
+    "title": "Cost Leaderboard",
+    "description": "View cost statistics rankings for users and keys",
+    "tabs": {
+      "users": "User Rankings",
+      "keys": "Key Rankings",
+      "userRanking": "User Rankings",
+      "providerRanking": "Provider Rankings",
+      "dailyRanking": "Daily Rankings",
+      "monthlyRanking": "Monthly Rankings"
+    },
+    "columns": {
+      "rank": "Rank",
+      "name": "Name",
+      "totalCost": "Total Cost",
+      "totalRequests": "Total Requests",
+      "avgCost": "Average Cost",
+      "lastActive": "Last Active",
+      "user": "User",
+      "requests": "Requests",
+      "tokens": "Tokens",
+      "consumedAmount": "Consumed Amount",
+      "provider": "Provider",
+      "cost": "Cost",
+      "successRate": "Success Rate",
+      "avgResponseTime": "Avg Response Time"
+    },
+    "states": {
+      "loading": "Loading...",
+      "noData": "No data available",
+      "todayNoData": "No data available for today",
+      "monthNoData": "No data available for this month",
+      "fetchFailed": "Failed to fetch leaderboard data"
+    },
+    "permission": {
+      "title": "Permission Required",
+      "restricted": "Access Restricted",
+      "description": "The leaderboard feature requires administrators to enable the \"Allow Global Usage View\" permission.",
+      "adminAction": "Enable this permission.",
+      "userAction": "Please contact an administrator to enable this permission.",
+      "systemSettings": "System Settings"
+    }
+  },
+  "sessions": {
+    "title": "Active Sessions",
+    "description": "Monitor current active API sessions in real-time",
+    "monitoring": "Session Monitoring",
+    "monitoringDescription": "Real-time display of active and inactive sessions (auto-refresh every 3 seconds)",
+    "activeSessions": "Active Sessions (Last 5 Minutes)",
+    "inactiveSessions": "Inactive Sessions (Over 5 Minutes, View Only)",
+    "columns": {
+      "sessionId": "Session ID",
+      "user": "User",
+      "key": "Key",
+      "provider": "Provider",
+      "model": "Model",
+      "startTime": "Start Time",
+      "lastActivity": "Last Activity",
+      "requestCount": "Requests",
+      "totalInput": "Total Input",
+      "totalOutput": "Total Output",
+      "totalCost": "Total Cost",
+      "totalDuration": "Total Duration",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "table": {
+      "count": "Total {count} {type} Sessions",
+      "active": "Active",
+      "inactive": "Inactive",
+      "notCountedInConcurrency": "(Not counted in concurrency)",
+      "refreshing": "Refreshing...",
+      "noActiveSessions": "No active sessions"
+    },
+    "details": {
+      "title": "Session Messages",
+      "messages": "Messages",
+      "info": "Session Info",
+      "timeline": "Timeline",
+      "overview": "Session Overview",
+      "overviewDescription": "Aggregated statistics",
+      "providersAndModels": "Providers & Models",
+      "providersAndModelsDescription": "Providers and models used",
+      "tokenUsage": "Token Usage (Total)",
+      "tokenUsageDescription": "Cumulative statistics for all requests",
+      "costInfo": "Cost Information (Total)",
+      "costInfoDescription": "Cumulative cost for all requests",
+      "totalRequests": "Total Requests",
+      "firstRequest": "First Request",
+      "lastRequest": "Last Request",
+      "totalDuration": "Total Duration",
+      "totalInput": "Total Input",
+      "totalOutput": "Total Output",
+      "cacheCreation": "Cache Creation",
+      "cacheRead": "Cache Read",
+      "total": "Total",
+      "totalFee": "Total Fee",
+      "providers": "Providers",
+      "models": "Models",
+      "noDetailedData": "No detailed data available",
+      "storageTip": "Tip: Set environment variable STORE_SESSION_MESSAGES=true to enable messages and response storage",
+      "clientInfo": "Client Info",
+      "requestMessages": "Request Messages",
+      "requestMessagesDescription": "Message content sent by the client",
+      "responseBody": "Response Body Content",
+      "responseBodyDescription": "Complete server response (5-minute TTL)",
+      "noData": "No Data"
+    },
+    "actions": {
+      "back": "Back",
+      "view": "View",
+      "copyMessages": "Copy Messages",
+      "downloadMessages": "Download Messages",
+      "copied": "Copied",
+      "copyResponse": "Copy Response"
+    },
+    "status": {
+      "loading": "Loading...",
+      "loadError": "Load failed",
+      "fetchFailed": "Fetch Failed",
+      "unknownError": "Unknown Error",
+      "storageNotEnabled": "Not Stored",
+      "storageNotEnabledHint": "Tip: Set environment variable STORE_SESSION_MESSAGES=true to enable messages storage"
+    },
+    "errors": {
+      "copyFailed": "Copy Failed"
+    },
+    "back": "Back",
+    "loadingError": "Loading failed"
+  },
+  "quotas": {
+    "title": "Quota Management",
+    "description": "Manage user, key, and provider usage quotas",
+    "tabs": {
+      "overview": "Overview",
+      "users": "User Quotas",
+      "keys": "Key Quotas",
+      "providers": "Provider Quotas"
+    },
+    "columns": {
+      "name": "Name",
+      "limit": "Limit",
+      "used": "Used",
+      "remaining": "Remaining",
+      "resetTime": "Reset Time",
+      "status": "Status"
+    },
+    "labels": {
+      "byName": "By Name",
+      "byUsageRate": "By Usage Rate",
+      "all": "All",
+      "warning": "Near Limit (>60%)",
+      "exceeded": "Exceeded (≥100%)"
+    },
+    "users": {
+      "title": "User Quota Statistics",
+      "totalUsers": "Total {count} users"
+    },
+    "keys": {
+      "title": "Key Quota Statistics",
+      "totalKeysInfo": "Total {userCount} users, {keyCount} keys",
+      "setKeyQuota": "Set Key Quota",
+      "setUserQuota": "Set User Quota",
+      "onlyKeyQuota": "Key Quota Only",
+      "onlyUserQuota": "User Quota Only",
+      "success": "User quota set successfully"
+    },
+    "providers": {
+      "title": "Provider Quota Statistics",
+      "totalProviders": "Total {count} providers"
+    }
+  },
+  "labels": {
+    "byName": "By Name",
+    "byUsageRate": "By Usage Rate"
+  },
+  "all": "All",
+  "nav": {
+    "dashboard": "Dashboard",
+    "usageLogs": "Usage Logs",
+    "leaderboard": "Leaderboard",
+    "quotasManagement": "Quota Management",
+    "documentation": "Documentation",
+    "systemSettings": "System Settings",
+    "feedback": "Feedback",
+    "login": "Login",
+    "logout": "Logout"
+  },
+  "statistics": {
+    "title": "Usage Statistics",
+    "cost": "Consumption Amount",
+    "calls": "API Calls",
+    "totalCost": "Total Consumption Amount",
+    "totalCalls": "Total API Calls",
+    "timeRange": {
+      "today": "Today",
+      "todayDescription": "Today's usage",
+      "7days": "Last 7 Days",
+      "7daysDescription": "Usage for the last 7 days",
+      "30days": "Last 30 Days",
+      "30daysDescription": "Usage for the last 30 days",
+      "default": "Usage"
+    },
+    "mode": {
+      "keys": "Only display usage statistics for your keys",
+      "mixed": "Display your key details and aggregated data from other users",
+      "users": "Display usage statistics for all users"
+    },
+    "legend": {
+      "selectAll": "Select All",
+      "deselectAll": "Clear",
+      "selected": "Selected"
+    },
+    "states": {
+      "noData": "No statistics data available",
+      "fetchFailed": "Failed to fetch statistics"
+    }
+  },
+  "errors": {
+    "fetchSystemSettingsFailed": "Failed to fetch system settings",
+    "fetchFailed": "Fetch failed",
+    "fetchSessionListFailed": "Failed to fetch session list"
+  },
+  "keyList": {
+    "columns": {
+      "name": "Name",
+      "key": "Key",
+      "todayCalls": "Today's Calls",
+      "todayCost": "Today's Cost",
+      "lastUsed": "Last Used",
+      "actions": "Actions"
+    },
+    "detailsButton": "Details",
+    "modelStats": "Model Statistics",
+    "modelStatsColumns": {
+      "model": "Model",
+      "calls": "Calls",
+      "cost": "Cost"
+    },
+    "limitUsage": "Limit Usage",
+    "copyKeyTooltip": "Copy full key",
+    "copyFailed": "Copy failed:",
+    "timesUnit": "times",
+    "provider": "Provider",
+    "neverUsed": "Never used",
+    "viewLogsTooltip": "View detailed logs",
+    "logsButton": "Logs",
+    "emptyState": {
+      "title": "No Keys",
+      "description": "Click the \"Add Key\" button in the top right corner to add a key"
+    }
+  },
+  "userList": {
+    "badge": "{count} Keys",
+    "activeKeys": "Active Keys",
+    "totalKeys": "Total Keys",
+    "emptyState": {
+      "title": "No Users",
+      "description": "Click the button below to create your first user"
+    },
+    "addUser": "Add User"
+  },
+  "keyListHeader": {
+    "todayUsage": "Today's Usage",
+    "proxyStatus": {
+      "loading": "Loading proxy status",
+      "fetchFailed": "Failed to fetch proxy status",
+      "noStatus": "No proxy status",
+      "activeRequests": "Active Requests",
+      "lastRequest": "Last Request",
+      "noRecord": "No record",
+      "timeAgo": {
+        "justNow": "Just now",
+        "secondsAgo": "{count}s ago",
+        "minutesAgo": "{count} min ago",
+        "hoursAgo": "{count}h ago",
+        "daysAgo": "{count}d ago"
+      }
+    },
+    "addKey": "Add Key",
+    "keyCreatedDialog": {
+      "title": "Key Created Successfully",
+      "description": "Your API key has been created successfully. Please copy and save it securely, as it will only be displayed once.",
+      "apiKeyLabel": "API Key",
+      "warningText": "Please copy and save before closing. You will not be able to view this key again after closing.",
+      "closeButton": "Close"
+    }
+  },
+  "keyLimitUsage": {
+    "loading": "Loading...",
+    "error": "Fetch failed",
+    "networkError": "Network error",
+    "cost5h": "5-Hour Cost",
+    "costWeekly": "Weekly Cost",
+    "costMonthly": "Monthly Cost",
+    "concurrentSessions": "Concurrent Sessions",
+    "noLimit": "No quota limits"
+  },
+  "addKeyForm": {
+    "title": "Add Key",
+    "description": "Create a new API key for the current user. The key value will be auto-generated.",
+    "submitText": "Create Key",
+    "loadingText": "Creating...",
+    "keyName": {
+      "label": "Key Name",
+      "placeholder": "Enter key name"
+    },
+    "expiresAt": {
+      "label": "Expiration Time",
+      "placeholder": "Select expiration time",
+      "description": "Leave blank for never expires"
+    },
+    "canLoginWebUi": {
+      "label": "Allow Web UI Login",
+      "description": "When disabled, this key can only be used for API calls and cannot login to the admin panel"
+    },
+    "limit5hUsd": {
+      "label": "5-Hour Cost Limit (USD)",
+      "placeholder": "Leave blank for unlimited",
+      "description": "Maximum cost within 5 hours"
+    },
+    "limitWeeklyUsd": {
+      "label": "Weekly Cost Limit (USD)",
+      "placeholder": "Leave blank for unlimited",
+      "description": "Maximum cost per week"
+    },
+    "limitMonthlyUsd": {
+      "label": "Monthly Cost Limit (USD)",
+      "placeholder": "Leave blank for unlimited",
+      "description": "Maximum cost per month"
+    },
+    "limitConcurrentSessions": {
+      "label": "Concurrent Session Limit",
+      "placeholder": "0 means unlimited",
+      "description": "Number of simultaneous conversations"
+    },
+    "errors": {
+      "userIdMissing": "User ID does not exist",
+      "createFailed": "Failed to create, please try again later",
+      "noKeyReturned": "Created successfully but key was not returned"
+    }
+  },
+  "userForm": {
+    "title": {
+      "add": "Add User",
+      "edit": "Edit User"
+    },
+    "description": {
+      "add": "Create a new user. The system will automatically generate a default key.",
+      "edit": "Modify user's basic information."
+    },
+    "submitText": {
+      "add": "Create User",
+      "edit": "Save Changes"
+    },
+    "loadingText": {
+      "add": "Creating...",
+      "edit": "Saving..."
+    },
+    "username": {
+      "label": "Username",
+      "placeholder": "Enter username"
+    },
+    "note": {
+      "label": "Note",
+      "placeholder": "Enter note (optional)",
+      "description": "Used to describe the user's purpose or notes"
+    },
+    "providerGroup": {
+      "label": "Provider Group",
+      "placeholder": "e.g., premium or premium,economy (optional)",
+      "description": "Specify user-specific provider groups (supports multiple, comma-separated). The system will only select from providers matching the groupTag. Leave blank = use all providers"
+    },
+    "rpm": {
+      "label": "RPM Limit",
+      "placeholder": "Requests per minute limit",
+      "description": "Default: {default}, Range: 1-10000"
+    },
+    "dailyQuota": {
+      "label": "Daily Quota",
+      "placeholder": "Daily consumption quota limit",
+      "description": "Default: ${default}, Range: $0.01-$1000"
+    }
+  },
+  "deleteKeyConfirm": {
+    "title": "Confirm Delete Key",
+    "description": "Are you sure you want to delete key \"{name}\"?\n{maskedKey}\nThis action cannot be undone. All applications using this key will lose access.",
+    "cancel": "Cancel",
+    "confirm": "Confirm Delete",
+    "confirmLoading": "Deleting...",
+    "errors": {
+      "deleteFailed": "Delete failed",
+      "retryError": "Delete failed, please try again later"
+    }
+  },
+  "keyActions": {
+    "edit": "Edit",
+    "delete": "Delete",
+    "editAriaLabel": "Edit key",
+    "deleteAriaLabel": "Delete key"
+  },
+  "userActions": {
+    "edit": "Edit user",
+    "delete": "Delete user",
+    "editAriaLabel": "Edit user",
+    "deleteAriaLabel": "Delete user"
+  }
+}

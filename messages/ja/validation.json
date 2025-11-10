@@ -1,0 +1,14 @@
+{
+  "_comment": "Form validation messages for Japanese",
+
+  "name_required": "名前は必須です",
+  "name_max_length": "名前は{max}文字を超えることはできません",
+  "note_max_length": "メモは{max}文字を超えることはできません",
+  "email_invalid": "有効なメールアドレスを入力してください",
+  "url_invalid": "有効なURLを入力してください",
+  "number_min": "{min}以上である必要があります",
+  "number_max": "{max}を超えることはできません",
+  "number_integer": "整数である必要があります",
+  "number_positive": "正の数である必要があります",
+  "required": "このフィールドは必須です"
+}

@@ -1,0 +1,51 @@
+{
+  "submit": "提交",
+  "reset": "重置",
+  "required": "必填",
+  "optional": "選填",
+  "processing": "處理中...",
+  "common": {
+    "cancel": "取消",
+    "processing": "處理中..."
+  },
+  "errors": {
+    "formErrorTitle": "表單錯誤",
+    "formErrorDescription": "處理表單時出錯，請重試。",
+    "required": "此欄位為必填項",
+    "invalid": "輸入格式不正確",
+    "minLength": "最少輸入 {min} 個字元",
+    "maxLength": "最多輸入 {max} 個字元",
+    "min": "最小值為 {min}",
+    "max": "最大值為 {max}",
+    "email": "請輸入有效的電子郵件地址",
+    "url": "請輸入有效的URL",
+    "pattern": "格式不符合要求"
+  },
+  "placeholder": {
+    "text": "請輸入文字",
+    "number": "請輸入數字",
+    "email": "請輸入電子郵件地址",
+    "password": "請輸入密碼",
+    "search": "搜尋...",
+    "select": "請選擇",
+    "date": "請選擇日期",
+    "textarea": "請輸入內容"
+  },
+  "validation": {
+    "required": "此欄位為必填項",
+    "invalid": "輸入格式不正確",
+    "tooShort": "輸入過短",
+    "tooLong": "輸入過長",
+    "invalidEmail": "電子郵件格式無效",
+    "invalidUrl": "URL 格式無效",
+    "invalidNumber": "數字格式無效"
+  },
+  "messages": {
+    "success": "操作成功",
+    "error": "操作失敗",
+    "saved": "保存成功",
+    "deleted": "刪除成功",
+    "loading": "處理中...",
+    "submit": "提交中..."
+  }
+}

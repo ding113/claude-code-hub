@@ -1,0 +1,83 @@
+{
+  "dataGenerator": {
+    "tabs": {
+      "usage": "Usage Data Generation",
+      "userBreakdown": "User Usage Breakdown"
+    },
+    "actions": {
+      "reconfigure": "Reconfigure Parameters",
+      "generate": "Generate Data",
+      "exportScreenshot": "Export Screenshot",
+      "exportPDF": "Export PDF"
+    },
+    "params": {
+      "title": "Generation Parameters",
+      "description": "Configure parameters to create simulated log data",
+      "startDate": "Start Time",
+      "endDate": "End Time",
+      "totalCostCny": "Total Amount (CNY)",
+      "totalRecords": "Total Records",
+      "models": "Include Models (comma-separated)",
+      "userIds": "User IDs (comma-separated)",
+      "providerIds": "Provider IDs (comma-separated)",
+      "serviceName": "Service Name",
+      "required": "*",
+      "placeholders": {
+        "totalCostCny": "e.g., 1000",
+        "totalRecords": "e.g., 500 (leave blank to calculate based on amount)",
+        "models": "e.g., claude-3-5-sonnet,gpt-4 (leave blank for all)",
+        "userIds": "e.g., 1,2,3 (leave blank for all)",
+        "providerIds": "e.g., 1,2 (leave blank for all)",
+        "serviceName": "AI Model Inference Service"
+      }
+    },
+    "summary": {
+      "totalRecords": "Total Records",
+      "totalCost": "Total Cost",
+      "totalCostCny": "Total Cost (CNY)",
+      "totalTokens": "Total Tokens",
+      "timeRange": "Time Range",
+      "to": "to",
+      "uniqueUsers": "Total Users",
+      "totalCalls": "Total Calls"
+    },
+    "table": {
+      "usageLogs": {
+        "title": "Usage Logs",
+        "description": "{count} records in total",
+        "columns": {
+          "time": "Time",
+          "user": "User",
+          "key": "Key",
+          "provider": "Provider",
+          "model": "Model",
+          "input": "Input",
+          "output": "Output",
+          "cacheWrite": "Cache Write",
+          "cacheRead": "Cache Read",
+          "cost": "Cost",
+          "duration": "Duration",
+          "status": "Status"
+        }
+      },
+      "userBreakdown": {
+        "title": "User Usage Details",
+        "description": "{count} records in total",
+        "collapseByUser": "Collapse by User",
+        "columns": {
+          "userName": "User Name",
+          "key": "Key",
+          "serviceModel": "Service Model",
+          "totalCalls": "Total Calls",
+          "totalCost": "Total Cost"
+        }
+      }
+    },
+    "status": {
+      "success": "Success"
+    },
+    "errors": {
+      "failed": "Failed to generate logs"
+    }
+  }
+}

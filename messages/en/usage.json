@@ -1,0 +1,471 @@
+{
+  "pageTitle": "Claude Code Hub Usage Documentation",
+  "pageDescription": "Complete integration guide for Claude Code, Codex, and Droid CLI",
+
+  "skipLinks": {
+    "mainContent": "Jump to main content",
+    "tableOfContents": "Jump to table of contents"
+  },
+
+  "navigation": {
+    "tableOfContents": "On this page",
+    "tableOfContentsEmpty": "No sections available on this page",
+    "quickLinks": "Quick links",
+    "backToDashboard": "Back to dashboard",
+    "backToTop": "Back to top",
+    "documentNavigation": "Document navigation",
+    "openTableOfContents": "Open table of contents",
+    "pageNavigation": "Page navigation"
+  },
+
+  "codeExamples": {
+    "label": "Code example - ${language}",
+    "description": "Click the code block to copy to clipboard"
+  },
+
+  "claudeCode": {
+    "title": "Claude Code Usage Guide",
+    "description": "Claude Code is Anthropic's official AI programming assistant that supports integration through the cch proxy service. This guide will help you complete installation and configuration on different operating systems.",
+
+    "environmentSetup": {
+      "title": "Environment Setup: Install Node.js",
+      "description": "claude requires Node.js runtime (v18 or higher).",
+
+      "macos": {
+        "homebrew": "Method 1: Using Homebrew (recommended)",
+        "official": "Method 2: Download from official website",
+        "officialSteps": [
+          "Visit https://nodejs.org/",
+          "Download the LTS version for macOS (v18 or higher required)",
+          "Open the downloaded .pkg file and follow the installation wizard"
+        ]
+      },
+
+      "windows": {
+        "official": "Method 1: Download from official website (recommended)",
+        "officialSteps": [
+          "Visit https://nodejs.org/",
+          "Download the LTS version (v18 or higher required)",
+          "Double-click the .msi file and follow the installation wizard (keep default settings)"
+        ],
+        "packageManager": "Method 2: Using package manager",
+        "note": "It's recommended to use PowerShell instead of CMD for a better experience"
+      },
+
+      "linux": {
+        "official": "Method 1: Using official repository (recommended)",
+        "packageManager": "Method 2: Using system package manager"
+      },
+
+      "verification": {
+        "title": "Verify Node.js Installation",
+        "description": "After installation, open terminal/command line and run the following commands to verify:",
+        "success": "If version numbers are displayed, the installation was successful!",
+        "command1": "node --version",
+        "command2": "npm --version"
+      }
+    },
+
+    "installation": {
+      "title": "Install claude",
+
+      "nativeInstall": {
+        "title": "Native Install (recommended)",
+        "description": "Officially recommended installation method with the following advantages:",
+        "advantages": [
+          "Single executable file, no Node.js dependency",
+          "More stable auto-update mechanism",
+          "Faster startup speed"
+        ],
+
+        "macos": {
+          "homebrew": "Method 1: Homebrew (recommended)",
+          "autoUpdate": "Auto-update information",
+          "autoUpdateText": "Claude Code installed via Homebrew will auto-update outside the brew directory unless explicitly disabled with the DISABLE_AUTOUPDATER environment variable.",
+          "curl": "Method 2: curl script",
+          "curls": [
+            "# Install stable version (default)",
+            "curl -fsSL https://claude.ai/install.sh | bash",
+            "",
+            "# Install latest version",
+            "curl -fsSL https://claude.ai/install.sh | bash -s latest",
+            "",
+            "# Install specific version",
+            "curl -fsSL https://claude.ai/install.sh | bash -s 1.0.58"
+          ]
+        },
+
+        "linux": {
+          "curl": "curl script installation",
+          "curls": [
+            "# Install stable version (default)",
+            "curl -fsSL https://claude.ai/install.sh | bash",
+            "",
+            "# Install latest version",
+            "curl -fsSL https://claude.ai/install.sh | bash -s latest",
+            "",
+            "# Install specific version",
+            "curl -fsSL https://claude.ai/install.sh | bash -s 1.0.58"
+          ],
+          "alpine": "Alpine Linux special notes",
+          "alpineText": "Distributions based on musl/uClibc (such as Alpine Linux) need to install additional dependencies:",
+          "alpineCode": ["apk add libgcc libstdc++ ripgrep", "export USE_BUILTIN_RIPGREP=0"]
+        },
+
+        "windows": {
+          "powershell": "Method 1: PowerShell",
+          "powershells": [
+            "# Install stable version (default)",
+            "irm https://claude.ai/install.ps1 | iex",
+            "",
+            "# Install latest version",
+            "& ([scriptblock]::Create((irm https://claude.ai/install.ps1))) latest",
+            "",
+            "# Install specific version",
+            "& ([scriptblock]::Create((irm https://claude.ai/install.ps1))) 1.0.58"
+          ],
+          "cmd": "Method 2: CMD",
+          "cmds": [
+            "REM Install stable version (default)",
+            "curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd && del install.cmd",
+            "",
+            "REM Install latest version",
+            "curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd latest && del install.cmd",
+            "",
+            "REM Install specific version",
+            "curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd 1.0.58 && del install.cmd"
+          ]
+        },
+
+        "verification": {
+          "title": "Verify Installation",
+          "description": "After installation, run the following command to verify:",
+          "success": "If the version number is displayed, congratulations! Claude Code has been successfully installed.",
+          "command": "claude --version"
+        },
+
+        "tip": "Tip",
+        "tipText": "Before installation, make sure to remove any outdated aliases or symbolic links. Use the claude doctor command to check the installation type and version."
+      },
+
+      "npmInstall": {
+        "title": "NPM",
+        "description": "Using NPM installation requires Node.js 18 or higher first. Suitable for developers who prefer using NPM package manager.",
+        "command": "npm install -g @anthropic-ai/claude-code",
+
+        "warning": "Warning",
+        "warningText": "Do NOT use sudo npm install -g, as this may cause permission issues and security risks. If you encounter permission errors, please refer to the NPM official solution.",
+
+        "verification": {
+          "title": "Verify Installation",
+          "description": "Verify installation",
+          "success": "If the version number is displayed, congratulations! Claude Code has been successfully installed."
+        },
+
+        "migration": {
+          "title": "Migrate to Native Install",
+          "description": "If you have already installed globally via NPM, you can use the following command to migrate to Native installation:",
+          "command": "claude install",
+          "note": "Some users may be automatically migrated to this installation method."
+        }
+      }
+    },
+
+    "configuration": {
+      "title": "Connect to cch service",
+
+      "settingsJson": {
+        "title": "Method 1: settings.json configuration (recommended)",
+        "description": "Configuration file path:",
+
+        "pathNote": "Path explanation",
+        "paths": [
+          "Windows: C:/Users/your-username/.claude",
+          "Linux or macOS: ~/.claude",
+          "If the settings.json file does not exist, please create it"
+        ],
+
+        "instruction": "Edit the settings.json file and add the following content:",
+
+        "important": "Important note",
+        "importantPoints": [
+          "Replace your-api-key-here with your actual API key",
+          "How to obtain key: Log in to console → API key management → Create key"
+        ]
+      },
+
+      "envVars": {
+        "title": "Method 2: Environment variable configuration",
+
+        "windows": {
+          "temporary": "Temporary setting (current session):",
+          "permanent": "Permanent setting (user-level):",
+          "note": "You need to reopen the PowerShell window for the settings to take effect."
+        },
+
+        "unix": {
+          "temporary": "Temporary setting (current session):",
+          "permanent": "Permanent setting:",
+          "permanentNote": "Add to your shell configuration file (${shellConfig}):"
+        }
+      },
+
+      "verification": {
+        "title": "Verify configuration",
+        "description": "After configuration, verify that the environment variables are set correctly:",
+
+        "windowsPowerShell": "Execute in PowerShell:",
+        "windowsCmd": "Execute in CMD:",
+
+        "expectedOutput": "Expected output example:",
+
+        "note": "Note",
+        "noteText": "If the output is empty or shows the variable name itself, it means the environment variable setting failed. Please repeat the steps above."
+      }
+    },
+
+    "vsCodeExtension": {
+      "title": "VS Code Extension Configuration",
+      "steps": [
+        "Search for and install Claude Code for VS Code in VS Code extensions",
+        "Create a config.json file in the ~/.claude directory (if it doesn't exist)",
+        "Add the following content:"
+      ],
+
+      "note": "Note",
+      "notePoints": [
+        "It's config.json, not settings.json",
+        "The primaryApiKey field value can be anything as long as it exists"
+      ]
+    },
+
+    "startup": {
+      "title": "Start claude",
+      "description": "Run the following command in your project directory:",
+      "initNote": "During the first startup, claude will perform initial configuration."
+    },
+
+    "commonIssues": {
+      "title": "Common questions",
+
+      "commandNotFound": "1. Command not found",
+      "commandNotFoundWindows": [
+        "Make sure the npm global path (usually C:\\Users\\your-username\\AppData\\Roaming\\npm) has been added to the system PATH",
+        "Reopen the PowerShell window"
+      ],
+      "commandNotFoundUnix": "Check the npm global installation path and add it to PATH (if not already there)",
+
+      "connectionFailed": "2. API connection failed",
+      "updateCli": "3. Update claude",
+      "updateNote": "Re-run the installation script to update to the latest version."
+    }
+  },
+
+  "codex": {
+    "title": "Codex CLI Usage Guide",
+    "description": "Codex is OpenAI's official command-line AI programming assistant that supports integration through the cch proxy. Note: Codex uses OpenAI-compatible format, the endpoint needs to include the /v1 path.",
+
+    "installation": {
+      "title": "Install codex",
+      "instruction": "Execute:",
+      "adminNote": "Run PowerShell as administrator,",
+      "verification": "Verify installation:",
+      "command": "codex --version"
+    },
+
+    "configuration": {
+      "title": "Connect to cch service",
+
+      "configFile": {
+        "title": "Method 1: Configuration file method (recommended)",
+        "steps": [
+          "Open file explorer, find the ${configPath} folder (create if it doesn't exist)",
+          "Create a config.toml file",
+          "Open with text editor and add the following content:"
+        ],
+
+        "step4": "Create an auth.json file and add:",
+
+        "important": "Important note",
+        "importantPoints": [
+          "Replace your-api-key-here with your cch API key",
+          "Note: Codex uses OpenAI-compatible format, endpoint includes the /v1 path"
+        ]
+      },
+
+      "envVars": {
+        "title": "Method 2: Environment variable configuration",
+
+        "windows": {
+          "instruction": "Run in PowerShell:",
+          "note": "You need to reopen the PowerShell window for the settings to take effect."
+        },
+
+        "unix": {
+          "instruction": "Set environment variables:"
+        }
+      }
+    },
+
+    "vsCodeExtension": {
+      "title": "VS Code Extension Configuration",
+      "steps": [
+        "Search for and install Codex – OpenAI's coding agent in VS Code extensions",
+        "Make sure you have configured config.toml and auth.json according to the steps above",
+        "Set the CCH_API_KEY environment variable"
+      ],
+
+      "important": "Important",
+      "importantText": "env_key can only be an environment variable name (such as CCH_API_KEY), not the complete key. If you directly fill in the key, it will report an error that the token is not found or the token configuration is incorrect."
+    },
+
+    "startup": {
+      "title": "Start codex",
+      "description": "Run the following command in your project directory:",
+      "initNote": "During the first startup, codex will perform initial configuration."
+    },
+
+    "commonIssues": {
+      "title": "Common questions",
+
+      "commandNotFound": "1. Command not found",
+      "commandNotFoundWindows": [
+        "Make sure the npm global path (usually C:\\Users\\your-username\\AppData\\Roaming\\npm) has been added to the system PATH",
+        "Reopen the PowerShell window"
+      ],
+      "commandNotFoundUnix": "Check the npm global installation path and add it to PATH (if not already there)",
+
+      "connectionFailed": "2. API connection failed",
+      "updateCli": "3. Update codex",
+      "updateCommand": "npm i -g @openai/codex --registry=https://registry.npmmirror.com"
+    }
+  },
+
+  "droid": {
+    "title": "Droid CLI Usage Guide",
+    "description": "Droid is an interactive terminal AI programming assistant developed by Factory AI that supports integration through the cch proxy service. You must register and log in to your Droid official account before use.",
+
+    "installation": {
+      "title": "Install droid",
+
+      "linux": {
+        "instruction": "Execute:",
+        "note": "Linux users need to ensure xdg-utils is installed:",
+        "command": "sudo apt-get install xdg-utils"
+      },
+
+      "windows": {
+        "instruction": "Execute in PowerShell:"
+      }
+    },
+
+    "configuration": {
+      "title": "Connect to cch service",
+
+      "prerequisite": "Prerequisite: Must log in to Droid official account first",
+      "prerequisiteSteps": [
+        "Run the droid command",
+        "Follow the prompts to log in to Factory official account via browser",
+        "After successful login, you can continue to configure custom models"
+      ],
+
+      "customModels": {
+        "title": "Configure custom models",
+        "path": "Configuration file path:",
+        "instruction": "Edit the configuration file and add the following content:",
+
+        "important": "Important notes",
+        "importantPoints": [
+          "Replace your-api-key-here with your cch API key",
+          "Anthropic format: Use ${resolvedOrigin} (no /v1)",
+          "OpenAI format: Use ${resolvedOrigin}/v1 (requires /v1)"
+        ]
+      },
+
+      "switching": {
+        "title": "Switch models",
+        "steps": [
+          "Restart Droid",
+          "Enter the /model command",
+          "Select GPT-5-Codex [cch] or Sonnet 4.5 [cch]",
+          "Start using!"
+        ]
+      }
+    },
+
+    "startup": {
+      "title": "Start droid",
+      "description": "Run the following command in your project directory:",
+      "initNote": "During the first startup, droid will perform initial configuration."
+    },
+
+    "commonIssues": {
+      "title": "Common questions",
+      "commandNotFound": "1. Command not found",
+      "commandNotFoundWindows": [
+        "Make sure the npm global path (usually C:\\Users\\your-username\\AppData\\Roaming\\npm) has been added to the system PATH",
+        "Reopen the PowerShell window"
+      ],
+      "commandNotFoundUnix": "Check the npm global installation path and add it to PATH (if not already there)",
+      "updateCli": "2. Update droid"
+    }
+  },
+
+  "commonCommands": {
+    "title": "Common commands",
+    "description": "After starting Claude Code, you can use the following common commands:",
+
+    "commands": [
+      { "command": "/help", "description": "View help information" },
+      { "command": "/clear", "description": "Clear chat history and start a new conversation" },
+      { "command": "/compact", "description": "Summarize the current conversation" },
+      { "command": "/cost", "description": "View the amount spent in the current conversation" },
+      { "command": "/model", "description": "Switch models (Droid-specific)" }
+    ],
+
+    "moreCommands": "For more commands, see the official documentation"
+  },
+
+  "troubleshooting": {
+    "title": "General troubleshooting",
+
+    "installationFailed": {
+      "title": "Installation failed",
+      "steps": [
+        "Check if network connection is normal",
+        "Make sure you have administrator privileges (Windows) or use sudo (macOS / Linux)",
+        "Try using a proxy or mirror source (npm can use the --registry parameter)"
+      ]
+    },
+
+    "invalidApiKey": {
+      "title": "API key is invalid",
+      "steps": [
+        "Confirm the key has been copied correctly (no extra spaces)",
+        "Check if the key is within the validity period",
+        "Verify that account permissions are normal",
+        "Confirm the correct endpoint format is used (Anthropic no /v1, OpenAI has /v1)"
+      ]
+    },
+
+    "endpointConfigError": {
+      "title": "Endpoint configuration error",
+      "points": [
+        "Claude Code / Droid Anthropic model: Use ${resolvedOrigin} (no /v1)",
+        "Codex / Droid OpenAI model: Use ${resolvedOrigin}/v1 (must include /v1)"
+      ]
+    }
+  },
+
+  "platforms": {
+    "macos": "macOS",
+    "windows": "Windows",
+    "linux": "Linux"
+  },
+
+  "ui": {
+    "mainContent": "Documentation content",
+    "main": "main",
+    "currentSiteAddress": "Current site address"
+  }
+}

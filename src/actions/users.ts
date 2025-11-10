@@ -12,6 +12,9 @@ import { USER_DEFAULTS } from "@/lib/constants/user.constants";
 import { createKey } from "@/repository/key";
 import { getSession } from "@/lib/auth";
 import type { ActionResult } from "./types";
+import { ERROR_CODES } from "@/lib/utils/error-messages";
+import { formatZodError } from "@/lib/utils/zod-i18n";
+import { getTranslations, getLocale } from "next-intl/server";
 
 // 获取用户数据
 export async function getUsers(): Promise<UserDisplay[]> {
@@ -20,6 +23,10 @@ export async function getUsers(): Promise<UserDisplay[]> {
     if (!session) {
       return [];
     }
+
+    // Get current locale and translations
+    const locale = await getLocale();
+    const t = await getTranslations("users");
 
     // 普通用户只能看到自己的数据
     let users;
@@ -67,10 +74,12 @@ export async function getUsers(): Promise<UserDisplay[]> {
                 maskedKey: maskKey(key.key),
                 fullKey: canUserManageKey ? key.key : undefined,
                 canCopy: canUserManageKey,
-                expiresAt: key.expiresAt ? key.expiresAt.toISOString().split("T")[0] : "永不过期",
+                expiresAt: key.expiresAt
+                  ? key.expiresAt.toISOString().split("T")[0]
+                  : t("neverExpires"),
                 status: key.isEnabled ? "enabled" : ("disabled" as const),
                 createdAt: key.createdAt,
-                createdAtFormatted: key.createdAt.toLocaleString("zh-CN", {
+                createdAtFormatted: key.createdAt.toLocaleString(locale, {
                   year: "numeric",
                   month: "2-digit",
                   day: "2-digit",
@@ -94,7 +103,7 @@ export async function getUsers(): Promise<UserDisplay[]> {
             }),
           };
         } catch (error) {
-          logger.error(`获取用户 ${user.id} 的密钥失败:`, error);
+          logger.error(`Failed to fetch keys for user ${user.id}:`, error);
           return {
             id: user.id,
             name: user.name,
@@ -111,7 +120,7 @@ export async function getUsers(): Promise<UserDisplay[]> {
 
     return userDisplays;
   } catch (error) {
-    logger.error("获取用户数据失败:", error);
+    logger.error("Failed to fetch user data:", error);
     return [];
   }
 }
@@ -125,19 +134,37 @@ export async function addUser(data: {
   dailyQuota?: number;
 }): Promise<ActionResult> {
   try {
+    // Get translations for error messages
+    const tError = await getTranslations("errors");
+
     // 权限检查：只有管理员可以添加用户
     const session = await getSession();
     if (!session || session.user.role !== "admin") {
-      return { ok: false, error: "无权限执行此操作" } as const;
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
     }
 
-    const validatedData = CreateUserSchema.parse({
+    // Validate data with Zod
+    const validationResult = CreateUserSchema.safeParse({
       name: data.name,
       note: data.note || "",
       providerGroup: data.providerGroup || "",
       rpm: data.rpm || USER_DEFAULTS.RPM,
       dailyQuota: data.dailyQuota || USER_DEFAULTS.DAILY_QUOTA,
     });
+
+    if (!validationResult.success) {
+      return {
+        ok: false,
+        error: formatZodError(validationResult.error),
+        errorCode: ERROR_CODES.INVALID_FORMAT,
+      };
+    }
+
+    const validatedData = validationResult.data;
 
     const newUser = await createUser({
       name: validatedData.name,
@@ -160,9 +187,14 @@ export async function addUser(data: {
     revalidatePath("/dashboard");
     return { ok: true };
   } catch (error) {
-    logger.error("添加用户失败:", error);
-    const message = error instanceof Error ? error.message : "添加用户失败，请稍后重试";
-    return { ok: false, error: message };
+    logger.error("Failed to create user:", error);
+    const tError = await getTranslations("errors");
+    const message = error instanceof Error ? error.message : tError("CREATE_USER_FAILED");
+    return {
+      ok: false,
+      error: message,
+      errorCode: ERROR_CODES.CREATE_FAILED,
+    };
   }
 }
 
@@ -178,9 +210,16 @@ export async function editUser(
   }
 ): Promise<ActionResult> {
   try {
+    // Get translations for error messages
+    const tError = await getTranslations("errors");
+
     const session = await getSession();
     if (!session) {
-      return { ok: false, error: "未登录" };
+      return {
+        ok: false,
+        error: tError("UNAUTHORIZED"),
+        errorCode: ERROR_CODES.UNAUTHORIZED,
+      };
     }
 
     // 定义敏感字段列表（仅管理员可修改）
@@ -190,7 +229,17 @@ export async function editUser(
     // 权限检查：区分三种情况
     if (session.user.role === "admin") {
       // 管理员可以修改所有用户的所有字段
-      const validatedData = UpdateUserSchema.parse(data);
+      const validationResult = UpdateUserSchema.safeParse(data);
+
+      if (!validationResult.success) {
+        return {
+          ok: false,
+          error: formatZodError(validationResult.error),
+          errorCode: ERROR_CODES.INVALID_FORMAT,
+        };
+      }
+
+      const validatedData = validationResult.data;
 
       await updateUser(userId, {
         name: validatedData.name,
@@ -204,15 +253,26 @@ export async function editUser(
       if (hasSensitiveFields) {
         return {
           ok: false,
-          error: "普通用户不能修改账户限额和供应商分组",
+          error: tError("USER_CANNOT_MODIFY_SENSITIVE_FIELDS"),
+          errorCode: ERROR_CODES.PERMISSION_DENIED,
         };
       }
 
       // 仅允许修改非敏感字段（name, description）
-      const validatedData = UpdateUserSchema.parse({
+      const validationResult = UpdateUserSchema.safeParse({
         name: data.name,
         note: data.note,
       });
+
+      if (!validationResult.success) {
+        return {
+          ok: false,
+          error: formatZodError(validationResult.error),
+          errorCode: ERROR_CODES.INVALID_FORMAT,
+        };
+      }
+
+      const validatedData = validationResult.data;
 
       await updateUser(userId, {
         name: validatedData.name,
@@ -220,33 +280,50 @@ export async function editUser(
       });
     } else {
       // 普通用户尝试修改他人信息
-      return { ok: false, error: "无权限执行此操作" };
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
     }
 
     revalidatePath("/dashboard");
     return { ok: true };
   } catch (error) {
-    logger.error("更新用户失败:", error);
-    const message = error instanceof Error ? error.message : "更新用户失败，请稍后重试";
-    return { ok: false, error: message };
+    logger.error("Failed to update user:", error);
+    const tError = await getTranslations("errors");
+    const message = error instanceof Error ? error.message : tError("UPDATE_USER_FAILED");
+    return {
+      ok: false,
+      error: message,
+      errorCode: ERROR_CODES.UPDATE_FAILED,
+    };
   }
 }
 
 // 删除用户
 export async function removeUser(userId: number): Promise<ActionResult> {
   try {
+    // Get translations for error messages
+    const tError = await getTranslations("errors");
+
     const session = await getSession();
     if (!session || session.user.role !== "admin") {
-      return { ok: false, error: "无权限执行此操作" };
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
     }
 
     await deleteUser(userId);
     revalidatePath("/dashboard");
     return { ok: true };
   } catch (error) {
-    logger.error("删除用户失败:", error);
-    const message = error instanceof Error ? error.message : "删除用户失败，请稍后重试";
-    return { ok: false, error: message };
+    logger.error("Failed to delete user:", error);
+    const tError = await getTranslations("errors");
+    const message = error instanceof Error ? error.message : tError("DELETE_USER_FAILED");
+    return { ok: false, error: message, errorCode: ERROR_CODES.DELETE_FAILED };
   }
 }
 
@@ -260,19 +337,26 @@ export async function getUserLimitUsage(userId: number): Promise<
   }>
 > {
   try {
+    // Get translations for error messages
+    const tError = await getTranslations("errors");
+
     const session = await getSession();
     if (!session) {
-      return { ok: false, error: "未登录" };
+      return { ok: false, error: tError("UNAUTHORIZED"), errorCode: ERROR_CODES.UNAUTHORIZED };
     }
 
     const user = await findUserById(userId);
     if (!user) {
-      return { ok: false, error: "用户不存在" };
+      return { ok: false, error: tError("USER_NOT_FOUND"), errorCode: ERROR_CODES.NOT_FOUND };
     }
 
     // 权限检查：用户只能查看自己，管理员可以查看所有人
     if (session.user.role !== "admin" && session.user.id !== userId) {
-      return { ok: false, error: "无权限执行此操作" };
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
     }
 
     // 动态导入避免循环依赖
@@ -303,8 +387,9 @@ export async function getUserLimitUsage(userId: number): Promise<
       },
     };
   } catch (error) {
-    logger.error("获取用户限额使用情况失败:", error);
-    const message = error instanceof Error ? error.message : "获取用户限额使用情况失败";
-    return { ok: false, error: message };
+    logger.error("Failed to fetch user limit usage:", error);
+    const tError = await getTranslations("errors");
+    const message = error instanceof Error ? error.message : tError("GET_USER_QUOTA_FAILED");
+    return { ok: false, error: message, errorCode: ERROR_CODES.OPERATION_FAILED };
   }
 }

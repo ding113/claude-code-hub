@@ -1,0 +1,471 @@
+{
+  "pageTitle": "Claude Code Hub 使用ドキュメント",
+  "pageDescription": "Claude Code、Codex、Droid CLIの完全な統合ガイド",
+
+  "skipLinks": {
+    "mainContent": "メインコンテンツへジャンプ",
+    "tableOfContents": "目次へジャンプ"
+  },
+
+  "navigation": {
+    "tableOfContents": "このページ内",
+    "tableOfContentsEmpty": "このページで利用可能なセクションはありません",
+    "quickLinks": "クイックリンク",
+    "backToDashboard": "ダッシュボードに戻る",
+    "backToTop": "トップに戻る",
+    "documentNavigation": "ドキュメントナビゲーション",
+    "openTableOfContents": "目次を開く",
+    "pageNavigation": "ページナビゲーション"
+  },
+
+  "codeExamples": {
+    "label": "コード例 - ${language}",
+    "description": "コードブロックをクリックしてクリップボードにコピー"
+  },
+
+  "claudeCode": {
+    "title": "Claude Code 使用ガイド",
+    "description": "Claude Code は Anthropic の公式 AI プログラミングアシスタントで、cch プロキシサービスを通じた統合をサポートしています。このガイドは、異なるオペレーティングシステムでのインストールと設定の完了を支援します。",
+
+    "environmentSetup": {
+      "title": "環境セットアップ: Node.js のインストール",
+      "description": "claude は Node.js ランタイム (v18 以上) が必要です。",
+
+      "macos": {
+        "homebrew": "方法1: Homebrew を使用 (推奨)",
+        "official": "方法2: 公式ウェブサイトからダウンロード",
+        "officialSteps": [
+          "https://nodejs.org/ にアクセス",
+          "macOS 用の LTS バージョン (v18 以上が必要) をダウンロード",
+          "ダウンロードした .pkg ファイルを開き、インストールウィザードに従う"
+        ]
+      },
+
+      "windows": {
+        "official": "方法1: 公式ウェブサイトからダウンロード (推奨)",
+        "officialSteps": [
+          "https://nodejs.org/ にアクセス",
+          "LTS バージョン (v18 以上が必要) をダウンロード",
+          ".msi ファイルをダブルクリックし、インストールウィザードに従う (デフォルト設定のままで可)"
+        ],
+        "packageManager": "方法2: パッケージマネージャーを使用",
+        "note": "より良い体験のため、CMD ではなく PowerShell の使用をお勧めします"
+      },
+
+      "linux": {
+        "official": "方法1: 公式リポジトリを使用 (推奨)",
+        "packageManager": "方法2: システムパッケージマネージャーを使用"
+      },
+
+      "verification": {
+        "title": "Node.js インストールの確認",
+        "description": "インストール後、ターミナル/コマンドラインを開き、以下のコマンドを実行して確認:",
+        "success": "バージョン番号が表示されていれば、インストールは成功です!",
+        "command1": "node --version",
+        "command2": "npm --version"
+      }
+    },
+
+    "installation": {
+      "title": "claude をインストール",
+
+      "nativeInstall": {
+        "title": "ネイティブインストール (推奨)",
+        "description": "公式に推奨されるインストール方法で、以下の利点があります:",
+        "advantages": [
+          "Node.js 依存関係のない単一実行可能ファイル",
+          "より安定した自動更新メカニズム",
+          "より高速な起動速度"
+        ],
+
+        "macos": {
+          "homebrew": "方法1: Homebrew (推奨)",
+          "autoUpdate": "自動更新情報",
+          "autoUpdateText": "Homebrew 経由でインストールされた Claude Code は、DISABLE_AUTOUPDATER 環境変数で明示的に無効にされない限り、brew ディレクトリの外で自動更新されます。",
+          "curl": "方法2: curl スクリプト",
+          "curls": [
+            "# 安定版をインストール (デフォルト)",
+            "curl -fsSL https://claude.ai/install.sh | bash",
+            "",
+            "# 最新版をインストール",
+            "curl -fsSL https://claude.ai/install.sh | bash -s latest",
+            "",
+            "# 特定バージョンをインストール",
+            "curl -fsSL https://claude.ai/install.sh | bash -s 1.0.58"
+          ]
+        },
+
+        "linux": {
+          "curl": "curl スクリプトのインストール",
+          "curls": [
+            "# 安定版をインストール (デフォルト)",
+            "curl -fsSL https://claude.ai/install.sh | bash",
+            "",
+            "# 最新版をインストール",
+            "curl -fsSL https://claude.ai/install.sh | bash -s latest",
+            "",
+            "# 特定バージョンをインストール",
+            "curl -fsSL https://claude.ai/install.sh | bash -s 1.0.58"
+          ],
+          "alpine": "Alpine Linux の特別な注記",
+          "alpineText": "musl/uClibc ベースのディストリビューション (Alpine Linux など) は追加の依存関係をインストールする必要があります:",
+          "alpineCode": ["apk add libgcc libstdc++ ripgrep", "export USE_BUILTIN_RIPGREP=0"]
+        },
+
+        "windows": {
+          "powershell": "方法1: PowerShell",
+          "powershells": [
+            "# 安定版をインストール (デフォルト)",
+            "irm https://claude.ai/install.ps1 | iex",
+            "",
+            "# 最新版をインストール",
+            "& ([scriptblock]::Create((irm https://claude.ai/install.ps1))) latest",
+            "",
+            "# 特定バージョンをインストール",
+            "& ([scriptblock]::Create((irm https://claude.ai/install.ps1))) 1.0.58"
+          ],
+          "cmd": "方法2: CMD",
+          "cmds": [
+            "REM 安定版をインストール (デフォルト)",
+            "curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd && del install.cmd",
+            "",
+            "REM 最新版をインストール",
+            "curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd latest && del install.cmd",
+            "",
+            "REM 特定バージョンをインストール",
+            "curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd 1.0.58 && del install.cmd"
+          ]
+        },
+
+        "verification": {
+          "title": "インストールの確認",
+          "description": "インストール後、以下のコマンドを実行して確認:",
+          "success": "バージョン番号が表示されていれば、Claude Code は正常にインストールされました。",
+          "command": "claude --version"
+        },
+
+        "tip": "ヒント",
+        "tipText": "インストール前に、古いエイリアスまたはシンボリックリンクを削除していることを確認してください。claude doctor コマンドを使用してインストールタイプとバージョンを確認できます。"
+      },
+
+      "npmInstall": {
+        "title": "NPM",
+        "description": "NPM インストールを使用するには、まず Node.js 18 以上をインストールする必要があります。NPM パッケージマネージャーの使用を好む開発者に適しています。",
+        "command": "npm install -g @anthropic-ai/claude-code",
+
+        "warning": "警告",
+        "warningText": "sudo npm install -g を使用しないでください。これにより権限の問題とセキュリティリスクが発生する可能性があります。権限エラーが発生した場合は、NPM の公式ソリューションを参照してください。",
+
+        "verification": {
+          "title": "インストールの確認",
+          "description": "インストールの確認",
+          "success": "バージョン番号が表示されていれば、Claude Code は正常にインストールされました。"
+        },
+
+        "migration": {
+          "title": "ネイティブインストールへの移行",
+          "description": "NPM を使用してグローバルにインストール済みの場合は、以下のコマンドを使用してネイティブインストールに移行できます:",
+          "command": "claude install",
+          "note": "一部のユーザーは自動的にこのインストール方法に移行される可能性があります。"
+        }
+      }
+    },
+
+    "configuration": {
+      "title": "cch サービスに接続",
+
+      "settingsJson": {
+        "title": "方法1: settings.json 設定 (推奨)",
+        "description": "設定ファイルのパス:",
+
+        "pathNote": "パスの説明",
+        "paths": [
+          "Windows: C:/Users/your-username/.claude",
+          "Linux または macOS: ~/.claude",
+          "settings.json ファイルが存在しない場合は作成してください"
+        ],
+
+        "instruction": "settings.json ファイルを編集して以下の内容を追加:",
+
+        "important": "重要な注記",
+        "importantPoints": [
+          "your-api-key-here を実際の API キーに置き換えます",
+          "キーの取得方法: コンソールにログイン → API キー管理 → キーを作成"
+        ]
+      },
+
+      "envVars": {
+        "title": "方法2: 環境変数設定",
+
+        "windows": {
+          "temporary": "一時設定 (現在のセッション):",
+          "permanent": "永続設定 (ユーザーレベル):",
+          "note": "設定を有効にするには PowerShell ウィンドウを再度開く必要があります。"
+        },
+
+        "unix": {
+          "temporary": "一時設定 (現在のセッション):",
+          "permanent": "永続設定:",
+          "permanentNote": "シェル設定ファイル (${shellConfig}) に追加:"
+        }
+      },
+
+      "verification": {
+        "title": "設定の確認",
+        "description": "設定後、環境変数が正しく設定されているかを確認:",
+
+        "windowsPowerShell": "PowerShell で実行:",
+        "windowsCmd": "CMD で実行:",
+
+        "expectedOutput": "予想される出力の例:",
+
+        "note": "注記",
+        "noteText": "出力が空またはコマンド名そのものが表示されている場合は、環境変数の設定に失敗しています。上記の手順をもう一度実行してください。"
+      }
+    },
+
+    "vsCodeExtension": {
+      "title": "VS Code 拡張機能の設定",
+      "steps": [
+        "VS Code 拡張機能で Claude Code for VS Code を検索してインストール",
+        "~/.claude ディレクトリに config.json ファイルを作成 (存在しない場合)",
+        "以下の内容を追加:"
+      ],
+
+      "note": "注記",
+      "notePoints": [
+        "これは config.json であり、settings.json ではありません",
+        "primaryApiKey フィールドの値は、存在する限り何でも構いません"
+      ]
+    },
+
+    "startup": {
+      "title": "claude を起動",
+      "description": "プロジェクトディレクトリで以下のコマンドを実行:",
+      "initNote": "初回起動時に claude は初期設定を実行します。"
+    },
+
+    "commonIssues": {
+      "title": "よくある質問",
+
+      "commandNotFound": "1. コマンドが見つかりません",
+      "commandNotFoundWindows": [
+        "npm グローバルパス (通常は C:\\Users\\your-username\\AppData\\Roaming\\npm) がシステム PATH に追加されていることを確認",
+        "PowerShell ウィンドウを再度開く"
+      ],
+      "commandNotFoundUnix": "npm グローバルインストールパスを確認し、PATH に追加 (存在しない場合)",
+
+      "connectionFailed": "2. API 接続失敗",
+      "updateCli": "3. claude を更新",
+      "updateNote": "インストールスクリプトを再度実行して最新バージョンに更新してください。"
+    }
+  },
+
+  "codex": {
+    "title": "Codex CLI 使用ガイド",
+    "description": "Codex は OpenAI の公式コマンドラインAIプログラミングアシスタントで、cch プロキシを通じた統合をサポートしています。注記: Codex は OpenAI 互換形式を使用し、エンドポイントには /v1 パスを含める必要があります。",
+
+    "installation": {
+      "title": "codex をインストール",
+      "instruction": "実行:",
+      "adminNote": "PowerShell を管理者として実行,",
+      "verification": "インストールの確認:",
+      "command": "codex --version"
+    },
+
+    "configuration": {
+      "title": "cch サービスに接続",
+
+      "configFile": {
+        "title": "方法1: 設定ファイル方式 (推奨)",
+        "steps": [
+          "ファイルエクスプローラーを開き、${configPath} フォルダを見つける (存在しない場合は作成)",
+          "config.toml ファイルを作成",
+          "テキストエディタで開き、以下の内容を追加:"
+        ],
+
+        "step4": "auth.json ファイルを作成して追加:",
+
+        "important": "重要な注記",
+        "importantPoints": [
+          "your-api-key-here を cch API キーに置き換える",
+          "注記: Codex は OpenAI 互換形式を使用し、エンドポイントには /v1 パスが含まれます"
+        ]
+      },
+
+      "envVars": {
+        "title": "方法2: 環境変数設定",
+
+        "windows": {
+          "instruction": "PowerShell で実行:",
+          "note": "設定を有効にするには PowerShell ウィンドウを再度開く必要があります。"
+        },
+
+        "unix": {
+          "instruction": "環境変数を設定:"
+        }
+      }
+    },
+
+    "vsCodeExtension": {
+      "title": "VS Code 拡張機能の設定",
+      "steps": [
+        "VS Code 拡張機能で Codex – OpenAI's coding agent を検索してインストール",
+        "上記の手順に従って config.toml と auth.json を設定していることを確認",
+        "CCH_API_KEY 環境変数を設定"
+      ],
+
+      "important": "重要",
+      "importantText": "env_key は環境変数名 (例: CCH_API_KEY) のみで、完全なキーではありません。キーを直接入力するとトークンエラーが発生します。"
+    },
+
+    "startup": {
+      "title": "codex を起動",
+      "description": "プロジェクトディレクトリで以下のコマンドを実行:",
+      "initNote": "初回起動時に codex は初期設定を実行します。"
+    },
+
+    "commonIssues": {
+      "title": "よくある質問",
+
+      "commandNotFound": "1. コマンドが見つかりません",
+      "commandNotFoundWindows": [
+        "npm グローバルパス (通常は C:\\Users\\your-username\\AppData\\Roaming\\npm) がシステム PATH に追加されていることを確認",
+        "PowerShell ウィンドウを再度開く"
+      ],
+      "commandNotFoundUnix": "npm グローバルインストールパスを確認し、PATH に追加 (存在しない場合)",
+
+      "connectionFailed": "2. API 接続失敗",
+      "updateCli": "3. codex を更新",
+      "updateCommand": "npm i -g @openai/codex --registry=https://registry.npmmirror.com"
+    }
+  },
+
+  "droid": {
+    "title": "Droid CLI 使用ガイド",
+    "description": "Droid は Factory AI が開発したインタラクティブターミナル AI プログラミングアシスタントで、cch プロキシサービスを通じた統合をサポートしています。使用する前に、Droid 公式アカウントに登録してログインする必要があります。",
+
+    "installation": {
+      "title": "droid をインストール",
+
+      "linux": {
+        "instruction": "実行:",
+        "note": "Linux ユーザーは xdg-utils がインストールされていることを確認:",
+        "command": "sudo apt-get install xdg-utils"
+      },
+
+      "windows": {
+        "instruction": "PowerShell で実行:"
+      }
+    },
+
+    "configuration": {
+      "title": "cch サービスに接続",
+
+      "prerequisite": "前提条件: まず Droid 公式アカウントにログイン",
+      "prerequisiteSteps": [
+        "droid コマンドを実行",
+        "プロンプトに従ってブラウザから Factory 公式アカウントにログイン",
+        "正常にログインしたら、カスタムモデルの設定に進みます"
+      ],
+
+      "customModels": {
+        "title": "カスタムモデルの設定",
+        "path": "設定ファイルのパス:",
+        "instruction": "設定ファイルを編集して以下の内容を追加:",
+
+        "important": "重要な注記",
+        "importantPoints": [
+          "your-api-key-here を cch API キーに置き換える",
+          "Anthropic 形式: ${resolvedOrigin} を使用 (/v1 なし)",
+          "OpenAI 形式: ${resolvedOrigin}/v1 を使用 (/v1 が必要)"
+        ]
+      },
+
+      "switching": {
+        "title": "モデルの切り替え",
+        "steps": [
+          "Droid を再起動",
+          "/model コマンドを入力",
+          "GPT-5-Codex [cch] または Sonnet 4.5 [cch] を選択",
+          "使用開始!"
+        ]
+      }
+    },
+
+    "startup": {
+      "title": "droid を起動",
+      "description": "プロジェクトディレクトリで以下のコマンドを実行:",
+      "initNote": "初回起動時、droid は初期設定を実行します。"
+    },
+
+    "commonIssues": {
+      "title": "よくある質問",
+      "commandNotFound": "1. コマンドが見つかりません",
+      "commandNotFoundWindows": [
+        "npm グローバルパス (通常 C:\\Users\\your-username\\AppData\\Roaming\\npm) がシステム PATH に追加されていることを確認",
+        "PowerShell ウィンドウを再起動"
+      ],
+      "commandNotFoundUnix": "npm グローバルインストールパスを確認し、PATH に追加 (まだの場合)",
+      "updateCli": "2. droid を更新"
+    }
+  },
+
+  "commonCommands": {
+    "title": "よく使用されるコマンド",
+    "description": "Claude Code を起動した後、以下のよく使用されるコマンドを使用できます:",
+
+    "commands": [
+      { "command": "/help", "description": "ヘルプ情報を表示" },
+      { "command": "/clear", "description": "チャット履歴をクリアして新しい会話を開始" },
+      { "command": "/compact", "description": "現在の会話を要約" },
+      { "command": "/cost", "description": "現在の会話で使用した金額を表示" },
+      { "command": "/model", "description": "モデルを切り替え (Droid 限定)" }
+    ],
+
+    "moreCommands": "その他のコマンドについては、公式ドキュメントを参照してください"
+  },
+
+  "troubleshooting": {
+    "title": "一般的なトラブルシューティング",
+
+    "installationFailed": {
+      "title": "インストール失敗",
+      "steps": [
+        "ネットワーク接続が正常であることを確認",
+        "管理者権限 (Windows) または sudo (macOS / Linux) があることを確認",
+        "プロキシまたはミラーソースを使用してみてください (npm は --registry パラメータを使用可能)"
+      ]
+    },
+
+    "invalidApiKey": {
+      "title": "API キーが無効",
+      "steps": [
+        "キーが正しくコピーされていることを確認 (余分なスペースがないこと)",
+        "キーが有効期間内であることを確認",
+        "アカウント権限が正常であることを確認",
+        "正しいエンドポイント形式が使用されていることを確認 (Anthropic に /v1 なし、OpenAI に /v1 あり)"
+      ]
+    },
+
+    "endpointConfigError": {
+      "title": "エンドポイント設定エラー",
+      "points": [
+        "Claude Code / Droid Anthropic モデル: ${resolvedOrigin} を使用 (/v1 なし)",
+        "Codex / Droid OpenAI モデル: ${resolvedOrigin}/v1 を使用 (/v1 が必須)"
+      ]
+    }
+  },
+
+  "platforms": {
+    "macos": "macOS",
+    "windows": "Windows",
+    "linux": "Linux"
+  },
+
+  "ui": {
+    "mainContent": "ドキュメントコンテンツ",
+    "main": "main",
+    "currentSiteAddress": "現在のサイトアドレス"
+  }
+}

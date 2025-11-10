@@ -1,0 +1,29 @@
+{
+  "_comment": "Toast notification messages for Chinese Traditional",
+
+  "save_success": "儲存成功",
+  "create_success": "創建成功",
+  "update_success": "更新成功",
+  "delete_success": "刪除成功",
+  "copy_success": "複製成功",
+  "sync_success": "同步成功",
+  "export_success": "匯出成功",
+  "import_success": "匯入成功",
+  "refresh_success": "刷新成功",
+  "test_success": "測試成功",
+
+  "user_created": "使用者 {name} 創建成功",
+  "user_updated": "使用者資訊已更新",
+  "user_deleted": "使用者已刪除",
+  "key_created": "金鑰創建成功",
+  "key_updated": "金鑰已更新",
+  "key_deleted": "金鑰已刪除",
+  "provider_created": "供應商創建成功",
+  "provider_updated": "供應商已更新",
+  "provider_deleted": "供應商已刪除",
+
+  "operation_success": "操作成功",
+  "operation_failed": "操作失敗",
+  "processing": "處理中...",
+  "please_wait": "請稍候..."
+}
