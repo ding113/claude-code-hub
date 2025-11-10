@@ -177,6 +177,9 @@ export interface MessageRequest {
   // User-Agent（用于客户端类型分析）
   userAgent?: string;
 
+  // 请求的 API endpoint（例如：/v1/messages），从 URL.pathname 提取
+  endpoint?: string;
+
   // Messages 数量（用于短请求检测和分析）
   messagesCount?: number;
 
@@ -222,6 +225,9 @@ export interface CreateMessageRequestData {
 
   // User-Agent（用于客户端类型分析）
   user_agent?: string;
+
+  // 请求的 API endpoint（例如：/v1/messages），从 URL.pathname 提取
+  endpoint?: string;
 
   // Messages 数量（用于短请求检测和分析）
   messages_count?: number;
