@@ -89,12 +89,14 @@ export function ModelMultiSelect({
           {selectedModels.length === 0 ? (
             <span className="text-muted-foreground">
               {t("allowAllModels", {
-                type: providerType === "claude" ? t("claude") : t("openai")
+                type: providerType === "claude" ? t("claude") : t("openai"),
               })}
             </span>
           ) : (
             <div className="flex gap-2 items-center">
-              <span className="truncate">{t("selectedCount", { count: selectedModels.length })}</span>
+              <span className="truncate">
+                {t("selectedCount", { count: selectedModels.length })}
+              </span>
               <Badge variant="secondary" className="ml-auto">
                 {selectedModels.length}
               </Badge>
@@ -195,9 +197,7 @@ export function ModelMultiSelect({
               <Plus className="h-4 w-4" />
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">
-            {t("manualDesc")}
-          </p>
+          <p className="text-xs text-muted-foreground">{t("manualDesc")}</p>
         </div>
       </PopoverContent>
     </Popover>

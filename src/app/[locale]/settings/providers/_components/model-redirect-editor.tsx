@@ -164,9 +164,7 @@ export function ModelRedirectEditor({
         )}
 
         {/* 帮助文本 */}
-        <p className="text-xs text-muted-foreground">
-          {t("description")}
-        </p>
+        <p className="text-xs text-muted-foreground">{t("description")}</p>
       </div>
 
       {/* 空状态提示 */}

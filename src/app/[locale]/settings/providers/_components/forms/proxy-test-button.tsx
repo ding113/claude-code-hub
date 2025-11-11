@@ -161,9 +161,15 @@ export function ProxyTestButton({
           <div className="font-medium mb-1">{testResult.message}</div>
           {testResult.details && (
             <div className="space-y-0.5 text-xs opacity-80">
-              {testResult.details.statusCode && <div>{t("statusCode")} {testResult.details.statusCode}</div>}
+              {testResult.details.statusCode && (
+                <div>
+                  {t("statusCode")} {testResult.details.statusCode}
+                </div>
+              )}
               {testResult.details.responseTime !== undefined && (
-                <div>{t("responseTime")} {testResult.details.responseTime}ms</div>
+                <div>
+                  {t("responseTime")} {testResult.details.responseTime}ms
+                </div>
               )}
               {testResult.details.usedProxy !== undefined && (
                 <div>
@@ -171,7 +177,11 @@ export function ProxyTestButton({
                   {testResult.details.proxyUrl && ` (${testResult.details.proxyUrl})`}
                 </div>
               )}
-              {testResult.details.errorType && <div>{t("errorType")} {testResult.details.errorType}</div>}
+              {testResult.details.errorType && (
+                <div>
+                  {t("errorType")} {testResult.details.errorType}
+                </div>
+              )}
             </div>
           )}
         </div>
