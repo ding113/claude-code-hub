@@ -1,16 +1,16 @@
-import type { ProxySession } from './session';
-import { ProxyAuthenticator } from './auth-guard';
-import { ProxyVersionGuard } from './version-guard';
-import { ProxySessionGuard } from './session-guard';
-import { ProxySensitiveWordGuard } from './sensitive-word-guard';
-import { ProxyRateLimitGuard } from './rate-limit-guard';
-import { ProxyProviderResolver } from './provider-selector';
-import { ProxyMessageService } from './message-service';
+import type { ProxySession } from "./session";
+import { ProxyAuthenticator } from "./auth-guard";
+import { ProxyVersionGuard } from "./version-guard";
+import { ProxySessionGuard } from "./session-guard";
+import { ProxySensitiveWordGuard } from "./sensitive-word-guard";
+import { ProxyRateLimitGuard } from "./rate-limit-guard";
+import { ProxyProviderResolver } from "./provider-selector";
+import { ProxyMessageService } from "./message-service";
 
 // Request type classification for pipeline presets
 export enum RequestType {
-  CHAT = 'CHAT',
-  COUNT_TOKENS = 'COUNT_TOKENS',
+  CHAT = "CHAT",
+  COUNT_TOKENS = "COUNT_TOKENS",
 }
 
 // A single guard step that can mutate session or produce an early Response
@@ -21,14 +21,14 @@ export interface GuardStep {
 
 // Pipeline configuration describes an ordered list of step keys
 export type GuardStepKey =
-  | 'auth'
-  | 'version'
-  | 'probe'
-  | 'session'
-  | 'sensitive'
-  | 'rateLimit'
-  | 'provider'
-  | 'messageContext';
+  | "auth"
+  | "version"
+  | "probe"
+  | "session"
+  | "sensitive"
+  | "rateLimit"
+  | "provider"
+  | "messageContext";
 
 export interface GuardConfig {
   steps: GuardStepKey[];
@@ -41,56 +41,56 @@ export interface GuardPipeline {
 // Concrete GuardStep implementations (adapters over existing guards)
 const Steps: Record<GuardStepKey, GuardStep> = {
   auth: {
-    name: 'auth',
+    name: "auth",
     async execute(session) {
       return ProxyAuthenticator.ensure(session);
     },
   },
   version: {
-    name: 'version',
+    name: "version",
     async execute(session) {
       return ProxyVersionGuard.ensure(session);
     },
   },
   probe: {
-    name: 'probe',
+    name: "probe",
     async execute(session) {
       if (session.isProbeRequest()) {
         return new Response(JSON.stringify({ input_tokens: 0 }), {
           status: 200,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { "Content-Type": "application/json" },
         });
       }
       return null;
     },
   },
   session: {
-    name: 'session',
+    name: "session",
     async execute(session) {
       await ProxySessionGuard.ensure(session);
       return null;
     },
   },
   sensitive: {
-    name: 'sensitive',
+    name: "sensitive",
     async execute(session) {
       return ProxySensitiveWordGuard.ensure(session);
     },
   },
   rateLimit: {
-    name: 'rateLimit',
+    name: "rateLimit",
     async execute(session) {
       return ProxyRateLimitGuard.ensure(session);
     },
   },
   provider: {
-    name: 'provider',
+    name: "provider",
     async execute(session) {
       return ProxyProviderResolver.ensure(session);
     },
   },
   messageContext: {
-    name: 'messageContext',
+    name: "messageContext",
     async execute(session) {
       await ProxyMessageService.ensureContext(session);
       return null;
@@ -129,11 +129,19 @@ export class GuardPipelineBuilder {
 // Preset configurations
 export const CHAT_PIPELINE: GuardConfig = {
   // Full guard chain for normal chat requests
-  steps: ['auth', 'version', 'probe', 'session', 'sensitive', 'rateLimit', 'provider', 'messageContext'],
+  steps: [
+    "auth",
+    "version",
+    "probe",
+    "session",
+    "sensitive",
+    "rateLimit",
+    "provider",
+    "messageContext",
+  ],
 };
 
 export const COUNT_TOKENS_PIPELINE: GuardConfig = {
   // Minimal chain for count_tokens: no session, no sensitive, no rate limit, no message logging
-  steps: ['auth', 'version', 'probe', 'provider'],
+  steps: ["auth", "version", "probe", "provider"],
 };
-
