@@ -1,13 +1,7 @@
 import type { Context } from "hono";
 import { logger } from "@/lib/logger";
 import { ProxySession } from "./proxy/session";
-import { ProxyAuthenticator } from "./proxy/auth-guard";
-import { ProxyVersionGuard } from "./proxy/version-guard";
-import { ProxySessionGuard } from "./proxy/session-guard";
-import { ProxySensitiveWordGuard } from "./proxy/sensitive-word-guard";
-import { ProxyRateLimitGuard } from "./proxy/rate-limit-guard";
-import { ProxyProviderResolver } from "./proxy/provider-selector";
-import { ProxyMessageService } from "./proxy/message-service";
+import { GuardPipelineBuilder, RequestType } from "./proxy/guard-pipeline";
 import { ProxyForwarder } from "./proxy/forwarder";
 import { ProxyResponseHandler } from "./proxy/response-handler";
 import { ProxyErrorHandler } from "./proxy/error-handler";
@@ -18,55 +12,16 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
   const session = await ProxySession.fromContext(c);
 
   try {
-    // 1. 认证检查
-    const unauthorized = await ProxyAuthenticator.ensure(session);
-    if (unauthorized) {
-      return unauthorized;
-    }
+    // Decide request type and build configured guard pipeline
+    const type = session.isCountTokensRequest() ? RequestType.COUNT_TOKENS : RequestType.CHAT;
+    const pipeline = GuardPipelineBuilder.fromRequestType(type);
 
-    // 2. 版本检查（在认证后、Session 分配前）
-    const upgradeRequired = await ProxyVersionGuard.ensure(session);
-    if (upgradeRequired) {
-      return upgradeRequired;
-    }
+    // Run guard chain; may return early Response
+    const early = await pipeline.run(session);
+    if (early) return early;
 
-    // 3. 探测请求拦截：立即返回，不执行任何后续逻辑
-    if (session.isProbeRequest()) {
-      logger.debug("[ProxyHandler] Probe request detected, returning mock success", {
-        messagesCount: session.getMessagesLength(),
-      });
-      return new Response(JSON.stringify({ input_tokens: 0 }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    // 4. Session 分配
-    await ProxySessionGuard.ensure(session);
-
-    // 5. 敏感词检查（在计费之前）
-    const blockedBySensitiveWord = await ProxySensitiveWordGuard.ensure(session);
-    if (blockedBySensitiveWord) {
-      return blockedBySensitiveWord;
-    }
-
-    // 6. 限流检查
-    const rateLimited = await ProxyRateLimitGuard.ensure(session);
-    if (rateLimited) {
-      return rateLimited;
-    }
-
-    // 7. 供应商选择
-    const providerUnavailable = await ProxyProviderResolver.ensure(session);
-    if (providerUnavailable) {
-      return providerUnavailable;
-    }
-
-    // 8. 创建消息上下文（正常请求才写入数据库）
-    await ProxyMessageService.ensureContext(session);
-
-    // 9. 增加并发计数（在所有检查通过后，请求开始前）
-    if (session.sessionId) {
+    // 9. 增加并发计数（在所有检查通过后，请求开始前）- 跳过 count_tokens
+    if (session.sessionId && !session.isCountTokensRequest()) {
       await SessionTracker.incrementConcurrentCount(session.sessionId);
     }
 
@@ -90,8 +45,8 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
     logger.error("Proxy handler error:", error);
     return await ProxyErrorHandler.handle(session, error);
   } finally {
-    // 11. 减少并发计数（确保无论成功失败都执行）
-    if (session.sessionId) {
+    // 11. 减少并发计数（确保无论成功失败都执行）- 跳过 count_tokens
+    if (session.sessionId && !session.isCountTokensRequest()) {
       await SessionTracker.decrementConcurrentCount(session.sessionId);
     }
   }
