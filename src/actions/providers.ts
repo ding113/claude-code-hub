@@ -23,6 +23,7 @@ import {
 import { isValidProxyUrl } from "@/lib/proxy-agent";
 import { CodexInstructionsCache } from "@/lib/codex-instructions-cache";
 import { isClientAbortError } from "@/app/v1/_lib/proxy/errors";
+import { PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 
 // 获取服务商数据
 export async function getProviders(): Promise<ProviderDisplay[]> {
@@ -130,6 +131,10 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         circuitBreakerHalfOpenSuccessThreshold: provider.circuitBreakerHalfOpenSuccessThreshold,
         proxyUrl: provider.proxyUrl,
         proxyFallbackToDirect: provider.proxyFallbackToDirect,
+        connectTimeoutMs: provider.connectTimeoutMs,
+        firstByteTimeoutStreamingMs: provider.firstByteTimeoutStreamingMs,
+        streamingIdleTimeoutMs: provider.streamingIdleTimeoutMs,
+        requestTimeoutNonStreamingMs: provider.requestTimeoutNonStreamingMs,
         websiteUrl: provider.websiteUrl,
         faviconUrl: provider.faviconUrl,
         tpm: provider.tpm,
@@ -181,6 +186,10 @@ export async function addProvider(data: {
   circuit_breaker_half_open_success_threshold?: number;
   proxy_url?: string | null;
   proxy_fallback_to_direct?: boolean;
+  connect_timeout_ms?: number;
+  first_byte_timeout_streaming_ms?: number;
+  streaming_idle_timeout_ms?: number;
+  request_timeout_non_streaming_ms?: number;
   website_url?: string | null;
   codex_instructions_strategy?: "auto" | "force_official" | "keep_original";
   tpm: number | null;
@@ -241,6 +250,17 @@ export async function addProvider(data: {
         validated.circuit_breaker_half_open_success_threshold ?? 2,
       proxy_url: validated.proxy_url ?? null,
       proxy_fallback_to_direct: validated.proxy_fallback_to_direct ?? false,
+      connect_timeout_ms:
+        validated.connect_timeout_ms ?? PROVIDER_TIMEOUT_DEFAULTS.CONNECT_TIMEOUT_MS,
+      first_byte_timeout_streaming_ms:
+        validated.first_byte_timeout_streaming_ms ??
+        PROVIDER_TIMEOUT_DEFAULTS.FIRST_BYTE_TIMEOUT_STREAMING_MS,
+      streaming_idle_timeout_ms:
+        validated.streaming_idle_timeout_ms ??
+        PROVIDER_TIMEOUT_DEFAULTS.STREAMING_IDLE_TIMEOUT_MS,
+      request_timeout_non_streaming_ms:
+        validated.request_timeout_non_streaming_ms ??
+        PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS,
       website_url: validated.website_url ?? null,
       favicon_url: faviconUrl,
       tpm: validated.tpm ?? null,
@@ -308,6 +328,10 @@ export async function editProvider(
     circuit_breaker_half_open_success_threshold?: number;
     proxy_url?: string | null;
     proxy_fallback_to_direct?: boolean;
+    connect_timeout_ms?: number;
+    first_byte_timeout_streaming_ms?: number;
+    streaming_idle_timeout_ms?: number;
+    request_timeout_non_streaming_ms?: number;
     website_url?: string | null;
     codex_instructions_strategy?: "auto" | "force_official" | "keep_original";
     tpm?: number | null;

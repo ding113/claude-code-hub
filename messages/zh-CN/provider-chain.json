@@ -9,7 +9,8 @@
     "ENOTFOUND": "DNS 解析失败",
     "ECONNREFUSED": "连接被拒绝",
     "ETIMEDOUT": "连接或读取超时",
-    "ECONNRESET": "连接被重置"
+    "ECONNRESET": "连接被重置",
+    "CLIENT_ABORT": "客户端中断请求"
   },
   "summary": {
     "singleSuccess": "{total} 个供应商，{healthy} 个健康 → {provider} ✓",

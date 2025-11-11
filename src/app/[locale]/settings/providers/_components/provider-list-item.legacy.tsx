@@ -69,6 +69,7 @@ export function ProviderListItem({
   const [resetPending, startResetTransition] = useTransition();
   const canEdit = currentUser?.role === "admin";
   const t = useTranslations("settings.providers.types");
+  const tTimeout = useTranslations("settings.providers.form.sections.timeout");
 
   const {
     enabled,
@@ -366,6 +367,17 @@ export function ProviderListItem({
           ) : (
             <span className="text-green-600">✓ 允许所有模型</span>
           )}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-foreground/80">超时配置:</span>
+          <span className="tabular-nums">
+            {tTimeout("summary", {
+              connect: item.connectTimeoutMs === 0 ? "∞" : ((item.connectTimeoutMs || 5000) / 1000).toString(),
+              streaming: item.firstByteTimeoutStreamingMs === 0 ? "∞" : ((item.firstByteTimeoutStreamingMs || 10000) / 1000).toString(),
+              idle: item.streamingIdleTimeoutMs === 0 ? "∞" : ((item.streamingIdleTimeoutMs || 10000) / 1000).toString(),
+              nonStreaming: item.requestTimeoutNonStreamingMs === 0 ? "∞" : ((item.requestTimeoutNonStreamingMs || 600000) / 1000).toString(),
+            })}
+          </span>
         </div>
       </div>
 

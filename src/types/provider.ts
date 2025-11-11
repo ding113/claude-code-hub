@@ -51,6 +51,12 @@ export interface Provider {
   proxyUrl: string | null;
   proxyFallbackToDirect: boolean;
 
+  // 超时配置（毫秒）
+  connectTimeoutMs: number;
+  firstByteTimeoutStreamingMs: number;
+  streamingIdleTimeoutMs: number;
+  requestTimeoutNonStreamingMs: number;
+
   // 供应商官网地址（用于快速跳转管理）
   websiteUrl: string | null;
   faviconUrl: string | null;
@@ -103,6 +109,11 @@ export interface ProviderDisplay {
   // 代理配置
   proxyUrl: string | null;
   proxyFallbackToDirect: boolean;
+  // 超时配置（毫秒）
+  connectTimeoutMs: number;
+  firstByteTimeoutStreamingMs: number;
+  streamingIdleTimeoutMs: number;
+  requestTimeoutNonStreamingMs: number;
   // 供应商官网地址
   websiteUrl: string | null;
   faviconUrl: string | null;
@@ -156,6 +167,12 @@ export interface CreateProviderData {
   proxy_url?: string | null;
   proxy_fallback_to_direct?: boolean;
 
+  // 超时配置（毫秒）
+  connect_timeout_ms?: number;
+  first_byte_timeout_streaming_ms?: number;
+  streaming_idle_timeout_ms?: number;
+  request_timeout_non_streaming_ms?: number;
+
   // 供应商官网地址
   website_url?: string | null;
   favicon_url?: string | null;
@@ -206,6 +223,12 @@ export interface UpdateProviderData {
   // 代理配置（支持 HTTP/HTTPS/SOCKS5）
   proxy_url?: string | null;
   proxy_fallback_to_direct?: boolean;
+
+  // 超时配置（毫秒）
+  connect_timeout_ms?: number;
+  first_byte_timeout_streaming_ms?: number;
+  streaming_idle_timeout_ms?: number;
+  request_timeout_non_streaming_ms?: number;
 
   // 供应商官网地址
   website_url?: string | null;

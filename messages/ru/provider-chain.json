@@ -9,7 +9,8 @@
     "ENOTFOUND": "Не удалось разрешить DNS",
     "ECONNREFUSED": "Соединение отклонено",
     "ETIMEDOUT": "Тайм-аут соединения или чтения",
-    "ECONNRESET": "Соединение сброшено"
+    "ECONNRESET": "Соединение сброшено",
+    "CLIENT_ABORT": "Клиент прервал запрос"
   },
   "summary": {
     "singleSuccess": "{total} провайдеров, {healthy} работоспособных → {provider} ✓",

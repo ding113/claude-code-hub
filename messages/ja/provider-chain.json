@@ -9,7 +9,8 @@
     "ENOTFOUND": "DNS解決失敗",
     "ECONNREFUSED": "接続拒否",
     "ETIMEDOUT": "接続またはタイムアウト",
-    "ECONNRESET": "接続リセット"
+    "ECONNRESET": "接続リセット",
+    "CLIENT_ABORT": "クライアントがリクエストを中断"
   },
   "summary": {
     "singleSuccess": "{total}個のプロバイダー、{healthy}個正常 → {provider} ✓",

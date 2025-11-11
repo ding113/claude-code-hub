@@ -39,5 +39,6 @@
   "warning": "Warning",
   "info": "Info",
   "noData": "No data",
-  "emptyState": "No data to display"
+  "emptyState": "No data to display",
+  "core": "Core"
 }

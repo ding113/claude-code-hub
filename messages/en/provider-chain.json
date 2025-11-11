@@ -9,7 +9,8 @@
     "ENOTFOUND": "DNS resolution failed",
     "ECONNREFUSED": "Connection refused",
     "ETIMEDOUT": "Connection or read timeout",
-    "ECONNRESET": "Connection reset"
+    "ECONNRESET": "Connection reset",
+    "CLIENT_ABORT": "Client aborted request"
   },
   "summary": {
     "singleSuccess": "{total} providers, {healthy} healthy → {provider} ✓",
