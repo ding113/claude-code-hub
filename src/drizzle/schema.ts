@@ -171,6 +171,9 @@ export const messageRequest = pgTable('message_request', {
   // Codex 支持：API 类型（'response' 或 'openai'）
   apiType: varchar('api_type', { length: 20 }),
 
+  // 请求端点路径（用于日志筛选及非计费识别），例如：/v1/messages/count_tokens
+  endpoint: varchar('endpoint', { length: 256 }),
+
   // 模型重定向：原始模型名称（用户请求的模型，用于前端显示和计费）
   originalModel: varchar('original_model', { length: 128 }),
 
@@ -203,6 +206,8 @@ export const messageRequest = pgTable('message_request', {
   messageRequestUserQueryIdx: index('idx_message_request_user_query').on(table.userId, table.createdAt).where(sql`${table.deletedAt} IS NULL`),
   // Session 查询索引（按 session 聚合查看对话）
   messageRequestSessionIdIdx: index('idx_message_request_session_id').on(table.sessionId).where(sql`${table.deletedAt} IS NULL`),
+  // Endpoint 过滤查询索引（仅针对未删除数据）
+  messageRequestEndpointIdx: index('idx_message_request_endpoint').on(table.endpoint).where(sql`${table.deletedAt} IS NULL`),
   // 基础索引
   messageRequestProviderIdIdx: index('idx_message_request_provider_id').on(table.providerId),
   messageRequestUserIdIdx: index('idx_message_request_user_id').on(table.userId),

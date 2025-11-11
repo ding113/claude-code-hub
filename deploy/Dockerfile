@@ -28,7 +28,7 @@ ENV PORT=3000
 ENV HOST=0.0.0.0
 WORKDIR /app
 
-# 安装 PostgreSQL 18 客户端工具（用于数据库备份/恢复功能）
+# 安装 PostgreSQL 18 客户端工具（用于数据库备份/恢复功能）和 curl（用于健康检查）
 # 需要使用官方 PostgreSQL APT 仓库以获取最新版本
 RUN apt-get update && \
     apt-get install -y gnupg curl ca-certificates && \

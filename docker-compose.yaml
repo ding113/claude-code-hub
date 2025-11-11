@@ -66,3 +66,10 @@ services:
     ports:
       - "${APP_PORT:-23000}:${APP_PORT:-23000}"
     restart: unless-stopped
+    healthcheck:
+      test:
+        ["CMD-SHELL", "curl -f http://localhost:${APP_PORT:-23000}/api/actions/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
