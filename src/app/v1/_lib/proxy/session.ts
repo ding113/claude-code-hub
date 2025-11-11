@@ -309,6 +309,15 @@ export class ProxySession {
   }
 
   /**
+   * 是否为 count_tokens 请求端点
+   * - 依据 URL pathname 判断：/v1/messages/count_tokens
+   */
+  isCountTokensRequest(): boolean {
+    const endpoint = this.getEndpoint();
+    return endpoint === "/v1/messages/count_tokens";
+  }
+
+  /**
    * 设置原始模型（在重定向前调用）
    * 只能设置一次，避免多次重定向覆盖
    */
