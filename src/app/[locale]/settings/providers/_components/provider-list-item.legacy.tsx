@@ -68,7 +68,7 @@ export function ProviderListItem({
   const [copied, setCopied] = useState(false);
   const [resetPending, startResetTransition] = useTransition();
   const canEdit = currentUser?.role === "admin";
-  const t = useTranslations("providers.types");
+  const t = useTranslations("settings.providers.types");
 
   const {
     enabled,
