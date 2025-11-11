@@ -24,6 +24,7 @@ export async function createMessageRequest(
     costMultiplier: data.cost_multiplier?.toString() ?? undefined, // 供应商倍率（转为字符串）
     sessionId: data.session_id, // Session ID
     userAgent: data.user_agent, // User-Agent
+    endpoint: data.endpoint, // 请求端点（可为空）
     messagesCount: data.messages_count, // Messages 数量
   };
 
@@ -38,6 +39,7 @@ export async function createMessageRequest(
     costMultiplier: messageRequest.costMultiplier, // 新增
     sessionId: messageRequest.sessionId, // 新增
     userAgent: messageRequest.userAgent, // 新增
+    endpoint: messageRequest.endpoint, // 新增：返回端点
     messagesCount: messageRequest.messagesCount, // 新增
     createdAt: messageRequest.createdAt,
     updatedAt: messageRequest.updatedAt,

@@ -29,6 +29,7 @@ interface ErrorDetailsDialogProps {
   currentModel?: string | null; // 当前模型（重定向后）
   userAgent?: string | null; // User-Agent
   messagesCount?: number | null; // Messages 数量
+  endpoint?: string | null; // API 端点
 }
 
 export function ErrorDetailsDialog({
@@ -42,6 +43,7 @@ export function ErrorDetailsDialog({
   currentModel,
   userAgent,
   messagesCount,
+  endpoint,
 }: ErrorDetailsDialogProps) {
   const t = useTranslations("dashboard");
   const tChain = useTranslations("provider-chain");
@@ -231,6 +233,18 @@ export function ErrorDetailsDialog({
               <div className="rounded-md border bg-muted/50 p-3">
                 <code className="text-xs font-mono break-all">
                   {userAgent}
+                </code>
+              </div>
+            </div>
+          )}
+
+          {/* Endpoint 信息 */}
+          {endpoint && (
+            <div className="space-y-2">
+              <h4 className="font-semibold text-sm">{t("logs.columns.endpoint")}</h4>
+              <div className="rounded-md border bg-muted/50 p-3">
+                <code className="text-xs font-mono break-all">
+                  {endpoint}
                 </code>
               </div>
             </div>

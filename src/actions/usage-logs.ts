@@ -6,6 +6,7 @@ import {
   findUsageLogsWithDetails,
   getUsedModels,
   getUsedStatusCodes,
+  getUsedEndpoints,
   type UsageLogFilters,
   type UsageLogsResult,
 } from "@/repository/usage-logs";
@@ -70,5 +71,23 @@ export async function getStatusCodeList(): Promise<ActionResult<number[]>> {
   } catch (error) {
     logger.error("获取状态码列表失败:", error);
     return { ok: false, error: "获取状态码列表失败" };
+  }
+}
+
+/**
+ * 获取 Endpoint 列表（用于筛选器）
+ */
+export async function getEndpointList(): Promise<ActionResult<string[]>> {
+  try {
+    const session = await getSession();
+    if (!session) {
+      return { ok: false, error: "未登录" };
+    }
+
+    const endpoints = await getUsedEndpoints();
+    return { ok: true, data: endpoints };
+  } catch (error) {
+    logger.error("获取 Endpoint 列表失败:", error);
+    return { ok: false, error: "获取 Endpoint 列表失败" };
   }
 }

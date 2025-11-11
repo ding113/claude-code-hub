@@ -14,6 +14,7 @@ export interface UsageLogFilters {
   endDate?: Date;
   statusCode?: number;
   model?: string;
+  endpoint?: string;
   page?: number;
   pageSize?: number;
 }
@@ -27,6 +28,7 @@ export interface UsageLogRow {
   providerName: string | null; // 改为可选：被拦截的请求没有 provider
   model: string | null;
   originalModel: string | null; // 原始模型（重定向前）
+  endpoint: string | null;
   statusCode: number | null;
   inputTokens: number | null;
   outputTokens: number | null;
@@ -72,6 +74,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
     endDate,
     statusCode,
     model,
+    endpoint,
     page = 1,
     pageSize = 50,
   } = filters;
@@ -156,6 +159,10 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
     conditions.push(eq(messageRequest.model, model));
   }
 
+  if (endpoint) {
+    conditions.push(eq(messageRequest.endpoint, endpoint));
+  }
+
   // 查询总数和统计数据
   const [summaryResult] = await db
     .select({
@@ -189,6 +196,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       providerName: providers.name, // 被拦截的请求为 null
       model: messageRequest.model,
       originalModel: messageRequest.originalModel, // 原始模型（重定向前）
+      endpoint: messageRequest.endpoint,
       statusCode: messageRequest.statusCode,
       inputTokens: messageRequest.inputTokens,
       outputTokens: messageRequest.outputTokens,
@@ -225,6 +233,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       totalTokens: totalRowTokens,
       costUsd: row.costUsd?.toString() ?? null,
       providerChain: row.providerChain as ProviderChainItem[] | null,
+      endpoint: row.endpoint,
     };
   });
 
@@ -267,4 +276,17 @@ export async function getUsedStatusCodes(): Promise<number[]> {
     .orderBy(messageRequest.statusCode);
 
   return results.map((r) => r.statusCode).filter((c): c is number => c !== null);
+}
+
+/**
+ * 获取所有使用过的 Endpoint 列表（用于筛选器）
+ */
+export async function getUsedEndpoints(): Promise<string[]> {
+  const results = await db
+    .selectDistinct({ endpoint: messageRequest.endpoint })
+    .from(messageRequest)
+    .where(and(isNull(messageRequest.deletedAt), sql`${messageRequest.endpoint} IS NOT NULL`))
+    .orderBy(messageRequest.endpoint);
+
+  return results.map((r) => r.endpoint).filter((e): e is string => e !== null);
 }

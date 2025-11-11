@@ -295,6 +295,20 @@ export class ProxySession {
   }
 
   /**
+   * 获取请求的 API endpoint（来自 URL.pathname）
+   * 处理边界：若 URL 不存在则返回 null
+   */
+  getEndpoint(): string | null {
+    try {
+      const url = this.requestUrl;
+      if (!url || typeof url.pathname !== "string") return null;
+      return url.pathname || "/";
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * 设置原始模型（在重定向前调用）
    * 只能设置一次，避免多次重定向覆盖
    */

@@ -56,6 +56,8 @@
       "user": "Пользователь",
       "provider": "Поставщик",
       "model": "Модель",
+      "endpoint": "Эндпоинт",
+      "endpoint": "Эндпоинт",
       "status": "Статус",
       "timeRange": "Диапазон времени",
       "startTime": "Время начала",
@@ -65,6 +67,7 @@
       "selectUserFirst": "Сначала выберите пользователя",
       "allProviders": "Все поставщики",
       "allModels": "Все модели",
+      "allEndpoints": "Все эндпоинты",
       "allStatusCodes": "Все коды состояния",
       "apiKey": "API ключ",
       "statusCode": "Код состояния",
@@ -77,6 +80,7 @@
       "key": "Ключ",
       "provider": "Поставщик",
       "model": "Модель",
+      "endpoint": "Эндпоинт",
       "inputTokens": "Вход",
       "outputTokens": "Выход",
       "cacheWrite": "Запись в кэш",
@@ -102,6 +106,7 @@
       "prevPage": "Предыдущая",
       "nextPage": "Следующая",
       "blocked": "Заблокировано",
+      "nonBilling": "Не тарифицируется",
       "times": "раз"
     },
     "actions": {

@@ -56,6 +56,8 @@
       "user": "使用者",
       "provider": "供應商",
       "model": "模型",
+      "endpoint": "端點",
+      "endpoint": "端點",
       "status": "狀態",
       "timeRange": "時間範圍",
       "startTime": "開始時間",
@@ -65,6 +67,7 @@
       "selectUserFirst": "請先選擇使用者",
       "allProviders": "所有供應商",
       "allModels": "所有模型",
+      "allEndpoints": "所有端點",
       "allStatusCodes": "所有狀態碼",
       "apiKey": "API 金鑰",
       "statusCode": "狀態碼",
@@ -77,6 +80,7 @@
       "key": "金鑰",
       "provider": "供應商",
       "model": "模型",
+      "endpoint": "端點",
       "inputTokens": "輸入",
       "outputTokens": "輸出",
       "cacheWrite": "快取寫入",
@@ -102,6 +106,7 @@
       "prevPage": "上一頁",
       "nextPage": "下一頁",
       "blocked": "已攔截",
+      "nonBilling": "非計費",
       "times": "次"
     },
     "actions": {

@@ -70,6 +70,7 @@ export function UsageLogsView({
     endDate?: Date;
     statusCode?: number;
     model?: string;
+    endpoint?: string;
     page: number;
   } = {
     userId: searchParams.userId ? parseInt(searchParams.userId as string) : undefined,
@@ -79,6 +80,7 @@ export function UsageLogsView({
     endDate: searchParams.endDate ? new Date(searchParams.endDate as string) : undefined,
     statusCode: searchParams.statusCode ? parseInt(searchParams.statusCode as string) : undefined,
     model: searchParams.model as string | undefined,
+    endpoint: searchParams.endpoint as string | undefined,
     page: searchParams.page ? parseInt(searchParams.page as string) : 1,
   };
 
@@ -173,6 +175,7 @@ export function UsageLogsView({
     if (newFilters.endDate) query.set("endDate", formatDateTimeLocal(newFilters.endDate));
     if (newFilters.statusCode) query.set("statusCode", newFilters.statusCode.toString());
     if (newFilters.model) query.set("model", newFilters.model);
+    if (newFilters.endpoint) query.set("endpoint", newFilters.endpoint);
 
     router.push(`/dashboard/logs?${query.toString()}`);
   };

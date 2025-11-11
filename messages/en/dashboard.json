@@ -56,6 +56,7 @@
       "user": "User",
       "provider": "Provider",
       "model": "Model",
+      "endpoint": "Endpoint",
       "status": "Status",
       "timeRange": "Time Range",
       "startTime": "Start Time",
@@ -65,6 +66,7 @@
       "selectUserFirst": "Please select a user first",
       "allProviders": "All Providers",
       "allModels": "All Models",
+      "allEndpoints": "All Endpoints",
       "allStatusCodes": "All Status Codes",
       "apiKey": "API Key",
       "statusCode": "Status Code",
@@ -77,6 +79,7 @@
       "key": "Key",
       "provider": "Provider",
       "model": "Model",
+      "endpoint": "Endpoint",
       "inputTokens": "Input",
       "outputTokens": "Output",
       "cacheWrite": "Cache Write",
@@ -102,6 +105,7 @@
       "prevPage": "Previous Page",
       "nextPage": "Next Page",
       "blocked": "Blocked",
+      "nonBilling": "Non-Billing",
       "times": "times"
     },
     "actions": {
