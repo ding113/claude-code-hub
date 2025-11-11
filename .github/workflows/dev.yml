@@ -15,6 +15,29 @@ jobs:
     runs-on: ubuntu-latest
     # 跳过由GitHub Actions创建的提交，避免死循环
     if: github.event.pusher.name != 'github-actions[bot]' && !contains(github.event.head_commit.message, '[skip ci]')
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: claude_code_hub_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -68,6 +91,31 @@ jobs:
         run: |
           pnpm install --frozen-lockfile
           pnpm format
+
+      - name: Type check
+        run: pnpm typecheck
+
+      - name: Run unit tests
+        run: pnpm test:unit
+        env:
+          NODE_ENV: test
+          DSN: postgresql://postgres:postgres@localhost:5432/claude_code_hub_test
+          REDIS_URL: redis://localhost:6379
+
+      - name: Run E2E tests
+        run: pnpm test:e2e
+        env:
+          NODE_ENV: test
+          DSN: postgresql://postgres:postgres@localhost:5432/claude_code_hub_test
+          REDIS_URL: redis://localhost:6379
+          APP_PORT: 13500
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/coverage-final.json
+          fail_ci_if_error: false
 
       - name: Commit formatted code
         run: |
