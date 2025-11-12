@@ -421,6 +421,9 @@
         "updating": "更新中...",
         "delete": "删除"
       },
+      "common": {
+        "core": "核心"
+      },
       "sections": {
         "routing": {
           "title": "路由配置",
@@ -546,6 +549,30 @@
             "label": "连接测试",
             "desc": "测试通过配置的代理访问供应商 URL（使用 HEAD 请求，不消耗额度）"
           }
+        },
+        "timeout": {
+          "title": "超时配置",
+          "summary": "首字: {streaming}s | 流式间隔: {idle}s | 非流式: {nonStreaming}s",
+          "desc": "配置请求超时时间，0 表示禁用超时",
+          "streamingFirstByte": {
+            "label": "流式首字节超时（秒）",
+            "placeholder": "30",
+            "desc": "流式请求首字节超时，范围 1-120 秒，默认 30 秒",
+            "core": "true"
+          },
+          "streamingIdle": {
+            "label": "流式静默期超时（秒）",
+            "placeholder": "10",
+            "desc": "流式请求静默期超时，范围 1-120 秒，默认 10 秒（防止中途卡住）",
+            "core": "true"
+          },
+          "nonStreamingTotal": {
+            "label": "非流式总超时（秒）",
+            "placeholder": "600",
+            "desc": "非流式请求总超时，范围 60-1200 秒，默认 600 秒（10 分钟）",
+            "core": "true"
+          },
+          "disableHint": "设为 0 表示禁用该超时（仅用于灰度回退场景，不推荐）"
         },
         "codexStrategy": {
           "title": "Codex Instructions 策略",

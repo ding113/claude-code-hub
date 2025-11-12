@@ -746,6 +746,9 @@
         "updating": "更新中...",
         "delete": "削除"
       },
+      "common": {
+        "core": "コア"
+      },
       "sections": {
         "routing": {
           "title": "ルーティング",
@@ -871,6 +874,30 @@
             "label": "接続テスト",
             "desc": "設定したプロキシ経由でプロバイダー URL への接続をテストします（HEAD リクエスト、課金なし）"
           }
+        },
+        "timeout": {
+          "title": "タイムアウト設定",
+          "summary": "初回バイト: {streaming}s | ストリーム間隔: {idle}s | 非ストリーミング: {nonStreaming}s",
+          "desc": "リクエストのタイムアウト時間を設定します。0 は無効を意味します",
+          "streamingFirstByte": {
+            "label": "ストリーミング初バイトタイムアウト（秒）",
+            "placeholder": "30",
+            "desc": "ストリーミングリクエストの初バイトタイムアウト、範囲1～120秒、デフォルト30秒",
+            "core": "true"
+          },
+          "streamingIdle": {
+            "label": "ストリーミングアイドルタイムアウト（秒）",
+            "placeholder": "10",
+            "desc": "ストリーミングリクエストのアイドルタイムアウト、範囲1～120秒、デフォルト10秒（途中停止防止）",
+            "core": "true"
+          },
+          "nonStreamingTotal": {
+            "label": "非ストリーミング総タイムアウト（秒）",
+            "placeholder": "600",
+            "desc": "非ストリーミングリクエストの総タイムアウト、範囲60～1200秒、デフォルト600秒（10分）",
+            "core": "true"
+          },
+          "disableHint": "0に設定するとタイムアウトを無効にします（カナリアロールバックシナリオのみ、非推奨）"
         },
         "codexStrategy": {
           "title": "Codex Instructions ポリシー",

@@ -39,5 +39,6 @@
   "warning": "警告",
   "info": "信息",
   "noData": "暂无数据",
-  "emptyState": "没有数据可显示"
+  "emptyState": "没有数据可显示",
+  "core": "核心"
 }

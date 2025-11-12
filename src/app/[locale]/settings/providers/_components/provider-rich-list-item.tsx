@@ -85,6 +85,7 @@ export function ProviderRichListItem({
   const tTypes = useTranslations("settings.providers.types");
   const tList = useTranslations("settings.providers.list");
   const tCommon = useTranslations("settings.common");
+  const tTimeout = useTranslations("settings.providers.form.sections.timeout");
 
   // 获取供应商类型配置
   const typeConfig = getProviderTypeConfig(provider.providerType);
@@ -312,6 +313,24 @@ export function ProviderRichListItem({
                 {provider.maskedKey}
               </button>
             )}
+
+            {/* 超时配置可视化（紧凑格式） */}
+            <span className="text-xs text-muted-foreground flex-shrink-0">
+              {tTimeout("summary", {
+                streaming:
+                  provider.firstByteTimeoutStreamingMs === 0
+                    ? "∞"
+                    : ((provider.firstByteTimeoutStreamingMs || 30000) / 1000).toString(),
+                idle:
+                  provider.streamingIdleTimeoutMs === 0
+                    ? "∞"
+                    : ((provider.streamingIdleTimeoutMs || 10000) / 1000).toString(),
+                nonStreaming:
+                  provider.requestTimeoutNonStreamingMs === 0
+                    ? "∞"
+                    : ((provider.requestTimeoutNonStreamingMs || 600000) / 1000).toString(),
+              })}
+            </span>
           </div>
         </div>
 
