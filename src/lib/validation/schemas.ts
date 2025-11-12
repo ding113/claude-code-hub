@@ -90,7 +90,38 @@ export const KeyFormSchema = z.object({
  */
 export const CreateProviderSchema = z.object({
   name: z.string().min(1, "服务商名称不能为空").max(64, "服务商名称不能超过64个字符"),
-  url: z.string().url("请输入有效的URL地址").max(255, "URL长度不能超过255个字符"),
+  url: z
+    .string()
+    .url("请输入有效的URL地址")
+    .max(255, "URL长度不能超过255个字符")
+    .refine(
+      (url) => {
+        try {
+          const parsed = new URL(url);
+          // 验证必须有协议和主机名
+          return !!parsed.protocol && !!parsed.hostname;
+        } catch {
+          return false;
+        }
+      },
+      {
+        message: "URL格式无效，必须包含协议(http/https)和主机名",
+      }
+    )
+    .refine(
+      (url) => {
+        try {
+          const parsed = new URL(url);
+          // 验证协议必须是 http 或 https
+          return ["http:", "https:"].includes(parsed.protocol);
+        } catch {
+          return false;
+        }
+      },
+      {
+        message: "URL协议必须是 http:// 或 https://",
+      }
+    ),
   key: z.string().min(1, "API密钥不能为空").max(1024, "API密钥长度不能超过1024个字符"),
   // 数据库字段命名：下划线
   is_enabled: z.boolean().optional().default(PROVIDER_DEFAULTS.IS_ENABLED),
@@ -192,7 +223,37 @@ export const CreateProviderSchema = z.object({
 export const UpdateProviderSchema = z
   .object({
     name: z.string().min(1).max(64).optional(),
-    url: z.string().url().max(255).optional(),
+    url: z
+      .string()
+      .url()
+      .max(255)
+      .refine(
+        (url) => {
+          try {
+            const parsed = new URL(url);
+            return !!parsed.protocol && !!parsed.hostname;
+          } catch {
+            return false;
+          }
+        },
+        {
+          message: "URL格式无效，必须包含协议(http/https)和主机名",
+        }
+      )
+      .refine(
+        (url) => {
+          try {
+            const parsed = new URL(url);
+            return ["http:", "https:"].includes(parsed.protocol);
+          } catch {
+            return false;
+          }
+        },
+        {
+          message: "URL协议必须是 http:// 或 https://",
+        }
+      )
+      .optional(),
     key: z.string().min(1).max(1024).optional(),
     is_enabled: z.boolean().optional(),
     weight: z
