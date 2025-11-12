@@ -898,7 +898,8 @@ export class ProxyForwarder {
           isStreaming,
           errorName: err.name,
           errorMessage: err.message || "(empty message)",
-          reason: "First-byte timeout indicates slow provider response, should count towards circuit breaker",
+          reason:
+            "First-byte timeout indicates slow provider response, should count towards circuit breaker",
         });
 
         // ✅ 抛出 ProxyError 并设置特殊状态码 524（Cloudflare: A Timeout Occurred）
@@ -933,14 +934,18 @@ export class ProxyForwarder {
       if (err.message?.includes("streaming_idle") && !session.clientAbortSignal?.aborted) {
         // 流式静默期超时：首字节之后的连续静默窗口超时
         // ✅ 修复：静默期超时也是供应商问题，应计入熔断器
-        logger.error("ProxyForwarder: Streaming idle timeout (provider quality issue, will switch)", {
-          providerId: provider.id,
-          providerName: provider.name,
-          idleTimeoutMs: provider.streamingIdleTimeoutMs,
-          errorName: err.name,
-          errorMessage: err.message || "(empty message)",
-          reason: "Idle timeout indicates provider stopped sending data, should count towards circuit breaker",
-        });
+        logger.error(
+          "ProxyForwarder: Streaming idle timeout (provider quality issue, will switch)",
+          {
+            providerId: provider.id,
+            providerName: provider.name,
+            idleTimeoutMs: provider.streamingIdleTimeoutMs,
+            errorName: err.name,
+            errorMessage: err.message || "(empty message)",
+            reason:
+              "Idle timeout indicates provider stopped sending data, should count towards circuit breaker",
+          }
+        );
 
         // ✅ 抛出 ProxyError（归类为 PROVIDER_ERROR）
         throw new ProxyError(
