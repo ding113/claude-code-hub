@@ -93,17 +93,17 @@ export async function getOverviewData(): Promise<ActionResult<OverviewData>> {
       totalSessionCount,
     });
 
-      return {
-        ok: true,
-        data: {
-          concurrentSessions,
-          todayRequests: metricsData.todayRequests,
-          todayCost: metricsData.todayCost,
-          avgResponseTime: metricsData.avgResponseTime,
-          totalSessionCount,
-          recentSessions,
-        },
-      };
+    return {
+      ok: true,
+      data: {
+        concurrentSessions,
+        todayRequests: metricsData.todayRequests,
+        todayCost: metricsData.todayCost,
+        avgResponseTime: metricsData.avgResponseTime,
+        totalSessionCount,
+        recentSessions,
+      },
+    };
   } catch (error) {
     logger.error("Failed to get overview data:", error);
     return {

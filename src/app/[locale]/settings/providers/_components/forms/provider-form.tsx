@@ -740,12 +740,16 @@ export function ProviderForm({
                       placeholder={t("sections.routing.scheduleParams.group.placeholder")}
                       disabled={isPending}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+                        if (e.key === "Enter" && e.currentTarget.value.trim()) {
                           e.preventDefault();
                           handleAddTag(e.currentTarget.value.trim());
-                          e.currentTarget.value = '';
+                          e.currentTarget.value = "";
                         }
-                        if (e.key === 'Backspace' && e.currentTarget.value === '' && groupTags?.length) {
+                        if (
+                          e.key === "Backspace" &&
+                          e.currentTarget.value === "" &&
+                          groupTags?.length
+                        ) {
                           handleRemoveTag(groupTags.length - 1);
                         }
                       }}

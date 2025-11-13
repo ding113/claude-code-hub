@@ -248,7 +248,7 @@ export interface ParsedSSEEvent {
 
 // 类型守卫：判断是否为跨组降级原因
 export function isCrossGroupDegradation(
-  reason: ProviderChainItem['reason']
-): reason is 'cross_group_degradation' {
-  return reason === 'cross_group_degradation';
+  reason: ProviderChainItem["reason"]
+): reason is "cross_group_degradation" {
+  return reason === "cross_group_degradation";
 }

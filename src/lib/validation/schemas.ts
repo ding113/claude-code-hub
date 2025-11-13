@@ -111,9 +111,11 @@ export const CreateProviderSchema = z.object({
   cost_multiplier: z.coerce.number().min(0, "成本倍率不能为负数").optional().default(1.0),
   /** @deprecated Use group_tags instead */
   group_tag: z.string().max(50, "分组标签不能超过50个字符").nullable().optional(),
-  group_tags: z.array(
-    z.string().min(1, "分组标签不能为空").max(50, "分组标签不能超过50个字符")
-  ).max(10, "最多只能添加10个分组标签").nullable().optional(),
+  group_tags: z
+    .array(z.string().min(1, "分组标签不能为空").max(50, "分组标签不能超过50个字符"))
+    .max(10, "最多只能添加10个分组标签")
+    .nullable()
+    .optional(),
   // Codex 支持:供应商类型和模型重定向
   provider_type: z
     .enum(["claude", "claude-auth", "codex", "gemini-cli", "openai-compatible"])
@@ -214,9 +216,11 @@ export const UpdateProviderSchema = z
     cost_multiplier: z.coerce.number().min(0, "成本倍率不能为负数").optional(),
     /** @deprecated Use group_tags instead */
     group_tag: z.string().max(50, "分组标签不能超过50个字符").nullable().optional(),
-    group_tags: z.array(
-      z.string().min(1, "分组标签不能为空").max(50, "分组标签不能超过50个字符")
-    ).max(10, "最多只能添加10个分组标签").nullable().optional(),
+    group_tags: z
+      .array(z.string().min(1, "分组标签不能为空").max(50, "分组标签不能超过50个字符"))
+      .max(10, "最多只能添加10个分组标签")
+      .nullable()
+      .optional(),
     // Codex 支持:供应商类型和模型重定向
     provider_type: z
       .enum(["claude", "claude-auth", "codex", "gemini-cli", "openai-compatible"])

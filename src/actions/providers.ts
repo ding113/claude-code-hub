@@ -365,10 +365,11 @@ export async function editProvider(
         group_tag: validated.group_tags?.[0] ?? null,
         group_tags: validated.group_tags,
       }),
-      ...(validated.group_tag !== undefined && validated.group_tags === undefined && {
-        group_tag: validated.group_tag,
-        group_tags: validated.group_tag ? [validated.group_tag] : null,
-      }),
+      ...(validated.group_tag !== undefined &&
+        validated.group_tags === undefined && {
+          group_tag: validated.group_tag,
+          group_tags: validated.group_tag ? [validated.group_tag] : null,
+        }),
     };
 
     const provider = await updateProvider(providerId, payload);
