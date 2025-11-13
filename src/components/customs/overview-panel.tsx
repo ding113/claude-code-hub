@@ -183,6 +183,7 @@ export function OverviewPanel({ currencyCode = "USD", isAdmin = false }: Overvie
     todayRequests: 0,
     todayCost: 0,
     avgResponseTime: 0,
+    totalSessionCount: 0,
     recentSessions: [],
   };
 
@@ -236,7 +237,7 @@ export function OverviewPanel({ currencyCode = "USD", isAdmin = false }: Overvie
               <Activity className="h-4 w-4 text-primary" />
               <h3 className="font-semibold text-sm">{tc("activeSessions.title")}</h3>
               <span className="text-xs text-muted-foreground">
-                {tc("activeSessions.summary", { count: metrics.recentSessions.length, minutes: 5 })}
+                {tc("activeSessions.summary", { count: metrics.totalSessionCount, minutes: 5 })}
               </span>
             </div>
             <button

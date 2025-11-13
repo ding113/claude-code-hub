@@ -21,6 +21,8 @@ export interface OverviewData {
   todayCost: number;
   /** 平均响应时间（毫秒） */
   avgResponseTime: number;
+  /** 活跃 Session 总数量（未截断前的完整数量） */
+  totalSessionCount: number;
   /** 最近活跃的Session列表（用于滚动展示） */
   recentSessions: ActiveSessionInfo[];
 }
@@ -54,12 +56,14 @@ export async function getOverviewData(): Promise<ActionResult<OverviewData>> {
     // 根据权限决定显示范围
     if (!canViewGlobalData) {
       // 普通用户且无权限：仅显示自己的活跃 Session，全站指标设为 0
+      // 先记录完整数量，再进行 UI 只展示前 10 条的截断
+      const totalSessionCount = sessionsResult.ok ? sessionsResult.data.length : 0;
       const recentSessions = sessionsResult.ok ? sessionsResult.data.slice(0, 10) : [];
 
       logger.debug("Overview: User without global view permission", {
         userId: session.user.id,
         userName: session.user.name,
-        ownSessionsCount: recentSessions.length,
+        ownSessionsCount: totalSessionCount,
       });
 
       return {
@@ -69,6 +73,7 @@ export async function getOverviewData(): Promise<ActionResult<OverviewData>> {
           todayRequests: 0, // 无权限时不显示全站请求数
           todayCost: 0, // 无权限时不显示全站消耗
           avgResponseTime: 0, // 无权限时不显示全站平均响应时间
+          totalSessionCount,
           recentSessions, // 仅显示自己的活跃 Session（getActiveSessions 已做权限过滤）
         },
       };
@@ -76,6 +81,8 @@ export async function getOverviewData(): Promise<ActionResult<OverviewData>> {
 
     // 管理员或有权限：显示全站数据
     const concurrentSessions = concurrentResult.ok ? concurrentResult.data : 0;
+    // 先记录完整数量，再进行 UI 只展示前 10 条的截断
+    const totalSessionCount = sessionsResult.ok ? sessionsResult.data.length : 0;
     const recentSessions = sessionsResult.ok ? sessionsResult.data.slice(0, 10) : [];
 
     logger.debug("Overview: User with global view permission", {
@@ -83,18 +90,20 @@ export async function getOverviewData(): Promise<ActionResult<OverviewData>> {
       userName: session.user.name,
       isAdmin,
       allowGlobalUsageView: settings.allowGlobalUsageView,
+      totalSessionCount,
     });
 
-    return {
-      ok: true,
-      data: {
-        concurrentSessions,
-        todayRequests: metricsData.todayRequests,
-        todayCost: metricsData.todayCost,
-        avgResponseTime: metricsData.avgResponseTime,
-        recentSessions,
-      },
-    };
+      return {
+        ok: true,
+        data: {
+          concurrentSessions,
+          todayRequests: metricsData.todayRequests,
+          todayCost: metricsData.todayCost,
+          avgResponseTime: metricsData.avgResponseTime,
+          totalSessionCount,
+          recentSessions,
+        },
+      };
   } catch (error) {
     logger.error("Failed to get overview data:", error);
     return {
