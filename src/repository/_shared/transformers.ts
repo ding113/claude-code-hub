@@ -15,6 +15,10 @@ export function toUser(dbUser: any): User {
     rpm: dbUser?.rpm || 60,
     dailyQuota: dbUser?.dailyQuota ? parseFloat(dbUser.dailyQuota) : 0,
     providerGroup: dbUser?.providerGroup ?? null,
+    // Multi-group support: prioritize providerGroups, fallback to providerGroup as array
+    providerGroups:
+      dbUser?.providerGroups ?? (dbUser?.providerGroup ? [dbUser.providerGroup] : null),
+    tags: dbUser?.tags ?? null,
     createdAt: dbUser?.createdAt ? new Date(dbUser.createdAt) : new Date(),
     updatedAt: dbUser?.updatedAt ? new Date(dbUser.updatedAt) : new Date(),
   };
@@ -44,6 +48,8 @@ export function toProvider(dbProvider: any): Provider {
     priority: dbProvider?.priority ?? 0,
     costMultiplier: dbProvider?.costMultiplier ? parseFloat(dbProvider.costMultiplier) : 1.0,
     groupTag: dbProvider?.groupTag ?? null,
+    // Multi-group support: prioritize groupTags, fallback to groupTag as array
+    groupTags: dbProvider?.groupTags ?? (dbProvider?.groupTag ? [dbProvider.groupTag] : null),
     providerType: dbProvider?.providerType ?? "claude",
     modelRedirects: dbProvider?.modelRedirects ?? null,
     codexInstructionsStrategy: dbProvider?.codexInstructionsStrategy ?? "auto",

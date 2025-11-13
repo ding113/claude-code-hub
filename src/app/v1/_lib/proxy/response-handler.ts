@@ -138,10 +138,11 @@ export class ProxyResponseHandler {
           await trackCostToRedis(session, usageMetrics);
         }
 
+        let costUsdStr: string | undefined;
+
         // 更新 session 使用量到 Redis（用于实时监控）
         if (session.sessionId && usageMetrics) {
           // 计算成本（复用相同逻辑）
-          let costUsdStr: string | undefined;
           if (session.request.model) {
             const priceData = await findLatestPriceByModel(session.request.model);
             if (priceData?.priceData) {
@@ -185,7 +186,8 @@ export class ProxyResponseHandler {
 
           // 记录请求结束
           const tracker = ProxyStatusTracker.getInstance();
-          tracker.endRequest(messageContext.user.id, messageContext.id);
+          const costUsd = costUsdStr ? parseFloat(costUsdStr) : undefined;
+          tracker.endRequest(messageContext.user.id, messageContext.id, costUsd);
         }
 
         logger.debug("ResponseHandler: Non-stream response processed", {
@@ -347,10 +349,6 @@ export class ProxyResponseHandler {
         const duration = Date.now() - session.startTime;
         await updateMessageRequestDuration(messageContext.id, duration);
 
-        // 记录请求结束
-        const tracker = ProxyStatusTracker.getInstance();
-        tracker.endRequest(messageContext.user.id, messageContext.id);
-
         const usageResult = parseUsageFromResponseText(allContent, provider.providerType);
         usageForCost = usageResult.usageMetrics;
 
@@ -364,6 +362,26 @@ export class ProxyResponseHandler {
 
         // 追踪消费到 Redis（用于限流）
         await trackCostToRedis(session, usageForCost);
+
+        // 计算成本用于 endRequest
+        let costUsd: number | undefined;
+        if (usageForCost && session.request.model) {
+          const priceData = await findLatestPriceByModel(session.request.model);
+          if (priceData?.priceData) {
+            const cost = calculateRequestCost(
+              usageForCost,
+              priceData.priceData,
+              provider.costMultiplier
+            );
+            if (cost.gt(0)) {
+              costUsd = parseFloat(cost.toString());
+            }
+          }
+        }
+
+        // 记录请求结束
+        const tracker = ProxyStatusTracker.getInstance();
+        tracker.endRequest(messageContext.user.id, messageContext.id, costUsd);
 
         // 更新 session 使用量到 Redis（用于实时监控）
         if (session.sessionId && usageForCost) {

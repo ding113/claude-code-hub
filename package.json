@@ -4,10 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev --port 13500 --turbo",
-    "build": "next build && cp VERSION .next/standalone/VERSION",
-    "start": "next start",
+    "build": "tsc --project tsconfig.server.json && next build && cp VERSION .next/standalone/VERSION",
+    "start": "node server.js",
     "lint": "next lint",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --coverage",
+    "test:watch": "vitest",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "cui": "npx cui-server --host 0.0.0.0 --port 30000 --token a7564bc8882aa9a2d25d8b4ea6ea1e2e",
@@ -83,6 +85,7 @@
     "@types/pg": "^8.15.5",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
+    "@vitest/coverage-v8": "^4.0.8",
     "drizzle-kit": "^0.31.5",
     "eslint": "^9.38.0",
     "eslint-config-next": "15.5.6",
@@ -90,7 +93,8 @@
     "prettier": "^3.6.2",
     "tailwindcss": "^4.1.16",
     "typescript": "^5.9.3",
-    "undici": "^7.16.0"
+    "undici": "^7.16.0",
+    "vitest": "^4.0.8"
   },
   "packageManager": "pnpm@9.15.0"
 }

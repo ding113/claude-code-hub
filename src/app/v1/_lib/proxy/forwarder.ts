@@ -12,6 +12,7 @@ import { ModelRedirector } from "./model-redirector";
 import { SessionManager } from "@/lib/session-manager";
 import { logger } from "@/lib/logger";
 import type { ProxySession } from "./session";
+import type { ProviderChainItem } from "@/types/message";
 import { defaultRegistry } from "../converters";
 import type { Format } from "../converters/types";
 import { mapClientFormatToTransformer, mapProviderTypeToTransformer } from "./format-mapper";
@@ -181,6 +182,22 @@ export class ProxyForwarder {
             });
           }
 
+          const selectionContext: NonNullable<ProviderChainItem["decisionContext"]> =
+            session.getLastSelectionContext() ?? {
+              totalProviders: 0,
+              enabledProviders: 0,
+              targetType: currentProvider.providerType === "claude" ? "claude" : "codex",
+              requestedModel: session.getCurrentModel() || "",
+              groupFilterApplied: false,
+              beforeHealthCheck: 0,
+              afterHealthCheck: 0,
+              priorityLevels: [],
+              selectedPriority: currentProvider.priority || 0,
+              candidatesAtPriority: [],
+              crossGroupDegradationUsed: false,
+              degradationReason: undefined,
+            };
+
           // 记录到决策链
           session.addProviderToChain(currentProvider, {
             reason:
@@ -190,6 +207,7 @@ export class ProxyForwarder {
             attemptNumber: attemptCount,
             statusCode: response.status,
             circuitState: getCircuitState(currentProvider.id),
+            decisionContext: selectionContext,
           });
 
           logger.info("ProxyForwarder: Request successful", {
@@ -198,7 +216,22 @@ export class ProxyForwarder {
             attemptNumber: attemptCount,
             totalProvidersAttempted,
             statusCode: response.status,
+            crossGroupDegradationUsed: selectionContext.crossGroupDegradationUsed,
           });
+
+          if (selectionContext.crossGroupDegradationUsed) {
+            logger.info("ProxyForwarder: Cross-group degradation request served", {
+              providerId: currentProvider.id,
+              providerName: currentProvider.name,
+              degradationReason:
+                selectionContext.degradationReason ||
+                "用户分组内无可用供应商，已降级到全局供应商池",
+              userGroup: selectionContext.userGroup || "unknown",
+              totalCandidates: selectionContext.enabledProviders,
+              attemptNumber: attemptCount,
+              totalProvidersAttempted,
+            });
+          }
 
           return response; // ⭐ 成功：立即返回，结束所有循环
         } catch (error) {

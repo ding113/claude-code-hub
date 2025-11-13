@@ -19,8 +19,15 @@ import { CURRENCY_CONFIG } from "@/lib/utils";
 import type { SystemSettings } from "@/types/system-config";
 import type { CurrencyCode } from "@/lib/utils";
 
+type CrossGroupConfigSource = "database" | "environment" | "default";
+
 interface SystemSettingsFormProps {
-  initialSettings: Pick<SystemSettings, "siteTitle" | "allowGlobalUsageView" | "currencyDisplay">;
+  initialSettings: Pick<
+    SystemSettings,
+    "siteTitle" | "allowGlobalUsageView" | "currencyDisplay" | "allowCrossGroupOnDegrade"
+  > & {
+    crossGroupConfigSource: CrossGroupConfigSource;
+  };
 }
 
 export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps) {
@@ -32,6 +39,12 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   const [currencyDisplay, setCurrencyDisplay] = useState<CurrencyCode>(
     initialSettings.currencyDisplay
   );
+  const [allowCrossGroupOnDegrade, setAllowCrossGroupOnDegrade] = useState(
+    initialSettings.allowCrossGroupOnDegrade
+  );
+  const [crossGroupConfigSource, setCrossGroupConfigSource] = useState<
+    CrossGroupConfigSource
+  >(initialSettings.crossGroupConfigSource);
   const [isPending, startTransition] = useTransition();
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -46,6 +59,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
       const result = await saveSystemSettings({
         siteTitle,
         allowGlobalUsageView,
+        allowCrossGroupOnDegrade,
         currencyDisplay,
       });
 
@@ -58,6 +72,8 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setSiteTitle(result.data.siteTitle);
         setAllowGlobalUsageView(result.data.allowGlobalUsageView);
         setCurrencyDisplay(result.data.currencyDisplay);
+        setAllowCrossGroupOnDegrade(result.data.allowCrossGroupOnDegrade);
+        setCrossGroupConfigSource("database");
       }
 
       toast.success(t("configUpdated"));
@@ -120,6 +136,33 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
           onCheckedChange={(checked) => setAllowGlobalUsageView(checked)}
           disabled={isPending}
         />
+      </div>
+
+      <div className="space-y-3 rounded-lg border px-4 py-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1">
+            <Label htmlFor="allow-cross-group" className="text-sm font-medium">
+              跨组降级策略
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              当用户分组内没有可用供应商时，允许降级到全局供应商池，保持业务连续性；关闭则维持严格分组隔离。
+            </p>
+            <p className="text-xs text-muted-foreground">
+              当前配置来源：
+              {crossGroupConfigSource === "database"
+                ? "数据库"
+                : crossGroupConfigSource === "environment"
+                  ? "环境变量（fallback）"
+                  : "默认值"}
+            </p>
+          </div>
+          <Switch
+            id="allow-cross-group"
+            checked={allowCrossGroupOnDegrade}
+            onCheckedChange={(checked) => setAllowCrossGroupOnDegrade(checked)}
+            disabled={isPending}
+          />
+        </div>
       </div>
 
       <div className="flex justify-end">

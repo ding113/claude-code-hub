@@ -23,6 +23,7 @@ export const users = pgTable('users', {
   /** @deprecated Use providerGroups instead */
   providerGroup: varchar('provider_group', { length: 50 }),
   providerGroups: jsonb('provider_groups').$type<string[] | null>().default(null),
+  tags: jsonb('tags').$type<string[] | null>().default(null),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),

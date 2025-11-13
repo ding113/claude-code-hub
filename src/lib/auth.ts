@@ -26,6 +26,7 @@ export async function validateKey(keyString: string): Promise<AuthSession | null
       rpm: 0,
       dailyQuota: 0,
       providerGroup: null,
+      providerGroups: null,
       createdAt: now,
       updatedAt: now,
     };

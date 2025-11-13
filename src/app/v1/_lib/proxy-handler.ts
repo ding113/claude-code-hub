@@ -36,6 +36,7 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
         providerId: session.provider.id,
         providerName: session.provider.name,
         model: session.request.model || "unknown",
+        sessionId: session.sessionId ?? undefined,
       });
     }
 

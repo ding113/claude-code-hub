@@ -23,6 +23,11 @@ export const CreateUserSchema = z.object({
     .max(USER_LIMITS.DAILY_QUOTA.MAX, `每日额度不能超过${USER_LIMITS.DAILY_QUOTA.MAX}美元`)
     .optional()
     .default(USER_DEFAULTS.DAILY_QUOTA),
+  tags: z
+    .array(z.string().min(1, "标签不能为空").max(20, "标签不能超过20个字符"))
+    .max(10, "最多只能添加10个标签")
+    .nullable()
+    .optional(),
 });
 
 /**
@@ -42,6 +47,11 @@ export const UpdateUserSchema = z.object({
     .number()
     .min(USER_LIMITS.DAILY_QUOTA.MIN, `每日额度不能低于${USER_LIMITS.DAILY_QUOTA.MIN}美元`)
     .max(USER_LIMITS.DAILY_QUOTA.MAX, `每日额度不能超过${USER_LIMITS.DAILY_QUOTA.MAX}美元`)
+    .optional(),
+  tags: z
+    .array(z.string().min(1, "标签不能为空").max(20, "标签不能超过20个字符"))
+    .max(10, "最多只能添加10个标签")
+    .nullable()
     .optional(),
 });
 

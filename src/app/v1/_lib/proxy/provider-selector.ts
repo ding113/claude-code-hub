@@ -7,6 +7,53 @@ import { ProxyResponses } from "./responses";
 import { logger } from "@/lib/logger";
 import type { ProxySession } from "./session";
 import type { ProviderChainItem } from "@/types/message";
+import { resolveCrossGroupDegradation } from "./degradation-config";
+
+/**
+ * 检查供应商分组是否匹配用户分组（数组交集判定）
+ *
+ * @param provider - 供应商信息
+ * @param userGroups - 用户分组数组
+ * @returns 是否匹配（任一分组重叠即匹配）
+ */
+function matchesProviderGroup(provider: Provider, userGroups: string[]): boolean {
+  // 获取供应商分组（优先使用 groupTags，fallback 到 groupTag）
+  const providerGroups = provider.groupTags ?? (provider.groupTag ? [provider.groupTag] : []);
+
+  // 空分组匹配所有用户（未分组供应商对所有用户可用）
+  if (providerGroups.length === 0) {
+    logger.debug(
+      {
+        providerId: provider.id,
+        providerName: provider.name,
+        providerGroups: [],
+        userGroups,
+        matched: true,
+        reason: "Empty provider groups match all users",
+      },
+      "Provider group matching: empty groups"
+    );
+    return true;
+  }
+
+  // 数组交集判定：使用 Set 优化查找性能（O(1) lookup）
+  const userGroupSet = new Set(userGroups);
+  const matched = providerGroups.some((g) => userGroupSet.has(g));
+
+  logger.debug(
+    {
+      providerId: provider.id,
+      providerName: provider.name,
+      providerGroups,
+      userGroups,
+      matched,
+      reason: matched ? "Group intersection found" : "No group intersection",
+    },
+    "Provider group matching"
+  );
+
+  return matched;
+}
 
 /**
  * 检查供应商是否支持指定模型（用于调度器匹配）
@@ -85,6 +132,7 @@ function providerSupportsModel(provider: Provider, requestedModel: string): bool
   return false;
 }
 
+
 export class ProxyProviderResolver {
   static async ensure(
     session: ProxySession,
@@ -129,6 +177,7 @@ export class ProxyProviderResolver {
             },
           ],
           sessionId: session.sessionId || undefined,
+          crossGroupDegradationUsed: false,
         },
       });
     }
@@ -240,24 +289,30 @@ export class ProxyProviderResolver {
         // 只在首次选择时记录到决策链（重试时的记录由 forwarder.ts 在请求完成后统一记录）
         if (attemptCount === 1) {
           const successContext = session.getLastSelectionContext();
+          const decisionContext = successContext || {
+            totalProviders: 0,
+            enabledProviders: 0,
+            targetType: session.provider.providerType as "claude" | "codex",
+            requestedModel: session.getCurrentModel() || "",
+            groupFilterApplied: false,
+            beforeHealthCheck: 0,
+            afterHealthCheck: 0,
+            priorityLevels: [],
+            selectedPriority: 0,
+            candidatesAtPriority: [],
+            crossGroupDegradationUsed: false,
+            degradationReason: undefined,
+          };
+
           session.addProviderToChain(session.provider, {
-            reason: "initial_selection",
-            selectionMethod: successContext?.groupFilterApplied
+            reason: decisionContext.crossGroupDegradationUsed
+              ? "cross_group_degradation"
+              : "initial_selection",
+            selectionMethod: decisionContext.groupFilterApplied
               ? "group_filtered"
               : "weighted_random",
             circuitState: getCircuitState(session.provider.id),
-            decisionContext: successContext || {
-              totalProviders: 0,
-              enabledProviders: 0,
-              targetType: session.provider.providerType as "claude" | "codex",
-              requestedModel: session.getCurrentModel() || "",
-              groupFilterApplied: false,
-              beforeHealthCheck: 0,
-              afterHealthCheck: 0,
-              priorityLevels: [],
-              selectedPriority: 0,
-              candidatesAtPriority: [],
-            },
+            decisionContext,
           });
         }
 
@@ -355,29 +410,31 @@ export class ProxyProviderResolver {
       return null;
     }
 
-    // 修复：检查用户分组权限（严格分组隔离 + 支持多分组）
-    const userGroup = session?.authState?.user?.providerGroup;
-    if (userGroup) {
-      // 用户有分组，支持多个分组（逗号分隔）
-      const userGroups = userGroup
-        .split(",")
-        .map((g) => g.trim())
-        .filter(Boolean);
+    // 修复：检查用户分组权限（严格分组隔离 + 支持多分组数组交集）
+    const userProviderGroups =
+      session?.authState?.user?.providerGroups ??
+      (session?.authState?.user?.providerGroup
+        ? session.authState.user.providerGroup
+            .split(",")
+            .map((g) => g.trim())
+            .filter(Boolean)
+        : []);
 
-      // 检查供应商的 groupTag 是否在用户的分组列表中
-      if (provider.groupTag && !userGroups.includes(provider.groupTag)) {
+    if (userProviderGroups.length > 0) {
+      // 用户有分组，使用数组交集匹配
+      if (!matchesProviderGroup(provider, userProviderGroups)) {
         logger.warn("ProviderSelector: Session provider not in user groups", {
           sessionId: session.sessionId,
           providerId: provider.id,
           providerName: provider.name,
-          providerGroup: provider.groupTag,
-          userGroups: userGroups.join(","),
+          providerGroups: provider.groupTags ?? (provider.groupTag ? [provider.groupTag] : []),
+          userGroups: userProviderGroups,
           message: "Strict group isolation: rejecting cross-group session reuse",
         });
         return null; // 不允许复用，重新选择
       }
     }
-    // 全局用户（userGroup 为空）可以复用任何供应商
+    // 全局用户（userProviderGroups 为空）可以复用任何供应商
 
     logger.info("ProviderSelector: Reusing provider", {
       providerName: provider.name,
@@ -411,6 +468,8 @@ export class ProxyProviderResolver {
       selectedPriority: 0,
       candidatesAtPriority: [],
       excludedProviderIds: excludeIds.length > 0 ? excludeIds : undefined,
+      crossGroupDegradationUsed: false,
+      degradationReason: undefined,
     };
 
     // Step 1: 基础过滤 + 模型匹配（新逻辑）
@@ -474,47 +533,65 @@ export class ProxyProviderResolver {
 
     // Step 2: 用户分组过滤（如果用户指定了分组）
     let candidateProviders = enabledProviders;
-    const userGroup = session?.authState?.user?.providerGroup;
+    const userProviderGroups =
+      session?.authState?.user?.providerGroups ??
+      (session?.authState?.user?.providerGroup
+        ? session.authState.user.providerGroup
+            .split(",")
+            .map((g) => g.trim())
+            .filter(Boolean)
+        : []);
 
-    if (userGroup) {
-      context.userGroup = userGroup;
+    if (userProviderGroups.length > 0) {
+      context.userGroup = userProviderGroups.join(",");
 
-      // 修复：支持多个分组（逗号分隔，如 "fero,chen"）
-      const userGroups = userGroup
-        .split(",")
-        .map((g) => g.trim())
-        .filter(Boolean);
-
-      // 过滤：供应商的 groupTag 在用户的分组列表中
-      const groupFiltered = enabledProviders.filter(
-        (p) => p.groupTag && userGroups.includes(p.groupTag)
+      // 使用数组交集匹配过滤供应商
+      const groupFiltered = enabledProviders.filter((p) =>
+        matchesProviderGroup(p, userProviderGroups)
       );
 
       if (groupFiltered.length > 0) {
         candidateProviders = groupFiltered;
         context.groupFilterApplied = true;
         context.afterGroupFilter = groupFiltered.length;
-        logger.debug("ProviderSelector: User multi-group filter applied", {
-          userGroup,
-          userGroups,
+        context.crossGroupDegradationUsed = false;
+        context.degradationReason = undefined;
+        logger.debug("ProviderSelector: User multi-group filter applied (array intersection)", {
+          userGroups: userProviderGroups,
           count: groupFiltered.length,
         });
       } else {
-        // 修复：严格分组隔离，无可用供应商时返回错误而不是 fallback
+        const { allowed: degradationAllowed, source: degradationSource } =
+          await resolveCrossGroupDegradation();
         context.groupFilterApplied = false;
         context.afterGroupFilter = 0;
-        logger.error("ProviderSelector: User groups have no available providers", {
-          userGroup,
-          userGroups,
-          enabledProviders: enabledProviders.length,
-          message: "Strict group isolation: returning null instead of fallback",
-        });
 
-        // 返回 null 表示无可用供应商
-        return {
-          provider: null,
-          context,
-        };
+        if (degradationAllowed) {
+          candidateProviders = enabledProviders;
+          context.crossGroupDegradationUsed = true;
+          context.degradationReason = "用户分组内无可用供应商，已降级到全局供应商池";
+          logger.warn("ProviderSelector: Cross-group degradation activated", {
+            userGroups: userProviderGroups,
+            enabledProviders: enabledProviders.length,
+            configSource: degradationSource,
+          });
+        } else {
+          context.crossGroupDegradationUsed = false;
+          context.degradationReason = "跨组降级未启用";
+          logger.error("ProviderSelector: User groups have no available providers", {
+            userGroups: userProviderGroups,
+            enabledProviders: enabledProviders.length,
+            message: "Strict group isolation: returning null instead of fallback",
+            crossGroupDegradationAllowed: degradationAllowed,
+            configSource: degradationSource,
+          });
+
+          // 返回 null 表示无可用供应商
+          return {
+            provider: null,
+            context,
+          };
+        }
       }
     }
 
@@ -581,7 +658,7 @@ export class ProxyProviderResolver {
       totalProviders: allProviders.length,
       enabledCount: enabledProviders.length,
       excludedIds: excludeIds,
-      userGroup: userGroup || "none",
+      userGroups: userProviderGroups.length > 0 ? userProviderGroups : ["none"],
       afterGroupFilter: candidateProviders.map((p) => p.name),
       afterHealthFilter: healthyProviders.length,
       filteredOut: filteredOut.map((p) => p.name),
