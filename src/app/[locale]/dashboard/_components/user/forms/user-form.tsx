@@ -209,11 +209,7 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
                   e.preventDefault();
                   handleAddTag();
                 }
-                if (
-                  e.key === "Backspace" &&
-                  tagInput === "" &&
-                  tags.length > 0
-                ) {
+                if (e.key === "Backspace" && tagInput === "" && tags.length > 0) {
                   handleRemoveTag(tags.length - 1);
                 }
               }}

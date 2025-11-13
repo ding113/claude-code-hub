@@ -132,7 +132,6 @@ function providerSupportsModel(provider: Provider, requestedModel: string): bool
   return false;
 }
 
-
 export class ProxyProviderResolver {
   static async ensure(
     session: ProxySession,

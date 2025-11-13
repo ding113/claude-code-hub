@@ -33,9 +33,7 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
     if (!user.tags || user.tags.length === 0) return false;
 
     // 匹配包含任一输入标签关键词的用户（不区分大小写）
-    return user.tags.some((tag) =>
-      tag.toLowerCase().includes(debouncedTagFilter.toLowerCase())
-    );
+    return user.tags.some((tag) => tag.toLowerCase().includes(debouncedTagFilter.toLowerCase()));
   });
 
   // 转换数据格式
@@ -91,7 +89,9 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
       <ListContainer
         emptyState={{
           title: debouncedTagFilter ? t("emptyState.noMatch") : t("emptyState.title"),
-          description: debouncedTagFilter ? t("emptyState.noMatchDescription") : t("emptyState.description"),
+          description: debouncedTagFilter
+            ? t("emptyState.noMatchDescription")
+            : t("emptyState.description"),
         }}
       >
         <div className="space-y-2">

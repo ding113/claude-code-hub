@@ -217,7 +217,6 @@ Session 追踪和缓存 (`src/lib/session-manager.ts`):
 - **自动清理** - TTL 过期自动清理
 
 - #### 分组策略与跨组降级
-
   - 默认严格分组隔离：用户仅能调度到所属分组的供应商；若无可用候选则直接返回错误。
   - **跨组降级（可选）**：
     - ⚙️ 配置优先级：数据库 `system_settings.allow_cross_group_on_degrade` > 环境变量 `ALLOW_CROSS_GROUP_DEGRADE`（仅在数据库未初始化时生效） > 代码默认值 `false`。
