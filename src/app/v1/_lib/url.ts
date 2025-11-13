@@ -26,9 +26,7 @@ export function buildProxyUrl(baseUrl: string, requestUrl: URL): string {
   try {
     // ⭐ 步骤 1: 验证 baseUrl 格式
     if (!baseUrl || typeof baseUrl !== "string") {
-      throw new Error(
-        `Invalid baseUrl: expected non-empty string, got ${typeof baseUrl}`
-      );
+      throw new Error(`Invalid baseUrl: expected non-empty string, got ${typeof baseUrl}`);
     }
 
     // 尝试解析 baseUrl
@@ -50,9 +48,7 @@ export function buildProxyUrl(baseUrl: string, requestUrl: URL): string {
 
     // ⭐ 步骤 3: 验证主机名
     if (!baseUrlObj.hostname) {
-      throw new Error(
-        `Invalid hostname in baseUrl: ${baseUrl}. Hostname is required.`
-      );
+      throw new Error(`Invalid hostname in baseUrl: ${baseUrl}. Hostname is required.`);
     }
 
     // ⭐ 步骤 4: 合并路径
