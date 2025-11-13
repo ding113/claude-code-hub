@@ -161,10 +161,7 @@ export function useWebSocket<T = unknown>(
    */
   const getRetryDelay = useCallback(
     (retryCount: number): number => {
-      const delay = Math.min(
-        opts.initialRetryDelay * Math.pow(2, retryCount),
-        opts.maxRetryDelay
-      );
+      const delay = Math.min(opts.initialRetryDelay * Math.pow(2, retryCount), opts.maxRetryDelay);
       return delay;
     },
     [opts.initialRetryDelay, opts.maxRetryDelay]
@@ -174,11 +171,7 @@ export function useWebSocket<T = unknown>(
    * 日志输出
    */
   const log = useCallback(
-    (
-      level: "info" | "warn" | "error",
-      message: string,
-      meta?: Record<string, unknown>
-    ) => {
+    (level: "info" | "warn" | "error", message: string, meta?: Record<string, unknown>) => {
       if (!opts.debug) return;
 
       const logData = {

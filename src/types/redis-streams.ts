@@ -39,7 +39,9 @@ export type XReadGroupResult = XReadResult;
 /**
  * 消息订阅回调函数类型
  */
-export type StreamMessageCallback<T = unknown> = (message: StreamMessage<T>) => void | Promise<void>;
+export type StreamMessageCallback<T = unknown> = (
+  message: StreamMessage<T>
+) => void | Promise<void>;
 
 /**
  * 消息订阅配置
@@ -146,7 +148,7 @@ export class StreamsError extends Error {
   constructor(
     message: string,
     public readonly code?: string,
-    public readonly cause?: unknown,
+    public readonly cause?: unknown
   ) {
     super(message);
     this.name = "StreamsError";

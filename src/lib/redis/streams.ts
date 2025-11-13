@@ -175,7 +175,7 @@ export class RedisStreamsClient {
   public async publishMessage<T = unknown>(
     stream: string,
     data: T,
-    id: StreamMessageId = "*",
+    id: StreamMessageId = "*"
   ): Promise<XAddResult> {
     if (!this.isAvailable()) {
       logger.warn("[RedisStreams] Redis unavailable, cannot publish message - Fail Open");
@@ -185,11 +185,18 @@ export class RedisStreamsClient {
     try {
       // 序列化数据 (支持 BigInt)
       const serialized = JSON.stringify(data, (_, value) =>
-        typeof value === "bigint" ? value.toString() : value,
+        typeof value === "bigint" ? value.toString() : value
       );
 
       // XADD 命令: XADD stream id field value [field value ...]
-      const messageId = await this.redis!.xadd(stream, id, "data", serialized, "timestamp", Date.now().toString());
+      const messageId = await this.redis!.xadd(
+        stream,
+        id,
+        "data",
+        serialized,
+        "timestamp",
+        Date.now().toString()
+      );
 
       logger.debug("[RedisStreams] Message published", {
         stream,
@@ -217,7 +224,7 @@ export class RedisStreamsClient {
   public async subscribe<T = unknown>(
     stream: string,
     callback: StreamMessageCallback<T>,
-    options: SubscribeOptions = {},
+    options: SubscribeOptions = {}
   ): Promise<void> {
     if (!this.isAvailable()) {
       logger.warn("[RedisStreams] Redis unavailable, cannot subscribe - Fail Open");
@@ -274,7 +281,7 @@ export class RedisStreamsClient {
   public async createConsumerGroup(
     stream: string,
     group: string,
-    startId: StreamMessageId = "$",
+    startId: StreamMessageId = "$"
   ): Promise<boolean> {
     if (!this.isAvailable()) {
       logger.warn("[RedisStreams] Redis unavailable, cannot create consumer group - Fail Open");
@@ -316,7 +323,7 @@ export class RedisStreamsClient {
     group: string,
     consumer: string,
     callback: StreamMessageCallback<T>,
-    options: Partial<ConsumeGroupOptions> = {},
+    options: Partial<ConsumeGroupOptions> = {}
   ): Promise<void> {
     if (!this.isAvailable()) {
       logger.warn("[RedisStreams] Redis unavailable, cannot consume from group - Fail Open");
@@ -487,7 +494,7 @@ export class RedisStreamsClient {
           state.options.blockMs!,
           "STREAMS",
           state.stream,
-          state.lastId,
+          state.lastId
         )) as XReadResult;
 
         if (!result || result.length === 0) {
@@ -508,7 +515,8 @@ export class RedisStreamsClient {
               logger.error("[RedisStreams] Callback error", {
                 stream: streamName,
                 messageId,
-                error: callbackError instanceof Error ? callbackError.message : String(callbackError),
+                error:
+                  callbackError instanceof Error ? callbackError.message : String(callbackError),
               });
             }
           }
@@ -550,7 +558,7 @@ export class RedisStreamsClient {
           state.options.blockMs!,
           "STREAMS",
           state.stream,
-          ">", // 只读取未传递的新消息
+          ">" // 只读取未传递的新消息
         )) as XReadGroupResult;
 
         if (!result || result.length === 0) {
@@ -575,7 +583,8 @@ export class RedisStreamsClient {
                 group: state.group,
                 consumer: state.consumer,
                 messageId,
-                error: callbackError instanceof Error ? callbackError.message : String(callbackError),
+                error:
+                  callbackError instanceof Error ? callbackError.message : String(callbackError),
               });
 
               // 如果回调失败，不 ACK，让消息进入 pending list
@@ -630,7 +639,9 @@ export class RedisStreamsClient {
     }
 
     // 从消息 ID 提取时间戳 (格式: milliseconds-sequence)
-    const timestamp = timestampStr ? parseInt(timestampStr, 10) : parseInt(messageId.split("-")[0], 10);
+    const timestamp = timestampStr
+      ? parseInt(timestampStr, 10)
+      : parseInt(messageId.split("-")[0], 10);
 
     return {
       id: messageId,

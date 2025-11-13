@@ -11,8 +11,10 @@ import { ActiveSessionsTable } from "./_components/active-sessions-table";
 import type { ActiveSessionInfo } from "@/types/session";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { useTranslations } from "next-intl";
+import { useWebSocket } from "@/hooks/use-websocket";
+import { ConnectionStatus } from "@/components/ui/connection-status";
 
-const REFRESH_INTERVAL = 3000; // 3秒刷新一次
+const REFRESH_INTERVAL = 3000; // 3秒刷新一次（轮询降级使用）
 
 async function fetchAllSessions(): Promise<{
   active: ActiveSessionInfo[];
@@ -41,19 +43,37 @@ export default function ActiveSessionsPage() {
   const router = useRouter();
   const t = useTranslations("dashboard.sessions");
 
-  const { data, isLoading, error } = useQuery<
-    { active: ActiveSessionInfo[]; inactive: ActiveSessionInfo[] },
-    Error
-  >({
+  // WebSocket 实时数据推送
+  const {
+    data: wsData,
+    connectionState,
+    connectionType,
+    error: wsError,
+  } = useWebSocket<{ active: ActiveSessionInfo[]; inactive: ActiveSessionInfo[] }>(
+    "sessions",
+    "all-sessions-update"
+  );
+
+  // 轮询降级方案（WebSocket 不可用时启用）
+  const {
+    data: pollingData,
+    isLoading,
+    error: pollingError,
+  } = useQuery<{ active: ActiveSessionInfo[]; inactive: ActiveSessionInfo[] }, Error>({
     queryKey: ["all-sessions"],
     queryFn: fetchAllSessions,
     refetchInterval: REFRESH_INTERVAL,
+    enabled: connectionType === "polling", // 仅当降级到轮询时才启用
   });
 
   const { data: systemSettings } = useQuery({
     queryKey: ["system-settings"],
     queryFn: fetchSystemSettings,
   });
+
+  // 合并数据源（优先使用 WebSocket 数据）
+  const data = wsData || pollingData;
+  const error = wsError || pollingError;
 
   const activeSessions = data?.active || [];
   const inactiveSessions = data?.inactive || [];
@@ -77,10 +97,17 @@ export default function ActiveSessionsPage() {
           <ArrowLeft className="h-4 w-4 mr-2" />
           {t("back")}
         </Button>
-        <div>
+        <div className="flex-1">
           <h1 className="text-2xl font-bold">{t("monitoring")}</h1>
           <p className="text-sm text-muted-foreground">{t("monitoringDescription")}</p>
         </div>
+        {/* 连接状态指示器 */}
+        <ConnectionStatus
+          connectionState={connectionState}
+          connectionType={connectionType}
+          error={wsError}
+          showDetails
+        />
       </div>
 
       {error ? (

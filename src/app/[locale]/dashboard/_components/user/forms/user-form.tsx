@@ -1,5 +1,5 @@
 "use client";
-import { useTransition, useEffect } from "react";
+import { useTransition, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { addUser, editUser } from "@/actions/users";
@@ -11,6 +11,10 @@ import { USER_DEFAULTS } from "@/lib/constants/user.constants";
 import { toast } from "sonner";
 import { setZodErrorMap } from "@/lib/utils/zod-i18n";
 import { getErrorMessage } from "@/lib/utils/error-messages";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 
 interface UserFormProps {
   user?: {
@@ -20,6 +24,7 @@ interface UserFormProps {
     rpm: number;
     dailyQuota: number;
     providerGroup?: string | null;
+    tags?: string[] | null;
   };
   onSuccess?: () => void;
 }
@@ -29,6 +34,10 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
   const router = useRouter();
   const isEdit = Boolean(user?.id);
 
+  // Tag state management
+  const [tags, setTags] = useState<string[]>(user?.tags ?? []);
+  const [tagInput, setTagInput] = useState("");
+
   // i18n translations
   const tErrors = useTranslations("errors");
   const tNotifications = useTranslations("notifications");
@@ -37,6 +46,37 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
   useEffect(() => {
     setZodErrorMap(tErrors);
   }, [tErrors]);
+
+  // Tag handlers
+  const handleAddTag = () => {
+    const trimmedTag = tagInput.trim();
+    if (!trimmedTag) return;
+
+    // Validation: max 10 tags
+    if (tags.length >= 10) {
+      toast.error("最多只能添加 10 个标签");
+      return;
+    }
+
+    // Validation: max 20 characters
+    if (trimmedTag.length > 20) {
+      toast.error("标签长度不能超过 20 个字符");
+      return;
+    }
+
+    // Validation: no duplicates
+    if (tags.includes(trimmedTag)) {
+      toast.error("该标签已存在");
+      return;
+    }
+
+    setTags([...tags, trimmedTag]);
+    setTagInput("");
+  };
+
+  const handleRemoveTag = (index: number) => {
+    setTags(tags.filter((_, idx) => idx !== index));
+  };
 
   const form = useZodForm({
     schema: CreateUserSchema, // Use CreateUserSchema for both, it has all fields with defaults
@@ -58,6 +98,7 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
               rpm: data.rpm,
               dailyQuota: data.dailyQuota,
               providerGroup: data.providerGroup || null,
+              tags: tags.length > 0 ? tags : null,
             });
           } else {
             res = await addUser({
@@ -66,6 +107,7 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
               rpm: data.rpm,
               dailyQuota: data.dailyQuota,
               providerGroup: data.providerGroup || null,
+              tags: tags.length > 0 ? tags : null,
             });
           }
 
@@ -130,6 +172,68 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
         description={tForm("providerGroup.description")}
         {...form.getFieldProps("providerGroup")}
       />
+
+      {/* Tags editing section */}
+      <div className="space-y-2">
+        <Label htmlFor="tags">标签</Label>
+        <div className="space-y-2">
+          {/* Badge chips display */}
+          {tags.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {tags.map((tag, idx) => (
+                <Badge key={idx} variant="secondary" className="gap-1">
+                  {tag}
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveTag(idx)}
+                    className="ml-1 hover:text-destructive"
+                    disabled={isPending}
+                  >
+                    ×
+                  </button>
+                </Badge>
+              ))}
+            </div>
+          )}
+          {/* Input for adding new tags */}
+          <div className="flex gap-2">
+            <Input
+              id="tags"
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              placeholder="输入标签名称"
+              disabled={isPending}
+              maxLength={20}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleAddTag();
+                }
+                if (
+                  e.key === "Backspace" &&
+                  tagInput === "" &&
+                  tags.length > 0
+                ) {
+                  handleRemoveTag(tags.length - 1);
+                }
+              }}
+            />
+            <Button
+              type="button"
+              onClick={handleAddTag}
+              disabled={isPending || !tagInput.trim()}
+              variant="outline"
+            >
+              添加
+            </Button>
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {tags.length === 0
+            ? "可添加最多 10 个标签，每个标签最多 20 个字符"
+            : `已添加 ${tags.length}/10 个标签`}
+        </p>
+      </div>
 
       <TextField
         label={tForm("rpm.label")}

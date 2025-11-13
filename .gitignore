@@ -43,6 +43,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# compiled server (auto-generated from server.ts)
+server.js
+server.js.map
+
 # tooling & logs
 .cursor/
 .claude/

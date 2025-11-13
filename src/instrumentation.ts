@@ -4,6 +4,8 @@
  */
 
 import { logger } from "@/lib/logger";
+import { getSyncScheduler } from "@/lib/sync-scheduler";
+import { getRealtimeCounter } from "@/lib/redis/realtime-counter";
 
 export async function register() {
   // 仅在服务器端执行
@@ -44,6 +46,27 @@ export async function register() {
       const { scheduleNotifications } = await import("@/lib/notification/notification-queue");
       await scheduleNotifications();
 
+      // 初始化 Redis 实时计数和同步调度器
+      try {
+        const realtimeCounter = getRealtimeCounter();
+        const scheduler = getSyncScheduler();
+
+        const status = realtimeCounter.getStatus();
+        if (status.available) {
+          logger.info("[Instrumentation] Redis realtime counter initialized");
+          scheduler.start();
+          logger.info("[Instrumentation] Sync scheduler started");
+        } else {
+          logger.warn(
+            "[Instrumentation] Redis unavailable, operating in database-only mode (Fail Open)"
+          );
+        }
+      } catch (error) {
+        logger.error("[Instrumentation] Failed to initialize Redis features", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
       logger.info("Application ready");
     }
     // 开发环境: 执行迁移 + 初始化价格表（禁用 Bull Queue 避免 Turbopack 冲突）
@@ -62,6 +85,27 @@ export async function register() {
       // 初始化价格表（如果数据库为空）
       const { ensurePriceTable } = await import("@/lib/price-sync/seed-initializer");
       await ensurePriceTable();
+
+      // 初始化 Redis 实时计数和同步调度器
+      try {
+        const realtimeCounter = getRealtimeCounter();
+        const scheduler = getSyncScheduler();
+
+        const status = realtimeCounter.getStatus();
+        if (status.available) {
+          logger.info("[Instrumentation] Redis realtime counter initialized");
+          scheduler.start();
+          logger.info("[Instrumentation] Sync scheduler started");
+        } else {
+          logger.warn(
+            "[Instrumentation] Redis unavailable, operating in database-only mode (Fail Open)"
+          );
+        }
+      } catch (error) {
+        logger.error("[Instrumentation] Failed to initialize Redis features", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
 
       // ⚠️ 开发环境禁用通知队列（Bull + Turbopack 不兼容）
       // 通知功能仅在生产环境可用，开发环境需要手动测试

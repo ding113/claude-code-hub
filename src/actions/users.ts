@@ -64,6 +64,7 @@ export async function getUsers(): Promise<UserDisplay[]> {
             rpm: user.rpm,
             dailyQuota: user.dailyQuota,
             providerGroup: user.providerGroup || undefined,
+            tags: user.tags || undefined,
             keys: keys.map((key) => {
               const stats = statisticsMap.get(key.id);
               // 用户可以查看和复制自己的密钥，管理员可以查看和复制所有密钥
@@ -112,6 +113,7 @@ export async function getUsers(): Promise<UserDisplay[]> {
             rpm: user.rpm,
             dailyQuota: user.dailyQuota,
             providerGroup: user.providerGroup || undefined,
+            tags: user.tags || undefined,
             keys: [],
           };
         }
@@ -132,6 +134,7 @@ export async function addUser(data: {
   providerGroup?: string | null;
   rpm?: number;
   dailyQuota?: number;
+  tags?: string[] | null;
 }): Promise<ActionResult> {
   try {
     // Get translations for error messages
@@ -154,6 +157,7 @@ export async function addUser(data: {
       providerGroup: data.providerGroup || "",
       rpm: data.rpm || USER_DEFAULTS.RPM,
       dailyQuota: data.dailyQuota || USER_DEFAULTS.DAILY_QUOTA,
+      tags: data.tags || null,
     });
 
     if (!validationResult.success) {
@@ -172,6 +176,7 @@ export async function addUser(data: {
       providerGroup: validatedData.providerGroup || null,
       rpm: validatedData.rpm,
       dailyQuota: validatedData.dailyQuota,
+      tags: validatedData.tags || null,
     });
 
     // 为新用户创建默认密钥
@@ -207,6 +212,7 @@ export async function editUser(
     providerGroup?: string | null;
     rpm?: number;
     dailyQuota?: number;
+    tags?: string[] | null;
   }
 ): Promise<ActionResult> {
   try {
@@ -223,7 +229,7 @@ export async function editUser(
     }
 
     // 定义敏感字段列表（仅管理员可修改）
-    const sensitiveFields = ["rpm", "dailyQuota", "providerGroup"] as const;
+    const sensitiveFields = ["rpm", "dailyQuota", "providerGroup", "tags"] as const;
     const hasSensitiveFields = sensitiveFields.some((field) => data[field] !== undefined);
 
     // 权限检查：区分三种情况
@@ -247,6 +253,7 @@ export async function editUser(
         providerGroup: validatedData.providerGroup,
         rpm: validatedData.rpm,
         dailyQuota: validatedData.dailyQuota,
+        tags: validatedData.tags,
       });
     } else if (session.user.id === userId) {
       // 普通用户修改自己的信息

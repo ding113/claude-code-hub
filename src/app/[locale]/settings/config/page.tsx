@@ -23,7 +23,7 @@ export default async function SettingsConfigPage() {
 
   const effectiveAllowCrossGroupOnDegrade = isDatabaseSource
     ? settings.allowCrossGroupOnDegrade
-    : envFallback ?? false;
+    : (envFallback ?? false);
 
   return (
     <>

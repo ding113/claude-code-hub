@@ -11,8 +11,10 @@ import { Link } from "@/i18n/routing";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
 import { useTranslations } from "next-intl";
+import { useWebSocket } from "@/hooks/use-websocket";
+import { ConnectionStatusIcon } from "@/components/ui/connection-status";
 
-const REFRESH_INTERVAL = 5000; // 5秒刷新一次
+const REFRESH_INTERVAL = 5000; // 5秒刷新一次（轮询降级使用）
 
 async function fetchActiveSessions(): Promise<ActiveSessionInfo[]> {
   const result = await getActiveSessions();
@@ -146,11 +148,36 @@ export function ActiveSessionsPanel({ currencyCode = "USD" }: { currencyCode?: C
   const tu = useTranslations("ui");
   const tc = useTranslations("customs");
 
-  const { data = [], isLoading } = useQuery<ActiveSessionInfo[], Error>({
+  // WebSocket 实时数据推送
+  const {
+    data: wsData,
+    connectionState,
+    connectionType,
+    error: wsError,
+  } = useWebSocket<ActiveSessionInfo[]>("dashboard", "sessions-update");
+
+  // 轮询降级方案（WebSocket 不可用时启用）
+  const { data: pollingData = [], isLoading } = useQuery<ActiveSessionInfo[], Error>({
     queryKey: ["active-sessions"],
     queryFn: fetchActiveSessions,
     refetchInterval: REFRESH_INTERVAL,
+    enabled: connectionType === "polling", // 仅当降级到轮询时才启用
   });
+
+  // 合并数据源（优先使用 WebSocket 数据），并去重
+  const allSessions = React.useMemo(() => {
+    const sessions = wsData || pollingData;
+
+    // 使用 Map 去重（基于 sessionId）
+    const sessionMap = new Map<string, ActiveSessionInfo>();
+    sessions.forEach((session) => {
+      sessionMap.set(session.sessionId, session);
+    });
+
+    return Array.from(sessionMap.values());
+  }, [wsData, pollingData]);
+
+  const data = allSessions;
 
   return (
     <div className="border rounded-lg bg-card">
@@ -161,6 +188,12 @@ export function ActiveSessionsPanel({ currencyCode = "USD" }: { currencyCode?: C
           <span className="text-xs text-muted-foreground">
             {tc("activeSessions.summary", { count: data.length, minutes: 5 })}
           </span>
+          {/* 连接状态图标 */}
+          <ConnectionStatusIcon
+            connectionState={connectionState}
+            connectionType={connectionType}
+            error={wsError}
+          />
         </div>
         <button
           onClick={() => router.push("/dashboard/sessions")}

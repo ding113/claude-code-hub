@@ -5,6 +5,7 @@
 ## 功能特性
 
 ### 核心功能
+
 - ✅ **消息发布** - 使用 XADD 命令发布消息到 Stream
 - ✅ **消息订阅** - 使用 XREAD 阻塞式读取实时消息
 - ✅ **消费组管理** - 支持 XGROUP 创建消费组，XREADGROUP 消费消息，XACK 确认机制
@@ -13,6 +14,7 @@
 - ✅ **错误处理** - Fail Open 策略，Redis 不可用时不阻塞服务
 
 ### 高级特性
+
 - ✅ **单例模式** - 全局唯一客户端实例，复用连接
 - ✅ **自动重连** - 连接断开时自动重试（指数退避）
 - ✅ **批量操作** - 支持批量 ACK，批量发布（pipeline）
@@ -70,11 +72,11 @@ import { getStreamsClient } from "@/lib/redis/streams";
 
 // 获取单例客户端
 const client = getStreamsClient({
-  defaultBlockMs: 5000,      // 默认阻塞等待时间
-  defaultCount: 10,          // 默认每次读取消息数
+  defaultBlockMs: 5000, // 默认阻塞等待时间
+  defaultCount: 10, // 默认每次读取消息数
   autoTrimInterval: 3600000, // 自动清理间隔 (1 小时)
-  defaultMaxLen: 10000,      // 默认保留最大消息数
-  enableAutoTrim: true,      // 启用自动清理
+  defaultMaxLen: 10000, // 默认保留最大消息数
+  enableAutoTrim: true, // 启用自动清理
 });
 
 // 连接 Redis
@@ -120,9 +122,9 @@ await client.subscribe(
     // 处理消息
   },
   {
-    startId: "0",       // 从头开始读取
-    blockMs: 10000,     // 阻塞等待 10 秒
-    count: 20,          // 每次读取 20 条消息
+    startId: "0", // 从头开始读取
+    blockMs: 10000, // 阻塞等待 10 秒
+    count: 20, // 每次读取 20 条消息
   }
 );
 
@@ -135,22 +137,22 @@ client.unsubscribe("dashboard-updates");
 ```typescript
 // 创建消费组
 await client.createConsumerGroup(
-  "dashboard-updates",  // Stream 名称
-  "dashboard-workers",  // 消费组名称
-  "$"                   // 从最新消息开始
+  "dashboard-updates", // Stream 名称
+  "dashboard-workers", // 消费组名称
+  "$" // 从最新消息开始
 );
 
 // 从消费组消费消息
 await client.consumeFromGroup(
   "dashboard-updates",
   "dashboard-workers",
-  "worker-1",           // 消费者名称
+  "worker-1", // 消费者名称
   async (message) => {
     // 处理消息
     console.log("Processing:", message.data);
   },
   {
-    autoAck: true,      // 自动 ACK (默认)
+    autoAck: true, // 自动 ACK (默认)
     count: 10,
   }
 );
@@ -172,8 +174,8 @@ client.stopConsumer("dashboard-updates", "dashboard-workers", "worker-1");
 ```typescript
 // 手动清理
 const deleted = await client.trimStream("dashboard-updates", {
-  maxLen: 5000,        // 保留最新 5000 条
-  approximate: true,   // 使用近似清理 (性能更好)
+  maxLen: 5000, // 保留最新 5000 条
+  approximate: true, // 使用近似清理 (性能更好)
 });
 
 console.log(`Deleted ${deleted} messages`);
@@ -268,7 +270,9 @@ await client.acknowledgeMessages("task-queue", "workers", message.id);
 // 发布任务
 await client.publishMessage("task-queue", {
   taskId: "task-123",
-  taskData: { /* ... */ },
+  taskData: {
+    /* ... */
+  },
 });
 ```
 
@@ -409,6 +413,7 @@ INTEGRATION_TEST=true REDIS_URL=redis://localhost:6379 pnpm test src/lib/redis/s
 **原因**: lastId 设置错误或消息已被消费
 
 **解决方案**:
+
 - 检查 `startId` 配置 ('$' = 最新, '0' = 从头)
 - 使用 `redis-cli XRANGE stream - +` 查看消息
 - 检查是否使用消费组模式（消息只能被消费一次）
@@ -418,6 +423,7 @@ INTEGRATION_TEST=true REDIS_URL=redis://localhost:6379 pnpm test src/lib/redis/s
 **原因**: 未启用自动清理或 TRIM 策略不当
 
 **解决方案**:
+
 - 启用 `enableAutoTrim: true`
 - 调整 `defaultMaxLen` 和 `autoTrimInterval`
 - 手动执行 `trimStream()` 清理
@@ -427,6 +433,7 @@ INTEGRATION_TEST=true REDIS_URL=redis://localhost:6379 pnpm test src/lib/redis/s
 **原因**: 未正确 ACK 或消费者崩溃
 
 **解决方案**:
+
 - 确保 `autoAck: true` 或手动调用 `acknowledgeMessages()`
 - 检查 pending list: `redis-cli XPENDING stream group`
 - 实现幂等性处理
@@ -436,6 +443,7 @@ INTEGRATION_TEST=true REDIS_URL=redis://localhost:6379 pnpm test src/lib/redis/s
 **原因**: Redis 不可用或配置错误
 
 **解决方案**:
+
 - 检查 `REDIS_URL` 和 `ENABLE_RATE_LIMIT` 环境变量
 - 查看日志: `[RedisStreams] Connection error`
 - Fail Open 策略会自动降级，不影响服务

@@ -434,9 +434,13 @@
     "badge": "{count} 个 Key",
     "activeKeys": "活跃密钥",
     "totalKeys": "总密钥",
+    "tagFilterPlaceholder": "按标签筛选用户...",
+    "clearFilter": "清空",
     "emptyState": {
       "title": "暂无用户",
-      "description": "点击下方按钮创建第一个用户"
+      "description": "点击下方按钮创建第一个用户",
+      "noMatch": "无匹配用户",
+      "noMatchDescription": "没有找到包含该标签的用户"
     },
     "addUser": "新增用户"
   },

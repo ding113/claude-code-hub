@@ -24,8 +24,10 @@ import type { ActiveSessionInfo } from "@/types/session";
 import type { CurrencyCode } from "@/lib/utils";
 import { Link } from "@/i18n/routing";
 import { useTranslations } from "next-intl";
+import { useWebSocket } from "@/hooks/use-websocket";
+import { ConnectionStatus } from "@/components/ui/connection-status";
 
-const REFRESH_INTERVAL = 5000; // 5秒刷新一次
+const REFRESH_INTERVAL = 5000; // 5秒刷新一次（轮询降级使用）
 
 async function fetchOverviewData(): Promise<OverviewData> {
   const result = await getOverviewData();
@@ -165,11 +167,22 @@ export function OverviewPanel({ currencyCode = "USD", isAdmin = false }: Overvie
   const tc = useTranslations("customs");
   const tu = useTranslations("ui");
 
-  const { data, isLoading } = useQuery<OverviewData, Error>({
+  // WebSocket 实时数据推送
+  const {
+    data: wsData,
+    connectionState,
+    connectionType,
+    error: wsError,
+  } = useWebSocket<OverviewData>("dashboard", "overview-update", {
+    enabled: isAdmin, // 仅当用户是 admin 时才连接 WebSocket
+  });
+
+  // 轮询降级方案（WebSocket 不可用时启用）
+  const { data: pollingData, isLoading } = useQuery<OverviewData, Error>({
     queryKey: ["overview-data"],
     queryFn: fetchOverviewData,
     refetchInterval: REFRESH_INTERVAL,
-    enabled: isAdmin, // 仅当用户是 admin 时才获取数据
+    enabled: isAdmin && connectionType === "polling", // 仅当降级到轮询时才启用
   });
 
   // 格式化响应时间
@@ -178,6 +191,8 @@ export function OverviewPanel({ currencyCode = "USD", isAdmin = false }: Overvie
     return `${(ms / 1000).toFixed(1)}s`;
   };
 
+  // 合并数据源（优先使用 WebSocket 数据）
+  const data = wsData || pollingData;
   const metrics = data || {
     concurrentSessions: 0,
     todayRequests: 0,
@@ -193,82 +208,94 @@ export function OverviewPanel({ currencyCode = "USD", isAdmin = false }: Overvie
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 w-full">
-      {/* 左侧：指标卡片区域 */}
-      <div className="lg:col-span-3">
-        <div className="grid grid-cols-2 gap-3">
-          <MetricCard
-            title={tc("metrics.concurrent")}
-            value={metrics.concurrentSessions}
-            icon={Activity}
-          />
-          <MetricCard
-            title={tc("metrics.todayRequests")}
-            value={metrics.todayRequests}
-            icon={TrendingUp}
-          />
-          <MetricCard
-            title={tc("metrics.todayCost")}
-            value={formatCurrency(metrics.todayCost, currencyCode)}
-            icon={DollarSign}
-          />
-          <MetricCard
-            title={tc("metrics.avgResponse")}
-            value={metrics.avgResponseTime}
-            icon={Clock}
-            formatter={formatResponseTime}
-          />
-        </div>
-        <div className="mt-3">
-          <button
-            onClick={() => router.push("/dashboard/sessions")}
-            className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors text-center py-1.5 hover:bg-muted rounded-md"
-          >
-            {tc("metrics.viewDetails")} →
-          </button>
-        </div>
+    <div className="space-y-3">
+      {/* 连接状态指示器 */}
+      <div className="flex justify-end">
+        <ConnectionStatus
+          connectionState={connectionState}
+          connectionType={connectionType}
+          error={wsError}
+          showDetails
+        />
       </div>
 
-      {/* 右侧：活跃 Session 列表 */}
-      <div className="lg:col-span-9">
-        <div className="border rounded-lg bg-card h-full flex flex-col">
-          <div className="px-4 py-3 border-b flex items-center justify-between flex-shrink-0">
-            <div className="flex items-center gap-2">
-              <Activity className="h-4 w-4 text-primary" />
-              <h3 className="font-semibold text-sm">{tc("activeSessions.title")}</h3>
-              <span className="text-xs text-muted-foreground">
-                {tc("activeSessions.summary", { count: metrics.totalSessionCount, minutes: 5 })}
-              </span>
-            </div>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 w-full">
+        {/* 左侧：指标卡片区域 */}
+        <div className="lg:col-span-3">
+          <div className="grid grid-cols-2 gap-3">
+            <MetricCard
+              title={tc("metrics.concurrent")}
+              value={metrics.concurrentSessions}
+              icon={Activity}
+            />
+            <MetricCard
+              title={tc("metrics.todayRequests")}
+              value={metrics.todayRequests}
+              icon={TrendingUp}
+            />
+            <MetricCard
+              title={tc("metrics.todayCost")}
+              value={formatCurrency(metrics.todayCost, currencyCode)}
+              icon={DollarSign}
+            />
+            <MetricCard
+              title={tc("metrics.avgResponse")}
+              value={metrics.avgResponseTime}
+              icon={Clock}
+              formatter={formatResponseTime}
+            />
+          </div>
+          <div className="mt-3">
             <button
               onClick={() => router.push("/dashboard/sessions")}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors text-center py-1.5 hover:bg-muted rounded-md"
             >
-              {tc("activeSessions.viewAll")} →
+              {tc("metrics.viewDetails")} →
             </button>
           </div>
+        </div>
 
-          <div className="flex-1 overflow-y-auto min-h-0">
-            {isLoading && metrics.recentSessions.length === 0 ? (
-              <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                {tu("common.loading")}
+        {/* 右侧：活跃 Session 列表 */}
+        <div className="lg:col-span-9">
+          <div className="border rounded-lg bg-card h-full flex flex-col">
+            <div className="px-4 py-3 border-b flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <Activity className="h-4 w-4 text-primary" />
+                <h3 className="font-semibold text-sm">{tc("activeSessions.title")}</h3>
+                <span className="text-xs text-muted-foreground">
+                  {tc("activeSessions.summary", { count: metrics.totalSessionCount, minutes: 5 })}
+                </span>
               </div>
-            ) : metrics.recentSessions.length === 0 ? (
-              <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-                {tc("activeSessions.empty")}
-              </div>
-            ) : (
-              <div className="divide-y">
-                {metrics.recentSessions.map((session) => (
-                  <SessionListItem
-                    key={session.sessionId}
-                    session={session}
-                    currencyCode={currencyCode}
-                  />
-                ))}
-              </div>
-            )}
+              <button
+                onClick={() => router.push("/dashboard/sessions")}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {tc("activeSessions.viewAll")} →
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto min-h-0">
+              {isLoading && metrics.recentSessions.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  {tu("common.loading")}
+                </div>
+              ) : metrics.recentSessions.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+                  {tc("activeSessions.empty")}
+                </div>
+              ) : (
+                <div className="divide-y">
+                  {metrics.recentSessions.map((session) => (
+                    <SessionListItem
+                      key={session.sessionId}
+                      session={session}
+                      currencyCode={currencyCode}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

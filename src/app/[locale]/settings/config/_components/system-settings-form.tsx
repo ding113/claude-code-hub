@@ -42,9 +42,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   const [allowCrossGroupOnDegrade, setAllowCrossGroupOnDegrade] = useState(
     initialSettings.allowCrossGroupOnDegrade
   );
-  const [crossGroupConfigSource, setCrossGroupConfigSource] = useState<
-    CrossGroupConfigSource
-  >(initialSettings.crossGroupConfigSource);
+  const [crossGroupConfigSource, setCrossGroupConfigSource] = useState<CrossGroupConfigSource>(
+    initialSettings.crossGroupConfigSource
+  );
   const [isPending, startTransition] = useTransition();
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {

@@ -8,7 +8,10 @@ export interface User {
   role: "admin" | "user";
   rpm: number; // 每分钟请求数限制
   dailyQuota: number; // 每日额度限制（美元）
+  /** @deprecated Use providerGroups instead */
   providerGroup: string | null; // 供应商分组
+  providerGroups: string[] | null; // 多分组支持（向后兼容，fallback 到 providerGroup）
+  tags?: string[] | null; // 用户标签（可选）
   createdAt: Date;
   updatedAt: Date;
   deletedAt?: Date;
@@ -23,6 +26,7 @@ export interface CreateUserData {
   rpm?: number; // 可选，有默认值
   dailyQuota?: number; // 可选，有默认值
   providerGroup?: string | null; // 可选，供应商分组
+  tags?: string[] | null; // 可选，用户标签
 }
 
 /**
@@ -34,6 +38,7 @@ export interface UpdateUserData {
   rpm?: number;
   dailyQuota?: number;
   providerGroup?: string | null; // 可选，供应商分组
+  tags?: string[] | null; // 可选，用户标签
 }
 
 /**
@@ -78,6 +83,7 @@ export interface UserDisplay {
   rpm: number;
   dailyQuota: number;
   providerGroup?: string | null;
+  tags?: string[] | null; // 用户标签（可选）
   keys: UserKeyDisplay[];
 }
 

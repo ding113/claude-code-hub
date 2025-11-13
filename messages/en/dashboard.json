@@ -433,9 +433,13 @@
     "badge": "{count} Keys",
     "activeKeys": "Active Keys",
     "totalKeys": "Total Keys",
+    "tagFilterPlaceholder": "Filter users by tag...",
+    "clearFilter": "Clear",
     "emptyState": {
       "title": "No Users",
-      "description": "Click the button below to create your first user"
+      "description": "Click the button below to create your first user",
+      "noMatch": "No Matching Users",
+      "noMatchDescription": "No users found with this tag"
     },
     "addUser": "Add User"
   },

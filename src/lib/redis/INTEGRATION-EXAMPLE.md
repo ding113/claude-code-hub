@@ -67,21 +67,18 @@ export async function SOCKET(
     const streamsClient = getStreamsClient();
     await streamsClient.connect();
 
-    await streamsClient.subscribe(
-      "websocket-broadcast",
-      async (message) => {
-        const { event, data, rooms } = message.data;
+    await streamsClient.subscribe("websocket-broadcast", async (message) => {
+      const { event, data, rooms } = message.data;
 
-        // 广播到所有客户端或指定 rooms
-        if (rooms && rooms.length > 0) {
-          rooms.forEach((room: string) => {
-            io!.to(room).emit(event, data);
-          });
-        } else {
-          io!.emit(event, data);
-        }
+      // 广播到所有客户端或指定 rooms
+      if (rooms && rooms.length > 0) {
+        rooms.forEach((room: string) => {
+          io!.to(room).emit(event, data);
+        });
+      } else {
+        io!.emit(event, data);
       }
-    );
+    });
 
     console.log("[WebSocket] Server initialized with Redis Streams");
   }
@@ -147,19 +144,21 @@ export class ProxyStatusTracker {
 
     // 广播实时更新
     const streamsClient = getStreamsClient();
-    streamsClient.publishMessage("websocket-broadcast", {
-      event: "metrics_update",
-      data: {
-        userId,
-        providerId,
-        activeSessions: this.getActiveSessions(userId),
-        timestamp: Date.now(),
-      },
-      rooms: ["admin", `user-${userId}`],
-    }).catch(err => {
-      logger.error("[ProxyStatusTracker] Failed to broadcast metrics:", err);
-      // Fail Open: 不阻塞主逻辑
-    });
+    streamsClient
+      .publishMessage("websocket-broadcast", {
+        event: "metrics_update",
+        data: {
+          userId,
+          providerId,
+          activeSessions: this.getActiveSessions(userId),
+          timestamp: Date.now(),
+        },
+        rooms: ["admin", `user-${userId}`],
+      })
+      .catch((err) => {
+        logger.error("[ProxyStatusTracker] Failed to broadcast metrics:", err);
+        // Fail Open: 不阻塞主逻辑
+      });
   }
 
   // ... 其他方法 ...
