@@ -70,3 +70,5 @@ TRANSLATIONS_CHECKLIST.md
 
 # i18n verification screenshots (temporary)
 /i18n-verification/
+# Build artifacts
+src/**/*.js
