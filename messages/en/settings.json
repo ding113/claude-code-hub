@@ -489,6 +489,9 @@
     }
   },
   "providers": {
+    "actions": {
+      "viewLeaderboard": "View Leaderboard"
+    },
     "add": "Add Provider",
     "addFailed": "Failed to add provider",
     "addProvider": "Add Provider",
@@ -622,7 +625,13 @@
         "targetEmpty": "Target model name cannot be empty",
         "alreadyExists": "Model \"{model}\" already has a redirect rule",
         "description": "Redirect Claude Code client requested models (e.g. claude-sonnet-4.5) to upstream provider supported models (e.g. glm-4.6, gemini-pro). For cost optimization or third-party AI integration.",
-        "emptyState": "No redirect rules yet. After adding rules, the system will automatically rewrite model names in requests."
+        "emptyState": "No redirect rules yet. After adding rules, the system will automatically rewrite model names in requests.",
+        "edit": "Edit",
+        "save": "Save",
+        "cancel": "Cancel",
+        "editSuccess": "Model redirect updated successfully",
+        "editFailed": "Failed to update model redirect",
+        "cannotModifyToExisting": "Cannot modify source model to an existing key"
       },
       "addRedirect": "Add Redirect",
       "allowAllModels": "✓ Allow All Models (Recommended)",

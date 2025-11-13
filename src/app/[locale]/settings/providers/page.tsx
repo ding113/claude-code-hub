@@ -8,6 +8,9 @@ import { SettingsPageHeader } from "../_components/settings-page-header";
 import { getSession } from "@/lib/auth";
 import { getSystemSettings } from "@/repository/system-config";
 import { getEnvConfig } from "@/lib/config/env.schema";
+import { Link } from "@/i18n/routing";
+import { Button } from "@/components/ui/button";
+import { BarChart } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +35,12 @@ export default async function SettingsProvidersPage() {
         description={t("providers.section.description")}
         actions={
           <div className="flex gap-2">
+            <Button asChild variant="outline" size="sm">
+              <Link href="/dashboard/leaderboard">
+                <BarChart />
+                {t("providers.actions.viewLeaderboard")}
+              </Link>
+            </Button>
             <SchedulingRulesDialog />
             <AddProviderDialog enableMultiProviderTypes={enableMultiProviderTypes} />
           </div>

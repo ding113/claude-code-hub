@@ -489,6 +489,9 @@
     }
   },
   "providers": {
+    "actions": {
+      "viewLeaderboard": "查看排行榜"
+    },
     "add": "新增供應商",
     "addFailed": "新增服務商失敗",
     "addProvider": "新增服务商",
@@ -597,7 +600,13 @@
         "targetEmpty": "目標模型名稱不能為空",
         "alreadyExists": "模型「{model}」已存在重新導向規則",
         "description": "將 Claude Code 客戶端請求的模型（如 claude-sonnet-4.5）重新導向到上游供應商實際支援的模型（如 glm-4.6、gemini-pro）。用於成本最佳化或接入第三方 AI 服務。",
-        "emptyState": "目前無重新導向規則。新增規則後，系統將自動重寫請求中的模型名稱。"
+        "emptyState": "目前無重新導向規則。新增規則後，系統將自動重寫請求中的模型名稱。",
+        "edit": "編輯",
+        "save": "儲存",
+        "cancel": "取消",
+        "editSuccess": "重定向規則更新成功",
+        "editFailed": "重定向規則更新失敗",
+        "cannotModifyToExisting": "不能修改為已存在的重定向規則"
       },
       "confirmAdd": "确认添加",
       "confirmAddPending": "添加中...",
