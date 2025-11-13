@@ -77,6 +77,7 @@ function createFallbackSettings(): SystemSettings {
     id: 0,
     siteTitle: DEFAULT_SITE_TITLE,
     allowGlobalUsageView: false,
+    allowCrossGroupOnDegrade: false,
     currencyDisplay: "USD",
     enableAutoCleanup: false,
     cleanupRetentionDays: 30,
@@ -98,6 +99,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
         id: systemSettings.id,
         siteTitle: systemSettings.siteTitle,
         allowGlobalUsageView: systemSettings.allowGlobalUsageView,
+        allowCrossGroupOnDegrade: systemSettings.allowCrossGroupOnDegrade,
         currencyDisplay: systemSettings.currencyDisplay,
         enableAutoCleanup: systemSettings.enableAutoCleanup,
         cleanupRetentionDays: systemSettings.cleanupRetentionDays,
@@ -119,6 +121,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       .values({
         siteTitle: DEFAULT_SITE_TITLE,
         allowGlobalUsageView: false,
+        allowCrossGroupOnDegrade: false,
         currencyDisplay: "USD",
       })
       .onConflictDoNothing()
@@ -126,6 +129,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
         id: systemSettings.id,
         siteTitle: systemSettings.siteTitle,
         allowGlobalUsageView: systemSettings.allowGlobalUsageView,
+        allowCrossGroupOnDegrade: systemSettings.allowCrossGroupOnDegrade,
         currencyDisplay: systemSettings.currencyDisplay,
         enableAutoCleanup: systemSettings.enableAutoCleanup,
         cleanupRetentionDays: systemSettings.cleanupRetentionDays,
@@ -146,6 +150,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
         id: systemSettings.id,
         siteTitle: systemSettings.siteTitle,
         allowGlobalUsageView: systemSettings.allowGlobalUsageView,
+        allowCrossGroupOnDegrade: systemSettings.allowCrossGroupOnDegrade,
         currencyDisplay: systemSettings.currencyDisplay,
         enableAutoCleanup: systemSettings.enableAutoCleanup,
         cleanupRetentionDays: systemSettings.cleanupRetentionDays,
@@ -218,6 +223,11 @@ export async function updateSystemSettings(
       updates.enableClientVersionCheck = payload.enableClientVersionCheck;
     }
 
+    // 跨组降级开关（如果提供）
+    if (payload.allowCrossGroupOnDegrade !== undefined) {
+      updates.allowCrossGroupOnDegrade = payload.allowCrossGroupOnDegrade;
+    }
+
     const [updated] = await db
       .update(systemSettings)
       .set(updates)
@@ -226,6 +236,7 @@ export async function updateSystemSettings(
         id: systemSettings.id,
         siteTitle: systemSettings.siteTitle,
         allowGlobalUsageView: systemSettings.allowGlobalUsageView,
+        allowCrossGroupOnDegrade: systemSettings.allowCrossGroupOnDegrade,
         currencyDisplay: systemSettings.currencyDisplay,
         enableAutoCleanup: systemSettings.enableAutoCleanup,
         cleanupRetentionDays: systemSettings.cleanupRetentionDays,

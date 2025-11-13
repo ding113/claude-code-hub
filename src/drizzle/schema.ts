@@ -20,7 +20,9 @@ export const users = pgTable('users', {
   role: varchar('role').default('user'),
   rpmLimit: integer('rpm_limit').default(60),
   dailyLimitUsd: numeric('daily_limit_usd', { precision: 10, scale: 2 }).default('100.00'),
+  /** @deprecated Use providerGroups instead */
   providerGroup: varchar('provider_group', { length: 50 }),
+  providerGroups: jsonb('provider_groups').$type<string[] | null>().default(null),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -73,7 +75,9 @@ export const providers = pgTable('providers', {
   // 优先级和分组配置
   priority: integer('priority').notNull().default(0),
   costMultiplier: numeric('cost_multiplier', { precision: 10, scale: 4 }).default('1.0'),
+  /** @deprecated Use groupTags instead */
   groupTag: varchar('group_tag', { length: 50 }),
+  groupTags: jsonb('group_tags').$type<string[] | null>().default(null),
 
   // 供应商类型：扩展支持 5 种类型
   // - claude: Anthropic 提供商（标准认证）
@@ -141,6 +145,8 @@ export const providers = pgTable('providers', {
   providersEnabledPriorityIdx: index('idx_providers_enabled_priority').on(table.isEnabled, table.priority, table.weight).where(sql`${table.deletedAt} IS NULL`),
   // 分组查询优化
   providersGroupIdx: index('idx_providers_group').on(table.groupTag).where(sql`${table.deletedAt} IS NULL`),
+  // 多分组查询优化（GIN 索引用于 JSONB 数组查询）
+  providersGroupTagsIdx: index('idx_providers_group_tags').using('gin', table.groupTags).where(sql`${table.deletedAt} IS NULL`),
   // 基础索引
   providersCreatedAtIdx: index('idx_providers_created_at').on(table.createdAt),
   providersDeletedAtIdx: index('idx_providers_deleted_at').on(table.deletedAt),
@@ -264,6 +270,10 @@ export const systemSettings = pgTable('system_settings', {
 
   // 客户端版本检查配置
   enableClientVersionCheck: boolean('enable_client_version_check').notNull().default(false),
+
+  // 供应商分组降级配置：当分组内无可用供应商时，是否允许跨组降级到全局供应商池
+  // 保持向后兼容：默认 false（严格分组隔离）
+  allowCrossGroupOnDegrade: boolean('allow_cross_group_on_degrade').notNull().default(false),
 
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),

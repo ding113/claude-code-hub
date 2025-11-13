@@ -19,7 +19,8 @@ export interface ProviderChainItem {
     | "system_error" // 系统/网络错误（不计入熔断器）
     | "retry_with_official_instructions" // Codex instructions 自动重试（官方）
     | "retry_with_cached_instructions" // Codex instructions 智能重试（缓存）
-    | "client_error_non_retryable"; // 不可重试的客户端错误（Prompt 超限、内容过滤、PDF 限制、Thinking 格式）
+    | "client_error_non_retryable" // 不可重试的客户端错误（Prompt 超限、内容过滤、PDF 限制、Thinking 格式）
+    | "cross_group_degradation"; // 跨组降级（用户分组内无可用供应商）
 
   // === 选择方法（细化） ===
   selectionMethod?:
@@ -135,6 +136,10 @@ export interface ProviderChainItem {
     // --- 重试特有 ---
     excludedProviderIds?: number[]; // 已排除的供应商 ID 列表
     retryReason?: string; // 重试原因
+
+    // --- 跨组降级 ---
+    crossGroupDegradationUsed?: boolean; // 是否使用了跨组降级
+    degradationReason?: string; // 降级原因描述
   };
 }
 
@@ -239,4 +244,11 @@ export interface CreateMessageRequestData {
 export interface ParsedSSEEvent {
   event: string;
   data: Record<string, unknown> | string;
+}
+
+// 类型守卫：判断是否为跨组降级原因
+export function isCrossGroupDegradation(
+  reason: ProviderChainItem['reason']
+): reason is 'cross_group_degradation' {
+  return reason === 'cross_group_degradation';
 }

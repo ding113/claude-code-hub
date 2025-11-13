@@ -79,6 +79,9 @@ export function ProviderForm({
     sourceProvider?.costMultiplier ?? 1.0
   );
   const [groupTag, setGroupTag] = useState<string>(sourceProvider?.groupTag ?? "");
+  const [groupTags, setGroupTags] = useState<string[] | null>(
+    sourceProvider?.groupTags ?? (sourceProvider?.groupTag ? [sourceProvider.groupTag] : null)
+  );
   const [limit5hUsd, setLimit5hUsd] = useState<number | null>(sourceProvider?.limit5hUsd ?? null);
   const [limitWeeklyUsd, setLimitWeeklyUsd] = useState<number | null>(
     sourceProvider?.limitWeeklyUsd ?? null
@@ -183,6 +186,30 @@ export function ProviderForm({
       proxy: false,
       codexStrategy: false,
     });
+  };
+
+  // 添加标签处理函数
+  const handleAddTag = (tag: string) => {
+    const currentTags = groupTags ?? [];
+    // Validation: max 10 tags, no duplicates
+    if (currentTags.length >= 10) {
+      toast.error(t("errors.groupTagsMaxError") || "最多只能添加 10 个分组标签");
+      return;
+    }
+    if (currentTags.includes(tag)) {
+      toast.error(t("errors.groupTagsDuplicateError") || "该分组标签已存在");
+      return;
+    }
+    const newTags = [...currentTags, tag];
+    setGroupTags(newTags);
+    setGroupTag(newTags[0] ?? ""); // Sync for backward compatibility
+  };
+
+  // 删除标签处理函数
+  const handleRemoveTag = (index: number) => {
+    const newTags = groupTags?.filter((_, idx) => idx !== index) ?? [];
+    setGroupTags(newTags.length > 0 ? newTags : null);
+    setGroupTag(newTags[0] ?? ""); // Sync for backward compatibility
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -690,13 +717,40 @@ export function ProviderForm({
                   <Label htmlFor={isEdit ? "edit-group" : "group"}>
                     {t("sections.routing.scheduleParams.group.label")}
                   </Label>
-                  <Input
-                    id={isEdit ? "edit-group" : "group"}
-                    value={groupTag}
-                    onChange={(e) => setGroupTag(e.target.value)}
-                    placeholder={t("sections.routing.scheduleParams.group.placeholder")}
-                    disabled={isPending}
-                  />
+                  <div className="space-y-2">
+                    {/* Badge chips display */}
+                    <div className="flex flex-wrap gap-2">
+                      {(groupTags ?? []).map((tag, idx) => (
+                        <Badge key={idx} variant="secondary" className="gap-1">
+                          {tag}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveTag(idx)}
+                            className="ml-1 hover:text-destructive"
+                            disabled={isPending}
+                          >
+                            ×
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+                    {/* Input for adding new tags */}
+                    <Input
+                      id={isEdit ? "edit-group" : "group"}
+                      placeholder={t("sections.routing.scheduleParams.group.placeholder")}
+                      disabled={isPending}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+                          e.preventDefault();
+                          handleAddTag(e.currentTarget.value.trim());
+                          e.currentTarget.value = '';
+                        }
+                        if (e.key === 'Backspace' && e.currentTarget.value === '' && groupTags?.length) {
+                          handleRemoveTag(groupTags.length - 1);
+                        }
+                      }}
+                    />
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     {t("sections.routing.scheduleParams.group.desc")}
                   </p>

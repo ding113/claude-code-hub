@@ -4,6 +4,8 @@ export interface SystemSettings {
   id: number;
   siteTitle: string;
   allowGlobalUsageView: boolean;
+  // 供应商分组降级配置：当分组内无可用供应商时，是否允许跨组降级到全局供应商池
+  allowCrossGroupOnDegrade: boolean;
 
   // 货币显示配置
   currencyDisplay: CurrencyCode;
@@ -25,6 +27,8 @@ export interface UpdateSystemSettingsInput {
   // 所有字段均为可选，支持部分更新
   siteTitle?: string;
   allowGlobalUsageView?: boolean;
+  // 供应商分组降级配置（可选）
+  allowCrossGroupOnDegrade?: boolean;
 
   // 货币显示配置（可选）
   currencyDisplay?: CurrencyCode;

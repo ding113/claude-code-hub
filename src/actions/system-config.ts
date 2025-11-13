@@ -27,6 +27,7 @@ export async function saveSystemSettings(formData: {
   // 所有字段均为可选，支持部分更新
   siteTitle?: string;
   allowGlobalUsageView?: boolean;
+  allowCrossGroupOnDegrade?: boolean;
   currencyDisplay?: string;
   enableAutoCleanup?: boolean;
   cleanupRetentionDays?: number;
@@ -44,6 +45,7 @@ export async function saveSystemSettings(formData: {
     const updated = await updateSystemSettings({
       siteTitle: validated.siteTitle?.trim(),
       allowGlobalUsageView: validated.allowGlobalUsageView,
+      allowCrossGroupOnDegrade: validated.allowCrossGroupOnDegrade,
       currencyDisplay: validated.currencyDisplay,
       enableAutoCleanup: validated.enableAutoCleanup,
       cleanupRetentionDays: validated.cleanupRetentionDays,

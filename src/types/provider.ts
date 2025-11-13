@@ -17,7 +17,9 @@ export interface Provider {
   // 优先级和分组配置
   priority: number;
   costMultiplier: number;
+  /** @deprecated Use groupTags instead */
   groupTag: string | null;
+  groupTags: string[] | null;
 
   // 供应商类型：扩展支持 4 种类型
   providerType: ProviderType;
@@ -81,7 +83,10 @@ export interface ProviderDisplay {
   // 优先级和分组配置
   priority: number;
   costMultiplier: number;
+  /** @deprecated Use groupTags instead */
   groupTag: string | null;
+  // 新增：多分组标签（向后兼容，源端可能仅提供单个 groupTag）
+  groupTags: string[] | null;
   // 供应商类型
   providerType: ProviderType;
   modelRedirects: Record<string, string> | null;
@@ -132,7 +137,9 @@ export interface CreateProviderData {
   // 优先级和分组配置
   priority?: number;
   cost_multiplier?: number;
+  /** @deprecated Use group_tags instead */
   group_tag?: string | null;
+  group_tags?: string[] | null;
 
   // 供应商类型和模型配置
   provider_type?: ProviderType;
@@ -183,7 +190,9 @@ export interface UpdateProviderData {
   // 优先级和分组配置
   priority?: number;
   cost_multiplier?: number;
+  /** @deprecated Use group_tags instead */
   group_tag?: string | null;
+  group_tags?: string[] | null;
 
   // 供应商类型和模型配置
   provider_type?: ProviderType;

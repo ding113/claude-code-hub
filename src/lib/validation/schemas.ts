@@ -109,7 +109,11 @@ export const CreateProviderSchema = z.object({
     .optional()
     .default(0),
   cost_multiplier: z.coerce.number().min(0, "成本倍率不能为负数").optional().default(1.0),
+  /** @deprecated Use group_tags instead */
   group_tag: z.string().max(50, "分组标签不能超过50个字符").nullable().optional(),
+  group_tags: z.array(
+    z.string().min(1, "分组标签不能为空").max(50, "分组标签不能超过50个字符")
+  ).max(10, "最多只能添加10个分组标签").nullable().optional(),
   // Codex 支持:供应商类型和模型重定向
   provider_type: z
     .enum(["claude", "claude-auth", "codex", "gemini-cli", "openai-compatible"])
@@ -208,7 +212,11 @@ export const UpdateProviderSchema = z
       .max(2147483647, "优先级超出整数范围")
       .optional(),
     cost_multiplier: z.coerce.number().min(0, "成本倍率不能为负数").optional(),
+    /** @deprecated Use group_tags instead */
     group_tag: z.string().max(50, "分组标签不能超过50个字符").nullable().optional(),
+    group_tags: z.array(
+      z.string().min(1, "分组标签不能为空").max(50, "分组标签不能超过50个字符")
+    ).max(10, "最多只能添加10个分组标签").nullable().optional(),
     // Codex 支持:供应商类型和模型重定向
     provider_type: z
       .enum(["claude", "claude-auth", "codex", "gemini-cli", "openai-compatible"])
@@ -287,6 +295,8 @@ export const UpdateProviderSchema = z
 export const UpdateSystemSettingsSchema = z.object({
   siteTitle: z.string().min(1, "站点标题不能为空").max(128, "站点标题不能超过128个字符").optional(),
   allowGlobalUsageView: z.boolean().optional(),
+  // 跨组降级（可选），默认 false，保持严格分组隔离
+  allowCrossGroupOnDegrade: z.boolean().optional(),
   currencyDisplay: z
     .enum(
       Object.keys(CURRENCY_CONFIG) as [

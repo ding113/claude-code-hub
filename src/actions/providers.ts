@@ -116,6 +116,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         priority: provider.priority,
         costMultiplier: provider.costMultiplier,
         groupTag: provider.groupTag,
+        groupTags: provider.groupTags,
         providerType: provider.providerType,
         modelRedirects: provider.modelRedirects,
         allowedModels: provider.allowedModels,
@@ -243,6 +244,9 @@ export async function addProvider(data: {
       proxy_fallback_to_direct: validated.proxy_fallback_to_direct ?? false,
       website_url: validated.website_url ?? null,
       favicon_url: faviconUrl,
+      // Support both old (group_tag) and new (group_tags) formats
+      group_tag: validated.group_tags?.[0] ?? validated.group_tag ?? null,
+      group_tags: validated.group_tags ?? (validated.group_tag ? [validated.group_tag] : null),
       tpm: validated.tpm ?? null,
       rpm: validated.rpm ?? null,
       rpd: validated.rpd ?? null,
@@ -356,6 +360,15 @@ export async function editProvider(
     const payload = {
       ...validated,
       ...(faviconUrl !== undefined && { favicon_url: faviconUrl }),
+      // Support both old (group_tag) and new (group_tags) formats
+      ...(validated.group_tags !== undefined && {
+        group_tag: validated.group_tags?.[0] ?? null,
+        group_tags: validated.group_tags,
+      }),
+      ...(validated.group_tag !== undefined && validated.group_tags === undefined && {
+        group_tag: validated.group_tag,
+        group_tags: validated.group_tag ? [validated.group_tag] : null,
+      }),
     };
 
     const provider = await updateProvider(providerId, payload);
