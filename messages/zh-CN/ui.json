@@ -4,7 +4,8 @@
     "actions": "操作",
     "loading": "加载中...",
     "empty": "为空",
-    "error": "错误"
+    "error": "错误",
+    "retry": "重试"
   },
   "table": {
     "pagination": "分页",

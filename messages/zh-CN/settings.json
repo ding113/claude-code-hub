@@ -187,6 +187,55 @@
     "confirmDelete": "确定要删除此供应商吗?",
     "notFound": "未找到匹配的供应商",
     "form": {
+      "proxyTest": {
+        "fillUrlFirst": "请先填写供应商 URL",
+        "testFailed": "测试失败",
+        "testFailedRetry": "测试失败，请重试",
+        "noResult": "测试成功但未返回结果",
+        "connectionSuccess": "连接成功",
+        "connectionFailed": "连接失败",
+        "viaProxy": "（通过代理）",
+        "viaDirect": "（直连）",
+        "responseTime": "响应时间:",
+        "statusCode": "状态码:",
+        "connectionMethod": "连接方式:",
+        "proxy": "代理",
+        "direct": "直连",
+        "errorType": "错误类型:",
+        "testing": "测试中...",
+        "testConnection": "测试连接",
+        "timeoutError": "连接超时（5秒）。请检查：\n1. 代理服务器是否可访问\n2. 代理地址和端口是否正确\n3. 代理认证信息是否正确",
+        "proxyError": "代理错误:",
+        "networkError": "网络错误:"
+      },
+      "modelSelect": {
+        "allowAllModels": "允许所有 {type} 模型",
+        "selectedCount": "已选择 {count} 个模型",
+        "searchPlaceholder": "搜索模型名称...",
+        "loading": "加载中...",
+        "notFound": "未找到模型",
+        "selectAll": "全选 ({count})",
+        "clear": "清空",
+        "manualAdd": "手动添加模型",
+        "manualPlaceholder": "输入模型名称（如 gpt-5-turbo）",
+        "manualDesc": "支持添加任意模型名称（不限于价格表中的模型）",
+        "claude": "Claude",
+        "openai": "OpenAI"
+      },
+      "modelRedirect": {
+        "currentRules": "当前规则 ({count})",
+        "addNewRule": "添加新规则",
+        "sourceModel": "用户请求的模型",
+        "targetModel": "实际转发的模型",
+        "sourcePlaceholder": "例如: claude-sonnet-4-5-20250929",
+        "targetPlaceholder": "例如: glm-4.6",
+        "add": "添加",
+        "sourceEmpty": "源模型名称不能为空",
+        "targetEmpty": "目标模型名称不能为空",
+        "alreadyExists": "模型 \"{model}\" 已存在重定向规则",
+        "description": "将 Claude Code 客户端请求的模型（如 claude-sonnet-4.5）重定向到上游供应商实际支持的模型（如 glm-4.6、gemini-pro）。用于成本优化或接入第三方 AI 服务。",
+        "emptyState": "暂无重定向规则。添加规则后，系统将自动重写请求中的模型名称。"
+      },
       "name": {
         "label": "服务商名称 *",
         "placeholder": "例如: 智谱"
@@ -421,6 +470,9 @@
         "updating": "更新中...",
         "delete": "删除"
       },
+      "common": {
+        "core": "核心"
+      },
       "sections": {
         "routing": {
           "title": "路由配置",
@@ -546,6 +598,30 @@
             "label": "连接测试",
             "desc": "测试通过配置的代理访问供应商 URL（使用 HEAD 请求，不消耗额度）"
           }
+        },
+        "timeout": {
+          "title": "超时配置",
+          "summary": "首字: {streaming}s | 流式间隔: {idle}s | 非流式: {nonStreaming}s",
+          "desc": "配置请求超时时间，0 表示禁用超时",
+          "streamingFirstByte": {
+            "label": "流式首字节超时（秒）",
+            "placeholder": "30",
+            "desc": "流式请求首字节超时，范围 1-120 秒，默认 30 秒",
+            "core": "true"
+          },
+          "streamingIdle": {
+            "label": "流式静默期超时（秒）",
+            "placeholder": "10",
+            "desc": "流式请求静默期超时，范围 1-120 秒，默认 10 秒（防止中途卡住）",
+            "core": "true"
+          },
+          "nonStreamingTotal": {
+            "label": "非流式总超时（秒）",
+            "placeholder": "600",
+            "desc": "非流式请求总超时，范围 60-1200 秒，默认 600 秒（10 分钟）",
+            "core": "true"
+          },
+          "disableHint": "设为 0 表示禁用该超时（仅用于灰度回退场景，不推荐）"
         },
         "codexStrategy": {
           "title": "Codex Instructions 策略",

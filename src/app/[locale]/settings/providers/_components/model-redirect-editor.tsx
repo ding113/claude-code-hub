@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { useTranslations } from "next-intl";
 
 interface ModelRedirectEditorProps {
   value: Record<string, string>;
@@ -17,6 +18,7 @@ export function ModelRedirectEditor({
   onChange,
   disabled = false,
 }: ModelRedirectEditorProps) {
+  const t = useTranslations("settings.providers.form.modelRedirect");
   const [newSource, setNewSource] = useState("");
   const [newTarget, setNewTarget] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -29,17 +31,17 @@ export function ModelRedirectEditor({
 
     // 验证输入
     if (!newSource.trim()) {
-      setError("源模型名称不能为空");
+      setError(t("sourceEmpty"));
       return;
     }
     if (!newTarget.trim()) {
-      setError("目标模型名称不能为空");
+      setError(t("targetEmpty"));
       return;
     }
 
     // 检查是否已存在
     if (value[newSource.trim()]) {
-      setError(`模型 "${newSource.trim()}" 已存在重定向规则`);
+      setError(t("alreadyExists", { model: newSource.trim() }));
       return;
     }
 
@@ -73,7 +75,7 @@ export function ModelRedirectEditor({
       {redirects.length > 0 && (
         <div className="space-y-2">
           <div className="text-xs font-medium text-muted-foreground">
-            当前规则 ({redirects.length})
+            {t("currentRules", { count: redirects.length })}
           </div>
           <div className="space-y-1">
             {redirects.map(([source, target]) => (
@@ -107,18 +109,18 @@ export function ModelRedirectEditor({
 
       {/* 添加新规则表单 */}
       <div className="space-y-2">
-        <div className="text-xs font-medium text-muted-foreground">添加新规则</div>
+        <div className="text-xs font-medium text-muted-foreground">{t("addNewRule")}</div>
         <div className="grid grid-cols-[1fr_auto_1fr_auto] gap-2 items-end">
           <div className="space-y-1">
             <Label htmlFor="new-source" className="text-xs">
-              用户请求的模型
+              {t("sourceModel")}
             </Label>
             <Input
               id="new-source"
               value={newSource}
               onChange={(e) => setNewSource(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="例如: claude-sonnet-4-5-20250929"
+              placeholder={t("sourcePlaceholder")}
               disabled={disabled}
               className="font-mono text-sm"
             />
@@ -128,14 +130,14 @@ export function ModelRedirectEditor({
 
           <div className="space-y-1">
             <Label htmlFor="new-target" className="text-xs">
-              实际转发的模型
+              {t("targetModel")}
             </Label>
             <Input
               id="new-target"
               value={newTarget}
               onChange={(e) => setNewTarget(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="例如: glm-4.6"
+              placeholder={t("targetPlaceholder")}
               disabled={disabled}
               className="font-mono text-sm"
             />
@@ -149,7 +151,7 @@ export function ModelRedirectEditor({
             className="mb-0"
           >
             <Plus className="h-4 w-4 mr-1" />
-            添加
+            {t("add")}
           </Button>
         </div>
 
@@ -162,17 +164,13 @@ export function ModelRedirectEditor({
         )}
 
         {/* 帮助文本 */}
-        <p className="text-xs text-muted-foreground">
-          将 Claude Code 客户端请求的模型（如
-          claude-sonnet-4.5）重定向到上游供应商实际支持的模型（如
-          glm-4.6、gemini-pro）。用于成本优化或接入第三方 AI 服务。
-        </p>
+        <p className="text-xs text-muted-foreground">{t("description")}</p>
       </div>
 
       {/* 空状态提示 */}
       {redirects.length === 0 && (
         <div className="text-center py-6 text-sm text-muted-foreground border border-dashed rounded-md">
-          暂无重定向规则。添加规则后，系统将自动重写请求中的模型名称。
+          {t("emptyState")}
         </div>
       )}
     </div>

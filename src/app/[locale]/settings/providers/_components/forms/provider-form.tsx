@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { ProviderDisplay, ProviderType, CodexInstructionsStrategy } from "@/types/provider";
 import { validateNumericField, isValidUrl } from "@/lib/utils/validation";
-import { PROVIDER_DEFAULTS } from "@/lib/constants/provider.constants";
+import { PROVIDER_DEFAULTS, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { toast } from "sonner";
 import { ModelMultiSelect } from "../model-multi-select";
 import { ModelRedirectEditor } from "../model-redirect-editor";
@@ -114,6 +114,27 @@ export function ProviderForm({
     sourceProvider?.proxyFallbackToDirect ?? false
   );
 
+  // 超时配置（以秒为单位显示，提交时转换为毫秒）
+  // ⚠️ 严格检查 null/undefined 并验证数值有效性，避免产生 NaN
+  const [firstByteTimeoutStreamingSeconds, setFirstByteTimeoutStreamingSeconds] = useState<
+    number | undefined
+  >(() => {
+    const ms = sourceProvider?.firstByteTimeoutStreamingMs;
+    return ms != null && typeof ms === "number" && !Number.isNaN(ms) ? ms / 1000 : undefined;
+  });
+  const [streamingIdleTimeoutSeconds, setStreamingIdleTimeoutSeconds] = useState<
+    number | undefined
+  >(() => {
+    const ms = sourceProvider?.streamingIdleTimeoutMs;
+    return ms != null && typeof ms === "number" && !Number.isNaN(ms) ? ms / 1000 : undefined;
+  });
+  const [requestTimeoutNonStreamingSeconds, setRequestTimeoutNonStreamingSeconds] = useState<
+    number | undefined
+  >(() => {
+    const ms = sourceProvider?.requestTimeoutNonStreamingMs;
+    return ms != null && typeof ms === "number" && !Number.isNaN(ms) ? ms / 1000 : undefined;
+  });
+
   // 供应商官网地址
   const [websiteUrl, setWebsiteUrl] = useState<string>(sourceProvider?.websiteUrl ?? "");
 
@@ -122,12 +143,19 @@ export function ProviderForm({
     useState<CodexInstructionsStrategy>(sourceProvider?.codexInstructionsStrategy ?? "auto");
 
   // 折叠区域状态管理
-  type SectionKey = "routing" | "rateLimit" | "circuitBreaker" | "proxy" | "codexStrategy";
+  type SectionKey =
+    | "routing"
+    | "rateLimit"
+    | "circuitBreaker"
+    | "proxy"
+    | "timeout"
+    | "codexStrategy";
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
     routing: false,
     rateLimit: false,
     circuitBreaker: false,
     proxy: false,
+    timeout: false,
     codexStrategy: false,
   });
 
@@ -170,6 +198,7 @@ export function ProviderForm({
       rateLimit: true,
       circuitBreaker: true,
       proxy: true,
+      timeout: true,
       codexStrategy: true,
     });
   };
@@ -181,6 +210,7 @@ export function ProviderForm({
       rateLimit: false,
       circuitBreaker: false,
       proxy: false,
+      timeout: false,
       codexStrategy: false,
     });
   };
@@ -230,6 +260,9 @@ export function ProviderForm({
             circuit_breaker_half_open_success_threshold?: number;
             proxy_url?: string | null;
             proxy_fallback_to_direct?: boolean;
+            first_byte_timeout_streaming_ms?: number;
+            streaming_idle_timeout_ms?: number;
+            request_timeout_non_streaming_ms?: number;
             website_url?: string | null;
             codex_instructions_strategy?: CodexInstructionsStrategy;
             tpm?: number | null;
@@ -258,6 +291,17 @@ export function ProviderForm({
             circuit_breaker_half_open_success_threshold: halfOpenSuccessThreshold ?? 2,
             proxy_url: proxyUrl.trim() || null,
             proxy_fallback_to_direct: proxyFallbackToDirect,
+            // ⭐ 编辑模式：undefined 代表不更新(沿用数据库旧值),不能回退到默认值
+            first_byte_timeout_streaming_ms:
+              firstByteTimeoutStreamingSeconds != null
+                ? firstByteTimeoutStreamingSeconds * 1000
+                : undefined,
+            streaming_idle_timeout_ms:
+              streamingIdleTimeoutSeconds != null ? streamingIdleTimeoutSeconds * 1000 : undefined,
+            request_timeout_non_streaming_ms:
+              requestTimeoutNonStreamingSeconds != null
+                ? requestTimeoutNonStreamingSeconds * 1000
+                : undefined,
             website_url: websiteUrl.trim() || null,
             codex_instructions_strategy: codexInstructionsStrategy,
             tpm: null,
@@ -299,6 +343,18 @@ export function ProviderForm({
             circuit_breaker_half_open_success_threshold: halfOpenSuccessThreshold ?? 2,
             proxy_url: proxyUrl.trim() || null,
             proxy_fallback_to_direct: proxyFallbackToDirect,
+            first_byte_timeout_streaming_ms:
+              firstByteTimeoutStreamingSeconds != null
+                ? firstByteTimeoutStreamingSeconds * 1000
+                : PROVIDER_TIMEOUT_DEFAULTS.FIRST_BYTE_TIMEOUT_STREAMING_MS,
+            streaming_idle_timeout_ms:
+              streamingIdleTimeoutSeconds != null
+                ? streamingIdleTimeoutSeconds * 1000
+                : PROVIDER_TIMEOUT_DEFAULTS.STREAMING_IDLE_TIMEOUT_MS,
+            request_timeout_non_streaming_ms:
+              requestTimeoutNonStreamingSeconds != null
+                ? requestTimeoutNonStreamingSeconds * 1000
+                : PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS,
             website_url: websiteUrl.trim() || null,
             codex_instructions_strategy: codexInstructionsStrategy,
             tpm: null,
@@ -335,6 +391,16 @@ export function ProviderForm({
           setHalfOpenSuccessThreshold(2);
           setProxyUrl("");
           setProxyFallbackToDirect(false);
+          setFirstByteTimeoutStreamingSeconds(
+            PROVIDER_TIMEOUT_DEFAULTS.FIRST_BYTE_TIMEOUT_STREAMING_MS / 1000
+          );
+          // ⭐ 修复遗漏：重置流式静默期超时
+          setStreamingIdleTimeoutSeconds(
+            PROVIDER_TIMEOUT_DEFAULTS.STREAMING_IDLE_TIMEOUT_MS / 1000
+          );
+          setRequestTimeoutNonStreamingSeconds(
+            PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS / 1000
+          );
           setWebsiteUrl("");
           setCodexInstructionsStrategy("auto");
         }
@@ -921,6 +987,157 @@ export function ProviderForm({
                   </p>
                 </div>
               </div>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+
+        {/* 超时配置 */}
+        <Collapsible open={openSections.timeout} onOpenChange={(open) => toggleSection("timeout")}>
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="flex items-center justify-between w-full py-4 border-t hover:bg-muted/50 transition-colors"
+              disabled={isPending}
+            >
+              <div className="flex items-center gap-2">
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${
+                    openSections.timeout ? "rotate-180" : ""
+                  }`}
+                />
+                <span className="text-sm font-medium">{t("sections.timeout.title")}</span>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {t("sections.timeout.summary", {
+                  streaming:
+                    firstByteTimeoutStreamingSeconds != null &&
+                    !Number.isNaN(firstByteTimeoutStreamingSeconds)
+                      ? firstByteTimeoutStreamingSeconds
+                      : PROVIDER_TIMEOUT_DEFAULTS.FIRST_BYTE_TIMEOUT_STREAMING_MS / 1000,
+                  idle:
+                    streamingIdleTimeoutSeconds != null &&
+                    !Number.isNaN(streamingIdleTimeoutSeconds)
+                      ? streamingIdleTimeoutSeconds
+                      : PROVIDER_TIMEOUT_DEFAULTS.STREAMING_IDLE_TIMEOUT_MS / 1000,
+                  nonStreaming:
+                    requestTimeoutNonStreamingSeconds != null &&
+                    !Number.isNaN(requestTimeoutNonStreamingSeconds)
+                      ? requestTimeoutNonStreamingSeconds
+                      : PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS / 1000,
+                })}
+              </span>
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-4 pb-4">
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">{t("sections.timeout.desc")}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label
+                    htmlFor={
+                      isEdit ? "edit-first-byte-timeout-streaming" : "first-byte-timeout-streaming"
+                    }
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      {t("sections.timeout.streamingFirstByte.label")}
+                      {t("sections.timeout.streamingFirstByte.core") && (
+                        <span className="text-orange-500 text-[10px] font-medium px-1.5 py-0.5 bg-orange-50 dark:bg-orange-950 rounded border border-orange-200 dark:border-orange-800">
+                          {t("common.core")}
+                        </span>
+                      )}
+                    </span>
+                  </Label>
+                  <Input
+                    id={
+                      isEdit ? "edit-first-byte-timeout-streaming" : "first-byte-timeout-streaming"
+                    }
+                    type="number"
+                    value={firstByteTimeoutStreamingSeconds ?? ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFirstByteTimeoutStreamingSeconds(val === "" ? undefined : parseInt(val));
+                    }}
+                    placeholder={t("sections.timeout.streamingFirstByte.placeholder")}
+                    disabled={isPending}
+                    min="0"
+                    max="120"
+                    step="1"
+                    className="border-orange-200 focus:border-orange-500 focus:ring-orange-500"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t("sections.timeout.streamingFirstByte.desc")}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label
+                    htmlFor={isEdit ? "edit-streaming-idle-timeout" : "streaming-idle-timeout"}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      {t("sections.timeout.streamingIdle.label")}
+                      {t("sections.timeout.streamingIdle.core") && (
+                        <span className="text-orange-500 text-[10px] font-medium px-1.5 py-0.5 bg-orange-50 dark:bg-orange-950 rounded border border-orange-200 dark:border-orange-800">
+                          {t("common.core")}
+                        </span>
+                      )}
+                    </span>
+                  </Label>
+                  <Input
+                    id={isEdit ? "edit-streaming-idle-timeout" : "streaming-idle-timeout"}
+                    type="number"
+                    value={streamingIdleTimeoutSeconds ?? ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setStreamingIdleTimeoutSeconds(val === "" ? undefined : parseInt(val));
+                    }}
+                    placeholder={t("sections.timeout.streamingIdle.placeholder")}
+                    disabled={isPending}
+                    min="0"
+                    max="120"
+                    step="1"
+                    className="border-orange-200 focus:border-orange-500 focus:ring-orange-500"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t("sections.timeout.streamingIdle.desc")}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label
+                    htmlFor={
+                      isEdit
+                        ? "edit-request-timeout-non-streaming"
+                        : "request-timeout-non-streaming"
+                    }
+                  >
+                    {t("sections.timeout.nonStreamingTotal.label")}
+                  </Label>
+                  <Input
+                    id={
+                      isEdit
+                        ? "edit-request-timeout-non-streaming"
+                        : "request-timeout-non-streaming"
+                    }
+                    type="number"
+                    value={requestTimeoutNonStreamingSeconds ?? ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setRequestTimeoutNonStreamingSeconds(val === "" ? undefined : parseInt(val));
+                    }}
+                    placeholder={t("sections.timeout.nonStreamingTotal.placeholder")}
+                    disabled={isPending}
+                    min="0"
+                    max="1200"
+                    step="1"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t("sections.timeout.nonStreamingTotal.desc")}
+                  </p>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground italic">
+                {t("sections.timeout.disableHint")}
+              </p>
             </div>
           </CollapsibleContent>
         </Collapsible>

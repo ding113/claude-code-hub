@@ -4,7 +4,8 @@
     "actions": "Actions",
     "loading": "Loading...",
     "empty": "Empty",
-    "error": "Error"
+    "error": "Error",
+    "retry": "Retry"
   },
   "table": {
     "pagination": "Pagination",

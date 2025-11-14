@@ -9,7 +9,13 @@
     "ENOTFOUND": "DNS 解析失敗",
     "ECONNREFUSED": "連接被拒絕",
     "ETIMEDOUT": "連接或讀取逾時",
-    "ECONNRESET": "連接被重置"
+    "ECONNRESET": "連接被重置",
+    "EHOSTUNREACH": "主機不可達（網路路由問題）",
+    "ENETUNREACH": "網路不可達（本地網路配置問題）",
+    "EPROTO": "協議錯誤（SSL/TLS 握手失敗）",
+    "CLIENT_ABORT": "客戶端中斷請求",
+    "PROVIDER_TIMEOUT": "供應商響應超時（首字節延遲過高）",
+    "STREAMING_IDLE_TIMEOUT": "流式響應靜默超時（供應商停止發送數據）"
   },
   "summary": {
     "singleSuccess": "{total} 個供應商，{healthy} 個健康 → {provider} ✓",

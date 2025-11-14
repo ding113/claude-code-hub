@@ -180,7 +180,7 @@ const NON_RETRYABLE_ERROR_PATTERNS = [
   /prompt is too long: \d+ tokens > \d+ maximum/i,
   /Request blocked by content filter|permission_error.*content filter/i,
   /A maximum of \d+ PDF pages may be provided/i,
-  /Expected.*thinking.*but found|thinking.*must start with a thinking block/i,
+  /thinking.*Input tag.*does not match|Expected.*thinking.*but found|thinking.*must start with a thinking block/i,
   /Field required|required field|missing required/i,
   /非法请求|illegal request|invalid request/i,
 ];
@@ -195,7 +195,10 @@ const NON_RETRYABLE_ERROR_PATTERNS = [
  * 1. Prompt 长度超限：`prompt is too long: {tokens} tokens > {max} maximum`
  * 2. 内容过滤拦截：`Request blocked by content filter` 或 `permission_error.*content filter`
  * 3. PDF 页数限制：`A maximum of {n} PDF pages may be provided`
- * 4. Thinking 格式错误：`Expected.*thinking.*but found` 或 `thinking.*must start with a thinking block`
+ * 4. Thinking 格式错误：
+ *    - `thinking: Input tag 'X' found using 'type' does not match any of the expected tags`
+ *    - `Expected.*thinking.*but found`
+ *    - `thinking.*must start with a thinking block`
  * 5. 参数缺失/验证错误：`Field required`、`required field`、`missing required`
  * 6. 非法请求：`非法请求`、`illegal request`、`invalid request`
  *
@@ -297,7 +300,7 @@ export function isClientAbortError(error: Error): boolean {
  *    → 不应重试（客户端已经不想要结果了）
  *    → 应立即返回错误
  *
- * 2. 不可重试的客户端输入错误（Prompt 超限、内容过滤、PDF 限制、Thinking 格式、参数缺失、非法请求）
+ * 2. 不可重试的客户端输入错误（Prompt 超限、内容过滤、PDF 限制、Thinking 参数格式错误、参数缺失、非法请求）
  *    → 客户端输入违反了 API 的硬性限制或安全策略
  *    → 不应计入熔断器（不是供应商故障）
  *    → 不应重试（重试也会失败）
