@@ -2,7 +2,7 @@
 # Claude Code Hub - Production Dockerfile
 # 用于手动构建部署，无需预构建镜像
 
-FROM --platform=$BUILDPLATFORM oven/bun:1.2.27 AS base
+FROM --platform=$BUILDPLATFORM oven/bun:1.2.11 AS base
 WORKDIR /app
 
 # 安装依赖
@@ -25,7 +25,7 @@ ENV NEXT_PUBLIC_APP_VERSION=$APP_VERSION
 RUN bun run build
 
 # 生产运行时
-FROM oven/bun:1.2.27-slim AS runner
+FROM oven/bun:1.2.11-slim AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production

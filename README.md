@@ -37,7 +37,7 @@ Claude Code Hub 通过 Next.js 15 + Hono + PostgreSQL + Redis 组合，实现 Cl
 ### 环境要求
 
 - Docker 与 Docker Compose（推荐使用最新版本）
-- 可选（本地开发）：Node.js ≥ 20，bun ≥ 1.2.27
+- 可选（本地开发）：Node.js ≥ 20，bun ≥ 1.2.11
 
 > 📖 **Bun 迁移说明**：项目已从 pnpm 迁移到 bun，获得更快的安装和构建速度。查看 [Bun 快速开始指南](./BUN_QUICKSTART.md) 了解详细用法。
 

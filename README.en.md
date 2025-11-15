@@ -37,7 +37,7 @@ Claude Code Hub combines Next.js 15, Hono, PostgreSQL, and Redis to deliver a Cl
 ### Requirements
 
 - Docker and Docker Compose (latest version recommended)
-- Optional (for local development): Node.js ≥ 20, bun ≥ 1.2.27
+- Optional (for local development): Node.js ≥ 20, bun ≥ 1.2.11
 
 > 📖 **Migration to Bun**: Project has migrated from pnpm to bun for faster installation and build speeds. See [Bun Quick Start Guide](./BUN_QUICKSTART.md) for detailed usage.
 

@@ -118,7 +118,7 @@ curl http://localhost:13500/api/actions/health
 - **Redis** + **ioredis** - 限流、会话追踪、熔断器
 - **Tailwind CSS v4** + **Shadcn UI** (orange 主题) - UI 框架
 - **Pino** - 结构化日志
-- **包管理器**: bun 1.2.27
+- **包管理器**: bun 1.2.11
 
 ## 架构概览
 
