@@ -3,20 +3,20 @@
   "version": "0.3.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --port 13500 --turbo",
-    "build": "tsc --project tsconfig.server.json && next build && cp VERSION .next/standalone/VERSION",
+    "dev": "bun --bun next dev --port 13500 --turbo",
+    "build": "bun --bun tsc --project tsconfig.server.json && bun --bun next build && cp VERSION .next/standalone/VERSION",
     "start": "node server.js",
-    "lint": "next lint",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run --coverage",
-    "test:watch": "vitest",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
+    "lint": "bun --bun next lint",
+    "typecheck": "bun --bun tsc -p tsconfig.json --noEmit",
+    "test": "bun test:run",
+    "test:watch": "bun test",
+    "format": "bun --bun prettier --write .",
+    "format:check": "bun --bun prettier --check .",
     "cui": "npx cui-server --host 0.0.0.0 --port 30000 --token a7564bc8882aa9a2d25d8b4ea6ea1e2e",
-    "db:generate": "drizzle-kit generate && node scripts/validate-migrations.js",
-    "db:migrate": "drizzle-kit migrate",
-    "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio",
+    "db:generate": "bun --bun drizzle-kit generate && node scripts/validate-migrations.js",
+    "db:migrate": "bun --bun drizzle-kit migrate",
+    "db:push": "bun --bun drizzle-kit push",
+    "db:studio": "bun --bun drizzle-kit studio",
     "validate:migrations": "node scripts/validate-migrations.js"
   },
   "dependencies": {
@@ -96,5 +96,5 @@
     "undici": "^7.16.0",
     "vitest": "^4.0.8"
   },
-  "packageManager": "pnpm@9.15.0"
+  "packageManager": "bun@1.2.27"
 }

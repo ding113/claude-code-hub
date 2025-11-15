@@ -1,0 +1,32 @@
+# Nixpacks 配置文件
+# 用于零配置部署 Claude Code Hub
+
+[phases.setup]
+nixPkgs = ["...", "postgresql", "curl"]
+
+[phases.install]
+cmds = [
+  'bun --version',
+  'bun install --frozen-lockfile'
+]
+
+[phases.build]
+cmds = [
+  'bun run build'
+]
+
+[start]
+cmd = 'bun run start'
+
+[variables]
+NODE_ENV = "production"
+PORT = "3000"
+HOSTNAME = "0.0.0.0"
+NEXT_TELEMETRY_DISABLED = "1"
+
+# 环境变量示例（实际部署时通过平台设置）
+# DSN = "postgresql://user:password@localhost:5432/dbname"
+# REDIS_URL = "redis://localhost:6379"
+# ADMIN_TOKEN = "your-admin-token"
+# AUTO_MIGRATE = "true"
+# ENABLE_RATE_LIMIT = "true"
