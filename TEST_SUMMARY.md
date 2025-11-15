@@ -3,23 +3,27 @@
 ## 📋 任务完成情况
 
 ✅ **新增依赖与脚本**
+
 - 已添加 Vitest, @testing-library/react, @testing-library/jest-dom, jsdom
 - 已添加 Playwright, start-server-and-test
 - 已配置 pnpm 脚本：test, test:unit, test:unit:watch, test:e2e, test:e2e:ui
 
 ✅ **创建 vitest.config.ts 与测试环境配置**
+
 - 配置 jsdom 环境（支持 React 组件测试）
-- 配置路径别名支持 (@/*)
+- 配置路径别名支持 (@/\*)
 - 配置覆盖率报告（v8 provider）
 - 设置覆盖率阈值（lines: 60%, functions: 60%, branches: 40%, statements: 60%）
 
 ✅ **最小样例：限额时间工具与 Provider 选择逻辑**
+
 - time-utils.spec.ts: 12 个测试用例（100% 覆盖率）
 - provider-selector.spec.ts: 8 个测试用例（已存在，验证通过）
 - env.schema.spec.ts: 19 个测试用例（100% 覆盖率）
 - cost-calculation.spec.ts: 3 个测试用例（100% 覆盖率）
 
 ✅ **E2E 初始化与示例**
+
 - playwright.config.ts: 配置完成
 - home.spec.ts: 2 个冒烟测试（首页渲染、语言重定向）
 - settings.spec.ts: 2 个冒烟测试（登录页、设置页认证）
@@ -55,12 +59,14 @@ $ pnpm test
 ### 2. 提供至少 3 个单元测试 + 2 个 E2E 冒烟用例
 
 **单元测试文件（4个）**:
+
 1. `src/lib/rate-limit/time-utils.spec.ts` - 12 个测试
 2. `src/lib/config/env.schema.spec.ts` - 19 个测试
 3. `src/lib/utils/cost-calculation.spec.ts` - 3 个测试
 4. `src/app/v1/_lib/proxy/provider-selector.spec.ts` - 8 个测试
 
 **E2E 测试文件（2个）**:
+
 1. `e2e/home.spec.ts` - 2 个测试
 2. `e2e/settings.spec.ts` - 2 个测试
 
@@ -163,13 +169,13 @@ package.json                  ✅ 新增测试脚本和依赖
 
 ## 📊 测试覆盖率
 
-| 模块 | Lines | Branches | Functions | Statements |
-|------|-------|----------|-----------|------------|
-| time-utils.ts | 100% | 100% | 100% | 100% |
-| env.schema.ts | 100% | 100% | 100% | 100% |
-| cost-calculation.ts | 100% | 58.82% | 100% | 100% |
-| provider-selector.ts | 50.22% | 32.74% | 83.33% | 48.34% |
-| **Overall** | **64.63%** | **42.72%** | **88.37%** | **63.05%** |
+| 模块                 | Lines      | Branches   | Functions  | Statements |
+| -------------------- | ---------- | ---------- | ---------- | ---------- |
+| time-utils.ts        | 100%       | 100%       | 100%       | 100%       |
+| env.schema.ts        | 100%       | 100%       | 100%       | 100%       |
+| cost-calculation.ts  | 100%       | 58.82%     | 100%       | 100%       |
+| provider-selector.ts | 50.22%     | 32.74%     | 83.33%     | 48.34%     |
+| **Overall**          | **64.63%** | **42.72%** | **88.37%** | **63.05%** |
 
 ## 🎯 下一步建议
 

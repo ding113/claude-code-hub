@@ -66,9 +66,9 @@ describe("calculateRequestCost", () => {
   it("calculates cost correctly", () => {
     const usage = { input_tokens: 1000, output_tokens: 500 };
     const price = { input_cost_per_token: 0.001, output_cost_per_token: 0.002 };
-    
+
     const cost = calculateRequestCost(usage, price);
-    
+
     expect(cost.toNumber()).toBeCloseTo(2.0, 2);
   });
 });

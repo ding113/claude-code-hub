@@ -252,6 +252,7 @@ xdg-open coverage/index.html  # Linux
 ### Q: 覆盖率不达标
 
 **A**: 当前覆盖率阈值设置为：
+
 - Lines: 60%
 - Functions: 60%
 - Branches: 40%

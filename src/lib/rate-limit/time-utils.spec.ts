@@ -135,7 +135,7 @@ describe("getTTLForPeriod", () => {
 });
 
 describe("getResetInfo", () => {
-  it('returns rolling type for 5h period', () => {
+  it("returns rolling type for 5h period", () => {
     const result = getResetInfo("5h");
 
     expect(result.type).toBe("rolling");
