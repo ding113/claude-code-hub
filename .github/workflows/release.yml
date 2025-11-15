@@ -134,17 +134,17 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Setup pnpm
+      - name: Setup Bun
         if: steps.check.outputs.needs_bump == 'true'
-        uses: pnpm/action-setup@v4
+        uses: oven-sh/setup-bun@v2
         with:
-          version: 9.15.0
+          bun-version: 1.2.27
 
       - name: Install dependencies and format code
         if: steps.check.outputs.needs_bump == 'true'
         run: |
-          pnpm install --frozen-lockfile
-          pnpm format
+          bun install --frozen-lockfile
+          bun run format
 
       - name: Update seed price table
         if: steps.check.outputs.needs_bump == 'true'

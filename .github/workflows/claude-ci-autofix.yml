@@ -130,7 +130,7 @@ jobs:
                - 使用 Read 工具查看相关文件
                - 使用 Edit 工具修复问题
                - 如果是格式化问题，运行相应的 lint/format 命令
-               - 使用 Bash(npm:*) 或 Bash(pnpm:*) 运行修复命令
+               - 使用 Bash(npm:*) 或 Bash(bun:*) 运行修复命令
 
             3. **验证修复**：
                - 如果可能，运行相关的测试或 lint 命令验证修复

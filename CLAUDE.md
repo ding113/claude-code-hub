@@ -19,22 +19,22 @@ Claude Code Hub 是一个 Claude Code API 代理中转服务平台，用于统�
 ### 开发命令
 
 ```bash
-pnpm dev              # 启动开发服务器 (http://localhost:13500, 使用 Turbopack)
-pnpm build            # 构建生产版本 (自动复制 VERSION 文件)
-pnpm start            # 启动生产服务器
-pnpm lint             # 运行 ESLint
-pnpm typecheck        # TypeScript 类型检查
-pnpm format           # 格式化代码
-pnpm format:check     # 检查代码格式
+bun dev              # 启动开发服务器 (http://localhost:13500, 使用 Turbopack)
+bun build            # 构建生产版本 (自动复制 VERSION 文件)
+bun start            # 启动生产服务器
+bun lint             # 运行 ESLint
+bun typecheck        # TypeScript 类型检查
+bun format           # 格式化代码
+bun format:check     # 检查代码格式
 ```
 
 ### 数据库命令
 
 ```bash
-pnpm db:generate      # 生成 Drizzle 迁移文件
-pnpm db:migrate       # 执行数据库迁移
-pnpm db:push          # 直接推送 schema 到数据库（开发环境）
-pnpm db:studio        # 启动 Drizzle Studio 可视化管理界面
+bun db:generate      # 生成 Drizzle 迁移文件
+bun db:migrate       # 执行数据库迁移
+bun db:push          # 直接推送 schema 到数据库（开发环境）
+bun db:studio        # 启动 Drizzle Studio 可视化管理界面
 ```
 
 ### Docker 部署
@@ -118,7 +118,7 @@ curl http://localhost:13500/api/actions/health
 - **Redis** + **ioredis** - 限流、会话追踪、熔断器
 - **Tailwind CSS v4** + **Shadcn UI** (orange 主题) - UI 框架
 - **Pino** - 结构化日志
-- **包管理器**: pnpm 9.15.0
+- **包管理器**: bun 1.2.27
 
 ## 架构概览
 
@@ -548,7 +548,7 @@ OpenAPI 文档（`/api/actions/scalar` 和 `/api/actions/docs`）中的 server U
 ### 7. 代码风格
 
 - 使用 ESLint + Prettier
-- 提交前运行 `pnpm typecheck` 确保类型正确
+- 提交前运行 `bun typecheck` 确保类型正确
 - 遵循现有代码风格（参考 `src/app/v1/_lib/proxy/` 中的代码）
 
 ### 8. 添加新的 API 端点
@@ -629,9 +629,9 @@ SELECT ... LIMIT 50 OFFSET 0;
 ### 修改数据库 Schema
 
 1. 修改 `src/drizzle/schema.ts`
-2. 运行 `pnpm db:generate` 生成迁移文件
+2. 运行 `bun db:generate` 生成迁移文件
 3. 检查生成的 SQL 文件 (`drizzle/` 目录)
-4. 运行 `pnpm db:push` (开发) 或 `pnpm db:migrate` (生产)
+4. 运行 `bun db:push` (开发) 或 `bun db:migrate` (生产)
 
 ## 故障排查
 
