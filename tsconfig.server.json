@@ -5,9 +5,8 @@
     "outDir": ".",
     "noEmit": false,
     "target": "ES2017",
-    "moduleResolution": "node",
-    "paths": {}
+    "moduleResolution": "node"
   },
-  "include": ["server.ts"],
-  "exclude": ["node_modules", "src"]
+  "include": ["server.ts", "src/**/*.ts"],
+  "exclude": ["node_modules", "src/**/*.test.ts", "src/**/*.spec.ts"]
 }

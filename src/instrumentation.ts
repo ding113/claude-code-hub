@@ -4,8 +4,6 @@
  */
 
 import { logger } from "@/lib/logger";
-import { getSyncScheduler } from "@/lib/sync-scheduler";
-import { getRealtimeCounter } from "@/lib/redis/realtime-counter";
 
 export async function register() {
   // 仅在服务器端执行
@@ -48,6 +46,9 @@ export async function register() {
 
       // 初始化 Redis 实时计数和同步调度器
       try {
+        const { getRealtimeCounter } = await import("@/lib/redis/realtime-counter");
+        const { getSyncScheduler } = await import("@/lib/sync-scheduler");
+
         const realtimeCounter = getRealtimeCounter();
         const scheduler = getSyncScheduler();
 
@@ -88,6 +89,9 @@ export async function register() {
 
       // 初始化 Redis 实时计数和同步调度器
       try {
+        const { getRealtimeCounter } = await import("@/lib/redis/realtime-counter");
+        const { getSyncScheduler } = await import("@/lib/sync-scheduler");
+
         const realtimeCounter = getRealtimeCounter();
         const scheduler = getSyncScheduler();
 
