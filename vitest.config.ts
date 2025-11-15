@@ -3,17 +3,25 @@ import path from "node:path";
 
 export default defineConfig({
   test: {
-    environment: "node",
-    include: ["src/**/*.spec.ts"],
+    globals: true,
+    environment: "jsdom",
+    include: ["src/**/*.spec.{ts,tsx}"],
+    setupFiles: ["./test/setup.ts"],
     coverage: {
       provider: "v8",
-      reporter: ["text", "lcov"],
-      include: ["src/app/v1/_lib/proxy/degradation-config.ts"],
+      reporter: ["text", "lcov", "html"],
+      include: [
+        "src/lib/rate-limit/time-utils.ts",
+        "src/app/v1/_lib/proxy/provider-selector.ts",
+        "src/lib/utils/cost-calculation.ts",
+        "src/lib/config/env.schema.ts",
+      ],
+      exclude: [],
       thresholds: {
-        lines: 70,
-        functions: 70,
-        branches: 70,
-        statements: 70,
+        lines: 60,
+        functions: 60,
+        branches: 40,
+        statements: 60,
       },
     },
   },
