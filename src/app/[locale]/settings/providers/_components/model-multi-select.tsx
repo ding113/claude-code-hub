@@ -16,6 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getAvailableModelsByProviderType } from "@/actions/model-prices";
+import { useTranslations } from "next-intl";
 
 interface ModelMultiSelectProps {
   providerType: "claude" | "codex" | "gemini-cli" | "openai-compatible";
@@ -30,6 +31,7 @@ export function ModelMultiSelect({
   onChange,
   disabled = false,
 }: ModelMultiSelectProps) {
+  const t = useTranslations("settings.providers.form.modelSelect");
   const [open, setOpen] = useState(false);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -86,11 +88,15 @@ export function ModelMultiSelect({
         >
           {selectedModels.length === 0 ? (
             <span className="text-muted-foreground">
-              允许所有 {providerType === "claude" ? "Claude" : "OpenAI"} 模型
+              {t("allowAllModels", {
+                type: providerType === "claude" ? t("claude") : t("openai"),
+              })}
             </span>
           ) : (
             <div className="flex gap-2 items-center">
-              <span className="truncate">已选择 {selectedModels.length} 个模型</span>
+              <span className="truncate">
+                {t("selectedCount", { count: selectedModels.length })}
+              </span>
               <Badge variant="secondary" className="ml-auto">
                 {selectedModels.length}
               </Badge>
@@ -110,9 +116,9 @@ export function ModelMultiSelect({
         onTouchMove={(e) => e.stopPropagation()}
       >
         <Command shouldFilter={true}>
-          <CommandInput placeholder="搜索模型名称..." />
+          <CommandInput placeholder={t("searchPlaceholder")} />
           <CommandList className="max-h-[250px] overflow-y-auto">
-            <CommandEmpty>{loading ? "加载中..." : "未找到模型"}</CommandEmpty>
+            <CommandEmpty>{loading ? t("loading") : t("notFound")}</CommandEmpty>
 
             {!loading && (
               <>
@@ -126,7 +132,7 @@ export function ModelMultiSelect({
                       className="flex-1"
                       type="button"
                     >
-                      全选 ({availableModels.length})
+                      {t("selectAll", { count: availableModels.length })}
                     </Button>
                     <Button
                       size="sm"
@@ -136,7 +142,7 @@ export function ModelMultiSelect({
                       className="flex-1"
                       type="button"
                     >
-                      清空
+                      {t("clear")}
                     </Button>
                   </div>
                 </CommandGroup>
@@ -167,10 +173,10 @@ export function ModelMultiSelect({
 
         {/* 新增：手动输入区域 */}
         <div className="border-t p-3 space-y-2">
-          <Label className="text-xs font-medium">手动添加模型</Label>
+          <Label className="text-xs font-medium">{t("manualAdd")}</Label>
           <div className="flex gap-2">
             <Input
-              placeholder="输入模型名称（如 gpt-5-turbo）"
+              placeholder={t("manualPlaceholder")}
               value={customModel}
               onChange={(e) => setCustomModel(e.target.value)}
               onKeyDown={(e) => {
@@ -191,9 +197,7 @@ export function ModelMultiSelect({
               <Plus className="h-4 w-4" />
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">
-            支持添加任意模型名称（不限于价格表中的模型）
-          </p>
+          <p className="text-xs text-muted-foreground">{t("manualDesc")}</p>
         </div>
       </PopoverContent>
     </Popover>
