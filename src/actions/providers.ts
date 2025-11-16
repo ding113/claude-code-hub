@@ -606,80 +606,14 @@ export async function testProviderProxy(data: {
       return { ok: false, error: "无权限执行此操作" };
     }
 
-    // 验证 Provider URL 格式和安全性（防止 SSRF）
-    try {
-      const parsedProviderUrl = new URL(data.providerUrl);
-
-      // 只允许 HTTPS 和 HTTP 协议
-      if (!["https:", "http:"].includes(parsedProviderUrl.protocol)) {
-        return {
-          ok: true,
-          data: {
-            success: false,
-            message: "供应商地址格式无效",
-            details: {
-              error: "仅支持 HTTP 和 HTTPS 协议",
-              errorType: "InvalidProviderUrl",
-            },
-          },
-        };
-      }
-
-      // 防止 SSRF：阻止访问内部网络和本地地址
-      const hostname = parsedProviderUrl.hostname.toLowerCase();
-      const blockedPatterns = [
-        /^localhost$/i,
-        /^127\.\d+\.\d+\.\d+$/,
-        /^10\.\d+\.\d+\.\d+$/,
-        /^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/,
-        /^192\.168\.\d+\.\d+$/,
-        /^169\.254\.\d+\.\d+$/,
-        /^::1$/,
-        /^fe80:/i,
-        /^fc00:/i,
-        /^fd00:/i,
-      ];
-
-      if (blockedPatterns.some((pattern) => pattern.test(hostname))) {
-        return {
-          ok: true,
-          data: {
-            success: false,
-            message: "供应商地址安全检查失败",
-            details: {
-              error: "不允许访问内部网络地址",
-              errorType: "BlockedUrl",
-            },
-          },
-        };
-      }
-
-      // 检查端口是否为常见的危险端口
-      const port = parsedProviderUrl.port ? parseInt(parsedProviderUrl.port) : null;
-      const dangerousPorts = [22, 23, 25, 3306, 5432, 6379, 27017, 9200]; // SSH, Telnet, SMTP, MySQL, PostgreSQL, Redis, MongoDB, Elasticsearch
-      if (port && dangerousPorts.includes(port)) {
-        return {
-          ok: true,
-          data: {
-            success: false,
-            message: "供应商地址端口检查失败",
-            details: {
-              error: "不允许访问内部服务端口",
-              errorType: "BlockedPort",
-            },
-          },
-        };
-      }
-    } catch (error) {
+    const providerUrlValidation = validateProviderUrlForConnectivity(data.providerUrl);
+    if (!providerUrlValidation.valid) {
       return {
         ok: true,
         data: {
           success: false,
-          message: "供应商地址格式无效",
-          details: {
-            error: error instanceof Error ? error.message : "URL 解析失败",
-            errorType: "InvalidProviderUrl",
-          },
+          message: providerUrlValidation.error.message,
+          details: providerUrlValidation.error.details,
         },
       };
     }
@@ -850,6 +784,92 @@ type ProviderApiTestResult = ActionResult<
     }
 >;
 
+type ProviderUrlValidationError = {
+  message: string;
+  details: {
+    error: string;
+    errorType: "InvalidProviderUrl" | "BlockedUrl" | "BlockedPort";
+  };
+};
+
+function validateProviderUrlForConnectivity(
+  providerUrl: string
+): { valid: true; normalizedUrl: string } | { valid: false; error: ProviderUrlValidationError } {
+  const trimmedUrl = providerUrl.trim();
+
+  try {
+    const parsedProviderUrl = new URL(trimmedUrl);
+
+    if (!["https:", "http:"].includes(parsedProviderUrl.protocol)) {
+      return {
+        valid: false,
+        error: {
+          message: "供应商地址格式无效",
+          details: {
+            error: "仅支持 HTTP 和 HTTPS 协议",
+            errorType: "InvalidProviderUrl",
+          },
+        },
+      };
+    }
+
+    const hostname = parsedProviderUrl.hostname.toLowerCase();
+    const blockedPatterns = [
+      /^localhost$/i,
+      /^127\.\d+\.\d+\.\d+$/,
+      /^10\.\d+\.\d+\.\d+$/,
+      /^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/,
+      /^192\.168\.\d+\.\d+$/,
+      /^169\.254\.\d+\.\d+$/,
+      /^::1$/,
+      /^fe80:/i,
+      /^fc00:/i,
+      /^fd00:/i,
+    ];
+
+    if (blockedPatterns.some((pattern) => pattern.test(hostname))) {
+      return {
+        valid: false,
+        error: {
+          message: "供应商地址安全检查失败",
+          details: {
+            error: "不允许访问内部网络地址",
+            errorType: "BlockedUrl",
+          },
+        },
+      };
+    }
+
+    const port = parsedProviderUrl.port ? parseInt(parsedProviderUrl.port, 10) : null;
+    const dangerousPorts = [22, 23, 25, 3306, 5432, 6379, 27017, 9200];
+    if (port && dangerousPorts.includes(port)) {
+      return {
+        valid: false,
+        error: {
+          message: "供应商地址端口检查失败",
+          details: {
+            error: "不允许访问内部服务端口",
+            errorType: "BlockedPort",
+          },
+        },
+      };
+    }
+
+    return { valid: true, normalizedUrl: trimmedUrl };
+  } catch (error) {
+    return {
+      valid: false,
+      error: {
+        message: "供应商地址格式无效",
+        details: {
+          error: error instanceof Error ? error.message : "URL 解析失败",
+          errorType: "InvalidProviderUrl",
+        },
+      },
+    };
+  }
+}
+
 async function executeProviderApiTest(
   data: ProviderApiTestArgs,
   options: {
@@ -884,17 +904,31 @@ async function executeProviderApiTest(
       };
     }
 
+    const providerUrlValidation = validateProviderUrlForConnectivity(data.providerUrl);
+    if (!providerUrlValidation.valid) {
+      return {
+        ok: true,
+        data: {
+          success: false,
+          message: providerUrlValidation.error.message,
+          details: providerUrlValidation.error.details,
+        },
+      };
+    }
+
+    const normalizedProviderUrl = providerUrlValidation.normalizedUrl.replace(/\/$/, "");
+
     const startTime = Date.now();
     const { createProxyAgentForProvider } = await import("@/lib/proxy-agent");
 
-    const tempProvider = {
+    const tempProvider: ProviderProxyConfig = {
       id: -1,
-      proxyUrl: data.proxyUrl,
+      name: "api-test",
+      proxyUrl: data.proxyUrl ?? null,
       proxyFallbackToDirect: data.proxyFallbackToDirect ?? false,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any;
+    };
 
-    const url = data.providerUrl.replace(/\/$/, "") + options.path;
+    const url = normalizedProviderUrl + options.path;
     const model = data.model || options.defaultModel;
 
     try {
@@ -920,22 +954,29 @@ async function executeProviderApiTest(
 
       if (!response.ok) {
         const errorText = await response.text();
-        let errorMessage = `HTTP ${response.status}`;
+        let errorDetail: string | undefined;
         try {
           const errorJson = JSON.parse(errorText);
-          errorMessage = errorJson.error?.message || errorJson.message || errorMessage;
+          errorDetail = errorJson.error?.message || errorJson.message;
         } catch {
-          errorMessage = errorText.substring(0, 200) || errorMessage;
+          errorDetail = undefined;
         }
+
+        logger.error("Provider API test failed", {
+          providerUrl: normalizedProviderUrl,
+          path: options.path,
+          status: response.status,
+          errorDetail: errorDetail ?? errorText,
+        });
 
         return {
           ok: true,
           data: {
             success: false,
-            message: `API 返回错误: ${errorMessage}`,
+            message: `API 返回错误: HTTP ${response.status}`,
             details: {
               responseTime,
-              error: errorMessage,
+              error: "API 请求失败，查看日志以获得更多信息",
             },
           },
         };
