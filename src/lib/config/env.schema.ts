@@ -4,8 +4,13 @@ import { z } from "zod";
  * 布尔值转换函数
  * - 将字符串 "false" 和 "0" 转换为 false
  * - 其他所有值转换为 true
+ * - 支持带引号、空格等格式（如 "false", 'false', " false "）
  */
-const booleanTransform = (s: string) => s !== "false" && s !== "0";
+const booleanTransform = (s: string) => {
+  // 去除空格和首尾引号（单引号或双引号）
+  const cleaned = String(s).trim().replace(/^["']|["']$/g, "").toLowerCase();
+  return cleaned !== "false" && cleaned !== "0" && cleaned !== "";
+};
 
 /**
  * 环境变量验证schema

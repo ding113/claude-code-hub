@@ -220,6 +220,15 @@ docker compose -f deploy/docker-compose.prod.yaml up -d
    - 确认 URL 含协议前缀（`http://`、`socks5://` 等），并使用后台“测试连接”按钮验证。
    - 若启用降级策略（`proxy_fallback_to_direct`），请在日志中确认是否已自动切换至直连。
 
+6. **HTTP 访问无法登录后台（Cookie 设置失败）？**
+   - **症状**：登录后无法进入后台，或刷新后退出登录，浏览器控制台可能提示 Cookie 被拒绝。
+   - **原因**：默认 `ENABLE_SECURE_COOKIES=true` 要求 HTTPS，浏览器在非 localhost 的 HTTP 环境下会拒绝设置 Secure Cookie。
+   - **解决方案**：
+     - **推荐**：配置 HTTPS 反向代理（Nginx/Caddy/Traefik），保持安全性。
+     - **临时**（内网部署）：设置 `ENABLE_SECURE_COOKIES=false`（不要加引号），然后重启应用（`docker compose restart app` 或 `bun run dev`）。
+   - **验证**：登录时查看日志中的 `secureEnabled` 字段，或使用浏览器开发者工具检查 `auth-token` Cookie 的 Secure 属性。
+   - **常见错误**：使用 `ENABLE_SECURE_COOKIES="false"` 或 `'false'`（带引号）会导致解析为 `true`，必须直接写 `false` 或 `0`。
+
 ## 🤝 贡献指南 Contributing
 
 欢迎通过 Issue / PR 参与开发，提交前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)，遵循双语目录、分支命名和 Conventional Commits 规则。

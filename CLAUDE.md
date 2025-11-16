@@ -674,6 +674,97 @@ SELECT ... LIMIT 50 OFFSET 0;
 - 如启用了"降级到直连"，检查是否自动降级成功
 - 验证目标供应商 URL 是否正确
 
+### HTTP 环境无法登录后台（Cookie 问题）
+
+**症状**：使用 HTTP（非 HTTPS）访问时，登录后无法进入后台，或者刷新页面后又退出登录。
+
+**原因**：默认情况下 `ENABLE_SECURE_COOKIES=true`，浏览器会拒绝在 HTTP 环境下设置 Secure Cookie（localhost 除外）。
+
+**解决方案**：
+
+1. **推荐方案**：配置 HTTPS 反向代理（Nginx/Caddy）
+   ```nginx
+   # Nginx 示例
+   server {
+     listen 443 ssl;
+     server_name your-domain.com;
+     ssl_certificate /path/to/cert.pem;
+     ssl_certificate_key /path/to/key.pem;
+     
+     location / {
+       proxy_pass http://localhost:23000;
+       proxy_set_header Host $host;
+       proxy_set_header X-Real-IP $remote_addr;
+       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+       proxy_set_header X-Forwarded-Proto $scheme;
+     }
+   }
+   ```
+
+2. **临时方案**（内网部署）：禁用 Secure Cookie
+   ```bash
+   # 在 .env 文件中设置（不要使用引号）
+   ENABLE_SECURE_COOKIES=false
+   
+   # 或在 docker-compose.yaml 中设置
+   environment:
+     - ENABLE_SECURE_COOKIES=false
+   ```
+
+   **重要**：配置后必须重启应用
+   ```bash
+   # Docker 部署
+   docker compose restart app
+   
+   # 本地开发
+   # 停止开发服务器 (Ctrl+C)，然后重新运行
+   bun run dev
+   ```
+
+3. **验证配置是否生效**：
+   - 登录时查看应用日志，确认 `secureEnabled` 的值：
+     ```json
+     {
+       "msg": "Setting auth cookie",
+       "secureEnabled": false,  // 应该是 false
+       "protocol": "http:",
+       "host": "192.168.1.100:23000"
+     }
+     ```
+   - 使用浏览器开发者工具（Application → Cookies）检查 `auth-token` Cookie 的 Secure 属性
+
+**常见错误**：
+
+❌ **错误配置**（带引号会被解析为字符串，导致失效）：
+```bash
+ENABLE_SECURE_COOKIES="false"  # 错误！引号导致解析为 true
+ENABLE_SECURE_COOKIES='false'  # 错误！引号导致解析为 true
+```
+
+✅ **正确配置**（不带引号）：
+```bash
+ENABLE_SECURE_COOKIES=false    # 正确
+ENABLE_SECURE_COOKIES=0        # 正确
+```
+
+**调试技巧**：
+
+1. 检查环境变量是否正确加载：
+   ```bash
+   # Docker 容器内检查
+   docker compose exec app env | grep ENABLE_SECURE_COOKIES
+   
+   # 应该输出：ENABLE_SECURE_COOKIES=false
+   ```
+
+2. 清除浏览器 Cookie 后重新登录：
+   - 浏览器开发者工具 → Application → Cookies → 删除所有 Cookie
+   - 或使用隐私模式测试
+
+3. 查看 Set-Cookie 响应头：
+   - 浏览器开发者工具 → Network → 登录请求 → Response Headers
+   - 检查是否包含 `Secure` 标志
+
 ## 参考资源
 
 - [Next.js 15 文档](https://nextjs.org/docs)
