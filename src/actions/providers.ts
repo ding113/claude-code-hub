@@ -1140,17 +1140,7 @@ export async function testProviderOpenAIResponses(
     }),
     body: (model) => ({
       model,
-      input: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: "讲一个简短的故事",
-            },
-          ],
-        },
-      ],
+      input: "讲一个简短的故事",
     }),
     successMessage: "OpenAI Responses API 测试成功",
     extract: (result) => {
