@@ -787,7 +787,7 @@ type ProviderApiTestResult = ActionResult<
 type ProviderApiResponse = Record<string, unknown> & {
   model?: string;
   usage?: Record<string, unknown>;
-  content?: Array<{ type?: string; text?: string } | Record<string, unknown>>;
+  content?: Array<{ type?: string; text?: string } | string | Record<string, unknown>>;
   choices?: Array<{
     message?: {
       content?: string;
@@ -799,11 +799,39 @@ type ProviderApiResponse = Record<string, unknown> & {
         content?: Array<{
           type?: string;
           text?: string;
-        }>;
+        } | Record<string, unknown>>;
       }
     | Record<string, unknown>
   >;
 };
+
+function extractFirstTextSnippet(
+  entries: ProviderApiResponse["content"],
+  maxLength = 100
+): string | undefined {
+  if (!Array.isArray(entries)) {
+    return undefined;
+  }
+
+  for (const entry of entries) {
+    if (typeof entry === "string") {
+      return entry.substring(0, maxLength);
+    }
+
+    if (entry && typeof entry === "object" && "text" in entry) {
+      const textValue = (entry as { text?: unknown }).text;
+      if (typeof textValue === "string") {
+        return textValue.substring(0, maxLength);
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function clipText(value: unknown, maxLength = 100): string | undefined {
+  return typeof value === "string" ? value.substring(0, maxLength) : undefined;
+}
 
 type ProviderUrlValidationError = {
   message: string;
@@ -1063,7 +1091,7 @@ export async function testProviderAnthropicMessages(
     extract: (result) => ({
       model: result?.model,
       usage: result?.usage,
-      content: result?.content?.[0]?.text?.substring(0, 100),
+      content: extractFirstTextSnippet(result?.content),
     }),
   });
 }
@@ -1092,7 +1120,7 @@ export async function testProviderOpenAIChatCompletions(
     extract: (result) => ({
       model: result?.model,
       usage: result?.usage,
-      content: result?.choices?.[0]?.message?.content?.substring(0, 100),
+      content: clipText(result?.choices?.[0]?.message?.content),
     }),
   });
 }
@@ -1121,9 +1149,9 @@ export async function testProviderOpenAIResponses(
         const firstOutput = result.output[0];
         if (firstOutput?.type === "message" && Array.isArray(firstOutput.content)) {
           const textContent = firstOutput.content.find(
-            (c: { type: string }) => c.type === "output_text"
-          );
-          content = textContent?.text?.substring(0, 100);
+            (c: { type?: string }) => c?.type === "output_text"
+          ) as { text?: unknown } | undefined;
+          content = clipText(textContent?.text);
         }
       }
 
