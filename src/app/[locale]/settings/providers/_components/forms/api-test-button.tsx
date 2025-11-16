@@ -84,12 +84,17 @@ export function ApiTestButton({
       let resolvedKey = apiKey.trim();
       if (!resolvedKey && providerId) {
         const result = await getUnmaskedProviderKey(providerId);
-        if (result.ok && result.data?.key) {
-          resolvedKey = result.data.key;
-        } else {
+        if (!result.ok) {
           toast.error(result.error || t("fillKeyFirst"));
           return;
         }
+
+        if (!result.data?.key) {
+          toast.error(t("fillKeyFirst"));
+          return;
+        }
+
+        resolvedKey = result.data.key;
       }
 
       if (!resolvedKey) {

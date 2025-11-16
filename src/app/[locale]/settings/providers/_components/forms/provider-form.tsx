@@ -443,7 +443,7 @@ export function ProviderForm({
         </div>
 
         {/* Codex 支持：供应商类型和模型重定向 */}
-        <Collapsible open={openSections.routing} onOpenChange={(open) => toggleSection("routing")}>
+        <Collapsible open={openSections.routing} onOpenChange={() => toggleSection("routing")}>
           <CollapsibleTrigger asChild>
             <button
               type="button"
@@ -713,7 +713,7 @@ export function ProviderForm({
         {/* 限流配置 */}
         <Collapsible
           open={openSections.rateLimit}
-          onOpenChange={(open) => toggleSection("rateLimit")}
+          onOpenChange={() => toggleSection("rateLimit")}
         >
           <CollapsibleTrigger asChild>
             <button
@@ -827,7 +827,7 @@ export function ProviderForm({
         {/* 熔断器配置 */}
         <Collapsible
           open={openSections.circuitBreaker}
-          onOpenChange={(open) => toggleSection("circuitBreaker")}
+          onOpenChange={() => toggleSection("circuitBreaker")}
         >
           <CollapsibleTrigger asChild>
             <button
@@ -930,7 +930,7 @@ export function ProviderForm({
         </Collapsible>
 
         {/* 代理配置 */}
-        <Collapsible open={openSections.proxy} onOpenChange={(open) => toggleSection("proxy")}>
+        <Collapsible open={openSections.proxy} onOpenChange={() => toggleSection("proxy")}>
           <CollapsibleTrigger asChild>
             <button
               type="button"
@@ -1023,7 +1023,7 @@ export function ProviderForm({
         {/* API 测试 */}
         <Collapsible
           open={openSections.apiTest}
-          onOpenChange={(open) => toggleSection("apiTest")}
+          onOpenChange={() => toggleSection("apiTest")}
         >
           <CollapsibleTrigger asChild>
             <button
@@ -1074,7 +1074,7 @@ export function ProviderForm({
         {providerType === "codex" && (
           <Collapsible
             open={openSections.codexStrategy}
-            onOpenChange={(open) => toggleSection("codexStrategy")}
+            onOpenChange={() => toggleSection("codexStrategy")}
           >
             <CollapsibleTrigger asChild>
               <button

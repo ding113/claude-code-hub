@@ -119,7 +119,7 @@ export function UserStatisticsChart({
     });
 
     return config;
-  }, [data.users]);
+  }, [data.users, t]);
 
   const userMap = React.useMemo(() => {
     return new Map(data.users.map((user) => [user.dataKey, user]));
