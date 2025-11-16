@@ -201,7 +201,8 @@ function ChartTooltipContent({
                 )}
               >
                 {formatter && item?.value !== undefined && item.name ? (
-                  // @ts-expect-error - recharts formatter 类型签名在新版本中有变化
+                  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                  // @ts-ignore - recharts formatter 类型在不同版本有差异
                   formatter(item.value, item.name, item, index, item.payload)
                 ) : (
                   <>
