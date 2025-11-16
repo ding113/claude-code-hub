@@ -274,7 +274,7 @@ export function ApiTestButton({
   // 获取默认模型占位符
   return (
     <div className="space-y-4">
-      <div className="space-y-2 max-w-xl">
+      <div className="space-y-2">
         <Label htmlFor="api-format">{t("apiFormat")}</Label>
         <Select
           value={apiFormat}
@@ -302,7 +302,7 @@ export function ApiTestButton({
         <div className="text-xs text-muted-foreground">{t("apiFormatDesc")}</div>
       </div>
 
-      <div className="space-y-2 max-w-xl">
+      <div className="space-y-2">
         <Label htmlFor="test-model">{t("testModel")}</Label>
         <Input
           id="test-model"
