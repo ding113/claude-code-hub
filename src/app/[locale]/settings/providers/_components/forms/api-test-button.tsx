@@ -9,7 +9,6 @@ import {
   testProviderOpenAIResponses,
   getUnmaskedProviderKey,
 } from "@/actions/providers";
-import { getAvailableModelsByProviderType } from "@/actions/model-prices";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
 import {
@@ -88,21 +87,15 @@ export function ApiTestButton({
     return Array.from(unique);
   }, [allowedModels]);
 
-  const [availableModels, setAvailableModels] = useState<string[]>([]);
-  const [modelsLoading, setModelsLoading] = useState(false);
-  const modelOptions =
-    normalizedAllowedModels.length > 0 ? normalizedAllowedModels : availableModels;
-
   const initialApiFormat = resolveApiFormatFromProvider(providerType);
   const [isTesting, setIsTesting] = useState(false);
   const [apiFormat, setApiFormat] = useState<ApiFormat>(initialApiFormat);
   const [isApiFormatManuallySelected, setIsApiFormatManuallySelected] = useState(false);
-  const [testModel, setTestModel] = useState(() => getDefaultModelForFormat(initialApiFormat));
-  const [isModelManuallyEdited, setIsModelManuallyEdited] = useState(false);
-  const [selectedAllowedModel, setSelectedAllowedModel] = useState<string | undefined>(() => {
-    const defaultModel = getDefaultModelForFormat(initialApiFormat);
-    return normalizedAllowedModels.includes(defaultModel) ? defaultModel : undefined;
+  const [testModel, setTestModel] = useState(() => {
+    const whitelistDefault = normalizedAllowedModels[0];
+    return whitelistDefault ?? getDefaultModelForFormat(initialApiFormat);
   });
+  const [isModelManuallyEdited, setIsModelManuallyEdited] = useState(false);
   const [testResult, setTestResult] = useState<{
     success: boolean;
     message: string;
@@ -124,49 +117,14 @@ export function ApiTestButton({
   }, [apiFormat, isApiFormatManuallySelected, providerType]);
 
   useEffect(() => {
-    if (normalizedAllowedModels.length > 0) {
-      setAvailableModels([]);
-      return;
-    }
-
-    let canceled = false;
-    async function loadModels() {
-      setModelsLoading(true);
-      const models = await getAvailableModelsByProviderType();
-      if (!canceled) {
-        setAvailableModels(models);
-      }
-      setModelsLoading(false);
-    }
-    loadModels();
-
-    return () => {
-      canceled = true;
-    };
-  }, [normalizedAllowedModels]);
-
-  useEffect(() => {
     if (isModelManuallyEdited) {
-      if (selectedAllowedModel && !modelOptions.includes(selectedAllowedModel)) {
-        setSelectedAllowedModel(undefined);
-      }
       return;
     }
 
-    const defaultModel = getDefaultModelForFormat(apiFormat);
-    const resolvedModel = modelOptions.includes(defaultModel)
-      ? defaultModel
-      : modelOptions[0] ?? defaultModel;
-
-    setTestModel(resolvedModel);
-    setSelectedAllowedModel(modelOptions.includes(resolvedModel) ? resolvedModel : undefined);
-  }, [apiFormat, isModelManuallyEdited, modelOptions]);
-
-  useEffect(() => {
-    if (selectedAllowedModel && !modelOptions.includes(selectedAllowedModel)) {
-      setSelectedAllowedModel(undefined);
-    }
-  }, [modelOptions, selectedAllowedModel]);
+    const whitelistDefault = normalizedAllowedModels[0];
+    const defaultModel = whitelistDefault ?? getDefaultModelForFormat(apiFormat);
+    setTestModel(defaultModel);
+  }, [apiFormat, isModelManuallyEdited, normalizedAllowedModels]);
 
   const handleTest = async () => {
     // 验证必填字段
@@ -344,34 +302,6 @@ export function ApiTestButton({
         <div className="text-xs text-muted-foreground">{t("apiFormatDesc")}</div>
       </div>
 
-      {modelOptions.length > 0 && (
-        <div className="space-y-2 max-w-xl">
-          <Label htmlFor="test-model-select">{t("allowedModelSelectLabel")}</Label>
-          <Select
-            value={selectedAllowedModel}
-            onValueChange={(value) => {
-              setIsModelManuallyEdited(true);
-              setSelectedAllowedModel(value);
-              setTestModel(value);
-            }}
-          >
-            <SelectTrigger id="test-model-select" disabled={modelsLoading}>
-              <SelectValue placeholder={t("allowedModelSelectPlaceholder")} />
-            </SelectTrigger>
-            <SelectContent>
-              {modelOptions.map((model) => (
-                <SelectItem key={model} value={model}>
-                  {model}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <div className="text-xs text-muted-foreground">
-            {modelsLoading ? t("loadingModels") : t("allowedModelSelectDesc")}
-          </div>
-        </div>
-      )}
-
       <div className="space-y-2 max-w-xl">
         <Label htmlFor="test-model">{t("testModel")}</Label>
         <Input
@@ -381,11 +311,6 @@ export function ApiTestButton({
             const value = e.target.value;
             setIsModelManuallyEdited(true);
             setTestModel(value);
-            if (normalizedAllowedModels.includes(value)) {
-              setSelectedAllowedModel(value);
-            } else {
-              setSelectedAllowedModel(undefined);
-            }
           }}
           placeholder={getDefaultModelForFormat(apiFormat)}
           disabled={isTesting}
