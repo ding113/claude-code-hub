@@ -8,7 +8,10 @@ import { z } from "zod";
  */
 const booleanTransform = (s: string) => {
   // 去除空格和首尾引号（单引号或双引号）
-  const cleaned = String(s).trim().replace(/^["']|["']$/g, "").toLowerCase();
+  const cleaned = String(s)
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .toLowerCase();
   return cleaned !== "false" && cleaned !== "0" && cleaned !== "";
 };
 
