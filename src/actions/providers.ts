@@ -20,7 +20,7 @@ import {
   saveProviderCircuitConfig,
   deleteProviderCircuitConfig,
 } from "@/lib/redis/circuit-breaker-config";
-import { isValidProxyUrl } from "@/lib/proxy-agent";
+import { isValidProxyUrl, type ProviderProxyConfig } from "@/lib/proxy-agent";
 import { CodexInstructionsCache } from "@/lib/codex-instructions-cache";
 import { isClientAbortError } from "@/app/v1/_lib/proxy/errors";
 
@@ -606,6 +606,84 @@ export async function testProviderProxy(data: {
       return { ok: false, error: "无权限执行此操作" };
     }
 
+    // 验证 Provider URL 格式和安全性（防止 SSRF）
+    try {
+      const parsedProviderUrl = new URL(data.providerUrl);
+
+      // 只允许 HTTPS 和 HTTP 协议
+      if (!["https:", "http:"].includes(parsedProviderUrl.protocol)) {
+        return {
+          ok: true,
+          data: {
+            success: false,
+            message: "供应商地址格式无效",
+            details: {
+              error: "仅支持 HTTP 和 HTTPS 协议",
+              errorType: "InvalidProviderUrl",
+            },
+          },
+        };
+      }
+
+      // 防止 SSRF：阻止访问内部网络和本地地址
+      const hostname = parsedProviderUrl.hostname.toLowerCase();
+      const blockedPatterns = [
+        /^localhost$/i,
+        /^127\.\d+\.\d+\.\d+$/,
+        /^10\.\d+\.\d+\.\d+$/,
+        /^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/,
+        /^192\.168\.\d+\.\d+$/,
+        /^169\.254\.\d+\.\d+$/,
+        /^::1$/,
+        /^fe80:/i,
+        /^fc00:/i,
+        /^fd00:/i,
+      ];
+
+      if (blockedPatterns.some((pattern) => pattern.test(hostname))) {
+        return {
+          ok: true,
+          data: {
+            success: false,
+            message: "供应商地址安全检查失败",
+            details: {
+              error: "不允许访问内部网络地址",
+              errorType: "BlockedUrl",
+            },
+          },
+        };
+      }
+
+      // 检查端口是否为常见的危险端口
+      const port = parsedProviderUrl.port ? parseInt(parsedProviderUrl.port) : null;
+      const dangerousPorts = [22, 23, 25, 3306, 5432, 6379, 27017, 9200]; // SSH, Telnet, SMTP, MySQL, PostgreSQL, Redis, MongoDB, Elasticsearch
+      if (port && dangerousPorts.includes(port)) {
+        return {
+          ok: true,
+          data: {
+            success: false,
+            message: "供应商地址端口检查失败",
+            details: {
+              error: "不允许访问内部服务端口",
+              errorType: "BlockedPort",
+            },
+          },
+        };
+      }
+    } catch (error) {
+      return {
+        ok: true,
+        data: {
+          success: false,
+          message: "供应商地址格式无效",
+          details: {
+            error: error instanceof Error ? error.message : "URL 解析失败",
+            errorType: "InvalidProviderUrl",
+          },
+        },
+      };
+    }
+
     // 验证代理 URL 格式
     if (data.proxyUrl && !isValidProxyUrl(data.proxyUrl)) {
       return {
@@ -627,12 +705,13 @@ export async function testProviderProxy(data: {
     const { createProxyAgentForProvider } = await import("@/lib/proxy-agent");
 
     // 构造临时 Provider 对象（用于创建代理 agent）
-    const tempProvider = {
+    // 使用类型安全的 ProviderProxyConfig 接口，避免 any
+    const tempProvider: ProviderProxyConfig = {
       id: -1,
-      proxyUrl: data.proxyUrl,
+      name: "test-connection",
+      proxyUrl: data.proxyUrl ?? null,
       proxyFallbackToDirect: data.proxyFallbackToDirect ?? false,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any;
+    };
 
     try {
       // 创建代理配置
