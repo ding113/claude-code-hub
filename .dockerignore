@@ -1,25 +1,127 @@
-# Ignore git metadata
+# ============================================
+# Claude Code Hub - Docker Build Exclusions
+# ============================================
+# Optimized .dockerignore for faster builds and smaller images
+
+# ============================================
+# Git Metadata
+# ============================================
 .git
 .gitignore
+.gitattributes
+.github
 
-# Node modules and build artifacts
+# ============================================
+# Dependencies (will be installed in container)
+# ============================================
 node_modules
+.pnpm-store
+.bun
+bun.lockb.cache
+
+# ============================================
+# Build Artifacts (will be generated in container)
+# ============================================
 .next
 out
-coverage
 dist
+build
+coverage
+*.tsbuildinfo
+.turbo
 
-# Local env files (will be provided via runtime)
+# ============================================
+# Environment Files (provided via runtime)
+# ============================================
 .env
 .env.*
 !.env.example
 
-# Editor/IDE
+# ============================================
+# Development Tools
+# ============================================
 .vscode
 .idea
+.fleet
+.code-workspace
+*.swp
+*.swo
+*~
+.DS_Store
 
-# Logs and misc
+# ============================================
+# Logs and Debug Files
+# ============================================
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
+bun-debug.log*
+lerna-debug.log*
+
+# ============================================
+# Testing and Coverage
+# ============================================
+coverage
+.nyc_output
+*.test.js
+*.spec.js
+*.test.ts
+*.spec.ts
+*.test.tsx
+*.spec.tsx
+__tests__
+**/__mocks__
+.vitest
+
+# ============================================
+# Documentation (not needed in runtime)
+# ============================================
+*.md
+!README.md
+docs/
+LICENSE
+CONTRIBUTING.md
+
+# ============================================
+# Development Scripts and Configs
+# ============================================
+dev/
+scripts/validate-migrations.js
+.prettierrc
+.prettierignore
+.eslintrc*
+.eslintignore
+vitest.config.ts
+
+# ============================================
+# CI/CD Files
+# ============================================
+.gitlab-ci.yml
+.travis.yml
+azure-pipelines.yml
+.circleci
+Jenkinsfile
+
+# ============================================
+# Container and Deployment Configs
+# ============================================
+.dockerignore
+Dockerfile
+Dockerfile.*
+docker-compose*.yml
+nixpacks.toml
+.nixpacks
+
+# ============================================
+# Misc
+# ============================================
+.cache
+.temp
+.tmp
+*.pid
+*.seed
+*.pid.lock
+.sass-cache
+.yarnclean

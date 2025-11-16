@@ -54,20 +54,15 @@ jobs:
           echo "Base tag: $BASE_TAG"
           echo "Versioned tag: $VERSIONED_TAG"
 
-      - name: Setup Node.js for formatting
-        uses: actions/setup-node@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
         with:
-          node-version: "20"
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9.15.0
+          bun-version: 1.3.2
 
       - name: Install dependencies and format code
         run: |
-          pnpm install --frozen-lockfile
-          pnpm format
+          bun install --frozen-lockfile
+          bun run format
 
       - name: Commit formatted code
         run: |

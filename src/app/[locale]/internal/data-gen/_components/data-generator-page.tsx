@@ -529,9 +529,10 @@ export function DataGeneratorPage() {
                   <CardTitle>{t("table.userBreakdown.title")}</CardTitle>
                   <CardDescription>
                     {t("table.userBreakdown.description", {
-                      count: collapseByUser
-                        ? collapsedUserData?.length
-                        : userBreakdownResult.items.length,
+                      count:
+                        (collapseByUser
+                          ? collapsedUserData?.length
+                          : userBreakdownResult.items.length) || 0,
                     })}
                   </CardDescription>
                 </div>

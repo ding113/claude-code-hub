@@ -22,6 +22,10 @@ ENV NEXT_PUBLIC_APP_VERSION=$APP_VERSION
 
 RUN pnpm run build
 
+# 验证关键文件存在，防止运行时报错（Next.js 15 middleware 需要 NFT 文件）
+RUN test -f .next/server/middleware.js.nft.json || \
+    (echo "ERROR: middleware.js.nft.json not found! Check Next.js build output." && exit 1)
+
 FROM node:22-slim AS runner
 ENV NODE_ENV=production
 ENV PORT=3000

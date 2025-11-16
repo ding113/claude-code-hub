@@ -1,0 +1,114 @@
+# ============================================
+# Claude Code Hub - Nixpacks Configuration
+# ============================================
+# Platform deployment config for Railway, Render, Coolify, etc.
+# Nixpacks auto-detects bun.lockb and uses Bun for all operations
+
+# ============================================
+# Providers Configuration
+# ============================================
+[providers]
+# Nixpacks will auto-detect bun.lockb and use Bun runtime
+# No explicit provider needed - auto-detection is preferred
+
+# ============================================
+# Setup Phase: Install System Packages
+# ============================================
+[phases.setup]
+# Add PostgreSQL client tools for database backup/restore functionality
+# '...' extends default packages instead of replacing them
+nixPkgs = ['...', 'postgresql']
+
+# Optional: Pin specific Nix packages version for reproducibility
+# Uncomment and update commit hash from https://github.com/NixOS/nixpkgs
+# nixPkgsArchive = 'https://github.com/NixOS/nixpkgs/archive/<commit-hash>.tar.gz'
+
+# ============================================
+# Install Phase: Install Dependencies
+# ============================================
+[phases.install]
+# Use Bun to install dependencies with frozen lockfile
+# Ensures reproducible builds matching local development
+cmds = ['bun install --frozen-lockfile']
+
+# ============================================
+# Build Phase: Compile and Build Application
+# ============================================
+[phases.build]
+# Multi-step build process:
+# 1. Run TypeScript type checking (ensures type safety)
+# 2. Compile server.ts to server.js (CommonJS for compatibility)
+# 3. Build Next.js application (standalone output mode)
+# 4. Copy VERSION file to standalone directory (for version display)
+cmds = [
+  'bun run typecheck',
+  'bun x tsc --project tsconfig.server.json',
+  'bun run build',
+  'cp VERSION .next/standalone/VERSION || true'
+]
+
+# ============================================
+# Start Configuration: Application Entry Point
+# ============================================
+[start]
+# Start custom server with Bun runtime
+# server.js includes Socket.IO + Next.js integration
+cmd = 'bun run server.js'
+
+# ============================================
+# Environment Variables
+# ============================================
+[variables]
+# Production mode
+NODE_ENV = 'production'
+
+# Disable Next.js telemetry for privacy and performance
+NEXT_TELEMETRY_DISABLED = '1'
+
+# Node.js version compatibility (Next.js 15 requires ≥20)
+# Set to 22 for optimal compatibility
+NIXPACKS_NODE_VERSION = '22'
+
+# ============================================
+# Platform-Specific Notes
+# ============================================
+# 
+# Railway:
+#   - Database and Redis URLs automatically injected as env vars
+#   - Set ENABLE_WEBSOCKET=true in Railway dashboard
+#   - Configure custom domain for APP_URL
+#   - Health check: /api/actions/health
+#
+# Render:
+#   - Add DATABASE_URL and REDIS_URL in environment settings
+#   - Enable "Auto-Deploy" for main branch
+#   - Set PORT to $PORT (auto-assigned)
+#
+# Coolify:
+#   - Configure PostgreSQL and Redis services
+#   - Set environment variables in service settings
+#   - Enable health checks
+#
+# Health Check Endpoint:
+#   - Path: /api/actions/health
+#   - Returns: {"status":"ok","version":"0.3.0","uptime":...}
+#   - Expected Status: 200 OK
+#
+# Required Environment Variables (set in platform dashboard):
+#   ADMIN_TOKEN         - Admin panel authentication (REQUIRED, change default)
+#   DSN                 - PostgreSQL connection string (REQUIRED)
+#   REDIS_URL           - Redis connection URL (REQUIRED)
+#   APP_PORT            - Application port (default: 23000, Railway uses PORT)
+#   APP_URL             - Public application URL (for OpenAPI docs)
+#   ENABLE_WEBSOCKET    - Enable WebSocket support (default: true)
+#   ENABLE_RATE_LIMIT   - Enable rate limiting (default: true)
+#   AUTO_MIGRATE        - Auto-run DB migrations on startup (default: true)
+#   TZ                  - Timezone (default: Asia/Shanghai)
+#
+# Optional Configuration:
+#   SESSION_TTL                 - Session cache TTL in seconds (default: 300)
+#   ENABLE_SECURE_COOKIES       - Force HTTPS cookies (default: true)
+#   STORE_SESSION_MESSAGES      - Store request messages (default: false)
+#   ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS  - Include network errors in circuit breaker (default: false)
+#
+# For complete environment variable reference, see .env.example

@@ -1,0 +1,102 @@
+# syntax=docker/dockerfile:1
+
+# ============================================
+# Claude Code Hub - Production Dockerfile (Bun)
+# ============================================
+# Multi-stage build for optimized production deployment
+# Base: Debian (ARM64 compatible - Alpine musl libc incompatible with Bun ARM64)
+# Runtime: Bun 1.3+ (60% faster startup, 20% lower memory vs Node.js)
+
+# ============================================
+# Stage 1: Base Image
+# ============================================
+FROM oven/bun:1.3-debian AS base
+WORKDIR /app
+ENV NODE_ENV=production
+
+# ============================================
+# Stage 2: Dependencies Installation
+# ============================================
+FROM base AS deps
+
+# Copy package files
+COPY package.json bun.lockb ./
+
+# Install ALL dependencies (needed for build stage)
+# --frozen-lockfile ensures reproducible builds
+RUN bun install --frozen-lockfile
+
+# ============================================
+# Stage 3: Build Stage
+# ============================================
+FROM base AS builder
+
+# Copy dependencies from deps stage
+COPY --from=deps /app/node_modules ./node_modules
+
+# Copy application source
+COPY . .
+
+# Build arguments
+ARG APP_VERSION=dev
+ENV NEXT_PUBLIC_APP_VERSION=$APP_VERSION
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Build application
+# 1. Run TypeScript type checking
+# 2. Compile TypeScript server (server.ts → server.js)
+# 3. Build Next.js application (standalone output mode)
+# 4. Copy VERSION file to standalone output directory
+RUN bun run typecheck && \
+    bun x tsc --project tsconfig.server.json && \
+    bun run build && \
+    cp VERSION .next/standalone/VERSION
+
+# ============================================
+# Stage 4: Production Runtime
+# ============================================
+FROM base AS runner
+
+# Install PostgreSQL 18 client tools (for database backup/restore functionality)
+# and curl (for health checks)
+RUN apt-get update && \
+    apt-get install -y gnupg curl ca-certificates && \
+    curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | \
+      gpg --dearmor -o /usr/share/keyrings/postgresql-archive-keyring.gpg && \
+    echo "deb [signed-by=/usr/share/keyrings/postgresql-archive-keyring.gpg] http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
+      > /etc/apt/sources.list.d/pgdg.list && \
+    apt-get update && \
+    apt-get install -y postgresql-client-18 && \
+    rm -rf /var/lib/apt/lists/*
+
+# Create non-root user for security
+RUN groupadd --gid 1001 nodejs && \
+    useradd --uid 1001 --gid nodejs nodejs
+
+# Copy application files from builder stage
+# Next.js standalone output includes minimal server and dependencies
+COPY --from=builder --chown=nodejs:nodejs /app/public ./public
+COPY --from=builder --chown=nodejs:nodejs /app/drizzle ./drizzle
+COPY --from=builder --chown=nodejs:nodejs /app/messages ./messages
+COPY --from=builder --chown=nodejs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nodejs:nodejs /app/.next/server ./.next/server
+COPY --from=builder --chown=nodejs:nodejs /app/.next/static ./.next/static
+
+# Copy compiled custom server (Socket.IO + Next.js integration)
+# This is NOT included in Next.js standalone trace
+COPY --from=builder --chown=nodejs:nodejs /app/server.js ./server.js
+
+# Switch to non-root user
+USER nodejs
+
+# Expose application port (default: 3000, override with APP_PORT env var)
+EXPOSE 3000
+
+# Health check configuration
+# Uses existing /api/actions/health endpoint
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+  CMD curl -f http://localhost:3000/api/actions/health || exit 1
+
+# Start application with Bun runtime
+# Custom server includes Socket.IO WebSocket support
+CMD ["bun", "run", "server.js"]

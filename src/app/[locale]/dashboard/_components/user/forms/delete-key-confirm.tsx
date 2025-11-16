@@ -52,7 +52,7 @@ export function DeleteKeyConfirm({
       <DialogHeader>
         <DialogTitle>{t("title")}</DialogTitle>
         <DialogDescription>
-          {t("description", { name: keyData?.name, maskedKey: keyData?.maskedKey })}
+          {t("description", { name: keyData?.name || "", maskedKey: keyData?.maskedKey || "" })}
         </DialogDescription>
       </DialogHeader>
 
