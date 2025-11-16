@@ -171,6 +171,7 @@ Docker Compose 是**首选部署方式**，自动配置数据库、Redis 和应�
    ```
 
 **Docker 部署**：使用 `deploy/Dockerfile.bun` 和 `deploy/docker-compose.prod.yaml`
+
 ```bash
 docker build -f deploy/Dockerfile.bun -t claude-code-hub:bun .
 # 或使用 docker-compose
@@ -179,8 +180,7 @@ docker compose -f deploy/docker-compose.prod.yaml up -d
 
 **Nixpacks 部署**：Railway / Render / Coolify 自动检测 `nixpacks.toml` 和 `bun.lockb`
 
-详细部署指南请参考：[docs/DEPLOYMENT_BUN.md](docs/DEPLOYMENT_BUN.md)
-4. 注意：首次运行可开启 `AUTO_MIGRATE=true` 自动迁移，生产环境完成后建议改为 `false` 并使用 Drizzle CLI 手动管理。
+详细部署指南请参考：[docs/DEPLOYMENT_BUN.md](docs/DEPLOYMENT_BUN.md) 4. 注意：首次运行可开启 `AUTO_MIGRATE=true` 自动迁移，生产环境完成后建议改为 `false` 并使用 Drizzle CLI 手动管理。
 
 ## ⚙️ 配置说明 Configuration
 

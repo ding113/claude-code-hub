@@ -3,6 +3,7 @@
 ## 📋 问题概述
 
 **症状**: CI Docker 构建报错
+
 ```
 ENOENT: no such file or directory, open '/app/.next/server/middleware.js.nft.json'
 ```
@@ -17,7 +18,7 @@ Next.js 15 + next-intl middleware 使用 Node.js runtime 时，会生成 **Node 
 
 1. ✅ **本地构建产物**: `.next/server/middleware.js.nft.json` **存在**
 2. ❌ **Standalone 输出**: `.next/standalone/.next/server` **不包含** NFT 文件
-3. ⚠️  **原因**: Next.js standalone 模式不会将 middleware NFT 打包到 standalone bundle 中
+3. ⚠️ **原因**: Next.js standalone 模式不会将 middleware NFT 打包到 standalone bundle 中
 
 ### 技术细节
 
@@ -36,6 +37,7 @@ Next.js 15 + next-intl middleware 使用 Node.js runtime 时，会生成 **Node 
 ```
 
 **为什么会缺失**:
+
 - `src/middleware.ts` 使用 `export const runtime = "nodejs"`
 - next-intl 中间件依赖 Node.js 模块（`postgres-js`, `net`, 等）
 - NFT 文件记录所有依赖的完整路径，供 Node.js runtime 解析
@@ -65,6 +67,7 @@ COPY --from=build --chown=node:node /app/.next/server ./.next/server
 ```
 
 **关键点**:
+
 1. **第 46 行**: 已存在，复制完整的 `.next/server` 目录到镜像
 2. **第 26-27 行**: **新增**，构建阶段验证 NFT 文件存在，及早发现问题
 
@@ -73,6 +76,7 @@ COPY --from=build --chown=node:node /app/.next/server ./.next/server
 **文件**: `package.json`
 
 **修改**:
+
 ```diff
 - "packageManager": "bun@1.3.2"
 + "packageManager": "pnpm@9.15.0"

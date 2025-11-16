@@ -20,6 +20,7 @@
 ### 选项 1: Docker (推荐用于自托管)
 
 **优势**:
+
 - ✅ 完整的容器编排 (App + PostgreSQL + Redis)
 - ✅ 适合 VPS、云服务器、本地服务器
 - ✅ 完全控制基础设施
@@ -30,6 +31,7 @@
 ### 选项 2: Nixpacks (推荐用于云平台)
 
 **优势**:
+
 - ✅ 零配置自动检测 Bun 运行时
 - ✅ 原生支持 Railway、Render、Coolify 等平台
 - ✅ 自动化 CI/CD 集成
@@ -68,6 +70,7 @@ nano .env
 ```
 
 **必须修改的变量**:
+
 ```env
 # 管理员令牌 (强制修改!)
 ADMIN_TOKEN=your-secure-random-token-here
@@ -302,48 +305,48 @@ AUTO_MIGRATE=true
 
 ### 必需变量
 
-| 变量 | 说明 | 示例 |
-|------|------|------|
-| `ADMIN_TOKEN` | 管理后台登录令牌 **(必须修改!)** | `your-secure-random-token` |
-| `DSN` | PostgreSQL 连接字符串 | `postgresql://user:pass@host:5432/db` |
-| `REDIS_URL` | Redis 连接 URL | `redis://host:6379` |
+| 变量          | 说明                             | 示例                                  |
+| ------------- | -------------------------------- | ------------------------------------- |
+| `ADMIN_TOKEN` | 管理后台登录令牌 **(必须修改!)** | `your-secure-random-token`            |
+| `DSN`         | PostgreSQL 连接字符串            | `postgresql://user:pass@host:5432/db` |
+| `REDIS_URL`   | Redis 连接 URL                   | `redis://host:6379`                   |
 
 ### 应用配置
 
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `APP_PORT` | `23000` | 应用端口 (容器内为 3000) |
-| `APP_URL` | (自动检测) | 公网访问地址,用于 OpenAPI 文档 |
-| `NODE_ENV` | `production` | 环境模式 |
-| `TZ` | `Asia/Shanghai` | 时区设置 |
-| `LOG_LEVEL` | `info` | 日志级别 (`fatal`/`error`/`warn`/`info`/`debug`) |
+| 变量        | 默认值          | 说明                                             |
+| ----------- | --------------- | ------------------------------------------------ |
+| `APP_PORT`  | `23000`         | 应用端口 (容器内为 3000)                         |
+| `APP_URL`   | (自动检测)      | 公网访问地址,用于 OpenAPI 文档                   |
+| `NODE_ENV`  | `production`    | 环境模式                                         |
+| `TZ`        | `Asia/Shanghai` | 时区设置                                         |
+| `LOG_LEVEL` | `info`          | 日志级别 (`fatal`/`error`/`warn`/`info`/`debug`) |
 
 ### 功能开关
 
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `ENABLE_WEBSOCKET` | `true` | 启用 WebSocket 实时推送 |
-| `ENABLE_RATE_LIMIT` | `true` | 启用限流功能 |
+| 变量                    | 默认值 | 说明                                        |
+| ----------------------- | ------ | ------------------------------------------- |
+| `ENABLE_WEBSOCKET`      | `true` | 启用 WebSocket 实时推送                     |
+| `ENABLE_RATE_LIMIT`     | `true` | 启用限流功能                                |
 | `ENABLE_SECURE_COOKIES` | `true` | 强制 HTTPS Cookie (HTTP 访问需设为 `false`) |
-| `AUTO_MIGRATE` | `true` | 启动时自动执行数据库迁移 |
+| `AUTO_MIGRATE`          | `true` | 启动时自动执行数据库迁移                    |
 
 ### 会话和限流
 
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `SESSION_TTL` | `300` | Session 缓存过期时间(秒) |
+| 变量                     | 默认值  | 说明                           |
+| ------------------------ | ------- | ------------------------------ |
+| `SESSION_TTL`            | `300`   | Session 缓存过期时间(秒)       |
 | `STORE_SESSION_MESSAGES` | `false` | 是否存储请求消息(用于实时监控) |
 
 ### 熔断器
 
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
+| 变量                                       | 默认值  | 说明                   |
+| ------------------------------------------ | ------- | ---------------------- |
 | `ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS` | `false` | 网络错误是否触发熔断器 |
 
 ### 跨组降级
 
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
+| 变量                        | 默认值  | 说明                           |
+| --------------------------- | ------- | ------------------------------ |
 | `ALLOW_CROSS_GROUP_DEGRADE` | `false` | 分组内无供应商时是否降级到全局 |
 
 完整环境变量列表请参考项目根目录的 `.env.example` 文件。
@@ -404,13 +407,13 @@ healthcheck:
 
 基于实际测试数据 (Next.js 15 + Custom Server):
 
-| 指标 | Node.js 22 | Bun 1.3 | 改进幅度 |
-|------|------------|---------|----------|
-| **启动时间** | ~2.0s | ~0.8s | ⚡ +60% |
-| **内存占用** | ~150MB | ~120MB | 💾 -20% |
-| **包安装** | ~45s | ~12s | 📦 +73% |
-| **构建时间** | ~35s | ~28s | 🏗️ +20% |
-| **镜像大小** | ~892MB | ~180MB | 📉 -80% |
+| 指标         | Node.js 22 | Bun 1.3 | 改进幅度 |
+| ------------ | ---------- | ------- | -------- |
+| **启动时间** | ~2.0s      | ~0.8s   | ⚡ +60%  |
+| **内存占用** | ~150MB     | ~120MB  | 💾 -20%  |
+| **包安装**   | ~45s       | ~12s    | 📦 +73%  |
+| **构建时间** | ~35s       | ~28s    | 🏗️ +20%  |
+| **镜像大小** | ~892MB     | ~180MB  | 📉 -80%  |
 
 ### 冷启动性能
 
@@ -427,6 +430,7 @@ healthcheck:
 #### 1. Bun 锁文件"变更"错误
 
 **错误信息**:
+
 ```
 error: lockfile had changes
 ```
@@ -521,6 +525,7 @@ ENABLE_SECURE_COOKIES=false
 #### 5. ARM64 镜像构建失败
 
 **错误信息**:
+
 ```
 ERROR: alpine musl libc incompatible with Bun ARM64
 ```

@@ -21,51 +21,51 @@ services:
     environment:
       # Database Configuration
       DSN: postgresql://postgres:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-claude_code_hub}
-      
+
       # Redis Configuration
       REDIS_URL: redis://redis:6379
-      
+
       # Security (MUST CHANGE IN PRODUCTION)
       ADMIN_TOKEN: ${ADMIN_TOKEN:-change-me-in-production}
-      
+
       # Application Settings
-      APP_PORT: 3000  # Internal port
+      APP_PORT: 3000 # Internal port
       APP_URL: ${APP_URL:-http://localhost:23000}
       NODE_ENV: production
       TZ: ${TZ:-Asia/Shanghai}
-      
+
       # Feature Flags
       ENABLE_WEBSOCKET: ${ENABLE_WEBSOCKET:-true}
       ENABLE_RATE_LIMIT: ${ENABLE_RATE_LIMIT:-true}
       ENABLE_SECURE_COOKIES: ${ENABLE_SECURE_COOKIES:-true}
       AUTO_MIGRATE: ${AUTO_MIGRATE:-true}
-      
+
       # Optional: Session and Rate Limit Config
       SESSION_TTL: ${SESSION_TTL:-300}
       STORE_SESSION_MESSAGES: ${STORE_SESSION_MESSAGES:-false}
-      
+
       # Optional: Circuit Breaker
       ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS: ${ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS:-false}
-      
+
       # Logging
       LOG_LEVEL: ${LOG_LEVEL:-info}
-    
+
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
-    
+
     networks:
       - claude-network
-    
+
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/actions/health"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 40s
-  
+
   # ============================================
   # PostgreSQL Database
   # ============================================
@@ -80,24 +80,25 @@ services:
       PGDATA: /var/lib/postgresql/data/pgdata
       TZ: ${TZ:-Asia/Shanghai}
       PGTZ: ${TZ:-Asia/Shanghai}
-    
+
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    
+
     networks:
       - claude-network
-    
+
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-claude_code_hub}"]
+      test:
+        ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-claude_code_hub}"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
-    
+
     # Optional: Expose PostgreSQL port for external access
     # ports:
     #   - "5432:5432"
-  
+
   # ============================================
   # Redis Cache
   # ============================================
@@ -106,20 +107,20 @@ services:
     container_name: claude-code-hub-redis
     restart: unless-stopped
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
-    
+
     volumes:
       - redis_data:/data
-    
+
     networks:
       - claude-network
-    
+
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
       start_period: 20s
-    
+
     # Optional: Expose Redis port for external access
     # ports:
     #   - "6379:6379"
@@ -139,35 +140,34 @@ volumes:
     driver: local
   redis_data:
     driver: local
-
 # ============================================
 # Usage Instructions
 # ============================================
-# 
+#
 # 1. Create .env file:
 #    cp .env.example .env
-#    
+#
 # 2. Edit .env and configure:
 #    - ADMIN_TOKEN (required)
 #    - POSTGRES_PASSWORD (required)
 #    - APP_URL (your domain)
-#    
+#
 # 3. Start services:
 #    docker compose -f deploy/docker-compose.prod.yaml up -d
-#    
+#
 # 4. View logs:
 #    docker compose -f deploy/docker-compose.prod.yaml logs -f
-#    
+#
 # 5. Stop services:
 #    docker compose -f deploy/docker-compose.prod.yaml down
-#    
+#
 # 6. Update to latest version:
 #    docker compose -f deploy/docker-compose.prod.yaml pull
 #    docker compose -f deploy/docker-compose.prod.yaml up -d
-#    
+#
 # 7. Backup database:
 #    docker exec claude-code-hub-db pg_dump -U postgres claude_code_hub > backup.sql
-#    
+#
 # 8. Restore database:
 #    docker exec -i claude-code-hub-db psql -U postgres claude_code_hub < backup.sql
 #
