@@ -784,6 +784,27 @@ type ProviderApiTestResult = ActionResult<
     }
 >;
 
+type ProviderApiResponse = Record<string, unknown> & {
+  model?: string;
+  usage?: Record<string, unknown>;
+  content?: Array<{ type?: string; text?: string } | Record<string, unknown>>;
+  choices?: Array<{
+    message?: {
+      content?: string;
+    };
+  }>;
+  output?: Array<
+    | {
+        type?: string;
+        content?: Array<{
+          type?: string;
+          text?: string;
+        }>;
+      }
+    | Record<string, unknown>
+  >;
+};
+
 type ProviderUrlValidationError = {
   message: string;
   details: {
@@ -878,7 +899,7 @@ async function executeProviderApiTest(
     headers: (apiKey: string) => Record<string, string>;
     body: (model: string) => unknown;
     successMessage: string;
-    extract: (result: any) => {
+    extract: (result: ProviderApiResponse) => {
       model?: string;
       usage?: Record<string, unknown>;
       content?: string;
