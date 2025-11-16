@@ -1053,13 +1053,15 @@ export function ProviderForm({
               </div>
 
               <div className="space-y-2">
-                <Label>{t("sections.apiTest.testLabel")}</Label>
                 <ApiTestButton
                   providerUrl={url}
                   apiKey={key}
                   proxyUrl={proxyUrl}
                   proxyFallbackToDirect={proxyFallbackToDirect}
                   providerId={provider?.id}
+                  providerType={providerType}
+                  allowedModels={allowedModels}
+                  enableMultiProviderTypes={enableMultiProviderTypes}
                   disabled={isPending || !url.trim()}
                 />
                 <p className="text-xs text-muted-foreground">

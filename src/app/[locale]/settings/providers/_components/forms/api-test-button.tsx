@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Loader2, CheckCircle2, XCircle, Activity } from "lucide-react";
 import {
@@ -21,8 +21,27 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { isValidUrl } from "@/lib/utils/validation";
+import type { ProviderType } from "@/types/provider";
 
 type ApiFormat = "anthropic-messages" | "openai-chat" | "openai-responses";
+
+const providerTypeToApiFormat: Partial<Record<ProviderType, ApiFormat>> = {
+  claude: "anthropic-messages",
+  "claude-auth": "anthropic-messages",
+  codex: "openai-responses",
+  "openai-compatible": "openai-chat",
+};
+
+const apiFormatDefaultModel: Record<ApiFormat, string> = {
+  "anthropic-messages": "claude-3-5-sonnet-20241022",
+  "openai-chat": "gpt-4.1",
+  "openai-responses": "gpt-4.1",
+};
+
+const resolveApiFormatFromProvider = (providerType?: ProviderType | null): ApiFormat =>
+  (providerType ? providerTypeToApiFormat[providerType] : undefined) ?? "anthropic-messages";
+
+const getDefaultModelForFormat = (format: ApiFormat) => apiFormatDefaultModel[format];
 
 interface ApiTestButtonProps {
   providerUrl: string;
@@ -31,6 +50,9 @@ interface ApiTestButtonProps {
   proxyFallbackToDirect?: boolean;
   disabled?: boolean;
   providerId?: number;
+  providerType?: ProviderType | null;
+  allowedModels?: string[];
+  enableMultiProviderTypes: boolean;
 }
 
 /**
@@ -48,11 +70,33 @@ export function ApiTestButton({
   proxyFallbackToDirect = false,
   disabled = false,
   providerId,
+  providerType,
+  allowedModels = [],
+  enableMultiProviderTypes,
 }: ApiTestButtonProps) {
   const t = useTranslations("settings.providers.form.apiTest");
+  const providerTypeT = useTranslations("settings.providers.form.providerTypes");
+  const normalizedAllowedModels = useMemo(() => {
+    const unique = new Set<string>();
+    allowedModels.forEach((model) => {
+      const trimmed = model.trim();
+      if (trimmed) {
+        unique.add(trimmed);
+      }
+    });
+    return Array.from(unique);
+  }, [allowedModels]);
+
+  const initialApiFormat = resolveApiFormatFromProvider(providerType);
   const [isTesting, setIsTesting] = useState(false);
-  const [apiFormat, setApiFormat] = useState<ApiFormat>("anthropic-messages");
-  const [testModel, setTestModel] = useState("");
+  const [apiFormat, setApiFormat] = useState<ApiFormat>(initialApiFormat);
+  const [isApiFormatManuallySelected, setIsApiFormatManuallySelected] = useState(false);
+  const [testModel, setTestModel] = useState(() => getDefaultModelForFormat(initialApiFormat));
+  const [isModelManuallyEdited, setIsModelManuallyEdited] = useState(false);
+  const [selectedAllowedModel, setSelectedAllowedModel] = useState<string | undefined>(() => {
+    const defaultModel = getDefaultModelForFormat(initialApiFormat);
+    return normalizedAllowedModels.includes(defaultModel) ? defaultModel : undefined;
+  });
   const [testResult, setTestResult] = useState<{
     success: boolean;
     message: string;
@@ -64,6 +108,35 @@ export function ApiTestButton({
       error?: string;
     };
   } | null>(null);
+
+  useEffect(() => {
+    if (isApiFormatManuallySelected) return;
+    const resolvedFormat = resolveApiFormatFromProvider(providerType);
+    if (resolvedFormat !== apiFormat) {
+      setApiFormat(resolvedFormat);
+    }
+  }, [apiFormat, isApiFormatManuallySelected, providerType]);
+
+  useEffect(() => {
+    if (isModelManuallyEdited) {
+      if (selectedAllowedModel && !normalizedAllowedModels.includes(selectedAllowedModel)) {
+        setSelectedAllowedModel(undefined);
+      }
+      return;
+    }
+
+    const defaultModel = getDefaultModelForFormat(apiFormat);
+    setTestModel(defaultModel);
+    setSelectedAllowedModel(
+      normalizedAllowedModels.includes(defaultModel) ? defaultModel : undefined
+    );
+  }, [apiFormat, isModelManuallyEdited, normalizedAllowedModels, selectedAllowedModel]);
+
+  useEffect(() => {
+    if (selectedAllowedModel && !normalizedAllowedModels.includes(selectedAllowedModel)) {
+      setSelectedAllowedModel(undefined);
+    }
+  }, [normalizedAllowedModels, selectedAllowedModel]);
 
   const handleTest = async () => {
     // 验证必填字段
@@ -211,43 +284,78 @@ export function ApiTestButton({
   };
 
   // 获取默认模型占位符
-  const getModelPlaceholder = () => {
-    switch (apiFormat) {
-      case "anthropic-messages":
-        return "claude-3-5-sonnet-20241022";
-      case "openai-chat":
-        return "gpt-4.1";
-      case "openai-responses":
-        return "gpt-4.1";
-      default:
-        return "";
-    }
-  };
-
   return (
     <div className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor="api-format">{t("apiFormat")}</Label>
-        <Select value={apiFormat} onValueChange={(value) => setApiFormat(value as ApiFormat)}>
+        <Select
+          value={apiFormat}
+          onValueChange={(value) => {
+            setIsApiFormatManuallySelected(true);
+            setApiFormat(value as ApiFormat);
+          }}
+        >
           <SelectTrigger id="api-format">
             <SelectValue placeholder={t("selectApiFormat")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="anthropic-messages">{t("formatAnthropicMessages")}</SelectItem>
-            <SelectItem value="openai-chat">{t("formatOpenAIChat")}</SelectItem>
+            <SelectItem value="anthropic-messages">
+              {t("formatAnthropicMessages")}
+            </SelectItem>
+            <SelectItem value="openai-chat" disabled={!enableMultiProviderTypes}>
+              <>
+                {t("formatOpenAIChat")}
+                {!enableMultiProviderTypes && providerTypeT("openaiCompatibleDisabled")}
+              </>
+            </SelectItem>
             <SelectItem value="openai-responses">{t("formatOpenAIResponses")}</SelectItem>
           </SelectContent>
         </Select>
         <div className="text-xs text-muted-foreground">{t("apiFormatDesc")}</div>
       </div>
 
+      {normalizedAllowedModels.length > 0 && (
+        <div className="space-y-2">
+          <Label htmlFor="test-model-select">{t("allowedModelSelectLabel")}</Label>
+          <Select
+            value={selectedAllowedModel}
+            onValueChange={(value) => {
+              setIsModelManuallyEdited(true);
+              setSelectedAllowedModel(value);
+              setTestModel(value);
+            }}
+          >
+            <SelectTrigger id="test-model-select">
+              <SelectValue placeholder={t("allowedModelSelectPlaceholder")} />
+            </SelectTrigger>
+            <SelectContent>
+              {normalizedAllowedModels.map((model) => (
+                <SelectItem key={model} value={model}>
+                  {model}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <div className="text-xs text-muted-foreground">{t("allowedModelSelectDesc")}</div>
+        </div>
+      )}
+
       <div className="space-y-2">
         <Label htmlFor="test-model">{t("testModel")}</Label>
         <Input
           id="test-model"
           value={testModel}
-          onChange={(e) => setTestModel(e.target.value)}
-          placeholder={getModelPlaceholder()}
+          onChange={(e) => {
+            const value = e.target.value;
+            setIsModelManuallyEdited(true);
+            setTestModel(value);
+            if (normalizedAllowedModels.includes(value)) {
+              setSelectedAllowedModel(value);
+            } else {
+              setSelectedAllowedModel(undefined);
+            }
+          }}
+          placeholder={getDefaultModelForFormat(apiFormat)}
           disabled={isTesting}
         />
         <div className="text-xs text-muted-foreground">{t("testModelDesc")}</div>
