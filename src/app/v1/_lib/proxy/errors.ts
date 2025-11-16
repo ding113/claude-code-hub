@@ -161,7 +161,7 @@ export enum ErrorCategory {
   PROVIDER_ERROR, // 供应商问题（所有 4xx/5xx HTTP 错误）→ 计入熔断器 + 直接切换
   SYSTEM_ERROR, // 系统/网络问题（fetch 网络异常）→ 不计入熔断器 + 先重试1次
   CLIENT_ABORT, // 客户端主动中断 → 不计入熔断器 + 不重试 + 直接返回
-  NON_RETRYABLE_CLIENT_ERROR, // 客户端输入错误（Prompt 超限、内容过滤、PDF 限制、Thinking 格式、参数缺失、非法请求）→ 不计入熔断器 + 不重试 + 直接返回
+  NON_RETRYABLE_CLIENT_ERROR, // 客户端输入错误（Prompt 超限、内容过滤、PDF 限制、Thinking 格式、参数缺失/额外参数、非法请求）→ 不计入熔断器 + 不重试 + 直接返回
 }
 
 const NON_RETRYABLE_ERROR_PATTERNS = [
@@ -169,21 +169,10 @@ const NON_RETRYABLE_ERROR_PATTERNS = [
   /Request blocked by content filter|permission_error.*content filter/i,
   /A maximum of \d+ PDF pages may be provided/i,
   /thinking.*Input tag.*does not match|Expected.*thinking.*but found|thinking.*must start with a thinking block/i,
-  /Field required|required field|missing required/i,
+  /Field required|required field|missing required|extra inputs.*not permitted/i,
   /非法请求|illegal request|invalid request/i,
   /A maximum of \d+ blocks? with cache_control may be provided/i,
 ];
-
-/**
- * 检测是否为不可重试的客户端输入错误
- *
- * 采用白名单模式，检测明确不应重试的客户端错误（如输入超限、内容过滤等），
- * 这些错误即使重试也不会成功，应直接返回给客户端，且不计入熔断器。
- *
-
- * @param error - 错误对象
- * @returns 是否为不可重试的客户端错误
- *
 
 export function isNonRetryableClientError(error: Error): boolean {
   // 提取错误消息
