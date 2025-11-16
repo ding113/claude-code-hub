@@ -629,9 +629,9 @@ SELECT ... LIMIT 50 OFFSET 0;
 ### 修改数据库 Schema
 
 1. 修改 `src/drizzle/schema.ts`
-2. 运行 `pnpm db:generate` 生成迁移文件
+2. 运行 `bun run db:generate` 生成迁移文件
 3. 检查生成的 SQL 文件 (`drizzle/` 目录)
-4. 运行 `pnpm db:push` (开发) 或 `pnpm db:migrate` (生产)
+4. 运行 `bun run db:push` (开发) 或 `bun run db:migrate` (生产)
 
 ## 故障排查
 

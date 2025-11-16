@@ -187,7 +187,7 @@ jobs:
           # Claude 配置参数
           claude_args: |
             --max-turns 999
-            --allowedTools "Read,Write,Edit,Bash(gh:*),Bash(git:*),Bash(npm:*),Bash(pnpm:*),Bash(yarn:*),mcp__github_inline_comment__create_inline_comment"
+            --allowedTools "Read,Write,Edit,Bash(gh:*),Bash(git:*),Bash(npm:*),Bash(bun:*),Bash(yarn:*),mcp__github_inline_comment__create_inline_comment"
 
           # 其他配置
           use_commit_signing: true

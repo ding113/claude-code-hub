@@ -39,7 +39,7 @@ Claude Code Hub 是一个面向团队的 AI API 代理平台，支持统一管�
    ```bash
    git clone https://github.com/ding113/claude-code-hub.git
    cd claude-code-hub
-   pnpm install
+   bun install
    ```
 2. 复制并配置环境变量：
    ```bash
@@ -47,7 +47,7 @@ Claude Code Hub 是一个面向团队的 AI API 代理平台，支持统一管�
    ```
 3. 本地启动：
    ```bash
-   pnpm dev
+   bun run dev
    ```
 4. 需要容器化体验可参考 `README.md` 与 `.github/CI_CD_SETUP.md` 中的 Docker 流程。
 
@@ -107,9 +107,9 @@ Claude Code Hub 是一个面向团队的 AI API 代理平台，支持统一管�
 在每次提交前务必运行：
 
 ```bash
-pnpm lint
-pnpm typecheck
-# 如果更改影响运行逻辑，执行端到端验证或 pnpm test
+bun run lint
+bun run typecheck
+# 如果更改影响运行逻辑，执行端到端验证或 bun run test
 ```
 
 CI 会在 PR 上运行 `Docker Build Test`（见 `.github/CI_CD_SETUP.md`）。如需验证容器构建，可本地执行：
@@ -175,7 +175,7 @@ Claude Code Hub centralizes multiple AI providers with smart routing, tenant con
    ```bash
    git clone https://github.com/ding113/claude-code-hub.git
    cd claude-code-hub
-   pnpm install
+   bun install
    ```
 2. Copy environment variables and configure secrets:
    ```bash
@@ -183,7 +183,7 @@ Claude Code Hub centralizes multiple AI providers with smart routing, tenant con
    ```
 3. Launch the dev server:
    ```bash
-   pnpm dev
+   bun run dev
    ```
 4. For Docker-based flows, review `README.md` and `.github/CI_CD_SETUP.md`.
 
@@ -235,9 +235,9 @@ Example: `fix: handle redis timeout retry`
 Always verify locally before requesting a review:
 
 ```bash
-pnpm lint
-pnpm typecheck
-# Run pnpm test or relevant scripts when logic changes
+bun run lint
+bun run typecheck
+# Run bun run test or relevant scripts when logic changes
 docker compose build   # optional, mirrors CI Docker Build Test
 ```
 

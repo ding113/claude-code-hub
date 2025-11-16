@@ -1,14 +1,11 @@
 # syntax=docker/dockerfile:1
 
-FROM --platform=$BUILDPLATFORM node:22-slim AS build-base
-ENV PNPM_HOME=/pnpm
-ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable
+FROM --platform=$BUILDPLATFORM oven/bun:slim AS build-base
 WORKDIR /app
 
 FROM build-base AS deps
-COPY package.json pnpm-lock.yaml ./
-RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile
+COPY package.json bun.lock ./
+RUN --mount=type=cache,target=/root/.bun/install/cache bun install --frozen-lockfile
 
 FROM deps AS build
 COPY . .
@@ -20,7 +17,7 @@ ARG APP_VERSION=dev
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NEXT_PUBLIC_APP_VERSION=$APP_VERSION
 
-RUN pnpm run build
+RUN bun run build
 
 # 验证关键文件存在，防止运行时报错（Next.js 15 middleware 需要 NFT 文件）
 RUN test -f .next/server/middleware.js.nft.json || \
