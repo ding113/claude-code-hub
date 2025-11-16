@@ -1059,6 +1059,7 @@ export function ProviderForm({
                   apiKey={key}
                   proxyUrl={proxyUrl}
                   proxyFallbackToDirect={proxyFallbackToDirect}
+                  providerId={provider?.id}
                   disabled={isPending || !url.trim()}
                 />
                 <p className="text-xs text-muted-foreground">

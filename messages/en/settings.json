@@ -577,6 +577,7 @@
     "form": {
       "apiTest": {
         "fillUrlFirst": "Please fill in provider URL first",
+        "invalidUrl": "Provider URL is invalid (http/https only)",
         "fillKeyFirst": "Please fill in API key first",
         "testFailed": "Test failed",
         "testFailedRetry": "Test failed, please retry",

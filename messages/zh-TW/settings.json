@@ -573,6 +573,7 @@
       },
       "apiTest": {
         "fillUrlFirst": "請先填寫供應商 URL",
+        "invalidUrl": "供應商 URL 無效，僅支援 http/https",
         "fillKeyFirst": "請先填寫 API 金鑰",
         "testFailed": "測試失敗",
         "testFailedRetry": "測試失敗，請重試",

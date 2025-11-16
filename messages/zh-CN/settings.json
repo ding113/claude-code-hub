@@ -210,6 +210,7 @@
       },
       "apiTest": {
         "fillUrlFirst": "请先填写供应商 URL",
+        "invalidUrl": "供应商 URL 无效，仅支持 http/https",
         "fillKeyFirst": "请先填写 API 密钥",
         "testFailed": "测试失败",
         "testFailedRetry": "测试失败，请重试",

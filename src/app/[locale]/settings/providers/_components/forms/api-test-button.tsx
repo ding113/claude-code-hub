@@ -7,6 +7,7 @@ import {
   testProviderAnthropicMessages,
   testProviderOpenAIChatCompletions,
   testProviderOpenAIResponses,
+  getUnmaskedProviderKey,
 } from "@/actions/providers";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
@@ -19,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { isValidUrl } from "@/lib/utils/validation";
 
 type ApiFormat = "anthropic-messages" | "openai-chat" | "openai-responses";
 
@@ -28,6 +30,7 @@ interface ApiTestButtonProps {
   proxyUrl?: string | null;
   proxyFallbackToDirect?: boolean;
   disabled?: boolean;
+  providerId?: number;
 }
 
 /**
@@ -44,6 +47,7 @@ export function ApiTestButton({
   proxyUrl,
   proxyFallbackToDirect = false,
   disabled = false,
+  providerId,
 }: ApiTestButtonProps) {
   const t = useTranslations("settings.providers.form.apiTest");
   const [isTesting, setIsTesting] = useState(false);
@@ -68,8 +72,8 @@ export function ApiTestButton({
       return;
     }
 
-    if (!apiKey.trim()) {
-      toast.error(t("fillKeyFirst"));
+    if (!isValidUrl(providerUrl.trim()) || !/^https?:\/\//.test(providerUrl.trim())) {
+      toast.error(t("invalidUrl"));
       return;
     }
 
@@ -77,13 +81,29 @@ export function ApiTestButton({
     setTestResult(null);
 
     try {
+      let resolvedKey = apiKey.trim();
+      if (!resolvedKey && providerId) {
+        const result = await getUnmaskedProviderKey(providerId);
+        if (result.ok && result.data?.key) {
+          resolvedKey = result.data.key;
+        } else {
+          toast.error(result.error || t("fillKeyFirst"));
+          return;
+        }
+      }
+
+      if (!resolvedKey) {
+        toast.error(t("fillKeyFirst"));
+        return;
+      }
+
       let response;
 
       switch (apiFormat) {
         case "anthropic-messages":
           response = await testProviderAnthropicMessages({
             providerUrl: providerUrl.trim(),
-            apiKey: apiKey.trim(),
+            apiKey: resolvedKey,
             model: testModel.trim() || undefined,
             proxyUrl: proxyUrl?.trim() || null,
             proxyFallbackToDirect,
@@ -93,7 +113,7 @@ export function ApiTestButton({
         case "openai-chat":
           response = await testProviderOpenAIChatCompletions({
             providerUrl: providerUrl.trim(),
-            apiKey: apiKey.trim(),
+            apiKey: resolvedKey,
             model: testModel.trim() || undefined,
             proxyUrl: proxyUrl?.trim() || null,
             proxyFallbackToDirect,
@@ -103,7 +123,7 @@ export function ApiTestButton({
         case "openai-responses":
           response = await testProviderOpenAIResponses({
             providerUrl: providerUrl.trim(),
-            apiKey: apiKey.trim(),
+            apiKey: resolvedKey,
             model: testModel.trim() || undefined,
             proxyUrl: proxyUrl?.trim() || null,
             proxyFallbackToDirect,
@@ -233,7 +253,12 @@ export function ApiTestButton({
         variant="outline"
         size="sm"
         onClick={handleTest}
-        disabled={disabled || isTesting || !providerUrl.trim() || !apiKey.trim()}
+        disabled={
+          disabled ||
+          isTesting ||
+          !providerUrl.trim() ||
+          (!apiKey.trim() && !providerId)
+        }
       >
         {getButtonContent()}
       </Button>

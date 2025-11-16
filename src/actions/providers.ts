@@ -742,38 +742,56 @@ export async function getUnmaskedProviderKey(id: number): Promise<ActionResult<{
   }
 }
 
-/**
- * 测试 Anthropic Messages API 连通性
- */
-export async function testProviderAnthropicMessages(data: {
+type ProviderApiTestArgs = {
   providerUrl: string;
   apiKey: string;
   model?: string;
   proxyUrl?: string | null;
   proxyFallbackToDirect?: boolean;
-}): Promise<
-  ActionResult<{
-    success: boolean;
-    message: string;
-    details?: {
-      responseTime?: number;
-      model?: string;
-      usage?: {
-        input_tokens: number;
-        output_tokens: number;
+};
+
+type ProviderApiTestResult = ActionResult<
+  | {
+      success: true;
+      message: string;
+      details?: {
+        responseTime?: number;
+        model?: string;
+        usage?: Record<string, unknown>;
+        content?: string;
       };
+    }
+  | {
+      success: false;
+      message: string;
+      details?: {
+        responseTime?: number;
+        error?: string;
+      };
+    }
+>;
+
+async function executeProviderApiTest(
+  data: ProviderApiTestArgs,
+  options: {
+    path: string;
+    defaultModel: string;
+    headers: (apiKey: string) => Record<string, string>;
+    body: (model: string) => unknown;
+    successMessage: string;
+    extract: (result: any) => {
+      model?: string;
+      usage?: Record<string, unknown>;
       content?: string;
-      error?: string;
     };
-  }>
-> {
+  }
+): Promise<ProviderApiTestResult> {
   try {
     const session = await getSession();
     if (!session || session.user.role !== "admin") {
       return { ok: false, error: "无权限执行此操作" };
     }
 
-    // 验证代理 URL 格式
     if (data.proxyUrl && !isValidProxyUrl(data.proxyUrl)) {
       return {
         ok: true,
@@ -788,11 +806,8 @@ export async function testProviderAnthropicMessages(data: {
     }
 
     const startTime = Date.now();
-
-    // 导入代理工厂函数
     const { createProxyAgentForProvider } = await import("@/lib/proxy-agent");
 
-    // 构造临时 Provider 对象（用于创建代理 agent）
     const tempProvider = {
       id: -1,
       proxyUrl: data.proxyUrl,
@@ -800,40 +815,27 @@ export async function testProviderAnthropicMessages(data: {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any;
 
-    // 构建请求 URL
-    const url = data.providerUrl.replace(/\/$/, "") + "/v1/messages";
-    const model = data.model || "claude-3-5-sonnet-20241022";
+    const url = data.providerUrl.replace(/\/$/, "") + options.path;
+    const model = data.model || options.defaultModel;
 
     try {
-      // 创建代理配置
       const proxyConfig = createProxyAgentForProvider(tempProvider, url);
 
-      // 扩展 RequestInit 类型
       interface UndiciFetchOptions extends RequestInit {
         dispatcher?: unknown;
       }
 
       const init: UndiciFetchOptions = {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "anthropic-version": "2023-06-01",
-          "x-api-key": data.apiKey,
-        },
-        body: JSON.stringify({
-          model,
-          max_tokens: 100,
-          messages: [{ role: "user", content: "Hello" }],
-        }),
-        signal: AbortSignal.timeout(30000), // 30 秒超时
+        headers: options.headers(data.apiKey),
+        body: JSON.stringify(options.body(model)),
+        signal: AbortSignal.timeout(30000),
       };
 
-      // 应用代理配置
       if (proxyConfig) {
         init.dispatcher = proxyConfig.agent;
       }
 
-      // 发起测试请求
       const response = await fetch(url, init);
       const responseTime = Date.now() - startTime;
 
@@ -844,7 +846,6 @@ export async function testProviderAnthropicMessages(data: {
           const errorJson = JSON.parse(errorText);
           errorMessage = errorJson.error?.message || errorJson.message || errorMessage;
         } catch {
-          // 解析失败，使用原始文本
           errorMessage = errorText.substring(0, 200) || errorMessage;
         }
 
@@ -862,17 +863,16 @@ export async function testProviderAnthropicMessages(data: {
       }
 
       const result = await response.json();
+      const extracted = options.extract(result);
 
       return {
         ok: true,
         data: {
           success: true,
-          message: "Anthropic Messages API 测试成功",
+          message: options.successMessage,
           details: {
             responseTime,
-            model: result.model,
-            usage: result.usage,
-            content: result.content?.[0]?.text?.substring(0, 100),
+            ...extracted,
           },
         },
       };
@@ -893,294 +893,90 @@ export async function testProviderAnthropicMessages(data: {
       };
     }
   } catch (error) {
-    logger.error("测试 Anthropic Messages API 失败:", error);
+    logger.error("测试供应商 API 失败:", error);
     const message = error instanceof Error ? error.message : "测试失败";
     return { ok: false, error: message };
   }
+}
+
+/**
+ * 测试 Anthropic Messages API 连通性
+ */
+export async function testProviderAnthropicMessages(
+  data: ProviderApiTestArgs
+): Promise<ProviderApiTestResult> {
+  return executeProviderApiTest(data, {
+    path: "/v1/messages",
+    defaultModel: "claude-3-5-sonnet-20241022",
+    headers: (apiKey) => ({
+      "Content-Type": "application/json",
+      "anthropic-version": "2023-06-01",
+      "x-api-key": apiKey,
+    }),
+    body: (model) => ({
+      model,
+      max_tokens: 100,
+      messages: [{ role: "user", content: "Hello" }],
+    }),
+    successMessage: "Anthropic Messages API 测试成功",
+    extract: (result) => ({
+      model: result?.model,
+      usage: result?.usage,
+      content: result?.content?.[0]?.text?.substring(0, 100),
+    }),
+  });
 }
 
 /**
  * 测试 OpenAI Chat Completions API 连通性
  */
-export async function testProviderOpenAIChatCompletions(data: {
-  providerUrl: string;
-  apiKey: string;
-  model?: string;
-  proxyUrl?: string | null;
-  proxyFallbackToDirect?: boolean;
-}): Promise<
-  ActionResult<{
-    success: boolean;
-    message: string;
-    details?: {
-      responseTime?: number;
-      model?: string;
-      usage?: {
-        prompt_tokens: number;
-        completion_tokens: number;
-        total_tokens: number;
-      };
-      content?: string;
-      error?: string;
-    };
-  }>
-> {
-  try {
-    const session = await getSession();
-    if (!session || session.user.role !== "admin") {
-      return { ok: false, error: "无权限执行此操作" };
-    }
-
-    // 验证代理 URL 格式
-    if (data.proxyUrl && !isValidProxyUrl(data.proxyUrl)) {
-      return {
-        ok: true,
-        data: {
-          success: false,
-          message: "代理地址格式无效",
-          details: {
-            error: "支持格式: http://, https://, socks5://, socks4://",
-          },
-        },
-      };
-    }
-
-    const startTime = Date.now();
-
-    // 导入代理工厂函数
-    const { createProxyAgentForProvider } = await import("@/lib/proxy-agent");
-
-    // 构造临时 Provider 对象（用于创建代理 agent）
-    const tempProvider = {
-      id: -1,
-      proxyUrl: data.proxyUrl,
-      proxyFallbackToDirect: data.proxyFallbackToDirect ?? false,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any;
-
-    // 构建请求 URL
-    const url = data.providerUrl.replace(/\/$/, "") + "/v1/chat/completions";
-    const model = data.model || "gpt-4.1";
-
-    try {
-      // 创建代理配置
-      const proxyConfig = createProxyAgentForProvider(tempProvider, url);
-
-      // 扩展 RequestInit 类型
-      interface UndiciFetchOptions extends RequestInit {
-        dispatcher?: unknown;
-      }
-
-      const init: UndiciFetchOptions = {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${data.apiKey}`,
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: "developer", content: "你是一个有帮助的助手。" },
-            { role: "user", content: "你好" },
-          ],
-        }),
-        signal: AbortSignal.timeout(30000), // 30 秒超时
-      };
-
-      // 应用代理配置
-      if (proxyConfig) {
-        init.dispatcher = proxyConfig.agent;
-      }
-
-      // 发起测试请求
-      const response = await fetch(url, init);
-      const responseTime = Date.now() - startTime;
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        let errorMessage = `HTTP ${response.status}`;
-        try {
-          const errorJson = JSON.parse(errorText);
-          errorMessage = errorJson.error?.message || errorJson.message || errorMessage;
-        } catch {
-          // 解析失败，使用原始文本
-          errorMessage = errorText.substring(0, 200) || errorMessage;
-        }
-
-        return {
-          ok: true,
-          data: {
-            success: false,
-            message: `API 返回错误: ${errorMessage}`,
-            details: {
-              responseTime,
-              error: errorMessage,
-            },
-          },
-        };
-      }
-
-      const result = await response.json();
-
-      return {
-        ok: true,
-        data: {
-          success: true,
-          message: "OpenAI Chat Completions API 测试成功",
-          details: {
-            responseTime,
-            model: result.model,
-            usage: result.usage,
-            content: result.choices?.[0]?.message?.content?.substring(0, 100),
-          },
-        },
-      };
-    } catch (error) {
-      const responseTime = Date.now() - startTime;
-      const err = error as Error & { code?: string };
-
-      return {
-        ok: true,
-        data: {
-          success: false,
-          message: `连接失败: ${err.message}`,
-          details: {
-            responseTime,
-            error: err.message,
-          },
-        },
-      };
-    }
-  } catch (error) {
-    logger.error("测试 OpenAI Chat Completions API 失败:", error);
-    const message = error instanceof Error ? error.message : "测试失败";
-    return { ok: false, error: message };
-  }
+export async function testProviderOpenAIChatCompletions(
+  data: ProviderApiTestArgs
+): Promise<ProviderApiTestResult> {
+  return executeProviderApiTest(data, {
+    path: "/v1/chat/completions",
+    defaultModel: "gpt-4.1",
+    headers: (apiKey) => ({
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    }),
+    body: (model) => ({
+      model,
+      messages: [
+        { role: "developer", content: "你是一个有帮助的助手。" },
+        { role: "user", content: "你好" },
+      ],
+    }),
+    successMessage: "OpenAI Chat Completions API 测试成功",
+    extract: (result) => ({
+      model: result?.model,
+      usage: result?.usage,
+      content: result?.choices?.[0]?.message?.content?.substring(0, 100),
+    }),
+  });
 }
 
 /**
  * 测试 OpenAI Responses API 连通性
  */
-export async function testProviderOpenAIResponses(data: {
-  providerUrl: string;
-  apiKey: string;
-  model?: string;
-  proxyUrl?: string | null;
-  proxyFallbackToDirect?: boolean;
-}): Promise<
-  ActionResult<{
-    success: boolean;
-    message: string;
-    details?: {
-      responseTime?: number;
-      model?: string;
-      usage?: {
-        input_tokens: number;
-        output_tokens: number;
-        total_tokens: number;
-      };
-      content?: string;
-      error?: string;
-    };
-  }>
-> {
-  try {
-    const session = await getSession();
-    if (!session || session.user.role !== "admin") {
-      return { ok: false, error: "无权限执行此操作" };
-    }
-
-    // 验证代理 URL 格式
-    if (data.proxyUrl && !isValidProxyUrl(data.proxyUrl)) {
-      return {
-        ok: true,
-        data: {
-          success: false,
-          message: "代理地址格式无效",
-          details: {
-            error: "支持格式: http://, https://, socks5://, socks4://",
-          },
-        },
-      };
-    }
-
-    const startTime = Date.now();
-
-    // 导入代理工厂函数
-    const { createProxyAgentForProvider } = await import("@/lib/proxy-agent");
-
-    // 构造临时 Provider 对象（用于创建代理 agent）
-    const tempProvider = {
-      id: -1,
-      proxyUrl: data.proxyUrl,
-      proxyFallbackToDirect: data.proxyFallbackToDirect ?? false,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any;
-
-    // 构建请求 URL
-    const url = data.providerUrl.replace(/\/$/, "") + "/v1/responses";
-    const model = data.model || "gpt-4.1";
-
-    try {
-      // 创建代理配置
-      const proxyConfig = createProxyAgentForProvider(tempProvider, url);
-
-      // 扩展 RequestInit 类型
-      interface UndiciFetchOptions extends RequestInit {
-        dispatcher?: unknown;
-      }
-
-      const init: UndiciFetchOptions = {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${data.apiKey}`,
-        },
-        body: JSON.stringify({
-          model,
-          input: "讲一个简短的故事",
-        }),
-        signal: AbortSignal.timeout(30000), // 30 秒超时
-      };
-
-      // 应用代理配置
-      if (proxyConfig) {
-        init.dispatcher = proxyConfig.agent;
-      }
-
-      // 发起测试请求
-      const response = await fetch(url, init);
-      const responseTime = Date.now() - startTime;
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        let errorMessage = `HTTP ${response.status}`;
-        try {
-          const errorJson = JSON.parse(errorText);
-          errorMessage = errorJson.error?.message || errorJson.message || errorMessage;
-        } catch {
-          // 解析失败，使用原始文本
-          errorMessage = errorText.substring(0, 200) || errorMessage;
-        }
-
-        return {
-          ok: true,
-          data: {
-            success: false,
-            message: `API 返回错误: ${errorMessage}`,
-            details: {
-              responseTime,
-              error: errorMessage,
-            },
-          },
-        };
-      }
-
-      const result = await response.json();
-
-      // 提取内容
+export async function testProviderOpenAIResponses(
+  data: ProviderApiTestArgs
+): Promise<ProviderApiTestResult> {
+  return executeProviderApiTest(data, {
+    path: "/v1/responses",
+    defaultModel: "gpt-4.1",
+    headers: (apiKey) => ({
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    }),
+    body: (model) => ({
+      model,
+      input: "讲一个简短的故事",
+    }),
+    successMessage: "OpenAI Responses API 测试成功",
+    extract: (result) => {
       let content: string | undefined;
-      if (result.output && Array.isArray(result.output)) {
+      if (result?.output && Array.isArray(result.output)) {
         const firstOutput = result.output[0];
         if (firstOutput?.type === "message" && Array.isArray(firstOutput.content)) {
           const textContent = firstOutput.content.find(
@@ -1191,37 +987,10 @@ export async function testProviderOpenAIResponses(data: {
       }
 
       return {
-        ok: true,
-        data: {
-          success: true,
-          message: "OpenAI Responses API 测试成功",
-          details: {
-            responseTime,
-            model: result.model,
-            usage: result.usage,
-            content,
-          },
-        },
+        model: result?.model,
+        usage: result?.usage,
+        content,
       };
-    } catch (error) {
-      const responseTime = Date.now() - startTime;
-      const err = error as Error & { code?: string };
-
-      return {
-        ok: true,
-        data: {
-          success: false,
-          message: `连接失败: ${err.message}`,
-          details: {
-            responseTime,
-            error: err.message,
-          },
-        },
-      };
-    }
-  } catch (error) {
-    logger.error("测试 OpenAI Responses API 失败:", error);
-    const message = error instanceof Error ? error.message : "测试失败";
-    return { ok: false, error: message };
-  }
+    },
+  });
 }
