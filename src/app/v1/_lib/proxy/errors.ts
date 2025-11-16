@@ -164,18 +164,6 @@ export enum ErrorCategory {
   NON_RETRYABLE_CLIENT_ERROR, // 客户端输入错误（Prompt 超限、内容过滤、PDF 限制、Thinking 格式、参数缺失、非法请求）→ 不计入熔断器 + 不重试 + 直接返回
 }
 
-/**
- * 预编译的不可重试客户端错误正则表达式数组
- * 用于高性能的白名单错误匹配，避免每次调用时重新编译正则
- *
- * 包含 6 类错误模式：
- * 1. Prompt 长度超限
- * 2. 内容过滤拦截
- * 3. PDF 页数限制
- * 4. Thinking 格式错误
- * 5. 参数缺失/验证错误
- * 6. 非法请求
- */
 const NON_RETRYABLE_ERROR_PATTERNS = [
   /prompt is too long: \d+ tokens > \d+ maximum/i,
   /Request blocked by content filter|permission_error.*content filter/i,
@@ -183,6 +171,7 @@ const NON_RETRYABLE_ERROR_PATTERNS = [
   /thinking.*Input tag.*does not match|Expected.*thinking.*but found|thinking.*must start with a thinking block/i,
   /Field required|required field|missing required/i,
   /非法请求|illegal request|invalid request/i,
+  /A maximum of \d+ blocks? with cache_control may be provided/i,
 ];
 
 /**
@@ -191,36 +180,11 @@ const NON_RETRYABLE_ERROR_PATTERNS = [
  * 采用白名单模式，检测明确不应重试的客户端错误（如输入超限、内容过滤等），
  * 这些错误即使重试也不会成功，应直接返回给客户端，且不计入熔断器。
  *
- * 检测的 6 类错误：
- * 1. Prompt 长度超限：`prompt is too long: {tokens} tokens > {max} maximum`
- * 2. 内容过滤拦截：`Request blocked by content filter` 或 `permission_error.*content filter`
- * 3. PDF 页数限制：`A maximum of {n} PDF pages may be provided`
- * 4. Thinking 格式错误：
- *    - `thinking: Input tag 'X' found using 'type' does not match any of the expected tags`
- *    - `Expected.*thinking.*but found`
- *    - `thinking.*must start with a thinking block`
- * 5. 参数缺失/验证错误：`Field required`、`required field`、`missing required`
- * 6. 非法请求：`非法请求`、`illegal request`、`invalid request`
- *
+
  * @param error - 错误对象
  * @returns 是否为不可重试的客户端错误
  *
- * @example
- * isNonRetryableClientError(new ProxyError('prompt is too long: 207406 tokens > 200000 maximum', 400))
- * // => true
- *
- * @example
- * isNonRetryableClientError(new ProxyError('max_tokens: Field required', 400))
- * // => true
- *
- * @example
- * isNonRetryableClientError(new ProxyError('非法请求', 400))
- * // => true
- *
- * @example
- * isNonRetryableClientError(new ProxyError('Internal server error', 500))
- * // => false
- */
+
 export function isNonRetryableClientError(error: Error): boolean {
   // 提取错误消息
   let message = error.message;
