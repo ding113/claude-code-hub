@@ -8,7 +8,8 @@ import {
   integer,
   numeric,
   jsonb,
-  index
+  index,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
 
@@ -229,6 +230,29 @@ export const modelPrices = pgTable('model_prices', {
   // 基础索引
   modelPricesModelNameIdx: index('idx_model_prices_model_name').on(table.modelName),
   modelPricesCreatedAtIdx: index('idx_model_prices_created_at').on(table.createdAt.desc()),
+}));
+
+// Error Rules table
+export const errorRules = pgTable('error_rules', {
+  id: serial('id').primaryKey(),
+  pattern: text('pattern').notNull(),
+  matchType: varchar('match_type', { length: 20 })
+    .notNull()
+    .default('regex')
+    .$type<'regex' | 'contains' | 'exact'>(),
+  category: varchar('category', { length: 50 }).notNull(),
+  description: text('description'),
+  isEnabled: boolean('is_enabled').notNull().default(true),
+  isDefault: boolean('is_default').notNull().default(false),
+  priority: integer('priority').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  // 状态与类型查询优化
+  errorRulesEnabledIdx: index('idx_error_rules_enabled').on(table.isEnabled, table.priority),
+  errorRulesPatternUniqueIdx: uniqueIndex('unique_pattern').on(table.pattern),
+  errorRulesCategoryIdx: index('idx_category').on(table.category),
+  errorRulesMatchTypeIdx: index('idx_match_type').on(table.matchType),
 }));
 
 // Sensitive Words table

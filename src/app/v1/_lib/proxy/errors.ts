@@ -164,17 +164,11 @@ export enum ErrorCategory {
   NON_RETRYABLE_CLIENT_ERROR, // 客户端输入错误（Prompt 超限、内容过滤、PDF 限制、Thinking 格式、参数缺失/额外参数、非法请求）→ 不计入熔断器 + 不重试 + 直接返回
 }
 
-const NON_RETRYABLE_ERROR_PATTERNS = [
-  /prompt is too long: \d+ tokens > \d+ maximum/i,
-  /Request blocked by content filter|permission_error.*content filter/i,
-  /A maximum of \d+ PDF pages may be provided/i,
-  /thinking.*Input tag.*does not match|Expected.*thinking.*but found|thinking.*must start with a thinking block/i,
-  /Field required|required field|missing required|extra inputs.*not permitted/i,
-  /非法请求|illegal request|invalid request/i,
-  /A maximum of \d+ blocks? with cache_control may be provided/i,
-];
-
 export function isNonRetryableClientError(error: Error): boolean {
+  // 动态导入 errorRuleDetector 避免循环依赖
+  // 使用延迟加载确保初始化顺序正确
+  const { errorRuleDetector } = require("@/lib/error-rule-detector");
+
   // 提取错误消息
   let message = error.message;
 
@@ -201,8 +195,8 @@ export function isNonRetryableClientError(error: Error): boolean {
     }
   }
 
-  // 使用预编译正则数组进行匹配，短路优化（第一个匹配成功立即返回）
-  return NON_RETRYABLE_ERROR_PATTERNS.some((pattern) => pattern.test(message));
+  // 使用 ErrorRuleDetector 检测规则，支持数据库驱动的动态规则
+  return errorRuleDetector.detect(message).matched;
 }
 
 /**

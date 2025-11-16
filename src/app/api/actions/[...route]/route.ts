@@ -11,6 +11,7 @@
  *   - OpenAPI JSON: GET /api/actions/openapi.json
  */
 
+import "@/lib/polyfills/file";
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { swaggerUI } from "@hono/swagger-ui";
 import { apiReference } from "@scalar/hono-api-reference";

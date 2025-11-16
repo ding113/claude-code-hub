@@ -127,6 +127,13 @@
       "when": 1762772559167,
       "tag": "0017_sudden_bruce_banner",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1763308745315,
+      "tag": "0018_natural_sasquatch",
+      "breakpoints": true
     }
   ]
 }
