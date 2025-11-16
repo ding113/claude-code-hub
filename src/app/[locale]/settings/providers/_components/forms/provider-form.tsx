@@ -32,6 +32,7 @@ import { toast } from "sonner";
 import { ModelMultiSelect } from "../model-multi-select";
 import { ModelRedirectEditor } from "../model-redirect-editor";
 import { ProxyTestButton } from "./proxy-test-button";
+import { ApiTestButton } from "./api-test-button";
 import { ChevronDown } from "lucide-react";
 import { useTranslations } from "next-intl";
 
@@ -122,12 +123,13 @@ export function ProviderForm({
     useState<CodexInstructionsStrategy>(sourceProvider?.codexInstructionsStrategy ?? "auto");
 
   // 折叠区域状态管理
-  type SectionKey = "routing" | "rateLimit" | "circuitBreaker" | "proxy" | "codexStrategy";
+  type SectionKey = "routing" | "rateLimit" | "circuitBreaker" | "proxy" | "apiTest" | "codexStrategy";
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
     routing: false,
     rateLimit: false,
     circuitBreaker: false,
     proxy: false,
+    apiTest: false,
     codexStrategy: false,
   });
 
@@ -137,7 +139,7 @@ export function ProviderForm({
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        setOpenSections(parsed);
+        setOpenSections((prev) => ({ ...prev, ...parsed }));
       } catch (e) {
         console.error("Failed to parse saved sections state:", e);
       }
@@ -170,6 +172,7 @@ export function ProviderForm({
       rateLimit: true,
       circuitBreaker: true,
       proxy: true,
+      apiTest: true,
       codexStrategy: true,
     });
   };
@@ -181,6 +184,7 @@ export function ProviderForm({
       rateLimit: false,
       circuitBreaker: false,
       proxy: false,
+      apiTest: false,
       codexStrategy: false,
     });
   };
@@ -1011,6 +1015,55 @@ export function ProviderForm({
                   disabled={isPending || !url.trim()}
                 />
                 <p className="text-xs text-muted-foreground">{t("sections.proxy.test.desc")}</p>
+              </div>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+
+        {/* API 测试 */}
+        <Collapsible
+          open={openSections.apiTest}
+          onOpenChange={(open) => toggleSection("apiTest")}
+        >
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="flex items-center justify-between w-full py-4 border-t hover:bg-muted/50 transition-colors"
+              disabled={isPending}
+            >
+              <div className="flex items-center gap-2">
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${
+                    openSections.apiTest ? "rotate-180" : ""
+                  }`}
+                />
+                <span className="text-sm font-medium">{t("sections.apiTest.title")}</span>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {t("sections.apiTest.summary")}
+              </span>
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-4 pb-4">
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">
+                  {t("sections.apiTest.desc")}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>{t("sections.apiTest.testLabel")}</Label>
+                <ApiTestButton
+                  providerUrl={url}
+                  apiKey={key}
+                  proxyUrl={proxyUrl}
+                  proxyFallbackToDirect={proxyFallbackToDirect}
+                  disabled={isPending || !url.trim()}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t("sections.apiTest.notice")}
+                </p>
               </div>
             </div>
           </CollapsibleContent>
