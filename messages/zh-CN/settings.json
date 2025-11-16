@@ -208,6 +208,31 @@
         "proxyError": "代理错误:",
         "networkError": "网络错误:"
       },
+      "apiTest": {
+        "fillUrlFirst": "请先填写供应商 URL",
+        "invalidUrl": "供应商 URL 无效，仅支持 http/https",
+        "fillKeyFirst": "请先填写 API 密钥",
+        "testFailed": "测试失败",
+        "testFailedRetry": "测试失败，请重试",
+        "noResult": "测试成功但未返回结果",
+        "testSuccess": "API 测试成功",
+        "testApi": "测试 API",
+        "testing": "测试中...",
+        "apiFormat": "API 格式",
+        "selectApiFormat": "选择要测试的 API 格式",
+        "apiFormatDesc": "选择供应商支持的 API 格式进行连通性测试",
+        "formatAnthropicMessages": "Anthropic Messages API (v1/messages)",
+        "formatOpenAIChat": "OpenAI Chat Completions API (v1/chat/completions)",
+        "formatOpenAIResponses": "OpenAI Responses API (v1/responses)",
+        "testModel": "测试模型",
+        "testModelDesc": "留空使用默认模型进行测试",
+        "model": "模型",
+        "responseTime": "响应时间",
+        "usage": "Token 用量",
+        "response": "响应内容",
+        "error": "错误信息",
+        "unknown": "未知"
+      },
       "modelSelect": {
         "allowAllModels": "允许所有 {type} 模型",
         "selectedCount": "已选择 {count} 个模型",
@@ -595,6 +620,13 @@
             "label": "连接测试",
             "desc": "测试通过配置的代理访问供应商 URL（使用 HEAD 请求，不消耗额度）"
           }
+        },
+        "apiTest": {
+          "title": "API 测试",
+          "summary": "测试模型连通性",
+          "desc": "测试供应商 API 的连通性，验证配置是否正确。支持 Anthropic Messages、OpenAI Chat Completions 和 OpenAI Responses 三种 API 格式。",
+          "testLabel": "测试 API",
+          "notice": "注意：测试将向供应商发送真实 API 请求（非流式），可能消耗少量额度。请先确认供应商 URL 和 API 密钥正确。"
         },
         "codexStrategy": {
           "title": "Codex Instructions 策略",

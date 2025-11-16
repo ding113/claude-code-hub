@@ -575,6 +575,31 @@
     "editProvider": "Edit Provider",
     "enabledStatus": "enabled",
     "form": {
+      "apiTest": {
+        "fillUrlFirst": "Please fill in provider URL first",
+        "invalidUrl": "Provider URL is invalid (http/https only)",
+        "fillKeyFirst": "Please fill in API key first",
+        "testFailed": "Test failed",
+        "testFailedRetry": "Test failed, please retry",
+        "noResult": "Test succeeded but no result returned",
+        "testSuccess": "API test succeeded",
+        "testApi": "Test API",
+        "testing": "Testing...",
+        "apiFormat": "API format",
+        "selectApiFormat": "Select API format to test",
+        "apiFormatDesc": "Choose the API format supported by the provider to verify connectivity",
+        "formatAnthropicMessages": "Anthropic Messages API (v1/messages)",
+        "formatOpenAIChat": "OpenAI Chat Completions API (v1/chat/completions)",
+        "formatOpenAIResponses": "OpenAI Responses API (v1/responses)",
+        "testModel": "Test model",
+        "testModelDesc": "Leave empty to use default model",
+        "model": "Model",
+        "responseTime": "Response time",
+        "usage": "Token usage",
+        "response": "Response preview",
+        "error": "Error message",
+        "unknown": "Unknown"
+      },
       "proxyTest": {
         "fillUrlFirst": "Please fill in provider URL first",
         "testFailed": "Test failed",
@@ -983,6 +1008,13 @@
             "label": "Connectivity Test",
             "desc": "Test accessing provider URL via proxy (HEAD request, no credits consumed)"
           }
+        },
+        "apiTest": {
+          "title": "API Connectivity Test",
+          "summary": "Verify model connectivity",
+          "desc": "Send sample requests to validate provider connectivity. Supports Anthropic Messages, OpenAI Chat Completions, and OpenAI Responses formats.",
+          "testLabel": "Run Test",
+          "notice": "Note: This will send real non-streaming API requests and may consume small quota. Please confirm provider URL and API key first."
         },
         "codexStrategy": {
           "title": "Codex Instructions Policy",

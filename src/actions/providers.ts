@@ -820,3 +820,256 @@ export async function getUnmaskedProviderKey(id: number): Promise<ActionResult<{
     return { ok: false, error: message };
   }
 }
+
+type ProviderApiTestArgs = {
+  providerUrl: string;
+  apiKey: string;
+  model?: string;
+  proxyUrl?: string | null;
+  proxyFallbackToDirect?: boolean;
+};
+
+type ProviderApiTestResult = ActionResult<
+  | {
+      success: true;
+      message: string;
+      details?: {
+        responseTime?: number;
+        model?: string;
+        usage?: Record<string, unknown>;
+        content?: string;
+      };
+    }
+  | {
+      success: false;
+      message: string;
+      details?: {
+        responseTime?: number;
+        error?: string;
+      };
+    }
+>;
+
+async function executeProviderApiTest(
+  data: ProviderApiTestArgs,
+  options: {
+    path: string;
+    defaultModel: string;
+    headers: (apiKey: string) => Record<string, string>;
+    body: (model: string) => unknown;
+    successMessage: string;
+    extract: (result: any) => {
+      model?: string;
+      usage?: Record<string, unknown>;
+      content?: string;
+    };
+  }
+): Promise<ProviderApiTestResult> {
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return { ok: false, error: "无权限执行此操作" };
+    }
+
+    if (data.proxyUrl && !isValidProxyUrl(data.proxyUrl)) {
+      return {
+        ok: true,
+        data: {
+          success: false,
+          message: "代理地址格式无效",
+          details: {
+            error: "支持格式: http://, https://, socks5://, socks4://",
+          },
+        },
+      };
+    }
+
+    const startTime = Date.now();
+    const { createProxyAgentForProvider } = await import("@/lib/proxy-agent");
+
+    const tempProvider = {
+      id: -1,
+      proxyUrl: data.proxyUrl,
+      proxyFallbackToDirect: data.proxyFallbackToDirect ?? false,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+
+    const url = data.providerUrl.replace(/\/$/, "") + options.path;
+    const model = data.model || options.defaultModel;
+
+    try {
+      const proxyConfig = createProxyAgentForProvider(tempProvider, url);
+
+      interface UndiciFetchOptions extends RequestInit {
+        dispatcher?: unknown;
+      }
+
+      const init: UndiciFetchOptions = {
+        method: "POST",
+        headers: options.headers(data.apiKey),
+        body: JSON.stringify(options.body(model)),
+        signal: AbortSignal.timeout(30000),
+      };
+
+      if (proxyConfig) {
+        init.dispatcher = proxyConfig.agent;
+      }
+
+      const response = await fetch(url, init);
+      const responseTime = Date.now() - startTime;
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMessage = `HTTP ${response.status}`;
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMessage = errorJson.error?.message || errorJson.message || errorMessage;
+        } catch {
+          errorMessage = errorText.substring(0, 200) || errorMessage;
+        }
+
+        return {
+          ok: true,
+          data: {
+            success: false,
+            message: `API 返回错误: ${errorMessage}`,
+            details: {
+              responseTime,
+              error: errorMessage,
+            },
+          },
+        };
+      }
+
+      const result = await response.json();
+      const extracted = options.extract(result);
+
+      return {
+        ok: true,
+        data: {
+          success: true,
+          message: options.successMessage,
+          details: {
+            responseTime,
+            ...extracted,
+          },
+        },
+      };
+    } catch (error) {
+      const responseTime = Date.now() - startTime;
+      const err = error as Error & { code?: string };
+
+      return {
+        ok: true,
+        data: {
+          success: false,
+          message: `连接失败: ${err.message}`,
+          details: {
+            responseTime,
+            error: err.message,
+          },
+        },
+      };
+    }
+  } catch (error) {
+    logger.error("测试供应商 API 失败:", error);
+    const message = error instanceof Error ? error.message : "测试失败";
+    return { ok: false, error: message };
+  }
+}
+
+/**
+ * 测试 Anthropic Messages API 连通性
+ */
+export async function testProviderAnthropicMessages(
+  data: ProviderApiTestArgs
+): Promise<ProviderApiTestResult> {
+  return executeProviderApiTest(data, {
+    path: "/v1/messages",
+    defaultModel: "claude-3-5-sonnet-20241022",
+    headers: (apiKey) => ({
+      "Content-Type": "application/json",
+      "anthropic-version": "2023-06-01",
+      "x-api-key": apiKey,
+    }),
+    body: (model) => ({
+      model,
+      max_tokens: 100,
+      messages: [{ role: "user", content: "Hello" }],
+    }),
+    successMessage: "Anthropic Messages API 测试成功",
+    extract: (result) => ({
+      model: result?.model,
+      usage: result?.usage,
+      content: result?.content?.[0]?.text?.substring(0, 100),
+    }),
+  });
+}
+
+/**
+ * 测试 OpenAI Chat Completions API 连通性
+ */
+export async function testProviderOpenAIChatCompletions(
+  data: ProviderApiTestArgs
+): Promise<ProviderApiTestResult> {
+  return executeProviderApiTest(data, {
+    path: "/v1/chat/completions",
+    defaultModel: "gpt-4.1",
+    headers: (apiKey) => ({
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    }),
+    body: (model) => ({
+      model,
+      messages: [
+        { role: "developer", content: "你是一个有帮助的助手。" },
+        { role: "user", content: "你好" },
+      ],
+    }),
+    successMessage: "OpenAI Chat Completions API 测试成功",
+    extract: (result) => ({
+      model: result?.model,
+      usage: result?.usage,
+      content: result?.choices?.[0]?.message?.content?.substring(0, 100),
+    }),
+  });
+}
+
+/**
+ * 测试 OpenAI Responses API 连通性
+ */
+export async function testProviderOpenAIResponses(
+  data: ProviderApiTestArgs
+): Promise<ProviderApiTestResult> {
+  return executeProviderApiTest(data, {
+    path: "/v1/responses",
+    defaultModel: "gpt-4.1",
+    headers: (apiKey) => ({
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    }),
+    body: (model) => ({
+      model,
+      input: "讲一个简短的故事",
+    }),
+    successMessage: "OpenAI Responses API 测试成功",
+    extract: (result) => {
+      let content: string | undefined;
+      if (result?.output && Array.isArray(result.output)) {
+        const firstOutput = result.output[0];
+        if (firstOutput?.type === "message" && Array.isArray(firstOutput.content)) {
+          const textContent = firstOutput.content.find(
+            (c: { type: string }) => c.type === "output_text"
+          );
+          content = textContent?.text?.substring(0, 100);
+        }
+      }
+
+      return {
+        model: result?.model,
+        usage: result?.usage,
+        content,
+      };
+    },
+  });
+}
