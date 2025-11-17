@@ -36,6 +36,15 @@ export async function register() {
       const { ensurePriceTable } = await import("@/lib/price-sync/seed-initializer");
       await ensurePriceTable();
 
+      // 初始化默认错误规则
+      const { initializeDefaultErrorRules } = await import("@/repository/error-rules");
+      try {
+        await initializeDefaultErrorRules();
+        logger.info("Default error rules initialized successfully");
+      } catch (error) {
+        logger.error("Failed to initialize default error rules:", error);
+      }
+
       // 初始化日志清理任务队列（如果启用）
       const { scheduleAutoCleanup } = await import("@/lib/log-cleanup/cleanup-queue");
       await scheduleAutoCleanup();
@@ -62,6 +71,15 @@ export async function register() {
       // 初始化价格表（如果数据库为空）
       const { ensurePriceTable } = await import("@/lib/price-sync/seed-initializer");
       await ensurePriceTable();
+
+      // 初始化默认错误规则
+      const { initializeDefaultErrorRules } = await import("@/repository/error-rules");
+      try {
+        await initializeDefaultErrorRules();
+        logger.info("Default error rules initialized successfully");
+      } catch (error) {
+        logger.error("Failed to initialize default error rules:", error);
+      }
 
       // ⚠️ 开发环境禁用通知队列（Bull + Turbopack 不兼容）
       // 通知功能仅在生产环境可用，开发环境需要手动测试
