@@ -210,7 +210,7 @@ class ErrorRuleDetector {
     }
 
     // 3. 正则匹配（最慢，但最灵活）
-    for (const { pattern, category, description } of this.regexPatterns) {
+    for (const { pattern, category } of this.regexPatterns) {
       if (pattern.test(errorMessage)) {
         return {
           matched: true,

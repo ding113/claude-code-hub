@@ -17,7 +17,6 @@ import { getProviders } from "@/actions/providers";
 import { useTranslations } from "next-intl";
 import { Calendar, X } from "lucide-react";
 import { format } from "date-fns";
-import { zhCN } from "date-fns/locale";
 
 export interface RateLimitFiltersProps {
   initialFilters: RateLimitEventFilters;
@@ -100,12 +99,6 @@ export function RateLimitFilters({
     setStartTime(defaultFilters.start_time);
     setEndTime(defaultFilters.end_time);
     onFiltersChange(defaultFilters);
-  };
-
-  // 格式化日期显示
-  const formatDateDisplay = (date: Date | undefined) => {
-    if (!date) return "";
-    return format(date, "yyyy-MM-dd HH:mm", { locale: zhCN });
   };
 
   return (

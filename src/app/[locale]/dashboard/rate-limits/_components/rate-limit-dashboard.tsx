@@ -19,7 +19,7 @@ export interface RateLimitDashboardProps {
  * 限流事件统计仪表板
  * 包含过滤器和三个可视化组件
  */
-export function RateLimitDashboard({ currencyCode = "USD" }: RateLimitDashboardProps) {
+export function RateLimitDashboard({}: RateLimitDashboardProps) {
   const t = useTranslations("dashboard.rateLimits");
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -52,7 +52,7 @@ export function RateLimitDashboard({ currencyCode = "USD" }: RateLimitDashboardP
   // 初始加载
   React.useEffect(() => {
     loadStats(filters);
-  }, []);
+  }, [filters, loadStats]);
 
   // 处理过滤器变化
   const handleFiltersChange = (newFilters: RateLimitEventFilters) => {

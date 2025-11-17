@@ -30,7 +30,7 @@ export function RateLimitTypeBreakdown({ data }: RateLimitTypeBreakdownProps) {
   // 转换数据为图表格式
   const chartData = React.useMemo(() => {
     return Object.entries(data)
-      .filter(([_, count]) => count > 0)
+      .filter(([, count]) => count > 0)
       .map(([type, count]) => ({
         type: type as RateLimitType,
         count,

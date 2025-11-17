@@ -809,7 +809,7 @@ source ${shellConfig.split(" ")[0]}`}
   /**
    * 渲染 VS Code 扩展配置
    */
-  const renderVSCodeExtension = (cli: CLIConfig, os: OS) => {
+  const renderVSCodeExtension = (cli: CLIConfig) => {
     const config = cli.vsCodeExtension;
     if (!config) return null;
 
@@ -1061,7 +1061,7 @@ curl -I ${resolvedOrigin}`}
         </div>
 
         {/* VS Code 扩展配置 */}
-        {(cli.id === "claude-code" || cli.id === "codex") && renderVSCodeExtension(cli, os)}
+        {(cli.id === "claude-code" || cli.id === "codex") && renderVSCodeExtension(cli)}
 
         {/* 启动与验证 */}
         {renderStartupVerification(cli, os)}
