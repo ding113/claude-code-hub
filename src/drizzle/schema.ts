@@ -124,6 +124,22 @@ export const providers = pgTable('providers', {
   proxyUrl: varchar('proxy_url', { length: 512 }),
   proxyFallbackToDirect: boolean('proxy_fallback_to_direct').default(false),
 
+  // 超时配置（毫秒）
+  // 注意：由于 undici fetch API 的限制，无法精确分离 DNS/TCP/TLS 连接阶段和响应头接收阶段
+  // 参考：https://github.com/nodejs/undici/discussions/1313
+  // - firstByteTimeoutStreamingMs: 流式请求首字节超时（默认 30 秒，0 = 禁用）⭐ 核心
+  //   覆盖从请求开始到收到首字节的全过程：DNS + TCP + TLS + 请求发送 + 首字节接收
+  //   解决流式请求重试缓慢问题
+  // - streamingIdleTimeoutMs: 流式请求静默期超时（默认 10 秒，0 = 禁用）⭐ 核心
+  //   解决流式中途卡住问题
+  // - requestTimeoutNonStreamingMs: 非流式请求总超时（默认 600 秒，0 = 禁用）⭐ 核心
+  //   防止长请求无限挂起
+  firstByteTimeoutStreamingMs: integer('first_byte_timeout_streaming_ms').notNull().default(30000),
+  streamingIdleTimeoutMs: integer('streaming_idle_timeout_ms').notNull().default(10000),
+  requestTimeoutNonStreamingMs: integer('request_timeout_non_streaming_ms')
+    .notNull()
+    .default(600000),
+
   // 供应商官网地址（用于快速跳转管理）
   websiteUrl: text('website_url'),
   faviconUrl: text('favicon_url'),

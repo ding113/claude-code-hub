@@ -134,6 +134,13 @@
       "when": 1763308745315,
       "tag": "0018_natural_sasquatch",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1763393401417,
+      "tag": "0019_far_whirlwind",
+      "breakpoints": true
     }
   ]
 }

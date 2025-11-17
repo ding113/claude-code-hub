@@ -890,6 +890,9 @@
         "updating": "Updating...",
         "delete": "Delete"
       },
+      "common": {
+        "core": "Core"
+      },
       "sections": {
         "routing": {
           "title": "Routing",
@@ -1015,6 +1018,30 @@
             "label": "Connectivity Test",
             "desc": "Test accessing provider URL via proxy (HEAD request, no credits consumed)"
           }
+        },
+        "timeout": {
+          "title": "Timeout Configuration",
+          "summary": "First byte: {streaming}s | Stream interval: {idle}s | Non-streaming: {nonStreaming}s",
+          "desc": "Configure request timeout duration, 0 means disable timeout",
+          "streamingFirstByte": {
+            "label": "Streaming First Byte Timeout (seconds)",
+            "placeholder": "30",
+            "desc": "Streaming request first byte timeout, range 1-120 seconds, default 30 seconds",
+            "core": "true"
+          },
+          "streamingIdle": {
+            "label": "Streaming Idle Timeout (seconds)",
+            "placeholder": "10",
+            "desc": "Streaming request idle timeout, range 1-120 seconds, default 10 seconds (prevent mid-stream stalling)",
+            "core": "true"
+          },
+          "nonStreamingTotal": {
+            "label": "Non-streaming Total Timeout (seconds)",
+            "placeholder": "600",
+            "desc": "Non-streaming request total timeout, range 60-1200 seconds, default 600 seconds (10 minutes)",
+            "core": "true"
+          },
+          "disableHint": "Set to 0 to disable the timeout (for canary rollback scenarios only, not recommended)"
         },
         "apiTest": {
           "title": "Provider Model Test",

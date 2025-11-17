@@ -23,3 +23,7 @@ dist
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Data directories (PostgreSQL, Redis persistent data)
+data/redis
+data/postgres

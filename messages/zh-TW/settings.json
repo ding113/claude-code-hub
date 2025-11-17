@@ -827,6 +827,9 @@
         "updating": "更新中...",
         "delete": "刪除"
       },
+      "common": {
+        "core": "核心"
+      },
       "sections": {
         "routing": {
           "title": "路由設定",
@@ -952,6 +955,30 @@
             "label": "連線測試",
             "desc": "透過代理測試訪問供應商 URL（HEAD 請求，不消耗額度）"
           }
+        },
+        "timeout": {
+          "title": "超時配置",
+          "summary": "首字: {streaming}s | 串流間隔: {idle}s | 非串流: {nonStreaming}s",
+          "desc": "設定請求超時時間，0 表示禁用超時",
+          "streamingFirstByte": {
+            "label": "串流首字節超時（秒）",
+            "placeholder": "30",
+            "desc": "串流請求首字節超時，範圍 1-120 秒，預設 30 秒",
+            "core": "true"
+          },
+          "streamingIdle": {
+            "label": "串流靜默期超時（秒）",
+            "placeholder": "10",
+            "desc": "串流請求靜默期超時，範圍 1-120 秒，預設 10 秒（防止中途卡住）",
+            "core": "true"
+          },
+          "nonStreamingTotal": {
+            "label": "非串流總超時（秒）",
+            "placeholder": "600",
+            "desc": "非串流請求總超時，範圍 60-1200 秒，預設 600 秒（10 分鐘）",
+            "core": "true"
+          },
+          "disableHint": "設為 0 表示禁用該超時（僅用於灰度回退場景，不推薦）"
         },
         "codexStrategy": {
           "title": "Codex Instructions 策略",
