@@ -82,7 +82,7 @@ export function ProviderRichListItem({
   const [togglePending, startToggleTransition] = useTransition();
 
   const canEdit = currentUser?.role === "admin";
-  const tTypes = useTranslations("providers.types");
+  const tTypes = useTranslations("settings.providers.types");
   const tList = useTranslations("settings.providers.list");
   const tCommon = useTranslations("settings.common");
 

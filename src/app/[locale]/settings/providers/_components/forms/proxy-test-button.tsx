@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, CheckCircle2, XCircle, Activity } from "lucide-react";
 import { testProviderProxy } from "@/actions/providers";
 import { toast } from "sonner";
+import { useTranslations } from "next-intl";
 
 interface ProxyTestButtonProps {
   providerUrl: string;
@@ -24,6 +25,7 @@ export function ProxyTestButton({
   proxyFallbackToDirect = false,
   disabled = false,
 }: ProxyTestButtonProps) {
+  const t = useTranslations("settings.providers.form.proxyTest");
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{
     success: boolean;
@@ -41,7 +43,7 @@ export function ProxyTestButton({
   const handleTest = async () => {
     // 验证必填字段
     if (!providerUrl.trim()) {
-      toast.error("请先填写供应商 URL");
+      toast.error(t("fillUrlFirst"));
       return;
     }
 
@@ -56,12 +58,12 @@ export function ProxyTestButton({
       });
 
       if (!response.ok) {
-        toast.error(response.error || "测试失败");
+        toast.error(response.error || t("testFailed"));
         return;
       }
 
       if (!response.data) {
-        toast.error("测试成功但未返回结果");
+        toast.error(t("noResult"));
         return;
       }
 
@@ -70,29 +72,29 @@ export function ProxyTestButton({
       // 显示测试结果
       if (response.data.success) {
         const details = response.data.details;
-        const proxyUsed = details?.usedProxy ? "（通过代理）" : "（直连）";
+        const proxyUsed = details?.usedProxy ? t("viaProxy") : t("viaDirect");
         const responseTime = details?.responseTime ? `${details.responseTime}ms` : "N/A";
 
-        toast.success(`连接成功 ${proxyUsed}`, {
-          description: `响应时间: ${responseTime}${details?.statusCode ? ` | 状态码: ${details.statusCode}` : ""}`,
+        toast.success(`${t("connectionSuccess")} ${proxyUsed}`, {
+          description: `${t("responseTime")} ${responseTime}${details?.statusCode ? ` | ${t("statusCode")} ${details.statusCode}` : ""}`,
         });
       } else {
         const errorType = response.data.details?.errorType;
         const errorMessage = response.data.details?.error || response.data.message;
 
-        toast.error("连接失败", {
+        toast.error(t("connectionFailed"), {
           description:
             errorType === "Timeout"
-              ? "连接超时（5秒）。请检查：\n1. 代理服务器是否可访问\n2. 代理地址和端口是否正确\n3. 代理认证信息是否正确"
+              ? t("timeoutError")
               : errorType === "ProxyError"
-                ? `代理错误: ${errorMessage}`
-                : `网络错误: ${errorMessage}`,
+                ? `${t("proxyError")} ${errorMessage}`
+                : `${t("networkError")} ${errorMessage}`,
           duration: 5000, // 延长显示时间，让用户看清楚诊断提示
         });
       }
     } catch (error) {
       console.error("测试代理连接失败:", error);
-      toast.error("测试失败，请重试");
+      toast.error(t("testFailedRetry"));
     } finally {
       setIsTesting(false);
     }
@@ -104,7 +106,7 @@ export function ProxyTestButton({
       return (
         <>
           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          测试中...
+          {t("testing")}
         </>
       );
     }
@@ -114,14 +116,14 @@ export function ProxyTestButton({
         return (
           <>
             <CheckCircle2 className="h-4 w-4 mr-2 text-green-600" />
-            连接成功
+            {t("connectionSuccess")}
           </>
         );
       } else {
         return (
           <>
             <XCircle className="h-4 w-4 mr-2 text-red-600" />
-            连接失败
+            {t("connectionFailed")}
           </>
         );
       }
@@ -130,7 +132,7 @@ export function ProxyTestButton({
     return (
       <>
         <Activity className="h-4 w-4 mr-2" />
-        测试连接
+        {t("testConnection")}
       </>
     );
   };
@@ -159,17 +161,27 @@ export function ProxyTestButton({
           <div className="font-medium mb-1">{testResult.message}</div>
           {testResult.details && (
             <div className="space-y-0.5 text-xs opacity-80">
-              {testResult.details.statusCode && <div>状态码: {testResult.details.statusCode}</div>}
+              {testResult.details.statusCode && (
+                <div>
+                  {t("statusCode")} {testResult.details.statusCode}
+                </div>
+              )}
               {testResult.details.responseTime !== undefined && (
-                <div>响应时间: {testResult.details.responseTime}ms</div>
+                <div>
+                  {t("responseTime")} {testResult.details.responseTime}ms
+                </div>
               )}
               {testResult.details.usedProxy !== undefined && (
                 <div>
-                  连接方式: {testResult.details.usedProxy ? "代理" : "直连"}
+                  {t("connectionMethod")} {testResult.details.usedProxy ? t("proxy") : t("direct")}
                   {testResult.details.proxyUrl && ` (${testResult.details.proxyUrl})`}
                 </div>
               )}
-              {testResult.details.errorType && <div>错误类型: {testResult.details.errorType}</div>}
+              {testResult.details.errorType && (
+                <div>
+                  {t("errorType")} {testResult.details.errorType}
+                </div>
+              )}
             </div>
           )}
         </div>

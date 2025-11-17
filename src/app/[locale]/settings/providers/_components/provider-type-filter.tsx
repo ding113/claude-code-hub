@@ -21,7 +21,7 @@ interface ProviderTypeFilterProps {
 }
 
 export function ProviderTypeFilter({ value, onChange }: ProviderTypeFilterProps) {
-  const tTypes = useTranslations("providers.types");
+  const tTypes = useTranslations("settings.providers.types");
   const tForm = useTranslations("settings.providers.form");
 
   return (
