@@ -8,7 +8,7 @@ import type { ActionResult } from "./types";
 
 /**
  * 获取限流事件统计数据（仅管理员）
- * 
+ *
  * @param filters 过滤条件（用户ID、供应商ID、限流类型、时间范围等）
  * @returns 限流事件统计结果
  */

@@ -105,10 +105,7 @@ export function RateLimitTypeBreakdown({ data }: RateLimitTypeBreakdownProps) {
                 label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
               >
                 {chartData.map((entry, index) => (
-                  <Cell
-                    key={`cell-${entry.type}`}
-                    fill={COLORS[index % COLORS.length]}
-                  />
+                  <Cell key={`cell-${entry.type}`} fill={COLORS[index % COLORS.length]} />
                 ))}
               </Pie>
               <Legend
