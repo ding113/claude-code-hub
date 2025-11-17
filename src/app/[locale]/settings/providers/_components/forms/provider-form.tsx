@@ -32,6 +32,7 @@ import { toast } from "sonner";
 import { ModelMultiSelect } from "../model-multi-select";
 import { ModelRedirectEditor } from "../model-redirect-editor";
 import { ProxyTestButton } from "./proxy-test-button";
+import { ApiTestButton } from "./api-test-button";
 import { ChevronDown } from "lucide-react";
 import { useTranslations } from "next-intl";
 
@@ -149,6 +150,7 @@ export function ProviderForm({
     | "circuitBreaker"
     | "proxy"
     | "timeout"
+    | "apiTest"
     | "codexStrategy";
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
     routing: false,
@@ -156,6 +158,7 @@ export function ProviderForm({
     circuitBreaker: false,
     proxy: false,
     timeout: false,
+    apiTest: false,
     codexStrategy: false,
   });
 
@@ -165,7 +168,7 @@ export function ProviderForm({
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        setOpenSections(parsed);
+        setOpenSections((prev) => ({ ...prev, ...parsed }));
       } catch (e) {
         console.error("Failed to parse saved sections state:", e);
       }
@@ -199,6 +202,7 @@ export function ProviderForm({
       circuitBreaker: true,
       proxy: true,
       timeout: true,
+      apiTest: true,
       codexStrategy: true,
     });
   };
@@ -211,6 +215,7 @@ export function ProviderForm({
       circuitBreaker: false,
       proxy: false,
       timeout: false,
+      apiTest: false,
       codexStrategy: false,
     });
   };
@@ -505,7 +510,7 @@ export function ProviderForm({
         </div>
 
         {/* Codex 支持：供应商类型和模型重定向 */}
-        <Collapsible open={openSections.routing} onOpenChange={(open) => toggleSection("routing")}>
+        <Collapsible open={openSections.routing} onOpenChange={() => toggleSection("routing")}>
           <CollapsibleTrigger asChild>
             <button
               type="button"
@@ -773,10 +778,7 @@ export function ProviderForm({
         </Collapsible>
 
         {/* 限流配置 */}
-        <Collapsible
-          open={openSections.rateLimit}
-          onOpenChange={(open) => toggleSection("rateLimit")}
-        >
+        <Collapsible open={openSections.rateLimit} onOpenChange={() => toggleSection("rateLimit")}>
           <CollapsibleTrigger asChild>
             <button
               type="button"
@@ -889,7 +891,7 @@ export function ProviderForm({
         {/* 熔断器配置 */}
         <Collapsible
           open={openSections.circuitBreaker}
-          onOpenChange={(open) => toggleSection("circuitBreaker")}
+          onOpenChange={() => toggleSection("circuitBreaker")}
         >
           <CollapsibleTrigger asChild>
             <button
@@ -1143,7 +1145,7 @@ export function ProviderForm({
         </Collapsible>
 
         {/* 代理配置 */}
-        <Collapsible open={openSections.proxy} onOpenChange={(open) => toggleSection("proxy")}>
+        <Collapsible open={openSections.proxy} onOpenChange={() => toggleSection("proxy")}>
           <CollapsibleTrigger asChild>
             <button
               type="button"
@@ -1233,11 +1235,54 @@ export function ProviderForm({
           </CollapsibleContent>
         </Collapsible>
 
+        {/* API 测试 */}
+        <Collapsible open={openSections.apiTest} onOpenChange={() => toggleSection("apiTest")}>
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="flex items-center justify-between w-full py-4 border-t hover:bg-muted/50 transition-colors"
+              disabled={isPending}
+            >
+              <div className="flex items-center gap-2">
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${
+                    openSections.apiTest ? "rotate-180" : ""
+                  }`}
+                />
+                <span className="text-sm font-medium">{t("sections.apiTest.title")}</span>
+              </div>
+              <span className="text-xs text-muted-foreground">{t("sections.apiTest.summary")}</span>
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-4 pb-4">
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">{t("sections.apiTest.desc")}</p>
+              </div>
+
+              <div className="space-y-2">
+                <ApiTestButton
+                  providerUrl={url}
+                  apiKey={key}
+                  proxyUrl={proxyUrl}
+                  proxyFallbackToDirect={proxyFallbackToDirect}
+                  providerId={provider?.id}
+                  providerType={providerType}
+                  allowedModels={allowedModels}
+                  enableMultiProviderTypes={enableMultiProviderTypes}
+                  disabled={isPending || !url.trim()}
+                />
+                <p className="text-xs text-muted-foreground">{t("sections.apiTest.notice")}</p>
+              </div>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+
         {/* Codex Instructions 策略配置 - 仅 Codex 供应商显示 */}
         {providerType === "codex" && (
           <Collapsible
             open={openSections.codexStrategy}
-            onOpenChange={(open) => toggleSection("codexStrategy")}
+            onOpenChange={() => toggleSection("codexStrategy")}
           >
             <CollapsibleTrigger asChild>
               <button

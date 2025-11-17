@@ -2,12 +2,10 @@
 
 import { getOverviewMetrics as getOverviewMetricsFromDB } from "@/repository/overview";
 import { getConcurrentSessions as getConcurrentSessionsCount } from "./concurrent-sessions";
-import { getActiveSessions as getActiveSessionsFromManager } from "./active-sessions";
 import { getSession } from "@/lib/auth";
 import { getSystemSettings } from "@/repository/system-config";
 import { logger } from "@/lib/logger";
 import type { ActionResult } from "./types";
-import type { ActiveSessionInfo } from "@/types/session";
 
 /**
  * 概览数据（包含并发数和今日统计）
@@ -21,8 +19,6 @@ export interface OverviewData {
   todayCost: number;
   /** 平均响应时间（毫秒） */
   avgResponseTime: number;
-  /** 最近活跃的Session列表（用于滚动展示） */
-  recentSessions: ActiveSessionInfo[];
 }
 
 /**
@@ -45,21 +41,17 @@ export async function getOverviewData(): Promise<ActionResult<OverviewData>> {
     const canViewGlobalData = isAdmin || settings.allowGlobalUsageView;
 
     // 并行查询所有数据
-    const [concurrentResult, metricsData, sessionsResult] = await Promise.all([
+    const [concurrentResult, metricsData] = await Promise.all([
       getConcurrentSessionsCount(),
       getOverviewMetricsFromDB(),
-      getActiveSessionsFromManager(),
     ]);
 
     // 根据权限决定显示范围
     if (!canViewGlobalData) {
-      // 普通用户且无权限：仅显示自己的活跃 Session，全站指标设为 0
-      const recentSessions = sessionsResult.ok ? sessionsResult.data.slice(0, 10) : [];
-
+      // 普通用户且无权限：全站指标设为 0
       logger.debug("Overview: User without global view permission", {
         userId: session.user.id,
         userName: session.user.name,
-        ownSessionsCount: recentSessions.length,
       });
 
       return {
@@ -69,14 +61,12 @@ export async function getOverviewData(): Promise<ActionResult<OverviewData>> {
           todayRequests: 0, // 无权限时不显示全站请求数
           todayCost: 0, // 无权限时不显示全站消耗
           avgResponseTime: 0, // 无权限时不显示全站平均响应时间
-          recentSessions, // 仅显示自己的活跃 Session（getActiveSessions 已做权限过滤）
         },
       };
     }
 
     // 管理员或有权限：显示全站数据
     const concurrentSessions = concurrentResult.ok ? concurrentResult.data : 0;
-    const recentSessions = sessionsResult.ok ? sessionsResult.data.slice(0, 10) : [];
 
     logger.debug("Overview: User with global view permission", {
       userId: session.user.id,
@@ -92,7 +82,6 @@ export async function getOverviewData(): Promise<ActionResult<OverviewData>> {
         todayRequests: metricsData.todayRequests,
         todayCost: metricsData.todayCost,
         avgResponseTime: metricsData.avgResponseTime,
-        recentSessions,
       },
     };
   } catch (error) {

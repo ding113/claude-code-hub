@@ -121,7 +121,7 @@ jobs:
             ### 修复策略：
 
             1. **分析错误类型**：
-               - ESLint/Prettier 错误 → 运行 `npm run lint:fix` 或 `pnpm lint:fix`
+               - ESLint/Prettier 错误 → 运行 `npm run lint:fix` 或 `bun run lint:fix`
                - TypeScript 类型错误 → 修复类型定义
                - 测试失败 → 分析并修复测试或代码
                - 构建失败 → 检查依赖和配置
@@ -130,7 +130,7 @@ jobs:
                - 使用 Read 工具查看相关文件
                - 使用 Edit 工具修复问题
                - 如果是格式化问题，运行相应的 lint/format 命令
-               - 使用 Bash(npm:*) 或 Bash(pnpm:*) 运行修复命令
+               - 使用 Bash(npm:*) 或 Bash(bun:*) 运行修复命令
 
             3. **验证修复**：
                - 如果可能，运行相关的测试或 lint 命令验证修复
@@ -180,7 +180,7 @@ jobs:
 
           claude_args: |
             --max-turns 999
-            --allowedTools "Read,Write,Edit,Bash(git:*),Bash(gh:*),Bash(npm:*),Bash(pnpm:*),Bash(yarn:*),Bash(bun:*),Bash(npx:*)"
+            --allowedTools "Read,Write,Edit,Bash(git:*),Bash(gh:*),Bash(npm:*),Bash(bun:*),Bash(yarn:*),Bash(npx:*)"
 
           use_commit_signing: true
           # workflow_run 事件不支持 track_progress,禁用以确保正常执行

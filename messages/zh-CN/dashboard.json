@@ -584,5 +584,70 @@
     "delete": "删除用户",
     "editAriaLabel": "编辑用户",
     "deleteAriaLabel": "删除用户"
+  },
+  "rateLimits": {
+    "title": "限流事件统计",
+    "description": "查看和分析限流事件的统计数据",
+    "loading": "加载中...",
+    "error": "加载失败",
+    "totalEvents": "总事件数",
+    "avgUsage": "平均使用率",
+    "affectedUsers": "受影响用户数",
+    "noData": "暂无数据",
+    "noDataHint": "在选定的时间范围内没有限流事件",
+    "filters": {
+      "startTime": "开始时间",
+      "endTime": "结束时间",
+      "user": "用户",
+      "provider": "供应商",
+      "limitType": "限流类型",
+      "allUsers": "全部用户",
+      "allProviders": "全部供应商",
+      "allLimitTypes": "全部类型",
+      "apply": "应用筛选",
+      "reset": "重置",
+      "loading": "加载中...",
+      "limitTypes": {
+        "rpm": "RPM限流",
+        "usd_5h": "5小时消费限流",
+        "usd_weekly": "周消费限流",
+        "usd_monthly": "月消费限流",
+        "concurrent_sessions": "并发Session限流",
+        "daily_quota": "每日额度限流"
+      }
+    },
+    "chart": {
+      "title": "限流事件时间线",
+      "description": "按小时统计的限流事件趋势",
+      "total": "总计",
+      "events": "事件数"
+    },
+    "breakdown": {
+      "title": "限流类型分布",
+      "description": "不同限流类型的事件占比",
+      "total": "总计",
+      "count": "事件数",
+      "percentage": "占比",
+      "noData": "暂无数据",
+      "types": {
+        "rpm": "RPM限流",
+        "usd_5h": "5小时消费",
+        "usd_weekly": "周消费",
+        "usd_monthly": "月消费",
+        "concurrent_sessions": "并发Session",
+        "daily_quota": "每日额度"
+      }
+    },
+    "topUsers": {
+      "title": "受影响用户排行",
+      "description": "触发限流最多的用户列表",
+      "total": "总计",
+      "rank": "排名",
+      "username": "用户名",
+      "eventCount": "事件数",
+      "percentage": "占比",
+      "loading": "加载中...",
+      "noData": "暂无数据"
+    }
   }
 }

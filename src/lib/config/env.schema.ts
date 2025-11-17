@@ -1,3 +1,5 @@
+// Ensure File polyfill is loaded before Zod (Zod 4.x checks for File API on initialization)
+import "@/lib/polyfills/file";
 import { z } from "zod";
 
 /**

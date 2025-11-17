@@ -349,6 +349,7 @@
     "clientVersions": "Client Update Reminder",
     "config": "Configuration",
     "data": "Data Management",
+    "errorRules": "Error Rules",
     "logs": "Logs",
     "notifications": "Notifications",
     "prices": "Pricing",
@@ -575,6 +576,37 @@
     "editProvider": "Edit Provider",
     "enabledStatus": "enabled",
     "form": {
+      "apiTest": {
+        "fillUrlFirst": "Please fill in provider URL first",
+        "invalidUrl": "Provider URL is invalid (http/https only)",
+        "fillKeyFirst": "Please fill in API key first",
+        "testFailed": "Test failed",
+        "testFailedRetry": "Test failed, please retry",
+        "noResult": "Test succeeded but no result returned",
+        "testSuccess": "Model test succeeded",
+        "testApi": "Provider Model Test",
+        "testing": "Testing...",
+        "apiFormat": "Provider type",
+        "selectApiFormat": "Select provider type to test",
+        "apiFormatDesc": "Defaults to the routing configuration unless manually changed",
+        "formatAnthropicMessages": "Claude (Anthropic Messages API)",
+        "formatOpenAIChat": "OpenAI Compatible",
+        "formatOpenAIResponses": "Codex (Response API)",
+        "testModel": "Test model",
+        "testModelDesc": "Leave empty to use the default model or type one manually",
+        "model": "Model",
+        "responseTime": "Response time",
+        "usage": "Token usage",
+        "response": "Response preview",
+        "error": "Error message",
+        "unknown": "Unknown",
+        "viewDetails": "View Details",
+        "copySuccess": "Copied to clipboard",
+        "copyFailed": "Failed to copy",
+        "copyResult": "Copy Result",
+        "success": "Success",
+        "failed": "Failed"
+      },
       "proxyTest": {
         "fillUrlFirst": "Please fill in provider URL first",
         "testFailed": "Test failed",
@@ -1011,6 +1043,13 @@
           },
           "disableHint": "Set to 0 to disable the timeout (for canary rollback scenarios only, not recommended)"
         },
+        "apiTest": {
+          "title": "Provider Model Test",
+          "summary": "Verify provider & model connectivity",
+          "desc": "Validate whether the selected provider type and model respond correctly. Defaults to the routing configuration unless overridden.",
+          "testLabel": "Provider Model Test",
+          "notice": "Note: This sends a real non-streaming request and may consume a small quota. Confirm provider URL, API key, and model before running."
+        },
         "codexStrategy": {
           "title": "Codex Instructions Policy",
           "summary": {
@@ -1281,5 +1320,129 @@
     "title": "Sensitive Words Management",
     "toggleFailed": "Toggle failed",
     "toggleFailedError": "Toggle failed:"
+  },
+  "errorRules": {
+    "nav": "Error Rules",
+    "title": "Error Rules Management",
+    "description": "Configure non-retryable client error detection rules to automatically identify error patterns that require circuit breaking.",
+    "section": {
+      "title": "Error Rules List",
+      "description": "Match error messages via regex patterns to identify non-retryable client errors like invalid requests, parameter errors, etc. System includes 7 default rules covering common error scenarios."
+    },
+    "add": "Add Error Rule",
+    "addSuccess": "Error rule created successfully",
+    "addFailed": "Failed to create error rule",
+    "edit": "Edit Error Rule",
+    "editSuccess": "Error rule updated successfully",
+    "editFailed": "Failed to update error rule",
+    "delete": "Delete Error Rule",
+    "deleteSuccess": "Error rule deleted successfully",
+    "deleteFailed": "Delete failed",
+    "enable": "Error rule enabled",
+    "disable": "Error rule disabled",
+    "toggleFailed": "Toggle failed",
+    "toggleFailedError": "Toggle failed:",
+    "refreshCache": "Refresh Cache",
+    "refreshCacheSuccess": "Cache refreshed successfully, loaded {count} error rules",
+    "refreshCacheFailed": "Failed to refresh cache",
+    "cacheStats": "Cache stats: Enabled({enabledCount}) Disabled({disabledCount}) Default({defaultCount})",
+    "emptyState": "No error rules yet. Click 'Add Error Rule' in the top right to start configuration.",
+    "confirmDelete": "Are you sure you want to delete error rule \"{pattern}\"?",
+    "dialog": {
+      "addTitle": "Add Error Rule",
+      "addDescription": "Configure error message regex patterns. Matched errors will be identified as non-retryable client errors.",
+      "editTitle": "Edit Error Rule",
+      "editDescription": "Modify error rule configuration. Changes will automatically refresh the cache.",
+      "patternLabel": "Regex Pattern *",
+      "patternPlaceholder": "Enter regular expression...",
+      "patternRequired": "Please enter regex pattern",
+      "patternHint": "Supports JavaScript regex syntax, e.g.: prompt is too long|invalid.*request",
+      "categoryLabel": "Rule Category *",
+      "categoryPlaceholder": "Select rule category",
+      "categoryRequired": "Please select rule category",
+      "categoryHint": "Choose the error category for classification and statistics",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Optional: Add description...",
+      "invalidRegex": "Invalid regex syntax",
+      "regexTester": "Regex Tester",
+      "testMessageLabel": "Test Message",
+      "testMessagePlaceholder": "Enter error message to test...",
+      "matchSuccess": "Match Successful",
+      "matchFailed": "No Match",
+      "invalidPattern": "Invalid Regex",
+      "matchedText": "Matched Text",
+      "defaultRuleHint": "Default rule pattern cannot be modified",
+      "creating": "Creating...",
+      "saving": "Saving..."
+    },
+    "table": {
+      "pattern": "Regex Pattern",
+      "category": "Rule Category",
+      "description": "Description",
+      "status": "Status",
+      "default": "Default",
+      "isEnabled": "Enabled Status",
+      "isDefault": "Default Rule",
+      "createdAt": "Created At",
+      "actions": "Actions"
+    },
+    "form": {
+      "fields": {
+        "pattern": "Regex Pattern",
+        "category": "Rule Category",
+        "description": "Description"
+      },
+      "placeholders": {
+        "pattern": "e.g. prompt is too long",
+        "category": "Select category",
+        "description": "Optional: Add description..."
+      },
+      "labels": {
+        "pattern": "Regex Pattern *",
+        "category": "Rule Category *",
+        "description": "Description",
+        "isEnabled": "Enabled Status"
+      }
+    },
+    "actions": {
+      "add": "Add",
+      "edit": "Edit",
+      "delete": "Delete",
+      "refresh": "Refresh",
+      "test": "Test",
+      "messages": {
+        "success": "Operation successful",
+        "error": "Operation failed"
+      }
+    },
+    "validation": {
+      "patternRequired": "Please enter regex pattern",
+      "categoryRequired": "Please select rule category",
+      "patternInvalid": "Invalid regex syntax",
+      "redosRisk": "Regex has ReDoS risk, please simplify pattern",
+      "patternTooComplex": "Regex is too complex"
+    },
+    "categories": {
+      "prompt_limit": "Prompt Length Limit",
+      "content_filter": "Content Filter",
+      "pdf_limit": "PDF Page Limit",
+      "thinking_error": "Thinking Format Error",
+      "parameter_error": "Parameter Validation Failed",
+      "invalid_request": "Invalid Request",
+      "cache_limit": "Cache Control Limit"
+    },
+    "regexTester": {
+      "title": "Regex Tester",
+      "testMessage": "Test Message",
+      "testMessagePlaceholder": "Enter error message to test...",
+      "matchResult": "Match Result",
+      "matched": "Matched",
+      "notMatched": "Not Matched",
+      "test": "Test"
+    },
+    "defaultRules": {
+      "cannotDelete": "Default rules cannot be deleted",
+      "cannotDisable": "Recommend keeping default rules enabled"
+    }
   }
 }

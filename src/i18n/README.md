@@ -188,7 +188,7 @@ All locale-related types are strictly typed:
 
 ### Issue: Type errors
 
-**Solution**: Run `pnpm typecheck` to verify TypeScript configuration
+**Solution**: Run `bun run typecheck` to verify TypeScript configuration
 
 ## References
 

@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import type { ProviderDisplay } from "@/types/provider";
 import type { User } from "@/types/user";
-import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
+import { getProviderTypeConfig } from "@/lib/provider-type-utils";
 import {
   Dialog,
   DialogContent,
@@ -82,7 +82,6 @@ export function ProviderRichListItem({
   const [togglePending, startToggleTransition] = useTransition();
 
   const canEdit = currentUser?.role === "admin";
-  const tTypes = useTranslations("settings.providers.types");
   const tList = useTranslations("settings.providers.list");
   const tCommon = useTranslations("settings.common");
   const tTimeout = useTranslations("settings.providers.form.sections.timeout");
@@ -90,9 +89,6 @@ export function ProviderRichListItem({
   // 获取供应商类型配置
   const typeConfig = getProviderTypeConfig(provider.providerType);
   const TypeIcon = typeConfig.icon;
-  const typeKey = getProviderTypeTranslationKey(provider.providerType);
-  const typeLabel = tTypes(`${typeKey}.label`);
-  const typeDescription = tTypes(`${typeKey}.description`);
 
   // 处理编辑
   const handleEdit = () => {
@@ -252,6 +248,7 @@ export function ProviderRichListItem({
           <div className="flex items-center gap-2 flex-wrap">
             {/* Favicon */}
             {provider.faviconUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={provider.faviconUrl}
                 alt=""

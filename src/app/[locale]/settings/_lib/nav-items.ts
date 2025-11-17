@@ -13,6 +13,7 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   { href: "/settings/prices", labelKey: "nav.prices", label: "价格表" },
   { href: "/settings/providers", labelKey: "nav.providers", label: "供应商" },
   { href: "/settings/sensitive-words", labelKey: "nav.sensitiveWords", label: "敏感词" },
+  { href: "/settings/error-rules", labelKey: "nav.errorRules", label: "错误规则" },
   { href: "/settings/client-versions", labelKey: "nav.clientVersions", label: "客户端升级提醒" },
   { href: "/settings/data", labelKey: "nav.data", label: "数据管理" },
   { href: "/settings/logs", labelKey: "nav.logs", label: "日志" },

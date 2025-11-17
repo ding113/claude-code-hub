@@ -93,6 +93,16 @@ export const BUSINESS_ERRORS = {
   CONFLICT: "CONFLICT",
 } as const;
 
+// Rate Limit Error Codes
+export const RATE_LIMIT_ERRORS = {
+  RATE_LIMIT_RPM_EXCEEDED: "RATE_LIMIT_RPM_EXCEEDED",
+  RATE_LIMIT_5H_EXCEEDED: "RATE_LIMIT_5H_EXCEEDED",
+  RATE_LIMIT_WEEKLY_EXCEEDED: "RATE_LIMIT_WEEKLY_EXCEEDED",
+  RATE_LIMIT_MONTHLY_EXCEEDED: "RATE_LIMIT_MONTHLY_EXCEEDED",
+  RATE_LIMIT_CONCURRENT_SESSIONS_EXCEEDED: "RATE_LIMIT_CONCURRENT_SESSIONS_EXCEEDED",
+  RATE_LIMIT_DAILY_QUOTA_EXCEEDED: "RATE_LIMIT_DAILY_QUOTA_EXCEEDED",
+} as const;
+
 /**
  * All Error Codes Union
  */
@@ -102,6 +112,7 @@ export const ERROR_CODES = {
   ...SERVER_ERRORS,
   ...NETWORK_ERRORS,
   ...BUSINESS_ERRORS,
+  ...RATE_LIMIT_ERRORS,
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
@@ -149,7 +160,7 @@ export function getErrorMessage(
 ): string {
   try {
     return t(code, params);
-  } catch (error) {
+  } catch {
     // Fallback to generic error message if translation key not found
     return t("INTERNAL_ERROR");
   }
@@ -178,7 +189,7 @@ export async function getErrorMessageServer(
     const { getTranslations } = await import("next-intl/server");
     const t = await getTranslations({ locale, namespace: "errors" });
     return t(code, params);
-  } catch (error) {
+  } catch {
     // Fallback to generic error message
     return "An error occurred";
   }

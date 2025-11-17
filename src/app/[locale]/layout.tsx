@@ -7,7 +7,7 @@ import { getSystemSettings } from "@/repository/system-config";
 import { logger } from "@/lib/logger";
 import { NextIntlClientProvider } from "next-intl";
 import { getMessages } from "next-intl/server";
-import { locales, defaultLocale, localeNamesInEnglish, type Locale } from "@/i18n/config";
+import { locales, type Locale } from "@/i18n/config";
 import { notFound } from "next/navigation";
 
 const FALLBACK_TITLE = "Claude Code Hub";

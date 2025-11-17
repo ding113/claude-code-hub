@@ -42,7 +42,7 @@ export function useFormatCurrency() {
         minimumFractionDigits: fractionDigits,
         maximumFractionDigits: fractionDigits,
       });
-    } catch (error) {
+    } catch {
       // Fallback to manual formatting if currency is not supported
       const formatted = amount.toLocaleString(config.locale, {
         minimumFractionDigits: fractionDigits,
