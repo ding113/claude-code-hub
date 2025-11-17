@@ -84,9 +84,7 @@ export function RegexTester({ pattern }: RegexTesterProps) {
             )}
           </div>
 
-          {matchResult.error && (
-            <p className="text-xs text-destructive">{matchResult.error}</p>
-          )}
+          {matchResult.error && <p className="text-xs text-destructive">{matchResult.error}</p>}
 
           {matchResult.matchedText && (
             <div className="space-y-1">

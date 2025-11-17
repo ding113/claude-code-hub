@@ -12,7 +12,11 @@
  */
 
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { createErrorRuleAction, deleteErrorRuleAction, refreshCacheAction } from "@/actions/error-rules";
+import {
+  createErrorRuleAction,
+  deleteErrorRuleAction,
+  refreshCacheAction,
+} from "@/actions/error-rules";
 import { isNonRetryableClientError } from "@/app/v1/_lib/proxy/errors";
 import { errorRuleDetector } from "@/lib/error-rule-detector";
 

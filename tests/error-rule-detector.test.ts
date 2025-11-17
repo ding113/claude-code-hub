@@ -213,7 +213,9 @@ describe("Performance Testing", () => {
     }
     const duration2 = performance.now() - start2;
 
-    console.log(`First detection: ${duration1.toFixed(2)}ms, 100 cached: ${duration2.toFixed(2)}ms`);
+    console.log(
+      `First detection: ${duration1.toFixed(2)}ms, 100 cached: ${duration2.toFixed(2)}ms`
+    );
 
     // Cached detections should be fast
     expect(duration2).toBeLessThan(10);

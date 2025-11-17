@@ -14,10 +14,7 @@ export default async function ErrorRulesPage() {
 
   return (
     <>
-      <SettingsPageHeader
-        title={t("errorRules.title")}
-        description={t("errorRules.description")}
-      />
+      <SettingsPageHeader title={t("errorRules.title")} description={t("errorRules.description")} />
 
       <Section
         title={t("errorRules.section.title")}
