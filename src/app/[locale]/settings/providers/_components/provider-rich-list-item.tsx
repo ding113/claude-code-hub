@@ -84,14 +84,11 @@ export function ProviderRichListItem({
   const canEdit = currentUser?.role === "admin";
   const tTypes = useTranslations("settings.providers.types");
   const tList = useTranslations("settings.providers.list");
-  const tCommon = useTranslations("settings.common");
 
   // 获取供应商类型配置
   const typeConfig = getProviderTypeConfig(provider.providerType);
   const TypeIcon = typeConfig.icon;
   const typeKey = getProviderTypeTranslationKey(provider.providerType);
-  const typeLabel = tTypes(`${typeKey}.label`);
-  const typeDescription = tTypes(`${typeKey}.description`);
 
   // 处理编辑
   const handleEdit = () => {

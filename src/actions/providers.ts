@@ -20,9 +20,17 @@ import {
   saveProviderCircuitConfig,
   deleteProviderCircuitConfig,
 } from "@/lib/redis/circuit-breaker-config";
-import { isValidProxyUrl } from "@/lib/proxy-agent";
+import { isValidProxyUrl, type ProviderProxyConfig } from "@/lib/proxy-agent";
 import { CodexInstructionsCache } from "@/lib/codex-instructions-cache";
 import { isClientAbortError } from "@/app/v1/_lib/proxy/errors";
+
+// API 测试配置常量
+const API_TEST_CONFIG = {
+  TIMEOUT_MS: 10000, // 10 秒超时
+  MAX_RESPONSE_PREVIEW_LENGTH: 100, // 响应内容预览最大长度
+  TEST_MAX_TOKENS: 100, // 测试请求的最大 token 数
+  TEST_PROMPT: "Hello", // 测试请求的默认提示词
+} as const;
 
 // 获取服务商数据
 export async function getProviders(): Promise<ProviderDisplay[]> {
@@ -198,7 +206,7 @@ export async function addProvider(data: {
       name: data.name,
       url: data.url,
       provider_type: data.provider_type,
-      proxy_url: data.proxy_url ? "***" : null,
+      proxy_url: data.proxy_url ? data.proxy_url.replace(/:\/\/[^@]*@/, "://***@") : null,
     });
 
     // 验证代理 URL 格式
@@ -606,6 +614,18 @@ export async function testProviderProxy(data: {
       return { ok: false, error: "无权限执行此操作" };
     }
 
+    const providerUrlValidation = validateProviderUrlForConnectivity(data.providerUrl);
+    if (!providerUrlValidation.valid) {
+      return {
+        ok: true,
+        data: {
+          success: false,
+          message: providerUrlValidation.error.message,
+          details: providerUrlValidation.error.details,
+        },
+      };
+    }
+
     // 验证代理 URL 格式
     if (data.proxyUrl && !isValidProxyUrl(data.proxyUrl)) {
       return {
@@ -627,12 +647,13 @@ export async function testProviderProxy(data: {
     const { createProxyAgentForProvider } = await import("@/lib/proxy-agent");
 
     // 构造临时 Provider 对象（用于创建代理 agent）
-    const tempProvider = {
+    // 使用类型安全的 ProviderProxyConfig 接口，避免 any
+    const tempProvider: ProviderProxyConfig = {
       id: -1,
-      proxyUrl: data.proxyUrl,
+      name: "test-connection",
+      proxyUrl: data.proxyUrl ?? null,
       proxyFallbackToDirect: data.proxyFallbackToDirect ?? false,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any;
+    };
 
     try {
       // 创建代理配置
@@ -645,7 +666,7 @@ export async function testProviderProxy(data: {
 
       const init: UndiciFetchOptions = {
         method: "HEAD", // 使用 HEAD 请求，减少流量
-        signal: AbortSignal.timeout(5000), // 5 秒超时
+        signal: AbortSignal.timeout(API_TEST_CONFIG.TIMEOUT_MS),
       };
 
       // 应用代理配置
@@ -740,4 +761,453 @@ export async function getUnmaskedProviderKey(id: number): Promise<ActionResult<{
     const message = error instanceof Error ? error.message : "获取供应商密钥失败";
     return { ok: false, error: message };
   }
+}
+
+type ProviderApiTestArgs = {
+  providerUrl: string;
+  apiKey: string;
+  model?: string;
+  proxyUrl?: string | null;
+  proxyFallbackToDirect?: boolean;
+};
+
+type ProviderApiTestResult = ActionResult<
+  | {
+      success: true;
+      message: string;
+      details?: {
+        responseTime?: number;
+        model?: string;
+        usage?: Record<string, unknown>;
+        content?: string;
+      };
+    }
+  | {
+      success: false;
+      message: string;
+      details?: {
+        responseTime?: number;
+        error?: string;
+      };
+    }
+>;
+
+// Anthropic Messages API 响应类型
+type AnthropicMessagesResponse = {
+  id: string;
+  type: "message";
+  role: "assistant";
+  model: string;
+  content: Array<{ type: "text"; text: string }>;
+  stop_reason: string;
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+    cache_creation_input_tokens?: number;
+    cache_read_input_tokens?: number;
+  };
+};
+
+// OpenAI Chat Completions API 响应类型
+type OpenAIChatResponse = {
+  id: string;
+  object: "chat.completion";
+  created: number;
+  model: string;
+  choices: Array<{
+    index: number;
+    message: {
+      role: "assistant";
+      content: string;
+    };
+    finish_reason: string;
+  }>;
+  usage: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+    reasoning_tokens?: number;
+  };
+};
+
+// OpenAI Responses API 响应类型
+type OpenAIResponsesResponse = {
+  id: string;
+  object: "response";
+  model: string;
+  output: Array<{
+    type: "message";
+    content: Array<{
+      type: "output_text";
+      text: string;
+    }>;
+  }>;
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+  };
+};
+
+// 联合类型：所有支持的 API 响应格式
+type ProviderApiResponse = AnthropicMessagesResponse | OpenAIChatResponse | OpenAIResponsesResponse;
+
+function extractFirstTextSnippet(
+  response: ProviderApiResponse,
+  maxLength?: number
+): string | undefined {
+  const limit = maxLength ?? API_TEST_CONFIG.MAX_RESPONSE_PREVIEW_LENGTH;
+
+  // Anthropic Messages API
+  if ("content" in response && Array.isArray(response.content)) {
+    const firstText = response.content.find((item) => item.type === "text");
+    if (firstText && "text" in firstText) {
+      return firstText.text.substring(0, limit);
+    }
+  }
+
+  // OpenAI Chat Completions API
+  if ("choices" in response && Array.isArray(response.choices)) {
+    const firstChoice = response.choices[0];
+    if (firstChoice?.message?.content) {
+      return firstChoice.message.content.substring(0, limit);
+    }
+  }
+
+  // OpenAI Responses API
+  if ("output" in response && Array.isArray(response.output)) {
+    const firstOutput = response.output[0];
+    if (firstOutput?.type === "message" && Array.isArray(firstOutput.content)) {
+      const textContent = firstOutput.content.find((c) => c.type === "output_text");
+      if (textContent && "text" in textContent) {
+        return textContent.text.substring(0, limit);
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function clipText(value: unknown, maxLength?: number): string | undefined {
+  const limit = maxLength ?? API_TEST_CONFIG.MAX_RESPONSE_PREVIEW_LENGTH;
+  return typeof value === "string" ? value.substring(0, limit) : undefined;
+}
+
+type ProviderUrlValidationError = {
+  message: string;
+  details: {
+    error: string;
+    errorType: "InvalidProviderUrl" | "BlockedUrl" | "BlockedPort";
+  };
+};
+
+function validateProviderUrlForConnectivity(
+  providerUrl: string
+): { valid: true; normalizedUrl: string } | { valid: false; error: ProviderUrlValidationError } {
+  const trimmedUrl = providerUrl.trim();
+
+  try {
+    const parsedProviderUrl = new URL(trimmedUrl);
+
+    if (!["https:", "http:"].includes(parsedProviderUrl.protocol)) {
+      return {
+        valid: false,
+        error: {
+          message: "供应商地址格式无效",
+          details: {
+            error: "仅支持 HTTP 和 HTTPS 协议",
+            errorType: "InvalidProviderUrl",
+          },
+        },
+      };
+    }
+
+    const hostname = parsedProviderUrl.hostname.toLowerCase();
+    const blockedPatterns = [
+      /^localhost$/i,
+      /^127\.\d+\.\d+\.\d+$/,
+      /^10\.\d+\.\d+\.\d+$/,
+      /^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/,
+      /^192\.168\.\d+\.\d+$/,
+      /^169\.254\.\d+\.\d+$/,
+      /^::1$/,
+      /^fe80:/i,
+      /^fc00:/i,
+      /^fd00:/i,
+    ];
+
+    if (blockedPatterns.some((pattern) => pattern.test(hostname))) {
+      return {
+        valid: false,
+        error: {
+          message: "供应商地址安全检查失败",
+          details: {
+            error: "不允许访问内部网络地址",
+            errorType: "BlockedUrl",
+          },
+        },
+      };
+    }
+
+    const port = parsedProviderUrl.port ? parseInt(parsedProviderUrl.port, 10) : null;
+    const dangerousPorts = [22, 23, 25, 3306, 5432, 6379, 27017, 9200];
+    if (port && dangerousPorts.includes(port)) {
+      return {
+        valid: false,
+        error: {
+          message: "供应商地址端口检查失败",
+          details: {
+            error: "不允许访问内部服务端口",
+            errorType: "BlockedPort",
+          },
+        },
+      };
+    }
+
+    return { valid: true, normalizedUrl: trimmedUrl };
+  } catch (error) {
+    return {
+      valid: false,
+      error: {
+        message: "供应商地址格式无效",
+        details: {
+          error: error instanceof Error ? error.message : "URL 解析失败",
+          errorType: "InvalidProviderUrl",
+        },
+      },
+    };
+  }
+}
+
+async function executeProviderApiTest(
+  data: ProviderApiTestArgs,
+  options: {
+    path: string;
+    defaultModel: string;
+    headers: (apiKey: string) => Record<string, string>;
+    body: (model: string) => unknown;
+    successMessage: string;
+    extract: (result: ProviderApiResponse) => {
+      model?: string;
+      usage?: Record<string, unknown>;
+      content?: string;
+    };
+  }
+): Promise<ProviderApiTestResult> {
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return { ok: false, error: "无权限执行此操作" };
+    }
+
+    if (data.proxyUrl && !isValidProxyUrl(data.proxyUrl)) {
+      return {
+        ok: true,
+        data: {
+          success: false,
+          message: "代理地址格式无效",
+          details: {
+            error: "支持格式: http://, https://, socks5://, socks4://",
+          },
+        },
+      };
+    }
+
+    const providerUrlValidation = validateProviderUrlForConnectivity(data.providerUrl);
+    if (!providerUrlValidation.valid) {
+      return {
+        ok: true,
+        data: {
+          success: false,
+          message: providerUrlValidation.error.message,
+          details: providerUrlValidation.error.details,
+        },
+      };
+    }
+
+    const normalizedProviderUrl = providerUrlValidation.normalizedUrl.replace(/\/$/, "");
+
+    const startTime = Date.now();
+    const { createProxyAgentForProvider } = await import("@/lib/proxy-agent");
+
+    const tempProvider: ProviderProxyConfig = {
+      id: -1,
+      name: "api-test",
+      proxyUrl: data.proxyUrl ?? null,
+      proxyFallbackToDirect: data.proxyFallbackToDirect ?? false,
+    };
+
+    const url = normalizedProviderUrl + options.path;
+    const model = data.model || options.defaultModel;
+
+    try {
+      const proxyConfig = createProxyAgentForProvider(tempProvider, url);
+
+      interface UndiciFetchOptions extends RequestInit {
+        dispatcher?: unknown;
+      }
+
+      const init: UndiciFetchOptions = {
+        method: "POST",
+        headers: options.headers(data.apiKey),
+        body: JSON.stringify(options.body(model)),
+        signal: AbortSignal.timeout(API_TEST_CONFIG.TIMEOUT_MS),
+      };
+
+      if (proxyConfig) {
+        init.dispatcher = proxyConfig.agent;
+      }
+
+      const response = await fetch(url, init);
+      const responseTime = Date.now() - startTime;
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorDetail: string | undefined;
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorDetail = errorJson.error?.message || errorJson.message;
+        } catch {
+          errorDetail = undefined;
+        }
+
+        logger.error("Provider API test failed", {
+          providerUrl: normalizedProviderUrl.replace(/:\/\/[^@]*@/, "://***@"),
+          path: options.path,
+          status: response.status,
+          errorDetail: errorDetail ?? clipText(errorText, 200),
+        });
+
+        return {
+          ok: true,
+          data: {
+            success: false,
+            message: `API 返回错误: HTTP ${response.status}`,
+            details: {
+              responseTime,
+              error: "API 请求失败，查看日志以获得更多信息",
+            },
+          },
+        };
+      }
+
+      const result = (await response.json()) as ProviderApiResponse;
+      const extracted = options.extract(result);
+
+      return {
+        ok: true,
+        data: {
+          success: true,
+          message: options.successMessage,
+          details: {
+            responseTime,
+            ...extracted,
+          },
+        },
+      };
+    } catch (error) {
+      const responseTime = Date.now() - startTime;
+      const err = error as Error & { code?: string };
+
+      return {
+        ok: true,
+        data: {
+          success: false,
+          message: `连接失败: ${err.message}`,
+          details: {
+            responseTime,
+            error: err.message,
+          },
+        },
+      };
+    }
+  } catch (error) {
+    logger.error("测试供应商 API 失败:", error);
+    const message = error instanceof Error ? error.message : "测试失败";
+    return { ok: false, error: message };
+  }
+}
+
+/**
+ * 测试 Anthropic Messages API 连通性
+ */
+export async function testProviderAnthropicMessages(
+  data: ProviderApiTestArgs
+): Promise<ProviderApiTestResult> {
+  return executeProviderApiTest(data, {
+    path: "/v1/messages",
+    defaultModel: "claude-3-5-sonnet-20241022",
+    headers: (apiKey) => ({
+      "Content-Type": "application/json",
+      "anthropic-version": "2023-06-01",
+      "x-api-key": apiKey,
+    }),
+    body: (model) => ({
+      model,
+      max_tokens: API_TEST_CONFIG.TEST_MAX_TOKENS,
+      messages: [{ role: "user", content: API_TEST_CONFIG.TEST_PROMPT }],
+    }),
+    successMessage: "Anthropic Messages API 测试成功",
+    extract: (result) => ({
+      model: "model" in result ? result.model : undefined,
+      usage: "usage" in result ? (result.usage as Record<string, unknown>) : undefined,
+      content: extractFirstTextSnippet(result),
+    }),
+  });
+}
+
+/**
+ * 测试 OpenAI Chat Completions API 连通性
+ */
+export async function testProviderOpenAIChatCompletions(
+  data: ProviderApiTestArgs
+): Promise<ProviderApiTestResult> {
+  return executeProviderApiTest(data, {
+    path: "/v1/chat/completions",
+    defaultModel: "gpt-4.1",
+    headers: (apiKey) => ({
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    }),
+    body: (model) => ({
+      model,
+      max_tokens: API_TEST_CONFIG.TEST_MAX_TOKENS,
+      messages: [
+        { role: "developer", content: "你是一个有帮助的助手。" },
+        { role: "user", content: "你好" },
+      ],
+    }),
+    successMessage: "OpenAI Chat Completions API 测试成功",
+    extract: (result) => ({
+      model: "model" in result ? result.model : undefined,
+      usage: "usage" in result ? (result.usage as Record<string, unknown>) : undefined,
+      content: extractFirstTextSnippet(result),
+    }),
+  });
+}
+
+/**
+ * 测试 OpenAI Responses API 连通性
+ */
+export async function testProviderOpenAIResponses(
+  data: ProviderApiTestArgs
+): Promise<ProviderApiTestResult> {
+  return executeProviderApiTest(data, {
+    path: "/v1/responses",
+    defaultModel: "gpt-4.1",
+    headers: (apiKey) => ({
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    }),
+    body: (model) => ({
+      model,
+      max_tokens: API_TEST_CONFIG.TEST_MAX_TOKENS,
+      input: "讲一个简短的故事",
+    }),
+    successMessage: "OpenAI Responses API 测试成功",
+    extract: (result) => ({
+      model: "model" in result ? result.model : undefined,
+      usage: "usage" in result ? (result.usage as Record<string, unknown>) : undefined,
+      content: extractFirstTextSnippet(result),
+    }),
+  });
 }

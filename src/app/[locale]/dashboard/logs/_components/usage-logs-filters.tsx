@@ -160,9 +160,9 @@ export function UsageLogsFilters({
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-12">
         {/* 时间范围 */}
-        <div className="space-y-2">
+        <div className="space-y-2 lg:col-span-4">
           <Label>{t("logs.filters.startTime")}</Label>
           <Input
             type="datetime-local"
@@ -176,7 +176,7 @@ export function UsageLogsFilters({
           />
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-2 lg:col-span-4">
           <Label>{t("logs.filters.endTime")}</Label>
           <Input
             type="datetime-local"
@@ -192,7 +192,7 @@ export function UsageLogsFilters({
 
         {/* 用户选择（仅 Admin） */}
         {isAdmin && (
-          <div className="space-y-2">
+          <div className="space-y-2 lg:col-span-4">
             <Label>{t("logs.filters.user")}</Label>
             <Select
               value={localFilters.userId?.toString() || ""}
@@ -213,7 +213,7 @@ export function UsageLogsFilters({
         )}
 
         {/* Key 选择 */}
-        <div className="space-y-2">
+        <div className="space-y-2 lg:col-span-4">
           <Label>{t("logs.filters.apiKey")}</Label>
           <Select
             value={localFilters.keyId?.toString() || ""}
@@ -240,7 +240,7 @@ export function UsageLogsFilters({
 
         {/* 供应商选择 */}
         {isAdmin && (
-          <div className="space-y-2">
+          <div className="space-y-2 lg:col-span-4">
             <Label>{t("logs.filters.provider")}</Label>
             <Select
               value={localFilters.providerId?.toString() || ""}
@@ -266,7 +266,7 @@ export function UsageLogsFilters({
         )}
 
         {/* 模型选择 */}
-        <div className="space-y-2">
+        <div className="space-y-2 lg:col-span-4">
           <Label>{t("logs.filters.model")}</Label>
           <Select
             value={localFilters.model || ""}
@@ -288,7 +288,7 @@ export function UsageLogsFilters({
         </div>
 
         {/* Endpoint 选择 */}
-        <div className="space-y-2">
+        <div className="space-y-2 lg:col-span-4">
           <Label>{t("logs.filters.endpoint")}</Label>
           <Select
             value={localFilters.endpoint || "all"}
@@ -323,7 +323,7 @@ export function UsageLogsFilters({
         </div>
 
         {/* 状态码选择 */}
-        <div className="space-y-2">
+        <div className="space-y-2 lg:col-span-4">
           <Label>{t("logs.filters.statusCode")}</Label>
           <Select
             value={localFilters.statusCode?.toString() || ""}

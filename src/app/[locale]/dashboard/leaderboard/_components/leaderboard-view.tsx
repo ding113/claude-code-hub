@@ -57,7 +57,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     return () => {
       cancelled = true;
     };
-  }, [scope]);
+  }, [scope, t]);
 
   if (loading) {
     return (

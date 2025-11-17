@@ -83,6 +83,7 @@
     "@types/pg": "^8.15.5",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
+    "bun-types": "^1.3.2",
     "drizzle-kit": "^0.31.5",
     "eslint": "^9.38.0",
     "eslint-config-next": "15.5.6",

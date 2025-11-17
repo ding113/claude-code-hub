@@ -284,7 +284,9 @@ describe("Match Type Priority", () => {
       expect(result.matched).toBe(true);
       expect(result.matchType).toBeTruthy();
       // Match type should be one of the valid types
-      expect(["regex", "contains", "exact"]).toContain(result.matchType);
+      if (result.matchType) {
+        expect(["regex", "contains", "exact"]).toContain(result.matchType);
+      }
     }
   });
 });

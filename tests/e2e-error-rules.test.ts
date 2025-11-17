@@ -53,9 +53,9 @@ describe("End-to-End Error Rules Workflow", () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(result.data).toBeDefined();
 
-    if (result.ok && result.data) {
+    if (result.ok) {
+      expect(result.data).toBeDefined();
       createdRuleId = result.data.id;
       expect(createdRuleId).toBeGreaterThan(0);
       expect(result.data.pattern).toBe("test.*custom.*error");
@@ -93,9 +93,9 @@ describe("End-to-End Error Rules Workflow", () => {
     const result = await refreshCacheAction();
 
     expect(result.ok).toBe(true);
-    expect(result.data).toBeDefined();
 
-    if (result.ok && result.data) {
+    if (result.ok) {
+      expect(result.data).toBeDefined();
       expect(result.data.stats.totalCount).toBeGreaterThan(7);
       expect(result.data.stats.isLoading).toBe(false);
     }
@@ -151,7 +151,9 @@ describe("ReDoS Protection E2E", () => {
     });
 
     expect(result.ok).toBe(false);
-    expect(result.error).toContain("ReDoS");
+    if (!result.ok) {
+      expect(result.error).toContain("ReDoS");
+    }
   });
 
   test("Should reject nested quantifiers", async () => {
@@ -163,7 +165,9 @@ describe("ReDoS Protection E2E", () => {
     });
 
     expect(result.ok).toBe(false);
-    expect(result.error).toContain("ReDoS");
+    if (!result.ok) {
+      expect(result.error).toContain("ReDoS");
+    }
   });
 
   test("Should accept safe regex pattern", async () => {

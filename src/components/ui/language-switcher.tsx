@@ -3,7 +3,6 @@
 import * as React from "react";
 import { useLocale } from "next-intl";
 import { useRouter, usePathname } from "@/i18n/routing";
-import { useParams } from "next/navigation";
 import { locales, localeLabels, type Locale } from "@/i18n/config";
 import { Languages } from "lucide-react";
 import {
@@ -39,7 +38,6 @@ export function LanguageSwitcher({ className, size = "sm" }: LanguageSwitcherPro
   const currentLocale = useLocale() as Locale;
   const router = useRouter();
   const pathname = usePathname();
-  const params = useParams();
   const [isTransitioning, setIsTransitioning] = React.useState(false);
 
   // Handle locale change
@@ -65,7 +63,7 @@ export function LanguageSwitcher({ className, size = "sm" }: LanguageSwitcherPro
         setIsTransitioning(false);
       }
     },
-    [currentLocale, pathname, router, isTransitioning, params]
+    [currentLocale, pathname, router, isTransitioning]
   );
 
   return (

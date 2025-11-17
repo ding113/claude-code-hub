@@ -209,6 +209,37 @@
         "proxyError": "代理错误:",
         "networkError": "网络错误:"
       },
+      "apiTest": {
+        "fillUrlFirst": "请先填写供应商 URL",
+        "invalidUrl": "供应商 URL 无效，仅支持 http/https",
+        "fillKeyFirst": "请先填写 API 密钥",
+        "testFailed": "测试失败",
+        "testFailedRetry": "测试失败，请重试",
+        "noResult": "测试成功但未返回结果",
+        "testSuccess": "模型测试成功",
+        "testApi": "供应商模型测试",
+        "testing": "测试中...",
+        "apiFormat": "供应商类型",
+        "selectApiFormat": "选择要测试的供应商类型",
+        "apiFormatDesc": "默认同步路由配置中的供应商类型，除非手动修改",
+        "formatAnthropicMessages": "Claude (Anthropic Messages API)",
+        "formatOpenAIChat": "OpenAI Compatible",
+        "formatOpenAIResponses": "Codex (Response API)",
+        "testModel": "测试模型",
+        "testModelDesc": "可手动输入，不填写则使用默认模型",
+        "model": "模型",
+        "responseTime": "响应时间",
+        "usage": "Token 用量",
+        "response": "响应内容",
+        "error": "错误信息",
+        "unknown": "未知",
+        "viewDetails": "查看详情",
+        "copySuccess": "已复制到剪贴板",
+        "copyFailed": "复制失败",
+        "copyResult": "复制结果",
+        "success": "成功",
+        "failed": "失败"
+      },
       "modelSelect": {
         "allowAllModels": "允许所有 {type} 模型",
         "selectedCount": "已选择 {count} 个模型",
@@ -596,6 +627,13 @@
             "label": "连接测试",
             "desc": "测试通过配置的代理访问供应商 URL（使用 HEAD 请求，不消耗额度）"
           }
+        },
+        "apiTest": {
+          "title": "供应商模型测试",
+          "summary": "验证供应商与模型连通性",
+          "desc": "测试供应商模型是否可用，默认与路由配置中选择的供应商类型保持一致。",
+          "testLabel": "供应商模型测试",
+          "notice": "注意：测试将向供应商发送真实请求（非流式），可能消耗少量额度。请确认供应商 URL、API 密钥及模型配置正确。"
         },
         "codexStrategy": {
           "title": "Codex Instructions 策略",
