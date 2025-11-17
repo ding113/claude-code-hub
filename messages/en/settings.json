@@ -598,7 +598,13 @@
         "usage": "Token usage",
         "response": "Response preview",
         "error": "Error message",
-        "unknown": "Unknown"
+        "unknown": "Unknown",
+        "viewDetails": "View Details",
+        "copySuccess": "Copied to clipboard",
+        "copyFailed": "Failed to copy",
+        "copyResult": "Copy Result",
+        "success": "Success",
+        "failed": "Failed"
       },
       "proxyTest": {
         "fillUrlFirst": "Please fill in provider URL first",

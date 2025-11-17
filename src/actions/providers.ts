@@ -24,6 +24,14 @@ import { isValidProxyUrl, type ProviderProxyConfig } from "@/lib/proxy-agent";
 import { CodexInstructionsCache } from "@/lib/codex-instructions-cache";
 import { isClientAbortError } from "@/app/v1/_lib/proxy/errors";
 
+// API 测试配置常量
+const API_TEST_CONFIG = {
+  TIMEOUT_MS: 10000, // 10 秒超时
+  MAX_RESPONSE_PREVIEW_LENGTH: 100, // 响应内容预览最大长度
+  TEST_MAX_TOKENS: 100, // 测试请求的最大 token 数
+  TEST_PROMPT: "Hello", // 测试请求的默认提示词
+} as const;
+
 // 获取服务商数据
 export async function getProviders(): Promise<ProviderDisplay[]> {
   try {
@@ -198,7 +206,7 @@ export async function addProvider(data: {
       name: data.name,
       url: data.url,
       provider_type: data.provider_type,
-      proxy_url: data.proxy_url ? "***" : null,
+      proxy_url: data.proxy_url ? data.proxy_url.replace(/:\/\/[^@]*@/, "://***@") : null,
     });
 
     // 验证代理 URL 格式
@@ -658,7 +666,7 @@ export async function testProviderProxy(data: {
 
       const init: UndiciFetchOptions = {
         method: "HEAD", // 使用 HEAD 请求，减少流量
-        signal: AbortSignal.timeout(5000), // 5 秒超时
+        signal: AbortSignal.timeout(API_TEST_CONFIG.TIMEOUT_MS),
       };
 
       // 应用代理配置
@@ -784,47 +792,94 @@ type ProviderApiTestResult = ActionResult<
     }
 >;
 
-type ProviderApiResponse = Record<string, unknown> & {
-  model?: string;
-  usage?: Record<string, unknown>;
-  content?: Array<{ type?: string; text?: string } | string | Record<string, unknown>>;
-  choices?: Array<{
-    message?: {
-      content?: string;
-    };
-  }>;
-  output?: Array<
-    | {
-        type?: string;
-        content?: Array<
-          | {
-              type?: string;
-              text?: string;
-            }
-          | Record<string, unknown>
-        >;
-      }
-    | Record<string, unknown>
-  >;
+// Anthropic Messages API 响应类型
+type AnthropicMessagesResponse = {
+  id: string;
+  type: "message";
+  role: "assistant";
+  model: string;
+  content: Array<{ type: "text"; text: string }>;
+  stop_reason: string;
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+    cache_creation_input_tokens?: number;
+    cache_read_input_tokens?: number;
+  };
 };
 
+// OpenAI Chat Completions API 响应类型
+type OpenAIChatResponse = {
+  id: string;
+  object: "chat.completion";
+  created: number;
+  model: string;
+  choices: Array<{
+    index: number;
+    message: {
+      role: "assistant";
+      content: string;
+    };
+    finish_reason: string;
+  }>;
+  usage: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+    reasoning_tokens?: number;
+  };
+};
+
+// OpenAI Responses API 响应类型
+type OpenAIResponsesResponse = {
+  id: string;
+  object: "response";
+  model: string;
+  output: Array<{
+    type: "message";
+    content: Array<{
+      type: "output_text";
+      text: string;
+    }>;
+  }>;
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+  };
+};
+
+// 联合类型：所有支持的 API 响应格式
+type ProviderApiResponse = AnthropicMessagesResponse | OpenAIChatResponse | OpenAIResponsesResponse;
+
 function extractFirstTextSnippet(
-  entries: ProviderApiResponse["content"],
-  maxLength = 100
+  response: ProviderApiResponse,
+  maxLength?: number
 ): string | undefined {
-  if (!Array.isArray(entries)) {
-    return undefined;
+  const limit = maxLength ?? API_TEST_CONFIG.MAX_RESPONSE_PREVIEW_LENGTH;
+
+  // Anthropic Messages API
+  if ("content" in response && Array.isArray(response.content)) {
+    const firstText = response.content.find((item) => item.type === "text");
+    if (firstText && "text" in firstText) {
+      return firstText.text.substring(0, limit);
+    }
   }
 
-  for (const entry of entries) {
-    if (typeof entry === "string") {
-      return entry.substring(0, maxLength);
+  // OpenAI Chat Completions API
+  if ("choices" in response && Array.isArray(response.choices)) {
+    const firstChoice = response.choices[0];
+    if (firstChoice?.message?.content) {
+      return firstChoice.message.content.substring(0, limit);
     }
+  }
 
-    if (entry && typeof entry === "object" && "text" in entry) {
-      const textValue = (entry as { text?: unknown }).text;
-      if (typeof textValue === "string") {
-        return textValue.substring(0, maxLength);
+  // OpenAI Responses API
+  if ("output" in response && Array.isArray(response.output)) {
+    const firstOutput = response.output[0];
+    if (firstOutput?.type === "message" && Array.isArray(firstOutput.content)) {
+      const textContent = firstOutput.content.find((c) => c.type === "output_text");
+      if (textContent && "text" in textContent) {
+        return textContent.text.substring(0, limit);
       }
     }
   }
@@ -832,8 +887,9 @@ function extractFirstTextSnippet(
   return undefined;
 }
 
-function clipText(value: unknown, maxLength = 100): string | undefined {
-  return typeof value === "string" ? value.substring(0, maxLength) : undefined;
+function clipText(value: unknown, maxLength?: number): string | undefined {
+  const limit = maxLength ?? API_TEST_CONFIG.MAX_RESPONSE_PREVIEW_LENGTH;
+  return typeof value === "string" ? value.substring(0, limit) : undefined;
 }
 
 type ProviderUrlValidationError = {
@@ -994,7 +1050,7 @@ async function executeProviderApiTest(
         method: "POST",
         headers: options.headers(data.apiKey),
         body: JSON.stringify(options.body(model)),
-        signal: AbortSignal.timeout(30000),
+        signal: AbortSignal.timeout(API_TEST_CONFIG.TIMEOUT_MS),
       };
 
       if (proxyConfig) {
@@ -1015,10 +1071,10 @@ async function executeProviderApiTest(
         }
 
         logger.error("Provider API test failed", {
-          providerUrl: normalizedProviderUrl,
+          providerUrl: normalizedProviderUrl.replace(/:\/\/[^@]*@/, "://***@"),
           path: options.path,
           status: response.status,
-          errorDetail: errorDetail ?? errorText,
+          errorDetail: errorDetail ?? clipText(errorText, 200),
         });
 
         return {
@@ -1034,7 +1090,7 @@ async function executeProviderApiTest(
         };
       }
 
-      const result = await response.json();
+      const result = (await response.json()) as ProviderApiResponse;
       const extracted = options.extract(result);
 
       return {
@@ -1087,14 +1143,14 @@ export async function testProviderAnthropicMessages(
     }),
     body: (model) => ({
       model,
-      max_tokens: 100,
-      messages: [{ role: "user", content: "Hello" }],
+      max_tokens: API_TEST_CONFIG.TEST_MAX_TOKENS,
+      messages: [{ role: "user", content: API_TEST_CONFIG.TEST_PROMPT }],
     }),
     successMessage: "Anthropic Messages API 测试成功",
     extract: (result) => ({
-      model: result?.model,
-      usage: result?.usage,
-      content: extractFirstTextSnippet(result?.content),
+      model: "model" in result ? result.model : undefined,
+      usage: "usage" in result ? (result.usage as Record<string, unknown>) : undefined,
+      content: extractFirstTextSnippet(result),
     }),
   });
 }
@@ -1114,6 +1170,7 @@ export async function testProviderOpenAIChatCompletions(
     }),
     body: (model) => ({
       model,
+      max_tokens: API_TEST_CONFIG.TEST_MAX_TOKENS,
       messages: [
         { role: "developer", content: "你是一个有帮助的助手。" },
         { role: "user", content: "你好" },
@@ -1121,9 +1178,9 @@ export async function testProviderOpenAIChatCompletions(
     }),
     successMessage: "OpenAI Chat Completions API 测试成功",
     extract: (result) => ({
-      model: result?.model,
-      usage: result?.usage,
-      content: clipText(result?.choices?.[0]?.message?.content),
+      model: "model" in result ? result.model : undefined,
+      usage: "usage" in result ? (result.usage as Record<string, unknown>) : undefined,
+      content: extractFirstTextSnippet(result),
     }),
   });
 }
@@ -1143,26 +1200,14 @@ export async function testProviderOpenAIResponses(
     }),
     body: (model) => ({
       model,
+      max_tokens: API_TEST_CONFIG.TEST_MAX_TOKENS,
       input: "讲一个简短的故事",
     }),
     successMessage: "OpenAI Responses API 测试成功",
-    extract: (result) => {
-      let content: string | undefined;
-      if (result?.output && Array.isArray(result.output)) {
-        const firstOutput = result.output[0];
-        if (firstOutput?.type === "message" && Array.isArray(firstOutput.content)) {
-          const textContent = firstOutput.content.find(
-            (c: { type?: string }) => c?.type === "output_text"
-          ) as { text?: unknown } | undefined;
-          content = clipText(textContent?.text);
-        }
-      }
-
-      return {
-        model: result?.model,
-        usage: result?.usage,
-        content,
-      };
-    },
+    extract: (result) => ({
+      model: "model" in result ? result.model : undefined,
+      usage: "usage" in result ? (result.usage as Record<string, unknown>) : undefined,
+      content: extractFirstTextSnippet(result),
+    }),
   });
 }

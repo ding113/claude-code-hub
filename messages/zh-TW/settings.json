@@ -594,7 +594,13 @@
         "usage": "Token 用量",
         "response": "回應內容",
         "error": "錯誤訊息",
-        "unknown": "未知"
+        "unknown": "未知",
+        "viewDetails": "檢視詳情",
+        "copySuccess": "已複製到剪貼簿",
+        "copyFailed": "複製失敗",
+        "copyResult": "複製結果",
+        "success": "成功",
+        "failed": "失敗"
       },
       "modelSelect": {
         "allowAllModels": "允許所有 {type} 模型",

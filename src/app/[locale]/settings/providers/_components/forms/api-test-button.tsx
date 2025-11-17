@@ -2,7 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Loader2, CheckCircle2, XCircle, Activity } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, Activity, Copy, ExternalLink } from "lucide-react";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import { Badge } from "@/components/ui/badge";
 import {
   testProviderAnthropicMessages,
   testProviderOpenAIChatCompletions,
@@ -24,6 +33,13 @@ import { isValidUrl } from "@/lib/utils/validation";
 import type { ProviderType } from "@/types/provider";
 
 type ApiFormat = "anthropic-messages" | "openai-chat" | "openai-responses";
+
+// UI 配置常量
+const API_TEST_UI_CONFIG = {
+  MAX_PREVIEW_LENGTH: 500, // 响应内容预览最大长度
+  TOAST_SUCCESS_DURATION: 3000, // 成功 toast 显示时长（毫秒）
+  TOAST_ERROR_DURATION: 5000, // 错误 toast 显示时长（毫秒）
+} as const;
 
 const providerTypeToApiFormat: Partial<Record<ProviderType, ApiFormat>> = {
   claude: "anthropic-messages",
@@ -142,7 +158,9 @@ export function ApiTestButton({
     setTestResult(null);
 
     try {
+      // 优先使用表单中的密钥，仅在为空且提供了 providerId 时才查询数据库
       let resolvedKey = apiKey.trim();
+
       if (!resolvedKey && providerId) {
         const result = await getUnmaskedProviderKey(providerId);
         if (!result.ok) {
@@ -217,13 +235,14 @@ export function ApiTestButton({
 
         toast.success(t("testSuccess"), {
           description: `${t("model")}: ${model} | ${t("responseTime")}: ${responseTime}`,
+          duration: API_TEST_UI_CONFIG.TOAST_SUCCESS_DURATION,
         });
       } else {
         const errorMessage = response.data.details?.error || response.data.message;
 
         toast.error(t("testFailed"), {
           description: errorMessage,
-          duration: 5000,
+          duration: API_TEST_UI_CONFIG.TOAST_ERROR_DURATION,
         });
       }
     } catch (error) {
@@ -271,6 +290,40 @@ export function ApiTestButton({
     );
   };
 
+  // 复制测试结果到剪贴板
+  const handleCopyResult = async () => {
+    if (!testResult) return;
+
+    const resultText = [
+      `测试结果: ${testResult.success ? "成功" : "失败"}`,
+      `消息: ${testResult.message}`,
+      testResult.details?.model && `模型: ${testResult.details.model}`,
+      testResult.details?.responseTime !== undefined &&
+        `响应时间: ${testResult.details.responseTime}ms`,
+      testResult.details?.usage &&
+        `Token 用量: ${
+          typeof testResult.details.usage === "object"
+            ? JSON.stringify(testResult.details.usage, null, 2)
+            : String(testResult.details.usage)
+        }`,
+      testResult.details?.content &&
+        `响应内容: ${testResult.details.content.slice(0, API_TEST_UI_CONFIG.MAX_PREVIEW_LENGTH)}${
+          testResult.details.content.length > API_TEST_UI_CONFIG.MAX_PREVIEW_LENGTH ? "..." : ""
+        }`,
+      testResult.details?.error && `错误详情: ${testResult.details.error}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    try {
+      await navigator.clipboard.writeText(resultText);
+      toast.success(t("copySuccess"));
+    } catch (error) {
+      console.error("复制失败:", error);
+      toast.error(t("copyFailed"));
+    }
+  };
+
   // 获取默认模型占位符
   return (
     <div className="space-y-4">
@@ -316,17 +369,125 @@ export function ApiTestButton({
         <div className="text-xs text-muted-foreground">{t("testModelDesc")}</div>
       </div>
 
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={handleTest}
-        disabled={disabled || isTesting || !providerUrl.trim() || (!apiKey.trim() && !providerId)}
-      >
-        {getButtonContent()}
-      </Button>
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={handleTest}
+          disabled={disabled || isTesting || !providerUrl.trim() || (!apiKey.trim() && !providerId)}
+        >
+          {getButtonContent()}
+        </Button>
 
-      {/* 显示详细测试结果 */}
+        {/* 查看详细结果按钮 */}
+        {testResult && !isTesting && (
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button type="button" variant="ghost" size="sm">
+                <ExternalLink className="h-4 w-4 mr-2" />
+                {t("viewDetails")}
+              </Button>
+            </SheetTrigger>
+            <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
+              <SheetHeader>
+                <SheetTitle className="flex items-center gap-2">
+                  {testResult.success ? (
+                    <>
+                      <CheckCircle2 className="h-5 w-5 text-green-600" />
+                      {t("testSuccess")}
+                    </>
+                  ) : (
+                    <>
+                      <XCircle className="h-5 w-5 text-red-600" />
+                      {t("testFailed")}
+                    </>
+                  )}
+                </SheetTitle>
+                <SheetDescription>{testResult.message}</SheetDescription>
+              </SheetHeader>
+
+              <div className="mt-6 space-y-4">
+                {/* 状态徽章 */}
+                <div className="flex gap-2">
+                  <Badge variant={testResult.success ? "default" : "destructive"}>
+                    {testResult.success ? t("success") : t("failed")}
+                  </Badge>
+                  {testResult.details?.model && (
+                    <Badge variant="outline">{testResult.details.model}</Badge>
+                  )}
+                </div>
+
+                {/* 详细信息 */}
+                {testResult.details && (
+                  <div className="space-y-4">
+                    {/* 响应时间 */}
+                    {testResult.details.responseTime !== undefined && (
+                      <div className="space-y-1">
+                        <div className="text-sm font-medium">{t("responseTime")}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {testResult.details.responseTime}ms
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Token 用量 */}
+                    {testResult.details.usage && (
+                      <div className="space-y-1">
+                        <div className="text-sm font-medium">{t("usage")}</div>
+                        <div className="text-sm text-muted-foreground font-mono bg-muted p-2 rounded">
+                          {typeof testResult.details.usage === "object"
+                            ? JSON.stringify(testResult.details.usage, null, 2)
+                            : String(testResult.details.usage)}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 响应内容 */}
+                    {testResult.details.content && (
+                      <div className="space-y-1">
+                        <div className="text-sm font-medium">{t("response")}</div>
+                        <div className="text-sm text-muted-foreground bg-muted p-3 rounded max-h-60 overflow-y-auto">
+                          {testResult.details.content.slice(
+                            0,
+                            API_TEST_UI_CONFIG.MAX_PREVIEW_LENGTH
+                          )}
+                          {testResult.details.content.length >
+                            API_TEST_UI_CONFIG.MAX_PREVIEW_LENGTH && "..."}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 错误详情 */}
+                    {testResult.details.error && (
+                      <div className="space-y-1">
+                        <div className="text-sm font-medium text-red-600">{t("error")}</div>
+                        <div className="text-sm text-red-600 bg-red-50 p-3 rounded max-h-60 overflow-y-auto font-mono">
+                          {testResult.details.error}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 复制按钮 */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCopyResult}
+                  className="w-full"
+                >
+                  <Copy className="h-4 w-4 mr-2" />
+                  {t("copyResult")}
+                </Button>
+              </div>
+            </SheetContent>
+          </Sheet>
+        )}
+      </div>
+
+      {/* 显示简要测试结果 */}
       {testResult && !isTesting && (
         <div
           className={`text-xs p-3 rounded-md ${

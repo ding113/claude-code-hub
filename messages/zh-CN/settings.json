@@ -231,7 +231,13 @@
         "usage": "Token 用量",
         "response": "响应内容",
         "error": "错误信息",
-        "unknown": "未知"
+        "unknown": "未知",
+        "viewDetails": "查看详情",
+        "copySuccess": "已复制到剪贴板",
+        "copyFailed": "复制失败",
+        "copyResult": "复制结果",
+        "success": "成功",
+        "failed": "失败"
       },
       "modelSelect": {
         "allowAllModels": "允许所有 {type} 模型",
