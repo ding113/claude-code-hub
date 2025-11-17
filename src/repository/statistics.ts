@@ -11,6 +11,9 @@ import type {
   DatabaseUser,
   DatabaseKeyStatRow,
   DatabaseKey,
+  RateLimitEventStats,
+  RateLimitEventFilters,
+  RateLimitType,
 } from "@/types/statistics";
 
 /**
@@ -613,6 +616,167 @@ export async function sumKeyCostInTimeRange(
     );
 
   return Number(result[0]?.total || 0);
+}
+
+/**
+ * 获取限流事件统计数据
+ * 查询 message_request 表中包含 rate_limit_metadata 的错误记录
+ *
+ * @param filters - 过滤条件
+ * @returns 聚合统计数据，包含 6 个维度的指标
+ */
+export async function getRateLimitEventStats(
+  filters: RateLimitEventFilters = {}
+): Promise<RateLimitEventStats> {
+  const timezone = getEnvConfig().TZ;
+  const { user_id, provider_id, limit_type, start_time, end_time, key_id } = filters;
+
+  // 构建 WHERE 条件
+  const conditions: string[] = [
+    `${messageRequest.errorMessage.name} LIKE '%rate_limit_metadata%'`,
+    `${messageRequest.deletedAt.name} IS NULL`,
+  ];
+
+  const params: (string | number | Date)[] = [];
+  let paramIndex = 1;
+
+  if (user_id !== undefined) {
+    conditions.push(`${messageRequest.userId.name} = $${paramIndex++}`);
+    params.push(user_id);
+  }
+
+  if (provider_id !== undefined) {
+    conditions.push(`${messageRequest.providerId.name} = $${paramIndex++}`);
+    params.push(provider_id);
+  }
+
+  if (start_time) {
+    conditions.push(`${messageRequest.createdAt.name} >= $${paramIndex++}`);
+    params.push(start_time);
+  }
+
+  if (end_time) {
+    conditions.push(`${messageRequest.createdAt.name} <= $${paramIndex++}`);
+    params.push(end_time);
+  }
+
+  // Key ID 过滤需要先查询 key 字符串
+  let keyString: string | null = null;
+  if (key_id !== undefined) {
+    const keyRecord = await db
+      .select({ key: keys.key })
+      .from(keys)
+      .where(eq(keys.id, key_id))
+      .limit(1);
+
+    if (keyRecord && keyRecord.length > 0) {
+      keyString = keyRecord[0].key;
+      conditions.push(`${messageRequest.key.name} = $${paramIndex++}`);
+      params.push(keyString);
+    } else {
+      // Key 不存在，返回空统计
+      return {
+        total_events: 0,
+        events_by_type: {} as Record<RateLimitType, number>,
+        events_by_user: {},
+        events_by_provider: {},
+        events_timeline: [],
+        avg_current_usage: 0,
+      };
+    }
+  }
+
+  // 查询所有符合条件的限流事件
+  const query = sql`
+    SELECT
+      ${messageRequest.id},
+      ${messageRequest.userId},
+      ${messageRequest.providerId},
+      ${messageRequest.errorMessage},
+      DATE_TRUNC('hour', ${messageRequest.createdAt} AT TIME ZONE ${timezone}) AS hour
+    FROM ${messageRequest}
+    WHERE ${sql.raw(conditions.join(" AND "))}
+    ORDER BY ${messageRequest.createdAt}
+  `;
+
+  const result = await db.execute(query);
+  const rows = Array.from(result) as Array<{
+    id: number;
+    user_id: number;
+    provider_id: number;
+    error_message: string;
+    hour: Date;
+  }>;
+
+  // 初始化聚合数据
+  const eventsByType: Record<string, number> = {};
+  const eventsByUser: Record<number, number> = {};
+  const eventsByProvider: Record<number, number> = {};
+  const eventsByHour: Record<string, number> = {};
+  let totalCurrentUsage = 0;
+  let usageCount = 0;
+
+  // 处理每条记录
+  for (const row of rows) {
+    // 解析 rate_limit_metadata JSON
+    const metadataMatch = row.error_message.match(/rate_limit_metadata:\s*(\{[^}]+\})/);
+    if (!metadataMatch) {
+      continue;
+    }
+
+    let metadata: { limit_type?: string; current?: number };
+    try {
+      metadata = JSON.parse(metadataMatch[1]);
+    } catch {
+      continue;
+    }
+
+    const rowLimitType = metadata.limit_type;
+    const currentUsage = metadata.current;
+
+    // 如果指定了 limit_type 过滤，跳过不匹配的记录
+    if (limit_type && rowLimitType !== limit_type) {
+      continue;
+    }
+
+    // 按类型统计
+    if (rowLimitType) {
+      eventsByType[rowLimitType] = (eventsByType[rowLimitType] || 0) + 1;
+    }
+
+    // 按用户统计
+    eventsByUser[row.user_id] = (eventsByUser[row.user_id] || 0) + 1;
+
+    // 按供应商统计
+    eventsByProvider[row.provider_id] = (eventsByProvider[row.provider_id] || 0) + 1;
+
+    // 按小时统计
+    const hourKey = row.hour.toISOString();
+    eventsByHour[hourKey] = (eventsByHour[hourKey] || 0) + 1;
+
+    // 累计当前使用量
+    if (typeof currentUsage === "number") {
+      totalCurrentUsage += currentUsage;
+      usageCount++;
+    }
+  }
+
+  // 计算平均当前使用量
+  const avgCurrentUsage = usageCount > 0 ? totalCurrentUsage / usageCount : 0;
+
+  // 构建时间线数组（按时间排序）
+  const eventsTimeline = Object.entries(eventsByHour)
+    .map(([hour, count]) => ({ hour, count }))
+    .sort((a, b) => a.hour.localeCompare(b.hour));
+
+  return {
+    total_events: rows.length,
+    events_by_type: eventsByType as Record<RateLimitType, number>,
+    events_by_user: eventsByUser,
+    events_by_provider: eventsByProvider,
+    events_timeline: eventsTimeline,
+    avg_current_usage: Number(avgCurrentUsage.toFixed(2)),
+  };
 }
 
 /**

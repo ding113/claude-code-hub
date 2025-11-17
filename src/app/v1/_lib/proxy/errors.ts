@@ -236,6 +236,57 @@ export function isClientAbortError(error: Error): boolean {
 }
 
 /**
+ * 限流错误类 - 携带详细的限流上下文信息
+ *
+ * 设计原则：
+ * 1. 结构化错误：携带 7 个核心字段用于精确反馈
+ * 2. 类型安全：使用 TypeScript 枚举确保限流类型正确
+ * 3. 可追踪性：包含 provider_id 用于追溯限流来源
+ */
+export class RateLimitError extends Error {
+  constructor(
+    public readonly type: "rate_limit_error",
+    message: string,
+    public readonly limitType:
+      | "rpm"
+      | "usd_5h"
+      | "usd_weekly"
+      | "usd_monthly"
+      | "concurrent_sessions"
+      | "daily_quota",
+    public readonly currentUsage: number,
+    public readonly limitValue: number,
+    public readonly resetTime: string, // ISO 8601 格式
+    public readonly providerId: number | null = null
+  ) {
+    super(message);
+    this.name = "RateLimitError";
+  }
+
+  /**
+   * 获取适合记录到数据库的 JSON 元数据
+   */
+  toJSON() {
+    return {
+      type: this.type,
+      limit_type: this.limitType,
+      current_usage: this.currentUsage,
+      limit_value: this.limitValue,
+      reset_time: this.resetTime,
+      provider_id: this.providerId,
+      message: this.message,
+    };
+  }
+}
+
+/**
+ * 类型守卫：检查是否为 RateLimitError
+ */
+export function isRateLimitError(error: unknown): error is RateLimitError {
+  return error instanceof RateLimitError;
+}
+
+/**
  * 判断错误类型
  *
  * 分类规则（优先级从高到低）：
