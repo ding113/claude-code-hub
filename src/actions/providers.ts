@@ -796,10 +796,13 @@ type ProviderApiResponse = Record<string, unknown> & {
   output?: Array<
     | {
         type?: string;
-        content?: Array<{
-          type?: string;
-          text?: string;
-        } | Record<string, unknown>>;
+        content?: Array<
+          | {
+              type?: string;
+              text?: string;
+            }
+          | Record<string, unknown>
+        >;
       }
     | Record<string, unknown>
   >;

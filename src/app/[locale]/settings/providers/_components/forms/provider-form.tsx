@@ -123,7 +123,13 @@ export function ProviderForm({
     useState<CodexInstructionsStrategy>(sourceProvider?.codexInstructionsStrategy ?? "auto");
 
   // 折叠区域状态管理
-  type SectionKey = "routing" | "rateLimit" | "circuitBreaker" | "proxy" | "apiTest" | "codexStrategy";
+  type SectionKey =
+    | "routing"
+    | "rateLimit"
+    | "circuitBreaker"
+    | "proxy"
+    | "apiTest"
+    | "codexStrategy";
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
     routing: false,
     rateLimit: false,
@@ -711,10 +717,7 @@ export function ProviderForm({
         </Collapsible>
 
         {/* 限流配置 */}
-        <Collapsible
-          open={openSections.rateLimit}
-          onOpenChange={() => toggleSection("rateLimit")}
-        >
+        <Collapsible open={openSections.rateLimit} onOpenChange={() => toggleSection("rateLimit")}>
           <CollapsibleTrigger asChild>
             <button
               type="button"
@@ -1021,10 +1024,7 @@ export function ProviderForm({
         </Collapsible>
 
         {/* API 测试 */}
-        <Collapsible
-          open={openSections.apiTest}
-          onOpenChange={() => toggleSection("apiTest")}
-        >
+        <Collapsible open={openSections.apiTest} onOpenChange={() => toggleSection("apiTest")}>
           <CollapsibleTrigger asChild>
             <button
               type="button"
@@ -1039,17 +1039,13 @@ export function ProviderForm({
                 />
                 <span className="text-sm font-medium">{t("sections.apiTest.title")}</span>
               </div>
-              <span className="text-xs text-muted-foreground">
-                {t("sections.apiTest.summary")}
-              </span>
+              <span className="text-xs text-muted-foreground">{t("sections.apiTest.summary")}</span>
             </button>
           </CollapsibleTrigger>
           <CollapsibleContent className="space-y-4 pb-4">
             <div className="space-y-4">
               <div className="space-y-1">
-                <p className="text-xs text-muted-foreground">
-                  {t("sections.apiTest.desc")}
-                </p>
+                <p className="text-xs text-muted-foreground">{t("sections.apiTest.desc")}</p>
               </div>
 
               <div className="space-y-2">
@@ -1064,9 +1060,7 @@ export function ProviderForm({
                   enableMultiProviderTypes={enableMultiProviderTypes}
                   disabled={isPending || !url.trim()}
                 />
-                <p className="text-xs text-muted-foreground">
-                  {t("sections.apiTest.notice")}
-                </p>
+                <p className="text-xs text-muted-foreground">{t("sections.apiTest.notice")}</p>
               </div>
             </div>
           </CollapsibleContent>
