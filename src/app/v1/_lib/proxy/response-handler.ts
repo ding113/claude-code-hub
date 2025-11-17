@@ -242,6 +242,16 @@ export class ProxyResponseHandler {
 
             // 注意：无法重试，因为客户端已收到 HTTP 200
             // 错误已记录，熔断器已更新，不抛出异常（避免影响后台任务）
+
+            // 更新数据库记录（避免 orphan record）
+            await persistRequestFailure({
+              session,
+              messageContext,
+              statusCode: statusCode ?? 500,
+              error: err,
+              taskId,
+              phase: "non-stream",
+            });
           } else {
             // ✅ 客户端主动中断：正常日志，不抛出错误
             logger.warn("ResponseHandler: Non-stream processing aborted by client", {
@@ -257,6 +267,16 @@ export class ProxyResponseHandler {
           }
         } else {
           logger.error("Failed to handle non-stream log:", error);
+
+          // 更新数据库记录（避免 orphan record）
+          await persistRequestFailure({
+            session,
+            messageContext,
+            statusCode: statusCode ?? 500,
+            error,
+            taskId,
+            phase: "non-stream",
+          });
         }
       } finally {
         AsyncTaskManager.cleanup(taskId);
@@ -265,10 +285,20 @@ export class ProxyResponseHandler {
 
     // ✅ 注册任务并添加全局错误捕获
     AsyncTaskManager.register(taskId, processingPromise, "non-stream-processing");
-    processingPromise.catch((error) => {
+    processingPromise.catch(async (error) => {
       logger.error("ResponseHandler: Uncaught error in non-stream processing", {
         taskId,
         error,
+      });
+
+      // 更新数据库记录（避免 orphan record）
+      await persistRequestFailure({
+        session,
+        messageContext,
+        statusCode: statusCode ?? 500,
+        error,
+        taskId,
+        phase: "non-stream",
       });
     });
 
@@ -607,6 +637,16 @@ export class ProxyResponseHandler {
 
             // 注意：无法重试，因为客户端已收到 HTTP 200
             // 错误已记录，熔断器已更新，不抛出异常（避免影响后台任务）
+
+            // 更新数据库记录（避免 orphan record）
+            await persistRequestFailure({
+              session,
+              messageContext,
+              statusCode: statusCode ?? 500,
+              error: err,
+              taskId,
+              phase: "stream",
+            });
           } else if (isIdleTimeout) {
             // ⚠️ 静默期超时：计入熔断器并记录错误日志
             logger.error("ResponseHandler: Streaming idle timeout", {
@@ -633,6 +673,16 @@ export class ProxyResponseHandler {
 
             // 注意：无法重试，因为客户端已收到 HTTP 200
             // 错误已记录，熔断器已更新，不抛出异常（避免影响后台任务）
+
+            // 更新数据库记录（避免 orphan record - 这是导致 185 个孤儿记录的根本原因！）
+            await persistRequestFailure({
+              session,
+              messageContext,
+              statusCode: statusCode ?? 500,
+              error: err,
+              taskId,
+              phase: "stream",
+            });
           } else {
             // ✅ 客户端主动中断：正常日志，不抛出错误
             logger.warn("ResponseHandler: Stream reading aborted by client", {
@@ -650,6 +700,16 @@ export class ProxyResponseHandler {
           }
         } else {
           logger.error("Failed to save SSE content:", error);
+
+          // 更新数据库记录（避免 orphan record）
+          await persistRequestFailure({
+            session,
+            messageContext,
+            statusCode: statusCode ?? 500,
+            error,
+            taskId,
+            phase: "stream",
+          });
         }
       } finally {
         // ✅ 确保资源释放
@@ -665,11 +725,21 @@ export class ProxyResponseHandler {
 
     // ✅ 注册任务并添加全局错误捕获
     AsyncTaskManager.register(taskId, processingPromise, "stream-processing");
-    processingPromise.catch((error) => {
+    processingPromise.catch(async (error) => {
       logger.error("ResponseHandler: Uncaught error in stream processing", {
         taskId,
         messageId: messageContext.id,
         error,
+      });
+
+      // 更新数据库记录（避免 orphan record）
+      await persistRequestFailure({
+        session,
+        messageContext,
+        statusCode: statusCode ?? 500,
+        error,
+        taskId,
+        phase: "stream",
       });
     });
 
@@ -1010,4 +1080,91 @@ async function trackCostToRedis(session: ProxySession, usage: UsageMetrics | nul
   void SessionTracker.refreshSession(session.sessionId, key.id, provider.id).catch((error) => {
     logger.error("[ResponseHandler] Failed to refresh session tracker:", error);
   });
+}
+
+/**
+ * 持久化请求失败信息到数据库
+ * - 用于后台异步任务中的错误处理，确保 orphan records 被正确更新
+ * - 包含完整的错误信息、duration、status code 和 provider chain
+ */
+async function persistRequestFailure(options: {
+  session: ProxySession;
+  messageContext: ProxySession["messageContext"] | null;
+  statusCode: number;
+  error: unknown;
+  taskId: string;
+  phase: "stream" | "non-stream";
+}): Promise<void> {
+  const { session, messageContext, statusCode, error, taskId, phase } = options;
+
+  if (!messageContext) {
+    logger.warn("ResponseHandler: Cannot persist failure without messageContext", {
+      taskId,
+      phase,
+    });
+    return;
+  }
+
+  const tracker = ProxyStatusTracker.getInstance();
+  const errorMessage = formatProcessingError(error);
+  const duration = Date.now() - session.startTime;
+
+  try {
+    // 更新请求持续时间
+    await updateMessageRequestDuration(messageContext.id, duration);
+
+    // 更新错误详情和 provider chain
+    await updateMessageRequestDetails(messageContext.id, {
+      statusCode,
+      errorMessage,
+      providerChain: session.getProviderChain(),
+    });
+
+    logger.info("ResponseHandler: Successfully persisted request failure", {
+      taskId,
+      phase,
+      messageId: messageContext.id,
+      duration,
+      statusCode,
+      errorMessage,
+    });
+  } catch (dbError) {
+    logger.error("ResponseHandler: Failed to persist request failure", {
+      taskId,
+      phase,
+      messageId: messageContext.id,
+      error: errorMessage,
+      dbError,
+    });
+  } finally {
+    // ✅ 确保无论数据库操作成功与否，都清理追踪状态
+    try {
+      tracker.endRequest(messageContext.user.id, messageContext.id);
+    } catch (trackerError) {
+      logger.warn("ResponseHandler: Failed to end request tracking", {
+        taskId,
+        messageId: messageContext.id,
+        trackerError,
+      });
+    }
+  }
+}
+
+/**
+ * 格式化处理错误信息
+ * - 提取有意义的错误描述用于数据库存储
+ */
+function formatProcessingError(error: unknown): string {
+  if (error instanceof Error) {
+    const message = error.message?.trim();
+    return message ? `${error.name}: ${message}` : error.name;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
 }
