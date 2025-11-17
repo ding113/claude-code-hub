@@ -1254,5 +1254,115 @@
     "title": "センシティブワード管理",
     "toggleFailed": "トグルに失敗しました",
     "toggleFailedError": "トグルに失敗しました："
+  },
+  "errorRules": {
+    "nav": "エラールール",
+    "title": "エラールール管理",
+    "description": "リトライ不可能なクライアントエラー検出ルールを設定し、サーキットブレーカーが必要なエラーパターンを自動識別します。",
+    "section": {
+      "title": "エラールールリスト",
+      "description": "正規表現パターンでエラーメッセージをマッチし、無効なリクエスト、パラメータエラーなどのリトライ不可能なクライアントエラーを識別します。システムには一般的なエラーシナリオをカバーする7つのデフォルトルールが含まれています。"
+    },
+    "add": "エラールールを追加",
+    "addSuccess": "エラールールが正常に作成されました",
+    "addFailed": "エラールールの作成に失敗しました",
+    "edit": "エラールールを編集",
+    "editSuccess": "エラールールが正常に更新されました",
+    "editFailed": "エラールールの更新に失敗しました",
+    "delete": "エラールールを削除",
+    "deleteSuccess": "エラールールが正常に削除されました",
+    "deleteFailed": "削除に失敗しました",
+    "enable": "エラールールが有効になりました",
+    "disable": "エラールールが無効になりました",
+    "toggleFailed": "切り替えに失敗しました",
+    "toggleFailedError": "切り替えに失敗しました:",
+    "refreshCache": "キャッシュを更新",
+    "refreshCacheSuccess": "キャッシュが正常に更新され、{count} 個のエラールールがロードされました",
+    "refreshCacheFailed": "キャッシュの更新に失敗しました",
+    "cacheStats": "キャッシュ統計: 有効({enabledCount}) 無効({disabledCount}) デフォルト({defaultCount})",
+    "emptyState": "エラールールがまだありません。右上の「エラールールを追加」をクリックして設定を開始してください。",
+    "confirmDelete": "エラールール \"{pattern}\" を削除してもよろしいですか？",
+    "dialog": {
+      "addTitle": "エラールールを追加",
+      "addDescription": "エラーメッセージの正規表現パターンを設定します。マッチしたエラーはリトライ不可能なクライアントエラーとして識別されます。",
+      "editTitle": "エラールールを編集",
+      "editDescription": "エラールール設定を変更します。変更後、キャッシュが自動的に更新されます。",
+      "patternLabel": "正規表現パターン *",
+      "patternPlaceholder": "正規表現を入力...",
+      "patternRequired": "正規表現パターンを入力してください",
+      "categoryLabel": "ルールカテゴリ *",
+      "categoryPlaceholder": "ルールカテゴリを選択",
+      "descriptionLabel": "説明",
+      "descriptionPlaceholder": "オプション: 説明を追加...",
+      "creating": "作成中...",
+      "saving": "保存中..."
+    },
+    "table": {
+      "pattern": "正規表現パターン",
+      "category": "ルールカテゴリ",
+      "description": "説明",
+      "isEnabled": "有効状態",
+      "isDefault": "デフォルトルール",
+      "createdAt": "作成日時",
+      "actions": "操作"
+    },
+    "form": {
+      "fields": {
+        "pattern": "正規表現パターン",
+        "category": "ルールカテゴリ",
+        "description": "説明"
+      },
+      "placeholders": {
+        "pattern": "例: prompt is too long",
+        "category": "カテゴリを選択",
+        "description": "オプション: 説明を追加..."
+      },
+      "labels": {
+        "pattern": "正規表現パターン *",
+        "category": "ルールカテゴリ *",
+        "description": "説明",
+        "isEnabled": "有効状態"
+      }
+    },
+    "actions": {
+      "add": "追加",
+      "edit": "編集",
+      "delete": "削除",
+      "refresh": "更新",
+      "test": "テスト",
+      "messages": {
+        "success": "操作が成功しました",
+        "error": "操作が失敗しました"
+      }
+    },
+    "validation": {
+      "patternRequired": "正規表現パターンを入力してください",
+      "categoryRequired": "ルールカテゴリを選択してください",
+      "patternInvalid": "正規表現の構文エラー",
+      "redosRisk": "正規表現に ReDoS リスクがあります。パターンを簡略化してください",
+      "patternTooComplex": "正規表現が複雑すぎます"
+    },
+    "categories": {
+      "prompt_limit": "プロンプト長制限",
+      "content_filter": "コンテンツフィルター",
+      "pdf_limit": "PDF ページ制限",
+      "thinking_error": "Thinking フォーマットエラー",
+      "parameter_error": "パラメータ検証失敗",
+      "invalid_request": "無効なリクエスト",
+      "cache_limit": "キャッシュ制御制限"
+    },
+    "regexTester": {
+      "title": "正規表現テスター",
+      "testMessage": "テストメッセージ",
+      "testMessagePlaceholder": "テストするエラーメッセージを入力...",
+      "matchResult": "マッチ結果",
+      "matched": "マッチしました",
+      "notMatched": "マッチしませんでした",
+      "test": "テスト"
+    },
+    "defaultRules": {
+      "cannotDelete": "デフォルトルールは削除できません",
+      "cannotDisable": "デフォルトルールは有効のままにすることをお勧めします"
+    }
   }
 }

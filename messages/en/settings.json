@@ -1254,5 +1254,115 @@
     "title": "Sensitive Words Management",
     "toggleFailed": "Toggle failed",
     "toggleFailedError": "Toggle failed:"
+  },
+  "errorRules": {
+    "nav": "Error Rules",
+    "title": "Error Rules Management",
+    "description": "Configure non-retryable client error detection rules to automatically identify error patterns that require circuit breaking.",
+    "section": {
+      "title": "Error Rules List",
+      "description": "Match error messages via regex patterns to identify non-retryable client errors like invalid requests, parameter errors, etc. System includes 7 default rules covering common error scenarios."
+    },
+    "add": "Add Error Rule",
+    "addSuccess": "Error rule created successfully",
+    "addFailed": "Failed to create error rule",
+    "edit": "Edit Error Rule",
+    "editSuccess": "Error rule updated successfully",
+    "editFailed": "Failed to update error rule",
+    "delete": "Delete Error Rule",
+    "deleteSuccess": "Error rule deleted successfully",
+    "deleteFailed": "Delete failed",
+    "enable": "Error rule enabled",
+    "disable": "Error rule disabled",
+    "toggleFailed": "Toggle failed",
+    "toggleFailedError": "Toggle failed:",
+    "refreshCache": "Refresh Cache",
+    "refreshCacheSuccess": "Cache refreshed successfully, loaded {count} error rules",
+    "refreshCacheFailed": "Failed to refresh cache",
+    "cacheStats": "Cache stats: Enabled({enabledCount}) Disabled({disabledCount}) Default({defaultCount})",
+    "emptyState": "No error rules yet. Click 'Add Error Rule' in the top right to start configuration.",
+    "confirmDelete": "Are you sure you want to delete error rule \"{pattern}\"?",
+    "dialog": {
+      "addTitle": "Add Error Rule",
+      "addDescription": "Configure error message regex patterns. Matched errors will be identified as non-retryable client errors.",
+      "editTitle": "Edit Error Rule",
+      "editDescription": "Modify error rule configuration. Changes will automatically refresh the cache.",
+      "patternLabel": "Regex Pattern *",
+      "patternPlaceholder": "Enter regular expression...",
+      "patternRequired": "Please enter regex pattern",
+      "categoryLabel": "Rule Category *",
+      "categoryPlaceholder": "Select rule category",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Optional: Add description...",
+      "creating": "Creating...",
+      "saving": "Saving..."
+    },
+    "table": {
+      "pattern": "Regex Pattern",
+      "category": "Rule Category",
+      "description": "Description",
+      "isEnabled": "Enabled Status",
+      "isDefault": "Default Rule",
+      "createdAt": "Created At",
+      "actions": "Actions"
+    },
+    "form": {
+      "fields": {
+        "pattern": "Regex Pattern",
+        "category": "Rule Category",
+        "description": "Description"
+      },
+      "placeholders": {
+        "pattern": "e.g. prompt is too long",
+        "category": "Select category",
+        "description": "Optional: Add description..."
+      },
+      "labels": {
+        "pattern": "Regex Pattern *",
+        "category": "Rule Category *",
+        "description": "Description",
+        "isEnabled": "Enabled Status"
+      }
+    },
+    "actions": {
+      "add": "Add",
+      "edit": "Edit",
+      "delete": "Delete",
+      "refresh": "Refresh",
+      "test": "Test",
+      "messages": {
+        "success": "Operation successful",
+        "error": "Operation failed"
+      }
+    },
+    "validation": {
+      "patternRequired": "Please enter regex pattern",
+      "categoryRequired": "Please select rule category",
+      "patternInvalid": "Invalid regex syntax",
+      "redosRisk": "Regex has ReDoS risk, please simplify pattern",
+      "patternTooComplex": "Regex is too complex"
+    },
+    "categories": {
+      "prompt_limit": "Prompt Length Limit",
+      "content_filter": "Content Filter",
+      "pdf_limit": "PDF Page Limit",
+      "thinking_error": "Thinking Format Error",
+      "parameter_error": "Parameter Validation Failed",
+      "invalid_request": "Invalid Request",
+      "cache_limit": "Cache Control Limit"
+    },
+    "regexTester": {
+      "title": "Regex Tester",
+      "testMessage": "Test Message",
+      "testMessagePlaceholder": "Enter error message to test...",
+      "matchResult": "Match Result",
+      "matched": "Matched",
+      "notMatched": "Not Matched",
+      "test": "Test"
+    },
+    "defaultRules": {
+      "cannotDelete": "Default rules cannot be deleted",
+      "cannotDisable": "Recommend keeping default rules enabled"
+    }
   }
 }

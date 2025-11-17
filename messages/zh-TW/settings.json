@@ -1254,5 +1254,115 @@
     "title": "敏感詞管理",
     "toggleFailed": "狀態切換失敗",
     "toggleFailedError": "狀態切換失敗:"
+  },
+  "errorRules": {
+    "nav": "錯誤規則",
+    "title": "錯誤規則管理",
+    "description": "設定不可重試的客戶端錯誤偵測規則，自動識別需要熔斷的錯誤模式。",
+    "section": {
+      "title": "錯誤規則列表",
+      "description": "透過正則表達式模式匹配錯誤訊息，識別客戶端非法請求、參數錯誤等不可重試的錯誤類型。系統已內建 7 條預設規則，覆蓋常見錯誤場景。"
+    },
+    "add": "新增錯誤規則",
+    "addSuccess": "錯誤規則建立成功",
+    "addFailed": "建立錯誤規則失敗",
+    "edit": "編輯錯誤規則",
+    "editSuccess": "錯誤規則更新成功",
+    "editFailed": "更新錯誤規則失敗",
+    "delete": "刪除錯誤規則",
+    "deleteSuccess": "錯誤規則刪除成功",
+    "deleteFailed": "刪除失敗",
+    "enable": "錯誤規則已啟用",
+    "disable": "錯誤規則已停用",
+    "toggleFailed": "狀態切換失敗",
+    "toggleFailedError": "狀態切換失敗:",
+    "refreshCache": "重新整理快取",
+    "refreshCacheSuccess": "快取重新整理成功，已載入 {count} 個錯誤規則",
+    "refreshCacheFailed": "重新整理快取失敗",
+    "cacheStats": "快取統計: 啟用({enabledCount}) 停用({disabledCount}) 預設({defaultCount})",
+    "emptyState": "目前沒有錯誤規則，點擊右上角「新增錯誤規則」開始設定。",
+    "confirmDelete": "確定要刪除錯誤規則「{pattern}」嗎？",
+    "dialog": {
+      "addTitle": "新增錯誤規則",
+      "addDescription": "設定錯誤訊息正則表達式模式，符合的錯誤將被識別為不可重試的客戶端錯誤。",
+      "editTitle": "編輯錯誤規則",
+      "editDescription": "修改錯誤規則設定，更改後將自動重新整理快取。",
+      "patternLabel": "正則表達式模式 *",
+      "patternPlaceholder": "輸入正則表達式...",
+      "patternRequired": "請輸入正則表達式模式",
+      "categoryLabel": "規則類別 *",
+      "categoryPlaceholder": "選擇規則類別",
+      "descriptionLabel": "說明",
+      "descriptionPlaceholder": "選填：新增說明...",
+      "creating": "建立中...",
+      "saving": "儲存中..."
+    },
+    "table": {
+      "pattern": "正則表達式模式",
+      "category": "規則類別",
+      "description": "說明",
+      "isEnabled": "啟用狀態",
+      "isDefault": "預設規則",
+      "createdAt": "建立時間",
+      "actions": "操作"
+    },
+    "form": {
+      "fields": {
+        "pattern": "正則表達式模式",
+        "category": "規則類別",
+        "description": "說明"
+      },
+      "placeholders": {
+        "pattern": "例如: prompt is too long",
+        "category": "選擇類別",
+        "description": "選填：新增說明..."
+      },
+      "labels": {
+        "pattern": "正則表達式模式 *",
+        "category": "規則類別 *",
+        "description": "說明",
+        "isEnabled": "啟用狀態"
+      }
+    },
+    "actions": {
+      "add": "新增",
+      "edit": "編輯",
+      "delete": "刪除",
+      "refresh": "重新整理",
+      "test": "測試",
+      "messages": {
+        "success": "操作成功",
+        "error": "操作失敗"
+      }
+    },
+    "validation": {
+      "patternRequired": "請輸入正則表達式模式",
+      "categoryRequired": "請選擇規則類別",
+      "patternInvalid": "正則表達式語法錯誤",
+      "redosRisk": "正則表達式存在 ReDoS 風險，請簡化模式",
+      "patternTooComplex": "正則表達式過於複雜"
+    },
+    "categories": {
+      "prompt_limit": "Prompt 長度限制",
+      "content_filter": "內容過濾",
+      "pdf_limit": "PDF 頁數限制",
+      "thinking_error": "Thinking 格式錯誤",
+      "parameter_error": "參數驗證失敗",
+      "invalid_request": "非法請求",
+      "cache_limit": "快取控制限制"
+    },
+    "regexTester": {
+      "title": "正則表達式測試器",
+      "testMessage": "測試訊息",
+      "testMessagePlaceholder": "輸入要測試的錯誤訊息...",
+      "matchResult": "匹配結果",
+      "matched": "匹配成功",
+      "notMatched": "未匹配",
+      "test": "測試"
+    },
+    "defaultRules": {
+      "cannotDelete": "預設規則無法刪除",
+      "cannotDisable": "建議保留預設規則啟用狀態"
+    }
   }
 }
