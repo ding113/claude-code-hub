@@ -17,6 +17,7 @@ import type { Format, TransformState } from "../converters/types";
 import { mapClientFormatToTransformer, mapProviderTypeToTransformer } from "./format-mapper";
 import { AsyncTaskManager } from "@/lib/async-task-manager";
 import { isClientAbortError } from "./errors";
+import type { SessionUsageUpdate } from "@/types/session";
 
 export type UsageMetrics = {
   input_tokens?: number;
@@ -100,6 +101,32 @@ export class ProxyResponseHandler {
     const abortController = new AbortController();
 
     const processingPromise = (async () => {
+      const finalizeNonStreamAbort = async (): Promise<void> => {
+        if (messageContext) {
+          const duration = Date.now() - session.startTime;
+          await updateMessageRequestDuration(messageContext.id, duration);
+          await updateMessageRequestDetails(messageContext.id, {
+            statusCode: statusCode,
+            providerChain: session.getProviderChain(),
+          });
+          const tracker = ProxyStatusTracker.getInstance();
+          tracker.endRequest(messageContext.user.id, messageContext.id);
+        }
+
+        if (session.sessionId) {
+          const sessionUsagePayload: SessionUsageUpdate = {
+            status: statusCode >= 200 && statusCode < 300 ? "completed" : "error",
+            statusCode: statusCode,
+          };
+
+          void SessionManager.updateSessionUsage(session.sessionId, sessionUsagePayload).catch(
+            (error: unknown) => {
+              logger.error("[ResponseHandler] Failed to update session usage:", error);
+            }
+          );
+        }
+      };
+
       try {
         // ✅ 检查客户端是否断开
         if (session.clientAbortSignal?.aborted || abortController.signal.aborted) {
@@ -107,6 +134,15 @@ export class ProxyResponseHandler {
             taskId,
             providerId: provider.id,
           });
+          try {
+            await finalizeNonStreamAbort();
+          } catch (finalizeError) {
+            logger.error("ResponseHandler: Failed to finalize aborted non-stream response", {
+              taskId,
+              providerId: provider.id,
+              finalizeError,
+            });
+          }
           return;
         }
 
@@ -252,6 +288,17 @@ export class ProxyResponseHandler {
               taskId,
               phase: "non-stream",
             });
+
+            // 执行清理逻辑
+            try {
+              await finalizeNonStreamAbort();
+            } catch (finalizeError) {
+              logger.error("ResponseHandler: Failed to finalize aborted non-stream response", {
+                taskId,
+                providerId: provider.id,
+                finalizeError,
+              });
+            }
           } else {
             // ✅ 客户端主动中断：正常日志，不抛出错误
             logger.warn("ResponseHandler: Non-stream processing aborted by client", {
@@ -264,6 +311,15 @@ export class ProxyResponseHandler {
                   ? "Response transmission interrupted"
                   : "Client disconnected",
             });
+            try {
+              await finalizeNonStreamAbort();
+            } catch (finalizeError) {
+              logger.error("ResponseHandler: Failed to finalize aborted non-stream response", {
+                taskId,
+                providerId: provider.id,
+                finalizeError,
+              });
+            }
           }
         } else {
           logger.error("Failed to handle non-stream log:", error);
@@ -469,6 +525,83 @@ export class ProxyResponseHandler {
       // ⭐ 不在首次读取前启动 idle timer（避免与首字节超时职责重叠）
       // idle timer 仅在首块数据到达后启动，用于检测流中途静默
 
+      const flushAndJoin = (): string => {
+        const flushed = decoder.decode();
+        if (flushed) {
+          chunks.push(flushed);
+        }
+        return chunks.join("");
+      };
+
+      const finalizeStream = async (allContent: string): Promise<void> => {
+        // 存储响应体到 Redis（5分钟过期）
+        if (session.sessionId) {
+          void SessionManager.storeSessionResponse(session.sessionId, allContent).catch((err) => {
+            logger.error("[ResponseHandler] Failed to store stream response:", err);
+          });
+        }
+
+        const duration = Date.now() - session.startTime;
+        await updateMessageRequestDuration(messageContext.id, duration);
+
+        const tracker = ProxyStatusTracker.getInstance();
+        tracker.endRequest(messageContext.user.id, messageContext.id);
+
+        const usageResult = parseUsageFromResponseText(allContent, provider.providerType);
+        usageForCost = usageResult.usageMetrics;
+
+        await updateRequestCostFromUsage(
+          messageContext.id,
+          session.getOriginalModel(),
+          session.getCurrentModel(),
+          usageForCost,
+          provider.costMultiplier
+        );
+
+        // 追踪消费到 Redis（用于限流）
+        await trackCostToRedis(session, usageForCost);
+
+        // 更新 session 使用量到 Redis（用于实时监控）
+        if (session.sessionId && usageForCost) {
+          let costUsdStr: string | undefined;
+          if (session.request.model) {
+            const priceData = await findLatestPriceByModel(session.request.model);
+            if (priceData?.priceData) {
+              const cost = calculateRequestCost(
+                usageForCost,
+                priceData.priceData,
+                provider.costMultiplier
+              );
+              if (cost.gt(0)) {
+                costUsdStr = cost.toString();
+              }
+            }
+          }
+
+          void SessionManager.updateSessionUsage(session.sessionId, {
+            inputTokens: usageForCost.input_tokens,
+            outputTokens: usageForCost.output_tokens,
+            cacheCreationInputTokens: usageForCost.cache_creation_input_tokens,
+            cacheReadInputTokens: usageForCost.cache_read_input_tokens,
+            costUsd: costUsdStr,
+            status: statusCode >= 200 && statusCode < 300 ? "completed" : "error",
+            statusCode: statusCode,
+          }).catch((error: unknown) => {
+            logger.error("[ResponseHandler] Failed to update session usage:", error);
+          });
+        }
+
+        // 保存扩展信息（status code, tokens, provider chain）
+        await updateMessageRequestDetails(messageContext.id, {
+          statusCode: statusCode,
+          inputTokens: usageForCost?.input_tokens,
+          outputTokens: usageForCost?.output_tokens,
+          cacheCreationInputTokens: usageForCost?.cache_creation_input_tokens,
+          cacheReadInputTokens: usageForCost?.cache_read_input_tokens,
+          providerChain: session.getProviderChain(),
+        });
+      };
+
       try {
         while (true) {
           // ✅ 检查取消信号
@@ -519,82 +652,8 @@ export class ProxyResponseHandler {
 
         // ⭐ 流式读取完成：清除静默期计时器
         clearIdleTimer();
-
-        const flushed = decoder.decode();
-        if (flushed) {
-          chunks.push(flushed);
-        }
-
-        const allContent = chunks.join("");
-
-        // 存储响应体到 Redis（5分钟过期）
-        if (session.sessionId) {
-          void SessionManager.storeSessionResponse(session.sessionId, allContent).catch((err) => {
-            logger.error("[ResponseHandler] Failed to store stream response:", err);
-          });
-        }
-
-        const duration = Date.now() - session.startTime;
-        await updateMessageRequestDuration(messageContext.id, duration);
-
-        // 记录请求结束
-        const tracker = ProxyStatusTracker.getInstance();
-        tracker.endRequest(messageContext.user.id, messageContext.id);
-
-        const usageResult = parseUsageFromResponseText(allContent, provider.providerType);
-        usageForCost = usageResult.usageMetrics;
-
-        await updateRequestCostFromUsage(
-          messageContext.id,
-          session.getOriginalModel(),
-          session.getCurrentModel(),
-          usageForCost,
-          provider.costMultiplier
-        );
-
-        // 追踪消费到 Redis（用于限流）
-        await trackCostToRedis(session, usageForCost);
-
-        // 更新 session 使用量到 Redis（用于实时监控）
-        if (session.sessionId && usageForCost) {
-          // 计算成本（复用相同逻辑）
-          let costUsdStr: string | undefined;
-          if (session.request.model) {
-            const priceData = await findLatestPriceByModel(session.request.model);
-            if (priceData?.priceData) {
-              const cost = calculateRequestCost(
-                usageForCost,
-                priceData.priceData,
-                provider.costMultiplier
-              );
-              if (cost.gt(0)) {
-                costUsdStr = cost.toString();
-              }
-            }
-          }
-
-          void SessionManager.updateSessionUsage(session.sessionId, {
-            inputTokens: usageForCost.input_tokens,
-            outputTokens: usageForCost.output_tokens,
-            cacheCreationInputTokens: usageForCost.cache_creation_input_tokens,
-            cacheReadInputTokens: usageForCost.cache_read_input_tokens,
-            costUsd: costUsdStr,
-            status: statusCode >= 200 && statusCode < 300 ? "completed" : "error",
-            statusCode: statusCode,
-          }).catch((error: unknown) => {
-            logger.error("[ResponseHandler] Failed to update session usage:", error);
-          });
-        }
-
-        // 保存扩展信息（status code, tokens, provider chain）
-        await updateMessageRequestDetails(messageContext.id, {
-          statusCode: statusCode,
-          inputTokens: usageForCost?.input_tokens,
-          outputTokens: usageForCost?.output_tokens,
-          cacheCreationInputTokens: usageForCost?.cache_creation_input_tokens,
-          cacheReadInputTokens: usageForCost?.cache_read_input_tokens,
-          providerChain: session.getProviderChain(),
-        });
+        const allContent = flushAndJoin();
+        await finalizeStream(allContent);
       } catch (error) {
         // 检测 AbortError 的来源：响应超时 vs 静默期超时 vs 客户端中断
         const err = error as Error;
@@ -697,6 +756,16 @@ export class ProxyResponseHandler {
                   ? "Response transmission interrupted"
                   : "Client disconnected",
             });
+            try {
+              const allContent = flushAndJoin();
+              await finalizeStream(allContent);
+            } catch (finalizeError) {
+              logger.error("ResponseHandler: Failed to finalize aborted stream response", {
+                taskId,
+                messageId: messageContext.id,
+                finalizeError,
+              });
+            }
           }
         } else {
           logger.error("Failed to save SSE content:", error);
