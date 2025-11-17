@@ -14,7 +14,8 @@ class NodeFile {
   constructor(fileBits: BlobPart[], fileName: string, options: NodeFileOptions = {}) {
     this.name = fileName;
     this.webkitRelativePath = "";
-    this.lastModified = typeof options.lastModified === "number" ? options.lastModified : Date.now();
+    this.lastModified =
+      typeof options.lastModified === "number" ? options.lastModified : Date.now();
     this.size = 0;
     this.type = options.type || "";
   }
