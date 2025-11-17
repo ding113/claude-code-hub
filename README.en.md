@@ -21,6 +21,20 @@ Claude Code Hub combines Next.js 15, Hono, PostgreSQL, and Redis to deliver a Cl
 
 ---
 
+<table>
+<tr>
+<td width="200">
+<a href="https://cubence.com?source=cch">
+<img src="public/readme/cubence.jpg" alt="Cubence Logo" width="180"/>
+</a>
+</td>
+<td>
+<b>💎 Special Offer</b>: <a href="https://cubence.com?source=cch">Cubence</a> is a stable and efficient AI service transit platform, providing transit services for AI tools such as Claude Code, Codex, Gemini, with good stability and cost-effectiveness.<br/>
+Cubence offers special discount coupons for users of CCH: when purchasing with the coupon <code>DING113CCH</code>, you can enjoy a <b>10% discount</b> → <a href="https://cubence.com?source=cch">Visit Now</a>
+</td>
+</tr>
+</table>
+
 ## ✨ Core Highlights
 
 - 🤖 **Intelligent load balancing**: Weight + priority + grouping scheduler with built-in circuit breaker and up to three failover retries to keep requests stable.
