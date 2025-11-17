@@ -8,7 +8,8 @@
     "data": "数据管理",
     "logs": "日志",
     "notifications": "消息推送",
-    "apiDocs": "API 文档"
+    "apiDocs": "API 文档",
+    "errorRules": "错误规则"
   },
   "common": {
     "save": "保存",
@@ -1290,10 +1291,16 @@
       "patternLabel": "正则模式 *",
       "patternPlaceholder": "输入正则表达式...",
       "patternRequired": "请输入正则模式",
+      "patternHint": "支持 JavaScript 正则表达式语法，例如：prompt is too long|invalid.*request",
       "categoryLabel": "规则类别 *",
       "categoryPlaceholder": "选择规则类别",
+      "categoryRequired": "请选择规则类别",
+      "categoryHint": "选择规则所属的错误类别，用于分类管理和统计",
       "descriptionLabel": "说明",
       "descriptionPlaceholder": "可选：添加说明...",
+      "invalidRegex": "正则表达式语法错误",
+      "regexTester": "正则测试器",
+      "defaultRuleHint": "默认规则的模式不可修改",
       "creating": "创建中...",
       "saving": "保存中..."
     },
