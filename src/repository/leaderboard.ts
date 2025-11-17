@@ -2,7 +2,7 @@
 
 import { db } from "@/drizzle/db";
 import { messageRequest, users, providers } from "@/drizzle/schema";
-import { and, gte, lt, desc, sql, isNull } from "drizzle-orm";
+import { and, desc, sql, isNull } from "drizzle-orm";
 import { getEnvConfig } from "@/lib/config";
 
 /**

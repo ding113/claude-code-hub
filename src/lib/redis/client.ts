@@ -4,20 +4,6 @@ import { logger } from "@/lib/logger";
 let redisClient: Redis | null = null;
 
 /**
- * Mask password in a URL for safe logging.
- * Example: rediss://user:pass@host:6379 -> rediss://user:***@host:6379
- */
-function maskRedisUrl(urlStr: string): string {
-  try {
-    const u = new URL(urlStr);
-    if (u.password) u.password = "***";
-    return u.toString();
-  } catch {
-    return urlStr.replace(/:(?:[^:@]+)@/, ":***@");
-  }
-}
-
-/**
  * Build ioredis connection options with protocol-based TLS detection.
  * - When `rediss://` is used, explicitly enable TLS via `tls: {}`
  * - When `redis://` is used, keep plaintext TCP (no TLS option)

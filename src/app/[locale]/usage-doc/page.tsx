@@ -813,8 +813,6 @@ source ${shellConfig.split(" ")[0]}`}
     const config = cli.vsCodeExtension;
     if (!config) return null;
 
-    const configPath = config.configPath[os === "macos" ? "macos" : "windows"];
-
     if (cli.id === "claude-code") {
       return (
         <div className="space-y-3">

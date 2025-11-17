@@ -575,6 +575,31 @@
     "editProvider": "Edit Provider",
     "enabledStatus": "enabled",
     "form": {
+      "apiTest": {
+        "fillUrlFirst": "Please fill in provider URL first",
+        "invalidUrl": "Provider URL is invalid (http/https only)",
+        "fillKeyFirst": "Please fill in API key first",
+        "testFailed": "Test failed",
+        "testFailedRetry": "Test failed, please retry",
+        "noResult": "Test succeeded but no result returned",
+        "testSuccess": "Model test succeeded",
+        "testApi": "Provider Model Test",
+        "testing": "Testing...",
+        "apiFormat": "Provider type",
+        "selectApiFormat": "Select provider type to test",
+        "apiFormatDesc": "Defaults to the routing configuration unless manually changed",
+        "formatAnthropicMessages": "Claude (Anthropic Messages API)",
+        "formatOpenAIChat": "OpenAI Compatible",
+        "formatOpenAIResponses": "Codex (Response API)",
+        "testModel": "Test model",
+        "testModelDesc": "Leave empty to use the default model or type one manually",
+        "model": "Model",
+        "responseTime": "Response time",
+        "usage": "Token usage",
+        "response": "Response preview",
+        "error": "Error message",
+        "unknown": "Unknown"
+      },
       "proxyTest": {
         "fillUrlFirst": "Please fill in provider URL first",
         "testFailed": "Test failed",
@@ -983,6 +1008,13 @@
             "label": "Connectivity Test",
             "desc": "Test accessing provider URL via proxy (HEAD request, no credits consumed)"
           }
+        },
+        "apiTest": {
+          "title": "Provider Model Test",
+          "summary": "Verify provider & model connectivity",
+          "desc": "Validate whether the selected provider type and model respond correctly. Defaults to the routing configuration unless overridden.",
+          "testLabel": "Provider Model Test",
+          "notice": "Note: This sends a real non-streaming request and may consume a small quota. Confirm provider URL, API key, and model before running."
         },
         "codexStrategy": {
           "title": "Codex Instructions Policy",

@@ -16,10 +16,8 @@ export const metadata: Metadata = {
  */
 export default async function UsageDocLayout({
   children,
-  params,
 }: {
   children: React.ReactNode;
-  params: Promise<{ locale: string }>;
 }) {
   const session = await getSession();
 

@@ -55,7 +55,7 @@ export function setZodErrorMap(
 
     try {
       return { message: t(code, params) };
-    } catch (error) {
+    } catch {
       // Fallback to Zod default message
       return { message: _ctx.defaultError };
     }
@@ -91,7 +91,7 @@ export async function getZodErrorMapServer(locale: string) {
 
     try {
       return { message: t(code, params) };
-    } catch (error) {
+    } catch {
       return { message: _ctx.defaultError };
     }
   };
