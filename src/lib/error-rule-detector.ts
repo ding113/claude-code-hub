@@ -13,10 +13,7 @@
 import { getActiveErrorRules } from "@/repository/error-rules";
 import { logger } from "@/lib/logger";
 import { eventEmitter } from "@/lib/event-emitter";
-
-// safe-regex doesn't have TypeScript definitions, use require for dynamic import
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const safeRegex = require("safe-regex") as (pattern: string) => boolean;
+import safeRegex from "safe-regex";
 
 /**
  * 错误检测结果

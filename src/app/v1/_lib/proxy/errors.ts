@@ -6,6 +6,8 @@
  * 2. 智能截断：JSON 完整保存，文本限制 500 字符
  * 3. 可读性优先：纯文本格式化，便于排查问题
  */
+import { errorRuleDetector } from "@/lib/error-rule-detector";
+
 export class ProxyError extends Error {
   constructor(
     message: string,
@@ -165,10 +167,6 @@ export enum ErrorCategory {
 }
 
 export function isNonRetryableClientError(error: Error): boolean {
-  // 动态导入 errorRuleDetector 避免循环依赖
-  // 使用延迟加载确保初始化顺序正确
-  const { errorRuleDetector } = require("@/lib/error-rule-detector");
-
   // 提取错误消息
   let message = error.message;
 
