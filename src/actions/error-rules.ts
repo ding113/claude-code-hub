@@ -33,12 +33,13 @@ export async function listErrorRules(): Promise<repo.ErrorRule[]> {
 export async function createErrorRuleAction(data: {
   pattern: string;
   category:
-    | "client_error"
-    | "server_error"
-    | "network_error"
-    | "rate_limit"
-    | "authentication"
-    | "other";
+    | "prompt_limit"
+    | "content_filter"
+    | "pdf_limit"
+    | "thinking_error"
+    | "parameter_error"
+    | "invalid_request"
+    | "cache_limit";
   matchType?: "contains" | "exact" | "regex";
   description?: string;
 }): Promise<ActionResult<repo.ErrorRule>> {
@@ -68,12 +69,13 @@ export async function createErrorRuleAction(data: {
 
     // 验证类别
     const validCategories = [
-      "client_error",
-      "server_error",
-      "network_error",
-      "rate_limit",
-      "authentication",
-      "other",
+      "prompt_limit",
+      "content_filter",
+      "pdf_limit",
+      "thinking_error",
+      "parameter_error",
+      "invalid_request",
+      "cache_limit",
     ];
     if (!validCategories.includes(data.category)) {
       return {

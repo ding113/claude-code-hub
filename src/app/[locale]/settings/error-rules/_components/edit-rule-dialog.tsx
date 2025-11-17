@@ -14,6 +14,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { updateErrorRuleAction } from "@/actions/error-rules";
 import { toast } from "sonner";
 import type { ErrorRule } from "@/repository/error-rules";
@@ -67,13 +74,14 @@ export function EditRuleDialog({ rule, open, onOpenChange }: EditRuleDialogProps
     try {
       const result = await updateErrorRuleAction(rule.id, {
         pattern: pattern.trim(),
-        category: category.trim() as
-          | "client_error"
-          | "server_error"
-          | "network_error"
-          | "rate_limit"
-          | "authentication"
-          | "other",
+        category: category as
+          | "prompt_limit"
+          | "content_filter"
+          | "pdf_limit"
+          | "thinking_error"
+          | "parameter_error"
+          | "invalid_request"
+          | "cache_limit",
         description: description.trim() || undefined,
       });
 
@@ -124,13 +132,32 @@ export function EditRuleDialog({ rule, open, onOpenChange }: EditRuleDialogProps
 
             <div className="grid gap-2">
               <Label htmlFor="edit-category">{t("errorRules.dialog.categoryLabel")}</Label>
-              <Input
-                id="edit-category"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                placeholder={t("errorRules.dialog.categoryPlaceholder")}
-                disabled={rule.isDefault}
-              />
+              <Select value={category} onValueChange={setCategory} disabled={rule.isDefault}>
+                <SelectTrigger id="edit-category">
+                  <SelectValue placeholder={t("errorRules.dialog.categoryPlaceholder")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="prompt_limit">
+                    {t("errorRules.categories.prompt_limit")}
+                  </SelectItem>
+                  <SelectItem value="content_filter">
+                    {t("errorRules.categories.content_filter")}
+                  </SelectItem>
+                  <SelectItem value="pdf_limit">{t("errorRules.categories.pdf_limit")}</SelectItem>
+                  <SelectItem value="thinking_error">
+                    {t("errorRules.categories.thinking_error")}
+                  </SelectItem>
+                  <SelectItem value="parameter_error">
+                    {t("errorRules.categories.parameter_error")}
+                  </SelectItem>
+                  <SelectItem value="invalid_request">
+                    {t("errorRules.categories.invalid_request")}
+                  </SelectItem>
+                  <SelectItem value="cache_limit">
+                    {t("errorRules.categories.cache_limit")}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
               <p className="text-xs text-muted-foreground">{t("errorRules.dialog.categoryHint")}</p>
             </div>
 
