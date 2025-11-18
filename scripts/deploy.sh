@@ -372,24 +372,22 @@ wait_for_health() {
 }
 
 get_network_addresses() {
-    log_info "Detecting network addresses..."
-    
     local addresses=()
     
     if [[ "$OS_TYPE" == "linux" ]]; then
         if command -v ip &> /dev/null; then
             while IFS= read -r line; do
                 addresses+=("$line")
-            done < <(ip addr show | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v '^127\.' | grep -v '^172\.17\.' | grep -v '^169\.254\.')
+            done < <(ip addr show 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v '^127\.' | grep -v '^172\.17\.' | grep -v '^169\.254\.')
         elif command -v ifconfig &> /dev/null; then
             while IFS= read -r line; do
                 addresses+=("$line")
-            done < <(ifconfig | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v '^127\.' | grep -v '^172\.17\.' | grep -v '^169\.254\.')
+            done < <(ifconfig 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v '^127\.' | grep -v '^172\.17\.' | grep -v '^169\.254\.')
         fi
     elif [[ "$OS_TYPE" == "macos" ]]; then
         while IFS= read -r line; do
             addresses+=("$line")
-        done < <(ifconfig | grep 'inet ' | awk '{print $2}' | grep -v '^127\.' | grep -v '^169\.254\.')
+        done < <(ifconfig 2>/dev/null | grep 'inet ' | awk '{print $2}' | grep -v '^127\.' | grep -v '^169\.254\.')
     fi
     
     addresses+=("localhost")
