@@ -175,6 +175,8 @@ export async function addProvider(data: {
   allowed_models?: string[] | null;
   join_claude_pool?: boolean;
   limit_5h_usd?: number | null;
+  limit_daily_usd?: number | null;
+  daily_reset_time?: string;
   limit_weekly_usd?: number | null;
   limit_monthly_usd?: number | null;
   limit_concurrent_sessions?: number | null;
@@ -234,6 +236,8 @@ export async function addProvider(data: {
     const payload = {
       ...validated,
       limit_5h_usd: validated.limit_5h_usd ?? null,
+      limit_daily_usd: validated.limit_daily_usd ?? null,
+      daily_reset_time: validated.daily_reset_time ?? "00:00",
       limit_weekly_usd: validated.limit_weekly_usd ?? null,
       limit_monthly_usd: validated.limit_monthly_usd ?? null,
       limit_concurrent_sessions: validated.limit_concurrent_sessions ?? 0,
@@ -302,6 +306,8 @@ export async function editProvider(
     allowed_models?: string[] | null;
     join_claude_pool?: boolean;
     limit_5h_usd?: number | null;
+    limit_daily_usd?: number | null;
+    daily_reset_time?: string;
     limit_weekly_usd?: number | null;
     limit_monthly_usd?: number | null;
     limit_concurrent_sessions?: number | null;

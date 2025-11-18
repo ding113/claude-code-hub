@@ -27,6 +27,8 @@ export async function addKey(data: {
   expiresAt?: string;
   canLoginWebUi?: boolean;
   limit5hUsd?: number | null;
+  limitDailyUsd?: number | null;
+  dailyResetTime?: string;
   limitWeeklyUsd?: number | null;
   limitMonthlyUsd?: number | null;
   limitConcurrentSessions?: number;
@@ -44,6 +46,13 @@ export async function addKey(data: {
     const validatedData = KeyFormSchema.parse({
       name: data.name,
       expiresAt: data.expiresAt,
+      canLoginWebUi: data.canLoginWebUi,
+      limit5hUsd: data.limit5hUsd,
+      limitDailyUsd: data.limitDailyUsd,
+      dailyResetTime: data.dailyResetTime,
+      limitWeeklyUsd: data.limitWeeklyUsd,
+      limitMonthlyUsd: data.limitMonthlyUsd,
+      limitConcurrentSessions: data.limitConcurrentSessions,
     });
 
     // 检查是否存在同名的生效key
@@ -69,6 +78,8 @@ export async function addKey(data: {
       expires_at: expiresAt,
       can_login_web_ui: validatedData.canLoginWebUi,
       limit_5h_usd: validatedData.limit5hUsd,
+      limit_daily_usd: validatedData.limitDailyUsd,
+      daily_reset_time: validatedData.dailyResetTime,
       limit_weekly_usd: validatedData.limitWeeklyUsd,
       limit_monthly_usd: validatedData.limitMonthlyUsd,
       limit_concurrent_sessions: validatedData.limitConcurrentSessions,
@@ -93,6 +104,8 @@ export async function editKey(
     expiresAt?: string;
     canLoginWebUi?: boolean;
     limit5hUsd?: number | null;
+    limitDailyUsd?: number | null;
+    dailyResetTime?: string;
     limitWeeklyUsd?: number | null;
     limitMonthlyUsd?: number | null;
     limitConcurrentSessions?: number;
@@ -125,6 +138,8 @@ export async function editKey(
       expires_at: expiresAt,
       can_login_web_ui: validatedData.canLoginWebUi,
       limit_5h_usd: validatedData.limit5hUsd,
+      limit_daily_usd: validatedData.limitDailyUsd,
+      daily_reset_time: validatedData.dailyResetTime,
       limit_weekly_usd: validatedData.limitWeeklyUsd,
       limit_monthly_usd: validatedData.limitMonthlyUsd,
       limit_concurrent_sessions: validatedData.limitConcurrentSessions,

@@ -80,6 +80,12 @@ export function ProviderForm({
   );
   const [groupTag, setGroupTag] = useState<string>(sourceProvider?.groupTag ?? "");
   const [limit5hUsd, setLimit5hUsd] = useState<number | null>(sourceProvider?.limit5hUsd ?? null);
+  const [limitDailyUsd, setLimitDailyUsd] = useState<number | null>(
+    sourceProvider?.limitDailyUsd ?? null
+  );
+  const [dailyResetTime, setDailyResetTime] = useState<string>(
+    sourceProvider?.dailyResetTime ?? "00:00"
+  );
   const [limitWeeklyUsd, setLimitWeeklyUsd] = useState<number | null>(
     sourceProvider?.limitWeeklyUsd ?? null
   );
