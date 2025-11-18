@@ -341,6 +341,129 @@
     }
   },
 
+  "gemini": {
+    "title": "Gemini CLI Usage Guide",
+    "description": "Gemini CLI is Google's official AI programming assistant command-line tool that supports integration through the cch proxy service. This guide will help you complete installation and configuration on different operating systems.",
+
+    "installation": {
+      "title": "Install gemini",
+      "instruction": "Make sure you have Node.js 18 or higher installed, then globally install Gemini CLI:",
+      "command": "npm install -g @google/gemini-cli",
+      "verification": "Verify installation:",
+      "verificationCommand": "gemini --version",
+      "adminNote": "Run PowerShell as administrator, "
+    },
+
+    "configuration": {
+      "title": "Connect to cch service",
+
+      "configFile": {
+        "title": "Method 1: Configuration File (Recommended)",
+
+        "step1": {
+          "title": "Create configuration directory",
+          "description": "Gemini CLI configuration files are located in the ~/.gemini/ directory.",
+          "macosLinux": "macOS / Linux:",
+          "windows": "Windows (PowerShell):"
+        },
+
+        "step2": {
+          "title": "Create .env configuration file",
+          "description": "Create the .env file in the ~/.gemini/ directory:",
+          "macosLinuxInstruction": "macOS / Linux:",
+          "windowsInstruction": "Windows: Create the .env file in the %USERPROFILE%\\.gemini\\ directory",
+          "content": "Add the following content:"
+        },
+
+        "step3": {
+          "title": "Create settings.json configuration file",
+          "description": "Create the settings.json file in the ~/.gemini/ directory:",
+          "content": "This configuration file enables IDE integration and sets the authentication method to API Key."
+        },
+
+        "parameterNote": "Parameter description",
+        "parameters": [
+          "GOOGLE_GEMINI_BASE_URL: cch API base URL",
+          "GEMINI_API_KEY: Your API key created in the cch console",
+          "GEMINI_MODEL: Model to use (default is gemini-2.5-pro)"
+        ],
+
+        "important": "Important",
+        "importantPoints": [
+          "Replace YOUR_API_KEY_HERE with your actual API key",
+          "How to obtain the key: Log in to the console → API Key Management → Create Key"
+        ]
+      },
+
+      "envVars": {
+        "title": "Method 2: Environment Variable Configuration",
+        "description": "If you only want to use it temporarily, you can configure it via environment variables:",
+
+        "macosLinux": {
+          "title": "macOS / Linux:",
+          "note": "Environment variables are only valid for the current terminal session. For persistent configuration, use the configuration file method."
+        },
+
+        "windows": {
+          "powershell": "Windows (PowerShell):",
+          "cmd": "Windows (CMD):",
+          "note": "Environment variables are only valid for the current terminal session. For persistent configuration, use the configuration file method."
+        }
+      }
+    },
+
+    "startup": {
+      "title": "Startup and Verification",
+
+      "startCli": {
+        "title": "Start Gemini CLI",
+        "description": "Navigate to your project directory and start Gemini CLI:",
+        "note": "On first startup, Gemini CLI will read the settings in the configuration file."
+      },
+
+      "verification": {
+        "title": "Verify Configuration",
+        "description": "Try sending a simple request in Gemini CLI to test the connection:",
+        "testCommand": "Hello, please help me create a Python hello world program",
+        "success": "If Gemini CLI responds normally, the configuration is successful!"
+      },
+
+      "agentMode": {
+        "title": "Using Agent Mode",
+        "description": "Gemini CLI supports Agent Mode, which can automatically plan and execute complex tasks:",
+        "command": "gemini --agent",
+        "features": "In Agent Mode, Gemini will:",
+        "featureList": [
+          "Automatically analyze task requirements",
+          "Develop execution plans",
+          "Execute step by step and verify results",
+          "Adjust strategies based on feedback"
+        ]
+      }
+    },
+
+    "commonIssues": {
+      "title": "Common Issues",
+
+      "commandNotFound": "1. Command not found",
+      "commandNotFoundWindows": [
+        "Make sure the npm global path (usually C:\\Users\\your-username\\AppData\\Roaming\\npm) has been added to the system PATH",
+        "Reopen the PowerShell window"
+      ],
+      "commandNotFoundUnix": "Check the npm global installation path and add it to PATH (if not already there)",
+
+      "connectionFailed": "2. API connection failed",
+      "connectionSteps": [
+        "Check if GEMINI_API_KEY in the environment variables or configuration file is set correctly",
+        "Verify if GOOGLE_GEMINI_BASE_URL is correct",
+        "Test network connection"
+      ],
+
+      "updateCli": "3. Update gemini",
+      "updateCommand": "npm install -g @google/gemini-cli"
+    }
+  },
+
   "droid": {
     "title": "Droid CLI Usage Guide",
     "description": "Droid is an interactive terminal AI programming assistant developed by Factory AI that supports integration through the cch proxy service. You must register and log in to your Droid official account before use.",
