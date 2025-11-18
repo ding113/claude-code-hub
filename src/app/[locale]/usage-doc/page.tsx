@@ -878,15 +878,15 @@ gemini`}
             {t("gemini.startup.verification.title")}
           </h5>
           <p>{t("gemini.startup.verification.description")}</p>
-          <CodeBlock
-            language="text"
-            code={t("gemini.startup.verification.testCommand")}
-          />
+          <CodeBlock language="text" code={t("gemini.startup.verification.testCommand")} />
           <p>{t("gemini.startup.verification.success")}</p>
 
           <h5 className="font-semibold text-foreground">{t("gemini.startup.agentMode.title")}</h5>
           <p>{t("gemini.startup.agentMode.description")}</p>
-          <CodeBlock language={os === "windows" ? "powershell" : "bash"} code={t("gemini.startup.agentMode.command")} />
+          <CodeBlock
+            language={os === "windows" ? "powershell" : "bash"}
+            code={t("gemini.startup.agentMode.command")}
+          />
           <p>{t("gemini.startup.agentMode.features")}</p>
           <ul className="list-disc space-y-1 pl-6">
             {(t.raw("gemini.startup.agentMode.featureList") as string[]).map(

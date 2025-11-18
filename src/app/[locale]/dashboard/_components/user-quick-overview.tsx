@@ -50,10 +50,7 @@ export function UserQuickOverview({ users, isAdmin }: UserQuickOverviewProps) {
       modelCounts.set(stat.model, (modelCounts.get(stat.model) || 0) + stat.callCount);
     });
     if (key.lastProviderName) {
-      providerCounts.set(
-        key.lastProviderName,
-        (providerCounts.get(key.lastProviderName) || 0) + 1
-      );
+      providerCounts.set(key.lastProviderName, (providerCounts.get(key.lastProviderName) || 0) + 1);
     }
   });
 

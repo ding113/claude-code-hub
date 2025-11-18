@@ -87,11 +87,7 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
       </div>
 
       {/* User Key Manager with filtered users */}
-      <UserKeyManager
-        users={filteredUsers}
-        currentUser={currentUser}
-        currencyCode="USD"
-      />
+      <UserKeyManager users={filteredUsers} currentUser={currentUser} currencyCode="USD" />
     </div>
   );
 }
