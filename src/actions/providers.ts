@@ -122,6 +122,8 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         joinClaudePool: provider.joinClaudePool,
         codexInstructionsStrategy: provider.codexInstructionsStrategy,
         limit5hUsd: provider.limit5hUsd,
+        limitDailyUsd: provider.limitDailyUsd,
+        dailyResetTime: provider.dailyResetTime,
         limitWeeklyUsd: provider.limitWeeklyUsd,
         limitMonthlyUsd: provider.limitMonthlyUsd,
         limitConcurrentSessions: provider.limitConcurrentSessions,

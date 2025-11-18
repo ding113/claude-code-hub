@@ -25,6 +25,8 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     joinClaudePool: providerData.join_claude_pool ?? false,
     codexInstructionsStrategy: providerData.codex_instructions_strategy ?? "auto",
     limit5hUsd: providerData.limit_5h_usd != null ? providerData.limit_5h_usd.toString() : null,
+    limitDailyUsd: providerData.limit_daily_usd != null ? providerData.limit_daily_usd.toString() : null,
+    dailyResetTime: providerData.daily_reset_time ?? "00:00",
     limitWeeklyUsd:
       providerData.limit_weekly_usd != null ? providerData.limit_weekly_usd.toString() : null,
     limitMonthlyUsd:
@@ -60,6 +62,8 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     joinClaudePool: providers.joinClaudePool,
     codexInstructionsStrategy: providers.codexInstructionsStrategy,
     limit5hUsd: providers.limit5hUsd,
+    limitDailyUsd: providers.limitDailyUsd,
+    dailyResetTime: providers.dailyResetTime,
     limitWeeklyUsd: providers.limitWeeklyUsd,
     limitMonthlyUsd: providers.limitMonthlyUsd,
     limitConcurrentSessions: providers.limitConcurrentSessions,
@@ -103,6 +107,8 @@ export async function findProviderList(
       joinClaudePool: providers.joinClaudePool,
       codexInstructionsStrategy: providers.codexInstructionsStrategy,
       limit5hUsd: providers.limit5hUsd,
+    limitDailyUsd: providers.limitDailyUsd,
+    dailyResetTime: providers.dailyResetTime,
       limitWeeklyUsd: providers.limitWeeklyUsd,
       limitMonthlyUsd: providers.limitMonthlyUsd,
       limitConcurrentSessions: providers.limitConcurrentSessions,
@@ -153,6 +159,8 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       joinClaudePool: providers.joinClaudePool,
       codexInstructionsStrategy: providers.codexInstructionsStrategy,
       limit5hUsd: providers.limit5hUsd,
+    limitDailyUsd: providers.limitDailyUsd,
+    dailyResetTime: providers.dailyResetTime,
       limitWeeklyUsd: providers.limitWeeklyUsd,
       limitMonthlyUsd: providers.limitMonthlyUsd,
       limitConcurrentSessions: providers.limitConcurrentSessions,
@@ -211,6 +219,11 @@ export async function updateProvider(
   if (providerData.limit_5h_usd !== undefined)
     dbData.limit5hUsd =
       providerData.limit_5h_usd != null ? providerData.limit_5h_usd.toString() : null;
+  if (providerData.limit_daily_usd !== undefined)
+    dbData.limitDailyUsd =
+      providerData.limit_daily_usd != null ? providerData.limit_daily_usd.toString() : null;
+  if (providerData.daily_reset_time !== undefined)
+    dbData.dailyResetTime = providerData.daily_reset_time;
   if (providerData.limit_weekly_usd !== undefined)
     dbData.limitWeeklyUsd =
       providerData.limit_weekly_usd != null ? providerData.limit_weekly_usd.toString() : null;
@@ -256,6 +269,8 @@ export async function updateProvider(
       joinClaudePool: providers.joinClaudePool,
       codexInstructionsStrategy: providers.codexInstructionsStrategy,
       limit5hUsd: providers.limit5hUsd,
+    limitDailyUsd: providers.limitDailyUsd,
+    dailyResetTime: providers.dailyResetTime,
       limitWeeklyUsd: providers.limitWeeklyUsd,
       limitMonthlyUsd: providers.limitMonthlyUsd,
       limitConcurrentSessions: providers.limitConcurrentSessions,

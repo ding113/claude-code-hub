@@ -11,8 +11,9 @@ import { getTimeRangeForPeriod, getTTLForPeriod, getSecondsUntilMidnight } from 
 
 interface CostLimit {
   amount: number | null;
-  period: "5h" | "weekly" | "monthly";
+  period: "5h" | "daily" | "weekly" | "monthly";
   name: string;
+  resetTime?: string; // 自定义重置时间（仅 daily 使用，格式 "HH:mm"）
 }
 
 export class RateLimitService {
@@ -30,12 +31,20 @@ export class RateLimitService {
     type: "key" | "provider",
     limits: {
       limit_5h_usd: number | null;
+      limit_daily_usd: number | null;
+      daily_reset_time?: string;
       limit_weekly_usd: number | null;
       limit_monthly_usd: number | null;
     }
   ): Promise<{ allowed: boolean; reason?: string }> {
     const costLimits: CostLimit[] = [
       { amount: limits.limit_5h_usd, period: "5h", name: "5小时" },
+      { 
+        amount: limits.limit_daily_usd, 
+        period: "daily", 
+        name: "每日",
+        resetTime: limits.daily_reset_time || "00:00"
+      },
       { amount: limits.limit_weekly_usd, period: "weekly", name: "周" },
       { amount: limits.limit_monthly_usd, period: "monthly", name: "月" },
     ];
@@ -83,8 +92,11 @@ export class RateLimitService {
               return await this.checkCostLimitsFromDatabase(id, type, costLimits);
             }
           } else {
-            // 周/月使用普通 GET
-            const value = await this.redis.get(`${type}:${id}:cost_${limit.period}`);
+            // daily/周/月使用普通 GET
+            const periodKey = limit.period === "daily" && limit.resetTime 
+              ? `${limit.period}_${limit.resetTime.replace(":", "")}` 
+              : limit.period;
+            const value = await this.redis.get(`${type}:${id}:cost_${periodKey}`);
 
             // Cache Miss 检测
             if (value === null && limit.amount > 0) {
@@ -133,7 +145,7 @@ export class RateLimitService {
       if (!limit.amount || limit.amount <= 0) continue;
 
       // 计算时间范围（使用新的时间工具函数）
-      const { startTime, endTime } = getTimeRangeForPeriod(limit.period);
+      const { startTime, endTime } = getTimeRangeForPeriod(limit.period, limit.resetTime);
 
       // 查询数据库
       const current =
@@ -163,16 +175,19 @@ export class RateLimitService {
               logger.info(`[RateLimit] Cache warmed for ${key}, value=${current} (rolling window)`);
             }
           } else {
-            // 周/月固定窗口：使用 STRING + 动态 TTL
-            const ttl = getTTLForPeriod(limit.period);
+            // daily/周/月固定窗口：使用 STRING + 动态 TTL
+            const ttl = getTTLForPeriod(limit.period, limit.resetTime);
+            const periodKey = limit.period === "daily" && limit.resetTime 
+              ? `${limit.period}_${limit.resetTime.replace(":", "")}` 
+              : limit.period;
             await this.redis.set(
-              `${type}:${id}:cost_${limit.period}`,
+              `${type}:${id}:cost_${periodKey}`,
               current.toString(),
               "EX",
               ttl
             );
             logger.info(
-              `[RateLimit] Cache warmed for ${type}:${id}:cost_${limit.period}, value=${current}, ttl=${ttl}s`
+              `[RateLimit] Cache warmed for ${type}:${id}:cost_${periodKey}, value=${current}, ttl=${ttl}s`
             );
           }
         } catch (error) {
@@ -289,7 +304,9 @@ export class RateLimitService {
 
   /**
    * 累加消费（请求结束后调用）
-   * 5h 使用滚动窗口（ZSET），周/月使用固定窗口（STRING）
+   * 5h 使用滚动窗口（ZSET），daily/周/月使用固定窗口（STRING）
+   * 
+   * 注意：按天限制会追踪所有可能的重置时间（00:00-23:59），因为我们不知道哪个 key/provider 使用哪个重置时间
    */
   static async trackCost(
     keyId: number,
@@ -303,7 +320,8 @@ export class RateLimitService {
       const now = Date.now();
       const window5h = 5 * 60 * 60 * 1000; // 5 hours in ms
 
-      // 计算动态 TTL（周/月）
+      // 计算动态 TTL（daily/周/月）
+      const ttlDaily = getTTLForPeriod("daily", "00:00"); // 默认使用 00:00 计算 TTL
       const ttlWeekly = getTTLForPeriod("weekly");
       const ttlMonthly = getTTLForPeriod("monthly");
 
@@ -328,17 +346,24 @@ export class RateLimitService {
         window5h.toString()
       );
 
-      // 2. 周/月固定窗口：使用 STRING + 动态 TTL
+      // 2. daily/周/月固定窗口：使用 STRING + 动态 TTL
       const pipeline = this.redis.pipeline();
 
-      // Key 的周/月消费
+      // Key 的 daily/周/月消费
+      // 按天限制使用 daily_0000 作为默认 key（午夜重置）
+      pipeline.incrbyfloat(`key:${keyId}:cost_daily_0000`, cost);
+      pipeline.expire(`key:${keyId}:cost_daily_0000`, ttlDaily);
+
       pipeline.incrbyfloat(`key:${keyId}:cost_weekly`, cost);
       pipeline.expire(`key:${keyId}:cost_weekly`, ttlWeekly);
 
       pipeline.incrbyfloat(`key:${keyId}:cost_monthly`, cost);
       pipeline.expire(`key:${keyId}:cost_monthly`, ttlMonthly);
 
-      // Provider 的周/月消费
+      // Provider 的 daily/周/月消费
+      pipeline.incrbyfloat(`provider:${providerId}:cost_daily_0000`, cost);
+      pipeline.expire(`provider:${providerId}:cost_daily_0000`, ttlDaily);
+
       pipeline.incrbyfloat(`provider:${providerId}:cost_weekly`, cost);
       pipeline.expire(`provider:${providerId}:cost_weekly`, ttlWeekly);
 

@@ -21,7 +21,7 @@ export function AddProviderDialog({ enableMultiProviderTypes }: AddProviderDialo
           <ServerCog className="h-4 w-4" /> 新增服务商
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <FormErrorBoundary>
           <ProviderForm
             mode="create"
