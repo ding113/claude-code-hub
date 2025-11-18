@@ -49,9 +49,9 @@ const providerTypeToApiFormat: Partial<Record<ProviderType, ApiFormat>> = {
 };
 
 const apiFormatDefaultModel: Record<ApiFormat, string> = {
-  "anthropic-messages": "claude-3-5-sonnet-20241022",
-  "openai-chat": "gpt-4.1",
-  "openai-responses": "gpt-4.1",
+  "anthropic-messages": "claude-sonnet-4-5-20250929",
+  "openai-chat": "gpt-5.1-codex",
+  "openai-responses": "gpt-5.1-codex",
 };
 
 const resolveApiFormatFromProvider = (providerType?: ProviderType | null): ApiFormat =>

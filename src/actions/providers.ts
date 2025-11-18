@@ -1066,7 +1066,10 @@ async function executeProviderApiTest(
 
       const init: UndiciFetchOptions = {
         method: "POST",
-        headers: options.headers(data.apiKey),
+        headers: {
+          ...options.headers(data.apiKey),
+          "User-Agent": "claude-cli/2.0.33 (external, cli)",
+        },
         body: JSON.stringify(options.body(model)),
         signal: AbortSignal.timeout(API_TEST_CONFIG.TIMEOUT_MS),
       };
@@ -1153,7 +1156,7 @@ export async function testProviderAnthropicMessages(
 ): Promise<ProviderApiTestResult> {
   return executeProviderApiTest(data, {
     path: "/v1/messages",
-    defaultModel: "claude-3-5-sonnet-20241022",
+    defaultModel: "claude-sonnet-4-5-20250929",
     headers: (apiKey) => ({
       "Content-Type": "application/json",
       "anthropic-version": "2023-06-01",
@@ -1181,7 +1184,7 @@ export async function testProviderOpenAIChatCompletions(
 ): Promise<ProviderApiTestResult> {
   return executeProviderApiTest(data, {
     path: "/v1/chat/completions",
-    defaultModel: "gpt-4.1",
+    defaultModel: "gpt-5.1-codex",
     headers: (apiKey) => ({
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
@@ -1211,7 +1214,7 @@ export async function testProviderOpenAIResponses(
 ): Promise<ProviderApiTestResult> {
   return executeProviderApiTest(data, {
     path: "/v1/responses",
-    defaultModel: "gpt-4.1",
+    defaultModel: "gpt-5.1-codex",
     headers: (apiKey) => ({
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
