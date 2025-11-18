@@ -91,7 +91,7 @@ export const providers = pgTable('providers', {
   providerType: varchar('provider_type', { length: 20 })
     .notNull()
     .default('claude')
-    .$type<'claude' | 'claude-auth' | 'codex' | 'gemini-cli' | 'openai-compatible'>(),
+    .$type<'claude' | 'claude-auth' | 'codex' | 'gemini-cli' | 'gemini' | 'openai-compatible'>(),
 
   // 模型重定向：将请求的模型名称重定向到另一个模型
   modelRedirects: jsonb('model_redirects').$type<Record<string, string>>(),

@@ -62,7 +62,7 @@ function providerSupportsModel(provider: Provider, requestedModel: string): bool
     return false;
   }
 
-  // 2b. 非 Anthropic 提供商（codex, gemini-cli, openai-compatible）
+  // 2b. 非 Anthropic 提供商（codex, gemini, gemini-cli, openai-compatible）
   // allowedModels 是声明列表，用于调度器匹配提供商
   // 用户可以手动填写任意模型名称（不限于真实模型），用于声明该提供商"支持"哪些模型
 
