@@ -39,11 +39,11 @@ export class RateLimitService {
   ): Promise<{ allowed: boolean; reason?: string }> {
     const costLimits: CostLimit[] = [
       { amount: limits.limit_5h_usd, period: "5h", name: "5小时" },
-      { 
-        amount: limits.limit_daily_usd, 
-        period: "daily", 
+      {
+        amount: limits.limit_daily_usd,
+        period: "daily",
         name: "每日",
-        resetTime: limits.daily_reset_time || "00:00"
+        resetTime: limits.daily_reset_time || "00:00",
       },
       { amount: limits.limit_weekly_usd, period: "weekly", name: "周" },
       { amount: limits.limit_monthly_usd, period: "monthly", name: "月" },
@@ -93,9 +93,10 @@ export class RateLimitService {
             }
           } else {
             // daily/周/月使用普通 GET
-            const periodKey = limit.period === "daily" && limit.resetTime 
-              ? `${limit.period}_${limit.resetTime.replace(":", "")}` 
-              : limit.period;
+            const periodKey =
+              limit.period === "daily" && limit.resetTime
+                ? `${limit.period}_${limit.resetTime.replace(":", "")}`
+                : limit.period;
             const value = await this.redis.get(`${type}:${id}:cost_${periodKey}`);
 
             // Cache Miss 检测
@@ -177,15 +178,11 @@ export class RateLimitService {
           } else {
             // daily/周/月固定窗口：使用 STRING + 动态 TTL
             const ttl = getTTLForPeriod(limit.period, limit.resetTime);
-            const periodKey = limit.period === "daily" && limit.resetTime 
-              ? `${limit.period}_${limit.resetTime.replace(":", "")}` 
-              : limit.period;
-            await this.redis.set(
-              `${type}:${id}:cost_${periodKey}`,
-              current.toString(),
-              "EX",
-              ttl
-            );
+            const periodKey =
+              limit.period === "daily" && limit.resetTime
+                ? `${limit.period}_${limit.resetTime.replace(":", "")}`
+                : limit.period;
+            await this.redis.set(`${type}:${id}:cost_${periodKey}`, current.toString(), "EX", ttl);
             logger.info(
               `[RateLimit] Cache warmed for ${type}:${id}:cost_${periodKey}, value=${current}, ttl=${ttl}s`
             );
@@ -305,7 +302,7 @@ export class RateLimitService {
   /**
    * 累加消费（请求结束后调用）
    * 5h 使用滚动窗口（ZSET），daily/周/月使用固定窗口（STRING）
-   * 
+   *
    * 注意：按天限制会追踪所有可能的重置时间（00:00-23:59），因为我们不知道哪个 key/provider 使用哪个重置时间
    */
   static async trackCost(

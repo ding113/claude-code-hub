@@ -88,8 +88,8 @@ export async function createKey(keyData: CreateKeyData): Promise<Key> {
     expiresAt: keys.expiresAt,
     canLoginWebUi: keys.canLoginWebUi,
     limit5hUsd: keys.limit5hUsd,
-      limitDailyUsd: keys.limitDailyUsd,
-      dailyResetTime: keys.dailyResetTime,
+    limitDailyUsd: keys.limitDailyUsd,
+    dailyResetTime: keys.dailyResetTime,
     limitWeeklyUsd: keys.limitWeeklyUsd,
     limitMonthlyUsd: keys.limitMonthlyUsd,
     limitConcurrentSessions: keys.limitConcurrentSessions,
@@ -117,9 +117,9 @@ export async function updateKey(id: number, keyData: UpdateKeyData): Promise<Key
   if (keyData.limit_5h_usd !== undefined)
     dbData.limit5hUsd = keyData.limit_5h_usd != null ? keyData.limit_5h_usd.toString() : null;
   if (keyData.limit_daily_usd !== undefined)
-    dbData.limitDailyUsd = keyData.limit_daily_usd != null ? keyData.limit_daily_usd.toString() : null;
-  if (keyData.daily_reset_time !== undefined)
-    dbData.dailyResetTime = keyData.daily_reset_time;
+    dbData.limitDailyUsd =
+      keyData.limit_daily_usd != null ? keyData.limit_daily_usd.toString() : null;
+  if (keyData.daily_reset_time !== undefined) dbData.dailyResetTime = keyData.daily_reset_time;
   if (keyData.limit_weekly_usd !== undefined)
     dbData.limitWeeklyUsd =
       keyData.limit_weekly_usd != null ? keyData.limit_weekly_usd.toString() : null;
