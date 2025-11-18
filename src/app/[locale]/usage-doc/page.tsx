@@ -622,7 +622,7 @@ sk_xxxxxxxxxxxxxxxxxx`}
           <CodeBlock
             language="toml"
             code={`model_provider = "cch"
-model = "gpt-5-codex"
+model = "gpt-5.1-codex"
 model_reasoning_effort = "high"
 disable_response_storage = true
 sandbox_mode = "workspace-write"
@@ -635,10 +635,6 @@ web_search_request = true
 unified_exec = false
 streamable_shell = false
 rmcp_client = true
-
-[tools]
-web_search = true
-view_image = true
 
 [model_providers.cch]
 name = "cch"
