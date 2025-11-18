@@ -4,13 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Loader2, CheckCircle2, XCircle, Activity, Copy, ExternalLink } from "lucide-react";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import {
   testProviderAnthropicMessages,
@@ -112,6 +112,7 @@ export function ApiTestButton({
     return whitelistDefault ?? getDefaultModelForFormat(initialApiFormat);
   });
   const [isModelManuallyEdited, setIsModelManuallyEdited] = useState(false);
+  const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
   const [testResult, setTestResult] = useState<{
     success: boolean;
     message: string;
@@ -382,16 +383,16 @@ export function ApiTestButton({
 
         {/* 查看详细结果按钮 */}
         {testResult && !isTesting && (
-          <Sheet>
-            <SheetTrigger asChild>
+          <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
+            <DialogTrigger asChild>
               <Button type="button" variant="ghost" size="sm">
                 <ExternalLink className="h-4 w-4 mr-2" />
                 {t("viewDetails")}
               </Button>
-            </SheetTrigger>
-            <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
-              <SheetHeader>
-                <SheetTitle className="flex items-center gap-2">
+            </DialogTrigger>
+            <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
                   {testResult.success ? (
                     <>
                       <CheckCircle2 className="h-5 w-5 text-green-600" />
@@ -403,11 +404,11 @@ export function ApiTestButton({
                       {t("testFailed")}
                     </>
                   )}
-                </SheetTitle>
-                <SheetDescription>{testResult.message}</SheetDescription>
-              </SheetHeader>
+                </DialogTitle>
+                <DialogDescription>{testResult.message}</DialogDescription>
+              </DialogHeader>
 
-              <div className="mt-6 space-y-4">
+              <div className="space-y-6 mt-4">
                 {/* 状态徽章 */}
                 <div className="flex gap-2">
                   <Badge variant={testResult.success ? "default" : "destructive"}>
@@ -423,47 +424,56 @@ export function ApiTestButton({
                   <div className="space-y-4">
                     {/* 响应时间 */}
                     {testResult.details.responseTime !== undefined && (
-                      <div className="space-y-1">
-                        <div className="text-sm font-medium">{t("responseTime")}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {testResult.details.responseTime}ms
+                      <div className="space-y-2">
+                        <h4 className="font-semibold text-sm">{t("responseTime")}</h4>
+                        <div className="rounded-md border bg-muted/50 p-3">
+                          <div className="text-sm">{testResult.details.responseTime}ms</div>
                         </div>
                       </div>
                     )}
 
                     {/* Token 用量 */}
                     {testResult.details.usage && (
-                      <div className="space-y-1">
-                        <div className="text-sm font-medium">{t("usage")}</div>
-                        <div className="text-sm text-muted-foreground font-mono bg-muted p-2 rounded">
-                          {typeof testResult.details.usage === "object"
-                            ? JSON.stringify(testResult.details.usage, null, 2)
-                            : String(testResult.details.usage)}
+                      <div className="space-y-2">
+                        <h4 className="font-semibold text-sm">{t("usage")}</h4>
+                        <div className="rounded-md border bg-muted/50 p-3">
+                          <pre className="text-xs font-mono break-all">
+                            {typeof testResult.details.usage === "object"
+                              ? JSON.stringify(testResult.details.usage, null, 2)
+                              : String(testResult.details.usage)}
+                          </pre>
                         </div>
                       </div>
                     )}
 
                     {/* 响应内容 */}
                     {testResult.details.content && (
-                      <div className="space-y-1">
-                        <div className="text-sm font-medium">{t("response")}</div>
-                        <div className="text-sm text-muted-foreground bg-muted p-3 rounded max-h-60 overflow-y-auto">
-                          {testResult.details.content.slice(
-                            0,
-                            API_TEST_UI_CONFIG.MAX_PREVIEW_LENGTH
-                          )}
-                          {testResult.details.content.length >
-                            API_TEST_UI_CONFIG.MAX_PREVIEW_LENGTH && "..."}
+                      <div className="space-y-2">
+                        <h4 className="font-semibold text-sm">{t("response")}</h4>
+                        <div className="rounded-md border bg-muted/50 p-3 max-h-60 overflow-y-auto">
+                          <pre className="text-xs whitespace-pre-wrap break-words">
+                            {testResult.details.content.slice(
+                              0,
+                              API_TEST_UI_CONFIG.MAX_PREVIEW_LENGTH
+                            )}
+                            {testResult.details.content.length >
+                              API_TEST_UI_CONFIG.MAX_PREVIEW_LENGTH && "..."}
+                          </pre>
                         </div>
                       </div>
                     )}
 
                     {/* 错误详情 */}
                     {testResult.details.error && (
-                      <div className="space-y-1">
-                        <div className="text-sm font-medium text-red-600">{t("error")}</div>
-                        <div className="text-sm text-red-600 bg-red-50 p-3 rounded max-h-60 overflow-y-auto font-mono">
-                          {testResult.details.error}
+                      <div className="space-y-2">
+                        <h4 className="font-semibold text-sm flex items-center gap-2">
+                          <XCircle className="h-4 w-4 text-destructive" />
+                          {t("error")}
+                        </h4>
+                        <div className="rounded-md border bg-destructive/10 p-3 max-h-60 overflow-y-auto">
+                          <pre className="text-xs text-destructive whitespace-pre-wrap break-words font-mono">
+                            {testResult.details.error}
+                          </pre>
                         </div>
                       </div>
                     )}
@@ -482,8 +492,8 @@ export function ApiTestButton({
                   {t("copyResult")}
                 </Button>
               </div>
-            </SheetContent>
-          </Sheet>
+            </DialogContent>
+          </Dialog>
         )}
       </div>
 
