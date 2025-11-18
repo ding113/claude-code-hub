@@ -771,7 +771,7 @@ source ${shellConfig.split(" ")[0]}`}
             language="bash"
             code={`GOOGLE_GEMINI_BASE_URL=${resolvedOrigin}
 GEMINI_API_KEY=your-api-key-here
-GEMINI_MODEL=gemini-2.5-pro`}
+GEMINI_MODEL=gemini-3-pro-preview`}
           />
 
           {/* 创建 settings.json 配置文件 */}
@@ -840,7 +840,7 @@ $env:GEMINI_MODEL="gemini-2.5-pro"`}
                 language="cmd"
                 code={`set GOOGLE_GEMINI_BASE_URL=${resolvedOrigin}
 set GEMINI_API_KEY=your-api-key-here
-set GEMINI_MODEL=gemini-2.5-pro`}
+set GEMINI_MODEL=gemini-3-pro-preview`}
               />
               <p className="text-sm text-muted-foreground">
                 {t("gemini.configuration.envVars.windows.note")}
