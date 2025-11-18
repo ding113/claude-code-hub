@@ -53,6 +53,60 @@ Cubence 为 CCH 的使用用户提供了特别的优惠折扣：在购买时使�
 - Docker 与 Docker Compose（推荐使用最新版本）
 - 可选（本地开发）：Node.js ≥ 20，pnpm ≥ 9.15
 
+### 🚀 一键部署脚本（✨ 推荐方式，全自动安装）
+
+一键部署脚本会**自动完成**以下所有步骤：
+
+- ✅ 检查并安装 Docker 和 Docker Compose（Linux/macOS 支持自动安装）
+- ✅ 创建部署目录并配置文件
+- ✅ 生成安全的管理员令牌和数据库密码
+- ✅ 启动所有服务并等待健康检查
+- ✅ 显示访问地址和管理员令牌
+
+**Linux / macOS:**
+
+```bash
+# 下载并运行部署脚本
+curl -fsSL https://raw.githubusercontent.com/ding113/claude-code-hub/main/scripts/deploy.sh -o deploy.sh
+chmod +x deploy.sh
+./deploy.sh
+```
+
+或者使用 wget：
+
+```bash
+wget https://raw.githubusercontent.com/ding113/claude-code-hub/main/scripts/deploy.sh
+chmod +x deploy.sh
+./deploy.sh
+```
+
+**Windows (PowerShell 管理员模式):**
+
+```powershell
+# 下载并运行部署脚本
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/ding113/claude-code-hub/main/scripts/deploy.ps1" -OutFile "deploy.ps1"
+Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
+.\deploy.ps1
+```
+
+**部署目录：**
+
+- Linux: `/www/compose/claude-code-hub`
+- macOS: `~/Applications/claude-code-hub`
+- Windows: `C:\ProgramData\claude-code-hub`
+
+**分支选择：**
+
+脚本会提示选择部署分支：
+
+- `main`（默认）：稳定版本，推荐生产环境使用
+- `dev`：开发版本，包含最新功能，用于测试
+
+**重要提示：**
+
+- ⚠️ 请妥善保存脚本输出的**管理员令牌**（Admin Token），这是登录后台的唯一凭证！
+- ⚠️ Windows 用户：如果未安装 Docker Desktop，脚本会自动打开下载页面
+
 ### 三步启动（Docker Compose）
 
 1. **克隆项目并配置环境**
