@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { addUser, editUser } from "@/actions/users";
 import { DialogFormLayout } from "@/components/form/form-layout";
-import { TextField } from "@/components/form/form-field";
+import { TextField, TagInputField } from "@/components/form/form-field";
 import { useZodForm } from "@/lib/hooks/use-zod-form";
 import { CreateUserSchema } from "@/lib/validation/schemas";
 import { USER_DEFAULTS } from "@/lib/constants/user.constants";
@@ -32,6 +32,7 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
   // i18n translations
   const tErrors = useTranslations("errors");
   const tNotifications = useTranslations("notifications");
+  const tUI = useTranslations("ui.tagInput");
 
   // Set Zod error map for client-side validation
   useEffect(() => {
@@ -123,11 +124,21 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
         {...form.getFieldProps("note")}
       />
 
-      <TextField
+      <TagInputField
         label={tForm("providerGroup.label")}
-        maxLength={50}
+        maxTagLength={50}
         placeholder={tForm("providerGroup.placeholder")}
         description={tForm("providerGroup.description")}
+        onInvalidTag={(tag, reason) => {
+          const messages: Record<string, string> = {
+            empty: tUI("emptyTag"),
+            duplicate: tUI("duplicateTag"),
+            too_long: tUI("tooLong", { max: 50 }),
+            invalid_format: tUI("invalidFormat"),
+            max_tags: tUI("maxTags"),
+          };
+          toast.error(messages[reason] || reason);
+        }}
         {...form.getFieldProps("providerGroup")}
       />
 

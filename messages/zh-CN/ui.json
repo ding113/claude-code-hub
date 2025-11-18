@@ -44,5 +44,14 @@
   "loading": {
     "title": "加载中",
     "description": "请稍候..."
+  },
+  "tagInput": {
+    "placeholder": "输入标签后按回车或逗号添加",
+    "emptyTag": "标签不能为空",
+    "duplicateTag": "标签已存在",
+    "maxTags": "已达到最大标签数量",
+    "tooLong": "标签长度不能超过 {max} 个字符",
+    "invalidFormat": "标签只能包含字母、数字、下划线和连字符",
+    "removeTag": "移除标签 {tag}"
   }
 }

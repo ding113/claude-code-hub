@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { TagInput } from "@/components/ui/tag-input";
 import {
   Select,
   SelectContent,
@@ -54,6 +55,7 @@ export function ProviderForm({
   enableMultiProviderTypes,
 }: ProviderFormProps) {
   const t = useTranslations("settings.providers.form");
+  const tUI = useTranslations("ui.tagInput");
   const isEdit = mode === "edit";
   const [isPending, startTransition] = useTransition();
 
@@ -79,7 +81,14 @@ export function ProviderForm({
   const [costMultiplier, setCostMultiplier] = useState<number>(
     sourceProvider?.costMultiplier ?? 1.0
   );
-  const [groupTag, setGroupTag] = useState<string>(sourceProvider?.groupTag ?? "");
+  const [groupTag, setGroupTag] = useState<string[]>(
+    sourceProvider?.groupTag
+      ? sourceProvider.groupTag
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean)
+      : []
+  );
   const [limit5hUsd, setLimit5hUsd] = useState<number | null>(sourceProvider?.limit5hUsd ?? null);
   const [limitWeeklyUsd, setLimitWeeklyUsd] = useState<number | null>(
     sourceProvider?.limitWeeklyUsd ?? null
@@ -284,7 +293,7 @@ export function ProviderForm({
             priority: priority,
             weight: weight,
             cost_multiplier: costMultiplier,
-            group_tag: groupTag.trim() || null,
+            group_tag: groupTag.length > 0 ? groupTag.join(",") : null,
             limit_5h_usd: limit5hUsd,
             limit_weekly_usd: limitWeeklyUsd,
             limit_monthly_usd: limitMonthlyUsd,
@@ -336,7 +345,7 @@ export function ProviderForm({
             weight: weight,
             priority: priority,
             cost_multiplier: costMultiplier,
-            group_tag: groupTag.trim() || null,
+            group_tag: groupTag.length > 0 ? groupTag.join(",") : null,
             limit_5h_usd: limit5hUsd,
             limit_weekly_usd: limitWeeklyUsd,
             limit_monthly_usd: limitMonthlyUsd,
@@ -761,12 +770,23 @@ export function ProviderForm({
                   <Label htmlFor={isEdit ? "edit-group" : "group"}>
                     {t("sections.routing.scheduleParams.group.label")}
                   </Label>
-                  <Input
+                  <TagInput
                     id={isEdit ? "edit-group" : "group"}
                     value={groupTag}
-                    onChange={(e) => setGroupTag(e.target.value)}
+                    onChange={setGroupTag}
                     placeholder={t("sections.routing.scheduleParams.group.placeholder")}
                     disabled={isPending}
+                    maxTagLength={50}
+                    onInvalidTag={(tag, reason) => {
+                      const messages: Record<string, string> = {
+                        empty: tUI("emptyTag"),
+                        duplicate: tUI("duplicateTag"),
+                        too_long: tUI("tooLong", { max: 50 }),
+                        invalid_format: tUI("invalidFormat"),
+                        max_tags: tUI("maxTags"),
+                      };
+                      toast.error(messages[reason] || reason);
+                    }}
                   />
                   <p className="text-xs text-muted-foreground">
                     {t("sections.routing.scheduleParams.group.desc")}
