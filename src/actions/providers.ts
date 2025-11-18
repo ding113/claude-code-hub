@@ -20,7 +20,11 @@ import {
   saveProviderCircuitConfig,
   deleteProviderCircuitConfig,
 } from "@/lib/redis/circuit-breaker-config";
-import { isValidProxyUrl, type ProviderProxyConfig } from "@/lib/proxy-agent";
+import {
+  createProxyAgentForProvider,
+  isValidProxyUrl,
+  type ProviderProxyConfig,
+} from "@/lib/proxy-agent";
 import { CodexInstructionsCache } from "@/lib/codex-instructions-cache";
 import { isClientAbortError } from "@/app/v1/_lib/proxy/errors";
 import { PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
@@ -661,9 +665,6 @@ export async function testProviderProxy(data: {
 
     const startTime = Date.now();
 
-    // 导入代理工厂函数
-    const { createProxyAgentForProvider } = await import("@/lib/proxy-agent");
-
     // 构造临时 Provider 对象（用于创建代理 agent）
     // 使用类型安全的 ProviderProxyConfig 接口，避免 any
     const tempProvider: ProviderProxyConfig = {
@@ -1045,7 +1046,6 @@ async function executeProviderApiTest(
     const normalizedProviderUrl = providerUrlValidation.normalizedUrl.replace(/\/$/, "");
 
     const startTime = Date.now();
-    const { createProxyAgentForProvider } = await import("@/lib/proxy-agent");
 
     const tempProvider: ProviderProxyConfig = {
       id: -1,
