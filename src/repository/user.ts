@@ -122,10 +122,14 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
   if (userData.description !== undefined) dbData.description = userData.description;
   if (userData.rpm !== undefined) dbData.rpmLimit = userData.rpm;
   if (userData.dailyQuota !== undefined) dbData.dailyLimitUsd = userData.dailyQuota.toString();
-  if (userData.limit5hUsd !== undefined) dbData.limit5hUsd = userData.limit5hUsd?.toString() ?? null;
-  if (userData.limitWeeklyUsd !== undefined) dbData.limitWeeklyUsd = userData.limitWeeklyUsd?.toString() ?? null;
-  if (userData.limitMonthlyUsd !== undefined) dbData.limitMonthlyUsd = userData.limitMonthlyUsd?.toString() ?? null;
-  if (userData.limitConcurrentSessions !== undefined) dbData.limitConcurrentSessions = userData.limitConcurrentSessions;
+  if (userData.limit5hUsd !== undefined)
+    dbData.limit5hUsd = userData.limit5hUsd?.toString() ?? null;
+  if (userData.limitWeeklyUsd !== undefined)
+    dbData.limitWeeklyUsd = userData.limitWeeklyUsd?.toString() ?? null;
+  if (userData.limitMonthlyUsd !== undefined)
+    dbData.limitMonthlyUsd = userData.limitMonthlyUsd?.toString() ?? null;
+  if (userData.limitConcurrentSessions !== undefined)
+    dbData.limitConcurrentSessions = userData.limitConcurrentSessions;
   if (userData.providerGroup !== undefined) dbData.providerGroup = userData.providerGroup;
   if (userData.tags !== undefined) dbData.tags = userData.tags;
 

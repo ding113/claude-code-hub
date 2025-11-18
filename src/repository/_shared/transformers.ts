@@ -12,21 +12,21 @@ export function toUser(dbUser: any): User {
     ...dbUser,
     description: dbUser?.description || "",
     role: (dbUser?.role as User["role"]) || "user",
-    
+
     // 兼容字段
     rpm: dbUser?.rpm || 60,
     dailyQuota: dbUser?.dailyQuota ? parseFloat(dbUser.dailyQuota) : 0,
-    
+
     // 统一的限额配置
     limit5hUsd: dbUser?.limit5hUsd ? parseFloat(dbUser.limit5hUsd) : null,
     limitWeeklyUsd: dbUser?.limitWeeklyUsd ? parseFloat(dbUser.limitWeeklyUsd) : null,
     limitMonthlyUsd: dbUser?.limitMonthlyUsd ? parseFloat(dbUser.limitMonthlyUsd) : null,
     limitConcurrentSessions: dbUser?.limitConcurrentSessions ?? 0,
-    
+
     // 分组和标签
     providerGroup: dbUser?.providerGroup ?? null,
     tags: dbUser?.tags ?? null,
-    
+
     createdAt: dbUser?.createdAt ? new Date(dbUser.createdAt) : new Date(),
     updatedAt: dbUser?.updatedAt ? new Date(dbUser.updatedAt) : new Date(),
   };
