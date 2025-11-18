@@ -418,6 +418,8 @@
     },
     "limitUsage": "Limit Usage",
     "copyKeyTooltip": "Copy full key",
+    "showKeyTooltip": "Show full key",
+    "hideKeyTooltip": "Hide key",
     "copyFailed": "Copy failed:",
     "timesUnit": "times",
     "provider": "Provider",
@@ -462,6 +464,10 @@
       "description": "Your API key has been created successfully. Please copy and save it securely, as it will only be displayed once.",
       "apiKeyLabel": "API Key",
       "warningText": "Please copy and save before closing. You will not be able to view this key again after closing.",
+      "httpWarningText": "HTTP access detected. Browser restrictions prevent clipboard access. Click the eye icon to reveal the key and copy manually.",
+      "copyTooltip": "Copy to clipboard",
+      "showTooltip": "Show full key",
+      "hideTooltip": "Hide key",
       "closeButton": "Close"
     }
   },

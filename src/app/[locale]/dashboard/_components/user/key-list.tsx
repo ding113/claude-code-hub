@@ -1,8 +1,8 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { DataTable, TableColumnTypes } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
-import { Copy, Check, ExternalLink, ChevronDown, ChevronRight } from "lucide-react";
+import { Copy, Check, ExternalLink, ChevronDown, ChevronRight, Eye, EyeOff } from "lucide-react";
 import { KeyActions } from "./key-actions";
 import { KeyLimitUsage } from "./key-limit-usage";
 import type { UserKeyDisplay } from "@/types/user";
@@ -20,6 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useTranslations } from "next-intl";
+import { isClipboardSupported, copyToClipboard } from "@/lib/utils/clipboard";
 
 interface KeyListProps {
   keys: UserKeyDisplay[];
@@ -32,7 +33,14 @@ export function KeyList({ keys, currentUser, keyOwnerUserId, currencyCode = "USD
   const t = useTranslations("dashboard.keyList");
   const [copiedKeyId, setCopiedKeyId] = useState<number | null>(null);
   const [expandedKeys, setExpandedKeys] = useState<Set<number>>(new Set());
+  const [visibleKeyIds, setVisibleKeyIds] = useState<Set<number>>(new Set());
+  const [clipboardAvailable, setClipboardAvailable] = useState(false);
   const canDeleteKeys = keys.length > 1;
+
+  // 检测 clipboard 是否可用
+  useEffect(() => {
+    setClipboardAvailable(isClipboardSupported());
+  }, []);
 
   const toggleExpanded = (keyId: number) => {
     setExpandedKeys((prev) => {
@@ -46,15 +54,25 @@ export function KeyList({ keys, currentUser, keyOwnerUserId, currencyCode = "USD
     });
   };
 
+  const toggleKeyVisibility = (keyId: number) => {
+    setVisibleKeyIds((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(keyId)) {
+        newSet.delete(keyId);
+      } else {
+        newSet.add(keyId);
+      }
+      return newSet;
+    });
+  };
+
   const handleCopyKey = async (key: UserKeyDisplay) => {
     if (!key.fullKey || !key.canCopy) return;
 
-    try {
-      await navigator.clipboard.writeText(key.fullKey);
+    const success = await copyToClipboard(key.fullKey);
+    if (success) {
       setCopiedKeyId(key.id);
       setTimeout(() => setCopiedKeyId(null), 2000);
-    } catch (err) {
-      console.error(t("copyFailed"), err);
     }
   };
 
@@ -150,26 +168,47 @@ export function KeyList({ keys, currentUser, keyOwnerUserId, currencyCode = "USD
       },
     }),
     TableColumnTypes.text<UserKeyDisplay>("maskedKey", t("columns.key"), {
-      render: (_, record: UserKeyDisplay) => (
-        <div className="group inline-flex items-center gap-1">
-          <div className="font-mono truncate">{record.maskedKey || "-"}</div>
-          {record.canCopy && record.fullKey && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => handleCopyKey(record)}
-              className="h-5 w-5 p-0 hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-              title={t("copyKeyTooltip")}
-            >
-              {copiedKeyId === record.id ? (
-                <Check className="h-3 w-3 text-green-600" />
-              ) : (
-                <Copy className="h-3 w-3" />
-              )}
-            </Button>
-          )}
-        </div>
-      ),
+      render: (_, record: UserKeyDisplay) => {
+        const isVisible = visibleKeyIds.has(record.id);
+        const displayKey = isVisible && record.fullKey ? record.fullKey : record.maskedKey || "-";
+
+        return (
+          <div className="group inline-flex items-center gap-1">
+            <div className={`font-mono ${isVisible ? "select-all" : "truncate"}`}>{displayKey}</div>
+            {record.canCopy && record.fullKey && (
+              <>
+                {clipboardAvailable ? (
+                  // HTTPS 环境：显示复制按钮
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleCopyKey(record)}
+                    className="h-5 w-5 p-0 hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                    title={t("copyKeyTooltip")}
+                  >
+                    {copiedKeyId === record.id ? (
+                      <Check className="h-3 w-3 text-green-600" />
+                    ) : (
+                      <Copy className="h-3 w-3" />
+                    )}
+                  </Button>
+                ) : (
+                  // HTTP 环境：显示显示/隐藏按钮
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => toggleKeyVisibility(record.id)}
+                    className="h-5 w-5 p-0 hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                    title={isVisible ? t("hideKeyTooltip") : t("showKeyTooltip")}
+                  >
+                    {isVisible ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
+        );
+      },
     }),
     TableColumnTypes.text<UserKeyDisplay>("todayCallCount", t("columns.todayCalls"), {
       render: (value) => (

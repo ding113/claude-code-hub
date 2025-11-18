@@ -419,6 +419,8 @@
     },
     "limitUsage": "制限使用状況",
     "copyKeyTooltip": "完全なキーをコピー",
+    "showKeyTooltip": "完全なキーを表示",
+    "hideKeyTooltip": "キーを非表示",
     "copyFailed": "コピーに失敗しました:",
     "timesUnit": "回",
     "provider": "プロバイダー",
@@ -463,6 +465,10 @@
       "description": "APIキーが正常に作成されました。安全にコピーして保存してください。このキーは一度だけ表示されます。",
       "apiKeyLabel": "API キー",
       "warningText": "閉じる前にコピーして保存してください。閉じた後、このキーを再度表示することはできません",
+      "httpWarningText": "HTTPアクセスが検出されました。ブラウザの制限によりコピー機能が使用できません。目のアイコンをクリックしてキーを表示し、手動でコピーしてください。",
+      "copyTooltip": "クリップボードにコピー",
+      "showTooltip": "完全なキーを表示",
+      "hideTooltip": "キーを非表示",
       "closeButton": "閉じる"
     }
   },

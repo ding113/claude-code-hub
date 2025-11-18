@@ -419,6 +419,8 @@
     },
     "limitUsage": "限额使用情况",
     "copyKeyTooltip": "复制完整密钥",
+    "showKeyTooltip": "显示完整密钥",
+    "hideKeyTooltip": "隐藏密钥",
     "copyFailed": "复制失败:",
     "timesUnit": "次",
     "provider": "供应商",
@@ -463,6 +465,10 @@
       "description": "你的 API Key 已成功创建。请务必复制并妥善保存，此密钥仅显示一次。",
       "apiKeyLabel": "API Key",
       "warningText": "请在关闭前复制并保存，关闭后将无法再次查看此密钥",
+      "httpWarningText": "检测到 HTTP 访问，浏览器限制无法使用复制功能。请点击眼睛图标显示密钥后手动复制。",
+      "copyTooltip": "复制到剪贴板",
+      "showTooltip": "显示完整密钥",
+      "hideTooltip": "隐藏密钥",
       "closeButton": "关闭"
     }
   },
