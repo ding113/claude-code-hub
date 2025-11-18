@@ -60,7 +60,7 @@ export class GeminiAuth {
           throw new Error(`Failed to refresh token: ${response.statusText}`);
         }
 
-        const data = (await response.json()) as any;
+        const data = (await response.json()) as { access_token?: string };
         if (data.access_token) {
           // Note: We are not persisting the new token back to DB here.
           // This means we might refresh more often than needed if the DB is not updated.

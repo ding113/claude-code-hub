@@ -1,19 +1,59 @@
-import {
-  GeminiRequest,
-  GeminiContent,
-  GeminiResponse,
-  GeminiCandidate,
-  GeminiUsageMetadata,
-} from "./types";
+import { GeminiRequest, GeminiContent, GeminiResponse } from "./types";
+
+// Define input message types for request transformation
+interface ContentPart {
+  type?: string;
+  text?: string;
+  source?: { media_type?: string; data?: string };
+  image_url?: { media_type?: string; data?: string };
+}
+
+interface InputMessage {
+  role: string;
+  content: string | ContentPart[];
+}
+
+interface TransformInput {
+  messages?: InputMessage[];
+  system?: string;
+  temperature?: number;
+  top_p?: number;
+  max_tokens?: number;
+  stop_sequences?: string[];
+}
+
+// Define OpenAI-compatible response types
+interface OpenAIUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+}
+
+interface OpenAICompatibleResponse {
+  id: string;
+  object: string;
+  created: number;
+  model: string;
+  choices: Array<{
+    index: number;
+    delta?: { content: string };
+    message?: { role: string; content: string };
+    finish_reason: string | null;
+  }>;
+  usage?: OpenAIUsage;
+}
 
 export class GeminiAdapter {
   /**
    * Convert generic chat request (OpenAI/Claude style) to Gemini format
    */
-  static transformRequest(input: any, providerType: "gemini" | "gemini-cli"): GeminiRequest {
+  static transformRequest(
+    input: TransformInput,
+    providerType: "gemini" | "gemini-cli"
+  ): GeminiRequest {
     const messages = input.messages || [];
     const contents: GeminiContent[] = [];
-    let systemInstructionParts: { text: string }[] = [];
+    const systemInstructionParts: { text: string }[] = [];
 
     // Handle system message(s)
     // Some formats allow multiple system messages or system message in "messages"
@@ -30,34 +70,33 @@ export class GeminiAdapter {
           typeof msg.content === "string"
             ? msg.content
             : Array.isArray(msg.content)
-              ? msg.content.map((c: any) => c.text).join("")
+              ? msg.content.map((c: ContentPart) => c.text || "").join("")
               : "";
         if (text) systemInstructionParts.push({ text });
         continue;
       }
 
       const role = msg.role === "assistant" ? "model" : "user";
-      let parts: { text: string; inlineData?: any }[] = [];
+      const parts: { text: string; inlineData?: { mimeType: string; data: string } }[] = [];
 
       if (typeof msg.content === "string") {
         parts.push({ text: msg.content });
       } else if (Array.isArray(msg.content)) {
-        parts = msg.content
-          .map((c: any) => {
-            if (c.type === "text") return { text: c.text };
-            if (c.type === "image" || c.type === "image_url") {
-              // Minimal support for image if base64 provided
-              // This needs more robust handling for real implementation
-              const source = c.source || c.image_url;
-              if (source && source.data) {
-                return {
-                  inlineData: { mimeType: source.media_type || "image/jpeg", data: source.data },
-                };
-              }
+        for (const c of msg.content) {
+          if (c.type === "text" && c.text) {
+            parts.push({ text: c.text });
+          } else if (c.type === "image" || c.type === "image_url") {
+            // Minimal support for image if base64 provided
+            // This needs more robust handling for real implementation
+            const source = c.source || c.image_url;
+            if (source && source.data) {
+              parts.push({
+                text: "",
+                inlineData: { mimeType: source.media_type || "image/jpeg", data: source.data },
+              });
             }
-            return { text: "" };
-          })
-          .filter((p: any) => p.text || p.inlineData);
+          }
+        }
       }
 
       if (parts.length > 0) {
@@ -102,7 +141,7 @@ export class GeminiAdapter {
   /**
    * Convert Gemini response to OpenAI-compatible chunks or full response
    */
-  static transformResponse(response: GeminiResponse, isStream: boolean): any {
+  static transformResponse(response: GeminiResponse, isStream: boolean): OpenAICompatibleResponse {
     // Extract content
     let content = "";
     const candidate = response.candidates?.[0];

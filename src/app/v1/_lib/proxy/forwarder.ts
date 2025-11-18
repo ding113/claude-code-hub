@@ -589,7 +589,7 @@ export class ProxyForwarder {
 
       // Detect streaming from original request
       try {
-        const originalBody = session.request.message as any;
+        const originalBody = session.request.message as Record<string, unknown>;
         isStreaming = originalBody.stream === true;
       } catch {
         isStreaming = false;

@@ -34,6 +34,11 @@ export const PROVIDER_TYPE_CONFIG: Record<
     iconColor: "text-blue-600",
     bgColor: "bg-blue-500/15",
   },
+  gemini: {
+    icon: Gemini.Color,
+    iconColor: "text-emerald-600",
+    bgColor: "bg-emerald-500/15",
+  },
   "gemini-cli": {
     icon: Gemini.Color,
     iconColor: "text-emerald-600",

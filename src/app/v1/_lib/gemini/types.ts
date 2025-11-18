@@ -8,11 +8,11 @@ export interface GeminiContent {
     };
     functionCall?: {
       name: string;
-      args: Record<string, any>;
+      args: Record<string, unknown>;
     };
     functionResponse?: {
       name: string;
-      response: Record<string, any>;
+      response: Record<string, unknown>;
     };
   }[];
 }
@@ -36,7 +36,7 @@ export interface GeminiTool {
   functionDeclarations?: {
     name: string;
     description?: string;
-    parameters?: Record<string, any>; // Officially parameters, but translated to parametersJsonSchema for CLI if needed? No, official uses parameters.
+    parameters?: Record<string, unknown>; // Officially parameters, but translated to parametersJsonSchema for CLI if needed? No, official uses parameters.
   }[];
 }
 

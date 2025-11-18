@@ -850,6 +850,30 @@ type OpenAIChatResponse = {
   };
 };
 
+// OpenAI Responses API 响应类型
+type OpenAIResponsesResponse = {
+  id: string;
+  object: "response";
+  created_at: number;
+  model: string;
+  output: Array<{
+    type: "message";
+    id: string;
+    status: string;
+    role: "assistant";
+    content: Array<{
+      type: "output_text";
+      text: string;
+      annotations?: unknown[];
+    }>;
+  }>;
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+  };
+};
+
 // Gemini API 响应类型
 type GeminiResponse = {
   candidates?: Array<{

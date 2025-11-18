@@ -1,5 +1,11 @@
 // 供应商类型枚举
-export type ProviderType = "claude" | "claude-auth" | "codex" | "gemini-cli" | "openai-compatible";
+export type ProviderType =
+  | "claude"
+  | "claude-auth"
+  | "codex"
+  | "gemini"
+  | "gemini-cli"
+  | "openai-compatible";
 
 // Codex Instructions 策略枚举
 export type CodexInstructionsStrategy = "auto" | "force_official" | "keep_original";
