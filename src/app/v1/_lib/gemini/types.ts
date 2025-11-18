@@ -76,4 +76,3 @@ export interface GeminiResponse {
   };
   usageMetadata?: GeminiUsageMetadata;
 }
-

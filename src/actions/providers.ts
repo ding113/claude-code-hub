@@ -1071,9 +1071,7 @@ async function executeProviderApiTest(
 
     const model = data.model || options.defaultModel;
     const path =
-      typeof options.path === "function"
-        ? options.path(model, data.apiKey)
-        : options.path;
+      typeof options.path === "function" ? options.path(model, data.apiKey) : options.path;
     const url = normalizedProviderUrl + path;
 
     try {

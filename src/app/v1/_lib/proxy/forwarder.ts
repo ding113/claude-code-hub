@@ -615,16 +615,17 @@ export class ProxyForwarder {
 
       // 3. Construct URL
       const model = session.request.model || "gemini-pro";
-      
+
       // Use provider.url if available, otherwise fall back to defaults
       let baseUrl = provider.url;
       if (!baseUrl) {
-        baseUrl = provider.providerType === "gemini"
-          ? GEMINI_PROTOCOL.OFFICIAL_ENDPOINT
-          : GEMINI_PROTOCOL.CLI_ENDPOINT;
+        baseUrl =
+          provider.providerType === "gemini"
+            ? GEMINI_PROTOCOL.OFFICIAL_ENDPOINT
+            : GEMINI_PROTOCOL.CLI_ENDPOINT;
       } else {
-         // Remove trailing slash if present
-         baseUrl = baseUrl.replace(/\/$/, "");
+        // Remove trailing slash if present
+        baseUrl = baseUrl.replace(/\/$/, "");
       }
 
       const action = isStreaming ? "streamGenerateContent" : "generateContent";
@@ -654,7 +655,6 @@ export class ProxyForwarder {
         isStreaming,
         isApiKey,
       });
-
     } else {
       // --- STANDARD HANDLING ---
       // 请求格式转换（基于 client 格式和 provider 类型）

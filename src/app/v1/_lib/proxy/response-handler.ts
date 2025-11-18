@@ -82,8 +82,7 @@ export class ProxyResponseHandler {
         logger.error("[ResponseHandler] Failed to transform Gemini non-stream response:", error);
         finalResponse = response;
       }
-    }
-    else if (needsTransform && defaultRegistry.hasResponseTransformer(fromFormat, toFormat)) {
+    } else if (needsTransform && defaultRegistry.hasResponseTransformer(fromFormat, toFormat)) {
       try {
         // 克隆一份用于转换
         const responseForTransform = response.clone();
@@ -419,13 +418,13 @@ export class ProxyResponseHandler {
           const text = decoder.decode(chunk, { stream: true });
           buffer += text;
 
-          const lines = buffer.split('\n');
+          const lines = buffer.split("\n");
           // Keep the last line in buffer as it might be incomplete
           buffer = lines.pop() || "";
 
           for (const line of lines) {
             const trimmedLine = line.trim();
-            if (trimmedLine.startsWith('data:')) {
+            if (trimmedLine.startsWith("data:")) {
               const jsonStr = trimmedLine.slice(5).trim();
               if (!jsonStr) continue;
               try {
@@ -440,20 +439,19 @@ export class ProxyResponseHandler {
           }
         },
         flush(controller) {
-           if (buffer.trim().startsWith('data:')) {
-               try {
-                   const jsonStr = buffer.trim().slice(5).trim();
-                   const geminiResponse = JSON.parse(jsonStr) as GeminiResponse;
-                   const openAIChunk = GeminiAdapter.transformResponse(geminiResponse, true);
-                   const output = `data: ${JSON.stringify(openAIChunk)}\n\n`;
-                   controller.enqueue(new TextEncoder().encode(output));
-               } catch {}
-           }
-        }
+          if (buffer.trim().startsWith("data:")) {
+            try {
+              const jsonStr = buffer.trim().slice(5).trim();
+              const geminiResponse = JSON.parse(jsonStr) as GeminiResponse;
+              const openAIChunk = GeminiAdapter.transformResponse(geminiResponse, true);
+              const output = `data: ${JSON.stringify(openAIChunk)}\n\n`;
+              controller.enqueue(new TextEncoder().encode(output));
+            } catch {}
+          }
+        },
       });
       processedStream = response.body.pipeThrough(transformStream);
-    }
-    else if (needsTransform && defaultRegistry.hasResponseTransformer(fromFormat, toFormat)) {
+    } else if (needsTransform && defaultRegistry.hasResponseTransformer(fromFormat, toFormat)) {
       logger.debug("[ResponseHandler] Transforming stream response", {
         from: fromFormat,
         to: toFormat,

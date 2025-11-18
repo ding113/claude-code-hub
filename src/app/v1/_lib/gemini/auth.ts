@@ -39,7 +39,7 @@ export class GeminiAuth {
 
     // If we have an access token but no expiry, assume it's valid or let it fail
     if (parsed.access_token && !parsed.expires_at) {
-       return parsed.access_token;
+      return parsed.access_token;
     }
 
     // Try to refresh if refresh_token exists
@@ -57,16 +57,16 @@ export class GeminiAuth {
         });
 
         if (!response.ok) {
-           throw new Error(`Failed to refresh token: ${response.statusText}`);
+          throw new Error(`Failed to refresh token: ${response.statusText}`);
         }
 
-        const data = await response.json() as any;
+        const data = (await response.json()) as any;
         if (data.access_token) {
-            // Note: We are not persisting the new token back to DB here.
-            // This means we might refresh more often than needed if the DB is not updated.
-            // For a full implementation, the provider key should be updated.
-            logger.info("Refreshed Gemini access token successfully");
-            return data.access_token;
+          // Note: We are not persisting the new token back to DB here.
+          // This means we might refresh more often than needed if the DB is not updated.
+          // For a full implementation, the provider key should be updated.
+          logger.info("Refreshed Gemini access token successfully");
+          return data.access_token;
         }
       } catch (e) {
         logger.error("Error refreshing Gemini token", e);
@@ -75,10 +75,9 @@ export class GeminiAuth {
 
     return parsed.access_token || "";
   }
-  
+
   static isApiKey(key: string): boolean {
-      const parsed = this.parse(key);
-      return typeof parsed === 'string' && !key.startsWith('ya29.'); // ya29. is typical prefix for Google Access Tokens
+    const parsed = this.parse(key);
+    return typeof parsed === "string" && !key.startsWith("ya29."); // ya29. is typical prefix for Google Access Tokens
   }
 }
-
