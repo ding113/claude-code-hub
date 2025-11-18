@@ -571,6 +571,26 @@
       "label": "每日额度",
       "placeholder": "每日消费额度限制",
       "description": "默认值: ${default}，范围: $0.01-$1000"
+    },
+    "limit5hUsd": {
+      "label": "5小时限额 (USD)",
+      "placeholder": "留空表示无限制",
+      "description": "5小时内最大消费金额"
+    },
+    "limitWeeklyUsd": {
+      "label": "周限额 (USD)",
+      "placeholder": "留空表示无限制",
+      "description": "每周最大消费金额"
+    },
+    "limitMonthlyUsd": {
+      "label": "月限额 (USD)",
+      "placeholder": "留空表示无限制",
+      "description": "每月最大消费金额"
+    },
+    "limitConcurrentSessions": {
+      "label": "并发 Session 上限",
+      "placeholder": "0 表示无限制",
+      "description": "同时运行的对话数量"
     }
   },
   "deleteKeyConfirm": {

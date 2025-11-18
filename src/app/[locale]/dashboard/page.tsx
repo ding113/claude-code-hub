@@ -3,8 +3,10 @@ import { getSession } from "@/lib/auth";
 import { getUserStatistics } from "@/actions/statistics";
 import { hasPriceTable } from "@/actions/model-prices";
 import { getSystemSettings } from "@/repository/system-config";
+import { getUsers } from "@/actions/users";
 import { StatisticsWrapper } from "./_components/statistics";
 import { OverviewPanel } from "@/components/customs/overview-panel";
+import { UserQuickOverview } from "./_components/user-quick-overview";
 import { DEFAULT_TIME_RANGE } from "@/types/statistics";
 import { getTranslations } from "next-intl/server";
 
@@ -22,10 +24,11 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
     return redirect({ href: "/settings/prices?required=true", locale });
   }
 
-  const [session, statistics, systemSettings] = await Promise.all([
+  const [session, statistics, systemSettings, users] = await Promise.all([
     getSession(),
     getUserStatistics(DEFAULT_TIME_RANGE),
     getSystemSettings(),
+    getUsers(),
   ]);
 
   // 检查是否是 admin 用户
@@ -42,10 +45,12 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
         />
       </div>
 
-      {/* UserKeyManager removed - functionality moved to /dashboard/users */}
-      <div className="space-y-6">
-        <h2 className="text-2xl font-bold">{t("overview")}</h2>
-        {/* Statistics and overview cards are now the primary dashboard content */}
+      {/* User Quick Overview Section */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold">{t("overview.title")}</h2>
+        </div>
+        <UserQuickOverview users={users} isAdmin={isAdmin} />
       </div>
     </div>
   );

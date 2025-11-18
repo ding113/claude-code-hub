@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { UserList } from "../_components/user/user-list";
+import { UserKeyManager } from "../_components/user/user-key-manager";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -86,11 +86,11 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
         </Select>
       </div>
 
-      <UserList
+      {/* User Key Manager with filtered users */}
+      <UserKeyManager
         users={filteredUsers}
-        activeUserId={filteredUsers[0]?.id ?? null}
-        onUserSelect={() => {}}
         currentUser={currentUser}
+        currencyCode="USD"
       />
     </div>
   );
