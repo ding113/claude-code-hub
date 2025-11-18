@@ -360,6 +360,7 @@
     "usageLogs": "使用ログ",
     "leaderboard": "ランキング",
     "quotasManagement": "クォータ管理",
+    "userManagement": "ユーザー管理",
     "documentation": "ドキュメント",
     "systemSettings": "システム設定",
     "feedback": "フィードバック",
@@ -566,6 +567,26 @@
       "label": "1日あたりの割当量",
       "placeholder": "1日あたりの消費割当量制限",
       "description": "デフォルト値: ${default}、範囲: $0.01-$1000"
+    },
+    "limit5hUsd": {
+      "label": "5時間制限 (USD)",
+      "placeholder": "空白の場合は無制限",
+      "description": "5時間以内の最大消費金額"
+    },
+    "limitWeeklyUsd": {
+      "label": "週間制限 (USD)",
+      "placeholder": "空白の場合は無制限",
+      "description": "週間最大消費金額"
+    },
+    "limitMonthlyUsd": {
+      "label": "月間制限 (USD)",
+      "placeholder": "空白の場合は無制限",
+      "description": "月間最大消費金額"
+    },
+    "limitConcurrentSessions": {
+      "label": "同時セッション上限",
+      "placeholder": "0は無制限を意味します",
+      "description": "同時に実行される会話の数"
     }
   },
   "deleteKeyConfirm": {

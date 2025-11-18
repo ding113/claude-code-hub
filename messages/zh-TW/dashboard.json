@@ -360,6 +360,7 @@
     "usageLogs": "使用記錄",
     "leaderboard": "排行榜",
     "quotasManagement": "額度管理",
+    "userManagement": "使用者管理",
     "documentation": "文件",
     "systemSettings": "系統設定",
     "feedback": "意見回饋",
@@ -566,6 +567,26 @@
       "label": "每日額度",
       "placeholder": "每日消費額度限制",
       "description": "預設值：${default}，範圍：$0.01-$1000"
+    },
+    "limit5hUsd": {
+      "label": "5小時消費上限 (USD)",
+      "placeholder": "留空表示無限制",
+      "description": "5小時內最大消費金額"
+    },
+    "limitWeeklyUsd": {
+      "label": "週消費上限 (USD)",
+      "placeholder": "留空表示無限制",
+      "description": "每週最大消費金額"
+    },
+    "limitMonthlyUsd": {
+      "label": "月消費上限 (USD)",
+      "placeholder": "留空表示無限制",
+      "description": "每月最大消費金額"
+    },
+    "limitConcurrentSessions": {
+      "label": "並發 Session 上限",
+      "placeholder": "0 表示無限制",
+      "description": "同時執行的對話數量"
     }
   },
   "deleteKeyConfirm": {

@@ -359,6 +359,7 @@
     "usageLogs": "Usage Logs",
     "leaderboard": "Leaderboard",
     "quotasManagement": "Quota Management",
+    "userManagement": "User Management",
     "documentation": "Documentation",
     "systemSettings": "System Settings",
     "feedback": "Feedback",
@@ -565,6 +566,26 @@
       "label": "Daily Quota",
       "placeholder": "Daily consumption quota limit",
       "description": "Default: ${default}, Range: $0.01-$1000"
+    },
+    "limit5hUsd": {
+      "label": "5-Hour Quota (USD)",
+      "placeholder": "Leave empty for unlimited",
+      "description": "Maximum spending in 5 hours"
+    },
+    "limitWeeklyUsd": {
+      "label": "Weekly Quota (USD)",
+      "placeholder": "Leave empty for unlimited",
+      "description": "Maximum weekly spending"
+    },
+    "limitMonthlyUsd": {
+      "label": "Monthly Quota (USD)",
+      "placeholder": "Leave empty for unlimited",
+      "description": "Maximum monthly spending"
+    },
+    "limitConcurrentSessions": {
+      "label": "Concurrent Sessions Limit",
+      "placeholder": "0 means unlimited",
+      "description": "Number of simultaneous conversations"
     }
   },
   "deleteKeyConfirm": {
@@ -589,5 +610,14 @@
     "delete": "Delete user",
     "editAriaLabel": "Edit user",
     "deleteAriaLabel": "Delete user"
+  },
+  "users": {
+    "title": "User Management",
+    "description": "Showing {count} users",
+    "toolbar": {
+      "searchPlaceholder": "Search by username...",
+      "groupFilter": "Filter by Group",
+      "allGroups": "All Groups"
+    }
   }
 }

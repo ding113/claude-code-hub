@@ -42,7 +42,7 @@ export function UserActions({ user, currentUser }: UserActionsProps) {
         </DialogTrigger>
         <DialogContent>
           <FormErrorBoundary>
-            <UserForm user={user} onSuccess={() => setOpenEdit(false)} />
+            <UserForm user={user} onSuccess={() => setOpenEdit(false)} currentUser={currentUser} />
           </FormErrorBoundary>
         </DialogContent>
       </Dialog>

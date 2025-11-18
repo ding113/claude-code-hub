@@ -9,7 +9,8 @@
     "logs": "日志",
     "notifications": "消息推送",
     "apiDocs": "API 文档",
-    "errorRules": "错误规则"
+    "errorRules": "错误规则",
+    "feedback": "反馈问题"
   },
   "common": {
     "save": "保存",

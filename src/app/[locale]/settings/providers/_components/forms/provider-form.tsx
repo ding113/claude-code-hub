@@ -395,7 +395,7 @@ export function ProviderForm({
           setPriority(0);
           setWeight(1);
           setCostMultiplier(1.0);
-          setGroupTag("");
+          setGroupTag([]);
           setLimit5hUsd(null);
           setLimitWeeklyUsd(null);
           setLimitMonthlyUsd(null);

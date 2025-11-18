@@ -1,12 +1,8 @@
 import { redirect } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
-import { Section } from "@/components/section";
-import { UserKeyManager } from "./_components/user/user-key-manager";
-import { getUsers } from "@/actions/users";
 import { getUserStatistics } from "@/actions/statistics";
 import { hasPriceTable } from "@/actions/model-prices";
 import { getSystemSettings } from "@/repository/system-config";
-import { ListErrorBoundary } from "@/components/error-boundary";
 import { StatisticsWrapper } from "./_components/statistics";
 import { OverviewPanel } from "@/components/customs/overview-panel";
 import { DEFAULT_TIME_RANGE } from "@/types/statistics";
@@ -26,8 +22,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
     return redirect({ href: "/settings/prices?required=true", locale });
   }
 
-  const [users, session, statistics, systemSettings] = await Promise.all([
-    getUsers(),
+  const [session, statistics, systemSettings] = await Promise.all([
     getSession(),
     getUserStatistics(DEFAULT_TIME_RANGE),
     getSystemSettings(),
@@ -47,15 +42,11 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
         />
       </div>
 
-      <Section title={t("title.clients")} description={t("title.userAndKeyManagement")}>
-        <ListErrorBoundary>
-          <UserKeyManager
-            users={users}
-            currentUser={session?.user}
-            currencyCode={systemSettings.currencyDisplay}
-          />
-        </ListErrorBoundary>
-      </Section>
+      {/* UserKeyManager removed - functionality moved to /dashboard/users */}
+      <div className="space-y-6">
+        <h2 className="text-2xl font-bold">{t("overview")}</h2>
+        {/* Statistics and overview cards are now the primary dashboard content */}
+      </div>
     </div>
   );
 }

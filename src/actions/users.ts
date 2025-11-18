@@ -15,6 +15,7 @@ import type { ActionResult } from "./types";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
 import { formatZodError } from "@/lib/utils/zod-i18n";
 import { getTranslations, getLocale } from "next-intl/server";
+import { getUnauthorizedFields } from "@/lib/permissions/user-field-permissions";
 
 // 获取用户数据
 export async function getUsers(): Promise<UserDisplay[]> {
@@ -64,6 +65,10 @@ export async function getUsers(): Promise<UserDisplay[]> {
             rpm: user.rpm,
             dailyQuota: user.dailyQuota,
             providerGroup: user.providerGroup || undefined,
+            limit5hUsd: user.limit5hUsd ?? null,
+            limitWeeklyUsd: user.limitWeeklyUsd ?? null,
+            limitMonthlyUsd: user.limitMonthlyUsd ?? null,
+            limitConcurrentSessions: user.limitConcurrentSessions ?? null,
             keys: keys.map((key) => {
               const stats = statisticsMap.get(key.id);
               // 用户可以查看和复制自己的密钥，管理员可以查看和复制所有密钥
@@ -112,6 +117,10 @@ export async function getUsers(): Promise<UserDisplay[]> {
             rpm: user.rpm,
             dailyQuota: user.dailyQuota,
             providerGroup: user.providerGroup || undefined,
+            limit5hUsd: user.limit5hUsd ?? null,
+            limitWeeklyUsd: user.limitWeeklyUsd ?? null,
+            limitMonthlyUsd: user.limitMonthlyUsd ?? null,
+            limitConcurrentSessions: user.limitConcurrentSessions ?? null,
             keys: [],
           };
         }
@@ -132,6 +141,10 @@ export async function addUser(data: {
   providerGroup?: string | null;
   rpm?: number;
   dailyQuota?: number;
+  limit5hUsd?: number | null;
+  limitWeeklyUsd?: number | null;
+  limitMonthlyUsd?: number | null;
+  limitConcurrentSessions?: number | null;
 }): Promise<ActionResult> {
   try {
     // Get translations for error messages
@@ -154,6 +167,10 @@ export async function addUser(data: {
       providerGroup: data.providerGroup || "",
       rpm: data.rpm || USER_DEFAULTS.RPM,
       dailyQuota: data.dailyQuota || USER_DEFAULTS.DAILY_QUOTA,
+      limit5hUsd: data.limit5hUsd,
+      limitWeeklyUsd: data.limitWeeklyUsd,
+      limitMonthlyUsd: data.limitMonthlyUsd,
+      limitConcurrentSessions: data.limitConcurrentSessions,
     });
 
     if (!validationResult.success) {
@@ -172,6 +189,10 @@ export async function addUser(data: {
       providerGroup: validatedData.providerGroup || null,
       rpm: validatedData.rpm,
       dailyQuota: validatedData.dailyQuota,
+      limit5hUsd: validatedData.limit5hUsd ?? undefined,
+      limitWeeklyUsd: validatedData.limitWeeklyUsd ?? undefined,
+      limitMonthlyUsd: validatedData.limitMonthlyUsd ?? undefined,
+      limitConcurrentSessions: validatedData.limitConcurrentSessions ?? undefined,
     });
 
     // 为新用户创建默认密钥
@@ -207,6 +228,10 @@ export async function editUser(
     providerGroup?: string | null;
     rpm?: number;
     dailyQuota?: number;
+    limit5hUsd?: number | null;
+    limitWeeklyUsd?: number | null;
+    limitMonthlyUsd?: number | null;
+    limitConcurrentSessions?: number | null;
   }
 ): Promise<ActionResult> {
   try {
@@ -222,70 +247,51 @@ export async function editUser(
       };
     }
 
-    // 定义敏感字段列表（仅管理员可修改）
-    const sensitiveFields = ["rpm", "dailyQuota", "providerGroup"] as const;
-    const hasSensitiveFields = sensitiveFields.some((field) => data[field] !== undefined);
+    // Validate data with Zod first
+    const validationResult = UpdateUserSchema.safeParse(data);
 
-    // 权限检查：区分三种情况
-    if (session.user.role === "admin") {
-      // 管理员可以修改所有用户的所有字段
-      const validationResult = UpdateUserSchema.safeParse(data);
+    if (!validationResult.success) {
+      return {
+        ok: false,
+        error: formatZodError(validationResult.error),
+        errorCode: ERROR_CODES.INVALID_FORMAT,
+      };
+    }
 
-      if (!validationResult.success) {
-        return {
-          ok: false,
-          error: formatZodError(validationResult.error),
-          errorCode: ERROR_CODES.INVALID_FORMAT,
-        };
-      }
+    const validatedData = validationResult.data;
 
-      const validatedData = validationResult.data;
+    // Permission check: Get unauthorized fields based on user role
+    const unauthorizedFields = getUnauthorizedFields(validatedData, session.user.role);
 
-      await updateUser(userId, {
-        name: validatedData.name,
-        description: validatedData.note,
-        providerGroup: validatedData.providerGroup,
-        rpm: validatedData.rpm,
-        dailyQuota: validatedData.dailyQuota,
-      });
-    } else if (session.user.id === userId) {
-      // 普通用户修改自己的信息
-      if (hasSensitiveFields) {
-        return {
-          ok: false,
-          error: tError("USER_CANNOT_MODIFY_SENSITIVE_FIELDS"),
-          errorCode: ERROR_CODES.PERMISSION_DENIED,
-        };
-      }
+    if (unauthorizedFields.length > 0) {
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED") + `: ${unauthorizedFields.join(", ")}`,
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
 
-      // 仅允许修改非敏感字段（name, description）
-      const validationResult = UpdateUserSchema.safeParse({
-        name: data.name,
-        note: data.note,
-      });
-
-      if (!validationResult.success) {
-        return {
-          ok: false,
-          error: formatZodError(validationResult.error),
-          errorCode: ERROR_CODES.INVALID_FORMAT,
-        };
-      }
-
-      const validatedData = validationResult.data;
-
-      await updateUser(userId, {
-        name: validatedData.name,
-        description: validatedData.note,
-      });
-    } else {
-      // 普通用户尝试修改他人信息
+    // Additional check: Non-admin users can only modify their own data
+    if (session.user.role !== "admin" && session.user.id !== userId) {
       return {
         ok: false,
         error: tError("PERMISSION_DENIED"),
         errorCode: ERROR_CODES.PERMISSION_DENIED,
       };
     }
+
+    // Update user with validated data
+    await updateUser(userId, {
+      name: validatedData.name,
+      description: validatedData.note,
+      providerGroup: validatedData.providerGroup,
+      rpm: validatedData.rpm,
+      dailyQuota: validatedData.dailyQuota,
+      limit5hUsd: validatedData.limit5hUsd ?? undefined,
+      limitWeeklyUsd: validatedData.limitWeeklyUsd ?? undefined,
+      limitMonthlyUsd: validatedData.limitMonthlyUsd ?? undefined,
+      limitConcurrentSessions: validatedData.limitConcurrentSessions ?? undefined,
+    });
 
     revalidatePath("/dashboard");
     return { ok: true };

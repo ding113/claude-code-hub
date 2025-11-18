@@ -141,6 +141,13 @@
       "when": 1763393401417,
       "tag": "0019_far_whirlwind",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1763465177387,
+      "tag": "0020_next_juggernaut",
+      "breakpoints": true
     }
   ]
 }

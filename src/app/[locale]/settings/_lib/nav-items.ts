@@ -19,6 +19,12 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   { href: "/settings/logs", labelKey: "nav.logs", label: "日志" },
   { href: "/settings/notifications", labelKey: "nav.notifications", label: "消息推送" },
   { href: "/api/actions/scalar", labelKey: "nav.apiDocs", label: "API 文档", external: true },
+  {
+    href: "https://github.com/ding113/claude-code-hub/issues",
+    labelKey: "nav.feedback",
+    label: "反馈问题",
+    external: true,
+  },
 ];
 
 // Helper function to get translated nav items

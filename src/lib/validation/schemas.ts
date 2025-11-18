@@ -27,6 +27,31 @@ export const CreateUserSchema = z.object({
     .max(USER_LIMITS.DAILY_QUOTA.MAX, `每日额度不能超过${USER_LIMITS.DAILY_QUOTA.MAX}美元`)
     .optional()
     .default(USER_DEFAULTS.DAILY_QUOTA),
+  limit5hUsd: z.coerce
+    .number()
+    .min(0, "5小时消费上限不能为负数")
+    .max(10000, "5小时消费上限不能超过10000美元")
+    .nullable()
+    .optional(),
+  limitWeeklyUsd: z.coerce
+    .number()
+    .min(0, "周消费上限不能为负数")
+    .max(50000, "周消费上限不能超过50000美元")
+    .nullable()
+    .optional(),
+  limitMonthlyUsd: z.coerce
+    .number()
+    .min(0, "月消费上限不能为负数")
+    .max(200000, "月消费上限不能超过200000美元")
+    .nullable()
+    .optional(),
+  limitConcurrentSessions: z.coerce
+    .number()
+    .int("并发Session上限必须是整数")
+    .min(0, "并发Session上限不能为负数")
+    .max(1000, "并发Session上限不能超过1000")
+    .nullable()
+    .optional(),
 });
 
 /**
@@ -46,6 +71,31 @@ export const UpdateUserSchema = z.object({
     .number()
     .min(USER_LIMITS.DAILY_QUOTA.MIN, `每日额度不能低于${USER_LIMITS.DAILY_QUOTA.MIN}美元`)
     .max(USER_LIMITS.DAILY_QUOTA.MAX, `每日额度不能超过${USER_LIMITS.DAILY_QUOTA.MAX}美元`)
+    .optional(),
+  limit5hUsd: z.coerce
+    .number()
+    .min(0, "5小时消费上限不能为负数")
+    .max(10000, "5小时消费上限不能超过10000美元")
+    .nullable()
+    .optional(),
+  limitWeeklyUsd: z.coerce
+    .number()
+    .min(0, "周消费上限不能为负数")
+    .max(50000, "周消费上限不能超过50000美元")
+    .nullable()
+    .optional(),
+  limitMonthlyUsd: z.coerce
+    .number()
+    .min(0, "月消费上限不能为负数")
+    .max(200000, "月消费上限不能超过200000美元")
+    .nullable()
+    .optional(),
+  limitConcurrentSessions: z.coerce
+    .number()
+    .int("并发Session上限必须是整数")
+    .min(0, "并发Session上限不能为负数")
+    .max(1000, "并发Session上限不能超过1000")
+    .nullable()
     .optional(),
 });
 

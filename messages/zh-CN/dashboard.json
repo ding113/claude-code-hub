@@ -357,6 +357,7 @@
   "all": "全部",
   "nav": {
     "dashboard": "仪表盘",
+    "userManagement": "用户管理",
     "usageLogs": "使用记录",
     "leaderboard": "排行榜",
     "quotasManagement": "限额管理",
@@ -503,22 +504,26 @@
     "limit5hUsd": {
       "label": "5小时消费上限 (USD)",
       "placeholder": "留空表示无限制",
-      "description": "5小时内最大消费金额"
+      "description": "5小时内最大消费金额",
+      "descriptionWithUserLimit": "5小时内最大消费金额（用户限额: ${limit}）"
     },
     "limitWeeklyUsd": {
       "label": "周消费上限 (USD)",
       "placeholder": "留空表示无限制",
-      "description": "每周最大消费金额"
+      "description": "每周最大消费金额",
+      "descriptionWithUserLimit": "每周最大消费金额（用户限额: ${limit}）"
     },
     "limitMonthlyUsd": {
       "label": "月消费上限 (USD)",
       "placeholder": "留空表示无限制",
-      "description": "每月最大消费金额"
+      "description": "每月最大消费金额",
+      "descriptionWithUserLimit": "每月最大消费金额（用户限额: ${limit}）"
     },
     "limitConcurrentSessions": {
       "label": "并发 Session 上限",
       "placeholder": "0 表示无限制",
-      "description": "同时运行的对话数量"
+      "description": "同时运行的对话数量",
+      "descriptionWithUserLimit": "同时运行的对话数量（用户限额: {limit}）"
     },
     "errors": {
       "userIdMissing": "用户ID不存在",
@@ -654,6 +659,15 @@
       "percentage": "占比",
       "loading": "加载中...",
       "noData": "暂无数据"
+    }
+  },
+  "users": {
+    "title": "用户管理",
+    "description": "显示 {count} 个用户",
+    "toolbar": {
+      "searchPlaceholder": "按用户名搜索...",
+      "groupFilter": "按分组筛选",
+      "allGroups": "所有分组"
     }
   }
 }
