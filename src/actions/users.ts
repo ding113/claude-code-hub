@@ -63,7 +63,12 @@ export async function getUsers(): Promise<UserDisplay[]> {
             role: user.role,
             rpm: user.rpm,
             dailyQuota: user.dailyQuota,
+            limit5hUsd: user.limit5hUsd,
+            limitWeeklyUsd: user.limitWeeklyUsd,
+            limitMonthlyUsd: user.limitMonthlyUsd,
+            limitConcurrentSessions: user.limitConcurrentSessions,
             providerGroup: user.providerGroup || undefined,
+            tags: user.tags || undefined,
             keys: keys.map((key) => {
               const stats = statisticsMap.get(key.id);
               // 用户可以查看和复制自己的密钥，管理员可以查看和复制所有密钥
@@ -111,7 +116,12 @@ export async function getUsers(): Promise<UserDisplay[]> {
             role: user.role,
             rpm: user.rpm,
             dailyQuota: user.dailyQuota,
+            limit5hUsd: user.limit5hUsd,
+            limitWeeklyUsd: user.limitWeeklyUsd,
+            limitMonthlyUsd: user.limitMonthlyUsd,
+            limitConcurrentSessions: user.limitConcurrentSessions,
             providerGroup: user.providerGroup || undefined,
+            tags: user.tags || undefined,
             keys: [],
           };
         }
@@ -130,8 +140,13 @@ export async function addUser(data: {
   name: string;
   note?: string;
   providerGroup?: string | null;
+  tags?: string | null;
   rpm?: number;
   dailyQuota?: number;
+  limit5hUsd?: number | null;
+  limitWeeklyUsd?: number | null;
+  limitMonthlyUsd?: number | null;
+  limitConcurrentSessions?: number;
 }): Promise<ActionResult> {
   try {
     // Get translations for error messages
@@ -152,8 +167,13 @@ export async function addUser(data: {
       name: data.name,
       note: data.note || "",
       providerGroup: data.providerGroup || "",
+      tags: data.tags || "",
       rpm: data.rpm || USER_DEFAULTS.RPM,
       dailyQuota: data.dailyQuota || USER_DEFAULTS.DAILY_QUOTA,
+      limit5hUsd: data.limit5hUsd,
+      limitWeeklyUsd: data.limitWeeklyUsd,
+      limitMonthlyUsd: data.limitMonthlyUsd,
+      limitConcurrentSessions: data.limitConcurrentSessions,
     });
 
     if (!validationResult.success) {
@@ -170,8 +190,13 @@ export async function addUser(data: {
       name: validatedData.name,
       description: validatedData.note || "",
       providerGroup: validatedData.providerGroup || null,
+      tags: validatedData.tags || null,
       rpm: validatedData.rpm,
       dailyQuota: validatedData.dailyQuota,
+      limit5hUsd: validatedData.limit5hUsd,
+      limitWeeklyUsd: validatedData.limitWeeklyUsd,
+      limitMonthlyUsd: validatedData.limitMonthlyUsd,
+      limitConcurrentSessions: validatedData.limitConcurrentSessions,
     });
 
     // 为新用户创建默认密钥
@@ -205,8 +230,13 @@ export async function editUser(
     name?: string;
     note?: string;
     providerGroup?: string | null;
+    tags?: string | null;
     rpm?: number;
     dailyQuota?: number;
+    limit5hUsd?: number | null;
+    limitWeeklyUsd?: number | null;
+    limitMonthlyUsd?: number | null;
+    limitConcurrentSessions?: number;
   }
 ): Promise<ActionResult> {
   try {
@@ -223,7 +253,15 @@ export async function editUser(
     }
 
     // 定义敏感字段列表（仅管理员可修改）
-    const sensitiveFields = ["rpm", "dailyQuota", "providerGroup"] as const;
+    const sensitiveFields = [
+      "rpm",
+      "dailyQuota",
+      "limit5hUsd",
+      "limitWeeklyUsd",
+      "limitMonthlyUsd",
+      "limitConcurrentSessions",
+      "providerGroup",
+    ] as const;
     const hasSensitiveFields = sensitiveFields.some((field) => data[field] !== undefined);
 
     // 权限检查：区分三种情况
@@ -245,8 +283,13 @@ export async function editUser(
         name: validatedData.name,
         description: validatedData.note,
         providerGroup: validatedData.providerGroup,
+        tags: validatedData.tags,
         rpm: validatedData.rpm,
         dailyQuota: validatedData.dailyQuota,
+        limit5hUsd: validatedData.limit5hUsd,
+        limitWeeklyUsd: validatedData.limitWeeklyUsd,
+        limitMonthlyUsd: validatedData.limitMonthlyUsd,
+        limitConcurrentSessions: validatedData.limitConcurrentSessions,
       });
     } else if (session.user.id === userId) {
       // 普通用户修改自己的信息
@@ -277,6 +320,7 @@ export async function editUser(
       await updateUser(userId, {
         name: validatedData.name,
         description: validatedData.note,
+        tags: validatedData.tags,
       });
     } else {
       // 普通用户尝试修改他人信息

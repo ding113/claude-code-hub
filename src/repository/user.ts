@@ -12,7 +12,12 @@ export async function createUser(userData: CreateUserData): Promise<User> {
     description: userData.description,
     rpmLimit: userData.rpm,
     dailyLimitUsd: userData.dailyQuota?.toString(),
+    limit5hUsd: userData.limit5hUsd?.toString(),
+    limitWeeklyUsd: userData.limitWeeklyUsd?.toString(),
+    limitMonthlyUsd: userData.limitMonthlyUsd?.toString(),
+    limitConcurrentSessions: userData.limitConcurrentSessions,
     providerGroup: userData.providerGroup,
+    tags: userData.tags,
   };
 
   const [user] = await db.insert(users).values(dbData).returning({
@@ -22,7 +27,12 @@ export async function createUser(userData: CreateUserData): Promise<User> {
     role: users.role,
     rpm: users.rpmLimit,
     dailyQuota: users.dailyLimitUsd,
+    limit5hUsd: users.limit5hUsd,
+    limitWeeklyUsd: users.limitWeeklyUsd,
+    limitMonthlyUsd: users.limitMonthlyUsd,
+    limitConcurrentSessions: users.limitConcurrentSessions,
     providerGroup: users.providerGroup,
+    tags: users.tags,
     createdAt: users.createdAt,
     updatedAt: users.updatedAt,
     deletedAt: users.deletedAt,
@@ -40,7 +50,12 @@ export async function findUserList(limit: number = 50, offset: number = 0): Prom
       role: users.role,
       rpm: users.rpmLimit,
       dailyQuota: users.dailyLimitUsd,
+      limit5hUsd: users.limit5hUsd,
+      limitWeeklyUsd: users.limitWeeklyUsd,
+      limitMonthlyUsd: users.limitMonthlyUsd,
+      limitConcurrentSessions: users.limitConcurrentSessions,
       providerGroup: users.providerGroup,
+      tags: users.tags,
       createdAt: users.createdAt,
       updatedAt: users.updatedAt,
       deletedAt: users.deletedAt,
@@ -63,7 +78,12 @@ export async function findUserById(id: number): Promise<User | null> {
       role: users.role,
       rpm: users.rpmLimit,
       dailyQuota: users.dailyLimitUsd,
+      limit5hUsd: users.limit5hUsd,
+      limitWeeklyUsd: users.limitWeeklyUsd,
+      limitMonthlyUsd: users.limitMonthlyUsd,
+      limitConcurrentSessions: users.limitConcurrentSessions,
       providerGroup: users.providerGroup,
+      tags: users.tags,
       createdAt: users.createdAt,
       updatedAt: users.updatedAt,
       deletedAt: users.deletedAt,
@@ -86,7 +106,12 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
     description?: string;
     rpmLimit?: number;
     dailyLimitUsd?: string;
+    limit5hUsd?: string | null;
+    limitWeeklyUsd?: string | null;
+    limitMonthlyUsd?: string | null;
+    limitConcurrentSessions?: number;
     providerGroup?: string | null;
+    tags?: string | null;
     updatedAt?: Date;
   }
 
@@ -97,7 +122,12 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
   if (userData.description !== undefined) dbData.description = userData.description;
   if (userData.rpm !== undefined) dbData.rpmLimit = userData.rpm;
   if (userData.dailyQuota !== undefined) dbData.dailyLimitUsd = userData.dailyQuota.toString();
+  if (userData.limit5hUsd !== undefined) dbData.limit5hUsd = userData.limit5hUsd?.toString() ?? null;
+  if (userData.limitWeeklyUsd !== undefined) dbData.limitWeeklyUsd = userData.limitWeeklyUsd?.toString() ?? null;
+  if (userData.limitMonthlyUsd !== undefined) dbData.limitMonthlyUsd = userData.limitMonthlyUsd?.toString() ?? null;
+  if (userData.limitConcurrentSessions !== undefined) dbData.limitConcurrentSessions = userData.limitConcurrentSessions;
   if (userData.providerGroup !== undefined) dbData.providerGroup = userData.providerGroup;
+  if (userData.tags !== undefined) dbData.tags = userData.tags;
 
   const [user] = await db
     .update(users)
@@ -110,7 +140,12 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
       role: users.role,
       rpm: users.rpmLimit,
       dailyQuota: users.dailyLimitUsd,
+      limit5hUsd: users.limit5hUsd,
+      limitWeeklyUsd: users.limitWeeklyUsd,
+      limitMonthlyUsd: users.limitMonthlyUsd,
+      limitConcurrentSessions: users.limitConcurrentSessions,
       providerGroup: users.providerGroup,
+      tags: users.tags,
       createdAt: users.createdAt,
       updatedAt: users.updatedAt,
       deletedAt: users.deletedAt,

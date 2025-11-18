@@ -6,9 +6,21 @@ export interface User {
   name: string;
   description: string;
   role: "admin" | "user";
+  
+  // 兼容字段（保留向后兼容）
   rpm: number; // 每分钟请求数限制
   dailyQuota: number; // 每日额度限制（美元）
+  
+  // 统一的限额配置（与 keys 对齐）
+  limit5hUsd?: number | null; // 5小时消费上限（美元）
+  limitWeeklyUsd?: number | null; // 周消费上限（美元）
+  limitMonthlyUsd?: number | null; // 月消费上限（美元）
+  limitConcurrentSessions?: number; // 并发 Session 上限
+  
+  // 分组和标签
   providerGroup: string | null; // 供应商分组
+  tags?: string | null; // 逗号分隔的标签列表
+  
   createdAt: Date;
   updatedAt: Date;
   deletedAt?: Date;
@@ -20,9 +32,20 @@ export interface User {
 export interface CreateUserData {
   name: string;
   description: string;
+  
+  // 兼容字段
   rpm?: number; // 可选，有默认值
   dailyQuota?: number; // 可选，有默认值
-  providerGroup?: string | null; // 可选，供应商分组
+  
+  // 统一的限额配置
+  limit5hUsd?: number | null;
+  limitWeeklyUsd?: number | null;
+  limitMonthlyUsd?: number | null;
+  limitConcurrentSessions?: number;
+  
+  // 分组和标签
+  providerGroup?: string | null;
+  tags?: string | null;
 }
 
 /**
@@ -31,9 +54,20 @@ export interface CreateUserData {
 export interface UpdateUserData {
   name?: string;
   description?: string;
+  
+  // 兼容字段
   rpm?: number;
   dailyQuota?: number;
-  providerGroup?: string | null; // 可选，供应商分组
+  
+  // 统一的限额配置
+  limit5hUsd?: number | null;
+  limitWeeklyUsd?: number | null;
+  limitMonthlyUsd?: number | null;
+  limitConcurrentSessions?: number;
+  
+  // 分组和标签
+  providerGroup?: string | null;
+  tags?: string | null;
 }
 
 /**
@@ -75,9 +109,21 @@ export interface UserDisplay {
   name: string;
   note?: string;
   role: "admin" | "user";
+  
+  // 兼容字段
   rpm: number;
   dailyQuota: number;
+  
+  // 统一的限额配置
+  limit5hUsd?: number | null;
+  limitWeeklyUsd?: number | null;
+  limitMonthlyUsd?: number | null;
+  limitConcurrentSessions?: number;
+  
+  // 分组和标签
   providerGroup?: string | null;
+  tags?: string | null;
+  
   keys: UserKeyDisplay[];
 }
 

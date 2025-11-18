@@ -19,9 +19,21 @@ export const users = pgTable('users', {
   name: varchar('name').notNull(),
   description: text('description'),
   role: varchar('role').default('user'),
+  
+  // 兼容字段（保留向后兼容）
   rpmLimit: integer('rpm_limit').default(60),
   dailyLimitUsd: numeric('daily_limit_usd', { precision: 10, scale: 2 }).default('100.00'),
+  
+  // 统一的金额限流配置（与 keys 表对齐）
+  limit5hUsd: numeric('limit_5h_usd', { precision: 10, scale: 2 }),
+  limitWeeklyUsd: numeric('limit_weekly_usd', { precision: 10, scale: 2 }),
+  limitMonthlyUsd: numeric('limit_monthly_usd', { precision: 10, scale: 2 }),
+  limitConcurrentSessions: integer('limit_concurrent_sessions').default(0),
+  
+  // 分组和标签
   providerGroup: varchar('provider_group', { length: 50 }),
+  tags: text('tags'), // 逗号分隔的标签列表，用于备注和区分用户
+  
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),

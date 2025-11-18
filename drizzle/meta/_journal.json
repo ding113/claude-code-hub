@@ -141,6 +141,13 @@
       "when": 1763393401417,
       "tag": "0019_far_whirlwind",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1763453780231,
+      "tag": "0020_lazy_grandmaster",
+      "breakpoints": true
     }
   ]
 }
