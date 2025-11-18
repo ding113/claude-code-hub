@@ -268,8 +268,7 @@
         "description": "Export complete database backup file (.dump format) for data migration or recovery."
       },
       "import": {
-        "title": "Data Import",
-        "description": "Restore database from backup file. Supports PostgreSQL custom format (.dump) backup files."
+        "title": "Data Import"
       }
     }
   },
@@ -1324,7 +1323,7 @@
   "errorRules": {
     "nav": "Error Rules",
     "title": "Error Rules Management",
-    "description": "Configure non-retryable client error detection rules to automatically identify error patterns that require circuit breaking.",
+    "description": "Manage client error rules that should not trigger automatic retries. When configured, errors matching these rules will be returned directly to users without retrying or counting toward provider circuit breaker thresholds.",
     "section": {
       "title": "Error Rules List",
       "description": "Match error messages via regex patterns to identify non-retryable client errors like invalid requests, parameter errors, etc. System includes 7 default rules covering common error scenarios."
