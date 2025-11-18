@@ -37,12 +37,10 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
     return users.filter((user) => {
       // Search filter: match username
       const matchesSearch =
-        searchTerm === "" ||
-        user.name.toLowerCase().includes(searchTerm.toLowerCase());
+        searchTerm === "" || user.name.toLowerCase().includes(searchTerm.toLowerCase());
 
       // Group filter
-      const matchesGroup =
-        groupFilter === "all" || user.providerGroup === groupFilter;
+      const matchesGroup = groupFilter === "all" || user.providerGroup === groupFilter;
 
       return matchesSearch && matchesGroup;
     });
