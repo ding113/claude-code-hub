@@ -28,6 +28,7 @@ import {
 import { CodexInstructionsCache } from "@/lib/codex-instructions-cache";
 import { isClientAbortError } from "@/app/v1/_lib/proxy/errors";
 import { PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
+import { GeminiAuth } from "@/app/v1/_lib/gemini/auth";
 
 // API 测试配置常量
 const API_TEST_CONFIG = {
@@ -849,26 +850,32 @@ type OpenAIChatResponse = {
   };
 };
 
-// OpenAI Responses API 响应类型
-type OpenAIResponsesResponse = {
-  id: string;
-  object: "response";
-  model: string;
-  output: Array<{
-    type: "message";
-    content: Array<{
-      type: "output_text";
-      text: string;
-    }>;
+// Gemini API 响应类型
+type GeminiResponse = {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{ text?: string }>;
+    };
+    finishReason?: string;
   }>;
-  usage: {
-    input_tokens: number;
-    output_tokens: number;
+  usageMetadata?: {
+    promptTokenCount?: number;
+    candidatesTokenCount?: number;
+    totalTokenCount?: number;
+  };
+  error?: {
+    code: number;
+    message: string;
+    status: string;
   };
 };
 
 // 联合类型：所有支持的 API 响应格式
-type ProviderApiResponse = AnthropicMessagesResponse | OpenAIChatResponse | OpenAIResponsesResponse;
+type ProviderApiResponse =
+  | AnthropicMessagesResponse
+  | OpenAIChatResponse
+  | OpenAIResponsesResponse
+  | GeminiResponse;
 
 function extractFirstTextSnippet(
   response: ProviderApiResponse,
@@ -900,6 +907,14 @@ function extractFirstTextSnippet(
       if (textContent && "text" in textContent) {
         return textContent.text.substring(0, limit);
       }
+    }
+  }
+
+  // Gemini API
+  if ("candidates" in response && Array.isArray(response.candidates)) {
+    const firstCandidate = response.candidates[0];
+    if (firstCandidate?.content?.parts?.[0]?.text) {
+      return firstCandidate.content.parts[0].text.substring(0, limit);
     }
   }
 
@@ -1000,7 +1015,7 @@ function validateProviderUrlForConnectivity(
 async function executeProviderApiTest(
   data: ProviderApiTestArgs,
   options: {
-    path: string;
+    path: string | ((model: string, apiKey: string) => string);
     defaultModel: string;
     headers: (apiKey: string) => Record<string, string>;
     body: (model: string) => unknown;
@@ -1054,8 +1069,12 @@ async function executeProviderApiTest(
       proxyFallbackToDirect: data.proxyFallbackToDirect ?? false,
     };
 
-    const url = normalizedProviderUrl + options.path;
     const model = data.model || options.defaultModel;
+    const path =
+      typeof options.path === "function"
+        ? options.path(model, data.apiKey)
+        : options.path;
+    const url = normalizedProviderUrl + path;
 
     try {
       const proxyConfig = createProxyAgentForProvider(tempProvider, url);
@@ -1093,7 +1112,7 @@ async function executeProviderApiTest(
 
         logger.error("Provider API test failed", {
           providerUrl: normalizedProviderUrl.replace(/:\/\/[^@]*@/, "://***@"),
-          path: options.path,
+          path: typeof options.path === "string" ? options.path : "dynamic",
           status: response.status,
           errorDetail: errorDetail ?? clipText(errorText, 200),
         });
@@ -1231,4 +1250,61 @@ export async function testProviderOpenAIResponses(
       content: extractFirstTextSnippet(result),
     }),
   });
+}
+
+/**
+ * 测试 Gemini API 连通性
+ */
+export async function testProviderGemini(
+  data: ProviderApiTestArgs
+): Promise<ProviderApiTestResult> {
+  // 预处理 Auth，如果是 API Key 保持原样，如果是 JSON 则解析 Access Token
+  let processedApiKey = data.apiKey;
+  let isJsonCreds = false;
+
+  try {
+    // 使用 GeminiAuth 获取 token (如果是 json 凭证)
+    processedApiKey = await GeminiAuth.getAccessToken(data.apiKey);
+    isJsonCreds = GeminiAuth.isJson(data.apiKey);
+  } catch (e) {
+    // 忽略错误，让后续请求失败
+    logger.warn("testProviderGemini:auth_process_failed", { error: e });
+  }
+
+  return executeProviderApiTest(
+    { ...data, apiKey: processedApiKey },
+    {
+      path: (model, apiKey) => {
+        if (!isJsonCreds) {
+          return `/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        }
+        return `/v1beta/models/${model}:generateContent`;
+      },
+      defaultModel: "gemini-1.5-pro",
+      headers: (apiKey) => {
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+        };
+        if (isJsonCreds) {
+          headers["Authorization"] = `Bearer ${apiKey}`;
+        }
+        return headers;
+      },
+      body: (model) => ({
+        contents: [{ parts: [{ text: API_TEST_CONFIG.TEST_PROMPT }] }],
+        generationConfig: {
+          maxOutputTokens: API_TEST_CONFIG.TEST_MAX_TOKENS,
+        },
+      }),
+      successMessage: "Gemini API 测试成功",
+      extract: (result) => {
+        const geminiResult = result as GeminiResponse;
+        return {
+          model: undefined,
+          usage: geminiResult.usageMetadata as Record<string, unknown>,
+          content: extractFirstTextSnippet(geminiResult),
+        };
+      },
+    }
+  );
 }

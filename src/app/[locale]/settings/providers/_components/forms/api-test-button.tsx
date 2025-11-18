@@ -16,6 +16,7 @@ import {
   testProviderAnthropicMessages,
   testProviderOpenAIChatCompletions,
   testProviderOpenAIResponses,
+  testProviderGemini,
   getUnmaskedProviderKey,
 } from "@/actions/providers";
 import { toast } from "sonner";
@@ -32,7 +33,7 @@ import { Label } from "@/components/ui/label";
 import { isValidUrl } from "@/lib/utils/validation";
 import type { ProviderType } from "@/types/provider";
 
-type ApiFormat = "anthropic-messages" | "openai-chat" | "openai-responses";
+type ApiFormat = "anthropic-messages" | "openai-chat" | "openai-responses" | "gemini";
 
 // UI 配置常量
 const API_TEST_UI_CONFIG = {
@@ -46,12 +47,15 @@ const providerTypeToApiFormat: Partial<Record<ProviderType, ApiFormat>> = {
   "claude-auth": "anthropic-messages",
   codex: "openai-responses",
   "openai-compatible": "openai-chat",
+  gemini: "gemini",
+  "gemini-cli": "gemini",
 };
 
 const apiFormatDefaultModel: Record<ApiFormat, string> = {
   "anthropic-messages": "claude-sonnet-4-5-20250929",
   "openai-chat": "gpt-5.1-codex",
   "openai-responses": "gpt-5.1-codex",
+  gemini: "gemini-1.5-pro",
 };
 
 const resolveApiFormatFromProvider = (providerType?: ProviderType | null): ApiFormat =>
@@ -214,6 +218,16 @@ export function ApiTestButton({
             proxyFallbackToDirect,
           });
           break;
+
+        case "gemini":
+          response = await testProviderGemini({
+            providerUrl: providerUrl.trim(),
+            apiKey: resolvedKey,
+            model: testModel.trim() || undefined,
+            proxyUrl: proxyUrl?.trim() || null,
+            proxyFallbackToDirect,
+          });
+          break;
       }
 
       if (!response.ok) {
@@ -349,6 +363,7 @@ export function ApiTestButton({
               </>
             </SelectItem>
             <SelectItem value="openai-responses">{t("formatOpenAIResponses")}</SelectItem>
+            <SelectItem value="gemini">Gemini API</SelectItem>
           </SelectContent>
         </Select>
         <div className="text-xs text-muted-foreground">{t("apiFormatDesc")}</div>

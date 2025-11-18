@@ -573,12 +573,8 @@ export function ProviderForm({
                     <SelectItem value="claude">{t("providerTypes.claude")}</SelectItem>
                     <SelectItem value="claude-auth">{t("providerTypes.claudeAuth")}</SelectItem>
                     <SelectItem value="codex">{t("providerTypes.codex")}</SelectItem>
-                    <SelectItem value="gemini-cli" disabled={!enableMultiProviderTypes}>
-                      <>
-                        {t("providerTypes.geminiCli")}{" "}
-                        {!enableMultiProviderTypes && t("providerTypes.geminiCliDisabled")}
-                      </>
-                    </SelectItem>
+                    <SelectItem value="gemini">{t("providerTypes.gemini")}</SelectItem>
+                    <SelectItem value="gemini-cli">{t("providerTypes.geminiCli")}</SelectItem>
                     <SelectItem value="openai-compatible" disabled={!enableMultiProviderTypes}>
                       <>
                         {t("providerTypes.openaiCompatible")}{" "}

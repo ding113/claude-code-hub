@@ -812,9 +812,9 @@
             "desc": "（スケジューリングに影響）",
             "placeholder": "プロバイダー種別を選択"
           },
-          "providerTypeDesc": "プロバイダーの API 形式を選択します。",
-          "providerTypeDisabledNote": "注: Gemini CLI と OpenAI Compatible は開発中のため、現在は使用できません",
-          "modelRedirects": {
+      "providerTypeDesc": "プロバイダーの API 形式を選択します。",
+      "providerTypeDisabledNote": "注: OpenAI Compatible は開発中のため、現在は使用できません",
+      "modelRedirects": {
             "label": "モデルリダイレクト設定",
             "optional": "（任意）"
           },
@@ -981,7 +981,7 @@
         "claudeAuth": "Claude (Anthropic Auth Token)",
         "codex": "Codex (Response API)",
         "geminiCli": "Gemini CLI",
-        "geminiCliDisabled": " - 開発中",
+        "geminiCliDisabled": "",
         "openaiCompatible": "OpenAI Compatible",
         "openaiCompatibleDisabled": " - 開発中"
       },

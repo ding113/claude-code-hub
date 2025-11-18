@@ -813,7 +813,7 @@
             "placeholder": "Выберите тип провайдера"
           },
           "providerTypeDesc": "Выберите формат API провайдера.",
-          "providerTypeDisabledNote": "Примечание: типы Gemini CLI и OpenAI Compatible находятся в разработке и пока недоступны",
+          "providerTypeDisabledNote": "Примечание: функции типа OpenAI Compatible находятся в разработке и пока недоступны",
           "modelRedirects": {
             "label": "Перенаправление моделей",
             "optional": "(необязательно)"
@@ -981,7 +981,7 @@
         "claudeAuth": "Claude (Anthropic Auth Token)",
         "codex": "Codex (Response API)",
         "geminiCli": "Gemini CLI",
-        "geminiCliDisabled": " - в разработке",
+        "geminiCliDisabled": "",
         "openaiCompatible": "OpenAI Compatible",
         "openaiCompatibleDisabled": " - в разработке"
       },
