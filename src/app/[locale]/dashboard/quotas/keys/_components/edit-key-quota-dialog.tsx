@@ -162,57 +162,57 @@ export function EditKeyQuotaDialog({
                   onChange={(e) => setLimit5h(e.target.value)}
                   className="h-9"
                 />
-              {currentQuota?.cost5h.limit && (
-                <p className="text-xs text-muted-foreground">
-                  {t("cost5h.current", {
-                    currency: currencySymbol,
-                    current: currentQuota.cost5h.current.toFixed(4),
-                    limit: currentQuota.cost5h.limit.toFixed(2),
-                  })}
-                </p>
-              )}
-            </div>
+                {currentQuota?.cost5h.limit && (
+                  <p className="text-xs text-muted-foreground">
+                    {t("cost5h.current", {
+                      currency: currencySymbol,
+                      current: currentQuota.cost5h.current.toFixed(4),
+                      limit: currentQuota.cost5h.limit.toFixed(2),
+                    })}
+                  </p>
+                )}
+              </div>
 
-            {/* 每日限额 */}
-            <div className="grid gap-1.5">
-              <Label htmlFor="limitDaily" className="text-xs">
-                {t("costDaily.label")}
-              </Label>
-              <Input
-                id="limitDaily"
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder={t("costDaily.placeholder")}
-                value={limitDaily}
-                onChange={(e) => setLimitDaily(e.target.value)}
-                className="h-9"
-              />
-              {currentQuota?.costDaily.limit && (
-                <p className="text-xs text-muted-foreground">
-                  {t("costDaily.current", {
-                    currency: currencySymbol,
-                    current: currentQuota.costDaily.current.toFixed(4),
-                    limit: currentQuota.costDaily.limit.toFixed(2),
-                  })}
-                </p>
-              )}
-            </div>
+              {/* 每日限额 */}
+              <div className="grid gap-1.5">
+                <Label htmlFor="limitDaily" className="text-xs">
+                  {t("costDaily.label")}
+                </Label>
+                <Input
+                  id="limitDaily"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder={t("costDaily.placeholder")}
+                  value={limitDaily}
+                  onChange={(e) => setLimitDaily(e.target.value)}
+                  className="h-9"
+                />
+                {currentQuota?.costDaily.limit && (
+                  <p className="text-xs text-muted-foreground">
+                    {t("costDaily.current", {
+                      currency: currencySymbol,
+                      current: currentQuota.costDaily.current.toFixed(4),
+                      limit: currentQuota.costDaily.limit.toFixed(2),
+                    })}
+                  </p>
+                )}
+              </div>
 
-            {/* 每日重置时间 */}
-            <div className="grid gap-1.5">
-              <Label htmlFor="dailyResetTime" className="text-xs">
-                {t("dailyResetTime.label")}
-              </Label>
-              <Input
-                id="dailyResetTime"
-                type="time"
-                step={60}
-                value={resetTime}
-                onChange={(e) => setResetTime(e.target.value || "00:00")}
-                className="h-9"
-              />
-            </div>
+              {/* 每日重置时间 */}
+              <div className="grid gap-1.5">
+                <Label htmlFor="dailyResetTime" className="text-xs">
+                  {t("dailyResetTime.label")}
+                </Label>
+                <Input
+                  id="dailyResetTime"
+                  type="time"
+                  step={60}
+                  value={resetTime}
+                  onChange={(e) => setResetTime(e.target.value || "00:00")}
+                  className="h-9"
+                />
+              </div>
 
               {/* 周限额 */}
               <div className="grid gap-1.5">
