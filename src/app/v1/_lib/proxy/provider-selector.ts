@@ -280,15 +280,53 @@ export class ProxyProviderResolver {
 
     // 循环结束：所有可用供应商都已尝试或无可用供应商
     const status = 503;
-    const message =
-      excludedProviders.length > 0
-        ? `所有供应商不可用（尝试了 ${excludedProviders.length} 个供应商）`
-        : "暂无可用的上游服务";
+
+    // 构建详细的错误消息
+    let message = "暂无可用的上游服务";
+    let errorType = "no_available_providers";
+
+    if (excludedProviders.length > 0) {
+      message = `所有供应商不可用（尝试了 ${excludedProviders.length} 个供应商）`;
+      errorType = "all_providers_failed";
+    } else if (session.getLastSelectionContext()?.filteredProviders?.length > 0) {
+      // 检查是否因为限流被过滤
+      const filtered = session.getLastSelectionContext()!.filteredProviders!;
+      const rateLimited = filtered.filter(p => p.reason === "rate_limited");
+      const circuitOpen = filtered.filter(p => p.reason === "circuit_open");
+
+      if (rateLimited.length > 0 && circuitOpen.length === 0) {
+        // 全部因为限流
+        message = `所有供应商已达消费限额（${rateLimited.length} 个供应商）`;
+        errorType = "rate_limit_exceeded";
+      } else if (circuitOpen.length > 0 && rateLimited.length === 0) {
+        // 全部因为熔断
+        message = `所有供应商熔断器已打开（${circuitOpen.length} 个供应商）`;
+        errorType = "circuit_breaker_open";
+      } else if (rateLimited.length > 0 && circuitOpen.length > 0) {
+        // 混合原因
+        message = `所有供应商不可用（${rateLimited.length} 个达限额，${circuitOpen.length} 个熔断）`;
+        errorType = "mixed_unavailable";
+      }
+    }
+
     logger.error("ProviderSelector: No available providers after trying all candidates", {
       excludedProviders,
       totalAttempts: attemptCount,
+      errorType,
+      filteredProviders: session.getLastSelectionContext()?.filteredProviders,
     });
-    return ProxyResponses.buildError(status, message);
+
+    // 构建详细的错误响应
+    const details: Record<string, unknown> = {
+      totalAttempts: attemptCount,
+      excludedCount: excludedProviders.length,
+    };
+
+    if (session.getLastSelectionContext()?.filteredProviders) {
+      details.filteredProviders = session.getLastSelectionContext()!.filteredProviders;
+    }
+
+    return ProxyResponses.buildError(status, message, errorType, details);
   }
 
   /**
@@ -549,10 +587,9 @@ export class ProxyProviderResolver {
     }
 
     if (healthyProviders.length === 0) {
-      logger.warn("ProviderSelector: All providers rate limited, falling back to random");
-      // Fail Open：降级到随机选择（让上游拒绝）
-      const fallback = this.weightedRandom(candidateProviders);
-      return { provider: fallback, context };
+      logger.warn("ProviderSelector: All providers rate limited or unavailable");
+      // 所有供应商都被限流或不可用，返回 null 触发 503 错误
+      return { provider: null, context };
     }
 
     // Step 4: 优先级分层（只选择最高优先级的供应商）
