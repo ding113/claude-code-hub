@@ -9,10 +9,10 @@ export const USER_DEFAULTS = {
 export const USER_LIMITS = {
   RPM: {
     MIN: 1,
-    MAX: 10_000,
+    MAX: 1_000_000, // 提升到 100 万
   },
   DAILY_QUOTA: {
     MIN: 0.01,
-    MAX: 1_000,
+    MAX: 100_000, // 提升到 10 万美元
   },
 } as const;
