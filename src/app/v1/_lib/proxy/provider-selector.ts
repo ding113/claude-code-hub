@@ -293,21 +293,27 @@ export class ProxyProviderResolver {
       const filteredProviders = selectionContext?.filteredProviders;
 
       if (filteredProviders && filteredProviders.length > 0) {
-        // 检查是否因为限流被过滤
+        // 统计各种原因
         const rateLimited = filteredProviders.filter(p => p.reason === "rate_limited");
         const circuitOpen = filteredProviders.filter(p => p.reason === "circuit_open");
+        const disabled = filteredProviders.filter(p => p.reason === "disabled");
+        const modelNotAllowed = filteredProviders.filter(p => p.reason === "model_not_allowed");
 
-        if (rateLimited.length > 0 && circuitOpen.length === 0) {
+        // 计算可用供应商数量（排除禁用和模型不支持的）
+        const unavailableCount = rateLimited.length + circuitOpen.length;
+        const totalEnabled = filteredProviders.length - disabled.length - modelNotAllowed.length;
+
+        if (rateLimited.length > 0 && circuitOpen.length === 0 && unavailableCount === totalEnabled) {
           // 全部因为限流
-          message = `所有供应商已达消费限额（${rateLimited.length} 个供应商）`;
+          message = `所有可用供应商已达消费限额（${rateLimited.length} 个供应商）`;
           errorType = "rate_limit_exceeded";
-        } else if (circuitOpen.length > 0 && rateLimited.length === 0) {
+        } else if (circuitOpen.length > 0 && rateLimited.length === 0 && unavailableCount === totalEnabled) {
           // 全部因为熔断
-          message = `所有供应商熔断器已打开（${circuitOpen.length} 个供应商）`;
+          message = `所有可用供应商熔断器已打开（${circuitOpen.length} 个供应商）`;
           errorType = "circuit_breaker_open";
         } else if (rateLimited.length > 0 && circuitOpen.length > 0) {
           // 混合原因
-          message = `所有供应商不可用（${rateLimited.length} 个达限额，${circuitOpen.length} 个熔断）`;
+          message = `所有可用供应商不可用（${rateLimited.length} 个达限额，${circuitOpen.length} 个熔断）`;
           errorType = "mixed_unavailable";
         }
       }

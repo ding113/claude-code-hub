@@ -150,6 +150,7 @@
         "billingDescription": "The system prioritizes billing based on the price of the requested model ({original}). If the model is not found in the price list, the price of the actually called model ({current}) is used."
       },
       "errorMessage": "Error Message",
+      "filteredProviders": "Filtered Providers",
       "providerChain": {
         "title": "Provider Decision Chain Timeline",
         "totalDuration": "Total Duration: {duration}ms"

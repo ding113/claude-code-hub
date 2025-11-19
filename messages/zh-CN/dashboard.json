@@ -151,6 +151,7 @@
         "billingDescription": "系统优先使用请求模型（{original}）的价格计费。如果价格表中不存在该模型，则使用实际调用模型（{current}）的价格。"
       },
       "errorMessage": "错误信息",
+      "filteredProviders": "被过滤的供应商",
       "providerChain": {
         "title": "供应商决策链时间线",
         "totalDuration": "总耗时: {duration}ms"
