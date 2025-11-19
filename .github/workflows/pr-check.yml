@@ -44,9 +44,9 @@ jobs:
       - name: 🛡️ Validate migrations
         run: bun run validate:migrations
 
-      - name: ✅ Code quality checks passed
+      - name: Code quality checks passed
         run: |
-          echo "✅ All code quality checks passed!"
+          echo "All code quality checks passed!"
           echo "📝 Type checking: OK"
           echo "🎨 Code formatting: OK"
           echo "🛡️ Migration validation: OK"

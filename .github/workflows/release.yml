@@ -157,11 +157,11 @@ jobs:
 
           # 下载最新价格表
           if curl -sSL -f "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json" -o public/seed/litellm-prices.json; then
-            echo "✅ 价格表下载成功"
+            echo "价格表下载成功"
 
             # 验证 JSON 格式
             if node -e "JSON.parse(require('fs').readFileSync('public/seed/litellm-prices.json', 'utf-8'))"; then
-              echo "✅ JSON 格式验证通过"
+              echo "JSON 格式验证通过"
 
               # 显示统计信息
               TOTAL_MODELS=$(node -e "console.log(Object.keys(JSON.parse(require('fs').readFileSync('public/seed/litellm-prices.json', 'utf-8'))).length)")

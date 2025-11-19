@@ -103,7 +103,7 @@ export class WeChatBot {
    * 测试 Webhook 连通性
    */
   async testConnection(): Promise<{ success: boolean; error?: string }> {
-    return this.sendMarkdown("✅ **测试消息**\n\n企业微信机器人连接成功！");
+    return this.sendMarkdown("**测试消息**\n\n企业微信机器人连接成功！");
   }
 }
 

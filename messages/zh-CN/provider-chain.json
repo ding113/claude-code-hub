@@ -105,7 +105,7 @@
     "requestOk": "OK",
     "successStatus": "状态: {code} OK",
     "requestCompleted": "请求成功完成",
-    "completed": "✅ 请求成功完成",
+    "completed": "请求成功完成",
     "concurrentLimitFailed": "并发限制",
     "attemptFailed": "尝试失败（第 {attempt} 次）",
     "concurrentLimit": "并发限制",

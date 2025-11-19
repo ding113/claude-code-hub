@@ -57,11 +57,11 @@ Cubence offers special discount coupons for users of CCH: when purchasing with t
 
 The one-click deployment script **automatically handles** all of the following:
 
-- ✅ Check and install Docker and Docker Compose (Linux/macOS support auto-install)
-- ✅ Create deployment directory and configuration files
-- ✅ Generate secure admin token and database password
-- ✅ Start all services and wait for health checks
-- ✅ Display access URLs and admin token
+- Check and install Docker and Docker Compose (Linux/macOS support auto-install)
+- Create deployment directory and configuration files
+- Generate secure admin token and database password
+- Start all services and wait for health checks
+- Display access URLs and admin token
 
 **Linux / macOS:**
 

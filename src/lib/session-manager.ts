@@ -390,7 +390,7 @@ export class SessionManager {
     if (!redis || redis.status !== "ready") return null;
 
     try {
-      // ✅ 修复：从真实绑定关系读取（session:provider）
+      // 修复：从真实绑定关系读取（session:provider）
       const providerIdStr = await redis.get(`session:${sessionId}:provider`);
       if (!providerIdStr) {
         return null;

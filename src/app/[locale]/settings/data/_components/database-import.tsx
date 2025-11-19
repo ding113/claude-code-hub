@@ -106,7 +106,7 @@ export function DatabaseImport() {
               if (data.type === 'progress') {
                 setProgressMessages(prev => [...prev, data.message]);
               } else if (data.type === 'complete') {
-                setProgressMessages(prev => [...prev, `✅ ${data.message}`]);
+                setProgressMessages(prev => [...prev, `${data.message}`]);
                 toast.success(t('successMessage'));
               } else if (data.type === 'error') {
                 setProgressMessages(prev => [...prev, `❌ ${data.message}`]);

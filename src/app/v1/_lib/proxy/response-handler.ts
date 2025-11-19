@@ -62,16 +62,18 @@ export class ProxyResponseHandler {
 
     // --- GEMINI HANDLING ---
     if (provider.providerType === "gemini" || provider.providerType === "gemini-cli") {
-      // 判断是否需要透传（客户端和提供商格式一致）
+      // 判断是否需要透传（客户端和提供商格式都必须是 Gemini）
       const isGeminiPassthrough =
-        session.originalFormat === "gemini" || session.originalFormat === "gemini-cli";
+        (session.originalFormat === "gemini" || session.originalFormat === "gemini-cli") &&
+        (provider.providerType === "gemini" || provider.providerType === "gemini-cli");
 
       if (isGeminiPassthrough) {
-        // ✅ 完全透传：客户端是 Gemini 格式，提供商也是 Gemini 类型
+        // 完全透传：客户端是 Gemini 格式，提供商也是 Gemini 类型
         logger.debug("[ResponseHandler] Gemini passthrough mode (no transformation)", {
           originalFormat: session.originalFormat,
           providerType: provider.providerType,
           model: session.request.model,
+          reason: "Client format and provider type both Gemini",
         });
         // 直接返回原始响应，不做任何转换
         finalResponse = response;
@@ -140,7 +142,7 @@ export class ProxyResponseHandler {
       }
     }
 
-    // ✅ 使用 AsyncTaskManager 管理后台处理任务
+    // 使用 AsyncTaskManager 管理后台处理任务
     const messageContext = session.messageContext;
     const taskId = `non-stream-${messageContext?.id || `unknown-${Date.now()}`}`;
     const abortController = new AbortController();
@@ -173,7 +175,7 @@ export class ProxyResponseHandler {
       };
 
       try {
-        // ✅ 检查客户端是否断开
+        // 检查客户端是否断开
         if (session.clientAbortSignal?.aborted || abortController.signal.aborted) {
           logger.info("ResponseHandler: Non-stream task cancelled (client disconnected)", {
             taskId,
@@ -345,7 +347,7 @@ export class ProxyResponseHandler {
               });
             }
           } else {
-            // ✅ 客户端主动中断：正常日志，不抛出错误
+            // 客户端主动中断：正常日志，不抛出错误
             logger.warn("ResponseHandler: Non-stream processing aborted by client", {
               taskId,
               providerId: provider.id,
@@ -384,7 +386,7 @@ export class ProxyResponseHandler {
       }
     })();
 
-    // ✅ 注册任务并添加全局错误捕获
+    // 注册任务并添加全局错误捕获
     AsyncTaskManager.register(taskId, processingPromise, "non-stream-processing");
     processingPromise.catch(async (error) => {
       logger.error("ResponseHandler: Uncaught error in non-stream processing", {
@@ -403,7 +405,7 @@ export class ProxyResponseHandler {
       });
     });
 
-    // ✅ 客户端断开时取消任务
+    // 客户端断开时取消任务
     if (session.clientAbortSignal) {
       session.clientAbortSignal.addEventListener("abort", () => {
         AsyncTaskManager.cancel(taskId);
@@ -432,16 +434,18 @@ export class ProxyResponseHandler {
 
     // --- GEMINI STREAM HANDLING ---
     if (provider.providerType === "gemini" || provider.providerType === "gemini-cli") {
-      // 判断是否需要透传（客户端和提供商格式一致）
+      // 判断是否需要透传（客户端和提供商格式都必须是 Gemini）
       const isGeminiPassthrough =
-        session.originalFormat === "gemini" || session.originalFormat === "gemini-cli";
+        (session.originalFormat === "gemini" || session.originalFormat === "gemini-cli") &&
+        (provider.providerType === "gemini" || provider.providerType === "gemini-cli");
 
       if (isGeminiPassthrough) {
-        // ✅ 完全透传：客户端是 Gemini 格式，提供商也是 Gemini 类型
+        // 完全透传：客户端是 Gemini 格式，提供商也是 Gemini 类型
         logger.debug("[ResponseHandler] Gemini stream passthrough mode (no transformation)", {
           originalFormat: session.originalFormat,
           providerType: provider.providerType,
           model: session.request.model,
+          reason: "Client format and provider type both Gemini",
         });
         // 直接使用原始流，不做任何转换
         processedStream = response.body;
@@ -555,7 +559,7 @@ export class ProxyResponseHandler {
     const [clientStream, internalStream] = controllableStream.tee();
     const statusCode = response.status;
 
-    // ✅ 使用 AsyncTaskManager 管理后台处理任务
+    // 使用 AsyncTaskManager 管理后台处理任务
     const taskId = `stream-${messageContext.id}`;
     const abortController = new AbortController();
 
@@ -713,7 +717,7 @@ export class ProxyResponseHandler {
 
       try {
         while (true) {
-          // ✅ 检查取消信号
+          // 检查取消信号
           if (session.clientAbortSignal?.aborted || abortController.signal.aborted) {
             logger.info("ResponseHandler: Stream processing cancelled", {
               taskId,
@@ -852,7 +856,7 @@ export class ProxyResponseHandler {
               phase: "stream",
             });
           } else {
-            // ✅ 客户端主动中断：正常日志，不抛出错误
+            // 客户端主动中断：正常日志，不抛出错误
             logger.warn("ResponseHandler: Stream reading aborted by client", {
               taskId,
               providerId: provider.id,
@@ -890,7 +894,7 @@ export class ProxyResponseHandler {
           });
         }
       } finally {
-        // ✅ 确保资源释放
+        // 确保资源释放
         clearIdleTimer(); // ⭐ 清除静默期计时器（防止泄漏）
         try {
           reader.releaseLock();
@@ -901,7 +905,7 @@ export class ProxyResponseHandler {
       }
     })();
 
-    // ✅ 注册任务并添加全局错误捕获
+    // 注册任务并添加全局错误捕获
     AsyncTaskManager.register(taskId, processingPromise, "stream-processing");
     processingPromise.catch(async (error) => {
       logger.error("ResponseHandler: Uncaught error in stream processing", {
@@ -921,7 +925,7 @@ export class ProxyResponseHandler {
       });
     });
 
-    // ✅ 客户端断开时取消任务并清除 idle timer
+    // 客户端断开时取消任务并清除 idle timer
     if (session.clientAbortSignal) {
       session.clientAbortSignal.addEventListener("abort", () => {
         logger.debug("ResponseHandler: Client disconnected, cleaning up", {
@@ -1274,7 +1278,7 @@ async function trackCostToRedis(session: ProxySession, usage: UsageMetrics | nul
     costFloat
   );
 
-  // ✅ 新增：追踪用户层每日消费
+  // 新增：追踪用户层每日消费
   await RateLimitService.trackUserDailyCost(user.id, costFloat);
 
   // 刷新 session 时间戳（滑动窗口）
@@ -1338,7 +1342,7 @@ async function persistRequestFailure(options: {
       dbError,
     });
   } finally {
-    // ✅ 确保无论数据库操作成功与否，都清理追踪状态
+    // 确保无论数据库操作成功与否，都清理追踪状态
     try {
       tracker.endRequest(messageContext.user.id, messageContext.id);
     } catch (trackerError) {

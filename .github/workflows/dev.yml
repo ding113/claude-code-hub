@@ -131,7 +131,7 @@ jobs:
 
       - name: Build summary
         run: |
-          echo "✅ Build completed successfully!"
+          echo "Build completed successfully!"
           echo ""
           echo "📦 Branch: ${{ steps.branch_info.outputs.branch_name }}"
           echo "📦 Docker Images:"

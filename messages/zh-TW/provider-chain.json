@@ -105,7 +105,7 @@
     "requestOk": "OK",
     "successStatus": "狀態: {code} OK",
     "requestCompleted": "請求成功完成",
-    "completed": "✅ 請求成功完成",
+    "completed": "請求成功完成",
     "concurrentLimitFailed": "並發限制",
     "attemptFailed": "嘗試失敗（第 {attempt} 次）",
     "concurrentLimit": "並發限制",

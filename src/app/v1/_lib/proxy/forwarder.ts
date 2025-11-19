@@ -931,7 +931,7 @@ export class ProxyForwarder {
 
       if (responseController.signal.aborted && !session.clientAbortSignal?.aborted) {
         // 响应超时：HTTP 首包未在规定时间内到达
-        // ✅ 修复：首字节超时应归类为供应商问题，计入熔断器并直接切换
+        // 修复：首字节超时应归类为供应商问题，计入熔断器并直接切换
         logger.error("ProxyForwarder: Response timeout (provider quality issue, will switch)", {
           providerId: provider.id,
           providerName: provider.name,
@@ -944,7 +944,7 @@ export class ProxyForwarder {
             "First-byte timeout indicates slow provider response, should count towards circuit breaker",
         });
 
-        // ✅ 抛出 ProxyError 并设置特殊状态码 524（Cloudflare: A Timeout Occurred）
+        // 抛出 ProxyError 并设置特殊状态码 524（Cloudflare: A Timeout Occurred）
         // 这样会被归类为 PROVIDER_ERROR，计入熔断器并直接切换供应商
         throw new ProxyError(
           `${responseTimeoutType === "streaming_first_byte" ? "供应商首字节响应超时" : "供应商响应超时"}: ${responseTimeoutMs}ms 内未收到数据`,
@@ -975,7 +975,7 @@ export class ProxyForwarder {
       // ⭐ 检测流式静默期超时（streaming_idle）
       if (err.message?.includes("streaming_idle") && !session.clientAbortSignal?.aborted) {
         // 流式静默期超时：首字节之后的连续静默窗口超时
-        // ✅ 修复：静默期超时也是供应商问题，应计入熔断器
+        // 修复：静默期超时也是供应商问题，应计入熔断器
         logger.error(
           "ProxyForwarder: Streaming idle timeout (provider quality issue, will switch)",
           {
@@ -989,7 +989,7 @@ export class ProxyForwarder {
           }
         );
 
-        // ✅ 抛出 ProxyError（归类为 PROVIDER_ERROR）
+        // 抛出 ProxyError（归类为 PROVIDER_ERROR）
         throw new ProxyError(
           `供应商流式响应静默超时: ${provider.streamingIdleTimeoutMs}ms 内未收到新数据`,
           524, // 524 = A Timeout Occurred

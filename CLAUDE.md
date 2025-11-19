@@ -303,11 +303,11 @@ if (proxyConfig) {
 
 **测试内容**：
 
-- ✅ API 连通性（网络连接、认证）
-- ✅ 响应时间测量（超时 10 秒）
-- ✅ Token 用量统计
-- ✅ 模型可用性验证
-- ✅ 代理配置测试（如果配置了代理）
+- API 连通性（网络连接、认证）
+- 响应时间测量（超时 10 秒）
+- Token 用量统计
+- 模型可用性验证
+- 代理配置测试（如果配置了代理）
 
 **安全限制**：
 
@@ -506,8 +506,8 @@ LOG_LEVEL=info                     # 日志级别
 
 **重要**: 所有布尔类型的环境变量(如 `ENABLE_SECURE_COOKIES`, `AUTO_MIGRATE`, `ENABLE_RATE_LIMIT` 等)必须使用以下值:
 
-- ✅ **表示 `true`**: `true`, `1`, `yes`, `on` 或任何非 `false`/`0` 的值
-- ✅ **表示 `false`**: `false`, `0`
+- **表示 `true`**: `true`, `1`, `yes`, `on` 或任何非 `false`/`0` 的值
+- **表示 `false`**: `false`, `0`
 
 **常见错误**:
 
@@ -515,7 +515,7 @@ LOG_LEVEL=info                     # 日志级别
 # ❌ 错误 - 字符串 "false" 会被解析为 true!
 ENABLE_SECURE_COOKIES="false"  # 错误:引号导致字符串被当作 true
 
-# ✅ 正确 - 不带引号
+# 正确 - 不带引号
 ENABLE_SECURE_COOKIES=false    # 正确:直接写 false
 ENABLE_SECURE_COOKIES=0        # 正确:也可以用 0
 ```

@@ -105,7 +105,7 @@
     "requestOk": "OK",
     "successStatus": "ステータス: {code} OK",
     "requestCompleted": "リクエスト正常完了",
-    "completed": "✅ リクエスト正常完了",
+    "completed": "リクエスト正常完了",
     "concurrentLimitFailed": "同時実行制限",
     "attemptFailed": "試行失敗（試行{attempt}）",
     "concurrentLimit": "同時実行制限",

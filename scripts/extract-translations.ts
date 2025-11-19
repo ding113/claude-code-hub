@@ -378,7 +378,7 @@ async function main() {
   console.log("\n📝 Generating translation files...");
   generateTranslationFiles(allStrings, dryRun);
 
-  console.log("\n✅ Extraction complete!");
+  console.log("\nExtraction complete!");
   if (dryRun) {
     console.log("   (Run without --dry-run to save changes)");
   }

@@ -87,7 +87,7 @@ export async function sanitizeCodexRequest(
   const effectiveStrategy =
     strategy || (ENABLE_CODEX_INSTRUCTIONS_INJECTION ? "force_official" : "auto");
 
-  // ✅ 官方 Codex CLI 客户端 + auto 策略：保持原始请求
+  // 官方 Codex CLI 客户端 + auto 策略：保持原始请求
   if (isOfficialClient && effectiveStrategy === "auto") {
     logger.debug("[CodexSanitizer] Official client detected, skipping auto sanitization", {
       model,

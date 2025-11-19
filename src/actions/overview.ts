@@ -23,7 +23,7 @@ export interface OverviewData {
 
 /**
  * 获取概览数据（首页实时面板使用）
- * ✅ 权限控制：管理员或 allowGlobalUsageView=true 时显示全站数据
+ * 权限控制：管理员或 allowGlobalUsageView=true 时显示全站数据
  */
 export async function getOverviewData(): Promise<ActionResult<OverviewData>> {
   try {
