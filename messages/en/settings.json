@@ -507,6 +507,10 @@
         "label": "Codex",
         "description": "Codex CLI API"
       },
+      "gemini": {
+        "label": "Gemini",
+        "description": "Google Gemini API"
+      },
       "geminiCli": {
         "label": "Gemini CLI",
         "description": "Gemini CLI API"
