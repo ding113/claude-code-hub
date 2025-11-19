@@ -241,7 +241,29 @@ export function KeyListHeader({
             </DialogTrigger>
             <DialogContent>
               <FormErrorBoundary>
-                <AddKeyForm userId={activeUser?.id} onSuccess={handleKeyCreated} />
+                <AddKeyForm
+                  userId={activeUser?.id}
+                  user={
+                    activeUser
+                      ? {
+                          id: activeUser.id,
+                          name: activeUser.name,
+                          description: activeUser.note || "",
+                          role: activeUser.role,
+                          rpm: activeUser.rpm,
+                          dailyQuota: activeUser.dailyQuota,
+                          providerGroup: activeUser.providerGroup || null,
+                          createdAt: new Date(),
+                          updatedAt: new Date(),
+                          limit5hUsd: activeUser.limit5hUsd ?? undefined,
+                          limitWeeklyUsd: activeUser.limitWeeklyUsd ?? undefined,
+                          limitMonthlyUsd: activeUser.limitMonthlyUsd ?? undefined,
+                          limitConcurrentSessions: activeUser.limitConcurrentSessions ?? undefined,
+                        }
+                      : undefined
+                  }
+                  onSuccess={handleKeyCreated}
+                />
               </FormErrorBoundary>
             </DialogContent>
           </Dialog>

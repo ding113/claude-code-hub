@@ -4,6 +4,9 @@ import { QuotaToolbar } from "@/components/quota/quota-toolbar";
 import { UsersQuotaClient } from "./_components/users-quota-client";
 import { getSystemSettings } from "@/repository/system-config";
 import { getTranslations } from "next-intl/server";
+import { Link } from "@/i18n/routing";
+import { Info } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 async function getUsersWithQuotas() {
   const users = await getUsers();
@@ -38,6 +41,16 @@ export default async function UsersQuotaPage() {
           </p>
         </div>
       </div>
+
+      <Alert>
+        <Info className="h-4 w-4" />
+        <AlertDescription>
+          {t("manageNotice")}{" "}
+          <Link href="/dashboard/users" className="font-medium underline underline-offset-4">
+            {t("manageLink")}
+          </Link>
+        </AlertDescription>
+      </Alert>
 
       <QuotaToolbar
         sortOptions={[

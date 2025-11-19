@@ -21,6 +21,9 @@ import { CodexInstructionsCache } from "@/lib/codex-instructions-cache";
 import { createProxyAgentForProvider } from "@/lib/proxy-agent";
 import type { Dispatcher } from "undici";
 import { getEnvConfig } from "@/lib/config/env.schema";
+import { GeminiAdapter } from "../gemini/adapter";
+import { GEMINI_PROTOCOL } from "../gemini/protocol";
+import { GeminiAuth } from "../gemini/auth";
 
 const MAX_ATTEMPTS_PER_PROVIDER = 2; // 每个供应商最多尝试次数（首次 + 1次重试）
 const MAX_PROVIDER_SWITCHES = 20; // 保险栓：最多切换 20 次供应商（防止无限循环）
@@ -569,171 +572,238 @@ export class ProxyForwarder {
       logger.debug("ProxyForwarder: Model redirected", { providerId: provider.id });
     }
 
-    // 请求格式转换（基于 client 格式和 provider 类型）
-    const fromFormat: Format = mapClientFormatToTransformer(session.originalFormat);
-    const toFormat: Format | null = provider.providerType
-      ? mapProviderTypeToTransformer(provider.providerType)
-      : null;
-
-    if (fromFormat !== toFormat && fromFormat && toFormat) {
-      try {
-        const transformed = defaultRegistry.transformRequest(
-          fromFormat,
-          toFormat,
-          session.request.model || "",
-          session.request.message,
-          true // 假设所有请求都是流式的
-        );
-
-        logger.debug("ProxyForwarder: Request format transformed", {
-          from: fromFormat,
-          to: toFormat,
-          model: session.request.model,
-        });
-
-        // 更新 session 中的请求体
-        session.request.message = transformed;
-      } catch (error) {
-        logger.error("ProxyForwarder: Request transformation failed", {
-          from: fromFormat,
-          to: toFormat,
-          error,
-        });
-        // 转换失败时继续使用原始请求
-      }
-    }
-
-    // Codex 请求清洗（即使格式相同也要执行，除非是官方客户端）
-    // 目的：确保非官方客户端的请求也能通过 Codex 供应商的校验
-    // - 替换 instructions 为官方完整 prompt
-    // - 删除不支持的参数（max_tokens, temperature 等）
-    if (toFormat === "codex") {
-      const isOfficialClient = isOfficialCodexClient(session.userAgent);
-      const log = isOfficialClient ? logger.debug.bind(logger) : logger.info.bind(logger);
-
-      log("[ProxyForwarder] Normalizing Codex request for upstream compatibility", {
-        userAgent: session.userAgent || "N/A",
-        providerId: provider.id,
-        providerName: provider.name,
-        officialClient: isOfficialClient,
-        codexStrategy: provider.codexInstructionsStrategy,
-      });
-
-      // 官方 Codex CLI + auto 策略：完全透传（避免额外字段处理影响上游）
-      const shouldBypassSanitizer =
-        isOfficialClient && (provider.codexInstructionsStrategy ?? "auto") === "auto";
-
-      if (shouldBypassSanitizer) {
-        logger.debug(
-          "[ProxyForwarder] Bypassing sanitizer for official Codex CLI (auto strategy)",
-          {
-            providerId: provider.id,
-            providerName: provider.name,
-          }
-        );
-      } else {
-        try {
-          const sanitized = await sanitizeCodexRequest(
-            session.request.message as Record<string, unknown>,
-            session.request.model || "gpt-5-codex",
-            provider.codexInstructionsStrategy, // ⭐ Phase 2: 传递供应商级别策略
-            provider.id, // ⭐ Phase 3: 传递 providerId 用于缓存
-            { isOfficialClient }
-          );
-
-          const instructionsLength =
-            typeof sanitized.instructions === "string" ? sanitized.instructions.length : 0;
-
-          if (!instructionsLength) {
-            logger.warn("[ProxyForwarder] Codex sanitization yielded empty instructions", {
-              providerId: provider.id,
-              officialClient: isOfficialClient,
-            });
-          }
-
-          session.request.message = sanitized;
-
-          logger.debug("[ProxyForwarder] Codex request sanitized", {
-            instructionsLength,
-            hasParallelToolCalls: sanitized.parallel_tool_calls,
-            hasStoreFlag: sanitized.store,
-          });
-        } catch (error) {
-          logger.error("[ProxyForwarder] Failed to sanitize Codex request, using original", {
-            error,
-            providerId: provider.id,
-          });
-          // 清洗失败时继续使用原始请求（降级策略）
-        }
-      }
-    }
-
-    const processedHeaders = ProxyForwarder.buildHeaders(session, provider);
-
-    // 开发模式：输出最终请求头
-    if (process.env.NODE_ENV === "development") {
-      logger.trace("ProxyForwarder: Final request headers", {
-        provider: provider.name,
-        providerType: provider.providerType,
-        headers: Object.fromEntries(processedHeaders.entries()),
-      });
-    }
-
-    // 根据目标格式动态选择转发路径
-    let forwardUrl = session.requestUrl;
-
-    // Codex 供应商：使用 Response API 端点（/v1/responses）
-    // 注意：基于 toFormat 而非 originalFormat，因为需要根据目标供应商类型选择路径
-    if (toFormat === "codex") {
-      forwardUrl = new URL(session.requestUrl);
-      forwardUrl.pathname = "/v1/responses";
-      logger.debug("ProxyForwarder: Codex request path rewrite", {
-        from: session.requestUrl.pathname,
-        to: "/v1/responses",
-        originalFormat: fromFormat,
-        targetFormat: toFormat,
-      });
-    }
-
-    const proxyUrl = buildProxyUrl(provider.url, forwardUrl);
-
-    // 输出最终代理 URL（用于调试）
-    logger.debug("ProxyForwarder: Final proxy URL", { url: proxyUrl });
-
-    const hasBody = session.method !== "GET" && session.method !== "HEAD";
-
-    // 关键修复：使用转换后的 message 而非原始 buffer
-    // 确保 OpenAI 格式转换为 Response API 后，发送的是包含 input 字段的请求体
+    let proxyUrl: string;
+    let processedHeaders: Headers;
     let requestBody: BodyInit | undefined;
-    let isStreaming = false; // 检测是否为流式请求
+    let isStreaming = false;
 
-    if (hasBody) {
-      // 过滤私有参数（下划线前缀）防止泄露到上游供应商
-      const filteredMessage = filterPrivateParameters(session.request.message);
-      const bodyString = JSON.stringify(filteredMessage);
+    // --- GEMINI HANDLING ---
+    if (provider.providerType === "gemini" || provider.providerType === "gemini-cli") {
+      // 1. Transform Request
+      const geminiRequest = GeminiAdapter.transformRequest(
+        session.request.message,
+        provider.providerType as "gemini" | "gemini-cli"
+      );
+      const bodyString = JSON.stringify(geminiRequest);
       requestBody = bodyString;
 
-      // ⭐ 检测请求类型（流式 vs 非流式）
+      // Detect streaming from original request
       try {
-        const parsed = JSON.parse(bodyString);
-        isStreaming = parsed.stream === true;
+        const originalBody = session.request.message as Record<string, unknown>;
+        isStreaming = originalBody.stream === true;
       } catch {
-        // JSON 解析失败，默认非流式
         isStreaming = false;
       }
 
-      // 调试日志：输出实际转发的请求体（仅在开发环境）
-      if (process.env.NODE_ENV === "development") {
-        logger.trace("ProxyForwarder: Forwarding request", {
-          provider: provider.name,
+      // 2. Prepare Auth & Headers
+      const accessToken = await GeminiAuth.getAccessToken(provider.key);
+      const isApiKey = GeminiAuth.isApiKey(provider.key);
+
+      const headers = new Headers();
+      headers.set("Content-Type", "application/json");
+
+      if (isApiKey) {
+        headers.set(GEMINI_PROTOCOL.HEADERS.API_KEY, accessToken);
+      } else {
+        headers.set("Authorization", `Bearer ${accessToken}`);
+      }
+
+      // CLI specific headers
+      if (provider.providerType === "gemini-cli") {
+        headers.set(GEMINI_PROTOCOL.HEADERS.API_CLIENT, "GeminiCLI/1.0");
+      }
+
+      // 3. Construct URL
+      const model = session.request.model || "gemini-pro";
+
+      // Use provider.url if available, otherwise fall back to defaults
+      let baseUrl = provider.url;
+      if (!baseUrl) {
+        baseUrl =
+          provider.providerType === "gemini"
+            ? GEMINI_PROTOCOL.OFFICIAL_ENDPOINT
+            : GEMINI_PROTOCOL.CLI_ENDPOINT;
+      } else {
+        // Remove trailing slash if present
+        baseUrl = baseUrl.replace(/\/$/, "");
+      }
+
+      const action = isStreaming ? "streamGenerateContent" : "generateContent";
+      let urlString = "";
+
+      if (provider.providerType === "gemini") {
+        urlString = `${baseUrl}/models/${model}:${action}`;
+      } else {
+        // CLI endpoint: https://cloudcode-pa.googleapis.com/v1internal:{action}
+        urlString = `${baseUrl}:${action}`;
+      }
+
+      if (isStreaming) {
+        urlString += "?alt=sse";
+      } else if (provider.providerType === "gemini") {
+        // Non-streaming official gemini might not need ?alt=sse, but supports it?
+        // Official API doesn't use ?alt=sse for generateContent usually, returns JSON.
+      }
+
+      proxyUrl = urlString;
+      processedHeaders = headers;
+
+      logger.debug("ProxyForwarder: Gemini request prepared", {
+        providerId: provider.id,
+        type: provider.providerType,
+        url: proxyUrl,
+        isStreaming,
+        isApiKey,
+      });
+    } else {
+      // --- STANDARD HANDLING ---
+      // 请求格式转换（基于 client 格式和 provider 类型）
+      const fromFormat: Format = mapClientFormatToTransformer(session.originalFormat);
+      const toFormat: Format | null = provider.providerType
+        ? mapProviderTypeToTransformer(provider.providerType)
+        : null;
+
+      if (fromFormat !== toFormat && fromFormat && toFormat) {
+        try {
+          const transformed = defaultRegistry.transformRequest(
+            fromFormat,
+            toFormat,
+            session.request.model || "",
+            session.request.message,
+            true // 假设所有请求都是流式的
+          );
+
+          logger.debug("ProxyForwarder: Request format transformed", {
+            from: fromFormat,
+            to: toFormat,
+            model: session.request.model,
+          });
+
+          // 更新 session 中的请求体
+          session.request.message = transformed;
+        } catch (error) {
+          logger.error("ProxyForwarder: Request transformation failed", {
+            from: fromFormat,
+            to: toFormat,
+            error,
+          });
+          // 转换失败时继续使用原始请求
+        }
+      }
+
+      // Codex 请求清洗（即使格式相同也要执行，除非是官方客户端）
+      if (toFormat === "codex") {
+        const isOfficialClient = isOfficialCodexClient(session.userAgent);
+        const log = isOfficialClient ? logger.debug.bind(logger) : logger.info.bind(logger);
+
+        log("[ProxyForwarder] Normalizing Codex request for upstream compatibility", {
+          userAgent: session.userAgent || "N/A",
           providerId: provider.id,
-          proxyUrl: proxyUrl,
-          format: session.originalFormat,
-          method: session.method,
-          bodyLength: bodyString.length,
-          bodyPreview: bodyString.slice(0, 1000),
-          isStreaming, // 记录请求类型
+          providerName: provider.name,
+          officialClient: isOfficialClient,
+          codexStrategy: provider.codexInstructionsStrategy,
         });
+
+        const shouldBypassSanitizer =
+          isOfficialClient && (provider.codexInstructionsStrategy ?? "auto") === "auto";
+
+        if (shouldBypassSanitizer) {
+          logger.debug(
+            "[ProxyForwarder] Bypassing sanitizer for official Codex CLI (auto strategy)",
+            {
+              providerId: provider.id,
+              providerName: provider.name,
+            }
+          );
+        } else {
+          try {
+            const sanitized = await sanitizeCodexRequest(
+              session.request.message as Record<string, unknown>,
+              session.request.model || "gpt-5-codex",
+              provider.codexInstructionsStrategy,
+              provider.id,
+              { isOfficialClient }
+            );
+
+            const instructionsLength =
+              typeof sanitized.instructions === "string" ? sanitized.instructions.length : 0;
+
+            if (!instructionsLength) {
+              logger.warn("[ProxyForwarder] Codex sanitization yielded empty instructions", {
+                providerId: provider.id,
+                officialClient: isOfficialClient,
+              });
+            }
+
+            session.request.message = sanitized;
+
+            logger.debug("[ProxyForwarder] Codex request sanitized", {
+              instructionsLength,
+              hasParallelToolCalls: sanitized.parallel_tool_calls,
+              hasStoreFlag: sanitized.store,
+            });
+          } catch (error) {
+            logger.error("[ProxyForwarder] Failed to sanitize Codex request, using original", {
+              error,
+              providerId: provider.id,
+            });
+          }
+        }
+      }
+
+      processedHeaders = ProxyForwarder.buildHeaders(session, provider);
+
+      if (process.env.NODE_ENV === "development") {
+        logger.trace("ProxyForwarder: Final request headers", {
+          provider: provider.name,
+          providerType: provider.providerType,
+          headers: Object.fromEntries(processedHeaders.entries()),
+        });
+      }
+
+      let forwardUrl = session.requestUrl;
+
+      if (toFormat === "codex") {
+        forwardUrl = new URL(session.requestUrl);
+        forwardUrl.pathname = "/v1/responses";
+        logger.debug("ProxyForwarder: Codex request path rewrite", {
+          from: session.requestUrl.pathname,
+          to: "/v1/responses",
+          originalFormat: fromFormat,
+          targetFormat: toFormat,
+        });
+      }
+
+      proxyUrl = buildProxyUrl(provider.url, forwardUrl);
+
+      logger.debug("ProxyForwarder: Final proxy URL", { url: proxyUrl });
+
+      const hasBody = session.method !== "GET" && session.method !== "HEAD";
+
+      if (hasBody) {
+        const filteredMessage = filterPrivateParameters(session.request.message);
+        const bodyString = JSON.stringify(filteredMessage);
+        requestBody = bodyString;
+
+        try {
+          const parsed = JSON.parse(bodyString);
+          isStreaming = parsed.stream === true;
+        } catch {
+          isStreaming = false;
+        }
+
+        if (process.env.NODE_ENV === "development") {
+          logger.trace("ProxyForwarder: Forwarding request", {
+            provider: provider.name,
+            providerId: provider.id,
+            proxyUrl: proxyUrl,
+            format: session.originalFormat,
+            method: session.method,
+            bodyLength: bodyString.length,
+            bodyPreview: bodyString.slice(0, 1000),
+            isStreaming,
+          });
+        }
       }
     }
 

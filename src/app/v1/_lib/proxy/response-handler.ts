@@ -18,6 +18,8 @@ import { mapClientFormatToTransformer, mapProviderTypeToTransformer } from "./fo
 import { AsyncTaskManager } from "@/lib/async-task-manager";
 import { isClientAbortError } from "./errors";
 import type { SessionUsageUpdate } from "@/types/session";
+import { GeminiAdapter } from "../gemini/adapter";
+import type { GeminiResponse } from "../gemini/types";
 
 export type UsageMetrics = {
   input_tokens?: number;
@@ -58,7 +60,29 @@ export class ProxyResponseHandler {
     const needsTransform = fromFormat !== toFormat && fromFormat && toFormat;
     let finalResponse = response;
 
-    if (needsTransform && defaultRegistry.hasResponseTransformer(fromFormat, toFormat)) {
+    // --- GEMINI HANDLING ---
+    if (provider.providerType === "gemini" || provider.providerType === "gemini-cli") {
+      try {
+        const responseForTransform = response.clone();
+        const responseText = await responseForTransform.text();
+        const responseData = JSON.parse(responseText) as GeminiResponse;
+
+        const transformed = GeminiAdapter.transformResponse(responseData, false);
+
+        logger.debug("[ResponseHandler] Transformed Gemini non-stream response", {
+          model: session.request.model,
+        });
+
+        finalResponse = new Response(JSON.stringify(transformed), {
+          status: response.status,
+          statusText: response.statusText,
+          headers: new Headers(response.headers),
+        });
+      } catch (error) {
+        logger.error("[ResponseHandler] Failed to transform Gemini non-stream response:", error);
+        finalResponse = response;
+      }
+    } else if (needsTransform && defaultRegistry.hasResponseTransformer(fromFormat, toFormat)) {
       try {
         // 克隆一份用于转换
         const responseForTransform = response.clone();
@@ -385,7 +409,49 @@ export class ProxyResponseHandler {
     const needsTransform = fromFormat !== toFormat && fromFormat && toFormat;
     let processedStream: ReadableStream<Uint8Array> = response.body;
 
-    if (needsTransform && defaultRegistry.hasResponseTransformer(fromFormat, toFormat)) {
+    // --- GEMINI STREAM HANDLING ---
+    if (provider.providerType === "gemini" || provider.providerType === "gemini-cli") {
+      let buffer = "";
+      const transformStream = new TransformStream<Uint8Array, Uint8Array>({
+        transform(chunk, controller) {
+          const decoder = new TextDecoder();
+          const text = decoder.decode(chunk, { stream: true });
+          buffer += text;
+
+          const lines = buffer.split("\n");
+          // Keep the last line in buffer as it might be incomplete
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            const trimmedLine = line.trim();
+            if (trimmedLine.startsWith("data:")) {
+              const jsonStr = trimmedLine.slice(5).trim();
+              if (!jsonStr) continue;
+              try {
+                const geminiResponse = JSON.parse(jsonStr) as GeminiResponse;
+                const openAIChunk = GeminiAdapter.transformResponse(geminiResponse, true);
+                const output = `data: ${JSON.stringify(openAIChunk)}\n\n`;
+                controller.enqueue(new TextEncoder().encode(output));
+              } catch (e) {
+                // Ignore parse errors
+              }
+            }
+          }
+        },
+        flush(controller) {
+          if (buffer.trim().startsWith("data:")) {
+            try {
+              const jsonStr = buffer.trim().slice(5).trim();
+              const geminiResponse = JSON.parse(jsonStr) as GeminiResponse;
+              const openAIChunk = GeminiAdapter.transformResponse(geminiResponse, true);
+              const output = `data: ${JSON.stringify(openAIChunk)}\n\n`;
+              controller.enqueue(new TextEncoder().encode(output));
+            } catch {}
+          }
+        },
+      });
+      processedStream = response.body.pipeThrough(transformStream);
+    } else if (needsTransform && defaultRegistry.hasResponseTransformer(fromFormat, toFormat)) {
       logger.debug("[ResponseHandler] Transforming stream response", {
         from: fromFormat,
         to: toFormat,
@@ -862,6 +928,16 @@ function extractUsageMetrics(value: unknown): UsageMetrics | null {
     hasAny = true;
   }
 
+  // Gemini support
+  if (typeof usage.promptTokenCount === "number") {
+    result.input_tokens = usage.promptTokenCount;
+    hasAny = true;
+  }
+  if (typeof usage.candidatesTokenCount === "number") {
+    result.output_tokens = usage.candidatesTokenCount;
+    hasAny = true;
+  }
+
   if (typeof usage.output_tokens === "number") {
     result.output_tokens = usage.output_tokens;
     hasAny = true;
@@ -934,6 +1010,7 @@ function parseUsageFromResponseText(
     if (parsedValue && typeof parsedValue === "object" && !Array.isArray(parsedValue)) {
       const parsed = parsedValue as Record<string, unknown>;
       applyUsageValue(parsed.usage, "json.root");
+      applyUsageValue(parsed.usageMetadata, "json.root.gemini");
 
       if (parsed.response && typeof parsed.response === "object") {
         applyUsageValue((parsed.response as Record<string, unknown>).usage, "json.response");

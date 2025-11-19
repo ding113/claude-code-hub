@@ -337,6 +337,129 @@
     }
   },
 
+  "gemini": {
+    "title": "Gemini CLI 使用指南",
+    "description": "Gemini CLI 是 Google 官方的 AI 编程助手命令行工具，支持通过 cch 代理服务使用。本指南将帮助您在不同操作系统上完成安装和配置。",
+
+    "installation": {
+      "title": "安装 gemini",
+      "instruction": "确保您已安装 Node.js 18 或更高版本，然后全局安装 Gemini CLI：",
+      "command": "npm install -g @google/gemini-cli",
+      "verification": "验证安装：",
+      "verificationCommand": "gemini --version",
+      "adminNote": "以管理员身份运行 PowerShell，"
+    },
+
+    "configuration": {
+      "title": "连接 cch 服务",
+
+      "configFile": {
+        "title": "方法一：配置文件方式（推荐）",
+
+        "step1": {
+          "title": "创建配置目录",
+          "description": "Gemini CLI 的配置文件位于 ~/.gemini/ 目录。",
+          "macosLinux": "macOS / Linux：",
+          "windows": "Windows (PowerShell)："
+        },
+
+        "step2": {
+          "title": "创建 .env 配置文件",
+          "description": "在 ~/.gemini/ 目录下创建 .env 文件：",
+          "macosLinuxInstruction": "macOS / Linux：",
+          "windowsInstruction": "Windows：在 %USERPROFILE%\\.gemini\\ 目录下创建 .env 文件",
+          "content": "添加以下内容："
+        },
+
+        "step3": {
+          "title": "创建 settings.json 配置文件",
+          "description": "在 ~/.gemini/ 目录下创建 settings.json 文件：",
+          "content": "这个配置文件启用了 IDE 集成，并设置认证方式为 API Key。"
+        },
+
+        "parameterNote": "参数说明",
+        "parameters": [
+          "GOOGLE_GEMINI_BASE_URL: cch API 基础地址",
+          "GEMINI_API_KEY: 您在 cch 控制台创建的 API 密钥",
+          "GEMINI_MODEL: 使用的模型（默认为 gemini-2.5-pro）"
+        ],
+
+        "important": "重要提示",
+        "importantPoints": [
+          "将 YOUR_API_KEY_HERE 替换为您的实际 API 密钥",
+          "密钥获取方式：登录控制台 → API 密钥管理 → 创建密钥"
+        ]
+      },
+
+      "envVars": {
+        "title": "方法二：环境变量配置",
+        "description": "如果您只想临时使用，可以通过环境变量配置：",
+
+        "macosLinux": {
+          "title": "macOS / Linux：",
+          "note": "环境变量只在当前终端会话中有效。如需持久化配置，请使用配置文件方式。"
+        },
+
+        "windows": {
+          "powershell": "Windows (PowerShell)：",
+          "cmd": "Windows (CMD)：",
+          "note": "环境变量只在当前终端会话中有效。如需持久化配置，请使用配置文件方式。"
+        }
+      }
+    },
+
+    "startup": {
+      "title": "启动和验证",
+
+      "startCli": {
+        "title": "启动 Gemini CLI",
+        "description": "进入您的项目目录并启动 Gemini CLI：",
+        "note": "首次启动时，Gemini CLI 会读取配置文件中的设置。"
+      },
+
+      "verification": {
+        "title": "验证配置",
+        "description": "在 Gemini CLI 中尝试发送一个简单的请求测试连接：",
+        "testCommand": "你好，请帮我创建一个 Python 的 hello world 程序",
+        "success": "如果 Gemini CLI 正常响应，说明配置成功！"
+      },
+
+      "agentMode": {
+        "title": "使用 Agent Mode",
+        "description": "Gemini CLI 支持 Agent Mode，可以自动规划和执行复杂任务：",
+        "command": "gemini --agent",
+        "features": "在 Agent Mode 下，Gemini 会：",
+        "featureList": [
+          "自动分析任务需求",
+          "制定执行计划",
+          "逐步执行并验证结果",
+          "根据反馈调整策略"
+        ]
+      }
+    },
+
+    "commonIssues": {
+      "title": "常见问题",
+
+      "commandNotFound": "1. 命令未找到",
+      "commandNotFoundWindows": [
+        "确保 npm 全局路径（通常是 C:\\Users\\你的用户名\\AppData\\Roaming\\npm）已添加到系统 PATH",
+        "重新打开 PowerShell 窗口"
+      ],
+      "commandNotFoundUnix": "检查 npm 全局安装路径并添加到 PATH（如果不在）",
+
+      "connectionFailed": "2. API 连接失败",
+      "connectionSteps": [
+        "检查环境变量或配置文件中的 GEMINI_API_KEY 是否设置正确",
+        "验证 GOOGLE_GEMINI_BASE_URL 是否正确",
+        "测试网络连接"
+      ],
+
+      "updateCli": "3. 更新 gemini",
+      "updateCommand": "npm install -g @google/gemini-cli"
+    }
+  },
+
   "droid": {
     "title": "Droid CLI 使用指南",
     "description": "Droid 是 Factory AI 开发的交互式终端 AI 编程助手，支持通过 cch 代理服务使用。使用前必须先注册并登录 Droid 官方账号。",

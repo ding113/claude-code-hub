@@ -349,6 +349,7 @@
     "config": "設定",
     "data": "資料管理",
     "errorRules": "錯誤規則",
+    "feedback": "意見回饋",
     "logs": "日誌",
     "notifications": "訊息推送",
     "prices": "價格表",
@@ -843,7 +844,7 @@
             "placeholder": "選擇供應商類型"
           },
           "providerTypeDesc": "選擇供應商的 API 格式類型。",
-          "providerTypeDisabledNote": "註：Gemini CLI 與 OpenAI Compatible 類型開發中，暫不可用",
+          "providerTypeDisabledNote": "註：OpenAI Compatible 類型開發中，暫不可用",
           "modelRedirects": {
             "label": "模型重定向設定",
             "optional": "（選填）"
@@ -1011,7 +1012,7 @@
         "claudeAuth": "Claude (Anthropic Auth Token)",
         "codex": "Codex (Response API)",
         "geminiCli": "Gemini CLI",
-        "geminiCliDisabled": " - 功能開發中",
+        "geminiCliDisabled": "",
         "openaiCompatible": "OpenAI Compatible",
         "openaiCompatibleDisabled": " - 功能開發中"
       },

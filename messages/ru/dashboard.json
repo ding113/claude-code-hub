@@ -360,6 +360,7 @@
     "usageLogs": "Журналы использования",
     "leaderboard": "Таблица лидеров",
     "quotasManagement": "Управление квотами",
+    "userManagement": "Управление пользователями",
     "documentation": "Документация",
     "systemSettings": "Настройки системы",
     "feedback": "Обратная связь",
@@ -566,6 +567,26 @@
       "label": "Дневная квота",
       "placeholder": "Лимит дневного расхода",
       "description": "По умолчанию: ${default}, диапазон: $0.01-$1000"
+    },
+    "limit5hUsd": {
+      "label": "Лимит на 5 часов (USD)",
+      "placeholder": "Оставьте пустым для неограниченного",
+      "description": "Максимальный расход за 5 часов"
+    },
+    "limitWeeklyUsd": {
+      "label": "Недельный лимит (USD)",
+      "placeholder": "Оставьте пустым для неограниченного",
+      "description": "Максимальный недельный расход"
+    },
+    "limitMonthlyUsd": {
+      "label": "Месячный лимит (USD)",
+      "placeholder": "Оставьте пустым для неограниченного",
+      "description": "Максимальный месячный расход"
+    },
+    "limitConcurrentSessions": {
+      "label": "Лимит одновременных сессий",
+      "placeholder": "0 означает неограниченно",
+      "description": "Количество одновременных разговоров"
     }
   },
   "deleteKeyConfirm": {

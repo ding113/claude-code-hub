@@ -18,6 +18,10 @@
       "label": "Gemini CLI",
       "description": "Gemini CLI API"
     },
+    "gemini": {
+      "label": "Gemini",
+      "description": "Официальный API Google Gemini"
+    },
     "openaiCompatible": {
       "label": "OpenAI Compatible",
       "description": "API совместимый с OpenAI"

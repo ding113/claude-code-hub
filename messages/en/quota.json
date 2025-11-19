@@ -64,6 +64,8 @@
   "users": {
     "title": "User Quota Statistics",
     "totalCount": "{count} users total",
+    "manageNotice": "To manage users and keys, visit",
+    "manageLink": "User Management",
     "noNote": "No note",
     "rpm": {
       "label": "RPM Quota",

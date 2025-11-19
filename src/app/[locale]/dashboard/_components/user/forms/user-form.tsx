@@ -20,14 +20,22 @@ interface UserFormProps {
     rpm: number;
     dailyQuota: number;
     providerGroup?: string | null;
+    limit5hUsd?: number | null;
+    limitWeeklyUsd?: number | null;
+    limitMonthlyUsd?: number | null;
+    limitConcurrentSessions?: number | null;
   };
   onSuccess?: () => void;
+  currentUser?: {
+    role: string;
+  };
 }
 
-export function UserForm({ user, onSuccess }: UserFormProps) {
+export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
   const isEdit = Boolean(user?.id);
+  const isAdmin = currentUser?.role === "admin";
 
   // i18n translations
   const tErrors = useTranslations("errors");
@@ -47,6 +55,10 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
       rpm: user?.rpm || USER_DEFAULTS.RPM,
       dailyQuota: user?.dailyQuota || USER_DEFAULTS.DAILY_QUOTA,
       providerGroup: user?.providerGroup || "",
+      limit5hUsd: user?.limit5hUsd ?? null,
+      limitWeeklyUsd: user?.limitWeeklyUsd ?? null,
+      limitMonthlyUsd: user?.limitMonthlyUsd ?? null,
+      limitConcurrentSessions: user?.limitConcurrentSessions ?? null,
     },
     onSubmit: async (data) => {
       startTransition(async () => {
@@ -59,6 +71,10 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
               rpm: data.rpm,
               dailyQuota: data.dailyQuota,
               providerGroup: data.providerGroup || null,
+              limit5hUsd: data.limit5hUsd,
+              limitWeeklyUsd: data.limitWeeklyUsd,
+              limitMonthlyUsd: data.limitMonthlyUsd,
+              limitConcurrentSessions: data.limitConcurrentSessions,
             });
           } else {
             res = await addUser({
@@ -67,6 +83,10 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
               rpm: data.rpm,
               dailyQuota: data.dailyQuota,
               providerGroup: data.providerGroup || null,
+              limit5hUsd: data.limit5hUsd,
+              limitWeeklyUsd: data.limitWeeklyUsd,
+              limitMonthlyUsd: data.limitMonthlyUsd,
+              limitConcurrentSessions: data.limitConcurrentSessions,
             });
           }
 
@@ -139,7 +159,10 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
           };
           toast.error(messages[reason] || reason);
         }}
-        {...form.getFieldProps("providerGroup")}
+        value={String(form.getFieldProps("providerGroup").value)}
+        onChange={form.getFieldProps("providerGroup").onChange}
+        error={form.getFieldProps("providerGroup").error}
+        touched={form.getFieldProps("providerGroup").touched}
       />
 
       <TextField
@@ -164,6 +187,55 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
         description={tForm("dailyQuota.description", { default: USER_DEFAULTS.DAILY_QUOTA })}
         {...form.getFieldProps("dailyQuota")}
       />
+
+      {/* Admin-only quota fields */}
+      {isAdmin && (
+        <>
+          <TextField
+            label={tForm("limit5hUsd.label")}
+            type="number"
+            min={0}
+            max={10000}
+            step={0.01}
+            placeholder={tForm("limit5hUsd.placeholder")}
+            description={tForm("limit5hUsd.description")}
+            {...form.getFieldProps("limit5hUsd")}
+          />
+
+          <TextField
+            label={tForm("limitWeeklyUsd.label")}
+            type="number"
+            min={0}
+            max={50000}
+            step={0.01}
+            placeholder={tForm("limitWeeklyUsd.placeholder")}
+            description={tForm("limitWeeklyUsd.description")}
+            {...form.getFieldProps("limitWeeklyUsd")}
+          />
+
+          <TextField
+            label={tForm("limitMonthlyUsd.label")}
+            type="number"
+            min={0}
+            max={200000}
+            step={0.01}
+            placeholder={tForm("limitMonthlyUsd.placeholder")}
+            description={tForm("limitMonthlyUsd.description")}
+            {...form.getFieldProps("limitMonthlyUsd")}
+          />
+
+          <TextField
+            label={tForm("limitConcurrentSessions.label")}
+            type="number"
+            min={0}
+            max={1000}
+            step={1}
+            placeholder={tForm("limitConcurrentSessions.placeholder")}
+            description={tForm("limitConcurrentSessions.description")}
+            {...form.getFieldProps("limitConcurrentSessions")}
+          />
+        </>
+      )}
     </DialogFormLayout>
   );
 }

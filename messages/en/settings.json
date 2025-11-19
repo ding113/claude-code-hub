@@ -349,6 +349,7 @@
     "config": "Configuration",
     "data": "Data Management",
     "errorRules": "Error Rules",
+    "feedback": "Feedback",
     "logs": "Logs",
     "notifications": "Notifications",
     "prices": "Pricing",
@@ -906,7 +907,7 @@
             "placeholder": "Select provider type"
           },
           "providerTypeDesc": "Choose the API format type of the provider.",
-          "providerTypeDisabledNote": "Note: Gemini CLI and OpenAI Compatible are under development and currently unavailable",
+          "providerTypeDisabledNote": "Note: OpenAI Compatible is under development and currently unavailable",
           "modelRedirects": {
             "label": "Model Redirects",
             "optional": "(optional)"

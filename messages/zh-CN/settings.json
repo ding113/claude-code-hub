@@ -9,7 +9,8 @@
     "logs": "日志",
     "notifications": "消息推送",
     "apiDocs": "API 文档",
-    "errorRules": "错误规则"
+    "errorRules": "错误规则",
+    "feedback": "反馈问题"
   },
   "common": {
     "save": "保存",
@@ -360,7 +361,7 @@
       "routingConfigSummary": "{models} 个模型白名单, {redirects} 个重定向",
       "routingConfigNone": "未配置",
       "providerTypeDesc": "选择供应商的 API 格式类型。",
-      "providerTypeDisabledNote": "注：Gemini CLI 和 OpenAI Compatible 类型功能正在开发中，暂不可用",
+      "providerTypeDisabledNote": "注：OpenAI Compatible 类型功能正在开发中，暂不可用",
       "modelRedirectsLabel": "模型重定向配置",
       "modelRedirectsOptional": "(可选)",
       "modelRedirectsEmpty": "暂无重定向规则。添加规则后，系统将自动重写请求中的模型名称。",

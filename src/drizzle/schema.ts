@@ -22,6 +22,12 @@ export const users = pgTable('users', {
   rpmLimit: integer('rpm_limit').default(60),
   dailyLimitUsd: numeric('daily_limit_usd', { precision: 10, scale: 2 }).default('100.00'),
   providerGroup: varchar('provider_group', { length: 50 }),
+  
+  // New user-level quota fields (nullable for backward compatibility)
+  limit5hUsd: numeric('limit_5h_usd', { precision: 10, scale: 2 }),
+  limitWeeklyUsd: numeric('limit_weekly_usd', { precision: 10, scale: 2 }),
+  limitMonthlyUsd: numeric('limit_monthly_usd', { precision: 10, scale: 2 }),
+  limitConcurrentSessions: integer('limit_concurrent_sessions'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -85,7 +91,7 @@ export const providers = pgTable('providers', {
   providerType: varchar('provider_type', { length: 20 })
     .notNull()
     .default('claude')
-    .$type<'claude' | 'claude-auth' | 'codex' | 'gemini-cli' | 'openai-compatible'>(),
+    .$type<'claude' | 'claude-auth' | 'codex' | 'gemini-cli' | 'gemini' | 'openai-compatible'>(),
 
   // 模型重定向：将请求的模型名称重定向到另一个模型
   modelRedirects: jsonb('model_redirects').$type<Record<string, string>>(),

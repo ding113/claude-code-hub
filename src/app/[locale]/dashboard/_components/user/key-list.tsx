@@ -26,10 +26,17 @@ interface KeyListProps {
   keys: UserKeyDisplay[];
   currentUser?: User;
   keyOwnerUserId: number; // 这些Key所属的用户ID
+  keyOwnerUser?: User; // 这些Key所属的用户对象（用于显示限额提示）
   currencyCode?: CurrencyCode;
 }
 
-export function KeyList({ keys, currentUser, keyOwnerUserId, currencyCode = "USD" }: KeyListProps) {
+export function KeyList({
+  keys,
+  currentUser,
+  keyOwnerUserId,
+  keyOwnerUser,
+  currencyCode = "USD",
+}: KeyListProps) {
   const t = useTranslations("dashboard.keyList");
   const [copiedKeyId, setCopiedKeyId] = useState<number | null>(null);
   const [expandedKeys, setExpandedKeys] = useState<Set<number>>(new Set());
@@ -255,6 +262,7 @@ export function KeyList({ keys, currentUser, keyOwnerUserId, currencyCode = "USD
           keyData={record}
           currentUser={currentUser}
           keyOwnerUserId={keyOwnerUserId}
+          keyOwnerUser={keyOwnerUser}
           canDelete={canDeleteKeys}
         />
       </div>

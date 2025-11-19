@@ -13,6 +13,10 @@ export async function createUser(userData: CreateUserData): Promise<User> {
     rpmLimit: userData.rpm,
     dailyLimitUsd: userData.dailyQuota?.toString(),
     providerGroup: userData.providerGroup,
+    limit5hUsd: userData.limit5hUsd?.toString(),
+    limitWeeklyUsd: userData.limitWeeklyUsd?.toString(),
+    limitMonthlyUsd: userData.limitMonthlyUsd?.toString(),
+    limitConcurrentSessions: userData.limitConcurrentSessions,
   };
 
   const [user] = await db.insert(users).values(dbData).returning({
@@ -26,6 +30,10 @@ export async function createUser(userData: CreateUserData): Promise<User> {
     createdAt: users.createdAt,
     updatedAt: users.updatedAt,
     deletedAt: users.deletedAt,
+    limit5hUsd: users.limit5hUsd,
+    limitWeeklyUsd: users.limitWeeklyUsd,
+    limitMonthlyUsd: users.limitMonthlyUsd,
+    limitConcurrentSessions: users.limitConcurrentSessions,
   });
 
   return toUser(user);
@@ -44,6 +52,10 @@ export async function findUserList(limit: number = 50, offset: number = 0): Prom
       createdAt: users.createdAt,
       updatedAt: users.updatedAt,
       deletedAt: users.deletedAt,
+      limit5hUsd: users.limit5hUsd,
+      limitWeeklyUsd: users.limitWeeklyUsd,
+      limitMonthlyUsd: users.limitMonthlyUsd,
+      limitConcurrentSessions: users.limitConcurrentSessions,
     })
     .from(users)
     .where(isNull(users.deletedAt))
@@ -67,6 +79,10 @@ export async function findUserById(id: number): Promise<User | null> {
       createdAt: users.createdAt,
       updatedAt: users.updatedAt,
       deletedAt: users.deletedAt,
+      limit5hUsd: users.limit5hUsd,
+      limitWeeklyUsd: users.limitWeeklyUsd,
+      limitMonthlyUsd: users.limitMonthlyUsd,
+      limitConcurrentSessions: users.limitConcurrentSessions,
     })
     .from(users)
     .where(and(eq(users.id, id), isNull(users.deletedAt)));
@@ -88,6 +104,10 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
     dailyLimitUsd?: string;
     providerGroup?: string | null;
     updatedAt?: Date;
+    limit5hUsd?: string;
+    limitWeeklyUsd?: string;
+    limitMonthlyUsd?: string;
+    limitConcurrentSessions?: number;
   }
 
   const dbData: UpdateDbData = {
@@ -98,6 +118,13 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
   if (userData.rpm !== undefined) dbData.rpmLimit = userData.rpm;
   if (userData.dailyQuota !== undefined) dbData.dailyLimitUsd = userData.dailyQuota.toString();
   if (userData.providerGroup !== undefined) dbData.providerGroup = userData.providerGroup;
+  if (userData.limit5hUsd !== undefined) dbData.limit5hUsd = userData.limit5hUsd.toString();
+  if (userData.limitWeeklyUsd !== undefined)
+    dbData.limitWeeklyUsd = userData.limitWeeklyUsd.toString();
+  if (userData.limitMonthlyUsd !== undefined)
+    dbData.limitMonthlyUsd = userData.limitMonthlyUsd.toString();
+  if (userData.limitConcurrentSessions !== undefined)
+    dbData.limitConcurrentSessions = userData.limitConcurrentSessions;
 
   const [user] = await db
     .update(users)
@@ -114,6 +141,10 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
       createdAt: users.createdAt,
       updatedAt: users.updatedAt,
       deletedAt: users.deletedAt,
+      limit5hUsd: users.limit5hUsd,
+      limitWeeklyUsd: users.limitWeeklyUsd,
+      limitMonthlyUsd: users.limitMonthlyUsd,
+      limitConcurrentSessions: users.limitConcurrentSessions,
     });
 
   if (!user) return null;

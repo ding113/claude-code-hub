@@ -21,13 +21,9 @@ export function DashboardHeader({ session }: DashboardHeaderProps) {
     { href: "/dashboard/logs", label: t("usageLogs") },
     { href: "/dashboard/leaderboard", label: t("leaderboard") },
     { href: "/dashboard/quotas", label: t("quotasManagement") },
+    { href: "/dashboard/users", label: t("userManagement") },
     { href: "/usage-doc", label: t("documentation") },
     { href: "/settings", label: t("systemSettings"), adminOnly: true },
-    {
-      href: "https://github.com/ding113/claude-code-hub/issues",
-      label: t("feedback"),
-      external: true,
-    },
   ];
 
   const items = NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin);
