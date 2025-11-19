@@ -188,7 +188,10 @@ export async function handleChatCompletions(c: Context): Promise<Response> {
       await ProxyMessageService.ensureContext(session);
 
       // 解析错误响应
-      const errorBody = await providerUnavailable.clone().json().catch(() => null);
+      const errorBody = await providerUnavailable
+        .clone()
+        .json()
+        .catch(() => null);
       const errorMessage = errorBody?.error?.message || "供应商不可用";
 
       // 记录失败消息

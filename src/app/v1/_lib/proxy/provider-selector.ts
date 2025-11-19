@@ -294,20 +294,28 @@ export class ProxyProviderResolver {
 
       if (filteredProviders && filteredProviders.length > 0) {
         // 统计各种原因
-        const rateLimited = filteredProviders.filter(p => p.reason === "rate_limited");
-        const circuitOpen = filteredProviders.filter(p => p.reason === "circuit_open");
-        const disabled = filteredProviders.filter(p => p.reason === "disabled");
-        const modelNotAllowed = filteredProviders.filter(p => p.reason === "model_not_allowed");
+        const rateLimited = filteredProviders.filter((p) => p.reason === "rate_limited");
+        const circuitOpen = filteredProviders.filter((p) => p.reason === "circuit_open");
+        const disabled = filteredProviders.filter((p) => p.reason === "disabled");
+        const modelNotAllowed = filteredProviders.filter((p) => p.reason === "model_not_allowed");
 
         // 计算可用供应商数量（排除禁用和模型不支持的）
         const unavailableCount = rateLimited.length + circuitOpen.length;
         const totalEnabled = filteredProviders.length - disabled.length - modelNotAllowed.length;
 
-        if (rateLimited.length > 0 && circuitOpen.length === 0 && unavailableCount === totalEnabled) {
+        if (
+          rateLimited.length > 0 &&
+          circuitOpen.length === 0 &&
+          unavailableCount === totalEnabled
+        ) {
           // 全部因为限流
           message = `所有可用供应商已达消费限额（${rateLimited.length} 个供应商）`;
           errorType = "rate_limit_exceeded";
-        } else if (circuitOpen.length > 0 && rateLimited.length === 0 && unavailableCount === totalEnabled) {
+        } else if (
+          circuitOpen.length > 0 &&
+          rateLimited.length === 0 &&
+          unavailableCount === totalEnabled
+        ) {
           // 全部因为熔断
           message = `所有可用供应商熔断器已打开（${circuitOpen.length} 个供应商）`;
           errorType = "circuit_breaker_open";
