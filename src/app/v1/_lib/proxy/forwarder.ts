@@ -634,8 +634,8 @@ export class ProxyForwarder {
       if (provider.providerType === "gemini") {
         urlString = `${baseUrl}/models/${model}:${action}`;
       } else {
-        // CLI endpoint: https://cloudcode-pa.googleapis.com/v1internal:{action}
-        urlString = `${baseUrl}:${action}`;
+        // CLI endpoint: https://your-endpoint.com/v1beta/models/{model}:{action}
+        urlString = `${baseUrl}/models/${model}:${action}`;
       }
 
       if (isStreaming) {
