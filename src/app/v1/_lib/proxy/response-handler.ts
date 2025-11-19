@@ -1009,11 +1009,18 @@ function parseUsageFromResponseText(
 
     if (parsedValue && typeof parsedValue === "object" && !Array.isArray(parsedValue)) {
       const parsed = parsedValue as Record<string, unknown>;
-      applyUsageValue(parsed.usage, "json.root");
-      applyUsageValue(parsed.usageMetadata, "json.root.gemini");
 
+      // Standard usage fields
+      applyUsageValue(parsed.usage, "json.root.usage");
+
+      // Gemini usageMetadata (direct)
+      applyUsageValue(parsed.usageMetadata, "json.root.usageMetadata");
+
+      // Handle response wrapping (some Gemini providers return {response: {...}})
       if (parsed.response && typeof parsed.response === "object") {
-        applyUsageValue((parsed.response as Record<string, unknown>).usage, "json.response");
+        const responseObj = parsed.response as Record<string, unknown>;
+        applyUsageValue(responseObj.usage, "json.response.usage");
+        applyUsageValue(responseObj.usageMetadata, "json.response.usageMetadata");
       }
 
       if (Array.isArray(parsed.output)) {
@@ -1056,13 +1063,18 @@ function parseUsageFromResponseText(
       }
 
       const data = event.data as Record<string, unknown>;
-      applyUsageValue(data.usage, `sse.${event.event}`);
 
+      // Standard usage fields
+      applyUsageValue(data.usage, `sse.${event.event}.usage`);
+
+      // Gemini usageMetadata
+      applyUsageValue(data.usageMetadata, `sse.${event.event}.usageMetadata`);
+
+      // Handle response wrapping in SSE
       if (!usageMetrics && data.response && typeof data.response === "object") {
-        applyUsageValue(
-          (data.response as Record<string, unknown>).usage,
-          `sse.${event.event}.response`
-        );
+        const responseObj = data.response as Record<string, unknown>;
+        applyUsageValue(responseObj.usage, `sse.${event.event}.response.usage`);
+        applyUsageValue(responseObj.usageMetadata, `sse.${event.event}.response.usageMetadata`);
       }
     }
   }

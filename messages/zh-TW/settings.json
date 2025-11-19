@@ -1011,6 +1011,7 @@
         "claude": "Claude (Anthropic Messages API)",
         "claudeAuth": "Claude (Anthropic Auth Token)",
         "codex": "Codex (Response API)",
+        "gemini": "Gemini (Google Gemini API)",
         "geminiCli": "Gemini CLI",
         "geminiCliDisabled": "",
         "openaiCompatible": "OpenAI Compatible",
@@ -1193,6 +1194,10 @@
       "codex": {
         "label": "Codex",
         "description": "Codex CLI API"
+      },
+      "gemini": {
+        "label": "Gemini",
+        "description": "Google Gemini API"
       },
       "geminiCli": {
         "label": "Gemini CLI",

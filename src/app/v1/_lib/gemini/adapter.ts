@@ -5,17 +5,17 @@ interface ContentPart {
   type?: string;
   text?: string;
   source?: { media_type?: string; data?: string };
-  image_url?: { media_type?: string; data?: string };
+  image_url?: { media_type?: string; data?: string; url?: string };
 }
 
 interface InputMessage {
   role: string;
-  content: string | ContentPart[];
+  content: string | ContentPart[] | { text?: string; parts?: ContentPart[] };
 }
 
 interface TransformInput {
   messages?: InputMessage[];
-  system?: string;
+  system?: string | string[];
   temperature?: number;
   top_p?: number;
   max_tokens?: number;
@@ -43,6 +43,41 @@ interface OpenAICompatibleResponse {
   usage?: OpenAIUsage;
 }
 
+/**
+ * Extract text content from various message content formats
+ * Supports:
+ * - Simple string: "hello"
+ * - Array format: [{type: "text", text: "hello"}]
+ * - Object format: {text: "hello"} or {parts: [{text: "hello"}]}
+ */
+function extractTextContent(
+  content: string | ContentPart[] | { text?: string; parts?: ContentPart[] }
+): string {
+  // Simple string
+  if (typeof content === "string") {
+    return content;
+  }
+
+  // Object with text field: {text: "hello"}
+  if (content && typeof content === "object" && !Array.isArray(content)) {
+    const obj = content as { text?: string; parts?: ContentPart[] };
+    if (obj.text) {
+      return obj.text;
+    }
+    // Object with parts: {parts: [{text: "hello"}]}
+    if (Array.isArray(obj.parts)) {
+      return obj.parts.map((p) => p.text || "").join("");
+    }
+  }
+
+  // Array format: [{type: "text", text: "hello"}]
+  if (Array.isArray(content)) {
+    return content.map((c: ContentPart) => c.text || "").join("");
+  }
+
+  return "";
+}
+
 export class GeminiAdapter {
   /**
    * Convert generic chat request (OpenAI/Claude style) to Gemini format
@@ -56,22 +91,22 @@ export class GeminiAdapter {
     const systemInstructionParts: { text: string }[] = [];
 
     // Handle system message(s)
-    // Some formats allow multiple system messages or system message in "messages"
-    // We extract them all into systemInstruction
     if (input.system) {
       if (typeof input.system === "string") {
         systemInstructionParts.push({ text: input.system });
+      } else if (Array.isArray(input.system)) {
+        // Support array of system messages
+        for (const sys of input.system) {
+          if (typeof sys === "string" && sys) {
+            systemInstructionParts.push({ text: sys });
+          }
+        }
       }
     }
 
     for (const msg of messages) {
       if (msg.role === "system") {
-        const text =
-          typeof msg.content === "string"
-            ? msg.content
-            : Array.isArray(msg.content)
-              ? msg.content.map((c: ContentPart) => c.text || "").join("")
-              : "";
+        const text = extractTextContent(msg.content);
         if (text) systemInstructionParts.push({ text });
         continue;
       }
@@ -79,23 +114,40 @@ export class GeminiAdapter {
       const role = msg.role === "assistant" ? "model" : "user";
       const parts: { text: string; inlineData?: { mimeType: string; data: string } }[] = [];
 
+      // Handle string content
       if (typeof msg.content === "string") {
         parts.push({ text: msg.content });
       } else if (Array.isArray(msg.content)) {
+        // Handle array of content parts
         for (const c of msg.content) {
-          if (c.type === "text" && c.text) {
+          if ((c.type === "text" || !c.type) && c.text) {
             parts.push({ text: c.text });
           } else if (c.type === "image" || c.type === "image_url") {
-            // Minimal support for image if base64 provided
-            // This needs more robust handling for real implementation
+            // Handle image content
             const source = c.source || c.image_url;
-            if (source && source.data) {
-              parts.push({
-                text: "",
-                inlineData: { mimeType: source.media_type || "image/jpeg", data: source.data },
-              });
+            if (source) {
+              // Support both base64 data and URLs
+              if (source.data) {
+                parts.push({
+                  text: "",
+                  inlineData: {
+                    mimeType: source.media_type || "image/jpeg",
+                    data: source.data,
+                  },
+                });
+              } else if (source.url) {
+                // For URL-based images, we'd need to fetch and convert to base64
+                // For now, just add a text placeholder
+                parts.push({ text: `[Image: ${source.url}]` });
+              }
             }
           }
+        }
+      } else if (msg.content && typeof msg.content === "object") {
+        // Handle object content: {text: "hello"} or {parts: [{text: "hello"}]}
+        const text = extractTextContent(msg.content);
+        if (text) {
+          parts.push({ text });
         }
       }
 
@@ -116,23 +168,12 @@ export class GeminiAdapter {
     };
 
     if (systemInstructionParts.length > 0) {
-      request.systemInstruction = { parts: systemInstructionParts };
-    }
-
-    // CLI specific handling
-    if (providerType === "gemini-cli") {
-      // TODO: Inject any CLI specific fields if required by the wrapper
-      // e.g. force role: user in system instructions?
-      // The TOON says: "systemInstruction上强制 role: 'user' 以满足 CLI 后端"
-      // But Gemini API systemInstruction doesn't have a role field, it's just content.
-      // Maybe it means "convert system messages to user messages"?
-      // "OpenAI messages -> Gemini contents+systemInstruction"
-      // "For CLI: systemInstruction must have role: 'user'?"
-      // Let's assume standard systemInstruction is fine unless we find otherwise.
-      // Re-reading TOON: "systemInstruction上强制 role: 'user'"
-      // This likely means putting system messages into contents as role: user, or similar.
-      // But usually systemInstruction is separate.
-      // Let's keep it standard for now.
+      // Gemini CLI may require role: 'user' in systemInstruction
+      // Standard Gemini API doesn't use role in systemInstruction
+      request.systemInstruction =
+        providerType === "gemini-cli"
+          ? { role: "user", parts: systemInstructionParts }
+          : { parts: systemInstructionParts };
     }
 
     return request;
@@ -140,25 +181,40 @@ export class GeminiAdapter {
 
   /**
    * Convert Gemini response to OpenAI-compatible chunks or full response
+   * Handles response wrapping: some providers wrap response in {response: {...}}
    */
   static transformResponse(response: GeminiResponse, isStream: boolean): OpenAICompatibleResponse {
+    // Handle response wrapping (some providers return {response: {...}})
+    const actualResponse = (response as { response?: GeminiResponse }).response || response;
+
     // Extract content
     let content = "";
-    const candidate = response.candidates?.[0];
+    const candidate = actualResponse.candidates?.[0];
 
     if (candidate?.content?.parts) {
-      content = candidate.content.parts.map((p) => p.text).join("");
+      content = candidate.content.parts.map((p) => p.text || "").join("");
     }
 
     // Handle finish reason
     const finishReason = mapFinishReason(candidate?.finishReason);
 
-    // Extract usage
-    const usage = response.usageMetadata
+    // Extract usage - handle both usageMetadata and usage fields
+    const usageData =
+      actualResponse.usageMetadata ||
+      (
+        actualResponse as {
+          usage?: {
+            promptTokenCount?: number;
+            candidatesTokenCount?: number;
+            totalTokenCount?: number;
+          };
+        }
+      ).usage;
+    const usage = usageData
       ? {
-          prompt_tokens: response.usageMetadata.promptTokenCount,
-          completion_tokens: response.usageMetadata.candidatesTokenCount,
-          total_tokens: response.usageMetadata.totalTokenCount,
+          prompt_tokens: usageData.promptTokenCount || 0,
+          completion_tokens: usageData.candidatesTokenCount || 0,
+          total_tokens: usageData.totalTokenCount || 0,
         }
       : undefined;
 

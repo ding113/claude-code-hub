@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import type { Context } from "hono";
 import type { Provider } from "@/types/provider";
 import type { User } from "@/types/user";
@@ -108,15 +109,28 @@ export class ProxySession {
     // 提取客户端 AbortSignal（如果存在）
     const clientAbortSignal = c.req.raw.signal || null;
 
+    const modelFromBody =
+      typeof bodyResult.requestMessage.model === "string" ? bodyResult.requestMessage.model : null;
+
+    // 针对官方 Gemini 路径（/v1beta/models/{model}:generateContent）
+    // 请求体中通常没有 model 字段，需从 URL 路径提取用于调度器匹配
+    const modelFromPath = extractModelFromPath(requestUrl.pathname);
+
+    // 双重检测（请求体优先，其次路径），若判断为 Gemini 请求则给出默认模型
+    const isLikelyGeminiRequest =
+      Array.isArray((bodyResult.requestMessage as Record<string, unknown>).contents) ||
+      typeof (bodyResult.requestMessage as Record<string, unknown>).request === "object" ||
+      modelFromPath !== null;
+
+    const resolvedModel =
+      modelFromBody ?? modelFromPath ?? (isLikelyGeminiRequest ? "gemini-2.5-flash" : null);
+
     const request: ProxyRequestPayload = {
       message: bodyResult.requestMessage,
       buffer: bodyResult.requestBodyBuffer,
       log: bodyResult.requestBodyLog,
       note: bodyResult.requestBodyLogNote,
-      model:
-        typeof bodyResult.requestMessage.model === "string"
-          ? bodyResult.requestMessage.model
-          : null,
+      model: resolvedModel,
     };
 
     return new ProxySession({
@@ -168,7 +182,39 @@ export class ProxySession {
   }
 
   /**
-   * 获取 messages 数组长度（支持 Claude 和 Codex 格式）
+   * 生成基于请求指纹的确定性 Session ID
+   *
+   * 优先级与参考实现一致：
+   * - API Key 前缀（x-api-key / x-goog-api-key 的前10位）
+   * - User-Agent
+   * - 客户端 IP（x-forwarded-for / x-real-ip）
+   *
+   * 当客户端未提供 metadata.session_id 时，可用于稳定绑定会话。
+   */
+  generateDeterministicSessionId(): string | null {
+    const apiKeyHeader = this.headers.get("x-api-key") || this.headers.get("x-goog-api-key");
+    const apiKeyPrefix = apiKeyHeader ? apiKeyHeader.substring(0, 10) : null;
+
+    const userAgent = this.headers.get("user-agent");
+
+    // 取链路上的首个 IP
+    const forwardedFor = this.headers.get("x-forwarded-for");
+    const realIp = this.headers.get("x-real-ip");
+    const ip =
+      forwardedFor?.split(",").map((ip) => ip.trim())[0] || (realIp ? realIp.trim() : null);
+
+    const parts = [userAgent, ip, apiKeyPrefix].filter(Boolean);
+    if (parts.length === 0) {
+      return null;
+    }
+
+    const hash = crypto.createHash("sha256").update(parts.join(":"), "utf8").digest("hex");
+    // 取前 32 位作为稳定 ID，避免过长
+    return `sess_${hash.substring(0, 32)}`;
+  }
+
+  /**
+   * 获取 messages 数组长度（支持 Claude、Codex 和 Gemini 格式）
    */
   getMessagesLength(): number {
     const msg = this.request.message as Record<string, unknown>;
@@ -180,11 +226,20 @@ export class ProxySession {
     if (Array.isArray(msg.input)) {
       return msg.input.length;
     }
+    // Gemini 格式: contents[]
+    if (Array.isArray(msg.contents)) {
+      return msg.contents.length;
+    }
+    // Gemini CLI 包装格式: request.contents[]
+    const requestData = msg.request as Record<string, unknown> | undefined;
+    if (requestData && Array.isArray(requestData.contents)) {
+      return requestData.contents.length;
+    }
     return 0;
   }
 
   /**
-   * 获取 messages 数组（支持 Claude 和 Codex 格式）
+   * 获取 messages 数组（支持 Claude、Codex 和 Gemini 格式）
    */
   getMessages(): unknown {
     const msg = this.request.message as Record<string, unknown>;
@@ -195,6 +250,15 @@ export class ProxySession {
     // Codex 格式
     if (msg.input !== undefined) {
       return msg.input;
+    }
+    // Gemini 格式: contents[]
+    if (msg.contents !== undefined) {
+      return msg.contents;
+    }
+    // Gemini CLI 包装格式: request.contents[]
+    const requestData = msg.request as Record<string, unknown> | undefined;
+    if (requestData?.contents !== undefined) {
+      return requestData.contents;
     }
     return undefined;
   }
@@ -398,6 +462,22 @@ function optimizeRequestMessage(message: Record<string, unknown>): Record<string
   }
 
   return optimized;
+}
+
+function extractModelFromPath(pathname: string): string | null {
+  // 匹配官方 Gemini 路径：/v1beta/models/{model}:<action>
+  const geminiMatch = pathname.match(/\/v1beta\/models\/([^/:]+)(?::[^/]+)?/);
+  if (geminiMatch?.[1]) {
+    return geminiMatch[1];
+  }
+
+  // 兼容 /v1/models/{model}:<action> 形式（未来可能的正式版本）
+  const v1Match = pathname.match(/\/v1\/models\/([^/:]+)(?::[^/]+)?/);
+  if (v1Match?.[1]) {
+    return v1Match[1];
+  }
+
+  return null;
 }
 
 async function parseRequestBody(c: Context): Promise<RequestBodyResult> {

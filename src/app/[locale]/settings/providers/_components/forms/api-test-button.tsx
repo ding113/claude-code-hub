@@ -55,7 +55,7 @@ const apiFormatDefaultModel: Record<ApiFormat, string> = {
   "anthropic-messages": "claude-sonnet-4-5-20250929",
   "openai-chat": "gpt-5.1-codex",
   "openai-responses": "gpt-5.1-codex",
-  gemini: "gemini-1.5-pro",
+  gemini: "gemini-3-pro-preview",
 };
 
 const resolveApiFormatFromProvider = (providerType?: ProviderType | null): ApiFormat =>
