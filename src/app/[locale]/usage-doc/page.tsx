@@ -815,8 +815,6 @@ source ${shellConfig.split(" ")[0]}`}
 
     const configPath = config.configPath[os === "macos" ? "macos" : "windows"];
 
-    const configPath = config.configPath[os === "macos" ? "macos" : "windows"];
-
     if (cli.id === "claude-code") {
       return (
         <div className="space-y-3">
