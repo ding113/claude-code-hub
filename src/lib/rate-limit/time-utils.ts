@@ -41,6 +41,7 @@ export interface ResetInfo {
  */
 export function getTimeRangeForPeriod(period: TimePeriod, resetTime = "00:00"): TimeRange {
   const timezone = getEnvConfig().TZ; // 'Asia/Shanghai'
+  const normalizedResetTime = normalizeResetTime(resetTime);
   const now = new Date();
   const endTime = now;
   let startTime: Date;
@@ -53,7 +54,7 @@ export function getTimeRangeForPeriod(period: TimePeriod, resetTime = "00:00"): 
 
     case "daily": {
       // 自定义每日重置时间（例如：18:00）
-      startTime = getCustomDailyResetTime(now, resetTime, timezone);
+      startTime = getCustomDailyResetTime(now, normalizedResetTime, timezone);
       break;
     }
 
@@ -87,13 +88,14 @@ export function getTimeRangeForPeriod(period: TimePeriod, resetTime = "00:00"): 
 export function getTTLForPeriod(period: TimePeriod, resetTime = "00:00"): number {
   const timezone = getEnvConfig().TZ;
   const now = new Date();
+  const normalizedResetTime = normalizeResetTime(resetTime);
 
   switch (period) {
     case "5h":
       return 5 * 3600; // 5 小时
 
     case "daily": {
-      const nextReset = getNextDailyResetTime(now, resetTime, timezone);
+      const nextReset = getNextDailyResetTime(now, normalizedResetTime, timezone);
       return Math.max(1, Math.ceil((nextReset.getTime() - now.getTime()) / 1000));
     }
 
@@ -125,6 +127,7 @@ export function getTTLForPeriod(period: TimePeriod, resetTime = "00:00"): number
 export function getResetInfo(period: TimePeriod, resetTime = "00:00"): ResetInfo {
   const timezone = getEnvConfig().TZ;
   const now = new Date();
+  const normalizedResetTime = normalizeResetTime(resetTime);
 
   switch (period) {
     case "5h":
@@ -134,7 +137,7 @@ export function getResetInfo(period: TimePeriod, resetTime = "00:00"): ResetInfo
       };
 
     case "daily": {
-      const nextReset = getNextDailyResetTime(now, resetTime, timezone);
+      const nextReset = getNextDailyResetTime(now, normalizedResetTime, timezone);
       return {
         type: "custom",
         resetAt: nextReset,
@@ -217,6 +220,11 @@ function parseResetTime(resetTime: string): { hours: number; minutes: number } {
   }
 
   return { hours, minutes };
+}
+
+export function normalizeResetTime(resetTime?: string): string {
+  const { hours, minutes } = parseResetTime(resetTime ?? "00:00");
+  return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
 }
 
 /**

@@ -7,7 +7,12 @@ import {
   GET_COST_5H_ROLLING_WINDOW,
 } from "@/lib/redis/lua-scripts";
 import { sumUserCostToday } from "@/repository/statistics";
-import { getTimeRangeForPeriod, getTTLForPeriod, getSecondsUntilMidnight } from "./time-utils";
+import {
+  getTimeRangeForPeriod,
+  getTTLForPeriod,
+  getSecondsUntilMidnight,
+  normalizeResetTime,
+} from "./time-utils";
 
 interface CostLimit {
   amount: number | null;
@@ -20,6 +25,11 @@ export class RateLimitService {
   // 使用 getter 实现懒加载，避免模块加载时立即连接 Redis（构建阶段触发）
   private static get redis() {
     return getRedisClient();
+  }
+
+  private static resolveDailyReset(resetTime?: string): { normalized: string; suffix: string } {
+    const normalized = normalizeResetTime(resetTime);
+    return { normalized, suffix: normalized.replace(":", "") };
   }
 
   /**
@@ -37,13 +47,14 @@ export class RateLimitService {
       limit_monthly_usd: number | null;
     }
   ): Promise<{ allowed: boolean; reason?: string }> {
+    const normalizedDailyReset = normalizeResetTime(limits.daily_reset_time);
     const costLimits: CostLimit[] = [
       { amount: limits.limit_5h_usd, period: "5h", name: "5小时" },
       {
         amount: limits.limit_daily_usd,
         period: "daily",
         name: "每日",
-        resetTime: limits.daily_reset_time || "00:00",
+        resetTime: normalizedDailyReset,
       },
       { amount: limits.limit_weekly_usd, period: "weekly", name: "周" },
       { amount: limits.limit_monthly_usd, period: "monthly", name: "月" },
@@ -93,16 +104,14 @@ export class RateLimitService {
             }
           } else {
             // daily/周/月使用普通 GET
-            const periodKey =
-              limit.period === "daily" && limit.resetTime
-                ? `${limit.period}_${limit.resetTime.replace(":", "")}`
-                : limit.period;
+            const { suffix } = this.resolveDailyReset(limit.resetTime);
+            const periodKey = limit.period === "daily" ? `${limit.period}_${suffix}` : limit.period;
             const value = await this.redis.get(`${type}:${id}:cost_${periodKey}`);
 
             // Cache Miss 检测
             if (value === null && limit.amount > 0) {
               logger.info(
-                `[RateLimit] Cache miss for ${type}:${id}:cost_${limit.period}, querying database`
+                `[RateLimit] Cache miss for ${type}:${id}:cost_${periodKey}, querying database`
               );
               return await this.checkCostLimitsFromDatabase(id, type, costLimits);
             }
@@ -177,11 +186,9 @@ export class RateLimitService {
             }
           } else {
             // daily/周/月固定窗口：使用 STRING + 动态 TTL
-            const ttl = getTTLForPeriod(limit.period, limit.resetTime);
-            const periodKey =
-              limit.period === "daily" && limit.resetTime
-                ? `${limit.period}_${limit.resetTime.replace(":", "")}`
-                : limit.period;
+            const { normalized, suffix } = this.resolveDailyReset(limit.resetTime);
+            const ttl = getTTLForPeriod(limit.period, normalized);
+            const periodKey = limit.period === "daily" ? `${limit.period}_${suffix}` : limit.period;
             await this.redis.set(`${type}:${id}:cost_${periodKey}`, current.toString(), "EX", ttl);
             logger.info(
               `[RateLimit] Cache warmed for ${type}:${id}:cost_${periodKey}, value=${current}, ttl=${ttl}s`
@@ -302,23 +309,28 @@ export class RateLimitService {
   /**
    * 累加消费（请求结束后调用）
    * 5h 使用滚动窗口（ZSET），daily/周/月使用固定窗口（STRING）
-   *
-   * 注意：按天限制会追踪所有可能的重置时间（00:00-23:59），因为我们不知道哪个 key/provider 使用哪个重置时间
    */
   static async trackCost(
     keyId: number,
     providerId: number,
     sessionId: string,
-    cost: number
+    cost: number,
+    options?: { keyResetTime?: string; providerResetTime?: string }
   ): Promise<void> {
     if (!this.redis || cost <= 0) return;
 
     try {
+      const keyDailyReset = this.resolveDailyReset(options?.keyResetTime);
+      const providerDailyReset = this.resolveDailyReset(options?.providerResetTime);
       const now = Date.now();
       const window5h = 5 * 60 * 60 * 1000; // 5 hours in ms
 
       // 计算动态 TTL（daily/周/月）
-      const ttlDaily = getTTLForPeriod("daily", "00:00"); // 默认使用 00:00 计算 TTL
+      const ttlDailyKey = getTTLForPeriod("daily", keyDailyReset.normalized);
+      const ttlDailyProvider =
+        keyDailyReset.normalized === providerDailyReset.normalized
+          ? ttlDailyKey
+          : getTTLForPeriod("daily", providerDailyReset.normalized);
       const ttlWeekly = getTTLForPeriod("weekly");
       const ttlMonthly = getTTLForPeriod("monthly");
 
@@ -347,9 +359,9 @@ export class RateLimitService {
       const pipeline = this.redis.pipeline();
 
       // Key 的 daily/周/月消费
-      // 按天限制使用 daily_0000 作为默认 key（午夜重置）
-      pipeline.incrbyfloat(`key:${keyId}:cost_daily_0000`, cost);
-      pipeline.expire(`key:${keyId}:cost_daily_0000`, ttlDaily);
+      const keyDailyKey = `key:${keyId}:cost_daily_${keyDailyReset.suffix}`;
+      pipeline.incrbyfloat(keyDailyKey, cost);
+      pipeline.expire(keyDailyKey, ttlDailyKey);
 
       pipeline.incrbyfloat(`key:${keyId}:cost_weekly`, cost);
       pipeline.expire(`key:${keyId}:cost_weekly`, ttlWeekly);
@@ -358,8 +370,9 @@ export class RateLimitService {
       pipeline.expire(`key:${keyId}:cost_monthly`, ttlMonthly);
 
       // Provider 的 daily/周/月消费
-      pipeline.incrbyfloat(`provider:${providerId}:cost_daily_0000`, cost);
-      pipeline.expire(`provider:${providerId}:cost_daily_0000`, ttlDaily);
+      const providerDailyKey = `provider:${providerId}:cost_daily_${providerDailyReset.suffix}`;
+      pipeline.incrbyfloat(providerDailyKey, cost);
+      pipeline.expire(providerDailyKey, ttlDailyProvider);
 
       pipeline.incrbyfloat(`provider:${providerId}:cost_weekly`, cost);
       pipeline.expire(`provider:${providerId}:cost_weekly`, ttlWeekly);
@@ -383,9 +396,11 @@ export class RateLimitService {
   static async getCurrentCost(
     id: number,
     type: "key" | "provider",
-    period: "5h" | "weekly" | "monthly"
+    period: "5h" | "daily" | "weekly" | "monthly",
+    resetTime = "00:00"
   ): Promise<number> {
     try {
+      const dailyResetInfo = this.resolveDailyReset(resetTime);
       // Fast Path: Redis 查询
       if (this.redis && this.redis.status === "ready") {
         let current = 0;
@@ -420,8 +435,9 @@ export class RateLimitService {
             return 0;
           }
         } else {
-          // 周/月使用普通 GET
-          const value = await this.redis.get(`${type}:${id}:cost_${period}`);
+          // daily/周/月使用普通 GET
+          const redisKey = period === "daily" ? `${period}_${dailyResetInfo.suffix}` : period;
+          const value = await this.redis.get(`${type}:${id}:cost_${redisKey}`);
 
           // Cache Hit
           if (value !== null) {
@@ -429,7 +445,9 @@ export class RateLimitService {
           }
 
           // Cache Miss: 从数据库恢复
-          logger.info(`[RateLimit] Cache miss for ${type}:${id}:cost_${period}, querying database`);
+          logger.info(
+            `[RateLimit] Cache miss for ${type}:${id}:cost_${redisKey}, querying database`
+          );
         }
       } else {
         logger.warn(`[RateLimit] Redis unavailable, querying database for ${type} cost`);
@@ -440,7 +458,7 @@ export class RateLimitService {
         "@/repository/statistics"
       );
 
-      const { startTime, endTime } = getTimeRangeForPeriod(period);
+      const { startTime, endTime } = getTimeRangeForPeriod(period, dailyResetInfo.normalized);
       const current =
         type === "key"
           ? await sumKeyCostInTimeRange(id, startTime, endTime)
@@ -470,11 +488,12 @@ export class RateLimitService {
               logger.info(`[RateLimit] Cache warmed for ${key}, value=${current} (rolling window)`);
             }
           } else {
-            // 周/月固定窗口：使用 STRING + 动态 TTL
-            const ttl = getTTLForPeriod(period);
-            await this.redis.set(`${type}:${id}:cost_${period}`, current.toString(), "EX", ttl);
+            // daily/周/月固定窗口：使用 STRING + 动态 TTL
+            const redisKey = period === "daily" ? `${period}_${dailyResetInfo.suffix}` : period;
+            const ttl = getTTLForPeriod(period, dailyResetInfo.normalized);
+            await this.redis.set(`${type}:${id}:cost_${redisKey}`, current.toString(), "EX", ttl);
             logger.info(
-              `[RateLimit] Cache warmed for ${type}:${id}:cost_${period}, value=${current}, ttl=${ttl}s`
+              `[RateLimit] Cache warmed for ${type}:${id}:cost_${redisKey}, value=${current}, ttl=${ttl}s`
             );
           }
         } catch (error) {

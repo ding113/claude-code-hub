@@ -470,6 +470,7 @@
     "error": "Fetch failed",
     "networkError": "Network error",
     "cost5h": "5-Hour Cost",
+    "costDaily": "Daily Cost",
     "costWeekly": "Weekly Cost",
     "costMonthly": "Monthly Cost",
     "concurrentSessions": "Concurrent Sessions",
@@ -497,6 +498,16 @@
       "label": "5-Hour Cost Limit (USD)",
       "placeholder": "Leave blank for unlimited",
       "description": "Maximum cost within 5 hours"
+    },
+    "limitDailyUsd": {
+      "label": "Daily Cost Limit (USD)",
+      "placeholder": "Leave blank for unlimited",
+      "description": "Maximum cost per day"
+    },
+    "dailyResetTime": {
+      "label": "Daily Reset Time",
+      "placeholder": "HH:mm",
+      "description": "When the daily limit resets (uses system timezone)"
     },
     "limitWeeklyUsd": {
       "label": "Weekly Cost Limit (USD)",

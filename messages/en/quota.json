@@ -101,6 +101,10 @@
     "cost5h": {
       "label": "5-Hour Cost"
     },
+    "costDaily": {
+      "label": "Daily Cost",
+      "resetAt": "Resets at"
+    },
     "costWeekly": {
       "label": "Weekly Cost",
       "resetAt": "Resets at"
@@ -134,6 +138,7 @@
       "keyName": "Key Name",
       "quotaType": "Quota Type",
       "cost5h": "5-Hour Quota",
+      "costDaily": "Daily Quota",
       "costWeekly": "Weekly Quota",
       "costMonthly": "Monthly Quota",
       "concurrentSessions": "Concurrent Limit",
@@ -157,6 +162,15 @@
         "label": "5-Hour Quota (USD)",
         "placeholder": "Unlimited",
         "current": "Current usage: {currency}{current} / {currency}{limit}"
+      },
+      "costDaily": {
+        "label": "Daily Quota (USD)",
+        "placeholder": "Unlimited",
+        "current": "Current usage: {currency}{current} / {currency}{limit}"
+      },
+      "dailyResetTime": {
+        "label": "Daily Reset Time",
+        "placeholder": "HH:mm"
       },
       "costWeekly": {
         "label": "Weekly Quota (USD)",
@@ -222,6 +236,16 @@
         "label": "5-Hour Cost Limit (USD)",
         "placeholder": "Leave blank for unlimited",
         "description": "Maximum cost within 5 hours"
+      },
+      "limitDailyUsd": {
+        "label": "Daily Cost Limit (USD)",
+        "placeholder": "Leave blank for unlimited",
+        "description": "Maximum cost per day"
+      },
+      "dailyResetTime": {
+        "label": "Daily Reset Time",
+        "placeholder": "HH:mm",
+        "description": "When the daily limit resets (uses system timezone)"
       },
       "limitWeeklyUsd": {
         "label": "Weekly Cost Limit (USD)",

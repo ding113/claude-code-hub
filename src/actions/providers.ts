@@ -521,6 +521,7 @@ export async function resetProviderCircuit(providerId: number): Promise<ActionRe
 export async function getProviderLimitUsage(providerId: number): Promise<
   ActionResult<{
     cost5h: { current: number; limit: number | null; resetInfo: string };
+    costDaily: { current: number; limit: number | null; resetAt: Date };
     costWeekly: { current: number; limit: number | null; resetAt: Date };
     costMonthly: { current: number; limit: number | null; resetAt: Date };
     concurrentSessions: { current: number; limit: number };
@@ -543,8 +544,9 @@ export async function getProviderLimitUsage(providerId: number): Promise<
     const { getResetInfo } = await import("@/lib/rate-limit/time-utils");
 
     // 获取金额消费（优先 Redis，降级数据库）
-    const [cost5h, costWeekly, costMonthly, concurrentSessions] = await Promise.all([
+    const [cost5h, costDaily, costWeekly, costMonthly, concurrentSessions] = await Promise.all([
       RateLimitService.getCurrentCost(providerId, "provider", "5h"),
+      RateLimitService.getCurrentCost(providerId, "provider", "daily", provider.dailyResetTime),
       RateLimitService.getCurrentCost(providerId, "provider", "weekly"),
       RateLimitService.getCurrentCost(providerId, "provider", "monthly"),
       SessionTracker.getProviderSessionCount(providerId),
@@ -552,6 +554,7 @@ export async function getProviderLimitUsage(providerId: number): Promise<
 
     // 获取重置时间信息
     const reset5h = getResetInfo("5h");
+    const resetDaily = getResetInfo("daily", provider.dailyResetTime);
     const resetWeekly = getResetInfo("weekly");
     const resetMonthly = getResetInfo("monthly");
 
@@ -562,6 +565,11 @@ export async function getProviderLimitUsage(providerId: number): Promise<
           current: cost5h,
           limit: provider.limit5hUsd,
           resetInfo: reset5h.type === "rolling" ? `滚动窗口（${reset5h.period}）` : "自然时间窗口",
+        },
+        costDaily: {
+          current: costDaily,
+          limit: provider.limitDailyUsd,
+          resetAt: resetDaily.resetAt!,
         },
         costWeekly: {
           current: costWeekly,

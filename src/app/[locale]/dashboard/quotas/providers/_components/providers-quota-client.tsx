@@ -13,6 +13,7 @@ import type { ProviderType } from "@/types/provider";
 
 interface ProviderQuota {
   cost5h: { current: number; limit: number | null; resetInfo: string };
+  costDaily: { current: number; limit: number | null; resetAt: Date };
   costWeekly: { current: number; limit: number | null; resetAt: Date };
   costMonthly: { current: number; limit: number | null; resetAt: Date };
   concurrentSessions: { current: number; limit: number };
@@ -39,6 +40,7 @@ function hasQuotaLimit(quota: ProviderQuota | null): boolean {
   if (!quota) return false;
   return (
     (quota.cost5h.limit !== null && quota.cost5h.limit > 0) ||
+    (quota.costDaily.limit !== null && quota.costDaily.limit > 0) ||
     (quota.costWeekly.limit !== null && quota.costWeekly.limit > 0) ||
     (quota.costMonthly.limit !== null && quota.costMonthly.limit > 0) ||
     quota.concurrentSessions.limit > 0
@@ -127,6 +129,27 @@ export function ProvidersQuotaClient({
                   className="h-2"
                 />
                 <p className="text-xs text-muted-foreground">{provider.quota.cost5h.resetInfo}</p>
+              </div>
+            )}
+
+            {provider.quota.costDaily.limit && provider.quota.costDaily.limit > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">{t("costDaily.label")}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {t("costDaily.resetAt")} {formatDateDistance(provider.quota.costDaily.resetAt, locale)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm font-mono">
+                  <span>
+                    {formatCurrency(provider.quota.costDaily.current, currencyCode)} /{" "}
+                    {formatCurrency(provider.quota.costDaily.limit, currencyCode)}
+                  </span>
+                </div>
+                <Progress
+                  value={(provider.quota.costDaily.current / (provider.quota.costDaily.limit || 1)) * 100}
+                  className="h-2"
+                />
               </div>
             )}
 

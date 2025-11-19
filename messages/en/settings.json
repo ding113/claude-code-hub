@@ -919,6 +919,7 @@
           "title": "Rate Limit",
           "summary": {
             "fiveHour": "5h: ${amount}",
+            "daily": "Day: ${amount} (reset ${resetTime})",
             "weekly": "Week: ${amount}",
             "monthly": "Month: ${amount}",
             "concurrent": "Concurrent: {count}",
@@ -927,6 +928,13 @@
           "limit5h": {
             "label": "5h Spend Limit (USD)",
             "placeholder": "Leave empty for unlimited"
+          },
+          "limitDaily": {
+            "label": "Daily Spend Limit (USD)",
+            "placeholder": "Leave empty for unlimited"
+          },
+          "dailyResetTime": {
+            "label": "Daily Reset Time (HH:mm)"
           },
           "limitWeekly": {
             "label": "Weekly Spend Limit (USD)",

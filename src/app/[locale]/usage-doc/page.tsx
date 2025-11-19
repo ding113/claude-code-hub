@@ -815,10 +815,15 @@ source ${shellConfig.split(" ")[0]}`}
 
     const configPath = config.configPath[os === "macos" ? "macos" : "windows"];
 
+    const configPath = config.configPath[os === "macos" ? "macos" : "windows"];
+
     if (cli.id === "claude-code") {
       return (
         <div className="space-y-3">
           <h4 className={headingClasses.h4}>{t("claudeCode.vsCodeExtension.title")}</h4>
+          <p className="text-sm text-muted-foreground">
+            {t("claudeCode.vsCodeExtension.configPath", { path: configPath })}
+          </p>
           <ol className="list-decimal space-y-2 pl-6">
             {(t.raw("claudeCode.vsCodeExtension.steps") as string[]).map(
               (step: string, i: number) => (
@@ -828,7 +833,8 @@ source ${shellConfig.split(" ")[0]}`}
           </ol>
           <CodeBlock
             language="json"
-            code={`{
+            code={`// Path: ${configPath}
+{
   "primaryApiKey": "any-value"
 }`}
           />

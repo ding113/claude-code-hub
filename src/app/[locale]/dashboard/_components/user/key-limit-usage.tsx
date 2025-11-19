@@ -15,6 +15,7 @@ interface KeyLimitUsageProps {
 
 interface LimitUsageData {
   cost5h: { current: number; limit: number | null };
+  costDaily: { current: number; limit: number | null };
   costWeekly: { current: number; limit: number | null };
   costMonthly: { current: number; limit: number | null };
   concurrentSessions: { current: number; limit: number };
@@ -74,6 +75,12 @@ export function KeyLimitUsage({ keyId, currencyCode = "USD" }: KeyLimitUsageProp
       label: t("cost5h"),
       current: data.cost5h.current,
       limit: data.cost5h.limit,
+      isCost: true,
+    },
+    {
+      label: t("costDaily"),
+      current: data.costDaily.current,
+      limit: data.costDaily.limit,
       isCost: true,
     },
     {

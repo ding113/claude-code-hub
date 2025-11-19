@@ -531,6 +531,7 @@
           "title": "限流配置",
           "summary": {
             "fiveHour": "5h: ${amount}",
+            "daily": "日: ${amount} (重置 {resetTime})",
             "weekly": "周: ${amount}",
             "monthly": "月: ${amount}",
             "concurrent": "并发: {count}",
@@ -539,6 +540,13 @@
           "limit5h": {
             "label": "5小时消费上限 (USD)",
             "placeholder": "留空表示无限制"
+          },
+          "limitDaily": {
+            "label": "每日消费上限 (USD)",
+            "placeholder": "留空表示无限制"
+          },
+          "dailyResetTime": {
+            "label": "每日重置时间 (HH:mm)"
           },
           "limitWeekly": {
             "label": "周消费上限 (USD)",

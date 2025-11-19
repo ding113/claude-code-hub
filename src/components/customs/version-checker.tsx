@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { ExternalLink, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,7 +21,7 @@ export function VersionChecker() {
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const checkVersion = async () => {
+  const checkVersion = useCallback(async () => {
     setLoading(true);
     try {
       const response = await fetch("/api/version");
@@ -38,11 +38,11 @@ export function VersionChecker() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [t]);
 
   useEffect(() => {
     checkVersion();
-  }, []);
+  }, [checkVersion]);
 
   if (!versionInfo && loading) {
     return (

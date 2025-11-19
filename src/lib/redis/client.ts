@@ -67,6 +67,8 @@ export function getRedisClient(): Redis | null {
     return null;
   }
 
+  const safeRedisUrl = maskRedisUrl(redisUrl);
+
   if (redisClient) {
     return redisClient;
   }
@@ -91,7 +93,7 @@ export function getRedisClient(): Redis | null {
 
     // 2. 如果使用 rediss://，则添加显式的 TLS 和 SNI (host) 配置
     if (useTls) {
-      logger.info("[Redis] Using TLS connection (rediss://)");
+      logger.info("[Redis] Using TLS connection (rediss://)", { redisUrl: safeRedisUrl });
       try {
         // 从 URL 中解析 hostname，用于 SNI
         const url = new URL(redisUrl);
@@ -113,6 +115,7 @@ export function getRedisClient(): Redis | null {
       logger.info("[Redis] Connected successfully", {
         protocol: useTls ? "rediss" : "redis",
         tlsEnabled: useTls,
+        redisUrl: safeRedisUrl,
       });
     });
 
@@ -121,17 +124,18 @@ export function getRedisClient(): Redis | null {
         error: error instanceof Error ? error.message : String(error),
         protocol: useTls ? "rediss" : "redis",
         tlsEnabled: useTls,
+        redisUrl: safeRedisUrl,
       });
     });
 
     redisClient.on("close", () => {
-      logger.warn("[Redis] Connection closed");
+      logger.warn("[Redis] Connection closed", { redisUrl: safeRedisUrl });
     });
 
     // 5. 返回客户端实例
     return redisClient;
   } catch (error) {
-    logger.error("[Redis] Failed to initialize:", error);
+    logger.error("[Redis] Failed to initialize:", error, { redisUrl: safeRedisUrl });
     return null;
   }
 }

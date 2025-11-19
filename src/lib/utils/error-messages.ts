@@ -150,6 +150,7 @@ export function getErrorMessage(
   try {
     return t(code, params);
   } catch (error) {
+    console.warn("Translation missing for error code", code, error);
     // Fallback to generic error message if translation key not found
     return t("INTERNAL_ERROR");
   }
@@ -179,6 +180,7 @@ export async function getErrorMessageServer(
     const t = await getTranslations({ locale, namespace: "errors" });
     return t(code, params);
   } catch (error) {
+    console.error("getErrorMessageServer failed", { locale, code, error });
     // Fallback to generic error message
     return "An error occurred";
   }

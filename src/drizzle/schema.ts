@@ -47,7 +47,9 @@ export const keys = pgTable('keys', {
   // 金额限流配置
   limit5hUsd: numeric('limit_5h_usd', { precision: 10, scale: 2 }),
   limitDailyUsd: numeric('limit_daily_usd', { precision: 10, scale: 2 }),
-  dailyResetTime: varchar('daily_reset_time', { length: 5 }).default('00:00'), // HH:mm 格式，如 "18:00"
+  dailyResetTime: varchar('daily_reset_time', { length: 5 })
+    .default('00:00')
+    .notNull(), // HH:mm 格式，如 "18:00"
   limitWeeklyUsd: numeric('limit_weekly_usd', { precision: 10, scale: 2 }),
   limitMonthlyUsd: numeric('limit_monthly_usd', { precision: 10, scale: 2 }),
   limitConcurrentSessions: integer('limit_concurrent_sessions').default(0),
@@ -113,7 +115,9 @@ export const providers = pgTable('providers', {
   // 金额限流配置
   limit5hUsd: numeric('limit_5h_usd', { precision: 10, scale: 2 }),
   limitDailyUsd: numeric('limit_daily_usd', { precision: 10, scale: 2 }),
-  dailyResetTime: varchar('daily_reset_time', { length: 5 }).default('00:00'),
+  dailyResetTime: varchar('daily_reset_time', { length: 5 })
+    .default('00:00')
+    .notNull(),
   limitWeeklyUsd: numeric('limit_weekly_usd', { precision: 10, scale: 2 }),
   limitMonthlyUsd: numeric('limit_monthly_usd', { precision: 10, scale: 2 }),
   limitConcurrentSessions: integer('limit_concurrent_sessions').default(0),

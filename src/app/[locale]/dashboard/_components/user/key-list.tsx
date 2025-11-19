@@ -64,6 +64,7 @@ export function KeyList({ keys, currentUser, keyOwnerUserId, currencyCode = "USD
         // 检查是否有限额配置
         const hasLimitConfig =
           (record.limit5hUsd && record.limit5hUsd > 0) ||
+          (record.limitDailyUsd && record.limitDailyUsd > 0) ||
           (record.limitWeeklyUsd && record.limitWeeklyUsd > 0) ||
           (record.limitMonthlyUsd && record.limitMonthlyUsd > 0) ||
           (record.limitConcurrentSessions && record.limitConcurrentSessions > 0);

@@ -134,6 +134,13 @@
       "when": 1763466610135,
       "tag": "0018_square_ozymandias",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1763482001307,
+      "tag": "0019_open_stephen_strange",
+      "breakpoints": true
     }
   ]
 }

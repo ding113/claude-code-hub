@@ -43,6 +43,7 @@ export function useFormatCurrency() {
         maximumFractionDigits: fractionDigits,
       });
     } catch (error) {
+      console.warn("Currency formatting failed, falling back to manual formatting", error);
       // Fallback to manual formatting if currency is not supported
       const formatted = amount.toLocaleString(config.locale, {
         minimumFractionDigits: fractionDigits,

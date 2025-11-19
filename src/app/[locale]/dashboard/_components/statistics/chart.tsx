@@ -69,7 +69,7 @@ export function UserStatisticsChart({
   // 重置选择状态(当 data.users 变化时)
   React.useEffect(() => {
     setSelectedUserIds(new Set(data.users.map((u) => u.id)));
-  }, [data.users]);
+  }, [data.users, t]);
 
   const isAdminMode = data.mode === "users";
   const enableUserFilter = isAdminMode && data.users.length > 1;
@@ -119,7 +119,7 @@ export function UserStatisticsChart({
     });
 
     return config;
-  }, [data.users]);
+  }, [data.users, t]);
 
   const userMap = React.useMemo(() => {
     return new Map(data.users.map((user) => [user.dataKey, user]));

@@ -18,6 +18,8 @@ async function getUsersWithKeysQuotas() {
             name: key.name,
             isEnabled: key.status === "enabled", // 转换 status 为 isEnabled
             expiresAt: key.expiresAt,
+            limitDailyUsd: key.limitDailyUsd ?? null,
+            dailyResetTime: key.dailyResetTime ?? "00:00",
             quota: result.ok ? result.data : null,
           };
         })
