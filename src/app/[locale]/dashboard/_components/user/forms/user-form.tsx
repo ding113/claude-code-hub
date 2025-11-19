@@ -7,7 +7,7 @@ import { DialogFormLayout } from "@/components/form/form-layout";
 import { TextField, TagInputField } from "@/components/form/form-field";
 import { useZodForm } from "@/lib/hooks/use-zod-form";
 import { CreateUserSchema } from "@/lib/validation/schemas";
-import { USER_DEFAULTS } from "@/lib/constants/user.constants";
+import { USER_DEFAULTS, USER_LIMITS } from "@/lib/constants/user.constants";
 import { toast } from "sonner";
 import { setZodErrorMap } from "@/lib/utils/zod-i18n";
 import { getErrorMessage } from "@/lib/utils/error-messages";
@@ -169,8 +169,8 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
         label={tForm("rpm.label")}
         type="number"
         required
-        min={1}
-        max={10000}
+        min={USER_LIMITS.RPM.MIN}
+        max={USER_LIMITS.RPM.MAX}
         placeholder={tForm("rpm.placeholder")}
         description={tForm("rpm.description", { default: USER_DEFAULTS.RPM })}
         {...form.getFieldProps("rpm")}
@@ -180,8 +180,8 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
         label={tForm("dailyQuota.label")}
         type="number"
         required
-        min={0.01}
-        max={1000}
+        min={USER_LIMITS.DAILY_QUOTA.MIN}
+        max={USER_LIMITS.DAILY_QUOTA.MAX}
         step={0.01}
         placeholder={tForm("dailyQuota.placeholder")}
         description={tForm("dailyQuota.description", { default: USER_DEFAULTS.DAILY_QUOTA })}

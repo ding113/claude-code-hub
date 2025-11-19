@@ -565,12 +565,12 @@
     "rpm": {
       "label": "RPM限制",
       "placeholder": "每分钟请求数限制",
-      "description": "默认值: {default}，范围: 1-10000"
+      "description": "默认值: {default}，范围: 1-1000000"
     },
     "dailyQuota": {
       "label": "每日额度",
       "placeholder": "每日消费额度限制",
-      "description": "默认值: ${default}，范围: $0.01-$1000"
+      "description": "默认值: ${default}，范围: $0.01-$100000"
     },
     "limit5hUsd": {
       "label": "5小时限额 (USD)",

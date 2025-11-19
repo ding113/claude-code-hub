@@ -220,8 +220,10 @@ export function zodErrorToCode(
 
     case "too_small":
       if (typeof minimum === "number") {
+        // 区分字符串长度和数值范围
+        const isStringType = type === "string";
         return {
-          code: ERROR_CODES.MIN_LENGTH,
+          code: isStringType ? ERROR_CODES.MIN_LENGTH : ERROR_CODES.MIN_VALUE,
           params: { field: field || "field", min: minimum },
         };
       }
@@ -229,8 +231,10 @@ export function zodErrorToCode(
 
     case "too_big":
       if (typeof maximum === "number") {
+        // 区分字符串长度和数值范围
+        const isStringType = type === "string";
         return {
-          code: ERROR_CODES.MAX_LENGTH,
+          code: isStringType ? ERROR_CODES.MAX_LENGTH : ERROR_CODES.MAX_VALUE,
           params: { field: field || "field", max: maximum },
         };
       }

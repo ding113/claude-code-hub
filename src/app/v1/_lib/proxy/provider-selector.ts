@@ -56,13 +56,27 @@ function providerSupportsModel(provider: Provider, requestedModel: string): bool
     return false;
   }
 
-  // Case 2: 非 Claude 模型请求（gpt-*, gemini-*, etc.）
-  // 2a. Anthropic 提供商不支持非 Claude 模型
+  // Case 2: 非 Claude 模型请求（gpt-*, gemini-*, 或其他任意模型）
+  // 2a. 优先检查显式声明（支持跨类型代理）
+  // 原因：允许 Claude 类型供应商通过 allowedModels/modelRedirects 声明支持非 Claude 模型
+  // 场景：Claude 供应商配置模型重定向，将 gemini-* 请求转发到真实的 Gemini 上游
+  const explicitlyDeclared =
+    !!(
+      provider.allowedModels?.includes(requestedModel) ||
+      provider.modelRedirects?.[requestedModel]
+    );
+
+  if (explicitlyDeclared) {
+    return true; // 显式声明优先级最高，允许跨类型代理
+  }
+
+  // 2b. Anthropic 提供商不支持非声明的非 Claude 模型
+  // 保护机制：防止将非 Claude 模型误路由到 Anthropic API
   if (isClaudeProvider) {
     return false;
   }
 
-  // 2b. 非 Anthropic 提供商（codex, gemini, gemini-cli, openai-compatible）
+  // 2c. 非 Anthropic 提供商（codex, gemini, gemini-cli, openai-compatible）
   // allowedModels 是声明列表，用于调度器匹配提供商
   // 用户可以手动填写任意模型名称（不限于真实模型），用于声明该提供商"支持"哪些模型
 
@@ -71,17 +85,7 @@ function providerSupportsModel(provider: Provider, requestedModel: string): bool
     return true;
   }
 
-  // 检查声明列表
-  if (provider.allowedModels.includes(requestedModel)) {
-    return true;
-  }
-
-  // 检查模型重定向
-  if (provider.modelRedirects?.[requestedModel]) {
-    return true;
-  }
-
-  // 不在声明列表中且无重定向配置
+  // 不在声明列表中且无重定向配置（前面已检查过 explicitlyDeclared）
   return false;
 }
 
