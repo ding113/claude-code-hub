@@ -46,6 +46,7 @@ export interface GeminiRequest {
   safetySettings?: GeminiSafetySetting[];
   generationConfig?: GeminiGenerationConfig;
   systemInstruction?: {
+    role?: "user";
     parts: { text: string }[];
   };
 }

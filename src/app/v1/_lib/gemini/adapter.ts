@@ -4,7 +4,7 @@ import { GeminiRequest, GeminiContent, GeminiResponse } from "./types";
 interface ContentPart {
   type?: string;
   text?: string;
-  source?: { media_type?: string; data?: string };
+  source?: { media_type?: string; data?: string; url?: string };
   image_url?: { media_type?: string; data?: string; url?: string };
 }
 

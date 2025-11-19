@@ -1331,8 +1331,7 @@
     "title": "Error Rules Management",
     "description": "Manage client error rules that should not trigger automatic retries. When configured, errors matching these rules will be returned directly to users without retrying or counting toward provider circuit breaker thresholds.",
     "section": {
-      "title": "Error Rules List",
-      "description": "Match error messages via regex patterns to identify non-retryable client errors like invalid requests, parameter errors, etc. System includes 7 default rules covering common error scenarios."
+      "title": "Error Rules List"
     },
     "add": "Add Error Rule",
     "addSuccess": "Error rule created successfully",

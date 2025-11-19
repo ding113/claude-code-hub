@@ -18,7 +18,6 @@ export default async function ErrorRulesPage() {
 
       <Section
         title={t("errorRules.section.title")}
-        description={t("errorRules.section.description")}
         actions={
           <div className="flex gap-2">
             <RefreshCacheButton stats={cacheStats} />
