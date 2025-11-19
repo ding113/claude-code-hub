@@ -471,6 +471,7 @@
     "error": "获取失败",
     "networkError": "网络错误",
     "cost5h": "5小时消费",
+    "costDaily": "每日消费",
     "costWeekly": "周消费",
     "costMonthly": "月消费",
     "concurrentSessions": "并发 Session",
@@ -498,6 +499,16 @@
       "label": "5小时消费上限 (USD)",
       "placeholder": "留空表示无限制",
       "description": "5小时内最大消费金额"
+    },
+    "limitDailyUsd": {
+      "label": "每日消费上限 (USD)",
+      "placeholder": "留空表示无限制",
+      "description": "每日最大消费金额"
+    },
+    "dailyResetTime": {
+      "label": "每日重置时间",
+      "placeholder": "HH:mm",
+      "description": "每日限额的重置时间（使用系统时区）"
     },
     "limitWeeklyUsd": {
       "label": "周消费上限 (USD)",

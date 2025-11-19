@@ -1,6 +1,7 @@
 "use client";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -80,11 +81,11 @@ export function ProviderRichListItem({
   const [resetPending, startResetTransition] = useTransition();
   const [deletePending, startDeleteTransition] = useTransition();
   const [togglePending, startToggleTransition] = useTransition();
+  const [faviconHidden, setFaviconHidden] = useState(false);
 
   const canEdit = currentUser?.role === "admin";
   const tTypes = useTranslations("settings.providers.types");
   const tList = useTranslations("settings.providers.list");
-  const tCommon = useTranslations("settings.common");
 
   // 获取供应商类型配置
   const typeConfig = getProviderTypeConfig(provider.providerType);
@@ -241,8 +242,10 @@ export function ProviderRichListItem({
           {/* 类型图标 */}
           <div
             className={`flex items-center justify-center w-6 h-6 rounded ${typeConfig.bgColor} flex-shrink-0`}
+            title={`${typeLabel} · ${typeDescription}`}
+            aria-label={typeLabel}
           >
-            <TypeIcon className="h-3.5 w-3.5" />
+            <TypeIcon className="h-3.5 w-3.5" aria-hidden />
           </div>
         </div>
 
@@ -250,15 +253,15 @@ export function ProviderRichListItem({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             {/* Favicon */}
-            {provider.faviconUrl && (
-              <img
+            {provider.faviconUrl && !faviconHidden && (
+              <Image
                 src={provider.faviconUrl}
                 alt=""
+                width={16}
+                height={16}
                 className="h-4 w-4 flex-shrink-0"
-                onError={(e) => {
-                  // 隐藏加载失败的图标
-                  (e.target as HTMLImageElement).style.display = "none";
-                }}
+                onError={() => setFaviconHidden(true)}
+                unoptimized
               />
             )}
 

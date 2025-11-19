@@ -530,15 +530,34 @@
         "rateLimit": {
           "title": "限流配置",
           "summary": {
-            "fiveHour": "5h: ${amount}",
-            "weekly": "周: ${amount}",
-            "monthly": "月: ${amount}",
+            "fiveHour": "5h: {amount}",
+            "daily": "日: {amount} (重置 {resetTime})",
+            "weekly": "周: {amount}",
+            "monthly": "月: {amount}",
             "concurrent": "并发: {count}",
             "none": "无限制"
           },
           "limit5h": {
             "label": "5小时消费上限 (USD)",
             "placeholder": "留空表示无限制"
+          },
+          "limitDaily": {
+            "label": "每日消费上限 (USD)",
+            "placeholder": "留空表示无限制"
+          },
+          "dailyResetMode": {
+            "label": "每日重置模式",
+            "options": {
+              "fixed": "固定时间重置",
+              "rolling": "滚动窗口（24小时）"
+            },
+            "desc": {
+              "fixed": "每天固定时间点重置配额",
+              "rolling": "从首次调用开始计算，24小时后重置"
+            }
+          },
+          "dailyResetTime": {
+            "label": "每日重置时间 (HH:mm)"
           },
           "limitWeekly": {
             "label": "周消费上限 (USD)",

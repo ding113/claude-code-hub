@@ -227,6 +227,7 @@
         "在 ~/.claude 目录下创建 config.json 文件（如果没有）",
         "添加以下内容："
       ],
+      "configPath": "配置文件路径：{path}",
 
       "note": "注意",
       "notePoints": [

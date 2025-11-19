@@ -80,6 +80,15 @@ export function ProviderForm({
   );
   const [groupTag, setGroupTag] = useState<string>(sourceProvider?.groupTag ?? "");
   const [limit5hUsd, setLimit5hUsd] = useState<number | null>(sourceProvider?.limit5hUsd ?? null);
+  const [limitDailyUsd, setLimitDailyUsd] = useState<number | null>(
+    sourceProvider?.limitDailyUsd ?? null
+  );
+  const [dailyResetMode, setDailyResetMode] = useState<"fixed" | "rolling">(
+    sourceProvider?.dailyResetMode ?? "fixed"
+  );
+  const [dailyResetTime, setDailyResetTime] = useState<string>(
+    sourceProvider?.dailyResetTime ?? "00:00"
+  );
   const [limitWeeklyUsd, setLimitWeeklyUsd] = useState<number | null>(
     sourceProvider?.limitWeeklyUsd ?? null
   );
@@ -222,6 +231,9 @@ export function ProviderForm({
             cost_multiplier?: number;
             group_tag?: string | null;
             limit_5h_usd?: number | null;
+            limit_daily_usd?: number | null;
+            daily_reset_mode?: "fixed" | "rolling";
+            daily_reset_time?: string;
             limit_weekly_usd?: number | null;
             limit_monthly_usd?: number | null;
             limit_concurrent_sessions?: number | null;
@@ -248,6 +260,9 @@ export function ProviderForm({
             cost_multiplier: costMultiplier,
             group_tag: groupTag.trim() || null,
             limit_5h_usd: limit5hUsd,
+            limit_daily_usd: limitDailyUsd,
+            daily_reset_mode: dailyResetMode,
+            daily_reset_time: dailyResetTime,
             limit_weekly_usd: limitWeeklyUsd,
             limit_monthly_usd: limitMonthlyUsd,
             limit_concurrent_sessions: limitConcurrentSessions,
@@ -289,6 +304,9 @@ export function ProviderForm({
             cost_multiplier: costMultiplier,
             group_tag: groupTag.trim() || null,
             limit_5h_usd: limit5hUsd,
+            limit_daily_usd: limitDailyUsd,
+            daily_reset_mode: dailyResetMode,
+            daily_reset_time: dailyResetTime,
             limit_weekly_usd: limitWeeklyUsd,
             limit_monthly_usd: limitMonthlyUsd,
             limit_concurrent_sessions: limitConcurrentSessions ?? 0,
@@ -327,6 +345,8 @@ export function ProviderForm({
           setCostMultiplier(1.0);
           setGroupTag("");
           setLimit5hUsd(null);
+          setLimitDailyUsd(null);
+          setDailyResetTime("00:00");
           setLimitWeeklyUsd(null);
           setLimitMonthlyUsd(null);
           setLimitConcurrentSessions(null);
@@ -439,7 +459,7 @@ export function ProviderForm({
         </div>
 
         {/* Codex 支持：供应商类型和模型重定向 */}
-        <Collapsible open={openSections.routing} onOpenChange={(open) => toggleSection("routing")}>
+        <Collapsible open={openSections.routing} onOpenChange={() => toggleSection("routing")}>
           <CollapsibleTrigger asChild>
             <button
               type="button"
@@ -707,10 +727,7 @@ export function ProviderForm({
         </Collapsible>
 
         {/* 限流配置 */}
-        <Collapsible
-          open={openSections.rateLimit}
-          onOpenChange={(open) => toggleSection("rateLimit")}
-        >
+        <Collapsible open={openSections.rateLimit} onOpenChange={() => toggleSection("rateLimit")}>
           <CollapsibleTrigger asChild>
             <button
               type="button"
@@ -730,6 +747,13 @@ export function ProviderForm({
                   const limits: string[] = [];
                   if (limit5hUsd)
                     limits.push(t("sections.rateLimit.summary.fiveHour", { amount: limit5hUsd }));
+                  if (limitDailyUsd)
+                    limits.push(
+                      t("sections.rateLimit.summary.daily", {
+                        amount: limitDailyUsd,
+                        resetTime: dailyResetTime,
+                      })
+                    );
                   if (limitWeeklyUsd)
                     limits.push(t("sections.rateLimit.summary.weekly", { amount: limitWeeklyUsd }));
                   if (limitMonthlyUsd)
@@ -765,6 +789,70 @@ export function ProviderForm({
                     step="0.01"
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor={isEdit ? "edit-limit-daily" : "limit-daily"}>
+                    {t("sections.rateLimit.limitDaily.label")}
+                  </Label>
+                  <Input
+                    id={isEdit ? "edit-limit-daily" : "limit-daily"}
+                    type="number"
+                    value={limitDailyUsd?.toString() ?? ""}
+                    onChange={(e) => setLimitDailyUsd(validateNumericField(e.target.value))}
+                    placeholder={t("sections.rateLimit.limitDaily.placeholder")}
+                    disabled={isPending}
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor={isEdit ? "edit-daily-reset-mode" : "daily-reset-mode"}>
+                    {t("sections.rateLimit.dailyResetMode.label")}
+                  </Label>
+                  <Select
+                    value={dailyResetMode}
+                    onValueChange={(value: "fixed" | "rolling") => setDailyResetMode(value)}
+                    disabled={isPending}
+                  >
+                    <SelectTrigger id={isEdit ? "edit-daily-reset-mode" : "daily-reset-mode"}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="fixed">
+                        {t("sections.rateLimit.dailyResetMode.options.fixed")}
+                      </SelectItem>
+                      <SelectItem value="rolling">
+                        {t("sections.rateLimit.dailyResetMode.options.rolling")}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {dailyResetMode === "fixed"
+                      ? t("sections.rateLimit.dailyResetMode.desc.fixed")
+                      : t("sections.rateLimit.dailyResetMode.desc.rolling")}
+                  </p>
+                </div>
+                {dailyResetMode === "fixed" && (
+                  <div className="space-y-2">
+                    <Label htmlFor={isEdit ? "edit-daily-reset" : "daily-reset"}>
+                      {t("sections.rateLimit.dailyResetTime.label")}
+                    </Label>
+                    <Input
+                      id={isEdit ? "edit-daily-reset" : "daily-reset"}
+                      type="time"
+                      value={dailyResetTime}
+                      onChange={(e) => setDailyResetTime(e.target.value || "00:00")}
+                      placeholder="00:00"
+                      disabled={isPending}
+                      step="60"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor={isEdit ? "edit-limit-weekly" : "limit-weekly"}>
                     {t("sections.rateLimit.limitWeekly.label")}
@@ -823,7 +911,7 @@ export function ProviderForm({
         {/* 熔断器配置 */}
         <Collapsible
           open={openSections.circuitBreaker}
-          onOpenChange={(open) => toggleSection("circuitBreaker")}
+          onOpenChange={() => toggleSection("circuitBreaker")}
         >
           <CollapsibleTrigger asChild>
             <button
@@ -926,7 +1014,7 @@ export function ProviderForm({
         </Collapsible>
 
         {/* 代理配置 */}
-        <Collapsible open={openSections.proxy} onOpenChange={(open) => toggleSection("proxy")}>
+        <Collapsible open={openSections.proxy} onOpenChange={() => toggleSection("proxy")}>
           <CollapsibleTrigger asChild>
             <button
               type="button"
@@ -1020,7 +1108,7 @@ export function ProviderForm({
         {providerType === "codex" && (
           <Collapsible
             open={openSections.codexStrategy}
-            onOpenChange={(open) => toggleSection("codexStrategy")}
+            onOpenChange={() => toggleSection("codexStrategy")}
           >
             <CollapsibleTrigger asChild>
               <button

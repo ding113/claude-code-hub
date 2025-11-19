@@ -619,6 +619,9 @@ export class ProxyProviderResolver {
         // 1. 检查金额限制
         const costCheck = await RateLimitService.checkCostLimits(p.id, "provider", {
           limit_5h_usd: p.limit5hUsd,
+          limit_daily_usd: p.limitDailyUsd,
+          daily_reset_mode: p.dailyResetMode,
+          daily_reset_time: p.dailyResetTime,
           limit_weekly_usd: p.limitWeeklyUsd,
           limit_monthly_usd: p.limitMonthlyUsd,
         });

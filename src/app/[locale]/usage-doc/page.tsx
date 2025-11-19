@@ -55,7 +55,7 @@ interface CLIConfig {
   vsCodeExtension?: {
     name: string;
     configFile: string;
-    configPath: { macos: string; windows: string };
+    configPath: Record<OS, string>;
   };
 }
 
@@ -78,6 +78,7 @@ function getCLIConfigs(t: (key: string) => string): Record<string, CLIConfig> {
         configPath: {
           macos: "~/.claude",
           windows: "C:\\Users\\你的用户名\\.claude",
+          linux: "~/.claude",
         },
       },
     },
@@ -92,6 +93,7 @@ function getCLIConfigs(t: (key: string) => string): Record<string, CLIConfig> {
         configPath: {
           macos: "~/.codex",
           windows: "C:\\Users\\你的用户名\\.codex",
+          linux: "~/.codex",
         },
       },
     },
@@ -813,12 +815,15 @@ source ${shellConfig.split(" ")[0]}`}
     const config = cli.vsCodeExtension;
     if (!config) return null;
 
-    const configPath = config.configPath[os === "macos" ? "macos" : "windows"];
+    const resolvedConfigPath = config.configPath[os];
 
     if (cli.id === "claude-code") {
       return (
         <div className="space-y-3">
           <h4 className={headingClasses.h4}>{t("claudeCode.vsCodeExtension.title")}</h4>
+          <p className="text-sm text-muted-foreground">
+            {t("claudeCode.vsCodeExtension.configPath", { path: resolvedConfigPath })}
+          </p>
           <ol className="list-decimal space-y-2 pl-6">
             {(t.raw("claudeCode.vsCodeExtension.steps") as string[]).map(
               (step: string, i: number) => (
@@ -827,8 +832,9 @@ source ${shellConfig.split(" ")[0]}`}
             )}
           </ol>
           <CodeBlock
-            language="json"
-            code={`{
+            language="jsonc"
+            code={`// Path: ${resolvedConfigPath}
+{
   "primaryApiKey": "any-value"
 }`}
           />

@@ -127,6 +127,27 @@
       "when": 1762772559167,
       "tag": "0017_sudden_bruce_banner",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1763466610135,
+      "tag": "0018_square_ozymandias",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1763482001307,
+      "tag": "0019_open_stephen_strange",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1763525530558,
+      "tag": "0020_nosy_synch",
+      "breakpoints": true
     }
   ]
 }

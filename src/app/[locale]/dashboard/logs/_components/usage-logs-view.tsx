@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useEffect, useRef } from "react";
+import { useState, useTransition, useEffect, useRef, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getUsageLogs } from "@/actions/usage-logs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -95,7 +95,7 @@ export function UsageLogsView({
 
   // 加载数据
   // shouldDetectNew: 是否检测新增记录（只在刷新时为 true，筛选/翻页时为 false）
-  const loadData = async (shouldDetectNew = false) => {
+  const loadData = useCallback(async (shouldDetectNew = false) => {
     startTransition(async () => {
       const result = await getUsageLogs(filtersRef.current);
       if (result.ok && result.data) {
@@ -125,7 +125,7 @@ export function UsageLogsView({
         setData(null);
       }
     });
-  };
+  }, [startTransition, t]);
 
   // 手动刷新（检测新增）
   const handleManualRefresh = async () => {
@@ -148,7 +148,7 @@ export function UsageLogsView({
     }
 
     previousParamsRef.current = currentParams;
-  }, [params]);
+  }, [params, loadData]);
 
   // 自动轮询（3秒间隔，检测新增）
   useEffect(() => {
@@ -161,7 +161,7 @@ export function UsageLogsView({
     }, 3000); // 3 秒间隔
 
     return () => clearInterval(intervalId);
-  }, [isAutoRefresh]);  
+  }, [isAutoRefresh, loadData]);  
 
   // 处理筛选条件变更
   const handleFilterChange = (newFilters: Omit<typeof filters, 'page'>) => {
