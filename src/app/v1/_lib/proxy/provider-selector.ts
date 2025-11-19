@@ -60,11 +60,9 @@ function providerSupportsModel(provider: Provider, requestedModel: string): bool
   // 2a. 优先检查显式声明（支持跨类型代理）
   // 原因：允许 Claude 类型供应商通过 allowedModels/modelRedirects 声明支持非 Claude 模型
   // 场景：Claude 供应商配置模型重定向，将 gemini-* 请求转发到真实的 Gemini 上游
-  const explicitlyDeclared =
-    !!(
-      provider.allowedModels?.includes(requestedModel) ||
-      provider.modelRedirects?.[requestedModel]
-    );
+  const explicitlyDeclared = !!(
+    provider.allowedModels?.includes(requestedModel) || provider.modelRedirects?.[requestedModel]
+  );
 
   if (explicitlyDeclared) {
     return true; // 显式声明优先级最高，允许跨类型代理
