@@ -62,25 +62,46 @@ export class ProxyResponseHandler {
 
     // --- GEMINI HANDLING ---
     if (provider.providerType === "gemini" || provider.providerType === "gemini-cli") {
-      try {
-        const responseForTransform = response.clone();
-        const responseText = await responseForTransform.text();
-        const responseData = JSON.parse(responseText) as GeminiResponse;
+      // 判断是否需要透传（客户端和提供商格式一致）
+      const isGeminiPassthrough =
+        session.originalFormat === "gemini" || session.originalFormat === "gemini-cli";
 
-        const transformed = GeminiAdapter.transformResponse(responseData, false);
-
-        logger.debug("[ResponseHandler] Transformed Gemini non-stream response", {
+      if (isGeminiPassthrough) {
+        // ✅ 完全透传：客户端是 Gemini 格式，提供商也是 Gemini 类型
+        logger.debug("[ResponseHandler] Gemini passthrough mode (no transformation)", {
+          originalFormat: session.originalFormat,
+          providerType: provider.providerType,
           model: session.request.model,
         });
-
-        finalResponse = new Response(JSON.stringify(transformed), {
-          status: response.status,
-          statusText: response.statusText,
-          headers: new Headers(response.headers),
-        });
-      } catch (error) {
-        logger.error("[ResponseHandler] Failed to transform Gemini non-stream response:", error);
+        // 直接返回原始响应，不做任何转换
         finalResponse = response;
+      } else {
+        // ❌ 需要转换：客户端不是 Gemini 格式（如 OpenAI/Claude）
+        try {
+          const responseForTransform = response.clone();
+          const responseText = await responseForTransform.text();
+          const responseData = JSON.parse(responseText) as GeminiResponse;
+
+          const transformed = GeminiAdapter.transformResponse(responseData, false);
+
+          logger.debug(
+            "[ResponseHandler] Transformed Gemini non-stream response to client format",
+            {
+              originalFormat: session.originalFormat,
+              providerType: provider.providerType,
+              model: session.request.model,
+            }
+          );
+
+          finalResponse = new Response(JSON.stringify(transformed), {
+            status: response.status,
+            statusText: response.statusText,
+            headers: new Headers(response.headers),
+          });
+        } catch (error) {
+          logger.error("[ResponseHandler] Failed to transform Gemini non-stream response:", error);
+          finalResponse = response;
+        }
       }
     } else if (needsTransform && defaultRegistry.hasResponseTransformer(fromFormat, toFormat)) {
       try {
@@ -411,46 +432,68 @@ export class ProxyResponseHandler {
 
     // --- GEMINI STREAM HANDLING ---
     if (provider.providerType === "gemini" || provider.providerType === "gemini-cli") {
-      let buffer = "";
-      const transformStream = new TransformStream<Uint8Array, Uint8Array>({
-        transform(chunk, controller) {
-          const decoder = new TextDecoder();
-          const text = decoder.decode(chunk, { stream: true });
-          buffer += text;
+      // 判断是否需要透传（客户端和提供商格式一致）
+      const isGeminiPassthrough =
+        session.originalFormat === "gemini" || session.originalFormat === "gemini-cli";
 
-          const lines = buffer.split("\n");
-          // Keep the last line in buffer as it might be incomplete
-          buffer = lines.pop() || "";
+      if (isGeminiPassthrough) {
+        // ✅ 完全透传：客户端是 Gemini 格式，提供商也是 Gemini 类型
+        logger.debug("[ResponseHandler] Gemini stream passthrough mode (no transformation)", {
+          originalFormat: session.originalFormat,
+          providerType: provider.providerType,
+          model: session.request.model,
+        });
+        // 直接使用原始流，不做任何转换
+        processedStream = response.body;
+      } else {
+        // ❌ 需要转换：客户端不是 Gemini 格式（如 OpenAI/Claude）
+        logger.debug("[ResponseHandler] Transforming Gemini stream to client format", {
+          originalFormat: session.originalFormat,
+          providerType: provider.providerType,
+          model: session.request.model,
+        });
 
-          for (const line of lines) {
-            const trimmedLine = line.trim();
-            if (trimmedLine.startsWith("data:")) {
-              const jsonStr = trimmedLine.slice(5).trim();
-              if (!jsonStr) continue;
+        let buffer = "";
+        const transformStream = new TransformStream<Uint8Array, Uint8Array>({
+          transform(chunk, controller) {
+            const decoder = new TextDecoder();
+            const text = decoder.decode(chunk, { stream: true });
+            buffer += text;
+
+            const lines = buffer.split("\n");
+            // Keep the last line in buffer as it might be incomplete
+            buffer = lines.pop() || "";
+
+            for (const line of lines) {
+              const trimmedLine = line.trim();
+              if (trimmedLine.startsWith("data:")) {
+                const jsonStr = trimmedLine.slice(5).trim();
+                if (!jsonStr) continue;
+                try {
+                  const geminiResponse = JSON.parse(jsonStr) as GeminiResponse;
+                  const openAIChunk = GeminiAdapter.transformResponse(geminiResponse, true);
+                  const output = `data: ${JSON.stringify(openAIChunk)}\n\n`;
+                  controller.enqueue(new TextEncoder().encode(output));
+                } catch (e) {
+                  // Ignore parse errors
+                }
+              }
+            }
+          },
+          flush(controller) {
+            if (buffer.trim().startsWith("data:")) {
               try {
+                const jsonStr = buffer.trim().slice(5).trim();
                 const geminiResponse = JSON.parse(jsonStr) as GeminiResponse;
                 const openAIChunk = GeminiAdapter.transformResponse(geminiResponse, true);
                 const output = `data: ${JSON.stringify(openAIChunk)}\n\n`;
                 controller.enqueue(new TextEncoder().encode(output));
-              } catch (e) {
-                // Ignore parse errors
-              }
+              } catch {}
             }
-          }
-        },
-        flush(controller) {
-          if (buffer.trim().startsWith("data:")) {
-            try {
-              const jsonStr = buffer.trim().slice(5).trim();
-              const geminiResponse = JSON.parse(jsonStr) as GeminiResponse;
-              const openAIChunk = GeminiAdapter.transformResponse(geminiResponse, true);
-              const output = `data: ${JSON.stringify(openAIChunk)}\n\n`;
-              controller.enqueue(new TextEncoder().encode(output));
-            } catch {}
-          }
-        },
-      });
-      processedStream = response.body.pipeThrough(transformStream);
+          },
+        });
+        processedStream = response.body.pipeThrough(transformStream);
+      }
     } else if (needsTransform && defaultRegistry.hasResponseTransformer(fromFormat, toFormat)) {
       logger.debug("[ResponseHandler] Transforming stream response", {
         from: fromFormat,
