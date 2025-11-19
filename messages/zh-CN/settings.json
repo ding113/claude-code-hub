@@ -247,14 +247,12 @@
       },
       "urlPreview": {
         "title": "URL 拼接预览",
-        "description": "根据您输入的 URL，系统将自动拼接以下 API 端点（智能检测重复路径）",
         "invalidUrl": "无效的 URL 格式",
         "invalidUrlDesc": "请输入有效的 HTTP/HTTPS 地址",
         "duplicatePath": "检测到重复路径",
         "copy": "复制",
         "copySuccess": "已复制 {name} 到剪贴板",
-        "copyFailed": "复制失败",
-        "hint": "智能检测：如果 base_url 已包含完整路径（如 /responses），将跳过重复拼接"
+        "copyFailed": "复制失败"
       },
       "modelSelect": {
         "allowAllModels": "允许所有 {type} 模型",

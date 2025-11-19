@@ -634,14 +634,12 @@
       },
       "urlPreview": {
         "title": "URL Concatenation Preview",
-        "description": "Based on your input URL, the system will automatically concatenate the following API endpoints (smart duplicate path detection)",
         "invalidUrl": "Invalid URL format",
         "invalidUrlDesc": "Please enter a valid HTTP/HTTPS address",
         "duplicatePath": "Duplicate path detected",
         "copy": "Copy",
         "copySuccess": "Copied {name} to clipboard",
-        "copyFailed": "Copy failed",
-        "hint": "Smart detection: If base_url already contains the complete path (e.g., /responses), duplicate concatenation will be skipped"
+        "copyFailed": "Copy failed"
       },
       "modelSelect": {
         "allowAllModels": "Allow all {type} models",

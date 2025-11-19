@@ -86,25 +86,77 @@ export function buildProxyUrl(baseUrl: string, requestUrl: URL): string {
 /**
  * 预览 URL 拼接结果（用于 UI 显示）
  *
- * 根据供应商类型和 base_url，生成可能的端点拼接结果
+ * 根据供应商类型和 base_url，生成对应端点的拼接结果
  *
  * @param baseUrl - 基础URL
  * @param providerType - 供应商类型
- * @returns 各种端点的预览结果
+ * @returns 该供应商类型对应的端点预览结果
  */
 export function previewProxyUrls(baseUrl: string, providerType?: string): Record<string, string> {
   const previews: Record<string, string> = {};
 
-  // 常见端点列表
-  const endpoints = [
-    { name: "Claude Messages", path: "/v1/messages" },
-    { name: "Claude Count Tokens", path: "/v1/messages/count_tokens" },
-    { name: "Codex Responses", path: "/v1/responses" },
-    { name: "OpenAI Chat", path: "/v1/chat/completions" },
-    { name: "Gemini Direct", path: "/v1beta/models/gemini-1.5-pro:generateContent" },
-    { name: "Gemini CLI", path: "/v1internal/models/gemini-2.5-flash:generateContent" },
-  ];
+  // 根据供应商类型定义端点映射
+  const endpointsByType: Record<string, Array<{ name: string; path: string }>> = {
+    claude: [
+      { name: "Claude Messages", path: "/v1/messages" },
+      { name: "Claude Count Tokens", path: "/v1/messages/count_tokens" },
+    ],
+    "claude-auth": [
+      { name: "Claude Messages", path: "/v1/messages" },
+      { name: "Claude Count Tokens", path: "/v1/messages/count_tokens" },
+    ],
+    codex: [{ name: "Codex Responses", path: "/v1/responses" }],
+    "openai-compatible": [
+      { name: "OpenAI Chat Completions", path: "/v1/chat/completions" },
+      { name: "OpenAI Models", path: "/v1/models" },
+    ],
+    gemini: [
+      {
+        name: "Gemini Generate Content",
+        path: "/v1beta/models/gemini-1.5-pro:generateContent",
+      },
+      {
+        name: "Gemini Stream Content",
+        path: "/v1beta/models/gemini-1.5-pro:streamGenerateContent",
+      },
+    ],
+    "gemini-cli": [
+      {
+        name: "Gemini CLI Generate",
+        path: "/v1internal/models/gemini-2.5-flash:generateContent",
+      },
+      {
+        name: "Gemini CLI Stream",
+        path: "/v1internal/models/gemini-2.5-flash:streamGenerateContent",
+      },
+    ],
+  };
 
+  // 获取当前供应商类型对应的端点列表（默认显示 Claude）
+  const endpoints = providerType ? endpointsByType[providerType] || [] : endpointsByType["claude"];
+
+  // 如果没有匹配的端点，显示常见端点
+  if (endpoints.length === 0) {
+    const commonEndpoints = [
+      { name: "Claude Messages", path: "/v1/messages" },
+      { name: "Codex Responses", path: "/v1/responses" },
+      { name: "OpenAI Chat", path: "/v1/chat/completions" },
+    ];
+
+    for (const { name, path } of commonEndpoints) {
+      try {
+        const fakeRequestUrl = new URL(`https://dummy.com${path}`);
+        const result = buildProxyUrl(baseUrl, fakeRequestUrl);
+        previews[name] = result;
+      } catch {
+        previews[name] = "❌ 无效的 URL";
+      }
+    }
+
+    return previews;
+  }
+
+  // 生成当前供应商类型的端点预览
   for (const { name, path } of endpoints) {
     try {
       const fakeRequestUrl = new URL(`https://dummy.com${path}`);

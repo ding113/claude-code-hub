@@ -536,14 +536,12 @@
       },
       "urlPreview": {
         "title": "URL結合プレビュー",
-        "description": "入力されたURLに基づいて、システムは以下のAPIエンドポイントを自動的に結合します（重複パス検出機能付き）",
         "invalidUrl": "無効なURL形式",
         "invalidUrlDesc": "有効なHTTP/HTTPSアドレスを入力してください",
         "duplicatePath": "重複パス検出",
         "copy": "コピー",
         "copySuccess": "{name} をクリップボードにコピーしました",
-        "copyFailed": "コピーに失敗しました",
-        "hint": "スマート検出：base_urlにすでに完全なパス（例：/responses）が含まれている場合、重複した結合はスキップされます"
+        "copyFailed": "コピーに失敗しました"
       },
       "modelSelect": {
         "allowAllModels": "すべての {type} モデルを許可",

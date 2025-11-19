@@ -17,10 +17,10 @@ interface UrlPreviewProps {
 /**
  * URL 预览组件
  *
- * 根据用户输入的 base_url 和供应商类型，实时显示所有可能的端点拼接结果
+ * 根据用户输入的 base_url 和供应商类型，实时显示对应端点的拼接结果
  *
  * **功能**：
- * - 展示各类 API 端点的完整 URL（Claude Messages、Codex Responses、OpenAI Chat、Gemini 等）
+ * - 根据供应商类型展示对应的 API 端点完整 URL
  * - 智能检测路径是否已包含在 base_url 中（高亮显示）
  * - 提供一键复制功能
  * - 验证 URL 合法性
@@ -104,7 +104,6 @@ export function UrlPreview({ baseUrl, providerType }: UrlPreviewProps) {
           <CheckCircle2 className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
           <div className="flex-1">
             <p className="text-sm font-medium text-blue-900">{t("title")}</p>
-            <p className="text-xs text-blue-700 mt-0.5">{t("description")}</p>
           </div>
         </div>
 
@@ -155,11 +154,6 @@ export function UrlPreview({ baseUrl, providerType }: UrlPreviewProps) {
               </div>
             );
           })}
-        </div>
-
-        {/* 提示信息 */}
-        <div className="text-xs text-blue-700 pt-2 border-t border-blue-200">
-          💡 {t("hint")}
         </div>
       </div>
     </Card>
