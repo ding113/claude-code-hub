@@ -727,10 +727,7 @@ export function ProviderForm({
         </Collapsible>
 
         {/* 限流配置 */}
-        <Collapsible
-          open={openSections.rateLimit}
-          onOpenChange={() => toggleSection("rateLimit")}
-        >
+        <Collapsible open={openSections.rateLimit} onOpenChange={() => toggleSection("rateLimit")}>
           <CollapsibleTrigger asChild>
             <button
               type="button"

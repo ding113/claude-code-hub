@@ -137,7 +137,8 @@ export function ProvidersQuotaClient({
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">{t("costDaily.label")}</span>
                   <span className="text-xs text-muted-foreground">
-                    {t("costDaily.resetAt")} {formatDateDistance(provider.quota.costDaily.resetAt, locale)}
+                    {t("costDaily.resetAt")}{" "}
+                    {formatDateDistance(provider.quota.costDaily.resetAt, locale)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm font-mono">
@@ -147,7 +148,9 @@ export function ProvidersQuotaClient({
                   </span>
                 </div>
                 <Progress
-                  value={(provider.quota.costDaily.current / (provider.quota.costDaily.limit || 1)) * 100}
+                  value={
+                    (provider.quota.costDaily.current / (provider.quota.costDaily.limit || 1)) * 100
+                  }
                   className="h-2"
                 />
               </div>

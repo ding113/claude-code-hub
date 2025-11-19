@@ -56,7 +56,9 @@ export function EditKeyQuotaDialog({
 
   // 表单状态
   const [limit5h, setLimit5h] = useState<string>(currentQuota?.cost5h.limit?.toString() ?? "");
-  const [limitDaily, setLimitDaily] = useState<string>(currentQuota?.costDaily.limit?.toString() ?? "");
+  const [limitDaily, setLimitDaily] = useState<string>(
+    currentQuota?.costDaily.limit?.toString() ?? ""
+  );
   const [resetTime, setResetTime] = useState<string>(dailyResetTime);
   const [limitWeekly, setLimitWeekly] = useState<string>(
     currentQuota?.costWeekly.limit?.toString() ?? ""
