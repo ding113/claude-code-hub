@@ -603,6 +603,17 @@
         "success": "成功",
         "failed": "失敗"
       },
+      "urlPreview": {
+        "title": "URL 拼接預覽",
+        "description": "根據您輸入的 URL，系統將自動拼接以下 API 端點（智能檢測重複路徑）",
+        "invalidUrl": "無效的 URL 格式",
+        "invalidUrlDesc": "請輸入有效的 HTTP/HTTPS 地址",
+        "duplicatePath": "檢測到重複路徑",
+        "copy": "複製",
+        "copySuccess": "已複製 {name} 到剪貼簿",
+        "copyFailed": "複製失敗",
+        "hint": "智能檢測：如果 base_url 已包含完整路徑（如 /responses），將跳過重複拼接"
+      },
       "modelSelect": {
         "allowAllModels": "允許所有 {type} 模型",
         "selectedCount": "已選擇 {count} 個模型",

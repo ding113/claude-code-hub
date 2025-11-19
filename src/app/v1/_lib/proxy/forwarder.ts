@@ -733,22 +733,16 @@ export class ProxyForwarder {
         });
       }
 
-      let forwardUrl = session.requestUrl;
+      // ⭐ 直接使用原始请求路径，让 buildProxyUrl() 智能处理路径拼接
+      // 移除了强制 /v1/responses 路径重写，解决 Issue #139
+      // buildProxyUrl() 会检测 base_url 是否已包含完整路径，避免重复拼接
+      proxyUrl = buildProxyUrl(provider.url, session.requestUrl);
 
-      if (toFormat === "codex") {
-        forwardUrl = new URL(session.requestUrl);
-        forwardUrl.pathname = "/v1/responses";
-        logger.debug("ProxyForwarder: Codex request path rewrite", {
-          from: session.requestUrl.pathname,
-          to: "/v1/responses",
-          originalFormat: fromFormat,
-          targetFormat: toFormat,
-        });
-      }
-
-      proxyUrl = buildProxyUrl(provider.url, forwardUrl);
-
-      logger.debug("ProxyForwarder: Final proxy URL", { url: proxyUrl });
+      logger.debug("ProxyForwarder: Final proxy URL", {
+        url: proxyUrl,
+        originalPath: session.requestUrl.pathname,
+        providerType: provider.providerType,
+      });
 
       const hasBody = session.method !== "GET" && session.method !== "HEAD";
 

@@ -27,6 +27,9 @@ interface OpenAIUsage {
   prompt_tokens: number;
   completion_tokens: number;
   total_tokens: number;
+  // Extended fields for Gemini cache support
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
 }
 
 interface OpenAICompatibleResponse {
@@ -207,6 +210,7 @@ export class GeminiAdapter {
             promptTokenCount?: number;
             candidatesTokenCount?: number;
             totalTokenCount?: number;
+            cachedContentTokenCount?: number;
           };
         }
       ).usage;
@@ -215,6 +219,11 @@ export class GeminiAdapter {
           prompt_tokens: usageData.promptTokenCount || 0,
           completion_tokens: usageData.candidatesTokenCount || 0,
           total_tokens: usageData.totalTokenCount || 0,
+          // Gemini 缓存支持：仅在存在缓存读取时添加字段
+          ...(typeof usageData.cachedContentTokenCount === "number" &&
+          usageData.cachedContentTokenCount > 0
+            ? { cache_read_input_tokens: usageData.cachedContentTokenCount }
+            : {}),
         }
       : undefined;
 

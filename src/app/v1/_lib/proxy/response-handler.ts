@@ -984,6 +984,11 @@ function extractUsageMetrics(value: unknown): UsageMetrics | null {
     result.output_tokens = usage.candidatesTokenCount;
     hasAny = true;
   }
+  // Gemini 缓存支持
+  if (typeof usage.cachedContentTokenCount === "number") {
+    result.cache_read_input_tokens = usage.cachedContentTokenCount;
+    hasAny = true;
+  }
 
   if (typeof usage.output_tokens === "number") {
     result.output_tokens = usage.output_tokens;

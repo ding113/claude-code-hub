@@ -34,6 +34,7 @@ import { ModelMultiSelect } from "../model-multi-select";
 import { ModelRedirectEditor } from "../model-redirect-editor";
 import { ProxyTestButton } from "./proxy-test-button";
 import { ApiTestButton } from "./api-test-button";
+import { UrlPreview } from "./url-preview";
 import { ChevronDown } from "lucide-react";
 import { useTranslations } from "next-intl";
 
@@ -458,6 +459,8 @@ export function ProviderForm({
             disabled={isPending}
             required
           />
+          {/* URL 预览组件 - 实时显示端点拼接结果 */}
+          {url.trim() && <UrlPreview baseUrl={url} providerType={providerType} />}
         </div>
 
         <div className="space-y-2">

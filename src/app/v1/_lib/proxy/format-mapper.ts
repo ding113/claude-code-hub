@@ -29,6 +29,67 @@ import type { ProviderType } from "@/types/provider";
 export type ClientFormat = "response" | "openai" | "claude" | "gemini" | "gemini-cli";
 
 /**
+ * 根据请求端点检测客户端格式（优先级最高）
+ *
+ * 这是最准确的格式检测方式，因为端点路径明确表示了客户端的意图。
+ * 应该优先使用此函数，失败时才回退到 detectClientFormat()。
+ *
+ * 支持的端点模式：
+ * - Claude Messages API: `/v1/messages`, `/v1/messages/count_tokens`
+ * - Codex Response API: `/v1/responses`
+ * - OpenAI Compatible: `/v1/chat/completions`
+ * - Gemini Direct: `/v1beta/models/{model}:generateContent`
+ * - Gemini CLI: `/v1internal/models/{model}:generateContent`
+ *
+ * @param pathname - URL 路径（如 `/v1/messages`）
+ * @returns 检测到的客户端格式，如果无法识别则返回 null
+ *
+ * @example
+ * ```ts
+ * detectFormatByEndpoint("/v1/messages") // => "claude"
+ * detectFormatByEndpoint("/v1/responses") // => "response"
+ * detectFormatByEndpoint("/v1beta/models/gemini-1.5-pro:generateContent") // => "gemini"
+ * detectFormatByEndpoint("/unknown/path") // => null
+ * ```
+ */
+export function detectFormatByEndpoint(pathname: string): ClientFormat | null {
+  // 规范化路径：移除查询参数和末尾斜杠
+  const normalizedPath = pathname.split("?")[0].replace(/\/$/, "");
+
+  // 端点模式匹配（按优先级顺序）
+  const endpointPatterns: Array<{ pattern: RegExp; format: ClientFormat }> = [
+    // Claude Messages API
+    { pattern: /^\/v1\/messages(?:\/count_tokens)?$/i, format: "claude" },
+
+    // Codex / Response API
+    { pattern: /^\/v1\/responses$/i, format: "response" },
+
+    // OpenAI Chat Completions
+    { pattern: /^\/v1\/chat\/completions$/i, format: "openai" },
+
+    // Gemini Direct API
+    {
+      pattern: /^\/v1beta\/models\/[^/:]+:(?:generateContent|streamGenerateContent|countTokens)$/i,
+      format: "gemini",
+    },
+
+    // Gemini CLI (internal)
+    {
+      pattern: /^\/v1internal\/models\/[^/:]+:(?:generateContent|streamGenerateContent)$/i,
+      format: "gemini-cli",
+    },
+  ];
+
+  for (const { pattern, format } of endpointPatterns) {
+    if (pattern.test(normalizedPath)) {
+      return format;
+    }
+  }
+
+  return null; // 未知端点，需要回退到请求体检测
+}
+
+/**
  * 将 Client Format 映射到 Transformer Format
  *
  * @param clientFormat - 路由层检测到的格式

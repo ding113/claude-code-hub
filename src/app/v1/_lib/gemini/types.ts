@@ -55,6 +55,7 @@ export interface GeminiUsageMetadata {
   promptTokenCount: number;
   candidatesTokenCount: number;
   totalTokenCount: number;
+  cachedContentTokenCount?: number; // Gemini 缓存支持
 }
 
 export interface GeminiCandidate {
