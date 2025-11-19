@@ -23,9 +23,71 @@ import type { ProviderType } from "@/types/provider";
  * - "response": 检测到 Response API 格式（Codex）的请求（通过 `input` 字段）
  * - "openai": 检测到 OpenAI Chat Completions 格式的请求（通过 `messages` 字段）
  * - "claude": 检测到 Claude Messages API 格式的请求（通过 `system` 或 Claude 特有字段）
+ * - "gemini": 检测到 Gemini API 直接格式的请求（通过 `contents` 字段）
  * - "gemini-cli": 检测到 Gemini CLI 格式的请求（通过 `request` envelope）
  */
-export type ClientFormat = "response" | "openai" | "claude" | "gemini-cli";
+export type ClientFormat = "response" | "openai" | "claude" | "gemini" | "gemini-cli";
+
+/**
+ * 根据请求端点检测客户端格式（优先级最高）
+ *
+ * 这是最准确的格式检测方式，因为端点路径明确表示了客户端的意图。
+ * 应该优先使用此函数，失败时才回退到 detectClientFormat()。
+ *
+ * 支持的端点模式：
+ * - Claude Messages API: `/v1/messages`, `/v1/messages/count_tokens`
+ * - Codex Response API: `/v1/responses`
+ * - OpenAI Compatible: `/v1/chat/completions`
+ * - Gemini Direct: `/v1beta/models/{model}:generateContent`
+ * - Gemini CLI: `/v1internal/models/{model}:generateContent`
+ *
+ * @param pathname - URL 路径（如 `/v1/messages`）
+ * @returns 检测到的客户端格式，如果无法识别则返回 null
+ *
+ * @example
+ * ```ts
+ * detectFormatByEndpoint("/v1/messages") // => "claude"
+ * detectFormatByEndpoint("/v1/responses") // => "response"
+ * detectFormatByEndpoint("/v1beta/models/gemini-1.5-pro:generateContent") // => "gemini"
+ * detectFormatByEndpoint("/unknown/path") // => null
+ * ```
+ */
+export function detectFormatByEndpoint(pathname: string): ClientFormat | null {
+  // 规范化路径：移除查询参数和末尾斜杠
+  const normalizedPath = pathname.split("?")[0].replace(/\/$/, "");
+
+  // 端点模式匹配（按优先级顺序）
+  const endpointPatterns: Array<{ pattern: RegExp; format: ClientFormat }> = [
+    // Claude Messages API
+    { pattern: /^\/v1\/messages(?:\/count_tokens)?$/i, format: "claude" },
+
+    // Codex / Response API
+    { pattern: /^\/v1\/responses$/i, format: "response" },
+
+    // OpenAI Chat Completions
+    { pattern: /^\/v1\/chat\/completions$/i, format: "openai" },
+
+    // Gemini Direct API
+    {
+      pattern: /^\/v1beta\/models\/[^/:]+:(?:generateContent|streamGenerateContent|countTokens)$/i,
+      format: "gemini",
+    },
+
+    // Gemini CLI (internal)
+    {
+      pattern: /^\/v1internal\/models\/[^/:]+:(?:generateContent|streamGenerateContent)$/i,
+      format: "gemini-cli",
+    },
+  ];
+
+  for (const { pattern, format } of endpointPatterns) {
+    if (pattern.test(normalizedPath)) {
+      return format;
+    }
+  }
+
+  return null; // 未知端点，需要回退到请求体检测
+}
 
 /**
  * 将 Client Format 映射到 Transformer Format
@@ -41,6 +103,8 @@ export function mapClientFormatToTransformer(clientFormat: ClientFormat): Format
       return "openai-compatible";
     case "claude":
       return "claude";
+    case "gemini":
+      return "gemini-cli"; // 直接 Gemini 格式内部使用 gemini-cli 转换器
     case "gemini-cli":
       return "gemini-cli";
     default:
@@ -82,7 +146,7 @@ export function mapTransformerFormatToClient(transformerFormat: Format): ClientF
     case "claude":
       return "claude";
     case "gemini-cli":
-      return "gemini-cli";
+      return "gemini"; // 返回直接 Gemini 格式给客户端
     default:
       // 类型守卫：如果有未处理的格式，TypeScript 会报错
       const _exhaustiveCheck: never = transformerFormat;
@@ -96,26 +160,36 @@ export function mapTransformerFormatToClient(transformerFormat: Format): ClientF
  * 这个函数用于路由层自动检测请求格式，避免手动指定。
  *
  * 检测优先级：
- * 1. Gemini CLI: 存在 `request` envelope
- * 2. Response API (Codex): 存在 `input` 数组
- * 3. OpenAI Compatible: 存在 `messages` 数组
- * 4. Claude Messages API: 默认（或存在 Claude 特有字段如 `system`）
+ * 1. Gemini API: 存在 `contents` 数组且不包含 `request` envelope（直接 Gemini 格式）
+ * 2. Gemini CLI: 存在 `request` envelope（CLI wrapper）
+ * 3. Response API (Codex): 存在 `input` 数组
+ * 4. OpenAI Compatible: 存在 `messages` 数组
+ * 5. Claude Messages API: 默认（或存在 Claude 特有字段如 `system`）
  *
  * @param requestBody - 请求体（JSON 对象）
  * @returns 检测到的客户端格式
  */
 export function detectClientFormat(requestBody: Record<string, unknown>): ClientFormat {
-  // 1. 检测 Gemini CLI 格式（envelope 结构）
+  // 1. 检测直接 Gemini API 格式（在 CLI 检测之前）
+  // Gemini API 的特征：有 `contents` 数组，但没有 `request` envelope
+  if (
+    Array.isArray(requestBody.contents) &&
+    !(typeof requestBody.request === "object" && requestBody.request !== null)
+  ) {
+    return "gemini";
+  }
+
+  // 2. 检测 Gemini CLI 格式（envelope 结构）
   if (typeof requestBody.request === "object" && requestBody.request !== null) {
     return "gemini-cli";
   }
 
-  // 2. 检测 Response API (Codex) 格式
+  // 3. 检测 Response API (Codex) 格式
   if (Array.isArray(requestBody.input)) {
     return "response";
   }
 
-  // 3. 检测 OpenAI Compatible 格式
+  // 4. 检测 OpenAI Compatible 格式
   if (Array.isArray(requestBody.messages)) {
     // 进一步区分 OpenAI 和 Claude
     // Claude 的 messages 可能包含 system，但 OpenAI 也可能有 system message
@@ -129,6 +203,6 @@ export function detectClientFormat(requestBody: Record<string, unknown>): Client
     return "openai";
   }
 
-  // 4. 默认为 Claude Messages API
+  // 5. 默认为 Claude Messages API
   return "claude";
 }

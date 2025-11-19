@@ -58,6 +58,7 @@ export function UploadPriceDialog({
   isRequired = false,
 }: UploadPriceDialogProps) {
   const t = useTranslations("settings.prices");
+  const tCommon = useTranslations("settings.common");
   const router = useRouter();
   const [open, setOpen] = useState(defaultOpen);
   const [uploading, setUploading] = useState(false);
@@ -283,8 +284,8 @@ export function UploadPriceDialog({
 
               <Button onClick={handleClose} className="w-full">
                 {isRequired && result && (result.added.length > 0 || result.updated.length > 0)
-                  ? t("common.confirm")
-                  : t("common.completed")}
+                  ? tCommon("confirm")
+                  : tCommon("completed")}
               </Button>
             </div>
           )}

@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,7 +10,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { ListPlus, Copy, CheckCircle } from "lucide-react";
+import { ListPlus, Copy, CheckCircle, Eye, EyeOff } from "lucide-react";
+import { isClipboardSupported, copyToClipboard } from "@/lib/utils/clipboard";
 import { useTranslations } from "next-intl";
 import { AddKeyForm } from "./forms/add-key-form";
 import { UserActions } from "./user-actions";
@@ -92,7 +93,14 @@ export function KeyListHeader({
   const [openAdd, setOpenAdd] = useState(false);
   const [keyResult, setKeyResult] = useState<{ generatedKey: string; name: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [keyVisible, setKeyVisible] = useState(false);
+  const [clipboardAvailable, setClipboardAvailable] = useState(false);
   const t = useTranslations("dashboard.keyListHeader");
+
+  // 检测 clipboard 是否可用
+  useEffect(() => {
+    setClipboardAvailable(isClipboardSupported());
+  }, []);
 
   const totalTodayUsage =
     activeUser?.keys.reduce((sum, key) => sum + (key.todayUsage ?? 0), 0) ?? 0;
@@ -184,18 +192,17 @@ export function KeyListHeader({
 
   const handleCopy = async () => {
     if (!keyResult) return;
-    try {
-      await navigator.clipboard.writeText(keyResult.generatedKey);
+    const success = await copyToClipboard(keyResult.generatedKey);
+    if (success) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error("复制失败:", err);
     }
   };
 
   const handleCloseSuccess = () => {
     setKeyResult(null);
     setCopied(false);
+    setKeyVisible(false);
   };
 
   // 权限检查：管理员可以给所有人添加Key，普通用户只能给自己添加Key
@@ -234,7 +241,29 @@ export function KeyListHeader({
             </DialogTrigger>
             <DialogContent>
               <FormErrorBoundary>
-                <AddKeyForm userId={activeUser?.id} onSuccess={handleKeyCreated} />
+                <AddKeyForm
+                  userId={activeUser?.id}
+                  user={
+                    activeUser
+                      ? {
+                          id: activeUser.id,
+                          name: activeUser.name,
+                          description: activeUser.note || "",
+                          role: activeUser.role,
+                          rpm: activeUser.rpm,
+                          dailyQuota: activeUser.dailyQuota,
+                          providerGroup: activeUser.providerGroup || null,
+                          createdAt: new Date(),
+                          updatedAt: new Date(),
+                          limit5hUsd: activeUser.limit5hUsd ?? undefined,
+                          limitWeeklyUsd: activeUser.limitWeeklyUsd ?? undefined,
+                          limitMonthlyUsd: activeUser.limitMonthlyUsd ?? undefined,
+                          limitConcurrentSessions: activeUser.limitConcurrentSessions ?? undefined,
+                        }
+                      : undefined
+                  }
+                  onSuccess={handleKeyCreated}
+                />
               </FormErrorBoundary>
             </DialogContent>
           </Dialog>
@@ -259,24 +288,49 @@ export function KeyListHeader({
                   {t("keyCreatedDialog.apiKeyLabel")}
                 </label>
                 <div className="relative">
-                  <div className="p-3 bg-muted/50 rounded-md font-mono text-sm break-all border-2 border-dashed border-orange-300 pr-12">
-                    {keyResult.generatedKey}
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleCopy}
-                    className="absolute top-1/2 right-2 -translate-y-1/2 h-7 w-7 p-0"
+                  <div
+                    className={`p-3 bg-muted/50 rounded-md font-mono text-sm break-all border-2 border-dashed border-orange-300 pr-12 ${keyVisible ? "select-all" : ""}`}
                   >
-                    {copied ? (
-                      <CheckCircle className="h-3 w-3 text-orange-600" />
-                    ) : (
-                      <Copy className="h-3 w-3" />
-                    )}
-                  </Button>
+                    {clipboardAvailable || keyVisible
+                      ? keyResult.generatedKey
+                      : "••••••••••••••••••••••••••••••"}
+                  </div>
+                  {clipboardAvailable ? (
+                    // HTTPS 环境：显示复制按钮
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleCopy}
+                      className="absolute top-1/2 right-2 -translate-y-1/2 h-7 w-7 p-0"
+                      title={t("keyCreatedDialog.copyTooltip")}
+                    >
+                      {copied ? (
+                        <CheckCircle className="h-3 w-3 text-orange-600" />
+                      ) : (
+                        <Copy className="h-3 w-3" />
+                      )}
+                    </Button>
+                  ) : (
+                    // HTTP 环境：显示显示/隐藏按钮
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setKeyVisible(!keyVisible)}
+                      className="absolute top-1/2 right-2 -translate-y-1/2 h-7 w-7 p-0"
+                      title={
+                        keyVisible
+                          ? t("keyCreatedDialog.hideTooltip")
+                          : t("keyCreatedDialog.showTooltip")
+                      }
+                    >
+                      {keyVisible ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                    </Button>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground mt-2">
-                  {t("keyCreatedDialog.warningText")}
+                  {clipboardAvailable
+                    ? t("keyCreatedDialog.warningText")
+                    : t("keyCreatedDialog.httpWarningText")}
                 </p>
               </div>
             </div>

@@ -64,6 +64,8 @@
   "users": {
     "title": "用户限额统计",
     "totalCount": "共 {count} 个用户",
+    "manageNotice": "管理用户和密钥，请访问",
+    "manageLink": "用户管理",
     "noNote": "无备注",
     "rpm": {
       "label": "RPM 限额",
@@ -235,7 +237,8 @@
       "limit5hUsd": {
         "label": "5小时消费上限 (USD)",
         "placeholder": "留空表示无限制",
-        "description": "5小时内最大消费金额"
+        "description": "5小时内最大消费金额",
+        "descriptionWithUserLimit": "5小时内最大消费金额（用户限额: ${limit}）"
       },
       "limitDailyUsd": {
         "label": "每日消费上限 (USD)",
@@ -250,17 +253,20 @@
       "limitWeeklyUsd": {
         "label": "周消费上限 (USD)",
         "placeholder": "留空表示无限制",
-        "description": "每周最大消费金额"
+        "description": "每周最大消费金额",
+        "descriptionWithUserLimit": "每周最大消费金额（用户限额: ${limit}）"
       },
       "limitMonthlyUsd": {
         "label": "月消费上限 (USD)",
         "placeholder": "留空表示无限制",
-        "description": "每月最大消费金额"
+        "description": "每月最大消费金额",
+        "descriptionWithUserLimit": "每月最大消费金额（用户限额: ${limit}）"
       },
       "limitConcurrentSessions": {
         "label": "并发 Session 上限",
         "placeholder": "0 表示无限制",
-        "description": "同时运行的对话数量"
+        "description": "同时运行的对话数量",
+        "descriptionWithUserLimit": "同时运行的对话数量（用户限额: {limit}）"
       },
       "submitText": "保存修改",
       "loadingText": "保存中...",

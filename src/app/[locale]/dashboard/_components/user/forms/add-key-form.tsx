@@ -17,13 +17,15 @@ import {
 } from "@/components/ui/select";
 import { useZodForm } from "@/lib/hooks/use-zod-form";
 import { KeyFormSchema } from "@/lib/validation/schemas";
+import type { User } from "@/types/user";
 
 interface AddKeyFormProps {
   userId?: number;
+  user?: User;
   onSuccess?: (result: { generatedKey: string; name: string }) => void;
 }
 
-export function AddKeyForm({ userId, onSuccess }: AddKeyFormProps) {
+export function AddKeyForm({ userId, user, onSuccess }: AddKeyFormProps) {
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
   const t = useTranslations("dashboard.addKeyForm");
@@ -132,7 +134,11 @@ export function AddKeyForm({ userId, onSuccess }: AddKeyFormProps) {
       <NumberField
         label={t("limit5hUsd.label")}
         placeholder={t("limit5hUsd.placeholder")}
-        description={t("limit5hUsd.description")}
+        description={
+          user?.limit5hUsd
+            ? t("limit5hUsd.descriptionWithUserLimit", { limit: user.limit5hUsd })
+            : t("limit5hUsd.description")
+        }
         min={0}
         step={0.01}
         {...form.getFieldProps("limit5hUsd")}
@@ -183,7 +189,11 @@ export function AddKeyForm({ userId, onSuccess }: AddKeyFormProps) {
       <NumberField
         label={t("limitWeeklyUsd.label")}
         placeholder={t("limitWeeklyUsd.placeholder")}
-        description={t("limitWeeklyUsd.description")}
+        description={
+          user?.limitWeeklyUsd
+            ? t("limitWeeklyUsd.descriptionWithUserLimit", { limit: user.limitWeeklyUsd })
+            : t("limitWeeklyUsd.description")
+        }
         min={0}
         step={0.01}
         {...form.getFieldProps("limitWeeklyUsd")}
@@ -192,7 +202,11 @@ export function AddKeyForm({ userId, onSuccess }: AddKeyFormProps) {
       <NumberField
         label={t("limitMonthlyUsd.label")}
         placeholder={t("limitMonthlyUsd.placeholder")}
-        description={t("limitMonthlyUsd.description")}
+        description={
+          user?.limitMonthlyUsd
+            ? t("limitMonthlyUsd.descriptionWithUserLimit", { limit: user.limitMonthlyUsd })
+            : t("limitMonthlyUsd.description")
+        }
         min={0}
         step={0.01}
         {...form.getFieldProps("limitMonthlyUsd")}
@@ -201,7 +215,13 @@ export function AddKeyForm({ userId, onSuccess }: AddKeyFormProps) {
       <NumberField
         label={t("limitConcurrentSessions.label")}
         placeholder={t("limitConcurrentSessions.placeholder")}
-        description={t("limitConcurrentSessions.description")}
+        description={
+          user?.limitConcurrentSessions
+            ? t("limitConcurrentSessions.descriptionWithUserLimit", {
+                limit: user.limitConcurrentSessions,
+              })
+            : t("limitConcurrentSessions.description")
+        }
         min={0}
         step={1}
         {...form.getFieldProps("limitConcurrentSessions")}

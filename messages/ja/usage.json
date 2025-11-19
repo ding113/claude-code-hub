@@ -342,6 +342,129 @@
     }
   },
 
+  "gemini": {
+    "title": "Gemini CLI 使用ガイド",
+    "description": "Gemini CLI は Google 公式の AI プログラミングアシスタントコマンドラインツールで、cch プロキシサービスを通じた統合をサポートしています。このガイドは、異なるオペレーティングシステムでのインストールと設定を完了するのに役立ちます。",
+
+    "installation": {
+      "title": "gemini をインストール",
+      "instruction": "Node.js 18 以降がインストールされていることを確認してから、Gemini CLI をグローバルにインストールします：",
+      "command": "npm install -g @google/gemini-cli",
+      "verification": "インストールの確認：",
+      "verificationCommand": "gemini --version",
+      "adminNote": "PowerShell を管理者として実行し、"
+    },
+
+    "configuration": {
+      "title": "cch サービスに接続",
+
+      "configFile": {
+        "title": "方法 1: 設定ファイル（推奨）",
+
+        "step1": {
+          "title": "設定ディレクトリを作成",
+          "description": "Gemini CLI の設定ファイルは ~/.gemini/ ディレクトリにあります。",
+          "macosLinux": "macOS / Linux：",
+          "windows": "Windows (PowerShell)："
+        },
+
+        "step2": {
+          "title": ".env 設定ファイルを作成",
+          "description": "~/.gemini/ ディレクトリに .env ファイルを作成します：",
+          "macosLinuxInstruction": "macOS / Linux：",
+          "windowsInstruction": "Windows：%USERPROFILE%\\.gemini\\ ディレクトリに .env ファイルを作成",
+          "content": "以下の内容を追加します："
+        },
+
+        "step3": {
+          "title": "settings.json 設定ファイルを作成",
+          "description": "~/.gemini/ ディレクトリに settings.json ファイルを作成します：",
+          "content": "この設定ファイルは IDE 統合を有効にし、認証方法を API Key に設定します。"
+        },
+
+        "parameterNote": "パラメータの説明",
+        "parameters": [
+          "GOOGLE_GEMINI_BASE_URL: cch API ベース URL",
+          "GEMINI_API_KEY: cch コンソールで作成した API キー",
+          "GEMINI_MODEL: 使用するモデル（デフォルトは gemini-2.5-pro）"
+        ],
+
+        "important": "重要",
+        "importantPoints": [
+          "YOUR_API_KEY_HERE を実際の API キーに置き換えてください",
+          "キーの取得方法：コンソールにログイン → API キー管理 → キーを作成"
+        ]
+      },
+
+      "envVars": {
+        "title": "方法 2: 環境変数設定",
+        "description": "一時的に使用したい場合は、環境変数で設定できます：",
+
+        "macosLinux": {
+          "title": "macOS / Linux：",
+          "note": "環境変数は現在のターミナルセッションでのみ有効です。永続的な設定には、設定ファイル方式を使用してください。"
+        },
+
+        "windows": {
+          "powershell": "Windows (PowerShell)：",
+          "cmd": "Windows (CMD)：",
+          "note": "環境変数は現在のターミナルセッションでのみ有効です。永続的な設定には、設定ファイル方式を使用してください。"
+        }
+      }
+    },
+
+    "startup": {
+      "title": "起動と確認",
+
+      "startCli": {
+        "title": "Gemini CLI を起動",
+        "description": "プロジェクトディレクトリに移動して Gemini CLI を起動します：",
+        "note": "初回起動時、Gemini CLI は設定ファイルの設定を読み取ります。"
+      },
+
+      "verification": {
+        "title": "設定の確認",
+        "description": "Gemini CLI で簡単なリクエストを送信して接続をテストします：",
+        "testCommand": "こんにちは、Python の hello world プログラムを作成してください",
+        "success": "Gemini CLI が正常に応答した場合、設定は成功です！"
+      },
+
+      "agentMode": {
+        "title": "Agent Mode の使用",
+        "description": "Gemini CLI は Agent Mode をサポートしており、複雑なタスクを自動的に計画して実行できます：",
+        "command": "gemini --agent",
+        "features": "Agent Mode では、Gemini は次のことを行います：",
+        "featureList": [
+          "タスク要件を自動的に分析",
+          "実行計画を策定",
+          "段階的に実行して結果を検証",
+          "フィードバックに基づいて戦略を調整"
+        ]
+      }
+    },
+
+    "commonIssues": {
+      "title": "よくある問題",
+
+      "commandNotFound": "1. コマンドが見つかりません",
+      "commandNotFoundWindows": [
+        "npm グローバルパス (通常は C:\\Users\\your-username\\AppData\\Roaming\\npm) がシステム PATH に追加されていることを確認",
+        "PowerShell ウィンドウを再度開く"
+      ],
+      "commandNotFoundUnix": "npm グローバルインストールパスを確認し、PATH に追加 (存在しない場合)",
+
+      "connectionFailed": "2. API 接続失敗",
+      "connectionSteps": [
+        "環境変数または設定ファイルの GEMINI_API_KEY が正しく設定されているか確認",
+        "GOOGLE_GEMINI_BASE_URL が正しいか確認",
+        "ネットワーク接続をテスト"
+      ],
+
+      "updateCli": "3. gemini を更新",
+      "updateCommand": "npm install -g @google/gemini-cli"
+    }
+  },
+
   "droid": {
     "title": "Droid CLI 使用ガイド",
     "description": "Droid は Factory AI が開発したインタラクティブターミナル AI プログラミングアシスタントで、cch プロキシサービスを通じた統合をサポートしています。使用する前に、Droid 公式アカウントに登録してログインする必要があります。",

@@ -15,7 +15,7 @@ import {
  * 获取所有活跃 session 的详细信息（使用聚合数据 + 批量查询 + 缓存）
  * 用于实时监控页面
  *
- * ✅ 安全修复：添加用户权限隔离
+ * 安全修复：添加用户权限隔离
  */
 export async function getActiveSessions(): Promise<ActionResult<ActiveSessionInfo[]>> {
   try {
@@ -134,8 +134,8 @@ export async function getActiveSessions(): Promise<ActionResult<ActiveSessionInf
  * 获取所有 session（包括活跃和非活跃的）
  * 用于实时监控页面的完整视图
  *
- * ✅ 修复：统一使用数据库聚合查询，确保与其他页面数据一致
- * ✅ 安全修复：添加用户权限隔离
+ * 修复：统一使用数据库聚合查询，确保与其他页面数据一致
+ * 安全修复：添加用户权限隔离
  */
 export async function getAllSessions(): Promise<
   ActionResult<{
@@ -290,7 +290,7 @@ export async function getAllSessions(): Promise<
  * 获取指定 session 的 messages 内容
  * 仅当 STORE_SESSION_MESSAGES=true 时可用
  *
- * ✅ 安全修复：添加用户权限检查
+ * 安全修复：添加用户权限检查
  */
 export async function getSessionMessages(sessionId: string): Promise<ActionResult<unknown>> {
   try {
@@ -375,8 +375,8 @@ export async function hasSessionMessages(sessionId: string): Promise<ActionResul
  * 获取 session 的完整详情（messages + response + 聚合统计）
  * 用于 session messages 详情页面
  *
- * ✅ 优化：添加缓存支持
- * ✅ 安全修复：添加用户权限检查
+ * 优化：添加缓存支持
+ * 安全修复：添加用户权限检查
  */
 export async function getSessionDetails(sessionId: string): Promise<
   ActionResult<{

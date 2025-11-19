@@ -8,7 +8,8 @@ import {
   integer,
   numeric,
   jsonb,
-  index
+  index,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
 
@@ -21,6 +22,12 @@ export const users = pgTable('users', {
   rpmLimit: integer('rpm_limit').default(60),
   dailyLimitUsd: numeric('daily_limit_usd', { precision: 10, scale: 2 }).default('100.00'),
   providerGroup: varchar('provider_group', { length: 50 }),
+  
+  // New user-level quota fields (nullable for backward compatibility)
+  limit5hUsd: numeric('limit_5h_usd', { precision: 10, scale: 2 }),
+  limitWeeklyUsd: numeric('limit_weekly_usd', { precision: 10, scale: 2 }),
+  limitMonthlyUsd: numeric('limit_monthly_usd', { precision: 10, scale: 2 }),
+  limitConcurrentSessions: integer('limit_concurrent_sessions'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -92,7 +99,7 @@ export const providers = pgTable('providers', {
   providerType: varchar('provider_type', { length: 20 })
     .notNull()
     .default('claude')
-    .$type<'claude' | 'claude-auth' | 'codex' | 'gemini-cli' | 'openai-compatible'>(),
+    .$type<'claude' | 'claude-auth' | 'codex' | 'gemini-cli' | 'gemini' | 'openai-compatible'>(),
 
   // 模型重定向：将请求的模型名称重定向到另一个模型
   modelRedirects: jsonb('model_redirects').$type<Record<string, string>>(),
@@ -138,6 +145,22 @@ export const providers = pgTable('providers', {
   // 代理配置（支持 HTTP/HTTPS/SOCKS5）
   proxyUrl: varchar('proxy_url', { length: 512 }),
   proxyFallbackToDirect: boolean('proxy_fallback_to_direct').default(false),
+
+  // 超时配置（毫秒）
+  // 注意：由于 undici fetch API 的限制，无法精确分离 DNS/TCP/TLS 连接阶段和响应头接收阶段
+  // 参考：https://github.com/nodejs/undici/discussions/1313
+  // - firstByteTimeoutStreamingMs: 流式请求首字节超时（默认 30 秒，0 = 禁用）⭐ 核心
+  //   覆盖从请求开始到收到首字节的全过程：DNS + TCP + TLS + 请求发送 + 首字节接收
+  //   解决流式请求重试缓慢问题
+  // - streamingIdleTimeoutMs: 流式请求静默期超时（默认 10 秒，0 = 禁用）⭐ 核心
+  //   解决流式中途卡住问题
+  // - requestTimeoutNonStreamingMs: 非流式请求总超时（默认 600 秒，0 = 禁用）⭐ 核心
+  //   防止长请求无限挂起
+  firstByteTimeoutStreamingMs: integer('first_byte_timeout_streaming_ms').notNull().default(30000),
+  streamingIdleTimeoutMs: integer('streaming_idle_timeout_ms').notNull().default(10000),
+  requestTimeoutNonStreamingMs: integer('request_timeout_non_streaming_ms')
+    .notNull()
+    .default(600000),
 
   // 供应商官网地址（用于快速跳转管理）
   websiteUrl: text('website_url'),
@@ -245,6 +268,29 @@ export const modelPrices = pgTable('model_prices', {
   // 基础索引
   modelPricesModelNameIdx: index('idx_model_prices_model_name').on(table.modelName),
   modelPricesCreatedAtIdx: index('idx_model_prices_created_at').on(table.createdAt.desc()),
+}));
+
+// Error Rules table
+export const errorRules = pgTable('error_rules', {
+  id: serial('id').primaryKey(),
+  pattern: text('pattern').notNull(),
+  matchType: varchar('match_type', { length: 20 })
+    .notNull()
+    .default('regex')
+    .$type<'regex' | 'contains' | 'exact'>(),
+  category: varchar('category', { length: 50 }).notNull(),
+  description: text('description'),
+  isEnabled: boolean('is_enabled').notNull().default(true),
+  isDefault: boolean('is_default').notNull().default(false),
+  priority: integer('priority').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  // 状态与类型查询优化
+  errorRulesEnabledIdx: index('idx_error_rules_enabled').on(table.isEnabled, table.priority),
+  errorRulesPatternUniqueIdx: uniqueIndex('unique_pattern').on(table.pattern),
+  errorRulesCategoryIdx: index('idx_category').on(table.category),
+  errorRulesMatchTypeIdx: index('idx_match_type').on(table.matchType),
 }));
 
 // Sensitive Words table

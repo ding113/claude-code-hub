@@ -176,10 +176,7 @@ export async function handleChatCompletions(c: Context): Promise<Response> {
     }
 
     // 4. 限流检查
-    const rateLimited = await ProxyRateLimitGuard.ensure(session);
-    if (rateLimited) {
-      return rateLimited;
-    }
+    await ProxyRateLimitGuard.ensure(session);
 
     // 5. 供应商选择（根据模型自动匹配）
     const providerUnavailable = await ProxyProviderResolver.ensure(session);

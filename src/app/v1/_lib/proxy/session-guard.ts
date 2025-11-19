@@ -21,7 +21,9 @@ export class ProxySessionGuard {
 
     try {
       // 1. 尝试从客户端提取 session_id（metadata.session_id）
-      const clientSessionId = SessionManager.extractClientSessionId(session.request.message);
+      const clientSessionId =
+        SessionManager.extractClientSessionId(session.request.message) ||
+        session.generateDeterministicSessionId();
 
       // 2. 获取 messages 数组
       const messages = session.getMessages();

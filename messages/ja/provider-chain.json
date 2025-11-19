@@ -9,7 +9,13 @@
     "ENOTFOUND": "DNS解決失敗",
     "ECONNREFUSED": "接続拒否",
     "ETIMEDOUT": "接続またはタイムアウト",
-    "ECONNRESET": "接続リセット"
+    "ECONNRESET": "接続リセット",
+    "EHOSTUNREACH": "ホスト到達不能（ネットワークルーティング問題）",
+    "ENETUNREACH": "ネットワーク到達不能（ローカルネットワーク設定問題）",
+    "EPROTO": "プロトコルエラー（SSL/TLS ハンドシェイク失敗）",
+    "CLIENT_ABORT": "クライアントがリクエストを中断",
+    "PROVIDER_TIMEOUT": "プロバイダーレスポンスタイムアウト（最初のバイト遅延が高い）",
+    "STREAMING_IDLE_TIMEOUT": "ストリーミングアイドルタイムアウト（プロバイダーがデータ送信を停止）"
   },
   "summary": {
     "singleSuccess": "{total}個のプロバイダー、{healthy}個正常 → {provider} ✓",
@@ -99,7 +105,7 @@
     "requestOk": "OK",
     "successStatus": "ステータス: {code} OK",
     "requestCompleted": "リクエスト正常完了",
-    "completed": "✅ リクエスト正常完了",
+    "completed": "リクエスト正常完了",
     "concurrentLimitFailed": "同時実行制限",
     "attemptFailed": "試行失敗（試行{attempt}）",
     "concurrentLimit": "同時実行制限",

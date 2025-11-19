@@ -65,7 +65,7 @@ export async function initializePriceTableFromSeed(): Promise<boolean> {
     }
 
     if (result.data) {
-      logger.info("✅ Price table initialized from seed", {
+      logger.info("Price table initialized from seed", {
         added: result.data.added.length,
         total: result.data.total,
       });

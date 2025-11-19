@@ -1,0 +1,30 @@
+{
+  "_comment": "Provider types and related translations for Chinese Traditional",
+
+  "types": {
+    "claude": {
+      "label": "Claude",
+      "description": "Anthropic 官方 API"
+    },
+    "claudeAuth": {
+      "label": "Claude Auth",
+      "description": "Claude 中轉服務"
+    },
+    "codex": {
+      "label": "Codex",
+      "description": "Codex CLI API"
+    },
+    "geminiCli": {
+      "label": "Gemini CLI",
+      "description": "Gemini CLI API"
+    },
+    "gemini": {
+      "label": "Gemini",
+      "description": "Google Gemini 官方 API"
+    },
+    "openaiCompatible": {
+      "label": "OpenAI Compatible",
+      "description": "OpenAI 兼容 API"
+    }
+  }
+}

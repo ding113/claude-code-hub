@@ -66,6 +66,50 @@ export async function addKey(data: {
       };
     }
 
+    // 服务端验证：Key限额不能超过用户限额
+    const { findUserById } = await import("@/repository/user");
+    const user = await findUserById(data.userId);
+    if (!user) {
+      return { ok: false, error: "用户不存在" };
+    }
+
+    // 验证各个限额字段
+    if (data.limit5hUsd && user.limit5hUsd && data.limit5hUsd > user.limit5hUsd) {
+      return {
+        ok: false,
+        error: `Key的5小时消费上限（${data.limit5hUsd}）不能超过用户限额（${user.limit5hUsd}）`,
+      };
+    }
+
+    if (data.limitWeeklyUsd && user.limitWeeklyUsd && data.limitWeeklyUsd > user.limitWeeklyUsd) {
+      return {
+        ok: false,
+        error: `Key的周消费上限（${data.limitWeeklyUsd}）不能超过用户限额（${user.limitWeeklyUsd}）`,
+      };
+    }
+
+    if (
+      data.limitMonthlyUsd &&
+      user.limitMonthlyUsd &&
+      data.limitMonthlyUsd > user.limitMonthlyUsd
+    ) {
+      return {
+        ok: false,
+        error: `Key的月消费上限（${data.limitMonthlyUsd}）不能超过用户限额（${user.limitMonthlyUsd}）`,
+      };
+    }
+
+    if (
+      data.limitConcurrentSessions &&
+      user.limitConcurrentSessions &&
+      data.limitConcurrentSessions > user.limitConcurrentSessions
+    ) {
+      return {
+        ok: false,
+        error: `Key的并发Session上限（${data.limitConcurrentSessions}）不能超过用户限额（${user.limitConcurrentSessions}）`,
+      };
+    }
+
     const generatedKey = "sk-" + randomBytes(16).toString("hex");
 
     // 转换 expiresAt: undefined → null（永不过期），string → Date（设置日期）
@@ -131,6 +175,54 @@ export async function editKey(
     }
 
     const validatedData = KeyFormSchema.parse(data);
+
+    // 服务端验证：Key限额不能超过用户限额
+    const { findUserById } = await import("@/repository/user");
+    const user = await findUserById(key.userId);
+    if (!user) {
+      return { ok: false, error: "用户不存在" };
+    }
+
+    // 验证各个限额字段
+    if (validatedData.limit5hUsd && user.limit5hUsd && validatedData.limit5hUsd > user.limit5hUsd) {
+      return {
+        ok: false,
+        error: `Key的5小时消费上限（${validatedData.limit5hUsd}）不能超过用户限额（${user.limit5hUsd}）`,
+      };
+    }
+
+    if (
+      validatedData.limitWeeklyUsd &&
+      user.limitWeeklyUsd &&
+      validatedData.limitWeeklyUsd > user.limitWeeklyUsd
+    ) {
+      return {
+        ok: false,
+        error: `Key的周消费上限（${validatedData.limitWeeklyUsd}）不能超过用户限额（${user.limitWeeklyUsd}）`,
+      };
+    }
+
+    if (
+      validatedData.limitMonthlyUsd &&
+      user.limitMonthlyUsd &&
+      validatedData.limitMonthlyUsd > user.limitMonthlyUsd
+    ) {
+      return {
+        ok: false,
+        error: `Key的月消费上限（${validatedData.limitMonthlyUsd}）不能超过用户限额（${user.limitMonthlyUsd}）`,
+      };
+    }
+
+    if (
+      validatedData.limitConcurrentSessions &&
+      user.limitConcurrentSessions &&
+      validatedData.limitConcurrentSessions > user.limitConcurrentSessions
+    ) {
+      return {
+        ok: false,
+        error: `Key的并发Session上限（${validatedData.limitConcurrentSessions}）不能超过用户限额（${user.limitConcurrentSessions}）`,
+      };
+    }
 
     // 转换 expiresAt: undefined → null（清除日期），string → Date（设置日期）
     const expiresAt =

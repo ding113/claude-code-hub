@@ -360,6 +360,7 @@
     "usageLogs": "使用ログ",
     "leaderboard": "ランキング",
     "quotasManagement": "クォータ管理",
+    "userManagement": "ユーザー管理",
     "documentation": "ドキュメント",
     "systemSettings": "システム設定",
     "feedback": "フィードバック",
@@ -419,6 +420,8 @@
     },
     "limitUsage": "制限使用状況",
     "copyKeyTooltip": "完全なキーをコピー",
+    "showKeyTooltip": "完全なキーを表示",
+    "hideKeyTooltip": "キーを非表示",
     "copyFailed": "コピーに失敗しました:",
     "timesUnit": "回",
     "provider": "プロバイダー",
@@ -463,6 +466,10 @@
       "description": "APIキーが正常に作成されました。安全にコピーして保存してください。このキーは一度だけ表示されます。",
       "apiKeyLabel": "API キー",
       "warningText": "閉じる前にコピーして保存してください。閉じた後、このキーを再度表示することはできません",
+      "httpWarningText": "HTTPアクセスが検出されました。ブラウザの制限によりコピー機能が使用できません。目のアイコンをクリックしてキーを表示し、手動でコピーしてください。",
+      "copyTooltip": "クリップボードにコピー",
+      "showTooltip": "完全なキーを表示",
+      "hideTooltip": "キーを非表示",
       "closeButton": "閉じる"
     }
   },
@@ -560,6 +567,26 @@
       "label": "1日あたりの割当量",
       "placeholder": "1日あたりの消費割当量制限",
       "description": "デフォルト値: ${default}、範囲: $0.01-$1000"
+    },
+    "limit5hUsd": {
+      "label": "5時間制限 (USD)",
+      "placeholder": "空白の場合は無制限",
+      "description": "5時間以内の最大消費金額"
+    },
+    "limitWeeklyUsd": {
+      "label": "週間制限 (USD)",
+      "placeholder": "空白の場合は無制限",
+      "description": "週間最大消費金額"
+    },
+    "limitMonthlyUsd": {
+      "label": "月間制限 (USD)",
+      "placeholder": "空白の場合は無制限",
+      "description": "月間最大消費金額"
+    },
+    "limitConcurrentSessions": {
+      "label": "同時セッション上限",
+      "placeholder": "0は無制限を意味します",
+      "description": "同時に実行される会話の数"
     }
   },
   "deleteKeyConfirm": {

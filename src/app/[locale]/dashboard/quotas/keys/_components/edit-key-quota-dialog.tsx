@@ -137,26 +137,31 @@ export function EditKeyQuotaDialog({
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px]">
-        <form onSubmit={handleSubmit}>
-          <DialogHeader>
-            <DialogTitle>{t("title")}</DialogTitle>
-            <DialogDescription>{t("description", { keyName, userName })}</DialogDescription>
-          </DialogHeader>
+      <DialogContent className="sm:max-w-[600px] max-h-[70vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
+          <DialogTitle>{t("title")}</DialogTitle>
+          <DialogDescription>{t("description", { keyName, userName })}</DialogDescription>
+        </DialogHeader>
 
-          <div className="grid gap-4 py-4">
-            {/* 5小时限额 */}
-            <div className="grid gap-2">
-              <Label htmlFor="limit5h">{t("cost5h.label")}</Label>
-              <Input
-                id="limit5h"
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder={t("cost5h.placeholder")}
-                value={limit5h}
-                onChange={(e) => setLimit5h(e.target.value)}
-              />
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="grid gap-3 py-3 overflow-y-auto pr-2 flex-1">
+            {/* 成本限额 - 双栏布局 */}
+            <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+              {/* 5小时限额 */}
+              <div className="grid gap-1.5">
+                <Label htmlFor="limit5h" className="text-xs">
+                  {t("cost5h.label")}
+                </Label>
+                <Input
+                  id="limit5h"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder={t("cost5h.placeholder")}
+                  value={limit5h}
+                  onChange={(e) => setLimit5h(e.target.value)}
+                  className="h-9"
+                />
               {currentQuota?.cost5h.limit && (
                 <p className="text-xs text-muted-foreground">
                   {t("cost5h.current", {
@@ -169,8 +174,10 @@ export function EditKeyQuotaDialog({
             </div>
 
             {/* 每日限额 */}
-            <div className="grid gap-2">
-              <Label htmlFor="limitDaily">{t("costDaily.label")}</Label>
+            <div className="grid gap-1.5">
+              <Label htmlFor="limitDaily" className="text-xs">
+                {t("costDaily.label")}
+              </Label>
               <Input
                 id="limitDaily"
                 type="number"
@@ -179,6 +186,7 @@ export function EditKeyQuotaDialog({
                 placeholder={t("costDaily.placeholder")}
                 value={limitDaily}
                 onChange={(e) => setLimitDaily(e.target.value)}
+                className="h-9"
               />
               {currentQuota?.costDaily.limit && (
                 <p className="text-xs text-muted-foreground">
@@ -192,88 +200,100 @@ export function EditKeyQuotaDialog({
             </div>
 
             {/* 每日重置时间 */}
-            <div className="grid gap-2">
-              <Label htmlFor="dailyResetTime">{t("dailyResetTime.label")}</Label>
+            <div className="grid gap-1.5">
+              <Label htmlFor="dailyResetTime" className="text-xs">
+                {t("dailyResetTime.label")}
+              </Label>
               <Input
                 id="dailyResetTime"
                 type="time"
                 step={60}
                 value={resetTime}
                 onChange={(e) => setResetTime(e.target.value || "00:00")}
+                className="h-9"
               />
             </div>
 
-            {/* 周限额 */}
-            <div className="grid gap-2">
-              <Label htmlFor="limitWeekly">{t("costWeekly.label")}</Label>
-              <Input
-                id="limitWeekly"
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder={t("costWeekly.placeholder")}
-                value={limitWeekly}
-                onChange={(e) => setLimitWeekly(e.target.value)}
-              />
-              {currentQuota?.costWeekly.limit && (
-                <p className="text-xs text-muted-foreground">
-                  {t("costWeekly.current", {
-                    currency: currencySymbol,
-                    current: currentQuota.costWeekly.current.toFixed(4),
-                    limit: currentQuota.costWeekly.limit.toFixed(2),
-                  })}
-                </p>
-              )}
-            </div>
+              {/* 周限额 */}
+              <div className="grid gap-1.5">
+                <Label htmlFor="limitWeekly" className="text-xs">
+                  {t("costWeekly.label")}
+                </Label>
+                <Input
+                  id="limitWeekly"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder={t("costWeekly.placeholder")}
+                  value={limitWeekly}
+                  onChange={(e) => setLimitWeekly(e.target.value)}
+                  className="h-9"
+                />
+                {currentQuota?.costWeekly.limit && (
+                  <p className="text-xs text-muted-foreground">
+                    {t("costWeekly.current", {
+                      currency: currencySymbol,
+                      current: currentQuota.costWeekly.current.toFixed(4),
+                      limit: currentQuota.costWeekly.limit.toFixed(2),
+                    })}
+                  </p>
+                )}
+              </div>
 
-            {/* 月限额 */}
-            <div className="grid gap-2">
-              <Label htmlFor="limitMonthly">{t("costMonthly.label")}</Label>
-              <Input
-                id="limitMonthly"
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder={t("costMonthly.placeholder")}
-                value={limitMonthly}
-                onChange={(e) => setLimitMonthly(e.target.value)}
-              />
-              {currentQuota?.costMonthly.limit && (
-                <p className="text-xs text-muted-foreground">
-                  {t("costMonthly.current", {
-                    currency: currencySymbol,
-                    current: currentQuota.costMonthly.current.toFixed(4),
-                    limit: currentQuota.costMonthly.limit.toFixed(2),
-                  })}
-                </p>
-              )}
-            </div>
+              {/* 月限额 */}
+              <div className="grid gap-1.5">
+                <Label htmlFor="limitMonthly" className="text-xs">
+                  {t("costMonthly.label")}
+                </Label>
+                <Input
+                  id="limitMonthly"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder={t("costMonthly.placeholder")}
+                  value={limitMonthly}
+                  onChange={(e) => setLimitMonthly(e.target.value)}
+                  className="h-9"
+                />
+                {currentQuota?.costMonthly.limit && (
+                  <p className="text-xs text-muted-foreground">
+                    {t("costMonthly.current", {
+                      currency: currencySymbol,
+                      current: currentQuota.costMonthly.current.toFixed(4),
+                      limit: currentQuota.costMonthly.limit.toFixed(2),
+                    })}
+                  </p>
+                )}
+              </div>
 
-            {/* 并发限额 */}
-            <div className="grid gap-2">
-              <Label htmlFor="limitConcurrent">{t("concurrentSessions.label")}</Label>
-              <Input
-                id="limitConcurrent"
-                type="number"
-                min="0"
-                placeholder={t("concurrentSessions.placeholder")}
-                value={limitConcurrent}
-                onChange={(e) => setLimitConcurrent(e.target.value)}
-              />
-              {currentQuota && currentQuota.concurrentSessions.limit > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  {t("concurrentSessions.current", {
-                    current: currentQuota.concurrentSessions.current,
-                    limit: currentQuota.concurrentSessions.limit,
-                  })}
-                </p>
-              )}
+              {/* 并发限额 */}
+              <div className="grid gap-1.5">
+                <Label htmlFor="limitConcurrent" className="text-xs">
+                  {t("concurrentSessions.label")}
+                </Label>
+                <Input
+                  id="limitConcurrent"
+                  type="number"
+                  min="0"
+                  placeholder={t("concurrentSessions.placeholder")}
+                  value={limitConcurrent}
+                  onChange={(e) => setLimitConcurrent(e.target.value)}
+                  className="h-9"
+                />
+                {currentQuota && currentQuota.concurrentSessions.limit > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {t("concurrentSessions.current", {
+                      current: currentQuota.concurrentSessions.current,
+                      limit: currentQuota.concurrentSessions.limit,
+                    })}
+                  </p>
+                )}
+              </div>
             </div>
           </div>
 
-          <DialogFooter className="gap-2">
+          <DialogFooter className="gap-2 flex-shrink-0 pt-3 border-t">
             {(currentQuota?.cost5h.limit ||
-              currentQuota?.costDaily.limit ||
               currentQuota?.costWeekly.limit ||
               currentQuota?.costMonthly.limit ||
               (currentQuota?.concurrentSessions.limit ?? 0) > 0) && (

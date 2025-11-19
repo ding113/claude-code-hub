@@ -97,6 +97,12 @@ function getCLIConfigs(t: (key: string) => string): Record<string, CLIConfig> {
         },
       },
     },
+    gemini: {
+      title: t("gemini.title"),
+      id: "gemini",
+      cliName: "gemini",
+      packageName: "@google/gemini-cli",
+    },
     droid: {
       title: t("droid.title"),
       id: "droid",
@@ -624,7 +630,7 @@ sk_xxxxxxxxxxxxxxxxxx`}
           <CodeBlock
             language="toml"
             code={`model_provider = "cch"
-model = "gpt-5-codex"
+model = "gpt-5.1-codex"
 model_reasoning_effort = "high"
 disable_response_storage = true
 sandbox_mode = "workspace-write"
@@ -637,10 +643,6 @@ web_search_request = true
 unified_exec = false
 streamable_shell = false
 rmcp_client = true
-
-[tools]
-web_search = true
-view_image = true
 
 [model_providers.cch]
 name = "cch"
@@ -698,6 +700,203 @@ source ${shellConfig.split(" ")[0]}`}
               />
             </>
           )}
+        </div>
+      </div>
+    );
+  };
+
+  /**
+   * 渲染 Gemini CLI 安装
+   */
+  const renderGeminiInstallation = (os: OS) => {
+    const lang = os === "windows" ? "powershell" : "bash";
+
+    return (
+      <div className="space-y-3">
+        <p>{t("gemini.installation.instruction")}</p>
+        <CodeBlock language={lang} code={t("gemini.installation.command")} />
+        <p>{t("gemini.installation.verification")}</p>
+        <CodeBlock language={lang} code={t("gemini.installation.verificationCommand")} />
+      </div>
+    );
+  };
+
+  /**
+   * 渲染 Gemini CLI 配置
+   */
+  const renderGeminiConfiguration = (os: OS) => {
+    const configPath = os === "windows" ? "%USERPROFILE%\\.gemini" : "~/.gemini";
+    const shellConfig =
+      os === "linux"
+        ? "~/.bashrc 或 ~/.zshrc"
+        : os === "macos"
+          ? "~/.zshrc 或 ~/.bash_profile"
+          : "";
+
+    return (
+      <div className="space-y-4">
+        <h4 className={headingClasses.h4}>{t("gemini.configuration.configFile.title")}</h4>
+        <div className="space-y-3">
+          {/* 创建配置目录 */}
+          <h5 className="font-semibold text-foreground">
+            {t("gemini.configuration.configFile.step1.title")}
+          </h5>
+          <p>{t("gemini.configuration.configFile.step1.description")}</p>
+
+          {os === "windows" ? (
+            <>
+              <p>{t("gemini.configuration.configFile.step1.windows")}</p>
+              <CodeBlock language="powershell" code={`mkdir $env:USERPROFILE\\.gemini`} />
+            </>
+          ) : (
+            <>
+              <p>{t("gemini.configuration.configFile.step1.macosLinux")}</p>
+              <CodeBlock language="bash" code={`mkdir -p ~/.gemini`} />
+            </>
+          )}
+
+          {/* 创建 .env 配置文件 */}
+          <h5 className="font-semibold text-foreground">
+            {t("gemini.configuration.configFile.step2.title")}
+          </h5>
+          <p>{t("gemini.configuration.configFile.step2.description")}</p>
+          {os === "windows" ? (
+            <p>{t("gemini.configuration.configFile.step2.windowsInstruction")}</p>
+          ) : (
+            <>
+              <p>{t("gemini.configuration.configFile.step2.macosLinuxInstruction")}</p>
+              <CodeBlock language="bash" code={`nano ~/.gemini/.env`} />
+            </>
+          )}
+          <p>{t("gemini.configuration.configFile.step2.content")}</p>
+          <CodeBlock
+            language="bash"
+            code={`GOOGLE_GEMINI_BASE_URL=${resolvedOrigin}
+GEMINI_API_KEY=your-api-key-here
+GEMINI_MODEL=gemini-3-pro-preview`}
+          />
+
+          {/* 创建 settings.json 配置文件 */}
+          <h5 className="font-semibold text-foreground">
+            {t("gemini.configuration.configFile.step3.title")}
+          </h5>
+          <p>{t("gemini.configuration.configFile.step3.description")}</p>
+          <CodeBlock
+            language="json"
+            code={`{
+  "ide": {
+    "enabled": true
+  },
+  "security": {
+    "auth": {
+      "selectedType": "gemini-api-key"
+    }
+  }
+}`}
+          />
+          <p>{t("gemini.configuration.configFile.step3.content")}</p>
+
+          {/* 参数说明 */}
+          <blockquote className="space-y-2 rounded-lg border-l-2 border-primary/50 bg-muted/40 px-4 py-3">
+            <p className="font-semibold text-foreground">
+              {t("gemini.configuration.configFile.parameterNote")}
+            </p>
+            <ul className="list-disc space-y-1 pl-4">
+              {(t.raw("gemini.configuration.configFile.parameters") as string[]).map(
+                (param: string, i: number) => (
+                  <li key={i}>{param}</li>
+                )
+              )}
+            </ul>
+          </blockquote>
+
+          {/* 重要提示 */}
+          <blockquote className="space-y-2 rounded-lg border-l-2 border-primary/50 bg-muted/40 px-4 py-3">
+            <p className="font-semibold text-foreground">
+              {t("gemini.configuration.configFile.important")}
+            </p>
+            <ul className="list-disc space-y-1 pl-4">
+              {(t.raw("gemini.configuration.configFile.importantPoints") as string[]).map(
+                (point: string, i: number) => (
+                  <li key={i}>{point}</li>
+                )
+              )}
+            </ul>
+          </blockquote>
+        </div>
+
+        <h4 className={headingClasses.h4}>{t("gemini.configuration.envVars.title")}</h4>
+        <div className="space-y-3">
+          <p>{t("gemini.configuration.envVars.description")}</p>
+          {os === "windows" ? (
+            <>
+              <p>{t("gemini.configuration.envVars.windows.powershell")}</p>
+              <CodeBlock
+                language="powershell"
+                code={`$env:GOOGLE_GEMINI_BASE_URL="${resolvedOrigin}"
+$env:GEMINI_API_KEY="your-api-key-here"
+$env:GEMINI_MODEL="gemini-2.5-pro"`}
+              />
+              <p>{t("gemini.configuration.envVars.windows.cmd")}</p>
+              <CodeBlock
+                language="cmd"
+                code={`set GOOGLE_GEMINI_BASE_URL=${resolvedOrigin}
+set GEMINI_API_KEY=your-api-key-here
+set GEMINI_MODEL=gemini-3-pro-preview`}
+              />
+              <p className="text-sm text-muted-foreground">
+                {t("gemini.configuration.envVars.windows.note")}
+              </p>
+            </>
+          ) : (
+            <>
+              <p>{t("gemini.configuration.envVars.macosLinux.title")}</p>
+              <CodeBlock
+                language="bash"
+                code={`export GOOGLE_GEMINI_BASE_URL="${resolvedOrigin}"
+export GEMINI_API_KEY="your-api-key-here"
+export GEMINI_MODEL="gemini-2.5-pro"`}
+              />
+              <p className="text-sm text-muted-foreground">
+                {t("gemini.configuration.envVars.macosLinux.note")}
+              </p>
+            </>
+          )}
+        </div>
+
+        {/* 启动和验证 */}
+        <h4 className={headingClasses.h4}>{t("gemini.startup.title")}</h4>
+        <div className="space-y-3">
+          <h5 className="font-semibold text-foreground">{t("gemini.startup.startCli.title")}</h5>
+          <p>{t("gemini.startup.startCli.description")}</p>
+          <CodeBlock
+            language={os === "windows" ? "powershell" : "bash"}
+            code={`cd ${os === "windows" ? "C:\\path\\to\\your\\project" : "/path/to/your/project"}
+gemini`}
+          />
+          <p>{t("gemini.startup.startCli.note")}</p>
+
+          <h5 className="font-semibold text-foreground">
+            {t("gemini.startup.verification.title")}
+          </h5>
+          <p>{t("gemini.startup.verification.description")}</p>
+          <CodeBlock language="text" code={t("gemini.startup.verification.testCommand")} />
+          <p>{t("gemini.startup.verification.success")}</p>
+
+          <h5 className="font-semibold text-foreground">{t("gemini.startup.agentMode.title")}</h5>
+          <p>{t("gemini.startup.agentMode.description")}</p>
+          <CodeBlock
+            language={os === "windows" ? "powershell" : "bash"}
+            code={t("gemini.startup.agentMode.command")}
+          />
+          <p>{t("gemini.startup.agentMode.features")}</p>
+          <ul className="list-disc space-y-1 pl-6">
+            {(t.raw("gemini.startup.agentMode.featureList") as string[]).map(
+              (feature: string, i: number) => (
+                <li key={i}>{feature}</li>
+              )
+            )}
+          </ul>
         </div>
       </div>
     );
@@ -816,7 +1015,6 @@ source ${shellConfig.split(" ")[0]}`}
     if (!config) return null;
 
     const resolvedConfigPath = config.configPath[os];
-
     if (cli.id === "claude-code") {
       return (
         <div className="space-y-3">
@@ -873,6 +1071,11 @@ source ${shellConfig.split(" ")[0]}`}
    * 渲染启动与验证
    */
   const renderStartupVerification = (cli: CLIConfig, os: OS) => {
+    // Gemini 的启动和验证已经集成在 renderGeminiConfiguration 中
+    if (cli.id === "gemini") {
+      return null;
+    }
+
     const lang = os === "windows" ? "powershell" : "bash";
     const titleKey =
       cli.id === "claude-code"
@@ -917,35 +1120,47 @@ ${cli.cliName}`}
         ? "claudeCode.commonIssues.title"
         : cli.id === "codex"
           ? "codex.commonIssues.title"
-          : "droid.commonIssues.title";
+          : cli.id === "gemini"
+            ? "gemini.commonIssues.title"
+            : "droid.commonIssues.title";
     const cmdNotFoundKey =
       cli.id === "claude-code"
         ? "claudeCode.commonIssues.commandNotFound"
         : cli.id === "codex"
           ? "codex.commonIssues.commandNotFound"
-          : "droid.commonIssues.commandNotFound";
+          : cli.id === "gemini"
+            ? "gemini.commonIssues.commandNotFound"
+            : "droid.commonIssues.commandNotFound";
     const cmdNotFoundWinKey =
       cli.id === "claude-code"
         ? "claudeCode.commonIssues.commandNotFoundWindows"
         : cli.id === "codex"
           ? "codex.commonIssues.commandNotFoundWindows"
-          : "droid.commonIssues.commandNotFoundWindows";
+          : cli.id === "gemini"
+            ? "gemini.commonIssues.commandNotFoundWindows"
+            : "droid.commonIssues.commandNotFoundWindows";
     const cmdNotFoundUnixKey =
       cli.id === "claude-code"
         ? "claudeCode.commonIssues.commandNotFoundUnix"
         : cli.id === "codex"
           ? "codex.commonIssues.commandNotFoundUnix"
-          : "droid.commonIssues.commandNotFoundUnix";
+          : cli.id === "gemini"
+            ? "gemini.commonIssues.commandNotFoundUnix"
+            : "droid.commonIssues.commandNotFoundUnix";
     const connFailedKey =
       cli.id === "claude-code"
         ? "claudeCode.commonIssues.connectionFailed"
-        : "codex.commonIssues.connectionFailed";
+        : cli.id === "gemini"
+          ? "gemini.commonIssues.connectionFailed"
+          : "codex.commonIssues.connectionFailed";
     const updateKey =
       cli.id === "claude-code"
         ? "claudeCode.commonIssues.updateCli"
         : cli.id === "codex"
           ? "codex.commonIssues.updateCli"
-          : "droid.commonIssues.updateCli";
+          : cli.id === "gemini"
+            ? "gemini.commonIssues.updateCli"
+            : "droid.commonIssues.updateCli";
 
     return (
       <div className="space-y-4">
@@ -975,7 +1190,16 @@ source ~/.${os === "macos" ? "zshrc" : "bashrc"}`}
         {cli.id !== "droid" && (
           <div className="space-y-3">
             <p className="font-semibold text-foreground">{t(connFailedKey)}</p>
-            {os === "windows" ? (
+            {cli.id === "gemini" ? (
+              // Gemini 特殊处理，显示 connectionSteps
+              <ul className="list-disc space-y-2 pl-6">
+                {(t.raw("gemini.commonIssues.connectionSteps") as string[]).map(
+                  (step: string, i: number) => (
+                    <li key={i}>{step}</li>
+                  )
+                )}
+              </ul>
+            ) : os === "windows" ? (
               <CodeBlock
                 language="powershell"
                 code={`# 检查环境变量
@@ -1002,6 +1226,8 @@ curl -I ${resolvedOrigin}`}
           {cli.packageName ? (
             cli.id === "codex" ? (
               <CodeBlock language={lang} code={t("codex.commonIssues.updateCommand")} />
+            ) : cli.id === "gemini" ? (
+              <CodeBlock language={lang} code={t("gemini.commonIssues.updateCommand")} />
             ) : (
               <CodeBlock language={lang} code={`npm install -g ${cli.packageName}`} />
             )
@@ -1046,11 +1272,14 @@ curl -I ${resolvedOrigin}`}
               ? t("claudeCode.installation.title")
               : cli.id === "codex"
                 ? t("codex.installation.title")
-                : t("droid.installation.title")}{" "}
+                : cli.id === "gemini"
+                  ? t("gemini.installation.title")
+                  : t("droid.installation.title")}{" "}
             {cli.cliName}
           </h4>
           {cli.id === "claude-code" && renderClaudeCodeInstallation(os)}
           {cli.id === "codex" && renderCodexInstallation(os)}
+          {cli.id === "gemini" && renderGeminiInstallation(os)}
           {cli.id === "droid" && renderDroidInstallation(os)}
         </div>
 
@@ -1061,10 +1290,13 @@ curl -I ${resolvedOrigin}`}
               ? t("claudeCode.configuration.title")
               : cli.id === "codex"
                 ? t("codex.configuration.title")
-                : t("droid.configuration.title")}
+                : cli.id === "gemini"
+                  ? t("gemini.configuration.title")
+                  : t("droid.configuration.title")}
           </h4>
           {cli.id === "claude-code" && renderClaudeCodeConfiguration(os)}
           {cli.id === "codex" && renderCodexConfiguration(os)}
+          {cli.id === "gemini" && renderGeminiConfiguration(os)}
           {cli.id === "droid" && renderDroidConfiguration(os)}
         </div>
 
@@ -1106,6 +1338,19 @@ curl -I ${resolvedOrigin}`}
         <p>{t("codex.description")}</p>
         {(["macos", "windows", "linux"] as OS[]).map((os) =>
           renderPlatformGuide(CLI_CONFIGS.codex, os)
+        )}
+      </section>
+
+      <hr className="border-border/60" />
+
+      {/* Gemini CLI 使用指南 */}
+      <section className="space-y-6">
+        <h2 id={CLI_CONFIGS.gemini.id} className={headingClasses.h2}>
+          📚 {CLI_CONFIGS.gemini.title}
+        </h2>
+        <p>{t("gemini.description")}</p>
+        {(["macos", "windows", "linux"] as OS[]).map((os) =>
+          renderPlatformGuide(CLI_CONFIGS.gemini, os)
         )}
       </section>
 

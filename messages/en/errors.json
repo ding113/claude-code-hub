@@ -49,6 +49,13 @@
   "INVALID_STATE": "Operation not allowed in current state",
   "CONFLICT": "Operation conflict",
 
+  "RATE_LIMIT_RPM_EXCEEDED": "Rate limit exceeded: {current} requests per minute (limit: {limit}). Resets at {resetTime}",
+  "RATE_LIMIT_5H_EXCEEDED": "5-hour cost limit exceeded: ${current} USD (limit: ${limit} USD). Resets at {resetTime}",
+  "RATE_LIMIT_WEEKLY_EXCEEDED": "Weekly cost limit exceeded: ${current} USD (limit: ${limit} USD). Resets at {resetTime}",
+  "RATE_LIMIT_MONTHLY_EXCEEDED": "Monthly cost limit exceeded: ${current} USD (limit: ${limit} USD). Resets at {resetTime}",
+  "RATE_LIMIT_CONCURRENT_SESSIONS_EXCEEDED": "Concurrent sessions limit exceeded: {current} sessions (limit: {limit}). Please wait for active sessions to complete",
+  "RATE_LIMIT_DAILY_QUOTA_EXCEEDED": "Daily quota exceeded: ${current} USD (limit: ${limit} USD). Resets at {resetTime}",
+
   "USER_NOT_FOUND": "User not found",
   "USER_CANNOT_MODIFY_SENSITIVE_FIELDS": "Regular users cannot modify quota limits and provider groups",
   "CREATE_USER_FAILED": "Failed to create user, please try again later",

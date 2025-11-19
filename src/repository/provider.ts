@@ -40,6 +40,9 @@ export async function createProvider(providerData: CreateProviderData): Promise<
       providerData.circuit_breaker_half_open_success_threshold ?? 2,
     proxyUrl: providerData.proxy_url ?? null,
     proxyFallbackToDirect: providerData.proxy_fallback_to_direct ?? false,
+    firstByteTimeoutStreamingMs: providerData.first_byte_timeout_streaming_ms ?? 30000,
+    streamingIdleTimeoutMs: providerData.streaming_idle_timeout_ms ?? 10000,
+    requestTimeoutNonStreamingMs: providerData.request_timeout_non_streaming_ms ?? 600000,
     websiteUrl: providerData.website_url ?? null,
     faviconUrl: providerData.favicon_url ?? null,
     tpm: providerData.tpm,
@@ -75,6 +78,9 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     circuitBreakerHalfOpenSuccessThreshold: providers.circuitBreakerHalfOpenSuccessThreshold,
     proxyUrl: providers.proxyUrl,
     proxyFallbackToDirect: providers.proxyFallbackToDirect,
+    firstByteTimeoutStreamingMs: providers.firstByteTimeoutStreamingMs,
+    streamingIdleTimeoutMs: providers.streamingIdleTimeoutMs,
+    requestTimeoutNonStreamingMs: providers.requestTimeoutNonStreamingMs,
     websiteUrl: providers.websiteUrl,
     faviconUrl: providers.faviconUrl,
     tpm: providers.tpm,
@@ -121,6 +127,9 @@ export async function findProviderList(
       circuitBreakerHalfOpenSuccessThreshold: providers.circuitBreakerHalfOpenSuccessThreshold,
       proxyUrl: providers.proxyUrl,
       proxyFallbackToDirect: providers.proxyFallbackToDirect,
+      firstByteTimeoutStreamingMs: providers.firstByteTimeoutStreamingMs,
+      streamingIdleTimeoutMs: providers.streamingIdleTimeoutMs,
+      requestTimeoutNonStreamingMs: providers.requestTimeoutNonStreamingMs,
       websiteUrl: providers.websiteUrl,
       faviconUrl: providers.faviconUrl,
       tpm: providers.tpm,
@@ -174,6 +183,9 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       circuitBreakerHalfOpenSuccessThreshold: providers.circuitBreakerHalfOpenSuccessThreshold,
       proxyUrl: providers.proxyUrl,
       proxyFallbackToDirect: providers.proxyFallbackToDirect,
+      firstByteTimeoutStreamingMs: providers.firstByteTimeoutStreamingMs,
+      streamingIdleTimeoutMs: providers.streamingIdleTimeoutMs,
+      requestTimeoutNonStreamingMs: providers.requestTimeoutNonStreamingMs,
       websiteUrl: providers.websiteUrl,
       faviconUrl: providers.faviconUrl,
       tpm: providers.tpm,
@@ -249,6 +261,12 @@ export async function updateProvider(
   if (providerData.proxy_url !== undefined) dbData.proxyUrl = providerData.proxy_url;
   if (providerData.proxy_fallback_to_direct !== undefined)
     dbData.proxyFallbackToDirect = providerData.proxy_fallback_to_direct;
+  if (providerData.first_byte_timeout_streaming_ms !== undefined)
+    dbData.firstByteTimeoutStreamingMs = providerData.first_byte_timeout_streaming_ms;
+  if (providerData.streaming_idle_timeout_ms !== undefined)
+    dbData.streamingIdleTimeoutMs = providerData.streaming_idle_timeout_ms;
+  if (providerData.request_timeout_non_streaming_ms !== undefined)
+    dbData.requestTimeoutNonStreamingMs = providerData.request_timeout_non_streaming_ms;
   if (providerData.website_url !== undefined) dbData.websiteUrl = providerData.website_url;
   if (providerData.favicon_url !== undefined) dbData.faviconUrl = providerData.favicon_url;
   if (providerData.tpm !== undefined) dbData.tpm = providerData.tpm;
@@ -287,6 +305,11 @@ export async function updateProvider(
       circuitBreakerHalfOpenSuccessThreshold: providers.circuitBreakerHalfOpenSuccessThreshold,
       proxyUrl: providers.proxyUrl,
       proxyFallbackToDirect: providers.proxyFallbackToDirect,
+      firstByteTimeoutStreamingMs: providers.firstByteTimeoutStreamingMs,
+      streamingIdleTimeoutMs: providers.streamingIdleTimeoutMs,
+      requestTimeoutNonStreamingMs: providers.requestTimeoutNonStreamingMs,
+      websiteUrl: providers.websiteUrl,
+      faviconUrl: providers.faviconUrl,
       tpm: providers.tpm,
       rpm: providers.rpm,
       rpd: providers.rpd,

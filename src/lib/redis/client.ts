@@ -3,17 +3,15 @@ import { logger } from "@/lib/logger";
 
 let redisClient: Redis | null = null;
 
-/**
- * Mask password in a URL for safe logging.
- * Example: rediss://user:pass@host:6379 -> rediss://user:***@host:6379
- */
-function maskRedisUrl(urlStr: string): string {
+function maskRedisUrl(redisUrl: string) {
   try {
-    const u = new URL(urlStr);
-    if (u.password) u.password = "***";
-    return u.toString();
+    const parsed = new URL(redisUrl);
+    if (parsed.password) {
+      parsed.password = "****";
+    }
+    return parsed.toString();
   } catch {
-    return urlStr.replace(/:(?:[^:@]+)@/, ":***@");
+    return redisUrl.replace(/:\w+@/, ":****@");
   }
 }
 

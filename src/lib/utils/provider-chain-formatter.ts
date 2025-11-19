@@ -386,7 +386,19 @@ export function formatProviderTimeline(
       if (item.errorDetails?.system) {
         const s = item.errorDetails.system;
         timeline += t("timeline.provider", { provider: item.name }) + "\n";
-        timeline += t("timeline.errorType") + "\n";
+
+        // 根据错误码显示更清晰的错误类型
+        if (s.errorCode) {
+          const meaning = getErrorCodeMeaning(s.errorCode, t);
+          if (meaning) {
+            timeline += t("timeline.errorType") + meaning + "\n";
+          } else {
+            timeline += t("timeline.errorType") + (s.errorName || t("timeline.unknown")) + "\n";
+          }
+        } else {
+          timeline += t("timeline.errorType") + (s.errorName || t("timeline.unknown")) + "\n";
+        }
+
         timeline += t("timeline.error", { error: s.errorName }) + "\n";
 
         // 计算请求耗时

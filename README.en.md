@@ -51,17 +51,17 @@ Cubence offers special discount coupons for users of CCH: when purchasing with t
 ### Requirements
 
 - Docker and Docker Compose (latest version recommended)
-- Optional (for local development): Node.js ≥ 20, pnpm ≥ 9.15
+- Optional (for local development): Node.js ≥ 20, Bun ≥ 1.3
 
 ### 🚀 One-Click Deployment Script (✨ Recommended - Fully Automated)
 
 The one-click deployment script **automatically handles** all of the following:
 
-- ✅ Check and install Docker and Docker Compose (Linux/macOS support auto-install)
-- ✅ Create deployment directory and configuration files
-- ✅ Generate secure admin token and database password
-- ✅ Start all services and wait for health checks
-- ✅ Display access URLs and admin token
+- Check and install Docker and Docker Compose (Linux/macOS support auto-install)
+- Create deployment directory and configuration files
+- Generate secure admin token and database password
+- Start all services and wait for health checks
+- Display access URLs and admin token
 
 **Linux / macOS:**
 
@@ -216,24 +216,24 @@ Docker Compose is the **preferred deployment method** — it automatically provi
 ### Local development (dev toolchain)
 
 1. Enter the `dev/` folder: `cd dev`.
-2. Run `make dev` to launch PostgreSQL + Redis + `pnpm dev` in one command.
+2. Run `make dev` to launch PostgreSQL + Redis + `bun dev` in one command.
 3. Helpful targets:
    - `make db`: start only database and Redis.
    - `make logs` / `make logs-app`: tail all services or app logs.
    - `make clean` / `make reset`: clean or fully reset the environment.
 4. Use `make migrate` and `make db-shell` for schema operations.
 
-### Manual deployment (pnpm build + start)
+### Manual deployment (bun build + start)
 
 1. Install dependencies and build:
    ```bash
-   pnpm install
-   pnpm build         # Copies the VERSION file automatically
+   bun install
+   bun run build      # Copies the VERSION file automatically
    ```
 2. Export environment variables via your process manager (systemd, PM2, etc.) and ensure PostgreSQL/Redis endpoints are reachable.
 3. Launch production server:
    ```bash
-   pnpm start
+   bun run start
    ```
 4. You may keep `AUTO_MIGRATE=true` for the first run, then disable it and manage migrations explicitly with Drizzle CLI.
 

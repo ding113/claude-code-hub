@@ -167,7 +167,7 @@ export class SessionTracker {
       pipeline.zadd(`key:${keyId}:active_sessions`, now, sessionId);
       pipeline.zadd(`provider:${providerId}:active_sessions`, now, sessionId);
 
-      // ✅ 修复 Bug：同步刷新 session 绑定信息的 TTL
+      // 修复 Bug：同步刷新 session 绑定信息的 TTL
       //
       // 问题：ZSET 条目（上面 zadd）会在每次请求时更新时间戳，但绑定信息 key 的 TTL 不会自动刷新
       // 导致：session 创建 5 分钟后，ZSET 仍有记录（仍被计为活跃），但绑定信息已过期，造成：

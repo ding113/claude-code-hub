@@ -358,6 +358,7 @@
   "all": "全部",
   "nav": {
     "dashboard": "仪表盘",
+    "userManagement": "用户管理",
     "usageLogs": "使用记录",
     "leaderboard": "排行榜",
     "quotasManagement": "限额管理",
@@ -420,6 +421,8 @@
     },
     "limitUsage": "限额使用情况",
     "copyKeyTooltip": "复制完整密钥",
+    "showKeyTooltip": "显示完整密钥",
+    "hideKeyTooltip": "隐藏密钥",
     "copyFailed": "复制失败:",
     "timesUnit": "次",
     "provider": "供应商",
@@ -464,6 +467,10 @@
       "description": "你的 API Key 已成功创建。请务必复制并妥善保存，此密钥仅显示一次。",
       "apiKeyLabel": "API Key",
       "warningText": "请在关闭前复制并保存，关闭后将无法再次查看此密钥",
+      "httpWarningText": "检测到 HTTP 访问，浏览器限制无法使用复制功能。请点击眼睛图标显示密钥后手动复制。",
+      "copyTooltip": "复制到剪贴板",
+      "showTooltip": "显示完整密钥",
+      "hideTooltip": "隐藏密钥",
       "closeButton": "关闭"
     }
   },
@@ -499,7 +506,8 @@
     "limit5hUsd": {
       "label": "5小时消费上限 (USD)",
       "placeholder": "留空表示无限制",
-      "description": "5小时内最大消费金额"
+      "description": "5小时内最大消费金额",
+      "descriptionWithUserLimit": "5小时内最大消费金额（用户限额: ${limit}）"
     },
     "limitDailyUsd": {
       "label": "每日消费上限 (USD)",
@@ -514,17 +522,20 @@
     "limitWeeklyUsd": {
       "label": "周消费上限 (USD)",
       "placeholder": "留空表示无限制",
-      "description": "每周最大消费金额"
+      "description": "每周最大消费金额",
+      "descriptionWithUserLimit": "每周最大消费金额（用户限额: ${limit}）"
     },
     "limitMonthlyUsd": {
       "label": "月消费上限 (USD)",
       "placeholder": "留空表示无限制",
-      "description": "每月最大消费金额"
+      "description": "每月最大消费金额",
+      "descriptionWithUserLimit": "每月最大消费金额（用户限额: ${limit}）"
     },
     "limitConcurrentSessions": {
       "label": "并发 Session 上限",
       "placeholder": "0 表示无限制",
-      "description": "同时运行的对话数量"
+      "description": "同时运行的对话数量",
+      "descriptionWithUserLimit": "同时运行的对话数量（用户限额: {limit}）"
     },
     "errors": {
       "userIdMissing": "用户ID不存在",
@@ -560,18 +571,38 @@
     },
     "providerGroup": {
       "label": "供应商分组",
-      "placeholder": "例如: premium 或 premium,economy（可选）",
+      "placeholder": "输入分组标签",
       "description": "指定用户专属的供应商分组（支持多个，逗号分隔）。系统将只从 groupTag 匹配的供应商中选择。留空=使用所有供应商"
     },
     "rpm": {
       "label": "RPM限制",
       "placeholder": "每分钟请求数限制",
-      "description": "默认值: {default}，范围: 1-10000"
+      "description": "默认值: {default}，范围: 1-1000000"
     },
     "dailyQuota": {
       "label": "每日额度",
       "placeholder": "每日消费额度限制",
-      "description": "默认值: ${default}，范围: $0.01-$1000"
+      "description": "默认值: ${default}，范围: $0.01-$100000"
+    },
+    "limit5hUsd": {
+      "label": "5小时限额 (USD)",
+      "placeholder": "留空表示无限制",
+      "description": "5小时内最大消费金额"
+    },
+    "limitWeeklyUsd": {
+      "label": "周限额 (USD)",
+      "placeholder": "留空表示无限制",
+      "description": "每周最大消费金额"
+    },
+    "limitMonthlyUsd": {
+      "label": "月限额 (USD)",
+      "placeholder": "留空表示无限制",
+      "description": "每月最大消费金额"
+    },
+    "limitConcurrentSessions": {
+      "label": "并发 Session 上限",
+      "placeholder": "0 表示无限制",
+      "description": "同时运行的对话数量"
     }
   },
   "deleteKeyConfirm": {
@@ -596,5 +627,79 @@
     "delete": "删除用户",
     "editAriaLabel": "编辑用户",
     "deleteAriaLabel": "删除用户"
+  },
+  "rateLimits": {
+    "title": "限流事件统计",
+    "description": "查看和分析限流事件的统计数据",
+    "loading": "加载中...",
+    "error": "加载失败",
+    "totalEvents": "总事件数",
+    "avgUsage": "平均使用率",
+    "affectedUsers": "受影响用户数",
+    "noData": "暂无数据",
+    "noDataHint": "在选定的时间范围内没有限流事件",
+    "filters": {
+      "startTime": "开始时间",
+      "endTime": "结束时间",
+      "user": "用户",
+      "provider": "供应商",
+      "limitType": "限流类型",
+      "allUsers": "全部用户",
+      "allProviders": "全部供应商",
+      "allLimitTypes": "全部类型",
+      "apply": "应用筛选",
+      "reset": "重置",
+      "loading": "加载中...",
+      "limitTypes": {
+        "rpm": "RPM限流",
+        "usd_5h": "5小时消费限流",
+        "usd_weekly": "周消费限流",
+        "usd_monthly": "月消费限流",
+        "concurrent_sessions": "并发Session限流",
+        "daily_quota": "每日额度限流"
+      }
+    },
+    "chart": {
+      "title": "限流事件时间线",
+      "description": "按小时统计的限流事件趋势",
+      "total": "总计",
+      "events": "事件数"
+    },
+    "breakdown": {
+      "title": "限流类型分布",
+      "description": "不同限流类型的事件占比",
+      "total": "总计",
+      "count": "事件数",
+      "percentage": "占比",
+      "noData": "暂无数据",
+      "types": {
+        "rpm": "RPM限流",
+        "usd_5h": "5小时消费",
+        "usd_weekly": "周消费",
+        "usd_monthly": "月消费",
+        "concurrent_sessions": "并发Session",
+        "daily_quota": "每日额度"
+      }
+    },
+    "topUsers": {
+      "title": "受影响用户排行",
+      "description": "触发限流最多的用户列表",
+      "total": "总计",
+      "rank": "排名",
+      "username": "用户名",
+      "eventCount": "事件数",
+      "percentage": "占比",
+      "loading": "加载中...",
+      "noData": "暂无数据"
+    }
+  },
+  "users": {
+    "title": "用户管理",
+    "description": "显示 {count} 个用户",
+    "toolbar": {
+      "searchPlaceholder": "按用户名搜索...",
+      "groupFilter": "按分组筛选",
+      "allGroups": "所有分组"
+    }
   }
 }

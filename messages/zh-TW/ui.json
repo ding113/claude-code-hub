@@ -4,7 +4,8 @@
     "actions": "操作",
     "loading": "載入中...",
     "empty": "為空",
-    "error": "錯誤"
+    "error": "錯誤",
+    "retry": "重試"
   },
   "table": {
     "pagination": "分頁",
@@ -43,5 +44,14 @@
   "loading": {
     "title": "載入中",
     "description": "請稍候..."
+  },
+  "tagInput": {
+    "placeholder": "輸入標籤後按回車或逗號新增",
+    "emptyTag": "標籤不能為空",
+    "duplicateTag": "標籤已存在",
+    "maxTags": "已達到最大標籤數量",
+    "tooLong": "標籤長度不能超過 {max} 個字元",
+    "invalidFormat": "標籤只能包含字母、數字、底線和連字符",
+    "removeTag": "移除標籤 {tag}"
   }
 }

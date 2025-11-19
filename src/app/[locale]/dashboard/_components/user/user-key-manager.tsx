@@ -41,6 +41,25 @@ export function UserKeyManager({ users, currentUser, currencyCode = "USD" }: Use
             keys={activeUser?.keys || []}
             currentUser={currentUser}
             keyOwnerUserId={activeUser?.id || 0}
+            keyOwnerUser={
+              activeUser
+                ? {
+                    id: activeUser.id,
+                    name: activeUser.name,
+                    description: activeUser.note || "",
+                    role: activeUser.role,
+                    rpm: activeUser.rpm,
+                    dailyQuota: activeUser.dailyQuota,
+                    providerGroup: activeUser.providerGroup || null,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                    limit5hUsd: activeUser.limit5hUsd ?? undefined,
+                    limitWeeklyUsd: activeUser.limitWeeklyUsd ?? undefined,
+                    limitMonthlyUsd: activeUser.limitMonthlyUsd ?? undefined,
+                    limitConcurrentSessions: activeUser.limitConcurrentSessions ?? undefined,
+                  }
+                : undefined
+            }
             currencyCode={currencyCode}
           />
         </div>
@@ -72,6 +91,25 @@ export function UserKeyManager({ users, currentUser, currencyCode = "USD" }: Use
             keys={activeUser?.keys || []}
             currentUser={currentUser}
             keyOwnerUserId={activeUser?.id || 0}
+            keyOwnerUser={
+              activeUser
+                ? {
+                    id: activeUser.id,
+                    name: activeUser.name,
+                    description: activeUser.note || "",
+                    role: activeUser.role,
+                    rpm: activeUser.rpm,
+                    dailyQuota: activeUser.dailyQuota,
+                    providerGroup: activeUser.providerGroup || null,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                    limit5hUsd: activeUser.limit5hUsd ?? undefined,
+                    limitWeeklyUsd: activeUser.limitWeeklyUsd ?? undefined,
+                    limitMonthlyUsd: activeUser.limitMonthlyUsd ?? undefined,
+                    limitConcurrentSessions: activeUser.limitConcurrentSessions ?? undefined,
+                  }
+                : undefined
+            }
             currencyCode={currencyCode}
           />
         </div>

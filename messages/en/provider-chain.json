@@ -6,10 +6,16 @@
     "unknown": "Unknown"
   },
   "errors": {
-    "ENOTFOUND": "DNS resolution failed",
-    "ECONNREFUSED": "Connection refused",
-    "ETIMEDOUT": "Connection or read timeout",
-    "ECONNRESET": "Connection reset"
+    "ENOTFOUND": "DNS resolution failed (domain name not found)",
+    "ECONNREFUSED": "Connection refused (target server rejected connection)",
+    "ETIMEDOUT": "TCP connection timeout (high network latency or firewall blocking)",
+    "ECONNRESET": "Connection reset (network interruption or server disconnect)",
+    "EHOSTUNREACH": "Host unreachable (network routing issue)",
+    "ENETUNREACH": "Network unreachable (local network configuration issue)",
+    "EPROTO": "Protocol error (SSL/TLS handshake failed)",
+    "CLIENT_ABORT": "Client aborted request",
+    "PROVIDER_TIMEOUT": "Provider response timeout (high first-byte latency)",
+    "STREAMING_IDLE_TIMEOUT": "Streaming idle timeout (provider stopped sending data)"
   },
   "summary": {
     "singleSuccess": "{total} providers, {healthy} healthy → {provider} ✓",
@@ -80,9 +86,9 @@
     "alreadyBroken": "Circuit already broken",
     "circuitTriggered": "⚠️ Circuit breaker triggered",
     "errorDetails": "Error Details",
-    "systemError": "System Error",
-    "systemErrorFailed": "System Error (Attempt {attempt})",
-    "errorType": "Error Type: System Error",
+    "systemError": "Network/System Error",
+    "systemErrorFailed": "Network/System Error (Attempt {attempt})",
+    "errorType": "Error Type: ",
     "errorName": "Error",
     "errorCode": "Error Code: {code}",
     "errorSyscall": "Syscall: {syscall}",
@@ -99,7 +105,7 @@
     "requestOk": "OK",
     "successStatus": "Status: {code} OK",
     "requestCompleted": "Request completed successfully",
-    "completed": "✅ Request completed successfully",
+    "completed": "Request completed successfully",
     "concurrentLimitFailed": "Concurrent Limit",
     "attemptFailed": "Attempt Failed ({attempt})",
     "concurrentLimit": "Concurrent Limit",

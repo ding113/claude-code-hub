@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { PROVIDER_LIMITS, PROVIDER_DEFAULTS } from "@/lib/constants/provider.constants";
+import {
+  PROVIDER_LIMITS,
+  PROVIDER_DEFAULTS,
+  PROVIDER_TIMEOUT_LIMITS,
+} from "@/lib/constants/provider.constants";
 import { USER_LIMITS, USER_DEFAULTS } from "@/lib/constants/user.constants";
 import { CURRENCY_CONFIG } from "@/lib/utils/currency";
 
@@ -23,6 +27,31 @@ export const CreateUserSchema = z.object({
     .max(USER_LIMITS.DAILY_QUOTA.MAX, `每日额度不能超过${USER_LIMITS.DAILY_QUOTA.MAX}美元`)
     .optional()
     .default(USER_DEFAULTS.DAILY_QUOTA),
+  limit5hUsd: z.coerce
+    .number()
+    .min(0, "5小时消费上限不能为负数")
+    .max(10000, "5小时消费上限不能超过10000美元")
+    .nullable()
+    .optional(),
+  limitWeeklyUsd: z.coerce
+    .number()
+    .min(0, "周消费上限不能为负数")
+    .max(50000, "周消费上限不能超过50000美元")
+    .nullable()
+    .optional(),
+  limitMonthlyUsd: z.coerce
+    .number()
+    .min(0, "月消费上限不能为负数")
+    .max(200000, "月消费上限不能超过200000美元")
+    .nullable()
+    .optional(),
+  limitConcurrentSessions: z.coerce
+    .number()
+    .int("并发Session上限必须是整数")
+    .min(0, "并发Session上限不能为负数")
+    .max(1000, "并发Session上限不能超过1000")
+    .nullable()
+    .optional(),
 });
 
 /**
@@ -42,6 +71,31 @@ export const UpdateUserSchema = z.object({
     .number()
     .min(USER_LIMITS.DAILY_QUOTA.MIN, `每日额度不能低于${USER_LIMITS.DAILY_QUOTA.MIN}美元`)
     .max(USER_LIMITS.DAILY_QUOTA.MAX, `每日额度不能超过${USER_LIMITS.DAILY_QUOTA.MAX}美元`)
+    .optional(),
+  limit5hUsd: z.coerce
+    .number()
+    .min(0, "5小时消费上限不能为负数")
+    .max(10000, "5小时消费上限不能超过10000美元")
+    .nullable()
+    .optional(),
+  limitWeeklyUsd: z.coerce
+    .number()
+    .min(0, "周消费上限不能为负数")
+    .max(50000, "周消费上限不能超过50000美元")
+    .nullable()
+    .optional(),
+  limitMonthlyUsd: z.coerce
+    .number()
+    .min(0, "月消费上限不能为负数")
+    .max(200000, "月消费上限不能超过200000美元")
+    .nullable()
+    .optional(),
+  limitConcurrentSessions: z.coerce
+    .number()
+    .int("并发Session上限必须是整数")
+    .min(0, "并发Session上限不能为负数")
+    .max(1000, "并发Session上限不能超过1000")
+    .nullable()
     .optional(),
 });
 
@@ -124,7 +178,7 @@ export const CreateProviderSchema = z.object({
   group_tag: z.string().max(50, "分组标签不能超过50个字符").nullable().optional(),
   // Codex 支持:供应商类型和模型重定向
   provider_type: z
-    .enum(["claude", "claude-auth", "codex", "gemini-cli", "openai-compatible"])
+    .enum(["claude", "claude-auth", "codex", "gemini", "gemini-cli", "openai-compatible"])
     .optional()
     .default("claude"),
   model_redirects: z.record(z.string(), z.string()).nullable().optional(),
@@ -195,6 +249,50 @@ export const CreateProviderSchema = z.object({
   // 代理配置
   proxy_url: z.string().max(512, "代理地址长度不能超过512个字符").nullable().optional(),
   proxy_fallback_to_direct: z.boolean().optional().default(false),
+  // 超时配置（毫秒）
+  // 注意：0 表示禁用超时（Infinity）
+  first_byte_timeout_streaming_ms: z
+    .union([
+      z.literal(0), // 0 = 禁用超时
+      z.coerce
+        .number()
+        .int("流式首字节超时必须是整数")
+        .min(
+          PROVIDER_TIMEOUT_LIMITS.FIRST_BYTE_TIMEOUT_STREAMING_MS.MIN,
+          "流式首字节超时不能少于1秒"
+        )
+        .max(
+          PROVIDER_TIMEOUT_LIMITS.FIRST_BYTE_TIMEOUT_STREAMING_MS.MAX,
+          "流式首字节超时不能超过120秒"
+        ),
+    ])
+    .optional(),
+  streaming_idle_timeout_ms: z
+    .union([
+      z.literal(0), // 0 = 禁用超时
+      z.coerce
+        .number()
+        .int("流式静默期超时必须是整数")
+        .min(PROVIDER_TIMEOUT_LIMITS.STREAMING_IDLE_TIMEOUT_MS.MIN, "流式静默期超时不能少于1秒")
+        .max(PROVIDER_TIMEOUT_LIMITS.STREAMING_IDLE_TIMEOUT_MS.MAX, "流式静默期超时不能超过120秒"),
+    ])
+    .optional(),
+  request_timeout_non_streaming_ms: z
+    .union([
+      z.literal(0), // 0 = 禁用超时
+      z.coerce
+        .number()
+        .int("非流式总超时必须是整数")
+        .min(
+          PROVIDER_TIMEOUT_LIMITS.REQUEST_TIMEOUT_NON_STREAMING_MS.MIN,
+          "非流式总超时不能少于60秒"
+        )
+        .max(
+          PROVIDER_TIMEOUT_LIMITS.REQUEST_TIMEOUT_NON_STREAMING_MS.MAX,
+          "非流式总超时不能超过1200秒"
+        ),
+    ])
+    .optional(),
   // 供应商官网地址
   website_url: z
     .string()
@@ -235,7 +333,7 @@ export const UpdateProviderSchema = z
     group_tag: z.string().max(50, "分组标签不能超过50个字符").nullable().optional(),
     // Codex 支持:供应商类型和模型重定向
     provider_type: z
-      .enum(["claude", "claude-auth", "codex", "gemini-cli", "openai-compatible"])
+      .enum(["claude", "claude-auth", "codex", "gemini", "gemini-cli", "openai-compatible"])
       .optional(),
     model_redirects: z.record(z.string(), z.string()).nullable().optional(),
     allowed_models: z.array(z.string()).nullable().optional(),
@@ -299,6 +397,53 @@ export const UpdateProviderSchema = z
     // 代理配置
     proxy_url: z.string().max(512, "代理地址长度不能超过512个字符").nullable().optional(),
     proxy_fallback_to_direct: z.boolean().optional(),
+    // 超时配置（毫秒）
+    // 注意：0 表示禁用超时（Infinity）
+    first_byte_timeout_streaming_ms: z
+      .union([
+        z.literal(0), // 0 = 禁用超时
+        z.coerce
+          .number()
+          .int("流式首字节超时必须是整数")
+          .min(
+            PROVIDER_TIMEOUT_LIMITS.FIRST_BYTE_TIMEOUT_STREAMING_MS.MIN,
+            "流式首字节超时不能少于1秒"
+          )
+          .max(
+            PROVIDER_TIMEOUT_LIMITS.FIRST_BYTE_TIMEOUT_STREAMING_MS.MAX,
+            "流式首字节超时不能超过120秒"
+          ),
+      ])
+      .optional(),
+    streaming_idle_timeout_ms: z
+      .union([
+        z.literal(0), // 0 = 禁用超时
+        z.coerce
+          .number()
+          .int("流式静默期超时必须是整数")
+          .min(PROVIDER_TIMEOUT_LIMITS.STREAMING_IDLE_TIMEOUT_MS.MIN, "流式静默期超时不能少于1秒")
+          .max(
+            PROVIDER_TIMEOUT_LIMITS.STREAMING_IDLE_TIMEOUT_MS.MAX,
+            "流式静默期超时不能超过120秒"
+          ),
+      ])
+      .optional(),
+    request_timeout_non_streaming_ms: z
+      .union([
+        z.literal(0), // 0 = 禁用超时
+        z.coerce
+          .number()
+          .int("非流式总超时必须是整数")
+          .min(
+            PROVIDER_TIMEOUT_LIMITS.REQUEST_TIMEOUT_NON_STREAMING_MS.MIN,
+            "非流式总超时不能少于60秒"
+          )
+          .max(
+            PROVIDER_TIMEOUT_LIMITS.REQUEST_TIMEOUT_NON_STREAMING_MS.MAX,
+            "非流式总超时不能超过1200秒"
+          ),
+      ])
+      .optional(),
     // 供应商官网地址
     website_url: z
       .string()

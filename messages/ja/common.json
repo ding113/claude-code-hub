@@ -39,5 +39,6 @@
   "warning": "警告",
   "info": "情報",
   "noData": "データがありません",
-  "emptyState": "表示するデータがありません"
+  "emptyState": "表示するデータがありません",
+  "core": "コア"
 }

@@ -34,7 +34,18 @@ export function SyncLiteLLMButton() {
 
       const { added, updated, unchanged, failed } = response.data;
 
-      // 显示详细结果
+      // 优先显示失败信息（更明显）
+      if (failed.length > 0) {
+        toast.error(
+          t("prices.sync.partialFailure", { failed: failed.length }) +
+            (failed.length <= 5 ? `\n失败模型: ${failed.join(", ")}` : ""),
+          {
+            duration: 5000, // 失败消息显示更长时间
+          }
+        );
+      }
+
+      // 显示成功信息
       if (added.length > 0 || updated.length > 0) {
         toast.success(
           t("prices.sync.successWithChanges", {
@@ -45,12 +56,8 @@ export function SyncLiteLLMButton() {
         );
       } else if (unchanged.length > 0) {
         toast.info(t("prices.sync.successNoChanges", { unchanged: unchanged.length }));
-      } else {
+      } else if (failed.length === 0) {
         toast.warning(t("prices.sync.noModels"));
-      }
-
-      if (failed.length > 0) {
-        toast.error(t("prices.sync.partialFailure", { failed: failed.length }));
       }
 
       // 刷新页面数据

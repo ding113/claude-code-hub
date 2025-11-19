@@ -1,7 +1,6 @@
 "use client";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -81,11 +80,11 @@ export function ProviderRichListItem({
   const [resetPending, startResetTransition] = useTransition();
   const [deletePending, startDeleteTransition] = useTransition();
   const [togglePending, startToggleTransition] = useTransition();
-  const [faviconHidden, setFaviconHidden] = useState(false);
 
   const canEdit = currentUser?.role === "admin";
   const tTypes = useTranslations("settings.providers.types");
   const tList = useTranslations("settings.providers.list");
+  const tTimeout = useTranslations("settings.providers.form.sections.timeout");
 
   // 获取供应商类型配置
   const typeConfig = getProviderTypeConfig(provider.providerType);
@@ -253,15 +252,15 @@ export function ProviderRichListItem({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             {/* Favicon */}
-            {provider.faviconUrl && !faviconHidden && (
-              <Image
+            {provider.faviconUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
                 src={provider.faviconUrl}
                 alt=""
-                width={16}
-                height={16}
                 className="h-4 w-4 flex-shrink-0"
-                onError={() => setFaviconHidden(true)}
-                unoptimized
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = "none";
+                }}
               />
             )}
 
@@ -315,6 +314,24 @@ export function ProviderRichListItem({
                 {provider.maskedKey}
               </button>
             )}
+
+            {/* 超时配置可视化（紧凑格式） */}
+            <span className="text-xs text-muted-foreground flex-shrink-0">
+              {tTimeout("summary", {
+                streaming:
+                  provider.firstByteTimeoutStreamingMs === 0
+                    ? "∞"
+                    : ((provider.firstByteTimeoutStreamingMs || 30000) / 1000).toString(),
+                idle:
+                  provider.streamingIdleTimeoutMs === 0
+                    ? "∞"
+                    : ((provider.streamingIdleTimeoutMs || 10000) / 1000).toString(),
+                nonStreaming:
+                  provider.requestTimeoutNonStreamingMs === 0
+                    ? "∞"
+                    : ((provider.requestTimeoutNonStreamingMs || 600000) / 1000).toString(),
+              })}
+            </span>
           </div>
         </div>
 

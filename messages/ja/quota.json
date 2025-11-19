@@ -64,6 +64,8 @@
   "users": {
     "title": "ユーザークォータ統計",
     "totalCount": "合計 {count} 名のユーザー",
+    "manageNotice": "ユーザーとキーを管理するには",
+    "manageLink": "ユーザー管理",
     "noNote": "備考なし",
     "rpm": {
       "label": "RPM クォータ",
