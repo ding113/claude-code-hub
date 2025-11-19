@@ -579,15 +579,11 @@ export class ProxyForwarder {
 
     // --- GEMINI HANDLING ---
     if (provider.providerType === "gemini" || provider.providerType === "gemini-cli") {
-      // 1. Transform Request
-      const geminiRequest = GeminiAdapter.transformRequest(
-        session.request.message,
-        provider.providerType as "gemini" | "gemini-cli"
-      );
-      const bodyString = JSON.stringify(geminiRequest);
+      // 1. 直接透传请求体（不转换）
+      const bodyString = JSON.stringify(session.request.message);
       requestBody = bodyString;
 
-      // Detect streaming from original request
+      // 检测流式请求
       try {
         const originalBody = session.request.message as Record<string, unknown>;
         isStreaming = originalBody.stream === true;
@@ -595,7 +591,7 @@ export class ProxyForwarder {
         isStreaming = false;
       }
 
-      // 2. Prepare Auth & Headers
+      // 2. 准备认证和 Headers
       const accessToken = await GeminiAuth.getAccessToken(provider.key);
       const isApiKey = GeminiAuth.isApiKey(provider.key);
 
@@ -613,45 +609,21 @@ export class ProxyForwarder {
         headers.set(GEMINI_PROTOCOL.HEADERS.API_CLIENT, "GeminiCLI/1.0");
       }
 
-      // 3. Construct URL
-      const model = session.request.model || "gemini-pro";
+      // 3. 直接透传：使用 buildProxyUrl() 拼接原始路径和查询参数
+      const baseUrl =
+        provider.url ||
+        (provider.providerType === "gemini"
+          ? GEMINI_PROTOCOL.OFFICIAL_ENDPOINT
+          : GEMINI_PROTOCOL.CLI_ENDPOINT);
 
-      // Use provider.url if available, otherwise fall back to defaults
-      let baseUrl = provider.url;
-      if (!baseUrl) {
-        baseUrl =
-          provider.providerType === "gemini"
-            ? GEMINI_PROTOCOL.OFFICIAL_ENDPOINT
-            : GEMINI_PROTOCOL.CLI_ENDPOINT;
-      } else {
-        // Remove trailing slash if present
-        baseUrl = baseUrl.replace(/\/$/, "");
-      }
-
-      const action = isStreaming ? "streamGenerateContent" : "generateContent";
-      let urlString = "";
-
-      if (provider.providerType === "gemini") {
-        urlString = `${baseUrl}/models/${model}:${action}`;
-      } else {
-        // CLI endpoint: https://your-endpoint.com/v1beta/models/{model}:{action}
-        urlString = `${baseUrl}/models/${model}:${action}`;
-      }
-
-      if (isStreaming) {
-        urlString += "?alt=sse";
-      } else if (provider.providerType === "gemini") {
-        // Non-streaming official gemini might not need ?alt=sse, but supports it?
-        // Official API doesn't use ?alt=sse for generateContent usually, returns JSON.
-      }
-
-      proxyUrl = urlString;
+      proxyUrl = buildProxyUrl(baseUrl, session.requestUrl);
       processedHeaders = headers;
 
-      logger.debug("ProxyForwarder: Gemini request prepared", {
+      logger.debug("ProxyForwarder: Gemini request passthrough", {
         providerId: provider.id,
         type: provider.providerType,
         url: proxyUrl,
+        originalPath: session.requestUrl.pathname,
         isStreaming,
         isApiKey,
       });
