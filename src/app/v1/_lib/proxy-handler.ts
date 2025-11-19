@@ -7,11 +7,27 @@ import { ProxyResponseHandler } from "./proxy/response-handler";
 import { ProxyErrorHandler } from "./proxy/error-handler";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { SessionTracker } from "@/lib/session-tracker";
+import { detectClientFormat } from "./proxy/format-mapper";
 
 export async function handleProxyRequest(c: Context): Promise<Response> {
   const session = await ProxySession.fromContext(c);
 
   try {
+    // 自动检测请求格式（如果尚未设置）
+    if (session.originalFormat === "claude") {
+      const detectedFormat = detectClientFormat(session.request.message as Record<string, unknown>);
+      session.setOriginalFormat(detectedFormat);
+
+      if (detectedFormat !== "claude") {
+        logger.debug("[ProxyHandler] Auto-detected request format:", {
+          format: detectedFormat,
+          hasContents: Array.isArray((session.request.message as Record<string, unknown>).contents),
+          hasRequest:
+            typeof (session.request.message as Record<string, unknown>).request === "object",
+        });
+      }
+    }
+
     // Decide request type and build configured guard pipeline
     const type = session.isCountTokensRequest() ? RequestType.COUNT_TOKENS : RequestType.CHAT;
     const pipeline = GuardPipelineBuilder.fromRequestType(type);
