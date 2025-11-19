@@ -214,7 +214,7 @@ export class ProxySession {
   }
 
   /**
-   * 获取 messages 数组长度（支持 Claude 和 Codex 格式）
+   * 获取 messages 数组长度（支持 Claude、Codex 和 Gemini 格式）
    */
   getMessagesLength(): number {
     const msg = this.request.message as Record<string, unknown>;
@@ -226,11 +226,20 @@ export class ProxySession {
     if (Array.isArray(msg.input)) {
       return msg.input.length;
     }
+    // Gemini 格式: contents[]
+    if (Array.isArray(msg.contents)) {
+      return msg.contents.length;
+    }
+    // Gemini CLI 包装格式: request.contents[]
+    const requestData = msg.request as Record<string, unknown> | undefined;
+    if (requestData && Array.isArray(requestData.contents)) {
+      return requestData.contents.length;
+    }
     return 0;
   }
 
   /**
-   * 获取 messages 数组（支持 Claude 和 Codex 格式）
+   * 获取 messages 数组（支持 Claude、Codex 和 Gemini 格式）
    */
   getMessages(): unknown {
     const msg = this.request.message as Record<string, unknown>;
@@ -241,6 +250,15 @@ export class ProxySession {
     // Codex 格式
     if (msg.input !== undefined) {
       return msg.input;
+    }
+    // Gemini 格式: contents[]
+    if (msg.contents !== undefined) {
+      return msg.contents;
+    }
+    // Gemini CLI 包装格式: request.contents[]
+    const requestData = msg.request as Record<string, unknown> | undefined;
+    if (requestData?.contents !== undefined) {
+      return requestData.contents;
     }
     return undefined;
   }
