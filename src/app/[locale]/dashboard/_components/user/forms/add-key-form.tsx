@@ -148,9 +148,7 @@ export function AddKeyForm({ userId, onSuccess }: AddKeyFormProps) {
       />
 
       <div className="space-y-2">
-        <Label htmlFor="daily-reset-mode">
-          {t("dailyResetMode.label")}
-        </Label>
+        <Label htmlFor="daily-reset-mode">{t("dailyResetMode.label")}</Label>
         <Select
           value={form.values.dailyResetMode}
           onValueChange={(value: "fixed" | "rolling") => form.setValue("dailyResetMode", value)}
@@ -160,12 +158,8 @@ export function AddKeyForm({ userId, onSuccess }: AddKeyFormProps) {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="fixed">
-              {t("dailyResetMode.options.fixed")}
-            </SelectItem>
-            <SelectItem value="rolling">
-              {t("dailyResetMode.options.rolling")}
-            </SelectItem>
+            <SelectItem value="fixed">{t("dailyResetMode.options.fixed")}</SelectItem>
+            <SelectItem value="rolling">{t("dailyResetMode.options.rolling")}</SelectItem>
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">

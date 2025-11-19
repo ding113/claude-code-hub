@@ -563,7 +563,11 @@ export async function getProviderLimitUsage(providerId: number): Promise<
 
     // 获取重置时间信息
     const reset5h = getResetInfo("5h");
-    const resetDaily = getResetInfoWithMode("daily", provider.dailyResetTime, provider.dailyResetMode ?? "fixed");
+    const resetDaily = getResetInfoWithMode(
+      "daily",
+      provider.dailyResetTime,
+      provider.dailyResetMode ?? "fixed"
+    );
     const resetWeekly = getResetInfo("weekly");
     const resetMonthly = getResetInfo("monthly");
 
