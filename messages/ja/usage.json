@@ -231,6 +231,7 @@
         "~/.claude ディレクトリに config.json ファイルを作成 (存在しない場合)",
         "以下の内容を追加:"
       ],
+      "configPath": "設定ファイルの場所：{path}",
 
       "note": "注記",
       "notePoints": [

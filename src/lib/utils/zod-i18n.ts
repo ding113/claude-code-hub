@@ -56,7 +56,11 @@ export function setZodErrorMap(
     try {
       return { message: t(code, params) };
     } catch (error) {
-      console.warn("setZodErrorMap fallback", { code, issue, error });
+      // Only log in development to avoid sensitive data exposure
+      if (process.env.NODE_ENV === "development") {
+        console.warn("setZodErrorMap fallback", { code, error });
+        // Avoid logging the full issue object which may contain user input
+      }
       // Fallback to Zod default message
       return { message: _ctx.defaultError };
     }
@@ -93,7 +97,11 @@ export async function getZodErrorMapServer(locale: string) {
     try {
       return { message: t(code, params) };
     } catch (error) {
-      console.warn("getZodErrorMapServer fallback", { locale, code, issue, error });
+      // Only log in development to avoid sensitive data exposure
+      if (process.env.NODE_ENV === "development") {
+        console.warn("getZodErrorMapServer fallback", { locale, code, error });
+        // Avoid logging the full issue object which may contain user input
+      }
       return { message: _ctx.defaultError };
     }
   };

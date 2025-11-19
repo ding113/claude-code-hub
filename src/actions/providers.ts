@@ -524,7 +524,7 @@ export async function resetProviderCircuit(providerId: number): Promise<ActionRe
 export async function getProviderLimitUsage(providerId: number): Promise<
   ActionResult<{
     cost5h: { current: number; limit: number | null; resetInfo: string };
-    costDaily: { current: number; limit: number | null; resetAt: Date };
+    costDaily: { current: number; limit: number | null; resetAt?: Date };
     costWeekly: { current: number; limit: number | null; resetAt: Date };
     costMonthly: { current: number; limit: number | null; resetAt: Date };
     concurrentSessions: { current: number; limit: number };
@@ -544,12 +544,18 @@ export async function getProviderLimitUsage(providerId: number): Promise<
     // 动态导入避免循环依赖
     const { RateLimitService } = await import("@/lib/rate-limit");
     const { SessionTracker } = await import("@/lib/session-tracker");
-    const { getResetInfo } = await import("@/lib/rate-limit/time-utils");
+    const { getResetInfo, getResetInfoWithMode } = await import("@/lib/rate-limit/time-utils");
 
     // 获取金额消费（优先 Redis，降级数据库）
     const [cost5h, costDaily, costWeekly, costMonthly, concurrentSessions] = await Promise.all([
       RateLimitService.getCurrentCost(providerId, "provider", "5h"),
-      RateLimitService.getCurrentCost(providerId, "provider", "daily", provider.dailyResetTime),
+      RateLimitService.getCurrentCost(
+        providerId,
+        "provider",
+        "daily",
+        provider.dailyResetTime,
+        provider.dailyResetMode ?? "fixed"
+      ),
       RateLimitService.getCurrentCost(providerId, "provider", "weekly"),
       RateLimitService.getCurrentCost(providerId, "provider", "monthly"),
       SessionTracker.getProviderSessionCount(providerId),
@@ -557,7 +563,7 @@ export async function getProviderLimitUsage(providerId: number): Promise<
 
     // 获取重置时间信息
     const reset5h = getResetInfo("5h");
-    const resetDaily = getResetInfo("daily", provider.dailyResetTime);
+    const resetDaily = getResetInfoWithMode("daily", provider.dailyResetTime, provider.dailyResetMode ?? "fixed");
     const resetWeekly = getResetInfo("weekly");
     const resetMonthly = getResetInfo("monthly");
 
@@ -572,7 +578,7 @@ export async function getProviderLimitUsage(providerId: number): Promise<
         costDaily: {
           current: costDaily,
           limit: provider.limitDailyUsd,
-          resetAt: resetDaily.resetAt!,
+          resetAt: resetDaily.type === "rolling" ? undefined : resetDaily.resetAt!,
         },
         costWeekly: {
           current: costWeekly,

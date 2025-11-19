@@ -530,10 +530,10 @@
         "rateLimit": {
           "title": "限流配置",
           "summary": {
-            "fiveHour": "5h: ${amount}",
-            "daily": "日: ${amount} (重置 {resetTime})",
-            "weekly": "周: ${amount}",
-            "monthly": "月: ${amount}",
+            "fiveHour": "5h: {amount}",
+            "daily": "日: {amount} (重置 {resetTime})",
+            "weekly": "周: {amount}",
+            "monthly": "月: {amount}",
             "concurrent": "并发: {count}",
             "none": "无限制"
           },

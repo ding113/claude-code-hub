@@ -266,12 +266,12 @@ export async function getKeyLimitUsage(keyId: number): Promise<
     // 动态导入 RateLimitService 避免循环依赖
     const { RateLimitService } = await import("@/lib/rate-limit");
     const { SessionTracker } = await import("@/lib/session-tracker");
-    const { getResetInfo } = await import("@/lib/rate-limit/time-utils");
+    const { getResetInfo, getResetInfoWithMode } = await import("@/lib/rate-limit/time-utils");
 
     // 获取金额消费（优先 Redis，降级数据库）
     const [cost5h, costDaily, costWeekly, costMonthly, concurrentSessions] = await Promise.all([
       RateLimitService.getCurrentCost(keyId, "key", "5h"),
-      RateLimitService.getCurrentCost(keyId, "key", "daily", key.dailyResetTime),
+      RateLimitService.getCurrentCost(keyId, "key", "daily", key.dailyResetTime, key.dailyResetMode ?? "fixed"),
       RateLimitService.getCurrentCost(keyId, "key", "weekly"),
       RateLimitService.getCurrentCost(keyId, "key", "monthly"),
       SessionTracker.getKeySessionCount(keyId),
@@ -279,7 +279,7 @@ export async function getKeyLimitUsage(keyId: number): Promise<
 
     // 获取重置时间
     const resetInfo5h = getResetInfo("5h");
-    const resetInfoDaily = getResetInfo("daily", key.dailyResetTime);
+    const resetInfoDaily = getResetInfoWithMode("daily", key.dailyResetTime, key.dailyResetMode ?? "fixed");
     const resetInfoWeekly = getResetInfo("weekly");
     const resetInfoMonthly = getResetInfo("monthly");
 
