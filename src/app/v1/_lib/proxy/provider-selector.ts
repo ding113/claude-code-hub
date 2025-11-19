@@ -288,24 +288,28 @@ export class ProxyProviderResolver {
     if (excludedProviders.length > 0) {
       message = `所有供应商不可用（尝试了 ${excludedProviders.length} 个供应商）`;
       errorType = "all_providers_failed";
-    } else if (session.getLastSelectionContext()?.filteredProviders?.length > 0) {
-      // 检查是否因为限流被过滤
-      const filtered = session.getLastSelectionContext()!.filteredProviders!;
-      const rateLimited = filtered.filter(p => p.reason === "rate_limited");
-      const circuitOpen = filtered.filter(p => p.reason === "circuit_open");
+    } else {
+      const selectionContext = session.getLastSelectionContext();
+      const filteredProviders = selectionContext?.filteredProviders;
 
-      if (rateLimited.length > 0 && circuitOpen.length === 0) {
-        // 全部因为限流
-        message = `所有供应商已达消费限额（${rateLimited.length} 个供应商）`;
-        errorType = "rate_limit_exceeded";
-      } else if (circuitOpen.length > 0 && rateLimited.length === 0) {
-        // 全部因为熔断
-        message = `所有供应商熔断器已打开（${circuitOpen.length} 个供应商）`;
-        errorType = "circuit_breaker_open";
-      } else if (rateLimited.length > 0 && circuitOpen.length > 0) {
-        // 混合原因
-        message = `所有供应商不可用（${rateLimited.length} 个达限额，${circuitOpen.length} 个熔断）`;
-        errorType = "mixed_unavailable";
+      if (filteredProviders && filteredProviders.length > 0) {
+        // 检查是否因为限流被过滤
+        const rateLimited = filteredProviders.filter(p => p.reason === "rate_limited");
+        const circuitOpen = filteredProviders.filter(p => p.reason === "circuit_open");
+
+        if (rateLimited.length > 0 && circuitOpen.length === 0) {
+          // 全部因为限流
+          message = `所有供应商已达消费限额（${rateLimited.length} 个供应商）`;
+          errorType = "rate_limit_exceeded";
+        } else if (circuitOpen.length > 0 && rateLimited.length === 0) {
+          // 全部因为熔断
+          message = `所有供应商熔断器已打开（${circuitOpen.length} 个供应商）`;
+          errorType = "circuit_breaker_open";
+        } else if (rateLimited.length > 0 && circuitOpen.length > 0) {
+          // 混合原因
+          message = `所有供应商不可用（${rateLimited.length} 个达限额，${circuitOpen.length} 个熔断）`;
+          errorType = "mixed_unavailable";
+        }
       }
     }
 
