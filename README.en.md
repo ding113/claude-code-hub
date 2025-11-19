@@ -21,6 +21,20 @@ Claude Code Hub combines Next.js 15, Hono, PostgreSQL, and Redis to deliver a Cl
 
 ---
 
+<table>
+<tr>
+<td width="200">
+<a href="https://cubence.com?source=cch">
+<img src="public/readme/cubence.jpg" alt="Cubence Logo" width="180"/>
+</a>
+</td>
+<td>
+<b>💎 Special Offer</b>: <a href="https://cubence.com?source=cch">Cubence</a> is a stable and efficient AI service transit platform, providing transit services for AI tools such as Claude Code, Codex, Gemini, with good stability and cost-effectiveness.<br/>
+Cubence offers special discount coupons for users of CCH: when purchasing with the coupon <code>DING113CCH</code>, you can enjoy a <b>10% discount</b> → <a href="https://cubence.com?source=cch">Visit Now</a>
+</td>
+</tr>
+</table>
+
 ## ✨ Core Highlights
 
 - 🤖 **Intelligent load balancing**: Weight + priority + grouping scheduler with built-in circuit breaker and up to three failover retries to keep requests stable.
@@ -38,6 +52,60 @@ Claude Code Hub combines Next.js 15, Hono, PostgreSQL, and Redis to deliver a Cl
 
 - Docker and Docker Compose (latest version recommended)
 - Optional (for local development): Node.js ≥ 20, Bun ≥ 1.3
+
+### 🚀 One-Click Deployment Script (✨ Recommended - Fully Automated)
+
+The one-click deployment script **automatically handles** all of the following:
+
+- ✅ Check and install Docker and Docker Compose (Linux/macOS support auto-install)
+- ✅ Create deployment directory and configuration files
+- ✅ Generate secure admin token and database password
+- ✅ Start all services and wait for health checks
+- ✅ Display access URLs and admin token
+
+**Linux / macOS:**
+
+```bash
+# Download and run the deployment script
+curl -fsSL https://raw.githubusercontent.com/ding113/claude-code-hub/main/scripts/deploy.sh -o deploy.sh
+chmod +x deploy.sh
+./deploy.sh
+```
+
+Or using wget:
+
+```bash
+wget https://raw.githubusercontent.com/ding113/claude-code-hub/main/scripts/deploy.sh
+chmod +x deploy.sh
+./deploy.sh
+```
+
+**Windows (PowerShell as Administrator):**
+
+```powershell
+# Download and run the deployment script
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/ding113/claude-code-hub/main/scripts/deploy.ps1" -OutFile "deploy.ps1"
+Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
+.\deploy.ps1
+```
+
+**Deployment Directories:**
+
+- Linux: `/www/compose/claude-code-hub`
+- macOS: `~/Applications/claude-code-hub`
+- Windows: `C:\ProgramData\claude-code-hub`
+
+**Branch Selection:**
+
+The script will prompt you to select a deployment branch:
+
+- `main` (default): Stable release, recommended for production
+- `dev`: Development version with latest features, for testing
+
+**Important Notes:**
+
+- ⚠️ Please save the **Admin Token** displayed by the script - it's the only credential to access the admin dashboard!
+- ⚠️ Windows users: If Docker Desktop is not installed, the script will automatically open the download page
 
 ### Three-Step Launch (Docker Compose)
 

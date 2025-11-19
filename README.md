@@ -21,6 +21,20 @@ Claude Code Hub 通过 Next.js 15 + Hono + PostgreSQL + Redis 组合，实现 Cl
 
 ---
 
+<table>
+<tr>
+<td width="200">
+<a href="https://cubence.com?source=cch">
+<img src="public/readme/cubence.jpg" alt="Cubence Logo" width="180"/>
+</a>
+</td>
+<td>
+<b>💎 特别优惠</b>：<a href="https://cubence.com?source=cch">Cubence</a> 一家稳定高效的AI服务中转平台，为 Claude Code、Codex、Gemini 等AI工具提供中转服务，有着不错的稳定性和性价比。<br/>
+Cubence 为 CCH 的使用用户提供了特别的优惠折扣：在购买时使用优惠券 <code>DING113CCH</code>，可享受 <b>10% 优惠折扣</b> → <a href="https://cubence.com?source=cch">立即访问</a>
+</td>
+</tr>
+</table>
+
 ## ✨ 核心功能 Highlights
 
 - 🤖 **智能负载均衡**：权重 + 优先级 + 分组调度，内置熔断保护与最多 3 次故障转移，保障请求稳定。
@@ -38,6 +52,60 @@ Claude Code Hub 通过 Next.js 15 + Hono + PostgreSQL + Redis 组合，实现 Cl
 
 - Docker 与 Docker Compose（推荐使用最新版本）
 - 可选（本地开发）：Node.js ≥ 20，Bun ≥ 1.3
+
+### 🚀 一键部署脚本（✨ 推荐方式，全自动安装）
+
+一键部署脚本会**自动完成**以下所有步骤：
+
+- ✅ 检查并安装 Docker 和 Docker Compose（Linux/macOS 支持自动安装）
+- ✅ 创建部署目录并配置文件
+- ✅ 生成安全的管理员令牌和数据库密码
+- ✅ 启动所有服务并等待健康检查
+- ✅ 显示访问地址和管理员令牌
+
+**Linux / macOS:**
+
+```bash
+# 下载并运行部署脚本
+curl -fsSL https://raw.githubusercontent.com/ding113/claude-code-hub/main/scripts/deploy.sh -o deploy.sh
+chmod +x deploy.sh
+./deploy.sh
+```
+
+或者使用 wget：
+
+```bash
+wget https://raw.githubusercontent.com/ding113/claude-code-hub/main/scripts/deploy.sh
+chmod +x deploy.sh
+./deploy.sh
+```
+
+**Windows (PowerShell 管理员模式):**
+
+```powershell
+# 下载并运行部署脚本
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/ding113/claude-code-hub/main/scripts/deploy.ps1" -OutFile "deploy.ps1"
+Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
+.\deploy.ps1
+```
+
+**部署目录：**
+
+- Linux: `/www/compose/claude-code-hub`
+- macOS: `~/Applications/claude-code-hub`
+- Windows: `C:\ProgramData\claude-code-hub`
+
+**分支选择：**
+
+脚本会提示选择部署分支：
+
+- `main`（默认）：稳定版本，推荐生产环境使用
+- `dev`：开发版本，包含最新功能，用于测试
+
+**重要提示：**
+
+- ⚠️ 请妥善保存脚本输出的**管理员令牌**（Admin Token），这是登录后台的唯一凭证！
+- ⚠️ Windows 用户：如果未安装 Docker Desktop，脚本会自动打开下载页面
 
 ### 三步启动（Docker Compose）
 
