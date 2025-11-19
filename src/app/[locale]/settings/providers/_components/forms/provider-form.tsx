@@ -662,7 +662,12 @@ export function ProviderForm({
 
                 <ModelMultiSelect
                   providerType={
-                    providerType as "claude" | "codex" | "gemini-cli" | "openai-compatible"
+                    providerType as
+                      | "claude"
+                      | "codex"
+                      | "gemini"
+                      | "gemini-cli"
+                      | "openai-compatible"
                   }
                   selectedModels={allowedModels}
                   onChange={setAllowedModels}
