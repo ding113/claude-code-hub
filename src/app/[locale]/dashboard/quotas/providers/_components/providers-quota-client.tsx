@@ -13,7 +13,7 @@ import type { ProviderType } from "@/types/provider";
 
 interface ProviderQuota {
   cost5h: { current: number; limit: number | null; resetInfo: string };
-  costDaily: { current: number; limit: number | null; resetAt: Date };
+  costDaily: { current: number; limit: number | null; resetAt?: Date };
   costWeekly: { current: number; limit: number | null; resetAt: Date };
   costMonthly: { current: number; limit: number | null; resetAt: Date };
   concurrentSessions: { current: number; limit: number };
@@ -136,10 +136,12 @@ export function ProvidersQuotaClient({
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">{t("costDaily.label")}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {t("costDaily.resetAt")}{" "}
-                    {formatDateDistance(provider.quota.costDaily.resetAt, locale)}
-                  </span>
+                  {provider.quota.costDaily.resetAt && (
+                    <span className="text-xs text-muted-foreground">
+                      {t("costDaily.resetAt")}{" "}
+                      {formatDateDistance(provider.quota.costDaily.resetAt, new Date(), locale)}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center justify-between text-sm font-mono">
                   <span>
