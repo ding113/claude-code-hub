@@ -50,8 +50,16 @@ export async function processPriceTableInternal(
       return { ok: false, error: "价格表必须是一个JSON对象" };
     }
 
-    // 导入所有模型（不限制模型名称前缀）
+    // 元数据字段列表（不是实际的模型数据）
+    const METADATA_FIELDS = ["sample_spec"];
+
+    // 导入所有模型（过滤元数据字段）
     const entries = Object.entries(priceTable).filter(([modelName]) => {
+      // 排除元数据字段
+      if (METADATA_FIELDS.includes(modelName)) {
+        logger.debug(`跳过元数据字段: ${modelName}`);
+        return false;
+      }
       return typeof modelName === "string" && modelName.trim().length > 0;
     });
 
@@ -66,8 +74,16 @@ export async function processPriceTableInternal(
     // 处理每个模型的价格
     for (const [modelName, priceData] of entries) {
       try {
-        // 验证价格数据
+        // 验证价格数据基本类型
         if (typeof priceData !== "object" || priceData === null) {
+          logger.warn(`模型 ${modelName} 的价格数据不是有效的对象`);
+          result.failed.push(modelName);
+          continue;
+        }
+
+        // 验证价格数据必须包含 mode 字段（所有有效模型都有这个字段）
+        if (!("mode" in priceData)) {
+          logger.warn(`模型 ${modelName} 缺少必需的 mode 字段，跳过处理`);
           result.failed.push(modelName);
           continue;
         }
