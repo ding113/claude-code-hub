@@ -18,6 +18,7 @@ import { toZonedTime, fromZonedTime } from "date-fns-tz";
 import { getEnvConfig } from "@/lib/config";
 
 export type TimePeriod = "5h" | "daily" | "weekly" | "monthly";
+export type DailyResetMode = "fixed" | "rolling";
 
 export interface TimeRange {
   startTime: Date;
@@ -79,6 +80,30 @@ export function getTimeRangeForPeriod(period: TimePeriod, resetTime = "00:00"): 
 }
 
 /**
+ * 根据周期和模式计算时间范围（支持滚动窗口模式）
+ * - daily + rolling: 滚动窗口（过去 24 小时）
+ * - daily + fixed: 固定时间重置（使用 resetTime）
+ * - 其他周期：使用原有逻辑
+ */
+export function getTimeRangeForPeriodWithMode(
+  period: TimePeriod,
+  resetTime = "00:00",
+  mode: DailyResetMode = "fixed"
+): TimeRange {
+  if (period === "daily" && mode === "rolling") {
+    // 滚动窗口：过去 24 小时
+    const now = new Date();
+    return {
+      startTime: new Date(now.getTime() - 24 * 60 * 60 * 1000),
+      endTime: now,
+    };
+  }
+
+  // 其他情况使用原有逻辑
+  return getTimeRangeForPeriod(period, resetTime);
+}
+
+/**
  * 根据周期计算 Redis Key 的 TTL（秒）
  * - 5h: 5 小时（固定）
  * - daily: 到下一个自定义重置时间的秒数
@@ -119,6 +144,24 @@ export function getTTLForPeriod(period: TimePeriod, resetTime = "00:00"): number
       return Math.ceil((nextMonth.getTime() - now.getTime()) / 1000);
     }
   }
+}
+
+/**
+ * 根据周期和模式计算 Redis Key 的 TTL（秒）
+ * - daily + rolling: 24 小时（固定）
+ * - daily + fixed: 到下一个自定义重置时间的秒数
+ * - 其他周期：使用原有逻辑
+ */
+export function getTTLForPeriodWithMode(
+  period: TimePeriod,
+  resetTime = "00:00",
+  mode: DailyResetMode = "fixed"
+): number {
+  if (period === "daily" && mode === "rolling") {
+    return 24 * 3600; // 24 小时
+  }
+
+  return getTTLForPeriod(period, resetTime);
 }
 
 /**
@@ -168,6 +211,24 @@ export function getResetInfo(period: TimePeriod, resetTime = "00:00"): ResetInfo
       };
     }
   }
+}
+
+/**
+ * 获取重置信息（支持滚动窗口模式）
+ */
+export function getResetInfoWithMode(
+  period: TimePeriod,
+  resetTime = "00:00",
+  mode: DailyResetMode = "fixed"
+): ResetInfo {
+  if (period === "daily" && mode === "rolling") {
+    return {
+      type: "rolling",
+      period: "24 小时",
+    };
+  }
+
+  return getResetInfo(period, resetTime);
 }
 
 function getCustomDailyResetTime(now: Date, resetTime: string, timezone: string): Date {

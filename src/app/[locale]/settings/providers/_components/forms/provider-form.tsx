@@ -83,6 +83,9 @@ export function ProviderForm({
   const [limitDailyUsd, setLimitDailyUsd] = useState<number | null>(
     sourceProvider?.limitDailyUsd ?? null
   );
+  const [dailyResetMode, setDailyResetMode] = useState<"fixed" | "rolling">(
+    sourceProvider?.dailyResetMode ?? "fixed"
+  );
   const [dailyResetTime, setDailyResetTime] = useState<string>(
     sourceProvider?.dailyResetTime ?? "00:00"
   );
@@ -228,6 +231,9 @@ export function ProviderForm({
             cost_multiplier?: number;
             group_tag?: string | null;
             limit_5h_usd?: number | null;
+            limit_daily_usd?: number | null;
+            daily_reset_mode?: "fixed" | "rolling";
+            daily_reset_time?: string;
             limit_weekly_usd?: number | null;
             limit_monthly_usd?: number | null;
             limit_concurrent_sessions?: number | null;
@@ -255,6 +261,7 @@ export function ProviderForm({
             group_tag: groupTag.trim() || null,
             limit_5h_usd: limit5hUsd,
             limit_daily_usd: limitDailyUsd,
+            daily_reset_mode: dailyResetMode,
             daily_reset_time: dailyResetTime,
             limit_weekly_usd: limitWeeklyUsd,
             limit_monthly_usd: limitMonthlyUsd,
@@ -298,6 +305,7 @@ export function ProviderForm({
             group_tag: groupTag.trim() || null,
             limit_5h_usd: limit5hUsd,
             limit_daily_usd: limitDailyUsd,
+            daily_reset_mode: dailyResetMode,
             daily_reset_time: dailyResetTime,
             limit_weekly_usd: limitWeeklyUsd,
             limit_monthly_usd: limitMonthlyUsd,
@@ -803,19 +811,51 @@ export function ProviderForm({
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor={isEdit ? "edit-daily-reset" : "daily-reset"}>
-                    {t("sections.rateLimit.dailyResetTime.label")}
+                  <Label htmlFor={isEdit ? "edit-daily-reset-mode" : "daily-reset-mode"}>
+                    {t("sections.rateLimit.dailyResetMode.label")}
                   </Label>
-                  <Input
-                    id={isEdit ? "edit-daily-reset" : "daily-reset"}
-                    type="time"
-                    value={dailyResetTime}
-                    onChange={(e) => setDailyResetTime(e.target.value || "00:00")}
-                    placeholder="00:00"
+                  <Select
+                    value={dailyResetMode}
+                    onValueChange={(value: "fixed" | "rolling") => setDailyResetMode(value)}
                     disabled={isPending}
-                    step="60"
-                  />
+                  >
+                    <SelectTrigger id={isEdit ? "edit-daily-reset-mode" : "daily-reset-mode"}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="fixed">
+                        {t("sections.rateLimit.dailyResetMode.options.fixed")}
+                      </SelectItem>
+                      <SelectItem value="rolling">
+                        {t("sections.rateLimit.dailyResetMode.options.rolling")}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {dailyResetMode === "fixed"
+                      ? t("sections.rateLimit.dailyResetMode.desc.fixed")
+                      : t("sections.rateLimit.dailyResetMode.desc.rolling")}
+                  </p>
                 </div>
+                {dailyResetMode === "fixed" && (
+                  <div className="space-y-2">
+                    <Label htmlFor={isEdit ? "edit-daily-reset" : "daily-reset"}>
+                      {t("sections.rateLimit.dailyResetTime.label")}
+                    </Label>
+                    <Input
+                      id={isEdit ? "edit-daily-reset" : "daily-reset"}
+                      type="time"
+                      value={dailyResetTime}
+                      onChange={(e) => setDailyResetTime(e.target.value || "00:00")}
+                      placeholder="00:00"
+                      disabled={isPending}
+                      step="60"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor={isEdit ? "edit-limit-weekly" : "limit-weekly"}>
                     {t("sections.rateLimit.limitWeekly.label")}

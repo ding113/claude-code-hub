@@ -28,6 +28,7 @@ export async function addKey(data: {
   canLoginWebUi?: boolean;
   limit5hUsd?: number | null;
   limitDailyUsd?: number | null;
+  dailyResetMode?: "fixed" | "rolling";
   dailyResetTime?: string;
   limitWeeklyUsd?: number | null;
   limitMonthlyUsd?: number | null;
@@ -49,6 +50,7 @@ export async function addKey(data: {
       canLoginWebUi: data.canLoginWebUi,
       limit5hUsd: data.limit5hUsd,
       limitDailyUsd: data.limitDailyUsd,
+      dailyResetMode: data.dailyResetMode,
       dailyResetTime: data.dailyResetTime,
       limitWeeklyUsd: data.limitWeeklyUsd,
       limitMonthlyUsd: data.limitMonthlyUsd,
@@ -79,6 +81,7 @@ export async function addKey(data: {
       can_login_web_ui: validatedData.canLoginWebUi,
       limit_5h_usd: validatedData.limit5hUsd,
       limit_daily_usd: validatedData.limitDailyUsd,
+      daily_reset_mode: validatedData.dailyResetMode,
       daily_reset_time: validatedData.dailyResetTime,
       limit_weekly_usd: validatedData.limitWeeklyUsd,
       limit_monthly_usd: validatedData.limitMonthlyUsd,
@@ -139,6 +142,7 @@ export async function editKey(
       can_login_web_ui: validatedData.canLoginWebUi,
       limit_5h_usd: validatedData.limit5hUsd,
       limit_daily_usd: validatedData.limitDailyUsd,
+      daily_reset_mode: validatedData.dailyResetMode,
       daily_reset_time: validatedData.dailyResetTime,
       limit_weekly_usd: validatedData.limitWeeklyUsd,
       limit_monthly_usd: validatedData.limitMonthlyUsd,

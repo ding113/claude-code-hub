@@ -39,6 +39,7 @@ export async function validateKey(keyString: string): Promise<AuthSession | null
       canLoginWebUi: true, // Admin Token 始终可以登录 Web UI
       limit5hUsd: null,
       limitDailyUsd: null,
+      dailyResetMode: "fixed",
       dailyResetTime: "00:00",
       limitWeeklyUsd: null,
       limitMonthlyUsd: null,

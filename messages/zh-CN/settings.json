@@ -545,6 +545,17 @@
             "label": "每日消费上限 (USD)",
             "placeholder": "留空表示无限制"
           },
+          "dailyResetMode": {
+            "label": "每日重置模式",
+            "options": {
+              "fixed": "固定时间重置",
+              "rolling": "滚动窗口（24小时）"
+            },
+            "desc": {
+              "fixed": "每天固定时间点重置配额",
+              "rolling": "从首次调用开始计算，24小时后重置"
+            }
+          },
           "dailyResetTime": {
             "label": "每日重置时间 (HH:mm)"
           },

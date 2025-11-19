@@ -123,6 +123,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         codexInstructionsStrategy: provider.codexInstructionsStrategy,
         limit5hUsd: provider.limit5hUsd,
         limitDailyUsd: provider.limitDailyUsd,
+        dailyResetMode: provider.dailyResetMode,
         dailyResetTime: provider.dailyResetTime,
         limitWeeklyUsd: provider.limitWeeklyUsd,
         limitMonthlyUsd: provider.limitMonthlyUsd,
@@ -176,6 +177,7 @@ export async function addProvider(data: {
   join_claude_pool?: boolean;
   limit_5h_usd?: number | null;
   limit_daily_usd?: number | null;
+  daily_reset_mode?: "fixed" | "rolling";
   daily_reset_time?: string;
   limit_weekly_usd?: number | null;
   limit_monthly_usd?: number | null;
@@ -237,6 +239,7 @@ export async function addProvider(data: {
       ...validated,
       limit_5h_usd: validated.limit_5h_usd ?? null,
       limit_daily_usd: validated.limit_daily_usd ?? null,
+      daily_reset_mode: validated.daily_reset_mode ?? "fixed",
       daily_reset_time: validated.daily_reset_time ?? "00:00",
       limit_weekly_usd: validated.limit_weekly_usd ?? null,
       limit_monthly_usd: validated.limit_monthly_usd ?? null,

@@ -823,7 +823,9 @@ async function trackCostToRedis(session: ProxySession, usage: UsageMetrics | nul
     costFloat,
     {
       keyResetTime: key.dailyResetTime,
+      keyResetMode: key.dailyResetMode,
       providerResetTime: provider.dailyResetTime,
+      providerResetMode: provider.dailyResetMode,
     }
   );
 

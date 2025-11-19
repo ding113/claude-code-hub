@@ -70,6 +70,7 @@ export const KeyFormSchema = z.object({
     .max(10000, "每日消费上限不能超过10000美元")
     .nullable()
     .optional(),
+  dailyResetMode: z.enum(["fixed", "rolling"]).optional().default("fixed"),
   dailyResetTime: z
     .string()
     .regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, "重置时间格式必须为 HH:mm")
@@ -147,6 +148,7 @@ export const CreateProviderSchema = z.object({
     .max(10000, "每日消费上限不能超过10000美元")
     .nullable()
     .optional(),
+  daily_reset_mode: z.enum(["fixed", "rolling"]).optional().default("fixed"),
   daily_reset_time: z
     .string()
     .regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, "重置时间格式必须为 HH:mm")

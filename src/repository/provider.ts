@@ -27,6 +27,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     limit5hUsd: providerData.limit_5h_usd != null ? providerData.limit_5h_usd.toString() : null,
     limitDailyUsd:
       providerData.limit_daily_usd != null ? providerData.limit_daily_usd.toString() : null,
+    dailyResetMode: providerData.daily_reset_mode ?? "fixed",
     dailyResetTime: providerData.daily_reset_time ?? "00:00",
     limitWeeklyUsd:
       providerData.limit_weekly_usd != null ? providerData.limit_weekly_usd.toString() : null,
@@ -223,6 +224,8 @@ export async function updateProvider(
   if (providerData.limit_daily_usd !== undefined)
     dbData.limitDailyUsd =
       providerData.limit_daily_usd != null ? providerData.limit_daily_usd.toString() : null;
+  if (providerData.daily_reset_mode !== undefined)
+    dbData.dailyResetMode = providerData.daily_reset_mode;
   if (providerData.daily_reset_time !== undefined)
     dbData.dailyResetTime = providerData.daily_reset_time;
   if (providerData.limit_weekly_usd !== undefined)

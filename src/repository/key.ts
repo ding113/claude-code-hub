@@ -72,6 +72,7 @@ export async function createKey(keyData: CreateKeyData): Promise<Key> {
     canLoginWebUi: keyData.can_login_web_ui ?? true,
     limit5hUsd: keyData.limit_5h_usd != null ? keyData.limit_5h_usd.toString() : null,
     limitDailyUsd: keyData.limit_daily_usd != null ? keyData.limit_daily_usd.toString() : null,
+    dailyResetMode: keyData.daily_reset_mode ?? "fixed",
     dailyResetTime: keyData.daily_reset_time ?? "00:00",
     limitWeeklyUsd: keyData.limit_weekly_usd != null ? keyData.limit_weekly_usd.toString() : null,
     limitMonthlyUsd:
@@ -89,6 +90,7 @@ export async function createKey(keyData: CreateKeyData): Promise<Key> {
     canLoginWebUi: keys.canLoginWebUi,
     limit5hUsd: keys.limit5hUsd,
     limitDailyUsd: keys.limitDailyUsd,
+    dailyResetMode: keys.dailyResetMode,
     dailyResetTime: keys.dailyResetTime,
     limitWeeklyUsd: keys.limitWeeklyUsd,
     limitMonthlyUsd: keys.limitMonthlyUsd,
@@ -119,6 +121,7 @@ export async function updateKey(id: number, keyData: UpdateKeyData): Promise<Key
   if (keyData.limit_daily_usd !== undefined)
     dbData.limitDailyUsd =
       keyData.limit_daily_usd != null ? keyData.limit_daily_usd.toString() : null;
+  if (keyData.daily_reset_mode !== undefined) dbData.dailyResetMode = keyData.daily_reset_mode;
   if (keyData.daily_reset_time !== undefined) dbData.dailyResetTime = keyData.daily_reset_time;
   if (keyData.limit_weekly_usd !== undefined)
     dbData.limitWeeklyUsd =
