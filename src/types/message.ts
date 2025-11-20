@@ -91,7 +91,7 @@ export interface ProviderChainItem {
     // --- 供应商池状态 ---
     totalProviders: number; // 系统总供应商数
     enabledProviders: number; // 启用的供应商数
-    targetType: "claude" | "codex"; // 目标类型
+    targetType: "claude" | "codex" | "openai-compatible" | "gemini" | "gemini-cli"; // 目标类型（基于请求格式推断）
     requestedModel?: string; // 请求的模型名称（用于追踪）
 
     // --- 用户分组筛选 ---
@@ -113,6 +113,7 @@ export interface ProviderChainItem {
         | "circuit_open"
         | "rate_limited"
         | "excluded"
+        | "format_type_mismatch" // 请求格式与供应商类型不兼容
         | "type_mismatch"
         | "model_not_allowed"
         | "disabled";
