@@ -1262,7 +1262,7 @@ export async function testProviderOpenAIResponses(
     }),
     body: (model) => ({
       model,
-      max_tokens: API_TEST_CONFIG.TEST_MAX_TOKENS,
+      max_output_tokens: API_TEST_CONFIG.TEST_MAX_TOKENS,
       input: "讲一个简短的故事",
     }),
     successMessage: "OpenAI Responses API 测试成功",
