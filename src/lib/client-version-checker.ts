@@ -338,7 +338,7 @@ export class ClientVersionChecker {
 
         const uniqueUsers = Array.from(userMap.values());
 
-        // ✅ 使用内存计算 GA 版本，避免重复查询数据库
+        // 使用内存计算 GA 版本，避免重复查询数据库
         const usersWithVersion = uniqueUsers.map((u) => ({
           userId: u.userId,
           version: u.clientInfo.version,

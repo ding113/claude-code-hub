@@ -14,13 +14,7 @@ export const metadata: Metadata = {
  * 提供文档页面的容器、样式和共用头部
  * 支持未登录访问：未登录时显示简化版头部，已登录时显示完整的 DashboardHeader
  */
-export default async function UsageDocLayout({
-  children,
-  params,
-}: {
-  children: React.ReactNode;
-  params: Promise<{ locale: string }>;
-}) {
+export default async function UsageDocLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
 
   return (

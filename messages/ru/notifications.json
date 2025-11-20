@@ -12,7 +12,7 @@
   "refresh_success": "Успешно обновлено",
   "test_success": "Тест успешен",
 
-  "user_created": "Пользователь {name} успешно создан",
+  "user_created": "Пользователь успешно создан",
   "user_updated": "Информация о пользователе обновлена",
   "user_deleted": "Пользователь удален",
   "key_created": "API ключ успешно создан",
@@ -21,6 +21,10 @@
   "provider_created": "Провайдер успешно создан",
   "provider_updated": "Провайдер обновлен",
   "provider_deleted": "Провайдер удален",
+
+  "create_failed": "Не удалось создать",
+  "update_failed": "Не удалось обновить",
+  "delete_failed": "Не удалось удалить",
 
   "operation_success": "Операция выполнена успешно",
   "operation_failed": "Операция не удалась",

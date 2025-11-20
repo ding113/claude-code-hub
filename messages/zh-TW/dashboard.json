@@ -360,6 +360,7 @@
     "usageLogs": "使用記錄",
     "leaderboard": "排行榜",
     "quotasManagement": "額度管理",
+    "userManagement": "使用者管理",
     "documentation": "文件",
     "systemSettings": "系統設定",
     "feedback": "意見回饋",
@@ -419,6 +420,8 @@
     },
     "limitUsage": "額度使用情況",
     "copyKeyTooltip": "複製完整金鑰",
+    "showKeyTooltip": "顯示完整金鑰",
+    "hideKeyTooltip": "隱藏金鑰",
     "copyFailed": "複製失敗:",
     "timesUnit": "次",
     "provider": "供應商",
@@ -463,6 +466,10 @@
       "description": "您的 API 金鑰已成功建立。請務必複製並妥善保存，此金鑰僅顯示一次。",
       "apiKeyLabel": "API 金鑰",
       "warningText": "請在關閉前複製並儲存，關閉後將無法再次檢視此金鑰",
+      "httpWarningText": "偵測到 HTTP 存取，瀏覽器限制無法使用複製功能。請點擊眼睛圖示顯示金鑰後手動複製。",
+      "copyTooltip": "複製到剪貼簿",
+      "showTooltip": "顯示完整金鑰",
+      "hideTooltip": "隱藏金鑰",
       "closeButton": "關閉"
     }
   },
@@ -560,6 +567,26 @@
       "label": "每日額度",
       "placeholder": "每日消費額度限制",
       "description": "預設值：${default}，範圍：$0.01-$1000"
+    },
+    "limit5hUsd": {
+      "label": "5小時消費上限 (USD)",
+      "placeholder": "留空表示無限制",
+      "description": "5小時內最大消費金額"
+    },
+    "limitWeeklyUsd": {
+      "label": "週消費上限 (USD)",
+      "placeholder": "留空表示無限制",
+      "description": "每週最大消費金額"
+    },
+    "limitMonthlyUsd": {
+      "label": "月消費上限 (USD)",
+      "placeholder": "留空表示無限制",
+      "description": "每月最大消費金額"
+    },
+    "limitConcurrentSessions": {
+      "label": "並發 Session 上限",
+      "placeholder": "0 表示無限制",
+      "description": "同時執行的對話數量"
     }
   },
   "deleteKeyConfirm": {

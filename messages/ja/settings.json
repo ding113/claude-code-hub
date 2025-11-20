@@ -268,8 +268,7 @@
         "description": "完全なデータベースバックアップファイル（.dump形式）をエクスポートし、データ移行または復旧に使用できます。"
       },
       "import": {
-        "title": "データインポート",
-        "description": "バックアップファイルからデータベースを復元します。PostgreSQL custom format（.dump）形式のバックアップファイルをサポートします。"
+        "title": "データインポート"
       }
     }
   },
@@ -349,6 +348,8 @@
     "clientVersions": "クライアント更新リマインダー",
     "config": "設定",
     "data": "データ管理",
+    "errorRules": "エラールール",
+    "feedback": "フィードバック",
     "logs": "ログ",
     "notifications": "通知",
     "prices": "価格表",
@@ -532,6 +533,15 @@
         "timeoutError": "接続タイムアウト（5秒）。以下を確認してください：\n1. プロキシサーバーにアクセスできるか\n2. プロキシアドレスとポートが正しいか\n3. プロキシ認証情報が正しいか",
         "proxyError": "プロキシエラー:",
         "networkError": "ネットワークエラー:"
+      },
+      "urlPreview": {
+        "title": "URL結合プレビュー",
+        "invalidUrl": "無効なURL形式",
+        "invalidUrlDesc": "有効なHTTP/HTTPSアドレスを入力してください",
+        "duplicatePath": "重複パス検出",
+        "copy": "コピー",
+        "copySuccess": "{name} をクリップボードにコピーしました",
+        "copyFailed": "コピーに失敗しました"
       },
       "modelSelect": {
         "allowAllModels": "すべての {type} モデルを許可",
@@ -795,6 +805,9 @@
         "updating": "更新中...",
         "delete": "削除"
       },
+      "common": {
+        "core": "コア"
+      },
       "sections": {
         "routing": {
           "title": "ルーティング",
@@ -809,7 +822,7 @@
             "placeholder": "プロバイダー種別を選択"
           },
           "providerTypeDesc": "プロバイダーの API 形式を選択します。",
-          "providerTypeDisabledNote": "注: Gemini CLI と OpenAI Compatible は開発中のため、現在は使用できません",
+          "providerTypeDisabledNote": "注: OpenAI Compatible は開発中のため、現在は使用できません",
           "modelRedirects": {
             "label": "モデルリダイレクト設定",
             "optional": "（任意）"
@@ -921,6 +934,30 @@
             "desc": "設定したプロキシ経由でプロバイダー URL への接続をテストします（HEAD リクエスト、課金なし）"
           }
         },
+        "timeout": {
+          "title": "タイムアウト設定",
+          "summary": "初回バイト: {streaming}s | ストリーム間隔: {idle}s | 非ストリーミング: {nonStreaming}s",
+          "desc": "リクエストのタイムアウト時間を設定します。0 は無効を意味します",
+          "streamingFirstByte": {
+            "label": "ストリーミング初バイトタイムアウト（秒）",
+            "placeholder": "30",
+            "desc": "ストリーミングリクエストの初バイトタイムアウト、範囲1～120秒、デフォルト30秒",
+            "core": "true"
+          },
+          "streamingIdle": {
+            "label": "ストリーミングアイドルタイムアウト（秒）",
+            "placeholder": "10",
+            "desc": "ストリーミングリクエストのアイドルタイムアウト、範囲1～120秒、デフォルト10秒（途中停止防止）",
+            "core": "true"
+          },
+          "nonStreamingTotal": {
+            "label": "非ストリーミング総タイムアウト（秒）",
+            "placeholder": "600",
+            "desc": "非ストリーミングリクエストの総タイムアウト、範囲60～1200秒、デフォルト600秒（10分）",
+            "core": "true"
+          },
+          "disableHint": "0に設定するとタイムアウトを無効にします（カナリアロールバックシナリオのみ、非推奨）"
+        },
         "codexStrategy": {
           "title": "Codex Instructions ポリシー",
           "summary": {
@@ -952,8 +989,9 @@
         "claude": "Claude (Anthropic Messages API)",
         "claudeAuth": "Claude (Anthropic Auth Token)",
         "codex": "Codex (Response API)",
+        "gemini": "Gemini (Google Gemini API)",
         "geminiCli": "Gemini CLI",
-        "geminiCliDisabled": " - 開発中",
+        "geminiCliDisabled": "",
         "openaiCompatible": "OpenAI Compatible",
         "openaiCompatibleDisabled": " - 開発中"
       },
@@ -1135,6 +1173,10 @@
         "label": "Codex",
         "description": "Codex CLI API"
       },
+      "gemini": {
+        "label": "Gemini",
+        "description": "Google Gemini API"
+      },
       "geminiCli": {
         "label": "Gemini CLI",
         "description": "Gemini CLI API"
@@ -1254,5 +1296,128 @@
     "title": "センシティブワード管理",
     "toggleFailed": "トグルに失敗しました",
     "toggleFailedError": "トグルに失敗しました："
+  },
+  "errorRules": {
+    "nav": "エラールール",
+    "title": "エラールール管理",
+    "description": "自動再試行を行わないクライアントエラールールを管理します。設定後、ルールに一致するエラーは再試行せずユーザーに直接返され、プロバイダーのサーキットブレーカーにもカウントされません。",
+    "section": {
+      "title": "エラールールリスト"
+    },
+    "add": "エラールールを追加",
+    "addSuccess": "エラールールが正常に作成されました",
+    "addFailed": "エラールールの作成に失敗しました",
+    "edit": "エラールールを編集",
+    "editSuccess": "エラールールが正常に更新されました",
+    "editFailed": "エラールールの更新に失敗しました",
+    "delete": "エラールールを削除",
+    "deleteSuccess": "エラールールが正常に削除されました",
+    "deleteFailed": "削除に失敗しました",
+    "enable": "エラールールが有効になりました",
+    "disable": "エラールールが無効になりました",
+    "toggleFailed": "切り替えに失敗しました",
+    "toggleFailedError": "切り替えに失敗しました:",
+    "refreshCache": "キャッシュを更新",
+    "refreshCacheSuccess": "キャッシュが正常に更新され、{count} 個のエラールールがロードされました",
+    "refreshCacheFailed": "キャッシュの更新に失敗しました",
+    "cacheStats": "キャッシュ統計: 有効({enabledCount}) 無効({disabledCount}) デフォルト({defaultCount})",
+    "emptyState": "エラールールがまだありません。右上の「エラールールを追加」をクリックして設定を開始してください。",
+    "confirmDelete": "エラールール \"{pattern}\" を削除してもよろしいですか？",
+    "dialog": {
+      "addTitle": "エラールールを追加",
+      "addDescription": "エラーメッセージの正規表現パターンを設定します。マッチしたエラーはリトライ不可能なクライアントエラーとして識別されます。",
+      "editTitle": "エラールールを編集",
+      "editDescription": "エラールール設定を変更します。変更後、キャッシュが自動的に更新されます。",
+      "patternLabel": "正規表現パターン *",
+      "patternPlaceholder": "正規表現を入力...",
+      "patternRequired": "正規表現パターンを入力してください",
+      "patternHint": "JavaScript正規表現構文をサポート、例：prompt is too long|invalid.*request",
+      "categoryLabel": "ルールカテゴリ *",
+      "categoryPlaceholder": "ルールカテゴリを選択",
+      "categoryRequired": "ルールカテゴリを選択してください",
+      "categoryHint": "分類管理と統計のためのエラーカテゴリを選択",
+      "descriptionLabel": "説明",
+      "descriptionPlaceholder": "オプション: 説明を追加...",
+      "invalidRegex": "正規表現の構文エラー",
+      "regexTester": "正規表現テスター",
+      "testMessageLabel": "テストメッセージ",
+      "testMessagePlaceholder": "テストするエラーメッセージを入力...",
+      "matchSuccess": "マッチ成功",
+      "matchFailed": "マッチなし",
+      "invalidPattern": "無効な正規表現",
+      "matchedText": "マッチしたテキスト",
+      "defaultRuleHint": "デフォルトルールのパターンは変更できません",
+      "creating": "作成中...",
+      "saving": "保存中..."
+    },
+    "table": {
+      "pattern": "正規表現パターン",
+      "category": "ルールカテゴリ",
+      "description": "説明",
+      "status": "ステータス",
+      "default": "デフォルト",
+      "isEnabled": "有効状態",
+      "isDefault": "デフォルトルール",
+      "createdAt": "作成日時",
+      "actions": "操作"
+    },
+    "form": {
+      "fields": {
+        "pattern": "正規表現パターン",
+        "category": "ルールカテゴリ",
+        "description": "説明"
+      },
+      "placeholders": {
+        "pattern": "例: prompt is too long",
+        "category": "カテゴリを選択",
+        "description": "オプション: 説明を追加..."
+      },
+      "labels": {
+        "pattern": "正規表現パターン *",
+        "category": "ルールカテゴリ *",
+        "description": "説明",
+        "isEnabled": "有効状態"
+      }
+    },
+    "actions": {
+      "add": "追加",
+      "edit": "編集",
+      "delete": "削除",
+      "refresh": "更新",
+      "test": "テスト",
+      "messages": {
+        "success": "操作が成功しました",
+        "error": "操作が失敗しました"
+      }
+    },
+    "validation": {
+      "patternRequired": "正規表現パターンを入力してください",
+      "categoryRequired": "ルールカテゴリを選択してください",
+      "patternInvalid": "正規表現の構文エラー",
+      "redosRisk": "正規表現に ReDoS リスクがあります。パターンを簡略化してください",
+      "patternTooComplex": "正規表現が複雑すぎます"
+    },
+    "categories": {
+      "prompt_limit": "プロンプト長制限",
+      "content_filter": "コンテンツフィルター",
+      "pdf_limit": "PDF ページ制限",
+      "thinking_error": "Thinking フォーマットエラー",
+      "parameter_error": "パラメータ検証失敗",
+      "invalid_request": "無効なリクエスト",
+      "cache_limit": "キャッシュ制御制限"
+    },
+    "regexTester": {
+      "title": "正規表現テスター",
+      "testMessage": "テストメッセージ",
+      "testMessagePlaceholder": "テストするエラーメッセージを入力...",
+      "matchResult": "マッチ結果",
+      "matched": "マッチしました",
+      "notMatched": "マッチしませんでした",
+      "test": "テスト"
+    },
+    "defaultRules": {
+      "cannotDelete": "デフォルトルールは削除できません",
+      "cannotDisable": "デフォルトルールは有効のままにすることをお勧めします"
+    }
   }
 }

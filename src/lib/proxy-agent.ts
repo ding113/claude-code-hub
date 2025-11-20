@@ -14,6 +14,17 @@ export interface ProxyConfig {
 }
 
 /**
+ * 最小的供应商代理配置接口（用于类型安全）
+ * 仅包含创建代理 Agent 所需的必要字段
+ */
+export interface ProviderProxyConfig {
+  id: number;
+  name?: string;
+  proxyUrl: string | null;
+  proxyFallbackToDirect: boolean;
+}
+
+/**
  * 为供应商创建代理 Agent（如果配置了代理）
  *
  * 支持协议：
@@ -22,12 +33,12 @@ export interface ProxyConfig {
  * - socks5:// - SOCKS5 代理
  * - socks4:// - SOCKS4 代理
  *
- * @param provider 供应商配置
+ * @param provider 供应商配置（Provider 或 ProviderProxyConfig）
  * @param targetUrl 目标请求 URL
  * @returns 代理配置对象，如果未配置代理则返回 null
  */
 export function createProxyAgentForProvider(
-  provider: Provider,
+  provider: Provider | ProviderProxyConfig,
   targetUrl: string
 ): ProxyConfig | null {
   // 未配置代理
@@ -52,7 +63,7 @@ export function createProxyAgentForProvider(
       agent = new SocksProxyAgent(proxyUrl);
       logger.debug("SOCKS ProxyAgent created", {
         providerId: provider.id,
-        providerName: provider.name,
+        providerName: provider.name ?? "unknown",
         protocol: parsedProxy.protocol,
         proxyHost: parsedProxy.hostname,
         proxyPort: parsedProxy.port,
@@ -63,7 +74,7 @@ export function createProxyAgentForProvider(
       agent = new ProxyAgent(proxyUrl);
       logger.debug("HTTP/HTTPS ProxyAgent created", {
         providerId: provider.id,
-        providerName: provider.name,
+        providerName: provider.name ?? "unknown",
         protocol: parsedProxy.protocol,
         proxyHost: parsedProxy.hostname,
         proxyPort: parsedProxy.port,
@@ -83,7 +94,7 @@ export function createProxyAgentForProvider(
   } catch (error) {
     logger.error("Failed to create ProxyAgent", {
       providerId: provider.id,
-      providerName: provider.name,
+      providerName: provider.name ?? "unknown",
       proxyUrl: maskProxyUrl(proxyUrl),
       error: error instanceof Error ? error.message : String(error),
     });

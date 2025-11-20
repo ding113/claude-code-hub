@@ -13,10 +13,17 @@ interface KeyActionsProps {
   keyData: UserKeyDisplay;
   currentUser?: User;
   keyOwnerUserId: number; // 这个Key所属的用户ID
+  keyOwnerUser?: User; // 这个Key所属的用户对象（用于显示限额提示）
   canDelete: boolean;
 }
 
-export function KeyActions({ keyData, currentUser, keyOwnerUserId, canDelete }: KeyActionsProps) {
+export function KeyActions({
+  keyData,
+  currentUser,
+  keyOwnerUserId,
+  keyOwnerUser,
+  canDelete,
+}: KeyActionsProps) {
   const [openEdit, setOpenEdit] = useState(false);
   const [openDelete, setOpenDelete] = useState(false);
   const t = useTranslations("dashboard.keyActions");
@@ -46,7 +53,11 @@ export function KeyActions({ keyData, currentUser, keyOwnerUserId, canDelete }: 
         </DialogTrigger>
         <DialogContent>
           <FormErrorBoundary>
-            <EditKeyForm keyData={keyData} onSuccess={() => setOpenEdit(false)} />
+            <EditKeyForm
+              keyData={keyData}
+              user={keyOwnerUser}
+              onSuccess={() => setOpenEdit(false)}
+            />
           </FormErrorBoundary>
         </DialogContent>
       </Dialog>

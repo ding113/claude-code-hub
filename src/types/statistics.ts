@@ -76,3 +76,35 @@ export interface UserStatisticsData {
   resolution: "hour" | "day";
   mode: "users" | "keys" | "mixed";
 }
+
+// Rate limit event statistics types
+export type RateLimitType =
+  | "rpm"
+  | "usd_5h"
+  | "usd_weekly"
+  | "usd_monthly"
+  | "concurrent_sessions"
+  | "daily_quota";
+
+export interface EventTimeline {
+  hour: string;
+  count: number;
+}
+
+export interface RateLimitEventStats {
+  total_events: number;
+  events_by_type: Record<RateLimitType, number>;
+  events_by_user: Record<number, number>;
+  events_by_provider: Record<number, number>;
+  events_timeline: EventTimeline[];
+  avg_current_usage: number;
+}
+
+export interface RateLimitEventFilters {
+  user_id?: number;
+  provider_id?: number;
+  limit_type?: RateLimitType;
+  start_time?: Date;
+  end_time?: Date;
+  key_id?: number;
+}

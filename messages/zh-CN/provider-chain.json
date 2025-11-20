@@ -6,10 +6,16 @@
     "unknown": "未知"
   },
   "errors": {
-    "ENOTFOUND": "DNS 解析失败",
-    "ECONNREFUSED": "连接被拒绝",
-    "ETIMEDOUT": "连接或读取超时",
-    "ECONNRESET": "连接被重置"
+    "ENOTFOUND": "DNS 解析失败（域名无法解析）",
+    "ECONNREFUSED": "连接被拒绝（目标服务器拒绝连接）",
+    "ETIMEDOUT": "TCP 连接超时（网络延迟过高或防火墙拦截）",
+    "ECONNRESET": "连接被重置（网络中断或服务器主动断开）",
+    "EHOSTUNREACH": "主机不可达（网络路由问题）",
+    "ENETUNREACH": "网络不可达（本地网络配置问题）",
+    "EPROTO": "协议错误（SSL/TLS 握手失败）",
+    "CLIENT_ABORT": "客户端中断请求",
+    "PROVIDER_TIMEOUT": "供应商响应超时（首字节延迟过高）",
+    "STREAMING_IDLE_TIMEOUT": "流式响应静默超时（供应商停止发送数据）"
   },
   "summary": {
     "singleSuccess": "{total} 个供应商，{healthy} 个健康 → {provider} ✓",
@@ -80,9 +86,9 @@
     "alreadyBroken": "已触发熔断",
     "circuitTriggered": "⚠️ 已触发熔断",
     "errorDetails": "错误详情",
-    "systemError": "系统错误",
-    "systemErrorFailed": "系统错误（第 {attempt} 次尝试）",
-    "errorType": "错误类型: 系统错误",
+    "systemError": "网络/系统错误",
+    "systemErrorFailed": "网络/系统错误（第 {attempt} 次尝试）",
+    "errorType": "错误类型: ",
     "errorName": "错误",
     "errorCode": "错误码: {code}",
     "errorSyscall": "系统调用: {syscall}",
@@ -99,7 +105,7 @@
     "requestOk": "OK",
     "successStatus": "状态: {code} OK",
     "requestCompleted": "请求成功完成",
-    "completed": "✅ 请求成功完成",
+    "completed": "请求成功完成",
     "concurrentLimitFailed": "并发限制",
     "attemptFailed": "尝试失败（第 {attempt} 次）",
     "concurrentLimit": "并发限制",
@@ -107,6 +113,10 @@
     "sessions": "会话",
     "withPriorityWeight": "（优先级={priority} 权重={weight}）",
     "unknown": "未知",
-    "noDecisionRecord": "无决策记录"
+    "noDecisionRecord": "无决策记录",
+    "modelRedirect": "模型重定向",
+    "modelRedirectFrom": "  请求模型: {model}",
+    "modelRedirectTo": "  实际转发: {model}",
+    "modelRedirectBilling": "  计费依据: {model}"
   }
 }

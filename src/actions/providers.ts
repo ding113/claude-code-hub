@@ -20,9 +20,23 @@ import {
   saveProviderCircuitConfig,
   deleteProviderCircuitConfig,
 } from "@/lib/redis/circuit-breaker-config";
-import { isValidProxyUrl } from "@/lib/proxy-agent";
+import {
+  createProxyAgentForProvider,
+  isValidProxyUrl,
+  type ProviderProxyConfig,
+} from "@/lib/proxy-agent";
 import { CodexInstructionsCache } from "@/lib/codex-instructions-cache";
 import { isClientAbortError } from "@/app/v1/_lib/proxy/errors";
+import { PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
+import { GeminiAuth } from "@/app/v1/_lib/gemini/auth";
+
+// API 测试配置常量
+const API_TEST_CONFIG = {
+  TIMEOUT_MS: 10000, // 10 秒超时
+  MAX_RESPONSE_PREVIEW_LENGTH: 100, // 响应内容预览最大长度
+  TEST_MAX_TOKENS: 100, // 测试请求的最大 token 数
+  TEST_PROMPT: "Hello", // 测试请求的默认提示词
+} as const;
 
 // 获取服务商数据
 export async function getProviders(): Promise<ProviderDisplay[]> {
@@ -130,6 +144,9 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         circuitBreakerHalfOpenSuccessThreshold: provider.circuitBreakerHalfOpenSuccessThreshold,
         proxyUrl: provider.proxyUrl,
         proxyFallbackToDirect: provider.proxyFallbackToDirect,
+        firstByteTimeoutStreamingMs: provider.firstByteTimeoutStreamingMs,
+        streamingIdleTimeoutMs: provider.streamingIdleTimeoutMs,
+        requestTimeoutNonStreamingMs: provider.requestTimeoutNonStreamingMs,
         websiteUrl: provider.websiteUrl,
         faviconUrl: provider.faviconUrl,
         tpm: provider.tpm,
@@ -181,6 +198,9 @@ export async function addProvider(data: {
   circuit_breaker_half_open_success_threshold?: number;
   proxy_url?: string | null;
   proxy_fallback_to_direct?: boolean;
+  first_byte_timeout_streaming_ms?: number;
+  streaming_idle_timeout_ms?: number;
+  request_timeout_non_streaming_ms?: number;
   website_url?: string | null;
   codex_instructions_strategy?: "auto" | "force_official" | "keep_original";
   tpm: number | null;
@@ -198,7 +218,7 @@ export async function addProvider(data: {
       name: data.name,
       url: data.url,
       provider_type: data.provider_type,
-      proxy_url: data.proxy_url ? "***" : null,
+      proxy_url: data.proxy_url ? data.proxy_url.replace(/:\/\/[^@]*@/, "://***@") : null,
     });
 
     // 验证代理 URL 格式
@@ -241,6 +261,14 @@ export async function addProvider(data: {
         validated.circuit_breaker_half_open_success_threshold ?? 2,
       proxy_url: validated.proxy_url ?? null,
       proxy_fallback_to_direct: validated.proxy_fallback_to_direct ?? false,
+      first_byte_timeout_streaming_ms:
+        validated.first_byte_timeout_streaming_ms ??
+        PROVIDER_TIMEOUT_DEFAULTS.FIRST_BYTE_TIMEOUT_STREAMING_MS,
+      streaming_idle_timeout_ms:
+        validated.streaming_idle_timeout_ms ?? PROVIDER_TIMEOUT_DEFAULTS.STREAMING_IDLE_TIMEOUT_MS,
+      request_timeout_non_streaming_ms:
+        validated.request_timeout_non_streaming_ms ??
+        PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS,
       website_url: validated.website_url ?? null,
       favicon_url: faviconUrl,
       tpm: validated.tpm ?? null,
@@ -308,6 +336,9 @@ export async function editProvider(
     circuit_breaker_half_open_success_threshold?: number;
     proxy_url?: string | null;
     proxy_fallback_to_direct?: boolean;
+    first_byte_timeout_streaming_ms?: number;
+    streaming_idle_timeout_ms?: number;
+    request_timeout_non_streaming_ms?: number;
     website_url?: string | null;
     codex_instructions_strategy?: "auto" | "force_official" | "keep_original";
     tpm?: number | null;
@@ -606,6 +637,18 @@ export async function testProviderProxy(data: {
       return { ok: false, error: "无权限执行此操作" };
     }
 
+    const providerUrlValidation = validateProviderUrlForConnectivity(data.providerUrl);
+    if (!providerUrlValidation.valid) {
+      return {
+        ok: true,
+        data: {
+          success: false,
+          message: providerUrlValidation.error.message,
+          details: providerUrlValidation.error.details,
+        },
+      };
+    }
+
     // 验证代理 URL 格式
     if (data.proxyUrl && !isValidProxyUrl(data.proxyUrl)) {
       return {
@@ -623,16 +666,14 @@ export async function testProviderProxy(data: {
 
     const startTime = Date.now();
 
-    // 导入代理工厂函数
-    const { createProxyAgentForProvider } = await import("@/lib/proxy-agent");
-
     // 构造临时 Provider 对象（用于创建代理 agent）
-    const tempProvider = {
+    // 使用类型安全的 ProviderProxyConfig 接口，避免 any
+    const tempProvider: ProviderProxyConfig = {
       id: -1,
-      proxyUrl: data.proxyUrl,
+      name: "test-connection",
+      proxyUrl: data.proxyUrl ?? null,
       proxyFallbackToDirect: data.proxyFallbackToDirect ?? false,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any;
+    };
 
     try {
       // 创建代理配置
@@ -645,7 +686,7 @@ export async function testProviderProxy(data: {
 
       const init: UndiciFetchOptions = {
         method: "HEAD", // 使用 HEAD 请求，减少流量
-        signal: AbortSignal.timeout(5000), // 5 秒超时
+        signal: AbortSignal.timeout(API_TEST_CONFIG.TIMEOUT_MS),
       };
 
       // 应用代理配置
@@ -740,4 +781,552 @@ export async function getUnmaskedProviderKey(id: number): Promise<ActionResult<{
     const message = error instanceof Error ? error.message : "获取供应商密钥失败";
     return { ok: false, error: message };
   }
+}
+
+type ProviderApiTestArgs = {
+  providerUrl: string;
+  apiKey: string;
+  model?: string;
+  proxyUrl?: string | null;
+  proxyFallbackToDirect?: boolean;
+};
+
+type ProviderApiTestResult = ActionResult<
+  | {
+      success: true;
+      message: string;
+      details?: {
+        responseTime?: number;
+        model?: string;
+        usage?: Record<string, unknown>;
+        content?: string;
+      };
+    }
+  | {
+      success: false;
+      message: string;
+      details?: {
+        responseTime?: number;
+        error?: string;
+      };
+    }
+>;
+
+// Anthropic Messages API 响应类型
+type AnthropicMessagesResponse = {
+  id: string;
+  type: "message";
+  role: "assistant";
+  model: string;
+  content: Array<{ type: "text"; text: string }>;
+  stop_reason: string;
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+    cache_creation_input_tokens?: number;
+    cache_read_input_tokens?: number;
+  };
+};
+
+// OpenAI Chat Completions API 响应类型
+type OpenAIChatResponse = {
+  id: string;
+  object: "chat.completion";
+  created: number;
+  model: string;
+  choices: Array<{
+    index: number;
+    message: {
+      role: "assistant";
+      content: string;
+    };
+    finish_reason: string;
+  }>;
+  usage: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+    reasoning_tokens?: number;
+  };
+};
+
+// OpenAI Responses API 响应类型
+type OpenAIResponsesResponse = {
+  id: string;
+  object: "response";
+  created_at: number;
+  model: string;
+  output: Array<{
+    type: "message";
+    id: string;
+    status: string;
+    role: "assistant";
+    content: Array<{
+      type: "output_text";
+      text: string;
+      annotations?: unknown[];
+    }>;
+  }>;
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+  };
+};
+
+// Gemini API 响应类型
+type GeminiResponse = {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{ text?: string }>;
+    };
+    finishReason?: string;
+  }>;
+  usageMetadata?: {
+    promptTokenCount?: number;
+    candidatesTokenCount?: number;
+    totalTokenCount?: number;
+  };
+  error?: {
+    code: number;
+    message: string;
+    status: string;
+  };
+};
+
+// 联合类型：所有支持的 API 响应格式
+type ProviderApiResponse =
+  | AnthropicMessagesResponse
+  | OpenAIChatResponse
+  | OpenAIResponsesResponse
+  | GeminiResponse;
+
+function extractFirstTextSnippet(
+  response: ProviderApiResponse,
+  maxLength?: number
+): string | undefined {
+  const limit = maxLength ?? API_TEST_CONFIG.MAX_RESPONSE_PREVIEW_LENGTH;
+
+  // Anthropic Messages API
+  if ("content" in response && Array.isArray(response.content)) {
+    const firstText = response.content.find((item) => item.type === "text");
+    if (firstText && "text" in firstText) {
+      return firstText.text.substring(0, limit);
+    }
+  }
+
+  // OpenAI Chat Completions API
+  if ("choices" in response && Array.isArray(response.choices)) {
+    const firstChoice = response.choices[0];
+    if (firstChoice?.message?.content) {
+      return firstChoice.message.content.substring(0, limit);
+    }
+  }
+
+  // OpenAI Responses API
+  if ("output" in response && Array.isArray(response.output)) {
+    const firstOutput = response.output[0];
+    if (firstOutput?.type === "message" && Array.isArray(firstOutput.content)) {
+      const textContent = firstOutput.content.find((c) => c.type === "output_text");
+      if (textContent && "text" in textContent) {
+        return textContent.text.substring(0, limit);
+      }
+    }
+  }
+
+  // Gemini API
+  if ("candidates" in response && Array.isArray(response.candidates)) {
+    const firstCandidate = response.candidates[0];
+    if (firstCandidate?.content?.parts?.[0]?.text) {
+      return firstCandidate.content.parts[0].text.substring(0, limit);
+    }
+  }
+
+  return undefined;
+}
+
+function clipText(value: unknown, maxLength?: number): string | undefined {
+  const limit = maxLength ?? API_TEST_CONFIG.MAX_RESPONSE_PREVIEW_LENGTH;
+  return typeof value === "string" ? value.substring(0, limit) : undefined;
+}
+
+type ProviderUrlValidationError = {
+  message: string;
+  details: {
+    error: string;
+    errorType: "InvalidProviderUrl" | "BlockedUrl" | "BlockedPort";
+  };
+};
+
+function validateProviderUrlForConnectivity(
+  providerUrl: string
+): { valid: true; normalizedUrl: string } | { valid: false; error: ProviderUrlValidationError } {
+  const trimmedUrl = providerUrl.trim();
+
+  try {
+    const parsedProviderUrl = new URL(trimmedUrl);
+
+    if (!["https:", "http:"].includes(parsedProviderUrl.protocol)) {
+      return {
+        valid: false,
+        error: {
+          message: "供应商地址格式无效",
+          details: {
+            error: "仅支持 HTTP 和 HTTPS 协议",
+            errorType: "InvalidProviderUrl",
+          },
+        },
+      };
+    }
+
+    const hostname = parsedProviderUrl.hostname.toLowerCase();
+    const blockedPatterns = [
+      /^localhost$/i,
+      /^127\.\d+\.\d+\.\d+$/,
+      /^10\.\d+\.\d+\.\d+$/,
+      /^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/,
+      /^192\.168\.\d+\.\d+$/,
+      /^169\.254\.\d+\.\d+$/,
+      /^::1$/,
+      /^fe80:/i,
+      /^fc00:/i,
+      /^fd00:/i,
+    ];
+
+    if (blockedPatterns.some((pattern) => pattern.test(hostname))) {
+      return {
+        valid: false,
+        error: {
+          message: "供应商地址安全检查失败",
+          details: {
+            error: "不允许访问内部网络地址",
+            errorType: "BlockedUrl",
+          },
+        },
+      };
+    }
+
+    const port = parsedProviderUrl.port ? parseInt(parsedProviderUrl.port, 10) : null;
+    const dangerousPorts = [22, 23, 25, 3306, 5432, 6379, 27017, 9200];
+    if (port && dangerousPorts.includes(port)) {
+      return {
+        valid: false,
+        error: {
+          message: "供应商地址端口检查失败",
+          details: {
+            error: "不允许访问内部服务端口",
+            errorType: "BlockedPort",
+          },
+        },
+      };
+    }
+
+    return { valid: true, normalizedUrl: trimmedUrl };
+  } catch (error) {
+    return {
+      valid: false,
+      error: {
+        message: "供应商地址格式无效",
+        details: {
+          error: error instanceof Error ? error.message : "URL 解析失败",
+          errorType: "InvalidProviderUrl",
+        },
+      },
+    };
+  }
+}
+
+async function executeProviderApiTest(
+  data: ProviderApiTestArgs,
+  options: {
+    path: string | ((model: string, apiKey: string) => string);
+    defaultModel: string;
+    headers: (apiKey: string) => Record<string, string>;
+    body: (model: string) => unknown;
+    successMessage: string;
+    extract: (result: ProviderApiResponse) => {
+      model?: string;
+      usage?: Record<string, unknown>;
+      content?: string;
+    };
+  }
+): Promise<ProviderApiTestResult> {
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return { ok: false, error: "无权限执行此操作" };
+    }
+
+    if (data.proxyUrl && !isValidProxyUrl(data.proxyUrl)) {
+      return {
+        ok: true,
+        data: {
+          success: false,
+          message: "代理地址格式无效",
+          details: {
+            error: "支持格式: http://, https://, socks5://, socks4://",
+          },
+        },
+      };
+    }
+
+    const providerUrlValidation = validateProviderUrlForConnectivity(data.providerUrl);
+    if (!providerUrlValidation.valid) {
+      return {
+        ok: true,
+        data: {
+          success: false,
+          message: providerUrlValidation.error.message,
+          details: providerUrlValidation.error.details,
+        },
+      };
+    }
+
+    const normalizedProviderUrl = providerUrlValidation.normalizedUrl.replace(/\/$/, "");
+
+    const startTime = Date.now();
+
+    const tempProvider: ProviderProxyConfig = {
+      id: -1,
+      name: "api-test",
+      proxyUrl: data.proxyUrl ?? null,
+      proxyFallbackToDirect: data.proxyFallbackToDirect ?? false,
+    };
+
+    const model = data.model || options.defaultModel;
+    const path =
+      typeof options.path === "function" ? options.path(model, data.apiKey) : options.path;
+    const url = normalizedProviderUrl + path;
+
+    try {
+      const proxyConfig = createProxyAgentForProvider(tempProvider, url);
+
+      interface UndiciFetchOptions extends RequestInit {
+        dispatcher?: unknown;
+      }
+
+      const init: UndiciFetchOptions = {
+        method: "POST",
+        headers: {
+          ...options.headers(data.apiKey),
+          "User-Agent": "claude-cli/2.0.33 (external, cli)",
+        },
+        body: JSON.stringify(options.body(model)),
+        signal: AbortSignal.timeout(API_TEST_CONFIG.TIMEOUT_MS),
+      };
+
+      if (proxyConfig) {
+        init.dispatcher = proxyConfig.agent;
+      }
+
+      const response = await fetch(url, init);
+      const responseTime = Date.now() - startTime;
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorDetail: string | undefined;
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorDetail = errorJson.error?.message || errorJson.message;
+        } catch {
+          errorDetail = undefined;
+        }
+
+        logger.error("Provider API test failed", {
+          providerUrl: normalizedProviderUrl.replace(/:\/\/[^@]*@/, "://***@"),
+          path: typeof options.path === "string" ? options.path : "dynamic",
+          status: response.status,
+          errorDetail: errorDetail ?? clipText(errorText, 200),
+        });
+
+        return {
+          ok: true,
+          data: {
+            success: false,
+            message: `API 返回错误: HTTP ${response.status}`,
+            details: {
+              responseTime,
+              error: "API 请求失败，查看日志以获得更多信息",
+            },
+          },
+        };
+      }
+
+      const result = (await response.json()) as ProviderApiResponse;
+      const extracted = options.extract(result);
+
+      return {
+        ok: true,
+        data: {
+          success: true,
+          message: options.successMessage,
+          details: {
+            responseTime,
+            ...extracted,
+          },
+        },
+      };
+    } catch (error) {
+      const responseTime = Date.now() - startTime;
+      const err = error as Error & { code?: string };
+
+      return {
+        ok: true,
+        data: {
+          success: false,
+          message: `连接失败: ${err.message}`,
+          details: {
+            responseTime,
+            error: err.message,
+          },
+        },
+      };
+    }
+  } catch (error) {
+    logger.error("测试供应商 API 失败:", error);
+    const message = error instanceof Error ? error.message : "测试失败";
+    return { ok: false, error: message };
+  }
+}
+
+/**
+ * 测试 Anthropic Messages API 连通性
+ */
+export async function testProviderAnthropicMessages(
+  data: ProviderApiTestArgs
+): Promise<ProviderApiTestResult> {
+  return executeProviderApiTest(data, {
+    path: "/v1/messages",
+    defaultModel: "claude-sonnet-4-5-20250929",
+    headers: (apiKey) => ({
+      "Content-Type": "application/json",
+      "anthropic-version": "2023-06-01",
+      "x-api-key": apiKey,
+    }),
+    body: (model) => ({
+      model,
+      max_tokens: API_TEST_CONFIG.TEST_MAX_TOKENS,
+      messages: [{ role: "user", content: API_TEST_CONFIG.TEST_PROMPT }],
+    }),
+    successMessage: "Anthropic Messages API 测试成功",
+    extract: (result) => ({
+      model: "model" in result ? result.model : undefined,
+      usage: "usage" in result ? (result.usage as Record<string, unknown>) : undefined,
+      content: extractFirstTextSnippet(result),
+    }),
+  });
+}
+
+/**
+ * 测试 OpenAI Chat Completions API 连通性
+ */
+export async function testProviderOpenAIChatCompletions(
+  data: ProviderApiTestArgs
+): Promise<ProviderApiTestResult> {
+  return executeProviderApiTest(data, {
+    path: "/v1/chat/completions",
+    defaultModel: "gpt-5.1-codex",
+    headers: (apiKey) => ({
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    }),
+    body: (model) => ({
+      model,
+      max_tokens: API_TEST_CONFIG.TEST_MAX_TOKENS,
+      messages: [
+        { role: "developer", content: "你是一个有帮助的助手。" },
+        { role: "user", content: "你好" },
+      ],
+    }),
+    successMessage: "OpenAI Chat Completions API 测试成功",
+    extract: (result) => ({
+      model: "model" in result ? result.model : undefined,
+      usage: "usage" in result ? (result.usage as Record<string, unknown>) : undefined,
+      content: extractFirstTextSnippet(result),
+    }),
+  });
+}
+
+/**
+ * 测试 OpenAI Responses API 连通性
+ */
+export async function testProviderOpenAIResponses(
+  data: ProviderApiTestArgs
+): Promise<ProviderApiTestResult> {
+  return executeProviderApiTest(data, {
+    path: "/v1/responses",
+    defaultModel: "gpt-5.1-codex",
+    headers: (apiKey) => ({
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    }),
+    body: (model) => ({
+      model,
+      max_tokens: API_TEST_CONFIG.TEST_MAX_TOKENS,
+      input: "讲一个简短的故事",
+    }),
+    successMessage: "OpenAI Responses API 测试成功",
+    extract: (result) => ({
+      model: "model" in result ? result.model : undefined,
+      usage: "usage" in result ? (result.usage as Record<string, unknown>) : undefined,
+      content: extractFirstTextSnippet(result),
+    }),
+  });
+}
+
+/**
+ * 测试 Gemini API 连通性
+ */
+export async function testProviderGemini(
+  data: ProviderApiTestArgs
+): Promise<ProviderApiTestResult> {
+  // 预处理 Auth，如果是 API Key 保持原样，如果是 JSON 则解析 Access Token
+  let processedApiKey = data.apiKey;
+  let isJsonCreds = false;
+
+  try {
+    // 使用 GeminiAuth 获取 token (如果是 json 凭证)
+    processedApiKey = await GeminiAuth.getAccessToken(data.apiKey);
+    isJsonCreds = GeminiAuth.isJson(data.apiKey);
+  } catch (e) {
+    // 忽略错误，让后续请求失败
+    logger.warn("testProviderGemini:auth_process_failed", { error: e });
+  }
+
+  return executeProviderApiTest(
+    { ...data, apiKey: processedApiKey },
+    {
+      path: (model, apiKey) => {
+        if (!isJsonCreds) {
+          return `/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        }
+        return `/v1beta/models/${model}:generateContent`;
+      },
+      defaultModel: "gemini-1.5-pro",
+      headers: (apiKey) => {
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+        };
+        if (isJsonCreds) {
+          headers["Authorization"] = `Bearer ${apiKey}`;
+        }
+        return headers;
+      },
+      body: (model) => ({
+        contents: [{ parts: [{ text: API_TEST_CONFIG.TEST_PROMPT }] }],
+        generationConfig: {
+          maxOutputTokens: API_TEST_CONFIG.TEST_MAX_TOKENS,
+        },
+      }),
+      successMessage: "Gemini API 测试成功",
+      extract: (result) => {
+        const geminiResult = result as GeminiResponse;
+        return {
+          model: undefined,
+          usage: geminiResult.usageMetadata as Record<string, unknown>,
+          content: extractFirstTextSnippet(geminiResult),
+        };
+      },
+    }
+  );
 }

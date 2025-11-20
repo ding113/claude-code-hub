@@ -50,23 +50,25 @@ export function DialogFormLayout({
 }: FormLayoutProps) {
   const t = useTranslations("forms");
   return (
-    <form onSubmit={onSubmit} className="space-y-4" noValidate>
-      <DialogHeader>
+    <form onSubmit={onSubmit} className="flex flex-col min-h-0 flex-1" noValidate>
+      <DialogHeader className="flex-shrink-0">
         <DialogTitle>{config.title}</DialogTitle>
         {config.description && <DialogDescription>{config.description}</DialogDescription>}
       </DialogHeader>
 
-      <div className="grid gap-4 py-2">
-        {children}
+      <div className="flex-1 overflow-y-auto min-h-0 py-4 pr-2 -mr-2">
+        <div className="grid gap-4">
+          {children}
 
-        {error && (
-          <div className="text-xs text-destructive" role="alert">
-            {error}
-          </div>
-        )}
+          {error && (
+            <div className="text-xs text-destructive" role="alert">
+              {error}
+            </div>
+          )}
+        </div>
       </div>
 
-      <DialogFooter>
+      <DialogFooter className="flex-shrink-0 pt-4 border-t">
         <DialogClose asChild>
           <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
             {config.cancelText || t("common.cancel")}

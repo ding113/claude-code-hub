@@ -9,7 +9,13 @@
     "ENOTFOUND": "Не удалось разрешить DNS",
     "ECONNREFUSED": "Соединение отклонено",
     "ETIMEDOUT": "Тайм-аут соединения или чтения",
-    "ECONNRESET": "Соединение сброшено"
+    "ECONNRESET": "Соединение сброшено",
+    "EHOSTUNREACH": "Хост недоступен (проблема маршрутизации сети)",
+    "ENETUNREACH": "Сеть недоступна (проблема локальной сетевой конфигурации)",
+    "EPROTO": "Ошибка протокола (ошибка SSL/TLS рукопожатия)",
+    "CLIENT_ABORT": "Клиент прервал запрос",
+    "PROVIDER_TIMEOUT": "Тайм-аут ответа провайдера (высокая задержка первого байта)",
+    "STREAMING_IDLE_TIMEOUT": "Тайм-аут простоя потоковой передачи (провайдер прекратил отправку данных)"
   },
   "summary": {
     "singleSuccess": "{total} провайдеров, {healthy} работоспособных → {provider} ✓",
@@ -99,7 +105,7 @@
     "requestOk": "OK",
     "successStatus": "Состояние: {code} OK",
     "requestCompleted": "Запрос успешно выполнен",
-    "completed": "✅ Запрос успешно выполнен",
+    "completed": "Запрос успешно выполнен",
     "concurrentLimitFailed": "Лимит параллельных запросов",
     "attemptFailed": "Попытка не удалась (Попытка {attempt})",
     "concurrentLimit": "Лимит параллельных запросов",
@@ -107,6 +113,10 @@
     "sessions": "Сессии",
     "withPriorityWeight": "(приоритет={priority} вес={weight})",
     "unknown": "Неизвестно",
-    "noDecisionRecord": "Нет записей решений"
+    "noDecisionRecord": "Нет записей решений",
+    "modelRedirect": "Перенаправление модели",
+    "modelRedirectFrom": "  Запрошенная модель: {model}",
+    "modelRedirectTo": "  Перенаправлено на: {model}",
+    "modelRedirectBilling": "  Модель для расчета: {model}"
   }
 }

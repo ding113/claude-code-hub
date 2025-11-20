@@ -19,22 +19,22 @@ Claude Code Hub 是一个 Claude Code API 代理中转服务平台，用于统�
 ### 开发命令
 
 ```bash
-pnpm dev              # 启动开发服务器 (http://localhost:13500, 使用 Turbopack)
-pnpm build            # 构建生产版本 (自动复制 VERSION 文件)
-pnpm start            # 启动生产服务器
-pnpm lint             # 运行 ESLint
-pnpm typecheck        # TypeScript 类型检查
-pnpm format           # 格式化代码
-pnpm format:check     # 检查代码格式
+bun run dev           # 启动开发服务器 (http://localhost:13500, 使用 Turbopack)
+bun run build         # 构建生产版本 (自动复制 VERSION 文件)
+bun run start         # 启动生产服务器
+bun run lint          # 运行 ESLint
+bun run typecheck     # TypeScript 类型检查
+bun run format        # 格式化代码
+bun run format:check  # 检查代码格式
 ```
 
 ### 数据库命令
 
 ```bash
-pnpm db:generate      # 生成 Drizzle 迁移文件
-pnpm db:migrate       # 执行数据库迁移
-pnpm db:push          # 直接推送 schema 到数据库（开发环境）
-pnpm db:studio        # 启动 Drizzle Studio 可视化管理界面
+bun run db:generate   # 生成 Drizzle 迁移文件
+bun run db:migrate    # 执行数据库迁移
+bun run db:push       # 直接推送 schema 到数据库（开发环境）
+bun run db:studio     # 启动 Drizzle Studio 可视化管理界面
 ```
 
 ### Docker 部署
@@ -64,7 +64,7 @@ make dev       # 一键启动完整开发环境
 
 ```bash
 # 环境管理
-make dev          # 启动完整开发环境 (DB + pnpm dev)
+make dev          # 启动完整开发环境 (DB + bun dev)
 make db           # 仅启动数据库和 Redis
 make stop         # 停止所有服务
 make status       # 查看服务状态
@@ -118,7 +118,7 @@ curl http://localhost:13500/api/actions/health
 - **Redis** + **ioredis** - 限流、会话追踪、熔断器
 - **Tailwind CSS v4** + **Shadcn UI** (orange 主题) - UI 框架
 - **Pino** - 结构化日志
-- **包管理器**: pnpm 9.15.0
+- **包管理器**: Bun 1.3+
 
 ## 架构概览
 
@@ -277,6 +277,70 @@ if (proxyConfig) {
 - 中国大陆访问海外 API 服务，改善连接性
 - 企业内网环境，需要通过公司代理访问外网
 - IP 限制场景，通过代理绕过 IP 封锁
+
+### API 连通性测试
+
+供应商管理页面提供 API 连通性测试功能，用于验证供应商 API 的可用性和配置正确性。
+
+**功能位置**：
+
+- 路径：设置 → 供应商管理 → 编辑/创建供应商
+- 权限：仅管理员可执行
+
+**支持的 API 格式**：
+
+1. **Anthropic Messages API** (`/v1/messages`)
+   - 标准 Anthropic 格式
+   - 支持 cache tokens 统计
+
+2. **OpenAI Chat Completions API** (`/v1/chat/completions`)
+   - OpenAI 聊天完成格式
+   - 支持 reasoning tokens 统计
+
+3. **OpenAI Responses API** (`/v1/responses`)
+   - OpenAI Response API 格式（Claude 4 Sonnet 同款）
+   - 支持 input/output tokens 统计
+
+**测试内容**：
+
+- API 连通性（网络连接、认证）
+- 响应时间测量（超时 10 秒）
+- Token 用量统计
+- 模型可用性验证
+- 代理配置测试（如果配置了代理）
+
+**安全限制**：
+
+- 🔒 仅管理员可执行测试（需要登录管理后台）
+- 🔒 阻止访问内部网络地址（防止 SSRF 攻击）
+  - localhost, 127.0.0.1
+  - 内网地址段：10.x.x.x, 172.16-31.x.x, 192.168.x.x
+  - 链路本地地址：169.254.x.x, fe80::/10
+- 🔒 阻止访问危险端口
+  - SSH (22), Telnet (23)
+  - 数据库端口：MySQL (3306), PostgreSQL (5432), MongoDB (27017), Redis (6379)
+  - 内部服务端口
+
+**使用场景**：
+
+1. **新增供应商**：验证 API 配置是否正确
+2. **故障排查**：诊断供应商连接问题
+3. **代理测试**：验证代理配置是否生效
+4. **模型验证**：确认供应商支持的模型
+
+**测试流程**：
+
+1. 填写供应商基本信息（URL、API 密钥、模型）
+2. 选择 API 格式（根据供应商类型自动选择）
+3. 点击"测试连接"按钮
+4. 等待测试结果（最长 10 秒）
+5. 查看详细结果（响应时间、Token 用量、响应内容）
+
+**注意事项**：
+
+- 测试会消耗少量 Token（约 100 tokens）
+- 测试失败不影响供应商保存
+- 建议在保存前先测试，确保配置正确
 
 ### 数据库 Schema
 
@@ -442,8 +506,8 @@ LOG_LEVEL=info                     # 日志级别
 
 **重要**: 所有布尔类型的环境变量(如 `ENABLE_SECURE_COOKIES`, `AUTO_MIGRATE`, `ENABLE_RATE_LIMIT` 等)必须使用以下值:
 
-- ✅ **表示 `true`**: `true`, `1`, `yes`, `on` 或任何非 `false`/`0` 的值
-- ✅ **表示 `false`**: `false`, `0`
+- **表示 `true`**: `true`, `1`, `yes`, `on` 或任何非 `false`/`0` 的值
+- **表示 `false`**: `false`, `0`
 
 **常见错误**:
 
@@ -451,7 +515,7 @@ LOG_LEVEL=info                     # 日志级别
 # ❌ 错误 - 字符串 "false" 会被解析为 true!
 ENABLE_SECURE_COOKIES="false"  # 错误:引号导致字符串被当作 true
 
-# ✅ 正确 - 不带引号
+# 正确 - 不带引号
 ENABLE_SECURE_COOKIES=false    # 正确:直接写 false
 ENABLE_SECURE_COOKIES=0        # 正确:也可以用 0
 ```
@@ -507,8 +571,9 @@ OpenAPI 文档（`/api/actions/scalar` 和 `/api/actions/docs`）中的 server U
 
 ### 3. 数据库迁移
 
-- 使用 `pnpm db:generate` 生成迁移文件
+- 使用 `bun run db:generate` 生成迁移文件
 - 生产环境使用 `AUTO_MIGRATE=true` 自动执行迁移
+- `bun run db:push` (开发) 或 `bun run db:migrate` (生产)
 - 索引优化: 所有查询都有对应的复合索引（参见 schema.ts 中的 index 定义）
 - 时区处理: 所有 timestamp 字段使用 `withTimezone: true`
 
@@ -535,7 +600,7 @@ OpenAPI 文档（`/api/actions/scalar` 和 `/api/actions/docs`）中的 server U
 ### 7. 代码风格
 
 - 使用 ESLint + Prettier
-- 提交前运行 `pnpm typecheck` 确保类型正确
+- 提交前运行 `bun run typecheck` 确保类型正确
 - 遵循现有代码风格（参考 `src/app/v1/_lib/proxy/` 中的代码）
 
 ### 8. 添加新的 API 端点
@@ -616,9 +681,9 @@ SELECT ... LIMIT 50 OFFSET 0;
 ### 修改数据库 Schema
 
 1. 修改 `src/drizzle/schema.ts`
-2. 运行 `pnpm db:generate` 生成迁移文件
+2. 运行 `bun run db:generate` 生成迁移文件
 3. 检查生成的 SQL 文件 (`drizzle/` 目录)
-4. 运行 `pnpm db:push` (开发) 或 `pnpm db:migrate` (生产)
+4. 运行 `bun run db:push` (开发) 或 `bun run db:migrate` (生产)
 
 ## 故障排查
 

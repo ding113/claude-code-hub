@@ -14,7 +14,7 @@
  * - tool results → function_call_output
  * - tools[] → tools[] (function.parameters → parameters)
  * - ❌ 删除不支持的参数：max_tokens, temperature, top_p 等
- * - ✅ 强制设置：stream=true, store=false, parallel_tool_calls=true
+ * - 强制设置：stream=true, store=false, parallel_tool_calls=true
  */
 
 import { logger } from "@/lib/logger";

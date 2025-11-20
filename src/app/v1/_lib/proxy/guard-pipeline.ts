@@ -80,7 +80,8 @@ const Steps: Record<GuardStepKey, GuardStep> = {
   rateLimit: {
     name: "rateLimit",
     async execute(session) {
-      return ProxyRateLimitGuard.ensure(session);
+      await ProxyRateLimitGuard.ensure(session);
+      return null;
     },
   },
   provider: {

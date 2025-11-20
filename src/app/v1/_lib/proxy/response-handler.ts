@@ -18,6 +18,8 @@ import { mapClientFormatToTransformer, mapProviderTypeToTransformer } from "./fo
 import { AsyncTaskManager } from "@/lib/async-task-manager";
 import { isClientAbortError } from "./errors";
 import type { SessionUsageUpdate } from "@/types/session";
+import { GeminiAdapter } from "../gemini/adapter";
+import type { GeminiResponse } from "../gemini/types";
 
 export type UsageMetrics = {
   input_tokens?: number;
@@ -58,7 +60,52 @@ export class ProxyResponseHandler {
     const needsTransform = fromFormat !== toFormat && fromFormat && toFormat;
     let finalResponse = response;
 
-    if (needsTransform && defaultRegistry.hasResponseTransformer(fromFormat, toFormat)) {
+    // --- GEMINI HANDLING ---
+    if (provider.providerType === "gemini" || provider.providerType === "gemini-cli") {
+      // 判断是否需要透传（客户端和提供商格式都必须是 Gemini）
+      const isGeminiPassthrough =
+        (session.originalFormat === "gemini" || session.originalFormat === "gemini-cli") &&
+        (provider.providerType === "gemini" || provider.providerType === "gemini-cli");
+
+      if (isGeminiPassthrough) {
+        // 完全透传：客户端是 Gemini 格式，提供商也是 Gemini 类型
+        logger.debug("[ResponseHandler] Gemini passthrough mode (no transformation)", {
+          originalFormat: session.originalFormat,
+          providerType: provider.providerType,
+          model: session.request.model,
+          reason: "Client format and provider type both Gemini",
+        });
+        // 直接返回原始响应，不做任何转换
+        finalResponse = response;
+      } else {
+        // ❌ 需要转换：客户端不是 Gemini 格式（如 OpenAI/Claude）
+        try {
+          const responseForTransform = response.clone();
+          const responseText = await responseForTransform.text();
+          const responseData = JSON.parse(responseText) as GeminiResponse;
+
+          const transformed = GeminiAdapter.transformResponse(responseData, false);
+
+          logger.debug(
+            "[ResponseHandler] Transformed Gemini non-stream response to client format",
+            {
+              originalFormat: session.originalFormat,
+              providerType: provider.providerType,
+              model: session.request.model,
+            }
+          );
+
+          finalResponse = new Response(JSON.stringify(transformed), {
+            status: response.status,
+            statusText: response.statusText,
+            headers: new Headers(response.headers),
+          });
+        } catch (error) {
+          logger.error("[ResponseHandler] Failed to transform Gemini non-stream response:", error);
+          finalResponse = response;
+        }
+      }
+    } else if (needsTransform && defaultRegistry.hasResponseTransformer(fromFormat, toFormat)) {
       try {
         // 克隆一份用于转换
         const responseForTransform = response.clone();
@@ -95,7 +142,7 @@ export class ProxyResponseHandler {
       }
     }
 
-    // ✅ 使用 AsyncTaskManager 管理后台处理任务
+    // 使用 AsyncTaskManager 管理后台处理任务
     const messageContext = session.messageContext;
     const taskId = `non-stream-${messageContext?.id || `unknown-${Date.now()}`}`;
     const abortController = new AbortController();
@@ -128,7 +175,7 @@ export class ProxyResponseHandler {
       };
 
       try {
-        // ✅ 检查客户端是否断开
+        // 检查客户端是否断开
         if (session.clientAbortSignal?.aborted || abortController.signal.aborted) {
           logger.info("ResponseHandler: Non-stream task cancelled (client disconnected)", {
             taskId,
@@ -146,7 +193,16 @@ export class ProxyResponseHandler {
           return;
         }
 
+        // ⭐ 非流式：读取完整响应体（会等待所有数据下载完成）
         const responseText = await responseForLog.text();
+
+        // ⭐ 响应体读取完成：清除响应超时定时器
+        const sessionWithCleanup = session as typeof session & {
+          clearResponseTimeout?: () => void;
+        };
+        if (sessionWithCleanup.clearResponseTimeout) {
+          sessionWithCleanup.clearResponseTimeout();
+        }
         let usageRecord: Record<string, unknown> | null = null;
         let usageMetrics: UsageMetrics | null = null;
 
@@ -231,46 +287,125 @@ export class ProxyResponseHandler {
           statusCode,
         });
       } catch (error) {
-        // 检测是否为客户端中断（使用统一的精确检测函数）
+        // 检测 AbortError 的来源：响应超时 vs 客户端中断
         const err = error as Error;
         if (isClientAbortError(err)) {
-          logger.warn("ResponseHandler: Non-stream processing aborted", {
-            taskId,
-            providerId: provider.id,
-            providerName: provider.name,
-            errorName: err.name,
-            reason:
-              err.name === "ResponseAborted"
-                ? "Response transmission interrupted"
-                : "Client disconnected",
-          });
-          try {
-            await finalizeNonStreamAbort();
-          } catch (finalizeError) {
-            logger.error("ResponseHandler: Failed to finalize aborted non-stream response", {
+          // 获取 responseController 引用（由 forwarder.ts 传递）
+          const sessionWithController = session as typeof session & {
+            responseController?: AbortController;
+          };
+
+          // 区分超时和客户端中断
+          const isResponseTimeout =
+            sessionWithController.responseController?.signal.aborted &&
+            !session.clientAbortSignal?.aborted;
+
+          if (isResponseTimeout) {
+            // ⚠️ 响应超时：计入熔断器并记录错误日志
+            logger.error("ResponseHandler: Response timeout during non-stream body read", {
               taskId,
               providerId: provider.id,
-              finalizeError,
+              providerName: provider.name,
+              errorName: err.name,
             });
+
+            // 计入熔断器（动态导入避免循环依赖）
+            try {
+              const { recordFailure } = await import("@/lib/circuit-breaker");
+              await recordFailure(provider.id, err);
+              logger.debug("ResponseHandler: Response timeout recorded in circuit breaker", {
+                providerId: provider.id,
+              });
+            } catch (cbError) {
+              logger.warn("ResponseHandler: Failed to record timeout in circuit breaker", {
+                providerId: provider.id,
+                error: cbError,
+              });
+            }
+
+            // 注意：无法重试，因为客户端已收到 HTTP 200
+            // 错误已记录，熔断器已更新，不抛出异常（避免影响后台任务）
+
+            // 更新数据库记录（避免 orphan record）
+            await persistRequestFailure({
+              session,
+              messageContext,
+              statusCode: statusCode ?? 500,
+              error: err,
+              taskId,
+              phase: "non-stream",
+            });
+
+            // 执行清理逻辑
+            try {
+              await finalizeNonStreamAbort();
+            } catch (finalizeError) {
+              logger.error("ResponseHandler: Failed to finalize aborted non-stream response", {
+                taskId,
+                providerId: provider.id,
+                finalizeError,
+              });
+            }
+          } else {
+            // 客户端主动中断：正常日志，不抛出错误
+            logger.warn("ResponseHandler: Non-stream processing aborted by client", {
+              taskId,
+              providerId: provider.id,
+              providerName: provider.name,
+              errorName: err.name,
+              reason:
+                err.name === "ResponseAborted"
+                  ? "Response transmission interrupted"
+                  : "Client disconnected",
+            });
+            try {
+              await finalizeNonStreamAbort();
+            } catch (finalizeError) {
+              logger.error("ResponseHandler: Failed to finalize aborted non-stream response", {
+                taskId,
+                providerId: provider.id,
+                finalizeError,
+              });
+            }
           }
         } else {
           logger.error("Failed to handle non-stream log:", error);
+
+          // 更新数据库记录（避免 orphan record）
+          await persistRequestFailure({
+            session,
+            messageContext,
+            statusCode: statusCode ?? 500,
+            error,
+            taskId,
+            phase: "non-stream",
+          });
         }
       } finally {
         AsyncTaskManager.cleanup(taskId);
       }
     })();
 
-    // ✅ 注册任务并添加全局错误捕获
+    // 注册任务并添加全局错误捕获
     AsyncTaskManager.register(taskId, processingPromise, "non-stream-processing");
-    processingPromise.catch((error) => {
+    processingPromise.catch(async (error) => {
       logger.error("ResponseHandler: Uncaught error in non-stream processing", {
         taskId,
         error,
       });
+
+      // 更新数据库记录（避免 orphan record）
+      await persistRequestFailure({
+        session,
+        messageContext,
+        statusCode: statusCode ?? 500,
+        error,
+        taskId,
+        phase: "non-stream",
+      });
     });
 
-    // ✅ 客户端断开时取消任务
+    // 客户端断开时取消任务
     if (session.clientAbortSignal) {
       session.clientAbortSignal.addEventListener("abort", () => {
         AsyncTaskManager.cancel(taskId);
@@ -297,7 +432,73 @@ export class ProxyResponseHandler {
     const needsTransform = fromFormat !== toFormat && fromFormat && toFormat;
     let processedStream: ReadableStream<Uint8Array> = response.body;
 
-    if (needsTransform && defaultRegistry.hasResponseTransformer(fromFormat, toFormat)) {
+    // --- GEMINI STREAM HANDLING ---
+    if (provider.providerType === "gemini" || provider.providerType === "gemini-cli") {
+      // 判断是否需要透传（客户端和提供商格式都必须是 Gemini）
+      const isGeminiPassthrough =
+        (session.originalFormat === "gemini" || session.originalFormat === "gemini-cli") &&
+        (provider.providerType === "gemini" || provider.providerType === "gemini-cli");
+
+      if (isGeminiPassthrough) {
+        // 完全透传：客户端是 Gemini 格式，提供商也是 Gemini 类型
+        logger.debug("[ResponseHandler] Gemini stream passthrough mode (no transformation)", {
+          originalFormat: session.originalFormat,
+          providerType: provider.providerType,
+          model: session.request.model,
+          reason: "Client format and provider type both Gemini",
+        });
+        // 直接使用原始流，不做任何转换
+        processedStream = response.body;
+      } else {
+        // ❌ 需要转换：客户端不是 Gemini 格式（如 OpenAI/Claude）
+        logger.debug("[ResponseHandler] Transforming Gemini stream to client format", {
+          originalFormat: session.originalFormat,
+          providerType: provider.providerType,
+          model: session.request.model,
+        });
+
+        let buffer = "";
+        const transformStream = new TransformStream<Uint8Array, Uint8Array>({
+          transform(chunk, controller) {
+            const decoder = new TextDecoder();
+            const text = decoder.decode(chunk, { stream: true });
+            buffer += text;
+
+            const lines = buffer.split("\n");
+            // Keep the last line in buffer as it might be incomplete
+            buffer = lines.pop() || "";
+
+            for (const line of lines) {
+              const trimmedLine = line.trim();
+              if (trimmedLine.startsWith("data:")) {
+                const jsonStr = trimmedLine.slice(5).trim();
+                if (!jsonStr) continue;
+                try {
+                  const geminiResponse = JSON.parse(jsonStr) as GeminiResponse;
+                  const openAIChunk = GeminiAdapter.transformResponse(geminiResponse, true);
+                  const output = `data: ${JSON.stringify(openAIChunk)}\n\n`;
+                  controller.enqueue(new TextEncoder().encode(output));
+                } catch (e) {
+                  // Ignore parse errors
+                }
+              }
+            }
+          },
+          flush(controller) {
+            if (buffer.trim().startsWith("data:")) {
+              try {
+                const jsonStr = buffer.trim().slice(5).trim();
+                const geminiResponse = JSON.parse(jsonStr) as GeminiResponse;
+                const openAIChunk = GeminiAdapter.transformResponse(geminiResponse, true);
+                const output = `data: ${JSON.stringify(openAIChunk)}\n\n`;
+                controller.enqueue(new TextEncoder().encode(output));
+              } catch {}
+            }
+          },
+        });
+        processedStream = response.body.pipeThrough(transformStream);
+      }
+    } else if (needsTransform && defaultRegistry.hasResponseTransformer(fromFormat, toFormat)) {
       logger.debug("[ResponseHandler] Transforming stream response", {
         from: fromFormat,
         to: toFormat,
@@ -341,17 +542,101 @@ export class ProxyResponseHandler {
       processedStream = response.body.pipeThrough(transformStream) as ReadableStream<Uint8Array>;
     }
 
-    const [clientStream, internalStream] = processedStream.tee();
+    // ⭐ 使用 TransformStream 包装流，以便在 idle timeout 时能关闭客户端流
+    // 这解决了 tee() 后 internalStream abort 不影响 clientStream 的问题
+    let streamController: TransformStreamDefaultController<Uint8Array> | null = null;
+    const controllableStream = processedStream.pipeThrough(
+      new TransformStream<Uint8Array, Uint8Array>({
+        start(controller) {
+          streamController = controller; // 保存 controller 引用
+        },
+        transform(chunk, controller) {
+          controller.enqueue(chunk); // 透传数据
+        },
+      })
+    );
+
+    const [clientStream, internalStream] = controllableStream.tee();
     const statusCode = response.status;
 
-    // ✅ 使用 AsyncTaskManager 管理后台处理任务
+    // 使用 AsyncTaskManager 管理后台处理任务
     const taskId = `stream-${messageContext.id}`;
     const abortController = new AbortController();
+
+    // ⭐ 提升 idleTimeoutId 到外部作用域，以便客户端断开时能清除
+    let idleTimeoutId: NodeJS.Timeout | null = null;
 
     const processingPromise = (async () => {
       const reader = internalStream.getReader();
       const decoder = new TextDecoder();
       const chunks: string[] = [];
+      let usageForCost: UsageMetrics | null = null;
+      let isFirstChunk = true; // ⭐ 标记是否为第一块数据
+
+      // ⭐ 静默期 Watchdog：监控流式请求中途卡住（无新数据推送）
+      const idleTimeoutMs =
+        provider.streamingIdleTimeoutMs > 0 ? provider.streamingIdleTimeoutMs : Infinity;
+      const startIdleTimer = () => {
+        if (idleTimeoutMs === Infinity) return; // 禁用时跳过
+        clearIdleTimer(); // 清除旧的
+        idleTimeoutId = setTimeout(() => {
+          logger.warn("ResponseHandler: Streaming idle timeout triggered", {
+            taskId,
+            providerId: provider.id,
+            idleTimeoutMs,
+            chunksCollected: chunks.length,
+          });
+
+          // ⭐ 1. 关闭客户端流（让客户端收到连接关闭通知，避免悬挂）
+          try {
+            if (streamController) {
+              streamController.error(new Error("Streaming idle timeout"));
+              logger.debug("ResponseHandler: Client stream closed due to idle timeout", {
+                taskId,
+                providerId: provider.id,
+              });
+            }
+          } catch (e) {
+            logger.warn("ResponseHandler: Failed to close client stream", {
+              taskId,
+              providerId: provider.id,
+              error: e,
+            });
+          }
+
+          // ⭐ 2. 终止上游连接（避免资源泄漏）
+          try {
+            const sessionWithController = session as typeof session & {
+              responseController?: AbortController;
+            };
+            if (sessionWithController.responseController) {
+              sessionWithController.responseController.abort(new Error("streaming_idle"));
+              logger.debug("ResponseHandler: Upstream connection aborted due to idle timeout", {
+                taskId,
+                providerId: provider.id,
+              });
+            }
+          } catch (e) {
+            logger.warn("ResponseHandler: Failed to abort upstream connection", {
+              taskId,
+              providerId: provider.id,
+              error: e,
+            });
+          }
+
+          // ⭐ 3. 终止后台读取任务
+          abortController.abort(new Error("streaming_idle"));
+        }, idleTimeoutMs);
+      };
+      const clearIdleTimer = () => {
+        if (idleTimeoutId) {
+          clearTimeout(idleTimeoutId);
+          idleTimeoutId = null;
+        }
+      };
+
+      // ⭐ 不在首次读取前启动 idle timer（避免与首字节超时职责重叠）
+      // idle timer 仅在首块数据到达后启动，用于检测流中途静默
 
       const flushAndJoin = (): string => {
         const flushed = decoder.decode();
@@ -376,27 +661,27 @@ export class ProxyResponseHandler {
         tracker.endRequest(messageContext.user.id, messageContext.id);
 
         const usageResult = parseUsageFromResponseText(allContent, provider.providerType);
-        const usageMetrics = usageResult.usageMetrics;
+        usageForCost = usageResult.usageMetrics;
 
         await updateRequestCostFromUsage(
           messageContext.id,
           session.getOriginalModel(),
           session.getCurrentModel(),
-          usageMetrics,
+          usageForCost,
           provider.costMultiplier
         );
 
         // 追踪消费到 Redis（用于限流）
-        await trackCostToRedis(session, usageMetrics);
+        await trackCostToRedis(session, usageForCost);
 
         // 更新 session 使用量到 Redis（用于实时监控）
-        if (session.sessionId) {
+        if (session.sessionId && usageForCost) {
           let costUsdStr: string | undefined;
-          if (usageMetrics && session.request.model) {
+          if (session.request.model) {
             const priceData = await findLatestPriceByModel(session.request.model);
             if (priceData?.priceData) {
               const cost = calculateRequestCost(
-                usageMetrics,
+                usageForCost,
                 priceData.priceData,
                 provider.costMultiplier
               );
@@ -406,43 +691,33 @@ export class ProxyResponseHandler {
             }
           }
 
-          const sessionUsagePayload: SessionUsageUpdate = {
+          void SessionManager.updateSessionUsage(session.sessionId, {
+            inputTokens: usageForCost.input_tokens,
+            outputTokens: usageForCost.output_tokens,
+            cacheCreationInputTokens: usageForCost.cache_creation_input_tokens,
+            cacheReadInputTokens: usageForCost.cache_read_input_tokens,
+            costUsd: costUsdStr,
             status: statusCode >= 200 && statusCode < 300 ? "completed" : "error",
-            statusCode,
-          };
-
-          if (usageMetrics) {
-            sessionUsagePayload.inputTokens = usageMetrics.input_tokens;
-            sessionUsagePayload.outputTokens = usageMetrics.output_tokens;
-            sessionUsagePayload.cacheCreationInputTokens = usageMetrics.cache_creation_input_tokens;
-            sessionUsagePayload.cacheReadInputTokens = usageMetrics.cache_read_input_tokens;
-          }
-
-          if (costUsdStr) {
-            sessionUsagePayload.costUsd = costUsdStr;
-          }
-
-          void SessionManager.updateSessionUsage(session.sessionId, sessionUsagePayload).catch(
-            (error: unknown) => {
-              logger.error("[ResponseHandler] Failed to update session usage:", error);
-            }
-          );
+            statusCode: statusCode,
+          }).catch((error: unknown) => {
+            logger.error("[ResponseHandler] Failed to update session usage:", error);
+          });
         }
 
         // 保存扩展信息（status code, tokens, provider chain）
         await updateMessageRequestDetails(messageContext.id, {
           statusCode: statusCode,
-          inputTokens: usageMetrics?.input_tokens,
-          outputTokens: usageMetrics?.output_tokens,
-          cacheCreationInputTokens: usageMetrics?.cache_creation_input_tokens,
-          cacheReadInputTokens: usageMetrics?.cache_read_input_tokens,
+          inputTokens: usageForCost?.input_tokens,
+          outputTokens: usageForCost?.output_tokens,
+          cacheCreationInputTokens: usageForCost?.cache_creation_input_tokens,
+          cacheReadInputTokens: usageForCost?.cache_read_input_tokens,
           providerChain: session.getProviderChain(),
         });
       };
 
       try {
         while (true) {
-          // ✅ 检查取消信号
+          // 检查取消信号
           if (session.clientAbortSignal?.aborted || abortController.signal.aborted) {
             logger.info("ResponseHandler: Stream processing cancelled", {
               taskId,
@@ -457,43 +732,170 @@ export class ProxyResponseHandler {
             break;
           }
           if (value) {
+            const chunkSize = value.length;
             chunks.push(decoder.decode(value, { stream: true }));
+
+            // ⭐ 每次收到数据后重置静默期计时器（首次收到数据时启动）
+            startIdleTimer();
+            logger.trace("ResponseHandler: Idle timer reset (data received)", {
+              taskId,
+              providerId: provider.id,
+              chunksCollected: chunks.length,
+              lastChunkSize: chunkSize,
+              idleTimeoutMs: idleTimeoutMs === Infinity ? "disabled" : idleTimeoutMs,
+            });
+
+            // ⭐ 流式：读到第一块数据后立即清除响应超时定时器
+            if (isFirstChunk) {
+              isFirstChunk = false;
+              const sessionWithCleanup = session as typeof session & {
+                clearResponseTimeout?: () => void;
+              };
+              if (sessionWithCleanup.clearResponseTimeout) {
+                sessionWithCleanup.clearResponseTimeout();
+                logger.debug("ResponseHandler: First chunk received, response timeout cleared", {
+                  taskId,
+                  providerId: provider.id,
+                  firstChunkSize: chunkSize,
+                });
+              }
+            }
           }
         }
 
+        // ⭐ 流式读取完成：清除静默期计时器
+        clearIdleTimer();
         const allContent = flushAndJoin();
         await finalizeStream(allContent);
       } catch (error) {
-        // 检测是否为客户端中断（使用统一的精确检测函数）
+        // 检测 AbortError 的来源：响应超时 vs 静默期超时 vs 客户端中断
         const err = error as Error;
         if (isClientAbortError(err)) {
-          logger.warn("ResponseHandler: Stream reading aborted", {
-            taskId,
-            providerId: provider.id,
-            providerName: provider.name,
-            messageId: messageContext.id,
-            chunksCollected: chunks.length,
-            errorName: err.name,
-            reason:
-              err.name === "ResponseAborted"
-                ? "Response transmission interrupted"
-                : "Client disconnected",
-          });
-          try {
-            const allContent = flushAndJoin();
-            await finalizeStream(allContent);
-          } catch (finalizeError) {
-            logger.error("ResponseHandler: Failed to finalize aborted stream response", {
+          // 获取 responseController 引用（由 forwarder.ts 传递）
+          const sessionWithController = session as typeof session & {
+            responseController?: AbortController;
+          };
+
+          // 区分不同的超时来源
+          const isResponseTimeout =
+            sessionWithController.responseController?.signal.aborted &&
+            !session.clientAbortSignal?.aborted;
+          const isIdleTimeout = err.message?.includes("streaming_idle");
+
+          if (isResponseTimeout && !isIdleTimeout) {
+            // ⚠️ 响应超时（首字节超时）：计入熔断器并记录错误日志
+            logger.error("ResponseHandler: Response timeout during stream body read", {
               taskId,
+              providerId: provider.id,
+              providerName: provider.name,
               messageId: messageContext.id,
-              finalizeError,
+              chunksCollected: chunks.length,
+              errorName: err.name,
             });
+
+            // ⚠️ 计入熔断器（动态导入避免循环依赖）
+            try {
+              const { recordFailure } = await import("@/lib/circuit-breaker");
+              await recordFailure(provider.id, err);
+              logger.debug("ResponseHandler: Response timeout recorded in circuit breaker", {
+                providerId: provider.id,
+              });
+            } catch (cbError) {
+              logger.warn("ResponseHandler: Failed to record timeout in circuit breaker", {
+                providerId: provider.id,
+                error: cbError,
+              });
+            }
+
+            // 注意：无法重试，因为客户端已收到 HTTP 200
+            // 错误已记录，熔断器已更新，不抛出异常（避免影响后台任务）
+
+            // 更新数据库记录（避免 orphan record）
+            await persistRequestFailure({
+              session,
+              messageContext,
+              statusCode: statusCode ?? 500,
+              error: err,
+              taskId,
+              phase: "stream",
+            });
+          } else if (isIdleTimeout) {
+            // ⚠️ 静默期超时：计入熔断器并记录错误日志
+            logger.error("ResponseHandler: Streaming idle timeout", {
+              taskId,
+              providerId: provider.id,
+              providerName: provider.name,
+              messageId: messageContext.id,
+              chunksCollected: chunks.length,
+            });
+
+            // ⚠️ 计入熔断器（动态导入避免循环依赖）
+            try {
+              const { recordFailure } = await import("@/lib/circuit-breaker");
+              await recordFailure(provider.id, err);
+              logger.debug("ResponseHandler: Streaming idle timeout recorded in circuit breaker", {
+                providerId: provider.id,
+              });
+            } catch (cbError) {
+              logger.warn("ResponseHandler: Failed to record timeout in circuit breaker", {
+                providerId: provider.id,
+                error: cbError,
+              });
+            }
+
+            // 注意：无法重试，因为客户端已收到 HTTP 200
+            // 错误已记录，熔断器已更新，不抛出异常（避免影响后台任务）
+
+            // 更新数据库记录（避免 orphan record - 这是导致 185 个孤儿记录的根本原因！）
+            await persistRequestFailure({
+              session,
+              messageContext,
+              statusCode: statusCode ?? 500,
+              error: err,
+              taskId,
+              phase: "stream",
+            });
+          } else {
+            // 客户端主动中断：正常日志，不抛出错误
+            logger.warn("ResponseHandler: Stream reading aborted by client", {
+              taskId,
+              providerId: provider.id,
+              providerName: provider.name,
+              messageId: messageContext.id,
+              chunksCollected: chunks.length,
+              errorName: err.name,
+              reason:
+                err.name === "ResponseAborted"
+                  ? "Response transmission interrupted"
+                  : "Client disconnected",
+            });
+            try {
+              const allContent = flushAndJoin();
+              await finalizeStream(allContent);
+            } catch (finalizeError) {
+              logger.error("ResponseHandler: Failed to finalize aborted stream response", {
+                taskId,
+                messageId: messageContext.id,
+                finalizeError,
+              });
+            }
           }
         } else {
           logger.error("Failed to save SSE content:", error);
+
+          // 更新数据库记录（避免 orphan record）
+          await persistRequestFailure({
+            session,
+            messageContext,
+            statusCode: statusCode ?? 500,
+            error,
+            taskId,
+            phase: "stream",
+          });
         }
       } finally {
-        // ✅ 确保资源释放
+        // 确保资源释放
+        clearIdleTimer(); // ⭐ 清除静默期计时器（防止泄漏）
         try {
           reader.releaseLock();
         } catch (releaseError) {
@@ -503,21 +905,51 @@ export class ProxyResponseHandler {
       }
     })();
 
-    // ✅ 注册任务并添加全局错误捕获
+    // 注册任务并添加全局错误捕获
     AsyncTaskManager.register(taskId, processingPromise, "stream-processing");
-    processingPromise.catch((error) => {
+    processingPromise.catch(async (error) => {
       logger.error("ResponseHandler: Uncaught error in stream processing", {
         taskId,
         messageId: messageContext.id,
         error,
       });
+
+      // 更新数据库记录（避免 orphan record）
+      await persistRequestFailure({
+        session,
+        messageContext,
+        statusCode: statusCode ?? 500,
+        error,
+        taskId,
+        phase: "stream",
+      });
     });
 
-    // ✅ 客户端断开时取消任务
+    // 客户端断开时取消任务并清除 idle timer
     if (session.clientAbortSignal) {
       session.clientAbortSignal.addEventListener("abort", () => {
+        logger.debug("ResponseHandler: Client disconnected, cleaning up", {
+          taskId,
+          providerId: provider.id,
+          messageId: messageContext.id,
+        });
+
+        // ⭐ 1. 清除 idle timeout（避免误触发）
+        if (idleTimeoutId) {
+          clearTimeout(idleTimeoutId);
+          idleTimeoutId = null;
+          logger.debug("ResponseHandler: Idle timeout cleared due to client disconnect", {
+            taskId,
+            providerId: provider.id,
+          });
+        }
+
+        // 2. 取消后台任务
         AsyncTaskManager.cancel(taskId);
         abortController.abort();
+
+        // 注意：不需要 streamController.error()（客户端已断开）
+        // 注意：不需要 responseController.abort()（上游会自然结束）
       });
     }
 
@@ -540,6 +972,21 @@ function extractUsageMetrics(value: unknown): UsageMetrics | null {
 
   if (typeof usage.input_tokens === "number") {
     result.input_tokens = usage.input_tokens;
+    hasAny = true;
+  }
+
+  // Gemini support
+  if (typeof usage.promptTokenCount === "number") {
+    result.input_tokens = usage.promptTokenCount;
+    hasAny = true;
+  }
+  if (typeof usage.candidatesTokenCount === "number") {
+    result.output_tokens = usage.candidatesTokenCount;
+    hasAny = true;
+  }
+  // Gemini 缓存支持
+  if (typeof usage.cachedContentTokenCount === "number") {
+    result.cache_read_input_tokens = usage.cachedContentTokenCount;
     hasAny = true;
   }
 
@@ -614,10 +1061,18 @@ function parseUsageFromResponseText(
 
     if (parsedValue && typeof parsedValue === "object" && !Array.isArray(parsedValue)) {
       const parsed = parsedValue as Record<string, unknown>;
-      applyUsageValue(parsed.usage, "json.root");
 
+      // Standard usage fields
+      applyUsageValue(parsed.usage, "json.root.usage");
+
+      // Gemini usageMetadata (direct)
+      applyUsageValue(parsed.usageMetadata, "json.root.usageMetadata");
+
+      // Handle response wrapping (some Gemini providers return {response: {...}})
       if (parsed.response && typeof parsed.response === "object") {
-        applyUsageValue((parsed.response as Record<string, unknown>).usage, "json.response");
+        const responseObj = parsed.response as Record<string, unknown>;
+        applyUsageValue(responseObj.usage, "json.response.usage");
+        applyUsageValue(responseObj.usageMetadata, "json.response.usageMetadata");
       }
 
       if (Array.isArray(parsed.output)) {
@@ -660,13 +1115,18 @@ function parseUsageFromResponseText(
       }
 
       const data = event.data as Record<string, unknown>;
-      applyUsageValue(data.usage, `sse.${event.event}`);
 
+      // Standard usage fields
+      applyUsageValue(data.usage, `sse.${event.event}.usage`);
+
+      // Gemini usageMetadata
+      applyUsageValue(data.usageMetadata, `sse.${event.event}.usageMetadata`);
+
+      // Handle response wrapping in SSE
       if (!usageMetrics && data.response && typeof data.response === "object") {
-        applyUsageValue(
-          (data.response as Record<string, unknown>).usage,
-          `sse.${event.event}.response`
-        );
+        const responseObj = data.response as Record<string, unknown>;
+        applyUsageValue(responseObj.usage, `sse.${event.event}.response.usage`);
+        applyUsageValue(responseObj.usageMetadata, `sse.${event.event}.response.usageMetadata`);
       }
     }
   }
@@ -823,11 +1283,98 @@ async function trackCostToRedis(session: ProxySession, usage: UsageMetrics | nul
     costFloat
   );
 
-  // ✅ 新增：追踪用户层每日消费
+  // 新增：追踪用户层每日消费
   await RateLimitService.trackUserDailyCost(user.id, costFloat);
 
   // 刷新 session 时间戳（滑动窗口）
   void SessionTracker.refreshSession(session.sessionId, key.id, provider.id).catch((error) => {
     logger.error("[ResponseHandler] Failed to refresh session tracker:", error);
   });
+}
+
+/**
+ * 持久化请求失败信息到数据库
+ * - 用于后台异步任务中的错误处理，确保 orphan records 被正确更新
+ * - 包含完整的错误信息、duration、status code 和 provider chain
+ */
+async function persistRequestFailure(options: {
+  session: ProxySession;
+  messageContext: ProxySession["messageContext"] | null;
+  statusCode: number;
+  error: unknown;
+  taskId: string;
+  phase: "stream" | "non-stream";
+}): Promise<void> {
+  const { session, messageContext, statusCode, error, taskId, phase } = options;
+
+  if (!messageContext) {
+    logger.warn("ResponseHandler: Cannot persist failure without messageContext", {
+      taskId,
+      phase,
+    });
+    return;
+  }
+
+  const tracker = ProxyStatusTracker.getInstance();
+  const errorMessage = formatProcessingError(error);
+  const duration = Date.now() - session.startTime;
+
+  try {
+    // 更新请求持续时间
+    await updateMessageRequestDuration(messageContext.id, duration);
+
+    // 更新错误详情和 provider chain
+    await updateMessageRequestDetails(messageContext.id, {
+      statusCode,
+      errorMessage,
+      providerChain: session.getProviderChain(),
+    });
+
+    logger.info("ResponseHandler: Successfully persisted request failure", {
+      taskId,
+      phase,
+      messageId: messageContext.id,
+      duration,
+      statusCode,
+      errorMessage,
+    });
+  } catch (dbError) {
+    logger.error("ResponseHandler: Failed to persist request failure", {
+      taskId,
+      phase,
+      messageId: messageContext.id,
+      error: errorMessage,
+      dbError,
+    });
+  } finally {
+    // 确保无论数据库操作成功与否，都清理追踪状态
+    try {
+      tracker.endRequest(messageContext.user.id, messageContext.id);
+    } catch (trackerError) {
+      logger.warn("ResponseHandler: Failed to end request tracking", {
+        taskId,
+        messageId: messageContext.id,
+        trackerError,
+      });
+    }
+  }
+}
+
+/**
+ * 格式化处理错误信息
+ * - 提取有意义的错误描述用于数据库存储
+ */
+function formatProcessingError(error: unknown): string {
+  if (error instanceof Error) {
+    const message = error.message?.trim();
+    return message ? `${error.name}: ${message}` : error.name;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
 }

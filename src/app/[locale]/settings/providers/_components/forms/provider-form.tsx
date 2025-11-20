@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { TagInput } from "@/components/ui/tag-input";
 import {
   Select,
   SelectContent,
@@ -27,11 +28,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { ProviderDisplay, ProviderType, CodexInstructionsStrategy } from "@/types/provider";
 import { validateNumericField, isValidUrl } from "@/lib/utils/validation";
-import { PROVIDER_DEFAULTS } from "@/lib/constants/provider.constants";
+import { PROVIDER_DEFAULTS, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { toast } from "sonner";
 import { ModelMultiSelect } from "../model-multi-select";
 import { ModelRedirectEditor } from "../model-redirect-editor";
 import { ProxyTestButton } from "./proxy-test-button";
+import { ApiTestButton } from "./api-test-button";
+import { UrlPreview } from "./url-preview";
 import { ChevronDown } from "lucide-react";
 import { useTranslations } from "next-intl";
 
@@ -53,6 +56,7 @@ export function ProviderForm({
   enableMultiProviderTypes,
 }: ProviderFormProps) {
   const t = useTranslations("settings.providers.form");
+  const tUI = useTranslations("ui.tagInput");
   const isEdit = mode === "edit";
   const [isPending, startTransition] = useTransition();
 
@@ -78,7 +82,14 @@ export function ProviderForm({
   const [costMultiplier, setCostMultiplier] = useState<number>(
     sourceProvider?.costMultiplier ?? 1.0
   );
-  const [groupTag, setGroupTag] = useState<string>(sourceProvider?.groupTag ?? "");
+  const [groupTag, setGroupTag] = useState<string[]>(
+    sourceProvider?.groupTag
+      ? sourceProvider.groupTag
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean)
+      : []
+  );
   const [limit5hUsd, setLimit5hUsd] = useState<number | null>(sourceProvider?.limit5hUsd ?? null);
   const [limitWeeklyUsd, setLimitWeeklyUsd] = useState<number | null>(
     sourceProvider?.limitWeeklyUsd ?? null
@@ -114,6 +125,27 @@ export function ProviderForm({
     sourceProvider?.proxyFallbackToDirect ?? false
   );
 
+  // 超时配置（以秒为单位显示，提交时转换为毫秒）
+  // ⚠️ 严格检查 null/undefined 并验证数值有效性，避免产生 NaN
+  const [firstByteTimeoutStreamingSeconds, setFirstByteTimeoutStreamingSeconds] = useState<
+    number | undefined
+  >(() => {
+    const ms = sourceProvider?.firstByteTimeoutStreamingMs;
+    return ms != null && typeof ms === "number" && !Number.isNaN(ms) ? ms / 1000 : undefined;
+  });
+  const [streamingIdleTimeoutSeconds, setStreamingIdleTimeoutSeconds] = useState<
+    number | undefined
+  >(() => {
+    const ms = sourceProvider?.streamingIdleTimeoutMs;
+    return ms != null && typeof ms === "number" && !Number.isNaN(ms) ? ms / 1000 : undefined;
+  });
+  const [requestTimeoutNonStreamingSeconds, setRequestTimeoutNonStreamingSeconds] = useState<
+    number | undefined
+  >(() => {
+    const ms = sourceProvider?.requestTimeoutNonStreamingMs;
+    return ms != null && typeof ms === "number" && !Number.isNaN(ms) ? ms / 1000 : undefined;
+  });
+
   // 供应商官网地址
   const [websiteUrl, setWebsiteUrl] = useState<string>(sourceProvider?.websiteUrl ?? "");
 
@@ -122,12 +154,21 @@ export function ProviderForm({
     useState<CodexInstructionsStrategy>(sourceProvider?.codexInstructionsStrategy ?? "auto");
 
   // 折叠区域状态管理
-  type SectionKey = "routing" | "rateLimit" | "circuitBreaker" | "proxy" | "codexStrategy";
+  type SectionKey =
+    | "routing"
+    | "rateLimit"
+    | "circuitBreaker"
+    | "proxy"
+    | "timeout"
+    | "apiTest"
+    | "codexStrategy";
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
     routing: false,
     rateLimit: false,
     circuitBreaker: false,
     proxy: false,
+    timeout: false,
+    apiTest: false,
     codexStrategy: false,
   });
 
@@ -137,7 +178,7 @@ export function ProviderForm({
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        setOpenSections(parsed);
+        setOpenSections((prev) => ({ ...prev, ...parsed }));
       } catch (e) {
         console.error("Failed to parse saved sections state:", e);
       }
@@ -170,6 +211,8 @@ export function ProviderForm({
       rateLimit: true,
       circuitBreaker: true,
       proxy: true,
+      timeout: true,
+      apiTest: true,
       codexStrategy: true,
     });
   };
@@ -181,6 +224,8 @@ export function ProviderForm({
       rateLimit: false,
       circuitBreaker: false,
       proxy: false,
+      timeout: false,
+      apiTest: false,
       codexStrategy: false,
     });
   };
@@ -230,6 +275,9 @@ export function ProviderForm({
             circuit_breaker_half_open_success_threshold?: number;
             proxy_url?: string | null;
             proxy_fallback_to_direct?: boolean;
+            first_byte_timeout_streaming_ms?: number;
+            streaming_idle_timeout_ms?: number;
+            request_timeout_non_streaming_ms?: number;
             website_url?: string | null;
             codex_instructions_strategy?: CodexInstructionsStrategy;
             tpm?: number | null;
@@ -246,7 +294,7 @@ export function ProviderForm({
             priority: priority,
             weight: weight,
             cost_multiplier: costMultiplier,
-            group_tag: groupTag.trim() || null,
+            group_tag: groupTag.length > 0 ? groupTag.join(",") : null,
             limit_5h_usd: limit5hUsd,
             limit_weekly_usd: limitWeeklyUsd,
             limit_monthly_usd: limitMonthlyUsd,
@@ -258,6 +306,17 @@ export function ProviderForm({
             circuit_breaker_half_open_success_threshold: halfOpenSuccessThreshold ?? 2,
             proxy_url: proxyUrl.trim() || null,
             proxy_fallback_to_direct: proxyFallbackToDirect,
+            // ⭐ 编辑模式：undefined 代表不更新(沿用数据库旧值),不能回退到默认值
+            first_byte_timeout_streaming_ms:
+              firstByteTimeoutStreamingSeconds != null
+                ? firstByteTimeoutStreamingSeconds * 1000
+                : undefined,
+            streaming_idle_timeout_ms:
+              streamingIdleTimeoutSeconds != null ? streamingIdleTimeoutSeconds * 1000 : undefined,
+            request_timeout_non_streaming_ms:
+              requestTimeoutNonStreamingSeconds != null
+                ? requestTimeoutNonStreamingSeconds * 1000
+                : undefined,
             website_url: websiteUrl.trim() || null,
             codex_instructions_strategy: codexInstructionsStrategy,
             tpm: null,
@@ -287,7 +346,7 @@ export function ProviderForm({
             weight: weight,
             priority: priority,
             cost_multiplier: costMultiplier,
-            group_tag: groupTag.trim() || null,
+            group_tag: groupTag.length > 0 ? groupTag.join(",") : null,
             limit_5h_usd: limit5hUsd,
             limit_weekly_usd: limitWeeklyUsd,
             limit_monthly_usd: limitMonthlyUsd,
@@ -299,6 +358,18 @@ export function ProviderForm({
             circuit_breaker_half_open_success_threshold: halfOpenSuccessThreshold ?? 2,
             proxy_url: proxyUrl.trim() || null,
             proxy_fallback_to_direct: proxyFallbackToDirect,
+            first_byte_timeout_streaming_ms:
+              firstByteTimeoutStreamingSeconds != null
+                ? firstByteTimeoutStreamingSeconds * 1000
+                : PROVIDER_TIMEOUT_DEFAULTS.FIRST_BYTE_TIMEOUT_STREAMING_MS,
+            streaming_idle_timeout_ms:
+              streamingIdleTimeoutSeconds != null
+                ? streamingIdleTimeoutSeconds * 1000
+                : PROVIDER_TIMEOUT_DEFAULTS.STREAMING_IDLE_TIMEOUT_MS,
+            request_timeout_non_streaming_ms:
+              requestTimeoutNonStreamingSeconds != null
+                ? requestTimeoutNonStreamingSeconds * 1000
+                : PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS,
             website_url: websiteUrl.trim() || null,
             codex_instructions_strategy: codexInstructionsStrategy,
             tpm: null,
@@ -325,7 +396,7 @@ export function ProviderForm({
           setPriority(0);
           setWeight(1);
           setCostMultiplier(1.0);
-          setGroupTag("");
+          setGroupTag([]);
           setLimit5hUsd(null);
           setLimitWeeklyUsd(null);
           setLimitMonthlyUsd(null);
@@ -335,6 +406,16 @@ export function ProviderForm({
           setHalfOpenSuccessThreshold(2);
           setProxyUrl("");
           setProxyFallbackToDirect(false);
+          setFirstByteTimeoutStreamingSeconds(
+            PROVIDER_TIMEOUT_DEFAULTS.FIRST_BYTE_TIMEOUT_STREAMING_MS / 1000
+          );
+          // ⭐ 修复遗漏：重置流式静默期超时
+          setStreamingIdleTimeoutSeconds(
+            PROVIDER_TIMEOUT_DEFAULTS.STREAMING_IDLE_TIMEOUT_MS / 1000
+          );
+          setRequestTimeoutNonStreamingSeconds(
+            PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS / 1000
+          );
           setWebsiteUrl("");
           setCodexInstructionsStrategy("auto");
         }
@@ -378,6 +459,8 @@ export function ProviderForm({
             disabled={isPending}
             required
           />
+          {/* URL 预览组件 - 实时显示端点拼接结果 */}
+          {url.trim() && <UrlPreview baseUrl={url} providerType={providerType} />}
         </div>
 
         <div className="space-y-2">
@@ -439,7 +522,7 @@ export function ProviderForm({
         </div>
 
         {/* Codex 支持：供应商类型和模型重定向 */}
-        <Collapsible open={openSections.routing} onOpenChange={(open) => toggleSection("routing")}>
+        <Collapsible open={openSections.routing} onOpenChange={() => toggleSection("routing")}>
           <CollapsibleTrigger asChild>
             <button
               type="button"
@@ -493,12 +576,8 @@ export function ProviderForm({
                     <SelectItem value="claude">{t("providerTypes.claude")}</SelectItem>
                     <SelectItem value="claude-auth">{t("providerTypes.claudeAuth")}</SelectItem>
                     <SelectItem value="codex">{t("providerTypes.codex")}</SelectItem>
-                    <SelectItem value="gemini-cli" disabled={!enableMultiProviderTypes}>
-                      <>
-                        {t("providerTypes.geminiCli")}{" "}
-                        {!enableMultiProviderTypes && t("providerTypes.geminiCliDisabled")}
-                      </>
-                    </SelectItem>
+                    <SelectItem value="gemini">{t("providerTypes.gemini")}</SelectItem>
+                    <SelectItem value="gemini-cli">{t("providerTypes.geminiCli")}</SelectItem>
                     <SelectItem value="openai-compatible" disabled={!enableMultiProviderTypes}>
                       <>
                         {t("providerTypes.openaiCompatible")}{" "}
@@ -586,7 +665,12 @@ export function ProviderForm({
 
                 <ModelMultiSelect
                   providerType={
-                    providerType as "claude" | "codex" | "gemini-cli" | "openai-compatible"
+                    providerType as
+                      | "claude"
+                      | "codex"
+                      | "gemini"
+                      | "gemini-cli"
+                      | "openai-compatible"
                   }
                   selectedModels={allowedModels}
                   onChange={setAllowedModels}
@@ -690,12 +774,23 @@ export function ProviderForm({
                   <Label htmlFor={isEdit ? "edit-group" : "group"}>
                     {t("sections.routing.scheduleParams.group.label")}
                   </Label>
-                  <Input
+                  <TagInput
                     id={isEdit ? "edit-group" : "group"}
                     value={groupTag}
-                    onChange={(e) => setGroupTag(e.target.value)}
+                    onChange={setGroupTag}
                     placeholder={t("sections.routing.scheduleParams.group.placeholder")}
                     disabled={isPending}
+                    maxTagLength={50}
+                    onInvalidTag={(tag, reason) => {
+                      const messages: Record<string, string> = {
+                        empty: tUI("emptyTag"),
+                        duplicate: tUI("duplicateTag"),
+                        too_long: tUI("tooLong", { max: 50 }),
+                        invalid_format: tUI("invalidFormat"),
+                        max_tags: tUI("maxTags"),
+                      };
+                      toast.error(messages[reason] || reason);
+                    }}
                   />
                   <p className="text-xs text-muted-foreground">
                     {t("sections.routing.scheduleParams.group.desc")}
@@ -707,10 +802,7 @@ export function ProviderForm({
         </Collapsible>
 
         {/* 限流配置 */}
-        <Collapsible
-          open={openSections.rateLimit}
-          onOpenChange={(open) => toggleSection("rateLimit")}
-        >
+        <Collapsible open={openSections.rateLimit} onOpenChange={() => toggleSection("rateLimit")}>
           <CollapsibleTrigger asChild>
             <button
               type="button"
@@ -823,7 +915,7 @@ export function ProviderForm({
         {/* 熔断器配置 */}
         <Collapsible
           open={openSections.circuitBreaker}
-          onOpenChange={(open) => toggleSection("circuitBreaker")}
+          onOpenChange={() => toggleSection("circuitBreaker")}
         >
           <CollapsibleTrigger asChild>
             <button
@@ -925,8 +1017,159 @@ export function ProviderForm({
           </CollapsibleContent>
         </Collapsible>
 
+        {/* 超时配置 */}
+        <Collapsible open={openSections.timeout} onOpenChange={(open) => toggleSection("timeout")}>
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="flex items-center justify-between w-full py-4 border-t hover:bg-muted/50 transition-colors"
+              disabled={isPending}
+            >
+              <div className="flex items-center gap-2">
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${
+                    openSections.timeout ? "rotate-180" : ""
+                  }`}
+                />
+                <span className="text-sm font-medium">{t("sections.timeout.title")}</span>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {t("sections.timeout.summary", {
+                  streaming:
+                    firstByteTimeoutStreamingSeconds != null &&
+                    !Number.isNaN(firstByteTimeoutStreamingSeconds)
+                      ? firstByteTimeoutStreamingSeconds
+                      : PROVIDER_TIMEOUT_DEFAULTS.FIRST_BYTE_TIMEOUT_STREAMING_MS / 1000,
+                  idle:
+                    streamingIdleTimeoutSeconds != null &&
+                    !Number.isNaN(streamingIdleTimeoutSeconds)
+                      ? streamingIdleTimeoutSeconds
+                      : PROVIDER_TIMEOUT_DEFAULTS.STREAMING_IDLE_TIMEOUT_MS / 1000,
+                  nonStreaming:
+                    requestTimeoutNonStreamingSeconds != null &&
+                    !Number.isNaN(requestTimeoutNonStreamingSeconds)
+                      ? requestTimeoutNonStreamingSeconds
+                      : PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS / 1000,
+                })}
+              </span>
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-4 pb-4">
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">{t("sections.timeout.desc")}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label
+                    htmlFor={
+                      isEdit ? "edit-first-byte-timeout-streaming" : "first-byte-timeout-streaming"
+                    }
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      {t("sections.timeout.streamingFirstByte.label")}
+                      {t("sections.timeout.streamingFirstByte.core") && (
+                        <span className="text-orange-500 text-[10px] font-medium px-1.5 py-0.5 bg-orange-50 dark:bg-orange-950 rounded border border-orange-200 dark:border-orange-800">
+                          {t("common.core")}
+                        </span>
+                      )}
+                    </span>
+                  </Label>
+                  <Input
+                    id={
+                      isEdit ? "edit-first-byte-timeout-streaming" : "first-byte-timeout-streaming"
+                    }
+                    type="number"
+                    value={firstByteTimeoutStreamingSeconds ?? ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFirstByteTimeoutStreamingSeconds(val === "" ? undefined : parseInt(val));
+                    }}
+                    placeholder={t("sections.timeout.streamingFirstByte.placeholder")}
+                    disabled={isPending}
+                    min="0"
+                    max="120"
+                    step="1"
+                    className="border-orange-200 focus:border-orange-500 focus:ring-orange-500"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t("sections.timeout.streamingFirstByte.desc")}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label
+                    htmlFor={isEdit ? "edit-streaming-idle-timeout" : "streaming-idle-timeout"}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      {t("sections.timeout.streamingIdle.label")}
+                      {t("sections.timeout.streamingIdle.core") && (
+                        <span className="text-orange-500 text-[10px] font-medium px-1.5 py-0.5 bg-orange-50 dark:bg-orange-950 rounded border border-orange-200 dark:border-orange-800">
+                          {t("common.core")}
+                        </span>
+                      )}
+                    </span>
+                  </Label>
+                  <Input
+                    id={isEdit ? "edit-streaming-idle-timeout" : "streaming-idle-timeout"}
+                    type="number"
+                    value={streamingIdleTimeoutSeconds ?? ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setStreamingIdleTimeoutSeconds(val === "" ? undefined : parseInt(val));
+                    }}
+                    placeholder={t("sections.timeout.streamingIdle.placeholder")}
+                    disabled={isPending}
+                    min="0"
+                    max="120"
+                    step="1"
+                    className="border-orange-200 focus:border-orange-500 focus:ring-orange-500"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t("sections.timeout.streamingIdle.desc")}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label
+                    htmlFor={
+                      isEdit
+                        ? "edit-request-timeout-non-streaming"
+                        : "request-timeout-non-streaming"
+                    }
+                  >
+                    {t("sections.timeout.nonStreamingTotal.label")}
+                  </Label>
+                  <Input
+                    id={
+                      isEdit
+                        ? "edit-request-timeout-non-streaming"
+                        : "request-timeout-non-streaming"
+                    }
+                    type="number"
+                    value={requestTimeoutNonStreamingSeconds ?? ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setRequestTimeoutNonStreamingSeconds(val === "" ? undefined : parseInt(val));
+                    }}
+                    placeholder={t("sections.timeout.nonStreamingTotal.placeholder")}
+                    disabled={isPending}
+                    min="0"
+                    max="1200"
+                    step="1"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t("sections.timeout.nonStreamingTotal.desc")}
+                  </p>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground italic">
+                {t("sections.timeout.disableHint")}
+              </p>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+
         {/* 代理配置 */}
-        <Collapsible open={openSections.proxy} onOpenChange={(open) => toggleSection("proxy")}>
+        <Collapsible open={openSections.proxy} onOpenChange={() => toggleSection("proxy")}>
           <CollapsibleTrigger asChild>
             <button
               type="button"
@@ -1016,11 +1259,54 @@ export function ProviderForm({
           </CollapsibleContent>
         </Collapsible>
 
+        {/* API 测试 */}
+        <Collapsible open={openSections.apiTest} onOpenChange={() => toggleSection("apiTest")}>
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="flex items-center justify-between w-full py-4 border-t hover:bg-muted/50 transition-colors"
+              disabled={isPending}
+            >
+              <div className="flex items-center gap-2">
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${
+                    openSections.apiTest ? "rotate-180" : ""
+                  }`}
+                />
+                <span className="text-sm font-medium">{t("sections.apiTest.title")}</span>
+              </div>
+              <span className="text-xs text-muted-foreground">{t("sections.apiTest.summary")}</span>
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-4 pb-4">
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">{t("sections.apiTest.desc")}</p>
+              </div>
+
+              <div className="space-y-2">
+                <ApiTestButton
+                  providerUrl={url}
+                  apiKey={key}
+                  proxyUrl={proxyUrl}
+                  proxyFallbackToDirect={proxyFallbackToDirect}
+                  providerId={provider?.id}
+                  providerType={providerType}
+                  allowedModels={allowedModels}
+                  enableMultiProviderTypes={enableMultiProviderTypes}
+                  disabled={isPending || !url.trim()}
+                />
+                <p className="text-xs text-muted-foreground">{t("sections.apiTest.notice")}</p>
+              </div>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+
         {/* Codex Instructions 策略配置 - 仅 Codex 供应商显示 */}
         {providerType === "codex" && (
           <Collapsible
             open={openSections.codexStrategy}
-            onOpenChange={(open) => toggleSection("codexStrategy")}
+            onOpenChange={() => toggleSection("codexStrategy")}
           >
             <CollapsibleTrigger asChild>
               <button

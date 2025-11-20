@@ -1,0 +1,30 @@
+{
+  "_comment": "Provider types and related translations for English",
+
+  "types": {
+    "claude": {
+      "label": "Claude",
+      "description": "Anthropic Official API"
+    },
+    "claudeAuth": {
+      "label": "Claude Auth",
+      "description": "Claude Relay Service"
+    },
+    "codex": {
+      "label": "Codex",
+      "description": "Codex CLI API"
+    },
+    "geminiCli": {
+      "label": "Gemini CLI",
+      "description": "Gemini CLI API"
+    },
+    "gemini": {
+      "label": "Gemini",
+      "description": "Google Gemini Official API"
+    },
+    "openaiCompatible": {
+      "label": "OpenAI Compatible",
+      "description": "OpenAI Compatible API"
+    }
+  }
+}

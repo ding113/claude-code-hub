@@ -386,7 +386,19 @@ export function formatProviderTimeline(
       if (item.errorDetails?.system) {
         const s = item.errorDetails.system;
         timeline += t("timeline.provider", { provider: item.name }) + "\n";
-        timeline += t("timeline.errorType") + "\n";
+
+        // 根据错误码显示更清晰的错误类型
+        if (s.errorCode) {
+          const meaning = getErrorCodeMeaning(s.errorCode, t);
+          if (meaning) {
+            timeline += t("timeline.errorType") + meaning + "\n";
+          } else {
+            timeline += t("timeline.errorType") + (s.errorName || t("timeline.unknown")) + "\n";
+          }
+        } else {
+          timeline += t("timeline.errorType") + (s.errorName || t("timeline.unknown")) + "\n";
+        }
+
         timeline += t("timeline.error", { error: s.errorName }) + "\n";
 
         // 计算请求耗时
@@ -467,6 +479,23 @@ export function formatProviderTimeline(
 
       timeline += t("timeline.provider", { provider: item.name }) + "\n";
       timeline += t("timeline.successStatus", { code: item.statusCode || 200 }) + "\n";
+
+      // 模型重定向信息
+      if (item.modelRedirect) {
+        timeline += "\n" + t("timeline.modelRedirect") + ":\n";
+        timeline +=
+          t("timeline.modelRedirectFrom", {
+            model: item.modelRedirect.originalModel,
+          }) + "\n";
+        timeline +=
+          t("timeline.modelRedirectTo", {
+            model: item.modelRedirect.redirectedModel,
+          }) + "\n";
+        timeline +=
+          t("timeline.modelRedirectBilling", {
+            model: item.modelRedirect.billingModel,
+          }) + "\n";
+      }
 
       // 计算请求耗时
       if (i > 0 && item.timestamp && chain[i - 1]?.timestamp) {

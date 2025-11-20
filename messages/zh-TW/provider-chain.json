@@ -9,7 +9,13 @@
     "ENOTFOUND": "DNS 解析失敗",
     "ECONNREFUSED": "連接被拒絕",
     "ETIMEDOUT": "連接或讀取逾時",
-    "ECONNRESET": "連接被重置"
+    "ECONNRESET": "連接被重置",
+    "EHOSTUNREACH": "主機不可達（網路路由問題）",
+    "ENETUNREACH": "網路不可達（本地網路配置問題）",
+    "EPROTO": "協議錯誤（SSL/TLS 握手失敗）",
+    "CLIENT_ABORT": "客戶端中斷請求",
+    "PROVIDER_TIMEOUT": "供應商響應超時（首字節延遲過高）",
+    "STREAMING_IDLE_TIMEOUT": "流式響應靜默超時（供應商停止發送數據）"
   },
   "summary": {
     "singleSuccess": "{total} 個供應商，{healthy} 個健康 → {provider} ✓",
@@ -99,7 +105,7 @@
     "requestOk": "OK",
     "successStatus": "狀態: {code} OK",
     "requestCompleted": "請求成功完成",
-    "completed": "✅ 請求成功完成",
+    "completed": "請求成功完成",
     "concurrentLimitFailed": "並發限制",
     "attemptFailed": "嘗試失敗（第 {attempt} 次）",
     "concurrentLimit": "並發限制",
@@ -107,6 +113,10 @@
     "sessions": "會話",
     "withPriorityWeight": "（優先級={priority} 權重={weight}）",
     "unknown": "未知",
-    "noDecisionRecord": "無決策記錄"
+    "noDecisionRecord": "無決策記錄",
+    "modelRedirect": "模型重定向",
+    "modelRedirectFrom": "  請求模型: {model}",
+    "modelRedirectTo": "  實際轉發: {model}",
+    "modelRedirectBilling": "  計費依據: {model}"
   }
 }

@@ -13,12 +13,16 @@ interface AddUserDialogProps {
   variant?: ButtonProps["variant"];
   size?: ButtonProps["size"];
   className?: string;
+  currentUser?: {
+    role: string;
+  };
 }
 
 export function AddUserDialog({
   variant = "default",
   size = "default",
   className,
+  currentUser,
 }: AddUserDialogProps) {
   const [open, setOpen] = useState(false);
   const t = useTranslations("dashboard.userList");
@@ -30,9 +34,9 @@ export function AddUserDialog({
           <ListPlus className="h-4 w-4" /> {t("addUser")}
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-h-[85vh] flex flex-col">
         <FormErrorBoundary>
-          <UserForm onSuccess={() => setOpen(false)} />
+          <UserForm onSuccess={() => setOpen(false)} currentUser={currentUser} />
         </FormErrorBoundary>
       </DialogContent>
     </Dialog>

@@ -21,6 +21,9 @@ import { CodexInstructionsCache } from "@/lib/codex-instructions-cache";
 import { createProxyAgentForProvider } from "@/lib/proxy-agent";
 import type { Dispatcher } from "undici";
 import { getEnvConfig } from "@/lib/config/env.schema";
+import { GeminiAdapter } from "../gemini/adapter";
+import { GEMINI_PROTOCOL } from "../gemini/protocol";
+import { GeminiAuth } from "../gemini/auth";
 
 const MAX_ATTEMPTS_PER_PROVIDER = 2; // 每个供应商最多尝试次数（首次 + 1次重试）
 const MAX_PROVIDER_SWITCHES = 20; // 保险栓：最多切换 20 次供应商（防止无限循环）
@@ -330,6 +333,10 @@ export class ProxyForwarder {
 
             // ⭐ 检查是否启用了网络错误计入熔断器
             const env = getEnvConfig();
+
+            // 无论是否计入熔断器，都要加入 failedProviderIds（避免重复选择同一供应商）
+            failedProviderIds.push(currentProvider.id);
+
             if (env.ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS) {
               logger.warn(
                 "ProxyForwarder: Network error will be counted towards circuit breaker (enabled by config)",
@@ -340,9 +347,6 @@ export class ProxyForwarder {
                   errorCode: err.code,
                 }
               );
-
-              // 记录到失败列表（避免重新选择）
-              failedProviderIds.push(currentProvider.id);
 
               // 计入熔断器
               await recordFailure(currentProvider.id, lastError);
@@ -568,159 +572,204 @@ export class ProxyForwarder {
       logger.debug("ProxyForwarder: Model redirected", { providerId: provider.id });
     }
 
-    // 请求格式转换（基于 client 格式和 provider 类型）
-    const fromFormat: Format = mapClientFormatToTransformer(session.originalFormat);
-    const toFormat: Format | null = provider.providerType
-      ? mapProviderTypeToTransformer(provider.providerType)
-      : null;
-
-    if (fromFormat !== toFormat && fromFormat && toFormat) {
-      try {
-        const transformed = defaultRegistry.transformRequest(
-          fromFormat,
-          toFormat,
-          session.request.model || "",
-          session.request.message,
-          true // 假设所有请求都是流式的
-        );
-
-        logger.debug("ProxyForwarder: Request format transformed", {
-          from: fromFormat,
-          to: toFormat,
-          model: session.request.model,
-        });
-
-        // 更新 session 中的请求体
-        session.request.message = transformed;
-      } catch (error) {
-        logger.error("ProxyForwarder: Request transformation failed", {
-          from: fromFormat,
-          to: toFormat,
-          error,
-        });
-        // 转换失败时继续使用原始请求
-      }
-    }
-
-    // Codex 请求清洗（即使格式相同也要执行，除非是官方客户端）
-    // 目的：确保非官方客户端的请求也能通过 Codex 供应商的校验
-    // - 替换 instructions 为官方完整 prompt
-    // - 删除不支持的参数（max_tokens, temperature 等）
-    if (toFormat === "codex") {
-      const isOfficialClient = isOfficialCodexClient(session.userAgent);
-      const log = isOfficialClient ? logger.debug.bind(logger) : logger.info.bind(logger);
-
-      log("[ProxyForwarder] Normalizing Codex request for upstream compatibility", {
-        userAgent: session.userAgent || "N/A",
-        providerId: provider.id,
-        providerName: provider.name,
-        officialClient: isOfficialClient,
-        codexStrategy: provider.codexInstructionsStrategy,
-      });
-
-      // 官方 Codex CLI + auto 策略：完全透传（避免额外字段处理影响上游）
-      const shouldBypassSanitizer =
-        isOfficialClient && (provider.codexInstructionsStrategy ?? "auto") === "auto";
-
-      if (shouldBypassSanitizer) {
-        logger.debug(
-          "[ProxyForwarder] Bypassing sanitizer for official Codex CLI (auto strategy)",
-          {
-            providerId: provider.id,
-            providerName: provider.name,
-          }
-        );
-      } else {
-        try {
-          const sanitized = await sanitizeCodexRequest(
-            session.request.message as Record<string, unknown>,
-            session.request.model || "gpt-5-codex",
-            provider.codexInstructionsStrategy, // ⭐ Phase 2: 传递供应商级别策略
-            provider.id, // ⭐ Phase 3: 传递 providerId 用于缓存
-            { isOfficialClient }
-          );
-
-          const instructionsLength =
-            typeof sanitized.instructions === "string" ? sanitized.instructions.length : 0;
-
-          if (!instructionsLength) {
-            logger.warn("[ProxyForwarder] Codex sanitization yielded empty instructions", {
-              providerId: provider.id,
-              officialClient: isOfficialClient,
-            });
-          }
-
-          session.request.message = sanitized;
-
-          logger.debug("[ProxyForwarder] Codex request sanitized", {
-            instructionsLength,
-            hasParallelToolCalls: sanitized.parallel_tool_calls,
-            hasStoreFlag: sanitized.store,
-          });
-        } catch (error) {
-          logger.error("[ProxyForwarder] Failed to sanitize Codex request, using original", {
-            error,
-            providerId: provider.id,
-          });
-          // 清洗失败时继续使用原始请求（降级策略）
-        }
-      }
-    }
-
-    const processedHeaders = ProxyForwarder.buildHeaders(session, provider);
-
-    // 开发模式：输出最终请求头
-    if (process.env.NODE_ENV === "development") {
-      logger.trace("ProxyForwarder: Final request headers", {
-        provider: provider.name,
-        providerType: provider.providerType,
-        headers: Object.fromEntries(processedHeaders.entries()),
-      });
-    }
-
-    // 根据目标格式动态选择转发路径
-    let forwardUrl = session.requestUrl;
-
-    // Codex 供应商：使用 Response API 端点（/v1/responses）
-    // 注意：基于 toFormat 而非 originalFormat，因为需要根据目标供应商类型选择路径
-    if (toFormat === "codex") {
-      forwardUrl = new URL(session.requestUrl);
-      forwardUrl.pathname = "/v1/responses";
-      logger.debug("ProxyForwarder: Codex request path rewrite", {
-        from: session.requestUrl.pathname,
-        to: "/v1/responses",
-        originalFormat: fromFormat,
-        targetFormat: toFormat,
-      });
-    }
-
-    const proxyUrl = buildProxyUrl(provider.url, forwardUrl);
-
-    // 输出最终代理 URL（用于调试）
-    logger.debug("ProxyForwarder: Final proxy URL", { url: proxyUrl });
-
-    const hasBody = session.method !== "GET" && session.method !== "HEAD";
-
-    // 关键修复：使用转换后的 message 而非原始 buffer
-    // 确保 OpenAI 格式转换为 Response API 后，发送的是包含 input 字段的请求体
+    let proxyUrl: string;
+    let processedHeaders: Headers;
     let requestBody: BodyInit | undefined;
-    if (hasBody) {
-      // 过滤私有参数（下划线前缀）防止泄露到上游供应商
-      const filteredMessage = filterPrivateParameters(session.request.message);
-      const bodyString = JSON.stringify(filteredMessage);
+    let isStreaming = false;
+
+    // --- GEMINI HANDLING ---
+    if (provider.providerType === "gemini" || provider.providerType === "gemini-cli") {
+      // 1. 直接透传请求体（不转换）
+      const bodyString = JSON.stringify(session.request.message);
       requestBody = bodyString;
 
-      // 调试日志：输出实际转发的请求体（仅在开发环境）
-      if (process.env.NODE_ENV === "development") {
-        logger.trace("ProxyForwarder: Forwarding request", {
-          provider: provider.name,
+      // 检测流式请求
+      try {
+        const originalBody = session.request.message as Record<string, unknown>;
+        isStreaming = originalBody.stream === true;
+      } catch {
+        isStreaming = false;
+      }
+
+      // 2. 准备认证和 Headers
+      const accessToken = await GeminiAuth.getAccessToken(provider.key);
+      const isApiKey = GeminiAuth.isApiKey(provider.key);
+
+      const headers = new Headers();
+      headers.set("Content-Type", "application/json");
+
+      if (isApiKey) {
+        headers.set(GEMINI_PROTOCOL.HEADERS.API_KEY, accessToken);
+      } else {
+        headers.set("Authorization", `Bearer ${accessToken}`);
+      }
+
+      // CLI specific headers
+      if (provider.providerType === "gemini-cli") {
+        headers.set(GEMINI_PROTOCOL.HEADERS.API_CLIENT, "GeminiCLI/1.0");
+      }
+
+      // 3. 直接透传：使用 buildProxyUrl() 拼接原始路径和查询参数
+      const baseUrl =
+        provider.url ||
+        (provider.providerType === "gemini"
+          ? GEMINI_PROTOCOL.OFFICIAL_ENDPOINT
+          : GEMINI_PROTOCOL.CLI_ENDPOINT);
+
+      proxyUrl = buildProxyUrl(baseUrl, session.requestUrl);
+      processedHeaders = headers;
+
+      logger.debug("ProxyForwarder: Gemini request passthrough", {
+        providerId: provider.id,
+        type: provider.providerType,
+        url: proxyUrl,
+        originalPath: session.requestUrl.pathname,
+        isStreaming,
+        isApiKey,
+      });
+    } else {
+      // --- STANDARD HANDLING ---
+      // 请求格式转换（基于 client 格式和 provider 类型）
+      const fromFormat: Format = mapClientFormatToTransformer(session.originalFormat);
+      const toFormat: Format | null = provider.providerType
+        ? mapProviderTypeToTransformer(provider.providerType)
+        : null;
+
+      if (fromFormat !== toFormat && fromFormat && toFormat) {
+        try {
+          const transformed = defaultRegistry.transformRequest(
+            fromFormat,
+            toFormat,
+            session.request.model || "",
+            session.request.message,
+            true // 假设所有请求都是流式的
+          );
+
+          logger.debug("ProxyForwarder: Request format transformed", {
+            from: fromFormat,
+            to: toFormat,
+            model: session.request.model,
+          });
+
+          // 更新 session 中的请求体
+          session.request.message = transformed;
+        } catch (error) {
+          logger.error("ProxyForwarder: Request transformation failed", {
+            from: fromFormat,
+            to: toFormat,
+            error,
+          });
+          // 转换失败时继续使用原始请求
+        }
+      }
+
+      // Codex 请求清洗（即使格式相同也要执行，除非是官方客户端）
+      if (toFormat === "codex") {
+        const isOfficialClient = isOfficialCodexClient(session.userAgent);
+        const log = isOfficialClient ? logger.debug.bind(logger) : logger.info.bind(logger);
+
+        log("[ProxyForwarder] Normalizing Codex request for upstream compatibility", {
+          userAgent: session.userAgent || "N/A",
           providerId: provider.id,
-          proxyUrl: proxyUrl,
-          format: session.originalFormat,
-          method: session.method,
-          bodyLength: bodyString.length,
-          bodyPreview: bodyString.slice(0, 1000),
+          providerName: provider.name,
+          officialClient: isOfficialClient,
+          codexStrategy: provider.codexInstructionsStrategy,
         });
+
+        const shouldBypassSanitizer =
+          isOfficialClient && (provider.codexInstructionsStrategy ?? "auto") === "auto";
+
+        if (shouldBypassSanitizer) {
+          logger.debug(
+            "[ProxyForwarder] Bypassing sanitizer for official Codex CLI (auto strategy)",
+            {
+              providerId: provider.id,
+              providerName: provider.name,
+            }
+          );
+        } else {
+          try {
+            const sanitized = await sanitizeCodexRequest(
+              session.request.message as Record<string, unknown>,
+              session.request.model || "gpt-5-codex",
+              provider.codexInstructionsStrategy,
+              provider.id,
+              { isOfficialClient }
+            );
+
+            const instructionsLength =
+              typeof sanitized.instructions === "string" ? sanitized.instructions.length : 0;
+
+            if (!instructionsLength) {
+              logger.warn("[ProxyForwarder] Codex sanitization yielded empty instructions", {
+                providerId: provider.id,
+                officialClient: isOfficialClient,
+              });
+            }
+
+            session.request.message = sanitized;
+
+            logger.debug("[ProxyForwarder] Codex request sanitized", {
+              instructionsLength,
+              hasParallelToolCalls: sanitized.parallel_tool_calls,
+              hasStoreFlag: sanitized.store,
+            });
+          } catch (error) {
+            logger.error("[ProxyForwarder] Failed to sanitize Codex request, using original", {
+              error,
+              providerId: provider.id,
+            });
+          }
+        }
+      }
+
+      processedHeaders = ProxyForwarder.buildHeaders(session, provider);
+
+      if (process.env.NODE_ENV === "development") {
+        logger.trace("ProxyForwarder: Final request headers", {
+          provider: provider.name,
+          providerType: provider.providerType,
+          headers: Object.fromEntries(processedHeaders.entries()),
+        });
+      }
+
+      // ⭐ 直接使用原始请求路径，让 buildProxyUrl() 智能处理路径拼接
+      // 移除了强制 /v1/responses 路径重写，解决 Issue #139
+      // buildProxyUrl() 会检测 base_url 是否已包含完整路径，避免重复拼接
+      proxyUrl = buildProxyUrl(provider.url, session.requestUrl);
+
+      logger.debug("ProxyForwarder: Final proxy URL", {
+        url: proxyUrl,
+        originalPath: session.requestUrl.pathname,
+        providerType: provider.providerType,
+      });
+
+      const hasBody = session.method !== "GET" && session.method !== "HEAD";
+
+      if (hasBody) {
+        const filteredMessage = filterPrivateParameters(session.request.message);
+        const bodyString = JSON.stringify(filteredMessage);
+        requestBody = bodyString;
+
+        try {
+          const parsed = JSON.parse(bodyString);
+          isStreaming = parsed.stream === true;
+        } catch {
+          isStreaming = false;
+        }
+
+        if (process.env.NODE_ENV === "development") {
+          logger.trace("ProxyForwarder: Forwarding request", {
+            provider: provider.name,
+            providerId: provider.id,
+            proxyUrl: proxyUrl,
+            format: session.originalFormat,
+            method: session.method,
+            bodyLength: bodyString.length,
+            bodyPreview: bodyString.slice(0, 1000),
+            isStreaming,
+          });
+        }
       }
     }
 
@@ -729,10 +778,102 @@ export class ProxyForwarder {
       dispatcher?: Dispatcher;
     }
 
+    // ⭐ 双路超时控制（first-byte / total）
+    // 注意：由于 undici fetch API 的限制，无法精确分离 DNS/TCP/TLS 连接阶段和响应头接收阶段
+    // 参考：https://github.com/nodejs/undici/discussions/1313
+    // 1. 首包/总响应超时：根据请求类型选择
+    const responseController = new AbortController();
+    let responseTimeoutMs: number;
+    let responseTimeoutType: string;
+
+    if (isStreaming) {
+      // 流式请求：使用首字节超时（快速失败）
+      responseTimeoutMs =
+        provider.firstByteTimeoutStreamingMs > 0 ? provider.firstByteTimeoutStreamingMs : 0;
+      responseTimeoutType = "streaming_first_byte";
+    } else {
+      // 非流式请求：使用总超时（防止无限挂起）
+      responseTimeoutMs =
+        provider.requestTimeoutNonStreamingMs > 0 ? provider.requestTimeoutNonStreamingMs : 0;
+      responseTimeoutType = "non_streaming_total";
+    }
+
+    let responseTimeoutId: NodeJS.Timeout | null = null;
+    if (responseTimeoutMs > 0) {
+      responseTimeoutId = setTimeout(() => {
+        responseController.abort();
+        logger.warn("ProxyForwarder: Response timeout", {
+          providerId: provider.id,
+          providerName: provider.name,
+          responseTimeoutMs,
+          responseTimeoutType,
+          isStreaming,
+        });
+      }, responseTimeoutMs);
+    } else {
+      logger.debug("ProxyForwarder: Response timeout disabled", {
+        providerId: provider.id,
+        providerName: provider.name,
+        responseTimeoutType,
+      });
+    }
+
+    // 2. 组合双路信号：response + client
+    let combinedSignal: AbortSignal | undefined;
+    const signals = [responseController.signal];
+    if (session.clientAbortSignal) {
+      signals.push(session.clientAbortSignal);
+    }
+
+    // ⭐ AbortSignal.any 实现（兼容所有环境）
+    // 原因：Next.js standalone 可能覆盖全局 AbortSignal，导致原生 any 方法不可用
+    if ("any" in AbortSignal && typeof AbortSignal.any === "function") {
+      // 优先使用原生实现（Node.js 20.3+）
+      combinedSignal = AbortSignal.any(signals);
+      logger.debug("ProxyForwarder: Using native AbortSignal.any", {
+        signalCount: signals.length,
+      });
+    } else {
+      // Polyfill: 手动实现多信号组合逻辑
+      logger.debug("ProxyForwarder: Using AbortSignal.any polyfill", {
+        signalCount: signals.length,
+        reason: "Native AbortSignal.any not available",
+      });
+
+      const combinedController = new AbortController();
+      const cleanupHandlers: Array<() => void> = [];
+
+      // 为每个信号添加监听器
+      for (const signal of signals) {
+        // 如果已经有信号中断，立即中断组合信号
+        if (signal.aborted) {
+          combinedController.abort();
+          break;
+        }
+
+        // 监听信号中断事件
+        const abortHandler = () => {
+          // 中断组合信号
+          combinedController.abort();
+          // 清理所有监听器（避免内存泄漏）
+          cleanupHandlers.forEach((cleanup) => cleanup());
+        };
+
+        signal.addEventListener("abort", abortHandler, { once: true });
+
+        // 记录清理函数
+        cleanupHandlers.push(() => {
+          signal.removeEventListener("abort", abortHandler);
+        });
+      }
+
+      combinedSignal = combinedController.signal;
+    }
+
     const init: UndiciFetchOptions = {
       method: session.method,
       headers: processedHeaders,
-      signal: session.clientAbortSignal || undefined, // 传递客户端中断信号
+      signal: combinedSignal, // 使用组合信号
       ...(requestBody ? { body: requestBody } : {}),
     };
 
@@ -752,9 +893,26 @@ export class ProxyForwarder {
     (init as Record<string, unknown>).verbose = true;
 
     let response: Response;
+    const fetchStartTime = Date.now();
     try {
       response = await fetch(proxyUrl, init);
+      // ⭐ fetch 成功：收到 HTTP 响应头，保留响应超时继续监控
+      // 注意：undici 的 fetch 在收到 HTTP 响应头后就 resolve，但实际数据（SSE 首字节 / 完整 JSON）
+      // 还没到达。responseTimeoutId 需要延续到 response-handler 中才能真正控制"首字节"或"总耗时"
+      const headersDuration = Date.now() - fetchStartTime;
+      logger.debug("ProxyForwarder: HTTP headers received", {
+        providerId: provider.id,
+        providerName: provider.name,
+        headersReceivedMs: headersDuration,
+        note: "Response timeout continues to monitor body reading",
+      });
+      // ⚠️ 不要清除 responseTimeoutId！让它继续监控响应体读取
     } catch (fetchError) {
+      // ⭐ fetch 失败：清除所有超时定时器
+      if (responseTimeoutId) {
+        clearTimeout(responseTimeoutId);
+      }
+
       // 捕获 fetch 原始错误（网络错误、DNS 解析失败、连接失败等）
       const err = fetchError as Error & {
         cause?: unknown;
@@ -762,6 +920,93 @@ export class ProxyForwarder {
         errno?: number;
         syscall?: string; // 系统调用：如 'getaddrinfo'、'connect'、'read'、'write'
       };
+
+      // ⭐ 超时错误检测（优先级：response > client）
+
+      if (responseController.signal.aborted && !session.clientAbortSignal?.aborted) {
+        // 响应超时：HTTP 首包未在规定时间内到达
+        // 修复：首字节超时应归类为供应商问题，计入熔断器并直接切换
+        logger.error("ProxyForwarder: Response timeout (provider quality issue, will switch)", {
+          providerId: provider.id,
+          providerName: provider.name,
+          responseTimeoutMs,
+          responseTimeoutType,
+          isStreaming,
+          errorName: err.name,
+          errorMessage: err.message || "(empty message)",
+          reason:
+            "First-byte timeout indicates slow provider response, should count towards circuit breaker",
+        });
+
+        // 抛出 ProxyError 并设置特殊状态码 524（Cloudflare: A Timeout Occurred）
+        // 这样会被归类为 PROVIDER_ERROR，计入熔断器并直接切换供应商
+        throw new ProxyError(
+          `${responseTimeoutType === "streaming_first_byte" ? "供应商首字节响应超时" : "供应商响应超时"}: ${responseTimeoutMs}ms 内未收到数据`,
+          524, // 524 = A Timeout Occurred (Cloudflare standard)
+          {
+            body: JSON.stringify({
+              error: {
+                type: "timeout_error",
+                message: `Provider failed to respond within ${responseTimeoutMs}ms`,
+                timeout_type: responseTimeoutType,
+                timeout_ms: responseTimeoutMs,
+              },
+            }),
+            parsed: {
+              error: {
+                type: "timeout_error",
+                message: `Provider failed to respond within ${responseTimeoutMs}ms`,
+                timeout_type: responseTimeoutType,
+                timeout_ms: responseTimeoutMs,
+              },
+            },
+            providerId: provider.id,
+            providerName: provider.name,
+          }
+        );
+      }
+
+      // ⭐ 检测流式静默期超时（streaming_idle）
+      if (err.message?.includes("streaming_idle") && !session.clientAbortSignal?.aborted) {
+        // 流式静默期超时：首字节之后的连续静默窗口超时
+        // 修复：静默期超时也是供应商问题，应计入熔断器
+        logger.error(
+          "ProxyForwarder: Streaming idle timeout (provider quality issue, will switch)",
+          {
+            providerId: provider.id,
+            providerName: provider.name,
+            idleTimeoutMs: provider.streamingIdleTimeoutMs,
+            errorName: err.name,
+            errorMessage: err.message || "(empty message)",
+            reason:
+              "Idle timeout indicates provider stopped sending data, should count towards circuit breaker",
+          }
+        );
+
+        // 抛出 ProxyError（归类为 PROVIDER_ERROR）
+        throw new ProxyError(
+          `供应商流式响应静默超时: ${provider.streamingIdleTimeoutMs}ms 内未收到新数据`,
+          524, // 524 = A Timeout Occurred
+          {
+            body: JSON.stringify({
+              error: {
+                type: "streaming_idle_timeout",
+                message: `Provider stopped sending data for ${provider.streamingIdleTimeoutMs}ms`,
+                timeout_ms: provider.streamingIdleTimeoutMs,
+              },
+            }),
+            parsed: {
+              error: {
+                type: "streaming_idle_timeout",
+                message: `Provider stopped sending data for ${provider.streamingIdleTimeoutMs}ms`,
+                timeout_ms: provider.streamingIdleTimeoutMs,
+              },
+            },
+            providerId: provider.id,
+            providerName: provider.name,
+          }
+        );
+      }
 
       // ⭐ 检测客户端主动中断（使用统一的精确检测函数）
       if (isClientAbortError(err)) {
@@ -883,11 +1128,36 @@ export class ProxyForwarder {
     // 检查 HTTP 错误状态（4xx/5xx 均视为失败，触发重试）
     // 注意：用户要求所有 4xx 都重试，包括 401、403、429 等
     if (!response.ok) {
+      // HTTP 错误：清除响应超时定时器
+      if (responseTimeoutId) {
+        clearTimeout(responseTimeoutId);
+      }
       throw await ProxyError.fromUpstreamResponse(response, {
         id: provider.id,
         name: provider.name,
       });
     }
+
+    // 将响应超时清理函数和 controller 引用附加到 session，供 response-handler 使用
+    // response-handler 会在读到首字节（流式）或完整响应（非流式）后调用此函数
+    const sessionWithTimeout = session as ProxySession & {
+      clearResponseTimeout?: () => void;
+      responseController?: AbortController;
+    };
+
+    sessionWithTimeout.clearResponseTimeout = () => {
+      if (responseTimeoutId) {
+        clearTimeout(responseTimeoutId);
+      }
+      logger.debug("ProxyForwarder: Response timeout cleared by response-handler", {
+        providerId: provider.id,
+        responseTimeoutMs,
+        responseTimeoutType,
+      });
+    };
+
+    // 传递 responseController 引用，让 response-handler 能区分超时和客户端中断
+    sessionWithTimeout.responseController = responseController;
 
     return response;
   }

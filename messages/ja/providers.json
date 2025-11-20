@@ -1,0 +1,30 @@
+{
+  "_comment": "Provider types and related translations for Japanese",
+
+  "types": {
+    "claude": {
+      "label": "Claude",
+      "description": "Anthropic 公式 API"
+    },
+    "claudeAuth": {
+      "label": "Claude Auth",
+      "description": "Claude リレーサービス"
+    },
+    "codex": {
+      "label": "Codex",
+      "description": "Codex CLI API"
+    },
+    "geminiCli": {
+      "label": "Gemini CLI",
+      "description": "Gemini CLI API"
+    },
+    "gemini": {
+      "label": "Gemini",
+      "description": "Google Gemini 公式 API"
+    },
+    "openaiCompatible": {
+      "label": "OpenAI Compatible",
+      "description": "OpenAI 互換 API"
+    }
+  }
+}

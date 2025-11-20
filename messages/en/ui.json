@@ -4,7 +4,8 @@
     "actions": "Actions",
     "loading": "Loading...",
     "empty": "Empty",
-    "error": "Error"
+    "error": "Error",
+    "retry": "Retry"
   },
   "table": {
     "pagination": "Pagination",
@@ -43,5 +44,14 @@
   "loading": {
     "title": "Loading",
     "description": "Please wait..."
+  },
+  "tagInput": {
+    "placeholder": "Type and press Enter or comma to add tags",
+    "emptyTag": "Tag cannot be empty",
+    "duplicateTag": "Tag already exists",
+    "maxTags": "Maximum number of tags reached",
+    "tooLong": "Tag length cannot exceed {max} characters",
+    "invalidFormat": "Tags can only contain letters, numbers, underscores and hyphens",
+    "removeTag": "Remove tag {tag}"
   }
 }

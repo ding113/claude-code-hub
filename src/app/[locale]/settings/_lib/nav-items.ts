@@ -13,11 +13,18 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   { href: "/settings/prices", labelKey: "nav.prices", label: "价格表" },
   { href: "/settings/providers", labelKey: "nav.providers", label: "供应商" },
   { href: "/settings/sensitive-words", labelKey: "nav.sensitiveWords", label: "敏感词" },
+  { href: "/settings/error-rules", labelKey: "nav.errorRules", label: "错误规则" },
   { href: "/settings/client-versions", labelKey: "nav.clientVersions", label: "客户端升级提醒" },
   { href: "/settings/data", labelKey: "nav.data", label: "数据管理" },
   { href: "/settings/logs", labelKey: "nav.logs", label: "日志" },
   { href: "/settings/notifications", labelKey: "nav.notifications", label: "消息推送" },
   { href: "/api/actions/scalar", labelKey: "nav.apiDocs", label: "API 文档", external: true },
+  {
+    href: "https://github.com/ding113/claude-code-hub/issues",
+    labelKey: "nav.feedback",
+    label: "反馈问题",
+    external: true,
+  },
 ];
 
 // Helper function to get translated nav items

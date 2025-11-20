@@ -14,6 +14,13 @@ const nextConfig: NextConfig = {
   // bull 和相关依赖只在服务端使用，包含 Node.js 原生模块
   serverExternalPackages: ["bull", "bullmq", "@bull-board/api", "@bull-board/express", "ioredis"],
 
+  // 强制包含 undici 到 standalone 输出
+  // Next.js 依赖追踪无法正确追踪动态导入和类型导入的传递依赖
+  // 参考: https://nextjs.org/docs/app/api-reference/config/next-config-js/output
+  outputFileTracingIncludes: {
+    "/**": ["./node_modules/undici/**/*", "./node_modules/socks-proxy-agent/**/*"],
+  },
+
   // 文件上传大小限制（用于数据库备份导入）
   // Next.js 15 通过 serverActions.bodySizeLimit 统一控制
   experimental: {
