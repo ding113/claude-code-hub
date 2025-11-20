@@ -113,6 +113,10 @@
     "sessions": "Сессии",
     "withPriorityWeight": "(приоритет={priority} вес={weight})",
     "unknown": "Неизвестно",
-    "noDecisionRecord": "Нет записей решений"
+    "noDecisionRecord": "Нет записей решений",
+    "modelRedirect": "Перенаправление модели",
+    "modelRedirectFrom": "  Запрошенная модель: {model}",
+    "modelRedirectTo": "  Перенаправлено на: {model}",
+    "modelRedirectBilling": "  Модель для расчета: {model}"
   }
 }

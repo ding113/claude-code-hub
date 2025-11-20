@@ -61,6 +61,20 @@ export class ModelRedirector {
     // 更新日志（记录重定向）
     session.request.note = `[Model Redirected: ${originalModel} → ${redirectedModel}] ${session.request.note || ""}`;
 
+    // 在决策链中记录模型重定向信息
+    const providerChain = session.getProviderChain();
+    if (providerChain.length > 0) {
+      const lastDecision = providerChain[providerChain.length - 1];
+      lastDecision.modelRedirect = {
+        originalModel: originalModel,
+        redirectedModel: redirectedModel,
+        billingModel: originalModel, // 始终使用原始模型计费
+      };
+      logger.debug(
+        `[ModelRedirector] Added modelRedirect to provider chain for provider ${provider.id}`
+      );
+    }
+
     return true;
   }
 

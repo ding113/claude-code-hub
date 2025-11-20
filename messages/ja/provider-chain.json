@@ -113,6 +113,10 @@
     "sessions": "セッション",
     "withPriorityWeight": "（優先度={priority} 重み={weight}）",
     "unknown": "不明",
-    "noDecisionRecord": "決定記録なし"
+    "noDecisionRecord": "決定記録なし",
+    "modelRedirect": "モデルリダイレクト",
+    "modelRedirectFrom": "  リクエストモデル: {model}",
+    "modelRedirectTo": "  リダイレクト先: {model}",
+    "modelRedirectBilling": "  課金モデル: {model}"
   }
 }

@@ -113,6 +113,10 @@
     "sessions": "Sessions",
     "withPriorityWeight": "(priority={priority} weight={weight})",
     "unknown": "Unknown",
-    "noDecisionRecord": "No decision record"
+    "noDecisionRecord": "No decision record",
+    "modelRedirect": "Model Redirect",
+    "modelRedirectFrom": "  Requested Model: {model}",
+    "modelRedirectTo": "  Redirected To: {model}",
+    "modelRedirectBilling": "  Billing Model: {model}"
   }
 }

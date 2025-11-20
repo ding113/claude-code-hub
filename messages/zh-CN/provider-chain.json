@@ -113,6 +113,10 @@
     "sessions": "会话",
     "withPriorityWeight": "（优先级={priority} 权重={weight}）",
     "unknown": "未知",
-    "noDecisionRecord": "无决策记录"
+    "noDecisionRecord": "无决策记录",
+    "modelRedirect": "模型重定向",
+    "modelRedirectFrom": "  请求模型: {model}",
+    "modelRedirectTo": "  实际转发: {model}",
+    "modelRedirectBilling": "  计费依据: {model}"
   }
 }

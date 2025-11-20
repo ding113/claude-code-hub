@@ -480,6 +480,23 @@ export function formatProviderTimeline(
       timeline += t("timeline.provider", { provider: item.name }) + "\n";
       timeline += t("timeline.successStatus", { code: item.statusCode || 200 }) + "\n";
 
+      // 模型重定向信息
+      if (item.modelRedirect) {
+        timeline += "\n" + t("timeline.modelRedirect") + ":\n";
+        timeline +=
+          t("timeline.modelRedirectFrom", {
+            model: item.modelRedirect.originalModel,
+          }) + "\n";
+        timeline +=
+          t("timeline.modelRedirectTo", {
+            model: item.modelRedirect.redirectedModel,
+          }) + "\n";
+        timeline +=
+          t("timeline.modelRedirectBilling", {
+            model: item.modelRedirect.billingModel,
+          }) + "\n";
+      }
+
       // 计算请求耗时
       if (i > 0 && item.timestamp && chain[i - 1]?.timestamp) {
         const duration = item.timestamp - (chain[i - 1]?.timestamp || 0);

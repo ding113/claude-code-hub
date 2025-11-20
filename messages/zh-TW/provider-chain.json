@@ -113,6 +113,10 @@
     "sessions": "會話",
     "withPriorityWeight": "（優先級={priority} 權重={weight}）",
     "unknown": "未知",
-    "noDecisionRecord": "無決策記錄"
+    "noDecisionRecord": "無決策記錄",
+    "modelRedirect": "模型重定向",
+    "modelRedirectFrom": "  請求模型: {model}",
+    "modelRedirectTo": "  實際轉發: {model}",
+    "modelRedirectBilling": "  計費依據: {model}"
   }
 }
