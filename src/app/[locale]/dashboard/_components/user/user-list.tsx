@@ -58,7 +58,9 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
       </ListContainer>
 
       {/* 新增用户按钮：列表下方、与列表同宽，中性配色 - 仅管理员可见 */}
-      {currentUser?.role === "admin" && <AddUserDialog variant="secondary" className="w-full" />}
+      {currentUser?.role === "admin" && (
+        <AddUserDialog variant="secondary" className="w-full" currentUser={currentUser} />
+      )}
     </div>
   );
 }

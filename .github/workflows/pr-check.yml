@@ -22,32 +22,31 @@ jobs:
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
 
-      - name: 📦 Setup pnpm
-        uses: pnpm/action-setup@v4
+      - name: 📦 Setup Bun
+        uses: oven-sh/setup-bun@v1
         with:
-          version: 9.15.0
+          bun-version: '1.3.2'
 
       - name: 🟢 Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'pnpm'
 
       - name: 📦 Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
 
       - name: 🔍 Type check
-        run: pnpm typecheck
+        run: bun run typecheck
 
       - name: 🎨 Format check
-        run: pnpm format:check
+        run: bun run format:check
 
       - name: 🛡️ Validate migrations
-        run: pnpm validate:migrations
+        run: bun run validate:migrations
 
-      - name: ✅ Code quality checks passed
+      - name: Code quality checks passed
         run: |
-          echo "✅ All code quality checks passed!"
+          echo "All code quality checks passed!"
           echo "📝 Type checking: OK"
           echo "🎨 Code formatting: OK"
           echo "🛡️ Migration validation: OK"

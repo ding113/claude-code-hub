@@ -8,7 +8,9 @@
     "data": "数据管理",
     "logs": "日志",
     "notifications": "消息推送",
-    "apiDocs": "API 文档"
+    "apiDocs": "API 文档",
+    "errorRules": "错误规则",
+    "feedback": "反馈问题"
   },
   "common": {
     "save": "保存",
@@ -126,6 +128,10 @@
         "label": "Codex",
         "description": "Codex CLI API"
       },
+      "gemini": {
+        "label": "Gemini",
+        "description": "Google Gemini API"
+      },
       "geminiCli": {
         "label": "Gemini CLI",
         "description": "Gemini CLI API"
@@ -207,6 +213,46 @@
         "timeoutError": "连接超时（5秒）。请检查：\n1. 代理服务器是否可访问\n2. 代理地址和端口是否正确\n3. 代理认证信息是否正确",
         "proxyError": "代理错误:",
         "networkError": "网络错误:"
+      },
+      "apiTest": {
+        "fillUrlFirst": "请先填写供应商 URL",
+        "invalidUrl": "供应商 URL 无效，仅支持 http/https",
+        "fillKeyFirst": "请先填写 API 密钥",
+        "testFailed": "测试失败",
+        "testFailedRetry": "测试失败，请重试",
+        "noResult": "测试成功但未返回结果",
+        "testSuccess": "模型测试成功",
+        "testApi": "供应商模型测试",
+        "testing": "测试中...",
+        "apiFormat": "供应商类型",
+        "selectApiFormat": "选择要测试的供应商类型",
+        "apiFormatDesc": "默认同步路由配置中的供应商类型，除非手动修改",
+        "formatAnthropicMessages": "Claude (Anthropic Messages API)",
+        "formatOpenAIChat": "OpenAI Compatible",
+        "formatOpenAIResponses": "Codex (Response API)",
+        "testModel": "测试模型",
+        "testModelDesc": "可手动输入，不填写则使用默认模型",
+        "model": "模型",
+        "responseTime": "响应时间",
+        "usage": "Token 用量",
+        "response": "响应内容",
+        "error": "错误信息",
+        "unknown": "未知",
+        "viewDetails": "查看详情",
+        "copySuccess": "已复制到剪贴板",
+        "copyFailed": "复制失败",
+        "copyResult": "复制结果",
+        "success": "成功",
+        "failed": "失败"
+      },
+      "urlPreview": {
+        "title": "URL 拼接预览",
+        "invalidUrl": "无效的 URL 格式",
+        "invalidUrlDesc": "请输入有效的 HTTP/HTTPS 地址",
+        "duplicatePath": "检测到重复路径",
+        "copy": "复制",
+        "copySuccess": "已复制 {name} 到剪贴板",
+        "copyFailed": "复制失败"
       },
       "modelSelect": {
         "allowAllModels": "允许所有 {type} 模型",
@@ -328,7 +374,7 @@
       "routingConfigSummary": "{models} 个模型白名单, {redirects} 个重定向",
       "routingConfigNone": "未配置",
       "providerTypeDesc": "选择供应商的 API 格式类型。",
-      "providerTypeDisabledNote": "注：Gemini CLI 和 OpenAI Compatible 类型功能正在开发中，暂不可用",
+      "providerTypeDisabledNote": "注：OpenAI Compatible 类型功能正在开发中，暂不可用",
       "modelRedirectsLabel": "模型重定向配置",
       "modelRedirectsOptional": "(可选)",
       "modelRedirectsEmpty": "暂无重定向规则。添加规则后，系统将自动重写请求中的模型名称。",
@@ -470,6 +516,9 @@
         "updating": "更新中...",
         "delete": "删除"
       },
+      "common": {
+        "core": "核心"
+      },
       "sections": {
         "routing": {
           "title": "路由配置",
@@ -522,8 +571,8 @@
             },
             "group": {
               "label": "供应商分组",
-              "placeholder": "例如: premium, economy",
-              "desc": "供应商分组标签。只有用户的 providerGroup 与此值匹配时，该用户才能使用此供应商。示例：设置为 \"premium\" 表示只供 providerGroup=\"premium\" 的用户使用"
+              "placeholder": "输入分组标签",
+              "desc": "供应商分组标签（支持多个，逗号分隔）。只有用户的 providerGroup 与此值匹配时，该用户才能使用此供应商。留空=对所有用户开放"
             }
           }
         },
@@ -596,6 +645,37 @@
             "desc": "测试通过配置的代理访问供应商 URL（使用 HEAD 请求，不消耗额度）"
           }
         },
+        "timeout": {
+          "title": "超时配置",
+          "summary": "首字: {streaming}s | 流式间隔: {idle}s | 非流式: {nonStreaming}s",
+          "desc": "配置请求超时时间，0 表示禁用超时",
+          "streamingFirstByte": {
+            "label": "流式首字节超时（秒）",
+            "placeholder": "30",
+            "desc": "流式请求首字节超时，范围 1-120 秒，默认 30 秒",
+            "core": "true"
+          },
+          "streamingIdle": {
+            "label": "流式静默期超时（秒）",
+            "placeholder": "10",
+            "desc": "流式请求静默期超时，范围 1-120 秒，默认 10 秒（防止中途卡住）",
+            "core": "true"
+          },
+          "nonStreamingTotal": {
+            "label": "非流式总超时（秒）",
+            "placeholder": "600",
+            "desc": "非流式请求总超时，范围 60-1200 秒，默认 600 秒（10 分钟）",
+            "core": "true"
+          },
+          "disableHint": "设为 0 表示禁用该超时（仅用于灰度回退场景，不推荐）"
+        },
+        "apiTest": {
+          "title": "供应商模型测试",
+          "summary": "验证供应商与模型连通性",
+          "desc": "测试供应商模型是否可用，默认与路由配置中选择的供应商类型保持一致。",
+          "testLabel": "供应商模型测试",
+          "notice": "注意：测试将向供应商发送真实请求（非流式），可能消耗少量额度。请确认供应商 URL、API 密钥及模型配置正确。"
+        },
         "codexStrategy": {
           "title": "Codex Instructions 策略",
           "summary": {
@@ -627,6 +707,7 @@
         "claude": "Claude (Anthropic Messages API)",
         "claudeAuth": "Claude (Anthropic Auth Token)",
         "codex": "Codex (Response API)",
+        "gemini": "Gemini (Google Gemini API)",
         "geminiCli": "Gemini CLI",
         "geminiCliDisabled": " - 功能开发中",
         "openaiCompatible": "OpenAI Compatible",
@@ -1126,8 +1207,7 @@
         "description": "导出完整的数据库备份文件（.dump 格式），可用于数据迁移或恢复。"
       },
       "import": {
-        "title": "数据导入",
-        "description": "从备份文件恢复数据库。支持 PostgreSQL custom format (.dump) 格式的备份文件。"
+        "title": "数据导入"
       }
     }
   },
@@ -1254,5 +1334,128 @@
     "testFailedRetry": "测试失败，请重试",
     "loadFailed": "加载通知设置失败",
     "unknownError": "操作过程中出现异常"
+  },
+  "errorRules": {
+    "nav": "错误规则",
+    "title": "错误规则管理",
+    "description": "管理不需要自动重试的客户端错误规则。配置后，命中规则的报错将直接返回给用户，不会触发重试，也不会计入供应商熔断。",
+    "section": {
+      "title": "错误规则列表"
+    },
+    "add": "添加错误规则",
+    "addSuccess": "错误规则创建成功",
+    "addFailed": "创建错误规则失败",
+    "edit": "编辑错误规则",
+    "editSuccess": "错误规则更新成功",
+    "editFailed": "更新错误规则失败",
+    "delete": "删除错误规则",
+    "deleteSuccess": "错误规则删除成功",
+    "deleteFailed": "删除失败",
+    "enable": "错误规则已启用",
+    "disable": "错误规则已禁用",
+    "toggleFailed": "状态切换失败",
+    "toggleFailedError": "状态切换失败:",
+    "refreshCache": "刷新缓存",
+    "refreshCacheSuccess": "缓存刷新成功，已加载 {count} 个错误规则",
+    "refreshCacheFailed": "刷新缓存失败",
+    "cacheStats": "缓存统计: 启用({enabledCount}) 禁用({disabledCount}) 默认({defaultCount})",
+    "emptyState": "暂无错误规则，点击右上角\"添加错误规则\"开始配置。",
+    "confirmDelete": "确定要删除错误规则\"{pattern}\"吗？",
+    "dialog": {
+      "addTitle": "添加错误规则",
+      "addDescription": "配置错误消息正则模式，匹配的错误将被识别为不可重试的客户端错误。",
+      "editTitle": "编辑错误规则",
+      "editDescription": "修改错误规则配置，更改后将自动刷新缓存。",
+      "patternLabel": "正则模式 *",
+      "patternPlaceholder": "输入正则表达式...",
+      "patternRequired": "请输入正则模式",
+      "patternHint": "支持 JavaScript 正则表达式语法，例如：prompt is too long|invalid.*request",
+      "categoryLabel": "规则类别 *",
+      "categoryPlaceholder": "选择规则类别",
+      "categoryRequired": "请选择规则类别",
+      "categoryHint": "选择规则所属的错误类别，用于分类管理和统计",
+      "descriptionLabel": "说明",
+      "descriptionPlaceholder": "可选：添加说明...",
+      "invalidRegex": "正则表达式语法错误",
+      "regexTester": "正则测试器",
+      "testMessageLabel": "测试消息",
+      "testMessagePlaceholder": "输入要测试的错误消息...",
+      "matchSuccess": "匹配成功",
+      "matchFailed": "未匹配",
+      "invalidPattern": "正则无效",
+      "matchedText": "匹配内容",
+      "defaultRuleHint": "默认规则的模式不可修改",
+      "creating": "创建中...",
+      "saving": "保存中..."
+    },
+    "table": {
+      "pattern": "正则模式",
+      "category": "规则类别",
+      "description": "说明",
+      "status": "状态",
+      "default": "默认",
+      "isEnabled": "启用状态",
+      "isDefault": "默认规则",
+      "createdAt": "创建时间",
+      "actions": "操作"
+    },
+    "form": {
+      "fields": {
+        "pattern": "正则模式",
+        "category": "规则类别",
+        "description": "说明"
+      },
+      "placeholders": {
+        "pattern": "例如: prompt is too long",
+        "category": "选择类别",
+        "description": "可选：添加说明..."
+      },
+      "labels": {
+        "pattern": "正则模式 *",
+        "category": "规则类别 *",
+        "description": "说明",
+        "isEnabled": "启用状态"
+      }
+    },
+    "actions": {
+      "add": "添加",
+      "edit": "编辑",
+      "delete": "删除",
+      "refresh": "刷新",
+      "test": "测试",
+      "messages": {
+        "success": "操作成功",
+        "error": "操作失败"
+      }
+    },
+    "validation": {
+      "patternRequired": "请输入正则模式",
+      "categoryRequired": "请选择规则类别",
+      "patternInvalid": "正则表达式语法错误",
+      "redosRisk": "正则表达式存在 ReDoS 风险，请简化模式",
+      "patternTooComplex": "正则表达式过于复杂"
+    },
+    "categories": {
+      "prompt_limit": "Prompt 长度限制",
+      "content_filter": "内容过滤",
+      "pdf_limit": "PDF 页数限制",
+      "thinking_error": "Thinking 格式错误",
+      "parameter_error": "参数验证失败",
+      "invalid_request": "非法请求",
+      "cache_limit": "缓存控制限制"
+    },
+    "regexTester": {
+      "title": "正则测试器",
+      "testMessage": "测试消息",
+      "testMessagePlaceholder": "输入要测试的错误消息...",
+      "matchResult": "匹配结果",
+      "matched": "匹配成功",
+      "notMatched": "未匹配",
+      "test": "测试"
+    },
+    "defaultRules": {
+      "cannotDelete": "默认规则无法删除",
+      "cannotDisable": "建议保留默认规则启用状态"
+    }
   }
 }

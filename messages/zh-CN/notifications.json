@@ -12,7 +12,7 @@
   "refresh_success": "刷新成功",
   "test_success": "测试成功",
 
-  "user_created": "用户 {name} 创建成功",
+  "user_created": "用户创建成功",
   "user_updated": "用户信息已更新",
   "user_deleted": "用户已删除",
   "key_created": "密钥创建成功",
@@ -21,6 +21,10 @@
   "provider_created": "供应商创建成功",
   "provider_updated": "供应商已更新",
   "provider_deleted": "供应商已删除",
+
+  "create_failed": "创建失败",
+  "update_failed": "更新失败",
+  "delete_failed": "删除失败",
 
   "operation_success": "操作成功",
   "operation_failed": "操作失败",

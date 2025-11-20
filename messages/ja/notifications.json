@@ -12,7 +12,7 @@
   "refresh_success": "更新しました",
   "test_success": "テスト成功",
 
-  "user_created": "ユーザー {name} を作成しました",
+  "user_created": "ユーザーを作成しました",
   "user_updated": "ユーザー情報を更新しました",
   "user_deleted": "ユーザーを削除しました",
   "key_created": "APIキーを作成しました",
@@ -21,6 +21,10 @@
   "provider_created": "プロバイダーを作成しました",
   "provider_updated": "プロバイダーを更新しました",
   "provider_deleted": "プロバイダーを削除しました",
+
+  "create_failed": "作成に失敗しました",
+  "update_failed": "更新に失敗しました",
+  "delete_failed": "削除に失敗しました",
 
   "operation_success": "操作が成功しました",
   "operation_failed": "操作に失敗しました",

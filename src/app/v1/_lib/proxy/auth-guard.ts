@@ -1,12 +1,23 @@
 import { validateApiKeyAndGetUser } from "@/repository/key";
 import { ProxyResponses } from "./responses";
 import type { ProxySession, AuthState } from "./session";
+import { logger } from "@/lib/logger";
+import { GEMINI_PROTOCOL } from "../gemini/protocol";
 
 export class ProxyAuthenticator {
   static async ensure(session: ProxySession): Promise<Response | null> {
     const authHeader = session.headers.get("authorization") ?? undefined;
     const apiKeyHeader = session.headers.get("x-api-key") ?? undefined;
-    const authState = await ProxyAuthenticator.validate({ authHeader, apiKeyHeader });
+    // Gemini CLI 认证：支持 x-goog-api-key 头部和 key 查询参数
+    const geminiApiKeyHeader = session.headers.get(GEMINI_PROTOCOL.HEADERS.API_KEY) ?? undefined;
+    const geminiApiKeyQuery = session.requestUrl.searchParams.get("key") ?? undefined;
+
+    const authState = await ProxyAuthenticator.validate({
+      authHeader,
+      apiKeyHeader,
+      geminiApiKeyHeader,
+      geminiApiKeyQuery,
+    });
     session.setAuthState(authState);
 
     if (authState.success) {
@@ -19,15 +30,27 @@ export class ProxyAuthenticator {
   private static async validate(headers: {
     authHeader?: string;
     apiKeyHeader?: string;
+    geminiApiKeyHeader?: string;
+    geminiApiKeyQuery?: string;
   }): Promise<AuthState> {
     const bearerKey = ProxyAuthenticator.extractKeyFromAuthorization(headers.authHeader);
     const apiKeyHeader = ProxyAuthenticator.normalizeKey(headers.apiKeyHeader);
+    // Gemini API 密钥：优先使用头部，其次使用查询参数
+    const geminiApiKey =
+      ProxyAuthenticator.normalizeKey(headers.geminiApiKeyHeader) ||
+      ProxyAuthenticator.normalizeKey(headers.geminiApiKeyQuery);
 
-    const providedKeys = [bearerKey, apiKeyHeader].filter(
+    const providedKeys = [bearerKey, apiKeyHeader, geminiApiKey].filter(
       (value): value is string => typeof value === "string" && value.length > 0
     );
 
     if (providedKeys.length === 0) {
+      logger.debug("[ProxyAuthenticator] No authentication credentials found", {
+        hasAuthHeader: !!headers.authHeader,
+        hasApiKeyHeader: !!headers.apiKeyHeader,
+        hasGeminiApiKeyHeader: !!headers.geminiApiKeyHeader,
+        hasGeminiApiKeyQuery: !!headers.geminiApiKeyQuery,
+      });
       return { user: null, key: null, apiKey: null, success: false };
     }
 
@@ -35,6 +58,9 @@ export class ProxyAuthenticator {
     const hasMismatch = providedKeys.some((key) => key !== firstKey);
 
     if (hasMismatch) {
+      logger.warn("[ProxyAuthenticator] Multiple conflicting API keys provided", {
+        keyCount: providedKeys.length,
+      });
       return { user: null, key: null, apiKey: null, success: false };
     }
 
@@ -42,8 +68,19 @@ export class ProxyAuthenticator {
     const authResult = await validateApiKeyAndGetUser(apiKey);
 
     if (!authResult) {
+      logger.debug("[ProxyAuthenticator] API key validation failed", {
+        apiKeyLength: apiKey.length,
+        fromHeader: !!headers.authHeader || !!headers.apiKeyHeader || !!headers.geminiApiKeyHeader,
+        fromQuery: !!headers.geminiApiKeyQuery,
+      });
       return { user: null, key: null, apiKey, success: false };
     }
+
+    logger.debug("[ProxyAuthenticator] Authentication successful", {
+      userId: authResult.user.id,
+      userName: authResult.user.name,
+      keyName: authResult.key.name,
+    });
 
     return { user: authResult.user, key: authResult.key, apiKey, success: true };
   }

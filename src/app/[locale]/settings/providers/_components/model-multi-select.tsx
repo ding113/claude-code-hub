@@ -19,7 +19,7 @@ import { getAvailableModelsByProviderType } from "@/actions/model-prices";
 import { useTranslations } from "next-intl";
 
 interface ModelMultiSelectProps {
-  providerType: "claude" | "codex" | "gemini-cli" | "openai-compatible";
+  providerType: "claude" | "codex" | "gemini" | "gemini-cli" | "openai-compatible";
   selectedModels: string[];
   onChange: (models: string[]) => void;
   disabled?: boolean;

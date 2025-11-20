@@ -1,0 +1,30 @@
+{
+  "_comment": "Provider types and related translations for Russian",
+
+  "types": {
+    "claude": {
+      "label": "Claude",
+      "description": "Официальный API Anthropic"
+    },
+    "claudeAuth": {
+      "label": "Claude Auth",
+      "description": "Сервис ретрансляции Claude"
+    },
+    "codex": {
+      "label": "Codex",
+      "description": "Codex CLI API"
+    },
+    "geminiCli": {
+      "label": "Gemini CLI",
+      "description": "Gemini CLI API"
+    },
+    "gemini": {
+      "label": "Gemini",
+      "description": "Официальный API Google Gemini"
+    },
+    "openaiCompatible": {
+      "label": "OpenAI Compatible",
+      "description": "API совместимый с OpenAI"
+    }
+  }
+}

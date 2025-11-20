@@ -16,7 +16,7 @@ logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.pnpm-debug.log*
+.bun-debug.log*
 
 # Environment files
 .env*
@@ -51,7 +51,7 @@ data
 public/seed/litellm-prices.json
 
 # Package manager
-pnpm-lock.yaml
+bun.lock
 package-lock.json
 yarn.lock
 

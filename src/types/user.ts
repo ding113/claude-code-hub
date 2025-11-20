@@ -12,6 +12,11 @@ export interface User {
   createdAt: Date;
   updatedAt: Date;
   deletedAt?: Date;
+  // User-level quota fields
+  limit5hUsd?: number; // 5小时消费上限（美元）
+  limitWeeklyUsd?: number; // 周消费上限（美元）
+  limitMonthlyUsd?: number; // 月消费上限（美元）
+  limitConcurrentSessions?: number; // 并发 Session 上限
 }
 
 /**
@@ -23,6 +28,11 @@ export interface CreateUserData {
   rpm?: number; // 可选，有默认值
   dailyQuota?: number; // 可选，有默认值
   providerGroup?: string | null; // 可选，供应商分组
+  // User-level quota fields
+  limit5hUsd?: number;
+  limitWeeklyUsd?: number;
+  limitMonthlyUsd?: number;
+  limitConcurrentSessions?: number;
 }
 
 /**
@@ -34,6 +44,11 @@ export interface UpdateUserData {
   rpm?: number;
   dailyQuota?: number;
   providerGroup?: string | null; // 可选，供应商分组
+  // User-level quota fields
+  limit5hUsd?: number;
+  limitWeeklyUsd?: number;
+  limitMonthlyUsd?: number;
+  limitConcurrentSessions?: number;
 }
 
 /**
@@ -79,6 +94,11 @@ export interface UserDisplay {
   dailyQuota: number;
   providerGroup?: string | null;
   keys: UserKeyDisplay[];
+  // User-level quota fields
+  limit5hUsd?: number | null;
+  limitWeeklyUsd?: number | null;
+  limitMonthlyUsd?: number | null;
+  limitConcurrentSessions?: number | null;
 }
 
 /**

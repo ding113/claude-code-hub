@@ -40,13 +40,13 @@ export function ModelDisplayWithRedirect({
               className="cursor-help text-xs border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300"
             >
               <ArrowRight className="h-3 w-3 mr-1" />
-              {t("logs.modelRedirect.redirected")}
+              {t("modelRedirect.redirected")}
             </Badge>
           </TooltipTrigger>
           <TooltipContent>
             <div className="text-xs space-y-1">
               <div>
-                <span className="font-medium">{t("logs.modelRedirect.targetModel")}:</span> {currentModel}
+                <span className="font-medium">{t("modelRedirect.targetModel")}:</span> {currentModel}
               </div>
             </div>
           </TooltipContent>

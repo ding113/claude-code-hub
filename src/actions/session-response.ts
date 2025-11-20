@@ -10,7 +10,7 @@ import { logger } from "@/lib/logger";
  * @param sessionId - Session ID
  * @returns 响应体内容或错误信息
  *
- * ✅ 安全修复：添加用户权限检查
+ * 安全修复：添加用户权限检查
  */
 export async function getSessionResponse(
   sessionId: string

@@ -4,6 +4,9 @@ import { ProvidersQuotaManager } from "./_components/providers-quota-manager";
 import { getSystemSettings } from "@/repository/system-config";
 import { getTranslations } from "next-intl/server";
 
+// 强制动态渲染 (此页面需要实时数据和认证)
+export const dynamic = "force-dynamic";
+
 async function getProvidersWithQuotas() {
   const providers = await getProviders();
 

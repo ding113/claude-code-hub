@@ -1,6 +1,7 @@
 "use client";
 
 import { Input } from "@/components/ui/input";
+import { TagInput } from "@/components/ui/tag-input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { useId, type ComponentProps } from "react";
@@ -121,4 +122,86 @@ export function NumberField(
  */
 export function DateField(props: FormFieldProps) {
   return <FormField type="date" {...props} />;
+}
+
+/**
+ * 标签输入字段组件 Props
+ */
+export interface TagInputFieldProps
+  extends Omit<ComponentProps<typeof TagInput>, "value" | "onChange"> {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  error?: string;
+  touched?: boolean;
+  required?: boolean;
+  description?: string;
+}
+
+/**
+ * 标签输入字段组件
+ * 用于与 react-hook-form 集成，接受 string 值（逗号分隔），内部转换为数组
+ */
+export function TagInputField({
+  label,
+  value,
+  onChange,
+  error,
+  touched,
+  required,
+  description,
+  className,
+  ...tagInputProps
+}: TagInputFieldProps) {
+  const hasError = Boolean(touched && error);
+  const autoId = useId();
+  const fieldId = tagInputProps.id || `field-${autoId}`;
+
+  // 将字符串转换为数组
+  const tagsArray = value
+    ? value
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean)
+    : [];
+
+  // 将数组转换回字符串
+  const handleChange = (tags: string[]) => {
+    onChange(tags.join(","));
+  };
+
+  return (
+    <div className="grid gap-2">
+      <Label
+        htmlFor={fieldId}
+        className={cn(required && "after:content-['*'] after:ml-0.5 after:text-destructive")}
+      >
+        {label}
+      </Label>
+      <TagInput
+        {...tagInputProps}
+        id={fieldId}
+        value={tagsArray}
+        onChange={handleChange}
+        className={cn(
+          hasError ? "border-destructive focus-visible:ring-destructive" : undefined,
+          className
+        )}
+        aria-invalid={hasError}
+        aria-describedby={
+          hasError ? `${fieldId}-error` : description ? `${fieldId}-description` : undefined
+        }
+      />
+      {description && !hasError && (
+        <div id={`${fieldId}-description`} className="text-xs text-muted-foreground">
+          {description}
+        </div>
+      )}
+      {hasError && (
+        <div id={`${fieldId}-error`} className="text-xs text-destructive" role="alert">
+          {error}
+        </div>
+      )}
+    </div>
+  );
 }

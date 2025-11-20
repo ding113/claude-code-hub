@@ -7,11 +7,44 @@ import { ProxyResponseHandler } from "./proxy/response-handler";
 import { ProxyErrorHandler } from "./proxy/error-handler";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { SessionTracker } from "@/lib/session-tracker";
+import { detectClientFormat, detectFormatByEndpoint } from "./proxy/format-mapper";
 
 export async function handleProxyRequest(c: Context): Promise<Response> {
   const session = await ProxySession.fromContext(c);
 
   try {
+    // 自动检测请求格式（端点优先，请求体补充）
+    if (session.originalFormat === "claude") {
+      // 第一步：尝试端点检测（优先级最高，最准确）
+      const endpointFormat = detectFormatByEndpoint(session.requestUrl.pathname);
+
+      if (endpointFormat) {
+        session.setOriginalFormat(endpointFormat);
+        logger.debug("[ProxyHandler] Detected format by endpoint", {
+          endpoint: session.requestUrl.pathname,
+          format: endpointFormat,
+        });
+      } else {
+        // 第二步：降级到请求体检测（作为 fallback）
+        const detectedFormat = detectClientFormat(
+          session.request.message as Record<string, unknown>
+        );
+        session.setOriginalFormat(detectedFormat);
+
+        if (detectedFormat !== "claude") {
+          logger.debug("[ProxyHandler] Detected format by request body (endpoint unknown)", {
+            format: detectedFormat,
+            endpoint: session.requestUrl.pathname,
+            hasContents: Array.isArray(
+              (session.request.message as Record<string, unknown>).contents
+            ),
+            hasRequest:
+              typeof (session.request.message as Record<string, unknown>).request === "object",
+          });
+        }
+      }
+    }
+
     // Decide request type and build configured guard pipeline
     const type = session.isCountTokensRequest() ? RequestType.COUNT_TOKENS : RequestType.CHAT;
     const pipeline = GuardPipelineBuilder.fromRequestType(type);

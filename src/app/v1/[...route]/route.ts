@@ -1,3 +1,4 @@
+import "@/lib/polyfills/file";
 import { Hono } from "hono";
 import { logger } from "@/lib/logger";
 import { handle } from "hono/vercel";
