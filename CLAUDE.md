@@ -658,6 +658,20 @@ WITH latest_prices AS (
 SELECT ... LIMIT 50 OFFSET 0;
 ```
 
+### 10. Database MCP
+
+Objective:
+You are required to use the `db` MCP server to interact with a database.
+
+Capabilities:
+With this server, you can perform the following actions:
+
+- View the structure of database tables.
+- Query and inspect data within the tables.
+
+Prerequisite:
+Before performing any operations, you must first consult the database schema definition to understand its structure. The schema is defined in the following file: @src/drizzle/schema.ts.
+
 ## 常见任务
 
 ### 添加新的供应商类型
