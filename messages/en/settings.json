@@ -653,7 +653,8 @@
         "manualPlaceholder": "Enter model name (e.g. gpt-5-turbo)",
         "manualDesc": "Support adding any model name (not limited to price table)",
         "claude": "Claude",
-        "openai": "OpenAI"
+        "openai": "OpenAI",
+        "gemini": "Gemini"
       },
       "modelRedirect": {
         "currentRules": "Current Rules ({count})",

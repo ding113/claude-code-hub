@@ -555,7 +555,8 @@
         "manualPlaceholder": "Введите название модели (например, gpt-5-turbo)",
         "manualDesc": "Поддержка добавления любого названия модели (не ограничено прайс-листом)",
         "claude": "Claude",
-        "openai": "OpenAI"
+        "openai": "OpenAI",
+        "gemini": "Gemini"
       },
       "modelRedirect": {
         "currentRules": "Текущие правила ({count})",
