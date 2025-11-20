@@ -423,13 +423,13 @@
     "sync": {
       "button": "Sync LiteLLM Prices",
       "syncing": "Syncing...",
-      "successWithChanges": "Price table updated successfully, {count} models updated",
+      "successWithChanges": "Price table updated: {added} added, {updated} updated, {unchanged} unchanged",
       "successNoChanges": "Price table is up to date, no updates needed",
       "failed": "Sync failed",
       "failedError": "Sync failed: {error}",
       "failedNoResult": "Price table updated but no result returned",
       "noModels": "No model prices found",
-      "partialFailure": "Partial update succeeded, but {count} models failed"
+      "partialFailure": "Partial update succeeded, but {failed} models failed"
     },
     "table": {
       "modelName": "Model Name",
