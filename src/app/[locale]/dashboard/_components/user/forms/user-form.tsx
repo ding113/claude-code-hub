@@ -3,7 +3,7 @@ import { useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { addUser, editUser } from "@/actions/users";
-import { DialogFormLayout } from "@/components/form/form-layout";
+import { DialogFormLayout, FormGrid } from "@/components/form/form-layout";
 import { TextField, TagInputField } from "@/components/form/form-field";
 import { useZodForm } from "@/lib/hooks/use-zod-form";
 import { CreateUserSchema } from "@/lib/validation/schemas";
@@ -165,32 +165,32 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
         touched={form.getFieldProps("providerGroup").touched}
       />
 
-      <TextField
-        label={tForm("rpm.label")}
-        type="number"
-        required
-        min={USER_LIMITS.RPM.MIN}
-        max={USER_LIMITS.RPM.MAX}
-        placeholder={tForm("rpm.placeholder")}
-        description={tForm("rpm.description", { default: USER_DEFAULTS.RPM })}
-        {...form.getFieldProps("rpm")}
-      />
+      <FormGrid columns={2}>
+        <TextField
+          label={tForm("rpm.label")}
+          type="number"
+          required
+          min={USER_LIMITS.RPM.MIN}
+          max={USER_LIMITS.RPM.MAX}
+          placeholder={tForm("rpm.placeholder")}
+          {...form.getFieldProps("rpm")}
+        />
 
-      <TextField
-        label={tForm("dailyQuota.label")}
-        type="number"
-        required
-        min={USER_LIMITS.DAILY_QUOTA.MIN}
-        max={USER_LIMITS.DAILY_QUOTA.MAX}
-        step={0.01}
-        placeholder={tForm("dailyQuota.placeholder")}
-        description={tForm("dailyQuota.description", { default: USER_DEFAULTS.DAILY_QUOTA })}
-        {...form.getFieldProps("dailyQuota")}
-      />
+        <TextField
+          label={tForm("dailyQuota.label")}
+          type="number"
+          required
+          min={USER_LIMITS.DAILY_QUOTA.MIN}
+          max={USER_LIMITS.DAILY_QUOTA.MAX}
+          step={0.01}
+          placeholder={tForm("dailyQuota.placeholder")}
+          {...form.getFieldProps("dailyQuota")}
+        />
+      </FormGrid>
 
       {/* Admin-only quota fields */}
       {isAdmin && (
-        <>
+        <FormGrid columns={2}>
           <TextField
             label={tForm("limit5hUsd.label")}
             type="number"
@@ -198,7 +198,6 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
             max={10000}
             step={0.01}
             placeholder={tForm("limit5hUsd.placeholder")}
-            description={tForm("limit5hUsd.description")}
             {...form.getFieldProps("limit5hUsd")}
           />
 
@@ -209,7 +208,6 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
             max={50000}
             step={0.01}
             placeholder={tForm("limitWeeklyUsd.placeholder")}
-            description={tForm("limitWeeklyUsd.description")}
             {...form.getFieldProps("limitWeeklyUsd")}
           />
 
@@ -220,7 +218,6 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
             max={200000}
             step={0.01}
             placeholder={tForm("limitMonthlyUsd.placeholder")}
-            description={tForm("limitMonthlyUsd.description")}
             {...form.getFieldProps("limitMonthlyUsd")}
           />
 
@@ -231,10 +228,9 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
             max={1000}
             step={1}
             placeholder={tForm("limitConcurrentSessions.placeholder")}
-            description={tForm("limitConcurrentSessions.description")}
             {...form.getFieldProps("limitConcurrentSessions")}
           />
-        </>
+        </FormGrid>
       )}
     </DialogFormLayout>
   );
