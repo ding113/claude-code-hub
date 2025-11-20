@@ -12,7 +12,7 @@
   "refresh_success": "Refreshed successfully",
   "test_success": "Test successful",
 
-  "user_created": "User {name} created successfully",
+  "user_created": "User created successfully",
   "user_updated": "User information updated",
   "user_deleted": "User deleted",
   "key_created": "API key created successfully",
@@ -21,6 +21,10 @@
   "provider_created": "Provider created successfully",
   "provider_updated": "Provider updated",
   "provider_deleted": "Provider deleted",
+
+  "create_failed": "Creation failed",
+  "update_failed": "Update failed",
+  "delete_failed": "Deletion failed",
 
   "operation_success": "Operation successful",
   "operation_failed": "Operation failed",
