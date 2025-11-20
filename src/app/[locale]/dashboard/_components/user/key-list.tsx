@@ -190,7 +190,7 @@ export function KeyList({
                     variant="ghost"
                     size="sm"
                     onClick={() => handleCopyKey(record)}
-                    className="h-5 w-5 p-0 hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                    className="h-5 w-5 p-0 hover:bg-muted flex-shrink-0"
                     title={t("copyKeyTooltip")}
                   >
                     {copiedKeyId === record.id ? (
@@ -205,7 +205,7 @@ export function KeyList({
                     variant="ghost"
                     size="sm"
                     onClick={() => toggleKeyVisibility(record.id)}
-                    className="h-5 w-5 p-0 hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                    className="h-5 w-5 p-0 hover:bg-muted flex-shrink-0"
                     title={isVisible ? t("hideKeyTooltip") : t("showKeyTooltip")}
                   >
                     {isVisible ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
