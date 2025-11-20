@@ -10,7 +10,9 @@ export function parseSSEData(sseText: string): ParsedSSEEvent[] {
   let dataLines: string[] = [];
 
   const flushEvent = () => {
-    if (!eventName || dataLines.length === 0) {
+    // 修改：支持没有 event: 前缀的纯 data: 格式（Gemini 流式响应）
+    // 如果没有 eventName，使用默认值 "message"
+    if (dataLines.length === 0) {
       eventName = "";
       dataLines = [];
       return;
@@ -20,9 +22,9 @@ export function parseSSEData(sseText: string): ParsedSSEEvent[] {
 
     try {
       const data = JSON.parse(dataStr);
-      events.push({ event: eventName, data });
+      events.push({ event: eventName || "message", data });
     } catch {
-      events.push({ event: eventName, data: dataStr });
+      events.push({ event: eventName || "message", data: dataStr });
     }
 
     eventName = "";
