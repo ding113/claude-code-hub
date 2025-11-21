@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { TocNav, type TocItem } from "./_components/toc-nav";
 import { QuickLinks } from "./_components/quick-links";
-import { LanguageSwitcher } from "@/components/ui/language-switcher";
 
 const headingClasses = {
   h2: "scroll-m-20 text-2xl font-semibold leading-snug text-foreground",
@@ -1541,11 +1540,6 @@ export default function UsageDocPage() {
       >
         {t("skipLinks.tableOfContents")}
       </a>
-
-      {/* Language Switcher - Fixed position */}
-      <div className="fixed top-4 right-4 z-50 lg:top-6 lg:right-8">
-        <LanguageSwitcher size="sm" />
-      </div>
 
       <div className="relative flex gap-6 lg:gap-8">
         {/* 左侧主文档 */}

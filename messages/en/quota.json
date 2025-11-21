@@ -92,6 +92,7 @@
     "title": "Provider Quota Statistics",
     "totalCount": "{count} providers total",
     "filterCount": "Showing {filtered} / {total} providers",
+    "searchPlaceholder": "Search provider name...",
     "status": {
       "enabled": "Enabled",
       "disabled": "Disabled"
@@ -99,6 +100,19 @@
     "card": {
       "priority": "Priority",
       "weight": "Weight"
+    },
+    "sort": {
+      "name": "By Name",
+      "priority": "By Priority",
+      "weight": "By Weight",
+      "usage": "By Usage"
+    },
+    "list": {
+      "resetIn": "Resets in",
+      "unlimited": "Unlimited",
+      "current": "Current",
+      "limit": "Limit",
+      "used": "used"
     },
     "cost5h": {
       "label": "5-Hour Cost"
@@ -121,6 +135,8 @@
     "noQuotaSet": "No quota set",
     "noQuotaData": "Unable to retrieve quota information",
     "noMatches": "No matching providers",
+    "noMatchesDesc": "No providers match your search criteria. Try adjusting your filters.",
+    "noProvidersDesc": "No providers have been configured yet.",
     "unlimitedSection": "Providers without quota ({count})"
   },
   "keys": {

@@ -4,6 +4,8 @@ import { Link, usePathname } from "@/i18n/routing";
 
 import { cn } from "@/lib/utils";
 import type { SettingsNavItem } from "../_lib/nav-items";
+import { ThemeSwitcher } from "@/components/ui/theme-switcher";
+import { useTranslations } from "next-intl";
 
 interface SettingsNavProps {
   items: SettingsNavItem[];
@@ -11,6 +13,7 @@ interface SettingsNavProps {
 
 export function SettingsNav({ items }: SettingsNavProps) {
   const pathname = usePathname();
+  const t = useTranslations("common");
 
   if (items.length === 0) {
     return null;
@@ -65,6 +68,17 @@ export function SettingsNav({ items }: SettingsNavProps) {
           );
         })}
       </ul>
+      <div className="mt-3 rounded-lg border border-dashed border-border/80 bg-muted/40 p-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {t("appearance")}
+            </p>
+            <p className="text-sm text-foreground/90">{t("theme")}</p>
+          </div>
+          <ThemeSwitcher />
+        </div>
+      </div>
     </nav>
   );
 }

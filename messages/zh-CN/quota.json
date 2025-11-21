@@ -92,6 +92,7 @@
     "title": "供应商限额统计",
     "totalCount": "共 {count} 个供应商",
     "filterCount": "显示 {filtered} / {total} 个供应商",
+    "searchPlaceholder": "搜索供应商名称...",
     "status": {
       "enabled": "启用",
       "disabled": "禁用"
@@ -99,6 +100,19 @@
     "card": {
       "priority": "优先级",
       "weight": "权重"
+    },
+    "sort": {
+      "name": "按名称",
+      "priority": "按优先级",
+      "weight": "按权重",
+      "usage": "按使用量"
+    },
+    "list": {
+      "resetIn": "重置于",
+      "unlimited": "无限制",
+      "current": "当前",
+      "limit": "限制",
+      "used": "已用"
     },
     "cost5h": {
       "label": "5小时消费"
@@ -121,6 +135,8 @@
     "noQuotaSet": "未设置限额",
     "noQuotaData": "无法获取限额信息",
     "noMatches": "没有匹配的供应商",
+    "noMatchesDesc": "没有供应商匹配您的搜索条件，请尝试调整筛选条件。",
+    "noProvidersDesc": "尚未配置任何供应商。",
     "unlimitedSection": "未设置限额的供应商 ({count}个)"
   },
   "keys": {

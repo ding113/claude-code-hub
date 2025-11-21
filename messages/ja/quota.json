@@ -92,6 +92,7 @@
     "title": "プロバイダークォータ統計",
     "totalCount": "合計 {count} 個のプロバイダー",
     "filterCount": "{filtered} / {total} 個のプロバイダーを表示",
+    "searchPlaceholder": "プロバイダー名を検索...",
     "status": {
       "enabled": "有効",
       "disabled": "無効"
@@ -100,8 +101,25 @@
       "priority": "優先度",
       "weight": "重み"
     },
+    "sort": {
+      "name": "名前順",
+      "priority": "優先度順",
+      "weight": "重み順",
+      "usage": "使用量順"
+    },
+    "list": {
+      "resetIn": "リセットまで",
+      "unlimited": "無制限",
+      "current": "現在",
+      "limit": "制限",
+      "used": "使用済み"
+    },
     "cost5h": {
       "label": "5時間コスト"
+    },
+    "costDaily": {
+      "label": "日次コスト",
+      "resetAt": "リセット時刻"
     },
     "costWeekly": {
       "label": "週次コスト",
@@ -117,6 +135,8 @@
     "noQuotaSet": "クォータ未設定",
     "noQuotaData": "クォータ情報を取得できません",
     "noMatches": "一致するプロバイダーがありません",
+    "noMatchesDesc": "検索条件に一致するプロバイダーがありません。フィルターを調整してください。",
+    "noProvidersDesc": "まだプロバイダーが設定されていません。",
     "unlimitedSection": "クォータ未設定のプロバイダー ({count}個)"
   },
   "keys": {
@@ -136,6 +156,7 @@
       "keyName": "キー名",
       "quotaType": "クォータタイプ",
       "cost5h": "5時間クォータ",
+      "costDaily": "日次クォータ",
       "costWeekly": "週次クォータ",
       "costMonthly": "月次クォータ",
       "concurrentSessions": "同時制限",
@@ -159,6 +180,26 @@
         "label": "5時間クォータ (USD)",
         "placeholder": "無制限",
         "current": "現在使用: {currency}{current} / {currency}{limit}"
+      },
+      "costDaily": {
+        "label": "日次クォータ (USD)",
+        "placeholder": "無制限",
+        "current": "現在使用: {currency}{current} / {currency}{limit}"
+      },
+      "dailyResetMode": {
+        "label": "日次リセットモード",
+        "options": {
+          "fixed": "固定時刻リセット",
+          "rolling": "ローリングウィンドウ（24時間）"
+        },
+        "desc": {
+          "fixed": "毎日固定時刻にクォータをリセット",
+          "rolling": "最初のリクエストから24時間のローリングウィンドウ"
+        }
+      },
+      "dailyResetTime": {
+        "label": "日次リセット時刻",
+        "placeholder": "HH:mm"
       },
       "costWeekly": {
         "label": "週次クォータ (USD)",
@@ -224,6 +265,27 @@
         "label": "5時間消費上限 (USD)",
         "placeholder": "空欄の場合は無制限",
         "description": "5時間以内の最大消費金額"
+      },
+      "limitDailyUsd": {
+        "label": "日次消費上限 (USD)",
+        "placeholder": "空欄の場合は無制限",
+        "description": "1日の最大消費金額"
+      },
+      "dailyResetMode": {
+        "label": "日次リセットモード",
+        "options": {
+          "fixed": "固定時刻リセット",
+          "rolling": "ローリングウィンドウ（24時間）"
+        },
+        "desc": {
+          "fixed": "毎日指定時刻にクォータをリセット",
+          "rolling": "最初のリクエストから24時間のローリングウィンドウで計算"
+        }
+      },
+      "dailyResetTime": {
+        "label": "日次リセット時刻",
+        "placeholder": "HH:mm",
+        "description": "日次制限のリセット時刻（システムタイムゾーン使用）"
       },
       "limitWeeklyUsd": {
         "label": "週間消費上限 (USD)",
