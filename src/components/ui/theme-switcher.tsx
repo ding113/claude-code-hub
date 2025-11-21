@@ -32,40 +32,12 @@ export function ThemeSwitcher({
   const t = useTranslations("common");
   const [mounted, setMounted] = useState(false);
 
-  // Wrap useTheme in try-catch for localStorage error handling
-  let themeHook: ReturnType<typeof useTheme> | null = null;
-  try {
-    themeHook = useTheme();
-  } catch (error) {
-    console.error("Failed to initialize theme:", error);
-  }
+  // Always call useTheme unconditionally (Rules of Hooks requirement)
+  const { theme, setTheme } = useTheme();
 
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  // Graceful degradation if theme system unavailable
-  if (!themeHook) {
-    return (
-      <Button
-        aria-label={t("theme")}
-        variant="ghost"
-        size={size === "sm" ? "icon" : "default"}
-        className={cn(
-          "relative rounded-full border border-border/60 bg-card/60 text-muted-foreground cursor-not-allowed",
-          size === "sm" && "size-9",
-          className
-        )}
-        disabled
-        title="Theme system unavailable"
-      >
-        <Sun className="size-4 opacity-50" />
-        {showLabel && <span className="ml-2 text-sm opacity-50">{t("theme")}</span>}
-      </Button>
-    );
-  }
-
-  const { theme, setTheme } = themeHook;
 
   // Simplified theme options with better type inference
   const options = [
