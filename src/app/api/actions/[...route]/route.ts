@@ -588,6 +588,7 @@ const { route: getNotificationSettingsRoute, handler: getNotificationSettingsHan
     {
       description: "获取通知设置",
       tags: ["通知管理"],
+      requiredRole: "admin",
     }
   );
 app.openapi(getNotificationSettingsRoute, getNotificationSettingsHandler);
@@ -604,6 +605,7 @@ const { route: updateNotificationSettingsRoute, handler: updateNotificationSetti
       }),
       description: "更新通知设置",
       tags: ["通知管理"],
+      requiredRole: "admin",
     }
   );
 app.openapi(updateNotificationSettingsRoute, updateNotificationSettingsHandler);
@@ -618,6 +620,7 @@ const { route: testWebhookRoute, handler: testWebhookHandler } = createActionRou
     }),
     description: "测试 Webhook 配置",
     tags: ["通知管理"],
+    requiredRole: "admin",
   }
 );
 app.openapi(testWebhookRoute, testWebhookHandler);
