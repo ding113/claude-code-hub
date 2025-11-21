@@ -36,6 +36,7 @@ interface KeyWithQuota {
   quota: KeyQuota | null;
   limitDailyUsd: number | null;
   dailyResetTime: string;
+  dailyResetMode: "fixed" | "rolling";
 }
 
 interface UserWithKeys {

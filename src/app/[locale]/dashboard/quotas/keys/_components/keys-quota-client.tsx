@@ -45,6 +45,7 @@ interface KeyWithQuota {
   quota: KeyQuota | null;
   limitDailyUsd: number | null;
   dailyResetTime: string;
+  dailyResetMode: "fixed" | "rolling";
 }
 
 interface UserWithKeys {
@@ -339,6 +340,7 @@ export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClient
                               currentQuota={key.quota}
                               currencyCode={currencyCode}
                               dailyResetTime={key.dailyResetTime}
+                              dailyResetMode={key.dailyResetMode}
                               trigger={
                                 <Button variant="ghost" size="sm">
                                   <Settings className="h-4 w-4" />

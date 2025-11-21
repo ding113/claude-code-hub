@@ -19,6 +19,13 @@ import { editKey } from "@/actions/keys";
 import { toast } from "sonner";
 import { type CurrencyCode, CURRENCY_CONFIG } from "@/lib/utils/currency";
 import { useTranslations } from "next-intl";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface KeyQuota {
   cost5h: { current: number; limit: number | null };
@@ -36,6 +43,7 @@ interface EditKeyQuotaDialogProps {
   currencyCode?: CurrencyCode;
   trigger?: React.ReactNode;
   dailyResetTime?: string;
+  dailyResetMode?: "fixed" | "rolling";
 }
 
 export function EditKeyQuotaDialog({
@@ -46,6 +54,7 @@ export function EditKeyQuotaDialog({
   currencyCode = "USD",
   trigger,
   dailyResetTime = "00:00",
+  dailyResetMode = "fixed",
 }: EditKeyQuotaDialogProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -59,6 +68,7 @@ export function EditKeyQuotaDialog({
   const [limitDaily, setLimitDaily] = useState<string>(
     currentQuota?.costDaily.limit?.toString() ?? ""
   );
+  const [resetMode, setResetMode] = useState<"fixed" | "rolling">(dailyResetMode);
   const [resetTime, setResetTime] = useState<string>(dailyResetTime);
   const [limitWeekly, setLimitWeekly] = useState<string>(
     currentQuota?.costWeekly.limit?.toString() ?? ""
@@ -80,6 +90,7 @@ export function EditKeyQuotaDialog({
           name: keyName, // 保持名称不变
           limit5hUsd: limit5h ? parseFloat(limit5h) : null,
           limitDailyUsd: limitDaily ? parseFloat(limitDaily) : null,
+          dailyResetMode: resetMode,
           dailyResetTime: resetTime,
           limitWeeklyUsd: limitWeekly ? parseFloat(limitWeekly) : null,
           limitMonthlyUsd: limitMonthly ? parseFloat(limitMonthly) : null,
@@ -107,6 +118,7 @@ export function EditKeyQuotaDialog({
           name: keyName,
           limit5hUsd: null,
           limitDailyUsd: null,
+          dailyResetMode: resetMode,
           dailyResetTime: resetTime,
           limitWeeklyUsd: null,
           limitMonthlyUsd: null,
@@ -199,20 +211,47 @@ export function EditKeyQuotaDialog({
                 )}
               </div>
 
-              {/* 每日重置时间 */}
+              {/* 每日重置模式 */}
               <div className="grid gap-1.5">
-                <Label htmlFor="dailyResetTime" className="text-xs">
-                  {t("dailyResetTime.label")}
+                <Label htmlFor="dailyResetMode" className="text-xs">
+                  {t("dailyResetMode.label")}
                 </Label>
-                <Input
-                  id="dailyResetTime"
-                  type="time"
-                  step={60}
-                  value={resetTime}
-                  onChange={(e) => setResetTime(e.target.value || "00:00")}
-                  className="h-9"
-                />
+                <Select
+                  value={resetMode}
+                  onValueChange={(value: "fixed" | "rolling") => setResetMode(value)}
+                  disabled={isPending}
+                >
+                  <SelectTrigger id="dailyResetMode" className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="fixed">{t("dailyResetMode.options.fixed")}</SelectItem>
+                    <SelectItem value="rolling">{t("dailyResetMode.options.rolling")}</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {resetMode === "fixed"
+                    ? t("dailyResetMode.desc.fixed")
+                    : t("dailyResetMode.desc.rolling")}
+                </p>
               </div>
+
+              {/* 每日重置时间 - 仅在固定时间模式下显示 */}
+              {resetMode === "fixed" && (
+                <div className="grid gap-1.5">
+                  <Label htmlFor="dailyResetTime" className="text-xs">
+                    {t("dailyResetTime.label")}
+                  </Label>
+                  <Input
+                    id="dailyResetTime"
+                    type="time"
+                    step={60}
+                    value={resetTime}
+                    onChange={(e) => setResetTime(e.target.value || "00:00")}
+                    className="h-9"
+                  />
+                </div>
+              )}
 
               {/* 周限额 */}
               <div className="grid gap-1.5">
