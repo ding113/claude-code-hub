@@ -161,7 +161,11 @@
         "default": "No detailed error message available"
       },
       "clickStatusCode": "Click status code to view full timeline",
-      "viewDetails": "View Details"
+      "viewDetails": "View Details",
+      "reasons": {
+        "rateLimited": "Provider Cost Limit",
+        "circuitOpen": "Circuit Breaker Open"
+      }
     },
     "providerChain": {
       "decisionChain": "Provider Decision Chain"
@@ -511,6 +515,17 @@
       "label": "Daily Cost Limit (USD)",
       "placeholder": "Leave blank for unlimited",
       "description": "Maximum cost per day"
+    },
+    "dailyResetMode": {
+      "label": "Daily Reset Mode",
+      "options": {
+        "fixed": "Fixed Time Reset",
+        "rolling": "Rolling Window (24h)"
+      },
+      "desc": {
+        "fixed": "Reset quota at a specific time each day",
+        "rolling": "24-hour rolling window from first request"
+      }
     },
     "dailyResetTime": {
       "label": "Daily Reset Time",

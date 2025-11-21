@@ -162,7 +162,11 @@
         "default": "暂无详细错误信息"
       },
       "clickStatusCode": "点击状态码查看完整时间线",
-      "viewDetails": "查看详情"
+      "viewDetails": "查看详情",
+      "reasons": {
+        "rateLimited": "供应商费用限制",
+        "circuitOpen": "熔断器打开"
+      }
     },
     "providerChain": {
       "decisionChain": "供应商决策链"
@@ -513,6 +517,17 @@
       "label": "每日消费上限 (USD)",
       "placeholder": "留空表示无限制",
       "description": "每日最大消费金额"
+    },
+    "dailyResetMode": {
+      "label": "每日重置模式",
+      "options": {
+        "fixed": "固定时间重置",
+        "rolling": "滚动窗口（24小时）"
+      },
+      "desc": {
+        "fixed": "每天在指定时间重置额度",
+        "rolling": "从首次请求开始计算24小时滚动窗口"
+      }
     },
     "dailyResetTime": {
       "label": "每日重置时间",

@@ -170,6 +170,17 @@
         "placeholder": "Unlimited",
         "current": "Current usage: {currency}{current} / {currency}{limit}"
       },
+      "dailyResetMode": {
+        "label": "Daily Reset Mode",
+        "options": {
+          "fixed": "Fixed Time Reset",
+          "rolling": "Rolling Window (24h)"
+        },
+        "desc": {
+          "fixed": "Reset quota at a fixed time each day",
+          "rolling": "Reset 24 hours after first API call"
+        }
+      },
       "dailyResetTime": {
         "label": "Daily Reset Time",
         "placeholder": "HH:mm"
@@ -243,6 +254,17 @@
         "label": "Daily Cost Limit (USD)",
         "placeholder": "Leave blank for unlimited",
         "description": "Maximum cost per day"
+      },
+      "dailyResetMode": {
+        "label": "Daily Reset Mode",
+        "options": {
+          "fixed": "Fixed Time Reset",
+          "rolling": "Rolling Window (24h)"
+        },
+        "desc": {
+          "fixed": "Reset quota at a specific time each day",
+          "rolling": "24-hour rolling window from first request"
+        }
       },
       "dailyResetTime": {
         "label": "Daily Reset Time",
