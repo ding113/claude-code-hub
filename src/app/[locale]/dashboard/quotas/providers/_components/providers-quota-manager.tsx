@@ -49,9 +49,7 @@ export function ProvidersQuotaManager({
   // 计算筛选后的供应商数量（包括搜索）
   const filteredCount = useMemo(() => {
     let filtered =
-      typeFilter === "all"
-        ? providers
-        : providers.filter((p) => p.providerType === typeFilter);
+      typeFilter === "all" ? providers : providers.filter((p) => p.providerType === typeFilter);
 
     if (debouncedSearchTerm) {
       const term = debouncedSearchTerm.toLowerCase();
