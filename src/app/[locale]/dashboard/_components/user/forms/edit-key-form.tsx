@@ -2,7 +2,7 @@
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { editKey } from "@/actions/keys";
-import { DialogFormLayout } from "@/components/form/form-layout";
+import { DialogFormLayout, FormGrid } from "@/components/form/form-layout";
 import { TextField, DateField, NumberField } from "@/components/form/form-field";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -142,27 +142,29 @@ export function EditKeyForm({ keyData, user, onSuccess }: EditKeyFormProps) {
         />
       </div>
 
-      <NumberField
-        label={t("limit5hUsd.label")}
-        placeholder={t("limit5hUsd.placeholder")}
-        description={
-          user?.limit5hUsd
-            ? t("limit5hUsd.descriptionWithUserLimit", { limit: user.limit5hUsd })
-            : t("limit5hUsd.description")
-        }
-        min={0}
-        step={0.01}
-        {...form.getFieldProps("limit5hUsd")}
-      />
+      <FormGrid columns={2}>
+        <NumberField
+          label={t("limit5hUsd.label")}
+          placeholder={t("limit5hUsd.placeholder")}
+          description={
+            user?.limit5hUsd
+              ? t("limit5hUsd.descriptionWithUserLimit", { limit: user.limit5hUsd })
+              : t("limit5hUsd.description")
+          }
+          min={0}
+          step={0.01}
+          {...form.getFieldProps("limit5hUsd")}
+        />
 
-      <NumberField
-        label={t("limitDailyUsd.label")}
-        placeholder={t("limitDailyUsd.placeholder")}
-        description={t("limitDailyUsd.description")}
-        min={0}
-        step={0.01}
-        {...form.getFieldProps("limitDailyUsd")}
-      />
+        <NumberField
+          label={t("limitDailyUsd.label")}
+          placeholder={t("limitDailyUsd.placeholder")}
+          description={t("limitDailyUsd.description")}
+          min={0}
+          step={0.01}
+          {...form.getFieldProps("limitDailyUsd")}
+        />
+      </FormGrid>
 
       <div className="space-y-2">
         <Label htmlFor="daily-reset-mode">{t("dailyResetMode.label")}</Label>
@@ -197,46 +199,48 @@ export function EditKeyForm({ keyData, user, onSuccess }: EditKeyFormProps) {
         />
       )}
 
-      <NumberField
-        label={t("limitWeeklyUsd.label")}
-        placeholder={t("limitWeeklyUsd.placeholder")}
-        description={
-          user?.limitWeeklyUsd
-            ? t("limitWeeklyUsd.descriptionWithUserLimit", { limit: user.limitWeeklyUsd })
-            : t("limitWeeklyUsd.description")
-        }
-        min={0}
-        step={0.01}
-        {...form.getFieldProps("limitWeeklyUsd")}
-      />
+      <FormGrid columns={2}>
+        <NumberField
+          label={t("limitWeeklyUsd.label")}
+          placeholder={t("limitWeeklyUsd.placeholder")}
+          description={
+            user?.limitWeeklyUsd
+              ? t("limitWeeklyUsd.descriptionWithUserLimit", { limit: user.limitWeeklyUsd })
+              : t("limitWeeklyUsd.description")
+          }
+          min={0}
+          step={0.01}
+          {...form.getFieldProps("limitWeeklyUsd")}
+        />
 
-      <NumberField
-        label={t("limitMonthlyUsd.label")}
-        placeholder={t("limitMonthlyUsd.placeholder")}
-        description={
-          user?.limitMonthlyUsd
-            ? t("limitMonthlyUsd.descriptionWithUserLimit", { limit: user.limitMonthlyUsd })
-            : t("limitMonthlyUsd.description")
-        }
-        min={0}
-        step={0.01}
-        {...form.getFieldProps("limitMonthlyUsd")}
-      />
+        <NumberField
+          label={t("limitMonthlyUsd.label")}
+          placeholder={t("limitMonthlyUsd.placeholder")}
+          description={
+            user?.limitMonthlyUsd
+              ? t("limitMonthlyUsd.descriptionWithUserLimit", { limit: user.limitMonthlyUsd })
+              : t("limitMonthlyUsd.description")
+          }
+          min={0}
+          step={0.01}
+          {...form.getFieldProps("limitMonthlyUsd")}
+        />
 
-      <NumberField
-        label={t("limitConcurrentSessions.label")}
-        placeholder={t("limitConcurrentSessions.placeholder")}
-        description={
-          user?.limitConcurrentSessions
-            ? t("limitConcurrentSessions.descriptionWithUserLimit", {
-                limit: user.limitConcurrentSessions,
-              })
-            : t("limitConcurrentSessions.description")
-        }
-        min={0}
-        step={1}
-        {...form.getFieldProps("limitConcurrentSessions")}
-      />
+        <NumberField
+          label={t("limitConcurrentSessions.label")}
+          placeholder={t("limitConcurrentSessions.placeholder")}
+          description={
+            user?.limitConcurrentSessions
+              ? t("limitConcurrentSessions.descriptionWithUserLimit", {
+                  limit: user.limitConcurrentSessions,
+                })
+              : t("limitConcurrentSessions.description")
+          }
+          min={0}
+          step={1}
+          {...form.getFieldProps("limitConcurrentSessions")}
+        />
+      </FormGrid>
     </DialogFormLayout>
   );
 }

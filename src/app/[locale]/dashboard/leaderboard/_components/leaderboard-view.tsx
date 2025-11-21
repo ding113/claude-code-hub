@@ -7,6 +7,7 @@ import { LeaderboardTable, type ColumnDef } from "./leaderboard-table";
 import type { LeaderboardEntry, ProviderLeaderboardEntry } from "@/repository/leaderboard";
 import { formatTokenAmount } from "@/lib/utils";
 import { useTranslations } from "next-intl";
+import { useSearchParams } from "next/navigation";
 
 interface LeaderboardViewProps {
   isAdmin: boolean;
@@ -17,12 +18,34 @@ type ProviderEntry = ProviderLeaderboardEntry & { totalCostFormatted?: string };
 
 export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
   const t = useTranslations("dashboard.leaderboard");
-  const [scope, setScope] = useState<"user" | "provider">("user");
-  const [period, setPeriod] = useState<"daily" | "monthly">("daily");
+  const searchParams = useSearchParams();
+
+  const initialScope = searchParams.get("scope") === "provider" && isAdmin ? "provider" : "user";
+  const initialPeriod = searchParams.get("period") === "monthly" ? "monthly" : "daily";
+
+  const [scope, setScope] = useState<"user" | "provider">(initialScope);
+  const [period, setPeriod] = useState<"daily" | "monthly">(initialPeriod);
   const [dailyData, setDailyData] = useState<Array<UserEntry | ProviderEntry>>([]);
   const [monthlyData, setMonthlyData] = useState<Array<UserEntry | ProviderEntry>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // 与 URL 查询参数保持同步，支持外部携带 scope/period 直达特定榜单
+  useEffect(() => {
+    const urlScope = searchParams.get("scope");
+    const normalizedScope = urlScope === "provider" && isAdmin ? "provider" : "user";
+
+    if (normalizedScope !== scope) {
+      setScope(normalizedScope);
+    }
+
+    const urlPeriod = searchParams.get("period");
+    const normalizedPeriod = urlPeriod === "monthly" ? "monthly" : "daily";
+
+    if (normalizedPeriod !== period) {
+      setPeriod(normalizedPeriod);
+    }
+  }, [isAdmin, searchParams, scope, period]);
 
   useEffect(() => {
     let cancelled = false;
