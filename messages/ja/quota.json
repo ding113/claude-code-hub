@@ -156,6 +156,7 @@
       "keyName": "キー名",
       "quotaType": "クォータタイプ",
       "cost5h": "5時間クォータ",
+      "costDaily": "日次クォータ",
       "costWeekly": "週次クォータ",
       "costMonthly": "月次クォータ",
       "concurrentSessions": "同時制限",
@@ -179,6 +180,26 @@
         "label": "5時間クォータ (USD)",
         "placeholder": "無制限",
         "current": "現在使用: {currency}{current} / {currency}{limit}"
+      },
+      "costDaily": {
+        "label": "日次クォータ (USD)",
+        "placeholder": "無制限",
+        "current": "現在使用: {currency}{current} / {currency}{limit}"
+      },
+      "dailyResetMode": {
+        "label": "日次リセットモード",
+        "options": {
+          "fixed": "固定時刻リセット",
+          "rolling": "ローリングウィンドウ（24時間）"
+        },
+        "desc": {
+          "fixed": "毎日固定時刻にクォータをリセット",
+          "rolling": "最初のリクエストから24時間のローリングウィンドウ"
+        }
+      },
+      "dailyResetTime": {
+        "label": "日次リセット時刻",
+        "placeholder": "HH:mm"
       },
       "costWeekly": {
         "label": "週次クォータ (USD)",
@@ -244,6 +265,27 @@
         "label": "5時間消費上限 (USD)",
         "placeholder": "空欄の場合は無制限",
         "description": "5時間以内の最大消費金額"
+      },
+      "limitDailyUsd": {
+        "label": "日次消費上限 (USD)",
+        "placeholder": "空欄の場合は無制限",
+        "description": "1日の最大消費金額"
+      },
+      "dailyResetMode": {
+        "label": "日次リセットモード",
+        "options": {
+          "fixed": "固定時刻リセット",
+          "rolling": "ローリングウィンドウ（24時間）"
+        },
+        "desc": {
+          "fixed": "毎日指定時刻にクォータをリセット",
+          "rolling": "最初のリクエストから24時間のローリングウィンドウで計算"
+        }
+      },
+      "dailyResetTime": {
+        "label": "日次リセット時刻",
+        "placeholder": "HH:mm",
+        "description": "日次制限のリセット時刻（システムタイムゾーン使用）"
       },
       "limitWeeklyUsd": {
         "label": "週間消費上限 (USD)",

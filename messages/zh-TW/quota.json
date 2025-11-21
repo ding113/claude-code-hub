@@ -154,6 +154,7 @@
       "keyName": "密鑰名稱",
       "quotaType": "限額類型",
       "cost5h": "5小時限額",
+      "costDaily": "每日限額",
       "costWeekly": "周限額",
       "costMonthly": "月限額",
       "concurrentSessions": "並發限制",
@@ -177,6 +178,26 @@
         "label": "5小時限額 (USD)",
         "placeholder": "不限制",
         "current": "當前已用: {currency}{current} / {currency}{limit}"
+      },
+      "costDaily": {
+        "label": "每日限額 (USD)",
+        "placeholder": "不限制",
+        "current": "當前已用: {currency}{current} / {currency}{limit}"
+      },
+      "dailyResetMode": {
+        "label": "每日重置模式",
+        "options": {
+          "fixed": "固定時間重置",
+          "rolling": "滾動窗口（24小時）"
+        },
+        "desc": {
+          "fixed": "每天在指定時間重置額度",
+          "rolling": "從首次請求開始計算24小時滾動窗口"
+        }
+      },
+      "dailyResetTime": {
+        "label": "每日重置時間",
+        "placeholder": "HH:mm"
       },
       "costWeekly": {
         "label": "周限額 (USD)",
@@ -242,6 +263,27 @@
         "label": "5小時消費上限 (USD)",
         "placeholder": "留空表示無限制",
         "description": "5小時內最大消費金額"
+      },
+      "limitDailyUsd": {
+        "label": "每日消費上限 (USD)",
+        "placeholder": "留空表示無限制",
+        "description": "每日最大消費金額"
+      },
+      "dailyResetMode": {
+        "label": "每日重置模式",
+        "options": {
+          "fixed": "固定時間重置",
+          "rolling": "滾動窗口（24小時）"
+        },
+        "desc": {
+          "fixed": "每天在指定時間重置額度",
+          "rolling": "從首次請求開始計算24小時滾動窗口"
+        }
+      },
+      "dailyResetTime": {
+        "label": "每日重置時間",
+        "placeholder": "HH:mm",
+        "description": "每日限額的重置時間（使用系統時區）"
       },
       "limitWeeklyUsd": {
         "label": "週消費上限 (USD)",

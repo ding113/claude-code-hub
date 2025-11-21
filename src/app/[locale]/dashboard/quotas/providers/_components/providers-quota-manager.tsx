@@ -41,7 +41,7 @@ export function ProvidersQuotaManager({
   const [typeFilter, setTypeFilter] = useState<ProviderType | "all">("all");
   const [sortBy, setSortBy] = useState<QuotaSortKey>("priority");
   const [searchTerm, setSearchTerm] = useState("");
-  const debouncedSearchTerm = useDebounce(searchTerm, 500);
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
   const t = useTranslations("quota.providers");
   const tSearch = useTranslations("settings.providers.search");

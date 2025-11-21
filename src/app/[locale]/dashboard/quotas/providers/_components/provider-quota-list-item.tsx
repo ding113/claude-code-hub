@@ -130,6 +130,9 @@ export function ProviderQuotaListItem({
   };
 
   if (!provider.quota) {
+    console.warn(
+      `Provider ${provider.name} (ID: ${provider.id}) has no quota data - skipping render`
+    );
     return null;
   }
 
