@@ -99,7 +99,9 @@ export function ProviderQuotaListItem({
           <TooltipTrigger asChild>
             <div className="flex flex-col items-center gap-1">
               <CircularProgress value={current} max={limit} size={48} strokeWidth={4} />
-              <span className="text-[10px] text-muted-foreground">{t("concurrentSessions.label")}</span>
+              <span className="text-[10px] text-muted-foreground">
+                {t("concurrentSessions.label")}
+              </span>
             </div>
           </TooltipTrigger>
           <TooltipContent side="top">
@@ -201,9 +203,7 @@ export function ProviderQuotaListItem({
       </div>
 
       {/* 右侧：操作区域（预留） */}
-      <div className="flex items-center gap-2 flex-shrink-0">
-        {/* 可以添加操作按钮 */}
-      </div>
+      <div className="flex items-center gap-2 flex-shrink-0">{/* 可以添加操作按钮 */}</div>
     </div>
   );
 }
