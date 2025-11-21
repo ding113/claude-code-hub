@@ -1272,6 +1272,7 @@
     "searchResults": "Found {count} matching providers",
     "section": {
       "description": "Configure upstream provider rate limiting and concurrent session limits. Leave empty for unlimited.",
+      "leaderboard": "Provider Leaderboard",
       "title": "Provider Management"
     },
     "subtitle": "Provider Management",
