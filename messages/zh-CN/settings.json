@@ -947,13 +947,13 @@
     "sync": {
       "button": "同步 LiteLLM 价格",
       "syncing": "同步中...",
-      "successWithChanges": "价格表更新成功，共更新 {count} 个模型",
+      "successWithChanges": "价格表更新: 新增 {added} 个，更新 {updated} 个，未变化 {unchanged} 个",
       "successNoChanges": "价格表已是最新，无需更新",
       "failed": "同步失败",
       "failedError": "同步失败: {error}",
       "failedNoResult": "价格表更新成功但未返回处理结果",
       "noModels": "未找到支持的模型价格",
-      "partialFailure": "部分更新成功，但有 {count} 个模型失败"
+      "partialFailure": "部分更新成功，但有 {failed} 个模型失败"
     },
     "table": {
       "modelName": "模型名称",
