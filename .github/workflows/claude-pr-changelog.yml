@@ -100,4 +100,4 @@ jobs:
             - Skip PRs with "skip-changelog" label
 
           claude_args: "--max-turns 999 --allowedTools Read,Write,Edit,Bash(gh:*),Bash(git:*),Bash(cat:*)"
-          use_commit_signing: true
+          use_commit_signing: false

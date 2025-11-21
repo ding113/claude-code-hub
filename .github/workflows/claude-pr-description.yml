@@ -101,4 +101,4 @@ jobs:
             - PR has "skip-description" label
 
           claude_args: "--max-turns 999 --allowedTools Read,Bash(gh:*)"
-          use_commit_signing: true
+          use_commit_signing: false

@@ -301,4 +301,4 @@ jobs:
             **Remember**: You are a CRITICAL REVIEWER. Your job is to find problems, not to validate. Focus on medium-to-critical issues only. Be thorough, be precise, be helpful.
 
           claude_args: "--max-turns 999 --allowedTools Read,Grep,Bash(gh:*),Bash(cat:*)"
-          use_commit_signing: true
+          use_commit_signing: false

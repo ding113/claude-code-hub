@@ -384,4 +384,4 @@ jobs:
             **Remember**: You are a DOCUMENTATION CRITIC. Bad docs are worse than no docs. Be thorough in finding issues that would confuse or mislead readers.
 
           claude_args: "--max-turns 999 --allowedTools Read,Grep,Bash(gh:*),Bash(cat:*)"
-          use_commit_signing: true
+          use_commit_signing: false

@@ -82,4 +82,4 @@ jobs:
             - List of affected issue numbers
 
           claude_args: "--max-turns 999 --allowedTools Bash(gh:*)"
-          use_commit_signing: true
+          use_commit_signing: false

@@ -107,4 +107,4 @@ jobs:
             - Explain what you changed and why
 
           claude_args: "--max-turns 999 --allowedTools Read,Write,Edit,Grep,Bash(gh:*),Bash(git:*)"
-          use_commit_signing: true
+          use_commit_signing: false
