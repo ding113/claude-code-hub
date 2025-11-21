@@ -21,7 +21,6 @@ import { CodexInstructionsCache } from "@/lib/codex-instructions-cache";
 import { createProxyAgentForProvider } from "@/lib/proxy-agent";
 import type { Dispatcher } from "undici";
 import { getEnvConfig } from "@/lib/config/env.schema";
-import { GeminiAdapter } from "../gemini/adapter";
 import { GEMINI_PROTOCOL } from "../gemini/protocol";
 import { GeminiAuth } from "../gemini/auth";
 

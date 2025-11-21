@@ -1341,7 +1341,7 @@ export async function testProviderGemini(
         }
         return headers;
       },
-      body: (model) => ({
+      body: (_model) => ({
         contents: [{ parts: [{ text: API_TEST_CONFIG.TEST_PROMPT }] }],
         generationConfig: {
           maxOutputTokens: API_TEST_CONFIG.TEST_MAX_TOKENS,

@@ -1109,7 +1109,7 @@ export function ProviderForm({
         </Collapsible>
 
         {/* 超时配置 */}
-        <Collapsible open={openSections.timeout} onOpenChange={(open) => toggleSection("timeout")}>
+        <Collapsible open={openSections.timeout} onOpenChange={() => toggleSection("timeout")}>
           <CollapsibleTrigger asChild>
             <button
               type="button"
