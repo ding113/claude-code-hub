@@ -34,6 +34,18 @@ function isInternalUrl(urlString: string): boolean {
       if (a === 0) return true; // 0.0.0.0/8
     }
 
+    // 检查 IPv6 私有地址范围
+    // 移除方括号（如果存在）用于 IPv6 地址检查
+    const ipv6Hostname = hostname.replace(/^\[|\]$/g, "");
+    // ULA (Unique Local Address): fc00::/7
+    if (ipv6Hostname.startsWith("fc") || ipv6Hostname.startsWith("fd")) {
+      return true;
+    }
+    // Link-local: fe80::/10
+    if (ipv6Hostname.startsWith("fe80:")) {
+      return true;
+    }
+
     // 危险端口
     const dangerousPorts = [22, 23, 3306, 5432, 27017, 6379, 11211];
     if (url.port && dangerousPorts.includes(parseInt(url.port, 10))) {

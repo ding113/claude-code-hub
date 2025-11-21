@@ -10,6 +10,7 @@
 
 import { createRoute, z } from "@hono/zod-openapi";
 import type { Context } from "hono";
+import { getCookie } from "hono/cookie";
 import type { ActionResult } from "@/actions/types";
 import { logger } from "@/lib/logger";
 import { validateKey } from "@/lib/auth";
@@ -197,7 +198,7 @@ export function createActionRoute(
     try {
       // 0. 认证检查 (如果需要)
       if (requiresAuth) {
-        const authToken = c.req.header("Cookie")?.match(/auth-token=([^;]+)/)?.[1];
+        const authToken = getCookie(c, "auth-token");
         if (!authToken) {
           logger.warn(`[ActionAPI] ${fullPath} 认证失败: 缺少 auth-token`);
           return c.json({ ok: false, error: "未认证" }, 401);
