@@ -19,6 +19,8 @@ interface EditKeyFormProps {
     expiresAt: string;
     canLoginWebUi?: boolean;
     limit5hUsd?: number | null;
+    limitDailyUsd?: number | null;
+    dailyResetTime?: string;
     limitWeeklyUsd?: number | null;
     limitMonthlyUsd?: number | null;
     limitConcurrentSessions?: number;
@@ -48,6 +50,8 @@ export function EditKeyForm({ keyData, user, onSuccess }: EditKeyFormProps) {
       expiresAt: formatExpiresAt(keyData?.expiresAt || ""),
       canLoginWebUi: keyData?.canLoginWebUi ?? true,
       limit5hUsd: keyData?.limit5hUsd ?? null,
+      limitDailyUsd: keyData?.limitDailyUsd ?? null,
+      dailyResetTime: keyData?.dailyResetTime ?? "00:00",
       limitWeeklyUsd: keyData?.limitWeeklyUsd ?? null,
       limitMonthlyUsd: keyData?.limitMonthlyUsd ?? null,
       limitConcurrentSessions: keyData?.limitConcurrentSessions ?? 0,
@@ -64,6 +68,8 @@ export function EditKeyForm({ keyData, user, onSuccess }: EditKeyFormProps) {
             expiresAt: data.expiresAt || undefined,
             canLoginWebUi: data.canLoginWebUi,
             limit5hUsd: data.limit5hUsd,
+            limitDailyUsd: data.limitDailyUsd,
+            dailyResetTime: data.dailyResetTime,
             limitWeeklyUsd: data.limitWeeklyUsd,
             limitMonthlyUsd: data.limitMonthlyUsd,
             limitConcurrentSessions: data.limitConcurrentSessions,
@@ -137,6 +143,24 @@ export function EditKeyForm({ keyData, user, onSuccess }: EditKeyFormProps) {
         min={0}
         step={0.01}
         {...form.getFieldProps("limit5hUsd")}
+      />
+
+      <NumberField
+        label={t("limitDailyUsd.label")}
+        placeholder={t("limitDailyUsd.placeholder")}
+        description={t("limitDailyUsd.description")}
+        min={0}
+        step={0.01}
+        {...form.getFieldProps("limitDailyUsd")}
+      />
+
+      <TextField
+        label={t("dailyResetTime.label")}
+        placeholder={t("dailyResetTime.placeholder")}
+        description={t("dailyResetTime.description")}
+        type="time"
+        step={60}
+        {...form.getFieldProps("dailyResetTime")}
       />
 
       <NumberField

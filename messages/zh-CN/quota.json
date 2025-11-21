@@ -103,6 +103,10 @@
     "cost5h": {
       "label": "5小时消费"
     },
+    "costDaily": {
+      "label": "每日消费",
+      "resetAt": "重置于"
+    },
     "costWeekly": {
       "label": "周消费",
       "resetAt": "重置于"
@@ -136,6 +140,7 @@
       "keyName": "密钥名称",
       "quotaType": "限额类型",
       "cost5h": "5小时限额",
+      "costDaily": "每日限额",
       "costWeekly": "周限额",
       "costMonthly": "月限额",
       "concurrentSessions": "并发限制",
@@ -159,6 +164,15 @@
         "label": "5小时限额(USD)",
         "placeholder": "不限制",
         "current": "当前已用: {currency}{current} / {currency}{limit}"
+      },
+      "costDaily": {
+        "label": "每日限额(USD)",
+        "placeholder": "不限制",
+        "current": "当前已用: {currency}{current} / {currency}{limit}"
+      },
+      "dailyResetTime": {
+        "label": "每日重置时间",
+        "placeholder": "HH:mm"
       },
       "costWeekly": {
         "label": "周限额(USD)",
@@ -225,6 +239,16 @@
         "placeholder": "留空表示无限制",
         "description": "5小时内最大消费金额",
         "descriptionWithUserLimit": "5小时内最大消费金额（用户限额: ${limit}）"
+      },
+      "limitDailyUsd": {
+        "label": "每日消费上限 (USD)",
+        "placeholder": "留空表示无限制",
+        "description": "每日最大消费金额"
+      },
+      "dailyResetTime": {
+        "label": "每日重置时间",
+        "placeholder": "HH:mm",
+        "description": "每日限额的重置时间（使用系统时区）"
       },
       "limitWeeklyUsd": {
         "label": "周消费上限 (USD)",

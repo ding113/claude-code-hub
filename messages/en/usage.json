@@ -231,6 +231,7 @@
         "Create a config.json file in the ~/.claude directory (if it doesn't exist)",
         "Add the following content:"
       ],
+      "configPath": "Configuration file location: {path}",
 
       "note": "Note",
       "notePoints": [

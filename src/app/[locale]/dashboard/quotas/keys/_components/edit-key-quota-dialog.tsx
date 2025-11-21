@@ -22,6 +22,7 @@ import { useTranslations } from "next-intl";
 
 interface KeyQuota {
   cost5h: { current: number; limit: number | null };
+  costDaily: { current: number; limit: number | null; resetAt?: Date };
   costWeekly: { current: number; limit: number | null };
   costMonthly: { current: number; limit: number | null };
   concurrentSessions: { current: number; limit: number };
@@ -34,6 +35,7 @@ interface EditKeyQuotaDialogProps {
   currentQuota: KeyQuota | null;
   currencyCode?: CurrencyCode;
   trigger?: React.ReactNode;
+  dailyResetTime?: string;
 }
 
 export function EditKeyQuotaDialog({
@@ -43,6 +45,7 @@ export function EditKeyQuotaDialog({
   currentQuota,
   currencyCode = "USD",
   trigger,
+  dailyResetTime = "00:00",
 }: EditKeyQuotaDialogProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -53,6 +56,10 @@ export function EditKeyQuotaDialog({
 
   // 表单状态
   const [limit5h, setLimit5h] = useState<string>(currentQuota?.cost5h.limit?.toString() ?? "");
+  const [limitDaily, setLimitDaily] = useState<string>(
+    currentQuota?.costDaily.limit?.toString() ?? ""
+  );
+  const [resetTime, setResetTime] = useState<string>(dailyResetTime);
   const [limitWeekly, setLimitWeekly] = useState<string>(
     currentQuota?.costWeekly.limit?.toString() ?? ""
   );
@@ -72,6 +79,8 @@ export function EditKeyQuotaDialog({
         const result = await editKey(keyId, {
           name: keyName, // 保持名称不变
           limit5hUsd: limit5h ? parseFloat(limit5h) : null,
+          limitDailyUsd: limitDaily ? parseFloat(limitDaily) : null,
+          dailyResetTime: resetTime,
           limitWeeklyUsd: limitWeekly ? parseFloat(limitWeekly) : null,
           limitMonthlyUsd: limitMonthly ? parseFloat(limitMonthly) : null,
           limitConcurrentSessions: limitConcurrent ? parseInt(limitConcurrent, 10) : 0,
@@ -97,6 +106,8 @@ export function EditKeyQuotaDialog({
         const result = await editKey(keyId, {
           name: keyName,
           limit5hUsd: null,
+          limitDailyUsd: null,
+          dailyResetTime: resetTime,
           limitWeeklyUsd: null,
           limitMonthlyUsd: null,
           limitConcurrentSessions: 0,
@@ -160,6 +171,47 @@ export function EditKeyQuotaDialog({
                     })}
                   </p>
                 )}
+              </div>
+
+              {/* 每日限额 */}
+              <div className="grid gap-1.5">
+                <Label htmlFor="limitDaily" className="text-xs">
+                  {t("costDaily.label")}
+                </Label>
+                <Input
+                  id="limitDaily"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder={t("costDaily.placeholder")}
+                  value={limitDaily}
+                  onChange={(e) => setLimitDaily(e.target.value)}
+                  className="h-9"
+                />
+                {currentQuota?.costDaily.limit && (
+                  <p className="text-xs text-muted-foreground">
+                    {t("costDaily.current", {
+                      currency: currencySymbol,
+                      current: currentQuota.costDaily.current.toFixed(4),
+                      limit: currentQuota.costDaily.limit.toFixed(2),
+                    })}
+                  </p>
+                )}
+              </div>
+
+              {/* 每日重置时间 */}
+              <div className="grid gap-1.5">
+                <Label htmlFor="dailyResetTime" className="text-xs">
+                  {t("dailyResetTime.label")}
+                </Label>
+                <Input
+                  id="dailyResetTime"
+                  type="time"
+                  step={60}
+                  value={resetTime}
+                  onChange={(e) => setResetTime(e.target.value || "00:00")}
+                  className="h-9"
+                />
               </div>
 
               {/* 周限额 */}

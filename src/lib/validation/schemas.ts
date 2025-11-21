@@ -118,6 +118,18 @@ export const KeyFormSchema = z.object({
     .max(10000, "5小时消费上限不能超过10000美元")
     .nullable()
     .optional(),
+  limitDailyUsd: z.coerce
+    .number()
+    .min(0, "每日消费上限不能为负数")
+    .max(10000, "每日消费上限不能超过10000美元")
+    .nullable()
+    .optional(),
+  dailyResetMode: z.enum(["fixed", "rolling"]).optional().default("fixed"),
+  dailyResetTime: z
+    .string()
+    .regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, "重置时间格式必须为 HH:mm")
+    .optional()
+    .default("00:00"),
   limitWeeklyUsd: z.coerce
     .number()
     .min(0, "周消费上限不能为负数")
@@ -184,6 +196,18 @@ export const CreateProviderSchema = z.object({
     .max(10000, "5小时消费上限不能超过10000美元")
     .nullable()
     .optional(),
+  limit_daily_usd: z.coerce
+    .number()
+    .min(0, "每日消费上限不能为负数")
+    .max(10000, "每日消费上限不能超过10000美元")
+    .nullable()
+    .optional(),
+  daily_reset_mode: z.enum(["fixed", "rolling"]).optional().default("fixed"),
+  daily_reset_time: z
+    .string()
+    .regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, "重置时间格式必须为 HH:mm")
+    .optional()
+    .default("00:00"),
   limit_weekly_usd: z.coerce
     .number()
     .min(0, "周消费上限不能为负数")
@@ -321,6 +345,17 @@ export const UpdateProviderSchema = z
       .min(0, "5小时消费上限不能为负数")
       .max(10000, "5小时消费上限不能超过10000美元")
       .nullable()
+      .optional(),
+    limit_daily_usd: z.coerce
+      .number()
+      .min(0, "每日消费上限不能为负数")
+      .max(10000, "每日消费上限不能超过10000美元")
+      .nullable()
+      .optional(),
+    daily_reset_mode: z.enum(["fixed", "rolling"]).optional(),
+    daily_reset_time: z
+      .string()
+      .regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, "重置时间格式必须为 HH:mm")
       .optional(),
     limit_weekly_usd: z.coerce
       .number()

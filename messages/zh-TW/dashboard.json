@@ -151,6 +151,7 @@
         "billingDescription": "系統優先使用請求模型（{original}）的價格計費。如果價格表中不存在該模型，則使用實際呼叫模型（{current}）的價格。"
       },
       "errorMessage": "錯誤訊息",
+      "filteredProviders": "被過濾的供應商",
       "providerChain": {
         "title": "供應商決策鏈時間軸",
         "totalDuration": "總耗時: {duration} 毫秒"

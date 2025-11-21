@@ -7,6 +7,7 @@
 // 类型定义
 export type KeyQuota = {
   cost5h: { current: number; limit: number | null };
+  costDaily: { current: number; limit: number | null };
   costWeekly: { current: number; limit: number | null };
   costMonthly: { current: number; limit: number | null };
   concurrentSessions: { current: number; limit: number };
@@ -28,6 +29,7 @@ export function hasKeyQuotaSet(quota: KeyQuota): boolean {
 
   return !!(
     quota.cost5h.limit ||
+    quota.costDaily.limit ||
     quota.costWeekly.limit ||
     quota.costMonthly.limit ||
     (quota.concurrentSessions.limit && quota.concurrentSessions.limit > 0)
@@ -74,6 +76,9 @@ export function getMaxUsageRate(quota: KeyQuota): number {
 
   if (quota.cost5h.limit) {
     rates.push(getUsageRate(quota.cost5h.current, quota.cost5h.limit));
+  }
+  if (quota.costDaily.limit) {
+    rates.push(getUsageRate(quota.costDaily.current, quota.costDaily.limit));
   }
   if (quota.costWeekly.limit) {
     rates.push(getUsageRate(quota.costWeekly.current, quota.costWeekly.limit));

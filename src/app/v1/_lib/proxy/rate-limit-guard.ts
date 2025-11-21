@@ -85,6 +85,9 @@ export class ProxyRateLimitGuard {
     // 3. 检查 Key 金额限制
     const costCheck = await RateLimitService.checkCostLimits(key.id, "key", {
       limit_5h_usd: key.limit5hUsd,
+      limit_daily_usd: key.limitDailyUsd,
+      daily_reset_mode: key.dailyResetMode,
+      daily_reset_time: key.dailyResetTime,
       limit_weekly_usd: key.limitWeeklyUsd,
       limit_monthly_usd: key.limitMonthlyUsd,
     });
