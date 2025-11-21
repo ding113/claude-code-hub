@@ -426,4 +426,4 @@ jobs:
             **Remember**: You are a SECURITY EXPERT. Every vulnerability you miss could lead to a breach. Be thorough, be precise, be paranoid.
 
           claude_args: "--max-turns 999 --allowedTools Read,Grep,Bash(gh:*)"
-          use_commit_signing: true
+          use_commit_signing: false

@@ -123,4 +123,4 @@ jobs:
             - Use descriptive branch names: `fix/issue-NUMBER-description`
 
           claude_args: "--max-turns 999 --allowedTools Read,Write,Edit,Grep,Glob,Bash(gh:*),Bash(git:*),Bash(cat:*),Bash(find:*)"
-          use_commit_signing: true
+          use_commit_signing: false

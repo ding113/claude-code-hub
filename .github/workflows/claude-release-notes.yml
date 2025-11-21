@@ -110,4 +110,4 @@ jobs:
             - Link to relevant PRs and issues
 
           claude_args: "--max-turns 999 --allowedTools Read,Bash(gh:*),Bash(git:*)"
-          use_commit_signing: true
+          use_commit_signing: false

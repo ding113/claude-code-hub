@@ -108,4 +108,4 @@ jobs:
             - Check for duplicate functionality
 
           claude_args: "--max-turns 999 --allowedTools Read,Bash(gh:*),Bash(cat:*)"
-          use_commit_signing: true
+          use_commit_signing: false

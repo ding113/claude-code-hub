@@ -159,4 +159,4 @@ jobs:
             - Don't include [skip ci] - let CI run again
 
           claude_args: "--max-turns 999 --allowedTools Read,Write,Edit,Bash(gh:*),Bash(git:*),Bash(bun:*),Bash(npm:*)"
-          use_commit_signing: true
+          use_commit_signing: false

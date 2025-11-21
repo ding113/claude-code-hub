@@ -89,4 +89,4 @@ jobs:
             - Respond to spam, duplicates, or empty issues
 
           claude_args: "--max-turns 999 --allowedTools Read,Bash(gh:*),Bash(cat:*),Bash(find:*),Grep"
-          use_commit_signing: true
+          use_commit_signing: false
