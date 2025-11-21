@@ -1103,7 +1103,10 @@ function parseUsageFromResponseText(
     // Fallback to SSE parsing when body is not valid JSON
   }
 
-  if (!usageMetrics && responseText.includes("event:")) {
+  // SSE 解析：支持两种格式
+  // 1. 标准 SSE (event: + data:) - Claude/OpenAI
+  // 2. 纯 data: 格式 - Gemini
+  if (!usageMetrics && responseText.includes("data:")) {
     const events = parseSSEData(responseText);
     for (const event of events) {
       if (usageMetrics) {
