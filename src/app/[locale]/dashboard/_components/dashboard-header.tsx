@@ -6,6 +6,7 @@ import { DashboardNav, type DashboardNavItem } from "./dashboard-nav";
 import { UserMenu } from "./user-menu";
 import { VersionUpdateNotifier } from "@/components/customs/version-update-notifier";
 import { LanguageSwitcher } from "@/components/ui/language-switcher";
+import { ThemeSwitcher } from "@/components/ui/theme-switcher";
 import { useTranslations } from "next-intl";
 
 interface DashboardHeaderProps {
@@ -33,6 +34,7 @@ export function DashboardHeader({ session }: DashboardHeaderProps) {
       <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-6">
         <DashboardNav items={items} />
         <div className="flex items-center gap-3">
+          <ThemeSwitcher />
           <LanguageSwitcher size="sm" />
           {session && <VersionUpdateNotifier />}
           {session ? (

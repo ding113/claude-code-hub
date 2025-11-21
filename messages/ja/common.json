@@ -40,5 +40,10 @@
   "info": "情報",
   "noData": "データがありません",
   "emptyState": "表示するデータがありません",
-  "core": "コア"
+  "core": "コア",
+  "appearance": "外観",
+  "theme": "テーマ",
+  "light": "ライト",
+  "dark": "ダーク",
+  "system": "システム設定"
 }

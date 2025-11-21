@@ -40,5 +40,10 @@
   "info": "Info",
   "noData": "No data",
   "emptyState": "No data to display",
-  "core": "Core"
+  "core": "Core",
+  "appearance": "Appearance",
+  "theme": "Theme",
+  "light": "Light",
+  "dark": "Dark",
+  "system": "System"
 }
