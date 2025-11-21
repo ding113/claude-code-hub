@@ -663,6 +663,60 @@ export class ProxyResponseHandler {
         const usageResult = parseUsageFromResponseText(allContent, provider.providerType);
         usageForCost = usageResult.usageMetrics;
 
+        // ⚠️ 检测流式响应是否完整（基于结束标识）
+        const isSuccessfulStatus = statusCode >= 200 && statusCode < 300;
+        let effectiveStatusCode = statusCode;
+        let errorMessage: string | null = null;
+
+        if (isSuccessfulStatus) {
+          const hasTerminationSignal = checkStreamTermination(allContent, provider.providerType);
+
+          if (!hasTerminationSignal) {
+            // 流式响应不完整：缺少结束标识
+            effectiveStatusCode = 500;
+            errorMessage = "Streaming response incomplete: missing termination signal";
+
+            // 记录错误日志
+            logger.error("ResponseHandler: Streaming response incomplete (missing termination signal)", {
+              taskId,
+              providerId: provider.id,
+              providerName: provider.name,
+              providerType: provider.providerType,
+              messageId: messageContext.id,
+              originalStatusCode: statusCode,
+              effectiveStatusCode,
+              chunksCollected: chunks.length,
+              responseLength: allContent.length,
+              durationMs: Date.now() - session.startTime,
+              hasUsage: !!usageForCost,
+            });
+
+            // 计入熔断器（供应商不稳定）
+            try {
+              const { recordFailure } = await import("@/lib/circuit-breaker");
+              await recordFailure(provider.id, new Error(errorMessage));
+              logger.debug("ResponseHandler: Recorded incomplete streaming to circuit breaker", {
+                providerId: provider.id,
+              });
+            } catch (cbError) {
+              logger.warn("ResponseHandler: Failed to record incomplete streaming in circuit breaker", {
+                providerId: provider.id,
+                error: cbError,
+              });
+            }
+
+            // 记录不完整的流式响应到决策链
+            session.addProviderToChain(provider, {
+              reason: "system_error",
+              errorMessage: "Streaming response incomplete: missing termination signal",
+              statusCode: effectiveStatusCode,
+            });
+          }
+        }
+
+        // 使用 effectiveStatusCode 更新后续数据库记录
+        const finalStatusCode = effectiveStatusCode;
+
         await updateRequestCostFromUsage(
           messageContext.id,
           session.getOriginalModel(),
@@ -697,21 +751,22 @@ export class ProxyResponseHandler {
             cacheCreationInputTokens: usageForCost.cache_creation_input_tokens,
             cacheReadInputTokens: usageForCost.cache_read_input_tokens,
             costUsd: costUsdStr,
-            status: statusCode >= 200 && statusCode < 300 ? "completed" : "error",
-            statusCode: statusCode,
+            status: finalStatusCode >= 200 && finalStatusCode < 300 ? "completed" : "error",
+            statusCode: finalStatusCode,
           }).catch((error: unknown) => {
             logger.error("[ResponseHandler] Failed to update session usage:", error);
           });
         }
 
-        // 保存扩展信息（status code, tokens, provider chain）
+        // 保存扩展信息（status code, tokens, provider chain, error message）
         await updateMessageRequestDetails(messageContext.id, {
-          statusCode: statusCode,
+          statusCode: finalStatusCode,
           inputTokens: usageForCost?.input_tokens,
           outputTokens: usageForCost?.output_tokens,
           cacheCreationInputTokens: usageForCost?.cache_creation_input_tokens,
           cacheReadInputTokens: usageForCost?.cache_read_input_tokens,
           providerChain: session.getProviderChain(),
+          errorMessage: errorMessage || undefined,
         });
       };
 
@@ -1165,6 +1220,96 @@ function adjustUsageForProviderType(
     ...usage,
     input_tokens: adjustedInput,
   };
+}
+
+/**
+ * 检测流式响应是否包含结束标识
+ *
+ * 根据不同的 API 格式检测流式响应完整性：
+ * - Claude Messages API: 检查 "event: message_stop"
+ * - OpenAI Chat Completions: 检查 "data: [DONE]"
+ * - OpenAI Responses API (Codex): 检查 "event: response.done"
+ * - Gemini API: 检查最后一个 chunk 是否包含 finishReason: "STOP"
+ *
+ * @param responseText - 完整的流式响应文本
+ * @param providerType - 供应商类型
+ * @returns true 表示包含结束标识（流式完整），false 表示缺少结束标识（流式不完整）
+ */
+function checkStreamTermination(
+  responseText: string,
+  providerType: string | null | undefined
+): boolean {
+  // 空响应视为不完整
+  if (!responseText || responseText.trim().length === 0) {
+    return false;
+  }
+
+  switch (providerType) {
+    case "claude":
+    case "claude-auth":
+      // Claude: 检查是否有 "event: message_stop"
+      return responseText.includes("event: message_stop");
+
+    case "codex":
+      // OpenAI Responses API: 检查是否有 "event: response.done"
+      return responseText.includes("event: response.done");
+
+    case "openai-compatible":
+      // OpenAI Chat Completions: 检查是否有 "data: [DONE]"
+      return responseText.includes("data: [DONE]");
+
+    case "gemini":
+    case "gemini-cli":
+      // Gemini: 检查最后一个 chunk 是否有 "finishReason": "STOP"
+      try {
+        const events = parseSSEData(responseText);
+        if (events.length === 0) return false;
+
+        // 从后往前找第一个有效的 data chunk
+        for (let i = events.length - 1; i >= 0; i--) {
+          const event = events[i];
+          if (typeof event.data !== "object" || !event.data) continue;
+
+          const data = event.data as Record<string, unknown>;
+          const candidates = data.candidates as Array<Record<string, unknown>> | undefined;
+
+          if (!candidates || candidates.length === 0) continue;
+
+          const finishReason = candidates[0].finishReason;
+
+          // STOP 表示正常结束
+          if (finishReason === "STOP") return true;
+
+          // 其他 finishReason（如 SAFETY, MAX_TOKENS, RECITATION 等）也表示流式已结束
+          // 详见：https://ai.google.dev/api/generate-content#finishreason
+          if (typeof finishReason === "string" && finishReason.length > 0) {
+            logger.debug("[ResponseHandler] Gemini stream ended with non-STOP finish reason", {
+              finishReason,
+              providerType,
+            });
+            return true;
+          }
+        }
+
+        // 所有 chunk 都没有 finishReason，流式不完整
+        return false;
+      } catch (error) {
+        // 解析失败，视为不完整
+        logger.warn("[ResponseHandler] Failed to parse Gemini SSE for termination check", {
+          error,
+          providerType,
+        });
+        return false;
+      }
+
+    default:
+      // 未知供应商类型，默认宽松策略（不检查，假设完整）
+      // 这样可以避免对新增供应商类型的误判
+      logger.debug("[ResponseHandler] Unknown provider type for stream termination check (assuming complete)", {
+        providerType,
+      });
+      return true;
+  }
 }
 
 async function updateRequestCostFromUsage(
