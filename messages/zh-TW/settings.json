@@ -624,7 +624,8 @@
         "manualPlaceholder": "輸入模型名稱（例如 gpt-5-turbo）",
         "manualDesc": "支援新增任意模型名稱（不限於價格表中的模型）",
         "claude": "Claude",
-        "openai": "OpenAI"
+        "openai": "OpenAI",
+        "gemini": "Gemini"
       },
       "modelRedirect": {
         "currentRules": "目前規則 ({count})",

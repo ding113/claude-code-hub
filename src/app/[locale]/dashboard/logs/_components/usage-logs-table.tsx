@@ -192,7 +192,7 @@ export function UsageLogsTable({
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="font-mono text-xs w-[120px] max-w-[120px] overflow-hidden">
+                    <TableCell className="font-mono text-xs w-[180px] max-w-[180px]">
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>

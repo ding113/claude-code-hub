@@ -26,6 +26,7 @@ import { useTranslations } from "next-intl";
 
 interface KeyQuota {
   cost5h: { current: number; limit: number | null; resetAt?: Date };
+  costDaily: { current: number; limit: number | null; resetAt?: Date };
   costWeekly: { current: number; limit: number | null; resetAt?: Date };
   costMonthly: { current: number; limit: number | null; resetAt?: Date };
   concurrentSessions: { current: number; limit: number };
@@ -42,6 +43,9 @@ interface KeyWithQuota {
   isEnabled: boolean;
   expiresAt: string | null;
   quota: KeyQuota | null;
+  limitDailyUsd: number | null;
+  dailyResetTime: string;
+  dailyResetMode: "fixed" | "rolling";
 }
 
 interface UserWithKeys {
@@ -120,6 +124,7 @@ export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClient
                       <TableHead className="w-[200px]">{t("table.keyName")}</TableHead>
                       <TableHead className="w-[120px]">{t("table.quotaType")}</TableHead>
                       <TableHead className="w-[150px]">{t("table.cost5h")}</TableHead>
+                      <TableHead className="w-[150px]">{t("table.costDaily")}</TableHead>
                       <TableHead className="w-[150px]">{t("table.costWeekly")}</TableHead>
                       <TableHead className="w-[150px]">{t("table.costMonthly")}</TableHead>
                       <TableHead className="w-[120px]">{t("table.concurrentSessions")}</TableHead>
@@ -169,6 +174,40 @@ export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClient
                                   {getUsageRate(
                                     key.quota.cost5h.current,
                                     key.quota.cost5h.limit
+                                  ).toFixed(1)}
+                                  %
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">-</span>
+                            )}
+                          </TableCell>
+
+                          {/* 每日限额 */}
+                          <TableCell>
+                            {hasKeyQuota && key.quota && key.quota.costDaily.limit !== null ? (
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between mb-1">
+                                  <QuotaWindowType type="daily" size="sm" />
+                                  {key.quota.costDaily.resetAt && (
+                                    <QuotaCountdownCompact resetAt={key.quota.costDaily.resetAt} />
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-mono">
+                                    {formatCurrency(key.quota.costDaily.current, currencyCode)}/
+                                    {formatCurrency(key.quota.costDaily.limit, currencyCode)}
+                                  </span>
+                                </div>
+                                <QuotaProgress
+                                  current={key.quota.costDaily.current}
+                                  limit={key.quota.costDaily.limit}
+                                  className="h-1"
+                                />
+                                <div className="text-xs text-muted-foreground text-right">
+                                  {getUsageRate(
+                                    key.quota.costDaily.current,
+                                    key.quota.costDaily.limit
                                   ).toFixed(1)}
                                   %
                                 </div>
@@ -300,6 +339,8 @@ export function KeysQuotaClient({ users, currencyCode = "USD" }: KeysQuotaClient
                               userName={user.name}
                               currentQuota={key.quota}
                               currencyCode={currencyCode}
+                              dailyResetTime={key.dailyResetTime}
+                              dailyResetMode={key.dailyResetMode}
                               trigger={
                                 <Button variant="ghost" size="sm">
                                   <Settings className="h-4 w-4" />

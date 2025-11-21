@@ -89,6 +89,7 @@ export function KeyList({
         // 检查是否有限额配置
         const hasLimitConfig =
           (record.limit5hUsd && record.limit5hUsd > 0) ||
+          (record.limitDailyUsd && record.limitDailyUsd > 0) ||
           (record.limitWeeklyUsd && record.limitWeeklyUsd > 0) ||
           (record.limitMonthlyUsd && record.limitMonthlyUsd > 0) ||
           (record.limitConcurrentSessions && record.limitConcurrentSessions > 0);
@@ -190,7 +191,7 @@ export function KeyList({
                     variant="ghost"
                     size="sm"
                     onClick={() => handleCopyKey(record)}
-                    className="h-5 w-5 p-0 hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                    className="h-5 w-5 p-0 hover:bg-muted flex-shrink-0"
                     title={t("copyKeyTooltip")}
                   >
                     {copiedKeyId === record.id ? (
@@ -205,7 +206,7 @@ export function KeyList({
                     variant="ghost"
                     size="sm"
                     onClick={() => toggleKeyVisibility(record.id)}
-                    className="h-5 w-5 p-0 hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                    className="h-5 w-5 p-0 hover:bg-muted flex-shrink-0"
                     title={isVisible ? t("hideKeyTooltip") : t("showKeyTooltip")}
                   >
                     {isVisible ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}

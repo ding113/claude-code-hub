@@ -14,6 +14,9 @@ export interface Key {
 
   // 金额限流配置
   limit5hUsd: number | null;
+  limitDailyUsd: number | null;
+  dailyResetMode: "fixed" | "rolling";
+  dailyResetTime: string; // HH:mm 格式
   limitWeeklyUsd: number | null;
   limitMonthlyUsd: number | null;
   limitConcurrentSessions: number;
@@ -36,6 +39,9 @@ export interface CreateKeyData {
   can_login_web_ui?: boolean;
   // 金额限流配置
   limit_5h_usd?: number | null;
+  limit_daily_usd?: number | null;
+  daily_reset_mode?: "fixed" | "rolling";
+  daily_reset_time?: string;
   limit_weekly_usd?: number | null;
   limit_monthly_usd?: number | null;
   limit_concurrent_sessions?: number;
@@ -52,6 +58,9 @@ export interface UpdateKeyData {
   can_login_web_ui?: boolean;
   // 金额限流配置
   limit_5h_usd?: number | null;
+  limit_daily_usd?: number | null;
+  daily_reset_mode?: "fixed" | "rolling";
+  daily_reset_time?: string;
   limit_weekly_usd?: number | null;
   limit_monthly_usd?: number | null;
   limit_concurrent_sessions?: number;

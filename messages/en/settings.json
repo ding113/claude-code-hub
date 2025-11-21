@@ -653,7 +653,8 @@
         "manualPlaceholder": "Enter model name (e.g. gpt-5-turbo)",
         "manualDesc": "Support adding any model name (not limited to price table)",
         "claude": "Claude",
-        "openai": "OpenAI"
+        "openai": "OpenAI",
+        "gemini": "Gemini"
       },
       "modelRedirect": {
         "currentRules": "Current Rules ({count})",
@@ -967,6 +968,7 @@
           "title": "Rate Limit",
           "summary": {
             "fiveHour": "5h: ${amount}",
+            "daily": "Day: ${amount} (reset ${resetTime})",
             "weekly": "Week: ${amount}",
             "monthly": "Month: ${amount}",
             "concurrent": "Concurrent: {count}",
@@ -975,6 +977,24 @@
           "limit5h": {
             "label": "5h Spend Limit (USD)",
             "placeholder": "Leave empty for unlimited"
+          },
+          "limitDaily": {
+            "label": "Daily Spend Limit (USD)",
+            "placeholder": "Leave empty for unlimited"
+          },
+          "dailyResetMode": {
+            "label": "Daily Reset Mode",
+            "options": {
+              "fixed": "Fixed Time Reset",
+              "rolling": "Rolling Window (24h)"
+            },
+            "desc": {
+              "fixed": "Reset quota at a fixed time each day",
+              "rolling": "Reset 24 hours after first API call"
+            }
+          },
+          "dailyResetTime": {
+            "label": "Daily Reset Time (HH:mm)"
           },
           "limitWeekly": {
             "label": "Weekly Spend Limit (USD)",

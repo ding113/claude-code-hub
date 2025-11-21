@@ -10,8 +10,12 @@ import {
   jsonb,
   index,
   uniqueIndex,
+  pgEnum,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
+
+// Enums
+export const dailyResetModeEnum = pgEnum('daily_reset_mode', ['fixed', 'rolling']);
 
 // Users table
 export const users = pgTable('users', {
@@ -53,6 +57,13 @@ export const keys = pgTable('keys', {
 
   // 金额限流配置
   limit5hUsd: numeric('limit_5h_usd', { precision: 10, scale: 2 }),
+  limitDailyUsd: numeric('limit_daily_usd', { precision: 10, scale: 2 }),
+  dailyResetMode: dailyResetModeEnum('daily_reset_mode')
+    .default('fixed')
+    .notNull(), // fixed: 固定时间重置, rolling: 滚动窗口（24小时）
+  dailyResetTime: varchar('daily_reset_time', { length: 5 })
+    .default('00:00')
+    .notNull(), // HH:mm 格式，如 "18:00"（仅 fixed 模式使用）
   limitWeeklyUsd: numeric('limit_weekly_usd', { precision: 10, scale: 2 }),
   limitMonthlyUsd: numeric('limit_monthly_usd', { precision: 10, scale: 2 }),
   limitConcurrentSessions: integer('limit_concurrent_sessions').default(0),
@@ -117,6 +128,13 @@ export const providers = pgTable('providers', {
 
   // 金额限流配置
   limit5hUsd: numeric('limit_5h_usd', { precision: 10, scale: 2 }),
+  limitDailyUsd: numeric('limit_daily_usd', { precision: 10, scale: 2 }),
+  dailyResetMode: dailyResetModeEnum('daily_reset_mode')
+    .default('fixed')
+    .notNull(), // fixed: 固定时间重置, rolling: 滚动窗口（24小时）
+  dailyResetTime: varchar('daily_reset_time', { length: 5 })
+    .default('00:00')
+    .notNull(), // HH:mm 格式，如 "18:00"（仅 fixed 模式使用）
   limitWeeklyUsd: numeric('limit_weekly_usd', { precision: 10, scale: 2 }),
   limitMonthlyUsd: numeric('limit_monthly_usd', { precision: 10, scale: 2 }),
   limitConcurrentSessions: integer('limit_concurrent_sessions').default(0),

@@ -136,6 +136,9 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         joinClaudePool: provider.joinClaudePool,
         codexInstructionsStrategy: provider.codexInstructionsStrategy,
         limit5hUsd: provider.limit5hUsd,
+        limitDailyUsd: provider.limitDailyUsd,
+        dailyResetMode: provider.dailyResetMode,
+        dailyResetTime: provider.dailyResetTime,
         limitWeeklyUsd: provider.limitWeeklyUsd,
         limitMonthlyUsd: provider.limitMonthlyUsd,
         limitConcurrentSessions: provider.limitConcurrentSessions,
@@ -190,6 +193,9 @@ export async function addProvider(data: {
   allowed_models?: string[] | null;
   join_claude_pool?: boolean;
   limit_5h_usd?: number | null;
+  limit_daily_usd?: number | null;
+  daily_reset_mode?: "fixed" | "rolling";
+  daily_reset_time?: string;
   limit_weekly_usd?: number | null;
   limit_monthly_usd?: number | null;
   limit_concurrent_sessions?: number | null;
@@ -252,6 +258,9 @@ export async function addProvider(data: {
     const payload = {
       ...validated,
       limit_5h_usd: validated.limit_5h_usd ?? null,
+      limit_daily_usd: validated.limit_daily_usd ?? null,
+      daily_reset_mode: validated.daily_reset_mode ?? "fixed",
+      daily_reset_time: validated.daily_reset_time ?? "00:00",
       limit_weekly_usd: validated.limit_weekly_usd ?? null,
       limit_monthly_usd: validated.limit_monthly_usd ?? null,
       limit_concurrent_sessions: validated.limit_concurrent_sessions ?? 0,
@@ -328,6 +337,8 @@ export async function editProvider(
     allowed_models?: string[] | null;
     join_claude_pool?: boolean;
     limit_5h_usd?: number | null;
+    limit_daily_usd?: number | null;
+    daily_reset_time?: string;
     limit_weekly_usd?: number | null;
     limit_monthly_usd?: number | null;
     limit_concurrent_sessions?: number | null;
@@ -544,6 +555,7 @@ export async function resetProviderCircuit(providerId: number): Promise<ActionRe
 export async function getProviderLimitUsage(providerId: number): Promise<
   ActionResult<{
     cost5h: { current: number; limit: number | null; resetInfo: string };
+    costDaily: { current: number; limit: number | null; resetAt?: Date };
     costWeekly: { current: number; limit: number | null; resetAt: Date };
     costMonthly: { current: number; limit: number | null; resetAt: Date };
     concurrentSessions: { current: number; limit: number };
@@ -563,11 +575,18 @@ export async function getProviderLimitUsage(providerId: number): Promise<
     // 动态导入避免循环依赖
     const { RateLimitService } = await import("@/lib/rate-limit");
     const { SessionTracker } = await import("@/lib/session-tracker");
-    const { getResetInfo } = await import("@/lib/rate-limit/time-utils");
+    const { getResetInfo, getResetInfoWithMode } = await import("@/lib/rate-limit/time-utils");
 
     // 获取金额消费（优先 Redis，降级数据库）
-    const [cost5h, costWeekly, costMonthly, concurrentSessions] = await Promise.all([
+    const [cost5h, costDaily, costWeekly, costMonthly, concurrentSessions] = await Promise.all([
       RateLimitService.getCurrentCost(providerId, "provider", "5h"),
+      RateLimitService.getCurrentCost(
+        providerId,
+        "provider",
+        "daily",
+        provider.dailyResetTime,
+        provider.dailyResetMode ?? "fixed"
+      ),
       RateLimitService.getCurrentCost(providerId, "provider", "weekly"),
       RateLimitService.getCurrentCost(providerId, "provider", "monthly"),
       SessionTracker.getProviderSessionCount(providerId),
@@ -575,6 +594,11 @@ export async function getProviderLimitUsage(providerId: number): Promise<
 
     // 获取重置时间信息
     const reset5h = getResetInfo("5h");
+    const resetDaily = getResetInfoWithMode(
+      "daily",
+      provider.dailyResetTime,
+      provider.dailyResetMode ?? "fixed"
+    );
     const resetWeekly = getResetInfo("weekly");
     const resetMonthly = getResetInfo("monthly");
 
@@ -585,6 +609,11 @@ export async function getProviderLimitUsage(providerId: number): Promise<
           current: cost5h,
           limit: provider.limit5hUsd,
           resetInfo: reset5h.type === "rolling" ? `滚动窗口（${reset5h.period}）` : "自然时间窗口",
+        },
+        costDaily: {
+          current: costDaily,
+          limit: provider.limitDailyUsd,
+          resetAt: resetDaily.type === "rolling" ? undefined : resetDaily.resetAt!,
         },
         costWeekly: {
           current: costWeekly,
@@ -1262,7 +1291,7 @@ export async function testProviderOpenAIResponses(
     }),
     body: (model) => ({
       model,
-      max_tokens: API_TEST_CONFIG.TEST_MAX_TOKENS,
+      max_output_tokens: API_TEST_CONFIG.TEST_MAX_TOKENS,
       input: "讲一个简短的故事",
     }),
     successMessage: "OpenAI Responses API 测试成功",

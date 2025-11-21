@@ -555,7 +555,8 @@
         "manualPlaceholder": "モデル名を入力（例：gpt-5-turbo）",
         "manualDesc": "任意のモデル名を追加できます（価格表のモデルに限定されません）",
         "claude": "Claude",
-        "openai": "OpenAI"
+        "openai": "OpenAI",
+        "gemini": "Gemini"
       },
       "modelRedirect": {
         "currentRules": "現在のルール ({count})",
