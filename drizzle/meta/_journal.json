@@ -148,6 +148,27 @@
       "when": 1763465177387,
       "tag": "0020_next_juggernaut",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1763823720000,
+      "tag": "0021_square_ozymandias",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1763823721000,
+      "tag": "0022_open_stephen_strange",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1763823722000,
+      "tag": "0023_nosy_synch",
+      "breakpoints": true
     }
   ]
 }
