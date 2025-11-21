@@ -155,6 +155,13 @@
       "when": 1763823720000,
       "tag": "0021_daily_cost_limits",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1763739167236,
+      "tag": "0022_simple_stardust",
+      "breakpoints": true
     }
   ]
 }
