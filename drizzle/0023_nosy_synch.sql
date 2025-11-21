@@ -1,2 +1,0 @@
-ALTER TABLE "keys" ADD COLUMN "daily_reset_mode" varchar(10) DEFAULT 'fixed' NOT NULL;--> statement-breakpoint
-ALTER TABLE "providers" ADD COLUMN "daily_reset_mode" varchar(10) DEFAULT 'fixed' NOT NULL;
