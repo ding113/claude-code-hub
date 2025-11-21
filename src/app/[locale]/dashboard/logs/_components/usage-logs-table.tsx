@@ -111,10 +111,8 @@ export function UsageLogsTable({
                     )}
                     aria-label={isNonBilling ? t("logs.table.nonBilling") : undefined}
                   >
-                    <TableCell className="font-mono text-xs w-[90px] max-w-[90px] overflow-hidden">
-                      <div className="truncate">
-                        <RelativeTime date={log.createdAt} fallback="-" />
-                      </div>
+                    <TableCell className="font-mono text-xs">
+                      <RelativeTime date={log.createdAt} fallback="-" />
                     </TableCell>
                     <TableCell>{log.userName}</TableCell>
                     <TableCell className="font-mono text-xs">{log.keyName}</TableCell>
@@ -192,22 +190,11 @@ export function UsageLogsTable({
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="font-mono text-xs w-[120px] max-w-[120px] overflow-hidden">
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div className="truncate cursor-help">
-                              <ModelDisplayWithRedirect
-                                originalModel={log.originalModel}
-                                currentModel={log.model}
-                              />
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p className="text-xs">{log.originalModel || log.model || "-"}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
+                    <TableCell className="font-mono text-xs">
+                      <ModelDisplayWithRedirect
+                        originalModel={log.originalModel}
+                        currentModel={log.model}
+                      />
                     </TableCell>
                     <TableCell className="text-right font-mono text-xs">
                       {formatTokenAmount(log.inputTokens)}

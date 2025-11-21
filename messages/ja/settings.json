@@ -423,13 +423,13 @@
     "sync": {
       "button": "LiteLLM価格を同期",
       "syncing": "同期中...",
-      "successWithChanges": "価格表を更新: {added}件追加、{updated}件更新、{unchanged}件変化なし",
+      "successWithChanges": "価格表が正常に更新されました。{count}個のモデルを更新しました",
       "successNoChanges": "価格表は最新です。更新の必要はありません",
       "failed": "同期に失敗しました",
       "failedError": "同期に失敗しました: {error}",
       "failedNoResult": "価格表は更新されましたが結果が返されていません",
       "noModels": "モデル価格が見つかりません",
-      "partialFailure": "一部更新が成功しましたが、{failed}件のモデルが失敗しました"
+      "partialFailure": "一部更新が成功しましたが、{count}個のモデルが失敗しました"
     },
     "table": {
       "modelName": "モデル名",
