@@ -1,3 +1,70 @@
+/**
+ * ============================================================================
+ * Rate Limit Service - Redis Key Naming Conventions
+ * ============================================================================
+ *
+ * This service implements cost tracking using different Redis data structures
+ * based on the time window mode (fixed vs rolling). Understanding the key
+ * naming patterns is crucial for debugging and maintenance.
+ *
+ * ## Key Naming Patterns
+ *
+ * ### 1. Fixed Time Window Keys (STRING type)
+ *    Format: `{type}:{id}:cost_daily_{suffix}`
+ *    Example: `key:123:cost_daily_1800` (resets at 18:00)
+ *             `provider:456:cost_daily_0000` (resets at 00:00)
+ *
+ *    - Uses Redis STRING type with INCRBYFLOAT
+ *    - Suffix is the reset time without colon (HH:mm -> HHmm)
+ *    - TTL: Dynamic, calculated to the next reset time
+ *    - Use case: Custom daily reset times (e.g., 18:00, 09:30)
+ *
+ * ### 2. Rolling Window Keys (ZSET type)
+ *    Format: `{type}:{id}:cost_daily_rolling`
+ *    Example: `key:123:cost_daily_rolling`
+ *             `provider:456:cost_daily_rolling`
+ *
+ *    - Uses Redis ZSET type with Lua scripts
+ *    - No time suffix - always "rolling"
+ *    - TTL: Fixed 24 hours (86400 seconds)
+ *    - Use case: True rolling 24-hour window (past 24 hours from now)
+ *
+ * ### 3. Other Period Keys (STRING type)
+ *    Format: `{type}:{id}:cost_{period}`
+ *    Example: `key:123:cost_weekly` (Monday 00:00 reset)
+ *             `key:123:cost_monthly` (1st day 00:00 reset)
+ *             `key:123:cost_5h_rolling` (5-hour rolling, ZSET)
+ *
+ * ## Why Different Patterns?
+ *
+ * ### Fixed Mode (`cost_daily_{suffix}`)
+ * - **Problem**: Multiple users may have different daily reset times
+ * - **Solution**: Include reset time in key name to avoid conflicts
+ * - **Example**: User A resets at 18:00, User B resets at 00:00
+ *   - Key A: `key:1:cost_daily_1800` (TTL to next 18:00)
+ *   - Key B: `key:2:cost_daily_0000` (TTL to next 00:00)
+ *
+ * ### Rolling Mode (`cost_daily_rolling`)
+ * - **Problem**: Rolling windows don't have a fixed reset time
+ * - **Solution**: Use generic "rolling" suffix, no time needed
+ * - **Advantage**: Simpler key naming, consistent TTL (24h)
+ * - **Trade-off**: Requires ZSET + Lua script (more complex but precise)
+ *
+ * ## Data Structure Comparison
+ *
+ * | Mode    | Type   | Operations      | TTL Strategy        | Precision |
+ * |---------|--------|-----------------|---------------------|-----------|
+ * | Fixed   | STRING | INCRBYFLOAT     | Dynamic (to reset)  | Minute    |
+ * | Rolling | ZSET   | Lua + ZADD      | Fixed (24h)         | Millisec  |
+ *
+ * ## Related Files
+ * - Lua Scripts: src/lib/redis/lua-scripts.ts
+ * - Time Utils: src/lib/rate-limit/time-utils.ts
+ * - Documentation: CLAUDE.md (Redis Key Architecture section)
+ *
+ * ============================================================================
+ */
+
 import { getRedisClient } from "@/lib/redis";
 import { logger } from "@/lib/logger";
 import { SessionTracker } from "@/lib/session-tracker";
