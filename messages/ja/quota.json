@@ -117,6 +117,10 @@
     "cost5h": {
       "label": "5時間コスト"
     },
+    "costDaily": {
+      "label": "日次コスト",
+      "resetAt": "リセット時刻"
+    },
     "costWeekly": {
       "label": "週次コスト",
       "resetAt": "リセット時刻"
@@ -131,6 +135,8 @@
     "noQuotaSet": "クォータ未設定",
     "noQuotaData": "クォータ情報を取得できません",
     "noMatches": "一致するプロバイダーがありません",
+    "noMatchesDesc": "検索条件に一致するプロバイダーがありません。フィルターを調整してください。",
+    "noProvidersDesc": "まだプロバイダーが設定されていません。",
     "unlimitedSection": "クォータ未設定のプロバイダー ({count}個)"
   },
   "keys": {

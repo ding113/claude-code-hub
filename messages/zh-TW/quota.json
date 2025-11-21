@@ -115,6 +115,10 @@
     "cost5h": {
       "label": "5小時消費"
     },
+    "costDaily": {
+      "label": "每日消費",
+      "resetAt": "重置於"
+    },
     "costWeekly": {
       "label": "周消費",
       "resetAt": "重置於"
@@ -129,6 +133,8 @@
     "noQuotaSet": "未設置限額",
     "noQuotaData": "無法獲取限額資訊",
     "noMatches": "沒有匹配的供應商",
+    "noMatchesDesc": "沒有供應商符合您的搜尋條件，請嘗試調整篩選條件。",
+    "noProvidersDesc": "尚未配置任何供應商。",
     "unlimitedSection": "未設置限額的供應商 ({count}個)"
   },
   "keys": {

@@ -135,6 +135,8 @@
     "noQuotaSet": "未设置限额",
     "noQuotaData": "无法获取限额信息",
     "noMatches": "没有匹配的供应商",
+    "noMatchesDesc": "没有供应商匹配您的搜索条件，请尝试调整筛选条件。",
+    "noProvidersDesc": "尚未配置任何供应商。",
     "unlimitedSection": "未设置限额的供应商 ({count}个)"
   },
   "keys": {

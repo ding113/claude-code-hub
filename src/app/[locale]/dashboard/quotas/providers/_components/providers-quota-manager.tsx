@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Search, X } from "lucide-react";
 import { ProviderTypeFilter } from "@/app/[locale]/settings/providers/_components/provider-type-filter";
 import { ProviderQuotaSortDropdown, type QuotaSortKey } from "./provider-quota-sort-dropdown";
@@ -46,11 +46,20 @@ export function ProvidersQuotaManager({
   const t = useTranslations("quota.providers");
   const tSearch = useTranslations("settings.providers.search");
 
-  // 计算筛选后的供应商数量（不包括搜索）
-  const filteredCount =
-    typeFilter === "all"
-      ? providers.length
-      : providers.filter((p) => p.providerType === typeFilter).length;
+  // 计算筛选后的供应商数量（包括搜索）
+  const filteredCount = useMemo(() => {
+    let filtered =
+      typeFilter === "all"
+        ? providers
+        : providers.filter((p) => p.providerType === typeFilter);
+
+    if (debouncedSearchTerm) {
+      const term = debouncedSearchTerm.toLowerCase();
+      filtered = filtered.filter((p) => p.name.toLowerCase().includes(term));
+    }
+
+    return filtered.length;
+  }, [providers, typeFilter, debouncedSearchTerm]);
 
   return (
     <div className="space-y-4">

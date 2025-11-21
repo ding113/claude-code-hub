@@ -48,7 +48,8 @@ export function ProviderQuotaListItem({
     label: string,
     current: number,
     limit: number | null,
-    resetAt?: Date
+    resetAt?: Date,
+    resetInfo?: string
   ) => {
     if (!limit || limit <= 0) return null;
 
@@ -60,13 +61,15 @@ export function ProviderQuotaListItem({
           <TooltipTrigger asChild>
             <div className="flex flex-col items-center gap-1">
               <CircularProgress value={current} max={limit} size={48} strokeWidth={4} />
-              {resetAt && (
+              {resetAt ? (
                 <CountdownTimer
                   targetDate={resetAt}
                   prefix={t("list.resetIn") + " "}
                   className="text-[10px] text-muted-foreground"
                 />
-              )}
+              ) : resetInfo ? (
+                <span className="text-[10px] text-muted-foreground">{resetInfo}</span>
+              ) : null}
             </div>
           </TooltipTrigger>
           <TooltipContent side="top">
@@ -93,6 +96,9 @@ export function ProviderQuotaListItem({
     const { current, limit } = provider.quota?.concurrentSessions || { current: 0, limit: 0 };
     if (limit <= 0) return null;
 
+    // 计算百分比，确保上限为100%
+    const percentage = Math.min((current / limit) * 100, 100);
+
     return (
       <TooltipProvider delayDuration={200}>
         <Tooltip>
@@ -114,7 +120,7 @@ export function ProviderQuotaListItem({
                 {t("list.limit")}: {limit}
               </div>
               <div className="text-xs font-semibold">
-                {((current / limit) * 100).toFixed(1)}% {t("list.used")}
+                {percentage.toFixed(1)}% {t("list.used")}
               </div>
             </div>
           </TooltipContent>
@@ -165,7 +171,9 @@ export function ProviderQuotaListItem({
           renderQuotaItem(
             t("cost5h.label"),
             provider.quota.cost5h.current,
-            provider.quota.cost5h.limit
+            provider.quota.cost5h.limit,
+            undefined,
+            provider.quota.cost5h.resetInfo
           )}
 
         {/* 每日限额 */}

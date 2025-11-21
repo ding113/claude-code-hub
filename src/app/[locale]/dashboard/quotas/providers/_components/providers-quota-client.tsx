@@ -112,26 +112,32 @@ export function ProvidersQuotaClient({
     });
 
     // 4. 排序（仅对有限额的供应商排序）
-    withQuota.sort((a, b) => {
-      switch (sortBy) {
-        case "name":
-          return a.name.localeCompare(b.name);
-        case "priority":
-          // 优先级：数值越小越优先，升序排列
-          return a.priority - b.priority;
-        case "weight":
-          // 权重：数值越大越优先，降序排列
-          return b.weight - a.weight;
-        case "usage": {
-          // 使用量：按最高使用率降序排列
-          const usageA = calculateMaxUsage(a);
-          const usageB = calculateMaxUsage(b);
-          return usageB - usageA;
+    if (sortBy === "usage") {
+      // 预计算 usage 值以提升排序性能
+      const usageMap = new Map<number, number>();
+      withQuota.forEach((p) => usageMap.set(p.id, calculateMaxUsage(p)));
+
+      withQuota.sort((a, b) => {
+        const usageA = usageMap.get(a.id) ?? 0;
+        const usageB = usageMap.get(b.id) ?? 0;
+        return usageB - usageA;
+      });
+    } else {
+      withQuota.sort((a, b) => {
+        switch (sortBy) {
+          case "name":
+            return a.name.localeCompare(b.name);
+          case "priority":
+            // 优先级：数值越小越优先，升序排列
+            return a.priority - b.priority;
+          case "weight":
+            // 权重：数值越大越优先，降序排列
+            return b.weight - a.weight;
+          default:
+            return 0;
         }
-        default:
-          return 0;
-      }
-    });
+      });
+    }
 
     return {
       providersWithQuota: withQuota,

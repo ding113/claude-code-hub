@@ -135,6 +135,8 @@
     "noQuotaSet": "No quota set",
     "noQuotaData": "Unable to retrieve quota information",
     "noMatches": "No matching providers",
+    "noMatchesDesc": "No providers match your search criteria. Try adjusting your filters.",
+    "noProvidersDesc": "No providers have been configured yet.",
     "unlimitedSection": "Providers without quota ({count})"
   },
   "keys": {
