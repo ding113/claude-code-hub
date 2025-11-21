@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Laptop, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useTranslations } from "next-intl";
@@ -29,26 +29,49 @@ export function ThemeSwitcher({
   size = "sm",
   showLabel = false,
 }: ThemeSwitcherProps) {
-  const { theme, resolvedTheme, setTheme } = useTheme();
   const t = useTranslations("common");
   const [mounted, setMounted] = useState(false);
+
+  // Wrap useTheme in try-catch for localStorage error handling
+  let themeHook: ReturnType<typeof useTheme> | null = null;
+  try {
+    themeHook = useTheme();
+  } catch (error) {
+    console.error("Failed to initialize theme:", error);
+  }
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  const activeTheme = useMemo<ThemeValue>(() => {
-    if (!mounted) return "system";
-    if (theme === "system") {
-      return (resolvedTheme as ThemeValue) ?? "system";
-    }
-    return (theme as ThemeValue) ?? "system";
-  }, [mounted, resolvedTheme, theme]);
+  // Graceful degradation if theme system unavailable
+  if (!themeHook) {
+    return (
+      <Button
+        aria-label={t("theme")}
+        variant="ghost"
+        size={size === "sm" ? "icon" : "default"}
+        className={cn(
+          "relative rounded-full border border-border/60 bg-card/60 text-muted-foreground cursor-not-allowed",
+          size === "sm" && "size-9",
+          className
+        )}
+        disabled
+        title="Theme system unavailable"
+      >
+        <Sun className="size-4 opacity-50" />
+        {showLabel && <span className="ml-2 text-sm opacity-50">{t("theme")}</span>}
+      </Button>
+    );
+  }
 
-  const options: { value: ThemeValue; icon: typeof Sun }[] = [
-    { value: "light", icon: Sun },
-    { value: "dark", icon: Moon },
-    { value: "system", icon: Laptop },
+  const { theme, setTheme } = themeHook;
+
+  // Simplified theme options with better type inference
+  const options = [
+    { value: "light" as ThemeValue, icon: Sun },
+    { value: "dark" as ThemeValue, icon: Moon },
+    { value: "system" as ThemeValue, icon: Laptop },
   ];
 
   const labelMap: Record<ThemeValue, string> = {
@@ -57,7 +80,21 @@ export function ThemeSwitcher({
     system: t("system"),
   };
 
+  // Simplified: directly use theme for display (shows "system" when selected)
+  const currentTheme = (theme ?? "system") as ThemeValue;
+
   const triggerSize = size === "sm" ? "icon" : "default";
+
+  // Handle theme changes with error handling
+  const handleThemeChange = (value: string) => {
+    try {
+      setTheme(value as ThemeValue);
+    } catch (error) {
+      console.error("Failed to change theme:", error);
+      // Optionally show toast notification
+      // toast.error("Unable to change theme. Please check browser settings.");
+    }
+  };
 
   if (!mounted) {
     return (
@@ -95,15 +132,15 @@ export function ThemeSwitcher({
           <Sun className="size-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
           <Moon className="absolute size-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
           {showLabel && (
-            <span className="text-sm font-medium leading-none">{labelMap[activeTheme]}</span>
+            <span className="text-sm font-medium leading-none">{labelMap[currentTheme]}</span>
           )}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-[10rem]" sideOffset={8}>
         <DropdownMenuLabel>{t("theme")}</DropdownMenuLabel>
         <DropdownMenuRadioGroup
-          value={activeTheme}
-          onValueChange={(value) => setTheme(value as ThemeValue)}
+          value={currentTheme}
+          onValueChange={handleThemeChange}
           className="pt-1"
         >
           {options.map(({ value, icon: Icon }) => (
