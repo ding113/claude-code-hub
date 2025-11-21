@@ -135,6 +135,8 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         allowedModels: provider.allowedModels,
         joinClaudePool: provider.joinClaudePool,
         codexInstructionsStrategy: provider.codexInstructionsStrategy,
+        mcpPassthroughType: provider.mcpPassthroughType,
+        mcpPassthroughUrl: provider.mcpPassthroughUrl,
         limit5hUsd: provider.limit5hUsd,
         limitWeeklyUsd: provider.limitWeeklyUsd,
         limitMonthlyUsd: provider.limitMonthlyUsd,
@@ -203,6 +205,8 @@ export async function addProvider(data: {
   request_timeout_non_streaming_ms?: number;
   website_url?: string | null;
   codex_instructions_strategy?: "auto" | "force_official" | "keep_original";
+  mcp_passthrough_type?: "none" | "minimax" | "glm" | "custom";
+  mcp_passthrough_url?: string | null;
   tpm: number | null;
   rpm: number | null;
   rpd: number | null;
@@ -341,6 +345,8 @@ export async function editProvider(
     request_timeout_non_streaming_ms?: number;
     website_url?: string | null;
     codex_instructions_strategy?: "auto" | "force_official" | "keep_original";
+    mcp_passthrough_type?: "none" | "minimax" | "glm" | "custom";
+    mcp_passthrough_url?: string | null;
     tpm?: number | null;
     rpm?: number | null;
     rpd?: number | null;
@@ -1312,7 +1318,7 @@ export async function testProviderGemini(
         }
         return headers;
       },
-      body: (model) => ({
+      body: () => ({
         contents: [{ parts: [{ text: API_TEST_CONFIG.TEST_PROMPT }] }],
         generationConfig: {
           maxOutputTokens: API_TEST_CONFIG.TEST_MAX_TOKENS,
