@@ -26,7 +26,12 @@ import {
   AlertDialogTitle as AlertTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import type { ProviderDisplay, ProviderType, CodexInstructionsStrategy, McpPassthroughType } from "@/types/provider";
+import type {
+  ProviderDisplay,
+  ProviderType,
+  CodexInstructionsStrategy,
+  McpPassthroughType,
+} from "@/types/provider";
 import { validateNumericField, isValidUrl, extractBaseUrl } from "@/lib/utils/validation";
 import { PROVIDER_DEFAULTS, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { toast } from "sonner";
@@ -154,10 +159,12 @@ export function ProviderForm({
     useState<CodexInstructionsStrategy>(sourceProvider?.codexInstructionsStrategy ?? "auto");
 
   // MCP 透传配置
-  const [mcpPassthroughType, setMcpPassthroughType] =
-    useState<McpPassthroughType>(sourceProvider?.mcpPassthroughType ?? "none");
-  const [mcpPassthroughUrl, setMcpPassthroughUrl] =
-    useState<string>(sourceProvider?.mcpPassthroughUrl || "");
+  const [mcpPassthroughType, setMcpPassthroughType] = useState<McpPassthroughType>(
+    sourceProvider?.mcpPassthroughType ?? "none"
+  );
+  const [mcpPassthroughUrl, setMcpPassthroughUrl] = useState<string>(
+    sourceProvider?.mcpPassthroughUrl || ""
+  );
 
   // 折叠区域状态管理
   type SectionKey =
@@ -1441,9 +1448,7 @@ export function ProviderForm({
           <CollapsibleContent className="space-y-4 pb-4">
             <div className="space-y-4">
               <div className="space-y-1">
-                <p className="text-xs text-muted-foreground">
-                  {t("sections.mcpPassthrough.desc")}
-                </p>
+                <p className="text-xs text-muted-foreground">{t("sections.mcpPassthrough.desc")}</p>
               </div>
 
               <div className="space-y-2">
@@ -1452,9 +1457,7 @@ export function ProviderForm({
                 </Label>
                 <Select
                   value={mcpPassthroughType}
-                  onValueChange={(value) =>
-                    setMcpPassthroughType(value as McpPassthroughType)
-                  }
+                  onValueChange={(value) => setMcpPassthroughType(value as McpPassthroughType)}
                   disabled={isPending}
                 >
                   <SelectTrigger id={isEdit ? "edit-mcp-passthrough" : "mcp-passthrough"}>
@@ -1503,9 +1506,7 @@ export function ProviderForm({
                     </SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">
-                  {t("sections.mcpPassthrough.hint")}
-                </p>
+                <p className="text-xs text-muted-foreground">{t("sections.mcpPassthrough.hint")}</p>
               </div>
 
               {/* MCP 透传 URL 配置 */}
@@ -1527,7 +1528,7 @@ export function ProviderForm({
                   {!mcpPassthroughUrl && url && (
                     <p className="text-xs text-muted-foreground">
                       {t("sections.mcpPassthrough.urlAuto", {
-                        url: extractBaseUrl(url)
+                        url: extractBaseUrl(url),
                       })}
                     </p>
                   )}

@@ -178,10 +178,7 @@ export const CreateProviderSchema = z.object({
     .optional()
     .default("auto"),
   // MCP 透传配置
-  mcp_passthrough_type: z
-    .enum(["none", "minimax", "glm", "custom"])
-    .optional()
-    .default("none"),
+  mcp_passthrough_type: z.enum(["none", "minimax", "glm", "custom"]).optional().default("none"),
   mcp_passthrough_url: z.string().max(512, "MCP透传URL长度不能超过512个字符").nullable().optional(),
   // 金额限流配置
   limit_5h_usd: z.coerce
@@ -323,7 +320,11 @@ export const UpdateProviderSchema = z
     codex_instructions_strategy: z.enum(["auto", "force_official", "keep_original"]).optional(),
     // MCP 透传配置
     mcp_passthrough_type: z.enum(["none", "minimax", "glm", "custom"]).optional(),
-    mcp_passthrough_url: z.string().max(512, "MCP透传URL长度不能超过512个字符").nullable().optional(),
+    mcp_passthrough_url: z
+      .string()
+      .max(512, "MCP透传URL长度不能超过512个字符")
+      .nullable()
+      .optional(),
     // 金额限流配置
     limit_5h_usd: z.coerce
       .number()

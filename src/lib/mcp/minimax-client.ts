@@ -65,10 +65,7 @@ export class MinimaxMcpClient {
    * @param prompt 提示词
    * @returns 图片理解结果
    */
-  async understandImage(
-    imageUrl: string,
-    prompt: string
-  ): Promise<McpImageUnderstandResponse> {
+  async understandImage(imageUrl: string, prompt: string): Promise<McpImageUnderstandResponse> {
     if (!imageUrl) {
       throw new McpRequestError("Image URL is required");
     }

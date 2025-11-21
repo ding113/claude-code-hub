@@ -749,11 +749,7 @@ export class ProxyForwarder {
       );
       const isMcpRequest = !isStandardRequest;
 
-      if (
-        isMcpRequest &&
-        provider.mcpPassthroughType &&
-        provider.mcpPassthroughType !== "none"
-      ) {
+      if (isMcpRequest && provider.mcpPassthroughType && provider.mcpPassthroughType !== "none") {
         // MCP 透传已启用，且当前是 MCP 请求
         if (provider.mcpPassthroughUrl) {
           // 使用配置的 MCP URL
@@ -788,13 +784,19 @@ export class ProxyForwarder {
             effectiveBaseUrl = provider.url;
           }
         }
-      } else if (isMcpRequest && (!provider.mcpPassthroughType || provider.mcpPassthroughType === "none")) {
+      } else if (
+        isMcpRequest &&
+        (!provider.mcpPassthroughType || provider.mcpPassthroughType === "none")
+      ) {
         // MCP 请求但未启用 MCP 透传
-        logger.debug("ProxyForwarder: MCP request but passthrough not enabled, using provider URL", {
-          providerId: provider.id,
-          providerName: provider.name,
-          requestPath,
-        });
+        logger.debug(
+          "ProxyForwarder: MCP request but passthrough not enabled, using provider URL",
+          {
+            providerId: provider.id,
+            providerName: provider.name,
+            requestPath,
+          }
+        );
       }
 
       // ⭐ 直接使用原始请求路径，让 buildProxyUrl() 智能处理路径拼接
