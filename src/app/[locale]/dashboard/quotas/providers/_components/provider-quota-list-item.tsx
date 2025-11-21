@@ -59,8 +59,12 @@ export function ProviderQuotaListItem({
       <TooltipProvider delayDuration={200}>
         <Tooltip>
           <TooltipTrigger asChild>
-            <div className="flex flex-col items-center gap-1">
+            <div className="flex flex-col items-center gap-1.5">
+              {/* 标题 */}
+              <span className="text-xs font-medium text-foreground/80">{label}</span>
+              {/* 圆环进度 */}
               <CircularProgress value={current} max={limit} size={48} strokeWidth={4} />
+              {/* 倒计时或重置信息 */}
               {resetAt ? (
                 <CountdownTimer
                   targetDate={resetAt}
@@ -103,11 +107,15 @@ export function ProviderQuotaListItem({
       <TooltipProvider delayDuration={200}>
         <Tooltip>
           <TooltipTrigger asChild>
-            <div className="flex flex-col items-center gap-1">
-              <CircularProgress value={current} max={limit} size={48} strokeWidth={4} />
-              <span className="text-[10px] text-muted-foreground">
+            <div className="flex flex-col items-center gap-1.5">
+              {/* 标题 */}
+              <span className="text-xs font-medium text-foreground/80">
                 {t("concurrentSessions.label")}
               </span>
+              {/* 圆环进度 */}
+              <CircularProgress value={current} max={limit} size={48} strokeWidth={4} />
+              {/* 占位符，保持对齐 */}
+              <span className="text-[10px] text-transparent">-</span>
             </div>
           </TooltipTrigger>
           <TooltipContent side="top">
