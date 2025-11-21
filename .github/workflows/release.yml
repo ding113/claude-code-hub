@@ -136,7 +136,7 @@ jobs:
 
       - name: Setup Bun
         if: steps.check.outputs.needs_bump == 'true'
-        uses: oven-sh/setup-bun@v1
+        uses: oven-sh/setup-bun@v2
         with:
           bun-version: '1.3.2'
 
@@ -237,7 +237,7 @@ jobs:
 
       - name: Create GitHub Release
         if: steps.check.outputs.needs_bump == 'true'
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.next_version.outputs.new_tag }}
           name: Release ${{ steps.next_version.outputs.new_version }}

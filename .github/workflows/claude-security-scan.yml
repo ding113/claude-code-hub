@@ -1,0 +1,134 @@
+name: Claude Security Scan
+
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+    paths:
+      - '**.ts'
+      - '**.tsx'
+      - '**.js'
+      - '**.jsx'
+
+jobs:
+  security-scan:
+    # Skip bot actors
+    if: "!endsWith(github.actor, '[bot]')"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      pull-requests: write
+      security-events: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude Code for Security Scan
+        uses: anthropics/claude-code-action@v1
+        env:
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Allow external contributors (fork PRs) to trigger this workflow
+          allowed_non_write_users: "*"
+
+          prompt: |
+            You are a security analyst for the repository ${{ github.repository }}.
+
+            Task: Perform a security scan on PR #${{ github.event.pull_request.number }}.
+
+            ## Instructions:
+
+            1. **Get the changes**:
+               ```bash
+               gh pr diff ${{ github.event.pull_request.number }}
+               ```
+
+            2. **Scan for OWASP Top 10 vulnerabilities**:
+
+               - **Injection** (SQL, NoSQL, Command, LDAP)
+                 - Look for: string concatenation in queries, unsanitized input in commands
+                 - Safe: Parameterized queries, ORMs with proper escaping
+
+               - **Broken Authentication**
+                 - Look for: Hardcoded credentials, weak password policies, missing rate limiting
+                 - Safe: Environment variables, strong hashing, proper session management
+
+               - **Sensitive Data Exposure**
+                 - Look for: Logging sensitive data, unencrypted storage, exposed API keys
+                 - Safe: Proper encryption, masked logging, secrets management
+
+               - **XXE (XML External Entities)**
+                 - Look for: XML parsing without disabling external entities
+                 - Safe: Disabled external entities, JSON instead of XML
+
+               - **Broken Access Control**
+                 - Look for: Missing authorization checks, IDOR vulnerabilities
+                 - Safe: Proper permission checks, ownership validation
+
+               - **Security Misconfiguration**
+                 - Look for: Debug mode in production, default credentials, verbose errors
+                 - Safe: Proper environment config, minimal error disclosure
+
+               - **XSS (Cross-Site Scripting)**
+                 - Look for: dangerouslySetInnerHTML, unsanitized user input in DOM
+                 - Safe: Proper escaping, Content Security Policy
+
+               - **Insecure Deserialization**
+                 - Look for: JSON.parse on untrusted data without validation
+                 - Safe: Schema validation, type checking
+
+               - **Using Components with Known Vulnerabilities**
+                 - Look for: Outdated dependencies, known CVEs
+                 - Safe: Regular updates, security advisories
+
+               - **Insufficient Logging & Monitoring**
+                 - Look for: Missing audit logs, no error tracking
+                 - Safe: Comprehensive logging, monitoring setup
+
+            3. **Additional checks**:
+               - SSRF (Server-Side Request Forgery)
+               - Path traversal
+               - Race conditions
+               - Insecure randomness
+               - Missing input validation
+
+            4. **Report findings**:
+               ```bash
+               gh pr comment ${{ github.event.pull_request.number }} --body "Your report"
+               ```
+
+            ## Report Format:
+            ```markdown
+            ## 🔒 Security Scan Results
+
+            ### 🚨 Critical Issues
+            [Issues that must be fixed before merge]
+
+            ### ⚠️ Warnings
+            [Issues that should be addressed]
+
+            ### ℹ️ Informational
+            [Best practice suggestions]
+
+            ### ✅ Passed Checks
+            - [List of security aspects that look good]
+
+            ---
+            🤖 *Security scan by Claude AI*
+            ```
+
+            ## Guidelines:
+            - Be specific about file and line numbers
+            - Provide remediation suggestions
+            - Don't report false positives
+            - If no issues found, still post a clean report
+
+          claude_args: "--max-turns 999 --allowedTools Read,Grep,Bash(gh:*)"
+          use_commit_signing: true

@@ -1,0 +1,122 @@
+name: Claude Docs Review
+
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+    paths:
+      - '**.md'
+      - 'docs/**'
+
+jobs:
+  docs-review:
+    # Skip bot actors
+    if: "!endsWith(github.actor, '[bot]')"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude Code for Docs Review
+        uses: anthropics/claude-code-action@v1
+        env:
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Allow external contributors (fork PRs) to trigger this workflow
+          allowed_non_write_users: "*"
+
+          prompt: |
+            You are a documentation reviewer for the repository ${{ github.repository }}.
+
+            Task: Review documentation changes in PR #${{ github.event.pull_request.number }}.
+
+            ## Instructions:
+
+            1. **Get documentation changes**:
+               ```bash
+               gh pr diff ${{ github.event.pull_request.number }} -- '*.md'
+               gh pr view ${{ github.event.pull_request.number }} --json files --jq '.files[].path' | grep -E '\.(md)$'
+               ```
+
+            2. **Review each changed document for**:
+
+               **Content Quality**:
+               - Accuracy of technical information
+               - Completeness of explanations
+               - Logical flow and organization
+               - Appropriate level of detail
+
+               **Writing Style**:
+               - Clear and concise language
+               - Consistent terminology
+               - Proper grammar and spelling
+               - Active voice preferred
+
+               **Formatting**:
+               - Proper markdown syntax
+               - Consistent heading hierarchy
+               - Code blocks with language tags
+               - Working links
+
+               **Code Examples**:
+               - Syntactically correct
+               - Actually runnable
+               - Well commented
+               - Up to date with codebase
+
+            3. **Check for**:
+               - Broken links (internal and external)
+               - Outdated information
+               - Missing sections
+               - Inconsistency with existing docs
+
+            4. **Post review**:
+               ```bash
+               gh pr comment ${{ github.event.pull_request.number }} --body "Your review"
+               ```
+
+            ## Review Format:
+            ```markdown
+            ## 📝 Documentation Review
+
+            ### Files Reviewed
+            - `path/to/file.md`
+
+            ### Content Feedback
+            - [Specific feedback on content accuracy and completeness]
+
+            ### Style & Formatting
+            - [Feedback on writing style and markdown formatting]
+
+            ### Code Examples
+            - [Feedback on code snippets]
+
+            ### Suggestions
+            - [Improvement suggestions]
+
+            ### Issues
+            - [ ] [Issue 1 - needs fixing]
+            - [ ] [Issue 2 - needs fixing]
+
+            ---
+            🤖 *Documentation review by Claude AI*
+            ```
+
+            ## Guidelines:
+            - Be constructive and specific
+            - Suggest concrete improvements
+            - Check that examples actually work
+            - Verify links are not broken
+
+          claude_args: "--max-turns 999 --allowedTools Read,Grep,Bash(gh:*),Bash(cat:*)"
+          use_commit_signing: true
