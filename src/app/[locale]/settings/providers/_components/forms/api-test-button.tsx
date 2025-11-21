@@ -571,7 +571,7 @@ export function ApiTestButton({
                     </pre>
                     {testResult.details.content.length > 200 && (
                       <div className="text-muted-foreground italic">
-                        显示前 200 字符，完整内容请点击"查看详情"
+                        显示前 200 字符，完整内容请点击&ldquo;查看详情&rdquo;
                       </div>
                     )}
                   </div>
