@@ -1283,7 +1283,13 @@ async function trackCostToRedis(session: ProxySession, usage: UsageMetrics | nul
     key.id,
     provider.id,
     session.sessionId, // 直接使用 session.sessionId
-    costFloat
+    costFloat,
+    {
+      keyResetTime: key.dailyResetTime,
+      keyResetMode: key.dailyResetMode,
+      providerResetTime: provider.dailyResetTime,
+      providerResetMode: provider.dailyResetMode,
+    }
   );
 
   // 新增：追踪用户层每日消费

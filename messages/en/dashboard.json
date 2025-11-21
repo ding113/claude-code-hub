@@ -150,6 +150,7 @@
         "billingDescription": "The system prioritizes billing based on the price of the requested model ({original}). If the model is not found in the price list, the price of the actually called model ({current}) is used."
       },
       "errorMessage": "Error Message",
+      "filteredProviders": "Filtered Providers",
       "providerChain": {
         "title": "Provider Decision Chain Timeline",
         "totalDuration": "Total Duration: {duration}ms"
@@ -160,7 +161,11 @@
         "default": "No detailed error message available"
       },
       "clickStatusCode": "Click status code to view full timeline",
-      "viewDetails": "View Details"
+      "viewDetails": "View Details",
+      "reasons": {
+        "rateLimited": "Provider Cost Limit",
+        "circuitOpen": "Circuit Breaker Open"
+      }
     },
     "providerChain": {
       "decisionChain": "Provider Decision Chain"
@@ -477,6 +482,7 @@
     "error": "Fetch failed",
     "networkError": "Network error",
     "cost5h": "5-Hour Cost",
+    "costDaily": "Daily Cost",
     "costWeekly": "Weekly Cost",
     "costMonthly": "Monthly Cost",
     "concurrentSessions": "Concurrent Sessions",
@@ -504,6 +510,27 @@
       "label": "5-Hour Cost Limit (USD)",
       "placeholder": "Leave blank for unlimited",
       "description": "Maximum cost within 5 hours"
+    },
+    "limitDailyUsd": {
+      "label": "Daily Cost Limit (USD)",
+      "placeholder": "Leave blank for unlimited",
+      "description": "Maximum cost per day"
+    },
+    "dailyResetMode": {
+      "label": "Daily Reset Mode",
+      "options": {
+        "fixed": "Fixed Time Reset",
+        "rolling": "Rolling Window (24h)"
+      },
+      "desc": {
+        "fixed": "Reset quota at a specific time each day",
+        "rolling": "24-hour rolling window from first request"
+      }
+    },
+    "dailyResetTime": {
+      "label": "Daily Reset Time",
+      "placeholder": "HH:mm",
+      "description": "When the daily limit resets (uses system timezone)"
     },
     "limitWeeklyUsd": {
       "label": "Weekly Cost Limit (USD)",

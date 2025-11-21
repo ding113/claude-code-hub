@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import type { ProviderDisplay } from "@/types/provider";
 import type { User } from "@/types/user";
-import { getProviderTypeConfig } from "@/lib/provider-type-utils";
+import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
 import {
   Dialog,
   DialogContent,
@@ -82,13 +82,16 @@ export function ProviderRichListItem({
   const [togglePending, startToggleTransition] = useTransition();
 
   const canEdit = currentUser?.role === "admin";
+  const tTypes = useTranslations("settings.providers.types");
   const tList = useTranslations("settings.providers.list");
-  const tCommon = useTranslations("settings.common");
   const tTimeout = useTranslations("settings.providers.form.sections.timeout");
 
   // 获取供应商类型配置
   const typeConfig = getProviderTypeConfig(provider.providerType);
   const TypeIcon = typeConfig.icon;
+  const typeKey = getProviderTypeTranslationKey(provider.providerType);
+  const typeLabel = tTypes(`${typeKey}.label`);
+  const typeDescription = tTypes(`${typeKey}.description`);
 
   // 处理编辑
   const handleEdit = () => {
@@ -238,8 +241,10 @@ export function ProviderRichListItem({
           {/* 类型图标 */}
           <div
             className={`flex items-center justify-center w-6 h-6 rounded ${typeConfig.bgColor} flex-shrink-0`}
+            title={`${typeLabel} · ${typeDescription}`}
+            aria-label={typeLabel}
           >
-            <TypeIcon className="h-3.5 w-3.5" />
+            <TypeIcon className="h-3.5 w-3.5" aria-hidden />
           </div>
         </div>
 
@@ -254,7 +259,6 @@ export function ProviderRichListItem({
                 alt=""
                 className="h-4 w-4 flex-shrink-0"
                 onError={(e) => {
-                  // 隐藏加载失败的图标
                   (e.target as HTMLImageElement).style.display = "none";
                 }}
               />

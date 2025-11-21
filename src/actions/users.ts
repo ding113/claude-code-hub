@@ -101,6 +101,8 @@ export async function getUsers(): Promise<UserDisplay[]> {
                 canLoginWebUi: key.canLoginWebUi,
                 // 限额配置
                 limit5hUsd: key.limit5hUsd,
+                limitDailyUsd: key.limitDailyUsd,
+                dailyResetTime: key.dailyResetTime,
                 limitWeeklyUsd: key.limitWeeklyUsd,
                 limitMonthlyUsd: key.limitMonthlyUsd,
                 limitConcurrentSessions: key.limitConcurrentSessions || 0,

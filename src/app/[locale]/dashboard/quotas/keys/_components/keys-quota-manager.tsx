@@ -17,6 +17,7 @@ import { useTranslations } from "next-intl";
 
 interface KeyQuota {
   cost5h: { current: number; limit: number | null };
+  costDaily: { current: number; limit: number | null };
   costWeekly: { current: number; limit: number | null };
   costMonthly: { current: number; limit: number | null };
   concurrentSessions: { current: number; limit: number };
@@ -33,6 +34,9 @@ interface KeyWithQuota {
   isEnabled: boolean;
   expiresAt: string | null;
   quota: KeyQuota | null;
+  limitDailyUsd: number | null;
+  dailyResetTime: string;
+  dailyResetMode: "fixed" | "rolling";
 }
 
 interface UserWithKeys {

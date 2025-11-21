@@ -295,13 +295,101 @@ export function ErrorDetailsDialog({
                 <AlertCircle className="h-4 w-4" />
                 {t("logs.details.errorMessage")}
               </h4>
-              <div className="rounded-md border bg-destructive/10 p-4">
-                <pre className="text-xs text-destructive whitespace-pre-wrap break-words font-mono">
-                  {errorMessage}
-                </pre>
-              </div>
+
+              {/* 尝试解析 JSON 错误 */}
+              {(() => {
+                try {
+                  const error = JSON.parse(errorMessage);
+
+                  // 检查是否是限流错误
+                  if (error.code === 'rate_limit_exceeded' || error.code === 'circuit_breaker_open' || error.code === 'mixed_unavailable') {
+                    return (
+                      <div className="rounded-md border bg-orange-50 dark:bg-orange-950/20 p-4 space-y-3">
+                        <div className="font-semibold text-orange-900 dark:text-orange-100">
+                          💰 {error.message}
+                        </div>
+                        {error.details?.filteredProviders && error.details.filteredProviders.length > 0 && (
+                          <div className="space-y-2">
+                            <div className="text-sm font-medium text-orange-900 dark:text-orange-100">
+                              {t("logs.details.filteredProviders")}:
+                            </div>
+                            <ul className="text-sm space-y-1">
+                              {error.details.filteredProviders
+                                .filter((p: { reason: string }) => p.reason === 'rate_limited' || p.reason === 'circuit_open')
+                                .map((p: { id: number; name: string; details: string }) => (
+                                  <li key={p.id} className="text-orange-800 dark:text-orange-200 flex items-center gap-2">
+                                    <span className="text-orange-600">•</span>
+                                    <span className="font-medium">{p.name}</span>
+                                    <span className="text-xs">({p.details})</span>
+                                  </li>
+                                ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  // 其他 JSON 错误，格式化显示
+                  return (
+                    <div className="rounded-md border bg-destructive/10 p-4">
+                      <pre className="text-xs text-destructive whitespace-pre-wrap break-words font-mono">
+                        {JSON.stringify(error, null, 2)}
+                      </pre>
+                    </div>
+                  );
+                } catch {
+                  // 解析失败，显示原始消息
+                  return (
+                    <div className="rounded-md border bg-destructive/10 p-4">
+                      <pre className="text-xs text-destructive whitespace-pre-wrap break-words font-mono">
+                        {errorMessage}
+                      </pre>
+                    </div>
+                  );
+                }
+              })()}
             </div>
           )}
+
+          {/* 被过滤的供应商（仅在成功请求时显示） */}
+          {isSuccess && providerChain && providerChain.length > 0 && (() => {
+            // 从决策链中提取被过滤的供应商
+            const filteredProviders = providerChain
+              .flatMap(item => item.decisionContext?.filteredProviders || [])
+              .filter(p => p.reason === 'rate_limited' || p.reason === 'circuit_open');
+
+            if (filteredProviders.length === 0) return null;
+
+            return (
+              <div className="space-y-2">
+                <h4 className="font-semibold text-sm flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 text-orange-600" />
+                  {t("logs.details.filteredProviders")}
+                </h4>
+                <div className="rounded-md border bg-orange-50 dark:bg-orange-950/20 p-4">
+                  <ul className="text-sm space-y-2">
+                    {filteredProviders.map((p, index) => (
+                      <li key={`${p.id}-${index}`} className="text-orange-800 dark:text-orange-200 flex items-start gap-2">
+                        <span className="text-orange-600 mt-0.5">💰</span>
+                        <div className="flex-1">
+                          <span className="font-medium">{p.name}</span>
+                          <span className="text-xs ml-2">
+                            ({t(`logs.details.reasons.${p.reason === 'rate_limited' ? 'rateLimited' : 'circuitOpen'}`)})
+                          </span>
+                          {p.details && (
+                            <div className="text-xs text-orange-700 dark:text-orange-300 mt-0.5">
+                              {p.details}
+                            </div>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* 供应商决策链时间线 */}
           {providerChain && providerChain.length > 0 && (

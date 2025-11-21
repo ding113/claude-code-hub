@@ -19,6 +19,9 @@ export async function findKeyById(id: number): Promise<Key | null> {
       expiresAt: keys.expiresAt,
       canLoginWebUi: keys.canLoginWebUi,
       limit5hUsd: keys.limit5hUsd,
+      limitDailyUsd: keys.limitDailyUsd,
+      dailyResetMode: keys.dailyResetMode,
+      dailyResetTime: keys.dailyResetTime,
       limitWeeklyUsd: keys.limitWeeklyUsd,
       limitMonthlyUsd: keys.limitMonthlyUsd,
       limitConcurrentSessions: keys.limitConcurrentSessions,
@@ -44,6 +47,9 @@ export async function findKeyList(userId: number): Promise<Key[]> {
       expiresAt: keys.expiresAt,
       canLoginWebUi: keys.canLoginWebUi,
       limit5hUsd: keys.limit5hUsd,
+      limitDailyUsd: keys.limitDailyUsd,
+      dailyResetMode: keys.dailyResetMode,
+      dailyResetTime: keys.dailyResetTime,
       limitWeeklyUsd: keys.limitWeeklyUsd,
       limitMonthlyUsd: keys.limitMonthlyUsd,
       limitConcurrentSessions: keys.limitConcurrentSessions,
@@ -67,6 +73,9 @@ export async function createKey(keyData: CreateKeyData): Promise<Key> {
     expiresAt: keyData.expires_at,
     canLoginWebUi: keyData.can_login_web_ui ?? true,
     limit5hUsd: keyData.limit_5h_usd != null ? keyData.limit_5h_usd.toString() : null,
+    limitDailyUsd: keyData.limit_daily_usd != null ? keyData.limit_daily_usd.toString() : null,
+    dailyResetMode: keyData.daily_reset_mode ?? "fixed",
+    dailyResetTime: keyData.daily_reset_time ?? "00:00",
     limitWeeklyUsd: keyData.limit_weekly_usd != null ? keyData.limit_weekly_usd.toString() : null,
     limitMonthlyUsd:
       keyData.limit_monthly_usd != null ? keyData.limit_monthly_usd.toString() : null,
@@ -82,6 +91,9 @@ export async function createKey(keyData: CreateKeyData): Promise<Key> {
     expiresAt: keys.expiresAt,
     canLoginWebUi: keys.canLoginWebUi,
     limit5hUsd: keys.limit5hUsd,
+    limitDailyUsd: keys.limitDailyUsd,
+    dailyResetMode: keys.dailyResetMode,
+    dailyResetTime: keys.dailyResetTime,
     limitWeeklyUsd: keys.limitWeeklyUsd,
     limitMonthlyUsd: keys.limitMonthlyUsd,
     limitConcurrentSessions: keys.limitConcurrentSessions,
@@ -108,6 +120,11 @@ export async function updateKey(id: number, keyData: UpdateKeyData): Promise<Key
   if (keyData.can_login_web_ui !== undefined) dbData.canLoginWebUi = keyData.can_login_web_ui;
   if (keyData.limit_5h_usd !== undefined)
     dbData.limit5hUsd = keyData.limit_5h_usd != null ? keyData.limit_5h_usd.toString() : null;
+  if (keyData.limit_daily_usd !== undefined)
+    dbData.limitDailyUsd =
+      keyData.limit_daily_usd != null ? keyData.limit_daily_usd.toString() : null;
+  if (keyData.daily_reset_mode !== undefined) dbData.dailyResetMode = keyData.daily_reset_mode;
+  if (keyData.daily_reset_time !== undefined) dbData.dailyResetTime = keyData.daily_reset_time;
   if (keyData.limit_weekly_usd !== undefined)
     dbData.limitWeeklyUsd =
       keyData.limit_weekly_usd != null ? keyData.limit_weekly_usd.toString() : null;
@@ -130,6 +147,9 @@ export async function updateKey(id: number, keyData: UpdateKeyData): Promise<Key
       expiresAt: keys.expiresAt,
       canLoginWebUi: keys.canLoginWebUi,
       limit5hUsd: keys.limit5hUsd,
+      limitDailyUsd: keys.limitDailyUsd,
+      dailyResetMode: keys.dailyResetMode,
+      dailyResetTime: keys.dailyResetTime,
       limitWeeklyUsd: keys.limitWeeklyUsd,
       limitMonthlyUsd: keys.limitMonthlyUsd,
       limitConcurrentSessions: keys.limitConcurrentSessions,
@@ -156,6 +176,9 @@ export async function findActiveKeyByUserIdAndName(
       expiresAt: keys.expiresAt,
       canLoginWebUi: keys.canLoginWebUi,
       limit5hUsd: keys.limit5hUsd,
+      limitDailyUsd: keys.limitDailyUsd,
+      dailyResetMode: keys.dailyResetMode,
+      dailyResetTime: keys.dailyResetTime,
       limitWeeklyUsd: keys.limitWeeklyUsd,
       limitMonthlyUsd: keys.limitMonthlyUsd,
       limitConcurrentSessions: keys.limitConcurrentSessions,
@@ -243,6 +266,9 @@ export async function findActiveKeyByKeyString(keyString: string): Promise<Key |
       expiresAt: keys.expiresAt,
       canLoginWebUi: keys.canLoginWebUi,
       limit5hUsd: keys.limit5hUsd,
+      limitDailyUsd: keys.limitDailyUsd,
+      dailyResetMode: keys.dailyResetMode,
+      dailyResetTime: keys.dailyResetTime,
       limitWeeklyUsd: keys.limitWeeklyUsd,
       limitMonthlyUsd: keys.limitMonthlyUsd,
       limitConcurrentSessions: keys.limitConcurrentSessions,
@@ -279,6 +305,9 @@ export async function validateApiKeyAndGetUser(
       keyExpiresAt: keys.expiresAt,
       keyCanLoginWebUi: keys.canLoginWebUi,
       keyLimit5hUsd: keys.limit5hUsd,
+      keyLimitDailyUsd: keys.limitDailyUsd,
+      keyDailyResetMode: keys.dailyResetMode,
+      keyDailyResetTime: keys.dailyResetTime,
       keyLimitWeeklyUsd: keys.limitWeeklyUsd,
       keyLimitMonthlyUsd: keys.limitMonthlyUsd,
       keyLimitConcurrentSessions: keys.limitConcurrentSessions,
@@ -337,6 +366,9 @@ export async function validateApiKeyAndGetUser(
     expiresAt: row.keyExpiresAt,
     canLoginWebUi: row.keyCanLoginWebUi,
     limit5hUsd: row.keyLimit5hUsd,
+    limitDailyUsd: row.keyLimitDailyUsd,
+    dailyResetMode: row.keyDailyResetMode,
+    dailyResetTime: row.keyDailyResetTime,
     limitWeeklyUsd: row.keyLimitWeeklyUsd,
     limitMonthlyUsd: row.keyLimitMonthlyUsd,
     limitConcurrentSessions: row.keyLimitConcurrentSessions,

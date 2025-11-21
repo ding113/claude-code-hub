@@ -27,6 +27,9 @@ export async function addKey(data: {
   expiresAt?: string;
   canLoginWebUi?: boolean;
   limit5hUsd?: number | null;
+  limitDailyUsd?: number | null;
+  dailyResetMode?: "fixed" | "rolling";
+  dailyResetTime?: string;
   limitWeeklyUsd?: number | null;
   limitMonthlyUsd?: number | null;
   limitConcurrentSessions?: number;
@@ -44,6 +47,14 @@ export async function addKey(data: {
     const validatedData = KeyFormSchema.parse({
       name: data.name,
       expiresAt: data.expiresAt,
+      canLoginWebUi: data.canLoginWebUi,
+      limit5hUsd: data.limit5hUsd,
+      limitDailyUsd: data.limitDailyUsd,
+      dailyResetMode: data.dailyResetMode,
+      dailyResetTime: data.dailyResetTime,
+      limitWeeklyUsd: data.limitWeeklyUsd,
+      limitMonthlyUsd: data.limitMonthlyUsd,
+      limitConcurrentSessions: data.limitConcurrentSessions,
     });
 
     // 检查是否存在同名的生效key
@@ -67,6 +78,13 @@ export async function addKey(data: {
       return {
         ok: false,
         error: `Key的5小时消费上限（${data.limit5hUsd}）不能超过用户限额（${user.limit5hUsd}）`,
+      };
+    }
+
+    if (data.limitDailyUsd && user.dailyQuota && data.limitDailyUsd > user.dailyQuota) {
+      return {
+        ok: false,
+        error: `Key的日消费上限（${data.limitDailyUsd}）不能超过用户限额（${user.dailyQuota}）`,
       };
     }
 
@@ -113,6 +131,9 @@ export async function addKey(data: {
       expires_at: expiresAt,
       can_login_web_ui: validatedData.canLoginWebUi,
       limit_5h_usd: validatedData.limit5hUsd,
+      limit_daily_usd: validatedData.limitDailyUsd,
+      daily_reset_mode: validatedData.dailyResetMode,
+      daily_reset_time: validatedData.dailyResetTime,
       limit_weekly_usd: validatedData.limitWeeklyUsd,
       limit_monthly_usd: validatedData.limitMonthlyUsd,
       limit_concurrent_sessions: validatedData.limitConcurrentSessions,
@@ -137,6 +158,9 @@ export async function editKey(
     expiresAt?: string;
     canLoginWebUi?: boolean;
     limit5hUsd?: number | null;
+    limitDailyUsd?: number | null;
+    dailyResetMode?: "fixed" | "rolling";
+    dailyResetTime?: string;
     limitWeeklyUsd?: number | null;
     limitMonthlyUsd?: number | null;
     limitConcurrentSessions?: number;
@@ -172,6 +196,17 @@ export async function editKey(
       return {
         ok: false,
         error: `Key的5小时消费上限（${validatedData.limit5hUsd}）不能超过用户限额（${user.limit5hUsd}）`,
+      };
+    }
+
+    if (
+      validatedData.limitDailyUsd &&
+      user.dailyQuota &&
+      validatedData.limitDailyUsd > user.dailyQuota
+    ) {
+      return {
+        ok: false,
+        error: `Key的日消费上限（${validatedData.limitDailyUsd}）不能超过用户限额（${user.dailyQuota}）`,
       };
     }
 
@@ -217,6 +252,9 @@ export async function editKey(
       expires_at: expiresAt,
       can_login_web_ui: validatedData.canLoginWebUi,
       limit_5h_usd: validatedData.limit5hUsd,
+      limit_daily_usd: validatedData.limitDailyUsd,
+      daily_reset_mode: validatedData.dailyResetMode,
+      daily_reset_time: validatedData.dailyResetTime,
       limit_weekly_usd: validatedData.limitWeeklyUsd,
       limit_monthly_usd: validatedData.limitMonthlyUsd,
       limit_concurrent_sessions: validatedData.limitConcurrentSessions,
@@ -314,6 +352,7 @@ export async function getKeysWithStatistics(
 export async function getKeyLimitUsage(keyId: number): Promise<
   ActionResult<{
     cost5h: { current: number; limit: number | null; resetAt?: Date };
+    costDaily: { current: number; limit: number | null; resetAt?: Date };
     costWeekly: { current: number; limit: number | null; resetAt?: Date };
     costMonthly: { current: number; limit: number | null; resetAt?: Date };
     concurrentSessions: { current: number; limit: number };
@@ -338,11 +377,18 @@ export async function getKeyLimitUsage(keyId: number): Promise<
     // 动态导入 RateLimitService 避免循环依赖
     const { RateLimitService } = await import("@/lib/rate-limit");
     const { SessionTracker } = await import("@/lib/session-tracker");
-    const { getResetInfo } = await import("@/lib/rate-limit/time-utils");
+    const { getResetInfo, getResetInfoWithMode } = await import("@/lib/rate-limit/time-utils");
 
     // 获取金额消费（优先 Redis，降级数据库）
-    const [cost5h, costWeekly, costMonthly, concurrentSessions] = await Promise.all([
+    const [cost5h, costDaily, costWeekly, costMonthly, concurrentSessions] = await Promise.all([
       RateLimitService.getCurrentCost(keyId, "key", "5h"),
+      RateLimitService.getCurrentCost(
+        keyId,
+        "key",
+        "daily",
+        key.dailyResetTime,
+        key.dailyResetMode ?? "fixed"
+      ),
       RateLimitService.getCurrentCost(keyId, "key", "weekly"),
       RateLimitService.getCurrentCost(keyId, "key", "monthly"),
       SessionTracker.getKeySessionCount(keyId),
@@ -350,6 +396,11 @@ export async function getKeyLimitUsage(keyId: number): Promise<
 
     // 获取重置时间
     const resetInfo5h = getResetInfo("5h");
+    const resetInfoDaily = getResetInfoWithMode(
+      "daily",
+      key.dailyResetTime,
+      key.dailyResetMode ?? "fixed"
+    );
     const resetInfoWeekly = getResetInfo("weekly");
     const resetInfoMonthly = getResetInfo("monthly");
 
@@ -360,6 +411,11 @@ export async function getKeyLimitUsage(keyId: number): Promise<
           current: cost5h,
           limit: key.limit5hUsd,
           resetAt: resetInfo5h.resetAt, // 滚动窗口无 resetAt
+        },
+        costDaily: {
+          current: costDaily,
+          limit: key.limitDailyUsd,
+          resetAt: resetInfoDaily.resetAt,
         },
         costWeekly: {
           current: costWeekly,

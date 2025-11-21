@@ -6,6 +6,13 @@ import { DialogFormLayout } from "@/components/form/form-layout";
 import { TextField, DateField, NumberField } from "@/components/form/form-field";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useZodForm } from "@/lib/hooks/use-zod-form";
 import { KeyFormSchema } from "@/lib/validation/schemas";
 import { toast } from "sonner";
@@ -19,6 +26,9 @@ interface EditKeyFormProps {
     expiresAt: string;
     canLoginWebUi?: boolean;
     limit5hUsd?: number | null;
+    limitDailyUsd?: number | null;
+    dailyResetMode?: "fixed" | "rolling";
+    dailyResetTime?: string;
     limitWeeklyUsd?: number | null;
     limitMonthlyUsd?: number | null;
     limitConcurrentSessions?: number;
@@ -48,6 +58,9 @@ export function EditKeyForm({ keyData, user, onSuccess }: EditKeyFormProps) {
       expiresAt: formatExpiresAt(keyData?.expiresAt || ""),
       canLoginWebUi: keyData?.canLoginWebUi ?? true,
       limit5hUsd: keyData?.limit5hUsd ?? null,
+      limitDailyUsd: keyData?.limitDailyUsd ?? null,
+      dailyResetMode: keyData?.dailyResetMode ?? "fixed",
+      dailyResetTime: keyData?.dailyResetTime ?? "00:00",
       limitWeeklyUsd: keyData?.limitWeeklyUsd ?? null,
       limitMonthlyUsd: keyData?.limitMonthlyUsd ?? null,
       limitConcurrentSessions: keyData?.limitConcurrentSessions ?? 0,
@@ -64,6 +77,9 @@ export function EditKeyForm({ keyData, user, onSuccess }: EditKeyFormProps) {
             expiresAt: data.expiresAt || undefined,
             canLoginWebUi: data.canLoginWebUi,
             limit5hUsd: data.limit5hUsd,
+            limitDailyUsd: data.limitDailyUsd,
+            dailyResetMode: data.dailyResetMode,
+            dailyResetTime: data.dailyResetTime,
             limitWeeklyUsd: data.limitWeeklyUsd,
             limitMonthlyUsd: data.limitMonthlyUsd,
             limitConcurrentSessions: data.limitConcurrentSessions,
@@ -138,6 +154,48 @@ export function EditKeyForm({ keyData, user, onSuccess }: EditKeyFormProps) {
         step={0.01}
         {...form.getFieldProps("limit5hUsd")}
       />
+
+      <NumberField
+        label={t("limitDailyUsd.label")}
+        placeholder={t("limitDailyUsd.placeholder")}
+        description={t("limitDailyUsd.description")}
+        min={0}
+        step={0.01}
+        {...form.getFieldProps("limitDailyUsd")}
+      />
+
+      <div className="space-y-2">
+        <Label htmlFor="daily-reset-mode">{t("dailyResetMode.label")}</Label>
+        <Select
+          value={form.values.dailyResetMode}
+          onValueChange={(value: "fixed" | "rolling") => form.setValue("dailyResetMode", value)}
+          disabled={isPending}
+        >
+          <SelectTrigger id="daily-reset-mode">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="fixed">{t("dailyResetMode.options.fixed")}</SelectItem>
+            <SelectItem value="rolling">{t("dailyResetMode.options.rolling")}</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          {form.values.dailyResetMode === "fixed"
+            ? t("dailyResetMode.desc.fixed")
+            : t("dailyResetMode.desc.rolling")}
+        </p>
+      </div>
+
+      {form.values.dailyResetMode === "fixed" && (
+        <TextField
+          label={t("dailyResetTime.label")}
+          placeholder={t("dailyResetTime.placeholder")}
+          description={t("dailyResetTime.description")}
+          type="time"
+          step={60}
+          {...form.getFieldProps("dailyResetTime")}
+        />
+      )}
 
       <NumberField
         label={t("limitWeeklyUsd.label")}

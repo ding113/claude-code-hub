@@ -204,6 +204,26 @@
           "primaryKey": false,
           "notNull": false
         },
+        "limit_daily_usd": {
+          "name": "limit_daily_usd",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "daily_reset_mode": {
+          "name": "daily_reset_mode",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'fixed'"
+        },
+        "daily_reset_time": {
+          "name": "daily_reset_time",
+          "type": "varchar(5)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'00:00'"
+        },
         "limit_weekly_usd": {
           "name": "limit_weekly_usd",
           "type": "numeric(10, 2)",
@@ -939,6 +959,26 @@
           "type": "numeric(10, 2)",
           "primaryKey": false,
           "notNull": false
+        },
+        "limit_daily_usd": {
+          "name": "limit_daily_usd",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "daily_reset_mode": {
+          "name": "daily_reset_mode",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'fixed'"
+        },
+        "daily_reset_time": {
+          "name": "daily_reset_time",
+          "type": "varchar(5)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'00:00'"
         },
         "limit_weekly_usd": {
           "name": "limit_weekly_usd",

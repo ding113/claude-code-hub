@@ -1,6 +1,6 @@
 {
-  "id": "dcbbb4ef-507a-41b9-81e6-ebd68d37dad8",
-  "prevId": "f68e89cc-aedd-4df1-a470-4081b0a18fb5",
+  "id": "2f530870-7533-4f3d-b34d-895e61d7b83b",
+  "prevId": "2cca68f8-d8c7-4298-9f24-c8fd493d700e",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -210,11 +210,19 @@
           "primaryKey": false,
           "notNull": false
         },
+        "daily_reset_mode": {
+          "name": "daily_reset_mode",
+          "type": "daily_reset_mode",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'fixed'"
+        },
         "daily_reset_time": {
           "name": "daily_reset_time",
           "type": "varchar(5)",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "default": "'00:00'"
         },
         "limit_weekly_usd": {
@@ -959,11 +967,19 @@
           "primaryKey": false,
           "notNull": false
         },
+        "daily_reset_mode": {
+          "name": "daily_reset_mode",
+          "type": "daily_reset_mode",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'fixed'"
+        },
         "daily_reset_time": {
           "name": "daily_reset_time",
           "type": "varchar(5)",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "default": "'00:00'"
         },
         "limit_weekly_usd": {
@@ -1018,6 +1034,27 @@
           "primaryKey": false,
           "notNull": false,
           "default": false
+        },
+        "first_byte_timeout_streaming_ms": {
+          "name": "first_byte_timeout_streaming_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 30000
+        },
+        "streaming_idle_timeout_ms": {
+          "name": "streaming_idle_timeout_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 10000
+        },
+        "request_timeout_non_streaming_ms": {
+          "name": "request_timeout_non_streaming_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 600000
         },
         "website_url": {
           "name": "website_url",
@@ -1397,6 +1434,30 @@
           "primaryKey": false,
           "notNull": false
         },
+        "limit_5h_usd": {
+          "name": "limit_5h_usd",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "limit_weekly_usd": {
+          "name": "limit_weekly_usd",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "limit_monthly_usd": {
+          "name": "limit_monthly_usd",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "limit_concurrent_sessions": {
+          "name": "limit_concurrent_sessions",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -1486,7 +1547,16 @@
       "isRLSEnabled": false
     }
   },
-  "enums": {},
+  "enums": {
+    "public.daily_reset_mode": {
+      "name": "daily_reset_mode",
+      "schema": "public",
+      "values": [
+        "fixed",
+        "rolling"
+      ]
+    }
+  },
   "schemas": {},
   "sequences": {},
   "roles": {},
