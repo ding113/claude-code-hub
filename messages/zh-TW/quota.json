@@ -90,6 +90,7 @@
     "title": "供應商限額統計",
     "totalCount": "共 {count} 個供應商",
     "filterCount": "顯示 {filtered} / {total} 個供應商",
+    "searchPlaceholder": "搜尋供應商名稱...",
     "status": {
       "enabled": "啟用",
       "disabled": "禁用"
@@ -97,6 +98,19 @@
     "card": {
       "priority": "優先級",
       "weight": "權重"
+    },
+    "sort": {
+      "name": "按名稱",
+      "priority": "按優先級",
+      "weight": "按權重",
+      "usage": "按使用量"
+    },
+    "list": {
+      "resetIn": "重置於",
+      "unlimited": "無限制",
+      "current": "當前",
+      "limit": "限制",
+      "used": "已用"
     },
     "cost5h": {
       "label": "5小時消費"

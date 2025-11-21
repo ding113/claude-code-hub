@@ -90,6 +90,7 @@
     "title": "Статистика квот провайдеров",
     "totalCount": "Всего провайдеров: {count}",
     "filterCount": "Показано {filtered} из {total} провайдеров",
+    "searchPlaceholder": "Поиск по имени провайдера...",
     "status": {
       "enabled": "Включен",
       "disabled": "Отключен"
@@ -97,6 +98,19 @@
     "card": {
       "priority": "Приоритет",
       "weight": "Вес"
+    },
+    "sort": {
+      "name": "По имени",
+      "priority": "По приоритету",
+      "weight": "По весу",
+      "usage": "По использованию"
+    },
+    "list": {
+      "resetIn": "Сброс через",
+      "unlimited": "Неограниченно",
+      "current": "Текущее",
+      "limit": "Лимит",
+      "used": "использовано"
     },
     "cost5h": {
       "label": "Расходы за 5 часов"

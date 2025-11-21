@@ -1,8 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { Search, X } from "lucide-react";
 import { ProviderTypeFilter } from "@/app/[locale]/settings/providers/_components/provider-type-filter";
+import { ProviderQuotaSortDropdown, type QuotaSortKey } from "./provider-quota-sort-dropdown";
 import { ProvidersQuotaClient } from "./providers-quota-client";
+import { Input } from "@/components/ui/input";
+import { useDebounce } from "@/lib/hooks/use-debounce";
 import type { ProviderType } from "@/types/provider";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { useTranslations } from "next-intl";
@@ -35,9 +39,14 @@ export function ProvidersQuotaManager({
   currencyCode = "USD",
 }: ProvidersQuotaManagerProps) {
   const [typeFilter, setTypeFilter] = useState<ProviderType | "all">("all");
-  const t = useTranslations("quota.providers");
+  const [sortBy, setSortBy] = useState<QuotaSortKey>("priority");
+  const [searchTerm, setSearchTerm] = useState("");
+  const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
-  // 计算筛选后的供应商数量
+  const t = useTranslations("quota.providers");
+  const tSearch = useTranslations("settings.providers.search");
+
+  // 计算筛选后的供应商数量（不包括搜索）
   const filteredCount =
     typeFilter === "all"
       ? providers.length
@@ -45,18 +54,50 @@ export function ProvidersQuotaManager({
 
   return (
     <div className="space-y-4">
-      {/* 类型筛选器 */}
-      <div className="flex items-center justify-between">
-        <ProviderTypeFilter value={typeFilter} onChange={setTypeFilter} />
-        <div className="text-sm text-muted-foreground">
-          {t("filterCount", { filtered: filteredCount, total: providers.length })}
+      {/* 筛选和搜索工具栏 */}
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center gap-2">
+          <ProviderTypeFilter value={typeFilter} onChange={setTypeFilter} />
+          <ProviderQuotaSortDropdown value={sortBy} onChange={setSortBy} />
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder={t("searchPlaceholder")}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-9 pr-9"
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                aria-label={tSearch("clear")}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* 搜索结果提示或筛选统计 */}
+        {debouncedSearchTerm ? (
+          <p className="text-sm text-muted-foreground">
+            {tSearch("found", { count: filteredCount })}
+          </p>
+        ) : (
+          <div className="text-sm text-muted-foreground">
+            {t("filterCount", { filtered: filteredCount, total: providers.length })}
+          </div>
+        )}
       </div>
 
       {/* 供应商列表 */}
       <ProvidersQuotaClient
         providers={providers}
         typeFilter={typeFilter}
+        sortBy={sortBy}
+        searchTerm={debouncedSearchTerm}
         currencyCode={currencyCode}
       />
     </div>

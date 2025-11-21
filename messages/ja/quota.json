@@ -92,6 +92,7 @@
     "title": "プロバイダークォータ統計",
     "totalCount": "合計 {count} 個のプロバイダー",
     "filterCount": "{filtered} / {total} 個のプロバイダーを表示",
+    "searchPlaceholder": "プロバイダー名を検索...",
     "status": {
       "enabled": "有効",
       "disabled": "無効"
@@ -99,6 +100,19 @@
     "card": {
       "priority": "優先度",
       "weight": "重み"
+    },
+    "sort": {
+      "name": "名前順",
+      "priority": "優先度順",
+      "weight": "重み順",
+      "usage": "使用量順"
+    },
+    "list": {
+      "resetIn": "リセットまで",
+      "unlimited": "無制限",
+      "current": "現在",
+      "limit": "制限",
+      "used": "使用済み"
     },
     "cost5h": {
       "label": "5時間コスト"
