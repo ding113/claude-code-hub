@@ -20,8 +20,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
   const t = useTranslations("dashboard.leaderboard");
   const searchParams = useSearchParams();
 
-  const initialScope =
-    searchParams.get("scope") === "provider" && isAdmin ? "provider" : "user";
+  const initialScope = searchParams.get("scope") === "provider" && isAdmin ? "provider" : "user";
   const initialPeriod = searchParams.get("period") === "monthly" ? "monthly" : "daily";
 
   const [scope, setScope] = useState<"user" | "provider">(initialScope);
