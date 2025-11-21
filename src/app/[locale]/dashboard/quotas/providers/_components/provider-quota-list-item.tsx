@@ -175,7 +175,7 @@ export function ProviderQuotaListItem({
       </div>
 
       {/* 中间：限额指标（圆形进度） */}
-      <div className="flex items-center gap-6 flex-1 justify-center">
+      <div className="flex items-start gap-6 flex-1 justify-center">
         {/* 5小时限额 */}
         {provider.quota.cost5h.limit &&
           provider.quota.cost5h.limit > 0 &&
