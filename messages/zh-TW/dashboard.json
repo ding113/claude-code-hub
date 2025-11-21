@@ -162,7 +162,11 @@
         "default": "暫無詳細錯誤訊息"
       },
       "clickStatusCode": "點擊狀態碼查看完整時間軸",
-      "viewDetails": "查看詳情"
+      "viewDetails": "查看詳情",
+      "reasons": {
+        "rateLimited": "供應商費用限制",
+        "circuitOpen": "斷路器開啟"
+      }
     },
     "providerChain": {
       "decisionChain": "供應商決策鏈"

@@ -161,7 +161,11 @@
         "default": "詳細なエラー情報はありません"
       },
       "clickStatusCode": "ステータスコードをクリックして完全なタイムラインを表示",
-      "viewDetails": "詳細を表示"
+      "viewDetails": "詳細を表示",
+      "reasons": {
+        "rateLimited": "プロバイダーコスト制限",
+        "circuitOpen": "サーキットブレーカー開放"
+      }
     },
     "providerChain": {
       "decisionChain": "プロバイダー決定チェーン"

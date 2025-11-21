@@ -375,7 +375,7 @@ export function ErrorDetailsDialog({
                         <div className="flex-1">
                           <span className="font-medium">{p.name}</span>
                           <span className="text-xs ml-2">
-                            ({p.reason === 'rate_limited' ? '供应商费用限制' : '熔断器打开'})
+                            ({t(`logs.details.reasons.${p.reason === 'rate_limited' ? 'rateLimited' : 'circuitOpen'}`)})
                           </span>
                           {p.details && (
                             <div className="text-xs text-orange-700 dark:text-orange-300 mt-0.5">
