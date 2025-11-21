@@ -81,6 +81,13 @@ export async function addKey(data: {
       };
     }
 
+    if (data.limitDailyUsd && user.dailyQuota && data.limitDailyUsd > user.dailyQuota) {
+      return {
+        ok: false,
+        error: `Key的日消费上限（${data.limitDailyUsd}）不能超过用户限额（${user.dailyQuota}）`,
+      };
+    }
+
     if (data.limitWeeklyUsd && user.limitWeeklyUsd && data.limitWeeklyUsd > user.limitWeeklyUsd) {
       return {
         ok: false,
@@ -152,6 +159,7 @@ export async function editKey(
     canLoginWebUi?: boolean;
     limit5hUsd?: number | null;
     limitDailyUsd?: number | null;
+    dailyResetMode?: "fixed" | "rolling";
     dailyResetTime?: string;
     limitWeeklyUsd?: number | null;
     limitMonthlyUsd?: number | null;
@@ -188,6 +196,17 @@ export async function editKey(
       return {
         ok: false,
         error: `Key的5小时消费上限（${validatedData.limit5hUsd}）不能超过用户限额（${user.limit5hUsd}）`,
+      };
+    }
+
+    if (
+      validatedData.limitDailyUsd &&
+      user.dailyQuota &&
+      validatedData.limitDailyUsd > user.dailyQuota
+    ) {
+      return {
+        ok: false,
+        error: `Key的日消费上限（${validatedData.limitDailyUsd}）不能超过用户限额（${user.dailyQuota}）`,
       };
     }
 
