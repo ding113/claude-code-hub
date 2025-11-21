@@ -474,9 +474,11 @@ export function ApiTestButton({
                             {testResult.details.content.length >
                               API_TEST_UI_CONFIG.MAX_PREVIEW_LENGTH && "..."}
                           </pre>
-                          {testResult.details.content.length > API_TEST_UI_CONFIG.MAX_PREVIEW_LENGTH && (
+                          {testResult.details.content.length >
+                            API_TEST_UI_CONFIG.MAX_PREVIEW_LENGTH && (
                             <div className="text-xs text-muted-foreground mt-2 italic">
-                              显示前 {API_TEST_UI_CONFIG.MAX_PREVIEW_LENGTH} 字符，完整内容请复制查看
+                              显示前 {API_TEST_UI_CONFIG.MAX_PREVIEW_LENGTH}{" "}
+                              字符，完整内容请复制查看
                             </div>
                           )}
                         </div>
