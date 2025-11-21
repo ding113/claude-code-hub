@@ -45,7 +45,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     if (normalizedPeriod !== period) {
       setPeriod(normalizedPeriod);
     }
-  }, [isAdmin, searchParams]);
+  }, [isAdmin, searchParams, scope, period]);
 
   useEffect(() => {
     let cancelled = false;

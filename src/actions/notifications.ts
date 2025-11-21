@@ -27,6 +27,7 @@ function isInternalUrl(urlString: string): boolean {
     if (ipv4Match) {
       const [, a, b, c] = ipv4Match.map(Number);
       // 私有 IP 范围
+      if (a === 127) return true; // 127.0.0.0/8 (loopback range)
       if (a === 10) return true; // 10.0.0.0/8
       if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
       if (a === 192 && b === 168) return true; // 192.168.0.0/16
@@ -37,6 +38,21 @@ function isInternalUrl(urlString: string): boolean {
     // 检查 IPv6 私有地址范围
     // 移除方括号（如果存在）用于 IPv6 地址检查
     const ipv6Hostname = hostname.replace(/^\[|\]$/g, "");
+    // IPv6-mapped IPv4 loopback (::ffff:127.x.x.x)
+    if (
+      ipv6Hostname.startsWith("::ffff:127.") ||
+      ipv6Hostname.startsWith("::ffff:10.") ||
+      ipv6Hostname.startsWith("::ffff:192.168.") ||
+      ipv6Hostname.startsWith("::ffff:0.")
+    ) {
+      return true;
+    }
+    // IPv6-mapped IPv4 172.16-31.x.x
+    const ipv6MappedMatch = ipv6Hostname.match(/^::ffff:172\.(\d+)\./);
+    if (ipv6MappedMatch) {
+      const secondOctet = parseInt(ipv6MappedMatch[1], 10);
+      if (secondOctet >= 16 && secondOctet <= 31) return true;
+    }
     // ULA (Unique Local Address): fc00::/7
     if (ipv6Hostname.startsWith("fc") || ipv6Hostname.startsWith("fd")) {
       return true;
