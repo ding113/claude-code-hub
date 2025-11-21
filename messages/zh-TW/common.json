@@ -40,5 +40,10 @@
   "info": "資訊",
   "noData": "暫無資料",
   "emptyState": "沒有資料可顯示",
-  "core": "核心"
+  "core": "核心",
+  "appearance": "外觀",
+  "theme": "主題",
+  "light": "淺色",
+  "dark": "深色",
+  "system": "跟隨系統"
 }
