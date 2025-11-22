@@ -5,6 +5,7 @@ export {
   clampTpm,
   formatTpmDisplay,
 } from "./provider";
+import { logger } from "@/lib/logger";
 
 /**
  * 验证URL格式
@@ -43,7 +44,8 @@ export function extractBaseUrl(url: string): string {
     const parsedUrl = new URL(url);
     // 返回协议 + 主机名（包含端口）
     return parsedUrl.origin;
-  } catch {
+  } catch (error) {
+    logger.warn("Failed to parse URL", { url, error });
     // 如果URL解析失败，返回原始URL
     return url;
   }

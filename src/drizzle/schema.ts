@@ -22,7 +22,7 @@ export const users = pgTable('users', {
   rpmLimit: integer('rpm_limit').default(60),
   dailyLimitUsd: numeric('daily_limit_usd', { precision: 10, scale: 2 }).default('100.00'),
   providerGroup: varchar('provider_group', { length: 50 }),
-  
+
   // New user-level quota fields (nullable for backward compatibility)
   limit5hUsd: numeric('limit_5h_usd', { precision: 10, scale: 2 }),
   limitWeeklyUsd: numeric('limit_weekly_usd', { precision: 10, scale: 2 }),
@@ -121,6 +121,7 @@ export const providers = pgTable('providers', {
   // - 'glm': 透传到智谱 MCP 服务（预留）
   // - 'custom': 自定义 MCP 服务（预留）
   mcpPassthroughType: varchar('mcp_passthrough_type', { length: 20 })
+    .notNull()
     .default('none')
     .$type<'none' | 'minimax' | 'glm' | 'custom'>(),
 

@@ -744,9 +744,8 @@ export class ProxyForwarder {
         "/v1/models",
       ];
       const requestPath = session.requestUrl.pathname;
-      const isStandardRequest = standardEndpoints.some(
-        (endpoint) => requestPath === endpoint || requestPath.startsWith(endpoint + "?")
-      );
+      // pathname does not include query params, so exact match is sufficient
+      const isStandardRequest = standardEndpoints.includes(requestPath);
       const isMcpRequest = !isStandardRequest;
 
       if (isMcpRequest && provider.mcpPassthroughType && provider.mcpPassthroughType !== "none") {

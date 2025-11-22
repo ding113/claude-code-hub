@@ -162,6 +162,11 @@ export class MinimaxMcpClient {
 
       return data;
     } catch (error) {
+      if (error instanceof TypeError) {
+        throw new McpRequestError(
+          `Network error: ${error.message}. Check base URL and network.`
+        );
+      }
       if (error instanceof McpAuthError || error instanceof McpRequestError) {
         throw error;
       }

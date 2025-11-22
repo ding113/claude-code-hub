@@ -143,9 +143,9 @@ export class McpPassthroughHandler {
     // 根据工具名称调用对应方法
     switch (toolCall.name) {
       case "web_search": {
-        const query = toolCall.input.query as string;
-        if (!query) {
-          throw new McpError("Missing required parameter: query");
+        const query = toolCall.input.query;
+        if (!query || typeof query !== "string") {
+          throw new McpError("Invalid parameter: query must be a non-empty string");
         }
 
         const response = await client.webSearch(query);
