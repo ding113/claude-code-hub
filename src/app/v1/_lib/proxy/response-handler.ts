@@ -104,72 +104,9 @@ export class ProxyResponseHandler {
               );
             }
 
-            // 统计逻辑（与原有逻辑一致）
+            // 使用共享的统计处理方法
             const duration = Date.now() - session.startTime;
-            if (messageContext) {
-              await updateMessageRequestDuration(messageContext.id, duration);
-            }
-
-            const tracker = ProxyStatusTracker.getInstance();
-            if (messageContext) {
-              tracker.endRequest(messageContext.user.id, messageContext.id);
-            }
-
-            const { usageMetrics } = parseUsageFromResponseText(
-              responseText,
-              provider.providerType
-            );
-
-            if (usageMetrics && messageContext) {
-              await updateRequestCostFromUsage(
-                messageContext.id,
-                session.getOriginalModel(),
-                session.getCurrentModel(),
-                usageMetrics,
-                provider.costMultiplier
-              );
-
-              await trackCostToRedis(session, usageMetrics);
-
-              // 更新 session usage
-              if (session.sessionId) {
-                let costUsdStr: string | undefined;
-                if (session.request.model) {
-                  const priceData = await findLatestPriceByModel(session.request.model);
-                  if (priceData?.priceData) {
-                    const cost = calculateRequestCost(
-                      usageMetrics,
-                      priceData.priceData,
-                      provider.costMultiplier
-                    );
-                    if (cost.gt(0)) {
-                      costUsdStr = cost.toString();
-                    }
-                  }
-                }
-
-                void SessionManager.updateSessionUsage(session.sessionId, {
-                  inputTokens: usageMetrics.input_tokens,
-                  outputTokens: usageMetrics.output_tokens,
-                  cacheCreationInputTokens: usageMetrics.cache_creation_input_tokens,
-                  cacheReadInputTokens: usageMetrics.cache_read_input_tokens,
-                  costUsd: costUsdStr,
-                  status: statusCode >= 200 && statusCode < 300 ? "completed" : "error",
-                  statusCode: statusCode,
-                }).catch((error: unknown) => {
-                  logger.error("[ResponseHandler] Failed to update session usage:", error);
-                });
-              }
-
-              await updateMessageRequestDetails(messageContext.id, {
-                statusCode: statusCode,
-                inputTokens: usageMetrics?.input_tokens,
-                outputTokens: usageMetrics?.output_tokens,
-                cacheCreationInputTokens: usageMetrics?.cache_creation_input_tokens,
-                cacheReadInputTokens: usageMetrics?.cache_read_input_tokens,
-                providerChain: session.getProviderChain(),
-              });
-            }
+            await finalizeRequestStats(session, responseText, statusCode, duration);
           } catch (error) {
             if (!isClientAbortError(error as Error)) {
               logger.error(
@@ -591,63 +528,18 @@ export class ProxyResponseHandler {
             if (flushed) chunks.push(flushed);
             const allContent = chunks.join("");
 
-            // 统计逻辑（与原有逻辑一致）
-            const duration = Date.now() - session.startTime;
-            await updateMessageRequestDuration(messageContext.id, duration);
-
-            const tracker = ProxyStatusTracker.getInstance();
-            tracker.endRequest(messageContext.user.id, messageContext.id);
-
-            const { usageMetrics } = parseUsageFromResponseText(allContent, provider.providerType);
-
-            await updateRequestCostFromUsage(
-              messageContext.id,
-              session.getOriginalModel(),
-              session.getCurrentModel(),
-              usageMetrics,
-              provider.costMultiplier
-            );
-
-            await trackCostToRedis(session, usageMetrics);
-
-            // 更新 session usage
-            if (session.sessionId && usageMetrics) {
-              let costUsdStr: string | undefined;
-              if (session.request.model) {
-                const priceData = await findLatestPriceByModel(session.request.model);
-                if (priceData?.priceData) {
-                  const cost = calculateRequestCost(
-                    usageMetrics,
-                    priceData.priceData,
-                    provider.costMultiplier
-                  );
-                  if (cost.gt(0)) {
-                    costUsdStr = cost.toString();
-                  }
+            // 存储响应体到 Redis（5分钟过期）
+            if (session.sessionId) {
+              void SessionManager.storeSessionResponse(session.sessionId, allContent).catch(
+                (err) => {
+                  logger.error("[ResponseHandler] Failed to store stream passthrough response:", err);
                 }
-              }
-
-              void SessionManager.updateSessionUsage(session.sessionId, {
-                inputTokens: usageMetrics.input_tokens,
-                outputTokens: usageMetrics.output_tokens,
-                cacheCreationInputTokens: usageMetrics.cache_creation_input_tokens,
-                cacheReadInputTokens: usageMetrics.cache_read_input_tokens,
-                costUsd: costUsdStr,
-                status: statusCode >= 200 && statusCode < 300 ? "completed" : "error",
-                statusCode: statusCode,
-              }).catch((err: unknown) => {
-                logger.error("[ResponseHandler] Failed to update session usage:", err);
-              });
+              );
             }
 
-            await updateMessageRequestDetails(messageContext.id, {
-              statusCode: statusCode,
-              inputTokens: usageMetrics?.input_tokens,
-              outputTokens: usageMetrics?.output_tokens,
-              cacheCreationInputTokens: usageMetrics?.cache_creation_input_tokens,
-              cacheReadInputTokens: usageMetrics?.cache_read_input_tokens,
-              providerChain: session.getProviderChain(),
-            });
+            // 使用共享的统计处理方法
+            const duration = Date.now() - session.startTime;
+            await finalizeRequestStats(session, allContent, statusCode, duration);
           } catch (error) {
             if (!isClientAbortError(error as Error)) {
               logger.error("[ResponseHandler] Gemini passthrough stats task failed:", error);
@@ -1465,6 +1357,92 @@ async function updateRequestCostFromUsage(
       },
     });
   }
+}
+
+/**
+ * 统一的请求统计处理方法
+ * 用于消除 Gemini 透传、普通非流式、普通流式之间的重复统计逻辑
+ */
+async function finalizeRequestStats(
+  session: ProxySession,
+  responseText: string,
+  statusCode: number,
+  duration: number
+): Promise<void> {
+  const { messageContext, provider } = session;
+  if (!provider || !messageContext) {
+    return;
+  }
+
+  // 1. 结束请求状态追踪
+  ProxyStatusTracker.getInstance().endRequest(messageContext.user.id, messageContext.id);
+
+  // 2. 更新请求时长
+  await updateMessageRequestDuration(messageContext.id, duration);
+
+  // 3. 解析 usage metrics
+  const { usageMetrics } = parseUsageFromResponseText(responseText, provider.providerType);
+
+  if (!usageMetrics) {
+    // 即使没有 usageMetrics，也需要更新状态码和 provider chain
+    await updateMessageRequestDetails(messageContext.id, {
+      statusCode: statusCode,
+      providerChain: session.getProviderChain(),
+    });
+    return;
+  }
+
+  // 4. 更新成本
+  await updateRequestCostFromUsage(
+    messageContext.id,
+    session.getOriginalModel(),
+    session.getCurrentModel(),
+    usageMetrics,
+    provider.costMultiplier
+  );
+
+  // 5. 追踪消费到 Redis（用于限流）
+  await trackCostToRedis(session, usageMetrics);
+
+  // 6. 更新 session usage
+  if (session.sessionId) {
+    let costUsdStr: string | undefined;
+    if (session.request.model) {
+      const priceData = await findLatestPriceByModel(session.request.model);
+      if (priceData?.priceData) {
+        const cost = calculateRequestCost(
+          usageMetrics,
+          priceData.priceData,
+          provider.costMultiplier
+        );
+        if (cost.gt(0)) {
+          costUsdStr = cost.toString();
+        }
+      }
+    }
+
+    void SessionManager.updateSessionUsage(session.sessionId, {
+      inputTokens: usageMetrics.input_tokens,
+      outputTokens: usageMetrics.output_tokens,
+      cacheCreationInputTokens: usageMetrics.cache_creation_input_tokens,
+      cacheReadInputTokens: usageMetrics.cache_read_input_tokens,
+      costUsd: costUsdStr,
+      status: statusCode >= 200 && statusCode < 300 ? "completed" : "error",
+      statusCode: statusCode,
+    }).catch((error: unknown) => {
+      logger.error("[ResponseHandler] Failed to update session usage:", error);
+    });
+  }
+
+  // 7. 更新请求详情
+  await updateMessageRequestDetails(messageContext.id, {
+    statusCode: statusCode,
+    inputTokens: usageMetrics.input_tokens,
+    outputTokens: usageMetrics.output_tokens,
+    cacheCreationInputTokens: usageMetrics.cache_creation_input_tokens,
+    cacheReadInputTokens: usageMetrics.cache_read_input_tokens,
+    providerChain: session.getProviderChain(),
+  });
 }
 
 /**
