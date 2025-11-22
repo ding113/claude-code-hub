@@ -67,10 +67,10 @@ export function formatLogTime(timestamp: number, timezone?: string): string {
 
     // 验证所有必需的时间部分都已成功获取
     if (!year || !month || !day || !hour || !minute) {
-      logger.warn(
-        "[log-time-formatter] Failed to get all date parts, falling back to ISO string",
-        { timestamp, timezone }
-      );
+      logger.warn("[log-time-formatter] Failed to get all date parts, falling back to ISO string", {
+        timestamp,
+        timezone,
+      });
       return new Date(timestamp).toISOString();
     }
 
