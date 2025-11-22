@@ -23,8 +23,6 @@ import {
 import {
   AreaChart,
   Area,
-  XAxis,
-  YAxis,
   ResponsiveContainer,
   PieChart,
   Pie,
@@ -34,9 +32,8 @@ import {
 } from "recharts";
 import { motion, AnimatePresence } from "framer-motion";
 import useSWR from "swr";
-import { useTranslations, useLocale } from "next-intl";
+import { useTranslations } from "next-intl";
 import { getDashboardRealtimeData } from "@/actions/dashboard-realtime";
-import type { DashboardRealtimeData } from "@/actions/dashboard-realtime";
 
 /**
  * ============================================================================
@@ -471,7 +468,7 @@ const UserRankings = ({
                   <motion.div
                     className="h-full bg-purple-500"
                     initial={{ width: 0 }}
-                    animate={{ width: `${(user.totalCost / 100) * 100}%` }}
+                    animate={{ width: `${(user.totalCost / (users[0]?.totalCost || 1)) * 100}%` }}
                   />
                 </div>
                 <span className="text-[9px] text-gray-500">{user.totalRequests} reqs</span>
@@ -595,7 +592,6 @@ const ModelDistribution = ({
  */
 export default function BigScreenPage() {
   const t = useTranslations("bigScreen");
-  const locale = useLocale();
   const [themeMode, setThemeMode] = useState("dark");
   const [currentTime, setCurrentTime] = useState(new Date());
 

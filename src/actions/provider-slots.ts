@@ -78,7 +78,7 @@ export async function getProviderSlots(): Promise<ActionResult<ProviderSlotInfo[
             name: provider.name,
             usedSlots,
             totalSlots: provider.limitConcurrentSessions ?? 0,
-            totalVolume: 0, // 会由前端从排行榜数据中填充，或由统一接口提供
+            totalVolume: 0, // This will be populated by the calling action from leaderboard data.
           };
         }
       )

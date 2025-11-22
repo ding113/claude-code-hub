@@ -70,6 +70,10 @@ export interface DashboardRealtimeData {
   }>;
 }
 
+// Constants for data limits
+const ACTIVITY_STREAM_LIMIT = 20;
+const MODEL_DISTRIBUTION_LIMIT = 10;
+
 /**
  * 获取数据大屏的所有实时数据
  *
@@ -107,16 +111,16 @@ export async function getDashboardRealtimeData(): Promise<ActionResult<Dashboard
       };
     }
 
-    // 并行查询所有数据源
+    // 并行查询所有数据源（使用 allSettled 以实现部分失败容错）
     const [
       overviewResult,
       activeSessionsResult,
-      userRankings,
-      providerRankings,
+      userRankingsResult,
+      providerRankingsResult,
       providerSlotsResult,
-      modelRankings,
+      modelRankingsResult,
       statisticsResult,
-    ] = await Promise.all([
+    ] = await Promise.allSettled([
       getOverviewData(),
       getActiveSessions(),
       findDailyLeaderboard(),
@@ -126,51 +130,121 @@ export async function getDashboardRealtimeData(): Promise<ActionResult<Dashboard
       getUserStatistics("today"),
     ]);
 
-    // 检查核心数据是否获取成功
-    if (!overviewResult.ok) {
+    // 提取数据并处理错误
+    const overviewData =
+      overviewResult.status === "fulfilled" && overviewResult.value.ok
+        ? overviewResult.value.data
+        : null;
+
+    if (!overviewData) {
+      const errorReason =
+        overviewResult.status === "rejected" ? overviewResult.reason : "Unknown error";
+      logger.error("Failed to get overview data", { reason: errorReason });
       return {
         ok: false,
-        error: overviewResult.error || "获取概览数据失败",
+        error: "获取概览数据失败",
       };
     }
 
+    // 提取其他数据，失败时使用空数组作为 fallback
+    const activeSessions =
+      activeSessionsResult.status === "fulfilled" && activeSessionsResult.value.ok
+        ? activeSessionsResult.value.data
+        : [];
+
+    const userRankings = userRankingsResult.status === "fulfilled" ? userRankingsResult.value : [];
+
+    const providerRankings =
+      providerRankingsResult.status === "fulfilled" ? providerRankingsResult.value : [];
+
+    const providerSlots =
+      providerSlotsResult.status === "fulfilled" && providerSlotsResult.value.ok
+        ? providerSlotsResult.value.data
+        : [];
+
+    const modelRankings =
+      modelRankingsResult.status === "fulfilled" ? modelRankingsResult.value : [];
+
+    const statisticsData =
+      statisticsResult.status === "fulfilled" && statisticsResult.value.ok
+        ? statisticsResult.value.data
+        : null;
+
+    // 记录部分失败的数据源
+    if (activeSessionsResult.status === "rejected" || !activeSessions.length) {
+      logger.warn("Failed to get active sessions", {
+        reason:
+          activeSessionsResult.status === "rejected" ? activeSessionsResult.reason : "empty data",
+      });
+    }
+    if (userRankingsResult.status === "rejected") {
+      logger.warn("Failed to get user rankings", { reason: userRankingsResult.reason });
+    }
+    if (providerRankingsResult.status === "rejected") {
+      logger.warn("Failed to get provider rankings", { reason: providerRankingsResult.reason });
+    }
+    if (providerSlotsResult.status === "rejected" || !providerSlots.length) {
+      logger.warn("Failed to get provider slots", {
+        reason:
+          providerSlotsResult.status === "rejected"
+            ? providerSlotsResult.reason
+            : "empty data or action failed",
+      });
+    }
+    if (modelRankingsResult.status === "rejected") {
+      logger.warn("Failed to get model rankings", { reason: modelRankingsResult.reason });
+    }
+    if (statisticsResult.status === "rejected" || !statisticsData) {
+      logger.warn("Failed to get statistics", {
+        reason:
+          statisticsResult.status === "rejected"
+            ? statisticsResult.reason
+            : "action failed or empty data",
+      });
+    }
+
     // 处理实时活动流数据
-    const activityStream: ActivityStreamEntry[] = activeSessionsResult.ok
-      ? activeSessionsResult.data.slice(0, 20).map((session) => ({
-          id: session.sessionId,
-          user: session.userName,
-          model: session.model || "Unknown",
-          provider: session.providerName || "Unknown",
-          latency: session.durationMs || 0,
-          status: session.statusCode || 200,
-          cost: parseFloat(session.costUsd || "0"),
-          startTime: session.startTime,
-        }))
-      : [];
+    const activityStream: ActivityStreamEntry[] = activeSessions
+      .slice(0, ACTIVITY_STREAM_LIMIT)
+      .map((session) => ({
+        id: session.sessionId,
+        user: session.userName,
+        model: session.model || "Unknown",
+        provider: session.providerName || "Unknown",
+        latency: session.durationMs || 0,
+        status: session.statusCode || 200,
+        cost: parseFloat(session.costUsd || "0"),
+        startTime: session.startTime,
+      }));
 
     // 处理供应商插槽数据（合并流量数据）
-    const providerSlots: ProviderSlotInfo[] = providerSlotsResult.ok
-      ? providerSlotsResult.data.map((slot) => {
-          // 从供应商排行榜中找到对应的流量数据
-          const rankingData = providerRankings.find((p) => p.providerId === slot.providerId);
-          return {
-            ...slot,
-            totalVolume: rankingData?.totalTokens || 0,
-          };
-        })
-      : [];
+    const providerSlotsWithVolume: ProviderSlotInfo[] = providerSlots.map((slot) => {
+      const rankingData = providerRankings.find((p) => p.providerId === slot.providerId);
 
-    // 处理趋势数据（24小时）
-    const trendData =
-      statisticsResult.ok && statisticsResult.data?.chartData
-        ? statisticsResult.data.chartData.map((item) => ({
-            hour: typeof item.hour === "number" ? item.hour : parseInt(String(item.hour), 10),
-            value:
-              typeof item.requests === "number"
-                ? item.requests
-                : parseInt(String(item.requests), 10),
-          }))
-        : Array.from({ length: 24 }, (_, i) => ({ hour: i, value: 0 }));
+      if (!rankingData) {
+        logger.debug("Provider has slots but no traffic", {
+          providerId: slot.providerId,
+          providerName: slot.name,
+        });
+      }
+
+      return {
+        ...slot,
+        totalVolume: rankingData?.totalTokens ?? 0,
+      };
+    });
+
+    // 处理趋势数据（24小时）- 从 ChartDataItem 正确提取数据
+    const trendData = statisticsData?.chartData
+      ? statisticsData.chartData.map((item) => {
+          const hour = new Date(item.date).getUTCHours();
+          // 聚合所有 *_calls 字段（如 user-1_calls, user-2_calls）
+          const value = Object.keys(item)
+            .filter((key) => key.endsWith("_calls"))
+            .reduce((sum, key) => sum + (Number(item[key]) || 0), 0);
+          return { hour, value };
+        })
+      : Array.from({ length: 24 }, (_, i) => ({ hour: i, value: 0 }));
 
     logger.debug("DashboardRealtime: Retrieved dashboard data", {
       userId: session.user.id,
@@ -183,12 +257,12 @@ export async function getDashboardRealtimeData(): Promise<ActionResult<Dashboard
     return {
       ok: true,
       data: {
-        metrics: overviewResult.data,
+        metrics: overviewData,
         activityStream,
         userRankings: userRankings.slice(0, 5),
         providerRankings: providerRankings.slice(0, 5),
-        providerSlots,
-        modelDistribution: modelRankings.slice(0, 10), // 前10个模型
+        providerSlots: providerSlotsWithVolume,
+        modelDistribution: modelRankings.slice(0, MODEL_DISTRIBUTION_LIMIT),
         trendData,
       },
     };
