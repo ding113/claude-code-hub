@@ -548,7 +548,7 @@ const TrafficTrend = ({
   currentTime: Date;
 }) => {
   // 只显示到当前小时的数据（截断未来时间）
-  const currentHour = currentTime.getHours();
+  const currentHour = currentTime.getUTCHours();
   const filteredData = data
     .filter((item) => item.hour <= currentHour)
     .map((item) => ({
