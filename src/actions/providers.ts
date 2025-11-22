@@ -1372,7 +1372,7 @@ export async function testProviderOpenAIResponses(
     }),
     body: (model) => ({
       model,
-      max_output_tokens: API_TEST_CONFIG.TEST_MAX_TOKENS,
+      // 注意：不包含 max_output_tokens，因为某些中转服务不支持此参数
       // input 必须是数组格式，符合 OpenAI Responses API 规范
       input: [
         {
