@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- Add real-time monitoring big screen dashboard with live metrics, 24h trends, provider slots status, and activity stream (#184) @ding113
 - Add dark mode support with theme switcher in Dashboard and settings pages (#171) @ding113
 - Add dark mode support to provider quota management page (#170) @ding113
 
