@@ -165,7 +165,10 @@ export async function getDashboardRealtimeData(): Promise<ActionResult<Dashboard
       statisticsResult.ok && statisticsResult.data?.chartData
         ? statisticsResult.data.chartData.map((item) => ({
             hour: typeof item.hour === "number" ? item.hour : parseInt(String(item.hour), 10),
-            value: typeof item.requests === "number" ? item.requests : parseInt(String(item.requests), 10),
+            value:
+              typeof item.requests === "number"
+                ? item.requests
+                : parseInt(String(item.requests), 10),
           }))
         : Array.from({ length: 24 }, (_, i) => ({ hour: i, value: 0 }));
 

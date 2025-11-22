@@ -141,7 +141,12 @@ const ParticleBackground = ({ themeMode }: { themeMode: string }) => {
     };
   }, [themeMode]);
 
-  return <canvas ref={canvasRef} className="absolute top-0 left-0 w-full h-full pointer-events-none z-0" />;
+  return (
+    <canvas
+      ref={canvasRef}
+      className="absolute top-0 left-0 w-full h-full pointer-events-none z-0"
+    />
+  );
 };
 
 /**
@@ -220,7 +225,9 @@ const MetricCard = ({
     >
       <div className="absolute -top-6 -right-6 w-24 h-24 bg-orange-500/10 rounded-full blur-2xl" />
       <div className="flex justify-between items-start z-10">
-        <span className={`text-xs uppercase tracking-wider font-semibold ${theme.text} opacity-50`}>{title}</span>
+        <span className={`text-xs uppercase tracking-wider font-semibold ${theme.text} opacity-50`}>
+          {title}
+        </span>
         <Icon size={16} className={`${theme.accent} opacity-80`} />
       </div>
       <div className="flex items-end gap-3 mt-1 z-10">
@@ -231,7 +238,9 @@ const MetricCard = ({
               <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-orange-500"></span>
             </span>
           )}
-          <span className={`text-3xl font-bold font-mono tracking-tight ${theme.text}`}>{value}</span>
+          <span className={`text-3xl font-bold font-mono tracking-tight ${theme.text}`}>
+            {value}
+          </span>
         </div>
       </div>
       <div className="mt-1 flex items-center text-[10px] font-medium z-10">
@@ -267,7 +276,9 @@ const ActivityStream = ({
 }) => {
   return (
     <div className="h-full flex flex-col">
-      <div className={`text-xs font-bold mb-2 flex items-center gap-2 ${theme.text} uppercase tracking-wider px-1`}>
+      <div
+        className={`text-xs font-bold mb-2 flex items-center gap-2 ${theme.text} uppercase tracking-wider px-1`}
+      >
         <Zap size={12} className="text-yellow-400" />
         {t("sections.activity")}
       </div>
@@ -296,13 +307,17 @@ const ActivityStream = ({
                 <div className={`col-span-2 truncate font-bold text-orange-400`}>{item.user}</div>
                 <div className={`col-span-3 truncate text-gray-300`}>{item.model}</div>
                 <div className={`col-span-3 truncate text-gray-500`}>{item.provider}</div>
-                <div className={`col-span-2 text-right ${item.latency > 1000 ? "text-red-400" : "text-green-400"}`}>
+                <div
+                  className={`col-span-2 text-right ${item.latency > 1000 ? "text-red-400" : "text-green-400"}`}
+                >
                   {item.latency}ms
                 </div>
                 <div className="col-span-2 text-right flex justify-end">
                   <span
                     className={`px-1.5 rounded-sm ${
-                      item.status === 200 ? "bg-green-500/10 text-green-500" : "bg-red-500/10 text-red-500"
+                      item.status === 200
+                        ? "bg-green-500/10 text-green-500"
+                        : "bg-red-500/10 text-red-500"
                     }`}
                   >
                     {item.status}
@@ -342,7 +357,9 @@ const ProviderQuotas = ({
 }) => {
   return (
     <div className="h-full flex flex-col">
-      <div className={`text-xs font-bold mb-3 flex items-center gap-2 ${theme.text} uppercase tracking-wider`}>
+      <div
+        className={`text-xs font-bold mb-3 flex items-center gap-2 ${theme.text} uppercase tracking-wider`}
+      >
         <Server size={12} className="text-blue-400" />
         {t("sections.providerQuotas")}
       </div>
@@ -402,7 +419,9 @@ const UserRankings = ({
 }) => {
   return (
     <div className="h-full flex flex-col relative">
-      <div className={`text-xs font-bold mb-3 flex items-center gap-2 ${theme.text} uppercase tracking-wider`}>
+      <div
+        className={`text-xs font-bold mb-3 flex items-center gap-2 ${theme.text} uppercase tracking-wider`}
+      >
         <User size={12} className="text-purple-400" />
         {t("sections.userRank")}
         <span className="ml-auto flex h-2 w-2">
@@ -443,7 +462,9 @@ const UserRankings = ({
             <div className="flex-1 min-w-0">
               <div className="flex justify-between items-center">
                 <span className={`text-xs font-bold truncate ${theme.text}`}>{user.userName}</span>
-                <span className="text-[10px] text-gray-500 font-mono">${user.totalCost.toFixed(2)}</span>
+                <span className="text-[10px] text-gray-500 font-mono">
+                  ${user.totalCost.toFixed(2)}
+                </span>
               </div>
               <div className="flex justify-between items-center mt-1">
                 <div className="w-16 h-1 bg-gray-700 rounded-full overflow-hidden">
@@ -479,19 +500,26 @@ const ProviderRanking = ({
 }) => {
   return (
     <div className="h-full flex flex-col">
-      <div className={`text-xs font-bold mb-3 flex items-center gap-2 ${theme.text} uppercase tracking-wider`}>
+      <div
+        className={`text-xs font-bold mb-3 flex items-center gap-2 ${theme.text} uppercase tracking-wider`}
+      >
         <Shield size={12} className="text-green-400" />
         {t("sections.providerRank")}
       </div>
       <div className="flex-1 space-y-2">
         {providers.slice(0, 5).map((p, i) => (
-          <div key={p.providerId} className="flex items-center justify-between p-2 rounded bg-white/5 border border-white/5">
+          <div
+            key={p.providerId}
+            className="flex items-center justify-between p-2 rounded bg-white/5 border border-white/5"
+          >
             <div className="flex items-center gap-2">
               <span className="text-[10px] text-gray-500 font-mono w-3">0{i + 1}</span>
               <span className={`text-xs font-semibold ${theme.text}`}>{p.providerName}</span>
             </div>
             <div className="text-right">
-              <div className={`text-xs font-mono ${theme.accent}`}>{p.totalTokens.toLocaleString()}</div>
+              <div className={`text-xs font-mono ${theme.accent}`}>
+                {p.totalTokens.toLocaleString()}
+              </div>
               <div className="text-[9px] text-gray-500">Tokens</div>
             </div>
           </div>
@@ -521,7 +549,9 @@ const ModelDistribution = ({
 
   return (
     <div className="h-full flex flex-col">
-      <div className={`text-xs font-bold mb-1 flex items-center gap-2 ${theme.text} uppercase tracking-wider`}>
+      <div
+        className={`text-xs font-bold mb-1 flex items-center gap-2 ${theme.text} uppercase tracking-wider`}
+      >
         <PieIcon size={12} className="text-indigo-400" />
         {t("sections.modelDist")}
       </div>
@@ -627,13 +657,19 @@ export default function BigScreenPage() {
         {/* Header */}
         <header className="flex justify-between items-center pb-2 border-b border-white/5">
           <div className="flex flex-col">
-            <h1 className={`text-2xl font-bold tracking-widest font-space ${theme.text}`}>{t("title")}</h1>
-            <p className={`text-[10px] tracking-[0.5em] uppercase opacity-50 ${theme.text} mt-1`}>{t("subtitle")}</p>
+            <h1 className={`text-2xl font-bold tracking-widest font-space ${theme.text}`}>
+              {t("title")}
+            </h1>
+            <p className={`text-[10px] tracking-[0.5em] uppercase opacity-50 ${theme.text} mt-1`}>
+              {t("subtitle")}
+            </p>
           </div>
 
           <div className="flex items-center gap-6">
             <div className={`text-right hidden md:block ${theme.text}`}>
-              <div className="text-xl font-mono font-bold tabular-nums">{currentTime.toLocaleTimeString()}</div>
+              <div className="text-xl font-mono font-bold tabular-nums">
+                {currentTime.toLocaleTimeString()}
+              </div>
             </div>
             <div className="h-6 w-[1px] bg-white/10" />
             <div className="flex gap-2">
@@ -646,7 +682,10 @@ export default function BigScreenPage() {
               >
                 {themeMode === "dark" ? <Moon size={18} /> : <Sun size={18} />}
               </button>
-              <button onClick={() => mutate()} className={`p-1.5 rounded hover:bg-white/5 ${theme.text}`}>
+              <button
+                onClick={() => mutate()}
+                className={`p-1.5 rounded hover:bg-white/5 ${theme.text}`}
+              >
                 <RefreshCw size={18} />
               </button>
             </div>
@@ -725,8 +764,12 @@ export default function BigScreenPage() {
             <div className={`flex-[2] ${theme.card} rounded-lg p-4`}>
               <ModelDistribution data={modelDist} theme={theme} t={t} />
             </div>
-            <div className={`flex-[1] ${theme.card} rounded-lg p-4 relative flex flex-col justify-end`}>
-              <div className={`absolute top-3 left-3 text-[10px] font-bold uppercase tracking-wider ${theme.text} opacity-50`}>
+            <div
+              className={`flex-[1] ${theme.card} rounded-lg p-4 relative flex flex-col justify-end`}
+            >
+              <div
+                className={`absolute top-3 left-3 text-[10px] font-bold uppercase tracking-wider ${theme.text} opacity-50`}
+              >
                 {t("sections.requestTrend")}
               </div>
               <div className="h-16 w-full">
@@ -738,7 +781,13 @@ export default function BigScreenPage() {
                         <stop offset="100%" stopColor="#ff6b35" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <Area type="monotone" dataKey="value" stroke="#ff6b35" fill="url(#grad1)" strokeWidth={2} />
+                    <Area
+                      type="monotone"
+                      dataKey="value"
+                      stroke="#ff6b35"
+                      fill="url(#grad1)"
+                      strokeWidth={2}
+                    />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -756,7 +805,9 @@ export default function BigScreenPage() {
         </div>
 
         {/* Footer */}
-        <footer className={`h-6 flex items-center justify-between text-[9px] uppercase tracking-wider opacity-40 ${theme.text}`}>
+        <footer
+          className={`h-6 flex items-center justify-between text-[9px] uppercase tracking-wider opacity-40 ${theme.text}`}
+        >
           <span>{t("status.normal")}</span>
           <span>
             {t("status.lastUpdate")}: {error ? "Error" : "2s ago"}

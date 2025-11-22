@@ -34,9 +34,7 @@ export async function getOverviewMetrics(): Promise<OverviewMetrics> {
       requestCount: count(),
       totalCost: sum(messageRequest.costUsd),
       avgDuration: avg(messageRequest.durationMs),
-      errorCount: sum(
-        sql<number>`CASE WHEN ${messageRequest.statusCode} >= 400 THEN 1 ELSE 0 END`
-      ),
+      errorCount: sum(sql<number>`CASE WHEN ${messageRequest.statusCode} >= 400 THEN 1 ELSE 0 END`),
     })
     .from(messageRequest)
     .where(
@@ -57,9 +55,8 @@ export async function getOverviewMetrics(): Promise<OverviewMetrics> {
   // 计算错误率（百分比）
   const requestCount = Number(result.requestCount || 0);
   const errorCount = Number(result.errorCount || 0);
-  const todayErrorRate = requestCount > 0
-    ? parseFloat(((errorCount / requestCount) * 100).toFixed(2))
-    : 0;
+  const todayErrorRate =
+    requestCount > 0 ? parseFloat(((errorCount / requestCount) * 100).toFixed(2)) : 0;
 
   return {
     todayRequests: requestCount,
