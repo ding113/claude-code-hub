@@ -15,5 +15,6 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- Fix error handling and status codes in response handler, improve user management page UX (#179) @ding113
 - Fix infinite loop in leaderboard tab switching (#178) @ding113
 - Fix CI failures: Prettier formatting and React Hooks ESLint error in theme-switcher (#173) @ding113
