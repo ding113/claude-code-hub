@@ -829,6 +829,10 @@ type ProviderApiTestResult = ActionResult<
         model?: string;
         usage?: Record<string, unknown>;
         content?: string;
+        streamInfo?: {
+          chunksReceived: number;
+          format: "sse" | "ndjson";
+        };
       };
     }
   | {
@@ -977,6 +981,301 @@ function extractFirstTextSnippet(
 function clipText(value: unknown, maxLength?: number): string | undefined {
   const limit = maxLength ?? API_TEST_CONFIG.MAX_RESPONSE_PREVIEW_LENGTH;
   return typeof value === "string" ? value.substring(0, limit) : undefined;
+}
+
+/**
+ * 流式响应解析结果
+ */
+type StreamParseResult = {
+  data: ProviderApiResponse;
+  chunksReceived: number;
+  format: "sse" | "ndjson";
+};
+
+/**
+ * 解析 SSE 文本格式的流式响应
+ */
+function parseSSEText(text: string): StreamParseResult {
+  const lines = text.split("\n");
+  const chunks: ProviderApiResponse[] = [];
+
+  let currentData = "";
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith("data:")) {
+      const dataContent = trimmed.slice(5).trim();
+
+      // 跳过 [DONE] 标记
+      if (dataContent === "[DONE]") {
+        continue;
+      }
+
+      if (dataContent) {
+        currentData = dataContent;
+      }
+    } else if (trimmed === "" && currentData) {
+      // 空行表示一个完整的 SSE 事件结束
+      try {
+        const parsed = JSON.parse(currentData) as ProviderApiResponse;
+        chunks.push(parsed);
+        currentData = "";
+      } catch {
+        // 忽略解析失败的 chunk
+      }
+    }
+  }
+
+  // 处理最后一个未结束的 data
+  if (currentData) {
+    try {
+      const parsed = JSON.parse(currentData) as ProviderApiResponse;
+      chunks.push(parsed);
+    } catch {
+      // 忽略解析失败的 chunk
+    }
+  }
+
+  if (chunks.length === 0) {
+    throw new Error("未能从 SSE 响应中解析出有效数据");
+  }
+
+  // 合并所有 chunks 为完整响应
+  const mergedResponse = mergeStreamChunks(chunks);
+
+  return {
+    data: mergedResponse,
+    chunksReceived: chunks.length,
+    format: "sse",
+  };
+}
+
+/**
+ * 解析流式响应（从 Response 对象读取）
+ */
+async function parseStreamResponse(response: Response): Promise<StreamParseResult> {
+  if (!response.body) {
+    throw new Error("响应体为空");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const chunks: ProviderApiResponse[] = [];
+
+  let buffer = "";
+  let currentData = "";
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+
+      // 保留最后一行（可能不完整）
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+
+        if (trimmed.startsWith("data:")) {
+          const dataContent = trimmed.slice(5).trim();
+
+          // 跳过 [DONE] 标记
+          if (dataContent === "[DONE]") {
+            continue;
+          }
+
+          if (dataContent) {
+            currentData = dataContent;
+          }
+        } else if (trimmed === "" && currentData) {
+          // 空行表示一个完整的 SSE 事件结束
+          try {
+            const parsed = JSON.parse(currentData) as ProviderApiResponse;
+            chunks.push(parsed);
+            currentData = "";
+          } catch {
+            // 忽略解析失败的 chunk
+          }
+        }
+      }
+    }
+
+    // 处理剩余的 buffer
+    if (buffer.trim()) {
+      const trimmed = buffer.trim();
+      if (trimmed.startsWith("data:")) {
+        const dataContent = trimmed.slice(5).trim();
+        if (dataContent && dataContent !== "[DONE]") {
+          try {
+            const parsed = JSON.parse(dataContent) as ProviderApiResponse;
+            chunks.push(parsed);
+          } catch {
+            // 忽略解析失败的 chunk
+          }
+        }
+      }
+    }
+
+    // 处理最后一个未结束的 data
+    if (currentData) {
+      try {
+        const parsed = JSON.parse(currentData) as ProviderApiResponse;
+        chunks.push(parsed);
+      } catch {
+        // 忽略解析失败的 chunk
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  if (chunks.length === 0) {
+    throw new Error("未能从流式响应中解析出有效数据");
+  }
+
+  // 合并所有 chunks 为完整响应
+  const mergedResponse = mergeStreamChunks(chunks);
+
+  return {
+    data: mergedResponse,
+    chunksReceived: chunks.length,
+    format: "sse",
+  };
+}
+
+/**
+ * 合并流式 chunks 为完整响应
+ */
+function mergeStreamChunks(chunks: ProviderApiResponse[]): ProviderApiResponse {
+  if (chunks.length === 0) {
+    throw new Error("没有可合并的 chunks");
+  }
+
+  // 使用第一个 chunk 作为基础
+  const base = { ...chunks[0] };
+
+  // 合并 usage 信息（取最后一个非空的）
+  for (let i = chunks.length - 1; i >= 0; i--) {
+    const chunk = chunks[i];
+    // Anthropic/OpenAI Chat/OpenAI Responses
+    if ("usage" in chunk && chunk.usage) {
+      if ("usage" in base) {
+        (base as AnthropicMessagesResponse | OpenAIChatResponse | OpenAIResponsesResponse).usage =
+          chunk.usage as (AnthropicMessagesResponse | OpenAIChatResponse | OpenAIResponsesResponse)["usage"];
+      }
+      break;
+    }
+    // Gemini
+    if ("usageMetadata" in chunk && chunk.usageMetadata) {
+      (base as GeminiResponse).usageMetadata = chunk.usageMetadata;
+      break;
+    }
+  }
+
+  // 合并文本内容
+  let mergedText = "";
+
+  for (const chunk of chunks) {
+    // Anthropic Messages API
+    if ("content" in chunk && Array.isArray(chunk.content)) {
+      for (const content of chunk.content) {
+        if (content.type === "text" && "text" in content) {
+          mergedText += content.text;
+        }
+      }
+    }
+
+    // OpenAI Chat Completions API (流式响应有 delta 字段)
+    if ("choices" in chunk && Array.isArray(chunk.choices)) {
+      const firstChoice = chunk.choices[0];
+      // 流式响应使用 delta
+      if (firstChoice && "delta" in firstChoice) {
+        const delta = firstChoice.delta as { content?: string };
+        if (delta.content) {
+          mergedText += delta.content;
+        }
+      }
+      // 非流式响应使用 message
+      else if (firstChoice?.message?.content) {
+        mergedText += firstChoice.message.content;
+      }
+    }
+
+    // OpenAI Responses API
+    if ("output" in chunk && Array.isArray(chunk.output)) {
+      const firstOutput = chunk.output[0];
+      if (firstOutput?.type === "message" && Array.isArray(firstOutput.content)) {
+        for (const content of firstOutput.content) {
+          if (content.type === "output_text" && "text" in content) {
+            mergedText += content.text;
+          }
+        }
+      }
+    }
+
+    // Gemini API
+    if ("candidates" in chunk && Array.isArray(chunk.candidates)) {
+      const firstCandidate = chunk.candidates[0];
+      if (firstCandidate?.content?.parts) {
+        for (const part of firstCandidate.content.parts) {
+          if (part.text) {
+            mergedText += part.text;
+          }
+        }
+      }
+    }
+  }
+
+  // 将合并后的文本写回到响应对象
+  if (mergedText) {
+    // Anthropic Messages API
+    if ("content" in base && Array.isArray(base.content)) {
+      base.content = [{ type: "text", text: mergedText }];
+    }
+
+    // OpenAI Chat Completions API
+    if ("choices" in base && Array.isArray(base.choices)) {
+      base.choices = [
+        {
+          ...base.choices[0],
+          message: { role: "assistant", content: mergedText },
+          finish_reason: "stop",
+        },
+      ];
+    }
+
+    // OpenAI Responses API
+    if ("output" in base && Array.isArray(base.output)) {
+      const firstOutput = base.output[0];
+      (base as OpenAIResponsesResponse).output = [
+        {
+          type: "message",
+          id: firstOutput?.id || "msg_" + Date.now(),
+          status: firstOutput?.status || "completed",
+          role: "assistant",
+          content: [{ type: "output_text", text: mergedText }],
+        },
+      ];
+    }
+
+    // Gemini API
+    if ("candidates" in base && Array.isArray(base.candidates)) {
+      (base as GeminiResponse).candidates = [
+        {
+          ...base.candidates[0],
+          content: {
+            parts: [{ text: mergedText }],
+          },
+          finishReason: "STOP",
+        },
+      ];
+    }
+  }
+
+  return base;
 }
 
 type ProviderUrlValidationError = {
@@ -1187,24 +1486,52 @@ async function executeProviderApiTest(
         contentType.includes("text/event-stream") || contentType.includes("application/x-ndjson");
 
       if (isStreamResponse) {
-        // 流式响应：读取部分内容用于测试
-        logger.warn("Provider API test received streaming response", {
+        // 流式响应：读取并解析流式数据
+        logger.info("Provider API test received streaming response", {
           providerUrl: normalizedProviderUrl.replace(/:\/\/[^@]*@/, "://***@"),
           contentType,
         });
 
-        return {
-          ok: true,
-          data: {
-            success: false,
-            message: "API 测试不支持流式响应",
-            details: {
-              responseTime,
-              error:
-                "供应商返回了流式响应（SSE），测试功能仅支持非流式 JSON 响应。请在实际使用中测试流式功能。",
+        try {
+          const streamResult = await parseStreamResponse(response);
+          const extracted = options.extract(streamResult.data);
+
+          return {
+            ok: true,
+            data: {
+              success: true,
+              message: `${options.successMessage}（流式响应）`,
+              details: {
+                responseTime,
+                ...extracted,
+                streamInfo: {
+                  chunksReceived: streamResult.chunksReceived,
+                  format: streamResult.format,
+                },
+              },
             },
-          },
-        };
+          };
+        } catch (streamError) {
+          logger.error("Provider API test stream parsing failed", {
+            providerUrl: normalizedProviderUrl.replace(/:\/\/[^@]*@/, "://***@"),
+            error: streamError instanceof Error ? streamError.message : String(streamError),
+          });
+
+          return {
+            ok: true,
+            data: {
+              success: false,
+              message: "流式响应解析失败",
+              details: {
+                responseTime,
+                error:
+                  streamError instanceof Error
+                    ? streamError.message
+                    : "无法解析流式响应数据",
+              },
+            },
+          };
+        }
       }
 
       // 先读取响应文本，然后尝试解析 JSON
@@ -1218,24 +1545,52 @@ async function executeProviderApiTest(
         responseText.includes("\n\ndata:");
 
       if (isLikelySSE) {
-        logger.warn("Provider API test received SSE response without proper Content-Type", {
+        logger.info("Provider API test received SSE response without proper Content-Type", {
           providerUrl: normalizedProviderUrl.replace(/:\/\/[^@]*@/, "://***@"),
           contentType,
           responsePreview: clipText(responseText, 100),
         });
 
-        return {
-          ok: true,
-          data: {
-            success: false,
-            message: "API 测试不支持流式响应",
-            details: {
-              responseTime,
-              error:
-                "供应商返回了流式响应（SSE），但未设置正确的 Content-Type。测试功能仅支持非流式 JSON 响应。",
+        try {
+          const streamResult = parseSSEText(responseText);
+          const extracted = options.extract(streamResult.data);
+
+          return {
+            ok: true,
+            data: {
+              success: true,
+              message: `${options.successMessage}（流式响应，Content-Type 未正确设置）`,
+              details: {
+                responseTime,
+                ...extracted,
+                streamInfo: {
+                  chunksReceived: streamResult.chunksReceived,
+                  format: streamResult.format,
+                },
+              },
             },
-          },
-        };
+          };
+        } catch (streamError) {
+          logger.error("Provider API test SSE text parsing failed", {
+            providerUrl: normalizedProviderUrl.replace(/:\/\/[^@]*@/, "://***@"),
+            error: streamError instanceof Error ? streamError.message : String(streamError),
+          });
+
+          return {
+            ok: true,
+            data: {
+              success: false,
+              message: "流式响应解析失败",
+              details: {
+                responseTime,
+                error:
+                  streamError instanceof Error
+                    ? streamError.message
+                    : "无法解析 SSE 格式数据",
+              },
+            },
+          };
+        }
       }
 
       // 尝试解析 JSON
