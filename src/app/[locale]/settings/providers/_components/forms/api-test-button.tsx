@@ -527,17 +527,28 @@ export function ApiTestButton({
                   </div>
                 )}
 
-                {/* 复制按钮 */}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleCopyResult}
-                  className="w-full"
-                >
-                  <Copy className="h-4 w-4 mr-2" />
-                  {t("copyResult")}
-                </Button>
+                {/* 操作按钮 */}
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCopyResult}
+                    className="flex-1"
+                  >
+                    <Copy className="h-4 w-4 mr-2" />
+                    {t("copyResult")}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setIsDetailDialogOpen(false)}
+                    className="flex-1"
+                  >
+                    {t("close")}
+                  </Button>
+                </div>
               </div>
             </DialogContent>
           </Dialog>

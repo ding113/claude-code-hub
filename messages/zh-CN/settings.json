@@ -242,6 +242,7 @@
         "copySuccess": "已复制到剪贴板",
         "copyFailed": "复制失败",
         "copyResult": "复制结果",
+        "close": "关闭",
         "success": "成功",
         "failed": "失败"
       },
