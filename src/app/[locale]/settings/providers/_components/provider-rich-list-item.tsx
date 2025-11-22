@@ -83,7 +83,6 @@ export function ProviderRichListItem({
 
   const canEdit = currentUser?.role === "admin";
   const tList = useTranslations("settings.providers.list");
-  const tCommon = useTranslations("settings.common");
   const tTimeout = useTranslations("settings.providers.form.sections.timeout");
 
   // 获取供应商类型配置

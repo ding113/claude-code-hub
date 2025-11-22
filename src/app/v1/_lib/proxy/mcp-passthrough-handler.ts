@@ -83,10 +83,7 @@ export class McpPassthroughHandler {
    * @param toolCall - 工具调用信息
    * @returns 工具响应
    */
-  static async handleToolCall(
-    provider: Provider,
-    toolCall: McpToolCall
-  ): Promise<McpToolResponse> {
+  static async handleToolCall(provider: Provider, toolCall: McpToolCall): Promise<McpToolResponse> {
     logger.info("[McpPassthroughHandler] Handling tool call", {
       providerId: provider.id,
       providerName: provider.name,

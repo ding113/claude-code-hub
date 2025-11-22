@@ -723,14 +723,6 @@ source ${shellConfig.split(" ")[0]}`}
    * 渲染 Gemini CLI 配置
    */
   const renderGeminiConfiguration = (os: OS) => {
-    const configPath = os === "windows" ? "%USERPROFILE%\\.gemini" : "~/.gemini";
-    const shellConfig =
-      os === "linux"
-        ? "~/.bashrc 或 ~/.zshrc"
-        : os === "macos"
-          ? "~/.zshrc 或 ~/.bash_profile"
-          : "";
-
     return (
       <div className="space-y-4">
         <h4 className={headingClasses.h4}>{t("gemini.configuration.configFile.title")}</h4>

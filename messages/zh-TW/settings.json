@@ -423,13 +423,13 @@
     "sync": {
       "button": "同步 LiteLLM 價格",
       "syncing": "同步中...",
-      "successWithChanges": "價格表更新成功，共更新 {count} 個模型",
+      "successWithChanges": "價格表更新: 新增 {added} 個，更新 {updated} 個，未變化 {unchanged} 個",
       "successNoChanges": "價格表已是最新，無需更新",
       "failed": "同步失敗",
       "failedError": "同步失敗: {error}",
       "failedNoResult": "價格表更新成功但未返回處理結果",
       "noModels": "未找到支援的模型價格",
-      "partialFailure": "部分更新成功，但有 {count} 個模型失敗"
+      "partialFailure": "部分更新成功，但有 {failed} 個模型失敗"
     },
     "table": {
       "modelName": "模型名稱",
@@ -624,7 +624,8 @@
         "manualPlaceholder": "輸入模型名稱（例如 gpt-5-turbo）",
         "manualDesc": "支援新增任意模型名稱（不限於價格表中的模型）",
         "claude": "Claude",
-        "openai": "OpenAI"
+        "openai": "OpenAI",
+        "gemini": "Gemini"
       },
       "modelRedirect": {
         "currentRules": "目前規則 ({count})",

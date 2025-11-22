@@ -19,7 +19,7 @@ import { getAvailableModelsByProviderType } from "@/actions/model-prices";
 import { useTranslations } from "next-intl";
 
 interface ModelMultiSelectProps {
-  providerType: "claude" | "codex" | "gemini" | "gemini-cli" | "openai-compatible";
+  providerType: "claude" | "claude-auth" | "codex" | "gemini" | "gemini-cli" | "openai-compatible";
   selectedModels: string[];
   onChange: (models: string[]) => void;
   disabled?: boolean;
@@ -37,6 +37,19 @@ export function ModelMultiSelect({
   const [loading, setLoading] = useState(true);
   // 新增：手动输入自定义模型的状态
   const [customModel, setCustomModel] = useState("");
+
+  // 供应商类型到显示名称的映射
+  const getProviderTypeLabel = (type: string): string => {
+    const typeMap: Record<string, string> = {
+      claude: t("claude"),
+      "claude-auth": t("claude"),
+      codex: t("openai"),
+      gemini: t("gemini"),
+      "gemini-cli": t("gemini"),
+      "openai-compatible": t("openai"),
+    };
+    return typeMap[type] || t("openai");
+  };
 
   // 当供应商类型变化时，重新加载模型列表
   useEffect(() => {
@@ -89,7 +102,7 @@ export function ModelMultiSelect({
           {selectedModels.length === 0 ? (
             <span className="text-muted-foreground">
               {t("allowAllModels", {
-                type: providerType === "claude" ? t("claude") : t("openai"),
+                type: getProviderTypeLabel(providerType),
               })}
             </span>
           ) : (

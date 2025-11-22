@@ -423,13 +423,13 @@
     "sync": {
       "button": "Синхронизировать цены LiteLLM",
       "syncing": "Синхронизация...",
-      "successWithChanges": "Прайс-лист успешно обновлён, {count} моделей обновлено",
+      "successWithChanges": "Обновление прайс-листа: добавлено {added}, обновлено {updated}, без изменений {unchanged}",
       "successNoChanges": "Прайс-лист актуален, обновление не требуется",
       "failed": "Ошибка синхронизации",
       "failedError": "Ошибка синхронизации: {error}",
       "failedNoResult": "Прайс-лист обновлен но результат не возвращен",
       "noModels": "Цены моделей не найдены",
-      "partialFailure": "Частичное обновление выполнено, но {count} моделей не удалось обновить"
+      "partialFailure": "Частичное обновление выполнено, но {failed} моделей не удалось обновить"
     },
     "table": {
       "modelName": "Название модели",
@@ -555,7 +555,8 @@
         "manualPlaceholder": "Введите название модели (например, gpt-5-turbo)",
         "manualDesc": "Поддержка добавления любого названия модели (не ограничено прайс-листом)",
         "claude": "Claude",
-        "openai": "OpenAI"
+        "openai": "OpenAI",
+        "gemini": "Gemini"
       },
       "modelRedirect": {
         "currentRules": "Текущие правила ({count})",

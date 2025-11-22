@@ -423,13 +423,13 @@
     "sync": {
       "button": "Sync LiteLLM Prices",
       "syncing": "Syncing...",
-      "successWithChanges": "Price table updated successfully, {count} models updated",
+      "successWithChanges": "Price table updated: {added} added, {updated} updated, {unchanged} unchanged",
       "successNoChanges": "Price table is up to date, no updates needed",
       "failed": "Sync failed",
       "failedError": "Sync failed: {error}",
       "failedNoResult": "Price table updated but no result returned",
       "noModels": "No model prices found",
-      "partialFailure": "Partial update succeeded, but {count} models failed"
+      "partialFailure": "Partial update succeeded, but {failed} models failed"
     },
     "table": {
       "modelName": "Model Name",
@@ -653,7 +653,8 @@
         "manualPlaceholder": "Enter model name (e.g. gpt-5-turbo)",
         "manualDesc": "Support adding any model name (not limited to price table)",
         "claude": "Claude",
-        "openai": "OpenAI"
+        "openai": "OpenAI",
+        "gemini": "Gemini"
       },
       "modelRedirect": {
         "currentRules": "Current Rules ({count})",
@@ -703,6 +704,22 @@
       "codexStrategyForceDesc": "Always use official Codex CLI instructions (~4000+ chars)",
       "codexStrategyForceLabel": "Force Official",
       "codexStrategyHint": "Hint: Some strict Codex gateways (e.g. 88code, foxcode) require official instructions. Choose \"Auto\" or \"Force Official\" strategy",
+      "mcpPassthroughConfig": "MCP Passthrough Configuration",
+      "mcpPassthroughConfigNone": "Disabled",
+      "mcpPassthroughConfigMinimax": "Minimax",
+      "mcpPassthroughConfigGlm": "GLM (Reserved)",
+      "mcpPassthroughConfigCustom": "Custom (Reserved)",
+      "mcpPassthroughDesc": "When enabled, pass through MCP tool calls to specified AI provider (e.g. minimax for image recognition, web search)",
+      "mcpPassthroughSelect": "Passthrough Type",
+      "mcpPassthroughNoneLabel": "Disabled",
+      "mcpPassthroughNoneDesc": "Do not enable MCP passthrough (default)",
+      "mcpPassthroughMinimaxLabel": "Minimax",
+      "mcpPassthroughMinimaxDesc": "Pass through to minimax MCP service (supports image recognition, web search, etc.)",
+      "mcpPassthroughGlmLabel": "GLM",
+      "mcpPassthroughGlmDesc": "Pass through to GLM MCP service (reserved, not implemented yet)",
+      "mcpPassthroughCustomLabel": "Custom",
+      "mcpPassthroughCustomDesc": "Pass through to custom MCP service (reserved, not implemented yet)",
+      "mcpPassthroughHint": "Hint: MCP passthrough allows Claude Code client to use tool capabilities provided by third-party AI providers (e.g. image recognition, web search)",
       "codexStrategyKeepDesc": "Always pass through client instructions, no auto retry (for lenient gateways)",
       "codexStrategyKeepLabel": "Keep Original",
       "codexStrategySelect": "Strategy Selection",
