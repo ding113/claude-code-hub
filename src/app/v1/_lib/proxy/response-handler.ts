@@ -532,7 +532,10 @@ export class ProxyResponseHandler {
             if (session.sessionId) {
               void SessionManager.storeSessionResponse(session.sessionId, allContent).catch(
                 (err) => {
-                  logger.error("[ResponseHandler] Failed to store stream passthrough response:", err);
+                  logger.error(
+                    "[ResponseHandler] Failed to store stream passthrough response:",
+                    err
+                  );
                 }
               );
             }
