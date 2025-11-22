@@ -513,6 +513,27 @@
       "placeholder": "留空表示無限制",
       "description": "5小時內最大消費金額"
     },
+    "limitDailyUsd": {
+      "label": "每日消費上限 (USD)",
+      "placeholder": "留空表示無限制",
+      "description": "每日最大消費金額"
+    },
+    "dailyResetMode": {
+      "label": "每日重設模式",
+      "options": {
+        "fixed": "固定時間重設",
+        "rolling": "滾動視窗（24小時）"
+      },
+      "desc": {
+        "fixed": "每天在指定時間重設額度",
+        "rolling": "從首次請求開始計算24小時滾動視窗"
+      }
+    },
+    "dailyResetTime": {
+      "label": "每日重設時間",
+      "placeholder": "HH:mm",
+      "description": "每日限額的重設時間（使用系統時區）"
+    },
     "limitWeeklyUsd": {
       "label": "週消費上限 (USD)",
       "placeholder": "留空表示無限制",

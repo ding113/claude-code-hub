@@ -34,7 +34,7 @@ export function AddUserDialog({
           <ListPlus className="h-4 w-4" /> {t("addUser")}
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[85vh] flex flex-col">
+      <DialogContent className="max-h-[85vh] flex flex-col overflow-hidden">
         <FormErrorBoundary>
           <UserForm onSuccess={() => setOpen(false)} currentUser={currentUser} />
         </FormErrorBoundary>

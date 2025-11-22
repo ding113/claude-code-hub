@@ -155,38 +155,40 @@ export function AddKeyForm({ userId, user, onSuccess }: AddKeyFormProps) {
         />
       </FormGrid>
 
-      <div className="space-y-2">
-        <Label htmlFor="daily-reset-mode">{t("dailyResetMode.label")}</Label>
-        <Select
-          value={form.values.dailyResetMode}
-          onValueChange={(value: "fixed" | "rolling") => form.setValue("dailyResetMode", value)}
-          disabled={isPending}
-        >
-          <SelectTrigger id="daily-reset-mode">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="fixed">{t("dailyResetMode.options.fixed")}</SelectItem>
-            <SelectItem value="rolling">{t("dailyResetMode.options.rolling")}</SelectItem>
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-muted-foreground">
-          {form.values.dailyResetMode === "fixed"
-            ? t("dailyResetMode.desc.fixed")
-            : t("dailyResetMode.desc.rolling")}
-        </p>
-      </div>
+      <FormGrid columns={2}>
+        <div className="space-y-2">
+          <Label htmlFor="daily-reset-mode">{t("dailyResetMode.label")}</Label>
+          <Select
+            value={form.values.dailyResetMode}
+            onValueChange={(value: "fixed" | "rolling") => form.setValue("dailyResetMode", value)}
+            disabled={isPending}
+          >
+            <SelectTrigger id="daily-reset-mode">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="fixed">{t("dailyResetMode.options.fixed")}</SelectItem>
+              <SelectItem value="rolling">{t("dailyResetMode.options.rolling")}</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            {form.values.dailyResetMode === "fixed"
+              ? t("dailyResetMode.desc.fixed")
+              : t("dailyResetMode.desc.rolling")}
+          </p>
+        </div>
 
-      {form.values.dailyResetMode === "fixed" && (
-        <TextField
-          label={t("dailyResetTime.label")}
-          placeholder={t("dailyResetTime.placeholder")}
-          description={t("dailyResetTime.description")}
-          type="time"
-          step={60}
-          {...form.getFieldProps("dailyResetTime")}
-        />
-      )}
+        {form.values.dailyResetMode === "fixed" && (
+          <TextField
+            label={t("dailyResetTime.label")}
+            placeholder={t("dailyResetTime.placeholder")}
+            description={t("dailyResetTime.description")}
+            type="time"
+            step={60}
+            {...form.getFieldProps("dailyResetTime")}
+          />
+        )}
+      </FormGrid>
 
       <FormGrid columns={2}>
         <NumberField
