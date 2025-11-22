@@ -1,0 +1,34 @@
+{
+  "title": "CLAUDE CODE HUB",
+  "subtitle": "REALTIME DATA MONITOR",
+  "metrics": {
+    "concurrent": "Concurrency",
+    "activeSessions": "Active Sessions",
+    "requests": "Requests (24h)",
+    "cost": "Cost (Today)",
+    "latency": "Avg Latency",
+    "errorRate": "Error Rate"
+  },
+  "sections": {
+    "providerRank": "Top Providers",
+    "providerQuotas": "Provider Slot Usage",
+    "requestTrend": "Traffic Trend (24h)",
+    "activity": "Live Stream",
+    "userRank": "Top Users (Realtime)",
+    "modelDist": "Model Distribution"
+  },
+  "headers": {
+    "user": "User",
+    "model": "Model",
+    "provider": "Provider",
+    "latency": "Latency",
+    "cost": "Cost",
+    "status": "Status",
+    "usage": "Usage",
+    "quota": "Quota"
+  },
+  "status": {
+    "normal": "System Normal",
+    "lastUpdate": "Last Update"
+  }
+}

@@ -2,7 +2,7 @@
 
 import { db } from "@/drizzle/db";
 import { messageRequest } from "@/drizzle/schema";
-import { isNull, and, gte, lt, count, sum, avg } from "drizzle-orm";
+import { isNull, and, gte, lt, count, sum, avg, sql } from "drizzle-orm";
 import { Decimal, toCostDecimal } from "@/lib/utils/currency";
 
 /**
@@ -15,6 +15,8 @@ export interface OverviewMetrics {
   todayCost: number;
   /** 平均响应时间（毫秒） */
   avgResponseTime: number;
+  /** 今日错误率（百分比） */
+  todayErrorRate: number;
 }
 
 /**
@@ -32,6 +34,9 @@ export async function getOverviewMetrics(): Promise<OverviewMetrics> {
       requestCount: count(),
       totalCost: sum(messageRequest.costUsd),
       avgDuration: avg(messageRequest.durationMs),
+      errorCount: sum(
+        sql<number>`CASE WHEN ${messageRequest.statusCode} >= 400 THEN 1 ELSE 0 END`
+      ),
     })
     .from(messageRequest)
     .where(
@@ -49,9 +54,17 @@ export async function getOverviewMetrics(): Promise<OverviewMetrics> {
   // 处理平均响应时间（转换为整数）
   const avgResponseTime = result.avgDuration ? Math.round(Number(result.avgDuration)) : 0;
 
+  // 计算错误率（百分比）
+  const requestCount = Number(result.requestCount || 0);
+  const errorCount = Number(result.errorCount || 0);
+  const todayErrorRate = requestCount > 0
+    ? parseFloat(((errorCount / requestCount) * 100).toFixed(2))
+    : 0;
+
   return {
-    todayRequests: Number(result.requestCount || 0),
+    todayRequests: requestCount,
     todayCost,
     avgResponseTime,
+    todayErrorRate,
   };
 }

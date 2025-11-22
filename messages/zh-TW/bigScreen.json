@@ -1,0 +1,34 @@
+{
+  "title": "CLAUDE CODE HUB",
+  "subtitle": "即時資料監控中台",
+  "metrics": {
+    "concurrent": "並發數",
+    "activeSessions": "活躍會話",
+    "requests": "今日請求",
+    "cost": "今日成本",
+    "latency": "平均回應",
+    "errorRate": "錯誤率"
+  },
+  "sections": {
+    "providerRank": "供應商排行 (TOP 5)",
+    "providerQuotas": "供應商並發插槽狀態",
+    "requestTrend": "24h 流量趨勢",
+    "activity": "即時請求流 (Live)",
+    "userRank": "用戶消耗排行 (Realtime)",
+    "modelDist": "模型調用分布"
+  },
+  "headers": {
+    "user": "用戶",
+    "model": "模型",
+    "provider": "供應商",
+    "latency": "耗時",
+    "cost": "成本",
+    "status": "狀態",
+    "usage": "用量",
+    "quota": "配額"
+  },
+  "status": {
+    "normal": "系統正常",
+    "lastUpdate": "資料更新"
+  }
+}
