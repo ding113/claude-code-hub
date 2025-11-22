@@ -77,7 +77,6 @@ import {
 } from "@/lib/redis/lua-scripts";
 import { sumUserCostToday } from "@/repository/statistics";
 import {
-
   getTimeRangeForPeriodWithMode,
   getTTLForPeriod,
   getTTLForPeriodWithMode,
@@ -469,7 +468,7 @@ export class RateLimitService {
       const ttlDailyKey = getTTLForPeriodWithMode("daily", keyDailyReset.normalized, keyDailyMode);
       const ttlDailyProvider =
         keyDailyReset.normalized === providerDailyReset.normalized &&
-          keyDailyMode === providerDailyMode
+        keyDailyMode === providerDailyMode
           ? ttlDailyKey
           : getTTLForPeriodWithMode("daily", providerDailyReset.normalized, providerDailyMode);
       const ttlWeekly = getTTLForPeriod("weekly");
