@@ -10,6 +10,15 @@ import { logger } from "@/lib/logger";
  * @param timestamp Unix 时间戳(毫秒)
  * @param timezone 可选的时区,默认使用系统时区
  * @returns 格式化后的时间字符串,格式: YYYY/MM/DD HH:mm
+ *
+ * @example
+ * // 使用系统时区
+ * formatLogTime(1640000000000) // "2021/12/20 16:53"
+ *
+ * @example
+ * // 指定时区
+ * formatLogTime(1640000000000, "America/New_York") // "2021/12/20 03:53"
+ * formatLogTime(1640000000000, "Asia/Shanghai") // "2021/12/20 16:53"
  */
 export function formatLogTime(timestamp: number, timezone?: string): string {
   try {
@@ -55,6 +64,11 @@ export function formatLogTime(timestamp: number, timezone?: string): string {
  * @param logs 日志对象数组
  * @param timezone 可选的时区
  * @returns 格式化后的日志数组
+ *
+ * @example
+ * const logs = [{ time: 1640000000000, message: "Error" }];
+ * formatLogTimes(logs, "Asia/Shanghai");
+ * // [{ time: 1640000000000, message: "Error", formattedTime: "2021/12/20 16:53" }]
  */
 export function formatLogTimes<T extends { time?: number }>(
   logs: T[],

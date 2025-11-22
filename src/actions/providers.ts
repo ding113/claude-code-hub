@@ -1569,7 +1569,9 @@ async function executeProviderApiTest(
         }
 
         // 使用 errorDetail 或 errorText 的前 200 字符作为错误详情
-        const finalErrorDetail = errorDetail ?? clipText(errorText, 200);
+        // 添加防御性检查,避免空字符串产生误导性错误消息
+        const finalErrorDetail =
+          errorDetail ?? (errorText ? clipText(errorText, 200) : "No error details available");
 
         logger.error("Provider API test failed", {
           providerUrl: normalizedProviderUrl.replace(/:\/\/[^@]*@/, "://***@"),
@@ -1585,7 +1587,7 @@ async function executeProviderApiTest(
             message: `API 返回错误: HTTP ${response.status}`,
             details: {
               responseTime,
-              error: finalErrorDetail || "API 请求失败",
+              error: finalErrorDetail,
             },
           },
         };
