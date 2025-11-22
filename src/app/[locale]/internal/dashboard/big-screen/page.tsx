@@ -29,10 +29,15 @@ import {
   Cell,
   Tooltip,
   Legend,
+  XAxis,
+  YAxis,
+  CartesianGrid,
 } from "recharts";
 import { motion, AnimatePresence } from "framer-motion";
 import useSWR from "swr";
-import { useTranslations } from "next-intl";
+import { useTranslations, useLocale } from "next-intl";
+import { useRouter, usePathname } from "@/i18n/routing";
+import { locales, localeLabels, type Locale } from "@/i18n/config";
 import { getDashboardRealtimeData } from "@/actions/dashboard-realtime";
 
 /**
@@ -490,6 +495,7 @@ const ProviderRanking = ({
   providers: Array<{
     providerId: number;
     providerName: string;
+    totalCost: number;
     totalTokens: number;
   }>;
   theme: (typeof THEMES)[keyof typeof THEMES];
@@ -504,7 +510,7 @@ const ProviderRanking = ({
         {t("sections.providerRank")}
       </div>
       <div className="flex-1 space-y-2">
-        {providers.slice(0, 5).map((p, i) => (
+        {providers.map((p, i) => (
           <div
             key={p.providerId}
             className="flex items-center justify-between p-2 rounded bg-white/5 border border-white/5"
@@ -514,10 +520,10 @@ const ProviderRanking = ({
               <span className={`text-xs font-semibold ${theme.text}`}>{p.providerName}</span>
             </div>
             <div className="text-right">
-              <div className={`text-xs font-mono ${theme.accent}`}>
-                {p.totalTokens.toLocaleString()}
+              <div className={`text-xs font-mono ${theme.accent}`}>${p.totalCost.toFixed(2)}</div>
+              <div className="text-[9px] text-gray-500">
+                {p.totalTokens.toLocaleString()} Tokens
               </div>
-              <div className="text-[9px] text-gray-500">Tokens</div>
             </div>
           </div>
         ))}
@@ -526,7 +532,88 @@ const ProviderRanking = ({
   );
 };
 
-// 6. 模型分布
+// 6. 流量趋势（24小时）
+const TrafficTrend = ({
+  data,
+  theme,
+  t,
+  currentTime,
+}: {
+  data: Array<{
+    hour: number;
+    value: number;
+  }>;
+  theme: (typeof THEMES)[keyof typeof THEMES];
+  t: (key: string) => string;
+  currentTime: Date;
+}) => {
+  // 只显示到当前小时的数据（截断未来时间）
+  const currentHour = currentTime.getHours();
+  const filteredData = data
+    .filter((item) => item.hour <= currentHour)
+    .map((item) => ({
+      hour: item.hour,
+      value: item.value,
+      hourLabel: `${item.hour}:00`,
+    }));
+
+  return (
+    <div className="h-full flex flex-col">
+      <div
+        className={`text-xs font-bold mb-2 flex items-center gap-2 ${theme.text} uppercase tracking-wider`}
+      >
+        <Activity size={12} className="text-orange-400" />
+        {t("sections.requestTrend")}
+      </div>
+      <div className="flex-1 min-h-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={filteredData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
+            <defs>
+              <linearGradient id="grad1" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#ff6b35" stopOpacity={0.3} />
+                <stop offset="100%" stopColor="#ff6b35" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+            <XAxis
+              dataKey="hour"
+              stroke={theme.text === "text-[#e6e6e6]" ? "#666" : "#999"}
+              tick={{ fill: theme.text === "text-[#e6e6e6]" ? "#666" : "#999", fontSize: 10 }}
+              tickFormatter={(value) => `${value}h`}
+            />
+            <YAxis
+              stroke={theme.text === "text-[#e6e6e6]" ? "#666" : "#999"}
+              tick={{ fill: theme.text === "text-[#e6e6e6]" ? "#666" : "#999", fontSize: 10 }}
+              width={30}
+            />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: "#0a0a0f",
+                borderColor: "#333",
+                fontSize: "11px",
+                borderRadius: "6px",
+              }}
+              itemStyle={{ color: "#fff" }}
+              labelFormatter={(value) => `${value}:00`}
+              formatter={(value: number) => [`${value} 请求`, "数量"]}
+            />
+            <Area
+              type="monotone"
+              dataKey="value"
+              stroke="#ff6b35"
+              fill="url(#grad1)"
+              strokeWidth={2}
+              dot={false}
+              activeDot={{ r: 4, fill: "#ff6b35" }}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+};
+
+// 7. 模型分布
 const ModelDistribution = ({
   data,
   theme,
@@ -544,6 +631,23 @@ const ModelDistribution = ({
     value: item.totalRequests,
   }));
 
+  // 处理空数据的情况
+  if (chartData.length === 0) {
+    return (
+      <div className="h-full flex flex-col">
+        <div
+          className={`text-xs font-bold mb-1 flex items-center gap-2 ${theme.text} uppercase tracking-wider`}
+        >
+          <PieIcon size={12} className="text-indigo-400" />
+          {t("sections.modelDist")}
+        </div>
+        <div className="flex-1 flex items-center justify-center">
+          <span className={`text-xs ${theme.text} opacity-50`}>暂无数据</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-full flex flex-col">
       <div
@@ -557,8 +661,8 @@ const ModelDistribution = ({
           <PieChart>
             <Pie
               data={chartData}
-              innerRadius={40}
-              outerRadius={60}
+              innerRadius={30}
+              outerRadius={50}
               paddingAngle={2}
               dataKey="value"
               stroke="none"
@@ -594,6 +698,20 @@ export default function BigScreenPage() {
   const t = useTranslations("bigScreen");
   const [themeMode, setThemeMode] = useState("dark");
   const [currentTime, setCurrentTime] = useState(new Date());
+
+  // 语言切换
+  const currentLocale = useLocale() as Locale;
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const handleLocaleSwitch = () => {
+    // 循环切换语言：zh-CN → en → ja → ru → zh-TW → zh-CN
+    const currentIndex = locales.indexOf(currentLocale as Locale);
+    const nextIndex = (currentIndex + 1) % locales.length;
+    const nextLocale = locales[nextIndex];
+
+    router.push(pathname || "/dashboard", { locale: nextLocale });
+  };
 
   const theme = THEMES[themeMode as keyof typeof THEMES];
 
@@ -669,18 +787,25 @@ export default function BigScreenPage() {
             </div>
             <div className="h-6 w-[1px] bg-white/10" />
             <div className="flex gap-2">
-              <button className={`p-1.5 rounded hover:bg-white/5 ${theme.text}`}>
+              <button
+                onClick={handleLocaleSwitch}
+                className={`p-1.5 rounded hover:bg-white/5 ${theme.text} flex items-center gap-1.5 transition-colors`}
+                title={`当前: ${localeLabels[currentLocale]} (点击切��)`}
+              >
                 <Globe size={18} />
+                <span className="text-[10px] font-mono uppercase">
+                  {currentLocale.split("-")[0]}
+                </span>
               </button>
               <button
                 onClick={() => setThemeMode(themeMode === "dark" ? "light" : "dark")}
-                className={`p-1.5 rounded hover:bg-white/5 ${theme.text}`}
+                className={`p-1.5 rounded hover:bg-white/5 ${theme.text} transition-colors`}
               >
                 {themeMode === "dark" ? <Moon size={18} /> : <Sun size={18} />}
               </button>
               <button
                 onClick={() => mutate()}
-                className={`p-1.5 rounded hover:bg-white/5 ${theme.text}`}
+                className={`p-1.5 rounded hover:bg-white/5 ${theme.text} transition-colors`}
               >
                 <RefreshCw size={18} />
               </button>
@@ -689,21 +814,13 @@ export default function BigScreenPage() {
         </header>
 
         {/* Top Metrics Row */}
-        <div className="grid grid-cols-6 gap-3 h-[120px]">
+        <div className="grid grid-cols-5 gap-3 h-[120px]">
           <MetricCard
             title={t("metrics.concurrent")}
             value={metrics.concurrentSessions}
-            subValue="Live"
+            subValue={`${activities.length} Recent`}
             type="pulse"
             icon={Wifi}
-            theme={theme}
-          />
-          <MetricCard
-            title={t("metrics.activeSessions")}
-            value={activities.length}
-            subValue="Stable"
-            type="neutral"
-            icon={Layers}
             theme={theme}
           />
           <MetricCard
@@ -758,35 +875,10 @@ export default function BigScreenPage() {
               <ProviderQuotas providers={providers} theme={theme} t={t} />
             </div>
             <div className={`flex-[2] ${theme.card} rounded-lg p-4`}>
-              <ModelDistribution data={modelDist} theme={theme} t={t} />
+              <TrafficTrend data={trendData} theme={theme} t={t} currentTime={currentTime} />
             </div>
-            <div
-              className={`flex-[1] ${theme.card} rounded-lg p-4 relative flex flex-col justify-end`}
-            >
-              <div
-                className={`absolute top-3 left-3 text-[10px] font-bold uppercase tracking-wider ${theme.text} opacity-50`}
-              >
-                {t("sections.requestTrend")}
-              </div>
-              <div className="h-16 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={trendData}>
-                    <defs>
-                      <linearGradient id="grad1" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#ff6b35" stopOpacity={0.2} />
-                        <stop offset="100%" stopColor="#ff6b35" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <Area
-                      type="monotone"
-                      dataKey="value"
-                      stroke="#ff6b35"
-                      fill="url(#grad1)"
-                      strokeWidth={2}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
+            <div className={`flex-[1] ${theme.card} rounded-lg p-4`}>
+              <ModelDistribution data={modelDist} theme={theme} t={t} />
             </div>
           </div>
 

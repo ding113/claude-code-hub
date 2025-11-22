@@ -204,7 +204,9 @@ async function findModelLeaderboardWithTimezone(
 ): Promise<ModelLeaderboardEntry[]> {
   const rankings = await db
     .select({
-      model: messageRequest.originalModel, // 使用 originalModel（计费模型）而非实际转发的 model
+      // 使用 COALESCE：优先使用 originalModel（计费模型），回退到实际转发的 model
+      // 修复：当 originalModel 为 NULL（未配置模型重定向）时，使用 model 字段
+      model: sql<string>`COALESCE(${messageRequest.originalModel}, ${messageRequest.model})`,
       totalRequests: sql<number>`count(*)::double precision`,
       totalCost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
       totalTokens: sql<number>`COALESCE(
@@ -231,13 +233,13 @@ async function findModelLeaderboardWithTimezone(
           : sql`date_trunc('month', ${messageRequest.createdAt} AT TIME ZONE ${timezone}) = date_trunc('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})`
       )
     )
-    .groupBy(messageRequest.originalModel)
+    .groupBy(sql`COALESCE(${messageRequest.originalModel}, ${messageRequest.model})`) // 修复：GROUP BY 也需要使用相同的 COALESCE
     .orderBy(desc(sql`count(*)`)); // 按请求数排序
 
   return rankings
-    .filter((entry) => entry.model !== null)
+    .filter((entry) => entry.model !== null && entry.model !== "")
     .map((entry) => ({
-      model: entry.model as string, // 已过滤 null，可安全断言
+      model: entry.model as string, // 已过滤 null/空字符串，可安全断言
       totalRequests: entry.totalRequests,
       totalCost: parseFloat(entry.totalCost),
       totalTokens: entry.totalTokens,
