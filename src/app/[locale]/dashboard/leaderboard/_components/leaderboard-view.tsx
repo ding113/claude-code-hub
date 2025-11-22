@@ -45,7 +45,9 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     if (normalizedPeriod !== period) {
       setPeriod(normalizedPeriod);
     }
-  }, [isAdmin, searchParams, scope, period]);
+    // 移除 scope 和 period 从依赖数组，避免无限循环
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin, searchParams]);
 
   useEffect(() => {
     let cancelled = false;

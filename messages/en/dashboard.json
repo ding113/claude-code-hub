@@ -438,12 +438,14 @@
     }
   },
   "userList": {
+    "title": "User List",
     "badge": "{count} Keys",
     "activeKeys": "Active Keys",
     "totalKeys": "Total Keys",
     "emptyState": {
       "title": "No Users",
-      "description": "Click the button below to create your first user"
+      "description": "You haven't created any users yet. Users are the foundation for managing API keys and usage quotas. Create your first user to get started!",
+      "action": "Create Your First User"
     },
     "addUser": "Add User"
   },
