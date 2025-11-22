@@ -33,7 +33,7 @@ import { GeminiAuth } from "@/app/v1/_lib/gemini/auth";
 // API 测试配置常量
 const API_TEST_CONFIG = {
   TIMEOUT_MS: 10000, // 10 秒超时
-  MAX_RESPONSE_PREVIEW_LENGTH: 100, // 响应内容预览最大长度
+  MAX_RESPONSE_PREVIEW_LENGTH: 500, // 响应内容预览最大长度（增加到 500 字符以显示更多内容）
   TEST_MAX_TOKENS: 100, // 测试请求的最大 token 数
   TEST_PROMPT: "Hello", // 测试请求的默认提示词
 } as const;
