@@ -38,18 +38,17 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
   }));
 
   // 特别设计的空状态 - 仅管理员可见
-  const emptyStateComponent = currentUser?.role === "admin" ? (
-    <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-      <div className="rounded-full bg-muted/50 p-6 mb-4">
-        <Users className="h-12 w-12 text-muted-foreground" />
+  const emptyStateComponent =
+    currentUser?.role === "admin" ? (
+      <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+        <div className="rounded-full bg-muted/50 p-6 mb-4">
+          <Users className="h-12 w-12 text-muted-foreground" />
+        </div>
+        <h3 className="text-lg font-semibold mb-2">{t("emptyState.title")}</h3>
+        <p className="text-sm text-muted-foreground mb-6 max-w-sm">{t("emptyState.description")}</p>
+        <AddUserDialog variant="default" size="lg" currentUser={currentUser} />
       </div>
-      <h3 className="text-lg font-semibold mb-2">{t("emptyState.title")}</h3>
-      <p className="text-sm text-muted-foreground mb-6 max-w-sm">
-        {t("emptyState.description")}
-      </p>
-      <AddUserDialog variant="default" size="lg" currentUser={currentUser} />
-    </div>
-  ) : null;
+    ) : null;
 
   return (
     <div className="space-y-3">
