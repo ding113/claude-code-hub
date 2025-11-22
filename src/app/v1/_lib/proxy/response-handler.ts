@@ -380,7 +380,7 @@ export class ProxyResponseHandler {
             await persistRequestFailure({
               session,
               messageContext,
-              statusCode: statusCode && statusCode >= 400 ? statusCode : 524,
+              statusCode: statusCode && statusCode >= 400 ? statusCode : 502,
               error: err,
               taskId,
               phase: "non-stream",
@@ -923,7 +923,7 @@ export class ProxyResponseHandler {
             await persistRequestFailure({
               session,
               messageContext,
-              statusCode: statusCode && statusCode >= 400 ? statusCode : 524,
+              statusCode: statusCode && statusCode >= 400 ? statusCode : 502,
               error: err,
               taskId,
               phase: "stream",
@@ -959,7 +959,7 @@ export class ProxyResponseHandler {
             await persistRequestFailure({
               session,
               messageContext,
-              statusCode: statusCode && statusCode >= 400 ? statusCode : 524,
+              statusCode: statusCode && statusCode >= 400 ? statusCode : 502,
               error: err,
               taskId,
               phase: "stream",
