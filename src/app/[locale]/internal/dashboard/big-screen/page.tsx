@@ -185,7 +185,7 @@ const CountUp = ({
       if (progress < 1) requestAnimationFrame(animate);
     };
     requestAnimationFrame(animate);
-  }, [value, displayValue]);
+  }, [value]);
   return (
     <span className={`font-mono ${className}`}>
       {prefix}
