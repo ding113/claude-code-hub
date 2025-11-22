@@ -51,7 +51,7 @@ export function KeyActions({
             <SquarePen className="h-4 w-4" />
           </button>
         </DialogTrigger>
-        <DialogContent className="max-h-[80vh] flex flex-col">
+        <DialogContent className="max-h-[80vh] flex flex-col overflow-hidden">
           <FormErrorBoundary>
             <EditKeyForm
               keyData={keyData}
