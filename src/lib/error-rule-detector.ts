@@ -63,11 +63,6 @@ class ErrorRuleDetector {
   private isLoading: boolean = false;
 
   constructor() {
-    // 初始化时立即加载缓存（异步，不阻塞构造函数）
-    this.reload().catch((error) => {
-      logger.error("[ErrorRuleDetector] Failed to initialize cache:", error);
-    });
-
     // 监听数据库变更事件，自动刷新缓存
     eventEmitter.on("errorRulesUpdated", () => {
       this.reload().catch((error) => {
