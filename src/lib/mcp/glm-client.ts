@@ -32,10 +32,7 @@ export class GlmMcpClient {
    * @param prompt 提示词
    * @returns 图片分析结果
    */
-  async analyzeImage(
-    imageSource: string,
-    prompt: string
-  ): Promise<McpGlmImageAnalyzeResponse> {
+  async analyzeImage(imageSource: string, prompt: string): Promise<McpGlmImageAnalyzeResponse> {
     if (!imageSource) {
       throw new McpRequestError("Image source is required");
     }
@@ -80,10 +77,7 @@ export class GlmMcpClient {
    * @param prompt 提示词
    * @returns 视频分析结果
    */
-  async analyzeVideo(
-    videoSource: string,
-    prompt: string
-  ): Promise<McpGlmVideoAnalyzeResponse> {
+  async analyzeVideo(videoSource: string, prompt: string): Promise<McpGlmVideoAnalyzeResponse> {
     if (!videoSource) {
       throw new McpRequestError("Video source is required");
     }
