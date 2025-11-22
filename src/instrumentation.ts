@@ -5,6 +5,30 @@
 
 import { logger } from "@/lib/logger";
 
+/**
+ * 初始化错误规则检测器
+ * 提取为独立函数以避免代码重复
+ */
+async function initializeErrorRuleDetector(): Promise<void> {
+  // 初始化默认错误规则
+  const { initializeDefaultErrorRules } = await import("@/repository/error-rules");
+  try {
+    await initializeDefaultErrorRules();
+    logger.info("Default error rules initialized successfully");
+  } catch (error) {
+    logger.error("Failed to initialize default error rules:", error);
+  }
+
+  // 加载错误规则缓存（在数据库准备好后）
+  const { errorRuleDetector } = await import("@/lib/error-rule-detector");
+  try {
+    await errorRuleDetector.reload();
+    logger.info("Error rule detector cache loaded successfully");
+  } catch (error) {
+    logger.error("Failed to load error rule detector cache:", error);
+  }
+}
+
 export async function register() {
   // 仅在服务器端执行
   if (process.env.NEXT_RUNTIME === "nodejs") {
@@ -36,23 +60,8 @@ export async function register() {
       const { ensurePriceTable } = await import("@/lib/price-sync/seed-initializer");
       await ensurePriceTable();
 
-      // 初始化默认错误规则
-      const { initializeDefaultErrorRules } = await import("@/repository/error-rules");
-      try {
-        await initializeDefaultErrorRules();
-        logger.info("Default error rules initialized successfully");
-      } catch (error) {
-        logger.error("Failed to initialize default error rules:", error);
-      }
-
-      // 加载错误规则缓存（在数据库准备好后）
-      const { errorRuleDetector } = await import("@/lib/error-rule-detector");
-      try {
-        await errorRuleDetector.reload();
-        logger.info("Error rule detector cache loaded successfully");
-      } catch (error) {
-        logger.error("Failed to load error rule detector cache:", error);
-      }
+      // 初始化错误规则检测器
+      await initializeErrorRuleDetector();
 
       // 初始化日志清理任务队列（如果启用）
       const { scheduleAutoCleanup } = await import("@/lib/log-cleanup/cleanup-queue");
@@ -81,23 +90,8 @@ export async function register() {
       const { ensurePriceTable } = await import("@/lib/price-sync/seed-initializer");
       await ensurePriceTable();
 
-      // 初始化默认错误规则
-      const { initializeDefaultErrorRules } = await import("@/repository/error-rules");
-      try {
-        await initializeDefaultErrorRules();
-        logger.info("Default error rules initialized successfully");
-      } catch (error) {
-        logger.error("Failed to initialize default error rules:", error);
-      }
-
-      // 加载错误规则缓存（在数据库准备好后）
-      const { errorRuleDetector } = await import("@/lib/error-rule-detector");
-      try {
-        await errorRuleDetector.reload();
-        logger.info("Error rule detector cache loaded successfully");
-      } catch (error) {
-        logger.error("Failed to load error rule detector cache:", error);
-      }
+      // 初始化错误规则检测器
+      await initializeErrorRuleDetector();
 
       // ⚠️ 开发环境禁用通知队列（Bull + Turbopack 不兼容）
       // 通知功能仅在生产环境可用，开发环境需要手动测试

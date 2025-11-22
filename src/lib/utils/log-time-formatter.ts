@@ -3,6 +3,8 @@
  * 将 Unix 时间戳(毫秒)转换为用户本地时间
  */
 
+import { logger } from "@/lib/logger";
+
 /**
  * 格式化日志时间戳为本地时间
  * @param timestamp Unix 时间戳(毫秒)
@@ -19,7 +21,8 @@ export function formatLogTime(timestamp: number, timezone?: string): string {
     }
 
     // 使用 Intl.DateTimeFormat 进行时区转换和格式化
-    const formatter = new Intl.DateTimeFormat("zh-CN", {
+    // 使用 undefined 作为 locale 以使用运行时的默认区域设置，提高通用性
+    const formatter = new Intl.DateTimeFormat(undefined, {
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
@@ -40,8 +43,10 @@ export function formatLogTime(timestamp: number, timezone?: string): string {
 
     return `${year}/${month}/${day} ${hour}:${minute}`;
   } catch (error) {
-    console.error("Failed to format log time:", error);
-    return new Date(timestamp).toLocaleString();
+    // 使用 logger 保持日志记录一致性
+    logger.error("Failed to format log time:", error);
+    // 使用 toISOString() 作为回退，提供明确的 ISO 8601 格式
+    return new Date(timestamp).toISOString();
   }
 }
 
