@@ -1,6 +1,21 @@
 /**
  * 日志时间格式化工具
  * 将 Unix 时间戳(毫秒)转换为用户本地时间
+ *
+ * @module log-time-formatter
+ *
+ * ## 计划用途
+ * 此工具函数将用于以下场景:
+ * 1. Dashboard 日志显示组件 - 格式化日志列表中的时间戳
+ * 2. 实时监控页面 - 显示可读的本地时间
+ * 3. 日志导出功能 - 提供统一的时间格式
+ *
+ * ## 集成计划
+ * - [ ] 集成到 `src/app/[locale]/dashboard/logs` 日志显示组件
+ * - [ ] 集成到实时监控页面的时间显示
+ * - [ ] 用于日志导出时的时间格式化
+ *
+ * @see https://github.com/ding113/claude-code-hub/issues/XXX (待创建相关 issue)
  */
 
 import { logger } from "@/lib/logger";
@@ -49,6 +64,15 @@ export function formatLogTime(timestamp: number, timezone?: string): string {
     const day = partsMap.get("day");
     const hour = partsMap.get("hour");
     const minute = partsMap.get("minute");
+
+    // 验证所有必需的时间部分都已成功获取
+    if (!year || !month || !day || !hour || !minute) {
+      logger.warn(
+        "[log-time-formatter] Failed to get all date parts, falling back to ISO string",
+        { timestamp, timezone }
+      );
+      return new Date(timestamp).toISOString();
+    }
 
     return `${year}/${month}/${day} ${hour}:${minute}`;
   } catch (error) {
