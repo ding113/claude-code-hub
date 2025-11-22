@@ -50,6 +50,9 @@ data
 # Seed data (large auto-generated JSON files)
 public/seed/litellm-prices.json
 
+# Documentation (preserve manual formatting)
+CHANGELOG.md
+
 # Package manager
 bun.lock
 package-lock.json

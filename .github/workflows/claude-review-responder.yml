@@ -1,0 +1,110 @@
+name: Claude PR Review Responder
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  review-responder:
+    # Respond to reviews requesting changes or asking questions
+    # Skip bot reviews to prevent infinite loops
+    if: |
+      !endsWith(github.event.review.user.login, '[bot]') &&
+      (github.event.review.state == 'changes_requested' ||
+       contains(github.event.review.body, '@claude'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Run Claude Code for Review Response
+        uses: anthropics/claude-code-action@v1
+        env:
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GH_PAT }}
+
+          prompt: |
+            You are a PR author assistant for the repository ${{ github.repository }}.
+
+            Context:
+            - PR: #${{ github.event.pull_request.number }}
+            - Review by: ${{ github.event.review.user.login }}
+            - Review state: ${{ github.event.review.state }}
+            - Review body: ${{ github.event.review.body }}
+
+            Task: Help address the PR review feedback.
+
+            ## Instructions:
+
+            1. **Read the PR and review**:
+               ```bash
+               gh pr view ${{ github.event.pull_request.number }}
+               gh pr view ${{ github.event.pull_request.number }} --comments
+               ```
+
+            2. **Understand the feedback**:
+               - What changes are requested?
+               - Are there specific questions to answer?
+               - What's the priority of each item?
+
+            3. **For change requests that you can address**:
+               ```bash
+               # You're already on the PR branch
+               # Make the requested changes using Edit tool
+
+               # Commit with descriptive message
+               git add .
+               git commit -m "fix: address review feedback - description"
+
+               # Push to update the PR
+               git push origin ${{ github.event.pull_request.head.ref }}
+               ```
+
+            4. **Post a response** to the review:
+               ```bash
+               gh pr comment ${{ github.event.pull_request.number }} --body "Your response"
+               ```
+
+            ## Response Template:
+            ```markdown
+            ## Addressing Review Feedback
+
+            @${{ github.event.review.user.login }} Thank you for the review!
+
+            ### Changes Made:
+            - ✅ [Change 1] - [commit description]
+            - ✅ [Change 2] - [commit description]
+
+            ### Responses:
+            - **[Question/Comment]**: [Your response]
+
+            ### Not Addressed (needs discussion):
+            - [Item] - [Reason why not addressed]
+
+            Please re-review when you have a chance.
+
+            ---
+            🤖 *Changes made by Claude AI*
+            ```
+
+            ## Guidelines:
+            - Only make changes you're confident about
+            - For complex or ambiguous requests, ask for clarification
+            - Don't make changes that alter the PR's intent
+            - Explain what you changed and why
+
+          claude_args: "--max-turns 999 --allowedTools Read,Write,Edit,Grep,Bash(gh:*),Bash(git:*)"
+          use_commit_signing: false

@@ -6,6 +6,7 @@ import { isCircuitOpen, getCircuitState } from "@/lib/circuit-breaker";
 import { ProxyResponses } from "./responses";
 import { logger } from "@/lib/logger";
 import type { ProxySession } from "./session";
+import type { ClientFormat } from "./format-mapper";
 import type { ProviderChainItem } from "@/types/message";
 
 /**
@@ -87,6 +88,44 @@ function providerSupportsModel(provider: Provider, requestedModel: string): bool
   return false;
 }
 
+/**
+ * 根据原始请求格式限制可选供应商类型
+ *
+ * 核心逻辑：确保客户端请求格式与供应商类型兼容，避免格式错配
+ *
+ * 映射关系：
+ * - claude → claude | claude-auth
+ * - response → codex
+ * - openai → openai-compatible
+ * - gemini → gemini
+ * - gemini-cli → gemini-cli
+ *
+ * @param format - 客户端请求格式（从 session.originalFormat 获取）
+ * @param providerType - 供应商类型
+ * @returns 是否兼容
+ *
+ * 向后兼容：调用方在 originalFormat 未设置时应跳过此检查
+ */
+function checkFormatProviderTypeCompatibility(
+  format: ClientFormat,
+  providerType: Provider["providerType"]
+): boolean {
+  switch (format) {
+    case "claude":
+      return providerType === "claude" || providerType === "claude-auth";
+    case "response":
+      return providerType === "codex";
+    case "openai":
+      return providerType === "openai-compatible";
+    case "gemini":
+      return providerType === "gemini";
+    case "gemini-cli":
+      return providerType === "gemini-cli";
+    default:
+      return true; // 未知格式回退为兼容（不会主动过滤）
+  }
+}
+
 export class ProxyProviderResolver {
   static async ensure(
     session: ProxySession,
@@ -115,7 +154,9 @@ export class ProxyProviderResolver {
         decisionContext: {
           totalProviders: 0, // 复用不需要筛选
           enabledProviders: 0,
-          targetType: reusedProvider.providerType as "claude" | "codex",
+          targetType: reusedProvider.providerType as NonNullable<
+            ProviderChainItem["decisionContext"]
+          >["targetType"],
           requestedModel: session.getCurrentModel() || "",
           groupFilterApplied: false,
           beforeHealthCheck: 0,
@@ -196,7 +237,9 @@ export class ProxyProviderResolver {
               : {
                   totalProviders: 0,
                   enabledProviders: 0,
-                  targetType: session.provider.providerType as "claude" | "codex",
+                  targetType: session.provider.providerType as NonNullable<
+                    ProviderChainItem["decisionContext"]
+                  >["targetType"],
                   requestedModel: session.getCurrentModel() || "",
                   groupFilterApplied: false,
                   beforeHealthCheck: 0,
@@ -251,7 +294,9 @@ export class ProxyProviderResolver {
             decisionContext: successContext || {
               totalProviders: 0,
               enabledProviders: 0,
-              targetType: session.provider.providerType as "claude" | "codex",
+              targetType: session.provider.providerType as NonNullable<
+                ProviderChainItem["decisionContext"]
+              >["targetType"],
               requestedModel: session.getCurrentModel() || "",
               groupFilterApplied: false,
               beforeHealthCheck: 0,
@@ -282,15 +327,71 @@ export class ProxyProviderResolver {
 
     // 循环结束：所有可用供应商都已尝试或无可用供应商
     const status = 503;
-    const message =
-      excludedProviders.length > 0
-        ? `所有供应商不可用（尝试了 ${excludedProviders.length} 个供应商）`
-        : "暂无可用的上游服务";
+
+    // 构建详细的错误消息
+    let message = "暂无可用的上游服务";
+    let errorType = "no_available_providers";
+
+    if (excludedProviders.length > 0) {
+      message = `所有供应商不可用（尝试了 ${excludedProviders.length} 个供应商）`;
+      errorType = "all_providers_failed";
+    } else {
+      const selectionContext = session.getLastSelectionContext();
+      const filteredProviders = selectionContext?.filteredProviders;
+
+      if (filteredProviders && filteredProviders.length > 0) {
+        // 统计各种原因
+        const rateLimited = filteredProviders.filter((p) => p.reason === "rate_limited");
+        const circuitOpen = filteredProviders.filter((p) => p.reason === "circuit_open");
+        const disabled = filteredProviders.filter((p) => p.reason === "disabled");
+        const modelNotAllowed = filteredProviders.filter((p) => p.reason === "model_not_allowed");
+
+        // 计算可用供应商数量（排除禁用和模型不支持的）
+        const unavailableCount = rateLimited.length + circuitOpen.length;
+        const totalEnabled = filteredProviders.length - disabled.length - modelNotAllowed.length;
+
+        if (
+          rateLimited.length > 0 &&
+          circuitOpen.length === 0 &&
+          unavailableCount === totalEnabled
+        ) {
+          // 全部因为限流
+          message = `所有可用供应商已达消费限额（${rateLimited.length} 个供应商）`;
+          errorType = "rate_limit_exceeded";
+        } else if (
+          circuitOpen.length > 0 &&
+          rateLimited.length === 0 &&
+          unavailableCount === totalEnabled
+        ) {
+          // 全部因为熔断
+          message = `所有可用供应商熔断器已打开（${circuitOpen.length} 个供应商）`;
+          errorType = "circuit_breaker_open";
+        } else if (rateLimited.length > 0 && circuitOpen.length > 0) {
+          // 混合原因
+          message = `所有可用供应商不可用（${rateLimited.length} 个达限额，${circuitOpen.length} 个熔断）`;
+          errorType = "mixed_unavailable";
+        }
+      }
+    }
+
     logger.error("ProviderSelector: No available providers after trying all candidates", {
       excludedProviders,
       totalAttempts: attemptCount,
+      errorType,
+      filteredProviders: session.getLastSelectionContext()?.filteredProviders,
     });
-    return ProxyResponses.buildError(status, message);
+
+    // 构建详细的错误响应
+    const details: Record<string, unknown> = {
+      totalAttempts: attemptCount,
+      excludedCount: excludedProviders.length,
+    };
+
+    if (session.getLastSelectionContext()?.filteredProviders) {
+      details.filteredProviders = session.getLastSelectionContext()!.filteredProviders;
+    }
+
+    return ProxyResponses.buildError(status, message, errorType, details);
   }
 
   /**
@@ -399,11 +500,29 @@ export class ProxyProviderResolver {
     const allProviders = await findProviderList();
     const requestedModel = session?.getCurrentModel() || "";
 
+    // 原始请求格式映射到目标供应商类型；缺省为 claude 以兼容历史请求
+    const targetType: "claude" | "codex" | "openai-compatible" | "gemini" | "gemini-cli" = (() => {
+      switch (session?.originalFormat) {
+        case "claude":
+          return "claude";
+        case "response":
+          return "codex";
+        case "openai":
+          return "openai-compatible";
+        case "gemini":
+          return "gemini";
+        case "gemini-cli":
+          return "gemini-cli";
+        default:
+          return "claude"; // 默认回退到 claude（向后兼容）
+      }
+    })();
+
     // === 初始化决策上下文 ===
     const context: NonNullable<ProviderChainItem["decisionContext"]> = {
       totalProviders: allProviders.length,
       enabledProviders: 0,
-      targetType: requestedModel.startsWith("claude-") ? "claude" : "codex", // 根据模型名推断
+      targetType, // 根据原始请求格式推断目标供应商类型（修复：不再根据模型名推断）
       requestedModel, // 新增：记录请求的模型
       groupFilterApplied: false,
       beforeHealthCheck: 0,
@@ -415,14 +534,26 @@ export class ProxyProviderResolver {
       excludedProviderIds: excludeIds.length > 0 ? excludeIds : undefined,
     };
 
-    // Step 1: 基础过滤 + 模型匹配（新逻辑）
+    // Step 1: 基础过滤 + 格式/模型匹配（新逻辑）
     const enabledProviders = allProviders.filter((provider) => {
       // 1a. 基础过滤
       if (!provider.isEnabled || excludeIds.includes(provider.id)) {
         return false;
       }
 
-      // 1b. 模型匹配（新逻辑）
+      // 1b. 格式类型匹配（新增）
+      // 根据 session.originalFormat 限制候选供应商类型，避免格式错配
+      if (session?.originalFormat) {
+        const isFormatCompatible = checkFormatProviderTypeCompatibility(
+          session.originalFormat,
+          provider.providerType
+        );
+        if (!isFormatCompatible) {
+          return false; // 过滤掉格式不兼容的供应商
+        }
+      }
+
+      // 1c. 模型匹配（保留原有逻辑）
       if (!requestedModel) {
         // 没有模型信息时，只选择 Anthropic 提供商（向后兼容）
         return provider.providerType === "claude";
@@ -440,6 +571,7 @@ export class ProxyProviderResolver {
           | "circuit_open"
           | "rate_limited"
           | "excluded"
+          | "format_type_mismatch"
           | "type_mismatch"
           | "model_not_allowed"
           | "disabled" = "disabled";
@@ -451,6 +583,12 @@ export class ProxyProviderResolver {
         } else if (excludeIds.includes(p.id)) {
           reason = "excluded";
           details = "已在前序尝试中失败";
+        } else if (
+          session?.originalFormat &&
+          !checkFormatProviderTypeCompatibility(session.originalFormat, p.providerType)
+        ) {
+          reason = "format_type_mismatch";
+          details = `原始格式 ${session.originalFormat} 与供应商类型 ${p.providerType} 不兼容`;
         } else if (requestedModel && !providerSupportsModel(p, requestedModel)) {
           reason = "model_not_allowed";
           details = `不支持模型 ${requestedModel}`;
@@ -551,10 +689,9 @@ export class ProxyProviderResolver {
     }
 
     if (healthyProviders.length === 0) {
-      logger.warn("ProviderSelector: All providers rate limited, falling back to random");
-      // Fail Open：降级到随机选择（让上游拒绝）
-      const fallback = this.weightedRandom(candidateProviders);
-      return { provider: fallback, context };
+      logger.warn("ProviderSelector: All providers rate limited or unavailable");
+      // 所有供应商都被限流或不可用，返回 null 触发 503 错误
+      return { provider: null, context };
     }
 
     // Step 4: 优先级分层（只选择最高优先级的供应商）
@@ -621,6 +758,9 @@ export class ProxyProviderResolver {
         // 1. 检查金额限制
         const costCheck = await RateLimitService.checkCostLimits(p.id, "provider", {
           limit_5h_usd: p.limit5hUsd,
+          limit_daily_usd: p.limitDailyUsd,
+          daily_reset_mode: p.dailyResetMode,
+          daily_reset_time: p.dailyResetTime,
           limit_weekly_usd: p.limitWeeklyUsd,
           limit_monthly_usd: p.limitMonthlyUsd,
         });

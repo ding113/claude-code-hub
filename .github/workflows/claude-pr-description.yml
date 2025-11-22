@@ -1,0 +1,104 @@
+name: Claude PR Description
+
+on:
+  pull_request_target:
+    types: [opened]
+
+jobs:
+  pr-description:
+    # Skip bot actors
+    if: "!endsWith(github.actor, '[bot]')"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude Code for PR Description Enhancement
+        uses: anthropics/claude-code-action@v1
+        env:
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GH_PAT }}
+          # Allow external contributors (fork PRs) to trigger this workflow
+          allowed_non_write_users: "*"
+
+          prompt: |
+            You are a PR description enhancer for the repository ${{ github.repository }}.
+
+            Task: Enhance or generate a comprehensive description for PR #${{ github.event.pull_request.number }}.
+
+            ## Instructions:
+
+            1. **Get PR information**:
+               ```bash
+               gh pr view ${{ github.event.pull_request.number }} --json title,body
+               gh pr diff ${{ github.event.pull_request.number }}
+               ```
+
+            2. **Check if description needs enhancement**:
+               - If body is empty or very short (< 50 chars): Generate full description
+               - If body exists but missing sections: Add missing sections
+               - If body is comprehensive: Do nothing
+
+            3. **Analyze the changes**:
+               - What problem does this solve?
+               - What approach was taken?
+               - What files were changed and why?
+               - Are there any breaking changes?
+               - What testing was done?
+
+            4. **Generate/enhance description** using template:
+               ```markdown
+               ## Summary
+               [Brief description of what this PR does]
+
+               ## Problem
+               [What problem does this solve?]
+
+               ## Solution
+               [How does this PR solve the problem?]
+
+               ## Changes
+               - [List of key changes]
+
+               ## Testing
+               - [ ] Unit tests added/updated
+               - [ ] Manual testing performed
+               - [ ] No breaking changes
+
+               ## Screenshots (if applicable)
+               [Add screenshots for UI changes]
+
+               ## Related Issues
+               Closes #[issue_number] (if applicable)
+               ```
+
+            5. **Update PR description**:
+               ```bash
+               gh pr edit ${{ github.event.pull_request.number }} --body "New description"
+               ```
+
+            ## Guidelines:
+            - Don't overwrite good existing content
+            - Keep technical details accurate based on diff
+            - Be concise but comprehensive
+            - Detect linked issues from branch name or commits
+
+            ## Skip if:
+            - Description already follows template
+            - Description is already comprehensive (> 200 chars with clear structure)
+            - PR has "skip-description" label
+
+          claude_args: "--max-turns 999 --allowedTools Read,Bash(gh:*)"
+          use_commit_signing: false

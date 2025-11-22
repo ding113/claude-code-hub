@@ -1,0 +1,83 @@
+name: Claude Issue Duplicate Check
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  check-duplicate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Run Claude Code for Duplicate Detection
+        uses: anthropics/claude-code-action@v1
+        env:
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GH_PAT }}
+
+          prompt: |
+            You are a duplicate issue detector for the repository ${{ github.repository }}.
+
+            Task: Check if issue #${{ github.event.issue.number }} is a duplicate of an existing issue.
+
+            ## Instructions:
+
+            1. **Read the new issue**:
+               ```bash
+               gh issue view ${{ github.event.issue.number }}
+               ```
+
+            2. **Search for similar issues**:
+               - Extract key terms from the issue title and body
+               - Search using multiple queries:
+               ```bash
+               gh search issues "keyword1 keyword2" --repo ${{ github.repository }} --state open --limit 10
+               gh search issues "keyword3" --repo ${{ github.repository }} --state open --limit 10
+               ```
+
+            3. **Analyze potential duplicates**:
+               - For each candidate, read the full issue:
+               ```bash
+               gh issue view <number>
+               ```
+               - Compare the core problem being reported
+               - Consider if they describe the same root cause
+
+            4. **If duplicate found**:
+               - Add the "duplicate" label:
+               ```bash
+               gh issue edit ${{ github.event.issue.number }} --add-label "duplicate"
+               ```
+               - Post a comment linking to the original:
+               ```bash
+               gh issue comment ${{ github.event.issue.number }} --body "This issue appears to be a duplicate of #<original-number>. Please follow the discussion there.
+
+               If you believe this is not a duplicate, please explain the difference and we will reopen this issue."
+               ```
+               - Close the issue:
+               ```bash
+               gh issue close ${{ github.event.issue.number }}
+               ```
+
+            5. **If NOT a duplicate**:
+               - Do nothing - no comment needed
+
+            ## Important:
+            - Only mark as duplicate if you are confident (>80% similarity)
+            - Focus on the core problem, not just keywords
+            - Consider both open and recently closed issues
+            - Be helpful in your duplicate comment
+
+          claude_args: "--max-turns 999 --allowedTools Bash(gh:*)"
+          use_commit_signing: false

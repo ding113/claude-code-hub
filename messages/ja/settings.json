@@ -1148,6 +1148,7 @@
     "searchResults": "找到 {count} 个匹配的供应商",
     "section": {
       "description": "配置上游服务商的金额限流和并发限制，留空表示无限制。",
+      "leaderboard": "プロバイダーランキング",
       "title": "服务商管理"
     },
     "subtitle": "プロバイダー管理",

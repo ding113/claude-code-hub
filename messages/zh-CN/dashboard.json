@@ -151,6 +151,7 @@
         "billingDescription": "系统优先使用请求模型（{original}）的价格计费。如果价格表中不存在该模型，则使用实际调用模型（{current}）的价格。"
       },
       "errorMessage": "错误信息",
+      "filteredProviders": "被过滤的供应商",
       "providerChain": {
         "title": "供应商决策链时间线",
         "totalDuration": "总耗时: {duration}ms"
@@ -161,7 +162,11 @@
         "default": "暂无详细错误信息"
       },
       "clickStatusCode": "点击状态码查看完整时间线",
-      "viewDetails": "查看详情"
+      "viewDetails": "查看详情",
+      "reasons": {
+        "rateLimited": "供应商费用限制",
+        "circuitOpen": "熔断器打开"
+      }
     },
     "providerChain": {
       "decisionChain": "供应商决策链"
@@ -434,12 +439,14 @@
     }
   },
   "userList": {
+    "title": "用户列表",
     "badge": "{count} 个 Key",
     "activeKeys": "活跃密钥",
     "totalKeys": "总密钥",
     "emptyState": {
       "title": "暂无用户",
-      "description": "点击下方按钮创建第一个用户"
+      "description": "您还没有创建任何用户。用户是管理 API 密钥和使用限额的基础单位，创建第一个用户开始使用吧！",
+      "action": "创建第一个用户"
     },
     "addUser": "新增用户"
   },
@@ -478,6 +485,7 @@
     "error": "获取失败",
     "networkError": "网络错误",
     "cost5h": "5小时消费",
+    "costDaily": "每日消费",
     "costWeekly": "周消费",
     "costMonthly": "月消费",
     "concurrentSessions": "并发 Session",
@@ -506,6 +514,27 @@
       "placeholder": "留空表示无限制",
       "description": "5小时内最大消费金额",
       "descriptionWithUserLimit": "5小时内最大消费金额（用户限额: ${limit}）"
+    },
+    "limitDailyUsd": {
+      "label": "每日消费上限 (USD)",
+      "placeholder": "留空表示无限制",
+      "description": "每日最大消费金额"
+    },
+    "dailyResetMode": {
+      "label": "每日重置模式",
+      "options": {
+        "fixed": "固定时间重置",
+        "rolling": "滚动窗口（24小时）"
+      },
+      "desc": {
+        "fixed": "每天在指定时间重置额度",
+        "rolling": "从首次请求开始计算24小时滚动窗口"
+      }
+    },
+    "dailyResetTime": {
+      "label": "每日重置时间",
+      "placeholder": "HH:mm",
+      "description": "每日限额的重置时间（使用系统时区）"
     },
     "limitWeeklyUsd": {
       "label": "周消费上限 (USD)",

@@ -3,6 +3,7 @@
 import { db } from "@/drizzle/db";
 import { errorRules } from "@/drizzle/schema";
 import { eq, desc } from "drizzle-orm";
+import { eventEmitter } from "@/lib/event-emitter";
 
 export interface ErrorRule {
   id: number;
@@ -226,4 +227,8 @@ export async function initializeDefaultErrorRules(): Promise<void> {
       await tx.insert(errorRules).values(rule).onConflictDoNothing({ target: errorRules.pattern });
     }
   });
+
+  // 通知 ErrorRuleDetector 重新加载缓存
+  // 这确保迁移完成后检测器能正确加载规则
+  eventEmitter.emit("errorRulesUpdated");
 }

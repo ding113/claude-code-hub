@@ -206,6 +206,171 @@ src/
 4. **Redis Lua 脚本** - 原子性检查和递增（解决竞态条件）
 5. **Fail Open 策略** - Redis 不可用时降级，不影响服务
 
+### Redis Key 架构
+
+#### 日限额 Redis Key 命名规范
+
+本系统使用不同的 Redis 数据结构来实现固定窗口和滚动窗口的日限额追踪。理解这些命名规范对于调试、监控和故障排查至关重要。
+
+**核心设计原则**：
+
+- 固定窗口使用 STRING 类型，支持自定义重置时间
+- 滚动窗口使用 ZSET 类型，提供精确的时间窗口计算
+
+#### Key 命名模式
+
+**1. 固定时间窗口 (Fixed Mode)**
+
+格式：`{type}:{id}:cost_daily_{suffix}`
+
+```
+示例：
+  key:123:cost_daily_1800      # Key ID 123，每天 18:00 重置
+  key:456:cost_daily_0000      # Key ID 456，每天 00:00 重置
+  provider:789:cost_daily_0930  # Provider ID 789，每天 09:30 重置
+```
+
+**特性**：
+
+- Redis 类型：STRING
+- 操作命令：INCRBYFLOAT（累加）、GET（查询）
+- Suffix 规则：重置时间去掉冒号（HH:mm → HHmm）
+- TTL 策略：动态计算到下一个重置时间的秒数
+- 用例：支持不同用户/供应商的自定义重置时间
+
+**为什么需要 Suffix？**
+
+不同用户可能配置不同的重置时间：
+
+- 用户 A 配置 18:00 重置 → `key:1:cost_daily_1800`
+- 用户 B 配置 00:00 重置 → `key:2:cost_daily_0000`
+
+如果省略 suffix，两个用户会使用相同的 key 模式，导致 TTL 冲突和数据混乱。
+
+**2. 滚动时间窗口 (Rolling Mode)**
+
+格式：`{type}:{id}:cost_daily_rolling`
+
+```
+示例：
+  key:123:cost_daily_rolling      # Key ID 123，滚动 24 小时窗口
+  provider:456:cost_daily_rolling  # Provider ID 456，滚动 24 小时窗口
+```
+
+**特性**：
+
+- Redis 类型：ZSET（Sorted Set）
+- 操作命令：Lua 脚本（ZADD + ZREMRANGEBYSCORE + ZRANGE）
+- Suffix 规则：固定使用 `rolling`，无时间后缀
+- TTL 策略：固定 24 小时（86400 秒）
+- 用例：真正的滚动窗口，统计"过去 24 小时"的消费
+
+**为什么不需要 Suffix？**
+
+滚动窗口没有固定的重置时间点：
+
+- 每次查询都是"当前时间往前推 24 小时"
+- 所有用户使用相同的窗口计算逻辑
+- TTL 固定为 24 小时，无需区分重置时间
+
+**3. 其他时间周期**
+
+```
+5 小时滚动窗口（ZSET）：
+  key:123:cost_5h_rolling
+  provider:456:cost_5h_rolling
+
+周限额（STRING，每周一 00:00 重置）：
+  key:123:cost_weekly
+  provider:456:cost_weekly
+
+月限额（STRING，每月 1 号 00:00 重置）：
+  key:123:cost_monthly
+  provider:456:cost_monthly
+```
+
+#### 数据结构对比
+
+| 模式     | Redis 类型 | 命名示例                     | TTL 策略           | 时间精度 | 操作复杂度 |
+| -------- | ---------- | ---------------------------- | ------------------ | -------- | ---------- |
+| 固定窗口 | STRING     | `cost_daily_1800`            | 动态（到重置时间） | 分钟级   | 简单       |
+| 滚动窗口 | ZSET       | `cost_daily_rolling`         | 固定（24h）        | 毫秒级   | 中等       |
+| 5h 滚动  | ZSET       | `cost_5h_rolling`            | 固定（5h）         | 毫秒级   | 中等       |
+| 周/月    | STRING     | `cost_weekly`/`cost_monthly` | 动态（到下周期）   | 分钟级   | 简单       |
+
+#### 实现细节
+
+**固定窗口操作流程**：
+
+```typescript
+// 1. 写入消费数据（累加）
+const key = `key:${keyId}:cost_daily_1800`;
+const ttl = calculateTTLToNextReset("18:00"); // 计算到下一个 18:00 的秒数
+await redis.incrbyfloat(key, cost);
+await redis.expire(key, ttl);
+
+// 2. 查询当前消费
+const current = await redis.get(key);
+```
+
+**滚动窗口操作流程**：
+
+```typescript
+// 1. 写入消费数据（使用 Lua 脚本）
+const key = `key:${keyId}:cost_daily_rolling`;
+const now = Date.now();
+const window = 24 * 60 * 60 * 1000; // 24 小时
+await redis.eval(TRACK_COST_DAILY_ROLLING_WINDOW, 1, key, cost, now, window);
+
+// 2. 查询当前消费（使用 Lua 脚本）
+const current = await redis.eval(GET_COST_DAILY_ROLLING_WINDOW, 1, key, now, window);
+```
+
+**Lua 脚本优势**：
+
+- 原子性：查询、清理过期数据、累加在一个操作内完成
+- 精确性：基于毫秒级时间戳，避免边界问题
+- 性能：减少网络往返次数
+
+#### 调试和监控
+
+**检查 Redis Key**：
+
+```bash
+# 查看所有日限额 key（固定窗口）
+redis-cli KEYS "*:cost_daily_*"
+
+# 查看滚动窗口 key
+redis-cli KEYS "*:cost_daily_rolling"
+
+# 查看具体 key 的值
+redis-cli GET "key:123:cost_daily_1800"
+
+# 查看 ZSET 的详细数据
+redis-cli ZRANGE "key:123:cost_daily_rolling" 0 -1 WITHSCORES
+```
+
+**常见问题排查**：
+
+1. **Key 不存在**：
+   - 原因：Redis 重启导致数据丢失
+   - 解决：系统会自动从数据库恢复（Cache Warming）
+
+2. **TTL 异常**：
+   - 检查：`redis-cli TTL "key:123:cost_daily_1800"`
+   - 预期：固定窗口为动态值，滚动窗口为 86400
+
+3. **消费统计不准确**：
+   - 固定窗口：检查重置时间配置是否正确
+   - 滚动窗口：检查 ZSET 中的时间戳范围
+
+#### 相关文件
+
+- **核心实现**：`src/lib/rate-limit/service.ts`（包含详细注释）
+- **Lua 脚本**：`src/lib/redis/lua-scripts.ts`
+- **时间工具**：`src/lib/rate-limit/time-utils.ts`
+- **数据库层**：`src/repository/statistics.ts`
+
 ### Session 管理
 
 Session 追踪和缓存 (`src/lib/session-manager.ts`):
@@ -658,6 +823,20 @@ WITH latest_prices AS (
 SELECT ... LIMIT 50 OFFSET 0;
 ```
 
+### 10. Database MCP
+
+Objective:
+You are required to use the `db` MCP server to interact with a database.
+
+Capabilities:
+With this server, you can perform the following actions:
+
+- View the structure of database tables.
+- Query and inspect data within the tables.
+
+Prerequisite:
+Before performing any operations, you must first consult the database schema definition to understand its structure. The schema is defined in the following file: @src/drizzle/schema.ts.
+
 ## 常见任务
 
 ### 添加新的供应商类型
@@ -733,4 +912,4 @@ SELECT ... LIMIT 50 OFFSET 0;
 - [Drizzle ORM 文档](https://orm.drizzle.team/)
 - [Shadcn UI 文档](https://ui.shadcn.com/)
 - [LiteLLM 价格表](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json)
-- 请使用 production 环境构建.
+- 请使用 production 环境构建。

@@ -21,11 +21,47 @@ export class HeaderProcessor {
 
   constructor(config: HeaderProcessorConfig = {}) {
     // 初始化黑名单（默认包含代理相关的 headers）
+    // 目的：保护客户端隐私，避免真实 IP 和来源信息泄露给上游供应商
     const defaultBlacklist = [
-      "x-forwarded-for",
-      "x-forwarded-host",
-      "x-forwarded-port",
-      "x-forwarded-proto",
+      // 标准代理转发头
+      "x-forwarded-for", // 客户端真实 IP 链
+      "x-forwarded-host", // 原始请求 Host
+      "x-forwarded-port", // 原始请求端口
+      "x-forwarded-proto", // 原始请求协议 (http/https)
+      "forwarded", // RFC 7239 标准转发头
+
+      // 真实 IP 相关
+      "x-real-ip", // Nginx 常用的真实 IP 头
+      "x-client-ip", // 部分代理使用
+      "x-originating-ip", // Microsoft 相关服务
+      "x-remote-ip", // 部分代理使用
+      "x-remote-addr", // 部分代理使用
+
+      // CDN/云服务商特定头
+      "cf-connecting-ip", // Cloudflare 客户端 IP
+      "cf-ipcountry", // Cloudflare 客户端国家
+      "cf-ray", // Cloudflare 请求追踪 ID
+      "cf-visitor", // Cloudflare 访问者信息
+      "true-client-ip", // Cloudflare Enterprise / Akamai
+      "x-cluster-client-ip", // 部分负载均衡器
+      "fastly-client-ip", // Fastly CDN
+      "x-azure-clientip", // Azure
+      "x-azure-fdid", // Azure Front Door ID
+      "x-azure-ref", // Azure 请求追踪
+      "akamai-origin-hop", // Akamai
+      "x-akamai-config-log-detail", // Akamai 配置日志
+
+      // 请求追踪和关联头
+      "x-request-id", // 请求追踪 ID
+      "x-correlation-id", // 关联 ID
+      "x-trace-id", // 追踪 ID
+      "x-amzn-trace-id", // AWS X-Ray 追踪
+      "x-b3-traceid", // Zipkin 追踪
+      "x-b3-spanid", // Zipkin span
+      "x-b3-parentspanid", // Zipkin parent span
+      "x-b3-sampled", // Zipkin 采样标记
+      "traceparent", // W3C Trace Context
+      "tracestate", // W3C Trace Context 状态
     ];
 
     // 如果不保留 authorization，添加到黑名单

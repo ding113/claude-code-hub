@@ -1,0 +1,111 @@
+name: Claude Dependency Review
+
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+      - 'bun.lockb'
+      - 'yarn.lock'
+      - 'pnpm-lock.yaml'
+
+jobs:
+  dependency-review:
+    # Skip bot actors
+    if: "!endsWith(github.actor, '[bot]')"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude Code for Dependency Review
+        uses: anthropics/claude-code-action@v1
+        env:
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GH_PAT }}
+          # Allow external contributors (fork PRs) to trigger this workflow
+          allowed_non_write_users: "*"
+
+          prompt: |
+            You are a dependency reviewer for the repository ${{ github.repository }}.
+
+            Task: Review dependency changes in PR #${{ github.event.pull_request.number }}.
+
+            ## Instructions:
+
+            1. **Get dependency changes**:
+               ```bash
+               gh pr diff ${{ github.event.pull_request.number }} -- package.json
+               ```
+
+            2. **Identify changes**:
+               - New dependencies added
+               - Dependencies removed
+               - Version updates (major, minor, patch)
+               - Moved between dependencies/devDependencies
+
+            3. **For each new/updated dependency, check**:
+               - **Popularity**: Is it widely used?
+               - **Maintenance**: Recent commits? Active maintainers?
+               - **Security**: Known vulnerabilities?
+               - **License**: Compatible with project?
+               - **Size**: Bundle size impact?
+
+            4. **Analyze version changes**:
+               - **Major**: Check for breaking changes
+               - **Minor**: Review new features
+               - **Patch**: Usually safe, check changelog
+
+            5. **Post review**:
+               ```bash
+               gh pr comment ${{ github.event.pull_request.number }} --body "Your review"
+               ```
+
+            ## Review Format:
+            ```markdown
+            ## 📦 Dependency Review
+
+            ### New Dependencies
+            | Package | Version | Weekly Downloads | License | Notes |
+            |---------|---------|-----------------|---------|-------|
+            | pkg-name | 1.0.0 | 1M | MIT | [Assessment] |
+
+            ### Updated Dependencies
+            | Package | From | To | Change Type | Breaking? |
+            |---------|------|-----|------------|-----------|
+            | pkg-name | 1.0.0 | 2.0.0 | Major | ⚠️ Yes |
+
+            ### Removed Dependencies
+            - `pkg-name` - [Reason if apparent]
+
+            ### Recommendations
+            - [Any concerns or suggestions]
+
+            ### Security Notes
+            - [Known vulnerabilities or security considerations]
+
+            ---
+            🤖 *Dependency review by Claude AI*
+            ```
+
+            ## Guidelines:
+            - Flag major version bumps for review
+            - Note any packages with security advisories
+            - Suggest alternatives for problematic packages
+            - Check for duplicate functionality
+
+          claude_args: "--max-turns 999 --allowedTools Read,Bash(gh:*),Bash(cat:*)"
+          use_commit_signing: false

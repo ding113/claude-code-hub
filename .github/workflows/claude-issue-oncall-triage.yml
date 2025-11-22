@@ -1,0 +1,83 @@
+name: Claude Oncall Issue Triage
+
+on:
+  schedule:
+    # Run every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  oncall-triage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Run Claude Code for Oncall Triage
+        uses: anthropics/claude-code-action@v1
+        env:
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GH_PAT }}
+
+          prompt: |
+            You are an oncall triage assistant for the repository ${{ github.repository }}.
+
+            Task: Identify critical blocking issues that require immediate oncall attention.
+
+            ## Instructions:
+
+            1. **Fetch recent open issues** (updated in the last 3 days):
+               ```bash
+               gh issue list --state open --json number,title,updatedAt,labels,comments --limit 50
+               ```
+
+            2. **For each issue, evaluate if it needs oncall attention**:
+               - Read the full issue and comments:
+               ```bash
+               gh issue view <number>
+               gh issue view <number> --comments
+               ```
+
+            3. **Oncall criteria** (ALL must be met):
+               a) **Is it a bug?** (has "bug" label or describes bug behavior)
+               b) **High engagement?** (5+ comments or reactions)
+               c) **Truly blocking?** Indicators:
+                  - "crash", "stuck", "frozen", "hang", "unresponsive"
+                  - "cannot use", "blocked", "broken", "down"
+                  - Prevents core functionality from working
+                  - No reasonable workaround exists
+
+            4. **For qualifying issues** (without "oncall" label):
+               - Add the "oncall" label:
+               ```bash
+               gh issue edit <number> --add-label "oncall"
+               ```
+               - Do NOT post any comments
+
+            5. **Do NOT apply oncall label if**:
+               - Issue already has "oncall" label
+               - Issue has "P4-low" or "wontfix" labels
+               - A workaround is mentioned and works
+               - It's a feature request, not a bug
+
+            ## Important:
+            - Be conservative - only flag truly critical blocking issues
+            - Do NOT post any comments to issues
+            - Do NOT remove existing labels
+            - Your only action should be to add the "oncall" label
+
+            ## Summary:
+            After processing, provide a summary:
+            - Total issues evaluated
+            - Issues that received "oncall" label (with numbers and brief reasons)
+            - Close calls that almost qualified but didn't
+
+          claude_args: "--max-turns 999 --allowedTools Bash(gh:*)"
+          use_commit_signing: false

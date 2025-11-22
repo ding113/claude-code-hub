@@ -451,8 +451,8 @@ export function ApiTestButton({
                     {testResult.details.usage && (
                       <div className="space-y-2">
                         <h4 className="font-semibold text-sm">{t("usage")}</h4>
-                        <div className="rounded-md border bg-muted/50 p-3">
-                          <pre className="text-xs font-mono break-all">
+                        <div className="rounded-md border bg-muted/50 p-3 max-h-60 overflow-y-auto">
+                          <pre className="text-xs font-mono whitespace-pre-wrap break-words">
                             {typeof testResult.details.usage === "object"
                               ? JSON.stringify(testResult.details.usage, null, 2)
                               : String(testResult.details.usage)}
@@ -465,8 +465,8 @@ export function ApiTestButton({
                     {testResult.details.content && (
                       <div className="space-y-2">
                         <h4 className="font-semibold text-sm">{t("response")}</h4>
-                        <div className="rounded-md border bg-muted/50 p-3 max-h-60 overflow-y-auto">
-                          <pre className="text-xs whitespace-pre-wrap break-words">
+                        <div className="rounded-md border bg-muted/50 p-3 max-h-80 overflow-y-auto">
+                          <pre className="text-xs whitespace-pre-wrap break-words leading-relaxed">
                             {testResult.details.content.slice(
                               0,
                               API_TEST_UI_CONFIG.MAX_PREVIEW_LENGTH
@@ -474,6 +474,13 @@ export function ApiTestButton({
                             {testResult.details.content.length >
                               API_TEST_UI_CONFIG.MAX_PREVIEW_LENGTH && "..."}
                           </pre>
+                          {testResult.details.content.length >
+                            API_TEST_UI_CONFIG.MAX_PREVIEW_LENGTH && (
+                            <div className="text-xs text-muted-foreground mt-2 italic">
+                              显示前 {API_TEST_UI_CONFIG.MAX_PREVIEW_LENGTH}{" "}
+                              字符，完整内容请复制查看
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
@@ -536,21 +543,50 @@ export function ApiTestButton({
                 </div>
               )}
               {testResult.details.usage && (
-                <div>
-                  <span className="font-medium">{t("usage")}:</span>{" "}
-                  {typeof testResult.details.usage === "object"
-                    ? JSON.stringify(testResult.details.usage)
-                    : String(testResult.details.usage)}
+                <div className="space-y-1 text-xs opacity-80">
+                  <div>
+                    <span className="font-medium">{t("usage")}:</span>
+                  </div>
+                  <div className="ml-2">
+                    <pre className="whitespace-pre-wrap break-words">
+                      {typeof testResult.details.usage === "object"
+                        ? JSON.stringify(testResult.details.usage, null, 2)
+                        : String(testResult.details.usage)}
+                    </pre>
+                  </div>
                 </div>
               )}
               {testResult.details.content && (
-                <div>
-                  <span className="font-medium">{t("response")}:</span> {testResult.details.content}
+                <div className="space-y-1 text-xs opacity-80">
+                  <div>
+                    <span className="font-medium">{t("response")}:</span>
+                  </div>
+                  <div className="ml-2">
+                    <pre className="whitespace-pre-wrap break-words max-h-32 overflow-y-auto">
+                      {testResult.details.content.slice(
+                        0,
+                        Math.min(200, testResult.details.content.length)
+                      )}
+                      {testResult.details.content.length > 200 && "..."}
+                    </pre>
+                    {testResult.details.content.length > 200 && (
+                      <div className="text-muted-foreground italic">
+                        显示前 200 字符，完整内容请点击&ldquo;查看详情&rdquo;
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
               {testResult.details.error && (
-                <div>
-                  <span className="font-medium">{t("error")}:</span> {testResult.details.error}
+                <div className="space-y-1 text-xs opacity-80">
+                  <div>
+                    <span className="font-medium">{t("error")}:</span>
+                  </div>
+                  <div className="ml-2">
+                    <pre className="whitespace-pre-wrap break-words text-red-600 max-h-32 overflow-y-auto">
+                      {testResult.details.error}
+                    </pre>
+                  </div>
                 </div>
               )}
             </div>

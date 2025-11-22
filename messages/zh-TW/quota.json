@@ -90,6 +90,7 @@
     "title": "供應商限額統計",
     "totalCount": "共 {count} 個供應商",
     "filterCount": "顯示 {filtered} / {total} 個供應商",
+    "searchPlaceholder": "搜尋供應商名稱...",
     "status": {
       "enabled": "啟用",
       "disabled": "禁用"
@@ -98,8 +99,25 @@
       "priority": "優先級",
       "weight": "權重"
     },
+    "sort": {
+      "name": "按名稱",
+      "priority": "按優先級",
+      "weight": "按權重",
+      "usage": "按使用量"
+    },
+    "list": {
+      "resetIn": "重置於",
+      "unlimited": "無限制",
+      "current": "當前",
+      "limit": "限制",
+      "used": "已用"
+    },
     "cost5h": {
       "label": "5小時消費"
+    },
+    "costDaily": {
+      "label": "每日消費",
+      "resetAt": "重置於"
     },
     "costWeekly": {
       "label": "周消費",
@@ -115,6 +133,8 @@
     "noQuotaSet": "未設置限額",
     "noQuotaData": "無法獲取限額資訊",
     "noMatches": "沒有匹配的供應商",
+    "noMatchesDesc": "沒有供應商符合您的搜尋條件，請嘗試調整篩選條件。",
+    "noProvidersDesc": "尚未配置任何供應商。",
     "unlimitedSection": "未設置限額的供應商 ({count}個)"
   },
   "keys": {
@@ -134,6 +154,7 @@
       "keyName": "密鑰名稱",
       "quotaType": "限額類型",
       "cost5h": "5小時限額",
+      "costDaily": "每日限額",
       "costWeekly": "周限額",
       "costMonthly": "月限額",
       "concurrentSessions": "並發限制",
@@ -157,6 +178,26 @@
         "label": "5小時限額 (USD)",
         "placeholder": "不限制",
         "current": "當前已用: {currency}{current} / {currency}{limit}"
+      },
+      "costDaily": {
+        "label": "每日限額 (USD)",
+        "placeholder": "不限制",
+        "current": "當前已用: {currency}{current} / {currency}{limit}"
+      },
+      "dailyResetMode": {
+        "label": "每日重置模式",
+        "options": {
+          "fixed": "固定時間重置",
+          "rolling": "滾動窗口（24小時）"
+        },
+        "desc": {
+          "fixed": "每天在指定時間重置額度",
+          "rolling": "從首次請求開始計算24小時滾動窗口"
+        }
+      },
+      "dailyResetTime": {
+        "label": "每日重置時間",
+        "placeholder": "HH:mm"
       },
       "costWeekly": {
         "label": "周限額 (USD)",
@@ -222,6 +263,27 @@
         "label": "5小時消費上限 (USD)",
         "placeholder": "留空表示無限制",
         "description": "5小時內最大消費金額"
+      },
+      "limitDailyUsd": {
+        "label": "每日消費上限 (USD)",
+        "placeholder": "留空表示無限制",
+        "description": "每日最大消費金額"
+      },
+      "dailyResetMode": {
+        "label": "每日重置模式",
+        "options": {
+          "fixed": "固定時間重置",
+          "rolling": "滾動窗口（24小時）"
+        },
+        "desc": {
+          "fixed": "每天在指定時間重置額度",
+          "rolling": "從首次請求開始計算24小時滾動窗口"
+        }
+      },
+      "dailyResetTime": {
+        "label": "每日重置時間",
+        "placeholder": "HH:mm",
+        "description": "每日限額的重置時間（使用系統時區）"
       },
       "limitWeeklyUsd": {
         "label": "週消費上限 (USD)",

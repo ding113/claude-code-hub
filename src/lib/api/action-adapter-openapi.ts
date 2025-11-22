@@ -10,8 +10,10 @@
 
 import { createRoute, z } from "@hono/zod-openapi";
 import type { Context } from "hono";
+import { getCookie } from "hono/cookie";
 import type { ActionResult } from "@/actions/types";
 import { logger } from "@/lib/logger";
+import { validateKey } from "@/lib/auth";
 
 // Server Action 函数签名 (支持两种格式)
 type ServerAction =
@@ -161,6 +163,7 @@ export function createActionRoute(
     summary,
     tags = [module],
     requiresAuth = true,
+    requiredRole,
   } = options;
 
   // 创建 OpenAPI 路由定义
@@ -193,6 +196,30 @@ export function createActionRoute(
     const fullPath = `${module}.${actionName}`;
 
     try {
+      // 0. 认证检查 (如果需要)
+      if (requiresAuth) {
+        const authToken = getCookie(c, "auth-token");
+        if (!authToken) {
+          logger.warn(`[ActionAPI] ${fullPath} 认证失败: 缺少 auth-token`);
+          return c.json({ ok: false, error: "未认证" }, 401);
+        }
+
+        const session = await validateKey(authToken);
+        if (!session) {
+          logger.warn(`[ActionAPI] ${fullPath} 认证失败: 无效的 auth-token`);
+          return c.json({ ok: false, error: "认证无效或已过期" }, 401);
+        }
+
+        // 检查角色权限
+        if (requiredRole === "admin" && session.user.role !== "admin") {
+          logger.warn(`[ActionAPI] ${fullPath} 权限不足: 需要 admin 角色`, {
+            userId: session.user.id,
+            userRole: session.user.role,
+          });
+          return c.json({ ok: false, error: "权限不足" }, 403);
+        }
+      }
+
       // 1. 解析并验证请求体 (Zod 自动验证)
       const body = await c.req.json().catch(() => ({}));
 

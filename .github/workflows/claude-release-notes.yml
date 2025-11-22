@@ -1,0 +1,114 @@
+name: Claude Release Notes
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  release-notes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Run Claude Code for Release Notes
+        uses: anthropics/claude-code-action@v1
+        env:
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GH_PAT }}
+
+          prompt: |
+            You are a release notes generator for the repository ${{ github.repository }}.
+
+            Task: Generate comprehensive release notes for release ${{ github.event.release.tag_name }}.
+
+            ## Instructions:
+
+            1. **Get release information**:
+               ```bash
+               gh release view ${{ github.event.release.tag_name }}
+               ```
+
+            2. **Get commits since last release**:
+               ```bash
+               # Find previous tag
+               git tag --sort=-version:refname | head -n 2
+
+               # Get commits between tags
+               git log PREVIOUS_TAG..${{ github.event.release.tag_name }} --oneline
+               ```
+
+            3. **Get merged PRs since last release**:
+               ```bash
+               gh pr list --state merged --base main --json number,title,labels,author --limit 100
+               ```
+
+            4. **Categorize changes**:
+               - 🚀 **Features**: New functionality
+               - 🐛 **Bug Fixes**: Fixed issues
+               - ⚡ **Performance**: Speed improvements
+               - 🔒 **Security**: Security fixes
+               - 📝 **Documentation**: Doc updates
+               - 🏗️ **Refactoring**: Code improvements
+               - 🔧 **Maintenance**: Chores, dependencies
+
+            5. **Generate release notes**:
+               ```bash
+               gh release edit ${{ github.event.release.tag_name }} --notes "Your notes"
+               ```
+
+            ## Release Notes Format:
+            ```markdown
+            ## What's Changed
+
+            ### 🚀 Features
+            - Feature description (#PR) @author
+
+            ### 🐛 Bug Fixes
+            - Fix description (#PR) @author
+
+            ### ⚡ Performance
+            - Improvement description (#PR) @author
+
+            ### 🔒 Security
+            - Security fix description (#PR) @author
+
+            ### 📝 Documentation
+            - Doc update description (#PR) @author
+
+            ### 🏗️ Refactoring
+            - Refactor description (#PR) @author
+
+            ### 🔧 Maintenance
+            - Chore description (#PR) @author
+
+            ## Breaking Changes
+            - [List any breaking changes with migration guide]
+
+            ## Contributors
+            @user1, @user2, @user3
+
+            ## Upgrade Guide
+            [If applicable, how to upgrade from previous version]
+
+            ---
+            **Full Changelog**: https://github.com/${{ github.repository }}/compare/PREVIOUS_TAG...${{ github.event.release.tag_name }}
+            ```
+
+            ## Guidelines:
+            - Include all significant changes
+            - Credit PR authors
+            - Highlight breaking changes prominently
+            - Include upgrade instructions if needed
+            - Link to relevant PRs and issues
+
+          claude_args: "--max-turns 999 --allowedTools Read,Bash(gh:*),Bash(git:*)"
+          use_commit_signing: false

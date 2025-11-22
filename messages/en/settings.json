@@ -984,6 +984,7 @@
           "title": "Rate Limit",
           "summary": {
             "fiveHour": "5h: ${amount}",
+            "daily": "Day: ${amount} (reset ${resetTime})",
             "weekly": "Week: ${amount}",
             "monthly": "Month: ${amount}",
             "concurrent": "Concurrent: {count}",
@@ -992,6 +993,24 @@
           "limit5h": {
             "label": "5h Spend Limit (USD)",
             "placeholder": "Leave empty for unlimited"
+          },
+          "limitDaily": {
+            "label": "Daily Spend Limit (USD)",
+            "placeholder": "Leave empty for unlimited"
+          },
+          "dailyResetMode": {
+            "label": "Daily Reset Mode",
+            "options": {
+              "fixed": "Fixed Time Reset",
+              "rolling": "Rolling Window (24h)"
+            },
+            "desc": {
+              "fixed": "Reset quota at a fixed time each day",
+              "rolling": "Reset 24 hours after first API call"
+            }
+          },
+          "dailyResetTime": {
+            "label": "Daily Reset Time (HH:mm)"
           },
           "limitWeekly": {
             "label": "Weekly Spend Limit (USD)",
@@ -1269,6 +1288,7 @@
     "searchResults": "Found {count} matching providers",
     "section": {
       "description": "Configure upstream provider rate limiting and concurrent session limits. Leave empty for unlimited.",
+      "leaderboard": "Provider Leaderboard",
       "title": "Provider Management"
     },
     "subtitle": "Provider Management",

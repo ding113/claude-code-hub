@@ -4,10 +4,17 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
 import { addKey } from "@/actions/keys";
-import { DialogFormLayout } from "@/components/form/form-layout";
+import { DialogFormLayout, FormGrid } from "@/components/form/form-layout";
 import { TextField, DateField, NumberField } from "@/components/form/form-field";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useZodForm } from "@/lib/hooks/use-zod-form";
 import { KeyFormSchema } from "@/lib/validation/schemas";
 import type { User } from "@/types/user";
@@ -30,6 +37,9 @@ export function AddKeyForm({ userId, user, onSuccess }: AddKeyFormProps) {
       expiresAt: "",
       canLoginWebUi: true,
       limit5hUsd: null,
+      limitDailyUsd: null,
+      dailyResetMode: "fixed" as const,
+      dailyResetTime: "00:00",
       limitWeeklyUsd: null,
       limitMonthlyUsd: null,
       limitConcurrentSessions: 0,
@@ -46,6 +56,9 @@ export function AddKeyForm({ userId, user, onSuccess }: AddKeyFormProps) {
           expiresAt: data.expiresAt || undefined,
           canLoginWebUi: data.canLoginWebUi,
           limit5hUsd: data.limit5hUsd,
+          limitDailyUsd: data.limitDailyUsd,
+          dailyResetMode: data.dailyResetMode,
+          dailyResetTime: data.dailyResetTime,
           limitWeeklyUsd: data.limitWeeklyUsd,
           limitMonthlyUsd: data.limitMonthlyUsd,
           limitConcurrentSessions: data.limitConcurrentSessions,
@@ -118,59 +131,107 @@ export function AddKeyForm({ userId, user, onSuccess }: AddKeyFormProps) {
         />
       </div>
 
-      <NumberField
-        label={t("limit5hUsd.label")}
-        placeholder={t("limit5hUsd.placeholder")}
-        description={
-          user?.limit5hUsd
-            ? t("limit5hUsd.descriptionWithUserLimit", { limit: user.limit5hUsd })
-            : t("limit5hUsd.description")
-        }
-        min={0}
-        step={0.01}
-        {...form.getFieldProps("limit5hUsd")}
-      />
+      <FormGrid columns={2}>
+        <NumberField
+          label={t("limit5hUsd.label")}
+          placeholder={t("limit5hUsd.placeholder")}
+          description={
+            user?.limit5hUsd
+              ? t("limit5hUsd.descriptionWithUserLimit", { limit: user.limit5hUsd })
+              : t("limit5hUsd.description")
+          }
+          min={0}
+          step={0.01}
+          {...form.getFieldProps("limit5hUsd")}
+        />
 
-      <NumberField
-        label={t("limitWeeklyUsd.label")}
-        placeholder={t("limitWeeklyUsd.placeholder")}
-        description={
-          user?.limitWeeklyUsd
-            ? t("limitWeeklyUsd.descriptionWithUserLimit", { limit: user.limitWeeklyUsd })
-            : t("limitWeeklyUsd.description")
-        }
-        min={0}
-        step={0.01}
-        {...form.getFieldProps("limitWeeklyUsd")}
-      />
+        <NumberField
+          label={t("limitDailyUsd.label")}
+          placeholder={t("limitDailyUsd.placeholder")}
+          description={t("limitDailyUsd.description")}
+          min={0}
+          step={0.01}
+          {...form.getFieldProps("limitDailyUsd")}
+        />
+      </FormGrid>
 
-      <NumberField
-        label={t("limitMonthlyUsd.label")}
-        placeholder={t("limitMonthlyUsd.placeholder")}
-        description={
-          user?.limitMonthlyUsd
-            ? t("limitMonthlyUsd.descriptionWithUserLimit", { limit: user.limitMonthlyUsd })
-            : t("limitMonthlyUsd.description")
-        }
-        min={0}
-        step={0.01}
-        {...form.getFieldProps("limitMonthlyUsd")}
-      />
+      <FormGrid columns={2}>
+        <div className="space-y-2">
+          <Label htmlFor="daily-reset-mode">{t("dailyResetMode.label")}</Label>
+          <Select
+            value={form.values.dailyResetMode}
+            onValueChange={(value: "fixed" | "rolling") => form.setValue("dailyResetMode", value)}
+            disabled={isPending}
+          >
+            <SelectTrigger id="daily-reset-mode">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="fixed">{t("dailyResetMode.options.fixed")}</SelectItem>
+              <SelectItem value="rolling">{t("dailyResetMode.options.rolling")}</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            {form.values.dailyResetMode === "fixed"
+              ? t("dailyResetMode.desc.fixed")
+              : t("dailyResetMode.desc.rolling")}
+          </p>
+        </div>
 
-      <NumberField
-        label={t("limitConcurrentSessions.label")}
-        placeholder={t("limitConcurrentSessions.placeholder")}
-        description={
-          user?.limitConcurrentSessions
-            ? t("limitConcurrentSessions.descriptionWithUserLimit", {
-                limit: user.limitConcurrentSessions,
-              })
-            : t("limitConcurrentSessions.description")
-        }
-        min={0}
-        step={1}
-        {...form.getFieldProps("limitConcurrentSessions")}
-      />
+        {form.values.dailyResetMode === "fixed" && (
+          <TextField
+            label={t("dailyResetTime.label")}
+            placeholder={t("dailyResetTime.placeholder")}
+            description={t("dailyResetTime.description")}
+            type="time"
+            step={60}
+            {...form.getFieldProps("dailyResetTime")}
+          />
+        )}
+      </FormGrid>
+
+      <FormGrid columns={2}>
+        <NumberField
+          label={t("limitWeeklyUsd.label")}
+          placeholder={t("limitWeeklyUsd.placeholder")}
+          description={
+            user?.limitWeeklyUsd
+              ? t("limitWeeklyUsd.descriptionWithUserLimit", { limit: user.limitWeeklyUsd })
+              : t("limitWeeklyUsd.description")
+          }
+          min={0}
+          step={0.01}
+          {...form.getFieldProps("limitWeeklyUsd")}
+        />
+
+        <NumberField
+          label={t("limitMonthlyUsd.label")}
+          placeholder={t("limitMonthlyUsd.placeholder")}
+          description={
+            user?.limitMonthlyUsd
+              ? t("limitMonthlyUsd.descriptionWithUserLimit", { limit: user.limitMonthlyUsd })
+              : t("limitMonthlyUsd.description")
+          }
+          min={0}
+          step={0.01}
+          {...form.getFieldProps("limitMonthlyUsd")}
+        />
+
+        <NumberField
+          label={t("limitConcurrentSessions.label")}
+          placeholder={t("limitConcurrentSessions.placeholder")}
+          description={
+            user?.limitConcurrentSessions
+              ? t("limitConcurrentSessions.descriptionWithUserLimit", {
+                  limit: user.limitConcurrentSessions,
+                })
+              : t("limitConcurrentSessions.description")
+          }
+          min={0}
+          step={1}
+          {...form.getFieldProps("limitConcurrentSessions")}
+        />
+      </FormGrid>
     </DialogFormLayout>
   );
 }

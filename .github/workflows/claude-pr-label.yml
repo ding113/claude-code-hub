@@ -1,0 +1,89 @@
+name: Claude PR Label
+
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+
+jobs:
+  pr-label:
+    # Skip bot actors
+    if: "!endsWith(github.actor, '[bot]')"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude Code for PR Labeling
+        uses: anthropics/claude-code-action@v1
+        env:
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GH_PAT }}
+          # Allow external contributors (fork PRs) to trigger this workflow
+          allowed_non_write_users: "*"
+
+          prompt: |
+            You are a PR labeling assistant for the repository ${{ github.repository }}.
+
+            Task: Analyze PR #${{ github.event.pull_request.number }} and apply appropriate labels.
+
+            ## Instructions:
+
+            1. **Get PR information**:
+               ```bash
+               gh pr view ${{ github.event.pull_request.number }}
+               gh pr diff ${{ github.event.pull_request.number }} --name-only
+               ```
+
+            2. **Fetch available labels**:
+               ```bash
+               gh label list
+               ```
+
+            3. **Analyze and determine labels**:
+
+               **By Change Type**:
+               - `bug` - Fixes a bug
+               - `enhancement` - Improves existing feature
+               - `feature` - Adds new functionality
+               - `documentation` - Only docs changes
+               - `refactor` - Code restructuring without behavior change
+               - `test` - Only test changes
+               - `chore` - Build, CI, dependencies
+
+               **By Component** (based on files changed):
+               - `api` - Changes in src/app/api or src/app/v1
+               - `ui` - Changes in src/app/(pages) or src/components
+               - `database` - Changes in src/drizzle or src/repository
+               - `auth` - Changes in authentication related files
+               - `proxy` - Changes in proxy related files
+
+               **By Impact**:
+               - `breaking-change` - Breaks backward compatibility
+               - `needs-migration` - Requires database migration
+               - `needs-review` - Complex changes requiring careful review
+
+            4. **Apply labels**:
+               ```bash
+               gh pr edit ${{ github.event.pull_request.number }} --add-label "label1,label2"
+               ```
+
+            ## Important:
+            - Do NOT post any comments - only apply labels
+            - Apply at most 4-5 labels total
+            - Be accurate - don't over-label
+            - Don't remove existing labels
+
+          claude_args: "--max-turns 999 --allowedTools Bash(gh:*)"
+          use_commit_signing: false

@@ -1,0 +1,103 @@
+name: Claude PR Changelog
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  pr-changelog:
+    # Only run when PR is merged
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.base.ref }}
+
+      - name: Run Claude Code for Changelog Generation
+        uses: anthropics/claude-code-action@v1
+        env:
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GH_PAT }}
+
+          prompt: |
+            You are a changelog generator for the repository ${{ github.repository }}.
+
+            Task: Update CHANGELOG.md with entry for merged PR #${{ github.event.pull_request.number }}.
+
+            ## Instructions:
+
+            1. **Get PR information**:
+               ```bash
+               gh pr view ${{ github.event.pull_request.number }} --json title,body,labels,author
+               ```
+
+            2. **Read current changelog**:
+               ```bash
+               cat CHANGELOG.md 2>/dev/null || echo "# Changelog"
+               ```
+
+            3. **Determine change category** based on PR labels:
+               - `feature` → **Added**
+               - `enhancement` → **Changed**
+               - `bug` → **Fixed**
+               - `documentation` → **Documentation**
+               - `refactor` → **Refactored**
+               - `breaking-change` → **Breaking Changes**
+               - `chore` → **Maintenance**
+               - Default → **Changed**
+
+            4. **Generate changelog entry**:
+               Format: `- [Category] Brief description (#PR_NUMBER) @author`
+
+            5. **Update CHANGELOG.md**:
+               - If there's an "Unreleased" section, add the entry there
+               - If not, create one at the top
+               - Keep existing entries intact
+
+            6. **Commit the change**:
+               ```bash
+               git config user.name "github-actions[bot]"
+               git config user.email "github-actions[bot]@users.noreply.github.com"
+               git add CHANGELOG.md
+               git commit -m "docs: update changelog for PR #${{ github.event.pull_request.number }}"
+               git push
+               ```
+
+            ## Changelog Format:
+            ```markdown
+            # Changelog
+
+            ## [Unreleased]
+
+            ### Added
+            - New feature description (#123) @username
+
+            ### Changed
+            - Enhancement description (#124) @username
+
+            ### Fixed
+            - Bug fix description (#125) @username
+
+            ## [1.0.0] - 2024-01-01
+            ...
+            ```
+
+            ## Guidelines:
+            - Keep entries concise (one line)
+            - Use present tense ("Add" not "Added")
+            - Include PR number and author
+            - Don't duplicate existing entries
+            - Skip PRs with "skip-changelog" label
+
+          claude_args: "--max-turns 999 --allowedTools Read,Write,Edit,Bash(gh:*),Bash(git:*),Bash(cat:*)"
+          use_commit_signing: false

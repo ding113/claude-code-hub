@@ -152,8 +152,29 @@
     {
       "idx": 21,
       "version": "7",
-      "when": 1763705088959,
-      "tag": "0021_glossy_silvermane",
+      "when": 1763823720000,
+      "tag": "0021_daily_cost_limits",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1763739167236,
+      "tag": "0022_simple_stardust",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1763823720001,
+      "tag": "0023_daily_limit_partial_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1763823720002,
+      "tag": "0024_glossy_silvermane",
       "breakpoints": true
     }
   ]

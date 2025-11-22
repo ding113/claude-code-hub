@@ -1,0 +1,86 @@
+name: Claude Issue Stale Cleanup
+
+on:
+  schedule:
+    # Run every day at 00:00 UTC
+    - cron: '0 0 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  stale-cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Run Claude Code for Stale Issue Cleanup
+        uses: anthropics/claude-code-action@v1
+        env:
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GH_PAT }}
+
+          prompt: |
+            You are a stale issue cleanup assistant for the repository ${{ github.repository }}.
+
+            Task: Identify and manage stale issues that have had no activity.
+
+            ## Instructions:
+
+            1. **Find stale issues** (no activity for 30+ days):
+               ```bash
+               gh issue list --state open --json number,title,updatedAt,labels --limit 100
+               ```
+
+            2. **For each potentially stale issue**:
+               - Check if it already has a "stale" label
+               - Check the last activity date
+               - Read the issue to understand its importance
+
+            3. **Stale issue handling** (no activity for 30 days):
+               - Add "stale" label:
+               ```bash
+               gh issue edit <number> --add-label "stale"
+               ```
+               - Post a warning comment:
+               ```bash
+               gh issue comment <number> --body "This issue has been automatically marked as stale because it has not had any activity in the last 30 days.
+
+               If this issue is still relevant:
+               - Please comment to keep it open
+               - Add any new information that might help resolve it
+
+               This issue will be automatically closed in 14 days if there is no further activity."
+               ```
+
+            4. **Very stale issue handling** (stale label + no activity for 14 more days):
+               - Close the issue:
+               ```bash
+               gh issue close <number>
+               ```
+               - Post a closing comment:
+               ```bash
+               gh issue comment <number> --body "This issue has been automatically closed due to inactivity.
+
+               If you believe this issue is still relevant, please feel free to reopen it with additional information."
+               ```
+
+            5. **Exceptions - Do NOT mark as stale**:
+               - Issues with "P1-critical" or "P2-high" labels
+               - Issues with "pinned" or "keep-open" labels
+               - Issues with recent commits referencing them
+
+            ## Summary:
+            After processing, provide a summary:
+            - Number of issues marked as stale
+            - Number of issues closed
+            - List of affected issue numbers
+
+          claude_args: "--max-turns 999 --allowedTools Bash(gh:*)"
+          use_commit_signing: false

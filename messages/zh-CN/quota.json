@@ -92,6 +92,7 @@
     "title": "供应商限额统计",
     "totalCount": "共 {count} 个供应商",
     "filterCount": "显示 {filtered} / {total} 个供应商",
+    "searchPlaceholder": "搜索供应商名称...",
     "status": {
       "enabled": "启用",
       "disabled": "禁用"
@@ -100,8 +101,25 @@
       "priority": "优先级",
       "weight": "权重"
     },
+    "sort": {
+      "name": "按名称",
+      "priority": "按优先级",
+      "weight": "按权重",
+      "usage": "按使用量"
+    },
+    "list": {
+      "resetIn": "重置于",
+      "unlimited": "无限制",
+      "current": "当前",
+      "limit": "限制",
+      "used": "已用"
+    },
     "cost5h": {
       "label": "5小时消费"
+    },
+    "costDaily": {
+      "label": "每日消费",
+      "resetAt": "重置于"
     },
     "costWeekly": {
       "label": "周消费",
@@ -117,6 +135,8 @@
     "noQuotaSet": "未设置限额",
     "noQuotaData": "无法获取限额信息",
     "noMatches": "没有匹配的供应商",
+    "noMatchesDesc": "没有供应商匹配您的搜索条件，请尝试调整筛选条件。",
+    "noProvidersDesc": "尚未配置任何供应商。",
     "unlimitedSection": "未设置限额的供应商 ({count}个)"
   },
   "keys": {
@@ -136,6 +156,7 @@
       "keyName": "密钥名称",
       "quotaType": "限额类型",
       "cost5h": "5小时限额",
+      "costDaily": "每日限额",
       "costWeekly": "周限额",
       "costMonthly": "月限额",
       "concurrentSessions": "并发限制",
@@ -159,6 +180,26 @@
         "label": "5小时限额(USD)",
         "placeholder": "不限制",
         "current": "当前已用: {currency}{current} / {currency}{limit}"
+      },
+      "costDaily": {
+        "label": "每日限额(USD)",
+        "placeholder": "不限制",
+        "current": "当前已用: {currency}{current} / {currency}{limit}"
+      },
+      "dailyResetMode": {
+        "label": "每日重置模式",
+        "options": {
+          "fixed": "固定时间重置",
+          "rolling": "滚动窗口(24小时)"
+        },
+        "desc": {
+          "fixed": "每天固定时间重置额度",
+          "rolling": "首次调用后24小时重置"
+        }
+      },
+      "dailyResetTime": {
+        "label": "每日重置时间",
+        "placeholder": "HH:mm"
       },
       "costWeekly": {
         "label": "周限额(USD)",
@@ -225,6 +266,27 @@
         "placeholder": "留空表示无限制",
         "description": "5小时内最大消费金额",
         "descriptionWithUserLimit": "5小时内最大消费金额（用户限额: ${limit}）"
+      },
+      "limitDailyUsd": {
+        "label": "每日消费上限 (USD)",
+        "placeholder": "留空表示无限制",
+        "description": "每日最大消费金额"
+      },
+      "dailyResetMode": {
+        "label": "每日重置模式",
+        "options": {
+          "fixed": "固定时间重置",
+          "rolling": "滚动窗口（24小时）"
+        },
+        "desc": {
+          "fixed": "每天在指定时间重置额度",
+          "rolling": "从首次请求开始计算24小时滚动窗口"
+        }
+      },
+      "dailyResetTime": {
+        "label": "每日重置时间",
+        "placeholder": "HH:mm",
+        "description": "每日限额的重置时间（使用系统时区）"
       },
       "limitWeeklyUsd": {
         "label": "周消费上限 (USD)",

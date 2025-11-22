@@ -44,6 +44,7 @@ export class ProxyResponseHandler {
     session: ProxySession,
     response: Response
   ): Promise<Response> {
+    const messageContext = session.messageContext;
     const provider = session.provider;
     if (!provider) {
       return response;
@@ -68,15 +69,65 @@ export class ProxyResponseHandler {
         (provider.providerType === "gemini" || provider.providerType === "gemini-cli");
 
       if (isGeminiPassthrough) {
-        // 完全透传：客户端是 Gemini 格式，提供商也是 Gemini 类型
-        logger.debug("[ResponseHandler] Gemini passthrough mode (no transformation)", {
-          originalFormat: session.originalFormat,
-          providerType: provider.providerType,
-          model: session.request.model,
-          reason: "Client format and provider type both Gemini",
+        logger.debug(
+          "[ResponseHandler] Gemini non-stream passthrough (clone for stats, return original)",
+          {
+            originalFormat: session.originalFormat,
+            providerType: provider.providerType,
+            model: session.request.model,
+            statusCode: response.status,
+            reason: "Client receives untouched response, stats read from clone",
+          }
+        );
+
+        const responseForStats = response.clone();
+        const statusCode = response.status;
+
+        const taskId = `non-stream-passthrough-${messageContext?.id || `unknown-${Date.now()}`}`;
+        const statsPromise = (async () => {
+          try {
+            const responseText = await responseForStats.text();
+
+            const sessionWithCleanup = session as typeof session & {
+              clearResponseTimeout?: () => void;
+            };
+            if (sessionWithCleanup.clearResponseTimeout) {
+              sessionWithCleanup.clearResponseTimeout();
+            }
+
+            // 存储响应体到 Redis（5分钟过期）
+            if (session.sessionId) {
+              void SessionManager.storeSessionResponse(session.sessionId, responseText).catch(
+                (err) => {
+                  logger.error("[ResponseHandler] Failed to store response:", err);
+                }
+              );
+            }
+
+            // 使用共享的统计处理方法
+            const duration = Date.now() - session.startTime;
+            await finalizeRequestStats(session, responseText, statusCode, duration);
+          } catch (error) {
+            if (!isClientAbortError(error as Error)) {
+              logger.error(
+                "[ResponseHandler] Gemini non-stream passthrough stats task failed:",
+                error
+              );
+            }
+          } finally {
+            AsyncTaskManager.cleanup(taskId);
+          }
+        })();
+
+        AsyncTaskManager.register(taskId, statsPromise, "non-stream-passthrough-stats");
+        statsPromise.catch((error) => {
+          logger.error(
+            "[ResponseHandler] Gemini non-stream passthrough stats task uncaught error:",
+            error
+          );
         });
-        // 直接返回原始响应，不做任何转换
-        finalResponse = response;
+
+        return response;
       } else {
         // ❌ 需要转换：客户端不是 Gemini 格式（如 OpenAI/Claude）
         try {
@@ -143,7 +194,6 @@ export class ProxyResponseHandler {
     }
 
     // 使用 AsyncTaskManager 管理后台处理任务
-    const messageContext = session.messageContext;
     const taskId = `non-stream-${messageContext?.id || `unknown-${Date.now()}`}`;
     const abortController = new AbortController();
 
@@ -330,7 +380,7 @@ export class ProxyResponseHandler {
             await persistRequestFailure({
               session,
               messageContext,
-              statusCode: statusCode ?? 500,
+              statusCode: statusCode && statusCode >= 400 ? statusCode : 502,
               error: err,
               taskId,
               phase: "non-stream",
@@ -375,7 +425,7 @@ export class ProxyResponseHandler {
           await persistRequestFailure({
             session,
             messageContext,
-            statusCode: statusCode ?? 500,
+            statusCode: statusCode && statusCode >= 400 ? statusCode : 500,
             error,
             taskId,
             phase: "non-stream",
@@ -398,7 +448,7 @@ export class ProxyResponseHandler {
       await persistRequestFailure({
         session,
         messageContext,
-        statusCode: statusCode ?? 500,
+        statusCode: statusCode && statusCode >= 400 ? statusCode : 500,
         error,
         taskId,
         phase: "non-stream",
@@ -440,15 +490,74 @@ export class ProxyResponseHandler {
         (provider.providerType === "gemini" || provider.providerType === "gemini-cli");
 
       if (isGeminiPassthrough) {
-        // 完全透传：客户端是 Gemini 格式，提供商也是 Gemini 类型
-        logger.debug("[ResponseHandler] Gemini stream passthrough mode (no transformation)", {
-          originalFormat: session.originalFormat,
-          providerType: provider.providerType,
-          model: session.request.model,
-          reason: "Client format and provider type both Gemini",
+        // 完全透传：clone 用于后台统计，返回原始 response
+        logger.debug(
+          "[ResponseHandler] Gemini stream passthrough (clone for stats, return original)",
+          {
+            originalFormat: session.originalFormat,
+            providerType: provider.providerType,
+            model: session.request.model,
+            statusCode: response.status,
+            reason: "Client receives untouched response, stats read from clone",
+          }
+        );
+
+        const responseForStats = response.clone();
+        const statusCode = response.status;
+
+        const taskId = `stream-passthrough-${messageContext.id}`;
+        const statsPromise = (async () => {
+          try {
+            const reader = responseForStats.body?.getReader();
+            if (!reader) return;
+
+            const chunks: string[] = [];
+            const decoder = new TextDecoder();
+
+            while (true) {
+              if (session.clientAbortSignal?.aborted) break;
+
+              const { done, value } = await reader.read();
+              if (done) break;
+              if (value) {
+                chunks.push(decoder.decode(value, { stream: true }));
+              }
+            }
+
+            const flushed = decoder.decode();
+            if (flushed) chunks.push(flushed);
+            const allContent = chunks.join("");
+
+            // 存储响应体到 Redis（5分钟过期）
+            if (session.sessionId) {
+              void SessionManager.storeSessionResponse(session.sessionId, allContent).catch(
+                (err) => {
+                  logger.error(
+                    "[ResponseHandler] Failed to store stream passthrough response:",
+                    err
+                  );
+                }
+              );
+            }
+
+            // 使用共享的统计处理方法
+            const duration = Date.now() - session.startTime;
+            await finalizeRequestStats(session, allContent, statusCode, duration);
+          } catch (error) {
+            if (!isClientAbortError(error as Error)) {
+              logger.error("[ResponseHandler] Gemini passthrough stats task failed:", error);
+            }
+          } finally {
+            AsyncTaskManager.cleanup(taskId);
+          }
+        })();
+
+        AsyncTaskManager.register(taskId, statsPromise, "stream-passthrough-stats");
+        statsPromise.catch((error) => {
+          logger.error("[ResponseHandler] Gemini passthrough stats task uncaught error:", error);
         });
-        // 直接使用原始流，不做任何转换
-        processedStream = response.body;
+
+        return response;
       } else {
         // ❌ 需要转换：客户端不是 Gemini 格式（如 OpenAI/Claude）
         logger.debug("[ResponseHandler] Transforming Gemini stream to client format", {
@@ -768,18 +877,18 @@ export class ProxyResponseHandler {
         const allContent = flushAndJoin();
         await finalizeStream(allContent);
       } catch (error) {
-        // 检测 AbortError 的来源：响应超时 vs 静默期超时 vs 客户端中断
+        // 检测 AbortError 的来源：响应超时 vs 静默期超时 vs 客户端/上游中断
         const err = error as Error;
-        if (isClientAbortError(err)) {
-          // 获取 responseController 引用（由 forwarder.ts 传递）
-          const sessionWithController = session as typeof session & {
-            responseController?: AbortController;
-          };
+        const sessionWithController = session as typeof session & {
+          responseController?: AbortController;
+        };
+        const clientAborted = session.clientAbortSignal?.aborted ?? false;
+        const isResponseControllerAborted =
+          sessionWithController.responseController?.signal.aborted ?? false;
 
+        if (isClientAbortError(err)) {
           // 区分不同的超时来源
-          const isResponseTimeout =
-            sessionWithController.responseController?.signal.aborted &&
-            !session.clientAbortSignal?.aborted;
+          const isResponseTimeout = isResponseControllerAborted && !clientAborted;
           const isIdleTimeout = err.message?.includes("streaming_idle");
 
           if (isResponseTimeout && !isIdleTimeout) {
@@ -814,7 +923,7 @@ export class ProxyResponseHandler {
             await persistRequestFailure({
               session,
               messageContext,
-              statusCode: statusCode ?? 500,
+              statusCode: statusCode && statusCode >= 400 ? statusCode : 502,
               error: err,
               taskId,
               phase: "stream",
@@ -850,7 +959,27 @@ export class ProxyResponseHandler {
             await persistRequestFailure({
               session,
               messageContext,
-              statusCode: statusCode ?? 500,
+              statusCode: statusCode && statusCode >= 400 ? statusCode : 502,
+              error: err,
+              taskId,
+              phase: "stream",
+            });
+          } else if (!clientAborted) {
+            // 上游在流式过程中意外中断：视为供应商/网络错误
+            logger.error("ResponseHandler: Upstream stream aborted unexpectedly", {
+              taskId,
+              providerId: provider.id,
+              providerName: provider.name,
+              messageId: messageContext.id,
+              chunksCollected: chunks.length,
+              errorName: err.name,
+              errorMessage: err.message || "(empty message)",
+            });
+
+            await persistRequestFailure({
+              session,
+              messageContext,
+              statusCode: 502,
               error: err,
               taskId,
               phase: "stream",
@@ -887,7 +1016,7 @@ export class ProxyResponseHandler {
           await persistRequestFailure({
             session,
             messageContext,
-            statusCode: statusCode ?? 500,
+            statusCode: statusCode && statusCode >= 400 ? statusCode : 500,
             error,
             taskId,
             phase: "stream",
@@ -918,7 +1047,7 @@ export class ProxyResponseHandler {
       await persistRequestFailure({
         session,
         messageContext,
-        statusCode: statusCode ?? 500,
+        statusCode: statusCode && statusCode >= 400 ? statusCode : 500,
         error,
         taskId,
         phase: "stream",
@@ -1103,7 +1232,10 @@ function parseUsageFromResponseText(
     // Fallback to SSE parsing when body is not valid JSON
   }
 
-  if (!usageMetrics && responseText.includes("event:")) {
+  // SSE 解析：支持两种格式
+  // 1. 标准 SSE (event: + data:) - Claude/OpenAI
+  // 2. 纯 data: 格式 - Gemini
+  if (!usageMetrics && responseText.includes("data:")) {
     const events = parseSSEData(responseText);
     for (const event of events) {
       if (usageMetrics) {
@@ -1251,6 +1383,92 @@ async function updateRequestCostFromUsage(
 }
 
 /**
+ * 统一的请求统计处理方法
+ * 用于消除 Gemini 透传、普通非流式、普通流式之间的重复统计逻辑
+ */
+async function finalizeRequestStats(
+  session: ProxySession,
+  responseText: string,
+  statusCode: number,
+  duration: number
+): Promise<void> {
+  const { messageContext, provider } = session;
+  if (!provider || !messageContext) {
+    return;
+  }
+
+  // 1. 结束请求状态追踪
+  ProxyStatusTracker.getInstance().endRequest(messageContext.user.id, messageContext.id);
+
+  // 2. 更新请求时长
+  await updateMessageRequestDuration(messageContext.id, duration);
+
+  // 3. 解析 usage metrics
+  const { usageMetrics } = parseUsageFromResponseText(responseText, provider.providerType);
+
+  if (!usageMetrics) {
+    // 即使没有 usageMetrics，也需要更新状态码和 provider chain
+    await updateMessageRequestDetails(messageContext.id, {
+      statusCode: statusCode,
+      providerChain: session.getProviderChain(),
+    });
+    return;
+  }
+
+  // 4. 更新成本
+  await updateRequestCostFromUsage(
+    messageContext.id,
+    session.getOriginalModel(),
+    session.getCurrentModel(),
+    usageMetrics,
+    provider.costMultiplier
+  );
+
+  // 5. 追踪消费到 Redis（用于限流）
+  await trackCostToRedis(session, usageMetrics);
+
+  // 6. 更新 session usage
+  if (session.sessionId) {
+    let costUsdStr: string | undefined;
+    if (session.request.model) {
+      const priceData = await findLatestPriceByModel(session.request.model);
+      if (priceData?.priceData) {
+        const cost = calculateRequestCost(
+          usageMetrics,
+          priceData.priceData,
+          provider.costMultiplier
+        );
+        if (cost.gt(0)) {
+          costUsdStr = cost.toString();
+        }
+      }
+    }
+
+    void SessionManager.updateSessionUsage(session.sessionId, {
+      inputTokens: usageMetrics.input_tokens,
+      outputTokens: usageMetrics.output_tokens,
+      cacheCreationInputTokens: usageMetrics.cache_creation_input_tokens,
+      cacheReadInputTokens: usageMetrics.cache_read_input_tokens,
+      costUsd: costUsdStr,
+      status: statusCode >= 200 && statusCode < 300 ? "completed" : "error",
+      statusCode: statusCode,
+    }).catch((error: unknown) => {
+      logger.error("[ResponseHandler] Failed to update session usage:", error);
+    });
+  }
+
+  // 7. 更新请求详情
+  await updateMessageRequestDetails(messageContext.id, {
+    statusCode: statusCode,
+    inputTokens: usageMetrics.input_tokens,
+    outputTokens: usageMetrics.output_tokens,
+    cacheCreationInputTokens: usageMetrics.cache_creation_input_tokens,
+    cacheReadInputTokens: usageMetrics.cache_read_input_tokens,
+    providerChain: session.getProviderChain(),
+  });
+}
+
+/**
  * 追踪消费到 Redis（用于限流）
  */
 async function trackCostToRedis(session: ProxySession, usage: UsageMetrics | null): Promise<void> {
@@ -1280,7 +1498,13 @@ async function trackCostToRedis(session: ProxySession, usage: UsageMetrics | nul
     key.id,
     provider.id,
     session.sessionId, // 直接使用 session.sessionId
-    costFloat
+    costFloat,
+    {
+      keyResetTime: key.dailyResetTime,
+      keyResetMode: key.dailyResetMode,
+      providerResetTime: provider.dailyResetTime,
+      providerResetMode: provider.dailyResetMode,
+    }
   );
 
   // 新增：追踪用户层每日消费

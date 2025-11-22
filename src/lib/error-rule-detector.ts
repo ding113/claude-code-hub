@@ -90,7 +90,23 @@ class ErrorRuleDetector {
     try {
       logger.info("[ErrorRuleDetector] Reloading error rules from database...");
 
-      const rules = await getActiveErrorRules();
+      let rules;
+      try {
+        rules = await getActiveErrorRules();
+      } catch (dbError) {
+        // 优雅处理表不存在的情况（迁移还未执行时）
+        // 这允许应用在迁移前正常启动，迁移后会自动重载
+        const errorMessage = (dbError as Error).message || "";
+        if (errorMessage.includes("relation") && errorMessage.includes("does not exist")) {
+          logger.warn(
+            "[ErrorRuleDetector] error_rules table does not exist yet (migration pending), using empty rules"
+          );
+          this.lastReloadTime = Date.now();
+          return;
+        }
+        // 其他数据库错误继续抛出
+        throw dbError;
+      }
 
       // 清空旧缓存
       this.regexPatterns = [];

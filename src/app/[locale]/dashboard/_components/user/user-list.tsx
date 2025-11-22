@@ -4,6 +4,7 @@ import type { User } from "@/types/user";
 import { ListContainer, ListItem, ListItemData } from "@/components/ui/list";
 import { AddUserDialog } from "./add-user-dialog";
 import { useTranslations } from "next-intl";
+import { Users } from "lucide-react";
 
 interface UserListProps {
   users: UserDisplay[];
@@ -36,31 +37,53 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
     ],
   }));
 
+  // 特别设计的空状态 - 仅管理员可见
+  const emptyStateComponent =
+    currentUser?.role === "admin" ? (
+      <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+        <div className="rounded-full bg-muted/50 p-6 mb-4">
+          <Users className="h-12 w-12 text-muted-foreground" />
+        </div>
+        <h3 className="text-lg font-semibold mb-2">{t("emptyState.title")}</h3>
+        <p className="text-sm text-muted-foreground mb-6 max-w-sm">{t("emptyState.description")}</p>
+        <AddUserDialog variant="default" size="lg" currentUser={currentUser} />
+      </div>
+    ) : null;
+
   return (
     <div className="space-y-3">
       <ListContainer
-        emptyState={{
-          title: t("emptyState.title"),
-          description: t("emptyState.description"),
-        }}
+        maxHeight="none"
+        title={t("title")}
+        actions={
+          currentUser?.role === "admin" && users.length > 0 ? (
+            <AddUserDialog variant="outline" size="sm" currentUser={currentUser} />
+          ) : undefined
+        }
+        emptyState={
+          users.length === 0
+            ? {
+                title: "",
+                description: "",
+                action: emptyStateComponent,
+              }
+            : undefined
+        }
       >
-        <div className="space-y-2">
-          {listItems.map((item) => (
-            <ListItem
-              key={item.id}
-              data={item}
-              isActive={item.id === activeUserId}
-              onClick={() => onUserSelect(item.id as number)}
-              compact
-            />
-          ))}
-        </div>
+        {users.length > 0 ? (
+          <div className="space-y-2">
+            {listItems.map((item) => (
+              <ListItem
+                key={item.id}
+                data={item}
+                isActive={item.id === activeUserId}
+                onClick={() => onUserSelect(item.id as number)}
+                compact
+              />
+            ))}
+          </div>
+        ) : null}
       </ListContainer>
-
-      {/* 新增用户按钮：列表下方、与列表同宽，中性配色 - 仅管理员可见 */}
-      {currentUser?.role === "admin" && (
-        <AddUserDialog variant="secondary" className="w-full" currentUser={currentUser} />
-      )}
     </div>
   );
 }

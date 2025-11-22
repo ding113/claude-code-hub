@@ -161,7 +161,11 @@
         "default": "詳細なエラー情報はありません"
       },
       "clickStatusCode": "ステータスコードをクリックして完全なタイムラインを表示",
-      "viewDetails": "詳細を表示"
+      "viewDetails": "詳細を表示",
+      "reasons": {
+        "rateLimited": "プロバイダーコスト制限",
+        "circuitOpen": "サーキットブレーカー開放"
+      }
     },
     "providerChain": {
       "decisionChain": "プロバイダー決定チェーン"
@@ -434,12 +438,14 @@
     }
   },
   "userList": {
+    "title": "ユーザーリスト",
     "badge": "{count} 個のキー",
     "activeKeys": "アクティブキー",
     "totalKeys": "総キー数",
     "emptyState": {
       "title": "ユーザーがいません",
-      "description": "下のボタンをクリックして最初のユーザーを作成してください"
+      "description": "まだユーザーを作成していません。ユーザーは API キーと使用制限を管理するための基本単位です。最初のユーザーを作成して始めましょう！",
+      "action": "最初のユーザーを作成"
     },
     "addUser": "ユーザーを追加"
   },
@@ -505,6 +511,27 @@
       "label": "5時間消費上限 (USD)",
       "placeholder": "空白の場合は無制限",
       "description": "5時間以内の最大消費金額"
+    },
+    "limitDailyUsd": {
+      "label": "1日の消費上限 (USD)",
+      "placeholder": "空白の場合は無制限",
+      "description": "1日あたりの最大消費金額"
+    },
+    "dailyResetMode": {
+      "label": "毎日リセットモード",
+      "options": {
+        "fixed": "固定時間リセット",
+        "rolling": "ローリングウィンドウ (24時間)"
+      },
+      "desc": {
+        "fixed": "毎日指定された時間にクォータをリセット",
+        "rolling": "最初のリクエストから24時間のローリングウィンドウ"
+      }
+    },
+    "dailyResetTime": {
+      "label": "毎日リセット時間",
+      "placeholder": "HH:mm",
+      "description": "1日の制限がリセットされる時間 (システムタイムゾーンを使用)"
     },
     "limitWeeklyUsd": {
       "label": "週間消費上限 (USD)",

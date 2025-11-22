@@ -1,0 +1,126 @@
+name: Claude Mention Responder
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+jobs:
+  mention-responder:
+    # Only respond to @claude mentions, skip bot comments
+    if: |
+      contains(github.event.comment.body, '@claude') &&
+      !endsWith(github.actor, '[bot]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Run Claude Code for Mention Response
+        uses: anthropics/claude-code-action@v1
+        env:
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GH_PAT }}
+          trigger_phrase: "@claude"
+
+          prompt: |
+            You are an AI assistant for the repository ${{ github.repository }}.
+
+            Context:
+            - Event: ${{ github.event_name }}
+            - Actor: ${{ github.actor }}
+            - Comment: ${{ github.event.comment.body }}
+
+            Task: Respond to the @claude mention with helpful assistance.
+
+            ## Instructions:
+
+            1. **Understand the context**:
+               - For issue comments: `gh issue view ${{ github.event.issue.number }}`
+               - For PR comments: `gh pr view ${{ github.event.pull_request.number || github.event.issue.number }}`
+               - Read all previous comments to understand the conversation
+
+            2. **Determine the appropriate response type**:
+               
+               **Provide HELP (default) when**:
+               - User asks a question about how something works
+               - User needs explanation or documentation
+               - User asks for suggestions or recommendations
+               - Issue is about configuration, usage, or understanding
+               - The request is vague or unclear
+               
+               **Provide CODE FIX only when**:
+               - User EXPLICITLY requests a fix (e.g., "please fix", "can you implement", "help me fix")
+               - Issue clearly describes a bug with reproduction steps
+               - User asks to "create a PR" or "submit a fix"
+               - The fix is straightforward and well-defined
+
+               **When in doubt, provide help first and ask if they want a code fix.**
+
+            3. **For HELP responses** (most common):
+               - Search the codebase to find relevant information
+               - Provide clear explanations with code examples
+               - Point to relevant files and documentation
+               - Suggest solutions without implementing them
+               - Ask clarifying questions if needed
+
+            4. **For CODE FIX requests** (only when explicitly requested):
+               
+               **CRITICAL: Branch Strategy**
+               ```bash
+               # ALWAYS start from dev branch (NEVER from main)
+               git fetch origin dev
+               git checkout -b fix/issue-${{ github.event.issue.number }}-description origin/dev
+
+               # Make your changes using Edit tool
+
+               # Commit with proper message (include closing keyword for issues)
+               git add .
+               git commit -m "fix: description, close #${{ github.event.issue.number }}"
+
+               # Push the branch
+               git push origin fix/issue-${{ github.event.issue.number }}-description
+
+               # Create PR to dev (NEVER to main)
+               gh pr create --base dev --title "Fix #${{ github.event.issue.number }}: ..." --body "Close #${{ github.event.issue.number }}
+
+               ## Summary
+               [Description of the fix]
+
+               ## Changes
+               - [List of changes]
+               "
+               ```
+
+            5. **Post your response**:
+               - For issues: `gh issue comment ${{ github.event.issue.number }} --body "..."`
+               - For PRs: `gh pr comment ${{ github.event.issue.number }} --body "..."`
+
+            ## Response Guidelines:
+            - Default to providing help, not code fixes
+            - Be helpful, clear, and concise
+            - Include code examples when relevant
+            - Explain your reasoning
+            - If you provide a fix, explain what you changed and why
+            - Sign off with: "🤖 *Response from Claude AI*"
+
+            ## Git Workflow Rules (for code fixes only):
+            - ALWAYS create branches from `origin/dev`, NEVER from main
+            - ALWAYS create PRs targeting `dev` branch
+            - NEVER commit directly to main or dev
+            - Include closing keywords for issues in commit messages
+            - Use descriptive branch names: `fix/issue-NUMBER-description`
+
+          claude_args: "--max-turns 999 --allowedTools Read,Write,Edit,Grep,Glob,Bash(gh:*),Bash(git:*),Bash(cat:*),Bash(find:*)"
+          use_commit_signing: false

@@ -151,6 +151,7 @@
         "billingDescription": "系統優先使用請求模型（{original}）的價格計費。如果價格表中不存在該模型，則使用實際呼叫模型（{current}）的價格。"
       },
       "errorMessage": "錯誤訊息",
+      "filteredProviders": "被過濾的供應商",
       "providerChain": {
         "title": "供應商決策鏈時間軸",
         "totalDuration": "總耗時: {duration} 毫秒"
@@ -161,7 +162,11 @@
         "default": "暫無詳細錯誤訊息"
       },
       "clickStatusCode": "點擊狀態碼查看完整時間軸",
-      "viewDetails": "查看詳情"
+      "viewDetails": "查看詳情",
+      "reasons": {
+        "rateLimited": "供應商費用限制",
+        "circuitOpen": "斷路器開啟"
+      }
     },
     "providerChain": {
       "decisionChain": "供應商決策鏈"
@@ -434,12 +439,14 @@
     }
   },
   "userList": {
+    "title": "使用者列表",
     "badge": "{count} 個金鑰",
     "activeKeys": "活躍金鑰",
     "totalKeys": "總金鑰數",
     "emptyState": {
       "title": "暫無使用者",
-      "description": "點選下方按鈕建立第一個使用者"
+      "description": "您還沒有建立任何使用者。使用者是管理 API 金鑰和使用限額的基礎單位，建立第一個使用者開始使用吧！",
+      "action": "建立第一個使用者"
     },
     "addUser": "新增使用者"
   },
@@ -505,6 +512,27 @@
       "label": "5小時消費上限 (USD)",
       "placeholder": "留空表示無限制",
       "description": "5小時內最大消費金額"
+    },
+    "limitDailyUsd": {
+      "label": "每日消費上限 (USD)",
+      "placeholder": "留空表示無限制",
+      "description": "每日最大消費金額"
+    },
+    "dailyResetMode": {
+      "label": "每日重設模式",
+      "options": {
+        "fixed": "固定時間重設",
+        "rolling": "滾動視窗（24小時）"
+      },
+      "desc": {
+        "fixed": "每天在指定時間重設額度",
+        "rolling": "從首次請求開始計算24小時滾動視窗"
+      }
+    },
+    "dailyResetTime": {
+      "label": "每日重設時間",
+      "placeholder": "HH:mm",
+      "description": "每日限額的重設時間（使用系統時區）"
     },
     "limitWeeklyUsd": {
       "label": "週消費上限 (USD)",

@@ -1,0 +1,93 @@
+name: Claude Issue Auto Response
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  auto-response:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Run Claude Code for Issue Auto Response
+        uses: anthropics/claude-code-action@v1
+        env:
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GH_PAT }}
+
+          prompt: |
+            You are a helpful assistant for the repository ${{ github.repository }}.
+
+            Task: Provide an initial helpful response to issue #${{ github.event.issue.number }}.
+
+            **IMPORTANT: This workflow provides HELP and GUIDANCE only. Do NOT create PRs or fix code automatically.**
+            If the user needs a code fix, guide them to request it by commenting "@claude please fix this".
+
+            ## Instructions:
+
+            1. **Read the issue**:
+               ```bash
+               gh issue view ${{ github.event.issue.number }}
+               ```
+
+            2. **Read the project documentation**:
+               ```bash
+               cat CLAUDE.md
+               cat README.md
+               ```
+
+            3. **Analyze the issue type and respond appropriately**:
+
+               **For Questions**:
+               - Search the codebase for relevant information
+               - Provide a helpful answer with code examples if applicable
+               - Link to relevant documentation
+               - Point to the relevant source files
+
+               **For Bug Reports**:
+               - Acknowledge the report
+               - Ask for additional information if needed (version, steps to reproduce, logs)
+               - Suggest temporary workarounds if known
+               - Identify potentially affected code and explain what might be wrong
+               - **Tell them**: "If you'd like me to create a fix, please comment `@claude please fix this`"
+
+               **For Feature Requests**:
+               - Acknowledge the request
+               - Briefly assess feasibility based on codebase knowledge
+               - Suggest implementation approach
+               - Point to related existing code
+               - **Tell them**: "If you'd like me to implement this, please comment `@claude please implement this`"
+
+            4. **Post your response**:
+               ```bash
+               gh issue comment ${{ github.event.issue.number }} --body "Your response here"
+               ```
+
+            ## Response Guidelines:
+            - Be friendly, professional, and helpful
+            - Keep responses concise but informative
+            - Use markdown formatting for readability
+            - Include code snippets to illustrate points (but don't create PRs)
+            - Always end with a clear next step
+            - If they need a fix, tell them to use @claude to request it
+            - Sign off with: "🤖 *This is an automated response from Claude AI*"
+
+            ## Do NOT:
+            - Create branches or PRs
+            - Commit any code changes
+            - Use Write or Edit tools
+            - Respond to spam, duplicates, or empty issues
+
+          claude_args: "--max-turns 999 --allowedTools Read,Bash(gh:*),Bash(cat:*),Bash(find:*),Grep"
+          use_commit_signing: false

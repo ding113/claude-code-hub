@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { TocNav, type TocItem } from "./_components/toc-nav";
 import { QuickLinks } from "./_components/quick-links";
-import { LanguageSwitcher } from "@/components/ui/language-switcher";
 
 const headingClasses = {
   h2: "scroll-m-20 text-2xl font-semibold leading-snug text-foreground",
@@ -55,7 +54,7 @@ interface CLIConfig {
   vsCodeExtension?: {
     name: string;
     configFile: string;
-    configPath: { macos: string; windows: string };
+    configPath: Record<OS, string>;
   };
 }
 
@@ -78,6 +77,7 @@ function getCLIConfigs(t: (key: string) => string): Record<string, CLIConfig> {
         configPath: {
           macos: "~/.claude",
           windows: "C:\\Users\\你的用户名\\.claude",
+          linux: "~/.claude",
         },
       },
     },
@@ -92,6 +92,7 @@ function getCLIConfigs(t: (key: string) => string): Record<string, CLIConfig> {
         configPath: {
           macos: "~/.codex",
           windows: "C:\\Users\\你的用户名\\.codex",
+          linux: "~/.codex",
         },
       },
     },
@@ -1000,14 +1001,18 @@ gemini`}
   /**
    * 渲染 VS Code 扩展配置
    */
-  const renderVSCodeExtension = (cli: CLIConfig) => {
+  const renderVSCodeExtension = (cli: CLIConfig, os: OS) => {
     const config = cli.vsCodeExtension;
     if (!config) return null;
 
+    const resolvedConfigPath = config.configPath[os];
     if (cli.id === "claude-code") {
       return (
         <div className="space-y-3">
           <h4 className={headingClasses.h4}>{t("claudeCode.vsCodeExtension.title")}</h4>
+          <p className="text-sm text-muted-foreground">
+            {t("claudeCode.vsCodeExtension.configPath", { path: resolvedConfigPath })}
+          </p>
           <ol className="list-decimal space-y-2 pl-6">
             {(t.raw("claudeCode.vsCodeExtension.steps") as string[]).map(
               (step: string, i: number) => (
@@ -1016,8 +1021,9 @@ gemini`}
             )}
           </ol>
           <CodeBlock
-            language="json"
-            code={`{
+            language="jsonc"
+            code={`// Path: ${resolvedConfigPath}
+{
   "primaryApiKey": "any-value"
 }`}
           />
@@ -1286,7 +1292,7 @@ curl -I ${resolvedOrigin}`}
         </div>
 
         {/* VS Code 扩展配置 */}
-        {(cli.id === "claude-code" || cli.id === "codex") && renderVSCodeExtension(cli)}
+        {(cli.id === "claude-code" || cli.id === "codex") && renderVSCodeExtension(cli, os)}
 
         {/* 启动与验证 */}
         {renderStartupVerification(cli, os)}
@@ -1526,11 +1532,6 @@ export default function UsageDocPage() {
       >
         {t("skipLinks.tableOfContents")}
       </a>
-
-      {/* Language Switcher - Fixed position */}
-      <div className="fixed top-4 right-4 z-50 lg:top-6 lg:right-8">
-        <LanguageSwitcher size="sm" />
-      </div>
 
       <div className="relative flex gap-6 lg:gap-8">
         {/* 左侧主文档 */}
