@@ -380,7 +380,7 @@ export class ProxyResponseHandler {
             await persistRequestFailure({
               session,
               messageContext,
-              statusCode: statusCode ?? 500,
+              statusCode: statusCode && statusCode >= 400 ? statusCode : 524,
               error: err,
               taskId,
               phase: "non-stream",
@@ -425,7 +425,7 @@ export class ProxyResponseHandler {
           await persistRequestFailure({
             session,
             messageContext,
-            statusCode: statusCode ?? 500,
+            statusCode: statusCode && statusCode >= 400 ? statusCode : 500,
             error,
             taskId,
             phase: "non-stream",
@@ -448,7 +448,7 @@ export class ProxyResponseHandler {
       await persistRequestFailure({
         session,
         messageContext,
-        statusCode: statusCode ?? 500,
+        statusCode: statusCode && statusCode >= 400 ? statusCode : 500,
         error,
         taskId,
         phase: "non-stream",
@@ -877,18 +877,18 @@ export class ProxyResponseHandler {
         const allContent = flushAndJoin();
         await finalizeStream(allContent);
       } catch (error) {
-        // 检测 AbortError 的来源：响应超时 vs 静默期超时 vs 客户端中断
+        // 检测 AbortError 的来源：响应超时 vs 静默期超时 vs 客户端/上游中断
         const err = error as Error;
-        if (isClientAbortError(err)) {
-          // 获取 responseController 引用（由 forwarder.ts 传递）
-          const sessionWithController = session as typeof session & {
-            responseController?: AbortController;
-          };
+        const sessionWithController = session as typeof session & {
+          responseController?: AbortController;
+        };
+        const clientAborted = session.clientAbortSignal?.aborted ?? false;
+        const isResponseControllerAborted =
+          sessionWithController.responseController?.signal.aborted ?? false;
 
+        if (isClientAbortError(err)) {
           // 区分不同的超时来源
-          const isResponseTimeout =
-            sessionWithController.responseController?.signal.aborted &&
-            !session.clientAbortSignal?.aborted;
+          const isResponseTimeout = isResponseControllerAborted && !clientAborted;
           const isIdleTimeout = err.message?.includes("streaming_idle");
 
           if (isResponseTimeout && !isIdleTimeout) {
@@ -923,7 +923,7 @@ export class ProxyResponseHandler {
             await persistRequestFailure({
               session,
               messageContext,
-              statusCode: statusCode ?? 500,
+              statusCode: statusCode && statusCode >= 400 ? statusCode : 524,
               error: err,
               taskId,
               phase: "stream",
@@ -959,7 +959,27 @@ export class ProxyResponseHandler {
             await persistRequestFailure({
               session,
               messageContext,
-              statusCode: statusCode ?? 500,
+              statusCode: statusCode && statusCode >= 400 ? statusCode : 524,
+              error: err,
+              taskId,
+              phase: "stream",
+            });
+          } else if (!clientAborted) {
+            // 上游在流式过程中意外中断：视为供应商/网络错误
+            logger.error("ResponseHandler: Upstream stream aborted unexpectedly", {
+              taskId,
+              providerId: provider.id,
+              providerName: provider.name,
+              messageId: messageContext.id,
+              chunksCollected: chunks.length,
+              errorName: err.name,
+              errorMessage: err.message || "(empty message)",
+            });
+
+            await persistRequestFailure({
+              session,
+              messageContext,
+              statusCode: 502,
               error: err,
               taskId,
               phase: "stream",
@@ -996,7 +1016,7 @@ export class ProxyResponseHandler {
           await persistRequestFailure({
             session,
             messageContext,
-            statusCode: statusCode ?? 500,
+            statusCode: statusCode && statusCode >= 400 ? statusCode : 500,
             error,
             taskId,
             phase: "stream",
@@ -1027,7 +1047,7 @@ export class ProxyResponseHandler {
       await persistRequestFailure({
         session,
         messageContext,
-        statusCode: statusCode ?? 500,
+        statusCode: statusCode && statusCode >= 400 ? statusCode : 500,
         error,
         taskId,
         phase: "stream",
