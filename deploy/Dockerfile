@@ -21,6 +21,8 @@ ENV NEXT_PUBLIC_APP_VERSION=$APP_VERSION
 # 这些是占位符,实际运行时会被真实值覆盖
 ENV DSN="postgres://placeholder:placeholder@localhost:5432/placeholder"
 ENV REDIS_URL="redis://localhost:6379"
+# 标记为 CI 环境，跳过 instrumentation.ts 中的数据库连接
+ENV CI=true
 
 RUN bun run build
 
