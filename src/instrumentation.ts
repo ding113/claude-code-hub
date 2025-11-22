@@ -8,25 +8,19 @@ import { logger } from "@/lib/logger";
 /**
  * 初始化错误规则检测器
  * 提取为独立函数以避免代码重复
+ *
+ * 注意: 此函数会传播关键错误,调用者应决定是否需要优雅降级
  */
 async function initializeErrorRuleDetector(): Promise<void> {
-  // 初始化默认错误规则
+  // 初始化默认错误规则 - 让关键错误传播
   const { initializeDefaultErrorRules } = await import("@/repository/error-rules");
-  try {
-    await initializeDefaultErrorRules();
-    logger.info("Default error rules initialized successfully");
-  } catch (error) {
-    logger.error("Failed to initialize default error rules:", error);
-  }
+  await initializeDefaultErrorRules();
+  logger.info("Default error rules initialized successfully");
 
-  // 加载错误规则缓存（在数据库准备好后）
+  // 加载错误规则缓存 - 让关键错误传播
   const { errorRuleDetector } = await import("@/lib/error-rule-detector");
-  try {
-    await errorRuleDetector.reload();
-    logger.info("Error rule detector cache loaded successfully");
-  } catch (error) {
-    logger.error("Failed to load error rule detector cache:", error);
-  }
+  await errorRuleDetector.reload();
+  logger.info("Error rule detector cache loaded successfully");
 }
 
 export async function register() {
@@ -60,8 +54,16 @@ export async function register() {
       const { ensurePriceTable } = await import("@/lib/price-sync/seed-initializer");
       await ensurePriceTable();
 
-      // 初始化错误规则检测器
-      await initializeErrorRuleDetector();
+      // 初始化错误规则检测器（非关键功能,允许优雅降级）
+      try {
+        await initializeErrorRuleDetector();
+      } catch (error) {
+        logger.error(
+          "[Instrumentation] Non-critical: Error rule detector initialization failed",
+          error
+        );
+        // 继续启动 - 错误检测不是核心功能的关键依赖
+      }
 
       // 初始化日志清理任务队列（如果启用）
       const { scheduleAutoCleanup } = await import("@/lib/log-cleanup/cleanup-queue");
@@ -90,8 +92,16 @@ export async function register() {
       const { ensurePriceTable } = await import("@/lib/price-sync/seed-initializer");
       await ensurePriceTable();
 
-      // 初始化错误规则检测器
-      await initializeErrorRuleDetector();
+      // 初始化错误规则检测器（非关键功能,允许优雅降级）
+      try {
+        await initializeErrorRuleDetector();
+      } catch (error) {
+        logger.error(
+          "[Instrumentation] Non-critical: Error rule detector initialization failed",
+          error
+        );
+        // 继续启动 - 错误检测不是核心功能的关键依赖
+      }
 
       // ⚠️ 开发环境禁用通知队列（Bull + Turbopack 不兼容）
       // 通知功能仅在生产环境可用，开发环境需要手动测试
