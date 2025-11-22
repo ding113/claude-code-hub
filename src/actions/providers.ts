@@ -1107,6 +1107,7 @@ async function parseStreamResponse(response: Response): Promise<StreamParseResul
 
   let buffer = "";
   let currentData = "";
+  let skippedChunks = 0;
 
   try {
     while (true) {
@@ -1139,8 +1140,14 @@ async function parseStreamResponse(response: Response): Promise<StreamParseResul
             const parsed = JSON.parse(currentData) as ProviderApiResponse;
             chunks.push(parsed);
             currentData = "";
-          } catch {
-            // 忽略解析失败的 chunk
+          } catch (parseError) {
+            // 记录解析失败的 chunk
+            skippedChunks++;
+            logger.warn("流式响应 chunk 解析失败", {
+              chunkPreview: clipText(currentData, 100),
+              error: parseError instanceof Error ? parseError.message : "Unknown",
+            });
+            currentData = "";
           }
         }
       }
@@ -1155,8 +1162,12 @@ async function parseStreamResponse(response: Response): Promise<StreamParseResul
           try {
             const parsed = JSON.parse(dataContent) as ProviderApiResponse;
             chunks.push(parsed);
-          } catch {
-            // 忽略解析失败的 chunk
+          } catch (parseError) {
+            skippedChunks++;
+            logger.warn("流式响应剩余 buffer 解析失败", {
+              chunkPreview: clipText(dataContent, 100),
+              error: parseError instanceof Error ? parseError.message : "Unknown",
+            });
           }
         }
       }
@@ -1167,17 +1178,32 @@ async function parseStreamResponse(response: Response): Promise<StreamParseResul
       try {
         const parsed = JSON.parse(currentData) as ProviderApiResponse;
         chunks.push(parsed);
-      } catch {
-        // 忽略解析失败的 chunk
+      } catch (parseError) {
+        skippedChunks++;
+        logger.warn("流式响应最后一个 chunk 解析失败", {
+          chunkPreview: clipText(currentData, 100),
+          error: parseError instanceof Error ? parseError.message : "Unknown",
+        });
       }
     }
+  } catch (error) {
+    // 在错误路径中取消 reader，防止资源泄漏
+    await reader.cancel();
+    throw error;
   } finally {
     reader.releaseLock();
   }
 
   if (chunks.length === 0) {
-    throw new Error("未能从流式响应中解析出有效数据");
+    throw new Error(
+      `未能从流式响应中解析出有效数据${skippedChunks > 0 ? `（跳过 ${skippedChunks} 个无效 chunk）` : ""}`
+    );
   }
+
+  logger.info("流式响应解析完成", {
+    totalChunks: chunks.length,
+    skippedChunks,
+  });
 
   // 合并所有 chunks 为完整响应
   const mergedResponse = mergeStreamChunks(chunks);
@@ -1285,40 +1311,75 @@ function mergeStreamChunks(chunks: ProviderApiResponse[]): ProviderApiResponse {
 
     // OpenAI Chat Completions API
     if ("choices" in base && Array.isArray(base.choices)) {
-      base.choices = [
-        {
-          ...base.choices[0],
-          message: { role: "assistant", content: mergedText },
-          finish_reason: "stop",
-        },
-      ];
+      // 类型守卫：确保 base.choices[0] 存在
+      const firstChoice = base.choices[0];
+      if (firstChoice) {
+        base.choices = [
+          {
+            ...firstChoice,
+            message: { role: "assistant", content: mergedText },
+            finish_reason: "stop",
+          },
+        ];
+      } else {
+        // 如果没有 choices，创建一个默认的
+        base.choices = [
+          {
+            index: 0,
+            message: { role: "assistant", content: mergedText },
+            finish_reason: "stop",
+          },
+        ];
+      }
     }
 
     // OpenAI Responses API
     if ("output" in base && Array.isArray(base.output)) {
       const firstOutput = base.output[0];
-      (base as OpenAIResponsesResponse).output = [
-        {
-          type: "message",
-          id: firstOutput?.id || "msg_" + Date.now(),
-          status: firstOutput?.status || "completed",
-          role: "assistant",
-          content: [{ type: "output_text", text: mergedText }],
-        },
-      ];
+      // 类型守卫：确保这是 OpenAI Responses 格式
+      if (
+        "id" in base &&
+        typeof base.id === "string" &&
+        "type" in base &&
+        base.type === "response"
+      ) {
+        (base as OpenAIResponsesResponse).output = [
+          {
+            type: "message",
+            id: firstOutput?.id || "msg_" + Date.now(),
+            status: firstOutput?.status || "completed",
+            role: "assistant",
+            content: [{ type: "output_text", text: mergedText }],
+          },
+        ];
+      }
     }
 
     // Gemini API
     if ("candidates" in base && Array.isArray(base.candidates)) {
-      (base as GeminiResponse).candidates = [
-        {
-          ...base.candidates[0],
-          content: {
-            parts: [{ text: mergedText }],
+      const firstCandidate = base.candidates[0];
+      // 类型守卫：确保这是 Gemini 格式
+      if (firstCandidate && "content" in firstCandidate) {
+        (base as GeminiResponse).candidates = [
+          {
+            ...firstCandidate,
+            content: {
+              parts: [{ text: mergedText }],
+            },
+            finishReason: "STOP",
           },
-          finishReason: "STOP",
-        },
-      ];
+        ];
+      } else {
+        // 如果没有 candidates，创建一个默认的
+        (base as GeminiResponse).candidates = [
+          {
+            content: {
+              parts: [{ text: mergedText }],
+            },
+            finishReason: "STOP",
+          },
+        ];
+      }
     }
   }
 
@@ -1582,11 +1643,9 @@ async function executeProviderApiTest(
       const responseText = await response.text();
 
       // 检查是否为 SSE 格式（即使 Content-Type 未正确设置）
-      const isLikelySSE =
-        responseText.startsWith("event:") ||
-        responseText.startsWith("data:") ||
-        responseText.includes("\n\nevent:") ||
-        responseText.includes("\n\ndata:");
+      // 使用正则表达式进行更健壮的检测
+      const ssePattern = /^(event:|data:)|\n\n(event:|data:)/;
+      const isLikelySSE = ssePattern.test(responseText);
 
       if (isLikelySSE) {
         logger.info("Provider API test received SSE response without proper Content-Type", {
