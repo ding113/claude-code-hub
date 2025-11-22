@@ -36,6 +36,10 @@ const API_TEST_CONFIG = {
   MAX_RESPONSE_PREVIEW_LENGTH: 500, // 响应内容预览最大长度（增加到 500 字符以显示更多内容）
   TEST_MAX_TOKENS: 100, // 测试请求的最大 token 数
   TEST_PROMPT: "Hello", // 测试请求的默认提示词
+  // 流式响应资源限制（防止 DoS 攻击）
+  MAX_STREAM_CHUNKS: 1000, // 最大数据块数量
+  MAX_STREAM_BUFFER_SIZE: 10 * 1024 * 1024, // 10MB 最大缓冲区大小
+  MAX_STREAM_ITERATIONS: 10000, // 最大迭代次数（防止无限循环）
 } as const;
 
 // 获取服务商数据
@@ -996,10 +1000,22 @@ type StreamParseResult = {
  * 解析 SSE 文本格式的流式响应
  */
 function parseSSEText(text: string): StreamParseResult {
-  const lines = text.split("\n");
-  const chunks: ProviderApiResponse[] = [];
+  // 验证输入大小（防止 DoS）
+  if (text.length > API_TEST_CONFIG.MAX_STREAM_BUFFER_SIZE) {
+    throw new Error(`SSE 文本超过最大大小 (${API_TEST_CONFIG.MAX_STREAM_BUFFER_SIZE} 字节)`);
+  }
 
+  const lines = text.split("\n");
+
+  // 防止过多行数（防止 DoS）
+  if (lines.length > API_TEST_CONFIG.MAX_STREAM_ITERATIONS) {
+    throw new Error(`SSE 超过最大行数 (${API_TEST_CONFIG.MAX_STREAM_ITERATIONS})`);
+  }
+
+  const chunks: ProviderApiResponse[] = [];
   let currentData = "";
+  let skippedChunks = 0;
+
   for (const line of lines) {
     const trimmed = line.trim();
 
@@ -1015,30 +1031,57 @@ function parseSSEText(text: string): StreamParseResult {
         currentData = dataContent;
       }
     } else if (trimmed === "" && currentData) {
+      // 防止过多数据块（防止 DoS）
+      if (chunks.length >= API_TEST_CONFIG.MAX_STREAM_CHUNKS) {
+        logger.warn("SSE 解析达到最大数据块限制", {
+          maxChunks: API_TEST_CONFIG.MAX_STREAM_CHUNKS,
+          skipped: skippedChunks,
+        });
+        break;
+      }
+
       // 空行表示一个完整的 SSE 事件结束
       try {
         const parsed = JSON.parse(currentData) as ProviderApiResponse;
         chunks.push(parsed);
         currentData = "";
-      } catch {
-        // 忽略解析失败的 chunk
+      } catch (parseError) {
+        // 记录解析失败的 chunk（用于调试）
+        skippedChunks++;
+        logger.warn("SSE chunk 解析失败", {
+          chunkPreview: clipText(currentData, 100),
+          error: parseError instanceof Error ? parseError.message : "Unknown",
+        });
+        currentData = "";
       }
     }
   }
 
   // 处理最后一个未结束的 data
-  if (currentData) {
+  if (currentData && chunks.length < API_TEST_CONFIG.MAX_STREAM_CHUNKS) {
     try {
       const parsed = JSON.parse(currentData) as ProviderApiResponse;
       chunks.push(parsed);
-    } catch {
-      // 忽略解析失败的 chunk
+    } catch (parseError) {
+      skippedChunks++;
+      logger.warn("SSE 最后一个 chunk 解析失败", {
+        chunkPreview: clipText(currentData, 100),
+        error: parseError instanceof Error ? parseError.message : "Unknown",
+      });
     }
   }
 
   if (chunks.length === 0) {
-    throw new Error("未能从 SSE 响应中解析出有效数据");
+    throw new Error(
+      `未能从 SSE 响应中解析出有效数据${skippedChunks > 0 ? `（跳过 ${skippedChunks} 个无效 chunk）` : ""}`
+    );
   }
+
+  logger.info("SSE 文本解析完成", {
+    totalChunks: chunks.length,
+    skippedChunks,
+    textLength: text.length,
+  });
 
   // 合并所有 chunks 为完整响应
   const mergedResponse = mergeStreamChunks(chunks);
@@ -1164,7 +1207,11 @@ function mergeStreamChunks(chunks: ProviderApiResponse[]): ProviderApiResponse {
     if ("usage" in chunk && chunk.usage) {
       if ("usage" in base) {
         (base as AnthropicMessagesResponse | OpenAIChatResponse | OpenAIResponsesResponse).usage =
-          chunk.usage as (AnthropicMessagesResponse | OpenAIChatResponse | OpenAIResponsesResponse)["usage"];
+          chunk.usage as (
+            | AnthropicMessagesResponse
+            | OpenAIChatResponse
+            | OpenAIResponsesResponse
+          )["usage"];
       }
       break;
     }
@@ -1524,10 +1571,7 @@ async function executeProviderApiTest(
               message: "流式响应解析失败",
               details: {
                 responseTime,
-                error:
-                  streamError instanceof Error
-                    ? streamError.message
-                    : "无法解析流式响应数据",
+                error: streamError instanceof Error ? streamError.message : "无法解析流式响应数据",
               },
             },
           };
@@ -1583,10 +1627,7 @@ async function executeProviderApiTest(
               message: "流式响应解析失败",
               details: {
                 responseTime,
-                error:
-                  streamError instanceof Error
-                    ? streamError.message
-                    : "无法解析 SSE 格式数据",
+                error: streamError instanceof Error ? streamError.message : "无法解析 SSE 格式数据",
               },
             },
           };
