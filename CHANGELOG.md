@@ -11,6 +11,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- Merge dev to main with internationalization improvements (Japanese, Russian, Traditional Chinese) and UI enhancements for daily limit dialogs (#182) @ding113
 - Refactor provider quota management page from card layout to compact list layout with circular progress indicators, search, and sorting capabilities (#170) @ding113
 
 ### Fixed
