@@ -1,4 +1,5 @@
 import auth from "./auth.json";
+import bigScreen from "./bigScreen.json";
 import common from "./common.json";
 import customs from "./customs.json";
 import dashboard from "./dashboard.json";
@@ -17,6 +18,7 @@ import internal from "./internal.json";
 
 export default {
   auth,
+  bigScreen,
   common,
   customs,
   dashboard,
