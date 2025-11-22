@@ -439,12 +439,14 @@
     }
   },
   "userList": {
+    "title": "用户列表",
     "badge": "{count} 个 Key",
     "activeKeys": "活跃密钥",
     "totalKeys": "总密钥",
     "emptyState": {
       "title": "暂无用户",
-      "description": "点击下方按钮创建第一个用户"
+      "description": "您还没有创建任何用户。用户是管理 API 密钥和使用限额的基础单位，创建第一个用户开始使用吧！",
+      "action": "创建第一个用户"
     },
     "addUser": "新增用户"
   },
