@@ -1181,7 +1181,88 @@ async function executeProviderApiTest(
         };
       }
 
-      const result = (await response.json()) as ProviderApiResponse;
+      // 检查响应是否为流式响应（SSE）
+      const contentType = response.headers.get("content-type") || "";
+      const isStreamResponse =
+        contentType.includes("text/event-stream") || contentType.includes("application/x-ndjson");
+
+      if (isStreamResponse) {
+        // 流式响应：读取部分内容用于测试
+        logger.warn("Provider API test received streaming response", {
+          providerUrl: normalizedProviderUrl.replace(/:\/\/[^@]*@/, "://***@"),
+          contentType,
+        });
+
+        return {
+          ok: true,
+          data: {
+            success: false,
+            message: "API 测试不支持流式响应",
+            details: {
+              responseTime,
+              error:
+                "供应商返回了流式响应（SSE），测试功能仅支持非流式 JSON 响应。请在实际使用中测试流式功能。",
+            },
+          },
+        };
+      }
+
+      // 先读取响应文本，然后尝试解析 JSON
+      const responseText = await response.text();
+
+      // 检查是否为 SSE 格式（即使 Content-Type 未正确设置）
+      const isLikelySSE =
+        responseText.startsWith("event:") ||
+        responseText.startsWith("data:") ||
+        responseText.includes("\n\nevent:") ||
+        responseText.includes("\n\ndata:");
+
+      if (isLikelySSE) {
+        logger.warn("Provider API test received SSE response without proper Content-Type", {
+          providerUrl: normalizedProviderUrl.replace(/:\/\/[^@]*@/, "://***@"),
+          contentType,
+          responsePreview: clipText(responseText, 100),
+        });
+
+        return {
+          ok: true,
+          data: {
+            success: false,
+            message: "API 测试不支持流式响应",
+            details: {
+              responseTime,
+              error:
+                "供应商返回了流式响应（SSE），但未设置正确的 Content-Type。测试功能仅支持非流式 JSON 响应。",
+            },
+          },
+        };
+      }
+
+      // 尝试解析 JSON
+      let result: ProviderApiResponse;
+      try {
+        result = JSON.parse(responseText) as ProviderApiResponse;
+      } catch (jsonError) {
+        logger.error("Provider API test JSON parse failed", {
+          providerUrl: normalizedProviderUrl.replace(/:\/\/[^@]*@/, "://***@"),
+          contentType,
+          responsePreview: clipText(responseText, 100),
+          jsonError: jsonError instanceof Error ? jsonError.message : String(jsonError),
+        });
+
+        return {
+          ok: true,
+          data: {
+            success: false,
+            message: "响应格式无效: 无法解析 JSON",
+            details: {
+              responseTime,
+              error: `JSON 解析失败: ${jsonError instanceof Error ? jsonError.message : "未知错误"}`,
+            },
+          },
+        };
+      }
+
       const extracted = options.extract(result);
 
       return {
@@ -1292,7 +1373,18 @@ export async function testProviderOpenAIResponses(
     body: (model) => ({
       model,
       max_output_tokens: API_TEST_CONFIG.TEST_MAX_TOKENS,
-      input: "讲一个简短的故事",
+      // input 必须是数组格式，符合 OpenAI Responses API 规范
+      input: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: API_TEST_CONFIG.TEST_PROMPT,
+            },
+          ],
+        },
+      ],
     }),
     successMessage: "OpenAI Responses API 测试成功",
     extract: (result) => ({
