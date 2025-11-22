@@ -70,17 +70,19 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
             : undefined
         }
       >
-        <div className="space-y-2">
-          {listItems.map((item) => (
-            <ListItem
-              key={item.id}
-              data={item}
-              isActive={item.id === activeUserId}
-              onClick={() => onUserSelect(item.id as number)}
-              compact
-            />
-          ))}
-        </div>
+        {users.length > 0 ? (
+          <div className="space-y-2">
+            {listItems.map((item) => (
+              <ListItem
+                key={item.id}
+                data={item}
+                isActive={item.id === activeUserId}
+                onClick={() => onUserSelect(item.id as number)}
+                compact
+              />
+            ))}
+          </div>
+        ) : null}
       </ListContainer>
     </div>
   );

@@ -51,7 +51,7 @@ export function KeyActions({
             <SquarePen className="h-4 w-4" />
           </button>
         </DialogTrigger>
-        <DialogContent>
+        <DialogContent className="max-h-[80vh] flex flex-col overflow-hidden">
           <FormErrorBoundary>
             <EditKeyForm
               keyData={keyData}
@@ -75,7 +75,7 @@ export function KeyActions({
               <Trash2 className="h-4 w-4" />
             </button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-h-[80vh] flex flex-col overflow-hidden">
             <FormErrorBoundary>
               <DeleteKeyConfirm keyData={keyData} onSuccess={() => setOpenDelete(false)} />
             </FormErrorBoundary>
