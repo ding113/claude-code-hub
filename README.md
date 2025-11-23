@@ -30,7 +30,7 @@ Claude Code Hub 通过 Next.js 15 + Hono + PostgreSQL + Redis 组合，实现 Cl
 </td>
 <td>
 <b>💎 特别优惠</b>：<a href="https://cubence.com?source=cch">Cubence</a> 一家稳定高效的AI服务中转平台，为 Claude Code、Codex、Gemini 等AI工具提供中转服务，有着不错的稳定性和性价比。<br/>
-Cubence 为 CCH 的使用用户提供了特别的优惠折扣：在购买时使用优惠券 <code>DING113CCH</code>，可享受 <b>10% 优惠折扣</b> → <a href="https://cubence.com?source=cch">立即访问</a>
+Cubence 为 CCH 的使用用户提供了特别的优惠折扣：在购买时使用优惠券 <code>DING113CCH</code>，可享受 <b>20% 优惠折扣</b> → <a href="https://cubence.com?source=cch">立即访问</a>
 </td>
 </tr>
 </table>
