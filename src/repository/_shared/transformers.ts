@@ -49,6 +49,8 @@ export function toProvider(dbProvider: any): Provider {
     providerType: dbProvider?.providerType ?? "claude",
     modelRedirects: dbProvider?.modelRedirects ?? null,
     codexInstructionsStrategy: dbProvider?.codexInstructionsStrategy ?? "auto",
+    mcpPassthroughType: dbProvider?.mcpPassthroughType ?? "none",
+    mcpPassthroughUrl: dbProvider?.mcpPassthroughUrl ?? null,
     limit5hUsd: dbProvider?.limit5hUsd ? parseFloat(dbProvider.limit5hUsd) : null,
     limitDailyUsd: dbProvider?.limitDailyUsd ? parseFloat(dbProvider.limitDailyUsd) : null,
     dailyResetTime: dbProvider?.dailyResetTime ?? "00:00",

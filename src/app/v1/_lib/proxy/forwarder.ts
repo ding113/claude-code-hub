@@ -21,9 +21,16 @@ import { CodexInstructionsCache } from "@/lib/codex-instructions-cache";
 import { createProxyAgentForProvider } from "@/lib/proxy-agent";
 import type { Dispatcher } from "undici";
 import { getEnvConfig } from "@/lib/config/env.schema";
-import { GeminiAdapter } from "../gemini/adapter";
 import { GEMINI_PROTOCOL } from "../gemini/protocol";
 import { GeminiAuth } from "../gemini/auth";
+
+const STANDARD_ENDPOINTS = [
+  "/v1/messages",
+  "/v1/messages/count_tokens",
+  "/v1/responses",
+  "/v1/chat/completions",
+  "/v1/models",
+];
 
 const MAX_ATTEMPTS_PER_PROVIDER = 2; // 每个供应商最多尝试次数（首次 + 1次重试）
 const MAX_PROVIDER_SWITCHES = 20; // 保险栓：最多切换 20 次供应商（防止无限循环）
@@ -733,15 +740,76 @@ export class ProxyForwarder {
         });
       }
 
+      // ⭐ MCP 透传处理：检测是否为 MCP 请求，并使用相应的 URL
+      let effectiveBaseUrl = provider.url;
+
+      // 检测是否为 MCP 请求（非标准 Claude/Codex/OpenAI 端点）
+      const requestPath = session.requestUrl.pathname;
+      // pathname does not include query params, so exact match is sufficient
+      const isStandardRequest = STANDARD_ENDPOINTS.includes(requestPath);
+      const isMcpRequest = !isStandardRequest;
+
+      if (isMcpRequest && provider.mcpPassthroughType && provider.mcpPassthroughType !== "none") {
+        // MCP 透传已启用，且当前是 MCP 请求
+        if (provider.mcpPassthroughUrl) {
+          // 使用配置的 MCP URL
+          effectiveBaseUrl = provider.mcpPassthroughUrl;
+          logger.debug("ProxyForwarder: Using configured MCP passthrough URL", {
+            providerId: provider.id,
+            providerName: provider.name,
+            mcpType: provider.mcpPassthroughType,
+            configuredUrl: provider.mcpPassthroughUrl,
+            requestPath,
+          });
+        } else {
+          // 自动从 provider.url 提取基础域名（去掉路径部分）
+          // 例如：https://api.minimaxi.com/anthropic -> https://api.minimaxi.com
+          try {
+            const baseUrlObj = new URL(provider.url);
+            effectiveBaseUrl = `${baseUrlObj.protocol}//${baseUrlObj.host}`;
+            logger.debug("ProxyForwarder: Extracted base domain for MCP passthrough", {
+              providerId: provider.id,
+              providerName: provider.name,
+              mcpType: provider.mcpPassthroughType,
+              originalUrl: provider.url,
+              extractedBaseDomain: effectiveBaseUrl,
+              requestPath,
+            });
+          } catch (error) {
+            logger.error("ProxyForwarder: Invalid provider URL for MCP passthrough", {
+              providerId: provider.id,
+              providerUrl: provider.url,
+              error,
+            });
+            throw new ProxyError(`Invalid provider URL configuration: ${provider.url}`, 500);
+          }
+        }
+      } else if (
+        isMcpRequest &&
+        (!provider.mcpPassthroughType || provider.mcpPassthroughType === "none")
+      ) {
+        // MCP 请求但未启用 MCP 透传
+        logger.debug(
+          "ProxyForwarder: MCP request but passthrough not enabled, using provider URL",
+          {
+            providerId: provider.id,
+            providerName: provider.name,
+            requestPath,
+          }
+        );
+      }
+
       // ⭐ 直接使用原始请求路径，让 buildProxyUrl() 智能处理路径拼接
       // 移除了强制 /v1/responses 路径重写，解决 Issue #139
       // buildProxyUrl() 会检测 base_url 是否已包含完整路径，避免重复拼接
-      proxyUrl = buildProxyUrl(provider.url, session.requestUrl);
+      proxyUrl = buildProxyUrl(effectiveBaseUrl, session.requestUrl);
 
       logger.debug("ProxyForwarder: Final proxy URL", {
         url: proxyUrl,
         originalPath: session.requestUrl.pathname,
         providerType: provider.providerType,
+        mcpPassthroughType: provider.mcpPassthroughType,
+        usedBaseUrl: effectiveBaseUrl,
       });
 
       const hasBody = session.method !== "GET" && session.method !== "HEAD";
