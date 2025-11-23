@@ -154,19 +154,24 @@ export class McpPassthroughHandler {
         return {
           type: "tool_result",
           tool_use_id: toolCall.id,
-          content: JSON.stringify(response, null, 2),
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(response.data?.results || [], null, 2),
+            },
+          ],
         };
       }
 
       case "understand_image": {
-        const imageUrl = toolCall.input.image_url as string;
-        const prompt = toolCall.input.prompt as string;
+        const imageUrl = toolCall.input.image_url;
+        const prompt = toolCall.input.prompt;
 
-        if (!imageUrl) {
-          throw new McpError("Missing required parameter: image_url");
+        if (!imageUrl || typeof imageUrl !== "string") {
+          throw new McpError("Invalid parameter: image_url must be a non-empty string");
         }
-        if (!prompt) {
-          throw new McpError("Missing required parameter: prompt");
+        if (!prompt || typeof prompt !== "string") {
+          throw new McpError("Invalid parameter: prompt must be a non-empty string");
         }
 
         const response = await client.understandImage(imageUrl, prompt);
@@ -175,7 +180,12 @@ export class McpPassthroughHandler {
         return {
           type: "tool_result",
           tool_use_id: toolCall.id,
-          content: JSON.stringify(response, null, 2),
+          content: [
+            {
+              type: "text",
+              text: response.data?.analysis || "No analysis result",
+            },
+          ],
         };
       }
 
@@ -205,14 +215,14 @@ export class McpPassthroughHandler {
     // 根据工具名称调用对应方法
     switch (toolCall.name) {
       case "analyze_image": {
-        const imageSource = toolCall.input.image_source as string;
-        const prompt = toolCall.input.prompt as string;
+        const imageSource = toolCall.input.image_source;
+        const prompt = toolCall.input.prompt;
 
-        if (!imageSource) {
-          throw new McpError("Missing required parameter: image_source");
+        if (!imageSource || typeof imageSource !== "string") {
+          throw new McpError("Invalid parameter: image_source must be a non-empty string");
         }
-        if (!prompt) {
-          throw new McpError("Missing required parameter: prompt");
+        if (!prompt || typeof prompt !== "string") {
+          throw new McpError("Invalid parameter: prompt must be a non-empty string");
         }
 
         const response = await client.analyzeImage(imageSource, prompt);
@@ -221,19 +231,24 @@ export class McpPassthroughHandler {
         return {
           type: "tool_result",
           tool_use_id: toolCall.id,
-          content: JSON.stringify(response, null, 2),
+          content: [
+            {
+              type: "text",
+              text: response.result,
+            },
+          ],
         };
       }
 
       case "analyze_video": {
-        const videoSource = toolCall.input.video_source as string;
-        const prompt = toolCall.input.prompt as string;
+        const videoSource = toolCall.input.video_source;
+        const prompt = toolCall.input.prompt;
 
-        if (!videoSource) {
-          throw new McpError("Missing required parameter: video_source");
+        if (!videoSource || typeof videoSource !== "string") {
+          throw new McpError("Invalid parameter: video_source must be a non-empty string");
         }
-        if (!prompt) {
-          throw new McpError("Missing required parameter: prompt");
+        if (!prompt || typeof prompt !== "string") {
+          throw new McpError("Invalid parameter: prompt must be a non-empty string");
         }
 
         const response = await client.analyzeVideo(videoSource, prompt);
@@ -242,7 +257,12 @@ export class McpPassthroughHandler {
         return {
           type: "tool_result",
           tool_use_id: toolCall.id,
-          content: JSON.stringify(response, null, 2),
+          content: [
+            {
+              type: "text",
+              text: response.result,
+            },
+          ],
         };
       }
 

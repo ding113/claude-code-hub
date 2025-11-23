@@ -728,7 +728,7 @@
           "summary": {
             "none": "不启用",
             "minimax": "Minimax",
-            "glm": "智谱 GLM (预留)",
+            "glm": "智谱 GLM",
             "custom": "自定义 (预留)"
           },
           "desc": "启用后，将 MCP 工具调用透传到指定的 AI 服务商（如 minimax 的图片识别、联网搜索）",
@@ -744,7 +744,7 @@
             },
             "glm": {
               "label": "智谱 GLM",
-              "desc": "透传到智谱 MCP 服务（预留，暂未实现）"
+              "desc": "透传到智谱 MCP 服务（支持图片分析、视频分析等工具）"
             },
             "custom": {
               "label": "自定义",

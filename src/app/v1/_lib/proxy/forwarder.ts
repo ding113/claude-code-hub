@@ -24,6 +24,14 @@ import { getEnvConfig } from "@/lib/config/env.schema";
 import { GEMINI_PROTOCOL } from "../gemini/protocol";
 import { GeminiAuth } from "../gemini/auth";
 
+const STANDARD_ENDPOINTS = [
+  "/v1/messages",
+  "/v1/messages/count_tokens",
+  "/v1/responses",
+  "/v1/chat/completions",
+  "/v1/models",
+];
+
 const MAX_ATTEMPTS_PER_PROVIDER = 2; // 每个供应商最多尝试次数（首次 + 1次重试）
 const MAX_PROVIDER_SWITCHES = 20; // 保险栓：最多切换 20 次供应商（防止无限循环）
 
@@ -736,16 +744,9 @@ export class ProxyForwarder {
       let effectiveBaseUrl = provider.url;
 
       // 检测是否为 MCP 请求（非标准 Claude/Codex/OpenAI 端点）
-      const standardEndpoints = [
-        "/v1/messages",
-        "/v1/messages/count_tokens",
-        "/v1/responses",
-        "/v1/chat/completions",
-        "/v1/models",
-      ];
       const requestPath = session.requestUrl.pathname;
       // pathname does not include query params, so exact match is sufficient
-      const isStandardRequest = standardEndpoints.includes(requestPath);
+      const isStandardRequest = STANDARD_ENDPOINTS.includes(requestPath);
       const isMcpRequest = !isStandardRequest;
 
       if (isMcpRequest && provider.mcpPassthroughType && provider.mcpPassthroughType !== "none") {
@@ -775,12 +776,15 @@ export class ProxyForwarder {
               requestPath,
             });
           } catch (error) {
-            logger.warn("ProxyForwarder: Failed to extract base domain, using original URL", {
+            logger.error("ProxyForwarder: Invalid provider URL for MCP passthrough", {
               providerId: provider.id,
+              providerUrl: provider.url,
               error,
             });
-            // 提取失败时使用原始 URL（降级处理）
-            effectiveBaseUrl = provider.url;
+            throw new ProxyError(
+              `Invalid provider URL configuration: ${provider.url}`,
+              500
+            );
           }
         }
       } else if (

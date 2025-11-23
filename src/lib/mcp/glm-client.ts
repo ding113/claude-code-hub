@@ -123,6 +123,8 @@ export class GlmMcpClient {
    */
   private async makeRequest<T>(endpoint: string, payload: unknown): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
     try {
       const response = await fetch(url, {
@@ -133,7 +135,9 @@ export class GlmMcpClient {
           "GLM-API-Source": "Claude-Code-Hub-MCP",
         },
         body: JSON.stringify(payload),
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new McpRequestError(
@@ -145,11 +149,21 @@ export class GlmMcpClient {
 
       const data = (await response.json()) as T;
 
-      // GLM 可能有不同的错误格式，这里做基本检查
-      // 实际错误处理需要根据 GLM API 的具体响应格式调整
+      // TODO: Implement GLM-specific error handling based on API docs
+      // For now, log response for debugging
+      logger.debug("[GlmMcpClient] API response", { endpoint, data });
 
       return data;
     } catch (error) {
+      clearTimeout(timeoutId);
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new McpRequestError("Request timeout after 30 seconds");
+      }
+      if (error instanceof TypeError) {
+        throw new McpRequestError(
+          `Network error: ${error.message}. Failed to connect to ${this.baseUrl}. Check base URL, network connectivity, and firewall settings.`
+        );
+      }
       if (error instanceof McpAuthError || error instanceof McpRequestError) {
         throw error;
       }

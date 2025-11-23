@@ -48,7 +48,7 @@ export interface Provider {
   // MCP 透传类型：控制是否启用 MCP 透传功能
   // 'none': 不启用（默认）
   // 'minimax': 透传到 minimax MCP 服务（图片识别、联网搜索）
-  // 'glm': 透传到智谱 MCP 服务（预留）
+  // 'glm': 透传到智谱 MCP 服务（图片分析、视频分析）
   // 'custom': 自定义 MCP 服务（预留）
   mcpPassthroughType: McpPassthroughType;
 

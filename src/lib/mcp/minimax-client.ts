@@ -110,6 +110,8 @@ export class MinimaxMcpClient {
    */
   private async makeRequest<T>(endpoint: string, payload: unknown): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
     try {
       const response = await fetch(url, {
@@ -120,7 +122,9 @@ export class MinimaxMcpClient {
           "MM-API-Source": "Claude-Code-Hub-MCP",
         },
         body: JSON.stringify(payload),
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new McpRequestError(
@@ -162,8 +166,14 @@ export class MinimaxMcpClient {
 
       return data;
     } catch (error) {
+      clearTimeout(timeoutId);
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new McpRequestError("Request timeout after 30 seconds");
+      }
       if (error instanceof TypeError) {
-        throw new McpRequestError(`Network error: ${error.message}. Check base URL and network.`);
+        throw new McpRequestError(
+          `Network error: ${error.message}. Failed to connect to ${this.baseUrl}. Check base URL, network connectivity, and firewall settings.`
+        );
       }
       if (error instanceof McpAuthError || error instanceof McpRequestError) {
         throw error;
