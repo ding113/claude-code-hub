@@ -781,10 +781,7 @@ export class ProxyForwarder {
               providerUrl: provider.url,
               error,
             });
-            throw new ProxyError(
-              `Invalid provider URL configuration: ${provider.url}`,
-              500
-            );
+            throw new ProxyError(`Invalid provider URL configuration: ${provider.url}`, 500);
           }
         }
       } else if (
