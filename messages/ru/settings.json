@@ -1421,5 +1421,25 @@
       "cannotDelete": "Правила по умолчанию не могут быть удалены",
       "cannotDisable": "Рекомендуется сохранить правила по умолчанию включенными"
     }
-  }
+  },
+  "mcpPassthroughConfig": "Конфигурация сквозной передачи MCP",
+  "mcpPassthroughConfigNone": "Отключено",
+  "mcpPassthroughConfigMinimax": "Minimax",
+  "mcpPassthroughConfigGlm": "GLM",
+  "mcpPassthroughConfigCustom": "Пользовательский (Зарезервировано)",
+  "mcpPassthroughDesc": "При включении передаёт вызовы инструментов MCP указанному AI-провайдеру (например, minimax для распознавания изображений, веб-поиска)",
+  "mcpPassthroughSelect": "Тип сквозной передачи",
+  "mcpPassthroughNoneLabel": "Отключено",
+  "mcpPassthroughNoneDesc": "Не включать сквозную передачу MCP (по умолчанию)",
+  "mcpPassthroughMinimaxLabel": "Minimax",
+  "mcpPassthroughMinimaxDesc": "Сквозная передача в сервис minimax MCP (поддержка распознавания изображений, веб-поиска и т.д.)",
+  "mcpPassthroughGlmLabel": "GLM",
+  "mcpPassthroughGlmDesc": "Сквозная передача в сервис GLM MCP (поддержка анализа изображений, видео и т.д.)",
+  "mcpPassthroughCustomLabel": "Пользовательский",
+  "mcpPassthroughCustomDesc": "Сквозная передача в пользовательский сервис MCP (зарезервировано, не реализовано)",
+  "mcpPassthroughHint": "Подсказка: сквозная передача MCP позволяет клиенту Claude Code использовать возможности инструментов, предоставляемых сторонними AI-провайдерами (например, распознавание изображений, веб-поиск)",
+  "mcpPassthroughUrlLabel": "URL сквозной передачи MCP",
+  "mcpPassthroughUrlPlaceholder": "https://api.minimaxi.com",
+  "mcpPassthroughUrlDesc": "Базовый URL сервиса MCP. Оставьте пустым для автоматического извлечения из URL провайдера",
+  "mcpPassthroughUrlAuto": "Автоматически извлечено: {url}"
 }

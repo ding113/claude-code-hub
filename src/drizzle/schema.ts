@@ -26,7 +26,7 @@ export const users = pgTable('users', {
   rpmLimit: integer('rpm_limit').default(60),
   dailyLimitUsd: numeric('daily_limit_usd', { precision: 10, scale: 2 }).default('100.00'),
   providerGroup: varchar('provider_group', { length: 50 }),
-  
+
   // New user-level quota fields (nullable for backward compatibility)
   limit5hUsd: numeric('limit_5h_usd', { precision: 10, scale: 2 }),
   limitWeeklyUsd: numeric('limit_weekly_usd', { precision: 10, scale: 2 }),
@@ -125,6 +125,21 @@ export const providers = pgTable('providers', {
   codexInstructionsStrategy: varchar('codex_instructions_strategy', { length: 20 })
     .default('auto')
     .$type<'auto' | 'force_official' | 'keep_original'>(),
+
+  // MCP 透传类型：控制是否启用 MCP 透传功能
+  // - 'none' (默认): 不启用 MCP 透传
+  // - 'minimax': 透传到 minimax MCP 服务（图片识别、联网搜索）
+  // - 'glm': 透传到智谱 MCP 服务（预留）
+  // - 'custom': 自定义 MCP 服务（预留）
+  mcpPassthroughType: varchar('mcp_passthrough_type', { length: 20 })
+    .notNull()
+    .default('none')
+    .$type<'none' | 'minimax' | 'glm' | 'custom'>(),
+
+  // MCP 透传 URL：MCP 服务的基础 URL
+  // 如果未配置，则自动从 provider.url 提取基础域名
+  // 例如：https://api.minimaxi.com/anthropic -> https://api.minimaxi.com
+  mcpPassthroughUrl: varchar('mcp_passthrough_url', { length: 512 }),
 
   // 金额限流配置
   limit5hUsd: numeric('limit_5h_usd', { precision: 10, scale: 2 }),

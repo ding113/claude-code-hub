@@ -162,6 +162,20 @@
       "when": 1763739167236,
       "tag": "0022_simple_stardust",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1763823720001,
+      "tag": "0023_daily_limit_partial_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1763823720002,
+      "tag": "0024_glossy_silvermane",
+      "breakpoints": true
     }
   ]
 }
