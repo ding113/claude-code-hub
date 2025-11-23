@@ -126,6 +126,10 @@ export function ApiTestButton({
       usage?: Record<string, unknown> | string | number;
       content?: string;
       error?: string;
+      streamInfo?: {
+        chunksReceived: number;
+        format: "sse" | "ndjson";
+      };
     };
   } | null>(null);
 
@@ -325,6 +329,8 @@ export function ApiTestButton({
         `响应内容: ${testResult.details.content.slice(0, API_TEST_UI_CONFIG.MAX_PREVIEW_LENGTH)}${
           testResult.details.content.length > API_TEST_UI_CONFIG.MAX_PREVIEW_LENGTH ? "..." : ""
         }`,
+      testResult.details?.streamInfo &&
+        `流式响应: 接收 ${testResult.details.streamInfo.chunksReceived} 个数据块 (${testResult.details.streamInfo.format.toUpperCase()})`,
       testResult.details?.error && `错误详情: ${testResult.details.error}`,
     ]
       .filter(Boolean)
@@ -485,6 +491,25 @@ export function ApiTestButton({
                       </div>
                     )}
 
+                    {/* 流式响应信息 */}
+                    {testResult.details.streamInfo && (
+                      <div className="space-y-2">
+                        <h4 className="font-semibold text-sm">流式响应信息</h4>
+                        <div className="rounded-md border bg-blue-50 p-3">
+                          <div className="text-xs space-y-1">
+                            <div>
+                              <span className="font-medium">接收到的数据块:</span>{" "}
+                              {testResult.details.streamInfo.chunksReceived}
+                            </div>
+                            <div>
+                              <span className="font-medium">流式格式:</span>{" "}
+                              {testResult.details.streamInfo.format.toUpperCase()}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {/* 错误详情 */}
                     {testResult.details.error && (
                       <div className="space-y-2">
@@ -502,17 +527,28 @@ export function ApiTestButton({
                   </div>
                 )}
 
-                {/* 复制按钮 */}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleCopyResult}
-                  className="w-full"
-                >
-                  <Copy className="h-4 w-4 mr-2" />
-                  {t("copyResult")}
-                </Button>
+                {/* 操作按钮 */}
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCopyResult}
+                    className="flex-1"
+                  >
+                    <Copy className="h-4 w-4 mr-2" />
+                    {t("copyResult")}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setIsDetailDialogOpen(false)}
+                    className="flex-1"
+                  >
+                    {t("close")}
+                  </Button>
+                </div>
               </div>
             </DialogContent>
           </Dialog>
@@ -574,6 +610,19 @@ export function ApiTestButton({
                         显示前 200 字符，完整内容请点击&ldquo;查看详情&rdquo;
                       </div>
                     )}
+                  </div>
+                </div>
+              )}
+              {testResult.details.streamInfo && (
+                <div className="space-y-1 text-xs opacity-80">
+                  <div>
+                    <span className="font-medium">流式响应:</span>
+                  </div>
+                  <div className="ml-2">
+                    <div className="text-blue-600">
+                      接收 {testResult.details.streamInfo.chunksReceived} 个数据块 (
+                      {testResult.details.streamInfo.format.toUpperCase()})
+                    </div>
                   </div>
                 </div>
               )}

@@ -608,6 +608,7 @@
         "copySuccess": "Copied to clipboard",
         "copyFailed": "Failed to copy",
         "copyResult": "Copy Result",
+        "close": "Close",
         "success": "Success",
         "failed": "Failed"
       },

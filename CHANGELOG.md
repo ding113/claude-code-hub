@@ -8,6 +8,10 @@ All notable changes to this project will be documented in this file.
 
 - Add dark mode support with theme switcher in Dashboard and settings pages (#171) @ding113
 
+### Changed
+
+- Enhance data dashboard with comprehensive optimizations and improvements (#183) @ding113
+
 ### Fixed
 
 - Fix infinite loop in leaderboard tab switching (#178) @ding113

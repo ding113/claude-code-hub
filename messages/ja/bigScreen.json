@@ -1,0 +1,34 @@
+{
+  "title": "CLAUDE CODE HUB",
+  "subtitle": "リアルタイムデータモニター",
+  "metrics": {
+    "concurrent": "同時接続数",
+    "activeSessions": "アクティブセッション",
+    "requests": "今日のリクエスト",
+    "cost": "今日のコスト",
+    "latency": "平均レスポンス",
+    "errorRate": "エラー率"
+  },
+  "sections": {
+    "providerRank": "プロバイダーランキング (TOP 5)",
+    "providerQuotas": "プロバイダー並行スロット状況",
+    "requestTrend": "24時間トラフィック推移",
+    "activity": "リアルタイムリクエスト (Live)",
+    "userRank": "ユーザー消費ランキング (Realtime)",
+    "modelDist": "モデル呼び出し分布"
+  },
+  "headers": {
+    "user": "ユーザー",
+    "model": "モデル",
+    "provider": "プロバイダー",
+    "latency": "レスポンス時間",
+    "cost": "コスト",
+    "status": "ステータス",
+    "usage": "使用量",
+    "quota": "クォータ"
+  },
+  "status": {
+    "normal": "システム正常",
+    "lastUpdate": "データ更新"
+  }
+}

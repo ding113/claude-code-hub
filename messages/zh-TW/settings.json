@@ -600,6 +600,7 @@
         "copySuccess": "已複製到剪貼簿",
         "copyFailed": "複製失敗",
         "copyResult": "複製結果",
+        "close": "關閉",
         "success": "成功",
         "failed": "失敗"
       },

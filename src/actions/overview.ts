@@ -19,6 +19,8 @@ export interface OverviewData {
   todayCost: number;
   /** 平均响应时间（毫秒） */
   avgResponseTime: number;
+  /** 今日错误率（百分比） */
+  todayErrorRate: number;
 }
 
 /**
@@ -61,6 +63,7 @@ export async function getOverviewData(): Promise<ActionResult<OverviewData>> {
           todayRequests: 0, // 无权限时不显示全站请求数
           todayCost: 0, // 无权限时不显示全站消耗
           avgResponseTime: 0, // 无权限时不显示全站平均响应时间
+          todayErrorRate: 0, // 无权限时不显示全站错误率
         },
       };
     }
@@ -82,6 +85,7 @@ export async function getOverviewData(): Promise<ActionResult<OverviewData>> {
         todayRequests: metricsData.todayRequests,
         todayCost: metricsData.todayCost,
         avgResponseTime: metricsData.avgResponseTime,
+        todayErrorRate: metricsData.todayErrorRate,
       },
     };
   } catch (error) {
