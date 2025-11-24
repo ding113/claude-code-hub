@@ -1545,7 +1545,13 @@ async function executeProviderApiTest(
         method: "POST",
         headers: {
           ...options.headers(data.apiKey),
+          // 使用更完整的请求头，模拟真实 Claude CLI 行为
+          // 避免被 Cloudflare Bot 检测拦截
           "User-Agent": "claude-cli/2.0.33 (external, cli)",
+          Accept: "application/json, text/event-stream",
+          "Accept-Language": "en-US,en;q=0.9",
+          "Accept-Encoding": "gzip, deflate, br",
+          Connection: "keep-alive",
         },
         body: JSON.stringify(options.body(model)),
         signal: AbortSignal.timeout(API_TEST_CONFIG.TIMEOUT_MS),
@@ -1555,8 +1561,53 @@ async function executeProviderApiTest(
         init.dispatcher = proxyConfig.agent;
       }
 
-      const response = await fetch(url, init);
-      const responseTime = Date.now() - startTime;
+      let response = await fetch(url, init);
+      let responseTime = Date.now() - startTime;
+
+      // ⭐ 代理失败降级逻辑：检测常见代理相关错误
+      // 520: Cloudflare "Web Server Returned Unknown Error"（常见于代理被 CDN 拦截）
+      // 502: Bad Gateway（代理无法连接上游）
+      // 504: Gateway Timeout（代理超时）
+      const isProxyRelatedError = proxyConfig && [520, 502, 504].includes(response.status);
+
+      if (isProxyRelatedError && proxyConfig.fallbackToDirect) {
+        // 克隆响应，避免消费原始响应体
+        const proxyResponse = response.clone();
+        const errorText = await proxyResponse.text();
+        const isCloudflareError = errorText.includes("cloudflare");
+
+        logger.warn("Provider API test: Proxy returned error, falling back to direct connection", {
+          providerId: tempProvider.id,
+          providerName: tempProvider.name,
+          proxyStatus: response.status,
+          proxyUrl: proxyConfig.proxyUrl,
+          isCloudflareError,
+        });
+
+        // 移除代理配置，直连重试
+        const fallbackInit = { ...init };
+        delete fallbackInit.dispatcher;
+
+        const fallbackStartTime = Date.now();
+        try {
+          response = await fetch(url, fallbackInit);
+          responseTime = Date.now() - fallbackStartTime;
+
+          logger.info("Provider API test: Direct connection succeeded after proxy failure", {
+            providerId: tempProvider.id,
+            providerName: tempProvider.name,
+            directStatus: response.status,
+            directResponseTime: responseTime,
+          });
+        } catch (directError) {
+          logger.error("Provider API test: Direct connection also failed", {
+            providerId: tempProvider.id,
+            error: directError,
+          });
+          // 直连失败，继续使用原始代理响应（下面会处理）
+          // 注意：此时 response 仍然是原始的代理响应，未被消费
+        }
+      }
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -1776,6 +1827,7 @@ export async function testProviderAnthropicMessages(
     body: (model) => ({
       model,
       max_tokens: API_TEST_CONFIG.TEST_MAX_TOKENS,
+      stream: false, // 显式禁用流式响应，避免 Cloudflare 520 错误
       messages: [{ role: "user", content: API_TEST_CONFIG.TEST_PROMPT }],
     }),
     successMessage: "Anthropic Messages API 测试成功",
