@@ -1031,10 +1031,7 @@ function sanitizeErrorTextForLogging(text: string, maxLength = 500): string {
 
   let sanitized = text;
   sanitized = sanitized.replace(/\b(?:sk|rk|pk)-[a-zA-Z0-9]{16,}\b/giu, "[REDACTED_KEY]");
-  sanitized = sanitized.replace(
-    /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g,
-    "[EMAIL]"
-  );
+  sanitized = sanitized.replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, "[EMAIL]");
   sanitized = sanitized.replace(/Bearer\s+[A-Za-z0-9._\-]+/gi, "Bearer [REDACTED]");
   sanitized = sanitized.replace(
     /(password|token|secret)\s*[:=]\s*['\"]?[^'"\s]+['\"]?/gi,
@@ -1697,8 +1694,7 @@ async function executeProviderApiTest(
       let responseTime = Date.now() - startTime;
 
       const shouldAttemptDirectRetry =
-        Boolean(proxyConfig?.fallbackToDirect) &&
-        PROXY_RETRY_STATUS_CODES.has(response.status);
+        Boolean(proxyConfig?.fallbackToDirect) && PROXY_RETRY_STATUS_CODES.has(response.status);
 
       if (shouldAttemptDirectRetry) {
         const isCloudflareError = detectCloudflareGatewayError(response);
