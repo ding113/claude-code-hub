@@ -467,17 +467,29 @@ export class ProxyProviderResolver {
         .map((g) => g.trim())
         .filter(Boolean);
 
-      // 检查供应商的 groupTag 是否在用户的分组列表中
-      if (provider.groupTag && !userGroups.includes(provider.groupTag)) {
-        logger.warn("ProviderSelector: Session provider not in user groups", {
-          sessionId: session.sessionId,
-          providerId: provider.id,
-          providerName: provider.name,
-          providerGroup: provider.groupTag,
-          userGroups: userGroups.join(","),
-          message: "Strict group isolation: rejecting cross-group session reuse",
-        });
-        return null; // 不允许复用，重新选择
+      // 检查供应商的 groupTag 与用户的分组是否有交集
+      // 修复 #190: 支持供应商多标签（如 "cli,chat"）与用户单标签（如 "cli"）的匹配
+      if (provider.groupTag) {
+        // 将供应商的 groupTag 拆分成标签数组
+        const providerTags = provider.groupTag
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean);
+
+        // 检查是否有交集
+        const hasIntersection = providerTags.some((tag) => userGroups.includes(tag));
+
+        if (!hasIntersection) {
+          logger.warn("ProviderSelector: Session provider not in user groups", {
+            sessionId: session.sessionId,
+            providerId: provider.id,
+            providerName: provider.name,
+            providerTags: providerTags.join(","),
+            userGroups: userGroups.join(","),
+            message: "Strict group isolation: rejecting cross-group session reuse",
+          });
+          return null; // 不允许复用，重新选择
+        }
       }
     }
     // 全局用户（userGroup 为空）可以复用任何供应商
@@ -625,10 +637,20 @@ export class ProxyProviderResolver {
         .map((g) => g.trim())
         .filter(Boolean);
 
-      // 过滤：供应商的 groupTag 在用户的分组列表中
-      const groupFiltered = enabledProviders.filter(
-        (p) => p.groupTag && userGroups.includes(p.groupTag)
-      );
+      // 过滤：供应商的 groupTag 与用户的分组有交集
+      // 修复 #190: 支持供应商多标签（如 "cli,chat"）与用户单标签（如 "cli"）的匹配
+      const groupFiltered = enabledProviders.filter((p) => {
+        if (!p.groupTag) return false;
+
+        // 将供应商的 groupTag 拆分成标签数组
+        const providerTags = p.groupTag
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean);
+
+        // 检查是否有交集：用户的分组中是否有任意一个标签在供应商的标签列表中
+        return providerTags.some((tag) => userGroups.includes(tag));
+      });
 
       if (groupFiltered.length > 0) {
         candidateProviders = groupFiltered;
