@@ -1623,11 +1623,43 @@ async function executeProviderApiTest(
 
       if (!response.ok) {
         const errorText = await response.text();
+
+        // 添加 trace 日志记录原始错误响应
+        logger.trace("Provider API test raw error response", {
+          providerUrl: normalizedProviderUrl.replace(/:\/\/[^@]*@/, "://***@"),
+          status: response.status,
+          rawErrorText: errorText,
+        });
+
         let errorDetail: string | undefined;
         try {
           const errorJson = JSON.parse(errorText);
-          errorDetail = errorJson.error?.message || errorJson.message;
-        } catch {
+
+          // 尝试多种错误路径提取错误信息
+          errorDetail =
+            errorJson.error?.message ||           // OpenAI 标准格式
+            errorJson.error?.error ||              // 嵌套 error 对象
+            errorJson.message ||                   // 简单 message 字段
+            errorJson.error_message ||             // error_message 字段
+            errorJson.detail ||                    // detail 字段
+            (errorJson.error && typeof errorJson.error === 'string' ? errorJson.error : undefined); // error 字段是字符串
+
+          // 如果以上都没有,尝试将整个 error 对象序列化
+          if (!errorDetail && errorJson.error && typeof errorJson.error === 'object') {
+            errorDetail = JSON.stringify(errorJson.error);
+          }
+
+          // 添加 trace 日志记录解析结果
+          logger.trace("Provider API test parsed error", {
+            providerUrl: normalizedProviderUrl.replace(/:\/\/[^@]*@/, "://***@"),
+            extractedDetail: errorDetail,
+            errorJsonKeys: Object.keys(errorJson),
+          });
+        } catch (parseError) {
+          logger.trace("Provider API test failed to parse error JSON", {
+            providerUrl: normalizedProviderUrl.replace(/:\/\/[^@]*@/, "://***@"),
+            parseError: parseError instanceof Error ? parseError.message : "Unknown parse error",
+          });
           errorDetail = undefined;
         }
 
