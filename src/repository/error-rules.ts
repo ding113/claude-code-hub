@@ -149,81 +149,120 @@ export async function deleteErrorRule(id: number): Promise<boolean> {
 }
 
 /**
+ * 默认错误规则定义
+ */
+const DEFAULT_ERROR_RULES = [
+  {
+    pattern: "prompt is too long.*maximum.*tokens",
+    category: "prompt_limit",
+    description: "Prompt token limit exceeded",
+    matchType: "regex" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 100,
+  },
+  {
+    pattern: "blocked by.*content filter",
+    category: "content_filter",
+    description: "Content blocked by safety filters",
+    matchType: "regex" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 90,
+  },
+  {
+    pattern: "PDF has too many pages|maximum of.*PDF pages",
+    category: "pdf_limit",
+    description: "PDF page limit exceeded",
+    matchType: "regex" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 80,
+  },
+  {
+    pattern: "thinking.*format.*invalid|Expected.*thinking.*but found",
+    category: "thinking_error",
+    description: "Invalid thinking block format",
+    matchType: "regex" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 70,
+  },
+  {
+    pattern: "Missing required parameter|Extra inputs.*not permitted",
+    category: "parameter_error",
+    description: "Request parameter validation failed",
+    matchType: "regex" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 60,
+  },
+  {
+    pattern: "非法请求|illegal request|invalid request",
+    category: "invalid_request",
+    description: "Invalid request format",
+    matchType: "regex" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 50,
+  },
+  {
+    pattern: "cache_control.*limit.*blocks",
+    category: "cache_limit",
+    description: "Cache control limit exceeded",
+    matchType: "regex" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 40,
+  },
+  {
+    pattern: "image exceeds.*maximum.*bytes",
+    category: "invalid_request",
+    description: "Image size exceeds maximum limit",
+    matchType: "regex" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 35,
+  },
+];
+
+/**
+ * 同步默认错误规则
+ *
+ * 将代码中的默认规则同步到数据库：
+ * - 删除所有已有的默认规则（isDefault=true）
+ * - 重新插入最新的默认规则
+ * - 用户自定义规则（isDefault=false）保持不变
+ *
+ * @returns 同步的规则数量
+ */
+export async function syncDefaultErrorRules(): Promise<number> {
+  await db.transaction(async (tx) => {
+    // 1. 删除所有默认规则
+    await tx.delete(errorRules).where(eq(errorRules.isDefault, true));
+
+    // 2. 重新插入最新的默认规则
+    for (const rule of DEFAULT_ERROR_RULES) {
+      await tx.insert(errorRules).values(rule);
+    }
+  });
+
+  // 通知 ErrorRuleDetector 重新加载缓存
+  eventEmitter.emit("errorRulesUpdated");
+
+  return DEFAULT_ERROR_RULES.length;
+}
+
+/**
  * 初始化默认错误规则
  *
  * 使用 ON CONFLICT DO NOTHING 确保幂等性，避免重复插入
- * 从 src/app/v1/_lib/proxy/errors.ts 中提取的 7 条默认规则
+ * 用于首次部署时初始化默认规则
  */
 export async function initializeDefaultErrorRules(): Promise<void> {
-  const defaultRules = [
-    {
-      pattern: "prompt is too long.*maximum.*tokens",
-      category: "prompt_limit",
-      description: "Prompt token limit exceeded",
-      matchType: "regex" as const,
-      isDefault: true,
-      isEnabled: true,
-      priority: 100,
-    },
-    {
-      pattern: "blocked by.*content filter",
-      category: "content_filter",
-      description: "Content blocked by safety filters",
-      matchType: "regex" as const,
-      isDefault: true,
-      isEnabled: true,
-      priority: 90,
-    },
-    {
-      pattern: "PDF has too many pages.*maximum.*pages",
-      category: "pdf_limit",
-      description: "PDF page limit exceeded",
-      matchType: "regex" as const,
-      isDefault: true,
-      isEnabled: true,
-      priority: 80,
-    },
-    {
-      pattern: "thinking.*format.*invalid|Expected.*thinking.*but found",
-      category: "thinking_error",
-      description: "Invalid thinking block format",
-      matchType: "regex" as const,
-      isDefault: true,
-      isEnabled: true,
-      priority: 70,
-    },
-    {
-      pattern: "Missing required parameter|Extra inputs.*not permitted",
-      category: "parameter_error",
-      description: "Request parameter validation failed",
-      matchType: "regex" as const,
-      isDefault: true,
-      isEnabled: true,
-      priority: 60,
-    },
-    {
-      pattern: "非法请求|illegal request|invalid request",
-      category: "invalid_request",
-      description: "Invalid request format",
-      matchType: "regex" as const,
-      isDefault: true,
-      isEnabled: true,
-      priority: 50,
-    },
-    {
-      pattern: "cache_control.*limit.*blocks",
-      category: "cache_limit",
-      description: "Cache control limit exceeded",
-      matchType: "regex" as const,
-      isDefault: true,
-      isEnabled: true,
-      priority: 40,
-    },
-  ];
-
   // 使用事务批量插入，ON CONFLICT DO NOTHING 保证幂等性
   await db.transaction(async (tx) => {
-    for (const rule of defaultRules) {
+    for (const rule of DEFAULT_ERROR_RULES) {
       await tx.insert(errorRules).values(rule).onConflictDoNothing({ target: errorRules.pattern });
     }
   });

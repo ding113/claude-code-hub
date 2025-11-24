@@ -282,9 +282,14 @@ export async function deleteErrorRuleAction(id: number): Promise<ActionResult> {
 
 /**
  * 手动刷新缓存
+ *
+ * 同时同步默认规则到数据库：
+ * - 删除所有已有的默认规则（isDefault=true）
+ * - 重新插入最新的默认规则
+ * - 用户自定义规则（isDefault=false）保持不变
  */
 export async function refreshCacheAction(): Promise<
-  ActionResult<{ stats: ReturnType<typeof errorRuleDetector.getStats> }>
+  ActionResult<{ stats: ReturnType<typeof errorRuleDetector.getStats>; syncedCount: number }>
 > {
   try {
     const session = await getSession();
@@ -295,24 +300,32 @@ export async function refreshCacheAction(): Promise<
       };
     }
 
+    // 1. 同步默认规则到数据库
+    const syncedCount = await repo.syncDefaultErrorRules();
+
+    // 2. 重新加载缓存（syncDefaultErrorRules 已经触发了 eventEmitter，但显式调用确保同步）
     await errorRuleDetector.reload();
 
     const stats = errorRuleDetector.getStats();
 
-    logger.info("[ErrorRulesAction] Cache refreshed", {
+    logger.info("[ErrorRulesAction] Default rules synced and cache refreshed", {
+      syncedCount,
       stats,
       userId: session.user.id,
     });
 
+    // 3. 刷新页面数据
+    revalidatePath("/settings/error-rules");
+
     return {
       ok: true,
-      data: { stats },
+      data: { stats, syncedCount },
     };
   } catch (error) {
-    logger.error("[ErrorRulesAction] Failed to refresh cache:", error);
+    logger.error("[ErrorRulesAction] Failed to sync rules and refresh cache:", error);
     return {
       ok: false,
-      error: "刷新缓存失败",
+      error: "同步规则失败",
     };
   }
 }
