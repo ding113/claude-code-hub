@@ -694,8 +694,7 @@
           "title": "供应商模型测试",
           "summary": "验证供应商与模型连通性",
           "desc": "测试供应商模型是否可用，默认与路由配置中选择的供应商类型保持一致。",
-          "testLabel": "供应商模型测试",
-          "notice": "注意：测试将向供应商发送真实请求，可能消耗少量额度。请确认供应商 URL、API 密钥及模型配置正确。"
+          "testLabel": "供应商模型测试"
         },
         "codexStrategy": {
           "title": "Codex Instructions 策略",
