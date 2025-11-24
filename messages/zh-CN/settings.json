@@ -233,6 +233,7 @@
         "testModel": "测试模型",
         "testModelDesc": "可手动输入，不填写则使用默认模型",
         "model": "模型",
+        "responseModel": "响应模型",
         "responseTime": "响应时间",
         "usage": "Token 用量",
         "response": "响应内容",

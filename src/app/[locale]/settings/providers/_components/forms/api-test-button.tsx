@@ -253,7 +253,7 @@ export function ApiTestButton({
         const model = details?.model || t("unknown");
 
         toast.success(t("testSuccess"), {
-          description: `${t("model")}: ${model} | ${t("responseTime")}: ${responseTime}`,
+          description: `${t("responseModel")}: ${model} | ${t("responseTime")}: ${responseTime}`,
           duration: API_TEST_UI_CONFIG.TOAST_SUCCESS_DURATION,
         });
       } else {
@@ -316,7 +316,7 @@ export function ApiTestButton({
     const resultText = [
       `测试结果: ${testResult.success ? "成功" : "失败"}`,
       `消息: ${testResult.message}`,
-      testResult.details?.model && `模型: ${testResult.details.model}`,
+      testResult.details?.model && `${t("responseModel")}: ${testResult.details.model}`,
       testResult.details?.responseTime !== undefined &&
         `响应时间: ${testResult.details.responseTime}ms`,
       testResult.details?.usage &&
@@ -579,7 +579,8 @@ export function ApiTestButton({
             <div className="space-y-1 text-xs opacity-80">
               {testResult.details.model && (
                 <div>
-                  <span className="font-medium">{t("model")}:</span> {testResult.details.model}
+                  <span className="font-medium">{t("responseModel")}:</span>{" "}
+                  {testResult.details.model}
                 </div>
               )}
               {testResult.details.responseTime !== undefined && (
