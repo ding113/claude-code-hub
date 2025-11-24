@@ -1834,7 +1834,9 @@ export async function testProviderAnthropicMessages(
     headers: (apiKey) => ({
       "Content-Type": "application/json",
       "anthropic-version": "2023-06-01",
+      // 同时发送两种认证头，兼容官方 API 和第三方中转站
       "x-api-key": apiKey,
+      Authorization: `Bearer ${apiKey}`,
     }),
     body: (model) => ({
       model,
