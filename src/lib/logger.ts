@@ -51,7 +51,7 @@ const pinoInstance = pino({
   // timestamp 是顶级配置项，返回格式化的时间字符串
   timestamp: enablePrettyTransport
     ? undefined // pino-pretty 会处理时间格式
-    : () => `,"time":"${new Date().toISOString()}"`,
+    : pino.stdTimeFunctions.isoTime,
   formatters: {
     level: (label) => {
       return { level: label };
