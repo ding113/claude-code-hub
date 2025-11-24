@@ -47,17 +47,15 @@ const pinoInstance = pino({
         },
       }
     : undefined,
+  // 生产环境格式化时间戳为 ISO 8601 格式
+  // timestamp 是顶级配置项，返回格式化的时间字符串
+  timestamp: enablePrettyTransport
+    ? undefined // pino-pretty 会处理时间格式
+    : () => `,"time":"${new Date().toISOString()}"`,
   formatters: {
     level: (label) => {
       return { level: label };
     },
-    // 生产环境格式化时间戳为 ISO 8601 格式
-    ...(!enablePrettyTransport && {
-      timestamp: () => {
-        const now = new Date();
-        return `,"time":"${now.toISOString()}"`;
-      },
-    }),
   },
 });
 
