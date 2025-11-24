@@ -21,6 +21,16 @@ export class ProxyMessageService {
     // Extract endpoint from URL pathname (nullable)
     const endpoint = session.getEndpoint() ?? undefined;
 
+    // ⭐ 修复模型重定向记录问题：
+    // 由于 ensureContext 在模型重定向之前被调用（guard-pipeline 阶段），
+    // 此时 session.getOriginalModel() 可能返回 null。
+    // 因此需要在这里提前保存当前模型作为 original_model，
+    // 如果后续发生重定向，ModelRedirector.apply() 会再次调用 setOriginalModel()（幂等性保护）
+    const currentModel = session.request.model;
+    if (currentModel && !session.getOriginalModel()) {
+      session.setOriginalModel(currentModel);
+    }
+
     const messageRequest = await createMessageRequest({
       provider_id: provider.id,
       user_id: authState.user.id,

@@ -96,6 +96,7 @@ export async function updateMessageRequestDetails(
     cacheReadInputTokens?: number;
     providerChain?: CreateMessageRequestData["provider_chain"];
     errorMessage?: string;
+    model?: string; // ⭐ 新增：支持更新重定向后的模型名称
   }
 ): Promise<void> {
   const updateData: Record<string, unknown> = {
@@ -122,6 +123,9 @@ export async function updateMessageRequestDetails(
   }
   if (details.errorMessage !== undefined) {
     updateData.errorMessage = details.errorMessage;
+  }
+  if (details.model !== undefined) {
+    updateData.model = details.model;
   }
 
   await db.update(messageRequest).set(updateData).where(eq(messageRequest.id, id));
