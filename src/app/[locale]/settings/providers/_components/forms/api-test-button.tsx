@@ -391,6 +391,16 @@ export function ApiTestButton({
         <div className="text-xs text-muted-foreground">{t("testModelDesc")}</div>
       </div>
 
+      {/* 免责声明 */}
+      <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+        <div className="font-medium mb-1">⚠️ 注意</div>
+        <div className="space-y-1 text-amber-700">
+          <div>• 测试将向供应商发送真实请求，可能消耗少量额度</div>
+          <div>• 因各家供应商情况不同，测试结果仅供参考，不代表实际调用效果</div>
+          <div>• 请确认供应商 URL、API 密钥及模型配置正确</div>
+        </div>
+      </div>
+
       <div className="flex gap-2">
         <Button
           type="button"
@@ -541,7 +551,7 @@ export function ApiTestButton({
                   </Button>
                   <Button
                     type="button"
-                    variant="secondary"
+                    variant="outline"
                     size="sm"
                     onClick={() => setIsDetailDialogOpen(false)}
                     className="flex-1"

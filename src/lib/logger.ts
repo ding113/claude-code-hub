@@ -51,6 +51,13 @@ const pinoInstance = pino({
     level: (label) => {
       return { level: label };
     },
+    // 生产环境格式化时间戳为 ISO 8601 格式
+    ...(!enablePrettyTransport && {
+      timestamp: () => {
+        const now = new Date();
+        return `,"time":"${now.toISOString()}"`;
+      },
+    }),
   },
 });
 
