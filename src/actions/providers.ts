@@ -1902,6 +1902,7 @@ export async function testProviderOpenAIResponses(
       // input 必须是数组格式，符合 OpenAI Responses API 规范
       input: [
         {
+          type: "message", // 必须指定 type 为 message
           role: "user",
           content: [
             {
