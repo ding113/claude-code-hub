@@ -1600,12 +1600,24 @@ async function executeProviderApiTest(
             directResponseTime: responseTime,
           });
         } catch (directError) {
+          const directResponseTime = Date.now() - fallbackStartTime;
           logger.error("Provider API test: Direct connection also failed", {
             providerId: tempProvider.id,
             error: directError,
           });
-          // 直连失败，继续使用原始代理响应（下面会处理）
-          // 注意：此时 response 仍然是原始的代理响应，未被消费
+
+          // 直连也失败，返回组合错误信息
+          return {
+            ok: true,
+            data: {
+              success: false,
+              message: `代理和直连均失败`,
+              details: {
+                responseTime: directResponseTime,
+                error: `代理错误: HTTP ${response.status} (${isCloudflareError ? "Cloudflare" : "Unknown"})\n直连错误: ${directError instanceof Error ? directError.message : String(directError)}`,
+              },
+            },
+          };
         }
       }
 
