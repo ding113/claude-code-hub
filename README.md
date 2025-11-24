@@ -251,6 +251,7 @@ Docker Compose 是**首选部署方式**，自动配置数据库、Redis 和应�
 | `ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS` | `false`                  | 是否将网络错误计入熔断器；开启后能更激进地阻断异常线路。                     |
 | `APP_PORT`                                 | `23000`                  | 生产端口，可被容器或进程管理器覆盖。                                         |
 | `APP_URL`                                  | 空                       | 设置后 OpenAPI 文档 `servers` 将展示正确域名/端口。                          |
+| `API_TEST_TIMEOUT_MS`                      | `15000`                  | 供应商 API 测试超时时间（毫秒，范围 5000-120000），跨境网络可适当提高。      |
 
 > 布尔变量请直接写 `true/false` 或 `1/0`，勿加引号，避免被 Zod 转换为真值。更多字段参考 `.env.example`。
 

@@ -251,6 +251,7 @@ Docker Compose is the **preferred deployment method** — it automatically provi
 | `ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS` | `false`                  | When `true`, network errors also trip the circuit breaker for quicker isolation.                     |
 | `APP_PORT`                                 | `23000`                  | Production port (override via container or process manager).                                         |
 | `APP_URL`                                  | empty                    | Populate to expose correct `servers` entries in OpenAPI docs.                                        |
+| `API_TEST_TIMEOUT_MS`                      | `15000`                  | Timeout (ms) for provider API connectivity tests. Accepts 5000-120000 for regional tuning.          |
 
 > Boolean values should be `true/false` or `1/0` without quotes; otherwise Zod may coerce strings incorrectly. See `.env.example` for the full list.
 
