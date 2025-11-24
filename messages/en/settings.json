@@ -610,7 +610,13 @@
         "copyResult": "Copy Result",
         "close": "Close",
         "success": "Success",
-        "failed": "Failed"
+        "failed": "Failed",
+        "disclaimer": {
+          "title": "Notice",
+          "realRequest": "This test sends a real request to the provider and may consume a small quota",
+          "resultReference": "Results may vary by provider and are for reference only",
+          "confirmConfig": "Please verify provider URL, API key, and model configuration"
+        }
       },
       "proxyTest": {
         "fillUrlFirst": "Please fill in provider URL first",
@@ -1081,13 +1087,7 @@
           "title": "Provider Model Test",
           "summary": "Verify provider & model connectivity",
           "desc": "Validate whether the selected provider type and model respond correctly. Defaults to the routing configuration unless overridden.",
-          "testLabel": "Provider Model Test",
-          "disclaimer": {
-            "title": "Notice",
-            "realRequest": "This test sends a real request to the provider and may consume a small quota",
-            "resultReference": "Results may vary by provider and are for reference only",
-            "confirmConfig": "Please verify provider URL, API key, and model configuration"
-          }
+          "testLabel": "Provider Model Test"
         },
         "codexStrategy": {
           "title": "Codex Instructions Policy",
