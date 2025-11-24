@@ -167,34 +167,16 @@ export enum ErrorCategory {
 }
 
 export function isNonRetryableClientError(error: Error): boolean {
-  // 提取错误消息
-  let message = error.message;
+  // 确定要检测的内容
+  // 优先使用整个响应体，这样规则可以匹配响应中的任何内容
+  let contentToCheck = error.message;
 
-  // 如果是 ProxyError，优先从 upstreamError.parsed 中提取详细错误消息
-  if (error instanceof ProxyError && error.upstreamError?.parsed) {
-    const parsed = error.upstreamError.parsed as Record<string, unknown>;
-    if (parsed.error && typeof parsed.error === "object") {
-      const errorObj = parsed.error as Record<string, unknown>;
-      if (typeof errorObj.message === "string") {
-        message = errorObj.message;
-      }
-    }
-    // 兼容智谱等供应商的 FastAPI/Pydantic 验证错误格式：{ "detail": [{ "msg": "..." }] }
-    if (Array.isArray(parsed.detail)) {
-      for (const item of parsed.detail) {
-        if (item && typeof item === "object") {
-          const detailObj = item as Record<string, unknown>;
-          if (typeof detailObj.msg === "string") {
-            message = detailObj.msg;
-            break;
-          }
-        }
-      }
-    }
+  if (error instanceof ProxyError && error.upstreamError?.body) {
+    contentToCheck = error.upstreamError.body;
   }
 
   // 使用 ErrorRuleDetector 检测规则，支持数据库驱动的动态规则
-  return errorRuleDetector.detect(message).matched;
+  return errorRuleDetector.detect(contentToCheck).matched;
 }
 
 /**

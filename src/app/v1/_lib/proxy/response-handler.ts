@@ -205,6 +205,7 @@ export class ProxyResponseHandler {
           await updateMessageRequestDetails(messageContext.id, {
             statusCode: statusCode,
             providerChain: session.getProviderChain(),
+            model: session.getCurrentModel() ?? undefined, // ⭐ 更新重定向后的模型
           });
           const tracker = ProxyStatusTracker.getInstance();
           tracker.endRequest(messageContext.user.id, messageContext.id);
@@ -323,6 +324,7 @@ export class ProxyResponseHandler {
             cacheCreationInputTokens: usageMetrics?.cache_creation_input_tokens,
             cacheReadInputTokens: usageMetrics?.cache_read_input_tokens,
             providerChain: session.getProviderChain(),
+            model: session.getCurrentModel() ?? undefined, // ⭐ 更新重定向后的模型
           });
 
           // 记录请求结束
@@ -821,6 +823,7 @@ export class ProxyResponseHandler {
           cacheCreationInputTokens: usageForCost?.cache_creation_input_tokens,
           cacheReadInputTokens: usageForCost?.cache_read_input_tokens,
           providerChain: session.getProviderChain(),
+          model: session.getCurrentModel() ?? undefined, // ⭐ 更新重定向后的模型
         });
       };
 
@@ -1411,6 +1414,7 @@ async function finalizeRequestStats(
     await updateMessageRequestDetails(messageContext.id, {
       statusCode: statusCode,
       providerChain: session.getProviderChain(),
+      model: session.getCurrentModel() ?? undefined,
     });
     return;
   }
@@ -1465,6 +1469,7 @@ async function finalizeRequestStats(
     cacheCreationInputTokens: usageMetrics.cache_creation_input_tokens,
     cacheReadInputTokens: usageMetrics.cache_read_input_tokens,
     providerChain: session.getProviderChain(),
+    model: session.getCurrentModel() ?? undefined,
   });
 }
 
@@ -1552,6 +1557,7 @@ async function persistRequestFailure(options: {
       statusCode,
       errorMessage,
       providerChain: session.getProviderChain(),
+      model: session.getCurrentModel() ?? undefined,
     });
 
     logger.info("ResponseHandler: Successfully persisted request failure", {

@@ -1934,7 +1934,7 @@ export async function testProviderOpenAIResponses(
       // input 必须是数组格式，符合 OpenAI Responses API 规范
       input: [
         {
-          type: "message", // 必须指定 type 为 message
+          type: "message", // ⭐ 修复 #189: Response API 要求 input 数组中的每个元素必须包含 type 字段
           role: "user",
           content: [
             {

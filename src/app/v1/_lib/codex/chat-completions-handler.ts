@@ -197,6 +197,7 @@ export async function handleChatCompletions(c: Context): Promise<Response> {
         await updateMessageRequestDetails(session.messageContext.id, {
           statusCode: providerUnavailable.status,
           errorMessage: JSON.stringify(errorBody?.error || { message: errorMessage }),
+          model: session.getCurrentModel() ?? undefined,
         });
       }
 
