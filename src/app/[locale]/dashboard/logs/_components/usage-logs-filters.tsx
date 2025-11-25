@@ -19,29 +19,6 @@ import type { UserDisplay } from "@/types/user";
 import type { ProviderDisplay } from "@/types/provider";
 import type { Key } from "@/types/key";
 
-/**
- * 将 Date 对象格式化为 datetime-local 输入所需的格式
- * 保持本地时区，不转换为 UTC
- */
-function formatDateTimeLocal(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
-}
-
-/**
- * 解析 datetime-local 输入的值为 Date 对象
- * 保持本地时区语义
- */
-function parseDateTimeLocal(value: string): Date {
-  // datetime-local 返回格式: "2025-10-23T10:30"
-  // 直接用 new Date() 会按照本地时区解析
-  return new Date(value);
-}
-
 interface UsageLogsFiltersProps {
   isAdmin: boolean;
   users: UserDisplay[];
@@ -51,8 +28,10 @@ interface UsageLogsFiltersProps {
     userId?: number;
     keyId?: number;
     providerId?: number;
-    startDate?: Date;
-    endDate?: Date;
+    /** 本地时间字符串，格式: "YYYY-MM-DDTHH:mm" */
+    startDateLocal?: string;
+    /** 本地时间字符串，格式: "YYYY-MM-DDTHH:mm" */
+    endDateLocal?: string;
     statusCode?: number;
     model?: string;
     endpoint?: string;
@@ -161,16 +140,16 @@ export function UsageLogsFilters({
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-12">
-        {/* 时间范围 */}
+        {/* 时间范围 - 使用字符串存储，避免时区转换问题 */}
         <div className="space-y-2 lg:col-span-4">
           <Label>{t("logs.filters.startTime")}</Label>
           <Input
             type="datetime-local"
-            value={localFilters.startDate ? formatDateTimeLocal(localFilters.startDate) : ""}
+            value={localFilters.startDateLocal ?? ""}
             onChange={(e) =>
               setLocalFilters({
                 ...localFilters,
-                startDate: e.target.value ? parseDateTimeLocal(e.target.value) : undefined,
+                startDateLocal: e.target.value || undefined,
               })
             }
           />
@@ -180,11 +159,11 @@ export function UsageLogsFilters({
           <Label>{t("logs.filters.endTime")}</Label>
           <Input
             type="datetime-local"
-            value={localFilters.endDate ? formatDateTimeLocal(localFilters.endDate) : ""}
+            value={localFilters.endDateLocal ?? ""}
             onChange={(e) =>
               setLocalFilters({
                 ...localFilters,
-                endDate: e.target.value ? parseDateTimeLocal(e.target.value) : undefined,
+                endDateLocal: e.target.value || undefined,
               })
             }
           />
