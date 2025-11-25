@@ -72,6 +72,7 @@ The system supports multiple provider types via `providerType` field:
 - `claude` - Anthropic API (standard)
 - `claude-auth` - Claude relay services (Bearer auth only)
 - `codex` - Codex CLI (Response API)
+- `gemini` - Gemini API
 - `gemini-cli` - Gemini CLI
 - `openai-compatible` - OpenAI Compatible APIs
 
