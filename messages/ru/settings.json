@@ -1320,7 +1320,7 @@
     "refreshCache": "Обновить кэш",
     "refreshCacheSuccess": "Кэш успешно обновлен, загружено {count} правил ошибок",
     "refreshCacheFailed": "Не удалось обновить кэш",
-    "cacheStats": "Статистика кэша: Включено({enabledCount}) Отключено({disabledCount}) По умолчанию({defaultCount})",
+    "cacheStats": "Кэшировано: {totalCount} правил",
     "emptyState": "Правил ошибок пока нет. Нажмите 'Добавить правило ошибки' в правом верхнем углу, чтобы начать настройку.",
     "confirmDelete": "Вы уверены, что хотите удалить правило ошибки \"{pattern}\"?",
     "dialog": {

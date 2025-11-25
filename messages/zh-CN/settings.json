@@ -1438,7 +1438,7 @@
     "refreshCache": "刷新缓存",
     "refreshCacheSuccess": "缓存刷新成功，已加载 {count} 个错误规则",
     "refreshCacheFailed": "刷新缓存失败",
-    "cacheStats": "缓存统计: 启用({enabledCount}) 禁用({disabledCount}) 默认({defaultCount})",
+    "cacheStats": "缓存: 共 {totalCount} 条规则",
     "emptyState": "暂无错误规则，点击右上角\"添加错误规则\"开始配置。",
     "confirmDelete": "确定要删除错误规则\"{pattern}\"吗？",
     "dialog": {

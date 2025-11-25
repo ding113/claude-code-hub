@@ -1419,7 +1419,7 @@
     "refreshCache": "Refresh Cache",
     "refreshCacheSuccess": "Cache refreshed successfully, loaded {count} error rules",
     "refreshCacheFailed": "Failed to refresh cache",
-    "cacheStats": "Cache stats: Enabled({enabledCount}) Disabled({disabledCount}) Default({defaultCount})",
+    "cacheStats": "Cached {totalCount} error rules",
     "emptyState": "No error rules yet. Click 'Add Error Rule' in the top right to start configuration.",
     "confirmDelete": "Are you sure you want to delete error rule \"{pattern}\"?",
     "dialog": {

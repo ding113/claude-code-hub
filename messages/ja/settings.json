@@ -1320,7 +1320,7 @@
     "refreshCache": "キャッシュを更新",
     "refreshCacheSuccess": "キャッシュが正常に更新され、{count} 個のエラールールがロードされました",
     "refreshCacheFailed": "キャッシュの更新に失敗しました",
-    "cacheStats": "キャッシュ統計: 有効({enabledCount}) 無効({disabledCount}) デフォルト({defaultCount})",
+    "cacheStats": "キャッシュ: {totalCount}件のルール",
     "emptyState": "エラールールがまだありません。右上の「エラールールを追加」をクリックして設定を開始してください。",
     "confirmDelete": "エラールール \"{pattern}\" を削除してもよろしいですか？",
     "dialog": {
