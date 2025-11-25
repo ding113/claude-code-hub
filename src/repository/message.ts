@@ -19,6 +19,7 @@ export async function createMessageRequest(
     userId: data.user_id,
     key: data.key,
     model: data.model,
+    originalModel: data.original_model, // 原始模型（重定向前，用于计费和前端显示）
     durationMs: data.duration_ms,
     costUsd: formattedCost ?? undefined,
     costMultiplier: data.cost_multiplier?.toString() ?? undefined, // 供应商倍率（转为字符串）
@@ -34,6 +35,7 @@ export async function createMessageRequest(
     userId: messageRequest.userId,
     key: messageRequest.key,
     model: messageRequest.model,
+    originalModel: messageRequest.originalModel, // 原始模型（重定向前）
     durationMs: messageRequest.durationMs,
     costUsd: messageRequest.costUsd,
     costMultiplier: messageRequest.costMultiplier, // 新增
