@@ -1,6 +1,6 @@
 {
-  "id": "8039ff75-655e-4ae6-a4a3-2fd0d285fad7",
-  "prevId": "2f530870-7533-4f3d-b34d-895e61d7b83b",
+  "id": "301f797d-6e88-4b88-8cf4-a1ba480ea35c",
+  "prevId": "8039ff75-655e-4ae6-a4a3-2fd0d285fad7",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -954,6 +954,19 @@
           "primaryKey": false,
           "notNull": false,
           "default": "'auto'"
+        },
+        "mcp_passthrough_type": {
+          "name": "mcp_passthrough_type",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'none'"
+        },
+        "mcp_passthrough_url": {
+          "name": "mcp_passthrough_url",
+          "type": "varchar(512)",
+          "primaryKey": false,
+          "notNull": false
         },
         "limit_5h_usd": {
           "name": "limit_5h_usd",
