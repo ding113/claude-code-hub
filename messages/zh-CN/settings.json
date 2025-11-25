@@ -233,6 +233,7 @@
         "testModel": "测试模型",
         "testModelDesc": "可手动输入，不填写则使用默认模型",
         "model": "模型",
+        "responseModel": "响应模型",
         "responseTime": "响应时间",
         "usage": "Token 用量",
         "response": "响应内容",
@@ -242,8 +243,27 @@
         "copySuccess": "已复制到剪贴板",
         "copyFailed": "复制失败",
         "copyResult": "复制结果",
+        "close": "关闭",
         "success": "成功",
-        "failed": "失败"
+        "failed": "失败",
+        "streamInfo": "流式响应信息",
+        "chunksReceived": "接收到的数据块",
+        "streamFormat": "流式格式",
+        "streamResponse": "流式响应",
+        "chunksCount": "接收 {count} 个数据块 ({format})",
+        "truncatedPreview": "显示前 {length} 字符，完整内容请复制查看",
+        "truncatedBrief": "显示前 {length} 字符，完整内容请点击「查看详情」",
+        "copyFormat": {
+          "testResult": "测试结果",
+          "message": "消息",
+          "errorDetails": "错误详情"
+        },
+        "disclaimer": {
+          "title": "注意",
+          "realRequest": "测试将向供应商发送真实请求，可能消耗少量额度",
+          "resultReference": "因各家供应商情况不同，测试结果仅供参考，不代表实际调用效果",
+          "confirmConfig": "请确认供应商 URL、API 密钥及模型配置正确"
+        }
       },
       "urlPreview": {
         "title": "URL 拼接预览",
@@ -693,8 +713,7 @@
           "title": "供应商模型测试",
           "summary": "验证供应商与模型连通性",
           "desc": "测试供应商模型是否可用，默认与路由配置中选择的供应商类型保持一致。",
-          "testLabel": "供应商模型测试",
-          "notice": "注意：测试将向供应商发送真实请求（非流式），可能消耗少量额度。请确认供应商 URL、API 密钥及模型配置正确。"
+          "testLabel": "供应商模型测试"
         },
         "codexStrategy": {
           "title": "Codex Instructions 策略",
@@ -721,6 +740,41 @@
             "placeholder": "选择策略"
           },
           "hint": "提示: 部分严格的 Codex 中转站（如 88code、foxcode）需要官方 instructions，选择\"自动\"或\"强制官方\"策略"
+        },
+        "mcpPassthrough": {
+          "title": "MCP 透传配置",
+          "summary": {
+            "none": "不启用",
+            "minimax": "Minimax",
+            "glm": "智谱 GLM",
+            "custom": "自定义 (预留)"
+          },
+          "desc": "启用后，将 MCP 工具调用透传到指定的 AI 服务商（如 minimax 的图片识别、联网搜索）",
+          "select": {
+            "label": "透传类型",
+            "none": {
+              "label": "不启用",
+              "desc": "不启用 MCP 透传功能（默认）"
+            },
+            "minimax": {
+              "label": "Minimax",
+              "desc": "透传到 minimax MCP 服务（支持图片识别、联网搜索等工具）"
+            },
+            "glm": {
+              "label": "智谱 GLM",
+              "desc": "透传到智谱 MCP 服务（支持图片分析、视频分析等工具）"
+            },
+            "custom": {
+              "label": "自定义",
+              "desc": "透传到自定义 MCP 服务（预留，暂未实现）"
+            },
+            "placeholder": "选择透传类型"
+          },
+          "hint": "提示: MCP 透传功能允许 Claude Code 客户端使用第三方 AI 服务商提供的工具能力（如图片识别、联网搜索）",
+          "urlLabel": "MCP 透传 URL",
+          "urlPlaceholder": "https://api.minimaxi.com",
+          "urlDesc": "MCP 服务的基础 URL。留空则自动从提供商 URL 提取基础域名",
+          "urlAuto": "自动提取: {url}"
         }
       },
       "providerTypes": {
@@ -1119,7 +1173,6 @@
       "tables": "{count} 个表"
     },
     "cleanup": {
-      "descriptionWarning": "清理历史日志数据以释放数据库存储空间。注意：统计数据将被保留，但日志详情将被永久删除。",
       "rangeLabel": "清理范围",
       "range": {
         "7days": "一周前的日志 (7 天)",
@@ -1149,18 +1202,18 @@
       "cleaning": "正在清理...",
       "successMessage": "成功清理 {count} 条日志记录（{batches} 批次，耗时 {duration}s）",
       "failed": "清理失败",
-      "error": "清理日志失败"
+      "error": "清理日志失败",
+      "descriptionWarning": "清理历史日志数据以释放数据库存储空间。注意：统计数据将被保留，但日志详情将被永久删除。"
     },
     "export": {
-      "descriptionFull": "导出完整的数据库备份文件（.dump 格式），可用于数据迁移或恢复。备份文件使用 PostgreSQL custom format，自动压缩且兼容不同版本的数据库结构。",
       "button": "导出数据库",
       "exporting": "正在导出...",
       "successMessage": "数据库导出成功！",
       "failed": "导出失败",
-      "error": "导出数据库失败"
+      "error": "导出数据库失败",
+      "descriptionFull": "导出完整的数据库备份文件（.dump 格式），可用于数据迁移或恢复。备份文件使用 PostgreSQL custom format，自动压缩且兼容不同版本的数据库结构。"
     },
     "import": {
-      "descriptionFull": "从备份文件恢复数据库。支持 PostgreSQL custom format (.dump) 格式的备份文件。",
       "selectFileLabel": "选择备份文件",
       "fileSelected": "已选择: {name} ({size} MB)",
       "fileError": "请选择 .dump 格式的备份文件",
@@ -1180,10 +1233,18 @@
       "cancel": "取消",
       "confirm": "确认导入",
       "successMessage": "数据导入完成！",
-      "failedMessage": "数据导入失败，请查看详细日志",
+      "successCleanModeDesc": "所有数据已成功恢复。如果页面显示异常，请刷新浏览器。",
+      "successMergeModeDesc": "数据已成功导入并合并。如果页面显示异常，请刷新浏览器。",
+      "successWithWarnings": "数据导入完成（有警告）",
+      "successWithWarningsDesc": "数据已成功导入，但跳过了一些已存在的对象。如果页面显示异常，请刷新浏览器或重启应用。",
+      "failedMessage": "数据导入失败",
       "error": "导入数据库失败",
       "streamError": "无法读取响应流",
-      "errorUnknown": "未知错误"
+      "streamInterrupted": "数据流意外中断",
+      "streamInterruptedDesc": "导入进度未正常完成，请检查日志并验证数据完整性。如有问题，请重新导入。",
+      "parseError": "解析响应数据失败",
+      "errorUnknown": "未知错误",
+      "descriptionFull": "从备份文件恢复数据库。支持 PostgreSQL custom format (.dump) 格式的备份文件。"
     },
     "guide": {
       "title": "使用说明与注意事项",
@@ -1228,7 +1289,8 @@
         "description": "导出完整的数据库备份文件（.dump 格式），可用于数据迁移或恢复。"
       },
       "import": {
-        "title": "数据导入"
+        "title": "数据导入",
+        "description": "从备份文件恢复数据库。支持 PostgreSQL custom format (.dump) 格式的备份文件。"
       }
     }
   },
@@ -1376,10 +1438,10 @@
     "disable": "错误规则已禁用",
     "toggleFailed": "状态切换失败",
     "toggleFailedError": "状态切换失败:",
-    "refreshCache": "刷新缓存",
-    "refreshCacheSuccess": "缓存刷新成功，已加载 {count} 个错误规则",
-    "refreshCacheFailed": "刷新缓存失败",
-    "cacheStats": "缓存统计: 启用({enabledCount}) 禁用({disabledCount}) 默认({defaultCount})",
+    "refreshCache": "同步规则",
+    "refreshCacheSuccess": "规则同步成功，已加载 {count} 个错误规则",
+    "refreshCacheFailed": "同步规则失败",
+    "cacheStats": "缓存: 共 {totalCount} 条规则",
     "emptyState": "暂无错误规则，点击右上角\"添加错误规则\"开始配置。",
     "confirmDelete": "确定要删除错误规则\"{pattern}\"吗？",
     "dialog": {
@@ -1478,5 +1540,25 @@
       "cannotDelete": "默认规则无法删除",
       "cannotDisable": "建议保留默认规则启用状态"
     }
-  }
+  },
+  "mcpPassthroughConfig": "MCP 透传配置",
+  "mcpPassthroughConfigNone": "不启用",
+  "mcpPassthroughConfigMinimax": "Minimax",
+  "mcpPassthroughConfigGlm": "智谱 GLM",
+  "mcpPassthroughConfigCustom": "自定义 (预留)",
+  "mcpPassthroughDesc": "启用后，将 MCP 工具调用透传到指定的 AI 服务商（如 minimax 的图片识别、联网搜索）",
+  "mcpPassthroughSelect": "透传类型",
+  "mcpPassthroughNoneLabel": "不启用",
+  "mcpPassthroughNoneDesc": "不启用 MCP 透传功能（默认）",
+  "mcpPassthroughMinimaxLabel": "Minimax",
+  "mcpPassthroughMinimaxDesc": "透传到 minimax MCP 服务（支持图片识别、联网搜索等工具）",
+  "mcpPassthroughGlmLabel": "智谱 GLM",
+  "mcpPassthroughGlmDesc": "透传到智谱 GLM MCP 服务（支持图片分析、视频分析等工具）",
+  "mcpPassthroughCustomLabel": "自定义",
+  "mcpPassthroughCustomDesc": "透传到自定义 MCP 服务（预留，暂未实现）",
+  "mcpPassthroughHint": "提示: MCP 透传功能允许 Claude Code 客户端使用第三方 AI 服务商提供的工具能力（如图片识别、联网搜索）",
+  "mcpPassthroughUrlLabel": "MCP 透传 URL",
+  "mcpPassthroughUrlPlaceholder": "https://api.minimaxi.com",
+  "mcpPassthroughUrlDesc": "MCP 服务的基础 URL。留空则自动从提供商 URL 提取基础域名",
+  "mcpPassthroughUrlAuto": "自动提取: {url}"
 }

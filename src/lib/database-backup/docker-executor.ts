@@ -248,9 +248,13 @@ export function executePgRestore(
       });
 
       // 进程结束
-      pgProcess.on("close", (code: number | null) => {
+      pgProcess.on("close", async (code: number | null) => {
         // 智能错误分析
         const analysis = analyzeRestoreErrors(errorLines);
+
+        // 判断是否需要执行迁移（成功或可忽略错误）
+        const shouldRunMigrations =
+          code === 0 || (code === 1 && !analysis.hasFatalErrors && analysis.ignorableCount > 0);
 
         if (code === 0) {
           logger.info({
@@ -258,12 +262,11 @@ export function executePgRestore(
             database: dbConfig.database,
           });
 
-          const completeMessage = `data: ${JSON.stringify({
-            type: "complete",
+          const progressMessage = `data: ${JSON.stringify({
+            type: "progress",
             message: "数据导入成功！",
-            exitCode: code,
           })}\n\n`;
-          controller.enqueue(encoder.encode(completeMessage));
+          controller.enqueue(encoder.encode(progressMessage));
         } else if (code === 1 && !analysis.hasFatalErrors && analysis.ignorableCount > 0) {
           // 特殊处理：退出代码 1 但只有可忽略错误（对象已存在）
           logger.warn({
@@ -274,13 +277,11 @@ export function executePgRestore(
             analysis: analysis.summary,
           });
 
-          const completeMessage = `data: ${JSON.stringify({
-            type: "complete",
+          const progressMessage = `data: ${JSON.stringify({
+            type: "progress",
             message: analysis.summary,
-            exitCode: code,
-            warningCount: analysis.ignorableCount,
           })}\n\n`;
-          controller.enqueue(encoder.encode(completeMessage));
+          controller.enqueue(encoder.encode(progressMessage));
         } else {
           // 真正的失败
           logger.error({
@@ -298,6 +299,63 @@ export function executePgRestore(
             errorCount: analysis.fatalCount || errorLines.length,
           })}\n\n`;
           controller.enqueue(encoder.encode(errorMessage));
+          controller.close();
+          return;
+        }
+
+        // 如果数据导入成功，自动执行数据库迁移
+        if (shouldRunMigrations) {
+          try {
+            logger.info({
+              action: "pg_restore_running_migrations",
+              database: dbConfig.database,
+            });
+
+            const migrationsMessage = `data: ${JSON.stringify({
+              type: "progress",
+              message: "正在执行数据库迁移以同步 schema...",
+            })}\n\n`;
+            controller.enqueue(encoder.encode(migrationsMessage));
+
+            // 动态导入迁移函数
+            const { runMigrations } = await import("@/lib/migrate");
+            await runMigrations();
+
+            logger.info({
+              action: "pg_restore_migrations_complete",
+              database: dbConfig.database,
+            });
+
+            const migrationSuccessMessage = `data: ${JSON.stringify({
+              type: "progress",
+              message: "数据库迁移完成！",
+            })}\n\n`;
+            controller.enqueue(encoder.encode(migrationSuccessMessage));
+
+            // 发送最终完成消息
+            const completeMessage = `data: ${JSON.stringify({
+              type: "complete",
+              message: "数据导入和迁移全部完成！",
+              exitCode: code,
+              warningCount: analysis.ignorableCount || undefined,
+            })}\n\n`;
+            controller.enqueue(encoder.encode(completeMessage));
+          } catch (migrationError) {
+            logger.error({
+              action: "pg_restore_migrations_error",
+              database: dbConfig.database,
+              error:
+                migrationError instanceof Error ? migrationError.message : String(migrationError),
+            });
+
+            const errorMessage = `data: ${JSON.stringify({
+              type: "error",
+              message: `数据库迁移失败: ${
+                migrationError instanceof Error ? migrationError.message : String(migrationError)
+              }`,
+            })}\n\n`;
+            controller.enqueue(encoder.encode(errorMessage));
+          }
         }
 
         controller.close();

@@ -26,8 +26,13 @@ import {
   AlertDialogTitle as AlertTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import type { ProviderDisplay, ProviderType, CodexInstructionsStrategy } from "@/types/provider";
-import { validateNumericField, isValidUrl } from "@/lib/utils/validation";
+import type {
+  ProviderDisplay,
+  ProviderType,
+  CodexInstructionsStrategy,
+  McpPassthroughType,
+} from "@/types/provider";
+import { validateNumericField, isValidUrl, extractBaseUrl } from "@/lib/utils/validation";
 import { PROVIDER_DEFAULTS, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { toast } from "sonner";
 import { ModelMultiSelect } from "../model-multi-select";
@@ -162,6 +167,14 @@ export function ProviderForm({
   const [codexInstructionsStrategy, setCodexInstructionsStrategy] =
     useState<CodexInstructionsStrategy>(sourceProvider?.codexInstructionsStrategy ?? "auto");
 
+  // MCP 透传配置
+  const [mcpPassthroughType, setMcpPassthroughType] = useState<McpPassthroughType>(
+    sourceProvider?.mcpPassthroughType ?? "none"
+  );
+  const [mcpPassthroughUrl, setMcpPassthroughUrl] = useState<string>(
+    sourceProvider?.mcpPassthroughUrl || ""
+  );
+
   // 折叠区域状态管理
   type SectionKey =
     | "routing"
@@ -170,7 +183,8 @@ export function ProviderForm({
     | "proxy"
     | "timeout"
     | "apiTest"
-    | "codexStrategy";
+    | "codexStrategy"
+    | "mcpPassthrough";
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
     routing: false,
     rateLimit: false,
@@ -179,6 +193,7 @@ export function ProviderForm({
     timeout: false,
     apiTest: false,
     codexStrategy: false,
+    mcpPassthrough: false,
   });
 
   // 从 localStorage 加载折叠偏好
@@ -223,6 +238,7 @@ export function ProviderForm({
       timeout: true,
       apiTest: true,
       codexStrategy: true,
+      mcpPassthrough: true,
     });
   };
 
@@ -236,6 +252,7 @@ export function ProviderForm({
       timeout: false,
       apiTest: false,
       codexStrategy: false,
+      mcpPassthrough: false,
     });
   };
 
@@ -292,6 +309,8 @@ export function ProviderForm({
             request_timeout_non_streaming_ms?: number;
             website_url?: string | null;
             codex_instructions_strategy?: CodexInstructionsStrategy;
+            mcp_passthrough_type?: McpPassthroughType;
+            mcp_passthrough_url?: string | null;
             tpm?: number | null;
             rpm?: number | null;
             rpd?: number | null;
@@ -334,6 +353,8 @@ export function ProviderForm({
                 : undefined,
             website_url: websiteUrl.trim() || null,
             codex_instructions_strategy: codexInstructionsStrategy,
+            mcp_passthrough_type: mcpPassthroughType,
+            mcp_passthrough_url: mcpPassthroughUrl.trim() || null,
             tpm: null,
             rpm: null,
             rpd: null,
@@ -390,6 +411,8 @@ export function ProviderForm({
                 : PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS,
             website_url: websiteUrl.trim() || null,
             codex_instructions_strategy: codexInstructionsStrategy,
+            mcp_passthrough_type: mcpPassthroughType,
+            mcp_passthrough_url: mcpPassthroughUrl.trim() || null,
             tpm: null,
             rpm: null,
             rpd: null,
@@ -1109,7 +1132,7 @@ export function ProviderForm({
         </Collapsible>
 
         {/* 超时配置 */}
-        <Collapsible open={openSections.timeout} onOpenChange={(open) => toggleSection("timeout")}>
+        <Collapsible open={openSections.timeout} onOpenChange={() => toggleSection("timeout")}>
           <CollapsibleTrigger asChild>
             <button
               type="button"
@@ -1179,7 +1202,7 @@ export function ProviderForm({
                     placeholder={t("sections.timeout.streamingFirstByte.placeholder")}
                     disabled={isPending}
                     min="0"
-                    max="120"
+                    max="180"
                     step="1"
                     className="border-orange-200 focus:border-orange-500 focus:ring-orange-500"
                   />
@@ -1211,7 +1234,7 @@ export function ProviderForm({
                     placeholder={t("sections.timeout.streamingIdle.placeholder")}
                     disabled={isPending}
                     min="0"
-                    max="120"
+                    max="600"
                     step="1"
                     className="border-orange-200 focus:border-orange-500 focus:ring-orange-500"
                   />
@@ -1244,7 +1267,7 @@ export function ProviderForm({
                     placeholder={t("sections.timeout.nonStreamingTotal.placeholder")}
                     disabled={isPending}
                     min="0"
-                    max="1200"
+                    max="1800"
                     step="1"
                   />
                   <p className="text-xs text-muted-foreground">
@@ -1387,7 +1410,6 @@ export function ProviderForm({
                   enableMultiProviderTypes={enableMultiProviderTypes}
                   disabled={isPending || !url.trim()}
                 />
-                <p className="text-xs text-muted-foreground">{t("sections.apiTest.notice")}</p>
               </div>
             </div>
           </CollapsibleContent>
@@ -1485,6 +1507,126 @@ export function ProviderForm({
             </CollapsibleContent>
           </Collapsible>
         )}
+
+        {/* MCP 透传配置 */}
+        <Collapsible
+          open={openSections.mcpPassthrough}
+          onOpenChange={() => toggleSection("mcpPassthrough")}
+        >
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="flex items-center justify-between w-full py-4 border-t hover:bg-muted/50 transition-colors"
+              disabled={isPending}
+            >
+              <div className="flex items-center gap-2">
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${
+                    openSections.mcpPassthrough ? "rotate-180" : ""
+                  }`}
+                />
+                <span className="text-sm font-medium">{t("sections.mcpPassthrough.title")}</span>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {mcpPassthroughType === "none" && t("sections.mcpPassthrough.summary.none")}
+                {mcpPassthroughType === "minimax" && t("sections.mcpPassthrough.summary.minimax")}
+                {mcpPassthroughType === "glm" && t("sections.mcpPassthrough.summary.glm")}
+                {mcpPassthroughType === "custom" && t("sections.mcpPassthrough.summary.custom")}
+              </span>
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-4 pb-4">
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">{t("sections.mcpPassthrough.desc")}</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor={isEdit ? "edit-mcp-passthrough" : "mcp-passthrough"}>
+                  {t("sections.mcpPassthrough.select.label")}
+                </Label>
+                <Select
+                  value={mcpPassthroughType}
+                  onValueChange={(value) => setMcpPassthroughType(value as McpPassthroughType)}
+                  disabled={isPending}
+                >
+                  <SelectTrigger id={isEdit ? "edit-mcp-passthrough" : "mcp-passthrough"}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">
+                      <div className="space-y-1">
+                        <div className="font-medium">
+                          {t("sections.mcpPassthrough.select.none.label")}
+                        </div>
+                        <div className="text-xs text-muted-foreground max-w-xs">
+                          {t("sections.mcpPassthrough.select.none.desc")}
+                        </div>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="minimax">
+                      <div className="space-y-1">
+                        <div className="font-medium">
+                          {t("sections.mcpPassthrough.select.minimax.label")}
+                        </div>
+                        <div className="text-xs text-muted-foreground max-w-xs">
+                          {t("sections.mcpPassthrough.select.minimax.desc")}
+                        </div>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="glm">
+                      <div className="space-y-1">
+                        <div className="font-medium">
+                          {t("sections.mcpPassthrough.select.glm.label")}
+                        </div>
+                        <div className="text-xs text-muted-foreground max-w-xs">
+                          {t("sections.mcpPassthrough.select.glm.desc")}
+                        </div>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="custom">
+                      <div className="space-y-1">
+                        <div className="font-medium">
+                          {t("sections.mcpPassthrough.select.custom.label")}
+                        </div>
+                        <div className="text-xs text-muted-foreground max-w-xs">
+                          {t("sections.mcpPassthrough.select.custom.desc")}
+                        </div>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">{t("sections.mcpPassthrough.hint")}</p>
+              </div>
+
+              {/* MCP 透传 URL 配置 */}
+              {mcpPassthroughType !== "none" && (
+                <div className="space-y-2">
+                  <Label htmlFor={isEdit ? "edit-mcp-passthrough-url" : "mcp-passthrough-url"}>
+                    {t("sections.mcpPassthrough.urlLabel")}
+                  </Label>
+                  <Input
+                    id={isEdit ? "edit-mcp-passthrough-url" : "mcp-passthrough-url"}
+                    value={mcpPassthroughUrl}
+                    onChange={(e) => setMcpPassthroughUrl(e.target.value)}
+                    placeholder={t("sections.mcpPassthrough.urlPlaceholder")}
+                    disabled={isPending}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t("sections.mcpPassthrough.urlDesc")}
+                  </p>
+                  {!mcpPassthroughUrl && url && (
+                    <p className="text-xs text-muted-foreground">
+                      {t("sections.mcpPassthrough.urlAuto", {
+                        url: extractBaseUrl(url),
+                      })}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
 
         {isEdit ? (
           <div className="flex items-center justify-between pt-4">

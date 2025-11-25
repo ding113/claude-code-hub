@@ -149,7 +149,6 @@
   },
   "data": {
     "cleanup": {
-      "descriptionWarning": "履歴ログデータをクリーンアップしてデータベースストレージを解放します。注：統計データは保持されますが、ログ詳細は完全に削除されます。",
       "rangeLabel": "クリーンアップ範囲",
       "range": {
         "7days": "1週間前のログ（7日）",
@@ -179,16 +178,17 @@
       "cleaning": "クリーンアップ中...",
       "successMessage": "{count}件のログレコードをクリーンアップしました（{batches}バッチ、所要時間{duration}秒）",
       "failed": "クリーンアップ失敗",
-      "error": "ログのクリーンアップに失敗しました"
+      "error": "ログのクリーンアップに失敗しました",
+      "descriptionWarning": "履歴ログデータをクリーンアップしてデータベースストレージを解放します。注：統計データは保持されますが、ログ詳細は完全に削除されます。"
     },
     "description": "データベースのバックアップと復元を管理し、完全なインポート/エクスポートとログクリーンアップをサポートします。",
     "export": {
-      "descriptionFull": "完全なデータベースバックアップファイル（.dump形式）をエクスポートし、データ移行または復旧に使用できます。バックアップはPostgreSQL custom formatを使用し、自動圧縮され、異なるデータベースバージョンと互換性があります。",
       "button": "データベースをエクスポート",
       "exporting": "エクスポート中...",
       "successMessage": "データベースのエクスポートに成功しました！",
       "failed": "エクスポート失敗",
-      "error": "データベースのエクスポートに失敗しました"
+      "error": "データベースのエクスポートに失敗しました",
+      "descriptionFull": "完全なデータベースバックアップファイル（.dump形式）をエクスポートし、データ移行または復旧に使用できます。バックアップはPostgreSQL custom formatを使用し、自動圧縮され、異なるデータベースバージョンと互換性があります。"
     },
     "guide": {
       "title": "使用説明と注意事項",
@@ -220,7 +220,6 @@
       }
     },
     "import": {
-      "descriptionFull": "バックアップファイルからデータベースを復元します。PostgreSQL custom format（.dump）形式のバックアップファイルをサポートします。",
       "selectFileLabel": "バックアップファイルを選択",
       "fileSelected": "選択済み：{name}（{size} MB）",
       "fileError": ".dump形式のバックアップファイルを選択してください",
@@ -243,7 +242,8 @@
       "failedMessage": "データインポート失敗、詳細ログを確認してください",
       "error": "データベースのインポートに失敗しました",
       "streamError": "レスポンスストリームを読み取れません",
-      "errorUnknown": "不明なエラー"
+      "errorUnknown": "不明なエラー",
+      "descriptionFull": "バックアップファイルからデータベースを復元します。PostgreSQL custom format（.dump）形式のバックアップファイルをサポートします。"
     },
     "status": {
       "loading": "読み込み中...",
@@ -268,7 +268,8 @@
         "description": "完全なデータベースバックアップファイル（.dump形式）をエクスポートし、データ移行または復旧に使用できます。"
       },
       "import": {
-        "title": "データインポート"
+        "title": "データインポート",
+        "description": "バックアップファイルからデータベースを復元します。PostgreSQL custom format（.dump）形式のバックアップファイルをサポートします。"
       }
     }
   },
@@ -1319,10 +1320,10 @@
     "disable": "エラールールが無効になりました",
     "toggleFailed": "切り替えに失敗しました",
     "toggleFailedError": "切り替えに失敗しました:",
-    "refreshCache": "キャッシュを更新",
-    "refreshCacheSuccess": "キャッシュが正常に更新され、{count} 個のエラールールがロードされました",
-    "refreshCacheFailed": "キャッシュの更新に失敗しました",
-    "cacheStats": "キャッシュ統計: 有効({enabledCount}) 無効({disabledCount}) デフォルト({defaultCount})",
+    "refreshCache": "ルールを同期",
+    "refreshCacheSuccess": "ルールが正常に同期され、{count} 個のエラールールがロードされました",
+    "refreshCacheFailed": "ルールの同期に失敗しました",
+    "cacheStats": "キャッシュ: {totalCount}件のルール",
     "emptyState": "エラールールがまだありません。右上の「エラールールを追加」をクリックして設定を開始してください。",
     "confirmDelete": "エラールール \"{pattern}\" を削除してもよろしいですか？",
     "dialog": {
@@ -1421,5 +1422,25 @@
       "cannotDelete": "デフォルトルールは削除できません",
       "cannotDisable": "デフォルトルールは有効のままにすることをお勧めします"
     }
-  }
+  },
+  "mcpPassthroughConfig": "MCP パススルー設定",
+  "mcpPassthroughConfigNone": "無効",
+  "mcpPassthroughConfigMinimax": "Minimax",
+  "mcpPassthroughConfigGlm": "GLM",
+  "mcpPassthroughConfigCustom": "カスタム (予約)",
+  "mcpPassthroughDesc": "有効にすると、MCP ツール呼び出しを指定された AI プロバイダにパススルーします（例：minimax の画像認識、Web 検索）",
+  "mcpPassthroughSelect": "パススルータイプ",
+  "mcpPassthroughNoneLabel": "無効",
+  "mcpPassthroughNoneDesc": "MCP パススルーを有効にしません（デフォルト）",
+  "mcpPassthroughMinimaxLabel": "Minimax",
+  "mcpPassthroughMinimaxDesc": "minimax MCP サービスにパススルー（画像認識、Web 検索などをサポート）",
+  "mcpPassthroughGlmLabel": "GLM",
+  "mcpPassthroughGlmDesc": "GLM MCP サービスにパススルー（画像分析、動画分析などをサポート）",
+  "mcpPassthroughCustomLabel": "カスタム",
+  "mcpPassthroughCustomDesc": "カスタム MCP サービスにパススルー（予約、未実装）",
+  "mcpPassthroughHint": "ヒント: MCP パススルーにより、Claude Code クライアントは第三者の AI プロバイダ提供的ツール機能（画像認識、Web 検索など）を使用できます",
+  "mcpPassthroughUrlLabel": "MCP パススルー URL",
+  "mcpPassthroughUrlPlaceholder": "https://api.minimaxi.com",
+  "mcpPassthroughUrlDesc": "MCP サービスベース URL。空のままにすると、プロバイダ URL から自動的に抽出されます",
+  "mcpPassthroughUrlAuto": "自動抽出: {url}"
 }

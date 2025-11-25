@@ -149,7 +149,6 @@
   },
   "data": {
     "cleanup": {
-      "descriptionWarning": "Clean up historical log data to free up database storage. Note: Statistics data will be retained, but log details will be permanently deleted.",
       "rangeLabel": "Cleanup Range",
       "range": {
         "7days": "Logs older than 1 week (7 days)",
@@ -179,16 +178,17 @@
       "cleaning": "Cleaning...",
       "successMessage": "Successfully cleaned {count} log records ({batches} batches, took {duration}s)",
       "failed": "Cleanup failed",
-      "error": "Failed to clean logs"
+      "error": "Failed to clean logs",
+      "descriptionWarning": "Clean up historical log data to free up database storage. Note: Statistics data will be retained, but log details will be permanently deleted."
     },
     "description": "Manage database backup and recovery with full data import/export and log cleanup.",
     "export": {
-      "descriptionFull": "Export complete database backup file (.dump format) for data migration or recovery. Backup uses PostgreSQL custom format, auto-compressed and compatible with different database versions.",
       "button": "Export Database",
       "exporting": "Exporting...",
       "successMessage": "Database exported successfully!",
       "failed": "Export failed",
-      "error": "Failed to export database"
+      "error": "Failed to export database",
+      "descriptionFull": "Export complete database backup file (.dump format) for data migration or recovery. Backup uses PostgreSQL custom format, auto-compressed and compatible with different database versions."
     },
     "guide": {
       "title": "Usage Instructions and Precautions",
@@ -220,7 +220,6 @@
       }
     },
     "import": {
-      "descriptionFull": "Restore database from backup file. Supports PostgreSQL custom format (.dump) backup files.",
       "selectFileLabel": "Select Backup File",
       "fileSelected": "Selected: {name} ({size} MB)",
       "fileError": "Please select .dump format backup file",
@@ -240,10 +239,18 @@
       "cancel": "Cancel",
       "confirm": "Confirm Import",
       "successMessage": "Data import completed!",
-      "failedMessage": "Data import failed, check detailed logs",
+      "successCleanModeDesc": "All data has been successfully restored. Refresh your browser if the page displays incorrectly.",
+      "successMergeModeDesc": "Data has been successfully imported and merged. Refresh your browser if the page displays incorrectly.",
+      "successWithWarnings": "Data import completed (with warnings)",
+      "successWithWarningsDesc": "Data has been successfully imported, but some existing objects were skipped. Refresh your browser or restart the application if the page displays incorrectly.",
+      "failedMessage": "Data import failed",
       "error": "Failed to import database",
       "streamError": "Cannot read response stream",
-      "errorUnknown": "Unknown error"
+      "streamInterrupted": "Data stream unexpectedly interrupted",
+      "streamInterruptedDesc": "Import progress did not complete normally. Please check the logs and verify data integrity. Re-import if needed.",
+      "parseError": "Failed to parse response data",
+      "errorUnknown": "Unknown error",
+      "descriptionFull": "Restore database from backup file. Supports PostgreSQL custom format (.dump) backup files."
     },
     "status": {
       "loading": "Loading...",
@@ -268,7 +275,8 @@
         "description": "Export complete database backup file (.dump format) for data migration or recovery."
       },
       "import": {
-        "title": "Data Import"
+        "title": "Data Import",
+        "description": "Restore database from backup file. Supports PostgreSQL custom format (.dump) backup files."
       }
     }
   },
@@ -599,6 +607,7 @@
         "testModel": "Test model",
         "testModelDesc": "Leave empty to use the default model or type one manually",
         "model": "Model",
+        "responseModel": "Response model",
         "responseTime": "Response time",
         "usage": "Token usage",
         "response": "Response preview",
@@ -608,8 +617,27 @@
         "copySuccess": "Copied to clipboard",
         "copyFailed": "Failed to copy",
         "copyResult": "Copy Result",
+        "close": "Close",
         "success": "Success",
-        "failed": "Failed"
+        "failed": "Failed",
+        "streamInfo": "Stream response info",
+        "chunksReceived": "Chunks received",
+        "streamFormat": "Stream format",
+        "streamResponse": "Stream response",
+        "chunksCount": "Received {count} chunks ({format})",
+        "truncatedPreview": "Showing first {length} characters, copy to see full content",
+        "truncatedBrief": "Showing first {length} characters, click \"View Details\" for more",
+        "copyFormat": {
+          "testResult": "Test result",
+          "message": "Message",
+          "errorDetails": "Error details"
+        },
+        "disclaimer": {
+          "title": "Notice",
+          "realRequest": "This test sends a real request to the provider and may consume a small quota",
+          "resultReference": "Results may vary by provider and are for reference only",
+          "confirmConfig": "Please verify provider URL, API key, and model configuration"
+        }
       },
       "proxyTest": {
         "fillUrlFirst": "Please fill in provider URL first",
@@ -704,6 +732,22 @@
       "codexStrategyForceDesc": "Always use official Codex CLI instructions (~4000+ chars)",
       "codexStrategyForceLabel": "Force Official",
       "codexStrategyHint": "Hint: Some strict Codex gateways (e.g. 88code, foxcode) require official instructions. Choose \"Auto\" or \"Force Official\" strategy",
+      "mcpPassthroughConfig": "MCP Passthrough Configuration",
+      "mcpPassthroughConfigMinimax": "Minimax",
+      "mcpPassthroughConfigGlm": "GLM",
+      "mcpPassthroughConfigCustom": "Custom (Reserved)",
+      "mcpPassthroughConfigNone": "Disabled",
+      "mcpPassthroughDesc": "When enabled, pass through MCP tool calls to specified AI provider (e.g. minimax for image recognition, web search)",
+      "mcpPassthroughSelect": "Passthrough Type",
+      "mcpPassthroughNoneLabel": "Disabled",
+      "mcpPassthroughNoneDesc": "Do not enable MCP passthrough (default)",
+      "mcpPassthroughMinimaxLabel": "Minimax",
+      "mcpPassthroughMinimaxDesc": "Pass through to minimax MCP service (supports image recognition, web search, etc.)",
+      "mcpPassthroughGlmLabel": "GLM",
+      "mcpPassthroughGlmDesc": "Pass through to GLM MCP service (supports image analysis, video analysis, etc.)",
+      "mcpPassthroughCustomLabel": "Custom",
+      "mcpPassthroughCustomDesc": "Pass through to custom MCP service (reserved, not implemented yet)",
+      "mcpPassthroughHint": "Hint: MCP passthrough allows Claude Code client to use tool capabilities provided by third-party AI providers (e.g. image recognition, web search)",
       "codexStrategyKeepDesc": "Always pass through client instructions, no auto retry (for lenient gateways)",
       "codexStrategyKeepLabel": "Keep Original",
       "codexStrategySelect": "Strategy Selection",
@@ -1080,8 +1124,7 @@
           "title": "Provider Model Test",
           "summary": "Verify provider & model connectivity",
           "desc": "Validate whether the selected provider type and model respond correctly. Defaults to the routing configuration unless overridden.",
-          "testLabel": "Provider Model Test",
-          "notice": "Note: This sends a real non-streaming request and may consume a small quota. Confirm provider URL, API key, and model before running."
+          "testLabel": "Provider Model Test"
         },
         "codexStrategy": {
           "title": "Codex Instructions Policy",
@@ -1376,10 +1419,10 @@
     "disable": "Error rule disabled",
     "toggleFailed": "Toggle failed",
     "toggleFailedError": "Toggle failed:",
-    "refreshCache": "Refresh Cache",
-    "refreshCacheSuccess": "Cache refreshed successfully, loaded {count} error rules",
-    "refreshCacheFailed": "Failed to refresh cache",
-    "cacheStats": "Cache stats: Enabled({enabledCount}) Disabled({disabledCount}) Default({defaultCount})",
+    "refreshCache": "Sync Rules",
+    "refreshCacheSuccess": "Rules synced successfully, loaded {count} error rules",
+    "refreshCacheFailed": "Failed to sync rules",
+    "cacheStats": "Cached {totalCount} error rules",
     "emptyState": "No error rules yet. Click 'Add Error Rule' in the top right to start configuration.",
     "confirmDelete": "Are you sure you want to delete error rule \"{pattern}\"?",
     "dialog": {
@@ -1478,5 +1521,25 @@
       "cannotDelete": "Default rules cannot be deleted",
       "cannotDisable": "Recommend keeping default rules enabled"
     }
-  }
+  },
+  "mcpPassthroughConfig": "MCP Passthrough Configuration",
+  "mcpPassthroughConfigNone": "Disabled",
+  "mcpPassthroughConfigMinimax": "Minimax",
+  "mcpPassthroughConfigGlm": "GLM",
+  "mcpPassthroughConfigCustom": "Custom (Reserved)",
+  "mcpPassthroughDesc": "When enabled, pass through MCP tool calls to specified AI provider (e.g. minimax for image recognition, web search)",
+  "mcpPassthroughSelect": "Passthrough Type",
+  "mcpPassthroughNoneLabel": "Disabled",
+  "mcpPassthroughNoneDesc": "Do not enable MCP passthrough (default)",
+  "mcpPassthroughMinimaxLabel": "Minimax",
+  "mcpPassthroughMinimaxDesc": "Pass through to minimax MCP service (supports image recognition, web search, etc.)",
+  "mcpPassthroughGlmLabel": "GLM",
+  "mcpPassthroughGlmDesc": "Pass through to GLM MCP service (supports image analysis, video analysis, etc.)",
+  "mcpPassthroughCustomLabel": "Custom",
+  "mcpPassthroughCustomDesc": "Pass through to custom MCP service (reserved, not implemented yet)",
+  "mcpPassthroughHint": "Hint: MCP passthrough allows Claude Code client to use tool capabilities provided by third-party AI providers (e.g. image recognition, web search)",
+  "mcpPassthroughUrlLabel": "MCP Passthrough URL",
+  "mcpPassthroughUrlPlaceholder": "https://api.minimaxi.com",
+  "mcpPassthroughUrlDesc": "MCP service base URL. Leave empty to auto-extract from provider URL",
+  "mcpPassthroughUrlAuto": "Auto-extracted: {url}"
 }

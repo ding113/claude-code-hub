@@ -26,28 +26,64 @@ export class ModelRedirector {
     // 获取原始模型名称
     const originalModel = session.request.model;
     if (!originalModel) {
-      logger.debug("[ModelRedirector] No model found in request, skipping redirect");
+      logger.debug("[ModelRedirector] No model in request, skipping redirect", {
+        providerId: provider.id,
+        providerName: provider.name,
+      });
       return false;
     }
 
     // 检查是否有该模型的重定向配置
     const redirectedModel = provider.modelRedirects[originalModel];
     if (!redirectedModel) {
-      logger.debug(
-        `[ModelRedirector] No redirect configured for model "${originalModel}" in provider ${provider.id}`
-      );
+      logger.debug("[ModelRedirector] No redirect configured for model", {
+        model: originalModel,
+        providerId: provider.id,
+        providerName: provider.name,
+      });
       return false;
     }
 
     // 执行重定向
-    logger.info(
-      `[ModelRedirector] Redirecting model: "${originalModel}" → "${redirectedModel}" (provider ${provider.id})`
-    );
+    logger.info("[ModelRedirector] Model redirected", {
+      originalModel,
+      redirectedModel,
+      providerId: provider.id,
+      providerName: provider.name,
+      providerType: provider.providerType,
+    });
 
     // 保存原始模型（用于计费，必须在修改 request.model 之前）
     session.setOriginalModel(originalModel);
 
-    // 修改 message 对象中的模型
+    // Gemini 特殊处理：修改 URL 路径中的模型名称
+    // Gemini API 的模型名称通过 URL 路径传递，不是通过 request body
+    // 例如：/v1internal/models/gemini-2.5-flash:generateContent
+    if (provider.providerType === "gemini" || provider.providerType === "gemini-cli") {
+      const originalPath = session.requestUrl.pathname;
+      // 替换 URL 中的模型名称
+      // 匹配模式：/models/{model}:action 或 /models/{model}
+      const newPath = originalPath.replace(
+        /\/models\/([^/:]+)(:[^/]+)?$/,
+        `/models/${redirectedModel}$2`
+      );
+
+      if (newPath !== originalPath) {
+        // 创建新的 URL 对象并修改路径
+        const newUrl = new URL(session.requestUrl.toString());
+        newUrl.pathname = newPath;
+        session.requestUrl = newUrl;
+
+        logger.debug(`[ModelRedirector] Updated Gemini URL path`, {
+          originalPath,
+          newPath,
+          originalModel,
+          redirectedModel,
+        });
+      }
+    }
+
+    // 修改 message 对象中的模型（对 Claude/OpenAI 有效，对 Gemini 无效但不影响）
     session.request.message.model = redirectedModel;
 
     // 更新缓存的 model 字段
@@ -70,9 +106,11 @@ export class ModelRedirector {
         redirectedModel: redirectedModel,
         billingModel: originalModel, // 始终使用原始模型计费
       };
-      logger.debug(
-        `[ModelRedirector] Added modelRedirect to provider chain for provider ${provider.id}`
-      );
+      logger.debug("[ModelRedirector] Added modelRedirect to provider chain", {
+        providerId: provider.id,
+        originalModel,
+        redirectedModel,
+      });
     }
 
     return true;

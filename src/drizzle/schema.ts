@@ -26,7 +26,7 @@ export const users = pgTable('users', {
   rpmLimit: integer('rpm_limit').default(60),
   dailyLimitUsd: numeric('daily_limit_usd', { precision: 10, scale: 2 }).default('100.00'),
   providerGroup: varchar('provider_group', { length: 50 }),
-  
+
   // New user-level quota fields (nullable for backward compatibility)
   limit5hUsd: numeric('limit_5h_usd', { precision: 10, scale: 2 }),
   limitWeeklyUsd: numeric('limit_weekly_usd', { precision: 10, scale: 2 }),
@@ -126,6 +126,21 @@ export const providers = pgTable('providers', {
     .default('auto')
     .$type<'auto' | 'force_official' | 'keep_original'>(),
 
+  // MCP 透传类型：控制是否启用 MCP 透传功能
+  // - 'none' (默认): 不启用 MCP 透传
+  // - 'minimax': 透传到 minimax MCP 服务（图片识别、联网搜索）
+  // - 'glm': 透传到智谱 MCP 服务（预留）
+  // - 'custom': 自定义 MCP 服务（预留）
+  mcpPassthroughType: varchar('mcp_passthrough_type', { length: 20 })
+    .notNull()
+    .default('none')
+    .$type<'none' | 'minimax' | 'glm' | 'custom'>(),
+
+  // MCP 透传 URL：MCP 服务的基础 URL
+  // 如果未配置，则自动从 provider.url 提取基础域名
+  // 例如：https://api.minimaxi.com/anthropic -> https://api.minimaxi.com
+  mcpPassthroughUrl: varchar('mcp_passthrough_url', { length: 512 }),
+
   // 金额限流配置
   limit5hUsd: numeric('limit_5h_usd', { precision: 10, scale: 2 }),
   limitDailyUsd: numeric('limit_daily_usd', { precision: 10, scale: 2 }),
@@ -154,15 +169,16 @@ export const providers = pgTable('providers', {
   // - firstByteTimeoutStreamingMs: 流式请求首字节超时（默认 30 秒，0 = 禁用）⭐ 核心
   //   覆盖从请求开始到收到首字节的全过程：DNS + TCP + TLS + 请求发送 + 首字节接收
   //   解决流式请求重试缓慢问题
-  // - streamingIdleTimeoutMs: 流式请求静默期超时（默认 10 秒，0 = 禁用）⭐ 核心
+  // - streamingIdleTimeoutMs: 流式请求静默期超时（默认 0 = 不限制）⭐ 核心
   //   解决流式中途卡住问题
-  // - requestTimeoutNonStreamingMs: 非流式请求总超时（默认 600 秒，0 = 禁用）⭐ 核心
+  //   注意：配置非 0 值时，最小必须为 60 秒
+  // - requestTimeoutNonStreamingMs: 非流式请求总超时（默认 0 = 不限制）⭐ 核心
   //   防止长请求无限挂起
-  firstByteTimeoutStreamingMs: integer('first_byte_timeout_streaming_ms').notNull().default(30000),
-  streamingIdleTimeoutMs: integer('streaming_idle_timeout_ms').notNull().default(10000),
+  firstByteTimeoutStreamingMs: integer('first_byte_timeout_streaming_ms').notNull().default(0),
+  streamingIdleTimeoutMs: integer('streaming_idle_timeout_ms').notNull().default(0),
   requestTimeoutNonStreamingMs: integer('request_timeout_non_streaming_ms')
     .notNull()
-    .default(600000),
+    .default(0),
 
   // 供应商官网地址（用于快速跳转管理）
   websiteUrl: text('website_url'),

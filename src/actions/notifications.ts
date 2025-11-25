@@ -25,7 +25,7 @@ function isInternalUrl(urlString: string): boolean {
     // 解析 IPv4 地址
     const ipv4Match = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
     if (ipv4Match) {
-      const [, a, b, c] = ipv4Match.map(Number);
+      const [, a, b] = ipv4Match.map(Number);
       // 私有 IP 范围
       if (a === 127) return true; // 127.0.0.0/8 (loopback range)
       if (a === 10) return true; // 10.0.0.0/8

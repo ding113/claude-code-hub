@@ -8,12 +8,7 @@ All notable changes to this project will be documented in this file.
 
 - Add real-time monitoring big screen dashboard with live metrics, 24h trends, provider slots status, and activity stream (#184) @ding113
 - Add dark mode support with theme switcher in Dashboard and settings pages (#171) @ding113
-- Add dark mode support to provider quota management page (#170) @ding113
-
-### Changed
-
-- Merge dev to main with internationalization improvements (Japanese, Russian, Traditional Chinese) and UI enhancements for daily limit dialogs (#182) @ding113
-- Refactor provider quota management page from card layout to compact list layout with circular progress indicators, search, and sorting capabilities (#170) @ding113
+- Add MCP (Model Context Protocol) passthrough functionality to forward tool calls to third-party AI services (#193) @ding113
 
 ### Changed
 

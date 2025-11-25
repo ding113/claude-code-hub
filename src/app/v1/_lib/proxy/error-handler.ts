@@ -153,6 +153,7 @@ export class ProxyErrorHandler {
       errorMessage: finalErrorMessage,
       providerChain: session.getProviderChain(),
       statusCode: statusCode,
+      model: session.getCurrentModel() ?? undefined,
     });
 
     // 记录请求结束

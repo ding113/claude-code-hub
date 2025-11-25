@@ -21,24 +21,27 @@ export const PROVIDER_DEFAULTS = {
 
 /**
  * 供应商超时配置常量（毫秒）
+ *
+ * 注意：0 表示禁用超时（Infinity），不受 MIN/MAX 限制
  */
 export const PROVIDER_TIMEOUT_LIMITS = {
-  // 流式请求首字节超时：1-120 秒（1000-120000 毫秒）
+  // 流式请求首字节超时：1-180 秒（1000-180000 毫秒）
   // 核心：解决流式请求重试缓慢问题
-  FIRST_BYTE_TIMEOUT_STREAMING_MS: { MIN: 1000, MAX: 120000 },
-  // 流式请求静默期超时：1-120 秒（1000-120000 毫秒）
+  FIRST_BYTE_TIMEOUT_STREAMING_MS: { MIN: 1000, MAX: 180000 },
+  // 流式请求静默期超时：60-600 秒（60000-600000 毫秒）
   // 核心：解决流式中途卡住问题
-  STREAMING_IDLE_TIMEOUT_MS: { MIN: 1000, MAX: 120000 },
-  // 非流式请求总超时：60-1200 秒（60000-1200000 毫秒）
+  // 注意：配置非 0 值时，最小必须为 60 秒
+  STREAMING_IDLE_TIMEOUT_MS: { MIN: 60000, MAX: 600000 },
+  // 非流式请求总超时：60-1800 秒（60000-1800000 毫秒）
   // 核心：防止长请求无限挂起
-  REQUEST_TIMEOUT_NON_STREAMING_MS: { MIN: 60000, MAX: 1200000 },
+  REQUEST_TIMEOUT_NON_STREAMING_MS: { MIN: 60000, MAX: 1800000 },
 } as const;
 
 export const PROVIDER_TIMEOUT_DEFAULTS = {
-  // 流式首字节超时默认 30 秒（快速失败）
-  FIRST_BYTE_TIMEOUT_STREAMING_MS: 30000,
-  // 流式静默期超时默认 10 秒（防止中途卡住）
-  STREAMING_IDLE_TIMEOUT_MS: 10000,
-  // 非流式总超时默认 600 秒（10 分钟）
-  REQUEST_TIMEOUT_NON_STREAMING_MS: 600000,
+  // 流式首字节超时默认 0（不限制）
+  FIRST_BYTE_TIMEOUT_STREAMING_MS: 0,
+  // 流式静默期超时默认 0（不限制）
+  STREAMING_IDLE_TIMEOUT_MS: 0,
+  // 非流式总超时默认 0（不限制）
+  REQUEST_TIMEOUT_NON_STREAMING_MS: 0,
 } as const;

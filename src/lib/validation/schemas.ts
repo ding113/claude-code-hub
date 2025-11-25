@@ -189,6 +189,38 @@ export const CreateProviderSchema = z.object({
     .enum(["auto", "force_official", "keep_original"])
     .optional()
     .default("auto"),
+  // MCP 透传配置
+  mcp_passthrough_type: z.enum(["none", "minimax", "glm", "custom"]).optional().default("none"),
+  mcp_passthrough_url: z
+    .string()
+    .max(512, "MCP透传URL长度不能超过512个字符")
+    .url("请输入有效的URL地址")
+    .refine(
+      (url) => {
+        try {
+          const parsed = new URL(url);
+          const hostname = parsed.hostname;
+          // Block localhost
+          if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1")
+            return false;
+          // Block private IP ranges
+          // 10.0.0.0/8
+          if (hostname.startsWith("10.")) return false;
+          // 192.168.0.0/16
+          if (hostname.startsWith("192.168.")) return false;
+          // 172.16.0.0/12
+          if (hostname.match(/^172\.(1[6-9]|2[0-9]|3[0-1])\./)) return false;
+          // 169.254.0.0/16 (Link-local)
+          if (hostname.startsWith("169.254.")) return false;
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      { message: "不允许使用内部网络地址 (SSRF Protection)" }
+    )
+    .nullable()
+    .optional(),
   // 金额限流配置
   limit_5h_usd: z.coerce
     .number()
@@ -263,7 +295,7 @@ export const CreateProviderSchema = z.object({
         )
         .max(
           PROVIDER_TIMEOUT_LIMITS.FIRST_BYTE_TIMEOUT_STREAMING_MS.MAX,
-          "流式首字节超时不能超过120秒"
+          "流式首字节超时不能超过180秒"
         ),
     ])
     .optional(),
@@ -273,8 +305,8 @@ export const CreateProviderSchema = z.object({
       z.coerce
         .number()
         .int("流式静默期超时必须是整数")
-        .min(PROVIDER_TIMEOUT_LIMITS.STREAMING_IDLE_TIMEOUT_MS.MIN, "流式静默期超时不能少于1秒")
-        .max(PROVIDER_TIMEOUT_LIMITS.STREAMING_IDLE_TIMEOUT_MS.MAX, "流式静默期超时不能超过120秒"),
+        .min(PROVIDER_TIMEOUT_LIMITS.STREAMING_IDLE_TIMEOUT_MS.MIN, "流式静默期超时不能少于60秒")
+        .max(PROVIDER_TIMEOUT_LIMITS.STREAMING_IDLE_TIMEOUT_MS.MAX, "流式静默期超时不能超过600秒"),
     ])
     .optional(),
   request_timeout_non_streaming_ms: z
@@ -289,7 +321,7 @@ export const CreateProviderSchema = z.object({
         )
         .max(
           PROVIDER_TIMEOUT_LIMITS.REQUEST_TIMEOUT_NON_STREAMING_MS.MAX,
-          "非流式总超时不能超过1200秒"
+          "非流式总超时不能超过1800秒"
         ),
     ])
     .optional(),
@@ -339,6 +371,38 @@ export const UpdateProviderSchema = z
     allowed_models: z.array(z.string()).nullable().optional(),
     join_claude_pool: z.boolean().optional(),
     codex_instructions_strategy: z.enum(["auto", "force_official", "keep_original"]).optional(),
+    // MCP 透传配置
+    mcp_passthrough_type: z.enum(["none", "minimax", "glm", "custom"]).optional(),
+    mcp_passthrough_url: z
+      .string()
+      .max(512, "MCP透传URL长度不能超过512个字符")
+      .url("请输入有效的URL地址")
+      .refine(
+        (url) => {
+          try {
+            const parsed = new URL(url);
+            const hostname = parsed.hostname;
+            // Block localhost
+            if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1")
+              return false;
+            // Block private IP ranges
+            // 10.0.0.0/8
+            if (hostname.startsWith("10.")) return false;
+            // 192.168.0.0/16
+            if (hostname.startsWith("192.168.")) return false;
+            // 172.16.0.0/12
+            if (hostname.match(/^172\.(1[6-9]|2[0-9]|3[0-1])\./)) return false;
+            // 169.254.0.0/16 (Link-local)
+            if (hostname.startsWith("169.254.")) return false;
+            return true;
+          } catch {
+            return false;
+          }
+        },
+        { message: "不允许使用内部网络地址 (SSRF Protection)" }
+      )
+      .nullable()
+      .optional(),
     // 金额限流配置
     limit_5h_usd: z.coerce
       .number()
@@ -411,7 +475,7 @@ export const UpdateProviderSchema = z
           )
           .max(
             PROVIDER_TIMEOUT_LIMITS.FIRST_BYTE_TIMEOUT_STREAMING_MS.MAX,
-            "流式首字节超时不能超过120秒"
+            "流式首字节超时不能超过180秒"
           ),
       ])
       .optional(),
@@ -421,10 +485,10 @@ export const UpdateProviderSchema = z
         z.coerce
           .number()
           .int("流式静默期超时必须是整数")
-          .min(PROVIDER_TIMEOUT_LIMITS.STREAMING_IDLE_TIMEOUT_MS.MIN, "流式静默期超时不能少于1秒")
+          .min(PROVIDER_TIMEOUT_LIMITS.STREAMING_IDLE_TIMEOUT_MS.MIN, "流式静默期超时不能少于60秒")
           .max(
             PROVIDER_TIMEOUT_LIMITS.STREAMING_IDLE_TIMEOUT_MS.MAX,
-            "流式静默期超时不能超过120秒"
+            "流式静默期超时不能超过600秒"
           ),
       ])
       .optional(),
@@ -440,7 +504,7 @@ export const UpdateProviderSchema = z
           )
           .max(
             PROVIDER_TIMEOUT_LIMITS.REQUEST_TIMEOUT_NON_STREAMING_MS.MAX,
-            "非流式总超时不能超过1200秒"
+            "非流式总超时不能超过1800秒"
           ),
       ])
       .optional(),

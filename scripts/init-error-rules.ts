@@ -1,23 +1,25 @@
 #!/usr/bin/env bun
 /**
- * Initialize default error rules
+ * Sync default error rules
  *
  * Usage: bun run scripts/init-error-rules.ts
  *
- * This script inserts 7 default error rules into the error_rules table.
- * It uses ON CONFLICT DO NOTHING to ensure idempotency.
+ * This script syncs DEFAULT_ERROR_RULES to the database:
+ * - Deletes all existing default rules (isDefault=true)
+ * - Re-inserts the latest default rules
+ * - User-created rules (isDefault=false) are preserved
  */
 
-import { initializeDefaultErrorRules } from "@/repository/error-rules";
+import { syncDefaultErrorRules } from "@/repository/error-rules";
 
 async function main() {
-  console.log("Initializing default error rules...");
+  console.log("Syncing default error rules...");
 
   try {
-    await initializeDefaultErrorRules();
-    console.log("✓ Default error rules initialized successfully");
+    const count = await syncDefaultErrorRules();
+    console.log(`✓ Default error rules synced successfully (${count} rules)`);
   } catch (error) {
-    console.error("✗ Failed to initialize default error rules:", error);
+    console.error("✗ Failed to sync default error rules:", error);
     process.exit(1);
   }
 }

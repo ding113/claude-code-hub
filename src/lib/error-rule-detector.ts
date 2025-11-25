@@ -61,19 +61,35 @@ class ErrorRuleDetector {
   private exactPatterns: Map<string, ExactPattern> = new Map();
   private lastReloadTime: number = 0;
   private isLoading: boolean = false;
+  private isInitialized: boolean = false; // 跟踪初始化状态
+  private initializationPromise: Promise<void> | null = null; // 防止并发初始化竞态
 
   constructor() {
-    // 初始化时立即加载缓存（异步，不阻塞构造函数）
-    this.reload().catch((error) => {
-      logger.error("[ErrorRuleDetector] Failed to initialize cache:", error);
-    });
-
     // 监听数据库变更事件，自动刷新缓存
     eventEmitter.on("errorRulesUpdated", () => {
       this.reload().catch((error) => {
         logger.error("[ErrorRuleDetector] Failed to reload cache on event:", error);
       });
     });
+  }
+
+  /**
+   * 确保规则已加载（懒加载，首次使用时或显式 reload 时调用）
+   * 避免在数据库未准备好时过早加载
+   * 使用 Promise 合并模式防止并发请求时的竞态条件
+   */
+  private async ensureInitialized(): Promise<void> {
+    if (this.isInitialized) {
+      return;
+    }
+
+    if (!this.initializationPromise) {
+      this.initializationPromise = this.reload().finally(() => {
+        this.initializationPromise = null;
+      });
+    }
+
+    await this.initializationPromise;
   }
 
   /**
@@ -102,6 +118,7 @@ class ErrorRuleDetector {
             "[ErrorRuleDetector] error_rules table does not exist yet (migration pending), using empty rules"
           );
           this.lastReloadTime = Date.now();
+          this.isLoading = false; // 关键：early return 时必须清除 isLoading，否则后续 reload 会被永久阻塞
           return;
         }
         // 其他数据库错误继续抛出
@@ -169,6 +186,7 @@ class ErrorRuleDetector {
       }
 
       this.lastReloadTime = Date.now();
+      this.isInitialized = true; // 标记为已初始化
 
       logger.info(
         `[ErrorRuleDetector] Loaded ${rules.length} error rules: ` +
@@ -184,7 +202,22 @@ class ErrorRuleDetector {
   }
 
   /**
-   * 检测错误消息是否匹配任何规则
+   * 异步检测错误消息（推荐使用）
+   * 确保规则已加载后再进行检测
+   *
+   * @param errorMessage - 错误消息
+   * @returns 检测结果
+   */
+  async detectAsync(errorMessage: string): Promise<ErrorDetectionResult> {
+    await this.ensureInitialized();
+    return this.detect(errorMessage);
+  }
+
+  /**
+   * 检测错误消息是否匹配任何规则（同步版本）
+   *
+   * 注意：如果规则未初始化，会记录警告并返回 false
+   * 推荐使用 detectAsync() 以确保规则已加载
    *
    * 检测顺序（性能优先）：
    * 1. 包含匹配（最快，O(n*m)）
@@ -197,6 +230,13 @@ class ErrorRuleDetector {
   detect(errorMessage: string): ErrorDetectionResult {
     if (!errorMessage || errorMessage.length === 0) {
       return { matched: false };
+    }
+
+    // 如果未初始化，记录警告
+    if (!this.isInitialized && !this.isLoading) {
+      logger.warn(
+        "[ErrorRuleDetector] detect() called before initialization, results may be incomplete. Consider using detectAsync() instead."
+      );
     }
 
     const lowerMessage = errorMessage.toLowerCase();

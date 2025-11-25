@@ -149,7 +149,6 @@
   },
   "data": {
     "cleanup": {
-      "descriptionWarning": "清理歷史日誌資料以釋放資料庫儲存空間。注意：統計資料將被保留，但日誌詳情將被永久刪除。",
       "rangeLabel": "清理範圍",
       "range": {
         "7days": "一週前的日誌 (7 天)",
@@ -179,16 +178,17 @@
       "cleaning": "正在清理...",
       "successMessage": "成功清理 {count} 筆日誌記錄（{batches} 批次，耗時 {duration}秒）",
       "failed": "清理失敗",
-      "error": "清理日誌失敗"
+      "error": "清理日誌失敗",
+      "descriptionWarning": "清理歷史日誌資料以釋放資料庫儲存空間。注意：統計資料將被保留，但日誌詳情將被永久刪除。"
     },
     "description": "管理資料庫的備份與恢復，支援完整資料匯入匯出和日誌清理。",
     "export": {
-      "descriptionFull": "匯出完整的資料庫備份檔案（.dump 格式），可用於資料遷移或還原。備份檔案使用 PostgreSQL custom format，自動壓縮且相容不同版本的資料庫結構。",
       "button": "匯出資料庫",
       "exporting": "正在匯出...",
       "successMessage": "資料庫匯出成功！",
       "failed": "匯出失敗",
-      "error": "匯出資料庫失敗"
+      "error": "匯出資料庫失敗",
+      "descriptionFull": "匯出完整的資料庫備份檔案（.dump 格式），可用於資料遷移或還原。備份檔案使用 PostgreSQL custom format，自動壓縮且相容不同版本的資料庫結構。"
     },
     "guide": {
       "title": "使用說明與注意事項",
@@ -220,7 +220,6 @@
       }
     },
     "import": {
-      "descriptionFull": "從備份檔案還原資料庫。支援 PostgreSQL custom format (.dump) 格式的備份檔案。",
       "selectFileLabel": "選擇備份檔案",
       "fileSelected": "已選擇：{name}（{size} MB）",
       "fileError": "請選擇 .dump 格式的備份檔案",
@@ -243,7 +242,8 @@
       "failedMessage": "資料匯入失敗，請查看詳細日誌",
       "error": "匯入資料庫失敗",
       "streamError": "無法讀取回應串流",
-      "errorUnknown": "未知錯誤"
+      "errorUnknown": "未知錯誤",
+      "descriptionFull": "從備份檔案還原資料庫。支援 PostgreSQL custom format (.dump) 格式的備份檔案。"
     },
     "status": {
       "loading": "載入中...",
@@ -268,7 +268,8 @@
         "description": "匯出完整的資料庫備份檔案（.dump 格式），可用於資料遷移或還原。"
       },
       "import": {
-        "title": "資料匯入"
+        "title": "資料匯入",
+        "description": "從備份檔案還原資料庫。支援 PostgreSQL custom format (.dump) 格式的備份檔案。"
       }
     }
   },
@@ -591,6 +592,7 @@
         "testModel": "測試模型",
         "testModelDesc": "可手動輸入，留空則使用預設模型",
         "model": "模型",
+        "responseModel": "回應模型",
         "responseTime": "回應時間",
         "usage": "Token 用量",
         "response": "回應內容",
@@ -600,8 +602,15 @@
         "copySuccess": "已複製到剪貼簿",
         "copyFailed": "複製失敗",
         "copyResult": "複製結果",
+        "close": "關閉",
         "success": "成功",
-        "failed": "失敗"
+        "failed": "失敗",
+        "disclaimer": {
+          "title": "注意",
+          "realRequest": "測試將向供應商發送真實請求，可能消耗少量額度",
+          "resultReference": "因各家供應商情況不同，測試結果僅供參考，不代表實際呼叫效果",
+          "confirmConfig": "請確認供應商 URL、API 金鑰及模型設定正確"
+        }
       },
       "urlPreview": {
         "title": "URL 拼接預覽",
@@ -990,6 +999,12 @@
           },
           "disableHint": "設為 0 表示禁用該超時（僅用於灰度回退場景，不推薦）"
         },
+        "apiTest": {
+          "title": "供應商模型測試",
+          "summary": "驗證供應商與模型連通性",
+          "desc": "測試供應商模型是否可用，預設與路由設定中選擇的供應商類型保持一致。",
+          "testLabel": "供應商模型測試"
+        },
         "codexStrategy": {
           "title": "Codex Instructions 策略",
           "summary": {
@@ -1350,10 +1365,10 @@
     "disable": "錯誤規則已停用",
     "toggleFailed": "狀態切換失敗",
     "toggleFailedError": "狀態切換失敗:",
-    "refreshCache": "重新整理快取",
-    "refreshCacheSuccess": "快取重新整理成功，已載入 {count} 個錯誤規則",
-    "refreshCacheFailed": "重新整理快取失敗",
-    "cacheStats": "快取統計: 啟用({enabledCount}) 停用({disabledCount}) 預設({defaultCount})",
+    "refreshCache": "同步規則",
+    "refreshCacheSuccess": "規則同步成功，已載入 {count} 個錯誤規則",
+    "refreshCacheFailed": "同步規則失敗",
+    "cacheStats": "快取: 共 {totalCount} 條規則",
     "emptyState": "目前沒有錯誤規則，點擊右上角「新增錯誤規則」開始設定。",
     "confirmDelete": "確定要刪除錯誤規則「{pattern}」嗎？",
     "dialog": {
@@ -1452,5 +1467,25 @@
       "cannotDelete": "預設規則無法刪除",
       "cannotDisable": "建議保留預設規則啟用狀態"
     }
-  }
+  },
+  "mcpPassthroughConfig": "MCP 透傳配置",
+  "mcpPassthroughConfigNone": "不啟用",
+  "mcpPassthroughConfigMinimax": "Minimax",
+  "mcpPassthroughConfigGlm": "智譜 GLM",
+  "mcpPassthroughConfigCustom": "自定義 (預留)",
+  "mcpPassthroughDesc": "啟用後，將 MCP 工具調用透傳到指定的 AI 服務商（如 minimax 的圖片識別、聯網搜索）",
+  "mcpPassthroughSelect": "透傳類型",
+  "mcpPassthroughNoneLabel": "不啟用",
+  "mcpPassthroughNoneDesc": "不啟用 MCP 透傳功能（默認）",
+  "mcpPassthroughMinimaxLabel": "Minimax",
+  "mcpPassthroughMinimaxDesc": "透傳到 minimax MCP 服務（支持圖片識別、聯網搜索等工具）",
+  "mcpPassthroughGlmLabel": "智譜 GLM",
+  "mcpPassthroughGlmDesc": "透傳到智譜 GLM MCP 服務（支持圖片分析、視頻分析等工具）",
+  "mcpPassthroughCustomLabel": "自定義",
+  "mcpPassthroughCustomDesc": "透傳到自定義 MCP 服務（預留，暫未實現）",
+  "mcpPassthroughHint": "提示: MCP 透傳功能允許 Claude Code 客戶端使用第三方 AI 服務商提供的工具能力（如圖片識別、聯網搜索）",
+  "mcpPassthroughUrlLabel": "MCP 透傳 URL",
+  "mcpPassthroughUrlPlaceholder": "https://api.minimaxi.com",
+  "mcpPassthroughUrlDesc": "MCP 服務的基礎 URL。留空則自動從提供商 URL 提取基礎域名",
+  "mcpPassthroughUrlAuto": "自動提取: {url}"
 }

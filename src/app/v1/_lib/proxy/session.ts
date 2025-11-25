@@ -39,7 +39,7 @@ interface RequestBodyResult {
 export class ProxySession {
   readonly startTime: number;
   readonly method: string;
-  readonly requestUrl: URL;
+  requestUrl: URL; // 非 readonly，允许模型重定向修改 Gemini URL 路径
   readonly headers: Headers;
   readonly headerLog: string;
   readonly request: ProxyRequestPayload;

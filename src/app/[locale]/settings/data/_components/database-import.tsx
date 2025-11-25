@@ -88,10 +88,23 @@ export function DatabaseImport() {
         throw new Error(t('streamError'));
       }
 
+      let hasReceivedCompletion = false;
+
       while (true) {
         const { done, value } = await reader.read();
 
         if (done) {
+          // 流正常结束，检查是否收到完成事件
+          if (!hasReceivedCompletion) {
+            setProgressMessages(prev => [
+              ...prev,
+              `⚠️ ${t('streamInterrupted')}`
+            ]);
+            toast.warning(t('streamInterrupted'), {
+              description: t('streamInterruptedDesc'),
+              duration: 6000,
+            });
+          }
           break;
         }
 
@@ -106,14 +119,37 @@ export function DatabaseImport() {
               if (data.type === 'progress') {
                 setProgressMessages(prev => [...prev, data.message]);
               } else if (data.type === 'complete') {
-                setProgressMessages(prev => [...prev, `${data.message}`]);
-                toast.success(t('successMessage'));
+                hasReceivedCompletion = true;
+                setProgressMessages(prev => [...prev, `✅ ${data.message}`]);
+
+                // 检查是否有警告（exitCode 非 0 表示有可忽略错误）
+                if (data.exitCode && data.exitCode !== 0) {
+                  toast.success(t('successWithWarnings'), {
+                    description: t('successWithWarningsDesc'),
+                    duration: 6000,
+                  });
+                } else {
+                  toast.success(t('successMessage'), {
+                    description: cleanFirst ? t('successCleanModeDesc') : t('successMergeModeDesc'),
+                    duration: 5000,
+                  });
+                }
               } else if (data.type === 'error') {
+                hasReceivedCompletion = true;
                 setProgressMessages(prev => [...prev, `❌ ${data.message}`]);
-                toast.error(t('failedMessage'));
+
+                // 显示详细错误信息
+                toast.error(t('failedMessage'), {
+                  description: data.message,
+                  duration: 8000,
+                });
               }
             } catch (parseError) {
               console.error('Parse SSE error:', parseError);
+              // 解析错误也要通知用户
+              toast.error(t('parseError'), {
+                description: String(parseError),
+              });
             }
           }
         }
