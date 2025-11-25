@@ -1466,5 +1466,25 @@
       "cannotDelete": "預設規則無法刪除",
       "cannotDisable": "建議保留預設規則啟用狀態"
     }
-  }
+  },
+  "mcpPassthroughConfig": "MCP 透傳配置",
+  "mcpPassthroughConfigNone": "不啟用",
+  "mcpPassthroughConfigMinimax": "Minimax",
+  "mcpPassthroughConfigGlm": "智譜 GLM",
+  "mcpPassthroughConfigCustom": "自定義 (預留)",
+  "mcpPassthroughDesc": "啟用後，將 MCP 工具調用透傳到指定的 AI 服務商（如 minimax 的圖片識別、聯網搜索）",
+  "mcpPassthroughSelect": "透傳類型",
+  "mcpPassthroughNoneLabel": "不啟用",
+  "mcpPassthroughNoneDesc": "不啟用 MCP 透傳功能（默認）",
+  "mcpPassthroughMinimaxLabel": "Minimax",
+  "mcpPassthroughMinimaxDesc": "透傳到 minimax MCP 服務（支持圖片識別、聯網搜索等工具）",
+  "mcpPassthroughGlmLabel": "智譜 GLM",
+  "mcpPassthroughGlmDesc": "透傳到智譜 GLM MCP 服務（支持圖片分析、視頻分析等工具）",
+  "mcpPassthroughCustomLabel": "自定義",
+  "mcpPassthroughCustomDesc": "透傳到自定義 MCP 服務（預留，暫未實現）",
+  "mcpPassthroughHint": "提示: MCP 透傳功能允許 Claude Code 客戶端使用第三方 AI 服務商提供的工具能力（如圖片識別、聯網搜索）",
+  "mcpPassthroughUrlLabel": "MCP 透傳 URL",
+  "mcpPassthroughUrlPlaceholder": "https://api.minimaxi.com",
+  "mcpPassthroughUrlDesc": "MCP 服務的基礎 URL。留空則自動從提供商 URL 提取基礎域名",
+  "mcpPassthroughUrlAuto": "自動提取: {url}"
 }

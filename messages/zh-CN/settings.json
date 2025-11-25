@@ -740,6 +740,41 @@
             "placeholder": "选择策略"
           },
           "hint": "提示: 部分严格的 Codex 中转站（如 88code、foxcode）需要官方 instructions，选择\"自动\"或\"强制官方\"策略"
+        },
+        "mcpPassthrough": {
+          "title": "MCP 透传配置",
+          "summary": {
+            "none": "不启用",
+            "minimax": "Minimax",
+            "glm": "智谱 GLM",
+            "custom": "自定义 (预留)"
+          },
+          "desc": "启用后，将 MCP 工具调用透传到指定的 AI 服务商（如 minimax 的图片识别、联网搜索）",
+          "select": {
+            "label": "透传类型",
+            "none": {
+              "label": "不启用",
+              "desc": "不启用 MCP 透传功能（默认）"
+            },
+            "minimax": {
+              "label": "Minimax",
+              "desc": "透传到 minimax MCP 服务（支持图片识别、联网搜索等工具）"
+            },
+            "glm": {
+              "label": "智谱 GLM",
+              "desc": "透传到智谱 MCP 服务（支持图片分析、视频分析等工具）"
+            },
+            "custom": {
+              "label": "自定义",
+              "desc": "透传到自定义 MCP 服务（预留，暂未实现）"
+            },
+            "placeholder": "选择透传类型"
+          },
+          "hint": "提示: MCP 透传功能允许 Claude Code 客户端使用第三方 AI 服务商提供的工具能力（如图片识别、联网搜索）",
+          "urlLabel": "MCP 透传 URL",
+          "urlPlaceholder": "https://api.minimaxi.com",
+          "urlDesc": "MCP 服务的基础 URL。留空则自动从提供商 URL 提取基础域名",
+          "urlAuto": "自动提取: {url}"
         }
       },
       "providerTypes": {
@@ -1497,5 +1532,25 @@
       "cannotDelete": "默认规则无法删除",
       "cannotDisable": "建议保留默认规则启用状态"
     }
-  }
+  },
+  "mcpPassthroughConfig": "MCP 透传配置",
+  "mcpPassthroughConfigNone": "不启用",
+  "mcpPassthroughConfigMinimax": "Minimax",
+  "mcpPassthroughConfigGlm": "智谱 GLM",
+  "mcpPassthroughConfigCustom": "自定义 (预留)",
+  "mcpPassthroughDesc": "启用后，将 MCP 工具调用透传到指定的 AI 服务商（如 minimax 的图片识别、联网搜索）",
+  "mcpPassthroughSelect": "透传类型",
+  "mcpPassthroughNoneLabel": "不启用",
+  "mcpPassthroughNoneDesc": "不启用 MCP 透传功能（默认）",
+  "mcpPassthroughMinimaxLabel": "Minimax",
+  "mcpPassthroughMinimaxDesc": "透传到 minimax MCP 服务（支持图片识别、联网搜索等工具）",
+  "mcpPassthroughGlmLabel": "智谱 GLM",
+  "mcpPassthroughGlmDesc": "透传到智谱 GLM MCP 服务（支持图片分析、视频分析等工具）",
+  "mcpPassthroughCustomLabel": "自定义",
+  "mcpPassthroughCustomDesc": "透传到自定义 MCP 服务（预留，暂未实现）",
+  "mcpPassthroughHint": "提示: MCP 透传功能允许 Claude Code 客户端使用第三方 AI 服务商提供的工具能力（如图片识别、联网搜索）",
+  "mcpPassthroughUrlLabel": "MCP 透传 URL",
+  "mcpPassthroughUrlPlaceholder": "https://api.minimaxi.com",
+  "mcpPassthroughUrlDesc": "MCP 服务的基础 URL。留空则自动从提供商 URL 提取基础域名",
+  "mcpPassthroughUrlAuto": "自动提取: {url}"
 }

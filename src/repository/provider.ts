@@ -24,6 +24,8 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     allowedModels: providerData.allowed_models,
     joinClaudePool: providerData.join_claude_pool ?? false,
     codexInstructionsStrategy: providerData.codex_instructions_strategy ?? "auto",
+    mcpPassthroughType: providerData.mcp_passthrough_type ?? "none",
+    mcpPassthroughUrl: providerData.mcp_passthrough_url ?? null,
     limit5hUsd: providerData.limit_5h_usd != null ? providerData.limit_5h_usd.toString() : null,
     limitDailyUsd:
       providerData.limit_daily_usd != null ? providerData.limit_daily_usd.toString() : null,
@@ -66,6 +68,8 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     allowedModels: providers.allowedModels,
     joinClaudePool: providers.joinClaudePool,
     codexInstructionsStrategy: providers.codexInstructionsStrategy,
+    mcpPassthroughType: providers.mcpPassthroughType,
+    mcpPassthroughUrl: providers.mcpPassthroughUrl,
     limit5hUsd: providers.limit5hUsd,
     limitDailyUsd: providers.limitDailyUsd,
     dailyResetMode: providers.dailyResetMode,
@@ -115,6 +119,8 @@ export async function findProviderList(
       allowedModels: providers.allowedModels,
       joinClaudePool: providers.joinClaudePool,
       codexInstructionsStrategy: providers.codexInstructionsStrategy,
+      mcpPassthroughType: providers.mcpPassthroughType,
+      mcpPassthroughUrl: providers.mcpPassthroughUrl,
       limit5hUsd: providers.limit5hUsd,
       limitDailyUsd: providers.limitDailyUsd,
       dailyResetMode: providers.dailyResetMode,
@@ -171,6 +177,8 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       allowedModels: providers.allowedModels,
       joinClaudePool: providers.joinClaudePool,
       codexInstructionsStrategy: providers.codexInstructionsStrategy,
+      mcpPassthroughType: providers.mcpPassthroughType,
+      mcpPassthroughUrl: providers.mcpPassthroughUrl,
       limit5hUsd: providers.limit5hUsd,
       limitDailyUsd: providers.limitDailyUsd,
       dailyResetMode: providers.dailyResetMode,
@@ -233,6 +241,10 @@ export async function updateProvider(
     dbData.joinClaudePool = providerData.join_claude_pool;
   if (providerData.codex_instructions_strategy !== undefined)
     dbData.codexInstructionsStrategy = providerData.codex_instructions_strategy;
+  if (providerData.mcp_passthrough_type !== undefined)
+    dbData.mcpPassthroughType = providerData.mcp_passthrough_type;
+  if (providerData.mcp_passthrough_url !== undefined)
+    dbData.mcpPassthroughUrl = providerData.mcp_passthrough_url;
   if (providerData.limit_5h_usd !== undefined)
     dbData.limit5hUsd =
       providerData.limit_5h_usd != null ? providerData.limit_5h_usd.toString() : null;
@@ -293,6 +305,8 @@ export async function updateProvider(
       allowedModels: providers.allowedModels,
       joinClaudePool: providers.joinClaudePool,
       codexInstructionsStrategy: providers.codexInstructionsStrategy,
+      mcpPassthroughType: providers.mcpPassthroughType,
+      mcpPassthroughUrl: providers.mcpPassthroughUrl,
       limit5hUsd: providers.limit5hUsd,
       limitDailyUsd: providers.limitDailyUsd,
       dailyResetMode: providers.dailyResetMode,

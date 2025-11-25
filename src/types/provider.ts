@@ -10,6 +10,9 @@ export type ProviderType =
 // Codex Instructions 策略枚举
 export type CodexInstructionsStrategy = "auto" | "force_official" | "keep_original";
 
+// MCP 透传类型枚举
+export type McpPassthroughType = "none" | "minimax" | "glm" | "custom";
+
 export interface Provider {
   id: number;
   name: string;
@@ -41,6 +44,18 @@ export interface Provider {
   // Codex Instructions 策略：控制如何处理 Codex 请求的 instructions 字段
   // 仅对 providerType = 'codex' 的供应商有效
   codexInstructionsStrategy: CodexInstructionsStrategy;
+
+  // MCP 透传类型：控制是否启用 MCP 透传功能
+  // 'none': 不启用（默认）
+  // 'minimax': 透传到 minimax MCP 服务（图片识别、联网搜索）
+  // 'glm': 透传到智谱 MCP 服务（图片分析、视频分析）
+  // 'custom': 自定义 MCP 服务（预留）
+  mcpPassthroughType: McpPassthroughType;
+
+  // MCP 透传 URL：MCP 服务的基础 URL
+  // 如果未配置，则自动从 provider.url 提取基础域名
+  // 例如：https://api.minimaxi.com/anthropic -> https://api.minimaxi.com
+  mcpPassthroughUrl: string | null;
 
   // 金额限流配置
   limit5hUsd: number | null;
@@ -105,6 +120,10 @@ export interface ProviderDisplay {
   joinClaudePool: boolean;
   // Codex Instructions 策略
   codexInstructionsStrategy: CodexInstructionsStrategy;
+  // MCP 透传类型
+  mcpPassthroughType: McpPassthroughType;
+  // MCP 透传 URL
+  mcpPassthroughUrl: string | null;
   // 金额限流配置
   limit5hUsd: number | null;
   limitDailyUsd: number | null;
@@ -161,6 +180,8 @@ export interface CreateProviderData {
   allowed_models?: string[] | null;
   join_claude_pool?: boolean;
   codex_instructions_strategy?: CodexInstructionsStrategy;
+  mcp_passthrough_type?: McpPassthroughType;
+  mcp_passthrough_url?: string | null;
 
   // 金额限流配置
   limit_5h_usd?: number | null;
@@ -220,6 +241,8 @@ export interface UpdateProviderData {
   allowed_models?: string[] | null;
   join_claude_pool?: boolean;
   codex_instructions_strategy?: CodexInstructionsStrategy;
+  mcp_passthrough_type?: McpPassthroughType;
+  mcp_passthrough_url?: string | null;
 
   // 金额限流配置
   limit_5h_usd?: number | null;
