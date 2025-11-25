@@ -178,7 +178,8 @@
       "cleaning": "Cleaning...",
       "successMessage": "Successfully cleaned {count} log records ({batches} batches, took {duration}s)",
       "failed": "Cleanup failed",
-      "error": "Failed to clean logs"
+      "error": "Failed to clean logs",
+      "descriptionWarning": "Clean up historical log data to free up database storage. Note: Statistics data will be retained, but log details will be permanently deleted."
     },
     "description": "Manage database backup and recovery with full data import/export and log cleanup.",
     "export": {
@@ -186,7 +187,8 @@
       "exporting": "Exporting...",
       "successMessage": "Database exported successfully!",
       "failed": "Export failed",
-      "error": "Failed to export database"
+      "error": "Failed to export database",
+      "descriptionFull": "Export complete database backup file (.dump format) for data migration or recovery. Backup uses PostgreSQL custom format, auto-compressed and compatible with different database versions."
     },
     "guide": {
       "title": "Usage Instructions and Precautions",
@@ -247,7 +249,8 @@
       "streamInterrupted": "Data stream unexpectedly interrupted",
       "streamInterruptedDesc": "Import progress did not complete normally. Please check the logs and verify data integrity. Re-import if needed.",
       "parseError": "Failed to parse response data",
-      "errorUnknown": "Unknown error"
+      "errorUnknown": "Unknown error",
+      "descriptionFull": "Restore database from backup file. Supports PostgreSQL custom format (.dump) backup files."
     },
     "status": {
       "loading": "Loading...",

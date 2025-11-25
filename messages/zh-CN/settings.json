@@ -1202,14 +1202,16 @@
       "cleaning": "正在清理...",
       "successMessage": "成功清理 {count} 条日志记录（{batches} 批次，耗时 {duration}s）",
       "failed": "清理失败",
-      "error": "清理日志失败"
+      "error": "清理日志失败",
+      "descriptionWarning": "清理历史日志数据以释放数据库存储空间。注意：统计数据将被保留，但日志详情将被永久删除。"
     },
     "export": {
       "button": "导出数据库",
       "exporting": "正在导出...",
       "successMessage": "数据库导出成功！",
       "failed": "导出失败",
-      "error": "导出数据库失败"
+      "error": "导出数据库失败",
+      "descriptionFull": "导出完整的数据库备份文件（.dump 格式），可用于数据迁移或恢复。备份文件使用 PostgreSQL custom format，自动压缩且兼容不同版本的数据库结构。"
     },
     "import": {
       "selectFileLabel": "选择备份文件",
@@ -1241,7 +1243,8 @@
       "streamInterrupted": "数据流意外中断",
       "streamInterruptedDesc": "导入进度未正常完成，请检查日志并验证数据完整性。如有问题，请重新导入。",
       "parseError": "解析响应数据失败",
-      "errorUnknown": "未知错误"
+      "errorUnknown": "未知错误",
+      "descriptionFull": "从备份文件恢复数据库。支持 PostgreSQL custom format (.dump) 格式的备份文件。"
     },
     "guide": {
       "title": "使用说明与注意事项",
