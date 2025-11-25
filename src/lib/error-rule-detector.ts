@@ -62,6 +62,7 @@ class ErrorRuleDetector {
   private lastReloadTime: number = 0;
   private isLoading: boolean = false;
   private isInitialized: boolean = false; // 跟踪初始化状态
+  private initializationPromise: Promise<void> | null = null; // 防止并发初始化竞态
 
   constructor() {
     // 监听数据库变更事件，自动刷新缓存
@@ -75,12 +76,20 @@ class ErrorRuleDetector {
   /**
    * 确保规则已加载（懒加载，首次使用时或显式 reload 时调用）
    * 避免在数据库未准备好时过早加载
+   * 使用 Promise 合并模式防止并发请求时的竞态条件
    */
   private async ensureInitialized(): Promise<void> {
-    if (this.isInitialized || this.isLoading) {
+    if (this.isInitialized) {
       return;
     }
-    await this.reload();
+
+    if (!this.initializationPromise) {
+      this.initializationPromise = this.reload().finally(() => {
+        this.initializationPromise = null;
+      });
+    }
+
+    await this.initializationPromise;
   }
 
   /**
