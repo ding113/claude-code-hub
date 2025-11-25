@@ -173,36 +173,51 @@ export async function updateErrorRuleAction(
       };
     }
 
-    // ReDoS (Regular Expression Denial of Service) 风险检测
-    // 仅当更新了 pattern 且 matchType 是 regex 时检查
-    if (updates.pattern) {
-      const matchType = updates.matchType || "regex";
-      if (matchType === "regex") {
-        if (!safeRegex(updates.pattern)) {
-          return {
-            ok: false,
-            error: "正则表达式存在 ReDoS 风险，请简化模式",
-          };
-        }
+    // 获取当前规则以确定最终的 matchType 和 pattern
+    const currentRule = await repo.getErrorRuleById(id);
+    if (!currentRule) {
+      return {
+        ok: false,
+        error: "错误规则不存在",
+      };
+    }
 
-        // 验证正则表达式语法
-        try {
-          new RegExp(updates.pattern);
-        } catch {
-          return {
-            ok: false,
-            error: "无效的正则表达式",
-          };
-        }
+    // 计算最终的 pattern 和 matchType
+    const finalPattern = updates.pattern ?? currentRule.pattern;
+    const finalMatchType = updates.matchType ?? currentRule.matchType;
+
+    // ReDoS (Regular Expression Denial of Service) 风险检测
+    // 当最终结果是 regex 类型时，需要检查 pattern 安全性
+    // 这覆盖了两种情况：
+    // 1. 更新 pattern 到一个 regex 规则
+    // 2. 将 matchType 从 contains/exact 改为 regex
+    if (finalMatchType === "regex") {
+      if (!safeRegex(finalPattern)) {
+        return {
+          ok: false,
+          error: "正则表达式存在 ReDoS 风险，请简化模式",
+        };
+      }
+
+      // 验证正则表达式语法
+      try {
+        new RegExp(finalPattern);
+      } catch {
+        return {
+          ok: false,
+          error: "无效的正则表达式",
+        };
       }
     }
 
     const result = await repo.updateErrorRule(id, updates);
 
+    // 注意：result 为 null 的情况已在上方 getErrorRuleById 检查时处理
+    // 这里保留检查作为防御性编程，应对并发删除场景
     if (!result) {
       return {
         ok: false,
-        error: "错误规则不存在",
+        error: "错误规则不存在或已被删除",
       };
     }
 

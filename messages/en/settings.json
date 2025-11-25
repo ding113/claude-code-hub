@@ -612,6 +612,18 @@
         "close": "Close",
         "success": "Success",
         "failed": "Failed",
+        "streamInfo": "Stream response info",
+        "chunksReceived": "Chunks received",
+        "streamFormat": "Stream format",
+        "streamResponse": "Stream response",
+        "chunksCount": "Received {count} chunks ({format})",
+        "truncatedPreview": "Showing first {length} characters, copy to see full content",
+        "truncatedBrief": "Showing first {length} characters, click \"View Details\" for more",
+        "copyFormat": {
+          "testResult": "Test result",
+          "message": "Message",
+          "errorDetails": "Error details"
+        },
         "disclaimer": {
           "title": "Notice",
           "realRequest": "This test sends a real request to the provider and may consume a small quota",

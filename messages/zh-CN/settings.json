@@ -246,6 +246,18 @@
         "close": "关闭",
         "success": "成功",
         "failed": "失败",
+        "streamInfo": "流式响应信息",
+        "chunksReceived": "接收到的数据块",
+        "streamFormat": "流式格式",
+        "streamResponse": "流式响应",
+        "chunksCount": "接收 {count} 个数据块 ({format})",
+        "truncatedPreview": "显示前 {length} 字符，完整内容请复制查看",
+        "truncatedBrief": "显示前 {length} 字符，完整内容请点击「查看详情」",
+        "copyFormat": {
+          "testResult": "测试结果",
+          "message": "消息",
+          "errorDetails": "错误详情"
+        },
         "disclaimer": {
           "title": "注意",
           "realRequest": "测试将向供应商发送真实请求，可能消耗少量额度",

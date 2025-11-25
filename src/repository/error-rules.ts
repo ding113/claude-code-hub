@@ -42,6 +42,32 @@ export async function getActiveErrorRules(): Promise<ErrorRule[]> {
 }
 
 /**
+ * 根据 ID 获取单个错误规则
+ */
+export async function getErrorRuleById(id: number): Promise<ErrorRule | null> {
+  const result = await db.query.errorRules.findFirst({
+    where: eq(errorRules.id, id),
+  });
+
+  if (!result) {
+    return null;
+  }
+
+  return {
+    id: result.id,
+    pattern: result.pattern,
+    matchType: result.matchType as "regex" | "contains" | "exact",
+    category: result.category,
+    description: result.description,
+    isEnabled: result.isEnabled,
+    isDefault: result.isDefault,
+    priority: result.priority,
+    createdAt: result.createdAt ?? new Date(),
+    updatedAt: result.updatedAt ?? new Date(),
+  };
+}
+
+/**
  * 获取所有错误规则（包括禁用的）
  */
 export async function getAllErrorRules(): Promise<ErrorRule[]> {

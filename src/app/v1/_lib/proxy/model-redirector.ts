@@ -26,23 +26,32 @@ export class ModelRedirector {
     // 获取原始模型名称
     const originalModel = session.request.model;
     if (!originalModel) {
-      logger.debug("[ModelRedirector] No model found in request, skipping redirect");
+      logger.debug("[ModelRedirector] No model in request, skipping redirect", {
+        providerId: provider.id,
+        providerName: provider.name,
+      });
       return false;
     }
 
     // 检查是否有该模型的重定向配置
     const redirectedModel = provider.modelRedirects[originalModel];
     if (!redirectedModel) {
-      logger.debug(
-        `[ModelRedirector] No redirect configured for model "${originalModel}" in provider ${provider.id}`
-      );
+      logger.debug("[ModelRedirector] No redirect configured for model", {
+        model: originalModel,
+        providerId: provider.id,
+        providerName: provider.name,
+      });
       return false;
     }
 
     // 执行重定向
-    logger.info(
-      `[ModelRedirector] Redirecting model: "${originalModel}" → "${redirectedModel}" (provider ${provider.id})`
-    );
+    logger.info("[ModelRedirector] Model redirected", {
+      originalModel,
+      redirectedModel,
+      providerId: provider.id,
+      providerName: provider.name,
+      providerType: provider.providerType,
+    });
 
     // 保存原始模型（用于计费，必须在修改 request.model 之前）
     session.setOriginalModel(originalModel);
@@ -97,9 +106,11 @@ export class ModelRedirector {
         redirectedModel: redirectedModel,
         billingModel: originalModel, // 始终使用原始模型计费
       };
-      logger.debug(
-        `[ModelRedirector] Added modelRedirect to provider chain for provider ${provider.id}`
-      );
+      logger.debug("[ModelRedirector] Added modelRedirect to provider chain", {
+        providerId: provider.id,
+        originalModel,
+        redirectedModel,
+      });
     }
 
     return true;
