@@ -599,6 +599,7 @@
         "testModel": "Test model",
         "testModelDesc": "Leave empty to use the default model or type one manually",
         "model": "Model",
+        "responseModel": "Response model",
         "responseTime": "Response time",
         "usage": "Token usage",
         "response": "Response preview",

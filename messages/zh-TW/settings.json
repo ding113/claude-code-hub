@@ -591,6 +591,7 @@
         "testModel": "測試模型",
         "testModelDesc": "可手動輸入，留空則使用預設模型",
         "model": "模型",
+        "responseModel": "回應模型",
         "responseTime": "回應時間",
         "usage": "Token 用量",
         "response": "回應內容",
