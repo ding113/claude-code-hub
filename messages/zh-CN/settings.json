@@ -1173,7 +1173,6 @@
       "tables": "{count} 个表"
     },
     "cleanup": {
-      "descriptionWarning": "清理历史日志数据以释放数据库存储空间。注意：统计数据将被保留，但日志详情将被永久删除。",
       "rangeLabel": "清理范围",
       "range": {
         "7days": "一周前的日志 (7 天)",
@@ -1206,7 +1205,6 @@
       "error": "清理日志失败"
     },
     "export": {
-      "descriptionFull": "导出完整的数据库备份文件（.dump 格式），可用于数据迁移或恢复。备份文件使用 PostgreSQL custom format，自动压缩且兼容不同版本的数据库结构。",
       "button": "导出数据库",
       "exporting": "正在导出...",
       "successMessage": "数据库导出成功！",
@@ -1214,7 +1212,6 @@
       "error": "导出数据库失败"
     },
     "import": {
-      "descriptionFull": "从备份文件恢复数据库。支持 PostgreSQL custom format (.dump) 格式的备份文件。",
       "selectFileLabel": "选择备份文件",
       "fileSelected": "已选择: {name} ({size} MB)",
       "fileError": "请选择 .dump 格式的备份文件",
@@ -1234,9 +1231,16 @@
       "cancel": "取消",
       "confirm": "确认导入",
       "successMessage": "数据导入完成！",
-      "failedMessage": "数据导入失败，请查看详细日志",
+      "successCleanModeDesc": "所有数据已成功恢复。如果页面显示异常，请刷新浏览器。",
+      "successMergeModeDesc": "数据已成功导入并合并。如果页面显示异常，请刷新浏览器。",
+      "successWithWarnings": "数据导入完成（有警告）",
+      "successWithWarningsDesc": "数据已成功导入，但跳过了一些已存在的对象。如果页面显示异常，请刷新浏览器或重启应用。",
+      "failedMessage": "数据导入失败",
       "error": "导入数据库失败",
       "streamError": "无法读取响应流",
+      "streamInterrupted": "数据流意外中断",
+      "streamInterruptedDesc": "导入进度未正常完成，请检查日志并验证数据完整性。如有问题，请重新导入。",
+      "parseError": "解析响应数据失败",
       "errorUnknown": "未知错误"
     },
     "guide": {
@@ -1282,7 +1286,8 @@
         "description": "导出完整的数据库备份文件（.dump 格式），可用于数据迁移或恢复。"
       },
       "import": {
-        "title": "数据导入"
+        "title": "数据导入",
+        "description": "从备份文件恢复数据库。支持 PostgreSQL custom format (.dump) 格式的备份文件。"
       }
     }
   },

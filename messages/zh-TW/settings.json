@@ -149,7 +149,6 @@
   },
   "data": {
     "cleanup": {
-      "descriptionWarning": "清理歷史日誌資料以釋放資料庫儲存空間。注意：統計資料將被保留，但日誌詳情將被永久刪除。",
       "rangeLabel": "清理範圍",
       "range": {
         "7days": "一週前的日誌 (7 天)",
@@ -183,7 +182,6 @@
     },
     "description": "管理資料庫的備份與恢復，支援完整資料匯入匯出和日誌清理。",
     "export": {
-      "descriptionFull": "匯出完整的資料庫備份檔案（.dump 格式），可用於資料遷移或還原。備份檔案使用 PostgreSQL custom format，自動壓縮且相容不同版本的資料庫結構。",
       "button": "匯出資料庫",
       "exporting": "正在匯出...",
       "successMessage": "資料庫匯出成功！",
@@ -220,7 +218,6 @@
       }
     },
     "import": {
-      "descriptionFull": "從備份檔案還原資料庫。支援 PostgreSQL custom format (.dump) 格式的備份檔案。",
       "selectFileLabel": "選擇備份檔案",
       "fileSelected": "已選擇：{name}（{size} MB）",
       "fileError": "請選擇 .dump 格式的備份檔案",
@@ -268,7 +265,8 @@
         "description": "匯出完整的資料庫備份檔案（.dump 格式），可用於資料遷移或還原。"
       },
       "import": {
-        "title": "資料匯入"
+        "title": "資料匯入",
+        "description": "從備份檔案還原資料庫。支援 PostgreSQL custom format (.dump) 格式的備份檔案。"
       }
     }
   },

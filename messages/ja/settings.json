@@ -149,7 +149,6 @@
   },
   "data": {
     "cleanup": {
-      "descriptionWarning": "履歴ログデータをクリーンアップしてデータベースストレージを解放します。注：統計データは保持されますが、ログ詳細は完全に削除されます。",
       "rangeLabel": "クリーンアップ範囲",
       "range": {
         "7days": "1週間前のログ（7日）",
@@ -183,7 +182,6 @@
     },
     "description": "データベースのバックアップと復元を管理し、完全なインポート/エクスポートとログクリーンアップをサポートします。",
     "export": {
-      "descriptionFull": "完全なデータベースバックアップファイル（.dump形式）をエクスポートし、データ移行または復旧に使用できます。バックアップはPostgreSQL custom formatを使用し、自動圧縮され、異なるデータベースバージョンと互換性があります。",
       "button": "データベースをエクスポート",
       "exporting": "エクスポート中...",
       "successMessage": "データベースのエクスポートに成功しました！",
@@ -220,7 +218,6 @@
       }
     },
     "import": {
-      "descriptionFull": "バックアップファイルからデータベースを復元します。PostgreSQL custom format（.dump）形式のバックアップファイルをサポートします。",
       "selectFileLabel": "バックアップファイルを選択",
       "fileSelected": "選択済み：{name}（{size} MB）",
       "fileError": ".dump形式のバックアップファイルを選択してください",
@@ -268,7 +265,8 @@
         "description": "完全なデータベースバックアップファイル（.dump形式）をエクスポートし、データ移行または復旧に使用できます。"
       },
       "import": {
-        "title": "データインポート"
+        "title": "データインポート",
+        "description": "バックアップファイルからデータベースを復元します。PostgreSQL custom format（.dump）形式のバックアップファイルをサポートします。"
       }
     }
   },

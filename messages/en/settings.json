@@ -149,7 +149,6 @@
   },
   "data": {
     "cleanup": {
-      "descriptionWarning": "Clean up historical log data to free up database storage. Note: Statistics data will be retained, but log details will be permanently deleted.",
       "rangeLabel": "Cleanup Range",
       "range": {
         "7days": "Logs older than 1 week (7 days)",
@@ -183,7 +182,6 @@
     },
     "description": "Manage database backup and recovery with full data import/export and log cleanup.",
     "export": {
-      "descriptionFull": "Export complete database backup file (.dump format) for data migration or recovery. Backup uses PostgreSQL custom format, auto-compressed and compatible with different database versions.",
       "button": "Export Database",
       "exporting": "Exporting...",
       "successMessage": "Database exported successfully!",
@@ -220,7 +218,6 @@
       }
     },
     "import": {
-      "descriptionFull": "Restore database from backup file. Supports PostgreSQL custom format (.dump) backup files.",
       "selectFileLabel": "Select Backup File",
       "fileSelected": "Selected: {name} ({size} MB)",
       "fileError": "Please select .dump format backup file",
@@ -240,9 +237,16 @@
       "cancel": "Cancel",
       "confirm": "Confirm Import",
       "successMessage": "Data import completed!",
-      "failedMessage": "Data import failed, check detailed logs",
+      "successCleanModeDesc": "All data has been successfully restored. Refresh your browser if the page displays incorrectly.",
+      "successMergeModeDesc": "Data has been successfully imported and merged. Refresh your browser if the page displays incorrectly.",
+      "successWithWarnings": "Data import completed (with warnings)",
+      "successWithWarningsDesc": "Data has been successfully imported, but some existing objects were skipped. Refresh your browser or restart the application if the page displays incorrectly.",
+      "failedMessage": "Data import failed",
       "error": "Failed to import database",
       "streamError": "Cannot read response stream",
+      "streamInterrupted": "Data stream unexpectedly interrupted",
+      "streamInterruptedDesc": "Import progress did not complete normally. Please check the logs and verify data integrity. Re-import if needed.",
+      "parseError": "Failed to parse response data",
       "errorUnknown": "Unknown error"
     },
     "status": {
@@ -268,7 +272,8 @@
         "description": "Export complete database backup file (.dump format) for data migration or recovery."
       },
       "import": {
-        "title": "Data Import"
+        "title": "Data Import",
+        "description": "Restore database from backup file. Supports PostgreSQL custom format (.dump) backup files."
       }
     }
   },
