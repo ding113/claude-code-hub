@@ -1410,7 +1410,6 @@ export function ProviderForm({
                   enableMultiProviderTypes={enableMultiProviderTypes}
                   disabled={isPending || !url.trim()}
                 />
-                <p className="text-xs text-muted-foreground">{t("sections.apiTest.notice")}</p>
               </div>
             </div>
           </CollapsibleContent>

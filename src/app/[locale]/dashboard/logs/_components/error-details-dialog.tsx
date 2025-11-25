@@ -89,11 +89,49 @@ export function ErrorDetailsDialog({
     }
   }, [open, sessionId]);
 
-  const getStatusBadgeVariant = () => {
-    if (isInProgress) return "outline"; // 请求中使用 outline 样式
-    if (isSuccess) return "default";
-    if (isError) return "destructive";
-    return "secondary";
+  /**
+   * 根据 HTTP 状态码返回对应的 Badge 样式类名
+   * 参考：new-api 和 gpt-load 的颜色方案，使用更明显的颜色区分
+   *
+   * 颜色方案：
+   * - 2xx (成功) - 绿色
+   * - 3xx (重定向) - 蓝色
+   * - 4xx (客户端错误) - 黄色
+   * - 5xx (服务器错误) - 红色
+   * - 进行中 - 灰色
+   */
+  const getStatusBadgeClassName = () => {
+    if (isInProgress) {
+      // 进行中 - 灰色
+      return "bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600";
+    }
+
+    if (!statusCode) {
+      return "bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600";
+    }
+
+    // 2xx - 成功 (绿色)
+    if (statusCode >= 200 && statusCode < 300) {
+      return "bg-green-100 text-green-700 border-green-300 dark:bg-green-900/30 dark:text-green-400 dark:border-green-700";
+    }
+
+    // 3xx - 重定向 (蓝色)
+    if (statusCode >= 300 && statusCode < 400) {
+      return "bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-700";
+    }
+
+    // 4xx - 客户端错误 (黄色)
+    if (statusCode >= 400 && statusCode < 500) {
+      return "bg-yellow-100 text-yellow-700 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-700";
+    }
+
+    // 5xx - 服务器错误 (红色)
+    if (statusCode >= 500) {
+      return "bg-red-100 text-red-700 border-red-300 dark:bg-red-900/30 dark:text-red-400 dark:border-red-700";
+    }
+
+    // 其他 - 灰色
+    return "bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600";
   };
 
   return (
@@ -103,7 +141,7 @@ export function ErrorDetailsDialog({
           variant="ghost"
           className="h-auto p-0 font-normal hover:bg-transparent"
         >
-          <Badge variant={getStatusBadgeVariant()} className="cursor-pointer">
+          <Badge variant="outline" className={getStatusBadgeClassName()}>
             {isInProgress ? t("logs.details.inProgress") : statusCode}
           </Badge>
         </Button>

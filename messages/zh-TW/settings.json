@@ -591,6 +591,7 @@
         "testModel": "測試模型",
         "testModelDesc": "可手動輸入，留空則使用預設模型",
         "model": "模型",
+        "responseModel": "回應模型",
         "responseTime": "回應時間",
         "usage": "Token 用量",
         "response": "回應內容",
@@ -602,7 +603,13 @@
         "copyResult": "複製結果",
         "close": "關閉",
         "success": "成功",
-        "failed": "失敗"
+        "failed": "失敗",
+        "disclaimer": {
+          "title": "注意",
+          "realRequest": "測試將向供應商發送真實請求，可能消耗少量額度",
+          "resultReference": "因各家供應商情況不同，測試結果僅供參考，不代表實際呼叫效果",
+          "confirmConfig": "請確認供應商 URL、API 金鑰及模型設定正確"
+        }
       },
       "urlPreview": {
         "title": "URL 拼接預覽",
@@ -990,6 +997,12 @@
             "core": "true"
           },
           "disableHint": "設為 0 表示禁用該超時（僅用於灰度回退場景，不推薦）"
+        },
+        "apiTest": {
+          "title": "供應商模型測試",
+          "summary": "驗證供應商與模型連通性",
+          "desc": "測試供應商模型是否可用，預設與路由設定中選擇的供應商類型保持一致。",
+          "testLabel": "供應商模型測試"
         },
         "codexStrategy": {
           "title": "Codex Instructions 策略",

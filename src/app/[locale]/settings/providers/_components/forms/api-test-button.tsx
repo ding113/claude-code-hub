@@ -38,6 +38,7 @@ type ApiFormat = "anthropic-messages" | "openai-chat" | "openai-responses" | "ge
 // UI 配置常量
 const API_TEST_UI_CONFIG = {
   MAX_PREVIEW_LENGTH: 500, // 响应内容预览最大长度
+  BRIEF_PREVIEW_LENGTH: 200, // 简要预览最大长度
   TOAST_SUCCESS_DURATION: 3000, // 成功 toast 显示时长（毫秒）
   TOAST_ERROR_DURATION: 5000, // 错误 toast 显示时长（毫秒）
 } as const;
@@ -253,7 +254,7 @@ export function ApiTestButton({
         const model = details?.model || t("unknown");
 
         toast.success(t("testSuccess"), {
-          description: `${t("model")}: ${model} | ${t("responseTime")}: ${responseTime}`,
+          description: `${t("responseModel")}: ${model} | ${t("responseTime")}: ${responseTime}`,
           duration: API_TEST_UI_CONFIG.TOAST_SUCCESS_DURATION,
         });
       } else {
@@ -265,7 +266,7 @@ export function ApiTestButton({
         });
       }
     } catch (error) {
-      console.error("测试 API 连通性失败:", error);
+      console.error("API test failed:", error);
       toast.error(t("testFailedRetry"));
     } finally {
       setIsTesting(false);
@@ -314,24 +315,24 @@ export function ApiTestButton({
     if (!testResult) return;
 
     const resultText = [
-      `测试结果: ${testResult.success ? "成功" : "失败"}`,
-      `消息: ${testResult.message}`,
-      testResult.details?.model && `模型: ${testResult.details.model}`,
+      `${t("copyFormat.testResult")}: ${testResult.success ? t("success") : t("failed")}`,
+      `${t("copyFormat.message")}: ${testResult.message}`,
+      testResult.details?.model && `${t("responseModel")}: ${testResult.details.model}`,
       testResult.details?.responseTime !== undefined &&
-        `响应时间: ${testResult.details.responseTime}ms`,
+        `${t("responseTime")}: ${testResult.details.responseTime}ms`,
       testResult.details?.usage &&
-        `Token 用量: ${
+        `${t("usage")}: ${
           typeof testResult.details.usage === "object"
             ? JSON.stringify(testResult.details.usage, null, 2)
             : String(testResult.details.usage)
         }`,
       testResult.details?.content &&
-        `响应内容: ${testResult.details.content.slice(0, API_TEST_UI_CONFIG.MAX_PREVIEW_LENGTH)}${
+        `${t("response")}: ${testResult.details.content.slice(0, API_TEST_UI_CONFIG.MAX_PREVIEW_LENGTH)}${
           testResult.details.content.length > API_TEST_UI_CONFIG.MAX_PREVIEW_LENGTH ? "..." : ""
         }`,
       testResult.details?.streamInfo &&
-        `流式响应: 接收 ${testResult.details.streamInfo.chunksReceived} 个数据块 (${testResult.details.streamInfo.format.toUpperCase()})`,
-      testResult.details?.error && `错误详情: ${testResult.details.error}`,
+        `${t("streamResponse")}: ${t("chunksCount", { count: testResult.details.streamInfo.chunksReceived, format: testResult.details.streamInfo.format.toUpperCase() })}`,
+      testResult.details?.error && `${t("copyFormat.errorDetails")}: ${testResult.details.error}`,
     ]
       .filter(Boolean)
       .join("\n");
@@ -340,7 +341,7 @@ export function ApiTestButton({
       await navigator.clipboard.writeText(resultText);
       toast.success(t("copySuccess"));
     } catch (error) {
-      console.error("复制失败:", error);
+      console.error("Copy failed:", error);
       toast.error(t("copyFailed"));
     }
   };
@@ -389,6 +390,16 @@ export function ApiTestButton({
           disabled={isTesting}
         />
         <div className="text-xs text-muted-foreground">{t("testModelDesc")}</div>
+      </div>
+
+      {/* 免责声明 */}
+      <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+        <div className="font-medium mb-1">⚠️ {t("disclaimer.title")}</div>
+        <div className="space-y-1 text-amber-700 dark:text-amber-300">
+          <div>• {t("disclaimer.realRequest")}</div>
+          <div>• {t("disclaimer.resultReference")}</div>
+          <div>• {t("disclaimer.confirmConfig")}</div>
+        </div>
       </div>
 
       <div className="flex gap-2">
@@ -483,8 +494,9 @@ export function ApiTestButton({
                           {testResult.details.content.length >
                             API_TEST_UI_CONFIG.MAX_PREVIEW_LENGTH && (
                             <div className="text-xs text-muted-foreground mt-2 italic">
-                              显示前 {API_TEST_UI_CONFIG.MAX_PREVIEW_LENGTH}{" "}
-                              字符，完整内容请复制查看
+                              {t("truncatedPreview", {
+                                length: API_TEST_UI_CONFIG.MAX_PREVIEW_LENGTH,
+                              })}
                             </div>
                           )}
                         </div>
@@ -494,15 +506,15 @@ export function ApiTestButton({
                     {/* 流式响应信息 */}
                     {testResult.details.streamInfo && (
                       <div className="space-y-2">
-                        <h4 className="font-semibold text-sm">流式响应信息</h4>
+                        <h4 className="font-semibold text-sm">{t("streamInfo")}</h4>
                         <div className="rounded-md border bg-blue-50 p-3">
                           <div className="text-xs space-y-1">
                             <div>
-                              <span className="font-medium">接收到的数据块:</span>{" "}
+                              <span className="font-medium">{t("chunksReceived")}:</span>{" "}
                               {testResult.details.streamInfo.chunksReceived}
                             </div>
                             <div>
-                              <span className="font-medium">流式格式:</span>{" "}
+                              <span className="font-medium">{t("streamFormat")}:</span>{" "}
                               {testResult.details.streamInfo.format.toUpperCase()}
                             </div>
                           </div>
@@ -541,7 +553,7 @@ export function ApiTestButton({
                   </Button>
                   <Button
                     type="button"
-                    variant="secondary"
+                    variant="outline"
                     size="sm"
                     onClick={() => setIsDetailDialogOpen(false)}
                     className="flex-1"
@@ -569,7 +581,8 @@ export function ApiTestButton({
             <div className="space-y-1 text-xs opacity-80">
               {testResult.details.model && (
                 <div>
-                  <span className="font-medium">{t("model")}:</span> {testResult.details.model}
+                  <span className="font-medium">{t("responseModel")}:</span>{" "}
+                  {testResult.details.model}
                 </div>
               )}
               {testResult.details.responseTime !== undefined && (
@@ -599,15 +612,14 @@ export function ApiTestButton({
                   </div>
                   <div className="ml-2">
                     <pre className="whitespace-pre-wrap break-words max-h-32 overflow-y-auto">
-                      {testResult.details.content.slice(
-                        0,
-                        Math.min(200, testResult.details.content.length)
-                      )}
-                      {testResult.details.content.length > 200 && "..."}
+                      {testResult.details.content.slice(0, API_TEST_UI_CONFIG.BRIEF_PREVIEW_LENGTH)}
+                      {testResult.details.content.length >
+                        API_TEST_UI_CONFIG.BRIEF_PREVIEW_LENGTH && "..."}
                     </pre>
-                    {testResult.details.content.length > 200 && (
+                    {testResult.details.content.length >
+                      API_TEST_UI_CONFIG.BRIEF_PREVIEW_LENGTH && (
                       <div className="text-muted-foreground italic">
-                        显示前 200 字符，完整内容请点击&ldquo;查看详情&rdquo;
+                        {t("truncatedBrief", { length: API_TEST_UI_CONFIG.BRIEF_PREVIEW_LENGTH })}
                       </div>
                     )}
                   </div>
@@ -616,12 +628,14 @@ export function ApiTestButton({
               {testResult.details.streamInfo && (
                 <div className="space-y-1 text-xs opacity-80">
                   <div>
-                    <span className="font-medium">流式响应:</span>
+                    <span className="font-medium">{t("streamResponse")}:</span>
                   </div>
                   <div className="ml-2">
                     <div className="text-blue-600">
-                      接收 {testResult.details.streamInfo.chunksReceived} 个数据块 (
-                      {testResult.details.streamInfo.format.toUpperCase()})
+                      {t("chunksCount", {
+                        count: testResult.details.streamInfo.chunksReceived,
+                        format: testResult.details.streamInfo.format.toUpperCase(),
+                      })}
                     </div>
                   </div>
                 </div>

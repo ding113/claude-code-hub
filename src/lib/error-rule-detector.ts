@@ -109,6 +109,7 @@ class ErrorRuleDetector {
             "[ErrorRuleDetector] error_rules table does not exist yet (migration pending), using empty rules"
           );
           this.lastReloadTime = Date.now();
+          this.isLoading = false; // 关键：early return 时必须清除 isLoading，否则后续 reload 会被永久阻塞
           return;
         }
         // 其他数据库错误继续抛出

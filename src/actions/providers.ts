@@ -30,9 +30,43 @@ import { isClientAbortError } from "@/app/v1/_lib/proxy/errors";
 import { PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { GeminiAuth } from "@/app/v1/_lib/gemini/auth";
 
+const API_TEST_TIMEOUT_LIMITS = {
+  DEFAULT: 15000,
+  MIN: 5000,
+  MAX: 120000,
+} as const;
+
+function resolveApiTestTimeoutMs(): number {
+  const rawValue = process.env.API_TEST_TIMEOUT_MS?.trim();
+  if (!rawValue) {
+    return API_TEST_TIMEOUT_LIMITS.DEFAULT;
+  }
+
+  const parsed = Number.parseInt(rawValue, 10);
+  if (!Number.isFinite(parsed)) {
+    logger.warn("API test timeout env is invalid, falling back to default", {
+      envValue: rawValue,
+      defaultTimeout: API_TEST_TIMEOUT_LIMITS.DEFAULT,
+    });
+    return API_TEST_TIMEOUT_LIMITS.DEFAULT;
+  }
+
+  if (parsed < API_TEST_TIMEOUT_LIMITS.MIN || parsed > API_TEST_TIMEOUT_LIMITS.MAX) {
+    logger.warn("API test timeout env is out of supported range", {
+      envValue: parsed,
+      min: API_TEST_TIMEOUT_LIMITS.MIN,
+      max: API_TEST_TIMEOUT_LIMITS.MAX,
+      defaultTimeout: API_TEST_TIMEOUT_LIMITS.DEFAULT,
+    });
+    return API_TEST_TIMEOUT_LIMITS.DEFAULT;
+  }
+
+  return parsed;
+}
+
 // API 测试配置常量
 const API_TEST_CONFIG = {
-  TIMEOUT_MS: 10000, // 10 秒超时
+  TIMEOUT_MS: resolveApiTestTimeoutMs(),
   MAX_RESPONSE_PREVIEW_LENGTH: 500, // 响应内容预览最大长度（增加到 500 字符以显示更多内容）
   TEST_MAX_TOKENS: 100, // 测试请求的最大 token 数
   TEST_PROMPT: "Hello", // 测试请求的默认提示词
@@ -41,6 +75,9 @@ const API_TEST_CONFIG = {
   MAX_STREAM_BUFFER_SIZE: 10 * 1024 * 1024, // 10MB 最大缓冲区大小
   MAX_STREAM_ITERATIONS: 10000, // 最大迭代次数（防止无限循环）
 } as const;
+
+const PROXY_RETRY_STATUS_CODES = new Set([502, 504, 520, 521, 522, 523, 524, 525, 526, 527, 530]);
+const CLOUDFLARE_ERROR_STATUS_CODES = new Set([520, 521, 522, 523, 524, 525, 526, 527, 530]);
 
 // 获取服务商数据
 export async function getProviders(): Promise<ProviderDisplay[]> {
@@ -993,6 +1030,98 @@ function clipText(value: unknown, maxLength?: number): string | undefined {
   return typeof value === "string" ? value.substring(0, limit) : undefined;
 }
 
+function sanitizeErrorTextForLogging(text: string, maxLength = 500): string {
+  if (!text) {
+    return text;
+  }
+
+  let sanitized = text;
+  sanitized = sanitized.replace(/\b(?:sk|rk|pk)-[a-zA-Z0-9]{16,}\b/giu, "[REDACTED_KEY]");
+  sanitized = sanitized.replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, "[EMAIL]");
+  sanitized = sanitized.replace(/Bearer\s+[A-Za-z0-9._\-]+/gi, "Bearer [REDACTED]");
+  sanitized = sanitized.replace(
+    /(password|token|secret)\s*[:=]\s*['\"]?[^'"\s]+['\"]?/gi,
+    "$1:***"
+  );
+  sanitized = sanitized.replace(/\/[\w.-]+\.(?:env|ya?ml|json|conf|ini)/gi, "[PATH]");
+
+  if (sanitized.length > maxLength) {
+    return `${sanitized.slice(0, maxLength)}... (truncated)`;
+  }
+
+  return sanitized;
+}
+
+function extractErrorMessage(errorJson: unknown): string | undefined {
+  if (!errorJson || typeof errorJson !== "object") {
+    return undefined;
+  }
+
+  const candidates: Array<(obj: Record<string, unknown>) => unknown> = [
+    (obj) => (obj.error as Record<string, unknown> | undefined)?.message,
+    (obj) => obj.message,
+    (obj) => (obj as { error_message?: unknown }).error_message,
+    (obj) => obj.detail,
+    (obj) => (obj.error as Record<string, unknown> | undefined)?.error,
+    (obj) => obj.error,
+  ];
+
+  for (const getter of candidates) {
+    let value: unknown;
+    try {
+      value = getter(errorJson as Record<string, unknown>);
+    } catch {
+      continue;
+    }
+
+    const normalized = normalizeErrorValue(value);
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return undefined;
+}
+
+function normalizeErrorValue(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  if (value && typeof value === "object") {
+    try {
+      const serialized = JSON.stringify(value);
+      const trimmed = serialized.trim();
+      return trimmed === "{}" || trimmed === "[]" ? undefined : trimmed;
+    } catch {
+      return undefined;
+    }
+  }
+
+  return undefined;
+}
+
+function detectCloudflareGatewayError(response: Response): boolean {
+  const cfRay = response.headers.get("cf-ray");
+  const cfCacheStatus = response.headers.get("cf-cache-status");
+  const server = response.headers.get("server");
+  const via = response.headers.get("via");
+
+  const headerIndicatesCloudflare = Boolean(
+    cfRay ||
+      cfCacheStatus ||
+      (server && server.toLowerCase().includes("cloudflare")) ||
+      (via && via.toLowerCase().includes("cloudflare"))
+  );
+
+  return headerIndicatesCloudflare && CLOUDFLARE_ERROR_STATUS_CODES.has(response.status);
+}
+
 /**
  * 流式响应解析结果
  */
@@ -1483,7 +1612,7 @@ async function executeProviderApiTest(
   options: {
     path: string | ((model: string, apiKey: string) => string);
     defaultModel: string;
-    headers: (apiKey: string) => Record<string, string>;
+    headers: (apiKey: string, context: { providerUrl: string }) => Record<string, string>;
     body: (model: string) => unknown;
     successMessage: string;
     extract: (result: ProviderApiResponse) => {
@@ -1550,8 +1679,14 @@ async function executeProviderApiTest(
       const init: UndiciFetchOptions = {
         method: "POST",
         headers: {
-          ...options.headers(data.apiKey),
+          ...options.headers(data.apiKey, { providerUrl: normalizedProviderUrl }),
+          // 使用更完整的请求头，模拟真实 Claude CLI 行为
+          // 避免被 Cloudflare Bot 检测拦截
           "User-Agent": "claude-cli/2.0.33 (external, cli)",
+          Accept: "application/json, text/event-stream",
+          "Accept-Language": "en-US,en;q=0.9",
+          "Accept-Encoding": "gzip, deflate, br",
+          Connection: "keep-alive",
         },
         body: JSON.stringify(options.body(model)),
         signal: AbortSignal.timeout(API_TEST_CONFIG.TIMEOUT_MS),
@@ -1561,16 +1696,90 @@ async function executeProviderApiTest(
         init.dispatcher = proxyConfig.agent;
       }
 
-      const response = await fetch(url, init);
-      const responseTime = Date.now() - startTime;
+      let response = await fetch(url, init);
+      let responseTime = Date.now() - startTime;
+
+      const shouldAttemptDirectRetry =
+        Boolean(proxyConfig?.fallbackToDirect) && PROXY_RETRY_STATUS_CODES.has(response.status);
+
+      if (shouldAttemptDirectRetry) {
+        const isCloudflareError = detectCloudflareGatewayError(response);
+
+        logger.warn("Provider API test: Proxy returned error, falling back to direct connection", {
+          providerId: tempProvider.id,
+          providerName: tempProvider.name,
+          proxyStatus: response.status,
+          proxyUrl: proxyConfig?.proxyUrl,
+          fallbackReason: isCloudflareError ? "cloudflare" : "proxy-error",
+        });
+
+        const fallbackInit = { ...init };
+        delete fallbackInit.dispatcher;
+
+        const fallbackStartTime = Date.now();
+        try {
+          response = await fetch(url, fallbackInit);
+          responseTime = Date.now() - fallbackStartTime;
+
+          logger.info("Provider API test: Direct connection succeeded after proxy failure", {
+            providerId: tempProvider.id,
+            providerName: tempProvider.name,
+            directStatus: response.status,
+            directResponseTime: responseTime,
+            fallbackReason: isCloudflareError ? "cloudflare" : "proxy-error",
+          });
+        } catch (directError) {
+          const directResponseTime = Date.now() - fallbackStartTime;
+          logger.error("Provider API test: Direct connection also failed", {
+            providerId: tempProvider.id,
+            error: directError,
+            fallbackReason: isCloudflareError ? "cloudflare" : "proxy-error",
+          });
+
+          return {
+            ok: true,
+            data: {
+              success: false,
+              message: `代理和直连均失败`,
+              details: {
+                responseTime: directResponseTime,
+                error: `代理错误: HTTP ${response.status} (${isCloudflareError ? "Cloudflare" : "Proxy"})\n直连错误: ${
+                  directError instanceof Error ? directError.message : String(directError)
+                }`,
+              },
+            },
+          };
+        }
+      }
 
       if (!response.ok) {
         const errorText = await response.text();
+        const sanitizedErrorText = sanitizeErrorTextForLogging(errorText);
+
+        // 添加 trace 日志记录原始错误响应
+        logger.trace("Provider API test raw error response", {
+          providerUrl: normalizedProviderUrl.replace(/:\/\/[^@]*@/, "://***@"),
+          status: response.status,
+          rawErrorText: sanitizedErrorText,
+          rawErrorLength: errorText.length,
+        });
+
         let errorDetail: string | undefined;
         try {
           const errorJson = JSON.parse(errorText);
-          errorDetail = errorJson.error?.message || errorJson.message;
-        } catch {
+          errorDetail = extractErrorMessage(errorJson);
+
+          logger.trace("Provider API test parsed error", {
+            providerUrl: normalizedProviderUrl.replace(/:\/\/[^@]*@/, "://***@"),
+            extractedDetail: errorDetail,
+            errorJsonKeys:
+              errorJson && typeof errorJson === "object" ? Object.keys(errorJson) : undefined,
+          });
+        } catch (parseError) {
+          logger.trace("Provider API test failed to parse error JSON", {
+            providerUrl: normalizedProviderUrl.replace(/:\/\/[^@]*@/, "://***@"),
+            parseError: parseError instanceof Error ? parseError.message : "Unknown parse error",
+          });
           errorDetail = undefined;
         }
 
@@ -1768,20 +1977,54 @@ async function executeProviderApiTest(
 /**
  * 测试 Anthropic Messages API 连通性
  */
+function getHostnameFromUrl(url: string): string | null {
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function resolveAnthropicAuthHeaders(apiKey: string, providerUrl: string): Record<string, string> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "anthropic-version": "2023-06-01",
+  };
+
+  const hostname = getHostnameFromUrl(providerUrl);
+  const isOfficialAnthropic = hostname
+    ? hostname.endsWith("anthropic.com") || hostname.endsWith("claude.ai")
+    : false;
+  const looksLikeProxy = hostname
+    ? /proxy|relay|gateway|router|openai|api2d|openrouter|worker|gpt/i.test(hostname)
+    : false;
+
+  if (isOfficialAnthropic) {
+    headers["x-api-key"] = apiKey;
+    return headers;
+  }
+
+  if (looksLikeProxy) {
+    headers.Authorization = `Bearer ${apiKey}`;
+    return headers;
+  }
+
+  headers["x-api-key"] = apiKey;
+  headers.Authorization = `Bearer ${apiKey}`;
+  return headers;
+}
+
 export async function testProviderAnthropicMessages(
   data: ProviderApiTestArgs
 ): Promise<ProviderApiTestResult> {
   return executeProviderApiTest(data, {
     path: "/v1/messages",
     defaultModel: "claude-sonnet-4-5-20250929",
-    headers: (apiKey) => ({
-      "Content-Type": "application/json",
-      "anthropic-version": "2023-06-01",
-      "x-api-key": apiKey,
-    }),
+    headers: (apiKey, context) => resolveAnthropicAuthHeaders(apiKey, context.providerUrl),
     body: (model) => ({
       model,
       max_tokens: API_TEST_CONFIG.TEST_MAX_TOKENS,
+      stream: false, // 显式禁用流式响应，避免 Cloudflare 520 错误
       messages: [{ role: "user", content: API_TEST_CONFIG.TEST_PROMPT }],
     }),
     successMessage: "Anthropic Messages API 测试成功",
@@ -1802,10 +2045,13 @@ export async function testProviderOpenAIChatCompletions(
   return executeProviderApiTest(data, {
     path: "/v1/chat/completions",
     defaultModel: "gpt-5.1-codex",
-    headers: (apiKey) => ({
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    }),
+    headers: (apiKey, context) => {
+      void context;
+      return {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      };
+    },
     body: (model) => ({
       model,
       max_tokens: API_TEST_CONFIG.TEST_MAX_TOKENS,
@@ -1832,16 +2078,20 @@ export async function testProviderOpenAIResponses(
   return executeProviderApiTest(data, {
     path: "/v1/responses",
     defaultModel: "gpt-5.1-codex",
-    headers: (apiKey) => ({
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    }),
+    headers: (apiKey, context) => {
+      void context;
+      return {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      };
+    },
     body: (model) => ({
       model,
       // 注意：不包含 max_output_tokens，因为某些中转服务不支持此参数
       // input 必须是数组格式，符合 OpenAI Responses API 规范
       input: [
         {
+          type: "message", // ⭐ 修复 #189: Response API 要求 input 数组中的每个元素必须包含 type 字段
           role: "user",
           content: [
             {
@@ -1890,7 +2140,8 @@ export async function testProviderGemini(
         return `/v1beta/models/${model}:generateContent`;
       },
       defaultModel: "gemini-1.5-pro",
-      headers: (apiKey) => {
+      headers: (apiKey, context) => {
+        void context;
         const headers: Record<string, string> = {
           "Content-Type": "application/json",
         };
@@ -1899,12 +2150,15 @@ export async function testProviderGemini(
         }
         return headers;
       },
-      body: () => ({
-        contents: [{ parts: [{ text: API_TEST_CONFIG.TEST_PROMPT }] }],
-        generationConfig: {
-          maxOutputTokens: API_TEST_CONFIG.TEST_MAX_TOKENS,
-        },
-      }),
+      body: (model) => {
+        void model;
+        return {
+          contents: [{ parts: [{ text: API_TEST_CONFIG.TEST_PROMPT }] }],
+          generationConfig: {
+            maxOutputTokens: API_TEST_CONFIG.TEST_MAX_TOKENS,
+          },
+        };
+      },
       successMessage: "Gemini API 测试成功",
       extract: (result) => {
         const geminiResult = result as GeminiResponse;

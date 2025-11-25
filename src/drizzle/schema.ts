@@ -169,12 +169,12 @@ export const providers = pgTable('providers', {
   // - firstByteTimeoutStreamingMs: 流式请求首字节超时（默认 30 秒，0 = 禁用）⭐ 核心
   //   覆盖从请求开始到收到首字节的全过程：DNS + TCP + TLS + 请求发送 + 首字节接收
   //   解决流式请求重试缓慢问题
-  // - streamingIdleTimeoutMs: 流式请求静默期超时（默认 10 秒，0 = 禁用）⭐ 核心
+  // - streamingIdleTimeoutMs: 流式请求静默期超时（默认 300 秒，0 = 禁用）⭐ 核心
   //   解决流式中途卡住问题
   // - requestTimeoutNonStreamingMs: 非流式请求总超时（默认 600 秒，0 = 禁用）⭐ 核心
   //   防止长请求无限挂起
   firstByteTimeoutStreamingMs: integer('first_byte_timeout_streaming_ms').notNull().default(30000),
-  streamingIdleTimeoutMs: integer('streaming_idle_timeout_ms').notNull().default(10000),
+  streamingIdleTimeoutMs: integer('streaming_idle_timeout_ms').notNull().default(300000),
   requestTimeoutNonStreamingMs: integer('request_timeout_non_streaming_ms')
     .notNull()
     .default(600000),
