@@ -253,12 +253,16 @@ const DEFAULT_ERROR_RULES = [
 ];
 
 /**
- * 同步默认错误规则
+ * 同步默认错误规则（推荐使用）
  *
  * 将代码中的默认规则同步到数据库：
  * - 删除所有已有的默认规则（isDefault=true）
- * - 重新插入最新的默认规则
+ * - 重新插入最新的 DEFAULT_ERROR_RULES
  * - 用户自定义规则（isDefault=false）保持不变
+ *
+ * 使用场景：
+ * 1. 系统启动时自动同步（instrumentation.ts）
+ * 2. 用户点击"刷新缓存"按钮时手动同步
  *
  * @returns 同步的规则数量
  */
@@ -282,8 +286,12 @@ export async function syncDefaultErrorRules(): Promise<number> {
 /**
  * 初始化默认错误规则
  *
- * 使用 ON CONFLICT DO NOTHING 确保幂等性，避免重复插入
- * 用于首次部署时初始化默认规则
+ * @deprecated 请使用 syncDefaultErrorRules() 替代
+ *
+ * 此函数使用 ON CONFLICT DO NOTHING，只能插入新规则，无法更新已存在的规则。
+ * 当 DEFAULT_ERROR_RULES 更新时，数据库中的旧规则不会被同步。
+ *
+ * syncDefaultErrorRules() 会删除所有预置规则并重新插入，确保每次都同步最新版本。
  */
 export async function initializeDefaultErrorRules(): Promise<void> {
   // 使用事务批量插入，ON CONFLICT DO NOTHING 保证幂等性

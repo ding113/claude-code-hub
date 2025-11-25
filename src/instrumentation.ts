@@ -6,16 +6,21 @@
 import { logger } from "@/lib/logger";
 
 /**
- * 初始化错误规则检测器
+ * 同步错误规则并初始化检测器
  * 提取为独立函数以避免代码重复
+ *
+ * 每次启动都会同步 DEFAULT_ERROR_RULES 到数据库：
+ * - 删除所有预置规则（isDefault=true）
+ * - 重新插入最新的预置规则
+ * - 用户自定义规则（isDefault=false）保持不变
  *
  * 注意: 此函数会传播关键错误,调用者应决定是否需要优雅降级
  */
-async function initializeErrorRuleDetector(): Promise<void> {
-  // 初始化默认错误规则 - 让关键错误传播
-  const { initializeDefaultErrorRules } = await import("@/repository/error-rules");
-  await initializeDefaultErrorRules();
-  logger.info("Default error rules initialized successfully");
+async function syncErrorRulesAndInitializeDetector(): Promise<void> {
+  // 同步默认错误规则到数据库 - 每次启动都完整同步
+  const { syncDefaultErrorRules } = await import("@/repository/error-rules");
+  const syncedCount = await syncDefaultErrorRules();
+  logger.info(`Default error rules synced successfully (${syncedCount} rules)`);
 
   // 加载错误规则缓存 - 让关键错误传播
   const { errorRuleDetector } = await import("@/lib/error-rule-detector");
@@ -54,9 +59,9 @@ export async function register() {
       const { ensurePriceTable } = await import("@/lib/price-sync/seed-initializer");
       await ensurePriceTable();
 
-      // 初始化错误规则检测器（非关键功能,允许优雅降级）
+      // 同步错误规则并初始化检测器（非关键功能,允许优雅降级）
       try {
-        await initializeErrorRuleDetector();
+        await syncErrorRulesAndInitializeDetector();
       } catch (error) {
         logger.error(
           "[Instrumentation] Non-critical: Error rule detector initialization failed",
@@ -92,9 +97,9 @@ export async function register() {
       const { ensurePriceTable } = await import("@/lib/price-sync/seed-initializer");
       await ensurePriceTable();
 
-      // 初始化错误规则检测器（非关键功能,允许优雅降级）
+      // 同步错误规则并初始化检测器（非关键功能,允许优雅降级）
       try {
-        await initializeErrorRuleDetector();
+        await syncErrorRulesAndInitializeDetector();
       } catch (error) {
         logger.error(
           "[Instrumentation] Non-critical: Error rule detector initialization failed",
