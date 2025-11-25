@@ -1202,7 +1202,7 @@ export function ProviderForm({
                     placeholder={t("sections.timeout.streamingFirstByte.placeholder")}
                     disabled={isPending}
                     min="0"
-                    max="120"
+                    max="180"
                     step="1"
                     className="border-orange-200 focus:border-orange-500 focus:ring-orange-500"
                   />
@@ -1234,7 +1234,7 @@ export function ProviderForm({
                     placeholder={t("sections.timeout.streamingIdle.placeholder")}
                     disabled={isPending}
                     min="0"
-                    max="120"
+                    max="600"
                     step="1"
                     className="border-orange-200 focus:border-orange-500 focus:ring-orange-500"
                   />
@@ -1267,7 +1267,7 @@ export function ProviderForm({
                     placeholder={t("sections.timeout.nonStreamingTotal.placeholder")}
                     disabled={isPending}
                     min="0"
-                    max="1200"
+                    max="1800"
                     step="1"
                   />
                   <p className="text-xs text-muted-foreground">

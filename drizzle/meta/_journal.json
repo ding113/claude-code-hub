@@ -169,6 +169,13 @@
       "when": 1764056229573,
       "tag": "0023_safe_christian_walker",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1764206400000,
+      "tag": "0024_update_provider_timeout_defaults",
+      "breakpoints": true
     }
   ]
 }

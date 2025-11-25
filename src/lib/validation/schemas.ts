@@ -295,7 +295,7 @@ export const CreateProviderSchema = z.object({
         )
         .max(
           PROVIDER_TIMEOUT_LIMITS.FIRST_BYTE_TIMEOUT_STREAMING_MS.MAX,
-          "流式首字节超时不能超过120秒"
+          "流式首字节超时不能超过180秒"
         ),
     ])
     .optional(),
@@ -305,8 +305,8 @@ export const CreateProviderSchema = z.object({
       z.coerce
         .number()
         .int("流式静默期超时必须是整数")
-        .min(PROVIDER_TIMEOUT_LIMITS.STREAMING_IDLE_TIMEOUT_MS.MIN, "流式静默期超时不能少于1秒")
-        .max(PROVIDER_TIMEOUT_LIMITS.STREAMING_IDLE_TIMEOUT_MS.MAX, "流式静默期超时不能超过120秒"),
+        .min(PROVIDER_TIMEOUT_LIMITS.STREAMING_IDLE_TIMEOUT_MS.MIN, "流式静默期超时不能少于60秒")
+        .max(PROVIDER_TIMEOUT_LIMITS.STREAMING_IDLE_TIMEOUT_MS.MAX, "流式静默期超时不能超过600秒"),
     ])
     .optional(),
   request_timeout_non_streaming_ms: z
@@ -321,7 +321,7 @@ export const CreateProviderSchema = z.object({
         )
         .max(
           PROVIDER_TIMEOUT_LIMITS.REQUEST_TIMEOUT_NON_STREAMING_MS.MAX,
-          "非流式总超时不能超过1200秒"
+          "非流式总超时不能超过1800秒"
         ),
     ])
     .optional(),
@@ -475,7 +475,7 @@ export const UpdateProviderSchema = z
           )
           .max(
             PROVIDER_TIMEOUT_LIMITS.FIRST_BYTE_TIMEOUT_STREAMING_MS.MAX,
-            "流式首字节超时不能超过120秒"
+            "流式首字节超时不能超过180秒"
           ),
       ])
       .optional(),
@@ -485,10 +485,10 @@ export const UpdateProviderSchema = z
         z.coerce
           .number()
           .int("流式静默期超时必须是整数")
-          .min(PROVIDER_TIMEOUT_LIMITS.STREAMING_IDLE_TIMEOUT_MS.MIN, "流式静默期超时不能少于1秒")
+          .min(PROVIDER_TIMEOUT_LIMITS.STREAMING_IDLE_TIMEOUT_MS.MIN, "流式静默期超时不能少于60秒")
           .max(
             PROVIDER_TIMEOUT_LIMITS.STREAMING_IDLE_TIMEOUT_MS.MAX,
-            "流式静默期超时不能超过120秒"
+            "流式静默期超时不能超过600秒"
           ),
       ])
       .optional(),
@@ -504,7 +504,7 @@ export const UpdateProviderSchema = z
           )
           .max(
             PROVIDER_TIMEOUT_LIMITS.REQUEST_TIMEOUT_NON_STREAMING_MS.MAX,
-            "非流式总超时不能超过1200秒"
+            "非流式总超时不能超过1800秒"
           ),
       ])
       .optional(),
