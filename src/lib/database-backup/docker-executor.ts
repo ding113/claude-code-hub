@@ -344,7 +344,8 @@ export function executePgRestore(
             logger.error({
               action: "pg_restore_migrations_error",
               database: dbConfig.database,
-              error: migrationError instanceof Error ? migrationError.message : String(migrationError),
+              error:
+                migrationError instanceof Error ? migrationError.message : String(migrationError),
             });
 
             const errorMessage = `data: ${JSON.stringify({
