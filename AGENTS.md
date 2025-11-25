@@ -68,6 +68,7 @@ Client Request → Next.js API Route (/v1)
 ### Provider Types
 
 The system supports multiple provider types via `providerType` field:
+
 - `claude` - Anthropic API (standard)
 - `claude-auth` - Claude relay services (Bearer auth only)
 - `codex` - Codex CLI (Response API)
@@ -77,6 +78,7 @@ The system supports multiple provider types via `providerType` field:
 ### Format Converters
 
 Located in `src/app/v1/_lib/converters/`, these handle bidirectional conversion between:
+
 - Claude Messages API
 - OpenAI Chat Completions API
 - Codex Response API
@@ -85,6 +87,7 @@ Located in `src/app/v1/_lib/converters/`, these handle bidirectional conversion 
 ### Guard Pipeline
 
 The `GuardPipelineBuilder` in `src/app/v1/_lib/proxy/guard-pipeline.ts` orchestrates request processing:
+
 1. `auth` - API key validation
 2. `version` - Client version check
 3. `probe` - Handle probe requests
@@ -97,6 +100,7 @@ The `GuardPipelineBuilder` in `src/app/v1/_lib/proxy/guard-pipeline.ts` orchestr
 ### Database Schema
 
 Core tables in `src/drizzle/schema.ts`:
+
 - `users` - User accounts with quota limits
 - `keys` - API keys with per-key limits
 - `providers` - Upstream provider configurations
@@ -108,6 +112,7 @@ Core tables in `src/drizzle/schema.ts`:
 ### OpenAPI Documentation
 
 Server Actions are automatically exposed as REST endpoints via `src/app/api/actions/[...route]/route.ts`:
+
 - Swagger UI: `/api/actions/docs`
 - Scalar UI: `/api/actions/scalar`
 - OpenAPI JSON: `/api/actions/openapi.json`
@@ -115,6 +120,7 @@ Server Actions are automatically exposed as REST endpoints via `src/app/api/acti
 ## Configuration
 
 Key environment variables (see `.env.example`):
+
 - `ADMIN_TOKEN` - Admin login token (required)
 - `DSN` - PostgreSQL connection string
 - `REDIS_URL` - Redis for rate limiting and sessions
@@ -125,18 +131,23 @@ Key environment variables (see `.env.example`):
 ## Important Patterns
 
 ### Path Alias
+
 All imports use `@/*` alias mapping to `./src/*`.
 
 ### i18n
+
 Internationalization via `next-intl` with messages in `/messages/{locale}/`.
 
 ### Rate Limiting
+
 Redis Lua scripts ensure atomic operations. Fail-open strategy when Redis unavailable.
 
 ### Circuit Breaker
+
 Per-provider circuit breaker with configurable thresholds. States: CLOSED → OPEN → HALF_OPEN.
 
 ### Session Stickiness
+
 5-minute session caching to maintain provider consistency within conversations.
 
 ## PR Guidelines
