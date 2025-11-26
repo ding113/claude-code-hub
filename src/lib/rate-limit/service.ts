@@ -855,4 +855,135 @@ export class RateLimitService {
       logger.error(`[RateLimit] Failed to track user daily cost:`, error);
     }
   }
+
+  /**
+   * 批量获取多个供应商的限额消费（Redis Pipeline）
+   * 用于避免 N+1 查询问题
+   *
+   * @param providerIds - 供应商 ID 列表
+   * @param dailyResetConfigs - 每个供应商的日限额重置配置
+   * @returns Map<providerId, { cost5h, costDaily, costWeekly, costMonthly }>
+   */
+  static async getCurrentCostBatch(
+    providerIds: number[],
+    dailyResetConfigs: Map<number, { resetTime?: string | null; resetMode?: string | null }>
+  ): Promise<Map<number, { cost5h: number; costDaily: number; costWeekly: number; costMonthly: number }>> {
+    const result = new Map<number, { cost5h: number; costDaily: number; costWeekly: number; costMonthly: number }>();
+
+    // 初始化结果（默认为 0）
+    for (const providerId of providerIds) {
+      result.set(providerId, { cost5h: 0, costDaily: 0, costWeekly: 0, costMonthly: 0 });
+    }
+
+    if (providerIds.length === 0) {
+      return result;
+    }
+
+    // Redis 不可用时返回默认值
+    if (!this.redis || this.redis.status !== "ready") {
+      logger.warn("[RateLimit] Redis unavailable for batch cost query, returning zeros");
+      return result;
+    }
+
+    try {
+      const now = Date.now();
+      const window5h = 5 * 60 * 60 * 1000;
+      const window24h = 24 * 60 * 60 * 1000;
+      const pipeline = this.redis.pipeline();
+
+      // 构建批量查询命令
+      // 记录每个供应商的查询顺序和类型
+      const queryMeta: Array<{
+        providerId: number;
+        period: "5h" | "daily" | "weekly" | "monthly";
+        isRolling: boolean;
+      }> = [];
+
+      for (const providerId of providerIds) {
+        const config = dailyResetConfigs.get(providerId);
+        const dailyResetMode = (config?.resetMode ?? "fixed") as DailyResetMode;
+        const { suffix } = this.resolveDailyReset(config?.resetTime ?? undefined);
+
+        // 5h 滚动窗口
+        pipeline.eval(
+          GET_COST_5H_ROLLING_WINDOW,
+          1,
+          `provider:${providerId}:cost_5h_rolling`,
+          now.toString(),
+          window5h.toString()
+        );
+        queryMeta.push({ providerId, period: "5h", isRolling: true });
+
+        // Daily: 根据模式选择查询方式
+        if (dailyResetMode === "rolling") {
+          pipeline.eval(
+            GET_COST_DAILY_ROLLING_WINDOW,
+            1,
+            `provider:${providerId}:cost_daily_rolling`,
+            now.toString(),
+            window24h.toString()
+          );
+          queryMeta.push({ providerId, period: "daily", isRolling: true });
+        } else {
+          pipeline.get(`provider:${providerId}:cost_daily_${suffix}`);
+          queryMeta.push({ providerId, period: "daily", isRolling: false });
+        }
+
+        // Weekly
+        pipeline.get(`provider:${providerId}:cost_weekly`);
+        queryMeta.push({ providerId, period: "weekly", isRolling: false });
+
+        // Monthly
+        pipeline.get(`provider:${providerId}:cost_monthly`);
+        queryMeta.push({ providerId, period: "monthly", isRolling: false });
+      }
+
+      // 执行批量查询
+      const pipelineResults = await pipeline.exec();
+
+      if (!pipelineResults) {
+        logger.error("[RateLimit] Batch cost query returned null");
+        return result;
+      }
+
+      // 解析结果
+      for (let i = 0; i < queryMeta.length; i++) {
+        const meta = queryMeta[i];
+        const [err, value] = pipelineResults[i];
+
+        if (err) {
+          logger.error("[RateLimit] Batch query error for provider", {
+            providerId: meta.providerId,
+            period: meta.period,
+            error: err.message,
+          });
+          continue;
+        }
+
+        const cost = parseFloat((value as string) || "0");
+        const providerData = result.get(meta.providerId)!;
+
+        switch (meta.period) {
+          case "5h":
+            providerData.cost5h = cost;
+            break;
+          case "daily":
+            providerData.costDaily = cost;
+            break;
+          case "weekly":
+            providerData.costWeekly = cost;
+            break;
+          case "monthly":
+            providerData.costMonthly = cost;
+            break;
+        }
+      }
+
+      logger.debug(`[RateLimit] Batch cost query completed for ${providerIds.length} providers`);
+      return result;
+    } catch (error) {
+      logger.error("[RateLimit] Batch cost query failed:", error);
+      return result;
+    }
+  }
 }

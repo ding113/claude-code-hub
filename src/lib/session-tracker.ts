@@ -300,6 +300,113 @@ export class SessionTracker {
   }
 
   /**
+   * 批量获取多个 Provider 的活跃 session 计数
+   * 用于避免 N+1 查询问题
+   *
+   * @param providerIds - Provider ID 列表
+   * @returns Map<providerId, count>
+   */
+  static async getProviderSessionCountBatch(providerIds: number[]): Promise<Map<number, number>> {
+    const result = new Map<number, number>();
+
+    // 初始化结果（默认为 0）
+    for (const providerId of providerIds) {
+      result.set(providerId, 0);
+    }
+
+    if (providerIds.length === 0) {
+      return result;
+    }
+
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") {
+      return result;
+    }
+
+    try {
+      const now = Date.now();
+      const fiveMinutesAgo = now - this.SESSION_TTL;
+
+      // 第一阶段：批量清理过期 session 并获取 session IDs
+      const cleanupPipeline = redis.pipeline();
+      for (const providerId of providerIds) {
+        const key = `provider:${providerId}:active_sessions`;
+        // 清理过期 session
+        cleanupPipeline.zremrangebyscore(key, "-inf", fiveMinutesAgo);
+        // 获取剩余 session IDs
+        cleanupPipeline.zrange(key, 0, -1);
+      }
+
+      const cleanupResults = await cleanupPipeline.exec();
+      if (!cleanupResults) {
+        return result;
+      }
+
+      // 收集需要验证的 session IDs
+      const providerSessionMap = new Map<number, string[]>();
+      const allSessionIds: string[] = [];
+
+      for (let i = 0; i < providerIds.length; i++) {
+        const providerId = providerIds[i];
+        // 每个 provider 有 2 个命令（zremrangebyscore + zrange）
+        const zrangeResult = cleanupResults[i * 2 + 1];
+
+        if (zrangeResult && zrangeResult[0] === null) {
+          const sessionIds = zrangeResult[1] as string[];
+          providerSessionMap.set(providerId, sessionIds);
+          allSessionIds.push(...sessionIds);
+        } else {
+          providerSessionMap.set(providerId, []);
+        }
+      }
+
+      // 如果没有 session，直接返回
+      if (allSessionIds.length === 0) {
+        return result;
+      }
+
+      // 第二阶段：批量验证所有 session info 是否存在
+      const uniqueSessionIds = [...new Set(allSessionIds)];
+      const verifyPipeline = redis.pipeline();
+      for (const sessionId of uniqueSessionIds) {
+        verifyPipeline.exists(`session:${sessionId}:info`);
+      }
+
+      const verifyResults = await verifyPipeline.exec();
+      if (!verifyResults) {
+        return result;
+      }
+
+      // 构建有效 session 集合
+      const validSessions = new Set<string>();
+      for (let i = 0; i < uniqueSessionIds.length; i++) {
+        const [err, exists] = verifyResults[i];
+        if (!err && exists === 1) {
+          validSessions.add(uniqueSessionIds[i]);
+        }
+      }
+
+      // 第三阶段：统计每个 provider 的有效 session 数量
+      for (const providerId of providerIds) {
+        const sessionIds = providerSessionMap.get(providerId) || [];
+        let count = 0;
+        for (const sessionId of sessionIds) {
+          if (validSessions.has(sessionId)) {
+            count++;
+          }
+        }
+        result.set(providerId, count);
+      }
+
+      logger.debug(`SessionTracker: Batch session count completed for ${providerIds.length} providers`);
+      return result;
+    } catch (error) {
+      logger.error("SessionTracker: Failed to get provider session count batch", { error });
+      return result;
+    }
+  }
+
+  /**
    * 获取活跃 session ID 列表（用于详情页）
    *
    * @returns Session ID 数组

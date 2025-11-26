@@ -93,6 +93,15 @@ export interface ProviderTestConfig {
   successContains?: string;
   /** Request timeout in ms (default: 10000) */
   timeoutMs?: number;
+
+  // =========== Custom Configuration Fields ===========
+
+  /** Preset configuration ID (e.g., 'cc_base', 'cx_base') */
+  preset?: string;
+  /** Custom JSON payload (overrides preset and default body) */
+  customPayload?: string;
+  /** Custom headers to merge with default headers */
+  customHeaders?: Record<string, string>;
 }
 
 // ============================================================================

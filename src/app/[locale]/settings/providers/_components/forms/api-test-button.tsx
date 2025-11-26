@@ -3,7 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Loader2, CheckCircle2, XCircle, Activity, AlertTriangle } from "lucide-react";
-import { testProviderUnified, getUnmaskedProviderKey } from "@/actions/providers";
+import {
+  testProviderUnified,
+  getUnmaskedProviderKey,
+  getProviderTestPresets,
+  type PresetConfigResponse,
+} from "@/actions/providers";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
 import {
@@ -15,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { isValidUrl } from "@/lib/utils/validation";
 import type { ProviderType } from "@/types/provider";
 import { TestResultCard, type UnifiedTestResultData } from "./test-result-card";
@@ -105,6 +111,13 @@ export function ApiTestButton({
   const [isModelManuallyEdited, setIsModelManuallyEdited] = useState(false);
   const [testResult, setTestResult] = useState<UnifiedTestResultData | null>(null);
 
+  // Custom configuration state
+  const [configMode, setConfigMode] = useState<"preset" | "custom">("preset");
+  const [presets, setPresets] = useState<PresetConfigResponse[]>([]);
+  const [selectedPreset, setSelectedPreset] = useState<string>("");
+  const [customPayload, setCustomPayload] = useState("");
+  const [successContains, setSuccessContains] = useState("pong");
+
   useEffect(() => {
     if (isApiFormatManuallySelected) return;
     const resolvedFormat = resolveApiFormatFromProvider(providerType);
@@ -112,6 +125,33 @@ export function ApiTestButton({
       setApiFormat(resolvedFormat);
     }
   }, [apiFormat, isApiFormatManuallySelected, providerType]);
+
+  // Map API format to provider type (defined before useEffect that depends on it)
+  const apiFormatToProviderType: Record<ApiFormat, ProviderType> = useMemo(() => ({
+    "anthropic-messages": providerType === "claude-auth" ? "claude-auth" : "claude",
+    "openai-chat": "openai-compatible",
+    "openai-responses": "codex",
+    gemini: providerType === "gemini-cli" ? "gemini-cli" : "gemini",
+  }), [providerType]);
+
+  // Load presets when provider type changes
+  useEffect(() => {
+    const currentProviderType = apiFormatToProviderType[apiFormat];
+    if (!currentProviderType) return;
+
+    getProviderTestPresets(currentProviderType).then((result) => {
+      if (result.ok && result.data) {
+        setPresets(result.data);
+        // Auto-select first preset if available
+        if (result.data.length > 0 && !selectedPreset) {
+          setSelectedPreset(result.data[0].id);
+          setSuccessContains(result.data[0].defaultSuccessContains);
+        }
+      } else {
+        setPresets([]);
+      }
+    });
+  }, [apiFormat, apiFormatToProviderType]);
 
   useEffect(() => {
     if (isModelManuallyEdited) {
@@ -122,14 +162,6 @@ export function ApiTestButton({
     const defaultModel = whitelistDefault ?? getDefaultModelForFormat(apiFormat);
     setTestModel(defaultModel);
   }, [apiFormat, isModelManuallyEdited, normalizedAllowedModels]);
-
-  // Map API format to provider type
-  const apiFormatToProviderType: Record<ApiFormat, ProviderType> = {
-    "anthropic-messages": providerType === "claude-auth" ? "claude-auth" : "claude",
-    "openai-chat": "openai-compatible",
-    "openai-responses": "codex",
-    gemini: providerType === "gemini-cli" ? "gemini-cli" : "gemini",
-  };
 
   const handleTest = async () => {
     // 验证必填字段
@@ -178,6 +210,10 @@ export function ApiTestButton({
         model: testModel.trim() || undefined,
         proxyUrl: proxyUrl?.trim() || null,
         proxyFallbackToDirect,
+        // Custom configuration
+        preset: configMode === "preset" && selectedPreset ? selectedPreset : undefined,
+        customPayload: configMode === "custom" && customPayload ? customPayload : undefined,
+        successContains: successContains || undefined,
       });
 
       if (!response.ok) {
@@ -195,7 +231,7 @@ export function ApiTestButton({
       // 显示测试结果 toast
       const statusLabels = {
         green: t("testSuccess"),
-        yellow: "波动",
+        yellow: t("resultCard.status.yellow"),
         red: t("testFailed"),
       };
 
@@ -246,7 +282,7 @@ export function ApiTestButton({
         return (
           <>
             <AlertTriangle className="h-4 w-4 mr-2 text-yellow-600" />
-            波动
+            {t("resultCard.status.yellow")}
           </>
         );
       } else {
@@ -310,6 +346,92 @@ export function ApiTestButton({
           disabled={isTesting}
         />
         <div className="text-xs text-muted-foreground">{t("testModelDesc")}</div>
+      </div>
+
+      {/* Request Configuration - Preset/Custom */}
+      {presets.length > 0 && (
+        <div className="space-y-3">
+          <Label>{t("requestConfig")}</Label>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant={configMode === "preset" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setConfigMode("preset")}
+              disabled={isTesting}
+            >
+              {t("presetConfig")}
+            </Button>
+            <Button
+              type="button"
+              variant={configMode === "custom" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setConfigMode("custom")}
+              disabled={isTesting}
+            >
+              {t("customConfig")}
+            </Button>
+          </div>
+
+          {configMode === "preset" && (
+            <div className="space-y-2">
+              <Select
+                value={selectedPreset}
+                onValueChange={(value: string) => {
+                  setSelectedPreset(value);
+                  const preset = presets.find((p) => p.id === value);
+                  if (preset) {
+                    setSuccessContains(preset.defaultSuccessContains);
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t("selectPreset")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {presets.map((preset) => (
+                    <SelectItem key={preset.id} value={preset.id}>
+                      {preset.id} - {preset.description}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="text-xs text-muted-foreground">
+                {t("presetDesc")}
+              </div>
+            </div>
+          )}
+
+          {configMode === "custom" && (
+            <div className="space-y-2">
+              <Textarea
+                value={customPayload}
+                onChange={(e) => setCustomPayload(e.target.value)}
+                placeholder={t("customPayloadPlaceholder")}
+                className="font-mono text-xs min-h-[120px]"
+                disabled={isTesting}
+              />
+              <div className="text-xs text-muted-foreground">
+                {t("customPayloadDesc")}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Success Detection Keyword */}
+      <div className="space-y-2">
+        <Label htmlFor="success-contains">{t("successContains")}</Label>
+        <Input
+          id="success-contains"
+          value={successContains}
+          onChange={(e) => setSuccessContains(e.target.value)}
+          placeholder={t("successContainsPlaceholder")}
+          disabled={isTesting}
+        />
+        <div className="text-xs text-muted-foreground">
+          {t("successContainsDesc")}
+        </div>
       </div>
 
       {/* 免责声明 */}

@@ -24,7 +24,8 @@ import {
   getTestHeaders,
   getTestUrl,
   DEFAULT_SUCCESS_CONTAINS,
-} from "./utils/test-prompts";
+} from './utils/test-prompts';
+import { getPresetPayload, getPreset } from './presets';
 
 /**
  * Execute a provider test with three-tier validation
@@ -35,8 +36,16 @@ export async function executeProviderTest(config: ProviderTestConfig): Promise<P
 
   // Build test configuration with defaults
   const timeoutMs = config.timeoutMs ?? TEST_DEFAULTS.TIMEOUT_MS;
-  const slowThresholdMs = config.latencyThresholdMs ?? TEST_DEFAULTS.SLOW_LATENCY_MS;
-  const successContains = config.successContains ?? DEFAULT_SUCCESS_CONTAINS[config.providerType];
+  const slowThresholdMs =
+    config.latencyThresholdMs ?? TEST_DEFAULTS.SLOW_LATENCY_MS;
+
+  // Determine success validation string (priority: config > preset > default)
+  let successContains = config.successContains;
+  if (!successContains && config.preset) {
+    const preset = getPreset(config.preset);
+    successContains = preset?.defaultSuccessContains;
+  }
+  successContains ??= DEFAULT_SUCCESS_CONTAINS[config.providerType];
 
   // Build request URL
   const url = getTestUrl(
@@ -49,9 +58,28 @@ export async function executeProviderTest(config: ProviderTestConfig): Promise<P
       : undefined
   );
 
-  // Build request body and headers
-  const body = getTestBody(config.providerType, config.model);
-  const headers = getTestHeaders(config.providerType, config.apiKey);
+  // Build request body (priority: customPayload > preset > default)
+  let body: Record<string, unknown>;
+  if (config.customPayload) {
+    // User-provided custom payload
+    try {
+      body = JSON.parse(config.customPayload);
+    } catch {
+      throw new Error('Invalid custom payload JSON');
+    }
+  } else if (config.preset) {
+    // Use preset configuration
+    body = getPresetPayload(config.preset, config.model);
+  } else {
+    // Use default test body
+    body = getTestBody(config.providerType, config.model);
+  }
+
+  // Build request headers (merge custom headers if provided)
+  const baseHeaders = getTestHeaders(config.providerType, config.apiKey);
+  const headers = config.customHeaders
+    ? { ...baseHeaders, ...config.customHeaders }
+    : baseHeaders;
 
   try {
     // Create abort controller for timeout
