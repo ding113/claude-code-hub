@@ -1615,6 +1615,7 @@ async function executeProviderApiTest(
     headers: (apiKey: string, context: { providerUrl: string }) => Record<string, string>;
     body: (model: string) => unknown;
     successMessage: string;
+    userAgent: string; // 渠道特定的 User-Agent
     extract: (result: ProviderApiResponse) => {
       model?: string;
       usage?: Record<string, unknown>;
@@ -1680,9 +1681,8 @@ async function executeProviderApiTest(
         method: "POST",
         headers: {
           ...options.headers(data.apiKey, { providerUrl: normalizedProviderUrl }),
-          // 使用更完整的请求头，模拟真实 Claude CLI 行为
-          // 避免被 Cloudflare Bot 检测拦截
-          "User-Agent": "claude-cli/2.0.33 (external, cli)",
+          // 使用渠道特定的 User-Agent，避免被 Cloudflare Bot 检测拦截
+          "User-Agent": options.userAgent,
           Accept: "application/json, text/event-stream",
           "Accept-Language": "en-US,en;q=0.9",
           "Accept-Encoding": "gzip, deflate, br",
@@ -2027,6 +2027,7 @@ export async function testProviderAnthropicMessages(
       stream: false, // 显式禁用流式响应，避免 Cloudflare 520 错误
       messages: [{ role: "user", content: API_TEST_CONFIG.TEST_PROMPT }],
     }),
+    userAgent: "claude-cli/2.0.50 (external, cli)",
     successMessage: "Anthropic Messages API 测试成功",
     extract: (result) => ({
       model: "model" in result ? result.model : undefined,
@@ -2060,6 +2061,7 @@ export async function testProviderOpenAIChatCompletions(
         { role: "user", content: "你好" },
       ],
     }),
+    userAgent: "OpenAI/NodeJS/3.2.1",
     successMessage: "OpenAI Chat Completions API 测试成功",
     extract: (result) => ({
       model: "model" in result ? result.model : undefined,
@@ -2102,6 +2104,7 @@ export async function testProviderOpenAIResponses(
         },
       ],
     }),
+    userAgent: "codex_cli_rs/0.63.0 (Mac OS 26.1.0; arm64) Apple_Terminal/455.1",
     successMessage: "OpenAI Responses API 测试成功",
     extract: (result) => ({
       model: "model" in result ? result.model : undefined,
@@ -2159,6 +2162,7 @@ export async function testProviderGemini(
           },
         };
       },
+      userAgent: "GeminiCLI/v0.17.1 (platform; arch)",
       successMessage: "Gemini API 测试成功",
       extract: (result) => {
         const geminiResult = result as GeminiResponse;
