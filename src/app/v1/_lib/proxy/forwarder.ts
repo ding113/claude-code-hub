@@ -375,6 +375,21 @@ export class ProxyForwarder {
             const proxyError = lastError as ProxyError;
             const statusCode = proxyError.statusCode;
 
+            // 🆕 count_tokens 请求特殊处理：不计入熔断，不触发供应商切换
+            if (session.isCountTokensRequest()) {
+              logger.debug(
+                "ProxyForwarder: count_tokens request error, skipping circuit breaker and provider switch",
+                {
+                  providerId: currentProvider.id,
+                  providerName: currentProvider.name,
+                  statusCode,
+                  error: proxyError.message,
+                }
+              );
+              // 直接抛出错误，不重试，不切换供应商
+              throw lastError;
+            }
+
             logger.warn("ProxyForwarder: Provider error, will switch immediately", {
               providerId: currentProvider.id,
               providerName: currentProvider.name,
