@@ -141,6 +141,13 @@
         "TWD": "NT$ 新台湾ドル (TWD)",
         "KRW": "₩ 韓国ウォン (KRW)",
         "SGD": "S$ シンガポールドル (SGD)"
+      },
+      "billingModelSource": "課金モデルソース",
+      "billingModelSourcePlaceholder": "課金モデルソースを選択",
+      "billingModelSourceDesc": "モデルリダイレクト時に課金に使用するモデルを設定します。「リダイレクト前」はユーザーがリクエストした元のモデル、「リダイレクト後」は実際に呼び出されたモデルを使用します。",
+      "billingModelSourceOptions": {
+        "original": "リダイレクト前（元のモデル）",
+        "redirected": "リダイレクト後（実際のモデル）"
       }
     },
     "siteSettings": "サイトパラメータ",

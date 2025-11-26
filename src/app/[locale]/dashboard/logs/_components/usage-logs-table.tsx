@@ -26,6 +26,7 @@ import { ModelDisplayWithRedirect } from "./model-display-with-redirect";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
 import { cn, formatTokenAmount } from "@/lib/utils";
+import type { BillingModelSource } from "@/types/system-config";
 
 const NON_BILLING_ENDPOINT = "/v1/messages/count_tokens";
 
@@ -55,6 +56,7 @@ interface UsageLogsTableProps {
   isPending: boolean;
   newLogIds?: Set<number>; // 新增记录 ID 集合（用于动画高亮）
   currencyCode?: CurrencyCode;
+  billingModelSource?: BillingModelSource;
 }
 
 export function UsageLogsTable({
@@ -66,6 +68,7 @@ export function UsageLogsTable({
   isPending,
   newLogIds,
   currencyCode = "USD",
+  billingModelSource = "original",
 }: UsageLogsTableProps) {
   const t = useTranslations("dashboard");
   const tChain = useTranslations("provider-chain");
@@ -200,6 +203,7 @@ export function UsageLogsTable({
                               <ModelDisplayWithRedirect
                                 originalModel={log.originalModel}
                                 currentModel={log.model}
+                                billingModelSource={billingModelSource}
                               />
                             </div>
                           </TooltipTrigger>
@@ -240,6 +244,7 @@ export function UsageLogsTable({
                         userAgent={log.userAgent}
                         messagesCount={log.messagesCount}
                         endpoint={log.endpoint}
+                        billingModelSource={billingModelSource}
                       />
                     </TableCell>
                   </TableRow>

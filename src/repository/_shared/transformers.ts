@@ -106,6 +106,7 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     siteTitle: dbSettings?.siteTitle ?? "Claude Code Hub",
     allowGlobalUsageView: dbSettings?.allowGlobalUsageView ?? true,
     currencyDisplay: dbSettings?.currencyDisplay ?? "USD",
+    billingModelSource: dbSettings?.billingModelSource ?? "original",
     enableAutoCleanup: dbSettings?.enableAutoCleanup ?? false,
     cleanupRetentionDays: dbSettings?.cleanupRetentionDays ?? 30,
     cleanupSchedule: dbSettings?.cleanupSchedule ?? "0 2 * * *",

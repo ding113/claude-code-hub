@@ -4,6 +4,7 @@ import {
   updateMessageRequestDetails,
 } from "@/repository/message";
 import { findLatestPriceByModel } from "@/repository/model-price";
+import { getSystemSettings } from "@/repository/system-config";
 import { logger } from "@/lib/logger";
 import { parseSSEData } from "@/lib/utils/sse";
 import { calculateRequestCost } from "@/lib/utils/cost-calculation";
@@ -1319,31 +1320,58 @@ async function updateRequestCostFromUsage(
     return;
   }
 
-  // Fallback 逻辑：优先原始模型，找不到则用重定向模型
+  // 获取系统设置中的计费模型来源配置
+  const systemSettings = await getSystemSettings();
+  const billingModelSource = systemSettings.billingModelSource;
+
+  // 根据配置决定计费模型优先级
+  let primaryModel: string | null;
+  let fallbackModel: string | null;
+
+  if (billingModelSource === "original") {
+    // 优先使用重定向前的原始模型
+    primaryModel = originalModel;
+    fallbackModel = redirectedModel;
+  } else {
+    // 优先使用重定向后的实际模型
+    primaryModel = redirectedModel;
+    fallbackModel = originalModel;
+  }
+
+  logger.debug("[CostCalculation] Billing model source config", {
+    messageId,
+    billingModelSource,
+    primaryModel,
+    fallbackModel,
+  });
+
+  // Fallback 逻辑：优先主要模型，找不到则用备选模型
   let priceData = null;
   let usedModelForPricing = null;
 
-  // Step 1: 尝试原始模型
-  if (originalModel) {
-    priceData = await findLatestPriceByModel(originalModel);
+  // Step 1: 尝试主要模型
+  if (primaryModel) {
+    priceData = await findLatestPriceByModel(primaryModel);
     if (priceData?.priceData) {
-      usedModelForPricing = originalModel;
-      logger.debug("[CostCalculation] Using original model for pricing", {
+      usedModelForPricing = primaryModel;
+      logger.debug("[CostCalculation] Using primary model for pricing", {
         messageId,
-        model: originalModel,
+        model: primaryModel,
+        billingModelSource,
       });
     }
   }
 
-  // Step 2: Fallback 到重定向模型
-  if (!priceData && redirectedModel && redirectedModel !== originalModel) {
-    priceData = await findLatestPriceByModel(redirectedModel);
+  // Step 2: Fallback 到备选模型
+  if (!priceData && fallbackModel && fallbackModel !== primaryModel) {
+    priceData = await findLatestPriceByModel(fallbackModel);
     if (priceData?.priceData) {
-      usedModelForPricing = redirectedModel;
-      logger.warn("[CostCalculation] Original model price not found, using redirected model", {
+      usedModelForPricing = fallbackModel;
+      logger.warn("[CostCalculation] Primary model price not found, using fallback model", {
         messageId,
-        originalModel,
-        redirectedModel,
+        primaryModel,
+        fallbackModel,
+        billingModelSource,
       });
     }
   }
@@ -1354,6 +1382,7 @@ async function updateRequestCostFromUsage(
       messageId,
       originalModel,
       redirectedModel,
+      billingModelSource,
       note: "Cost will be $0. Please check price table or model name.",
     });
     return;
@@ -1365,6 +1394,7 @@ async function updateRequestCostFromUsage(
   logger.info("[CostCalculation] Cost calculated successfully", {
     messageId,
     usedModelForPricing,
+    billingModelSource,
     costUsd: cost.toString(),
     costMultiplier,
     usage,

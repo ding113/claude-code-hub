@@ -17,6 +17,7 @@ import { AlertCircle, ArrowRight, CheckCircle, ExternalLink, Loader2, Monitor } 
 import type { ProviderChainItem } from "@/types/message";
 import { hasSessionMessages } from "@/actions/active-sessions";
 import { formatProviderTimeline } from "@/lib/utils/provider-chain-formatter";
+import type { BillingModelSource } from "@/types/system-config";
 
 interface ErrorDetailsDialogProps {
   statusCode: number | null;
@@ -30,6 +31,7 @@ interface ErrorDetailsDialogProps {
   userAgent?: string | null; // User-Agent
   messagesCount?: number | null; // Messages 数量
   endpoint?: string | null; // API 端点
+  billingModelSource?: BillingModelSource; // 计费模型来源
 }
 
 export function ErrorDetailsDialog({
@@ -44,6 +46,7 @@ export function ErrorDetailsDialog({
   userAgent,
   messagesCount,
   endpoint,
+  billingModelSource = "original",
 }: ErrorDetailsDialogProps) {
   const t = useTranslations("dashboard");
   const tChain = useTranslations("provider-chain");
@@ -296,7 +299,7 @@ export function ErrorDetailsDialog({
                 {t("logs.details.modelRedirect.title")}
               </h4>
               <div className="rounded-md border bg-blue-50 dark:bg-blue-950/20 p-4 space-y-3">
-                <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className="grid grid-cols-3 gap-4 text-sm">
                   <div>
                     <span className="font-medium text-blue-900 dark:text-blue-100">
                       {t("logs.details.modelRedirect.requestModel")}:
@@ -317,10 +320,22 @@ export function ErrorDetailsDialog({
                       </code>
                     </div>
                   </div>
+                  <div>
+                    <span className="font-medium text-blue-900 dark:text-blue-100">
+                      {t("logs.details.modelRedirect.billingModel")}:
+                    </span>
+                    <div className="mt-1">
+                      <code className="bg-green-100 dark:bg-green-900/50 px-2 py-1 rounded text-green-900 dark:text-green-100 font-semibold">
+                        {billingModelSource === "original" ? originalModel : currentModel}
+                      </code>
+                    </div>
+                  </div>
                 </div>
                 <div className="text-xs text-blue-800 dark:text-blue-200 border-t border-blue-200 dark:border-blue-800 pt-2">
                   <span className="font-medium">{t("logs.details.modelRedirect.billing")}:</span>{" "}
-                  {t("logs.details.modelRedirect.billingDescription", { original: originalModel, current: currentModel })}
+                  {billingModelSource === "original"
+                    ? t("logs.details.modelRedirect.billingDescription_original", { original: originalModel, current: currentModel })
+                    : t("logs.details.modelRedirect.billingDescription_redirected", { original: originalModel, current: currentModel })}
                 </div>
               </div>
             </div>

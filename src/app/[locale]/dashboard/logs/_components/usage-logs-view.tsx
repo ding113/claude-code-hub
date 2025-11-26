@@ -16,6 +16,7 @@ import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
 import { formatTokenAmount } from "@/lib/utils";
 import { useTranslations } from "next-intl";
+import type { BillingModelSource } from "@/types/system-config";
 
 interface UsageLogsViewProps {
   isAdmin: boolean;
@@ -24,6 +25,7 @@ interface UsageLogsViewProps {
   initialKeys: Key[];
   searchParams: { [key: string]: string | string[] | undefined };
   currencyCode?: CurrencyCode;
+  billingModelSource?: BillingModelSource;
 }
 
 export function UsageLogsView({
@@ -33,6 +35,7 @@ export function UsageLogsView({
   initialKeys,
   searchParams,
   currencyCode = "USD",
+  billingModelSource = "original",
 }: UsageLogsViewProps) {
   const t = useTranslations("dashboard");
   const router = useRouter();
@@ -320,6 +323,7 @@ export function UsageLogsView({
               isPending={isPending}
               newLogIds={newLogIds}
               currencyCode={currencyCode}
+              billingModelSource={billingModelSource}
             />
           )}
         </CardContent>

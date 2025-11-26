@@ -79,7 +79,7 @@
       "user": "使用者",
       "key": "金鑰",
       "provider": "供應商",
-      "model": "模型",
+      "model": "計費模型",
       "endpoint": "端點",
       "inputTokens": "輸入",
       "outputTokens": "輸出",
@@ -148,7 +148,12 @@
         "requestModel": "請求模型",
         "actualModel": "實際呼叫",
         "billing": "計費說明",
-        "billingDescription": "系統優先使用請求模型（{original}）的價格計費。如果價格表中不存在該模型，則使用實際呼叫模型（{current}）的價格。"
+        "billingDescription": "系統優先使用請求模型（{original}）的價格計費。如果價格表中不存在該模型，則使用實際呼叫模型（{current}）的價格。",
+        "billingModel": "計費模型",
+        "actualModelTooltip": "實際模型: {model}",
+        "originalModelTooltip": "原始模型: {model}",
+        "billingDescription_original": "目前計費模式：使用重新導向前的原始模型（{model}）計費",
+        "billingDescription_redirected": "目前計費模式：使用重新導向後的實際模型（{model}）計費"
       },
       "errorMessage": "錯誤訊息",
       "filteredProviders": "被過濾的供應商",

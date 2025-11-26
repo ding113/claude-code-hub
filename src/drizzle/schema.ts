@@ -336,6 +336,9 @@ export const systemSettings = pgTable('system_settings', {
   // 货币显示配置
   currencyDisplay: varchar('currency_display', { length: 10 }).notNull().default('USD'),
 
+  // 计费模型来源配置: 'original' (重定向前) | 'redirected' (重定向后)
+  billingModelSource: varchar('billing_model_source', { length: 20 }).notNull().default('original'),
+
   // 日志清理配置
   enableAutoCleanup: boolean('enable_auto_cleanup').default(false),
   cleanupRetentionDays: integer('cleanup_retention_days').default(30),

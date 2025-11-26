@@ -1,6 +1,6 @@
 {
-  "id": "f5c8b2a1-4d3e-47f9-9b6c-8e2a1d3c5f7b",
-  "prevId": "301f797d-6e88-4b88-8cf4-a1ba480ea35c",
+  "id": "f84758a8-81ed-4c83-ba8f-e8621a57939c",
+  "prevId": "f5c8b2a1-4d3e-47f9-9b6c-8e2a1d3c5f7b",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1339,6 +1339,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'USD'"
+        },
+        "billing_model_source": {
+          "name": "billing_model_source",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'original'"
         },
         "enable_auto_cleanup": {
           "name": "enable_auto_cleanup",

@@ -176,6 +176,13 @@
       "when": 1764206400000,
       "tag": "0024_update_provider_timeout_defaults",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1764128773876,
+      "tag": "0025_hard_violations",
+      "breakpoints": true
     }
   ]
 }

@@ -9,15 +9,18 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ArrowRight } from "lucide-react";
+import type { BillingModelSource } from "@/types/system-config";
 
 interface ModelDisplayWithRedirectProps {
   originalModel: string | null;
   currentModel: string | null;
+  billingModelSource: BillingModelSource;
 }
 
 export function ModelDisplayWithRedirect({
   originalModel,
   currentModel,
+  billingModelSource,
 }: ModelDisplayWithRedirectProps) {
   const t = useTranslations("dashboard");
 
@@ -25,13 +28,18 @@ export function ModelDisplayWithRedirect({
   const isRedirected =
     originalModel && currentModel && originalModel !== currentModel;
 
+  // 根据计费模型来源配置决定显示哪个模型
+  const billingModel = billingModelSource === "original" ? originalModel : currentModel;
+  const otherModel = billingModelSource === "original" ? currentModel : originalModel;
+
   if (!isRedirected) {
-    return <span>{currentModel || originalModel || "-"}</span>;
+    return <span>{billingModel || "-"}</span>;
   }
 
+  // 计费模型 + 重定向标记
   return (
     <div className="flex items-center gap-2">
-      <span>{originalModel}</span>
+      <span>{billingModel}</span>
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -46,7 +54,12 @@ export function ModelDisplayWithRedirect({
           <TooltipContent>
             <div className="text-xs space-y-1">
               <div>
-                <span className="font-medium">{t("modelRedirect.targetModel")}:</span> {currentModel}
+                <span className="font-medium">
+                  {billingModelSource === "original"
+                    ? t("modelRedirect.actualModelTooltip")
+                    : t("modelRedirect.originalModelTooltip")}:
+                </span>{" "}
+                {otherModel}
               </div>
             </div>
           </TooltipContent>

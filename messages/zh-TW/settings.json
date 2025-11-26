@@ -141,6 +141,13 @@
         "TWD": "NT$ 新台幣 (TWD)",
         "KRW": "₩ 韓元 (KRW)",
         "SGD": "S$ 新加坡元 (SGD)"
+      },
+      "billingModelSource": "計費模型來源",
+      "billingModelSourcePlaceholder": "選擇計費模型來源",
+      "billingModelSourceDesc": "設定模型重新導向時使用哪個模型進行計費。「重新導向前」使用使用者請求的原始模型計費，「重新導向後」使用實際呼叫的模型計費。",
+      "billingModelSourceOptions": {
+        "original": "重新導向前（原始模型）",
+        "redirected": "重新導向後（實際模型）"
       }
     },
     "siteSettings": "站台參數",

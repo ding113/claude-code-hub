@@ -68,6 +68,13 @@
       "currencyDisplay": "货币显示单位",
       "currencyDisplayPlaceholder": "选择货币单位",
       "currencyDisplayDesc": "修改后，系统所有页面和 API 接口的金额显示将使用对应的货币符号（仅修改符号，不进行汇率转换）。",
+      "billingModelSource": "计费模型来源",
+      "billingModelSourcePlaceholder": "选择计费模型来源",
+      "billingModelSourceDesc": "配置模型重定向时使用哪个模型进行计费。重定向前使用用户请求的原始模型计费，重定向后使用实际调用的模型计费。",
+      "billingModelSourceOptions": {
+        "original": "重定向前（原始模型）",
+        "redirected": "重定向后（实际模型）"
+      },
       "allowGlobalView": "允许查看全站使用量",
       "allowGlobalViewDesc": "关闭后，普通用户在仪表盘仅能查看自己密钥的使用统计。",
       "saveSettings": "保存设置",
