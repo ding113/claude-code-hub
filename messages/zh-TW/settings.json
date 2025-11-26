@@ -614,8 +614,8 @@
         "failed": "失敗",
         "disclaimer": {
           "title": "注意",
+          "resultReference": "【重要】因各家供應商情況不同，測試結果僅供參考，不代表實際呼叫效果",
           "realRequest": "測試將向供應商發送真實請求，可能消耗少量額度",
-          "resultReference": "因各家供應商情況不同，測試結果僅供參考，不代表實際呼叫效果",
           "confirmConfig": "請確認供應商 URL、API 金鑰及模型設定正確"
         }
       },
