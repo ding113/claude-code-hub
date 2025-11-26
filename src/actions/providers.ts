@@ -2104,7 +2104,7 @@ export async function testProviderOpenAIResponses(
         },
       ],
     }),
-    userAgent: "codex_cli_rs/0.63.0 (Mac OS 26.1.0; arm64) Apple_Terminal/455.1",
+    userAgent: "codex_cli_rs/0.63.0",
     successMessage: "OpenAI Responses API 测试成功",
     extract: (result) => ({
       model: "model" in result ? result.model : undefined,
