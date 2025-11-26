@@ -61,6 +61,9 @@ export class ProxySession {
   // 模型重定向追踪：保存原始模型名（重定向前）
   private originalModelName: string | null = null;
 
+  // 原始 URL 路径（用于 Gemini 模型重定向重置）
+  private originalUrlPathname: string | null = null;
+
   // 上游决策链（记录尝试的供应商列表）
   private providerChain: ProviderChainItem[];
 
@@ -384,10 +387,12 @@ export class ProxySession {
   /**
    * 设置原始模型（在重定向前调用）
    * 只能设置一次，避免多次重定向覆盖
+   * 同时保存原始 URL 路径（用于 Gemini 重置）
    */
   setOriginalModel(model: string | null): void {
     if (this.originalModelName === null) {
       this.originalModelName = model;
+      this.originalUrlPathname = this.requestUrl.pathname;
     }
   }
 
@@ -396,6 +401,13 @@ export class ProxySession {
    */
   isModelRedirected(): boolean {
     return this.originalModelName !== null && this.originalModelName !== this.request.model;
+  }
+
+  /**
+   * 获取原始 URL 路径（用于 Gemini 模型重定向重置）
+   */
+  getOriginalUrlPathname(): string | null {
+    return this.originalUrlPathname;
   }
 
   /**
