@@ -267,8 +267,8 @@
         },
         "disclaimer": {
           "title": "注意",
+          "resultReference": "【重要】因各家供应商情况不同，测试结果仅供参考，不代表实际调用效果",
           "realRequest": "测试将向供应商发送真实请求，可能消耗少量额度",
-          "resultReference": "因各家供应商情况不同，测试结果仅供参考，不代表实际调用效果",
           "confirmConfig": "请确认供应商 URL、API 密钥及模型配置正确"
         }
       },
