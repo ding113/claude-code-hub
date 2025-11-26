@@ -28,11 +28,15 @@ ALTER TABLE "providers" ALTER COLUMN "request_timeout_non_streaming_ms" SET DEFA
 
 -- Step 3: 添加 keys 表字段（幂等）
 ALTER TABLE "keys" ADD COLUMN IF NOT EXISTS "daily_reset_mode" "daily_reset_mode" DEFAULT 'fixed' NOT NULL;--> statement-breakpoint
+ALTER TABLE "keys" ADD COLUMN IF NOT EXISTS "limit_daily_usd" numeric(10, 2);--> statement-breakpoint
+ALTER TABLE "keys" ADD COLUMN IF NOT EXISTS "daily_reset_time" varchar(5) DEFAULT '00:00' NOT NULL;--> statement-breakpoint
 
 -- Step 4: 添加 providers 表字段（幂等）
 ALTER TABLE "providers" ADD COLUMN IF NOT EXISTS "mcp_passthrough_type" varchar(20) DEFAULT 'none' NOT NULL;--> statement-breakpoint
 ALTER TABLE "providers" ADD COLUMN IF NOT EXISTS "mcp_passthrough_url" varchar(512);--> statement-breakpoint
 ALTER TABLE "providers" ADD COLUMN IF NOT EXISTS "daily_reset_mode" "daily_reset_mode" DEFAULT 'fixed' NOT NULL;--> statement-breakpoint
+ALTER TABLE "providers" ADD COLUMN IF NOT EXISTS "limit_daily_usd" numeric(10, 2);--> statement-breakpoint
+ALTER TABLE "providers" ADD COLUMN IF NOT EXISTS "daily_reset_time" varchar(5) DEFAULT '00:00' NOT NULL;--> statement-breakpoint
 
 -- Step 5: 添加 system_settings 表字段（幂等）
 ALTER TABLE "system_settings" ADD COLUMN IF NOT EXISTS "billing_model_source" varchar(20) DEFAULT 'original' NOT NULL;--> statement-breakpoint
