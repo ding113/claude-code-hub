@@ -206,7 +206,8 @@ const DEFAULT_ERROR_RULES = [
     priority: 80,
   },
   {
-    pattern: "thinking.*format.*invalid|Expected.*thinking.*but found|clear_thinking.*requires.*thinking.*enabled",
+    pattern:
+      "thinking.*format.*invalid|Expected.*thinking.*but found|clear_thinking.*requires.*thinking.*enabled",
     category: "thinking_error",
     description: "Invalid thinking block format or configuration",
     matchType: "regex" as const,
