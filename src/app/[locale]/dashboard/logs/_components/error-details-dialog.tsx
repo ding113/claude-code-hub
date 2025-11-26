@@ -73,7 +73,6 @@ export function ErrorDetailsDialog({
   };
 
   const isSuccess = statusCode && statusCode >= 200 && statusCode < 300;
-  const isError = statusCode && (statusCode >= 400 || statusCode < 200);
   const isInProgress = !statusCode; // 没有状态码表示请求进行中
   const isBlocked = !!blockedBy; // 是否被拦截
 

@@ -15,7 +15,6 @@ import {
   ArrowUp,
   ArrowDown,
   Wifi,
-  Layers,
   Shield,
   User,
   PieChart as PieIcon,
@@ -170,9 +169,11 @@ const CountUp = ({
   className?: string;
 }) => {
   const [displayValue, setDisplayValue] = useState(value);
+  const prevValueRef = useRef(value);
   useEffect(() => {
-    const start = displayValue;
+    const start = prevValueRef.current;
     const end = value;
+    prevValueRef.current = value;
     if (start === end) return;
     const duration = 1000;
     const startTime = performance.now();

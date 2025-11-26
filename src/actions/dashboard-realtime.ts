@@ -7,7 +7,6 @@ import type { ActionResult } from "./types";
 
 // 导入已有的接口和方法
 import { getOverviewData, type OverviewData } from "./overview";
-import { getActiveSessions } from "./active-sessions";
 import {
   findDailyLeaderboard,
   findDailyProviderLeaderboard,
