@@ -1,6 +1,6 @@
 {
-  "id": "301f797d-6e88-4b88-8cf4-a1ba480ea35c",
-  "prevId": "2f530870-7533-4f3d-b34d-895e61d7b83b",
+  "id": "2f530870-7533-4f3d-b34d-895e61d7b83b",
+  "prevId": "a0d7b238-d013-4831-9f8c-02e0532bf035",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -955,19 +955,6 @@
           "notNull": false,
           "default": "'auto'"
         },
-        "mcp_passthrough_type": {
-          "name": "mcp_passthrough_type",
-          "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'none'"
-        },
-        "mcp_passthrough_url": {
-          "name": "mcp_passthrough_url",
-          "type": "varchar(512)",
-          "primaryKey": false,
-          "notNull": false
-        },
         "limit_5h_usd": {
           "name": "limit_5h_usd",
           "type": "numeric(10, 2)",
@@ -1060,7 +1047,7 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": 300000
+          "default": 10000
         },
         "request_timeout_non_streaming_ms": {
           "name": "request_timeout_non_streaming_ms",
