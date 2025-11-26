@@ -158,7 +158,7 @@ describe("isNonRetryableClientError - 7 Default Rules", () => {
 
   /**
    * Rule 7: Cache Control Limit
-   * Pattern: "cache_control.*limit.*blocks"
+   * Pattern: "(cache_control.*(limit|maximum).*blocks|(maximum|limit).*blocks.*cache_control)"
    */
   describe("Rule 7: Cache Control Limit", () => {
     test("should match: cache_control limit exceeded", () => {
@@ -168,6 +168,11 @@ describe("isNonRetryableClientError - 7 Default Rules", () => {
 
     test("should match: different format", () => {
       const error = new Error("The cache_control has too many limit blocks");
+      expect(isNonRetryableClientError(error)).toBe(true);
+    });
+
+    test("should match: Anthropic API format", () => {
+      const error = new Error("A maximum of 4 blocks with cache_control may be provided. Found 5.");
       expect(isNonRetryableClientError(error)).toBe(true);
     });
 

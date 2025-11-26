@@ -234,7 +234,7 @@ const DEFAULT_ERROR_RULES = [
     priority: 50,
   },
   {
-    pattern: "cache_control.*limit.*blocks",
+    pattern: "(cache_control.*(limit|maximum).*blocks|(maximum|limit).*blocks.*cache_control)",
     category: "cache_limit",
     description: "Cache control limit exceeded",
     matchType: "regex" as const,
