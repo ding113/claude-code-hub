@@ -14,6 +14,8 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- Add provider-specific User-Agent headers to avoid Cloudflare detection (#210) @ding113
+- Increase provider dialog width to prevent horizontal scrollbar on long model redirect names (#210) @ding113
 - Enhance data dashboard with comprehensive optimizations and improvements (#183) @ding113
 - Update default provider timeout to unlimited for better compatibility (#199) @ding113
 - Adjust streaming silent period timeout from 10s to 300s (#199) @ding113
@@ -22,6 +24,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- Fix model test disclaimer display order (#210) @ding113
 - Fix provider statistics, group settings persistence, and usage records date filtering; consolidate migrations 0020-0025 into single idempotent file (#207) @ding113
 - Fix database migration duplicate enum type creation error (#181) @ding113
 - Fix error handling and status codes in response handler, improve user management page UX (#179) @ding113
