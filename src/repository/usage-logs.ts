@@ -10,8 +10,10 @@ export interface UsageLogFilters {
   userId?: number;
   keyId?: number;
   providerId?: number;
-  startDate?: Date;
-  endDate?: Date;
+  /** 本地时间字符串，格式: "YYYY-MM-DD HH:mm:ss" 或 "YYYY-MM-DDTHH:mm" */
+  startDateLocal?: string;
+  /** 本地时间字符串，格式: "YYYY-MM-DD HH:mm:ss" 或 "YYYY-MM-DDTHH:mm" */
+  endDateLocal?: string;
   statusCode?: number;
   model?: string;
   endpoint?: string;
@@ -65,13 +67,27 @@ export interface UsageLogsResult {
 /**
  * 查询使用日志（支持多种筛选条件和分页）
  */
+/**
+ * 将本地时间字符串标准化为 "YYYY-MM-DD HH:mm:ss" 格式
+ * 支持输入格式: "YYYY-MM-DDTHH:mm" 或 "YYYY-MM-DD HH:mm:ss"
+ */
+function normalizeLocalTimeStr(input: string): string {
+  // 处理 datetime-local 格式: "2025-11-26T00:00" → "2025-11-26 00:00:00"
+  const normalized = input.replace("T", " ");
+  // 如果没有秒数，补充 ":00"
+  if (normalized.length === 16) {
+    return normalized + ":00";
+  }
+  return normalized;
+}
+
 export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promise<UsageLogsResult> {
   const {
     userId,
     keyId,
     providerId,
-    startDate,
-    endDate,
+    startDateLocal,
+    endDateLocal,
     statusCode,
     model,
     endpoint,
@@ -119,33 +135,19 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
   }
 
   // 时区感知的时间比较
-  // 将数据库的 timestamptz 转换为本地时区（Asia/Shanghai）后再与前端传来的本地时间比较
+  // 将数据库的 timestamptz 转换为配置的时区后，与前端传来的本地时间字符串比较
+  // 注意：前端直接传递用户选择的本地时间字符串，避免 Date 序列化导致的时区问题
   const timezone = getEnvConfig().TZ;
 
-  if (startDate) {
-    // 从 Date 对象提取本地时间（不要用 toISOString，那会转换为 UTC）
-    const year = startDate.getFullYear();
-    const month = String(startDate.getMonth() + 1).padStart(2, "0");
-    const day = String(startDate.getDate()).padStart(2, "0");
-    const hours = String(startDate.getHours()).padStart(2, "0");
-    const minutes = String(startDate.getMinutes()).padStart(2, "0");
-    const seconds = String(startDate.getSeconds()).padStart(2, "0");
-    const localTimeStr = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-
+  if (startDateLocal) {
+    const localTimeStr = normalizeLocalTimeStr(startDateLocal);
     conditions.push(
       sql`(${messageRequest.createdAt} AT TIME ZONE 'UTC' AT TIME ZONE ${timezone})::timestamp >= ${localTimeStr}::timestamp`
     );
   }
 
-  if (endDate) {
-    const year = endDate.getFullYear();
-    const month = String(endDate.getMonth() + 1).padStart(2, "0");
-    const day = String(endDate.getDate()).padStart(2, "0");
-    const hours = String(endDate.getHours()).padStart(2, "0");
-    const minutes = String(endDate.getMinutes()).padStart(2, "0");
-    const seconds = String(endDate.getSeconds()).padStart(2, "0");
-    const localTimeStr = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-
+  if (endDateLocal) {
+    const localTimeStr = normalizeLocalTimeStr(endDateLocal);
     conditions.push(
       sql`(${messageRequest.createdAt} AT TIME ZONE 'UTC' AT TIME ZONE ${timezone})::timestamp < ${localTimeStr}::timestamp`
     );

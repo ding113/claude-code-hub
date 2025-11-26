@@ -28,7 +28,7 @@ export async function runMigrations() {
     // 执行迁移
     await migrate(db, { migrationsFolder });
 
-    logger.info("Database migrations completed successfully!");
+    logger.info("✅ Database migrations completed successfully!");
   } catch (error) {
     logger.error("❌ Migration failed:", error);
     process.exit(1);

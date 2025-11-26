@@ -16,11 +16,14 @@ import {
 import { saveSystemSettings } from "@/actions/system-config";
 import { toast } from "sonner";
 import { CURRENCY_CONFIG } from "@/lib/utils";
-import type { SystemSettings } from "@/types/system-config";
+import type { SystemSettings, BillingModelSource } from "@/types/system-config";
 import type { CurrencyCode } from "@/lib/utils";
 
 interface SystemSettingsFormProps {
-  initialSettings: Pick<SystemSettings, "siteTitle" | "allowGlobalUsageView" | "currencyDisplay">;
+  initialSettings: Pick<
+    SystemSettings,
+    "siteTitle" | "allowGlobalUsageView" | "currencyDisplay" | "billingModelSource"
+  >;
 }
 
 export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps) {
@@ -31,6 +34,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   );
   const [currencyDisplay, setCurrencyDisplay] = useState<CurrencyCode>(
     initialSettings.currencyDisplay
+  );
+  const [billingModelSource, setBillingModelSource] = useState<BillingModelSource>(
+    initialSettings.billingModelSource
   );
   const [isPending, startTransition] = useTransition();
 
@@ -47,6 +53,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         siteTitle,
         allowGlobalUsageView,
         currencyDisplay,
+        billingModelSource,
       });
 
       if (!result.ok) {
@@ -58,6 +65,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setSiteTitle(result.data.siteTitle);
         setAllowGlobalUsageView(result.data.allowGlobalUsageView);
         setCurrencyDisplay(result.data.currencyDisplay);
+        setBillingModelSource(result.data.billingModelSource);
       }
 
       toast.success(t("configUpdated"));
@@ -105,6 +113,24 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">{t("currencyDisplayDesc")}</p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="billing-model-source">{t("billingModelSource")}</Label>
+        <Select
+          value={billingModelSource}
+          onValueChange={(value) => setBillingModelSource(value as BillingModelSource)}
+          disabled={isPending}
+        >
+          <SelectTrigger id="billing-model-source">
+            <SelectValue placeholder={t("billingModelSourcePlaceholder")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="original">{t("billingModelSourceOptions.original")}</SelectItem>
+            <SelectItem value="redirected">{t("billingModelSourceOptions.redirected")}</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">{t("billingModelSourceDesc")}</p>
       </div>
 
       <div className="flex items-start justify-between gap-4 rounded-lg border border-dashed border-border px-4 py-3">

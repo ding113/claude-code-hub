@@ -206,9 +206,10 @@ const DEFAULT_ERROR_RULES = [
     priority: 80,
   },
   {
-    pattern: "thinking.*format.*invalid|Expected.*thinking.*but found",
+    pattern:
+      "thinking.*format.*invalid|Expected.*thinking.*but found|clear_thinking.*requires.*thinking.*enabled",
     category: "thinking_error",
-    description: "Invalid thinking block format",
+    description: "Invalid thinking block format or configuration",
     matchType: "regex" as const,
     isDefault: true,
     isEnabled: true,
@@ -233,7 +234,7 @@ const DEFAULT_ERROR_RULES = [
     priority: 50,
   },
   {
-    pattern: "cache_control.*limit.*blocks",
+    pattern: "(cache_control.*(limit|maximum).*blocks|(maximum|limit).*blocks.*cache_control)",
     category: "cache_limit",
     description: "Cache control limit exceeded",
     matchType: "regex" as const,

@@ -78,6 +78,7 @@ function createFallbackSettings(): SystemSettings {
     siteTitle: DEFAULT_SITE_TITLE,
     allowGlobalUsageView: false,
     currencyDisplay: "USD",
+    billingModelSource: "original",
     enableAutoCleanup: false,
     cleanupRetentionDays: 30,
     cleanupSchedule: "0 2 * * *",
@@ -99,6 +100,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
         siteTitle: systemSettings.siteTitle,
         allowGlobalUsageView: systemSettings.allowGlobalUsageView,
         currencyDisplay: systemSettings.currencyDisplay,
+        billingModelSource: systemSettings.billingModelSource,
         enableAutoCleanup: systemSettings.enableAutoCleanup,
         cleanupRetentionDays: systemSettings.cleanupRetentionDays,
         cleanupSchedule: systemSettings.cleanupSchedule,
@@ -120,6 +122,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
         siteTitle: DEFAULT_SITE_TITLE,
         allowGlobalUsageView: false,
         currencyDisplay: "USD",
+        billingModelSource: "original",
       })
       .onConflictDoNothing()
       .returning({
@@ -127,6 +130,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
         siteTitle: systemSettings.siteTitle,
         allowGlobalUsageView: systemSettings.allowGlobalUsageView,
         currencyDisplay: systemSettings.currencyDisplay,
+        billingModelSource: systemSettings.billingModelSource,
         enableAutoCleanup: systemSettings.enableAutoCleanup,
         cleanupRetentionDays: systemSettings.cleanupRetentionDays,
         cleanupSchedule: systemSettings.cleanupSchedule,
@@ -147,6 +151,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
         siteTitle: systemSettings.siteTitle,
         allowGlobalUsageView: systemSettings.allowGlobalUsageView,
         currencyDisplay: systemSettings.currencyDisplay,
+        billingModelSource: systemSettings.billingModelSource,
         enableAutoCleanup: systemSettings.enableAutoCleanup,
         cleanupRetentionDays: systemSettings.cleanupRetentionDays,
         cleanupSchedule: systemSettings.cleanupSchedule,
@@ -199,6 +204,11 @@ export async function updateSystemSettings(
       updates.currencyDisplay = payload.currencyDisplay;
     }
 
+    // 计费模型来源配置字段（如果提供）
+    if (payload.billingModelSource !== undefined) {
+      updates.billingModelSource = payload.billingModelSource;
+    }
+
     // 日志清理配置字段（如果提供）
     if (payload.enableAutoCleanup !== undefined) {
       updates.enableAutoCleanup = payload.enableAutoCleanup;
@@ -227,6 +237,7 @@ export async function updateSystemSettings(
         siteTitle: systemSettings.siteTitle,
         allowGlobalUsageView: systemSettings.allowGlobalUsageView,
         currencyDisplay: systemSettings.currencyDisplay,
+        billingModelSource: systemSettings.billingModelSource,
         enableAutoCleanup: systemSettings.enableAutoCleanup,
         cleanupRetentionDays: systemSettings.cleanupRetentionDays,
         cleanupSchedule: systemSettings.cleanupSchedule,

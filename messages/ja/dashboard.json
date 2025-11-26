@@ -79,7 +79,7 @@
       "user": "ユーザー",
       "key": "キー",
       "provider": "プロバイダー",
-      "model": "モデル",
+      "model": "課金モデル",
       "endpoint": "エンドポイント",
       "inputTokens": "入力",
       "outputTokens": "出力",
@@ -148,7 +148,14 @@
         "requestModel": "リクエストモデル",
         "actualModel": "実際の呼び出し",
         "billing": "課金説明",
-        "billingDescription": "システムはリクエストモデル（{original}）の価格を優先して課金します。価格表にそのモデルが存在しない場合、実際の呼び出しモデル（{current}）の価格を使用します。"
+        "billingDescription": "システムはリクエストモデル（{original}）の価格を優先して課金します。価格表にそのモデルが存在しない場合、実際の呼び出しモデル（{current}）の価格を使用します。",
+        "billingModel": "課金モデル",
+        "actualModelTooltip": "実際のモデル: {model}",
+        "originalModelTooltip": "元のモデル: {model}",
+        "billingDescription_original": "現在の課金モード：リダイレクト前の元のモデル（{original}）で課金",
+        "billingDescription_redirected": "現在の課金モード：リダイレクト後の実際のモデル（{current}）で課金",
+        "billingOriginal": "課金: 元",
+        "billingRedirected": "課金: 実際"
       },
       "errorMessage": "エラーメッセージ",
       "providerChain": {

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Table,
@@ -26,6 +27,7 @@ import { ModelDisplayWithRedirect } from "./model-display-with-redirect";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
 import { cn, formatTokenAmount } from "@/lib/utils";
+import type { BillingModelSource } from "@/types/system-config";
 
 const NON_BILLING_ENDPOINT = "/v1/messages/count_tokens";
 
@@ -55,6 +57,7 @@ interface UsageLogsTableProps {
   isPending: boolean;
   newLogIds?: Set<number>; // 新增记录 ID 集合（用于动画高亮）
   currencyCode?: CurrencyCode;
+  billingModelSource?: BillingModelSource;
 }
 
 export function UsageLogsTable({
@@ -66,10 +69,17 @@ export function UsageLogsTable({
   isPending,
   newLogIds,
   currencyCode = "USD",
+  billingModelSource = "original",
 }: UsageLogsTableProps) {
   const t = useTranslations("dashboard");
   const tChain = useTranslations("provider-chain");
   const totalPages = Math.ceil(total / pageSize);
+
+  // 弹窗状态管理：记录当前打开的行 ID 和是否需要滚动到重定向部分
+  const [dialogState, setDialogState] = useState<{
+    logId: number | null;
+    scrollToRedirect: boolean;
+  }>({ logId: null, scrollToRedirect: false });
 
   return (
     <div className="space-y-4">
@@ -196,10 +206,12 @@ export function UsageLogsTable({
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <div className="truncate cursor-help">
+                            <div className="flex items-center gap-1 min-w-0 cursor-help">
                               <ModelDisplayWithRedirect
                                 originalModel={log.originalModel}
                                 currentModel={log.model}
+                                billingModelSource={billingModelSource}
+                                onRedirectClick={() => setDialogState({ logId: log.id, scrollToRedirect: true })}
                               />
                             </div>
                           </TooltipTrigger>
@@ -240,6 +252,12 @@ export function UsageLogsTable({
                         userAgent={log.userAgent}
                         messagesCount={log.messagesCount}
                         endpoint={log.endpoint}
+                        billingModelSource={billingModelSource}
+                        externalOpen={dialogState.logId === log.id ? true : undefined}
+                        onExternalOpenChange={(open) => {
+                          if (!open) setDialogState({ logId: null, scrollToRedirect: false });
+                        }}
+                        scrollToRedirect={dialogState.logId === log.id && dialogState.scrollToRedirect}
                       />
                     </TableCell>
                   </TableRow>

@@ -205,6 +205,7 @@ describe("Default Rules Verification", () => {
       "Missing required parameter: model",
       "非法请求",
       "cache_control limit exceeded: 5 blocks",
+      "A maximum of 4 blocks with cache_control may be provided. Found 5.",
     ];
 
     for (const pattern of defaultPatterns) {

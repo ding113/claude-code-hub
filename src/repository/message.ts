@@ -99,6 +99,7 @@ export async function updateMessageRequestDetails(
     providerChain?: CreateMessageRequestData["provider_chain"];
     errorMessage?: string;
     model?: string; // ⭐ 新增：支持更新重定向后的模型名称
+    providerId?: number; // ⭐ 新增：支持更新最终供应商ID（重试切换后）
   }
 ): Promise<void> {
   const updateData: Record<string, unknown> = {
@@ -128,6 +129,9 @@ export async function updateMessageRequestDetails(
   }
   if (details.model !== undefined) {
     updateData.model = details.model;
+  }
+  if (details.providerId !== undefined) {
+    updateData.providerId = details.providerId;
   }
 
   await db.update(messageRequest).set(updateData).where(eq(messageRequest.id, id));

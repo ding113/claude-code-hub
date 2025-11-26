@@ -18,13 +18,20 @@ export class ModelRedirector {
    * @returns 是否进行了重定向
    */
   static apply(session: ProxySession, provider: Provider): boolean {
+    // 获取真正的原始模型（用户请求的模型，不是上一个供应商重定向后的模型）
+    const trueOriginalModel = session.getOriginalModel() || session.request.model;
+
     // 检查是否配置了模型重定向
     if (!provider.modelRedirects || Object.keys(provider.modelRedirects).length === 0) {
+      // 如果新供应商没有重定向配置，且之前发生过重定向，需要重置
+      if (session.isModelRedirected() && trueOriginalModel) {
+        ModelRedirector.resetToOriginal(session, trueOriginalModel, provider);
+      }
       return false;
     }
 
     // 获取原始模型名称
-    const originalModel = session.request.model;
+    const originalModel = trueOriginalModel;
     if (!originalModel) {
       logger.debug("[ModelRedirector] No model in request, skipping redirect", {
         providerId: provider.id,
@@ -36,11 +43,16 @@ export class ModelRedirector {
     // 检查是否有该模型的重定向配置
     const redirectedModel = provider.modelRedirects[originalModel];
     if (!redirectedModel) {
-      logger.debug("[ModelRedirector] No redirect configured for model", {
-        model: originalModel,
-        providerId: provider.id,
-        providerName: provider.name,
-      });
+      // 如果新供应商对此模型没有重定向规则，且之前发生过重定向，需要重置
+      if (session.isModelRedirected()) {
+        ModelRedirector.resetToOriginal(session, originalModel, provider);
+      } else {
+        logger.debug("[ModelRedirector] No redirect configured for model", {
+          model: originalModel,
+          providerId: provider.id,
+          providerName: provider.name,
+        });
+      }
       return false;
     }
 
@@ -140,5 +152,48 @@ export class ModelRedirector {
    */
   static hasRedirect(model: string, provider: Provider): boolean {
     return !!(provider.modelRedirects && model && provider.modelRedirects[model]);
+  }
+
+  /**
+   * 重置模型到原始值（用于供应商切换时）
+   *
+   * @param session - 代理会话
+   * @param originalModel - 原始模型名称
+   * @param provider - 新供应商
+   */
+  private static resetToOriginal(
+    session: ProxySession,
+    originalModel: string,
+    provider: Provider
+  ): void {
+    // 重置 request.model 和 request.message.model
+    session.request.model = originalModel;
+    session.request.message.model = originalModel;
+
+    // 重置 Gemini URL 路径（如果适用）
+    if (provider.providerType === "gemini" || provider.providerType === "gemini-cli") {
+      const originalPathname = session.getOriginalUrlPathname();
+      if (originalPathname && originalPathname !== session.requestUrl.pathname) {
+        const newUrl = new URL(session.requestUrl.toString());
+        newUrl.pathname = originalPathname;
+        session.requestUrl = newUrl;
+
+        logger.debug("[ModelRedirector] Reset Gemini URL path to original", {
+          originalPathname,
+          providerId: provider.id,
+          providerName: provider.name,
+        });
+      }
+    }
+
+    // 重新生成请求 buffer
+    const updatedBody = JSON.stringify(session.request.message);
+    session.request.buffer = new TextEncoder().encode(updatedBody).buffer;
+
+    logger.info("[ModelRedirector] Reset model to original (provider switch)", {
+      originalModel,
+      providerId: provider.id,
+      providerName: provider.name,
+    });
   }
 }

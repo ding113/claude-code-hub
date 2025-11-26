@@ -145,36 +145,8 @@
     {
       "idx": 20,
       "version": "7",
-      "when": 1763465177387,
-      "tag": "0020_next_juggernaut",
-      "breakpoints": true
-    },
-    {
-      "idx": 21,
-      "version": "7",
-      "when": 1763823720000,
-      "tag": "0021_daily_cost_limits",
-      "breakpoints": true
-    },
-    {
-      "idx": 22,
-      "version": "7",
-      "when": 1763955126094,
-      "tag": "0023_cheerful_shocker",
-      "breakpoints": true
-    },
-    {
-      "idx": 23,
-      "version": "7",
-      "when": 1764056229573,
-      "tag": "0023_safe_christian_walker",
-      "breakpoints": true
-    },
-    {
-      "idx": 24,
-      "version": "7",
-      "when": 1764206400000,
-      "tag": "0024_update_provider_timeout_defaults",
+      "when": 1764210000000,
+      "tag": "0020_glossy_grandmaster",
       "breakpoints": true
     }
   ]

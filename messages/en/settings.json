@@ -141,6 +141,13 @@
         "TWD": "NT$ New Taiwan Dollar (TWD)",
         "KRW": "₩ South Korean Won (KRW)",
         "SGD": "S$ Singapore Dollar (SGD)"
+      },
+      "billingModelSource": "Billing Model Source",
+      "billingModelSourcePlaceholder": "Select billing model source",
+      "billingModelSourceDesc": "Configure which model to use for billing when model redirection occurs. 'Before Redirection' uses the original model requested by the user, 'After Redirection' uses the actual model called.",
+      "billingModelSourceOptions": {
+        "original": "Before Redirection (Original Model)",
+        "redirected": "After Redirection (Actual Model)"
       }
     },
     "siteSettings": "Site Parameters",

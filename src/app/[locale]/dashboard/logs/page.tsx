@@ -59,6 +59,7 @@ export default async function UsageLogsPage({
             initialKeys={initialKeys.ok ? initialKeys.data : []}
             searchParams={resolvedSearchParams}
             currencyCode={systemSettings.currencyDisplay}
+            billingModelSource={systemSettings.billingModelSource}
           />
         </Suspense>
       </Section>

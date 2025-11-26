@@ -24,6 +24,7 @@ export default async function SettingsConfigPage() {
             siteTitle: settings.siteTitle,
             allowGlobalUsageView: settings.allowGlobalUsageView,
             currencyDisplay: settings.currencyDisplay,
+            billingModelSource: settings.billingModelSource,
           }}
         />
       </Section>

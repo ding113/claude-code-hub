@@ -1,5 +1,8 @@
 import type { CurrencyCode } from "@/lib/utils";
 
+// 计费模型来源: 'original' (重定向前) | 'redirected' (重定向后)
+export type BillingModelSource = "original" | "redirected";
+
 export interface SystemSettings {
   id: number;
   siteTitle: string;
@@ -7,6 +10,9 @@ export interface SystemSettings {
 
   // 货币显示配置
   currencyDisplay: CurrencyCode;
+
+  // 计费模型来源配置
+  billingModelSource: BillingModelSource;
 
   // 日志清理配置
   enableAutoCleanup?: boolean;
@@ -28,6 +34,9 @@ export interface UpdateSystemSettingsInput {
 
   // 货币显示配置（可选）
   currencyDisplay?: CurrencyCode;
+
+  // 计费模型来源配置（可选）
+  billingModelSource?: BillingModelSource;
 
   // 日志清理配置（可选）
   enableAutoCleanup?: boolean;
