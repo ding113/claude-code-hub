@@ -365,31 +365,52 @@ export async function getProviderStatistics(): Promise<
     // 参考 getUserStatisticsFromDB 的实现，避免 Node.js Date 带来的时区偏移
     const timezone = getEnvConfig().TZ;
 
+    // ⭐ 使用 providerChain 最后一项的 providerId 来确定最终供应商（兼容重试切换）
+    // 如果 provider_chain 为空（无重试），则使用 provider_id 字段
     const query = sql`
       WITH provider_stats AS (
         SELECT
           p.id,
           COALESCE(
-            SUM(CASE WHEN (mr.created_at AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date
-                 THEN mr.cost_usd ELSE 0 END),
+            SUM(CASE
+              WHEN (mr.created_at AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date
+                AND (
+                  -- 情况1：无重试（provider_chain 为 NULL 或空数组），使用 provider_id
+                  (mr.provider_chain IS NULL OR jsonb_array_length(mr.provider_chain) = 0) AND mr.provider_id = p.id
+                  OR
+                  -- 情况2：有重试，使用 providerChain 最后一项的 providerId
+                  (mr.provider_chain IS NOT NULL AND jsonb_array_length(mr.provider_chain) > 0
+                   AND (mr.provider_chain->-1->>'providerId')::int = p.id)
+                )
+              THEN mr.cost_usd ELSE 0 END),
             0
           ) AS today_cost,
-          COUNT(CASE WHEN (mr.created_at AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date
-                  THEN 1 END)::integer AS today_calls
+          COUNT(CASE
+            WHEN (mr.created_at AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date
+              AND (
+                (mr.provider_chain IS NULL OR jsonb_array_length(mr.provider_chain) = 0) AND mr.provider_id = p.id
+                OR
+                (mr.provider_chain IS NOT NULL AND jsonb_array_length(mr.provider_chain) > 0
+                 AND (mr.provider_chain->-1->>'providerId')::int = p.id)
+              )
+            THEN 1 END)::integer AS today_calls
         FROM providers p
-        LEFT JOIN message_request mr ON p.id = mr.provider_id
-          AND mr.deleted_at IS NULL
+        LEFT JOIN message_request mr ON mr.deleted_at IS NULL
         WHERE p.deleted_at IS NULL
         GROUP BY p.id
       ),
       latest_call AS (
-        SELECT DISTINCT ON (provider_id)
-          provider_id,
+        SELECT DISTINCT ON (final_provider_id)
+          -- 计算最终供应商ID：优先使用 providerChain 最后一项
+          CASE
+            WHEN provider_chain IS NULL OR jsonb_array_length(provider_chain) = 0 THEN provider_id
+            ELSE (provider_chain->-1->>'providerId')::int
+          END AS final_provider_id,
           created_at AS last_call_time,
           model AS last_call_model
         FROM message_request
         WHERE deleted_at IS NULL
-        ORDER BY provider_id, created_at DESC
+        ORDER BY final_provider_id, created_at DESC
       )
       SELECT
         ps.id,
@@ -398,7 +419,7 @@ export async function getProviderStatistics(): Promise<
         lc.last_call_time,
         lc.last_call_model
       FROM provider_stats ps
-      LEFT JOIN latest_call lc ON ps.id = lc.provider_id
+      LEFT JOIN latest_call lc ON ps.id = lc.final_provider_id
       ORDER BY ps.id ASC
     `;
 

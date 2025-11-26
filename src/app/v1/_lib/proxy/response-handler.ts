@@ -207,6 +207,7 @@ export class ProxyResponseHandler {
             statusCode: statusCode,
             providerChain: session.getProviderChain(),
             model: session.getCurrentModel() ?? undefined, // ⭐ 更新重定向后的模型
+            providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
           });
           const tracker = ProxyStatusTracker.getInstance();
           tracker.endRequest(messageContext.user.id, messageContext.id);
@@ -326,6 +327,7 @@ export class ProxyResponseHandler {
             cacheReadInputTokens: usageMetrics?.cache_read_input_tokens,
             providerChain: session.getProviderChain(),
             model: session.getCurrentModel() ?? undefined, // ⭐ 更新重定向后的模型
+            providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
           });
 
           // 记录请求结束
@@ -825,6 +827,7 @@ export class ProxyResponseHandler {
           cacheReadInputTokens: usageForCost?.cache_read_input_tokens,
           providerChain: session.getProviderChain(),
           model: session.getCurrentModel() ?? undefined, // ⭐ 更新重定向后的模型
+          providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
         });
       };
 
@@ -1445,6 +1448,7 @@ async function finalizeRequestStats(
       statusCode: statusCode,
       providerChain: session.getProviderChain(),
       model: session.getCurrentModel() ?? undefined,
+      providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
     });
     return;
   }
@@ -1500,6 +1504,7 @@ async function finalizeRequestStats(
     cacheReadInputTokens: usageMetrics.cache_read_input_tokens,
     providerChain: session.getProviderChain(),
     model: session.getCurrentModel() ?? undefined,
+    providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
   });
 }
 
@@ -1588,6 +1593,7 @@ async function persistRequestFailure(options: {
       errorMessage,
       providerChain: session.getProviderChain(),
       model: session.getCurrentModel() ?? undefined,
+      providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
     });
 
     logger.info("ResponseHandler: Successfully persisted request failure", {

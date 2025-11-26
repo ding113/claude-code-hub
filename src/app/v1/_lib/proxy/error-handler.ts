@@ -154,6 +154,7 @@ export class ProxyErrorHandler {
       providerChain: session.getProviderChain(),
       statusCode: statusCode,
       model: session.getCurrentModel() ?? undefined,
+      providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
     });
 
     // 记录请求结束
