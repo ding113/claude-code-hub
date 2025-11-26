@@ -22,6 +22,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- Fix provider statistics, group settings persistence, and usage records date filtering; consolidate migrations 0020-0025 into single idempotent file (#207) @ding113
 - Fix database migration duplicate enum type creation error (#181) @ding113
 - Fix error handling and status codes in response handler, improve user management page UX (#179) @ding113
 - Fix infinite loop in leaderboard tab switching (#178) @ding113
