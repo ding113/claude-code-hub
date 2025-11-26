@@ -1,5 +1,5 @@
 {
-  "id": "2cca68f8-d8c7-4298-9f24-c8fd493d700e",
+  "id": "e423d87a-7e70-4a76-b7ad-4011efd95f2a",
   "prevId": "4ba39e7a-e353-4ed1-8e18-934a56fb0af6",
   "version": "7",
   "dialect": "postgresql",
@@ -212,7 +212,8 @@
         },
         "daily_reset_mode": {
           "name": "daily_reset_mode",
-          "type": "varchar(10)",
+          "type": "daily_reset_mode",
+          "typeSchema": "public",
           "primaryKey": false,
           "notNull": true,
           "default": "'fixed'"
@@ -954,6 +955,19 @@
           "notNull": false,
           "default": "'auto'"
         },
+        "mcp_passthrough_type": {
+          "name": "mcp_passthrough_type",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'none'"
+        },
+        "mcp_passthrough_url": {
+          "name": "mcp_passthrough_url",
+          "type": "varchar(512)",
+          "primaryKey": false,
+          "notNull": false
+        },
         "limit_5h_usd": {
           "name": "limit_5h_usd",
           "type": "numeric(10, 2)",
@@ -968,7 +982,8 @@
         },
         "daily_reset_mode": {
           "name": "daily_reset_mode",
-          "type": "varchar(10)",
+          "type": "daily_reset_mode",
+          "typeSchema": "public",
           "primaryKey": false,
           "notNull": true,
           "default": "'fixed'"
@@ -1038,21 +1053,21 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": 30000
+          "default": 0
         },
         "streaming_idle_timeout_ms": {
           "name": "streaming_idle_timeout_ms",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": 10000
+          "default": 0
         },
         "request_timeout_non_streaming_ms": {
           "name": "request_timeout_non_streaming_ms",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": 600000
+          "default": 0
         },
         "website_url": {
           "name": "website_url",
@@ -1325,6 +1340,13 @@
           "notNull": true,
           "default": "'USD'"
         },
+        "billing_model_source": {
+          "name": "billing_model_source",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'original'"
+        },
         "enable_auto_cleanup": {
           "name": "enable_auto_cleanup",
           "type": "boolean",
@@ -1545,7 +1567,16 @@
       "isRLSEnabled": false
     }
   },
-  "enums": {},
+  "enums": {
+    "public.daily_reset_mode": {
+      "name": "daily_reset_mode",
+      "schema": "public",
+      "values": [
+        "fixed",
+        "rolling"
+      ]
+    }
+  },
   "schemas": {},
   "sequences": {},
   "roles": {},

@@ -1,1 +1,0 @@
-ALTER TABLE "system_settings" ADD COLUMN "billing_model_source" varchar(20) DEFAULT 'original' NOT NULL;

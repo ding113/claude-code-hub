@@ -1,1 +1,0 @@
-ALTER TABLE "providers" ALTER COLUMN "streaming_idle_timeout_ms" SET DEFAULT 300000;
