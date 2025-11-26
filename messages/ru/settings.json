@@ -542,6 +542,140 @@
         "proxyError": "Ошибка прокси:",
         "networkError": "Сетевая ошибка:"
       },
+      "apiTest": {
+        "fillUrlFirst": "Пожалуйста, сначала заполните URL провайдера",
+        "invalidUrl": "URL провайдера недействителен (только http/https)",
+        "fillKeyFirst": "Пожалуйста, сначала заполните API ключ",
+        "testFailed": "Тест не пройден",
+        "testFailedRetry": "Тест не пройден, попробуйте снова",
+        "noResult": "Тест успешен, но результат не возвращен",
+        "testSuccess": "Тест модели успешен",
+        "testApi": "Тест модели провайдера",
+        "testing": "Тестирование...",
+        "apiFormat": "Тип провайдера",
+        "selectApiFormat": "Выберите тип провайдера для тестирования",
+        "apiFormatDesc": "По умолчанию синхронизируется с типом провайдера в конфигурации маршрутизации",
+        "formatAnthropicMessages": "Claude (Anthropic Messages API)",
+        "formatOpenAIChat": "OpenAI Compatible",
+        "formatOpenAIResponses": "Codex (Response API)",
+        "testModel": "Тестовая модель",
+        "testModelDesc": "Оставьте пустым для использования модели по умолчанию или введите вручную",
+        "model": "Модель",
+        "responseModel": "Модель ответа",
+        "responseTime": "Время ответа",
+        "usage": "Использование токенов",
+        "response": "Предварительный просмотр ответа",
+        "error": "Сообщение об ошибке",
+        "unknown": "Неизвестно",
+        "viewDetails": "Подробнее",
+        "copySuccess": "Скопировано в буфер обмена",
+        "copyFailed": "Не удалось скопировать",
+        "copyResult": "Копировать результат",
+        "close": "Закрыть",
+        "success": "Успешно",
+        "failed": "Не удалось",
+        "streamInfo": "Информация о потоковом ответе",
+        "chunksReceived": "Полученные чанки",
+        "streamFormat": "Формат потока",
+        "streamResponse": "Потоковый ответ",
+        "chunksCount": "Получено {count} чанков ({format})",
+        "truncatedPreview": "Показаны первые {length} символов, скопируйте для просмотра полного текста",
+        "truncatedBrief": "Показаны первые {length} символов, нажмите «Подробнее» для полного просмотра",
+        "copyFormat": {
+          "testResult": "Результат теста",
+          "message": "Сообщение",
+          "errorDetails": "Детали ошибки"
+        },
+        "disclaimer": {
+          "title": "Внимание",
+          "realRequest": "Этот тест отправляет реальный запрос провайдеру и может потреблять небольшую квоту",
+          "resultReference": "Результаты могут варьироваться в зависимости от провайдера и служат только для справки",
+          "confirmConfig": "Пожалуйста, проверьте URL провайдера, API ключ и конфигурацию модели"
+        },
+        "resultCard": {
+          "status": {
+            "green": "Доступен",
+            "yellow": "Нестабильно",
+            "red": "Недоступен"
+          },
+          "dialogTitle": "Детали теста провайдера",
+          "validation": {
+            "title": "Детали трехуровневой валидации",
+            "http": {
+              "title": "Уровень 1: HTTP статус",
+              "statusCode": "Код статуса",
+              "passed": "2xx/3xx успех",
+              "failed": "4xx/5xx ошибка"
+            },
+            "latency": {
+              "title": "Уровень 2: Порог задержки",
+              "actual": "Фактическая задержка",
+              "passed": "В пределах порога",
+              "failed": "Превышен порог"
+            },
+            "content": {
+              "title": "Уровень 3: Валидация контента",
+              "target": "Цель",
+              "passed": "Содержит целевую строку",
+              "failed": "Цель не найдена"
+            },
+            "passed": "Пройдено",
+            "failed": "Не пройдено",
+            "timeout": "Тайм-аут"
+          },
+          "labels": {
+            "http": "HTTP",
+            "latency": "Задержка",
+            "content": "Контент",
+            "model": "Модель",
+            "firstByte": "Первый байт",
+            "totalLatency": "Общая задержка",
+            "error": "Ошибка",
+            "responsePreview": "Предпросмотр ответа"
+          },
+          "timing": {
+            "title": "Информация о времени",
+            "totalLatency": "Общая задержка",
+            "firstByte": "Первый байт",
+            "testedAt": "Время теста"
+          },
+          "tokenUsage": {
+            "title": "Использование токенов",
+            "input": "Ввод",
+            "output": "Вывод",
+            "cacheCreation": "Создание кэша",
+            "cacheRead": "Чтение кэша"
+          },
+          "streamInfo": {
+            "title": "Информация о потоковом ответе",
+            "isStreaming": "Потоковая передача",
+            "chunksCount": "Количество чанков",
+            "yes": "Да",
+            "no": "Нет"
+          },
+          "errorDetails": {
+            "title": "Детали ошибки",
+            "type": "Тип ошибки"
+          },
+          "copyText": {
+            "status": "Статус",
+            "message": "Сообщение",
+            "latency": "Задержка",
+            "httpStatus": "HTTP статус",
+            "model": "Модель",
+            "usage": "Использование",
+            "inputOutput": "Ввод {input} / Вывод {output} токенов",
+            "response": "Ответ",
+            "error": "Ошибка",
+            "testedAt": "Время теста",
+            "validationDetails": "Детали валидации",
+            "httpCheck": "Проверка HTTP",
+            "latencyCheck": "Проверка задержки",
+            "contentCheck": "Проверка контента"
+          },
+          "judgment": "Решение"
+        }
+      },
       "urlPreview": {
         "title": "Предварительный просмотр URL",
         "invalidUrl": "Неверный формат URL",

@@ -371,6 +371,7 @@
     "dashboard": "儀表板",
     "usageLogs": "使用記錄",
     "leaderboard": "排行榜",
+    "availability": "可用性監控",
     "quotasManagement": "額度管理",
     "userManagement": "使用者管理",
     "documentation": "文件",
@@ -646,5 +647,126 @@
     "delete": "刪除使用者",
     "editAriaLabel": "編輯使用者",
     "deleteAriaLabel": "刪除使用者"
+  },
+  "users": {
+    "title": "使用者管理",
+    "description": "顯示 {count} 位使用者",
+    "toolbar": {
+      "searchPlaceholder": "依使用者名稱搜尋...",
+      "groupFilter": "依群組篩選",
+      "allGroups": "所有群組"
+    }
+  },
+  "availability": {
+    "title": "供應商可用性監控",
+    "description": "即時監控供應商的可用性狀態和效能指標",
+    "nav": "可用性監控",
+    "status": {
+      "green": "正常",
+      "red": "異常",
+      "unknown": "未知"
+    },
+    "statusDescription": {
+      "green": "服務正常，請求成功",
+      "red": "服務異常或不可用",
+      "unknown": "暫無資料"
+    },
+    "metrics": {
+      "systemAvailability": "系統可用性",
+      "totalRequests": "總請求數",
+      "successRate": "成功率",
+      "avgLatency": "平均延遲",
+      "p50Latency": "P50 延遲",
+      "p95Latency": "P95 延遲",
+      "p99Latency": "P99 延遲",
+      "lastRequest": "最後請求",
+      "requestCount": "請求數"
+    },
+    "timeRange": {
+      "label": "時間範圍",
+      "last15min": "最近 15 分鐘",
+      "last1h": "最近 1 小時",
+      "last6h": "最近 6 小時",
+      "last24h": "最近 24 小時",
+      "last7d": "最近 7 天",
+      "custom": "自訂"
+    },
+    "filters": {
+      "provider": "供應商",
+      "allProviders": "全部供應商",
+      "includeDisabled": "包含已停用"
+    },
+    "sort": {
+      "label": "排序",
+      "availability": "可用性",
+      "name": "名稱",
+      "requests": "請求數"
+    },
+    "columns": {
+      "provider": "供應商",
+      "type": "類型",
+      "status": "狀態",
+      "availability": "可用性",
+      "requests": "請求數",
+      "successRate": "成功率",
+      "avgLatency": "平均延遲",
+      "lastRequest": "最後請求",
+      "actions": "操作"
+    },
+    "chart": {
+      "title": "可用性趨勢",
+      "description": "依時間段統計的可用性變化",
+      "availabilityScore": "可用性評分",
+      "requestVolume": "請求量",
+      "latencyTrend": "延遲趨勢",
+      "noData": "暫無資料"
+    },
+    "details": {
+      "title": "供應商詳情",
+      "overview": "概覽",
+      "timeBuckets": "時間分段",
+      "greenCount": "成功請求",
+      "redCount": "失敗請求"
+    },
+    "actions": {
+      "refresh": "重新整理",
+      "refreshing": "重新整理中...",
+      "autoRefresh": "自動重新整理",
+      "stopAutoRefresh": "停止自動重新整理",
+      "viewDetails": "檢視詳情",
+      "testProvider": "測試供應商"
+    },
+    "states": {
+      "loading": "載入中...",
+      "error": "載入失敗",
+      "noProviders": "暫無供應商",
+      "noData": "暫無可用性資料",
+      "fetchFailed": "取得可用性資料失敗"
+    },
+    "legend": {
+      "green": "優秀 (可用性 95%+)",
+      "lime": "良好 (可用性 80-95%)",
+      "orange": "警告 (可用性 50-80%)",
+      "red": "異常 (可用性 <50%)",
+      "noData": "無資料"
+    },
+    "summary": {
+      "title": "可用性摘要",
+      "healthyProviders": "健康供應商",
+      "unhealthyProviders": "異常供應商",
+      "unknownProviders": "無資料",
+      "totalProviders": "供應商總數"
+    },
+    "heatmap": {
+      "bucketSize": "時間分段",
+      "minutes": "分鐘",
+      "requests": "請求",
+      "noData": "無資料",
+      "noRequests": "無請求"
+    },
+    "toast": {
+      "refreshSuccess": "可用性資料已重新整理",
+      "refreshFailed": "重新整理失敗，請重試"
+    }
   }
 }

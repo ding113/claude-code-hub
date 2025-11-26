@@ -644,6 +644,89 @@
           "resultReference": "[IMPORTANT] Results may vary by provider and are for reference only",
           "realRequest": "This test sends a real request to the provider and may consume a small quota",
           "confirmConfig": "Please verify provider URL, API key, and model configuration"
+        },
+        "resultCard": {
+          "status": {
+            "green": "Available",
+            "yellow": "Degraded",
+            "red": "Unavailable"
+          },
+          "dialogTitle": "Provider Test Details",
+          "validation": {
+            "title": "Three-tier Validation Details",
+            "http": {
+              "title": "Tier 1: HTTP Status",
+              "statusCode": "Status Code",
+              "passed": "2xx/3xx Success",
+              "failed": "4xx/5xx Failed"
+            },
+            "latency": {
+              "title": "Tier 2: Latency Threshold",
+              "actual": "Actual Latency",
+              "passed": "Within threshold",
+              "failed": "Exceeded threshold"
+            },
+            "content": {
+              "title": "Tier 3: Content Validation",
+              "target": "Target",
+              "passed": "Contains target string",
+              "failed": "Target not found"
+            },
+            "passed": "Passed",
+            "failed": "Failed",
+            "timeout": "Timeout"
+          },
+          "labels": {
+            "http": "HTTP",
+            "latency": "Latency",
+            "content": "Content",
+            "model": "Model",
+            "firstByte": "First Byte",
+            "totalLatency": "Total Latency",
+            "error": "Error",
+            "responsePreview": "Response Preview"
+          },
+          "timing": {
+            "title": "Timing Info",
+            "totalLatency": "Total Latency",
+            "firstByte": "First Byte",
+            "testedAt": "Tested At"
+          },
+          "tokenUsage": {
+            "title": "Token Usage",
+            "input": "Input",
+            "output": "Output",
+            "cacheCreation": "Cache Creation",
+            "cacheRead": "Cache Read"
+          },
+          "streamInfo": {
+            "title": "Stream Response Info",
+            "isStreaming": "Streaming",
+            "chunksCount": "Chunks Count",
+            "yes": "Yes",
+            "no": "No"
+          },
+          "errorDetails": {
+            "title": "Error Details",
+            "type": "Error Type"
+          },
+          "copyText": {
+            "status": "Status",
+            "message": "Message",
+            "latency": "Latency",
+            "httpStatus": "HTTP Status",
+            "model": "Model",
+            "usage": "Usage",
+            "inputOutput": "Input {input} / Output {output} tokens",
+            "response": "Response",
+            "error": "Error",
+            "testedAt": "Tested At",
+            "validationDetails": "Validation Details",
+            "httpCheck": "HTTP Check",
+            "latencyCheck": "Latency Check",
+            "contentCheck": "Content Check"
+          },
+          "judgment": "Judgment"
         }
       },
       "proxyTest": {

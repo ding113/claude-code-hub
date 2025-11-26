@@ -21,6 +21,7 @@ export function DashboardHeader({ session }: DashboardHeaderProps) {
     { href: "/dashboard", label: t("dashboard") },
     { href: "/dashboard/logs", label: t("usageLogs") },
     { href: "/dashboard/leaderboard", label: t("leaderboard") },
+    { href: "/dashboard/availability", label: t("availability"), adminOnly: true },
     { href: "/dashboard/quotas", label: t("quotasManagement") },
     { href: "/dashboard/users", label: t("userManagement") },
     { href: "/usage-doc", label: t("documentation") },

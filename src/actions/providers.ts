@@ -29,6 +29,12 @@ import { CodexInstructionsCache } from "@/lib/codex-instructions-cache";
 import { isClientAbortError } from "@/app/v1/_lib/proxy/errors";
 import { PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { GeminiAuth } from "@/app/v1/_lib/gemini/auth";
+import {
+  executeProviderTest,
+  type ProviderTestConfig,
+  type TestStatus,
+  type TestSubStatus,
+} from "@/lib/provider-testing";
 
 const API_TEST_TIMEOUT_LIMITS = {
   DEFAULT: 15000,
@@ -2198,4 +2204,183 @@ export async function testProviderGemini(
       },
     }
   );
+}
+
+// ============================================================================
+// Unified Provider Testing (relay-pulse style three-tier validation)
+// ============================================================================
+
+/**
+ * Arguments for unified provider testing
+ */
+export type UnifiedTestArgs = {
+  providerUrl: string;
+  apiKey: string;
+  providerType: ProviderType;
+  model?: string;
+  proxyUrl?: string | null;
+  proxyFallbackToDirect?: boolean;
+  /** Latency threshold in ms for YELLOW status (default: 5000) */
+  latencyThresholdMs?: number;
+  /** String that must be present in response (default: type-specific) */
+  successContains?: string;
+  /** Request timeout in ms (default: 10000) */
+  timeoutMs?: number;
+};
+
+/**
+ * Result type for unified provider testing
+ * Includes three-tier validation details
+ */
+export type UnifiedTestResult = ActionResult<{
+  success: boolean;
+  status: TestStatus;
+  subStatus: TestSubStatus;
+  message: string;
+  latencyMs: number;
+  firstByteMs?: number;
+  httpStatusCode?: number;
+  httpStatusText?: string;
+  model?: string;
+  content?: string;
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheCreationInputTokens?: number;
+    cacheReadInputTokens?: number;
+  };
+  streamInfo?: {
+    isStreaming: boolean;
+    chunksReceived?: number;
+  };
+  errorMessage?: string;
+  errorType?: string;
+  testedAt: string;
+  validationDetails: {
+    httpPassed: boolean;
+    httpStatusCode?: number;
+    latencyPassed: boolean;
+    latencyMs?: number;
+    contentPassed: boolean;
+    contentTarget?: string;
+  };
+}>;
+
+/**
+ * Human-readable messages for sub-status
+ */
+const SUB_STATUS_MESSAGES: Record<TestSubStatus, string> = {
+  success: "所有检查通过",
+  slow_latency: "响应成功但较慢",
+  rate_limit: "请求被限流 (429)",
+  server_error: "服务器错误 (5xx)",
+  client_error: "客户端错误 (4xx)",
+  auth_error: "认证失败 (401/403)",
+  invalid_request: "无效请求 (400)",
+  network_error: "网络连接失败",
+  content_mismatch: "响应内容验证失败",
+};
+
+/**
+ * Check if a URL is safe for API testing (SSRF prevention)
+ * Wraps validateProviderUrlForConnectivity with a simpler interface
+ */
+async function isUrlSafeForApiTest(
+  providerUrl: string
+): Promise<{ safe: boolean; reason?: string }> {
+  const validation = validateProviderUrlForConnectivity(providerUrl);
+  if (validation.valid) {
+    return { safe: true };
+  }
+  return { safe: false, reason: validation.error.message };
+}
+
+/**
+ * Unified provider testing with three-tier validation
+ *
+ * Validation tiers (from relay-pulse):
+ * 1. HTTP Status Code - 2xx/3xx = pass, 4xx/5xx = fail
+ * 2. Latency Threshold - Below threshold = GREEN, above = YELLOW
+ * 3. Content Validation - Response contains expected string
+ *
+ * Status meanings:
+ * - green: All validations passed
+ * - yellow: HTTP OK but slow (degraded)
+ * - red: Any validation failed
+ */
+export async function testProviderUnified(
+  data: UnifiedTestArgs
+): Promise<UnifiedTestResult> {
+  const session = await getSession();
+  if (!session || session.user.role !== "admin") {
+    return {
+      ok: false,
+      error: "未授权",
+    };
+  }
+
+  // Validate URL
+  const urlValidation = await isUrlSafeForApiTest(data.providerUrl);
+  if (!urlValidation.safe) {
+    return {
+      ok: false,
+      error: urlValidation.reason ?? "无效的 URL",
+    };
+  }
+
+  try {
+    // Build test configuration
+    const config: ProviderTestConfig = {
+      providerUrl: data.providerUrl,
+      apiKey: data.apiKey,
+      providerType: data.providerType,
+      model: data.model,
+      proxyUrl: data.proxyUrl ?? undefined,
+      proxyFallbackToDirect: data.proxyFallbackToDirect,
+      latencyThresholdMs: data.latencyThresholdMs,
+      successContains: data.successContains,
+      timeoutMs: data.timeoutMs,
+    };
+
+    // Execute test
+    const result = await executeProviderTest(config);
+
+    // Build response message
+    const statusText =
+      result.status === "green"
+        ? "可用"
+        : result.status === "yellow"
+          ? "波动"
+          : "不可用";
+
+    const message = `供应商 ${statusText}: ${SUB_STATUS_MESSAGES[result.subStatus]}`;
+
+    return {
+      ok: true,
+      data: {
+        success: result.success,
+        status: result.status,
+        subStatus: result.subStatus,
+        message,
+        latencyMs: result.latencyMs,
+        firstByteMs: result.firstByteMs,
+        httpStatusCode: result.httpStatusCode,
+        httpStatusText: result.httpStatusText,
+        model: result.model,
+        content: result.content,
+        usage: result.usage,
+        streamInfo: result.streamInfo,
+        errorMessage: result.errorMessage,
+        errorType: result.errorType,
+        testedAt: result.testedAt.toISOString(),
+        validationDetails: result.validationDetails,
+      },
+    };
+  } catch (error) {
+    logger.error("testProviderUnified error", { error });
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "测试执行失败",
+    };
+  }
 }

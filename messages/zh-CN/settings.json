@@ -270,6 +270,89 @@
           "resultReference": "【重要】因各家供应商情况不同，测试结果仅供参考，不代表实际调用效果",
           "realRequest": "测试将向供应商发送真实请求，可能消耗少量额度",
           "confirmConfig": "请确认供应商 URL、API 密钥及模型配置正确"
+        },
+        "resultCard": {
+          "status": {
+            "green": "可用",
+            "yellow": "波动",
+            "red": "不可用"
+          },
+          "dialogTitle": "供应商测试详情",
+          "validation": {
+            "title": "三层验证详情",
+            "http": {
+              "title": "Tier 1: HTTP 状态",
+              "statusCode": "状态码",
+              "passed": "2xx/3xx 成功",
+              "failed": "4xx/5xx 失败"
+            },
+            "latency": {
+              "title": "Tier 2: 延迟阈值",
+              "actual": "实际延迟",
+              "passed": "在阈值内",
+              "failed": "超过阈值"
+            },
+            "content": {
+              "title": "Tier 3: 内容验证",
+              "target": "目标",
+              "passed": "包含目标字符串",
+              "failed": "未找到目标"
+            },
+            "passed": "通过",
+            "failed": "失败",
+            "timeout": "超时"
+          },
+          "labels": {
+            "http": "HTTP",
+            "latency": "延迟",
+            "content": "内容",
+            "model": "模型",
+            "firstByte": "首字节",
+            "totalLatency": "总延迟",
+            "error": "错误",
+            "responsePreview": "响应预览"
+          },
+          "timing": {
+            "title": "时间信息",
+            "totalLatency": "总延迟",
+            "firstByte": "首字节",
+            "testedAt": "测试时间"
+          },
+          "tokenUsage": {
+            "title": "Token 用量",
+            "input": "输入",
+            "output": "输出",
+            "cacheCreation": "缓存创建",
+            "cacheRead": "缓存读取"
+          },
+          "streamInfo": {
+            "title": "流式响应信息",
+            "isStreaming": "流式响应",
+            "chunksCount": "数据块数",
+            "yes": "是",
+            "no": "否"
+          },
+          "errorDetails": {
+            "title": "错误详情",
+            "type": "错误类型"
+          },
+          "copyText": {
+            "status": "状态",
+            "message": "消息",
+            "latency": "延迟",
+            "httpStatus": "HTTP 状态",
+            "model": "模型",
+            "usage": "用量",
+            "inputOutput": "输入 {input} / 输出 {output} tokens",
+            "response": "响应",
+            "error": "错误",
+            "testedAt": "测试时间",
+            "validationDetails": "验证详情",
+            "httpCheck": "HTTP 检查",
+            "latencyCheck": "延迟检查",
+            "contentCheck": "内容验证"
+          },
+          "judgment": "判定"
         }
       },
       "urlPreview": {
