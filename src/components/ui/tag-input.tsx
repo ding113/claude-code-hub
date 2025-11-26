@@ -141,6 +141,13 @@ export function TagInput({
     [separator, addTag]
   );
 
+  // Commit pending input value on blur (e.g., when clicking save button)
+  const handleBlur = React.useCallback(() => {
+    if (inputValue.trim()) {
+      addTag(inputValue);
+    }
+  }, [inputValue, addTag]);
+
   return (
     <div
       className={cn(
@@ -181,6 +188,7 @@ export function TagInput({
         onChange={handleInputChange}
         onKeyDown={handleKeyDown}
         onPaste={handlePaste}
+        onBlur={handleBlur}
         disabled={disabled}
         placeholder={value.length === 0 ? placeholder : undefined}
         className={cn(
