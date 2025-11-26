@@ -1060,26 +1060,23 @@ function extractErrorMessage(errorJson: unknown): string | undefined {
   const obj = errorJson as Record<string, unknown>;
 
   // 优先提取 upstream_error 中的错误信息（针对中转服务的嵌套错误）
-  // 例如: { error: { message: "请求目标分享错误", upstream_error: { error: { message: "真正的错误" } } } }
-  if (obj.error && typeof obj.error === "object") {
-    const errorObj = obj.error as Record<string, unknown>;
-    if (errorObj.upstream_error && typeof errorObj.upstream_error === "object") {
-      const upstreamError = errorObj.upstream_error as Record<string, unknown>;
+  const upstreamError = (obj.error as { upstream_error?: unknown } | undefined)?.upstream_error;
 
-      // 尝试从 upstream_error.error.message 提取
-      if (upstreamError.error && typeof upstreamError.error === "object") {
-        const upstreamErrorObj = upstreamError.error as Record<string, unknown>;
-        const upstreamMessage = normalizeErrorValue(upstreamErrorObj.message);
-        if (upstreamMessage) {
-          return upstreamMessage;
-        }
-      }
+  if (upstreamError && typeof upstreamError === "object") {
+    const upstreamErrorObj = upstreamError as Record<string, unknown>;
 
-      // 尝试从 upstream_error.message 提取
-      const upstreamMessage = normalizeErrorValue(upstreamError.message);
-      if (upstreamMessage) {
-        return upstreamMessage;
-      }
+    // 尝试从 upstream_error.error.message 提取
+    const nestedMessage = normalizeErrorValue(
+      (upstreamErrorObj.error as { message?: unknown } | undefined)?.message
+    );
+    if (nestedMessage) {
+      return nestedMessage;
+    }
+
+    // 尝试从 upstream_error.message 提取
+    const directMessage = normalizeErrorValue(upstreamErrorObj.message);
+    if (directMessage) {
+      return directMessage;
     }
   }
 
