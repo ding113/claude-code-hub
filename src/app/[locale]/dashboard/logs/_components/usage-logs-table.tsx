@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Table,
@@ -73,6 +74,12 @@ export function UsageLogsTable({
   const t = useTranslations("dashboard");
   const tChain = useTranslations("provider-chain");
   const totalPages = Math.ceil(total / pageSize);
+
+  // 弹窗状态管理：记录当前打开的行 ID 和是否需要滚动到重定向部分
+  const [dialogState, setDialogState] = useState<{
+    logId: number | null;
+    scrollToRedirect: boolean;
+  }>({ logId: null, scrollToRedirect: false });
 
   return (
     <div className="space-y-4">
@@ -204,6 +211,7 @@ export function UsageLogsTable({
                                 originalModel={log.originalModel}
                                 currentModel={log.model}
                                 billingModelSource={billingModelSource}
+                                onRedirectClick={() => setDialogState({ logId: log.id, scrollToRedirect: true })}
                               />
                             </div>
                           </TooltipTrigger>
@@ -245,6 +253,11 @@ export function UsageLogsTable({
                         messagesCount={log.messagesCount}
                         endpoint={log.endpoint}
                         billingModelSource={billingModelSource}
+                        externalOpen={dialogState.logId === log.id ? true : undefined}
+                        onExternalOpenChange={(open) => {
+                          if (!open) setDialogState({ logId: null, scrollToRedirect: false });
+                        }}
+                        scrollToRedirect={dialogState.logId === log.id && dialogState.scrollToRedirect}
                       />
                     </TableCell>
                   </TableRow>

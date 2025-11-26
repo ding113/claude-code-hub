@@ -33,6 +33,9 @@ interface ErrorDetailsDialogProps {
   messagesCount?: number | null; // Messages 数量
   endpoint?: string | null; // API 端点
   billingModelSource?: BillingModelSource; // 计费模型来源
+  externalOpen?: boolean; // 外部控制弹窗开关
+  onExternalOpenChange?: (open: boolean) => void; // 外部控制回调
+  scrollToRedirect?: boolean; // 是否滚动到重定向部分
 }
 
 export function ErrorDetailsDialog({
@@ -48,12 +51,26 @@ export function ErrorDetailsDialog({
   messagesCount,
   endpoint,
   billingModelSource = "original",
+  externalOpen,
+  onExternalOpenChange,
+  scrollToRedirect,
 }: ErrorDetailsDialogProps) {
   const t = useTranslations("dashboard");
   const tChain = useTranslations("provider-chain");
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
   const [hasMessages, setHasMessages] = useState(false);
   const [checkingMessages, setCheckingMessages] = useState(false);
+
+  // 支持外部控制和内部控制
+  const isControlled = externalOpen !== undefined;
+  const open = isControlled ? externalOpen : internalOpen;
+  const setOpen = (value: boolean) => {
+    if (isControlled) {
+      onExternalOpenChange?.(value);
+    } else {
+      setInternalOpen(value);
+    }
+  };
 
   const isSuccess = statusCode && statusCode >= 200 && statusCode < 300;
   const isError = statusCode && (statusCode >= 400 || statusCode < 200);
@@ -92,6 +109,18 @@ export function ErrorDetailsDialog({
       setCheckingMessages(false);
     }
   }, [open, sessionId]);
+
+  // 滚动到重定向部分
+  useEffect(() => {
+    if (open && scrollToRedirect) {
+      // 等待 DOM 渲染完成后滚动
+      const timer = setTimeout(() => {
+        const element = document.getElementById('model-redirect-section');
+        element?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [open, scrollToRedirect]);
 
   /**
    * 根据 HTTP 状态码返回对应的 Badge 样式类名
@@ -294,7 +323,7 @@ export function ErrorDetailsDialog({
 
           {/* 模型重定向信息 */}
           {originalModel && currentModel && originalModel !== currentModel && (
-            <div className="space-y-1.5">
+            <div id="model-redirect-section" className="space-y-1.5">
               <h4 className="font-semibold text-sm flex items-center gap-2">
                 <ArrowRight className="h-4 w-4 text-blue-600" />
                 {t("logs.details.modelRedirect.title")}
