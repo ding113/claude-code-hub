@@ -3,8 +3,8 @@
  * Handles both streaming and non-streaming responses
  */
 
-import type { ParsedResponse, TokenUsage } from '../types';
-import { parseSSEStream, isSSEResponse } from '../utils/sse-collector';
+import type { ParsedResponse, TokenUsage } from "../types";
+import { parseSSEStream, isSSEResponse } from "../utils/sse-collector";
 
 /**
  * OpenAI non-streaming response structure
@@ -37,10 +37,7 @@ interface OpenAIResponse {
 /**
  * Parse OpenAI Chat Completions API response
  */
-export function parseOpenAIResponse(
-  body: string,
-  contentType?: string
-): ParsedResponse {
+export function parseOpenAIResponse(body: string, contentType?: string): ParsedResponse {
   // Check if streaming response
   if (isSSEResponse(body, contentType)) {
     return parseSSEStream(body);
@@ -53,7 +50,7 @@ export function parseOpenAIResponse(
     // Handle error response
     if (data.error) {
       return {
-        content: data.error.message || 'Unknown error',
+        content: data.error.message || "Unknown error",
         model: undefined,
         usage: undefined,
         isStreaming: false,
@@ -63,9 +60,9 @@ export function parseOpenAIResponse(
     // Extract text content from choices
     const content =
       data.choices
-        ?.map((c) => c.message?.content || '')
+        ?.map((c) => c.message?.content || "")
         .filter(Boolean)
-        .join('') || '';
+        .join("") || "";
 
     // Extract usage
     let usage: TokenUsage | undefined;

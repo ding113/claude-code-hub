@@ -3,7 +3,7 @@
  * Handles non-streaming responses (Gemini uses different endpoint for streaming)
  */
 
-import type { ParsedResponse, TokenUsage } from '../types';
+import type { ParsedResponse, TokenUsage } from "../types";
 
 /**
  * Gemini GenerateContent response structure
@@ -39,17 +39,14 @@ interface GeminiResponse {
 /**
  * Parse Gemini GenerateContent API response
  */
-export function parseGeminiResponse(
-  body: string,
-  _contentType?: string
-): ParsedResponse {
+export function parseGeminiResponse(body: string, _contentType?: string): ParsedResponse {
   try {
     const data = JSON.parse(body) as GeminiResponse;
 
     // Handle error response
     if (data.error) {
       return {
-        content: data.error.message || 'Unknown error',
+        content: data.error.message || "Unknown error",
         model: undefined,
         usage: undefined,
         isStreaming: false,
@@ -70,7 +67,7 @@ export function parseGeminiResponse(
       }
     }
 
-    const content = texts.join('');
+    const content = texts.join("");
 
     // Extract usage
     let usage: TokenUsage | undefined;

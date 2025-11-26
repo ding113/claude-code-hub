@@ -8,13 +8,8 @@
  * 3. Support both streaming and non-streaming modes
  */
 
-import type { ProviderType } from '@/types/provider';
-import type {
-  ClaudeTestBody,
-  CodexTestBody,
-  OpenAITestBody,
-  GeminiTestBody,
-} from '../types';
+import type { ProviderType } from "@/types/provider";
+import type { ClaudeTestBody, CodexTestBody, OpenAITestBody, GeminiTestBody } from "../types";
 
 // ============================================================================
 // Claude / Claude-Auth Test Body
@@ -27,31 +22,31 @@ import type {
  * - Minimal token usage with echo bot pattern
  */
 export const CLAUDE_TEST_BODY: ClaudeTestBody = {
-  model: 'claude-sonnet-4-5-20250929',
+  model: "claude-sonnet-4-5-20250929",
   messages: [
     {
-      role: 'user',
-      content: [{ type: 'text', text: 'ping, please reply pong' }],
+      role: "user",
+      content: [{ type: "text", text: "ping, please reply pong" }],
     },
   ],
   system: [
     {
-      type: 'text',
-      text: 'You are a echo bot. Always say pong.',
-      cache_control: { type: 'ephemeral' },
+      type: "text",
+      text: "You are a echo bot. Always say pong.",
+      cache_control: { type: "ephemeral" },
     },
   ],
   max_tokens: 20,
   stream: false,
-  metadata: { user_id: 'cch_probe_test' },
+  metadata: { user_id: "cch_probe_test" },
 };
 
 /**
  * Headers for Claude API
  */
 export const CLAUDE_TEST_HEADERS = {
-  'anthropic-version': '2023-06-01',
-  'content-type': 'application/json',
+  "anthropic-version": "2023-06-01",
+  "content-type": "application/json",
 };
 
 // ============================================================================
@@ -65,18 +60,18 @@ export const CLAUDE_TEST_HEADERS = {
  * - Low reasoning effort for faster response
  */
 export const CODEX_TEST_BODY: CodexTestBody = {
-  model: 'gpt-5-codex',
-  instructions: 'You are a echo bot. Always say pong.',
+  model: "gpt-5-codex",
+  instructions: "You are a echo bot. Always say pong.",
   input: [
     {
-      type: 'message',
-      role: 'user',
-      content: [{ type: 'input_text', text: 'ping' }],
+      type: "message",
+      role: "user",
+      content: [{ type: "input_text", text: "ping" }],
     },
   ],
   tools: [],
-  tool_choice: 'auto',
-  reasoning: { effort: 'low', summary: 'auto' },
+  tool_choice: "auto",
+  reasoning: { effort: "low", summary: "auto" },
   store: false,
   stream: true,
 };
@@ -85,7 +80,7 @@ export const CODEX_TEST_BODY: CodexTestBody = {
  * Headers for Codex API (uses Bearer token)
  */
 export const CODEX_TEST_HEADERS = {
-  'content-type': 'application/json',
+  "content-type": "application/json",
 };
 
 // ============================================================================
@@ -98,10 +93,10 @@ export const CODEX_TEST_HEADERS = {
  * - Non-streaming for simpler validation
  */
 export const OPENAI_TEST_BODY: OpenAITestBody = {
-  model: 'gpt-4o',
+  model: "gpt-4o",
   messages: [
-    { role: 'system', content: 'You are a echo bot. Always say pong.' },
-    { role: 'user', content: 'ping' },
+    { role: "system", content: "You are a echo bot. Always say pong." },
+    { role: "user", content: "ping" },
   ],
   max_tokens: 20,
   stream: false,
@@ -111,7 +106,7 @@ export const OPENAI_TEST_BODY: OpenAITestBody = {
  * Headers for OpenAI-Compatible API (uses Bearer token)
  */
 export const OPENAI_TEST_HEADERS = {
-  'content-type': 'application/json',
+  "content-type": "application/json",
 };
 
 // ============================================================================
@@ -126,11 +121,11 @@ export const OPENAI_TEST_HEADERS = {
 export const GEMINI_TEST_BODY: GeminiTestBody = {
   contents: [
     {
-      parts: [{ text: 'ping, please reply pong' }],
+      parts: [{ text: "ping, please reply pong" }],
     },
   ],
   systemInstruction: {
-    parts: [{ text: 'You are a echo bot. Always say pong.' }],
+    parts: [{ text: "You are a echo bot. Always say pong." }],
   },
   generationConfig: {
     maxOutputTokens: 20,
@@ -141,7 +136,7 @@ export const GEMINI_TEST_BODY: GeminiTestBody = {
  * Headers for Gemini API
  */
 export const GEMINI_TEST_HEADERS = {
-  'content-type': 'application/json',
+  "content-type": "application/json",
 };
 
 // ============================================================================
@@ -152,60 +147,57 @@ export const GEMINI_TEST_HEADERS = {
  * Default models per provider type
  */
 export const DEFAULT_MODELS: Record<ProviderType, string> = {
-  claude: 'claude-sonnet-4-5-20250929',
-  'claude-auth': 'claude-sonnet-4-5-20250929',
-  codex: 'gpt-5-codex',
-  'openai-compatible': 'gpt-4o',
-  gemini: 'gemini-2.0-flash',
-  'gemini-cli': 'gemini-2.0-flash',
+  claude: "claude-sonnet-4-5-20250929",
+  "claude-auth": "claude-sonnet-4-5-20250929",
+  codex: "gpt-5-codex",
+  "openai-compatible": "gpt-4o",
+  gemini: "gemini-2.0-flash",
+  "gemini-cli": "gemini-2.0-flash",
 };
 
 /**
  * Default success_contains patterns per provider type
  */
 export const DEFAULT_SUCCESS_CONTAINS: Record<ProviderType, string> = {
-  claude: 'pong',
-  'claude-auth': 'pong',
-  codex: 'pong',
-  'openai-compatible': 'pong',
-  gemini: 'pong',
-  'gemini-cli': 'pong',
+  claude: "pong",
+  "claude-auth": "pong",
+  codex: "pong",
+  "openai-compatible": "pong",
+  gemini: "pong",
+  "gemini-cli": "pong",
 };
 
 /**
  * API endpoints per provider type
  */
 export const API_ENDPOINTS: Record<ProviderType, string> = {
-  claude: '/v1/messages',
-  'claude-auth': '/v1/messages',
-  codex: '/v1/responses',
-  'openai-compatible': '/v1/chat/completions',
-  gemini: '/v1beta/models/{model}:generateContent',
-  'gemini-cli': '/v1beta/models/{model}:generateContent',
+  claude: "/v1/messages",
+  "claude-auth": "/v1/messages",
+  codex: "/v1/responses",
+  "openai-compatible": "/v1/chat/completions",
+  gemini: "/v1beta/models/{model}:generateContent",
+  "gemini-cli": "/v1beta/models/{model}:generateContent",
 };
 
 /**
  * Get test body for a specific provider type
  */
-export function getTestBody(
-  providerType: ProviderType,
-  model?: string
-): Record<string, unknown> {
+export function getTestBody(providerType: ProviderType, model?: string): Record<string, unknown> {
   const targetModel = model || DEFAULT_MODELS[providerType];
 
   switch (providerType) {
-    case 'claude':
-    case 'claude-auth':
+    case "claude":
+    case "claude-auth":
       return { ...CLAUDE_TEST_BODY, model: targetModel };
 
-    case 'codex':
+    case "codex":
       return { ...CODEX_TEST_BODY, model: targetModel };
 
-    case 'openai-compatible':
+    case "openai-compatible":
       return { ...OPENAI_TEST_BODY, model: targetModel };
 
-    case 'gemini':
-    case 'gemini-cli':
+    case "gemini":
+    case "gemini-cli":
       // Gemini model is in URL, not body
       return { ...GEMINI_TEST_BODY };
 
@@ -217,33 +209,30 @@ export function getTestBody(
 /**
  * Get test headers for a specific provider type
  */
-export function getTestHeaders(
-  providerType: ProviderType,
-  apiKey: string
-): Record<string, string> {
+export function getTestHeaders(providerType: ProviderType, apiKey: string): Record<string, string> {
   switch (providerType) {
-    case 'claude':
+    case "claude":
       return {
         ...CLAUDE_TEST_HEADERS,
-        'x-api-key': apiKey,
+        "x-api-key": apiKey,
       };
 
-    case 'claude-auth':
+    case "claude-auth":
       // Claude-auth uses Bearer token
       return {
         ...CLAUDE_TEST_HEADERS,
         Authorization: `Bearer ${apiKey}`,
       };
 
-    case 'codex':
-    case 'openai-compatible':
+    case "codex":
+    case "openai-compatible":
       return {
         ...OPENAI_TEST_HEADERS,
         Authorization: `Bearer ${apiKey}`,
       };
 
-    case 'gemini':
-    case 'gemini-cli':
+    case "gemini":
+    case "gemini-cli":
       // Gemini uses URL parameter for API key
       return {
         ...GEMINI_TEST_HEADERS,
@@ -264,15 +253,15 @@ export function getTestUrl(
   apiKey?: string
 ): string {
   // Remove trailing slash
-  const cleanBaseUrl = baseUrl.replace(/\/$/, '');
+  const cleanBaseUrl = baseUrl.replace(/\/$/, "");
   const endpoint = API_ENDPOINTS[providerType];
   const targetModel = model || DEFAULT_MODELS[providerType];
 
   let url = `${cleanBaseUrl}${endpoint}`;
 
   // Gemini needs model in URL
-  if (providerType === 'gemini' || providerType === 'gemini-cli') {
-    url = url.replace('{model}', targetModel);
+  if (providerType === "gemini" || providerType === "gemini-cli") {
+    url = url.replace("{model}", targetModel);
     // Add API key as query parameter for Gemini
     if (apiKey) {
       url += `?key=${apiKey}`;

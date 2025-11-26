@@ -4,7 +4,7 @@
  * Based on relay-pulse implementation
  */
 
-import type { TestStatus, TestSubStatus } from '../types';
+import type { TestStatus, TestSubStatus } from "../types";
 
 export interface ContentValidationResult {
   status: TestStatus;
@@ -38,7 +38,7 @@ export function evaluateContentValidation(
   }
 
   // Already red - no need to validate (can't get worse)
-  if (baseStatus === 'red') {
+  if (baseStatus === "red") {
     return {
       status: baseStatus,
       subStatus: baseSubStatus,
@@ -47,7 +47,7 @@ export function evaluateContentValidation(
   }
 
   // 429 rate limit: response body is error message, skip content validation
-  if (baseSubStatus === 'rate_limit') {
+  if (baseSubStatus === "rate_limit") {
     return {
       status: baseStatus,
       subStatus: baseSubStatus,
@@ -58,8 +58,8 @@ export function evaluateContentValidation(
   // Empty response = content mismatch
   if (!responseBody || !responseBody.trim()) {
     return {
-      status: 'red',
-      subStatus: 'content_mismatch',
+      status: "red",
+      subStatus: "content_mismatch",
       contentPassed: false,
     };
   }
@@ -67,8 +67,8 @@ export function evaluateContentValidation(
   // Check if response contains expected content
   if (!responseBody.includes(successContains)) {
     return {
-      status: 'red',
-      subStatus: 'content_mismatch',
+      status: "red",
+      subStatus: "content_mismatch",
       contentPassed: false,
     };
   }
@@ -93,9 +93,9 @@ export function extractTextContent(responseBody: string): string {
     // Anthropic format
     if (obj.content && Array.isArray(obj.content)) {
       return obj.content
-        .filter((c: { type: string }) => c.type === 'text')
+        .filter((c: { type: string }) => c.type === "text")
         .map((c: { text: string }) => c.text)
-        .join('');
+        .join("");
     }
 
     // OpenAI format
@@ -103,18 +103,19 @@ export function extractTextContent(responseBody: string): string {
       return obj.choices
         .map(
           (c: { message?: { content: string }; text?: string }) =>
-            c.message?.content || c.text || ''
+            c.message?.content || c.text || ""
         )
-        .join('');
+        .join("");
     }
 
     // Codex Response API format
     if (obj.output && Array.isArray(obj.output)) {
       return obj.output
-        .flatMap((o: { content?: Array<{ text?: string }> }) =>
-          o.content?.map((c) => c.text || '').filter(Boolean) || []
+        .flatMap(
+          (o: { content?: Array<{ text?: string }> }) =>
+            o.content?.map((c) => c.text || "").filter(Boolean) || []
         )
-        .join('');
+        .join("");
     }
 
     // Gemini format
@@ -122,18 +123,18 @@ export function extractTextContent(responseBody: string): string {
       return obj.candidates
         .flatMap(
           (c: { content?: { parts?: Array<{ text?: string }> } }) =>
-            c.content?.parts?.map((p) => p.text || '').filter(Boolean) || []
+            c.content?.parts?.map((p) => p.text || "").filter(Boolean) || []
         )
-        .join('');
+        .join("");
     }
 
     // Direct content field
-    if (typeof obj.content === 'string') {
+    if (typeof obj.content === "string") {
       return obj.content;
     }
 
     // Direct text field
-    if (typeof obj.text === 'string') {
+    if (typeof obj.text === "string") {
       return obj.text;
     }
   } catch {

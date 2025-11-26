@@ -2308,9 +2308,7 @@ async function isUrlSafeForApiTest(
  * - yellow: HTTP OK but slow (degraded)
  * - red: Any validation failed
  */
-export async function testProviderUnified(
-  data: UnifiedTestArgs
-): Promise<UnifiedTestResult> {
+export async function testProviderUnified(data: UnifiedTestArgs): Promise<UnifiedTestResult> {
   const session = await getSession();
   if (!session || session.user.role !== "admin") {
     return {
@@ -2347,11 +2345,7 @@ export async function testProviderUnified(
 
     // Build response message
     const statusText =
-      result.status === "green"
-        ? "可用"
-        : result.status === "yellow"
-          ? "波动"
-          : "不可用";
+      result.status === "green" ? "可用" : result.status === "yellow" ? "波动" : "不可用";
 
     const message = `供应商 ${statusText}: ${SUB_STATUS_MESSAGES[result.subStatus]}`;
 

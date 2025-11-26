@@ -9,7 +9,7 @@
  * - RED (0.0): HTTP 4xx/5xx or error
  * - UNKNOWN (-1): No data available (must be displayed honestly as "no data")
  */
-export type AvailabilityStatus = 'green' | 'red' | 'unknown';
+export type AvailabilityStatus = "green" | "red" | "unknown";
 
 /**
  * Numeric weights for availability calculation

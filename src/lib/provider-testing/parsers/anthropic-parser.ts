@@ -3,8 +3,8 @@
  * Handles both streaming and non-streaming responses
  */
 
-import type { ParsedResponse, TokenUsage } from '../types';
-import { parseSSEStream, isSSEResponse } from '../utils/sse-collector';
+import type { ParsedResponse, TokenUsage } from "../types";
+import { parseSSEStream, isSSEResponse } from "../utils/sse-collector";
 
 /**
  * Anthropic non-streaming response structure
@@ -34,10 +34,7 @@ interface AnthropicResponse {
 /**
  * Parse Anthropic Messages API response
  */
-export function parseAnthropicResponse(
-  body: string,
-  contentType?: string
-): ParsedResponse {
+export function parseAnthropicResponse(body: string, contentType?: string): ParsedResponse {
   // Check if streaming response
   if (isSSEResponse(body, contentType)) {
     return parseSSEStream(body);
@@ -50,7 +47,7 @@ export function parseAnthropicResponse(
     // Handle error response
     if (data.error) {
       return {
-        content: data.error.message || 'Unknown error',
+        content: data.error.message || "Unknown error",
         model: undefined,
         usage: undefined,
         isStreaming: false,
@@ -58,11 +55,9 @@ export function parseAnthropicResponse(
     }
 
     // Extract text content
-    const textParts =
-      data.content?.filter((c) => c.type === 'text').map((c) => c.text || '') ||
-      [];
+    const textParts = data.content?.filter((c) => c.type === "text").map((c) => c.text || "") || [];
 
-    const content = textParts.join('');
+    const content = textParts.join("");
 
     // Extract usage
     let usage: TokenUsage | undefined;

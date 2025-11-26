@@ -3,10 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Loader2, CheckCircle2, XCircle, Activity, AlertTriangle } from "lucide-react";
-import {
-  testProviderUnified,
-  getUnmaskedProviderKey,
-} from "@/actions/providers";
+import { testProviderUnified, getUnmaskedProviderKey } from "@/actions/providers";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
 import {
@@ -336,9 +333,7 @@ export function ApiTestButton({
       </Button>
 
       {/* 显示测试结果卡片 */}
-      {testResult && !isTesting && (
-        <TestResultCard result={testResult} />
-      )}
+      {testResult && !isTesting && <TestResultCard result={testResult} />}
     </div>
   );
 }

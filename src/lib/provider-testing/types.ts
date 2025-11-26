@@ -3,7 +3,7 @@
  * Based on relay-pulse implementation patterns
  */
 
-import type { ProviderType } from '@/types/provider';
+import type { ProviderType } from "@/types/provider";
 
 // ============================================================================
 // Test Status Types (3-level system from relay-pulse)
@@ -15,22 +15,22 @@ import type { ProviderType } from '@/types/provider';
  * - yellow: HTTP OK but degraded (slow latency)
  * - red: Any failure
  */
-export type TestStatus = 'green' | 'yellow' | 'red';
+export type TestStatus = "green" | "yellow" | "red";
 
 /**
  * Detailed sub-status for granular error classification
  * Maps to relay-pulse's 8 SubStatus categories
  */
 export type TestSubStatus =
-  | 'success' // All validations passed
-  | 'slow_latency' // HTTP OK but latency exceeds threshold
-  | 'rate_limit' // HTTP 429
-  | 'server_error' // HTTP 5xx
-  | 'client_error' // HTTP 4xx (excluding specific codes)
-  | 'auth_error' // HTTP 401/403
-  | 'invalid_request' // HTTP 400
-  | 'network_error' // Connection/DNS/timeout errors
-  | 'content_mismatch'; // Response content validation failed
+  | "success" // All validations passed
+  | "slow_latency" // HTTP OK but latency exceeds threshold
+  | "rate_limit" // HTTP 429
+  | "server_error" // HTTP 5xx
+  | "client_error" // HTTP 4xx (excluding specific codes)
+  | "auth_error" // HTTP 401/403
+  | "invalid_request" // HTTP 400
+  | "network_error" // Connection/DNS/timeout errors
+  | "content_mismatch"; // Response content validation failed
 
 /**
  * Numeric status values for availability calculation
@@ -60,13 +60,13 @@ export const TEST_DEFAULTS = {
   /** Weight for degraded (YELLOW) status in availability calculation */
   DEGRADED_WEIGHT: 0.7,
   /** Default success validation string for Claude */
-  SUCCESS_CONTAINS_CLAUDE: 'pong',
+  SUCCESS_CONTAINS_CLAUDE: "pong",
   /** Default success validation string for Codex */
-  SUCCESS_CONTAINS_CODEX: 'pong',
+  SUCCESS_CONTAINS_CODEX: "pong",
   /** Default success validation string for OpenAI */
-  SUCCESS_CONTAINS_OPENAI: 'pong',
+  SUCCESS_CONTAINS_OPENAI: "pong",
   /** Default success validation string for Gemini */
-  SUCCESS_CONTAINS_GEMINI: 'pong',
+  SUCCESS_CONTAINS_GEMINI: "pong",
 } as const;
 
 /**
@@ -193,10 +193,7 @@ export interface ParsedResponse {
 /**
  * Parser function signature
  */
-export type ResponseParser = (
-  body: string,
-  contentType?: string
-) => ParsedResponse;
+export type ResponseParser = (body: string, contentType?: string) => ParsedResponse;
 
 // ============================================================================
 // Test Request Body Types
@@ -208,13 +205,13 @@ export type ResponseParser = (
 export interface ClaudeTestBody {
   model: string;
   messages: Array<{
-    role: 'user' | 'assistant';
-    content: Array<{ type: 'text'; text: string }>;
+    role: "user" | "assistant";
+    content: Array<{ type: "text"; text: string }>;
   }>;
   system?: Array<{
-    type: 'text';
+    type: "text";
     text: string;
-    cache_control?: { type: 'ephemeral' };
+    cache_control?: { type: "ephemeral" };
   }>;
   max_tokens: number;
   stream: boolean;
@@ -228,9 +225,9 @@ export interface CodexTestBody {
   model: string;
   instructions: string;
   input: Array<{
-    type: 'message';
-    role: 'user';
-    content: Array<{ type: 'input_text'; text: string }>;
+    type: "message";
+    role: "user";
+    content: Array<{ type: "input_text"; text: string }>;
   }>;
   tools: unknown[];
   tool_choice: string;
@@ -245,7 +242,7 @@ export interface CodexTestBody {
 export interface OpenAITestBody {
   model: string;
   messages: Array<{
-    role: 'system' | 'user' | 'assistant';
+    role: "system" | "user" | "assistant";
     content: string;
   }>;
   max_tokens: number;

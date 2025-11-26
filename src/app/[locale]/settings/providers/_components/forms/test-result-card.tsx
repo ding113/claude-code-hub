@@ -107,20 +107,29 @@ export function TestResultCard({ result, onClose }: TestResultCardProps) {
     const ct = (key: string) => t(`resultCard.copyText.${key}`);
     const vp = (passed: boolean, type: "http" | "latency" | "content") => {
       if (type === "latency") {
-        return passed ? `✓ ${t("resultCard.validation.passed")}` : `✗ ${t("resultCard.validation.timeout")}`;
+        return passed
+          ? `✓ ${t("resultCard.validation.passed")}`
+          : `✗ ${t("resultCard.validation.timeout")}`;
       }
-      return passed ? `✓ ${t("resultCard.validation.passed")}` : `✗ ${t("resultCard.validation.failed")}`;
+      return passed
+        ? `✓ ${t("resultCard.validation.passed")}`
+        : `✗ ${t("resultCard.validation.failed")}`;
     };
 
     const resultText = [
       `${ct("status")}: ${statusLabel} (${result.subStatus})`,
       `${ct("message")}: ${result.message}`,
       `${ct("latency")}: ${result.latencyMs}ms`,
-      result.httpStatusCode && `${ct("httpStatus")}: ${result.httpStatusCode} ${result.httpStatusText || ""}`,
+      result.httpStatusCode &&
+        `${ct("httpStatus")}: ${result.httpStatusCode} ${result.httpStatusText || ""}`,
       result.model && `${ct("model")}: ${result.model}`,
       result.usage &&
-        t("resultCard.copyText.inputOutput", { input: result.usage.inputTokens, output: result.usage.outputTokens }),
-      result.content && `${ct("response")}: ${result.content.slice(0, 200)}${result.content.length > 200 ? "..." : ""}`,
+        t("resultCard.copyText.inputOutput", {
+          input: result.usage.inputTokens,
+          output: result.usage.outputTokens,
+        }),
+      result.content &&
+        `${ct("response")}: ${result.content.slice(0, 200)}${result.content.length > 200 ? "..." : ""}`,
       result.errorMessage && `${ct("error")}: ${result.errorMessage}`,
       `${ct("testedAt")}: ${new Date(result.testedAt).toLocaleString()}`,
       "",
@@ -229,7 +238,9 @@ export function TestResultCard({ result, onClose }: TestResultCardProps) {
       {/* Content preview if success */}
       {result.content && result.status !== "red" && (
         <div className="mt-3 p-2 rounded bg-white/50 dark:bg-black/20 text-xs">
-          <span className="font-medium text-muted-foreground">{t("resultCard.labels.responsePreview")}:</span>
+          <span className="font-medium text-muted-foreground">
+            {t("resultCard.labels.responsePreview")}:
+          </span>
           <pre className="mt-1 whitespace-pre-wrap break-words text-foreground">
             {result.content.slice(0, 150)}
             {result.content.length > 150 && "..."}
@@ -255,9 +266,7 @@ function ValidationIndicator({
   return (
     <div
       className={`flex flex-col items-center p-2 rounded-md ${
-        passed
-          ? "bg-green-100/50 dark:bg-green-900/20"
-          : "bg-red-100/50 dark:bg-red-900/20"
+        passed ? "bg-green-100/50 dark:bg-green-900/20" : "bg-red-100/50 dark:bg-red-900/20"
       }`}
     >
       <div className="flex items-center gap-1 text-xs font-medium">
@@ -268,9 +277,7 @@ function ValidationIndicator({
         )}
         <span>{label}</span>
       </div>
-      {value && (
-        <span className="text-xs text-muted-foreground truncate max-w-full">{value}</span>
-      )}
+      {value && <span className="text-xs text-muted-foreground truncate max-w-full">{value}</span>}
     </div>
   );
 }
@@ -304,9 +311,7 @@ function TestResultDetails({
         </Badge>
         <Badge variant="outline">{result.subStatus}</Badge>
         {result.model && <Badge variant="outline">{result.model}</Badge>}
-        {result.httpStatusCode && (
-          <Badge variant="outline">HTTP {result.httpStatusCode}</Badge>
-        )}
+        {result.httpStatusCode && <Badge variant="outline">HTTP {result.httpStatusCode}</Badge>}
       </div>
 
       {/* Validation Details */}
@@ -319,9 +324,11 @@ function TestResultDetails({
             statusCodeLabel={t("resultCard.validation.http.statusCode")}
             statusCode={result.validationDetails.httpStatusCode}
             judgmentLabel={t("resultCard.judgment")}
-            judgmentText={result.validationDetails.httpPassed
-              ? t("resultCard.validation.http.passed")
-              : t("resultCard.validation.http.failed")}
+            judgmentText={
+              result.validationDetails.httpPassed
+                ? t("resultCard.validation.http.passed")
+                : t("resultCard.validation.http.failed")
+            }
           />
           <ValidationDetailCard
             title={t("resultCard.validation.latency.title")}
@@ -329,9 +336,11 @@ function TestResultDetails({
             statusCodeLabel={t("resultCard.validation.latency.actual")}
             statusCode={`${result.validationDetails.latencyMs || result.latencyMs}ms`}
             judgmentLabel={t("resultCard.judgment")}
-            judgmentText={result.validationDetails.latencyPassed
-              ? t("resultCard.validation.latency.passed")
-              : t("resultCard.validation.latency.failed")}
+            judgmentText={
+              result.validationDetails.latencyPassed
+                ? t("resultCard.validation.latency.passed")
+                : t("resultCard.validation.latency.failed")
+            }
           />
           <ValidationDetailCard
             title={t("resultCard.validation.content.title")}
@@ -339,9 +348,11 @@ function TestResultDetails({
             statusCodeLabel={t("resultCard.validation.content.target")}
             statusCode={`"${result.validationDetails.contentTarget || "N/A"}"`}
             judgmentLabel={t("resultCard.judgment")}
-            judgmentText={result.validationDetails.contentPassed
-              ? t("resultCard.validation.content.passed")
-              : t("resultCard.validation.content.failed")}
+            judgmentText={
+              result.validationDetails.contentPassed
+                ? t("resultCard.validation.content.passed")
+                : t("resultCard.validation.content.failed")
+            }
           />
         </div>
       </div>
@@ -383,13 +394,17 @@ function TestResultDetails({
               </div>
               {result.usage.cacheCreationInputTokens !== undefined && (
                 <div>
-                  <span className="text-muted-foreground">{t("resultCard.tokenUsage.cacheCreation")}:</span>{" "}
+                  <span className="text-muted-foreground">
+                    {t("resultCard.tokenUsage.cacheCreation")}:
+                  </span>{" "}
                   <span className="font-mono">{result.usage.cacheCreationInputTokens}</span>
                 </div>
               )}
               {result.usage.cacheReadInputTokens !== undefined && (
                 <div>
-                  <span className="text-muted-foreground">{t("resultCard.tokenUsage.cacheRead")}:</span>{" "}
+                  <span className="text-muted-foreground">
+                    {t("resultCard.tokenUsage.cacheRead")}:
+                  </span>{" "}
                   <span className="font-mono">{result.usage.cacheReadInputTokens}</span>
                 </div>
               )}
@@ -405,12 +420,20 @@ function TestResultDetails({
           <div className="rounded-md border bg-blue-50 dark:bg-blue-950 p-3 text-sm">
             <div className="flex gap-4">
               <div>
-                <span className="text-muted-foreground">{t("resultCard.streamInfo.isStreaming")}:</span>{" "}
-                <span>{result.streamInfo.isStreaming ? t("resultCard.streamInfo.yes") : t("resultCard.streamInfo.no")}</span>
+                <span className="text-muted-foreground">
+                  {t("resultCard.streamInfo.isStreaming")}:
+                </span>{" "}
+                <span>
+                  {result.streamInfo.isStreaming
+                    ? t("resultCard.streamInfo.yes")
+                    : t("resultCard.streamInfo.no")}
+                </span>
               </div>
               {result.streamInfo.chunksReceived !== undefined && (
                 <div>
-                  <span className="text-muted-foreground">{t("resultCard.streamInfo.chunksCount")}:</span>{" "}
+                  <span className="text-muted-foreground">
+                    {t("resultCard.streamInfo.chunksCount")}:
+                  </span>{" "}
                   <span className="font-mono">{result.streamInfo.chunksReceived}</span>
                 </div>
               )}
@@ -442,7 +465,8 @@ function TestResultDetails({
             <div className="text-xs space-y-1">
               {result.errorType && (
                 <div>
-                  <span className="font-medium">{t("resultCard.errorDetails.type")}:</span> {result.errorType}
+                  <span className="font-medium">{t("resultCard.errorDetails.type")}:</span>{" "}
+                  {result.errorType}
                 </div>
               )}
               <pre className="text-destructive whitespace-pre-wrap break-words font-mono">

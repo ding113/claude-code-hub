@@ -4,9 +4,9 @@
  * Simple two-tier status: success (green) or failure (red)
  */
 
-import { db } from '@/drizzle/db';
-import { messageRequest, providers } from '@/drizzle/schema';
-import { and, eq, gte, lte, sql, isNull, desc, inArray } from 'drizzle-orm';
+import { db } from "@/drizzle/db";
+import { messageRequest, providers } from "@/drizzle/schema";
+import { and, eq, gte, lte, sql, isNull, desc, inArray } from "drizzle-orm";
 import {
   type AvailabilityStatus,
   type AvailabilityQueryOptions,
@@ -16,19 +16,17 @@ import {
   type RequestStatusClassification,
   AVAILABILITY_WEIGHTS,
   AVAILABILITY_DEFAULTS,
-} from './types';
+} from "./types";
 
 /**
  * Classify a single request's status
  * Simple: success (2xx/3xx) = green, failure = red
  */
-export function classifyRequestStatus(
-  statusCode: number | null
-): RequestStatusClassification {
+export function classifyRequestStatus(statusCode: number | null): RequestStatusClassification {
   // No status code means network error or timeout
   if (statusCode === null) {
     return {
-      status: 'red',
+      status: "red",
       isSuccess: false,
       isError: true,
     };
@@ -37,7 +35,7 @@ export function classifyRequestStatus(
   // HTTP error (4xx/5xx)
   if (statusCode >= 400) {
     return {
-      status: 'red',
+      status: "red",
       isSuccess: false,
       isError: true,
     };
@@ -45,7 +43,7 @@ export function classifyRequestStatus(
 
   // HTTP success (2xx/3xx) - all successful requests are green
   return {
-    status: 'green',
+    status: "green",
     isSuccess: true,
     isError: false,
   };
@@ -54,10 +52,7 @@ export function classifyRequestStatus(
 /**
  * Calculate availability score from counts (simple: green / total)
  */
-export function calculateAvailabilityScore(
-  greenCount: number,
-  redCount: number
-): number {
+export function calculateAvailabilityScore(greenCount: number, redCount: number): number {
   const total = greenCount + redCount;
   if (total === 0) return 0;
 
@@ -112,8 +107,8 @@ export async function queryProviderAvailability(
     maxBuckets = 100,
   } = options;
 
-  const startDate = typeof startTime === 'string' ? new Date(startTime) : startTime;
-  const endDate = typeof endTime === 'string' ? new Date(endTime) : endTime;
+  const startDate = typeof startTime === "string" ? new Date(startTime) : startTime;
+  const endDate = typeof endTime === "string" ? new Date(endTime) : endTime;
   const timeRangeMinutes = (endDate.getTime() - startDate.getTime()) / (1000 * 60);
 
   // Get provider list
@@ -196,9 +191,7 @@ export async function queryProviderAvailability(
   for (const req of requests) {
     if (!req.createdAt) continue;
 
-    const bucketStart = new Date(
-      Math.floor(req.createdAt.getTime() / bucketSizeMs) * bucketSizeMs
-    );
+    const bucketStart = new Date(Math.floor(req.createdAt.getTime() / bucketSizeMs) * bucketSizeMs);
     const bucketKey = bucketStart.toISOString();
 
     const providerData = providerBuckets.get(req.providerId);
@@ -215,7 +208,7 @@ export async function queryProviderAvailability(
     const bucket = providerData.get(bucketKey)!;
     const classification = classifyRequestStatus(req.statusCode);
 
-    if (classification.status === 'green') {
+    if (classification.status === "green") {
       bucket.greenCount++;
     } else {
       bucket.redCount++;
@@ -280,21 +273,20 @@ export async function queryProviderAvailability(
 
     // Determine current status based on last few buckets
     // IMPORTANT: No data = 'unknown', NOT 'green'! Must be honest.
-    let currentStatus: AvailabilityStatus = 'unknown';
+    let currentStatus: AvailabilityStatus = "unknown";
     if (timeBuckets.length > 0) {
       const recentBuckets = timeBuckets.slice(-3); // Last 3 buckets
       const recentScore =
-        recentBuckets.reduce((sum, b) => sum + b.availabilityScore, 0) /
-        recentBuckets.length;
+        recentBuckets.reduce((sum, b) => sum + b.availabilityScore, 0) / recentBuckets.length;
 
       // Simple: >= 50% success = green, otherwise red
-      currentStatus = recentScore >= 0.5 ? 'green' : 'red';
+      currentStatus = recentScore >= 0.5 ? "green" : "red";
     }
 
     providerSummaries.push({
       providerId: provider.id,
       providerName: provider.name,
-      providerType: provider.providerType ?? 'claude',
+      providerType: provider.providerType ?? "claude",
       isEnabled: provider.enabled ?? true,
       currentStatus,
       currentAvailability: calculateAvailabilityScore(totalGreen, totalRed),
@@ -310,16 +302,11 @@ export async function queryProviderAvailability(
   }
 
   // Calculate system-wide availability
-  const totalSystemRequests = providerSummaries.reduce(
-    (sum, p) => sum + p.totalRequests,
-    0
-  );
+  const totalSystemRequests = providerSummaries.reduce((sum, p) => sum + p.totalRequests, 0);
   const weightedSystemAvailability =
     totalSystemRequests > 0
-      ? providerSummaries.reduce(
-          (sum, p) => sum + p.currentAvailability * p.totalRequests,
-          0
-        ) / totalSystemRequests
+      ? providerSummaries.reduce((sum, p) => sum + p.currentAvailability * p.totalRequests, 0) /
+        totalSystemRequests
       : 0;
 
   return {
@@ -406,7 +393,7 @@ export async function getCurrentProviderStatus(): Promise<
 
     const classification = classifyRequestStatus(req.statusCode);
 
-    if (classification.status === 'green') {
+    if (classification.status === "green") {
       stats.greenCount++;
     } else {
       stats.redCount++;
@@ -423,12 +410,12 @@ export async function getCurrentProviderStatus(): Promise<
     const availability = calculateAvailabilityScore(stats.greenCount, stats.redCount);
 
     // IMPORTANT: No data = 'unknown', NOT 'green'! Must be honest.
-    let status: AvailabilityStatus = 'unknown';
+    let status: AvailabilityStatus = "unknown";
     if (total === 0) {
-      status = 'unknown'; // No data - must be honest, don't assume healthy!
+      status = "unknown"; // No data - must be honest, don't assume healthy!
     } else {
       // Simple: >= 50% success = green, otherwise red
-      status = availability >= 0.5 ? 'green' : 'red';
+      status = availability >= 0.5 ? "green" : "red";
     }
 
     return {

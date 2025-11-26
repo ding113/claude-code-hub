@@ -10,15 +10,15 @@
  * - PROBE_TIMEOUT_MS: Timeout for each probe request (default: 5000ms = 5s)
  */
 
-import { logger } from '@/lib/logger';
-import { getAllHealthStatus, getCircuitState, resetCircuit } from './circuit-breaker';
-import { executeProviderTest } from './provider-testing/test-service';
-import type { ProviderType } from '@/types/provider';
+import { logger } from "@/lib/logger";
+import { getAllHealthStatus, getCircuitState, resetCircuit } from "./circuit-breaker";
+import { executeProviderTest } from "./provider-testing/test-service";
+import type { ProviderType } from "@/types/provider";
 
 // Configuration
-const ENABLE_SMART_PROBING = process.env.ENABLE_SMART_PROBING === 'true';
-const PROBE_INTERVAL_MS = parseInt(process.env.PROBE_INTERVAL_MS || '30000', 10);
-const PROBE_TIMEOUT_MS = parseInt(process.env.PROBE_TIMEOUT_MS || '5000', 10);
+const ENABLE_SMART_PROBING = process.env.ENABLE_SMART_PROBING === "true";
+const PROBE_INTERVAL_MS = parseInt(process.env.PROBE_INTERVAL_MS || "30000", 10);
+const PROBE_TIMEOUT_MS = parseInt(process.env.PROBE_TIMEOUT_MS || "5000", 10);
 
 // Probe state
 let probeIntervalId: NodeJS.Timeout | null = null;
@@ -49,9 +49,9 @@ async function loadProviderConfigs(): Promise<void> {
 
   try {
     // Dynamic import to avoid circular dependencies
-    const { db } = await import('@/drizzle/db');
-    const { providers } = await import('@/drizzle/schema');
-    const { eq, isNull, and } = await import('drizzle-orm');
+    const { db } = await import("@/drizzle/db");
+    const { providers } = await import("@/drizzle/schema");
+    const { eq, isNull, and } = await import("drizzle-orm");
 
     const providerList = await db
       .select({
@@ -72,17 +72,17 @@ async function loadProviderConfigs(): Promise<void> {
           name: p.name,
           url: p.url,
           key: p.key,
-          providerType: (p.providerType || 'claude') as ProviderType,
+          providerType: (p.providerType || "claude") as ProviderType,
         },
       ])
     );
     lastProviderCacheUpdate = now;
 
-    logger.debug('[SmartProbe] Updated provider cache', {
+    logger.debug("[SmartProbe] Updated provider cache", {
       count: providerConfigCache.size,
     });
   } catch (error) {
-    logger.error('[SmartProbe] Failed to load provider configs', {
+    logger.error("[SmartProbe] Failed to load provider configs", {
       error: error instanceof Error ? error.message : String(error),
     });
   }
@@ -94,12 +94,12 @@ async function loadProviderConfigs(): Promise<void> {
 async function probeProvider(providerId: number): Promise<boolean> {
   const config = providerConfigCache.get(providerId);
   if (!config) {
-    logger.warn('[SmartProbe] Provider config not found', { providerId });
+    logger.warn("[SmartProbe] Provider config not found", { providerId });
     return false;
   }
 
   try {
-    logger.info('[SmartProbe] Probing provider', {
+    logger.info("[SmartProbe] Probing provider", {
       providerId,
       providerName: config.name,
     });
@@ -112,7 +112,7 @@ async function probeProvider(providerId: number): Promise<boolean> {
     });
 
     if (result.success) {
-      logger.info('[SmartProbe] Probe succeeded, transitioning to half-open', {
+      logger.info("[SmartProbe] Probe succeeded, transitioning to half-open", {
         providerId,
         providerName: config.name,
         latencyMs: result.latencyMs,
@@ -125,7 +125,7 @@ async function probeProvider(providerId: number): Promise<boolean> {
       return true;
     }
 
-    logger.info('[SmartProbe] Probe failed, keeping circuit open', {
+    logger.info("[SmartProbe] Probe failed, keeping circuit open", {
       providerId,
       providerName: config.name,
       status: result.status,
@@ -134,7 +134,7 @@ async function probeProvider(providerId: number): Promise<boolean> {
     });
     return false;
   } catch (error) {
-    logger.error('[SmartProbe] Probe execution error', {
+    logger.error("[SmartProbe] Probe execution error", {
       providerId,
       error: error instanceof Error ? error.message : String(error),
     });
@@ -147,7 +147,7 @@ async function probeProvider(providerId: number): Promise<boolean> {
  */
 async function runProbeCycle(): Promise<void> {
   if (isProbing) {
-    logger.debug('[SmartProbe] Skipping cycle, previous cycle still running');
+    logger.debug("[SmartProbe] Skipping cycle, previous cycle still running");
     return;
   }
 
@@ -162,17 +162,17 @@ async function runProbeCycle(): Promise<void> {
     const openCircuits: number[] = [];
 
     for (const [providerId, health] of Object.entries(healthStatus)) {
-      if (health.circuitState === 'open') {
+      if (health.circuitState === "open") {
         openCircuits.push(parseInt(providerId, 10));
       }
     }
 
     if (openCircuits.length === 0) {
-      logger.debug('[SmartProbe] No open circuits to probe');
+      logger.debug("[SmartProbe] No open circuits to probe");
       return;
     }
 
-    logger.info('[SmartProbe] Starting probe cycle', {
+    logger.info("[SmartProbe] Starting probe cycle", {
       openCircuitCount: openCircuits.length,
       providerIds: openCircuits,
     });
@@ -180,18 +180,16 @@ async function runProbeCycle(): Promise<void> {
     // Probe each provider with open circuit
     const results = await Promise.allSettled(openCircuits.map((id) => probeProvider(id)));
 
-    const succeeded = results.filter(
-      (r) => r.status === 'fulfilled' && r.value === true
-    ).length;
+    const succeeded = results.filter((r) => r.status === "fulfilled" && r.value === true).length;
     const failed = results.length - succeeded;
 
-    logger.info('[SmartProbe] Probe cycle completed', {
+    logger.info("[SmartProbe] Probe cycle completed", {
       total: results.length,
       succeeded,
       failed,
     });
   } catch (error) {
-    logger.error('[SmartProbe] Probe cycle error', {
+    logger.error("[SmartProbe] Probe cycle error", {
       error: error instanceof Error ? error.message : String(error),
     });
   } finally {
@@ -204,23 +202,23 @@ async function runProbeCycle(): Promise<void> {
  */
 export function startProbeScheduler(): void {
   if (!ENABLE_SMART_PROBING) {
-    logger.info('[SmartProbe] Smart probing is disabled');
+    logger.info("[SmartProbe] Smart probing is disabled");
     return;
   }
 
   if (probeIntervalId) {
-    logger.warn('[SmartProbe] Scheduler already running');
+    logger.warn("[SmartProbe] Scheduler already running");
     return;
   }
 
-  logger.info('[SmartProbe] Starting probe scheduler', {
+  logger.info("[SmartProbe] Starting probe scheduler", {
     intervalMs: PROBE_INTERVAL_MS,
     timeoutMs: PROBE_TIMEOUT_MS,
   });
 
   // Run immediately on startup
   runProbeCycle().catch((error) => {
-    logger.error('[SmartProbe] Initial probe cycle failed', {
+    logger.error("[SmartProbe] Initial probe cycle failed", {
       error: error instanceof Error ? error.message : String(error),
     });
   });
@@ -228,15 +226,15 @@ export function startProbeScheduler(): void {
   // Schedule periodic probes
   probeIntervalId = setInterval(() => {
     runProbeCycle().catch((error) => {
-      logger.error('[SmartProbe] Scheduled probe cycle failed', {
+      logger.error("[SmartProbe] Scheduled probe cycle failed", {
         error: error instanceof Error ? error.message : String(error),
       });
     });
   }, PROBE_INTERVAL_MS);
 
   // Ensure cleanup on process exit
-  process.on('SIGTERM', stopProbeScheduler);
-  process.on('SIGINT', stopProbeScheduler);
+  process.on("SIGTERM", stopProbeScheduler);
+  process.on("SIGINT", stopProbeScheduler);
 }
 
 /**
@@ -246,7 +244,7 @@ export function stopProbeScheduler(): void {
   if (probeIntervalId) {
     clearInterval(probeIntervalId);
     probeIntervalId = null;
-    logger.info('[SmartProbe] Probe scheduler stopped');
+    logger.info("[SmartProbe] Probe scheduler stopped");
   }
 }
 

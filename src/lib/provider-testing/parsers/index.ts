@@ -3,17 +3,17 @@
  * Provides unified parser selection based on provider type
  */
 
-import type { ProviderType } from '@/types/provider';
-import type { ParsedResponse } from '../types';
-import { parseAnthropicResponse } from './anthropic-parser';
-import { parseOpenAIResponse } from './openai-parser';
-import { parseCodexResponse } from './codex-parser';
-import { parseGeminiResponse } from './gemini-parser';
+import type { ProviderType } from "@/types/provider";
+import type { ParsedResponse } from "../types";
+import { parseAnthropicResponse } from "./anthropic-parser";
+import { parseOpenAIResponse } from "./openai-parser";
+import { parseCodexResponse } from "./codex-parser";
+import { parseGeminiResponse } from "./gemini-parser";
 
-export { parseAnthropicResponse } from './anthropic-parser';
-export { parseOpenAIResponse } from './openai-parser';
-export { parseCodexResponse } from './codex-parser';
-export { parseGeminiResponse } from './gemini-parser';
+export { parseAnthropicResponse } from "./anthropic-parser";
+export { parseOpenAIResponse } from "./openai-parser";
+export { parseCodexResponse } from "./codex-parser";
+export { parseGeminiResponse } from "./gemini-parser";
 
 /**
  * Parser function type
@@ -25,11 +25,11 @@ export type ResponseParser = (body: string, contentType?: string) => ParsedRespo
  */
 const parserRegistry: Record<ProviderType, ResponseParser> = {
   claude: parseAnthropicResponse,
-  'claude-auth': parseAnthropicResponse,
+  "claude-auth": parseAnthropicResponse,
   codex: parseCodexResponse,
-  'openai-compatible': parseOpenAIResponse,
+  "openai-compatible": parseOpenAIResponse,
   gemini: parseGeminiResponse,
-  'gemini-cli': parseGeminiResponse,
+  "gemini-cli": parseGeminiResponse,
 };
 
 /**

@@ -12,11 +12,11 @@
  * - UNKNOWN: No data available
  */
 
-export * from './types';
+export * from "./types";
 export {
   classifyRequestStatus,
   calculateAvailabilityScore,
   determineOptimalBucketSize,
   queryProviderAvailability,
   getCurrentProviderStatus,
-} from './availability-service';
+} from "./availability-service";

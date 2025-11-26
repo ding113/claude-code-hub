@@ -1,44 +1,39 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import { RefreshCw, Activity, CheckCircle2, XCircle, HelpCircle } from 'lucide-react';
-import { useTranslations } from 'next-intl';
-import { cn } from '@/lib/utils';
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { RefreshCw, Activity, CheckCircle2, XCircle, HelpCircle } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { cn } from "@/lib/utils";
 import type {
   AvailabilityQueryResult,
   ProviderAvailabilitySummary,
   TimeBucketMetrics,
-} from '@/lib/availability';
+} from "@/lib/availability";
 
-type TimeRangeOption = '15min' | '1h' | '6h' | '24h' | '7d';
-type SortOption = 'availability' | 'name' | 'requests';
+type TimeRangeOption = "15min" | "1h" | "6h" | "24h" | "7d";
+type SortOption = "availability" | "name" | "requests";
 
 // Target number of buckets to fill the heatmap width consistently
 const TARGET_BUCKETS = 60;
 
 const TIME_RANGE_MAP: Record<TimeRangeOption, number> = {
-  '15min': 15 * 60 * 1000,
-  '1h': 60 * 60 * 1000,
-  '6h': 6 * 60 * 60 * 1000,
-  '24h': 24 * 60 * 60 * 1000,
-  '7d': 7 * 24 * 60 * 60 * 1000,
+  "15min": 15 * 60 * 1000,
+  "1h": 60 * 60 * 1000,
+  "6h": 6 * 60 * 60 * 1000,
+  "24h": 24 * 60 * 60 * 1000,
+  "7d": 7 * 24 * 60 * 60 * 1000,
 };
 
 /**
@@ -56,12 +51,12 @@ function calculateBucketSize(timeRangeMs: number): number {
  * Simple gradient: gray(no data) -> red -> green
  */
 function getAvailabilityColor(score: number, hasData: boolean): string {
-  if (!hasData) return 'bg-slate-300 dark:bg-slate-600'; // Gray = no data
+  if (!hasData) return "bg-slate-300 dark:bg-slate-600"; // Gray = no data
 
-  if (score < 0.5) return 'bg-red-500';
-  if (score < 0.8) return 'bg-orange-500';
-  if (score < 0.95) return 'bg-lime-500';
-  return 'bg-green-500';
+  if (score < 0.5) return "bg-red-500";
+  if (score < 0.8) return "bg-orange-500";
+  if (score < 0.95) return "bg-lime-500";
+  return "bg-green-500";
 }
 
 /**
@@ -71,27 +66,27 @@ function formatBucketTime(isoString: string, bucketSizeMinutes: number): string 
   const date = new Date(isoString);
   if (bucketSizeMinutes >= 1440) {
     // Daily buckets: show date
-    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
   }
   if (bucketSizeMinutes >= 60) {
     // Hourly buckets: show date + hour
     return date.toLocaleString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   }
   // Sub-hour buckets: show full time with seconds for precision
   if (bucketSizeMinutes < 1) {
     return date.toLocaleTimeString(undefined, {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
     });
   }
   // Minute buckets: show time
-  return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 }
 
 /**
@@ -100,7 +95,7 @@ function formatBucketTime(isoString: string, bucketSizeMinutes: number): string 
 function formatBucketSizeDisplay(minutes: number): string {
   if (minutes >= 60) {
     const hours = minutes / 60;
-    return hours === 1 ? '1 hour' : `${hours.toFixed(1)} hours`;
+    return hours === 1 ? "1 hour" : `${hours.toFixed(1)} hours`;
   }
   if (minutes >= 1) {
     return `${Math.round(minutes)} min`;
@@ -110,12 +105,12 @@ function formatBucketSizeDisplay(minutes: number): string {
 }
 
 export function AvailabilityView() {
-  const t = useTranslations('dashboard.availability');
+  const t = useTranslations("dashboard.availability");
   const [data, setData] = useState<AvailabilityQueryResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [timeRange, setTimeRange] = useState<TimeRangeOption>('24h');
-  const [sortBy, setSortBy] = useState<SortOption>('availability');
+  const [timeRange, setTimeRange] = useState<TimeRangeOption>("24h");
+  const [sortBy, setSortBy] = useState<SortOption>("availability");
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -135,15 +130,15 @@ export function AvailabilityView() {
 
       const res = await fetch(`/api/availability?${params}`);
       if (!res.ok) {
-        throw new Error(t('states.fetchFailed'));
+        throw new Error(t("states.fetchFailed"));
       }
 
       const result: AvailabilityQueryResult = await res.json();
       setData(result);
       setError(null);
     } catch (err) {
-      console.error('Failed to fetch availability data:', err);
-      setError(err instanceof Error ? err.message : t('states.fetchFailed'));
+      console.error("Failed to fetch availability data:", err);
+      setError(err instanceof Error ? err.message : t("states.fetchFailed"));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -179,15 +174,15 @@ export function AvailabilityView() {
 
     return [...data.providers].sort((a, b) => {
       switch (sortBy) {
-        case 'availability':
+        case "availability":
           // Unknown status (no data) goes to the end
-          if (a.currentStatus === 'unknown' && b.currentStatus !== 'unknown') return 1;
-          if (b.currentStatus === 'unknown' && a.currentStatus !== 'unknown') return -1;
+          if (a.currentStatus === "unknown" && b.currentStatus !== "unknown") return 1;
+          if (b.currentStatus === "unknown" && a.currentStatus !== "unknown") return -1;
           // Sort by availability ascending (worst first for monitoring)
           return a.currentAvailability - b.currentAvailability;
-        case 'name':
+        case "name":
           return a.providerName.localeCompare(b.providerName);
-        case 'requests':
+        case "requests":
           // Sort by requests descending (most active first)
           return b.totalRequests - a.totalRequests;
         default:
@@ -198,11 +193,11 @@ export function AvailabilityView() {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'green':
+      case "green":
         return <CheckCircle2 className="h-4 w-4 text-green-500" />;
-      case 'red':
+      case "red":
         return <XCircle className="h-4 w-4 text-red-500" />;
-      case 'unknown':
+      case "unknown":
         return <HelpCircle className="h-4 w-4 text-slate-400" />;
       default:
         return <Activity className="h-4 w-4 text-muted-foreground" />;
@@ -210,14 +205,14 @@ export function AvailabilityView() {
   };
 
   const getStatusBadge = (status: string) => {
-    const statusKey = status as 'green' | 'red' | 'unknown';
-    const variants: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-      green: 'default',
-      red: 'destructive',
-      unknown: 'outline',
+    const statusKey = status as "green" | "red" | "unknown";
+    const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+      green: "default",
+      red: "destructive",
+      unknown: "outline",
     };
     return (
-      <Badge variant={variants[status] || 'outline'} className="gap-1">
+      <Badge variant={variants[status] || "outline"} className="gap-1">
         {getStatusIcon(status)}
         {t(`status.${statusKey}`)}
       </Badge>
@@ -235,9 +230,9 @@ export function AvailabilityView() {
   const getSummaryCounts = () => {
     if (!data?.providers) return { healthy: 0, unhealthy: 0, unknown: 0, total: 0 };
     return {
-      healthy: data.providers.filter((p) => p.currentStatus === 'green').length,
-      unhealthy: data.providers.filter((p) => p.currentStatus === 'red').length,
-      unknown: data.providers.filter((p) => p.currentStatus === 'unknown').length,
+      healthy: data.providers.filter((p) => p.currentStatus === "green").length,
+      unhealthy: data.providers.filter((p) => p.currentStatus === "red").length,
+      unknown: data.providers.filter((p) => p.currentStatus === "unknown").length,
       total: data.providers.length,
     };
   };
@@ -249,9 +244,7 @@ export function AvailabilityView() {
     provider: ProviderAvailabilitySummary,
     bucketStart: string
   ): TimeBucketMetrics | null => {
-    return (
-      provider.timeBuckets.find((b) => b.bucketStart === bucketStart) || null
-    );
+    return provider.timeBuckets.find((b) => b.bucketStart === bucketStart) || null;
   };
 
   if (loading) {
@@ -271,7 +264,7 @@ export function AvailabilityView() {
         </div>
         <Card>
           <CardContent className="py-8">
-            <div className="text-center text-muted-foreground">{t('states.loading')}</div>
+            <div className="text-center text-muted-foreground">{t("states.loading")}</div>
           </CardContent>
         </Card>
       </div>
@@ -296,7 +289,7 @@ export function AvailabilityView() {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                {t('metrics.systemAvailability')}
+                {t("metrics.systemAvailability")}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -309,7 +302,7 @@ export function AvailabilityView() {
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-green-600 flex items-center gap-1">
                 <CheckCircle2 className="h-4 w-4" />
-                {t('summary.healthyProviders')}
+                {t("summary.healthyProviders")}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -320,7 +313,7 @@ export function AvailabilityView() {
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-red-600 flex items-center gap-1">
                 <XCircle className="h-4 w-4" />
-                {t('summary.unhealthyProviders')}
+                {t("summary.unhealthyProviders")}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -331,7 +324,7 @@ export function AvailabilityView() {
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-slate-500 flex items-center gap-1">
                 <HelpCircle className="h-4 w-4" />
-                {t('summary.unknownProviders')}
+                {t("summary.unknownProviders")}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -345,47 +338,49 @@ export function AvailabilityView() {
           <div className="flex items-center gap-4">
             <Select value={timeRange} onValueChange={(v) => setTimeRange(v as TimeRangeOption)}>
               <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder={t('timeRange.label')} />
+                <SelectValue placeholder={t("timeRange.label")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="15min">{t('timeRange.last15min')}</SelectItem>
-                <SelectItem value="1h">{t('timeRange.last1h')}</SelectItem>
-                <SelectItem value="6h">{t('timeRange.last6h')}</SelectItem>
-                <SelectItem value="24h">{t('timeRange.last24h')}</SelectItem>
-                <SelectItem value="7d">{t('timeRange.last7d')}</SelectItem>
+                <SelectItem value="15min">{t("timeRange.last15min")}</SelectItem>
+                <SelectItem value="1h">{t("timeRange.last1h")}</SelectItem>
+                <SelectItem value="6h">{t("timeRange.last6h")}</SelectItem>
+                <SelectItem value="24h">{t("timeRange.last24h")}</SelectItem>
+                <SelectItem value="7d">{t("timeRange.last7d")}</SelectItem>
               </SelectContent>
             </Select>
             <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
               <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder={t('sort.label')} />
+                <SelectValue placeholder={t("sort.label")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="availability">{t('sort.availability')}</SelectItem>
-                <SelectItem value="name">{t('sort.name')}</SelectItem>
-                <SelectItem value="requests">{t('sort.requests')}</SelectItem>
+                <SelectItem value="availability">{t("sort.availability")}</SelectItem>
+                <SelectItem value="name">{t("sort.name")}</SelectItem>
+                <SelectItem value="requests">{t("sort.requests")}</SelectItem>
               </SelectContent>
             </Select>
             {data && (
               <span className="text-sm text-muted-foreground">
-                {t('heatmap.bucketSize')}: {data.bucketSizeMinutes} {t('heatmap.minutes')}
+                {t("heatmap.bucketSize")}: {data.bucketSizeMinutes} {t("heatmap.minutes")}
               </span>
             )}
           </div>
           <Button variant="outline" size="sm" onClick={fetchData} disabled={refreshing}>
-            <RefreshCw className={cn('h-4 w-4 mr-2', refreshing && 'animate-spin')} />
-            {refreshing ? t('actions.refreshing') : t('actions.refresh')}
+            <RefreshCw className={cn("h-4 w-4 mr-2", refreshing && "animate-spin")} />
+            {refreshing ? t("actions.refreshing") : t("actions.refresh")}
           </Button>
         </div>
 
         {/* Heatmap */}
         <Card>
           <CardHeader>
-            <CardTitle>{t('chart.title')}</CardTitle>
-            <CardDescription>{t('chart.description')}</CardDescription>
+            <CardTitle>{t("chart.title")}</CardTitle>
+            <CardDescription>{t("chart.description")}</CardDescription>
           </CardHeader>
           <CardContent>
             {!sortedProviders.length ? (
-              <div className="text-center text-muted-foreground py-8">{t('states.noProviders')}</div>
+              <div className="text-center text-muted-foreground py-8">
+                {t("states.noProviders")}
+              </div>
             ) : (
               <div className="space-y-3">
                 {/* Provider rows with heatmap */}
@@ -417,7 +412,7 @@ export function AvailabilityView() {
                               <TooltipTrigger asChild>
                                 <div
                                   className={cn(
-                                    'h-6 rounded-[2px] cursor-pointer transition-opacity hover:opacity-80 min-w-[2px]',
+                                    "h-6 rounded-[2px] cursor-pointer transition-opacity hover:opacity-80 min-w-[2px]",
                                     getAvailabilityColor(score, hasData)
                                   )}
                                 />
@@ -430,26 +425,28 @@ export function AvailabilityView() {
                                   {hasData && bucket ? (
                                     <>
                                       <div>
-                                        {t('heatmap.requests')}: {bucket.totalRequests}
+                                        {t("heatmap.requests")}: {bucket.totalRequests}
                                       </div>
                                       <div>
-                                        {t('columns.availability')}: {formatPercentage(bucket.availabilityScore)}
+                                        {t("columns.availability")}:{" "}
+                                        {formatPercentage(bucket.availabilityScore)}
                                       </div>
                                       <div>
-                                        {t('columns.avgLatency')}: {formatLatency(bucket.avgLatencyMs)}
+                                        {t("columns.avgLatency")}:{" "}
+                                        {formatLatency(bucket.avgLatencyMs)}
                                       </div>
                                       <div className="flex gap-2 text-xs">
                                         <span className="text-green-500">
-                                          {t('details.greenCount')}: {bucket.greenCount}
+                                          {t("details.greenCount")}: {bucket.greenCount}
                                         </span>
                                         <span className="text-red-500">
-                                          {t('details.redCount')}: {bucket.redCount}
+                                          {t("details.redCount")}: {bucket.redCount}
                                         </span>
                                       </div>
                                     </>
                                   ) : (
                                     <div className="text-muted-foreground">
-                                      {t('heatmap.noData')}
+                                      {t("heatmap.noData")}
                                     </div>
                                   )}
                                 </div>
@@ -463,14 +460,14 @@ export function AvailabilityView() {
                     {/* Summary stats */}
                     <div className="w-28 shrink-0 text-right text-sm">
                       <div className="font-mono">
-                        {provider.currentStatus === 'unknown'
-                          ? t('heatmap.noData')
+                        {provider.currentStatus === "unknown"
+                          ? t("heatmap.noData")
                           : formatPercentage(provider.currentAvailability)}
                       </div>
                       <div className="text-muted-foreground text-xs">
                         {provider.totalRequests > 0
-                          ? `${provider.totalRequests.toLocaleString()} ${t('heatmap.requests')}`
-                          : t('heatmap.noRequests')}
+                          ? `${provider.totalRequests.toLocaleString()} ${t("heatmap.requests")}`
+                          : t("heatmap.noRequests")}
                       </div>
                     </div>
                   </div>
@@ -486,23 +483,23 @@ export function AvailabilityView() {
             <div className="flex flex-wrap gap-6 text-sm">
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 rounded-sm bg-green-500" />
-                <span className="text-muted-foreground">{t('legend.green')}</span>
+                <span className="text-muted-foreground">{t("legend.green")}</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 rounded-sm bg-lime-500" />
-                <span className="text-muted-foreground">{t('legend.lime')}</span>
+                <span className="text-muted-foreground">{t("legend.lime")}</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 rounded-sm bg-orange-500" />
-                <span className="text-muted-foreground">{t('legend.orange')}</span>
+                <span className="text-muted-foreground">{t("legend.orange")}</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 rounded-sm bg-red-500" />
-                <span className="text-muted-foreground">{t('legend.red')}</span>
+                <span className="text-muted-foreground">{t("legend.red")}</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 rounded-sm bg-slate-300 dark:bg-slate-600" />
-                <span className="text-muted-foreground">{t('legend.noData')}</span>
+                <span className="text-muted-foreground">{t("legend.noData")}</span>
               </div>
             </div>
           </CardContent>

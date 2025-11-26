@@ -3,12 +3,8 @@
  * Handles streaming and non-streaming responses for /v1/responses endpoint
  */
 
-import type { ParsedResponse, TokenUsage } from '../types';
-import {
-  parseSSEStream,
-  isSSEResponse,
-  parseNDJSONStream,
-} from '../utils/sse-collector';
+import type { ParsedResponse, TokenUsage } from "../types";
+import { parseSSEStream, isSSEResponse, parseNDJSONStream } from "../utils/sse-collector";
 
 /**
  * Codex Response API response structure
@@ -46,12 +42,12 @@ interface CodexResponse {
  * Codex often uses NDJSON instead of SSE
  */
 function isNDJSONResponse(body: string, contentType?: string): boolean {
-  if (contentType?.includes('application/x-ndjson')) {
+  if (contentType?.includes("application/x-ndjson")) {
     return true;
   }
 
   // Check if body has multiple JSON objects on separate lines
-  const lines = body.split('\n').filter((l) => l.trim());
+  const lines = body.split("\n").filter((l) => l.trim());
   if (lines.length > 1) {
     try {
       // Try to parse first two lines as JSON
@@ -69,10 +65,7 @@ function isNDJSONResponse(body: string, contentType?: string): boolean {
 /**
  * Parse Codex Response API response
  */
-export function parseCodexResponse(
-  body: string,
-  contentType?: string
-): ParsedResponse {
+export function parseCodexResponse(body: string, contentType?: string): ParsedResponse {
   // Check if streaming SSE response
   if (isSSEResponse(body, contentType)) {
     return parseSSEStream(body);
@@ -90,7 +83,7 @@ export function parseCodexResponse(
     // Handle error response
     if (data.error) {
       return {
-        content: data.error.message || 'Unknown error',
+        content: data.error.message || "Unknown error",
         model: undefined,
         usage: undefined,
         isStreaming: false,
@@ -103,7 +96,7 @@ export function parseCodexResponse(
       for (const item of data.output) {
         if (item.content && Array.isArray(item.content)) {
           for (const c of item.content) {
-            if (c.type === 'output_text' && c.text) {
+            if (c.type === "output_text" && c.text) {
               texts.push(c.text);
             } else if (c.text) {
               texts.push(c.text);
@@ -113,7 +106,7 @@ export function parseCodexResponse(
       }
     }
 
-    const content = texts.join('');
+    const content = texts.join("");
 
     // Extract usage
     let usage: TokenUsage | undefined;
