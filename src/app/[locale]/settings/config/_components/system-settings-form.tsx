@@ -20,7 +20,10 @@ import type { SystemSettings, BillingModelSource } from "@/types/system-config";
 import type { CurrencyCode } from "@/lib/utils";
 
 interface SystemSettingsFormProps {
-  initialSettings: Pick<SystemSettings, "siteTitle" | "allowGlobalUsageView" | "currencyDisplay" | "billingModelSource">;
+  initialSettings: Pick<
+    SystemSettings,
+    "siteTitle" | "allowGlobalUsageView" | "currencyDisplay" | "billingModelSource"
+  >;
 }
 
 export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps) {
@@ -123,12 +126,8 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
             <SelectValue placeholder={t("billingModelSourcePlaceholder")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="original">
-              {t("billingModelSourceOptions.original")}
-            </SelectItem>
-            <SelectItem value="redirected">
-              {t("billingModelSourceOptions.redirected")}
-            </SelectItem>
+            <SelectItem value="original">{t("billingModelSourceOptions.original")}</SelectItem>
+            <SelectItem value="redirected">{t("billingModelSourceOptions.redirected")}</SelectItem>
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">{t("billingModelSourceDesc")}</p>
