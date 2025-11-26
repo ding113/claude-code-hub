@@ -152,8 +152,10 @@
         "billingModel": "課金モデル",
         "actualModelTooltip": "実際のモデル: {model}",
         "originalModelTooltip": "元のモデル: {model}",
-        "billingDescription_original": "現在の課金モード：リダイレクト前の元のモデル（{model}）で課金",
-        "billingDescription_redirected": "現在の課金モード：リダイレクト後の実際のモデル（{model}）で課金"
+        "billingDescription_original": "現在の課金モード：リダイレクト前の元のモデル（{original}）で課金",
+        "billingDescription_redirected": "現在の課金モード：リダイレクト後の実際のモデル（{current}）で課金",
+        "billingOriginal": "課金: 元",
+        "billingRedirected": "課金: 実際"
       },
       "errorMessage": "エラーメッセージ",
       "providerChain": {

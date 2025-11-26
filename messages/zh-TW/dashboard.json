@@ -152,8 +152,10 @@
         "billingModel": "計費模型",
         "actualModelTooltip": "實際模型: {model}",
         "originalModelTooltip": "原始模型: {model}",
-        "billingDescription_original": "目前計費模式：使用重新導向前的原始模型（{model}）計費",
-        "billingDescription_redirected": "目前計費模式：使用重新導向後的實際模型（{model}）計費"
+        "billingDescription_original": "目前計費模式：使用重新導向前的原始模型（{original}）計費",
+        "billingDescription_redirected": "目前計費模式：使用重新導向後的實際模型（{current}）計費",
+        "billingOriginal": "計費: 原始",
+        "billingRedirected": "計費: 實際"
       },
       "errorMessage": "錯誤訊息",
       "filteredProviders": "被過濾的供應商",

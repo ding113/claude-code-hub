@@ -152,8 +152,10 @@
         "billingModel": "计费模型",
         "actualModelTooltip": "实际模型: {model}",
         "originalModelTooltip": "原始模型: {model}",
-        "billingDescription_original": "当前计费模式：使用重定向前的原始模型（{model}）计费",
-        "billingDescription_redirected": "当前计费模式：使用重定向后的实际模型（{model}）计费"
+        "billingDescription_original": "当前计费模式：使用重定向前的原始模型（{original}）计费",
+        "billingDescription_redirected": "当前计费模式：使用重定向后的实际模型（{current}）计费",
+        "billingOriginal": "计费: 原始",
+        "billingRedirected": "计费: 实际"
       },
       "errorMessage": "错误信息",
       "filteredProviders": "被过滤的供应商",

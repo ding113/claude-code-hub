@@ -199,7 +199,7 @@ export function UsageLogsTable({
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <div className="truncate cursor-help">
+                            <div className="flex items-center gap-1 min-w-0 cursor-help">
                               <ModelDisplayWithRedirect
                                 originalModel={log.originalModel}
                                 currentModel={log.model}

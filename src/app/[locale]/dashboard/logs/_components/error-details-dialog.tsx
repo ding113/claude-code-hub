@@ -18,6 +18,7 @@ import type { ProviderChainItem } from "@/types/message";
 import { hasSessionMessages } from "@/actions/active-sessions";
 import { formatProviderTimeline } from "@/lib/utils/provider-chain-formatter";
 import type { BillingModelSource } from "@/types/system-config";
+import { cn } from "@/lib/utils";
 
 interface ErrorDetailsDialogProps {
   statusCode: number | null;
@@ -293,49 +294,35 @@ export function ErrorDetailsDialog({
 
           {/* 模型重定向信息 */}
           {originalModel && currentModel && originalModel !== currentModel && (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <h4 className="font-semibold text-sm flex items-center gap-2">
                 <ArrowRight className="h-4 w-4 text-blue-600" />
                 {t("logs.details.modelRedirect.title")}
               </h4>
-              <div className="rounded-md border bg-blue-50 dark:bg-blue-950/20 p-4 space-y-3">
-                <div className="grid grid-cols-3 gap-4 text-sm">
-                  <div>
-                    <span className="font-medium text-blue-900 dark:text-blue-100">
-                      {t("logs.details.modelRedirect.requestModel")}:
-                    </span>
-                    <div className="mt-1">
-                      <code className="bg-blue-100 dark:bg-blue-900/50 px-2 py-1 rounded text-blue-900 dark:text-blue-100">
-                        {originalModel}
-                      </code>
-                    </div>
-                  </div>
-                  <div>
-                    <span className="font-medium text-blue-900 dark:text-blue-100">
-                      {t("logs.details.modelRedirect.actualModel")}:
-                    </span>
-                    <div className="mt-1">
-                      <code className="bg-blue-100 dark:bg-blue-900/50 px-2 py-1 rounded text-blue-900 dark:text-blue-100">
-                        {currentModel}
-                      </code>
-                    </div>
-                  </div>
-                  <div>
-                    <span className="font-medium text-blue-900 dark:text-blue-100">
-                      {t("logs.details.modelRedirect.billingModel")}:
-                    </span>
-                    <div className="mt-1">
-                      <code className="bg-green-100 dark:bg-green-900/50 px-2 py-1 rounded text-green-900 dark:text-green-100 font-semibold">
-                        {billingModelSource === "original" ? originalModel : currentModel}
-                      </code>
-                    </div>
-                  </div>
-                </div>
-                <div className="text-xs text-blue-800 dark:text-blue-200 border-t border-blue-200 dark:border-blue-800 pt-2">
-                  <span className="font-medium">{t("logs.details.modelRedirect.billing")}:</span>{" "}
-                  {billingModelSource === "original"
-                    ? t("logs.details.modelRedirect.billingDescription_original", { original: originalModel, current: currentModel })
-                    : t("logs.details.modelRedirect.billingDescription_redirected", { original: originalModel, current: currentModel })}
+              <div className="rounded-md border bg-blue-50 dark:bg-blue-950/20 px-3 py-2">
+                <div className="flex items-center gap-2 text-sm flex-wrap">
+                  <code className={cn(
+                    "px-1.5 py-0.5 rounded text-xs",
+                    billingModelSource === "original"
+                      ? "bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200 ring-1 ring-green-300 dark:ring-green-700"
+                      : "bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200"
+                  )}>
+                    {originalModel}
+                  </code>
+                  <ArrowRight className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" />
+                  <code className={cn(
+                    "px-1.5 py-0.5 rounded text-xs",
+                    billingModelSource === "redirected"
+                      ? "bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200 ring-1 ring-green-300 dark:ring-green-700"
+                      : "bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200"
+                  )}>
+                    {currentModel}
+                  </code>
+                  <span className="text-xs text-muted-foreground ml-1">
+                    ({billingModelSource === "original"
+                      ? t("logs.details.modelRedirect.billingOriginal")
+                      : t("logs.details.modelRedirect.billingRedirected")})
+                  </span>
                 </div>
               </div>
             </div>

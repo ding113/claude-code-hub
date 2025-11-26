@@ -33,13 +33,13 @@ export function ModelDisplayWithRedirect({
   const otherModel = billingModelSource === "original" ? currentModel : originalModel;
 
   if (!isRedirected) {
-    return <span>{billingModel || "-"}</span>;
+    return <span className="truncate">{billingModel || "-"}</span>;
   }
 
   // 计费模型 + 重定向标记
   return (
-    <div className="flex items-center gap-2">
-      <span>{billingModel}</span>
+    <div className="flex items-center gap-1.5 min-w-0">
+      <span className="truncate">{billingModel}</span>
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>

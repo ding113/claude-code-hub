@@ -151,8 +151,10 @@
         "billingModel": "Billing Model",
         "actualModelTooltip": "Actual Model: {model}",
         "originalModelTooltip": "Original Model: {model}",
-        "billingDescription_original": "Current billing mode: Using original model before redirection ({model}) for billing",
-        "billingDescription_redirected": "Current billing mode: Using actual model after redirection ({model}) for billing"
+        "billingDescription_original": "Current billing mode: Using original model before redirection ({original}) for billing",
+        "billingDescription_redirected": "Current billing mode: Using actual model after redirection ({current}) for billing",
+        "billingOriginal": "billing: original",
+        "billingRedirected": "billing: redirected"
       },
       "errorMessage": "Error Message",
       "filteredProviders": "Filtered Providers",

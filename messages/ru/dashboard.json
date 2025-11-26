@@ -151,8 +151,10 @@
         "billingModel": "Модель тарификации",
         "actualModelTooltip": "Фактическая модель: {model}",
         "originalModelTooltip": "Исходная модель: {model}",
-        "billingDescription_original": "Текущий режим тарификации: По исходной модели до перенаправления ({model})",
-        "billingDescription_redirected": "Текущий режим тарификации: По фактической модели после перенаправления ({model})"
+        "billingDescription_original": "Текущий режим тарификации: По исходной модели до перенаправления ({original})",
+        "billingDescription_redirected": "Текущий режим тарификации: По фактической модели после перенаправления ({current})",
+        "billingOriginal": "оплата: исх.",
+        "billingRedirected": "оплата: факт."
       },
       "errorMessage": "Сообщение об ошибке",
       "providerChain": {
