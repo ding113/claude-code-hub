@@ -352,17 +352,17 @@
     "title": "Управление логами"
   },
   "nav": {
-    "apiDocs": "API документация",
-    "clientVersions": "Напоминание об обновлении",
-    "config": "Конфигурация",
-    "data": "Управление данными",
-    "errorRules": "Правила ошибок",
-    "feedback": "Обратная связь",
+    "apiDocs": "API док.",
+    "clientVersions": "Обновления",
+    "config": "Конфиг",
+    "data": "Данные",
+    "errorRules": "Ошибки",
+    "feedback": "Отзывы",
     "logs": "Логи",
     "notifications": "Уведомления",
-    "prices": "Прайс-лист",
+    "prices": "Цены",
     "providers": "Поставщики",
-    "sensitiveWords": "Чувствительные слова"
+    "sensitiveWords": "Фильтры"
   },
   "notifications": {
     "title": "Push-уведомления",

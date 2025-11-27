@@ -352,17 +352,17 @@
     "title": "ログ管理"
   },
   "nav": {
-    "apiDocs": "APIドキュメント",
-    "clientVersions": "クライアント更新リマインダー",
+    "apiDocs": "API文書",
+    "clientVersions": "更新通知",
     "config": "設定",
-    "data": "データ管理",
-    "errorRules": "エラールール",
-    "feedback": "フィードバック",
+    "data": "データ",
+    "errorRules": "エラー",
+    "feedback": "報告",
     "logs": "ログ",
     "notifications": "通知",
     "prices": "価格表",
-    "providers": "プロバイダー",
-    "sensitiveWords": "センシティブワード"
+    "providers": "供給元",
+    "sensitiveWords": "フィルター"
   },
   "notifications": {
     "title": "プッシュ通知",

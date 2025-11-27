@@ -359,17 +359,17 @@
     "title": "Log Management"
   },
   "nav": {
-    "apiDocs": "API Documentation",
-    "clientVersions": "Client Update Reminder",
-    "config": "Configuration",
-    "data": "Data Management",
-    "errorRules": "Error Rules",
+    "apiDocs": "API Docs",
+    "clientVersions": "Updates",
+    "config": "Config",
+    "data": "Data",
+    "errorRules": "Errors",
     "feedback": "Feedback",
     "logs": "Logs",
     "notifications": "Notifications",
     "prices": "Pricing",
     "providers": "Providers",
-    "sensitiveWords": "Sensitive Words"
+    "sensitiveWords": "Filters"
   },
   "notifications": {
     "title": "Push Notifications",
