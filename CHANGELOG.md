@@ -30,6 +30,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- Fix session binding not updating after provider failover, causing repeated attempts to failed providers (#220) @ding113
 - Fix provider availability monitoring page sorting order so high-availability providers rank first (#219) @ding113
 - Fix provider daily usage statistics JSONB field name error (#216) @ding113
 - Fix response content validation failure in provider testing (#216) @ding113
