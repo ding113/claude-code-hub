@@ -772,7 +772,7 @@
           },
           "forwardClientIp": {
             "label": "转发用户真实 IP",
-            "desc": "启用后，将用户客户端的真实 IP（x-forwarded-for、x-real-ip、cf-connecting-ip 等）发送给上游供应商。默认关闭以保护隐私"
+            "desc": "⚠ 警告：启用后将保留并转发用户客户端的真实 IP（x-forwarded-for、x-real-ip、cf-connecting-ip 等），上游供应商可直接获得真实来源。仅在供应商明确要求时开启，默认关闭以保护隐私"
           },
           "test": {
             "label": "连接测试",

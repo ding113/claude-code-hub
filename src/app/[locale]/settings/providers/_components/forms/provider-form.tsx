@@ -1385,10 +1385,13 @@ export function ProviderForm({
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <Label htmlFor={isEdit ? "edit-forward-client-ip" : "forward-client-ip"}>
+                    <Label
+                      htmlFor={isEdit ? "edit-forward-client-ip" : "forward-client-ip"}
+                      className="text-destructive"
+                    >
                       {t("sections.proxy.forwardClientIp.label")}
                     </Label>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-destructive">
                       {t("sections.proxy.forwardClientIp.desc")}
                     </p>
                   </div>

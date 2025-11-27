@@ -1183,7 +1183,7 @@
           },
           "forwardClientIp": {
             "label": "Forward client real IP",
-            "desc": "When enabled, preserve X-Forwarded-For, X-Real-IP, CF-Connecting-IP and similar headers so upstream providers receive the original client IP. Disabled by default to protect privacy"
+            "desc": "⚠ WARNING: Preserves X-Forwarded-For, X-Real-IP, CF-Connecting-IP and similar headers so upstream providers receive the original client IP. Enable only when the upstream explicitly requires the real IP. Disabled by default to protect privacy"
           },
           "test": {
             "label": "Connectivity Test",

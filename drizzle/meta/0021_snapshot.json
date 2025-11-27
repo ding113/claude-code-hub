@@ -1052,7 +1052,7 @@
           "name": "forward_client_real_ip",
           "type": "boolean",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "default": false
         },
         "first_byte_timeout_streaming_ms": {

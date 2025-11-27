@@ -43,6 +43,7 @@ export function toKey(dbKey: any): Key {
  * @param dbProvider - The raw provider record (usually from the database) to normalize; missing fields will be filled with sensible defaults.
  * @returns A Provider object with defaults applied, numeric/string limits parsed, and `createdAt`/`updatedAt` converted to `Date` instances.
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function toProvider(dbProvider: any): Provider {
   return {
     ...dbProvider,
