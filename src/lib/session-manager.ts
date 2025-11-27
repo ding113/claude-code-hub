@@ -418,29 +418,16 @@ export class SessionManager {
   }
 
   /**
-   * 智能更新 Session 绑定（主备模式 + 健康自动回迁）
+   * 智能更新 Session 绑定
    *
-   * ⚠️ 职责分离：不做分组权限检查（选择器已保证）
-   *
-   * 核心策略：
-   * 1. 首次绑定：直接绑定到成功的供应商（SET NX 避免并发竞争）
-   * 2. 重试成功：智能决策
-   *    a) 新供应商优先级更高（数字更小）→ 直接更新（迁移到主供应商）
-   *    b) 新供应商优先级相同或更低 → 检查原供应商健康状态：
-   *       - 原供应商已熔断 → 更新到新供应商（备用供应商接管）
-   *       - 原供应商健康 → 保持原绑定（优先使用主供应商）
-   *
-   * @param sessionId - Session ID
-   * @param newProviderId - 新供应商 ID
-   * @param newProviderPriority - 新供应商优先级
-   * @param isFirstAttempt - 是否首次尝试
-   * @returns { updated: 是否更新, reason: 原因说明, details: 详细说明 }
+   * 策略：首次绑定用 SET NX；故障转移后无条件更新；其他情况按优先级和熔断状态决策
    */
   static async updateSessionBindingSmart(
     sessionId: string,
     newProviderId: number,
     newProviderPriority: number,
-    isFirstAttempt: boolean = false
+    isFirstAttempt: boolean = false,
+    isFailoverSuccess: boolean = false
   ): Promise<{ updated: boolean; reason: string; details?: string }> {
     const redis = getRedisClient();
     if (!redis || redis.status !== "ready") {
@@ -476,6 +463,24 @@ export class SessionManager {
       }
 
       // ========== 情况 2：重试成功（需要智能决策）==========
+
+      // 2.0 故障转移成功：无条件更新绑定（减少缓存切换）
+      if (isFailoverSuccess) {
+        const key = `session:${sessionId}:provider`;
+        await redis.setex(key, this.SESSION_TTL, newProviderId.toString());
+
+        logger.info("SessionManager: Updated binding after failover", {
+          sessionId,
+          newProviderId,
+          newPriority: newProviderPriority,
+        });
+
+        return {
+          updated: true,
+          reason: "failover_success",
+          details: `故障转移成功，绑定到供应商 ${newProviderId}`,
+        };
+      }
 
       // 2.1 获取当前绑定的供应商 ID
       const currentProviderIdStr = await redis.get(`session:${sessionId}:provider`);
