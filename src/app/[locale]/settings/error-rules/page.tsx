@@ -18,7 +18,10 @@ export default async function ErrorRulesPage() {
       <SettingsPageHeader title={t("errorRules.title")} description={t("errorRules.description")} />
 
       <div className="space-y-6">
-        <Section title={t("errorRules.tester.title")} description={t("errorRules.tester.description")}>
+        <Section
+          title={t("errorRules.tester.title")}
+          description={t("errorRules.tester.description")}
+        >
           <ErrorRuleTester />
         </Section>
 

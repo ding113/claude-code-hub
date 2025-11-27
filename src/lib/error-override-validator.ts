@@ -81,8 +81,6 @@ export function validateErrorOverrideResponse(response: unknown): string | null 
  * @param response - 待验证的响应对象
  * @returns 是否为合法的 ErrorOverrideResponse
  */
-export function isValidErrorOverrideResponse(
-  response: unknown
-): response is ErrorOverrideResponse {
+export function isValidErrorOverrideResponse(response: unknown): response is ErrorOverrideResponse {
   return validateErrorOverrideResponse(response) === null;
 }

@@ -82,9 +82,7 @@ export function OverrideSection({
           {t("errorRules.dialog.enableOverride")}
         </Label>
       </div>
-      <p className="text-xs text-muted-foreground">
-        {t("errorRules.dialog.enableOverrideHint")}
-      </p>
+      <p className="text-xs text-muted-foreground">{t("errorRules.dialog.enableOverrideHint")}</p>
 
       {enableOverride && (
         <div className="space-y-4 pt-2">
