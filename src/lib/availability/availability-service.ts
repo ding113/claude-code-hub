@@ -7,6 +7,7 @@
 import { db } from "@/drizzle/db";
 import { messageRequest, providers } from "@/drizzle/schema";
 import { and, eq, gte, lte, sql, isNull, desc, inArray } from "drizzle-orm";
+import { logger } from "@/lib/logger";
 import {
   type AvailabilityStatus,
   type AvailabilityQueryOptions,
@@ -17,6 +18,9 @@ import {
   AVAILABILITY_WEIGHTS,
   AVAILABILITY_DEFAULTS,
 } from "./types";
+
+// Maximum requests to load per query to prevent OOM
+const MAX_REQUESTS_PER_QUERY = 100000;
 
 /**
  * Classify a single request's status
@@ -162,7 +166,20 @@ export async function queryProviderAvailability(
     })
     .from(messageRequest)
     .where(and(...requestConditions))
-    .orderBy(messageRequest.createdAt);
+    .orderBy(messageRequest.createdAt)
+    .limit(MAX_REQUESTS_PER_QUERY);
+
+  // Warn if query hit the limit - results may be incomplete
+  if (requests.length === MAX_REQUESTS_PER_QUERY) {
+    logger.warn(
+      "[Availability] Query hit max request limit, results may be incomplete",
+      {
+        limit: MAX_REQUESTS_PER_QUERY,
+        startTime: startDate.toISOString(),
+        endTime: endDate.toISOString(),
+      }
+    );
+  }
 
   // Determine bucket size if not explicitly specified
   const bucketSizeMinutes =

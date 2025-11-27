@@ -82,70 +82,73 @@ export async function executeProviderTest(config: ProviderTestConfig): Promise<P
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    // Execute request
-    const response = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-    firstByteMs = Date.now() - startTime;
-
-    // Read response body
-    const responseBody = await response.text();
-    const latencyMs = Date.now() - startTime;
-    const contentType = response.headers.get("content-type") || undefined;
-
-    // Tier 1: HTTP Status validation
-    const httpResult = classifyHttpStatus(response.status, latencyMs, slowThresholdMs);
-
-    // Tier 2 & 3: Content validation - SIMPLIFIED: directly match raw response body
-    // No SSE/JSON parsing needed - just check if successContains exists in raw response
-    // This is the most reliable approach as relay-pulse also falls back to raw body
-    const contentResult = evaluateContentValidation(
-      httpResult.status,
-      httpResult.subStatus,
-      responseBody, // Use raw response body directly
-      successContains
-    );
-
-    // Try to extract model from response (simple JSON extraction)
-    let model: string | undefined;
     try {
-      // Try to parse as JSON for model extraction only
-      const parsed = JSON.parse(responseBody);
-      model = parsed.model;
-    } catch {
-      // Not JSON or parsing failed - that's fine, model is optional
+      // Execute request
+      const response = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      firstByteMs = Date.now() - startTime;
+
+      // Read response body
+      const responseBody = await response.text();
+      const latencyMs = Date.now() - startTime;
+      const contentType = response.headers.get("content-type") || undefined;
+
+      // Tier 1: HTTP Status validation
+      const httpResult = classifyHttpStatus(response.status, latencyMs, slowThresholdMs);
+
+      // Tier 2 & 3: Content validation - SIMPLIFIED: directly match raw response body
+      // No SSE/JSON parsing needed - just check if successContains exists in raw response
+      // This is the most reliable approach as relay-pulse also falls back to raw body
+      const contentResult = evaluateContentValidation(
+        httpResult.status,
+        httpResult.subStatus,
+        responseBody, // Use raw response body directly
+        successContains
+      );
+
+      // Try to extract model from response (simple JSON extraction)
+      let model: string | undefined;
+      try {
+        // Try to parse as JSON for model extraction only
+        const parsed = JSON.parse(responseBody);
+        model = parsed.model;
+      } catch {
+        // Not JSON or parsing failed - that's fine, model is optional
+      }
+
+      // Build validation details
+      const validationDetails: ValidationDetails = {
+        httpPassed: response.ok,
+        httpStatusCode: response.status,
+        latencyPassed: latencyMs <= slowThresholdMs,
+        latencyMs,
+        contentPassed: contentResult.contentPassed,
+        contentTarget: successContains,
+      };
+
+      // Build result with raw response for user inspection
+      return {
+        success: contentResult.status !== "red",
+        status: contentResult.status,
+        subStatus: contentResult.subStatus,
+        latencyMs,
+        firstByteMs,
+        httpStatusCode: response.status,
+        httpStatusText: response.statusText,
+        model,
+        content: responseBody.slice(0, 500), // Preview for quick view
+        rawResponse: responseBody.slice(0, 5000), // Full response for detailed inspection
+        testedAt: new Date(),
+        validationDetails,
+      };
+    } finally {
+      clearTimeout(timeoutId);
     }
-
-    // Build validation details
-    const validationDetails: ValidationDetails = {
-      httpPassed: response.ok,
-      httpStatusCode: response.status,
-      latencyPassed: latencyMs <= slowThresholdMs,
-      latencyMs,
-      contentPassed: contentResult.contentPassed,
-      contentTarget: successContains,
-    };
-
-    // Build result with raw response for user inspection
-    return {
-      success: contentResult.status !== "red",
-      status: contentResult.status,
-      subStatus: contentResult.subStatus,
-      latencyMs,
-      firstByteMs,
-      httpStatusCode: response.status,
-      httpStatusText: response.statusText,
-      model,
-      content: responseBody.slice(0, 500), // Preview for quick view
-      rawResponse: responseBody.slice(0, 5000), // Full response for detailed inspection
-      testedAt: new Date(),
-      validationDetails,
-    };
   } catch (error) {
     const latencyMs = Date.now() - startTime;
 

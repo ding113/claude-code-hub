@@ -7,23 +7,16 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentProviderStatus } from "@/lib/availability";
-import { validateKey } from "@/lib/auth";
+import { getSession } from "@/lib/auth";
 
 /**
  * GET /api/availability/current
  */
 export async function GET(request: NextRequest) {
-  // Verify admin authentication
-  const authHeader = request.headers.get("Authorization");
-  const token = authHeader?.replace("Bearer ", "");
-
-  if (!token) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const session = await validateKey(token);
+  // Verify admin authentication using session cookies (consistent with /api/availability)
+  const session = await getSession();
   if (!session || session.user.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden: Admin access required" }, { status: 403 });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
