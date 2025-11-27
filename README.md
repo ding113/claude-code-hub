@@ -282,7 +282,7 @@ Docker Compose 是**首选部署方式**，自动配置数据库、Redis 和应�
 
 ## 🌐 致谢 Acknowledgments
 
-项目基于 [zsio/claude-code-hub](https://github.com/zsio/claude-code-hub) 深度改进，OpenAI 兼容层参考 [router-for-me/CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)。感谢原作者及社区贡献者！
+项目基于 [zsio/claude-code-hub](https://github.com/zsio/claude-code-hub) 深度改进，OpenAI 兼容层参考 [router-for-me/CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)，供应商检测功能参考 [prehisle/relay-pulse](https://github.com/prehisle/relay-pulse)。感谢原作者及社区贡献者！
 
 ## ⭐ Star History
 
