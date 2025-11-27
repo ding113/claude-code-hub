@@ -149,12 +149,13 @@ export class ProxyForwarder {
 
           // ⭐ 成功后绑定 session 到供应商（智能绑定策略）
           if (session.sessionId) {
-            // 使用智能绑定策略（主备模式 + 健康自动回迁）
+            // 使用智能绑定策略（故障转移优先 + 稳定性优化）
             const result = await SessionManager.updateSessionBindingSmart(
               session.sessionId,
               currentProvider.id,
               currentProvider.priority || 0,
-              totalProvidersAttempted === 1 && attemptCount === 1 // isFirstAttempt
+              totalProvidersAttempted === 1 && attemptCount === 1, // isFirstAttempt
+              totalProvidersAttempted > 1 // isFailoverSuccess: 切换过供应商
             );
 
             if (result.updated) {
