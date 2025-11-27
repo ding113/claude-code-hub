@@ -3,7 +3,8 @@ export class ProxyResponses {
     status: number,
     message: string,
     errorType?: string,
-    details?: Record<string, unknown>
+    details?: Record<string, unknown>,
+    requestId?: string
   ): Response {
     const payload: {
       error: {
@@ -12,6 +13,7 @@ export class ProxyResponses {
         code?: string;
         details?: Record<string, unknown>;
       };
+      request_id?: string;
     } = {
       error: {
         message,
@@ -27,6 +29,11 @@ export class ProxyResponses {
     // 添加详细信息（可选）
     if (details) {
       payload.error.details = details;
+    }
+
+    // 透传上游 request_id（可选）
+    if (requestId) {
+      payload.request_id = requestId;
     }
 
     return new Response(JSON.stringify(payload), {

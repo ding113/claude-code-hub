@@ -6,7 +6,8 @@
  * 2. 智能截断：JSON 完整保存，文本限制 500 字符
  * 3. 可读性优先：纯文本格式化，便于排查问题
  */
-import { errorRuleDetector } from "@/lib/error-rule-detector";
+import { errorRuleDetector, type ErrorDetectionResult } from "@/lib/error-rule-detector";
+import type { ErrorOverrideResponse } from "@/repository/error-rules";
 
 export class ProxyError extends Error {
   constructor(
@@ -17,6 +18,7 @@ export class ProxyError extends Error {
       parsed?: unknown; // 解析后的 JSON（如果有）
       providerId?: number;
       providerName?: string;
+      requestId?: string; // 上游请求 ID（用于覆写响应时注入）
     }
   ) {
     super(message);
@@ -64,12 +66,289 @@ export class ProxyError extends Error {
     // 4. 智能截断响应体
     const truncatedBody = ProxyError.smartTruncate(body, parsed);
 
+    // 5. 提取 request_id（从响应体或响应头）
+    const requestId =
+      ProxyError.extractRequestIdFromBody(parsed) ||
+      ProxyError.extractRequestIdFromHeaders(response.headers);
+
     return new ProxyError(message, response.status, {
       body: truncatedBody,
       parsed,
       providerId: provider.id,
       providerName: provider.name,
+      requestId,
     });
+  }
+
+  /**
+   * 从解析后的 JSON 响应体中提取 request_id
+   *
+   * 支持多种嵌套格式：
+   * 1. 顶层 request_id/requestId（标准 Claude/OpenAI 格式）
+   * 2. error 对象内的 request_id/requestId
+   * 3. error.upstream_error 对象内的 request_id/requestId（中继服务格式）
+   * 4. message 字段内嵌套 JSON 字符串中的 request_id（某些代理服务格式）
+   *
+   * @example
+   * // 标准格式
+   * { "request_id": "req_xxx" }
+   *
+   * // error 对象内
+   * { "error": { "request_id": "req_xxx" } }
+   *
+   * // upstream_error 格式
+   * { "error": { "upstream_error": { "request_id": "req_xxx" } } }
+   *
+   * // message 内嵌套 JSON
+   * { "error": { "message": "{\"request_id\":\"req_xxx\"}" } }
+   */
+  private static extractRequestIdFromBody(parsed: unknown): string | undefined {
+    if (!parsed || typeof parsed !== "object") return undefined;
+    return ProxyError.extractRequestIdFromObject(parsed as Record<string, unknown>);
+  }
+
+  /**
+   * 通用的 request_id 提取逻辑
+   *
+   * @param obj - 要提取的对象
+   * @param remainingDepth - 允许的嵌套 JSON 解析次数，防止循环/过度 JSON.parse
+   */
+  private static extractRequestIdFromObject(
+    obj: Record<string, unknown>,
+    remainingDepth: number = 2
+  ): string | undefined {
+    let depthBudget = remainingDepth;
+
+    // 1. 检查顶层 request_id/requestId
+    const flatRequestId = ProxyError.extractRequestIdFromFlat(obj);
+    if (flatRequestId) {
+      return flatRequestId;
+    }
+
+    // 2. 检查 error 对象内的各种格式
+    if (obj.error && typeof obj.error === "object") {
+      const errorObj = obj.error as Record<string, unknown>;
+
+      // 2.1 直接在 error 对象内的 request_id/requestId
+      const errorRequestId = ProxyError.extractRequestIdFromFlat(errorObj);
+      if (errorRequestId) {
+        return errorRequestId;
+      }
+
+      // 2.2 检查 error.upstream_error 对象（中继服务格式）
+      if (errorObj.upstream_error && typeof errorObj.upstream_error === "object") {
+        const upstreamError = errorObj.upstream_error as Record<string, unknown>;
+
+        // 2.2.1 直接在 upstream_error 对象内的 request_id
+        const upstreamRequestId = ProxyError.extractRequestIdFromFlat(upstreamError);
+        if (upstreamRequestId) {
+          return upstreamRequestId;
+        }
+
+        // 2.2.2 检查 upstream_error.error 对象（深层嵌套格式）
+        // 例如: { error: { upstream_error: { error: { message: "{...request_id...}" } } } }
+        if (upstreamError.error && typeof upstreamError.error === "object") {
+          const nestedError = upstreamError.error as Record<string, unknown>;
+
+          // 检查 upstream_error.error.request_id
+          const nestedRequestId = ProxyError.extractRequestIdFromFlat(nestedError);
+          if (nestedRequestId) {
+            return nestedRequestId;
+          }
+
+          // 检查 upstream_error.error.message 内的嵌套格式
+          if (typeof nestedError.message === "string" && depthBudget > 0) {
+            const msgRequestId = ProxyError.extractRequestIdFromJsonString(
+              nestedError.message,
+              depthBudget - 1
+            );
+            if (msgRequestId) {
+              return msgRequestId;
+            }
+          }
+        }
+      }
+
+      // 2.3 尝试从 error.message 字段解析嵌套 JSON
+      if (typeof errorObj.message === "string" && depthBudget > 0) {
+        const nestedRequestId = ProxyError.extractRequestIdFromJsonString(
+          errorObj.message,
+          depthBudget - 1
+        );
+        if (nestedRequestId) {
+          return nestedRequestId;
+        }
+        depthBudget -= 1; // 消耗一次尝试，避免重复解析同一层 message
+      }
+    }
+
+    // 3. 检查顶层 message 字段内的嵌套 JSON
+    if (typeof obj.message === "string" && depthBudget > 0) {
+      return ProxyError.extractRequestIdFromJsonString(obj.message, depthBudget - 1);
+    }
+
+    return undefined;
+  }
+
+  /**
+   * 从对象中直接提取 request_id（不递归）
+   */
+  private static extractRequestIdFromFlat(obj: Record<string, unknown>): string | undefined {
+    if (typeof obj.request_id === "string" && obj.request_id.trim()) {
+      return obj.request_id.trim();
+    }
+    if (typeof obj.requestId === "string" && obj.requestId.trim()) {
+      return obj.requestId.trim();
+    }
+    return undefined;
+  }
+
+  /**
+   * 从可能包含 JSON 或 request_id 的字符串中提取 request_id
+   *
+   * 支持的格式：
+   * 1. 纯 JSON 字符串: `{"request_id":"req_xxx"}`
+   * 2. JSON + 尾部文本: `{"request_id":"req_xxx"}（traceid: ...）`
+   * 3. 纯文本格式: `... (request id: xxx)` 或 `... (request_id: xxx)`
+   *
+   * @param str - 可能包含 JSON 或 request_id 的字符串
+   * @param remainingDepth - 允许的嵌套 JSON 解析次数
+   * @returns 提取的 request_id，如果未找到则返回 undefined
+   */
+  private static extractRequestIdFromJsonString(
+    str: string,
+    remainingDepth: number = 2
+  ): string | undefined {
+    const trimmed = str.trim();
+    if (remainingDepth < 0) {
+      return undefined;
+    }
+
+    // 策略 1: 尝试解析 JSON（可能以 { 开头）
+    if (trimmed.startsWith("{")) {
+      // 尝试直接解析整个字符串
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed && typeof parsed === "object") {
+          return ProxyError.extractRequestIdFromObject(
+            parsed as Record<string, unknown>,
+            remainingDepth
+          );
+        }
+      } catch {
+        // JSON.parse 失败，可能是 JSON + 尾部文本的情况
+        // 尝试提取 JSON 部分（找到匹配的 } 位置）
+        const jsonPart = ProxyError.extractJsonFromString(trimmed);
+        if (jsonPart) {
+          try {
+            const parsed = JSON.parse(jsonPart);
+            if (parsed && typeof parsed === "object") {
+              return ProxyError.extractRequestIdFromObject(
+                parsed as Record<string, unknown>,
+                remainingDepth
+              );
+            }
+          } catch {
+            // 提取的部分也不是有效 JSON，继续尝试其他策略
+          }
+        }
+      }
+    }
+
+    // 策略 2: 正则提取纯文本格式的 request_id
+    // 匹配: (request id: xxx) 或 (request_id: xxx) 或 request_id: xxx
+    return ProxyError.extractRequestIdFromText(str);
+  }
+
+  /**
+   * 从字符串中提取 JSON 对象部分
+   *
+   * 处理类似 `{"key":"value"}（额外文本）` 的情况
+   * 通过括号匹配找到 JSON 对象的结束位置
+   */
+  private static extractJsonFromString(str: string): string | null {
+    if (!str.startsWith("{")) {
+      return null;
+    }
+
+    let depth = 0;
+    let inString = false;
+    let escape = false;
+
+    for (let i = 0; i < str.length; i++) {
+      const char = str[i];
+
+      if (escape) {
+        escape = false;
+        continue;
+      }
+
+      if (char === "\\") {
+        escape = true;
+        continue;
+      }
+
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+
+      if (inString) {
+        continue;
+      }
+
+      if (char === "{") {
+        depth++;
+      } else if (char === "}") {
+        depth--;
+        if (depth === 0) {
+          // 找到匹配的结束括号
+          return str.substring(0, i + 1);
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * 从纯文本中提取 request_id
+   *
+   * 支持的格式：
+   * - (request id: xxx)
+   * - (request_id: xxx)
+   * - request_id: "xxx"
+   * - "request_id": "xxx"
+   */
+  private static extractRequestIdFromText(str: string): string | undefined {
+    // 模式 1: (request id: xxx) 或 (request_id: xxx) - 括号内格式
+    const parenMatch = str.match(/\(request[_ ]id:\s*([^)]+)\)/i);
+    if (parenMatch && parenMatch[1]) {
+      return parenMatch[1].trim();
+    }
+
+    // 模式 2: "request_id": "xxx" - JSON 字段格式（用于部分损坏的 JSON）
+    const jsonFieldMatch = str.match(/"request_id"\s*:\s*"([^"]+)"/);
+    if (jsonFieldMatch && jsonFieldMatch[1]) {
+      return jsonFieldMatch[1].trim();
+    }
+
+    return undefined;
+  }
+
+  /**
+   * 从响应头中提取 request_id
+   */
+  private static extractRequestIdFromHeaders(headers: Headers): string | undefined {
+    // 常见的 request_id 响应头名称
+    const headerNames = ["x-request-id", "request-id", "x-amzn-requestid"];
+    for (const name of headerNames) {
+      const value = headers.get(name);
+      if (value && value.trim()) {
+        return value.trim();
+      }
+    }
+    return undefined;
   }
 
   /**
@@ -166,17 +445,103 @@ export enum ErrorCategory {
   NON_RETRYABLE_CLIENT_ERROR, // 客户端输入错误（Prompt 超限、内容过滤、PDF 限制、Thinking 格式、参数缺失/额外参数、非法请求）→ 不计入熔断器 + 不重试 + 直接返回
 }
 
-export function isNonRetryableClientError(error: Error): boolean {
-  // 确定要检测的内容
-  // 优先使用整个响应体，这样规则可以匹配响应中的任何内容
-  let contentToCheck = error.message;
-
+/**
+ * 从错误对象中提取用于规则匹配的内容
+ *
+ * 优先使用整个响应体（upstreamError.body），这样规则可以匹配响应中的任何内容
+ * 如果没有响应体，则使用错误消息
+ */
+function extractErrorContentForDetection(error: Error): string {
+  // 优先使用整个响应体进行规则匹配
   if (error instanceof ProxyError && error.upstreamError?.body) {
-    contentToCheck = error.upstreamError.body;
+    return error.upstreamError.body;
+  }
+  return error.message;
+}
+
+/**
+ * 错误规则检测结果缓存
+ *
+ * 使用 WeakMap 避免内存泄漏，同一个 Error 对象只检测一次
+ * 这样 isNonRetryableClientError 和 getErrorOverrideMessage 可以复用检测结果
+ */
+const errorDetectionCache = new WeakMap<Error, ErrorDetectionResult>();
+
+/**
+ * 检测错误规则（带缓存）
+ *
+ * 同一个 Error 对象只执行一次规则匹配，后续调用直接返回缓存结果
+ *
+ * 优化：避免在规则尚未初始化时缓存空结果
+ * - 如果规则已初始化，正常缓存结果
+ * - 如果规则未初始化，触发异步加载并返回同步结果（可能为空）
+ *   后续请求会自动获取正确的缓存结果
+ */
+function detectErrorRuleOnce(error: Error): ErrorDetectionResult {
+  const cached = errorDetectionCache.get(error);
+  if (cached) {
+    return cached;
   }
 
-  // 使用 ErrorRuleDetector 检测规则，支持数据库驱动的动态规则
-  return errorRuleDetector.detect(contentToCheck).matched;
+  const content = extractErrorContentForDetection(error);
+
+  // 避免在规则尚未初始化时缓存可能不完整的结果
+  if (!errorRuleDetector.hasInitialized()) {
+    // 触发异步初始化，但不阻塞当前请求
+    void errorRuleDetector
+      .detectAsync(content)
+      .then((result) => errorDetectionCache.set(error, result))
+      .catch(() => undefined);
+
+    // 返回同步结果（可能为空），不缓存以允许后续请求重新检测
+    return errorRuleDetector.detect(content);
+  }
+
+  const result = errorRuleDetector.detect(content);
+  errorDetectionCache.set(error, result);
+  return result;
+}
+
+export function isNonRetryableClientError(error: Error): boolean {
+  // 使用缓存的检测结果，避免重复执行规则匹配
+  return detectErrorRuleOnce(error).matched;
+}
+
+/**
+ * 错误覆写结果
+ */
+export interface ErrorOverrideResult {
+  /** 覆写的响应体（可选，null 表示不覆写响应体，仅覆写状态码） */
+  response: ErrorOverrideResponse | null;
+  /** 覆写的状态码（可选，null 表示透传上游状态码） */
+  statusCode: number | null;
+}
+
+/**
+ * 检测错误并返回覆写配置（如果配置了）
+ *
+ * 用于在返回错误响应时应用覆写，将复杂的上游错误转换为友好的用户提示
+ * 支持三种覆写模式：
+ * 1. 仅覆写响应体
+ * 2. 仅覆写状态码
+ * 3. 同时覆写响应体和状态码
+ *
+ * @param error - 错误对象
+ * @returns 覆写配置（如果配置了响应体或状态码），否则返回 undefined
+ */
+export function getErrorOverride(error: Error): ErrorOverrideResult | undefined {
+  // 使用缓存的检测结果，避免重复执行规则匹配
+  const result = detectErrorRuleOnce(error);
+
+  // 只要配置了响应体或状态码，就返回覆写配置
+  if (result.matched && (result.overrideResponse || result.overrideStatusCode)) {
+    return {
+      response: result.overrideResponse ?? null,
+      statusCode: result.overrideStatusCode ?? null,
+    };
+  }
+
+  return undefined;
 }
 
 /**

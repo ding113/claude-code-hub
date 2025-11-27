@@ -298,6 +298,12 @@ export const errorRules = pgTable('error_rules', {
     .$type<'regex' | 'contains' | 'exact'>(),
   category: varchar('category', { length: 50 }).notNull(),
   description: text('description'),
+  // 覆写响应体（JSONB）：匹配成功时用此响应替换原始错误响应
+  // 格式参考 Claude API: { type: "error", error: { type: "...", message: "..." }, request_id?: "..." }
+  // null = 不覆写，保留原始错误响应
+  overrideResponse: jsonb('override_response'),
+  // 覆写状态码：null = 透传上游状态码
+  overrideStatusCode: integer('override_status_code'),
   isEnabled: boolean('is_enabled').notNull().default(true),
   isDefault: boolean('is_default').notNull().default(false),
   priority: integer('priority').notNull().default(0),
