@@ -1087,8 +1087,8 @@
           },
           "streamingIdle": {
             "label": "串流靜默期超時（秒）",
-            "placeholder": "10",
-            "desc": "串流請求靜默期超時，範圍 1-120 秒，預設 10 秒（防止中途卡住）",
+            "placeholder": "60",
+            "desc": "串流請求靜默期超時，範圍 60-600 秒，填 0 禁用（防止中途卡住）",
             "core": "true"
           },
           "nonStreamingTotal": {

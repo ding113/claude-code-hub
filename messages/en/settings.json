@@ -1208,8 +1208,8 @@
           },
           "streamingIdle": {
             "label": "Streaming Idle Timeout (seconds)",
-            "placeholder": "10",
-            "desc": "Streaming request idle timeout, range 1-120 seconds, default 10 seconds (prevent mid-stream stalling)",
+            "placeholder": "60",
+            "desc": "Streaming request idle timeout, range 60-600 seconds, enter 0 to disable (prevent mid-stream stalling)",
             "core": "true"
           },
           "nonStreamingTotal": {
