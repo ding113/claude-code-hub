@@ -798,7 +798,7 @@
           "desc": "控制用户隐私信息的转发行为",
           "forwardClientIp": {
             "label": "转发用户真实 IP",
-            "desc": "启用后将保留并转发用户客户端的真实 IP（x-forwarded-for、x-real-ip、cf-connecting-ip 等），上游供应商可直接获得真实来源。仅在供应商明确要求时开启，默认关闭以保护隐私。注意：此功能仅转发 HTTP Headers 中的客户端 IP，无法改变 TCP 连接的源 IP，功能仅对部分供应商有效，除非使用 SOCKS5/HTTP 代理（见供应商-代理配置）",
+            "desc": "启用后将保留并转发用户客户端的真实 IP（x-forwarded-for、x-real-ip、cf-connecting-ip 等），上游供应商可直接获得真实来源。仅在供应商明确要求时开启，默认关闭以保护隐私。注意：此功能仅转发 HTTP Headers 中的客户端 IP，无法改变 TCP 连接的源 IP，功能仅对部分供应商有效，除非使用 SOCKS5/HTTP 代理（见供应商\"代理配置\"）",
             "warning": "隐私警告"
           }
         },

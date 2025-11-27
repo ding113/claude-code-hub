@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- Add per-provider client real IP forwarding control (#20)
+- Add per-provider client real IP forwarding control (#218)
   - New `forwardClientRealIp` toggle in provider settings under "Privacy & Security Configuration"
   - Controls whether to forward client IP headers (x-forwarded-for, x-real-ip, cf-connecting-ip, etc.)
   - Supports 22 IP-related headers including Cloudflare, Azure, Akamai
