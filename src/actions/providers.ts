@@ -85,7 +85,13 @@ const API_TEST_CONFIG = {
 const PROXY_RETRY_STATUS_CODES = new Set([502, 504, 520, 521, 522, 523, 524, 525, 526, 527, 530]);
 const CLOUDFLARE_ERROR_STATUS_CODES = new Set([520, 521, 522, 523, 524, 525, 526, 527, 530]);
 
-// 获取服务商数据
+/**
+ * Retrieve the list of providers with normalized metadata and aggregated usage statistics for admin users.
+ *
+ * The returned entries include provider configuration (id, name, urls, timeouts, limits, circuit breaker settings, forwarding flag, etc.), masked API key, creation/update dates, and best-effort statistics (today's cost, call count, last call time/model). If the caller is not an admin or an error occurs, an empty array is returned.
+ *
+ * @returns An array of `ProviderDisplay` objects containing provider metadata, masked keys, and optional statistics.
+ */
 export async function getProviders(): Promise<ProviderDisplay[]> {
   try {
     const session = await getSession();
@@ -228,7 +234,17 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
   }
 }
 
-// 添加服务商
+/**
+ * Create a new provider configuration and persist it to the database (admin only).
+ *
+ * Builds and validates a provider payload from `data`, derives a favicon from `website_url` when present,
+ * applies defaults for timeouts, limits and circuit-breaker settings, and stores the provider record.
+ * Attempts to persist the provider's circuit-breaker configuration to Redis (best-effort) and revalidates
+ * the providers settings path after creation.
+ *
+ * @param data - Object containing provider configuration fields (name, url, key and optional settings such as proxy_url, timeouts, limits, circuit breaker params, rate limits, website_url, forward_client_real_ip, etc.).
+ * @returns `{ ok: true }` on success; `{ ok: false, error: string }` on failure with an explanatory error message.
+ */
 export async function addProvider(data: {
   name: string;
   url: string;
@@ -373,7 +389,15 @@ export async function addProvider(data: {
   }
 }
 
-// 更新服务商
+/**
+ * Update an existing provider's configuration and propagate relevant runtime caches.
+ *
+ * Validates admin session and input, optionally validates proxy URL, regenerates the favicon when `website_url` is changed, updates the provider record, and—if circuit breaker or codex instructions settings changed—synchronizes the circuit config to Redis and clears related caches. Revalidates the providers settings path before returning.
+ *
+ * @param providerId - ID of the provider to update
+ * @param data - Partial provider attributes to change. Supported fields include network/proxy settings, credentials, limits (5h/daily/weekly/monthly/concurrent), circuit breaker parameters, timeouts, `website_url` (triggers favicon generation when present), `codex_instructions_strategy`, MCP passthrough settings, and `forward_client_real_ip`.
+ * @returns An ActionResult object: `ok: true` on success; `ok: false` with an `error` message on failure.
+ */
 export async function editProvider(
   providerId: number,
   data: {

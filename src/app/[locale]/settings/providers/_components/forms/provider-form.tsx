@@ -53,6 +53,20 @@ interface ProviderFormProps {
   enableMultiProviderTypes: boolean;
 }
 
+/**
+ * Render a form UI for creating or editing a provider and manage its full submission lifecycle.
+ *
+ * The form exposes fields for connection details, routing, rate limits, circuit breaker,
+ * proxy/timeout settings, Codex and MCP passthrough options, and includes validation,
+ * preview/test controls, and expand/collapse of advanced sections.
+ *
+ * @param mode - "create" to initialise an empty form or "edit" to load an existing provider
+ * @param onSuccess - Optional callback invoked after a successful add, update, or delete
+ * @param provider - Existing provider data used to populate the form in edit mode
+ * @param cloneProvider - Existing provider data used to prefill fields when creating a cloned provider
+ * @param enableMultiProviderTypes - If false, disables selection of multi-provider types (e.g., openai-compatible)
+ * @returns A React element containing the provider form with sections, controls, validation, and submission handling
+ */
 export function ProviderForm({
   mode,
   onSuccess,
