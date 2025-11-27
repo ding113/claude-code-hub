@@ -163,6 +163,11 @@ export const providers = pgTable('providers', {
   proxyUrl: varchar('proxy_url', { length: 512 }),
   proxyFallbackToDirect: boolean('proxy_fallback_to_direct').default(false),
 
+  // 转发用户真实 IP：控制是否将用户客户端的真实 IP 发送给上游供应商
+  // true: 保留并转发客户端 IP (x-forwarded-for, x-real-ip, cf-connecting-ip 等)
+  // false (默认): 删除客户端 IP 信息，使用服务器 IP（隐私保护）
+  forwardClientRealIp: boolean('forward_client_real_ip').default(false),
+
   // 超时配置（毫秒）
   // 注意：由于 undici fetch API 的限制，无法精确分离 DNS/TCP/TLS 连接阶段和响应头接收阶段
   // 参考：https://github.com/nodejs/undici/discussions/1313

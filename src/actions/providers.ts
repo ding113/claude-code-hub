@@ -196,6 +196,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         circuitBreakerHalfOpenSuccessThreshold: provider.circuitBreakerHalfOpenSuccessThreshold,
         proxyUrl: provider.proxyUrl,
         proxyFallbackToDirect: provider.proxyFallbackToDirect,
+        forwardClientRealIp: provider.forwardClientRealIp,
         firstByteTimeoutStreamingMs: provider.firstByteTimeoutStreamingMs,
         streamingIdleTimeoutMs: provider.streamingIdleTimeoutMs,
         requestTimeoutNonStreamingMs: provider.requestTimeoutNonStreamingMs,
@@ -253,6 +254,7 @@ export async function addProvider(data: {
   circuit_breaker_half_open_success_threshold?: number;
   proxy_url?: string | null;
   proxy_fallback_to_direct?: boolean;
+  forward_client_real_ip?: boolean;
   first_byte_timeout_streaming_ms?: number;
   streaming_idle_timeout_ms?: number;
   request_timeout_non_streaming_ms?: number;
@@ -398,6 +400,7 @@ export async function editProvider(
     circuit_breaker_half_open_success_threshold?: number;
     proxy_url?: string | null;
     proxy_fallback_to_direct?: boolean;
+    forward_client_real_ip?: boolean;
     first_byte_timeout_streaming_ms?: number;
     streaming_idle_timeout_ms?: number;
     request_timeout_non_streaming_ms?: number;

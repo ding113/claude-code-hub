@@ -770,6 +770,10 @@
             "label": "代理失败时降级到直连",
             "desc": "启用后，代理连接失败时自动尝试直接连接供应商"
           },
+          "forwardClientIp": {
+            "label": "转发用户真实 IP",
+            "desc": "启用后，将用户客户端的真实 IP（x-forwarded-for、x-real-ip、cf-connecting-ip 等）发送给上游供应商。默认关闭以保护隐私"
+          },
           "test": {
             "label": "连接测试",
             "desc": "测试通过配置的代理访问供应商 URL（使用 HEAD 请求，不消耗额度）"

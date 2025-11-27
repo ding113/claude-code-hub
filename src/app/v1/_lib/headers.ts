@@ -10,6 +10,8 @@ export interface HeaderProcessorConfig {
   overrides?: Record<string, string>;
   /** 是否保留原始 authorization（默认 false） */
   preserveAuthorization?: boolean;
+  /** 是否保留转发相关的 IP 头（x-forwarded-for, x-real-ip 等，默认 false） */
+  preserveForwardingHeaders?: boolean;
 }
 
 /**
@@ -22,12 +24,9 @@ export class HeaderProcessor {
   constructor(config: HeaderProcessorConfig = {}) {
     // 初始化黑名单（默认包含代理相关的 headers）
     // 目的：保护客户端隐私，避免真实 IP 和来源信息泄露给上游供应商
-    const defaultBlacklist = [
+    const forwardingHeaders = [
       // 标准代理转发头
       "x-forwarded-for", // 客户端真实 IP 链
-      "x-forwarded-host", // 原始请求 Host
-      "x-forwarded-port", // 原始请求端口
-      "x-forwarded-proto", // 原始请求协议 (http/https)
       "forwarded", // RFC 7239 标准转发头
 
       // 真实 IP 相关
@@ -50,6 +49,13 @@ export class HeaderProcessor {
       "x-azure-ref", // Azure 请求追踪
       "akamai-origin-hop", // Akamai
       "x-akamai-config-log-detail", // Akamai 配置日志
+    ];
+
+    const defaultBlacklist = [
+      // 标准代理转发头（非 IP 部分）
+      "x-forwarded-host", // 原始请求 Host
+      "x-forwarded-port", // 原始请求端口
+      "x-forwarded-proto", // 原始请求协议 (http/https)
 
       // 请求追踪和关联头
       "x-request-id", // 请求追踪 ID
@@ -63,6 +69,10 @@ export class HeaderProcessor {
       "traceparent", // W3C Trace Context
       "tracestate", // W3C Trace Context 状态
     ];
+
+    if (!config.preserveForwardingHeaders) {
+      defaultBlacklist.push(...forwardingHeaders);
+    }
 
     // 如果不保留 authorization，添加到黑名单
     if (!config.preserveAuthorization) {

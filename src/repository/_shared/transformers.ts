@@ -62,6 +62,7 @@ export function toProvider(dbProvider: any): Provider {
     circuitBreakerHalfOpenSuccessThreshold: dbProvider?.circuitBreakerHalfOpenSuccessThreshold ?? 2,
     proxyUrl: dbProvider?.proxyUrl ?? null,
     proxyFallbackToDirect: dbProvider?.proxyFallbackToDirect ?? false,
+    forwardClientRealIp: dbProvider?.forwardClientRealIp ?? false,
     firstByteTimeoutStreamingMs: dbProvider?.firstByteTimeoutStreamingMs ?? 30000,
     streamingIdleTimeoutMs: dbProvider?.streamingIdleTimeoutMs ?? 10000,
     requestTimeoutNonStreamingMs: dbProvider?.requestTimeoutNonStreamingMs ?? 600000,

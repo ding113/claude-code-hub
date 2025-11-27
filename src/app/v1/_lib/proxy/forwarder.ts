@@ -1310,6 +1310,7 @@ export class ProxyForwarder {
     const headerProcessor = HeaderProcessor.createForProxy({
       blacklist: ["content-length"], // 删除原始 Content-Length，让 fetch 自动计算（转换请求后长度变化）
       overrides,
+      preserveForwardingHeaders: provider.forwardClientRealIp, // 根据供应商配置决定是否保留用户真实 IP
     });
 
     return headerProcessor.process(session.headers);

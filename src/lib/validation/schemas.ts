@@ -281,6 +281,8 @@ export const CreateProviderSchema = z.object({
   // 代理配置
   proxy_url: z.string().max(512, "代理地址长度不能超过512个字符").nullable().optional(),
   proxy_fallback_to_direct: z.boolean().optional().default(false),
+  // 转发用户真实 IP
+  forward_client_real_ip: z.boolean().optional().default(false),
   // 超时配置（毫秒）
   // 注意：0 表示禁用超时（Infinity）
   first_byte_timeout_streaming_ms: z
@@ -461,6 +463,8 @@ export const UpdateProviderSchema = z
     // 代理配置
     proxy_url: z.string().max(512, "代理地址长度不能超过512个字符").nullable().optional(),
     proxy_fallback_to_direct: z.boolean().optional(),
+    // 转发用户真实 IP
+    forward_client_real_ip: z.boolean().optional(),
     // 超时配置（毫秒）
     // 注意：0 表示禁用超时（Infinity）
     first_byte_timeout_streaming_ms: z

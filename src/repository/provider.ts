@@ -42,6 +42,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
       providerData.circuit_breaker_half_open_success_threshold ?? 2,
     proxyUrl: providerData.proxy_url ?? null,
     proxyFallbackToDirect: providerData.proxy_fallback_to_direct ?? false,
+    forwardClientRealIp: providerData.forward_client_real_ip ?? false,
     firstByteTimeoutStreamingMs: providerData.first_byte_timeout_streaming_ms ?? 30000,
     streamingIdleTimeoutMs: providerData.streaming_idle_timeout_ms ?? 10000,
     requestTimeoutNonStreamingMs: providerData.request_timeout_non_streaming_ms ?? 600000,
@@ -82,6 +83,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     circuitBreakerHalfOpenSuccessThreshold: providers.circuitBreakerHalfOpenSuccessThreshold,
     proxyUrl: providers.proxyUrl,
     proxyFallbackToDirect: providers.proxyFallbackToDirect,
+    forwardClientRealIp: providers.forwardClientRealIp,
     firstByteTimeoutStreamingMs: providers.firstByteTimeoutStreamingMs,
     streamingIdleTimeoutMs: providers.streamingIdleTimeoutMs,
     requestTimeoutNonStreamingMs: providers.requestTimeoutNonStreamingMs,
@@ -133,6 +135,7 @@ export async function findProviderList(
       circuitBreakerHalfOpenSuccessThreshold: providers.circuitBreakerHalfOpenSuccessThreshold,
       proxyUrl: providers.proxyUrl,
       proxyFallbackToDirect: providers.proxyFallbackToDirect,
+      forwardClientRealIp: providers.forwardClientRealIp,
       firstByteTimeoutStreamingMs: providers.firstByteTimeoutStreamingMs,
       streamingIdleTimeoutMs: providers.streamingIdleTimeoutMs,
       requestTimeoutNonStreamingMs: providers.requestTimeoutNonStreamingMs,
@@ -191,6 +194,7 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       circuitBreakerHalfOpenSuccessThreshold: providers.circuitBreakerHalfOpenSuccessThreshold,
       proxyUrl: providers.proxyUrl,
       proxyFallbackToDirect: providers.proxyFallbackToDirect,
+      forwardClientRealIp: providers.forwardClientRealIp,
       firstByteTimeoutStreamingMs: providers.firstByteTimeoutStreamingMs,
       streamingIdleTimeoutMs: providers.streamingIdleTimeoutMs,
       requestTimeoutNonStreamingMs: providers.requestTimeoutNonStreamingMs,
@@ -273,6 +277,8 @@ export async function updateProvider(
   if (providerData.proxy_url !== undefined) dbData.proxyUrl = providerData.proxy_url;
   if (providerData.proxy_fallback_to_direct !== undefined)
     dbData.proxyFallbackToDirect = providerData.proxy_fallback_to_direct;
+  if (providerData.forward_client_real_ip !== undefined)
+    dbData.forwardClientRealIp = providerData.forward_client_real_ip;
   if (providerData.first_byte_timeout_streaming_ms !== undefined)
     dbData.firstByteTimeoutStreamingMs = providerData.first_byte_timeout_streaming_ms;
   if (providerData.streaming_idle_timeout_ms !== undefined)
@@ -319,6 +325,7 @@ export async function updateProvider(
       circuitBreakerHalfOpenSuccessThreshold: providers.circuitBreakerHalfOpenSuccessThreshold,
       proxyUrl: providers.proxyUrl,
       proxyFallbackToDirect: providers.proxyFallbackToDirect,
+      forwardClientRealIp: providers.forwardClientRealIp,
       firstByteTimeoutStreamingMs: providers.firstByteTimeoutStreamingMs,
       streamingIdleTimeoutMs: providers.streamingIdleTimeoutMs,
       requestTimeoutNonStreamingMs: providers.requestTimeoutNonStreamingMs,

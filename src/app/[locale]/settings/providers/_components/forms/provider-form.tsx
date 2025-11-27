@@ -139,6 +139,11 @@ export function ProviderForm({
     sourceProvider?.proxyFallbackToDirect ?? false
   );
 
+  // 转发用户真实 IP
+  const [forwardClientRealIp, setForwardClientRealIp] = useState<boolean>(
+    sourceProvider?.forwardClientRealIp ?? false
+  );
+
   // 超时配置（以秒为单位显示，提交时转换为毫秒）
   // ⚠️ 严格检查 null/undefined 并验证数值有效性，避免产生 NaN
   const [firstByteTimeoutStreamingSeconds, setFirstByteTimeoutStreamingSeconds] = useState<
@@ -304,6 +309,7 @@ export function ProviderForm({
             circuit_breaker_half_open_success_threshold?: number;
             proxy_url?: string | null;
             proxy_fallback_to_direct?: boolean;
+            forward_client_real_ip?: boolean;
             first_byte_timeout_streaming_ms?: number;
             streaming_idle_timeout_ms?: number;
             request_timeout_non_streaming_ms?: number;
@@ -340,6 +346,7 @@ export function ProviderForm({
             circuit_breaker_half_open_success_threshold: halfOpenSuccessThreshold ?? 2,
             proxy_url: proxyUrl.trim() || null,
             proxy_fallback_to_direct: proxyFallbackToDirect,
+            forward_client_real_ip: forwardClientRealIp,
             // ⭐ 编辑模式：undefined 代表不更新(沿用数据库旧值),不能回退到默认值
             first_byte_timeout_streaming_ms:
               firstByteTimeoutStreamingSeconds != null
@@ -397,6 +404,7 @@ export function ProviderForm({
             circuit_breaker_half_open_success_threshold: halfOpenSuccessThreshold ?? 2,
             proxy_url: proxyUrl.trim() || null,
             proxy_fallback_to_direct: proxyFallbackToDirect,
+            forward_client_real_ip: forwardClientRealIp,
             first_byte_timeout_streaming_ms:
               firstByteTimeoutStreamingSeconds != null
                 ? firstByteTimeoutStreamingSeconds * 1000
@@ -449,6 +457,7 @@ export function ProviderForm({
           setHalfOpenSuccessThreshold(2);
           setProxyUrl("");
           setProxyFallbackToDirect(false);
+          setForwardClientRealIp(false);
           setFirstByteTimeoutStreamingSeconds(
             PROVIDER_TIMEOUT_DEFAULTS.FIRST_BYTE_TIMEOUT_STREAMING_MS / 1000
           );
@@ -1353,6 +1362,26 @@ export function ProviderForm({
                     id={isEdit ? "edit-proxy-fallback" : "proxy-fallback"}
                     checked={proxyFallbackToDirect}
                     onCheckedChange={setProxyFallbackToDirect}
+                    disabled={isPending}
+                  />
+                </div>
+              </div>
+
+              {/* 转发用户真实 IP 开关 */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor={isEdit ? "edit-forward-client-ip" : "forward-client-ip"}>
+                      {t("sections.proxy.forwardClientIp.label")}
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      {t("sections.proxy.forwardClientIp.desc")}
+                    </p>
+                  </div>
+                  <Switch
+                    id={isEdit ? "edit-forward-client-ip" : "forward-client-ip"}
+                    checked={forwardClientRealIp}
+                    onCheckedChange={setForwardClientRealIp}
                     disabled={isPending}
                   />
                 </div>

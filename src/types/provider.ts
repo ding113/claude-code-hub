@@ -75,6 +75,9 @@ export interface Provider {
   proxyUrl: string | null;
   proxyFallbackToDirect: boolean;
 
+  // 转发用户真实 IP：控制是否将用户客户端的真实 IP 发送给上游供应商
+  forwardClientRealIp: boolean;
+
   // 超时配置（毫秒）
   firstByteTimeoutStreamingMs: number;
   streamingIdleTimeoutMs: number;
@@ -139,6 +142,8 @@ export interface ProviderDisplay {
   // 代理配置
   proxyUrl: string | null;
   proxyFallbackToDirect: boolean;
+  // 转发用户真实 IP：控制是否将用户客户端的真实 IP 发送给上游供应商
+  forwardClientRealIp: boolean;
   // 超时配置（毫秒）
   firstByteTimeoutStreamingMs: number;
   streamingIdleTimeoutMs: number;
@@ -201,6 +206,9 @@ export interface CreateProviderData {
   proxy_url?: string | null;
   proxy_fallback_to_direct?: boolean;
 
+  // 转发用户真实 IP
+  forward_client_real_ip?: boolean;
+
   // 超时配置（毫秒）
   first_byte_timeout_streaming_ms?: number;
   streaming_idle_timeout_ms?: number;
@@ -261,6 +269,9 @@ export interface UpdateProviderData {
   // 代理配置（支持 HTTP/HTTPS/SOCKS5）
   proxy_url?: string | null;
   proxy_fallback_to_direct?: boolean;
+
+  // 转发用户真实 IP
+  forward_client_real_ip?: boolean;
 
   // 超时配置（毫秒）
   first_byte_timeout_streaming_ms?: number;
