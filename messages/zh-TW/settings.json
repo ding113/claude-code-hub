@@ -622,6 +622,18 @@
         "close": "關閉",
         "success": "成功",
         "failed": "失敗",
+        "streamInfo": "串流響應資訊",
+        "chunksReceived": "已接收區塊",
+        "streamFormat": "串流格式",
+        "streamResponse": "串流響應",
+        "chunksCount": "已接收 {count} 個區塊（{format}）",
+        "truncatedPreview": "顯示前 {length} 個字元，複製可查看完整內容",
+        "truncatedBrief": "顯示前 {length} 個字元，點擊「查看詳情」以查看更多",
+        "copyFormat": {
+          "testResult": "測試結果",
+          "message": "訊息",
+          "errorDetails": "錯誤詳情"
+        },
         "disclaimer": {
           "title": "注意",
           "resultReference": "【重要】因各家供應商情況不同，測試結果僅供參考，不代表實際呼叫效果",
