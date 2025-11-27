@@ -263,9 +263,9 @@ export function aggregateResponseText(body: string, contentType?: string): strin
 
     // Anthropic format: {"content":[{"type":"text","text":"..."}]}
     if (obj.content && Array.isArray(obj.content)) {
-      const texts = (obj.content as Array<{type?: string; text?: string}>)
-        .filter(c => c.type === "text" && c.text)
-        .map(c => c.text || "");
+      const texts = (obj.content as Array<{ type?: string; text?: string }>)
+        .filter((c) => c.type === "text" && c.text)
+        .map((c) => c.text || "");
       if (texts.length > 0) {
         return texts.join("");
       }
@@ -273,8 +273,8 @@ export function aggregateResponseText(body: string, contentType?: string): strin
 
     // OpenAI format: {"choices":[{"message":{"content":"..."}}]}
     if (obj.choices && Array.isArray(obj.choices)) {
-      const texts = (obj.choices as Array<{message?: {content?: string}; text?: string}>)
-        .map(c => c.message?.content || c.text || "")
+      const texts = (obj.choices as Array<{ message?: { content?: string }; text?: string }>)
+        .map((c) => c.message?.content || c.text || "")
         .filter(Boolean);
       if (texts.length > 0) {
         return texts.join("");
@@ -283,8 +283,9 @@ export function aggregateResponseText(body: string, contentType?: string): strin
 
     // Codex Response API format: {"output":[{"content":[{"text":"..."}]}]}
     if (obj.output && Array.isArray(obj.output)) {
-      const texts = (obj.output as Array<{content?: Array<{text?: string}>}>)
-        .flatMap(o => o.content?.map(c => c.text || "").filter(Boolean) || []);
+      const texts = (obj.output as Array<{ content?: Array<{ text?: string }> }>).flatMap(
+        (o) => o.content?.map((c) => c.text || "").filter(Boolean) || []
+      );
       if (texts.length > 0) {
         return texts.join("");
       }
@@ -292,8 +293,9 @@ export function aggregateResponseText(body: string, contentType?: string): strin
 
     // Gemini format: {"candidates":[{"content":{"parts":[{"text":"..."}]}}]}
     if (obj.candidates && Array.isArray(obj.candidates)) {
-      const texts = (obj.candidates as Array<{content?: {parts?: Array<{text?: string}>}}>)
-        .flatMap(c => c.content?.parts?.map(p => p.text || "").filter(Boolean) || []);
+      const texts = (
+        obj.candidates as Array<{ content?: { parts?: Array<{ text?: string }> } }>
+      ).flatMap((c) => c.content?.parts?.map((p) => p.text || "").filter(Boolean) || []);
       if (texts.length > 0) {
         return texts.join("");
       }
@@ -306,7 +308,7 @@ export function aggregateResponseText(body: string, contentType?: string): strin
 
     // Error message extraction
     if (obj.error && typeof obj.error === "object") {
-      const error = obj.error as {message?: string};
+      const error = obj.error as { message?: string };
       if (error.message) return error.message;
     }
   } catch {
