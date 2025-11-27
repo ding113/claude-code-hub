@@ -8,6 +8,12 @@ import type { Provider, CreateProviderData, UpdateProviderData } from "@/types/p
 import { toProvider } from "./_shared/transformers";
 import { getEnvConfig } from "@/lib/config";
 
+/**
+ * Create a new provider record and persist it to the database.
+ *
+ * @param providerData - Values used to populate the new provider record
+ * @returns The created Provider object including generated id and timestamps
+ */
 export async function createProvider(providerData: CreateProviderData): Promise<Provider> {
   const dbData = {
     name: providerData.name,
@@ -101,6 +107,13 @@ export async function createProvider(providerData: CreateProviderData): Promise<
   return toProvider(provider);
 }
 
+/**
+ * Retrieve a paginated list of providers that are not deleted, ordered by creation time descending.
+ *
+ * @param limit - Maximum number of providers to return
+ * @param offset - Number of providers to skip before starting to collect the result set
+ * @returns An array of Provider objects (most recently created first); providers with `deletedAt` set are excluded
+ */
 export async function findProviderList(
   limit: number = 50,
   offset: number = 0
@@ -163,6 +176,12 @@ export async function findProviderList(
   return result.map(toProvider);
 }
 
+/**
+ * Retrieve a provider by its numeric ID, excluding providers that have been soft-deleted.
+ *
+ * @param id - The provider's numeric identifier
+ * @returns The matching `Provider` mapped from the database, or `null` if no active provider was found
+ */
 export async function findProviderById(id: number): Promise<Provider | null> {
   const [provider] = await db
     .select({
@@ -215,6 +234,13 @@ export async function findProviderById(id: number): Promise<Provider | null> {
   return toProvider(provider);
 }
 
+/**
+ * Apply partial updates to a provider record and return the updated Provider.
+ *
+ * If `providerData` has no keys, the existing provider is returned unchanged. Only fields present on `providerData` are applied; `updatedAt` is set to the current timestamp. If the provider does not exist or has been soft-deleted, the function returns `null`.
+ *
+ * @returns The updated `Provider`, or `null` if the provider does not exist or is deleted.
+ */
 export async function updateProvider(
   id: number,
   providerData: UpdateProviderData
