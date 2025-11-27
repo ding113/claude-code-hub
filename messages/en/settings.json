@@ -1209,7 +1209,7 @@
           "desc": "Control how user privacy information is forwarded",
           "forwardClientIp": {
             "label": "Forward client real IP",
-            "desc": "When enabled, preserves and forwards the client's real IP (x-forwarded-for, x-real-ip, cf-connecting-ip, etc.) to upstream providers. Enable only when the upstream explicitly requires the real IP. Disabled by default to protect privacy",
+            "desc": "When enabled, preserves and forwards the client's real IP (x-forwarded-for, x-real-ip, cf-connecting-ip, etc.) to upstream providers. Enable only when the upstream explicitly requires the real IP. Disabled by default to protect privacy. Note: This feature only forwards HTTP Headers containing client IP, it cannot change the TCP connection's source IP. The TCP source IP will always be this server's IP unless using SOCKS5/HTTP proxy (see provider \"Proxy Configuration\")",
             "warning": "Privacy Warning"
           }
         },
