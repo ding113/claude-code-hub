@@ -58,4 +58,5 @@ export {
   parseSSEStream,
   isSSEResponse,
   parseNDJSONStream,
+  aggregateResponseText,
 } from "./utils";

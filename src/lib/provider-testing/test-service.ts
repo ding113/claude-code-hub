@@ -19,6 +19,7 @@ import { TEST_DEFAULTS } from "./types";
 import { classifyHttpStatus } from "./validators/http-validator";
 import { evaluateContentValidation } from "./validators/content-validator";
 import { parseResponse } from "./parsers";
+import { aggregateResponseText } from "./utils/sse-collector";
 import {
   getTestBody,
   getTestHeaders,
@@ -102,14 +103,19 @@ export async function executeProviderTest(config: ProviderTestConfig): Promise<P
     // Tier 1: HTTP Status validation
     const httpResult = classifyHttpStatus(response.status, latencyMs, slowThresholdMs);
 
-    // Parse response content
+    // Parse response content for metadata extraction (model, usage, etc.)
     const parsedResponse = parseResponse(config.providerType, responseBody, contentType);
 
+    // Use aggregateResponseText for content validation (relay-pulse pattern)
+    // This provides fallback mechanisms: SSE -> JSON -> raw body
+    const aggregatedContent = aggregateResponseText(responseBody, contentType);
+
     // Tier 2 & 3: Content validation (only if HTTP passed)
+    // Use aggregated content which has better fallback handling
     const contentResult = evaluateContentValidation(
       httpResult.status,
       httpResult.subStatus,
-      parsedResponse.content,
+      aggregatedContent,
       successContains
     );
 
@@ -124,6 +130,10 @@ export async function executeProviderTest(config: ProviderTestConfig): Promise<P
     };
 
     // Build result
+    // Use aggregatedContent for display (shows what was actually validated)
+    // Fall back to parsedResponse.content if aggregatedContent is empty
+    const displayContent = aggregatedContent || parsedResponse.content;
+
     return {
       success: contentResult.status !== "red",
       status: contentResult.status,
@@ -133,7 +143,7 @@ export async function executeProviderTest(config: ProviderTestConfig): Promise<P
       httpStatusCode: response.status,
       httpStatusText: response.statusText,
       model: parsedResponse.model,
-      content: parsedResponse.content.slice(0, 500), // Truncate for safety
+      content: displayContent.slice(0, 500), // Truncate for safety
       usage: parsedResponse.usage,
       streamInfo: parsedResponse.isStreaming
         ? {
