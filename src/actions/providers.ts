@@ -35,7 +35,7 @@ import {
   type TestStatus,
   type TestSubStatus,
 } from "@/lib/provider-testing";
-import { getPresetsForProvider, type PresetConfig } from "@/lib/provider-testing/presets";
+import { getPresetsForProvider } from "@/lib/provider-testing/presets";
 
 const API_TEST_TIMEOUT_LIMITS = {
   DEFAULT: 15000,
