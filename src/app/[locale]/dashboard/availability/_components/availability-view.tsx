@@ -206,13 +206,25 @@ export function AvailabilityView() {
 
   const getStatusBadge = (status: string) => {
     const statusKey = status as "green" | "red" | "unknown";
-    const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-      green: "default",
-      red: "destructive",
-      unknown: "outline",
+
+    // 采用与请求日志相同的配色方案
+    const getStatusClassName = () => {
+      switch (status) {
+        case "green":
+          // 成功 - 绿色
+          return "bg-green-100 text-green-700 border-green-300 dark:bg-green-900/30 dark:text-green-400 dark:border-green-700";
+        case "red":
+          // 错误 - 红色
+          return "bg-red-100 text-red-700 border-red-300 dark:bg-red-900/30 dark:text-red-400 dark:border-red-700";
+        case "unknown":
+        default:
+          // 未知 - 灰色
+          return "bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600";
+      }
     };
+
     return (
-      <Badge variant={variants[status] || "outline"} className="gap-1">
+      <Badge variant="outline" className={`gap-1 ${getStatusClassName()}`}>
         {getStatusIcon(status)}
         {t(`status.${statusKey}`)}
       </Badge>
