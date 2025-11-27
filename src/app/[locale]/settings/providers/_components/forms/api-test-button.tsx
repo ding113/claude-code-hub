@@ -127,12 +127,15 @@ export function ApiTestButton({
   }, [apiFormat, isApiFormatManuallySelected, providerType]);
 
   // Map API format to provider type (defined before useEffect that depends on it)
-  const apiFormatToProviderType: Record<ApiFormat, ProviderType> = useMemo(() => ({
-    "anthropic-messages": providerType === "claude-auth" ? "claude-auth" : "claude",
-    "openai-chat": "openai-compatible",
-    "openai-responses": "codex",
-    gemini: providerType === "gemini-cli" ? "gemini-cli" : "gemini",
-  }), [providerType]);
+  const apiFormatToProviderType: Record<ApiFormat, ProviderType> = useMemo(
+    () => ({
+      "anthropic-messages": providerType === "claude-auth" ? "claude-auth" : "claude",
+      "openai-chat": "openai-compatible",
+      "openai-responses": "codex",
+      gemini: providerType === "gemini-cli" ? "gemini-cli" : "gemini",
+    }),
+    [providerType]
+  );
 
   // Load presets when provider type changes
   useEffect(() => {
@@ -396,9 +399,7 @@ export function ApiTestButton({
                   ))}
                 </SelectContent>
               </Select>
-              <div className="text-xs text-muted-foreground">
-                {t("presetDesc")}
-              </div>
+              <div className="text-xs text-muted-foreground">{t("presetDesc")}</div>
             </div>
           )}
 
@@ -411,9 +412,7 @@ export function ApiTestButton({
                 className="font-mono text-xs min-h-[120px]"
                 disabled={isTesting}
               />
-              <div className="text-xs text-muted-foreground">
-                {t("customPayloadDesc")}
-              </div>
+              <div className="text-xs text-muted-foreground">{t("customPayloadDesc")}</div>
             </div>
           )}
         </div>
@@ -429,9 +428,7 @@ export function ApiTestButton({
           placeholder={t("successContainsPlaceholder")}
           disabled={isTesting}
         />
-        <div className="text-xs text-muted-foreground">
-          {t("successContainsDesc")}
-        </div>
+        <div className="text-xs text-muted-foreground">{t("successContainsDesc")}</div>
       </div>
 
       {/* 免责声明 */}

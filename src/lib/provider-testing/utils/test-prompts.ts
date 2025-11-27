@@ -20,12 +20,12 @@ import type { ClaudeTestBody, CodexTestBody, OpenAITestBody, GeminiTestBody } fr
  * These are required to pass relay service client verification
  */
 export const USER_AGENTS: Record<ProviderType, string> = {
-  claude: 'claude-cli/2.0.50 (external, cli)',
-  'claude-auth': 'claude-cli/2.0.50 (external, cli)',
-  codex: 'codex_cli_rs/0.63.0',
-  'openai-compatible': 'OpenAI/NodeJS/3.2.1',
-  gemini: 'GeminiCLI/v0.17.1 (darwin; arm64)',
-  'gemini-cli': 'GeminiCLI/v0.17.1 (darwin; arm64)',
+  claude: "claude-cli/2.0.50 (external, cli)",
+  "claude-auth": "claude-cli/2.0.50 (external, cli)",
+  codex: "codex_cli_rs/0.63.0",
+  "openai-compatible": "OpenAI/NodeJS/3.2.1",
+  gemini: "GeminiCLI/v0.17.1 (darwin; arm64)",
+  "gemini-cli": "GeminiCLI/v0.17.1 (darwin; arm64)",
 };
 
 /**
@@ -33,10 +33,10 @@ export const USER_AGENTS: Record<ProviderType, string> = {
  * These headers mimic real CLI client behavior
  */
 export const BASE_HEADERS = {
-  Accept: 'application/json, text/event-stream',
-  'Accept-Language': 'en-US,en;q=0.9',
-  'Accept-Encoding': 'gzip, deflate, br',
-  Connection: 'keep-alive',
+  Accept: "application/json, text/event-stream",
+  "Accept-Language": "en-US,en;q=0.9",
+  "Accept-Encoding": "gzip, deflate, br",
+  Connection: "keep-alive",
 };
 
 // ============================================================================
@@ -238,14 +238,11 @@ export function getTestBody(providerType: ProviderType, model?: string): Record<
  * Get test headers for a specific provider type
  * Includes User-Agent and base headers for relay service authentication
  */
-export function getTestHeaders(
-  providerType: ProviderType,
-  apiKey: string
-): Record<string, string> {
+export function getTestHeaders(providerType: ProviderType, apiKey: string): Record<string, string> {
   // Start with base headers and User-Agent (critical for relay services)
   const baseHeaders = {
     ...BASE_HEADERS,
-    'User-Agent': USER_AGENTS[providerType],
+    "User-Agent": USER_AGENTS[providerType],
   };
 
   switch (providerType) {

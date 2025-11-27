@@ -35,10 +35,7 @@ import {
   type TestStatus,
   type TestSubStatus,
 } from "@/lib/provider-testing";
-import {
-  getPresetsForProvider,
-  type PresetConfig,
-} from "@/lib/provider-testing/presets";
+import { getPresetsForProvider, type PresetConfig } from "@/lib/provider-testing/presets";
 
 const API_TEST_TIMEOUT_LIMITS = {
   DEFAULT: 15000,
@@ -746,7 +743,10 @@ export async function getProviderLimitUsageBatch(
     const providerIds = providers.map((p) => p.id);
 
     // 构建日限额重置配置
-    const dailyResetConfigs = new Map<number, { resetTime?: string | null; resetMode?: string | null }>();
+    const dailyResetConfigs = new Map<
+      number,
+      { resetTime?: string | null; resetMode?: string | null }
+    >();
     for (const provider of providers) {
       dailyResetConfigs.set(provider.id, {
         resetTime: provider.dailyResetTime,
@@ -762,13 +762,22 @@ export async function getProviderLimitUsageBatch(
 
     // 组装结果
     for (const provider of providers) {
-      const costs = costMap.get(provider.id) || { cost5h: 0, costDaily: 0, costWeekly: 0, costMonthly: 0 };
+      const costs = costMap.get(provider.id) || {
+        cost5h: 0,
+        costDaily: 0,
+        costWeekly: 0,
+        costMonthly: 0,
+      };
       const sessionCount = sessionCountMap.get(provider.id) || 0;
 
       // 获取重置时间信息
       const reset5h = getResetInfo("5h");
       const dailyResetMode = (provider.dailyResetMode ?? "fixed") as "fixed" | "rolling";
-      const resetDaily = getResetInfoWithMode("daily", provider.dailyResetTime ?? undefined, dailyResetMode);
+      const resetDaily = getResetInfoWithMode(
+        "daily",
+        provider.dailyResetTime ?? undefined,
+        dailyResetMode
+      );
       const resetWeekly = getResetInfo("weekly");
       const resetMonthly = getResetInfo("monthly");
 

@@ -24,8 +24,8 @@ import {
   getTestHeaders,
   getTestUrl,
   DEFAULT_SUCCESS_CONTAINS,
-} from './utils/test-prompts';
-import { getPresetPayload, getPreset } from './presets';
+} from "./utils/test-prompts";
+import { getPresetPayload, getPreset } from "./presets";
 
 /**
  * Execute a provider test with three-tier validation
@@ -36,8 +36,7 @@ export async function executeProviderTest(config: ProviderTestConfig): Promise<P
 
   // Build test configuration with defaults
   const timeoutMs = config.timeoutMs ?? TEST_DEFAULTS.TIMEOUT_MS;
-  const slowThresholdMs =
-    config.latencyThresholdMs ?? TEST_DEFAULTS.SLOW_LATENCY_MS;
+  const slowThresholdMs = config.latencyThresholdMs ?? TEST_DEFAULTS.SLOW_LATENCY_MS;
 
   // Determine success validation string (priority: config > preset > default)
   let successContains = config.successContains;
@@ -65,7 +64,7 @@ export async function executeProviderTest(config: ProviderTestConfig): Promise<P
     try {
       body = JSON.parse(config.customPayload);
     } catch {
-      throw new Error('Invalid custom payload JSON');
+      throw new Error("Invalid custom payload JSON");
     }
   } else if (config.preset) {
     // Use preset configuration
@@ -77,9 +76,7 @@ export async function executeProviderTest(config: ProviderTestConfig): Promise<P
 
   // Build request headers (merge custom headers if provided)
   const baseHeaders = getTestHeaders(config.providerType, config.apiKey);
-  const headers = config.customHeaders
-    ? { ...baseHeaders, ...config.customHeaders }
-    : baseHeaders;
+  const headers = config.customHeaders ? { ...baseHeaders, ...config.customHeaders } : baseHeaders;
 
   try {
     // Create abort controller for timeout

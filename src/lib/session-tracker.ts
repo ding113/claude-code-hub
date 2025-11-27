@@ -398,7 +398,9 @@ export class SessionTracker {
         result.set(providerId, count);
       }
 
-      logger.debug(`SessionTracker: Batch session count completed for ${providerIds.length} providers`);
+      logger.debug(
+        `SessionTracker: Batch session count completed for ${providerIds.length} providers`
+      );
       return result;
     } catch (error) {
       logger.error("SessionTracker: Failed to get provider session count batch", { error });

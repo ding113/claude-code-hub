@@ -867,8 +867,13 @@ export class RateLimitService {
   static async getCurrentCostBatch(
     providerIds: number[],
     dailyResetConfigs: Map<number, { resetTime?: string | null; resetMode?: string | null }>
-  ): Promise<Map<number, { cost5h: number; costDaily: number; costWeekly: number; costMonthly: number }>> {
-    const result = new Map<number, { cost5h: number; costDaily: number; costWeekly: number; costMonthly: number }>();
+  ): Promise<
+    Map<number, { cost5h: number; costDaily: number; costWeekly: number; costMonthly: number }>
+  > {
+    const result = new Map<
+      number,
+      { cost5h: number; costDaily: number; costWeekly: number; costMonthly: number }
+    >();
 
     // 初始化结果（默认为 0）
     for (const providerId of providerIds) {
