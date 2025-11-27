@@ -370,6 +370,7 @@
     "dashboard": "ダッシュボード",
     "usageLogs": "使用ログ",
     "leaderboard": "ランキング",
+    "availability": "可用性監視",
     "quotasManagement": "クォータ管理",
     "userManagement": "ユーザー管理",
     "documentation": "ドキュメント",
@@ -645,5 +646,126 @@
     "delete": "ユーザーを削除",
     "editAriaLabel": "ユーザーを編集",
     "deleteAriaLabel": "ユーザーを削除"
+  },
+  "users": {
+    "title": "ユーザー管理",
+    "description": "{count} 人のユーザーを表示中",
+    "toolbar": {
+      "searchPlaceholder": "ユーザー名で検索...",
+      "groupFilter": "グループでフィルター",
+      "allGroups": "すべてのグループ"
+    }
+  },
+  "availability": {
+    "title": "プロバイダー可用性モニター",
+    "description": "プロバイダーの可用性とパフォーマンス指標をリアルタイムで監視",
+    "nav": "可用性モニター",
+    "status": {
+      "green": "正常",
+      "red": "異常",
+      "unknown": "不明"
+    },
+    "statusDescription": {
+      "green": "サービスは正常、リクエスト成功",
+      "red": "サービスが利用不可またはエラー",
+      "unknown": "データがありません"
+    },
+    "metrics": {
+      "systemAvailability": "システム可用性",
+      "totalRequests": "総リクエスト数",
+      "successRate": "成功率",
+      "avgLatency": "平均遅延",
+      "p50Latency": "P50 遅延",
+      "p95Latency": "P95 遅延",
+      "p99Latency": "P99 遅延",
+      "lastRequest": "最終リクエスト",
+      "requestCount": "リクエスト数"
+    },
+    "timeRange": {
+      "label": "時間範囲",
+      "last15min": "過去15分",
+      "last1h": "過去1時間",
+      "last6h": "過去6時間",
+      "last24h": "過去24時間",
+      "last7d": "過去7日間",
+      "custom": "カスタム"
+    },
+    "filters": {
+      "provider": "プロバイダー",
+      "allProviders": "すべてのプロバイダー",
+      "includeDisabled": "無効を含む"
+    },
+    "sort": {
+      "label": "並び替え",
+      "availability": "可用性",
+      "name": "名前",
+      "requests": "リクエスト数"
+    },
+    "columns": {
+      "provider": "プロバイダー",
+      "type": "タイプ",
+      "status": "ステータス",
+      "availability": "可用性",
+      "requests": "リクエスト",
+      "successRate": "成功率",
+      "avgLatency": "平均遅延",
+      "lastRequest": "最終リクエスト",
+      "actions": "操作"
+    },
+    "chart": {
+      "title": "可用性トレンド",
+      "description": "時間経過による可用性の変化",
+      "availabilityScore": "可用性スコア",
+      "requestVolume": "リクエスト量",
+      "latencyTrend": "遅延トレンド",
+      "noData": "データなし"
+    },
+    "details": {
+      "title": "プロバイダー詳細",
+      "overview": "概要",
+      "timeBuckets": "時間バケット",
+      "greenCount": "成功リクエスト",
+      "redCount": "失敗リクエスト"
+    },
+    "actions": {
+      "refresh": "更新",
+      "refreshing": "更新中...",
+      "autoRefresh": "自動更新",
+      "stopAutoRefresh": "自動更新を停止",
+      "viewDetails": "詳細を表示",
+      "testProvider": "プロバイダーをテスト"
+    },
+    "states": {
+      "loading": "読み込み中...",
+      "error": "読み込み失敗",
+      "noProviders": "プロバイダーなし",
+      "noData": "可用性データなし",
+      "fetchFailed": "可用性データの取得に失敗しました"
+    },
+    "legend": {
+      "green": "優秀 (可用性 95%+)",
+      "lime": "良好 (可用性 80-95%)",
+      "orange": "警告 (可用性 50-80%)",
+      "red": "異常 (可用性 <50%)",
+      "noData": "データなし"
+    },
+    "summary": {
+      "title": "可用性サマリー",
+      "healthyProviders": "正常なプロバイダー",
+      "unhealthyProviders": "異常なプロバイダー",
+      "unknownProviders": "データなし",
+      "totalProviders": "プロバイダー総数"
+    },
+    "heatmap": {
+      "bucketSize": "バケットサイズ",
+      "minutes": "分",
+      "requests": "リクエスト",
+      "noData": "データなし",
+      "noRequests": "リクエストなし"
+    },
+    "toast": {
+      "refreshSuccess": "可用性データを更新しました",
+      "refreshFailed": "更新に失敗しました。再試行してください"
+    }
   }
 }

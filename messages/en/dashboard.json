@@ -370,6 +370,7 @@
     "dashboard": "Dashboard",
     "usageLogs": "Usage Logs",
     "leaderboard": "Leaderboard",
+    "availability": "Availability",
     "quotasManagement": "Quota Management",
     "userManagement": "User Management",
     "documentation": "Documentation",
@@ -654,6 +655,118 @@
       "searchPlaceholder": "Search by username...",
       "groupFilter": "Filter by Group",
       "allGroups": "All Groups"
+    }
+  },
+  "availability": {
+    "title": "Provider Availability Monitor",
+    "description": "Real-time monitoring of provider availability and performance metrics",
+    "nav": "Availability Monitor",
+    "status": {
+      "green": "Healthy",
+      "red": "Unhealthy",
+      "unknown": "Unknown"
+    },
+    "statusDescription": {
+      "green": "Service is healthy, requests successful",
+      "red": "Service unavailable or error",
+      "unknown": "No data available"
+    },
+    "metrics": {
+      "systemAvailability": "System Availability",
+      "totalRequests": "Total Requests",
+      "successRate": "Success Rate",
+      "avgLatency": "Avg Latency",
+      "p50Latency": "P50 Latency",
+      "p95Latency": "P95 Latency",
+      "p99Latency": "P99 Latency",
+      "lastRequest": "Last Request",
+      "requestCount": "Request Count"
+    },
+    "timeRange": {
+      "label": "Time Range",
+      "last15min": "Last 15 minutes",
+      "last1h": "Last 1 hour",
+      "last6h": "Last 6 hours",
+      "last24h": "Last 24 hours",
+      "last7d": "Last 7 days",
+      "custom": "Custom"
+    },
+    "filters": {
+      "provider": "Provider",
+      "allProviders": "All Providers",
+      "includeDisabled": "Include Disabled"
+    },
+    "sort": {
+      "label": "Sort By",
+      "availability": "Availability",
+      "name": "Name",
+      "requests": "Requests"
+    },
+    "columns": {
+      "provider": "Provider",
+      "type": "Type",
+      "status": "Status",
+      "availability": "Availability",
+      "requests": "Requests",
+      "successRate": "Success Rate",
+      "avgLatency": "Avg Latency",
+      "lastRequest": "Last Request",
+      "actions": "Actions"
+    },
+    "chart": {
+      "title": "Availability Trend",
+      "description": "Availability changes over time periods",
+      "availabilityScore": "Availability Score",
+      "requestVolume": "Request Volume",
+      "latencyTrend": "Latency Trend",
+      "noData": "No Data"
+    },
+    "details": {
+      "title": "Provider Details",
+      "overview": "Overview",
+      "timeBuckets": "Time Buckets",
+      "greenCount": "Successful Requests",
+      "redCount": "Failed Requests"
+    },
+    "actions": {
+      "refresh": "Refresh",
+      "refreshing": "Refreshing...",
+      "autoRefresh": "Auto Refresh",
+      "stopAutoRefresh": "Stop Auto Refresh",
+      "viewDetails": "View Details",
+      "testProvider": "Test Provider"
+    },
+    "states": {
+      "loading": "Loading...",
+      "error": "Load Failed",
+      "noProviders": "No Providers",
+      "noData": "No availability data",
+      "fetchFailed": "Failed to fetch availability data"
+    },
+    "legend": {
+      "green": "Excellent (95%+ availability)",
+      "lime": "Good (80-95% availability)",
+      "orange": "Warning (50-80% availability)",
+      "red": "Unhealthy (<50% availability)",
+      "noData": "No Data"
+    },
+    "summary": {
+      "title": "Availability Summary",
+      "healthyProviders": "Healthy Providers",
+      "unhealthyProviders": "Unhealthy Providers",
+      "unknownProviders": "No Data",
+      "totalProviders": "Total Providers"
+    },
+    "heatmap": {
+      "bucketSize": "Bucket Size",
+      "minutes": "min",
+      "requests": "requests",
+      "noData": "No Data",
+      "noRequests": "No Requests"
+    },
+    "toast": {
+      "refreshSuccess": "Availability data refreshed",
+      "refreshFailed": "Refresh failed, please retry"
     }
   }
 }

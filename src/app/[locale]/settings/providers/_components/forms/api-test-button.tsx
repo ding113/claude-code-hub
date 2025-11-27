@@ -2,22 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Loader2, CheckCircle2, XCircle, Activity, Copy, ExternalLink } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, Activity, AlertTriangle } from "lucide-react";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
-import {
-  testProviderAnthropicMessages,
-  testProviderOpenAIChatCompletions,
-  testProviderOpenAIResponses,
-  testProviderGemini,
+  testProviderUnified,
   getUnmaskedProviderKey,
+  getProviderTestPresets,
+  type PresetConfigResponse,
 } from "@/actions/providers";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
@@ -30,8 +20,10 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { isValidUrl } from "@/lib/utils/validation";
 import type { ProviderType } from "@/types/provider";
+import { TestResultCard, type UnifiedTestResultData } from "./test-result-card";
 
 type ApiFormat = "anthropic-messages" | "openai-chat" | "openai-responses" | "gemini";
 
@@ -117,22 +109,14 @@ export function ApiTestButton({
     return whitelistDefault ?? getDefaultModelForFormat(initialApiFormat);
   });
   const [isModelManuallyEdited, setIsModelManuallyEdited] = useState(false);
-  const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
-  const [testResult, setTestResult] = useState<{
-    success: boolean;
-    message: string;
-    details?: {
-      responseTime?: number;
-      model?: string;
-      usage?: Record<string, unknown> | string | number;
-      content?: string;
-      error?: string;
-      streamInfo?: {
-        chunksReceived: number;
-        format: "sse" | "ndjson";
-      };
-    };
-  } | null>(null);
+  const [testResult, setTestResult] = useState<UnifiedTestResultData | null>(null);
+
+  // Custom configuration state
+  const [configMode, setConfigMode] = useState<"preset" | "custom">("preset");
+  const [presets, setPresets] = useState<PresetConfigResponse[]>([]);
+  const [selectedPreset, setSelectedPreset] = useState<string>("");
+  const [customPayload, setCustomPayload] = useState("");
+  const [successContains, setSuccessContains] = useState("pong");
 
   useEffect(() => {
     if (isApiFormatManuallySelected) return;
@@ -141,6 +125,36 @@ export function ApiTestButton({
       setApiFormat(resolvedFormat);
     }
   }, [apiFormat, isApiFormatManuallySelected, providerType]);
+
+  // Map API format to provider type (defined before useEffect that depends on it)
+  const apiFormatToProviderType: Record<ApiFormat, ProviderType> = useMemo(
+    () => ({
+      "anthropic-messages": providerType === "claude-auth" ? "claude-auth" : "claude",
+      "openai-chat": "openai-compatible",
+      "openai-responses": "codex",
+      gemini: providerType === "gemini-cli" ? "gemini-cli" : "gemini",
+    }),
+    [providerType]
+  );
+
+  // Load presets when provider type changes
+  useEffect(() => {
+    const currentProviderType = apiFormatToProviderType[apiFormat];
+    if (!currentProviderType) return;
+
+    getProviderTestPresets(currentProviderType).then((result) => {
+      if (result.ok && result.data) {
+        setPresets(result.data);
+        // Auto-select first preset if available
+        if (result.data.length > 0 && !selectedPreset) {
+          setSelectedPreset(result.data[0].id);
+          setSuccessContains(result.data[0].defaultSuccessContains);
+        }
+      } else {
+        setPresets([]);
+      }
+    });
+  }, [apiFormat, apiFormatToProviderType]);
 
   useEffect(() => {
     if (isModelManuallyEdited) {
@@ -191,49 +205,19 @@ export function ApiTestButton({
         return;
       }
 
-      let response;
-
-      switch (apiFormat) {
-        case "anthropic-messages":
-          response = await testProviderAnthropicMessages({
-            providerUrl: providerUrl.trim(),
-            apiKey: resolvedKey,
-            model: testModel.trim() || undefined,
-            proxyUrl: proxyUrl?.trim() || null,
-            proxyFallbackToDirect,
-          });
-          break;
-
-        case "openai-chat":
-          response = await testProviderOpenAIChatCompletions({
-            providerUrl: providerUrl.trim(),
-            apiKey: resolvedKey,
-            model: testModel.trim() || undefined,
-            proxyUrl: proxyUrl?.trim() || null,
-            proxyFallbackToDirect,
-          });
-          break;
-
-        case "openai-responses":
-          response = await testProviderOpenAIResponses({
-            providerUrl: providerUrl.trim(),
-            apiKey: resolvedKey,
-            model: testModel.trim() || undefined,
-            proxyUrl: proxyUrl?.trim() || null,
-            proxyFallbackToDirect,
-          });
-          break;
-
-        case "gemini":
-          response = await testProviderGemini({
-            providerUrl: providerUrl.trim(),
-            apiKey: resolvedKey,
-            model: testModel.trim() || undefined,
-            proxyUrl: proxyUrl?.trim() || null,
-            proxyFallbackToDirect,
-          });
-          break;
-      }
+      // Use unified testing service
+      const response = await testProviderUnified({
+        providerUrl: providerUrl.trim(),
+        apiKey: resolvedKey,
+        providerType: apiFormatToProviderType[apiFormat],
+        model: testModel.trim() || undefined,
+        proxyUrl: proxyUrl?.trim() || null,
+        proxyFallbackToDirect,
+        // Custom configuration
+        preset: configMode === "preset" && selectedPreset ? selectedPreset : undefined,
+        customPayload: configMode === "custom" && customPayload ? customPayload : undefined,
+        successContains: successContains || undefined,
+      });
 
       if (!response.ok) {
         toast.error(response.error || t("testFailed"));
@@ -247,21 +231,26 @@ export function ApiTestButton({
 
       setTestResult(response.data);
 
-      // 显示测试结果
-      if (response.data.success) {
-        const details = response.data.details;
-        const responseTime = details?.responseTime ? `${details.responseTime}ms` : "N/A";
-        const model = details?.model || t("unknown");
+      // 显示测试结果 toast
+      const statusLabels = {
+        green: t("testSuccess"),
+        yellow: t("resultCard.status.yellow"),
+        red: t("testFailed"),
+      };
 
-        toast.success(t("testSuccess"), {
-          description: `${t("responseModel")}: ${model} | ${t("responseTime")}: ${responseTime}`,
+      if (response.data.status === "green") {
+        toast.success(statusLabels.green, {
+          description: `${t("responseModel")}: ${response.data.model || t("unknown")} | ${t("responseTime")}: ${response.data.latencyMs}ms`,
+          duration: API_TEST_UI_CONFIG.TOAST_SUCCESS_DURATION,
+        });
+      } else if (response.data.status === "yellow") {
+        toast.warning(statusLabels.yellow, {
+          description: response.data.message,
           duration: API_TEST_UI_CONFIG.TOAST_SUCCESS_DURATION,
         });
       } else {
-        const errorMessage = response.data.details?.error || response.data.message;
-
-        toast.error(t("testFailed"), {
-          description: errorMessage,
+        toast.error(statusLabels.red, {
+          description: response.data.errorMessage || response.data.message,
           duration: API_TEST_UI_CONFIG.TOAST_ERROR_DURATION,
         });
       }
@@ -285,11 +274,18 @@ export function ApiTestButton({
     }
 
     if (testResult) {
-      if (testResult.success) {
+      if (testResult.status === "green") {
         return (
           <>
             <CheckCircle2 className="h-4 w-4 mr-2 text-green-600" />
             {t("testSuccess")}
+          </>
+        );
+      } else if (testResult.status === "yellow") {
+        return (
+          <>
+            <AlertTriangle className="h-4 w-4 mr-2 text-yellow-600" />
+            {t("resultCard.status.yellow")}
           </>
         );
       } else {
@@ -310,43 +306,6 @@ export function ApiTestButton({
     );
   };
 
-  // 复制测试结果到剪贴板
-  const handleCopyResult = async () => {
-    if (!testResult) return;
-
-    const resultText = [
-      `${t("copyFormat.testResult")}: ${testResult.success ? t("success") : t("failed")}`,
-      `${t("copyFormat.message")}: ${testResult.message}`,
-      testResult.details?.model && `${t("responseModel")}: ${testResult.details.model}`,
-      testResult.details?.responseTime !== undefined &&
-        `${t("responseTime")}: ${testResult.details.responseTime}ms`,
-      testResult.details?.usage &&
-        `${t("usage")}: ${
-          typeof testResult.details.usage === "object"
-            ? JSON.stringify(testResult.details.usage, null, 2)
-            : String(testResult.details.usage)
-        }`,
-      testResult.details?.content &&
-        `${t("response")}: ${testResult.details.content.slice(0, API_TEST_UI_CONFIG.MAX_PREVIEW_LENGTH)}${
-          testResult.details.content.length > API_TEST_UI_CONFIG.MAX_PREVIEW_LENGTH ? "..." : ""
-        }`,
-      testResult.details?.streamInfo &&
-        `${t("streamResponse")}: ${t("chunksCount", { count: testResult.details.streamInfo.chunksReceived, format: testResult.details.streamInfo.format.toUpperCase() })}`,
-      testResult.details?.error && `${t("copyFormat.errorDetails")}: ${testResult.details.error}`,
-    ]
-      .filter(Boolean)
-      .join("\n");
-
-    try {
-      await navigator.clipboard.writeText(resultText);
-      toast.success(t("copySuccess"));
-    } catch (error) {
-      console.error("Copy failed:", error);
-      toast.error(t("copyFailed"));
-    }
-  };
-
-  // 获取默认模型占位符
   return (
     <div className="space-y-4">
       <div className="space-y-2">
@@ -392,6 +351,86 @@ export function ApiTestButton({
         <div className="text-xs text-muted-foreground">{t("testModelDesc")}</div>
       </div>
 
+      {/* Request Configuration - Preset/Custom */}
+      {presets.length > 0 && (
+        <div className="space-y-3">
+          <Label>{t("requestConfig")}</Label>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant={configMode === "preset" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setConfigMode("preset")}
+              disabled={isTesting}
+            >
+              {t("presetConfig")}
+            </Button>
+            <Button
+              type="button"
+              variant={configMode === "custom" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setConfigMode("custom")}
+              disabled={isTesting}
+            >
+              {t("customConfig")}
+            </Button>
+          </div>
+
+          {configMode === "preset" && (
+            <div className="space-y-2">
+              <Select
+                value={selectedPreset}
+                onValueChange={(value: string) => {
+                  setSelectedPreset(value);
+                  const preset = presets.find((p) => p.id === value);
+                  if (preset) {
+                    setSuccessContains(preset.defaultSuccessContains);
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t("selectPreset")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {presets.map((preset) => (
+                    <SelectItem key={preset.id} value={preset.id}>
+                      {preset.id} - {preset.description}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="text-xs text-muted-foreground">{t("presetDesc")}</div>
+            </div>
+          )}
+
+          {configMode === "custom" && (
+            <div className="space-y-2">
+              <Textarea
+                value={customPayload}
+                onChange={(e) => setCustomPayload(e.target.value)}
+                placeholder={t("customPayloadPlaceholder")}
+                className="font-mono text-xs min-h-[120px]"
+                disabled={isTesting}
+              />
+              <div className="text-xs text-muted-foreground">{t("customPayloadDesc")}</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Success Detection Keyword */}
+      <div className="space-y-2">
+        <Label htmlFor="success-contains">{t("successContains")}</Label>
+        <Input
+          id="success-contains"
+          value={successContains}
+          onChange={(e) => setSuccessContains(e.target.value)}
+          placeholder={t("successContainsPlaceholder")}
+          disabled={isTesting}
+        />
+        <div className="text-xs text-muted-foreground">{t("successContainsDesc")}</div>
+      </div>
+
       {/* 免责声明 */}
       <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
         <div className="font-medium mb-1">⚠️ {t("disclaimer.title")}</div>
@@ -402,260 +441,18 @@ export function ApiTestButton({
         </div>
       </div>
 
-      <div className="flex gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={handleTest}
-          disabled={disabled || isTesting || !providerUrl.trim() || (!apiKey.trim() && !providerId)}
-        >
-          {getButtonContent()}
-        </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={handleTest}
+        disabled={disabled || isTesting || !providerUrl.trim() || (!apiKey.trim() && !providerId)}
+      >
+        {getButtonContent()}
+      </Button>
 
-        {/* 查看详细结果按钮 */}
-        {testResult && !isTesting && (
-          <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
-            <DialogTrigger asChild>
-              <Button type="button" variant="ghost" size="sm">
-                <ExternalLink className="h-4 w-4 mr-2" />
-                {t("viewDetails")}
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  {testResult.success ? (
-                    <>
-                      <CheckCircle2 className="h-5 w-5 text-green-600" />
-                      {t("testSuccess")}
-                    </>
-                  ) : (
-                    <>
-                      <XCircle className="h-5 w-5 text-red-600" />
-                      {t("testFailed")}
-                    </>
-                  )}
-                </DialogTitle>
-                <DialogDescription>{testResult.message}</DialogDescription>
-              </DialogHeader>
-
-              <div className="space-y-6 mt-4">
-                {/* 状态徽章 */}
-                <div className="flex gap-2">
-                  <Badge variant={testResult.success ? "default" : "destructive"}>
-                    {testResult.success ? t("success") : t("failed")}
-                  </Badge>
-                  {testResult.details?.model && (
-                    <Badge variant="outline">{testResult.details.model}</Badge>
-                  )}
-                </div>
-
-                {/* 详细信息 */}
-                {testResult.details && (
-                  <div className="space-y-4">
-                    {/* 响应时间 */}
-                    {testResult.details.responseTime !== undefined && (
-                      <div className="space-y-2">
-                        <h4 className="font-semibold text-sm">{t("responseTime")}</h4>
-                        <div className="rounded-md border bg-muted/50 p-3">
-                          <div className="text-sm">{testResult.details.responseTime}ms</div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Token 用量 */}
-                    {testResult.details.usage && (
-                      <div className="space-y-2">
-                        <h4 className="font-semibold text-sm">{t("usage")}</h4>
-                        <div className="rounded-md border bg-muted/50 p-3 max-h-60 overflow-y-auto">
-                          <pre className="text-xs font-mono whitespace-pre-wrap break-words">
-                            {typeof testResult.details.usage === "object"
-                              ? JSON.stringify(testResult.details.usage, null, 2)
-                              : String(testResult.details.usage)}
-                          </pre>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* 响应内容 */}
-                    {testResult.details.content && (
-                      <div className="space-y-2">
-                        <h4 className="font-semibold text-sm">{t("response")}</h4>
-                        <div className="rounded-md border bg-muted/50 p-3 max-h-80 overflow-y-auto">
-                          <pre className="text-xs whitespace-pre-wrap break-words leading-relaxed">
-                            {testResult.details.content.slice(
-                              0,
-                              API_TEST_UI_CONFIG.MAX_PREVIEW_LENGTH
-                            )}
-                            {testResult.details.content.length >
-                              API_TEST_UI_CONFIG.MAX_PREVIEW_LENGTH && "..."}
-                          </pre>
-                          {testResult.details.content.length >
-                            API_TEST_UI_CONFIG.MAX_PREVIEW_LENGTH && (
-                            <div className="text-xs text-muted-foreground mt-2 italic">
-                              {t("truncatedPreview", {
-                                length: API_TEST_UI_CONFIG.MAX_PREVIEW_LENGTH,
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* 流式响应信息 */}
-                    {testResult.details.streamInfo && (
-                      <div className="space-y-2">
-                        <h4 className="font-semibold text-sm">{t("streamInfo")}</h4>
-                        <div className="rounded-md border bg-blue-50 p-3">
-                          <div className="text-xs space-y-1">
-                            <div>
-                              <span className="font-medium">{t("chunksReceived")}:</span>{" "}
-                              {testResult.details.streamInfo.chunksReceived}
-                            </div>
-                            <div>
-                              <span className="font-medium">{t("streamFormat")}:</span>{" "}
-                              {testResult.details.streamInfo.format.toUpperCase()}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* 错误详情 */}
-                    {testResult.details.error && (
-                      <div className="space-y-2">
-                        <h4 className="font-semibold text-sm flex items-center gap-2">
-                          <XCircle className="h-4 w-4 text-destructive" />
-                          {t("error")}
-                        </h4>
-                        <div className="rounded-md border bg-destructive/10 p-3 max-h-60 overflow-y-auto">
-                          <pre className="text-xs text-destructive whitespace-pre-wrap break-words font-mono">
-                            {testResult.details.error}
-                          </pre>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* 操作按钮 */}
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleCopyResult}
-                    className="flex-1"
-                  >
-                    <Copy className="h-4 w-4 mr-2" />
-                    {t("copyResult")}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setIsDetailDialogOpen(false)}
-                    className="flex-1"
-                  >
-                    {t("close")}
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
-        )}
-      </div>
-
-      {/* 显示简要测试结果 */}
-      {testResult && !isTesting && (
-        <div
-          className={`text-xs p-3 rounded-md ${
-            testResult.success
-              ? "bg-green-50 text-green-700 border border-green-200"
-              : "bg-red-50 text-red-700 border border-red-200"
-          }`}
-        >
-          <div className="font-medium mb-2">{testResult.message}</div>
-          {testResult.details && (
-            <div className="space-y-1 text-xs opacity-80">
-              {testResult.details.model && (
-                <div>
-                  <span className="font-medium">{t("responseModel")}:</span>{" "}
-                  {testResult.details.model}
-                </div>
-              )}
-              {testResult.details.responseTime !== undefined && (
-                <div>
-                  <span className="font-medium">{t("responseTime")}:</span>{" "}
-                  {testResult.details.responseTime}ms
-                </div>
-              )}
-              {testResult.details.usage && (
-                <div className="space-y-1 text-xs opacity-80">
-                  <div>
-                    <span className="font-medium">{t("usage")}:</span>
-                  </div>
-                  <div className="ml-2">
-                    <pre className="whitespace-pre-wrap break-words">
-                      {typeof testResult.details.usage === "object"
-                        ? JSON.stringify(testResult.details.usage, null, 2)
-                        : String(testResult.details.usage)}
-                    </pre>
-                  </div>
-                </div>
-              )}
-              {testResult.details.content && (
-                <div className="space-y-1 text-xs opacity-80">
-                  <div>
-                    <span className="font-medium">{t("response")}:</span>
-                  </div>
-                  <div className="ml-2">
-                    <pre className="whitespace-pre-wrap break-words max-h-32 overflow-y-auto">
-                      {testResult.details.content.slice(0, API_TEST_UI_CONFIG.BRIEF_PREVIEW_LENGTH)}
-                      {testResult.details.content.length >
-                        API_TEST_UI_CONFIG.BRIEF_PREVIEW_LENGTH && "..."}
-                    </pre>
-                    {testResult.details.content.length >
-                      API_TEST_UI_CONFIG.BRIEF_PREVIEW_LENGTH && (
-                      <div className="text-muted-foreground italic">
-                        {t("truncatedBrief", { length: API_TEST_UI_CONFIG.BRIEF_PREVIEW_LENGTH })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-              {testResult.details.streamInfo && (
-                <div className="space-y-1 text-xs opacity-80">
-                  <div>
-                    <span className="font-medium">{t("streamResponse")}:</span>
-                  </div>
-                  <div className="ml-2">
-                    <div className="text-blue-600">
-                      {t("chunksCount", {
-                        count: testResult.details.streamInfo.chunksReceived,
-                        format: testResult.details.streamInfo.format.toUpperCase(),
-                      })}
-                    </div>
-                  </div>
-                </div>
-              )}
-              {testResult.details.error && (
-                <div className="space-y-1 text-xs opacity-80">
-                  <div>
-                    <span className="font-medium">{t("error")}:</span>
-                  </div>
-                  <div className="ml-2">
-                    <pre className="whitespace-pre-wrap break-words text-red-600 max-h-32 overflow-y-auto">
-                      {testResult.details.error}
-                    </pre>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+      {/* 显示测试结果卡片 */}
+      {testResult && !isTesting && <TestResultCard result={testResult} />}
     </div>
   );
 }

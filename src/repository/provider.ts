@@ -350,6 +350,10 @@ export async function deleteProvider(id: number): Promise<boolean> {
 /**
  * 获取所有供应商的统计信息
  * 包括：今天的总金额、今天的调用次数、最近一次调用时间和模型
+ *
+ * 性能优化：
+ * - provider_stats CTE: LEFT JOIN 添加日期过滤，仅扫描今日数据（避免全表扫描）
+ * - latest_call CTE: 添加 7 天时间范围限制（避免扫描历史数据）
  */
 export async function getProviderStatistics(): Promise<
   Array<{
@@ -378,9 +382,9 @@ export async function getProviderStatistics(): Promise<
                   -- 情况1：无重试（provider_chain 为 NULL 或空数组），使用 provider_id
                   (mr.provider_chain IS NULL OR jsonb_array_length(mr.provider_chain) = 0) AND mr.provider_id = p.id
                   OR
-                  -- 情况2：有重试，使用 providerChain 最后一项的 providerId
+                  -- 情况2：有重试，使用 providerChain 最后一项的 id
                   (mr.provider_chain IS NOT NULL AND jsonb_array_length(mr.provider_chain) > 0
-                   AND (mr.provider_chain->-1->>'providerId')::int = p.id)
+                   AND (mr.provider_chain->-1->>'id')::int = p.id)
                 )
               THEN mr.cost_usd ELSE 0 END),
             0
@@ -391,25 +395,29 @@ export async function getProviderStatistics(): Promise<
                 (mr.provider_chain IS NULL OR jsonb_array_length(mr.provider_chain) = 0) AND mr.provider_id = p.id
                 OR
                 (mr.provider_chain IS NOT NULL AND jsonb_array_length(mr.provider_chain) > 0
-                 AND (mr.provider_chain->-1->>'providerId')::int = p.id)
+                 AND (mr.provider_chain->-1->>'id')::int = p.id)
               )
             THEN 1 END)::integer AS today_calls
         FROM providers p
+        -- 性能优化：添加日期过滤条件，仅扫描今日数据（避免全表扫描）
         LEFT JOIN message_request mr ON mr.deleted_at IS NULL
+          AND mr.created_at >= (CURRENT_DATE AT TIME ZONE ${timezone})
         WHERE p.deleted_at IS NULL
         GROUP BY p.id
       ),
       latest_call AS (
         SELECT DISTINCT ON (final_provider_id)
-          -- 计算最终供应商ID：优先使用 providerChain 最后一项
+          -- 计算最终供应商ID：优先使用 providerChain 最后一项的 id
           CASE
             WHEN provider_chain IS NULL OR jsonb_array_length(provider_chain) = 0 THEN provider_id
-            ELSE (provider_chain->-1->>'providerId')::int
+            ELSE (provider_chain->-1->>'id')::int
           END AS final_provider_id,
           created_at AS last_call_time,
           model AS last_call_model
         FROM message_request
+        -- 性能优化：添加 7 天时间范围限制（避免扫描历史数据）
         WHERE deleted_at IS NULL
+          AND created_at >= (CURRENT_DATE AT TIME ZONE ${timezone} - INTERVAL '7 days')
         ORDER BY final_provider_id, created_at DESC
       )
       SELECT

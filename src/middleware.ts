@@ -66,7 +66,7 @@ export async function middleware(request: NextRequest) {
     // Preserve locale in redirect
     const locale = isLocaleInPath ? potentialLocale : routing.defaultLocale;
     url.pathname = `/${locale}/login`;
-    url.searchParams.set("from", pathname);
+    url.searchParams.set("from", pathWithoutLocale || "/dashboard");
     return NextResponse.redirect(url);
   }
 
@@ -78,7 +78,7 @@ export async function middleware(request: NextRequest) {
     // Preserve locale in redirect
     const locale = isLocaleInPath ? potentialLocale : routing.defaultLocale;
     url.pathname = `/${locale}/login`;
-    url.searchParams.set("from", pathname);
+    url.searchParams.set("from", pathWithoutLocale || "/dashboard");
     const response = NextResponse.redirect(url);
     response.cookies.delete("auth-token");
     return response;

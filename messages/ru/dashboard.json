@@ -369,6 +369,7 @@
     "dashboard": "Панель",
     "usageLogs": "Журналы",
     "leaderboard": "Лидеры",
+    "availability": "Доступность",
     "quotasManagement": "Квоты",
     "userManagement": "Пользователи",
     "documentation": "Документация",
@@ -644,5 +645,126 @@
     "delete": "Удалить пользователя",
     "editAriaLabel": "Редактировать пользователя",
     "deleteAriaLabel": "Удалить пользователя"
+  },
+  "users": {
+    "title": "Управление пользователями",
+    "description": "Показано {count} пользователей",
+    "toolbar": {
+      "searchPlaceholder": "Поиск по имени пользователя...",
+      "groupFilter": "Фильтр по группе",
+      "allGroups": "Все группы"
+    }
+  },
+  "availability": {
+    "title": "Мониторинг доступности провайдеров",
+    "description": "Мониторинг доступности и показателей производительности провайдеров в реальном времени",
+    "nav": "Мониторинг доступности",
+    "status": {
+      "green": "Здоров",
+      "red": "Недоступен",
+      "unknown": "Неизвестно"
+    },
+    "statusDescription": {
+      "green": "Сервис работает нормально, запросы успешны",
+      "red": "Сервис недоступен или ошибка",
+      "unknown": "Данные отсутствуют"
+    },
+    "metrics": {
+      "systemAvailability": "Доступность системы",
+      "totalRequests": "Всего запросов",
+      "successRate": "Успешность",
+      "avgLatency": "Средняя задержка",
+      "p50Latency": "P50 задержка",
+      "p95Latency": "P95 задержка",
+      "p99Latency": "P99 задержка",
+      "lastRequest": "Последний запрос",
+      "requestCount": "Кол-во запросов"
+    },
+    "timeRange": {
+      "label": "Временной диапазон",
+      "last15min": "Последние 15 минут",
+      "last1h": "Последний час",
+      "last6h": "Последние 6 часов",
+      "last24h": "Последние 24 часа",
+      "last7d": "Последние 7 дней",
+      "custom": "Настраиваемый"
+    },
+    "filters": {
+      "provider": "Провайдер",
+      "allProviders": "Все провайдеры",
+      "includeDisabled": "Включить отключённые"
+    },
+    "sort": {
+      "label": "Сортировка",
+      "availability": "Доступность",
+      "name": "Название",
+      "requests": "Запросы"
+    },
+    "columns": {
+      "provider": "Провайдер",
+      "type": "Тип",
+      "status": "Статус",
+      "availability": "Доступность",
+      "requests": "Запросы",
+      "successRate": "Успешность",
+      "avgLatency": "Средняя задержка",
+      "lastRequest": "Последний запрос",
+      "actions": "Действия"
+    },
+    "chart": {
+      "title": "Тренд доступности",
+      "description": "Изменение доступности во времени",
+      "availabilityScore": "Оценка доступности",
+      "requestVolume": "Объём запросов",
+      "latencyTrend": "Тренд задержки",
+      "noData": "Нет данных"
+    },
+    "details": {
+      "title": "Детали провайдера",
+      "overview": "Обзор",
+      "timeBuckets": "Временные интервалы",
+      "greenCount": "Успешные запросы",
+      "redCount": "Неудачные запросы"
+    },
+    "actions": {
+      "refresh": "Обновить",
+      "refreshing": "Обновление...",
+      "autoRefresh": "Автообновление",
+      "stopAutoRefresh": "Остановить автообновление",
+      "viewDetails": "Подробнее",
+      "testProvider": "Тестировать провайдера"
+    },
+    "states": {
+      "loading": "Загрузка...",
+      "error": "Ошибка загрузки",
+      "noProviders": "Нет провайдеров",
+      "noData": "Нет данных о доступности",
+      "fetchFailed": "Не удалось получить данные о доступности"
+    },
+    "legend": {
+      "green": "Отлично (доступность 95%+)",
+      "lime": "Хорошо (доступность 80-95%)",
+      "orange": "Внимание (доступность 50-80%)",
+      "red": "Недоступен (доступность <50%)",
+      "noData": "Нет данных"
+    },
+    "summary": {
+      "title": "Сводка доступности",
+      "healthyProviders": "Здоровые провайдеры",
+      "unhealthyProviders": "Недоступные провайдеры",
+      "unknownProviders": "Нет данных",
+      "totalProviders": "Всего провайдеров"
+    },
+    "heatmap": {
+      "bucketSize": "Размер интервала",
+      "minutes": "мин",
+      "requests": "запросов",
+      "noData": "Нет данных",
+      "noRequests": "Нет запросов"
+    },
+    "toast": {
+      "refreshSuccess": "Данные о доступности обновлены",
+      "refreshFailed": "Обновление не удалось, попробуйте снова"
+    }
   }
 }

@@ -78,6 +78,15 @@ export async function register() {
       const { scheduleNotifications } = await import("@/lib/notification/notification-queue");
       await scheduleNotifications();
 
+      // 初始化智能探测调度器（如果启用）
+      const { startProbeScheduler, isSmartProbingEnabled } = await import(
+        "@/lib/circuit-breaker-probe"
+      );
+      if (isSmartProbingEnabled()) {
+        startProbeScheduler();
+        logger.info("Smart probing scheduler started");
+      }
+
       logger.info("Application ready");
     }
     // 开发环境: 执行迁移 + 初始化价格表（禁用 Bull Queue 避免 Turbopack 冲突）
@@ -114,6 +123,15 @@ export async function register() {
         "Notification queue disabled in development mode due to Bull + Turbopack incompatibility. " +
           "Notification features are only available in production environment."
       );
+
+      // 初始化智能探测调度器（开发环境也支持）
+      const { startProbeScheduler, isSmartProbingEnabled } = await import(
+        "@/lib/circuit-breaker-probe"
+      );
+      if (isSmartProbingEnabled()) {
+        startProbeScheduler();
+        logger.info("Smart probing scheduler started (development mode)");
+      }
 
       logger.info("Development environment ready");
     }

@@ -29,6 +29,13 @@ import { CodexInstructionsCache } from "@/lib/codex-instructions-cache";
 import { isClientAbortError } from "@/app/v1/_lib/proxy/errors";
 import { PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { GeminiAuth } from "@/app/v1/_lib/gemini/auth";
+import {
+  executeProviderTest,
+  type ProviderTestConfig,
+  type TestStatus,
+  type TestSubStatus,
+} from "@/lib/provider-testing";
+import { getPresetsForProvider, type PresetConfig } from "@/lib/provider-testing/presets";
 
 const API_TEST_TIMEOUT_LIMITS = {
   DEFAULT: 15000,
@@ -686,6 +693,131 @@ export async function getProviderLimitUsage(providerId: number): Promise<
 }
 
 /**
+ * 供应商限额使用情况数据结构
+ */
+export type ProviderLimitUsageData = {
+  cost5h: { current: number; limit: number | null; resetInfo: string };
+  costDaily: { current: number; limit: number | null; resetAt?: Date };
+  costWeekly: { current: number; limit: number | null; resetAt: Date };
+  costMonthly: { current: number; limit: number | null; resetAt: Date };
+  concurrentSessions: { current: number; limit: number };
+};
+
+/**
+ * 批量获取多个供应商的限额使用情况
+ * 使用 Redis Pipeline 避免 N+1 查询问题
+ *
+ * @param providers - 供应商数据数组（必须包含限额相关字段）
+ * @returns Map<providerId, ProviderLimitUsageData>
+ */
+export async function getProviderLimitUsageBatch(
+  providers: Array<{
+    id: number;
+    dailyResetTime?: string | null;
+    dailyResetMode?: string | null;
+    limit5hUsd?: number | null;
+    limitDailyUsd?: number | null;
+    limitWeeklyUsd?: number | null;
+    limitMonthlyUsd?: number | null;
+    limitConcurrentSessions?: number | null;
+  }>
+): Promise<Map<number, ProviderLimitUsageData>> {
+  const result = new Map<number, ProviderLimitUsageData>();
+
+  if (providers.length === 0) {
+    return result;
+  }
+
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      logger.warn("getProviderLimitUsageBatch: 无权限执行此操作");
+      return result;
+    }
+
+    // 动态导入避免循环依赖
+    const { RateLimitService } = await import("@/lib/rate-limit");
+    const { SessionTracker } = await import("@/lib/session-tracker");
+    const { getResetInfo, getResetInfoWithMode } = await import("@/lib/rate-limit/time-utils");
+
+    const providerIds = providers.map((p) => p.id);
+
+    // 构建日限额重置配置
+    const dailyResetConfigs = new Map<
+      number,
+      { resetTime?: string | null; resetMode?: string | null }
+    >();
+    for (const provider of providers) {
+      dailyResetConfigs.set(provider.id, {
+        resetTime: provider.dailyResetTime,
+        resetMode: provider.dailyResetMode,
+      });
+    }
+
+    // 批量获取限额消费和并发 session 计数（2 次 Redis Pipeline 调用）
+    const [costMap, sessionCountMap] = await Promise.all([
+      RateLimitService.getCurrentCostBatch(providerIds, dailyResetConfigs),
+      SessionTracker.getProviderSessionCountBatch(providerIds),
+    ]);
+
+    // 组装结果
+    for (const provider of providers) {
+      const costs = costMap.get(provider.id) || {
+        cost5h: 0,
+        costDaily: 0,
+        costWeekly: 0,
+        costMonthly: 0,
+      };
+      const sessionCount = sessionCountMap.get(provider.id) || 0;
+
+      // 获取重置时间信息
+      const reset5h = getResetInfo("5h");
+      const dailyResetMode = (provider.dailyResetMode ?? "fixed") as "fixed" | "rolling";
+      const resetDaily = getResetInfoWithMode(
+        "daily",
+        provider.dailyResetTime ?? undefined,
+        dailyResetMode
+      );
+      const resetWeekly = getResetInfo("weekly");
+      const resetMonthly = getResetInfo("monthly");
+
+      result.set(provider.id, {
+        cost5h: {
+          current: costs.cost5h,
+          limit: provider.limit5hUsd ?? null,
+          resetInfo: reset5h.type === "rolling" ? `滚动窗口（${reset5h.period}）` : "自然时间窗口",
+        },
+        costDaily: {
+          current: costs.costDaily,
+          limit: provider.limitDailyUsd ?? null,
+          resetAt: resetDaily.type === "rolling" ? undefined : resetDaily.resetAt!,
+        },
+        costWeekly: {
+          current: costs.costWeekly,
+          limit: provider.limitWeeklyUsd ?? null,
+          resetAt: resetWeekly.resetAt!,
+        },
+        costMonthly: {
+          current: costs.costMonthly,
+          limit: provider.limitMonthlyUsd ?? null,
+          resetAt: resetMonthly.resetAt!,
+        },
+        concurrentSessions: {
+          current: sessionCount,
+          limit: provider.limitConcurrentSessions || 0,
+        },
+      });
+    }
+
+    logger.debug(`getProviderLimitUsageBatch: 批量获取 ${providers.length} 个供应商限额数据完成`);
+    return result;
+  } catch (error) {
+    logger.error("批量获取供应商限额使用情况失败:", error);
+    return result;
+  }
+}
+
+/**
  * 测试代理连接
  * 通过代理访问供应商 URL，验证代理配置是否正确
  */
@@ -1057,6 +1189,30 @@ function extractErrorMessage(errorJson: unknown): string | undefined {
     return undefined;
   }
 
+  const obj = errorJson as Record<string, unknown>;
+
+  // 优先提取 upstream_error 中的错误信息（针对中转服务的嵌套错误）
+  const upstreamError = (obj.error as { upstream_error?: unknown } | undefined)?.upstream_error;
+
+  if (upstreamError && typeof upstreamError === "object") {
+    const upstreamErrorObj = upstreamError as Record<string, unknown>;
+
+    // 尝试从 upstream_error.error.message 提取
+    const nestedMessage = normalizeErrorValue(
+      (upstreamErrorObj.error as { message?: unknown } | undefined)?.message
+    );
+    if (nestedMessage) {
+      return nestedMessage;
+    }
+
+    // 尝试从 upstream_error.message 提取
+    const directMessage = normalizeErrorValue(upstreamErrorObj.message);
+    if (directMessage) {
+      return directMessage;
+    }
+  }
+
+  // 常规错误提取逻辑（保持原有优先级）
   const candidates: Array<(obj: Record<string, unknown>) => unknown> = [
     (obj) => (obj.error as Record<string, unknown> | undefined)?.message,
     (obj) => obj.message,
@@ -1069,7 +1225,7 @@ function extractErrorMessage(errorJson: unknown): string | undefined {
   for (const getter of candidates) {
     let value: unknown;
     try {
-      value = getter(errorJson as Record<string, unknown>);
+      value = getter(obj);
     } catch {
       continue;
     }
@@ -2174,4 +2330,240 @@ export async function testProviderGemini(
       },
     }
   );
+}
+
+// ============================================================================
+// Unified Provider Testing (relay-pulse style three-tier validation)
+// ============================================================================
+
+/**
+ * Arguments for unified provider testing
+ */
+export type UnifiedTestArgs = {
+  providerUrl: string;
+  apiKey: string;
+  providerType: ProviderType;
+  model?: string;
+  proxyUrl?: string | null;
+  proxyFallbackToDirect?: boolean;
+  /** Latency threshold in ms for YELLOW status (default: 5000) */
+  latencyThresholdMs?: number;
+  /** String that must be present in response (default: type-specific) */
+  successContains?: string;
+  /** Request timeout in ms (default: 10000) */
+  timeoutMs?: number;
+  /** Preset configuration ID (e.g., 'cc_base', 'cx_base') */
+  preset?: string;
+  /** Custom JSON payload (overrides preset and default body) */
+  customPayload?: string;
+  /** Custom headers to merge with default headers */
+  customHeaders?: Record<string, string>;
+};
+
+/**
+ * Result type for unified provider testing
+ * Includes three-tier validation details
+ */
+export type UnifiedTestResult = ActionResult<{
+  success: boolean;
+  status: TestStatus;
+  subStatus: TestSubStatus;
+  message: string;
+  latencyMs: number;
+  firstByteMs?: number;
+  httpStatusCode?: number;
+  httpStatusText?: string;
+  model?: string;
+  content?: string;
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheCreationInputTokens?: number;
+    cacheReadInputTokens?: number;
+  };
+  streamInfo?: {
+    isStreaming: boolean;
+    chunksReceived?: number;
+  };
+  errorMessage?: string;
+  errorType?: string;
+  testedAt: string;
+  validationDetails: {
+    httpPassed: boolean;
+    httpStatusCode?: number;
+    latencyPassed: boolean;
+    latencyMs?: number;
+    contentPassed: boolean;
+    contentTarget?: string;
+  };
+}>;
+
+/**
+ * Human-readable messages for sub-status
+ */
+const SUB_STATUS_MESSAGES: Record<TestSubStatus, string> = {
+  success: "所有检查通过",
+  slow_latency: "响应成功但较慢",
+  rate_limit: "请求被限流 (429)",
+  server_error: "服务器错误 (5xx)",
+  client_error: "客户端错误 (4xx)",
+  auth_error: "认证失败 (401/403)",
+  invalid_request: "无效请求 (400)",
+  network_error: "网络连接失败",
+  content_mismatch: "响应内容验证失败",
+};
+
+/**
+ * Check if a URL is safe for API testing (SSRF prevention)
+ * Wraps validateProviderUrlForConnectivity with a simpler interface
+ */
+async function isUrlSafeForApiTest(
+  providerUrl: string
+): Promise<{ safe: boolean; reason?: string }> {
+  const validation = validateProviderUrlForConnectivity(providerUrl);
+  if (validation.valid) {
+    return { safe: true };
+  }
+  return { safe: false, reason: validation.error.message };
+}
+
+/**
+ * Unified provider testing with three-tier validation
+ *
+ * Validation tiers (from relay-pulse):
+ * 1. HTTP Status Code - 2xx/3xx = pass, 4xx/5xx = fail
+ * 2. Latency Threshold - Below threshold = GREEN, above = YELLOW
+ * 3. Content Validation - Response contains expected string
+ *
+ * Status meanings:
+ * - green: All validations passed
+ * - yellow: HTTP OK but slow (degraded)
+ * - red: Any validation failed
+ */
+export async function testProviderUnified(data: UnifiedTestArgs): Promise<UnifiedTestResult> {
+  const session = await getSession();
+  if (!session || session.user.role !== "admin") {
+    return {
+      ok: false,
+      error: "未授权",
+    };
+  }
+
+  // Validate URL
+  const urlValidation = await isUrlSafeForApiTest(data.providerUrl);
+  if (!urlValidation.safe) {
+    return {
+      ok: false,
+      error: urlValidation.reason ?? "无效的 URL",
+    };
+  }
+
+  try {
+    // Build test configuration
+    const config: ProviderTestConfig = {
+      providerUrl: data.providerUrl,
+      apiKey: data.apiKey,
+      providerType: data.providerType,
+      model: data.model,
+      proxyUrl: data.proxyUrl ?? undefined,
+      proxyFallbackToDirect: data.proxyFallbackToDirect,
+      latencyThresholdMs: data.latencyThresholdMs,
+      successContains: data.successContains,
+      timeoutMs: data.timeoutMs,
+      // Custom configuration fields
+      preset: data.preset,
+      customPayload: data.customPayload,
+      customHeaders: data.customHeaders,
+    };
+
+    // Execute test
+    const result = await executeProviderTest(config);
+
+    // Build response message
+    const statusText =
+      result.status === "green" ? "可用" : result.status === "yellow" ? "波动" : "不可用";
+
+    const message = `供应商 ${statusText}: ${SUB_STATUS_MESSAGES[result.subStatus]}`;
+
+    return {
+      ok: true,
+      data: {
+        success: result.success,
+        status: result.status,
+        subStatus: result.subStatus,
+        message,
+        latencyMs: result.latencyMs,
+        firstByteMs: result.firstByteMs,
+        httpStatusCode: result.httpStatusCode,
+        httpStatusText: result.httpStatusText,
+        model: result.model,
+        content: result.content,
+        usage: result.usage,
+        streamInfo: result.streamInfo,
+        errorMessage: result.errorMessage,
+        errorType: result.errorType,
+        testedAt: result.testedAt.toISOString(),
+        validationDetails: result.validationDetails,
+      },
+    };
+  } catch (error) {
+    logger.error("testProviderUnified error", { error });
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "测试执行失败",
+    };
+  }
+}
+
+// ============================================================================
+// Provider Test Presets
+// ============================================================================
+
+/**
+ * Preset configuration for frontend display
+ */
+export type PresetConfigResponse = {
+  id: string;
+  description: string;
+  defaultSuccessContains: string;
+  defaultModel: string;
+};
+
+/**
+ * Get available test presets for a provider type
+ *
+ * @description Returns list of preset configurations compatible with the given provider type.
+ * Presets provide authentic CLI request patterns that pass relay service verification.
+ */
+export async function getProviderTestPresets(
+  providerType: ProviderType
+): Promise<ActionResult<PresetConfigResponse[]>> {
+  const session = await getSession();
+  if (!session || session.user.role !== "admin") {
+    return {
+      ok: false,
+      error: "未授权",
+    };
+  }
+
+  try {
+    const presets = getPresetsForProvider(providerType);
+    const response: PresetConfigResponse[] = presets.map((preset) => ({
+      id: preset.id,
+      description: preset.description,
+      defaultSuccessContains: preset.defaultSuccessContains,
+      defaultModel: preset.defaultModel,
+    }));
+
+    return {
+      ok: true,
+      data: response,
+    };
+  } catch (error) {
+    logger.error("getProviderTestPresets error", { error, providerType });
+    return {
+      ok: false,
+      error: "获取预置配置失败",
+    };
+  }
 }

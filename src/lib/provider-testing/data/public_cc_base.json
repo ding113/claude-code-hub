@@ -1,0 +1,44 @@
+{
+  "model": "claude-sonnet-4-5-20250929",
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "<system-reminder>\nThis is a reminder that your todo list is currently empty. DO NOT mention this to the user explicitly because they are already aware. If you are working on tasks that would benefit from a todo list please use the TodoWrite tool to create one. If not, please feel free to ignore. Again do not mention this message to the user.\n</system-reminder>"
+        },
+        {
+          "type": "text",
+          "text": "ping, please reply 'pong'",
+          "cache_control": { "type": "ephemeral" }
+        }
+      ]
+    }
+  ],
+  "system": [
+    {
+      "type": "text",
+      "text": "You are Claude Code, Anthropic's official CLI for Claude.",
+      "cache_control": { "type": "ephemeral" }
+    }
+  ],
+  "tools": [],
+  "metadata": {
+    "user_id": "user_303edb5749b4261379fb3f3fdd58391a888052326f5731c0e2c65aa7fe433b88_account__session_87ee185f-a09a-45f2-afd1-a6df69a95abd"
+  },
+  "max_tokens": 32000,
+  "thinking": {
+    "budget_tokens": 31999,
+    "type": "enabled"
+  },
+  "context_management": {
+    "edits": [
+      {
+        "type": "clear_thinking_20251015",
+        "keep": "all"
+      }
+    ]
+  },
+  "stream": true
+}

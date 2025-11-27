@@ -598,6 +598,16 @@
         "formatOpenAIResponses": "Codex (Response API)",
         "testModel": "測試模型",
         "testModelDesc": "可手動輸入，留空則使用預設模型",
+        "requestConfig": "請求配置",
+        "presetConfig": "預置配置",
+        "customConfig": "自訂",
+        "selectPreset": "選擇預置範本",
+        "presetDesc": "預置範本包含真實 CLI 請求特徵，用於通過中轉服務驗證",
+        "customPayloadPlaceholder": "{\"model\": \"...\", \"messages\": [...]}",
+        "customPayloadDesc": "輸入自訂 JSON payload，將覆蓋預設請求主體",
+        "successContains": "成功檢測詞",
+        "successContainsPlaceholder": "pong",
+        "successContainsDesc": "回應需包含此內容才算測試成功",
         "model": "模型",
         "responseModel": "回應模型",
         "responseTime": "回應時間",
@@ -612,11 +622,110 @@
         "close": "關閉",
         "success": "成功",
         "failed": "失敗",
+        "streamInfo": "串流響應資訊",
+        "chunksReceived": "已接收區塊",
+        "streamFormat": "串流格式",
+        "streamResponse": "串流響應",
+        "chunksCount": "已接收 {count} 個區塊（{format}）",
+        "truncatedPreview": "顯示前 {length} 個字元，複製可查看完整內容",
+        "truncatedBrief": "顯示前 {length} 個字元，點擊「查看詳情」以查看更多",
+        "copyFormat": {
+          "testResult": "測試結果",
+          "message": "訊息",
+          "errorDetails": "錯誤詳情"
+        },
         "disclaimer": {
           "title": "注意",
           "resultReference": "【重要】因各家供應商情況不同，測試結果僅供參考，不代表實際呼叫效果",
           "realRequest": "測試將向供應商發送真實請求，可能消耗少量額度",
           "confirmConfig": "請確認供應商 URL、API 金鑰及模型設定正確"
+        },
+        "resultCard": {
+          "status": {
+            "green": "可用",
+            "yellow": "波動",
+            "red": "不可用"
+          },
+          "dialogTitle": "供應商測試詳情",
+          "validation": {
+            "title": "三層驗證詳情",
+            "http": {
+              "title": "Tier 1: HTTP 狀態",
+              "statusCode": "狀態碼",
+              "passed": "2xx/3xx 成功",
+              "failed": "4xx/5xx 失敗"
+            },
+            "latency": {
+              "title": "Tier 2: 延遲閾值",
+              "actual": "實際延遲",
+              "passed": "在閾值內",
+              "failed": "超過閾值"
+            },
+            "content": {
+              "title": "Tier 3: 內容驗證",
+              "target": "目標",
+              "passed": "包含目標字串",
+              "failed": "未找到目標"
+            },
+            "passed": "通過",
+            "failed": "失敗",
+            "timeout": "逾時"
+          },
+          "labels": {
+            "http": "HTTP",
+            "latency": "延遲",
+            "content": "內容",
+            "model": "模型",
+            "firstByte": "首位元組",
+            "totalLatency": "總延遲",
+            "error": "錯誤",
+            "responsePreview": "回應預覽"
+          },
+          "timing": {
+            "title": "時間資訊",
+            "totalLatency": "總延遲",
+            "firstByte": "首位元組",
+            "testedAt": "測試時間"
+          },
+          "tokenUsage": {
+            "title": "Token 用量",
+            "input": "輸入",
+            "output": "輸出",
+            "cacheCreation": "快取建立",
+            "cacheRead": "快取讀取"
+          },
+          "streamInfo": {
+            "title": "串流回應資訊",
+            "isStreaming": "串流回應",
+            "chunksCount": "資料區塊數",
+            "yes": "是",
+            "no": "否"
+          },
+          "rawResponse": {
+            "title": "完整回應內容",
+            "hint": "此處顯示原始回應內容，您可以在此檢查關鍵字是否存在於回應中"
+          },
+          "errorDetails": {
+            "title": "錯誤詳情",
+            "type": "錯誤類型"
+          },
+          "copyText": {
+            "status": "狀態",
+            "message": "訊息",
+            "latency": "延遲",
+            "httpStatus": "HTTP 狀態",
+            "model": "模型",
+            "usage": "用量",
+            "inputOutput": "輸入 {input} / 輸出 {output} tokens",
+            "response": "回應",
+            "error": "錯誤",
+            "testedAt": "測試時間",
+            "validationDetails": "驗證詳情",
+            "httpCheck": "HTTP 檢查",
+            "latencyCheck": "延遲檢查",
+            "contentCheck": "內容驗證"
+          },
+          "judgment": "判定"
         }
       },
       "urlPreview": {
@@ -994,8 +1103,8 @@
           },
           "streamingIdle": {
             "label": "串流靜默期超時（秒）",
-            "placeholder": "10",
-            "desc": "串流請求靜默期超時，範圍 1-120 秒，預設 10 秒（防止中途卡住）",
+            "placeholder": "60",
+            "desc": "串流請求靜默期超時，範圍 60-600 秒，填 0 禁用（防止中途卡住）",
             "core": "true"
           },
           "nonStreamingTotal": {

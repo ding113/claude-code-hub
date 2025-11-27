@@ -334,6 +334,44 @@ export function resetCircuit(providerId: number): void {
 }
 
 /**
+ * 将熔断器从 OPEN 状态转换到 HALF_OPEN 状态（用于智能探测）
+ * 比直接 resetCircuit 更安全，允许通过 HALF_OPEN 阶段验证恢复
+ */
+export function tripToHalfOpen(providerId: number): boolean {
+  const health = getOrCreateHealth(providerId);
+
+  // 只有 OPEN 状态才能转换到 HALF_OPEN
+  if (health.circuitState !== "open") {
+    logger.debug(
+      `[CircuitBreaker] Provider ${providerId} not in OPEN state, cannot trip to half-open`,
+      {
+        providerId,
+        currentState: health.circuitState,
+      }
+    );
+    return false;
+  }
+
+  const oldState = health.circuitState;
+
+  // 转换到 HALF_OPEN 状态
+  health.circuitState = "half-open";
+  health.halfOpenSuccessCount = 0;
+  health.circuitOpenUntil = null;
+
+  logger.info(
+    `[CircuitBreaker] Provider ${providerId} circuit transitioned from ${oldState} to half-open via smart probe`,
+    {
+      providerId,
+      previousState: oldState,
+      newState: "half-open",
+    }
+  );
+
+  return true;
+}
+
+/**
  * 清除供应商的配置缓存（供应商更新后调用）
  */
 export function clearConfigCache(providerId: number): void {

@@ -372,6 +372,7 @@
     "userManagement": "用户管理",
     "usageLogs": "使用记录",
     "leaderboard": "排行榜",
+    "availability": "可用性监控",
     "quotasManagement": "限额管理",
     "documentation": "文档",
     "systemSettings": "系统设置",
@@ -724,6 +725,118 @@
       "searchPlaceholder": "按用户名搜索...",
       "groupFilter": "按分组筛选",
       "allGroups": "所有分组"
+    }
+  },
+  "availability": {
+    "title": "供应商可用性监控",
+    "description": "实时监控供应商的可用性状态和性能指标",
+    "nav": "可用性监控",
+    "status": {
+      "green": "正常",
+      "red": "异常",
+      "unknown": "未知"
+    },
+    "statusDescription": {
+      "green": "服务正常，请求成功",
+      "red": "服务异常或不可用",
+      "unknown": "暂无数据"
+    },
+    "metrics": {
+      "systemAvailability": "系统可用性",
+      "totalRequests": "总请求数",
+      "successRate": "成功率",
+      "avgLatency": "平均延迟",
+      "p50Latency": "P50 延迟",
+      "p95Latency": "P95 延迟",
+      "p99Latency": "P99 延迟",
+      "lastRequest": "最后请求",
+      "requestCount": "请求数"
+    },
+    "timeRange": {
+      "label": "时间范围",
+      "last15min": "最近 15 分钟",
+      "last1h": "最近 1 小时",
+      "last6h": "最近 6 小时",
+      "last24h": "最近 24 小时",
+      "last7d": "最近 7 天",
+      "custom": "自定义"
+    },
+    "filters": {
+      "provider": "供应商",
+      "allProviders": "全部供应商",
+      "includeDisabled": "包含已禁用"
+    },
+    "sort": {
+      "label": "排序",
+      "availability": "可用性",
+      "name": "名称",
+      "requests": "请求数"
+    },
+    "columns": {
+      "provider": "供应商",
+      "type": "类型",
+      "status": "状态",
+      "availability": "可用性",
+      "requests": "请求数",
+      "successRate": "成功率",
+      "avgLatency": "平均延迟",
+      "lastRequest": "最后请求",
+      "actions": "操作"
+    },
+    "chart": {
+      "title": "可用性趋势",
+      "description": "按时间段统计的可用性变化",
+      "availabilityScore": "可用性评分",
+      "requestVolume": "请求量",
+      "latencyTrend": "延迟趋势",
+      "noData": "暂无数据"
+    },
+    "details": {
+      "title": "供应商详情",
+      "overview": "概览",
+      "timeBuckets": "时间分段",
+      "greenCount": "成功请求",
+      "redCount": "失败请求"
+    },
+    "actions": {
+      "refresh": "刷新",
+      "refreshing": "刷新中...",
+      "autoRefresh": "自动刷新",
+      "stopAutoRefresh": "停止自动刷新",
+      "viewDetails": "查看详情",
+      "testProvider": "测试供应商"
+    },
+    "states": {
+      "loading": "加载中...",
+      "error": "加载失败",
+      "noProviders": "暂无供应商",
+      "noData": "暂无可用性数据",
+      "fetchFailed": "获取可用性数据失败"
+    },
+    "legend": {
+      "green": "优秀 (可用性 95%+)",
+      "lime": "良好 (可用性 80-95%)",
+      "orange": "警告 (可用性 50-80%)",
+      "red": "异常 (可用性 <50%)",
+      "noData": "无数据"
+    },
+    "summary": {
+      "title": "可用性摘要",
+      "healthyProviders": "健康供应商",
+      "unhealthyProviders": "异常供应商",
+      "unknownProviders": "无数据",
+      "totalProviders": "供应商总数"
+    },
+    "heatmap": {
+      "bucketSize": "时间分段",
+      "minutes": "分钟",
+      "requests": "请求",
+      "noData": "无数据",
+      "noRequests": "无请求"
+    },
+    "toast": {
+      "refreshSuccess": "可用性数据已刷新",
+      "refreshFailed": "刷新失败，请重试"
     }
   }
 }

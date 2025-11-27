@@ -1,0 +1,29 @@
+{
+  "model": "claude-haiku-4-5-20251001",
+  "messages": [
+    {
+      "role": "user",
+      "content": [{ "text": "ping", "type": "text" }]
+    },
+    {
+      "role": "assistant",
+      "content": [{ "text": "{", "type": "text" }]
+    }
+  ],
+  "system": [
+    {
+      "text": "You are Claude Code, Anthropic's official CLI for Claude.",
+      "type": "text"
+    },
+    {
+      "text": "Analyze if this message indicates a new conversation topic. If it does, extract a 2-3 word title that captures the new topic. Format your response as a JSON object with two fields: 'isNewTopic' (boolean) and 'title' (string, or null if isNewTopic is false). Only include these fields, no other text. ONLY generate the JSON object, no other text (eg. no markdown).",
+      "type": "text"
+    }
+  ],
+  "metadata": {
+    "user_id": "user_30321cc79fe5f8134ed831044003814f3ba314faf6c6559d590dcd311ce1b37e_account__session_9c774ebe-303d-4e67-82df-ed297b99062c"
+  },
+  "max_tokens": 100,
+  "stream": false,
+  "tools": []
+}
