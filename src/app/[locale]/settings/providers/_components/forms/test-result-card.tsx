@@ -424,9 +424,7 @@ function TestResultDetails({
               {result.rawResponse || result.content}
             </pre>
           </div>
-          <p className="text-xs text-muted-foreground">
-            {t("resultCard.rawResponse.hint")}
-          </p>
+          <p className="text-xs text-muted-foreground">{t("resultCard.rawResponse.hint")}</p>
         </div>
       )}
 
