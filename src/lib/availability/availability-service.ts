@@ -171,14 +171,11 @@ export async function queryProviderAvailability(
 
   // Warn if query hit the limit - results may be incomplete
   if (requests.length === MAX_REQUESTS_PER_QUERY) {
-    logger.warn(
-      "[Availability] Query hit max request limit, results may be incomplete",
-      {
-        limit: MAX_REQUESTS_PER_QUERY,
-        startTime: startDate.toISOString(),
-        endTime: endDate.toISOString(),
-      }
-    );
+    logger.warn("[Availability] Query hit max request limit, results may be incomplete", {
+      limit: MAX_REQUESTS_PER_QUERY,
+      startTime: startDate.toISOString(),
+      endTime: endDate.toISOString(),
+    });
   }
 
   // Determine bucket size if not explicitly specified
