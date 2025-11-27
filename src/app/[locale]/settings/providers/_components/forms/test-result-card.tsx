@@ -39,6 +39,8 @@ export interface UnifiedTestResultData {
   httpStatusText?: string;
   model?: string;
   content?: string;
+  /** Raw response body for user inspection */
+  rawResponse?: string;
   usage?: {
     inputTokens: number;
     outputTokens: number;
@@ -413,44 +415,18 @@ function TestResultDetails({
         </div>
       )}
 
-      {/* Stream Info */}
-      {result.streamInfo && (
+      {/* Raw Response Body - Full response for user inspection */}
+      {(result.rawResponse || result.content) && (
         <div className="space-y-2">
-          <h4 className="font-semibold text-sm">{t("resultCard.streamInfo.title")}</h4>
-          <div className="rounded-md border bg-blue-50 dark:bg-blue-950 p-3 text-sm">
-            <div className="flex gap-4">
-              <div>
-                <span className="text-muted-foreground">
-                  {t("resultCard.streamInfo.isStreaming")}:
-                </span>{" "}
-                <span>
-                  {result.streamInfo.isStreaming
-                    ? t("resultCard.streamInfo.yes")
-                    : t("resultCard.streamInfo.no")}
-                </span>
-              </div>
-              {result.streamInfo.chunksReceived !== undefined && (
-                <div>
-                  <span className="text-muted-foreground">
-                    {t("resultCard.streamInfo.chunksCount")}:
-                  </span>{" "}
-                  <span className="font-mono">{result.streamInfo.chunksReceived}</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Response Content */}
-      {result.content && (
-        <div className="space-y-2">
-          <h4 className="font-semibold text-sm">{t("response")}</h4>
-          <div className="rounded-md border bg-muted/50 p-3 max-h-60 overflow-y-auto">
+          <h4 className="font-semibold text-sm">{t("resultCard.rawResponse.title")}</h4>
+          <div className="rounded-md border bg-muted/50 p-3 max-h-96 overflow-y-auto">
             <pre className="text-xs whitespace-pre-wrap break-words font-mono">
-              {result.content}
+              {result.rawResponse || result.content}
             </pre>
           </div>
+          <p className="text-xs text-muted-foreground">
+            {t("resultCard.rawResponse.hint")}
+          </p>
         </div>
       )}
 

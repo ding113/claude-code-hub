@@ -716,6 +716,10 @@
             "yes": "Yes",
             "no": "No"
           },
+          "rawResponse": {
+            "title": "Raw Response Body",
+            "hint": "This shows the raw response content. You can check if the keyword exists in the response here."
+          },
           "errorDetails": {
             "title": "Error Details",
             "type": "Error Type"

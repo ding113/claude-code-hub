@@ -156,11 +156,13 @@ export interface ProviderTestResult {
   httpStatusText?: string;
   /** Model used in response */
   model?: string;
-  /** Response content (truncated) */
+  /** Response content preview (truncated to 500 chars) */
   content?: string;
-  /** Token usage */
+  /** Raw response body for user inspection (truncated to 5000 chars) */
+  rawResponse?: string;
+  /** Token usage (deprecated - kept for backward compatibility) */
   usage?: TokenUsage;
-  /** Stream info (if streaming response) */
+  /** Stream info (deprecated - kept for backward compatibility) */
   streamInfo?: {
     isStreaming: boolean;
     chunksReceived?: number;

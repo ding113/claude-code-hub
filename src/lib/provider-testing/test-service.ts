@@ -18,8 +18,6 @@ import type {
 import { TEST_DEFAULTS } from "./types";
 import { classifyHttpStatus } from "./validators/http-validator";
 import { evaluateContentValidation } from "./validators/content-validator";
-import { parseResponse } from "./parsers";
-import { aggregateResponseText } from "./utils/sse-collector";
 import {
   getTestBody,
   getTestHeaders,
@@ -103,21 +101,25 @@ export async function executeProviderTest(config: ProviderTestConfig): Promise<P
     // Tier 1: HTTP Status validation
     const httpResult = classifyHttpStatus(response.status, latencyMs, slowThresholdMs);
 
-    // Parse response content for metadata extraction (model, usage, etc.)
-    const parsedResponse = parseResponse(config.providerType, responseBody, contentType);
-
-    // Use aggregateResponseText for content validation (relay-pulse pattern)
-    // This provides fallback mechanisms: SSE -> JSON -> raw body
-    const aggregatedContent = aggregateResponseText(responseBody, contentType);
-
-    // Tier 2 & 3: Content validation (only if HTTP passed)
-    // Use aggregated content which has better fallback handling
+    // Tier 2 & 3: Content validation - SIMPLIFIED: directly match raw response body
+    // No SSE/JSON parsing needed - just check if successContains exists in raw response
+    // This is the most reliable approach as relay-pulse also falls back to raw body
     const contentResult = evaluateContentValidation(
       httpResult.status,
       httpResult.subStatus,
-      aggregatedContent,
+      responseBody, // Use raw response body directly
       successContains
     );
+
+    // Try to extract model from response (simple JSON extraction)
+    let model: string | undefined;
+    try {
+      // Try to parse as JSON for model extraction only
+      const parsed = JSON.parse(responseBody);
+      model = parsed.model;
+    } catch {
+      // Not JSON or parsing failed - that's fine, model is optional
+    }
 
     // Build validation details
     const validationDetails: ValidationDetails = {
@@ -129,11 +131,7 @@ export async function executeProviderTest(config: ProviderTestConfig): Promise<P
       contentTarget: successContains,
     };
 
-    // Build result
-    // Use aggregatedContent for display (shows what was actually validated)
-    // Fall back to parsedResponse.content if aggregatedContent is empty
-    const displayContent = aggregatedContent || parsedResponse.content;
-
+    // Build result with raw response for user inspection
     return {
       success: contentResult.status !== "red",
       status: contentResult.status,
@@ -142,15 +140,9 @@ export async function executeProviderTest(config: ProviderTestConfig): Promise<P
       firstByteMs,
       httpStatusCode: response.status,
       httpStatusText: response.statusText,
-      model: parsedResponse.model,
-      content: displayContent.slice(0, 500), // Truncate for safety
-      usage: parsedResponse.usage,
-      streamInfo: parsedResponse.isStreaming
-        ? {
-            isStreaming: true,
-            chunksReceived: parsedResponse.chunksReceived,
-          }
-        : undefined,
+      model,
+      content: responseBody.slice(0, 500), // Preview for quick view
+      rawResponse: responseBody.slice(0, 5000), // Full response for detailed inspection
       testedAt: new Date(),
       validationDetails,
     };
