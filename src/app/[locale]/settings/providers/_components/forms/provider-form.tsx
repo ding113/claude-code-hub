@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { AlertTriangle } from "lucide-react";
 import { useState, useTransition, useEffect, useRef } from "react";
 import { addProvider, editProvider, removeProvider } from "@/actions/providers";
 import {
@@ -199,6 +200,7 @@ export function ProviderForm({
     | "routing"
     | "rateLimit"
     | "circuitBreaker"
+    | "privacy"
     | "proxy"
     | "timeout"
     | "apiTest"
@@ -208,6 +210,7 @@ export function ProviderForm({
     routing: false,
     rateLimit: false,
     circuitBreaker: false,
+    privacy: false,
     proxy: false,
     timeout: false,
     apiTest: false,
@@ -253,6 +256,7 @@ export function ProviderForm({
       routing: true,
       rateLimit: true,
       circuitBreaker: true,
+      privacy: true,
       proxy: true,
       timeout: true,
       apiTest: true,
@@ -267,6 +271,7 @@ export function ProviderForm({
       routing: false,
       rateLimit: false,
       circuitBreaker: false,
+      privacy: false,
       proxy: false,
       timeout: false,
       apiTest: false,
@@ -1305,6 +1310,65 @@ export function ProviderForm({
           </CollapsibleContent>
         </Collapsible>
 
+        {/* 隐私与安全配置 */}
+        <Collapsible open={openSections.privacy} onOpenChange={() => toggleSection("privacy")}>
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="flex items-center justify-between w-full py-4 border-t hover:bg-muted/50 transition-colors"
+              disabled={isPending}
+            >
+              <div className="flex items-center gap-2">
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${
+                    openSections.privacy ? "rotate-180" : ""
+                  }`}
+                />
+                <span className="text-sm font-medium">{t("sections.privacy.title")}</span>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {forwardClientRealIp
+                  ? t("sections.privacy.summary.forwardIp")
+                  : t("sections.privacy.summary.protected")}
+              </span>
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-4 pb-4">
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">{t("sections.privacy.desc")}</p>
+              </div>
+
+              {/* 转发用户真实 IP 开关 */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5 flex-1">
+                    <Label htmlFor={isEdit ? "edit-forward-client-ip" : "forward-client-ip"}>
+                      {t("sections.privacy.forwardClientIp.label")}
+                    </Label>
+                    <div className="flex items-start gap-2 mt-1">
+                      <AlertTriangle className="h-4 w-4 text-yellow-500 mt-0.5 flex-shrink-0" />
+                      <p className="text-xs text-muted-foreground">
+                        <span className="font-medium text-yellow-600">
+                          {t("sections.privacy.forwardClientIp.warning")}:
+                        </span>{" "}
+                        {t("sections.privacy.forwardClientIp.desc")}
+                      </p>
+                    </div>
+                  </div>
+                  <Switch
+                    id={isEdit ? "edit-forward-client-ip" : "forward-client-ip"}
+                    checked={forwardClientRealIp}
+                    onCheckedChange={setForwardClientRealIp}
+                    disabled={isPending}
+                    className="ml-4"
+                  />
+                </div>
+              </div>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+
         {/* 代理配置 */}
         <Collapsible open={openSections.proxy} onOpenChange={() => toggleSection("proxy")}>
           <CollapsibleTrigger asChild>
@@ -1376,29 +1440,6 @@ export function ProviderForm({
                     id={isEdit ? "edit-proxy-fallback" : "proxy-fallback"}
                     checked={proxyFallbackToDirect}
                     onCheckedChange={setProxyFallbackToDirect}
-                    disabled={isPending}
-                  />
-                </div>
-              </div>
-
-              {/* 转发用户真实 IP 开关 */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label
-                      htmlFor={isEdit ? "edit-forward-client-ip" : "forward-client-ip"}
-                      className="text-destructive"
-                    >
-                      {t("sections.proxy.forwardClientIp.label")}
-                    </Label>
-                    <p className="text-xs text-destructive">
-                      {t("sections.proxy.forwardClientIp.desc")}
-                    </p>
-                  </div>
-                  <Switch
-                    id={isEdit ? "edit-forward-client-ip" : "forward-client-ip"}
-                    checked={forwardClientRealIp}
-                    onCheckedChange={setForwardClientRealIp}
                     disabled={isPending}
                   />
                 </div>

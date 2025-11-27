@@ -770,13 +770,22 @@
             "label": "代理失败时降级到直连",
             "desc": "启用后，代理连接失败时自动尝试直接连接供应商"
           },
-          "forwardClientIp": {
-            "label": "转发用户真实 IP",
-            "desc": "⚠ 警告：启用后将保留并转发用户客户端的真实 IP（x-forwarded-for、x-real-ip、cf-connecting-ip 等），上游供应商可直接获得真实来源。仅在供应商明确要求时开启，默认关闭以保护隐私"
-          },
           "test": {
             "label": "连接测试",
             "desc": "测试通过配置的代理访问供应商 URL（使用 HEAD 请求，不消耗额度）"
+          }
+        },
+        "privacy": {
+          "title": "隐私与安全配置",
+          "summary": {
+            "forwardIp": "转发真实 IP",
+            "protected": "隐私保护"
+          },
+          "desc": "控制用户隐私信息的转发行为",
+          "forwardClientIp": {
+            "label": "转发用户真实 IP",
+            "desc": "启用后将保留并转发用户客户端的真实 IP（x-forwarded-for、x-real-ip、cf-connecting-ip 等），上游供应商可直接获得真实来源。仅在供应商明确要求时开启，默认关闭以保护隐私",
+            "warning": "隐私警告"
           }
         },
         "timeout": {

@@ -1181,13 +1181,22 @@
             "label": "Fallback to direct on proxy failure",
             "desc": "When enabled, will try direct connection if proxy fails"
           },
-          "forwardClientIp": {
-            "label": "Forward client real IP",
-            "desc": "⚠ WARNING: Preserves X-Forwarded-For, X-Real-IP, CF-Connecting-IP and similar headers so upstream providers receive the original client IP. Enable only when the upstream explicitly requires the real IP. Disabled by default to protect privacy"
-          },
           "test": {
             "label": "Connectivity Test",
             "desc": "Test accessing provider URL via proxy (HEAD request, no credits consumed)"
+          }
+        },
+        "privacy": {
+          "title": "Privacy & Security Configuration",
+          "summary": {
+            "forwardIp": "Forward Real IP",
+            "protected": "Privacy Protected"
+          },
+          "desc": "Control how user privacy information is forwarded",
+          "forwardClientIp": {
+            "label": "Forward client real IP",
+            "desc": "When enabled, preserves and forwards the client's real IP (x-forwarded-for, x-real-ip, cf-connecting-ip, etc.) to upstream providers. Enable only when the upstream explicitly requires the real IP. Disabled by default to protect privacy",
+            "warning": "Privacy Warning"
           }
         },
         "timeout": {
