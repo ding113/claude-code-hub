@@ -26,6 +26,8 @@ import { Plus } from "lucide-react";
 import { createErrorRuleAction } from "@/actions/error-rules";
 import { toast } from "sonner";
 import { RegexTester } from "./regex-tester";
+import { OverrideSection } from "./override-section";
+import type { ErrorOverrideResponse } from "@/repository/error-rules";
 
 export function AddRuleDialog() {
   const t = useTranslations("settings");
@@ -34,6 +36,9 @@ export function AddRuleDialog() {
   const [pattern, setPattern] = useState("");
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
+  const [enableOverride, setEnableOverride] = useState(false);
+  const [overrideResponse, setOverrideResponse] = useState("");
+  const [overrideStatusCode, setOverrideStatusCode] = useState<string>("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,6 +61,31 @@ export function AddRuleDialog() {
       return;
     }
 
+    // Parse and validate override response JSON (only when override is enabled)
+    let parsedOverrideResponse: ErrorOverrideResponse | undefined = undefined;
+    let parsedStatusCode: number | undefined = undefined;
+
+    if (enableOverride) {
+      if (overrideResponse.trim()) {
+        try {
+          parsedOverrideResponse = JSON.parse(overrideResponse.trim());
+        } catch {
+          toast.error(t("errorRules.dialog.invalidJson"));
+          return;
+        }
+      }
+
+      // Parse override status code
+      if (overrideStatusCode.trim()) {
+        const code = parseInt(overrideStatusCode.trim(), 10);
+        if (isNaN(code) || code < 400 || code > 599) {
+          toast.error(t("errorRules.dialog.invalidStatusCode"));
+          return;
+        }
+        parsedStatusCode = code;
+      }
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -70,6 +100,8 @@ export function AddRuleDialog() {
           | "invalid_request"
           | "cache_limit",
         description: description.trim() || undefined,
+        overrideResponse: parsedOverrideResponse ?? null,
+        overrideStatusCode: parsedStatusCode ?? null,
       });
 
       if (result.ok) {
@@ -79,6 +111,9 @@ export function AddRuleDialog() {
         setPattern("");
         setCategory("");
         setDescription("");
+        setEnableOverride(false);
+        setOverrideResponse("");
+        setOverrideStatusCode("");
       } else {
         toast.error(result.error);
       }
@@ -158,6 +193,16 @@ export function AddRuleDialog() {
                 rows={3}
               />
             </div>
+
+            <OverrideSection
+              idPrefix="add"
+              enableOverride={enableOverride}
+              onEnableOverrideChange={setEnableOverride}
+              overrideResponse={overrideResponse}
+              onOverrideResponseChange={setOverrideResponse}
+              overrideStatusCode={overrideStatusCode}
+              onOverrideStatusCodeChange={setOverrideStatusCode}
+            />
 
             {pattern && (
               <div className="grid gap-2">

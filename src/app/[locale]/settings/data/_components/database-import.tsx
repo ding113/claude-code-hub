@@ -258,19 +258,21 @@ export function DatabaseImport() {
               <AlertCircle className="h-5 w-5 text-orange-500" />
               {t('confirmTitle')}
             </AlertDialogTitle>
-            <AlertDialogDescription className="space-y-2">
-              <p>
-                {cleanFirst ? t('confirmOverwrite') : t('confirmMerge')}
-              </p>
-              <p className="font-semibold text-foreground">
-                {cleanFirst ? t('warningOverwrite') : t('warningMerge')}
-              </p>
-              <p>
-                {t('backupFile')} <span className="font-mono text-xs">{selectedFile?.name}</span>
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {t('backupRecommendation')}
-              </p>
+            <AlertDialogDescription asChild>
+              <div className="text-muted-foreground text-sm space-y-2">
+                <p>
+                  {cleanFirst ? t('confirmOverwrite') : t('confirmMerge')}
+                </p>
+                <p className="font-semibold text-foreground">
+                  {cleanFirst ? t('warningOverwrite') : t('warningMerge')}
+                </p>
+                <p>
+                  {t('backupFile')} <span className="font-mono text-xs">{selectedFile?.name}</span>
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {t('backupRecommendation')}
+                </p>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
