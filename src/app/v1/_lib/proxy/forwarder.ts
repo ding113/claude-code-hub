@@ -1313,6 +1313,25 @@ export class ProxyForwarder {
       preserveForwardingHeaders: provider.forwardClientRealIp, // 根据供应商配置决定是否保留用户真实 IP
     });
 
-    return headerProcessor.process(session.headers);
+    const processedHeaders = headerProcessor.process(session.headers);
+
+    // 调试日志：记录 IP 转发配置和实际 headers
+    logger.debug("ProxyForwarder: IP forwarding configuration", {
+      providerId: provider.id,
+      providerName: provider.name,
+      forwardClientRealIp: provider.forwardClientRealIp,
+      originalHeaders: {
+        "x-forwarded-for": session.headers.get("x-forwarded-for"),
+        "x-real-ip": session.headers.get("x-real-ip"),
+        "cf-connecting-ip": session.headers.get("cf-connecting-ip"),
+      },
+      processedHeaders: {
+        "x-forwarded-for": processedHeaders.get("x-forwarded-for"),
+        "x-real-ip": processedHeaders.get("x-real-ip"),
+        "cf-connecting-ip": processedHeaders.get("cf-connecting-ip"),
+      },
+    });
+
+    return processedHeaders;
   }
 }
