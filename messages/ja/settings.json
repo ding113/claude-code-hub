@@ -560,6 +560,16 @@
         "formatOpenAIResponses": "Codex (Response API)",
         "testModel": "テストモデル",
         "testModelDesc": "空欄の場合はデフォルトモデルを使用、手動入力も可能",
+        "requestConfig": "リクエスト設定",
+        "presetConfig": "プリセット",
+        "customConfig": "カスタム",
+        "selectPreset": "プリセットテンプレートを選択",
+        "presetDesc": "プリセットテンプレートには、リレーサービス検証用の本物のCLIリクエストパターンが含まれています",
+        "customPayloadPlaceholder": "{\"model\": \"...\", \"messages\": [...]}",
+        "customPayloadDesc": "カスタムJSONペイロードを入力してデフォルトのリクエストボディを上書き",
+        "successContains": "成功検出キーワード",
+        "successContainsPlaceholder": "pong",
+        "successContainsDesc": "成功と見なすには、レスポンスにこのキーワードが含まれている必要があります",
         "model": "モデル",
         "responseModel": "応答モデル",
         "responseTime": "応答時間",
@@ -652,6 +662,10 @@
             "chunksCount": "チャンク数",
             "yes": "はい",
             "no": "いいえ"
+          },
+          "rawResponse": {
+            "title": "生のレスポンスボディ",
+            "hint": "ここに生のレスポンス内容が表示されます。キーワードがレスポンスに含まれているか確認できます。"
           },
           "errorDetails": {
             "title": "エラー詳細",
@@ -1089,8 +1103,8 @@
           },
           "streamingIdle": {
             "label": "ストリーミングアイドルタイムアウト（秒）",
-            "placeholder": "10",
-            "desc": "ストリーミングリクエストのアイドルタイムアウト、範囲1～120秒、デフォルト10秒（途中停止防止）",
+            "placeholder": "60",
+            "desc": "ストリーミングリクエストのアイドルタイムアウト、範囲60～600秒、0で無効化（途中停止防止）",
             "core": "true"
           },
           "nonStreamingTotal": {

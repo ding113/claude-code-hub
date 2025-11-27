@@ -216,6 +216,7 @@ export function parseSSEStream(body: string): ParsedResponse {
 
 /**
  * Check if a response body appears to be an SSE stream
+ * Based on relay-pulse heuristic: check for both "event:" and "data:" patterns
  */
 export function isSSEResponse(body: string, contentType?: string): boolean {
   // Check Content-Type header
@@ -223,9 +224,99 @@ export function isSSEResponse(body: string, contentType?: string): boolean {
     return true;
   }
 
-  // Check body pattern (multiple data: lines)
-  const dataLineCount = (body.match(/^data:/gm) || []).length;
-  return dataLineCount > 1;
+  // Heuristic from relay-pulse: must contain both "event:" and "data:" patterns
+  // This is more accurate than just counting data: lines
+  const hasEventLines = body.includes("event:");
+  const hasDataLines = body.includes("data:");
+
+  return hasEventLines && hasDataLines;
+}
+
+/**
+ * Aggregate response text from various formats (SSE, JSON, plain text)
+ * Based on relay-pulse aggregateResponseText function
+ *
+ * This function attempts to extract text content from:
+ * 1. SSE/streaming responses - parse data: lines and extract deltas
+ * 2. JSON responses - parse and extract content fields
+ * 3. Plain text - return as-is
+ *
+ * Key feature: Falls back to raw body if SSE parsing fails
+ */
+export function aggregateResponseText(body: string, contentType?: string): string {
+  if (!body || !body.trim()) {
+    return "";
+  }
+
+  // Try SSE parsing if it looks like SSE (same heuristic as relay-pulse)
+  if (body.includes("event:") && body.includes("data:")) {
+    const sseText = extractTextFromSSE(body);
+    if (sseText && sseText.trim()) {
+      return sseText;
+    }
+    // Fall through to other methods if SSE extraction returned empty
+  }
+
+  // Try JSON parsing for common response formats
+  try {
+    const obj = JSON.parse(body) as Record<string, unknown>;
+
+    // Anthropic format: {"content":[{"type":"text","text":"..."}]}
+    if (obj.content && Array.isArray(obj.content)) {
+      const texts = (obj.content as Array<{ type?: string; text?: string }>)
+        .filter((c) => c.type === "text" && c.text)
+        .map((c) => c.text || "");
+      if (texts.length > 0) {
+        return texts.join("");
+      }
+    }
+
+    // OpenAI format: {"choices":[{"message":{"content":"..."}}]}
+    if (obj.choices && Array.isArray(obj.choices)) {
+      const texts = (obj.choices as Array<{ message?: { content?: string }; text?: string }>)
+        .map((c) => c.message?.content || c.text || "")
+        .filter(Boolean);
+      if (texts.length > 0) {
+        return texts.join("");
+      }
+    }
+
+    // Codex Response API format: {"output":[{"content":[{"text":"..."}]}]}
+    if (obj.output && Array.isArray(obj.output)) {
+      const texts = (obj.output as Array<{ content?: Array<{ text?: string }> }>).flatMap(
+        (o) => o.content?.map((c) => c.text || "").filter(Boolean) || []
+      );
+      if (texts.length > 0) {
+        return texts.join("");
+      }
+    }
+
+    // Gemini format: {"candidates":[{"content":{"parts":[{"text":"..."}]}}]}
+    if (obj.candidates && Array.isArray(obj.candidates)) {
+      const texts = (
+        obj.candidates as Array<{ content?: { parts?: Array<{ text?: string }> } }>
+      ).flatMap((c) => c.content?.parts?.map((p) => p.text || "").filter(Boolean) || []);
+      if (texts.length > 0) {
+        return texts.join("");
+      }
+    }
+
+    // Direct content/text/message fields
+    if (typeof obj.content === "string") return obj.content;
+    if (typeof obj.text === "string") return obj.text;
+    if (typeof obj.message === "string") return obj.message;
+
+    // Error message extraction
+    if (obj.error && typeof obj.error === "object") {
+      const error = obj.error as { message?: string };
+      if (error.message) return error.message;
+    }
+  } catch {
+    // Not JSON, continue to raw body fallback
+  }
+
+  // Fallback: return raw body
+  return body;
 }
 
 /**

@@ -613,6 +613,16 @@
         "formatOpenAIResponses": "Codex (Response API)",
         "testModel": "Test model",
         "testModelDesc": "Leave empty to use the default model or type one manually",
+        "requestConfig": "Request Configuration",
+        "presetConfig": "Preset",
+        "customConfig": "Custom",
+        "selectPreset": "Select preset template",
+        "presetDesc": "Preset templates contain authentic CLI request patterns for relay service verification",
+        "customPayloadPlaceholder": "{\"model\": \"...\", \"messages\": [...]}",
+        "customPayloadDesc": "Enter custom JSON payload to override default request body",
+        "successContains": "Success Keyword",
+        "successContainsPlaceholder": "pong",
+        "successContainsDesc": "Response must contain this keyword to be considered successful",
         "model": "Model",
         "responseModel": "Response model",
         "responseTime": "Response time",
@@ -705,6 +715,10 @@
             "chunksCount": "Chunks Count",
             "yes": "Yes",
             "no": "No"
+          },
+          "rawResponse": {
+            "title": "Raw Response Body",
+            "hint": "This shows the raw response content. You can check if the keyword exists in the response here."
           },
           "errorDetails": {
             "title": "Error Details",
@@ -1211,8 +1225,8 @@
           },
           "streamingIdle": {
             "label": "Streaming Idle Timeout (seconds)",
-            "placeholder": "10",
-            "desc": "Streaming request idle timeout, range 1-120 seconds, default 10 seconds (prevent mid-stream stalling)",
+            "placeholder": "60",
+            "desc": "Streaming request idle timeout, range 60-600 seconds, enter 0 to disable (prevent mid-stream stalling)",
             "core": "true"
           },
           "nonStreamingTotal": {

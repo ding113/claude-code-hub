@@ -25,4 +25,5 @@ export {
   parseSSEStream,
   isSSEResponse,
   parseNDJSONStream,
+  aggregateResponseText,
 } from "./sse-collector";

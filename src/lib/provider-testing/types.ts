@@ -93,6 +93,15 @@ export interface ProviderTestConfig {
   successContains?: string;
   /** Request timeout in ms (default: 10000) */
   timeoutMs?: number;
+
+  // =========== Custom Configuration Fields ===========
+
+  /** Preset configuration ID (e.g., 'cc_base', 'cx_base') */
+  preset?: string;
+  /** Custom JSON payload (overrides preset and default body) */
+  customPayload?: string;
+  /** Custom headers to merge with default headers */
+  customHeaders?: Record<string, string>;
 }
 
 // ============================================================================
@@ -147,11 +156,13 @@ export interface ProviderTestResult {
   httpStatusText?: string;
   /** Model used in response */
   model?: string;
-  /** Response content (truncated) */
+  /** Response content preview (truncated to 500 chars) */
   content?: string;
-  /** Token usage */
+  /** Raw response body for user inspection (truncated to 5000 chars) */
+  rawResponse?: string;
+  /** Token usage (deprecated - kept for backward compatibility) */
   usage?: TokenUsage;
-  /** Stream info (if streaming response) */
+  /** Stream info (deprecated - kept for backward compatibility) */
   streamInfo?: {
     isStreaming: boolean;
     chunksReceived?: number;

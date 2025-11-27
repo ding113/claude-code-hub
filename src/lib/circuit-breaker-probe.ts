@@ -11,7 +11,7 @@
  */
 
 import { logger } from "@/lib/logger";
-import { getAllHealthStatus, getCircuitState, resetCircuit } from "./circuit-breaker";
+import { getAllHealthStatus, getCircuitState, tripToHalfOpen } from "./circuit-breaker";
 import { executeProviderTest } from "./provider-testing/test-service";
 import type { ProviderType } from "@/types/provider";
 
@@ -119,9 +119,9 @@ async function probeProvider(providerId: number): Promise<boolean> {
         status: result.status,
       });
 
-      // Reset circuit to closed (will transition through half-open on next real request)
-      // Using resetCircuit here since we want to give the provider another chance
-      resetCircuit(providerId);
+      // Transition circuit to half-open state for safe recovery verification
+      // This allows real requests to gradually test the provider before fully closing
+      tripToHalfOpen(providerId);
       return true;
     }
 

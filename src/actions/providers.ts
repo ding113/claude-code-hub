@@ -35,6 +35,7 @@ import {
   type TestStatus,
   type TestSubStatus,
 } from "@/lib/provider-testing";
+import { getPresetsForProvider, type PresetConfig } from "@/lib/provider-testing/presets";
 
 const API_TEST_TIMEOUT_LIMITS = {
   DEFAULT: 15000,
@@ -715,6 +716,131 @@ export async function getProviderLimitUsage(providerId: number): Promise<
     logger.error("获取供应商限额使用情况失败:", error);
     const message = error instanceof Error ? error.message : "获取供应商限额使用情况失败";
     return { ok: false, error: message };
+  }
+}
+
+/**
+ * 供应商限额使用情况数据结构
+ */
+export type ProviderLimitUsageData = {
+  cost5h: { current: number; limit: number | null; resetInfo: string };
+  costDaily: { current: number; limit: number | null; resetAt?: Date };
+  costWeekly: { current: number; limit: number | null; resetAt: Date };
+  costMonthly: { current: number; limit: number | null; resetAt: Date };
+  concurrentSessions: { current: number; limit: number };
+};
+
+/**
+ * 批量获取多个供应商的限额使用情况
+ * 使用 Redis Pipeline 避免 N+1 查询问题
+ *
+ * @param providers - 供应商数据数组（必须包含限额相关字段）
+ * @returns Map<providerId, ProviderLimitUsageData>
+ */
+export async function getProviderLimitUsageBatch(
+  providers: Array<{
+    id: number;
+    dailyResetTime?: string | null;
+    dailyResetMode?: string | null;
+    limit5hUsd?: number | null;
+    limitDailyUsd?: number | null;
+    limitWeeklyUsd?: number | null;
+    limitMonthlyUsd?: number | null;
+    limitConcurrentSessions?: number | null;
+  }>
+): Promise<Map<number, ProviderLimitUsageData>> {
+  const result = new Map<number, ProviderLimitUsageData>();
+
+  if (providers.length === 0) {
+    return result;
+  }
+
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      logger.warn("getProviderLimitUsageBatch: 无权限执行此操作");
+      return result;
+    }
+
+    // 动态导入避免循环依赖
+    const { RateLimitService } = await import("@/lib/rate-limit");
+    const { SessionTracker } = await import("@/lib/session-tracker");
+    const { getResetInfo, getResetInfoWithMode } = await import("@/lib/rate-limit/time-utils");
+
+    const providerIds = providers.map((p) => p.id);
+
+    // 构建日限额重置配置
+    const dailyResetConfigs = new Map<
+      number,
+      { resetTime?: string | null; resetMode?: string | null }
+    >();
+    for (const provider of providers) {
+      dailyResetConfigs.set(provider.id, {
+        resetTime: provider.dailyResetTime,
+        resetMode: provider.dailyResetMode,
+      });
+    }
+
+    // 批量获取限额消费和并发 session 计数（2 次 Redis Pipeline 调用）
+    const [costMap, sessionCountMap] = await Promise.all([
+      RateLimitService.getCurrentCostBatch(providerIds, dailyResetConfigs),
+      SessionTracker.getProviderSessionCountBatch(providerIds),
+    ]);
+
+    // 组装结果
+    for (const provider of providers) {
+      const costs = costMap.get(provider.id) || {
+        cost5h: 0,
+        costDaily: 0,
+        costWeekly: 0,
+        costMonthly: 0,
+      };
+      const sessionCount = sessionCountMap.get(provider.id) || 0;
+
+      // 获取重置时间信息
+      const reset5h = getResetInfo("5h");
+      const dailyResetMode = (provider.dailyResetMode ?? "fixed") as "fixed" | "rolling";
+      const resetDaily = getResetInfoWithMode(
+        "daily",
+        provider.dailyResetTime ?? undefined,
+        dailyResetMode
+      );
+      const resetWeekly = getResetInfo("weekly");
+      const resetMonthly = getResetInfo("monthly");
+
+      result.set(provider.id, {
+        cost5h: {
+          current: costs.cost5h,
+          limit: provider.limit5hUsd ?? null,
+          resetInfo: reset5h.type === "rolling" ? `滚动窗口（${reset5h.period}）` : "自然时间窗口",
+        },
+        costDaily: {
+          current: costs.costDaily,
+          limit: provider.limitDailyUsd ?? null,
+          resetAt: resetDaily.type === "rolling" ? undefined : resetDaily.resetAt!,
+        },
+        costWeekly: {
+          current: costs.costWeekly,
+          limit: provider.limitWeeklyUsd ?? null,
+          resetAt: resetWeekly.resetAt!,
+        },
+        costMonthly: {
+          current: costs.costMonthly,
+          limit: provider.limitMonthlyUsd ?? null,
+          resetAt: resetMonthly.resetAt!,
+        },
+        concurrentSessions: {
+          current: sessionCount,
+          limit: provider.limitConcurrentSessions || 0,
+        },
+      });
+    }
+
+    logger.debug(`getProviderLimitUsageBatch: 批量获取 ${providers.length} 个供应商限额数据完成`);
+    return result;
+  } catch (error) {
+    logger.error("批量获取供应商限额使用情况失败:", error);
+    return result;
   }
 }
 
@@ -2253,6 +2379,12 @@ export type UnifiedTestArgs = {
   successContains?: string;
   /** Request timeout in ms (default: 10000) */
   timeoutMs?: number;
+  /** Preset configuration ID (e.g., 'cc_base', 'cx_base') */
+  preset?: string;
+  /** Custom JSON payload (overrides preset and default body) */
+  customPayload?: string;
+  /** Custom headers to merge with default headers */
+  customHeaders?: Record<string, string>;
 };
 
 /**
@@ -2365,6 +2497,10 @@ export async function testProviderUnified(data: UnifiedTestArgs): Promise<Unifie
       latencyThresholdMs: data.latencyThresholdMs,
       successContains: data.successContains,
       timeoutMs: data.timeoutMs,
+      // Custom configuration fields
+      preset: data.preset,
+      customPayload: data.customPayload,
+      customHeaders: data.customHeaders,
     };
 
     // Execute test
@@ -2402,6 +2538,59 @@ export async function testProviderUnified(data: UnifiedTestArgs): Promise<Unifie
     return {
       ok: false,
       error: error instanceof Error ? error.message : "测试执行失败",
+    };
+  }
+}
+
+// ============================================================================
+// Provider Test Presets
+// ============================================================================
+
+/**
+ * Preset configuration for frontend display
+ */
+export type PresetConfigResponse = {
+  id: string;
+  description: string;
+  defaultSuccessContains: string;
+  defaultModel: string;
+};
+
+/**
+ * Get available test presets for a provider type
+ *
+ * @description Returns list of preset configurations compatible with the given provider type.
+ * Presets provide authentic CLI request patterns that pass relay service verification.
+ */
+export async function getProviderTestPresets(
+  providerType: ProviderType
+): Promise<ActionResult<PresetConfigResponse[]>> {
+  const session = await getSession();
+  if (!session || session.user.role !== "admin") {
+    return {
+      ok: false,
+      error: "未授权",
+    };
+  }
+
+  try {
+    const presets = getPresetsForProvider(providerType);
+    const response: PresetConfigResponse[] = presets.map((preset) => ({
+      id: preset.id,
+      description: preset.description,
+      defaultSuccessContains: preset.defaultSuccessContains,
+      defaultModel: preset.defaultModel,
+    }));
+
+    return {
+      ok: true,
+      data: response,
+    };
+  } catch (error) {
+    logger.error("getProviderTestPresets error", { error, providerType });
+    return {
+      ok: false,
+      error: "获取预置配置失败",
     };
   }
 }

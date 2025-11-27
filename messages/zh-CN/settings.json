@@ -239,6 +239,16 @@
         "formatOpenAIResponses": "Codex (Response API)",
         "testModel": "测试模型",
         "testModelDesc": "可手动输入，不填写则使用默认模型",
+        "requestConfig": "请求配置",
+        "presetConfig": "预置配置",
+        "customConfig": "自定义",
+        "selectPreset": "选择预置模板",
+        "presetDesc": "预置模板包含真实 CLI 请求特征，用于通过中转服务验证",
+        "customPayloadPlaceholder": "{\"model\": \"...\", \"messages\": [...]}",
+        "customPayloadDesc": "输入自定义 JSON payload，将覆盖默认请求体",
+        "successContains": "成功检测词",
+        "successContainsPlaceholder": "pong",
+        "successContainsDesc": "响应需包含此内容才算测试成功",
         "model": "模型",
         "responseModel": "响应模型",
         "responseTime": "响应时间",
@@ -331,6 +341,10 @@
             "chunksCount": "数据块数",
             "yes": "是",
             "no": "否"
+          },
+          "rawResponse": {
+            "title": "完整响应体",
+            "hint": "此处显示原始响应内容，您可以在此检查关键词是否存在于响应中"
           },
           "errorDetails": {
             "title": "错误详情",
@@ -800,8 +814,8 @@
           },
           "streamingIdle": {
             "label": "流式静默期超时（秒）",
-            "placeholder": "10",
-            "desc": "流式请求静默期超时，范围 1-120 秒，默认 10 秒（防止中途卡住）",
+            "placeholder": "60",
+            "desc": "流式请求静默期超时，范围 60-600 秒，填 0 禁用（防止中途卡住）",
             "core": "true"
           },
           "nonStreamingTotal": {

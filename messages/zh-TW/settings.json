@@ -598,6 +598,16 @@
         "formatOpenAIResponses": "Codex (Response API)",
         "testModel": "測試模型",
         "testModelDesc": "可手動輸入，留空則使用預設模型",
+        "requestConfig": "請求配置",
+        "presetConfig": "預置配置",
+        "customConfig": "自訂",
+        "selectPreset": "選擇預置範本",
+        "presetDesc": "預置範本包含真實 CLI 請求特徵，用於通過中轉服務驗證",
+        "customPayloadPlaceholder": "{\"model\": \"...\", \"messages\": [...]}",
+        "customPayloadDesc": "輸入自訂 JSON payload，將覆蓋預設請求主體",
+        "successContains": "成功檢測詞",
+        "successContainsPlaceholder": "pong",
+        "successContainsDesc": "回應需包含此內容才算測試成功",
         "model": "模型",
         "responseModel": "回應模型",
         "responseTime": "回應時間",
@@ -612,6 +622,18 @@
         "close": "關閉",
         "success": "成功",
         "failed": "失敗",
+        "streamInfo": "串流響應資訊",
+        "chunksReceived": "已接收區塊",
+        "streamFormat": "串流格式",
+        "streamResponse": "串流響應",
+        "chunksCount": "已接收 {count} 個區塊（{format}）",
+        "truncatedPreview": "顯示前 {length} 個字元，複製可查看完整內容",
+        "truncatedBrief": "顯示前 {length} 個字元，點擊「查看詳情」以查看更多",
+        "copyFormat": {
+          "testResult": "測試結果",
+          "message": "訊息",
+          "errorDetails": "錯誤詳情"
+        },
         "disclaimer": {
           "title": "注意",
           "resultReference": "【重要】因各家供應商情況不同，測試結果僅供參考，不代表實際呼叫效果",
@@ -678,6 +700,10 @@
             "chunksCount": "資料區塊數",
             "yes": "是",
             "no": "否"
+          },
+          "rawResponse": {
+            "title": "完整回應內容",
+            "hint": "此處顯示原始回應內容，您可以在此檢查關鍵字是否存在於回應中"
           },
           "errorDetails": {
             "title": "錯誤詳情",
@@ -1077,8 +1103,8 @@
           },
           "streamingIdle": {
             "label": "串流靜默期超時（秒）",
-            "placeholder": "10",
-            "desc": "串流請求靜默期超時，範圍 1-120 秒，預設 10 秒（防止中途卡住）",
+            "placeholder": "60",
+            "desc": "串流請求靜默期超時，範圍 60-600 秒，填 0 禁用（防止中途卡住）",
             "core": "true"
           },
           "nonStreamingTotal": {

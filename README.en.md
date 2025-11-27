@@ -282,7 +282,7 @@ We welcome issues and PRs! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for th
 
 ## 🌐 Acknowledgments
 
-This project builds on [zsio/claude-code-hub](https://github.com/zsio/claude-code-hub) and references [router-for-me/CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) for the OpenAI-compatible layer. Huge thanks to the original authors and community contributors!
+This project builds on [zsio/claude-code-hub](https://github.com/zsio/claude-code-hub), references [router-for-me/CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) for the OpenAI-compatible layer, and [prehisle/relay-pulse](https://github.com/prehisle/relay-pulse) for provider detection functionality. Huge thanks to the original authors and community contributors!
 
 ## ⭐ Star History
 

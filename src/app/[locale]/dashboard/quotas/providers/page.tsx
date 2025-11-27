@@ -1,5 +1,4 @@
-import { getProviders } from "@/actions/providers";
-import { getProviderLimitUsage } from "@/actions/providers";
+import { getProviders, getProviderLimitUsageBatch } from "@/actions/providers";
 import { ProvidersQuotaManager } from "./_components/providers-quota-manager";
 import { getSystemSettings } from "@/repository/system-config";
 import { getTranslations } from "next-intl/server";
@@ -10,22 +9,31 @@ export const dynamic = "force-dynamic";
 async function getProvidersWithQuotas() {
   const providers = await getProviders();
 
-  const providersWithQuotas = await Promise.all(
-    providers.map(async (provider) => {
-      const result = await getProviderLimitUsage(provider.id);
-      return {
-        id: provider.id,
-        name: provider.name,
-        providerType: provider.providerType,
-        isEnabled: provider.isEnabled,
-        priority: provider.priority,
-        weight: provider.weight,
-        quota: result.ok ? result.data : null,
-      };
-    })
+  // 使用批量查询获取所有供应商的限额数据（避免 N+1 查询问题）
+  // 优化前: 50 个供应商 = 52 DB + 250 Redis 查询
+  // 优化后: 50 个供应商 = 2 DB + 2 Redis Pipeline 查询
+  const quotaMap = await getProviderLimitUsageBatch(
+    providers.map((p) => ({
+      id: p.id,
+      dailyResetTime: p.dailyResetTime,
+      dailyResetMode: p.dailyResetMode,
+      limit5hUsd: p.limit5hUsd,
+      limitDailyUsd: p.limitDailyUsd,
+      limitWeeklyUsd: p.limitWeeklyUsd,
+      limitMonthlyUsd: p.limitMonthlyUsd,
+      limitConcurrentSessions: p.limitConcurrentSessions,
+    }))
   );
 
-  return providersWithQuotas;
+  return providers.map((provider) => ({
+    id: provider.id,
+    name: provider.name,
+    providerType: provider.providerType,
+    isEnabled: provider.isEnabled,
+    priority: provider.priority,
+    weight: provider.weight,
+    quota: quotaMap.get(provider.id) ?? null,
+  }));
 }
 
 export default async function ProvidersQuotaPage() {
