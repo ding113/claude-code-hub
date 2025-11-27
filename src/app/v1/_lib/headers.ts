@@ -1,5 +1,5 @@
 import { logger } from "@/lib/logger";
-import { IP_FORWARDING_HEADERS, ALWAYS_BLOCKED_HEADERS } from "@/lib/constants/headers";
+import { CLIENT_IDENTIFYING_HEADERS, ALWAYS_BLOCKED_HEADERS } from "@/lib/constants/headers";
 
 /**
  * Header 处理器配置
@@ -27,8 +27,8 @@ export class HeaderProcessor {
     // 目的：保护客户端隐私，避免真实 IP 和来源信息泄露给上游供应商
     const defaultBlacklist: string[] = [
       ...ALWAYS_BLOCKED_HEADERS,
-      // 根据配置决定是否添加 IP 转发相关 headers
-      ...(config.preserveForwardingHeaders ? [] : IP_FORWARDING_HEADERS),
+      // 根据配置决定是否添加客户端身份识别相关 headers
+      ...(config.preserveForwardingHeaders ? [] : CLIENT_IDENTIFYING_HEADERS),
     ];
 
     // 如果不保留 authorization，添加到黑名单

@@ -1315,27 +1315,25 @@ export class ProxyForwarder {
 
     const processedHeaders = headerProcessor.process(session.headers);
 
-    // 仅在 debug/trace 级别输出详细的 IP 转发日志
+    // 调试日志仅在 debug/trace 级别输出：记录 IP 转发配置及关键头的变化情况
     // 注意：此功能仅转发 HTTP Headers 中的客户端 IP，无法改变 TCP 连接的源 IP
     // TCP 源 IP 永远是本服务器的 IP，除非使用 SOCKS5/HTTP 代理（见供应商"代理配置"）
-    if (logger.level === "debug" || logger.level === "trace") {
-      logger.debug("ProxyForwarder: IP forwarding configuration", {
-        providerId: provider.id,
-        providerName: provider.name,
-        forwardClientRealIp: provider.forwardClientRealIp,
-        note: "This only forwards HTTP headers. TCP source IP remains unchanged. Use proxy config if you need to change TCP IP.",
-        originalHeaders: {
-          "x-forwarded-for": session.headers.get("x-forwarded-for"),
-          "x-real-ip": session.headers.get("x-real-ip"),
-          "cf-connecting-ip": session.headers.get("cf-connecting-ip"),
-        },
-        processedHeaders: {
-          "x-forwarded-for": processedHeaders.get("x-forwarded-for"),
-          "x-real-ip": processedHeaders.get("x-real-ip"),
-          "cf-connecting-ip": processedHeaders.get("cf-connecting-ip"),
-        },
-      });
-    }
+    logger.debug("ProxyForwarder: IP forwarding configuration", {
+      providerId: provider.id,
+      providerName: provider.name,
+      forwardClientRealIp: provider.forwardClientRealIp,
+      note: "This only forwards HTTP headers. TCP source IP remains unchanged. Use proxy config if you need to change TCP IP.",
+      originalHeaders: {
+        "x-forwarded-for": session.headers.get("x-forwarded-for"),
+        "x-real-ip": session.headers.get("x-real-ip"),
+        "cf-connecting-ip": session.headers.get("cf-connecting-ip"),
+      },
+      processedHeaders: {
+        "x-forwarded-for": processedHeaders.get("x-forwarded-for"),
+        "x-real-ip": processedHeaders.get("x-real-ip"),
+        "cf-connecting-ip": processedHeaders.get("cf-connecting-ip"),
+      },
+    });
 
     return processedHeaders;
   }

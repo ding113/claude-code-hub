@@ -1,13 +1,13 @@
 /**
- * IP 转发相关的 HTTP Headers 常量
- * 用于控制是否将客户端真实 IP 转发给上游供应商
+ * 客户端身份识别相关的 HTTP Headers 常量
+ * 用于控制是否将客户端身份信息转发给上游供应商
  */
 
 /**
- * IP 转发相关的 Headers 列表
- * 包含标准代理转发头、真实 IP 头、CDN 特定头等
+ * 客户端真实 IP 相关的 Headers 列表
+ * 包含标准代理转发头和各种真实 IP 头
  */
-export const IP_FORWARDING_HEADERS = [
+const CLIENT_IP_HEADERS = [
   // 标准代理转发头
   "x-forwarded-for", // 客户端真实 IP 链
   "forwarded", // RFC 7239 标准转发头
@@ -19,19 +19,35 @@ export const IP_FORWARDING_HEADERS = [
   "x-remote-ip", // 部分代理使用
   "x-remote-addr", // 部分代理使用
 
-  // CDN/云服务商特定头
+  // CDN/云服务商 IP 头
   "cf-connecting-ip", // Cloudflare 客户端 IP
-  "cf-ipcountry", // Cloudflare 客户端国家
-  "cf-ray", // Cloudflare 请求追踪 ID
-  "cf-visitor", // Cloudflare 访问者信息
   "true-client-ip", // Cloudflare Enterprise / Akamai
   "x-cluster-client-ip", // 部分负载均衡器
   "fastly-client-ip", // Fastly CDN
   "x-azure-clientip", // Azure
+] as const;
+
+/**
+ * CDN/云服务商的客户端元数据 Headers
+ * 包含地理位置、追踪 ID 等非 IP 信息，但可用于识别客户端
+ */
+const CLIENT_METADATA_HEADERS = [
+  "cf-ipcountry", // Cloudflare 客户端国家
+  "cf-ray", // Cloudflare 请求追踪 ID
+  "cf-visitor", // Cloudflare 访问者信息
   "x-azure-fdid", // Azure Front Door ID
   "x-azure-ref", // Azure 请求追踪
   "akamai-origin-hop", // Akamai
   "x-akamai-config-log-detail", // Akamai 配置日志
+] as const;
+
+/**
+ * 客户端身份识别相关的所有 Headers（IP + 元数据）
+ * 当 forwardClientRealIp 为 false 时，这些 headers 将被删除以保护客户端隐私
+ */
+export const CLIENT_IDENTIFYING_HEADERS = [
+  ...CLIENT_IP_HEADERS,
+  ...CLIENT_METADATA_HEADERS,
 ] as const;
 
 /**
