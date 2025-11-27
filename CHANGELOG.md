@@ -30,6 +30,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- Fix provider availability monitoring page sorting order so high-availability providers rank first (#219) @ding113
 - Fix provider daily usage statistics JSONB field name error (#216) @ding113
 - Fix response content validation failure in provider testing (#216) @ding113
 - Fix login redirect displaying duplicate language prefix (#216) @ding113
