@@ -178,8 +178,8 @@ export function AvailabilityView() {
           // Unknown status (no data) goes to the end
           if (a.currentStatus === "unknown" && b.currentStatus !== "unknown") return 1;
           if (b.currentStatus === "unknown" && a.currentStatus !== "unknown") return -1;
-          // Sort by availability ascending (worst first for monitoring)
-          return a.currentAvailability - b.currentAvailability;
+          // Sort by availability descending (best first)
+          return b.currentAvailability - a.currentAvailability;
         case "name":
           return a.providerName.localeCompare(b.providerName);
         case "requests":
