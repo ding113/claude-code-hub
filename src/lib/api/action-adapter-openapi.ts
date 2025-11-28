@@ -240,8 +240,9 @@ export function createActionRoute(
           // 单个参数，直接传递值
           args = [body[keys[0] as keyof typeof body]];
         } else {
-          // 多个参数，按 schema key 顺序传递
-          args = keys.map((key) => body[key as keyof typeof body]);
+          // 多个参数场景 - 保持原有行为传递整个 body 对象
+          // 因为存在 editUser(userId, data) 这类签名，无法从 schema 区分
+          args = [body];
         }
       } else {
         // 非对象 schema，直接传递整个 body
