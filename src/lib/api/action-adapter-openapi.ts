@@ -224,8 +224,32 @@ export function createActionRoute(
       const body = await c.req.json().catch(() => ({}));
 
       // 2. 调用 Server Action
+      // 提取 schema 中定义的参数并按顺序传递给 action
+      // 这样可以兼容 action(arg1, arg2, ...) 和 action({ arg1, arg2, ... }) 两种签名
       logger.debug(`[ActionAPI] Calling ${fullPath}`, { body });
-      const rawResult = await action(body);
+
+      // 如果 requestSchema 是对象类型，提取 keys 作为参数顺序
+      let args: unknown[];
+      if (requestSchema instanceof z.ZodObject) {
+        const schemaShape = requestSchema.shape;
+        const keys = Object.keys(schemaShape);
+        if (keys.length === 0) {
+          // 没有参数
+          args = [];
+        } else if (keys.length === 1) {
+          // 单个参数，直接传递值
+          args = [body[keys[0] as keyof typeof body]];
+        } else {
+          // 多个参数场景 - 保持原有行为传递整个 body 对象
+          // 因为存在 editUser(userId, data) 这类签名，无法从 schema 区分
+          args = [body];
+        }
+      } else {
+        // 非对象 schema，直接传递整个 body
+        args = [body];
+      }
+
+      const rawResult = await action(...args);
 
       // 2.5. 包装非 ActionResult 格式的返回值
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
