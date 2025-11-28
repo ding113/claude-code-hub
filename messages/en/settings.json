@@ -788,6 +788,18 @@
         "openai": "OpenAI",
         "gemini": "Gemini"
       },
+      "fetchModels": {
+        "fetchModels": "Fetch Models",
+        "fetching": "Fetching...",
+        "fetchSuccess": "Fetch Success",
+        "fetchFailed": "Fetch Failed",
+        "fetchedCount": "Fetched {count}",
+        "modelsFound": "Found {count} available models",
+        "noModelsFound": "No models found",
+        "fillUrlFirst": "Please fill in provider URL first",
+        "invalidUrl": "Invalid provider URL, only http/https supported",
+        "fillKeyFirst": "Please fill in API key first"
+      },
       "modelRedirect": {
         "currentRules": "Current Rules ({count})",
         "addNewRule": "Add New Rule",

@@ -393,6 +393,18 @@
         "openai": "OpenAI",
         "gemini": "Gemini"
       },
+      "fetchModels": {
+        "fetchModels": "获取模型",
+        "fetching": "获取中...",
+        "fetchSuccess": "获取成功",
+        "fetchFailed": "获取失败",
+        "fetchedCount": "已获取 {count} 个",
+        "modelsFound": "找到 {count} 个可用模型",
+        "noModelsFound": "未找到可用模型",
+        "fillUrlFirst": "请先填写供应商 URL",
+        "invalidUrl": "供应商 URL 无效，仅支持 http/https",
+        "fillKeyFirst": "请先填写 API 密钥"
+      },
       "modelRedirect": {
         "currentRules": "当前规则 ({count})",
         "addNewRule": "添加新规则",
