@@ -3,11 +3,38 @@
 import { revalidatePath } from "next/cache";
 import * as repo from "@/repository/error-rules";
 import { errorRuleDetector } from "@/lib/error-rule-detector";
-import { eventEmitter } from "@/lib/event-emitter";
 import { logger } from "@/lib/logger";
 import { getSession } from "@/lib/auth";
+import { validateErrorOverrideResponse } from "@/lib/error-override-validator";
 import safeRegex from "safe-regex";
 import type { ActionResult } from "./types";
+
+/** 覆写状态码最小值 */
+const OVERRIDE_STATUS_CODE_MIN = 400;
+/** 覆写状态码最大值 */
+const OVERRIDE_STATUS_CODE_MAX = 599;
+
+/**
+ * 验证覆写状态码范围
+ *
+ * @param statusCode - 要验证的状态码
+ * @returns 错误消息（如果验证失败）或 null（验证通过）
+ */
+function validateOverrideStatusCodeRange(statusCode: number | null | undefined): string | null {
+  if (statusCode === null || statusCode === undefined) {
+    return null;
+  }
+
+  if (
+    !Number.isInteger(statusCode) ||
+    statusCode < OVERRIDE_STATUS_CODE_MIN ||
+    statusCode > OVERRIDE_STATUS_CODE_MAX
+  ) {
+    return `覆写状态码必须是 ${OVERRIDE_STATUS_CODE_MIN}-${OVERRIDE_STATUS_CODE_MAX} 范围内的整数`;
+  }
+
+  return null;
+}
 
 /**
  * 获取所有错误规则列表
@@ -42,6 +69,10 @@ export async function createErrorRuleAction(data: {
     | "cache_limit";
   matchType?: "contains" | "exact" | "regex";
   description?: string;
+  /** 覆写响应体（JSON 格式，符合 Claude API 错误格式） */
+  overrideResponse?: repo.ErrorOverrideResponse | null;
+  /** 覆写状态码：null 表示透传上游状态码 */
+  overrideStatusCode?: number | null;
 }): Promise<ActionResult<repo.ErrorRule>> {
   try {
     const session = await getSession();
@@ -115,18 +146,37 @@ export async function createErrorRuleAction(data: {
       }
     }
 
+    // 验证覆写响应体格式
+    if (data.overrideResponse) {
+      const validationError = validateErrorOverrideResponse(data.overrideResponse);
+      if (validationError) {
+        return {
+          ok: false,
+          error: validationError,
+        };
+      }
+    }
+
+    // 验证覆写状态码范围
+    const statusCodeError = validateOverrideStatusCodeRange(data.overrideStatusCode);
+    if (statusCodeError) {
+      return {
+        ok: false,
+        error: statusCodeError,
+      };
+    }
+
     const result = await repo.createErrorRule({
       pattern: data.pattern,
       category: data.category,
       matchType,
       description: data.description,
+      overrideResponse: data.overrideResponse ?? null,
+      overrideStatusCode: data.overrideStatusCode ?? null,
     });
 
-    // 刷新缓存
+    // 刷新缓存（直接调用 reload，不再触发事件避免重复刷新）
     await errorRuleDetector.reload();
-
-    // 触发事件
-    eventEmitter.emit("errorRulesUpdated");
 
     revalidatePath("/settings/error-rules");
 
@@ -160,6 +210,10 @@ export async function updateErrorRuleAction(
     category: string;
     matchType: "regex" | "contains" | "exact";
     description: string;
+    /** 覆写响应体（JSON 格式），设为 null 可清除 */
+    overrideResponse: repo.ErrorOverrideResponse | null;
+    /** 覆写状态码：null 表示透传上游状态码 */
+    overrideStatusCode: number | null;
     isEnabled: boolean;
     priority: number;
   }>
@@ -210,7 +264,30 @@ export async function updateErrorRuleAction(
       }
     }
 
-    const result = await repo.updateErrorRule(id, updates);
+    // 验证覆写响应体格式
+    if (updates.overrideResponse !== undefined && updates.overrideResponse !== null) {
+      const validationError = validateErrorOverrideResponse(updates.overrideResponse);
+      if (validationError) {
+        return {
+          ok: false,
+          error: validationError,
+        };
+      }
+    }
+
+    // 验证覆写状态码范围
+    const statusCodeError = validateOverrideStatusCodeRange(updates.overrideStatusCode);
+    if (statusCodeError) {
+      return {
+        ok: false,
+        error: statusCodeError,
+      };
+    }
+
+    // 直接使用 updates，不做额外处理
+    const processedUpdates = updates;
+
+    const result = await repo.updateErrorRule(id, processedUpdates);
 
     // 注意：result 为 null 的情况已在上方 getErrorRuleById 检查时处理
     // 这里保留检查作为防御性编程，应对并发删除场景
@@ -221,11 +298,8 @@ export async function updateErrorRuleAction(
       };
     }
 
-    // 刷新缓存
+    // 刷新缓存（直接调用 reload，不再触发事件避免重复刷新）
     await errorRuleDetector.reload();
-
-    // 触发事件
-    eventEmitter.emit("errorRulesUpdated");
 
     revalidatePath("/settings/error-rules");
 
@@ -270,11 +344,8 @@ export async function deleteErrorRuleAction(id: number): Promise<ActionResult> {
       };
     }
 
-    // 刷新缓存
+    // 刷新缓存（直接调用 reload，不再触发事件避免重复刷新）
     await errorRuleDetector.reload();
-
-    // 触发事件
-    eventEmitter.emit("errorRulesUpdated");
 
     revalidatePath("/settings/error-rules");
 
@@ -318,7 +389,7 @@ export async function refreshCacheAction(): Promise<
     // 1. 同步默认规则到数据库
     const syncedCount = await repo.syncDefaultErrorRules();
 
-    // 2. 重新加载缓存（syncDefaultErrorRules 已经触发了 eventEmitter，但显式调用确保同步）
+    // 2. 重新加载缓存
     await errorRuleDetector.reload();
 
     const stats = errorRuleDetector.getStats();
@@ -341,6 +412,151 @@ export async function refreshCacheAction(): Promise<
     return {
       ok: false,
       error: "同步规则失败",
+    };
+  }
+}
+
+/**
+ * 测试错误规则匹配
+ *
+ * 用于前端测试功能，模拟错误消息被系统处理后的结果：
+ * - 是否命中错误规则
+ * - 命中的规则详情
+ * - 最终返回给用户的响应（考虑覆写，与运行时逻辑一致）
+ *
+ * 运行时处理逻辑（与 error-handler.ts 保持一致）：
+ * 1. 验证覆写响应格式是否合法（isValidErrorOverrideResponse）
+ * 2. 移除覆写中的 request_id（运行时会从上游注入）
+ * 3. 验证状态码范围（400-599）
+ * 4. message 为空时运行时会回退到原始错误消息
+ */
+export async function testErrorRuleAction(input: { message: string }): Promise<
+  ActionResult<{
+    matched: boolean;
+    rule?: {
+      category: string;
+      pattern: string;
+      matchType: "regex" | "contains" | "exact";
+      overrideResponse: repo.ErrorOverrideResponse | null;
+      overrideStatusCode: number | null;
+    };
+    /** 最终返回给用户的响应体（经过运行时验证处理） */
+    finalResponse: repo.ErrorOverrideResponse | null;
+    /** 最终返回的状态码（经过范围校验） */
+    finalStatusCode: number | null;
+    /** 警告信息（如果有配置问题） */
+    warnings?: string[];
+  }>
+> {
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return {
+        ok: false,
+        error: "权限不足",
+      };
+    }
+
+    const rawMessage = input.message ?? "";
+
+    // 仅用 trim 做空值校验，检测时使用原始消息以保持与实际运行时一致
+    if (!rawMessage.trim()) {
+      return {
+        ok: false,
+        error: "测试消息不能为空",
+      };
+    }
+
+    // 使用异步检测确保规则已加载
+    // 注意：使用原始消息检测，与实际运行时逻辑保持一致
+    const detection = await errorRuleDetector.detectAsync(rawMessage);
+
+    // 验证 matchType 是有效值
+    const validMatchTypes = ["regex", "contains", "exact"] as const;
+    const matchType = validMatchTypes.includes(
+      detection.matchType as (typeof validMatchTypes)[number]
+    )
+      ? (detection.matchType as "regex" | "contains" | "exact")
+      : "regex";
+
+    // 模拟运行时处理逻辑，确保测试结果与实际行为一致
+    const warnings: string[] = [];
+    let finalResponse: repo.ErrorOverrideResponse | null = null;
+    let finalStatusCode: number | null = null;
+
+    if (detection.matched) {
+      // 1. 验证覆写响应格式（与 error-handler.ts 运行时逻辑一致）
+      if (detection.overrideResponse) {
+        const validationError = validateErrorOverrideResponse(detection.overrideResponse);
+        if (validationError) {
+          warnings.push(`${validationError}，运行时将跳过响应体覆写`);
+        } else {
+          // 2. 移除 request_id（运行时会从上游注入）
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { request_id: _ignoredRequestId, ...responseWithoutRequestId } =
+            detection.overrideResponse as Record<string, unknown>;
+
+          // 3. 处理 message 为空的情况（运行时会回退到原始错误消息）
+          const overrideErrorObj = detection.overrideResponse.error as Record<string, unknown>;
+          const overrideMessage =
+            typeof overrideErrorObj?.message === "string" &&
+            overrideErrorObj.message.trim().length > 0
+              ? overrideErrorObj.message
+              : rawMessage;
+
+          if (overrideMessage === rawMessage) {
+            warnings.push("覆写响应的 message 为空，运行时将回退到原始错误消息");
+          }
+
+          // 构建最终响应（与 error-handler.ts 构建逻辑一致）
+          finalResponse = {
+            ...responseWithoutRequestId,
+            error: {
+              ...overrideErrorObj,
+              message: overrideMessage,
+            },
+          } as repo.ErrorOverrideResponse;
+        }
+      }
+
+      // 4. 验证状态码范围（与 error-handler.ts 运行时逻辑一致）
+      const statusCodeError = validateOverrideStatusCodeRange(detection.overrideStatusCode);
+      if (
+        !statusCodeError &&
+        detection.overrideStatusCode !== undefined &&
+        detection.overrideStatusCode !== null
+      ) {
+        finalStatusCode = detection.overrideStatusCode;
+      } else if (statusCodeError) {
+        warnings.push(
+          `覆写状态码 ${detection.overrideStatusCode} 非整数或超出有效范围（${OVERRIDE_STATUS_CODE_MIN}-${OVERRIDE_STATUS_CODE_MAX}），运行时将使用上游状态码`
+        );
+      }
+    }
+
+    return {
+      ok: true,
+      data: {
+        matched: detection.matched,
+        rule: detection.matched
+          ? {
+              category: detection.category ?? "unknown",
+              pattern: detection.pattern ?? "",
+              matchType,
+              overrideResponse: detection.overrideResponse ?? null,
+              overrideStatusCode: detection.overrideStatusCode ?? null,
+            }
+          : undefined,
+        finalResponse,
+        finalStatusCode,
+        warnings: warnings.length > 0 ? warnings : undefined,
+      },
+    };
+  } catch (error) {
+    logger.error("[ErrorRulesAction] Failed to test error rule:", error);
+    return {
+      ok: false,
+      error: "测试错误规则失败",
     };
   }
 }

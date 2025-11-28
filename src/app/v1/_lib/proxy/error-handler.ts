@@ -1,9 +1,15 @@
 import { updateMessageRequestDuration, updateMessageRequestDetails } from "@/repository/message";
 import { logger } from "@/lib/logger";
 import { ProxyResponses } from "./responses";
-import { ProxyError, RateLimitError, isRateLimitError } from "./errors";
+import { ProxyError, RateLimitError, isRateLimitError, getErrorOverride } from "./errors";
 import type { ProxySession } from "./session";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
+import { isValidErrorOverrideResponse } from "@/lib/error-override-validator";
+
+/** 覆写状态码最小值 */
+const OVERRIDE_STATUS_CODE_MIN = 400;
+/** 覆写状态码最大值 */
+const OVERRIDE_STATUS_CODE_MAX = 599;
 
 export class ProxyErrorHandler {
   static async handle(session: ProxySession, error: unknown): Promise<Response> {
@@ -44,12 +50,134 @@ export class ProxyErrorHandler {
       }
     }
 
-    // 记录错误到数据库
+    // 记录错误到数据库（始终记录原始错误消息）
     await this.logErrorToDatabase(session, errorMessage, statusCode, null);
+
+    // 检测是否有覆写配置（响应体或状态码）
+    if (error instanceof Error) {
+      const override = getErrorOverride(error);
+      if (override) {
+        // 运行时校验覆写状态码范围（400-599），防止数据库脏数据导致 Response 抛 RangeError
+        let validatedStatusCode = override.statusCode;
+        if (
+          validatedStatusCode !== null &&
+          (!Number.isInteger(validatedStatusCode) ||
+            validatedStatusCode < OVERRIDE_STATUS_CODE_MIN ||
+            validatedStatusCode > OVERRIDE_STATUS_CODE_MAX)
+        ) {
+          logger.warn("ProxyErrorHandler: Invalid override status code, falling back to upstream", {
+            overrideStatusCode: validatedStatusCode,
+            upstreamStatusCode: statusCode,
+          });
+          validatedStatusCode = null;
+        }
+
+        // 使用覆写状态码，如果未配置或无效则使用上游状态码
+        const responseStatusCode = validatedStatusCode ?? statusCode;
+
+        // 提取上游 request_id（用于覆写场景透传）
+        const upstreamRequestId =
+          error instanceof ProxyError ? error.upstreamError?.requestId : undefined;
+        const safeRequestId = typeof upstreamRequestId === "string" ? upstreamRequestId : undefined;
+
+        // 情况 1: 有响应体覆写 - 返回覆写的 JSON 响应
+        if (override.response) {
+          // 运行时守卫：验证覆写响应格式是否合法（双重保护，加载时已过滤一次）
+          // 防止数据库中存在畸形数据导致返回不合规响应
+          if (!isValidErrorOverrideResponse(override.response)) {
+            logger.warn("ProxyErrorHandler: Invalid override response in database, skipping", {
+              response: JSON.stringify(override.response).substring(0, 200),
+            });
+            // 跳过响应体覆写，但仍可应用状态码覆写
+            if (override.statusCode !== null) {
+              return ProxyResponses.buildError(
+                responseStatusCode,
+                errorMessage,
+                undefined,
+                undefined,
+                safeRequestId
+              );
+            }
+            // 两者都无效，返回原始错误（但仍透传 request_id，因为有覆写意图）
+            return ProxyResponses.buildError(
+              statusCode,
+              errorMessage,
+              undefined,
+              undefined,
+              safeRequestId
+            );
+          }
+
+          // 覆写消息为空时回退到原始错误消息
+          const overrideErrorObj = override.response.error as Record<string, unknown>;
+          const overrideMessage =
+            typeof overrideErrorObj?.message === "string" &&
+            overrideErrorObj.message.trim().length > 0
+              ? overrideErrorObj.message
+              : errorMessage;
+
+          // 构建最终响应：注入 request_id（如果有），并确保 message 不为空
+          // 移除覆写配置中的 request_id，只使用上游的 request_id
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { request_id: _ignoredRequestId, ...overrideWithoutRequestId } =
+            override.response as Record<string, unknown>;
+
+          const responseBody = {
+            ...overrideWithoutRequestId,
+            error: {
+              ...overrideErrorObj,
+              message: overrideMessage,
+            },
+            ...(safeRequestId ? { request_id: safeRequestId } : {}),
+          };
+
+          logger.info("ProxyErrorHandler: Applied error override response", {
+            original: errorMessage.substring(0, 200),
+            overrideType: override.response.error?.type,
+            statusCode: responseStatusCode,
+            hasRequestId: !!safeRequestId,
+          });
+
+          logger.error("ProxyErrorHandler: Request failed (overridden)", {
+            error: errorMessage,
+            statusCode: responseStatusCode,
+            overridden: true,
+          });
+
+          return new Response(JSON.stringify(responseBody), {
+            status: responseStatusCode,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
+        // 情况 2: 仅状态码覆写 - 返回原始错误消息，但使用覆写的状态码
+        logger.info("ProxyErrorHandler: Applied status code override only", {
+          original: errorMessage.substring(0, 200),
+          originalStatusCode: statusCode,
+          overrideStatusCode: responseStatusCode,
+          hasRequestId: !!safeRequestId,
+        });
+
+        logger.error("ProxyErrorHandler: Request failed (status overridden)", {
+          error: errorMessage,
+          statusCode: responseStatusCode,
+          overridden: true,
+        });
+
+        return ProxyResponses.buildError(
+          responseStatusCode,
+          errorMessage,
+          undefined,
+          undefined,
+          safeRequestId
+        );
+      }
+    }
 
     logger.error("ProxyErrorHandler: Request failed", {
       error: errorMessage,
       statusCode,
+      overridden: false,
     });
 
     return ProxyResponses.buildError(statusCode, errorMessage);

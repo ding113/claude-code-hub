@@ -372,7 +372,7 @@
     "availability": "Доступность",
     "quotasManagement": "Квоты",
     "userManagement": "Пользователи",
-    "documentation": "Документация",
+    "documentation": "Доки",
     "systemSettings": "Настройки",
     "feedback": "Обратная связь",
     "login": "Вход",
@@ -402,6 +402,11 @@
       "selectAll": "Выбрать все",
       "deselectAll": "Очистить",
       "selected": "Выбрано"
+    },
+    "chartMode": {
+      "label": "Режим отображения",
+      "overlay": "Сравнение",
+      "stacked": "Накопление"
     },
     "states": {
       "noData": "Нет статистических данных",

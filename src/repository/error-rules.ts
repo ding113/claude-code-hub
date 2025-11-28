@@ -4,6 +4,23 @@ import { db } from "@/drizzle/db";
 import { errorRules } from "@/drizzle/schema";
 import { eq, desc } from "drizzle-orm";
 import { eventEmitter } from "@/lib/event-emitter";
+import { validateErrorOverrideResponse } from "@/lib/error-override-validator";
+import { logger } from "@/lib/logger";
+
+/**
+ * 错误覆写响应体类型
+ * 参考 Claude API 错误格式: https://platform.claude.com/docs/en/api/errors
+ */
+export interface ErrorOverrideResponse {
+  type: string; // 通常为 "error"
+  error: {
+    type: string; // 错误类型，如 "invalid_request_error"
+    message: string; // 错误消息
+    [key: string]: unknown; // 其他可选字段
+  };
+  request_id?: string; // 请求 ID（会自动从上游注入）
+  [key: string]: unknown; // 其他可选字段
+}
 
 export interface ErrorRule {
   id: number;
@@ -11,11 +28,41 @@ export interface ErrorRule {
   matchType: "regex" | "contains" | "exact";
   category: string;
   description: string | null;
+  /** 覆写响应体（JSON）：匹配成功时用此响应替换原始错误响应，null 表示不覆写 */
+  overrideResponse: ErrorOverrideResponse | null;
+  /** 覆写状态码：null 表示透传上游状态码 */
+  overrideStatusCode: number | null;
   isEnabled: boolean;
   isDefault: boolean;
   priority: number;
   createdAt: Date;
   updatedAt: Date;
+}
+
+/**
+ * 验证并清理 overrideResponse 字段
+ *
+ * 从数据库读取的 JSONB 数据可能被手动修改为畸形格式，
+ * 此函数在 repository 层进行运行时验证，确保返回给上层的数据格式正确
+ *
+ * @param raw - 数据库中的原始值
+ * @param context - 调用上下文（用于日志）
+ * @returns 验证通过的 ErrorOverrideResponse 或 null
+ */
+function sanitizeOverrideResponse(raw: unknown, context: string): ErrorOverrideResponse | null {
+  if (raw === null || raw === undefined) {
+    return null;
+  }
+
+  const validationError = validateErrorOverrideResponse(raw);
+  if (validationError) {
+    logger.warn(
+      `[ErrorRulesRepository] Invalid overrideResponse in ${context}: ${validationError}`
+    );
+    return null;
+  }
+
+  return raw as ErrorOverrideResponse;
 }
 
 /**
@@ -33,6 +80,11 @@ export async function getActiveErrorRules(): Promise<ErrorRule[]> {
     matchType: r.matchType as "regex" | "contains" | "exact",
     category: r.category,
     description: r.description,
+    overrideResponse: sanitizeOverrideResponse(
+      r.overrideResponse,
+      `getActiveErrorRules id=${r.id}`
+    ),
+    overrideStatusCode: r.overrideStatusCode,
     isEnabled: r.isEnabled,
     isDefault: r.isDefault,
     priority: r.priority,
@@ -59,6 +111,11 @@ export async function getErrorRuleById(id: number): Promise<ErrorRule | null> {
     matchType: result.matchType as "regex" | "contains" | "exact",
     category: result.category,
     description: result.description,
+    overrideResponse: sanitizeOverrideResponse(
+      result.overrideResponse,
+      `getErrorRuleById id=${result.id}`
+    ),
+    overrideStatusCode: result.overrideStatusCode,
     isEnabled: result.isEnabled,
     isDefault: result.isDefault,
     priority: result.priority,
@@ -81,6 +138,8 @@ export async function getAllErrorRules(): Promise<ErrorRule[]> {
     matchType: r.matchType as "regex" | "contains" | "exact",
     category: r.category,
     description: r.description,
+    overrideResponse: sanitizeOverrideResponse(r.overrideResponse, `getAllErrorRules id=${r.id}`),
+    overrideStatusCode: r.overrideStatusCode,
     isEnabled: r.isEnabled,
     isDefault: r.isDefault,
     priority: r.priority,
@@ -97,6 +156,8 @@ export async function createErrorRule(data: {
   matchType: "regex" | "contains" | "exact";
   category: string;
   description?: string;
+  overrideResponse?: ErrorOverrideResponse | null;
+  overrideStatusCode?: number | null;
   priority?: number;
 }): Promise<ErrorRule> {
   const [result] = await db
@@ -106,6 +167,8 @@ export async function createErrorRule(data: {
       matchType: data.matchType,
       category: data.category,
       description: data.description,
+      overrideResponse: data.overrideResponse,
+      overrideStatusCode: data.overrideStatusCode ?? null,
       priority: data.priority ?? 0,
     })
     .returning();
@@ -116,6 +179,11 @@ export async function createErrorRule(data: {
     matchType: result.matchType as "regex" | "contains" | "exact",
     category: result.category,
     description: result.description,
+    overrideResponse: sanitizeOverrideResponse(
+      result.overrideResponse,
+      `createErrorRule id=${result.id}`
+    ),
+    overrideStatusCode: result.overrideStatusCode,
     isEnabled: result.isEnabled,
     isDefault: result.isDefault,
     priority: result.priority,
@@ -134,6 +202,8 @@ export async function updateErrorRule(
     matchType: "regex" | "contains" | "exact";
     category: string;
     description: string;
+    overrideResponse: ErrorOverrideResponse | null;
+    overrideStatusCode: number | null;
     isEnabled: boolean;
     priority: number;
   }>
@@ -157,6 +227,11 @@ export async function updateErrorRule(
     matchType: result.matchType as "regex" | "contains" | "exact",
     category: result.category,
     description: result.description,
+    overrideResponse: sanitizeOverrideResponse(
+      result.overrideResponse,
+      `updateErrorRule id=${result.id}`
+    ),
+    overrideStatusCode: result.overrideStatusCode,
     isEnabled: result.isEnabled,
     isDefault: result.isDefault,
     priority: result.priority,
@@ -179,7 +254,7 @@ export async function deleteErrorRule(id: number): Promise<boolean> {
  */
 const DEFAULT_ERROR_RULES = [
   {
-    pattern: "prompt is too long.*maximum.*tokens",
+    pattern: "prompt is too long.*(tokens.*maximum|maximum.*tokens)",
     category: "prompt_limit",
     description: "Prompt token limit exceeded",
     matchType: "regex" as const,
@@ -278,9 +353,8 @@ export async function syncDefaultErrorRules(): Promise<number> {
     }
   });
 
-  // 通知 ErrorRuleDetector 重新加载缓存
-  eventEmitter.emit("errorRulesUpdated");
-
+  // 注意：不在此处触发 eventEmitter，由调用方决定是否刷新缓存
+  // 这样可以避免调用方手动 reload() 时导致双重刷新
   return DEFAULT_ERROR_RULES.length;
 }
 

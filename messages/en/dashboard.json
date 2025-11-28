@@ -11,7 +11,7 @@
     "sessionMonitoring": "Session Monitoring",
     "sessionMonitoringDescription": "Real-time display of active and inactive sessions (auto-refresh every 3 seconds)",
     "inactiveSessions": "Inactive Sessions (Over 5 Minutes, View Only)",
-    "quotasManagement": "Quota Management",
+    "quotasManagement": "Quotas",
     "quotasManagementDescription": "View and manage quotas at all levels",
     "usersQuotas": "User Quota Statistics",
     "keysQuotas": "Key Quota Statistics",
@@ -371,9 +371,9 @@
     "usageLogs": "Usage Logs",
     "leaderboard": "Leaderboard",
     "availability": "Availability",
-    "quotasManagement": "Quota Management",
-    "userManagement": "User Management",
-    "documentation": "Documentation",
+    "quotasManagement": "Quotas",
+    "userManagement": "Users",
+    "documentation": "Docs",
     "systemSettings": "Settings",
     "feedback": "Feedback",
     "login": "Login",
@@ -403,6 +403,11 @@
       "selectAll": "Select All",
       "deselectAll": "Clear",
       "selected": "Selected"
+    },
+    "chartMode": {
+      "label": "Display Mode",
+      "overlay": "Overlay",
+      "stacked": "Stacked"
     },
     "states": {
       "noData": "No statistics data available",

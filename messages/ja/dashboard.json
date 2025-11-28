@@ -367,14 +367,14 @@
   },
   "all": "すべて",
   "nav": {
-    "dashboard": "ダッシュボード",
+    "dashboard": "ホーム",
     "usageLogs": "使用ログ",
     "leaderboard": "ランキング",
     "availability": "可用性監視",
     "quotasManagement": "クォータ管理",
-    "userManagement": "ユーザー管理",
-    "documentation": "ドキュメント",
-    "systemSettings": "システム設定",
+    "userManagement": "ユーザー",
+    "documentation": "ドキュ",
+    "systemSettings": "設定",
     "feedback": "フィードバック",
     "login": "ログイン",
     "logout": "ログアウト"
@@ -403,6 +403,11 @@
       "selectAll": "すべて選択",
       "deselectAll": "すべてクリア",
       "selected": "選択済み"
+    },
+    "chartMode": {
+      "label": "表示モード",
+      "overlay": "比較",
+      "stacked": "積み上げ"
     },
     "states": {
       "noData": "統計データなし",

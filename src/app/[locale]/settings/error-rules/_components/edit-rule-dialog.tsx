@@ -23,8 +23,9 @@ import {
 } from "@/components/ui/select";
 import { updateErrorRuleAction } from "@/actions/error-rules";
 import { toast } from "sonner";
-import type { ErrorRule } from "@/repository/error-rules";
+import type { ErrorRule, ErrorOverrideResponse } from "@/repository/error-rules";
 import { RegexTester } from "./regex-tester";
+import { OverrideSection } from "./override-section";
 
 interface EditRuleDialogProps {
   rule: ErrorRule;
@@ -38,6 +39,9 @@ export function EditRuleDialog({ rule, open, onOpenChange }: EditRuleDialogProps
   const [pattern, setPattern] = useState("");
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
+  const [enableOverride, setEnableOverride] = useState(false);
+  const [overrideResponse, setOverrideResponse] = useState("");
+  const [overrideStatusCode, setOverrideStatusCode] = useState<string>("");
 
   // Update form when rule changes
   useEffect(() => {
@@ -45,6 +49,13 @@ export function EditRuleDialog({ rule, open, onOpenChange }: EditRuleDialogProps
       setPattern(rule.pattern);
       setCategory(rule.category || "");
       setDescription(rule.description || "");
+      // Enable override if rule has override response or status code
+      const hasOverride = !!rule.overrideResponse || !!rule.overrideStatusCode;
+      setEnableOverride(hasOverride);
+      setOverrideResponse(
+        rule.overrideResponse ? JSON.stringify(rule.overrideResponse, null, 2) : ""
+      );
+      setOverrideStatusCode(rule.overrideStatusCode?.toString() || "");
     }
   }, [rule]);
 
@@ -61,12 +72,39 @@ export function EditRuleDialog({ rule, open, onOpenChange }: EditRuleDialogProps
       return;
     }
 
-    // Validate regex pattern
-    try {
-      new RegExp(pattern.trim());
-    } catch {
-      toast.error(t("errorRules.dialog.invalidRegex"));
-      return;
+    // Validate regex pattern (only for regex match type)
+    if (rule.matchType === "regex") {
+      try {
+        new RegExp(pattern.trim());
+      } catch {
+        toast.error(t("errorRules.dialog.invalidRegex"));
+        return;
+      }
+    }
+
+    // Parse and validate override response JSON (only when override is enabled)
+    let parsedOverrideResponse: ErrorOverrideResponse | null = null;
+    let parsedStatusCode: number | null = null;
+
+    if (enableOverride) {
+      if (overrideResponse.trim()) {
+        try {
+          parsedOverrideResponse = JSON.parse(overrideResponse.trim());
+        } catch {
+          toast.error(t("errorRules.dialog.invalidJson"));
+          return;
+        }
+      }
+
+      // Parse override status code
+      if (overrideStatusCode.trim()) {
+        const code = parseInt(overrideStatusCode.trim(), 10);
+        if (isNaN(code) || code < 400 || code > 599) {
+          toast.error(t("errorRules.dialog.invalidStatusCode"));
+          return;
+        }
+        parsedStatusCode = code;
+      }
     }
 
     setIsSubmitting(true);
@@ -83,6 +121,8 @@ export function EditRuleDialog({ rule, open, onOpenChange }: EditRuleDialogProps
           | "invalid_request"
           | "cache_limit",
         description: description.trim() || undefined,
+        overrideResponse: parsedOverrideResponse,
+        overrideStatusCode: parsedStatusCode,
       });
 
       if (result.ok) {
@@ -171,6 +211,16 @@ export function EditRuleDialog({ rule, open, onOpenChange }: EditRuleDialogProps
                 rows={3}
               />
             </div>
+
+            <OverrideSection
+              idPrefix="edit"
+              enableOverride={enableOverride}
+              onEnableOverrideChange={setEnableOverride}
+              overrideResponse={overrideResponse}
+              onOverrideResponseChange={setOverrideResponse}
+              overrideStatusCode={overrideStatusCode}
+              onOverrideStatusCodeChange={setOverrideStatusCode}
+            />
 
             {pattern && (
               <div className="grid gap-2">

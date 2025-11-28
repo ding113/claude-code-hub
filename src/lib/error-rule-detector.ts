@@ -10,9 +10,10 @@
  * - EventEmitter 驱动的自动缓存刷新
  */
 
-import { getActiveErrorRules } from "@/repository/error-rules";
+import { getActiveErrorRules, type ErrorOverrideResponse } from "@/repository/error-rules";
 import { logger } from "@/lib/logger";
 import { eventEmitter } from "@/lib/event-emitter";
+import { isValidErrorOverrideResponse } from "@/lib/error-override-validator";
 import safeRegex from "safe-regex";
 
 /**
@@ -23,6 +24,10 @@ export interface ErrorDetectionResult {
   category?: string; // 触发的错误分类
   pattern?: string; // 匹配的规则模式
   matchType?: string; // 匹配类型（regex/contains/exact）
+  /** 覆写响应体：如果配置了则用此响应替换原始错误响应 */
+  overrideResponse?: ErrorOverrideResponse;
+  /** 覆写状态码：如果配置了则用此状态码替换原始状态码 */
+  overrideStatusCode?: number;
 }
 
 /**
@@ -32,6 +37,8 @@ interface RegexPattern {
   pattern: RegExp;
   category: string;
   description?: string;
+  overrideResponse?: ErrorOverrideResponse;
+  overrideStatusCode?: number;
 }
 
 /**
@@ -41,6 +48,8 @@ interface ContainsPattern {
   text: string;
   category: string;
   description?: string;
+  overrideResponse?: ErrorOverrideResponse;
+  overrideStatusCode?: number;
 }
 
 /**
@@ -50,6 +59,8 @@ interface ExactPattern {
   text: string;
   category: string;
   description?: string;
+  overrideResponse?: ErrorOverrideResponse;
+  overrideStatusCode?: number;
 }
 
 /**
@@ -125,33 +136,51 @@ class ErrorRuleDetector {
         throw dbError;
       }
 
-      // 清空旧缓存
-      this.regexPatterns = [];
-      this.containsPatterns = [];
-      this.exactPatterns.clear();
+      // 使用局部变量收集新数据，避免 reload 期间 detect() 返回空结果
+      const newRegexPatterns: RegexPattern[] = [];
+      const newContainsPatterns: ContainsPattern[] = [];
+      const newExactPatterns = new Map<string, ExactPattern>();
 
       // 按类型分组加载规则
       let validRegexCount = 0;
       let skippedRedosCount = 0;
+      let skippedInvalidResponseCount = 0;
 
       for (const rule of rules) {
+        // 在加载阶段验证 overrideResponse 格式，过滤畸形数据
+        let validatedOverrideResponse: ErrorOverrideResponse | undefined = undefined;
+        if (rule.overrideResponse) {
+          if (isValidErrorOverrideResponse(rule.overrideResponse)) {
+            validatedOverrideResponse = rule.overrideResponse;
+          } else {
+            logger.warn(
+              `[ErrorRuleDetector] Invalid override_response for rule ${rule.id} (pattern: ${rule.pattern}), skipping response override`
+            );
+            skippedInvalidResponseCount++;
+          }
+        }
+
         switch (rule.matchType) {
           case "contains": {
             const lowerText = rule.pattern.toLowerCase();
-            this.containsPatterns.push({
+            newContainsPatterns.push({
               text: lowerText,
               category: rule.category,
               description: rule.description ?? undefined,
+              overrideResponse: validatedOverrideResponse,
+              overrideStatusCode: rule.overrideStatusCode ?? undefined,
             });
             break;
           }
 
           case "exact": {
             const lowerText = rule.pattern.toLowerCase();
-            this.exactPatterns.set(lowerText, {
+            newExactPatterns.set(lowerText, {
               text: lowerText,
               category: rule.category,
               description: rule.description ?? undefined,
+              overrideResponse: validatedOverrideResponse,
+              overrideStatusCode: rule.overrideStatusCode ?? undefined,
             });
             break;
           }
@@ -168,10 +197,12 @@ class ErrorRuleDetector {
               }
 
               const pattern = new RegExp(rule.pattern, "i");
-              this.regexPatterns.push({
+              newRegexPatterns.push({
                 pattern,
                 category: rule.category,
                 description: rule.description ?? undefined,
+                overrideResponse: validatedOverrideResponse,
+                overrideStatusCode: rule.overrideStatusCode ?? undefined,
               });
               validRegexCount++;
             } catch (error) {
@@ -185,13 +216,25 @@ class ErrorRuleDetector {
         }
       }
 
+      // 原子替换：确保 detect() 始终看到一致的数据集
+      this.regexPatterns = newRegexPatterns;
+      this.containsPatterns = newContainsPatterns;
+      this.exactPatterns = newExactPatterns;
+
       this.lastReloadTime = Date.now();
       this.isInitialized = true; // 标记为已初始化
 
+      const skippedInfo = [
+        skippedRedosCount > 0 ? `${skippedRedosCount} ReDoS` : "",
+        skippedInvalidResponseCount > 0 ? `${skippedInvalidResponseCount} invalid response` : "",
+      ]
+        .filter(Boolean)
+        .join(", ");
+
       logger.info(
         `[ErrorRuleDetector] Loaded ${rules.length} error rules: ` +
-          `contains=${this.containsPatterns.length}, exact=${this.exactPatterns.size}, ` +
-          `regex=${validRegexCount}${skippedRedosCount > 0 ? ` (skipped ${skippedRedosCount} ReDoS)` : ""}`
+          `contains=${newContainsPatterns.length}, exact=${newExactPatterns.size}, ` +
+          `regex=${validRegexCount}${skippedInfo ? ` (skipped: ${skippedInfo})` : ""}`
       );
     } catch (error) {
       logger.error("[ErrorRuleDetector] Failed to reload error rules:", error);
@@ -250,6 +293,8 @@ class ErrorRuleDetector {
           category: pattern.category,
           pattern: pattern.text,
           matchType: "contains",
+          overrideResponse: pattern.overrideResponse,
+          overrideStatusCode: pattern.overrideStatusCode,
         };
       }
     }
@@ -262,17 +307,21 @@ class ErrorRuleDetector {
         category: exactMatch.category,
         pattern: exactMatch.text,
         matchType: "exact",
+        overrideResponse: exactMatch.overrideResponse,
+        overrideStatusCode: exactMatch.overrideStatusCode,
       };
     }
 
     // 3. 正则匹配（最慢，但最灵活）
-    for (const { pattern, category } of this.regexPatterns) {
+    for (const { pattern, category, overrideResponse, overrideStatusCode } of this.regexPatterns) {
       if (pattern.test(errorMessage)) {
         return {
           matched: true,
           category,
           pattern: pattern.source,
           matchType: "regex",
+          overrideResponse,
+          overrideStatusCode,
         };
       }
     }
@@ -293,6 +342,15 @@ class ErrorRuleDetector {
       lastReloadTime: this.lastReloadTime,
       isLoading: this.isLoading,
     };
+  }
+
+  /**
+   * 检查是否完成至少一次初始化
+   *
+   * 用于避免未加载完成时缓存空结果，导致后续请求无法命中规则
+   */
+  hasInitialized(): boolean {
+    return this.isInitialized;
   }
 
   /**

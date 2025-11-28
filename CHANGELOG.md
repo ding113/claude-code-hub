@@ -30,15 +30,8 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
-- Fix session binding not updating after provider failover, causing repeated attempts to failed providers (#220) @ding113
-- Fix provider availability monitoring page sorting order so high-availability providers rank first (#219) @ding113
-- Fix provider daily usage statistics JSONB field name error (#216) @ding113
-- Fix response content validation failure in provider testing (#216) @ding113
-- Fix login redirect displaying duplicate language prefix (#216) @ding113
-- Fix zh-TW missing 8 translation keys for apiTest (#216) @ding113
-- Remove DialogContent hardcoded `sm:max-w-lg` width constraint (#216) @ding113
-- Fix model test disclaimer display order (#210) @ding113
-- Fix provider statistics, group settings persistence, and usage records date filtering; consolidate migrations 0020-0025 into single idempotent file (#207) @ding113
+- Fix API action adapter to pass schema params as positional args instead of object (#232) @ding113
+- Fix availability monitoring Invalid Date error when selecting 15-minute time range (#231) @ding113
 - Fix database migration duplicate enum type creation error (#181) @ding113
 - Fix error handling and status codes in response handler, improve user management page UX (#179) @ding113
 - Fix infinite loop in leaderboard tab switching (#178) @ding113
