@@ -53,8 +53,8 @@ export async function GET(request: NextRequest) {
     if (bucketSizeMinutes) {
       // Use parseFloat to support sub-minute bucket sizes (e.g., 0.25 for 15 seconds)
       const parsed = parseFloat(bucketSizeMinutes);
-      // Ensure bucket size is at least 0.25 minutes (15 seconds) to prevent division by zero
-      options.bucketSizeMinutes = Math.max(0.25, parsed);
+      // Ensure bucket size is valid and at least 0.25 minutes (15 seconds) to prevent division by zero
+      options.bucketSizeMinutes = Number.isNaN(parsed) ? 0.25 : Math.max(0.25, parsed);
     }
 
     const includeDisabled = searchParams.get("includeDisabled");
