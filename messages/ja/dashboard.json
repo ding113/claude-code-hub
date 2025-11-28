@@ -404,6 +404,11 @@
       "deselectAll": "すべてクリア",
       "selected": "選択済み"
     },
+    "chartMode": {
+      "label": "表示モード",
+      "overlay": "比較",
+      "stacked": "積み上げ"
+    },
     "states": {
       "noData": "統計データなし",
       "fetchFailed": "統計データの取得に失敗しました"

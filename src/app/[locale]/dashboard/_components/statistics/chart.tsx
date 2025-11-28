@@ -60,6 +60,7 @@ export function UserStatisticsChart({
 }: UserStatisticsChartProps) {
   const t = useTranslations("dashboard.statistics");
   const [activeChart, setActiveChart] = React.useState<"cost" | "calls">("cost");
+  const [chartMode, setChartMode] = React.useState<"stacked" | "overlay">("overlay");
 
   // 用户选择状态(仅 Admin 用 users 模式时启用)
   const [selectedUserIds, setSelectedUserIds] = React.useState<Set<number>>(
@@ -358,7 +359,28 @@ export function UserStatisticsChart({
           </button>
         </div>
       )}
-      <CardContent className="px-1 sm:p-6">
+      <CardContent className="px-1 sm:p-6 relative">
+        {/* 图表模式切换（右上角，仅多用户时显示） */}
+        {visibleUsers.length > 1 && (
+          <div className="absolute top-0 right-0 sm:right-2 z-10">
+            <div className="inline-flex rounded-md border bg-background/80 backdrop-blur-sm p-0.5">
+              <button
+                data-active={chartMode === "overlay"}
+                onClick={() => setChartMode("overlay")}
+                className="data-[active=true]:bg-muted data-[active=true]:text-foreground text-[10px] text-muted-foreground px-1.5 py-0.5 rounded transition-colors hover:bg-muted/70"
+              >
+                {t("chartMode.overlay")}
+              </button>
+              <button
+                data-active={chartMode === "stacked"}
+                onClick={() => setChartMode("stacked")}
+                className="data-[active=true]:bg-muted data-[active=true]:text-foreground text-[10px] text-muted-foreground px-1.5 py-0.5 rounded transition-colors hover:bg-muted/70"
+              >
+                {t("chartMode.stacked")}
+              </button>
+            </div>
+          </div>
+        )}
         <ChartContainer config={chartConfig} className="aspect-auto h-[280px] w-full">
           <AreaChart
             data={numericChartData}
@@ -397,6 +419,7 @@ export function UserStatisticsChart({
               tickLine={false}
               axisLine={false}
               tickMargin={8}
+              domain={[0, "dataMax"]}
               tickFormatter={(value) => {
                 if (activeChart === "cost") {
                   return formatCurrency(value, currencyCode);
@@ -468,7 +491,19 @@ export function UserStatisticsChart({
                 );
               }}
             />
-            {visibleUsers.map((user) => {
+            {/* Overlay 模式下按数值降序渲染，大的在底层，小的在顶层避免遮挡 */}
+            {(chartMode === "overlay"
+              ? [...visibleUsers].sort((a, b) => {
+                  const totalA = userTotals[a.dataKey];
+                  const totalB = userTotals[b.dataKey];
+                  if (!totalA || !totalB) return 0;
+                  if (activeChart === "cost") {
+                    return totalB.cost.comparedTo(totalA.cost);
+                  }
+                  return totalB.calls - totalA.calls;
+                })
+              : visibleUsers
+            ).map((user) => {
               const originalIndex = data.users.findIndex((u) => u.id === user.id);
               const color = getUserColor(originalIndex);
               return (
@@ -479,7 +514,7 @@ export function UserStatisticsChart({
                   type="monotone"
                   fill={`url(#fill-${user.dataKey})`}
                   stroke={color}
-                  stackId="a"
+                  stackId={chartMode === "stacked" ? "a" : undefined}
                 />
               );
             })}
