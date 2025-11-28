@@ -16,6 +16,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- Fix API action adapter to pass schema params as positional args instead of object (#232) @ding113
 - Fix database migration duplicate enum type creation error (#181) @ding113
 - Fix error handling and status codes in response handler, improve user management page UX (#179) @ding113
 - Fix infinite loop in leaderboard tab switching (#178) @ding113
