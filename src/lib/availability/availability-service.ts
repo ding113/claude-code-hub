@@ -179,8 +179,10 @@ export async function queryProviderAvailability(
   }
 
   // Determine bucket size if not explicitly specified
-  const bucketSizeMinutes =
+  // Ensure minimum bucket size of 0.25 minutes (15 seconds) to prevent division by zero
+  const rawBucketSize =
     explicitBucketSize ?? determineOptimalBucketSize(requests.length, timeRangeMinutes);
+  const bucketSizeMinutes = Math.max(0.25, rawBucketSize);
   const bucketSizeMs = bucketSizeMinutes * 60 * 1000;
 
   // Group requests by provider and time bucket
