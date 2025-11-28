@@ -78,8 +78,7 @@ export class ProxyErrorHandler {
         // 提取上游 request_id（用于覆写场景透传）
         const upstreamRequestId =
           error instanceof ProxyError ? error.upstreamError?.requestId : undefined;
-        const safeRequestId =
-          typeof upstreamRequestId === "string" ? upstreamRequestId : undefined;
+        const safeRequestId = typeof upstreamRequestId === "string" ? upstreamRequestId : undefined;
 
         // 情况 1: 有响应体覆写 - 返回覆写的 JSON 响应
         if (override.response) {
@@ -112,7 +111,8 @@ export class ProxyErrorHandler {
           // 覆写消息为空时回退到原始错误消息
           const overrideErrorObj = override.response.error as Record<string, unknown>;
           const overrideMessage =
-            typeof overrideErrorObj?.message === "string" && overrideErrorObj.message.trim().length > 0
+            typeof overrideErrorObj?.message === "string" &&
+            overrideErrorObj.message.trim().length > 0
               ? overrideErrorObj.message
               : errorMessage;
 

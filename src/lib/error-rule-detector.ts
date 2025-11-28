@@ -233,8 +233,8 @@ class ErrorRuleDetector {
 
       logger.info(
         `[ErrorRuleDetector] Loaded ${rules.length} error rules: ` +
-        `contains=${newContainsPatterns.length}, exact=${newExactPatterns.size}, ` +
-        `regex=${validRegexCount}${skippedInfo ? ` (skipped: ${skippedInfo})` : ""}`
+          `contains=${newContainsPatterns.length}, exact=${newExactPatterns.size}, ` +
+          `regex=${validRegexCount}${skippedInfo ? ` (skipped: ${skippedInfo})` : ""}`
       );
     } catch (error) {
       logger.error("[ErrorRuleDetector] Failed to reload error rules:", error);

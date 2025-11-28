@@ -49,17 +49,16 @@ export interface ErrorRule {
  * @param context - 调用上下文（用于日志）
  * @returns 验证通过的 ErrorOverrideResponse 或 null
  */
-function sanitizeOverrideResponse(
-  raw: unknown,
-  context: string
-): ErrorOverrideResponse | null {
+function sanitizeOverrideResponse(raw: unknown, context: string): ErrorOverrideResponse | null {
   if (raw === null || raw === undefined) {
     return null;
   }
 
   const validationError = validateErrorOverrideResponse(raw);
   if (validationError) {
-    logger.warn(`[ErrorRulesRepository] Invalid overrideResponse in ${context}: ${validationError}`);
+    logger.warn(
+      `[ErrorRulesRepository] Invalid overrideResponse in ${context}: ${validationError}`
+    );
     return null;
   }
 
@@ -81,7 +80,10 @@ export async function getActiveErrorRules(): Promise<ErrorRule[]> {
     matchType: r.matchType as "regex" | "contains" | "exact",
     category: r.category,
     description: r.description,
-    overrideResponse: sanitizeOverrideResponse(r.overrideResponse, `getActiveErrorRules id=${r.id}`),
+    overrideResponse: sanitizeOverrideResponse(
+      r.overrideResponse,
+      `getActiveErrorRules id=${r.id}`
+    ),
     overrideStatusCode: r.overrideStatusCode,
     isEnabled: r.isEnabled,
     isDefault: r.isDefault,
@@ -109,7 +111,10 @@ export async function getErrorRuleById(id: number): Promise<ErrorRule | null> {
     matchType: result.matchType as "regex" | "contains" | "exact",
     category: result.category,
     description: result.description,
-    overrideResponse: sanitizeOverrideResponse(result.overrideResponse, `getErrorRuleById id=${result.id}`),
+    overrideResponse: sanitizeOverrideResponse(
+      result.overrideResponse,
+      `getErrorRuleById id=${result.id}`
+    ),
     overrideStatusCode: result.overrideStatusCode,
     isEnabled: result.isEnabled,
     isDefault: result.isDefault,
@@ -174,7 +179,10 @@ export async function createErrorRule(data: {
     matchType: result.matchType as "regex" | "contains" | "exact",
     category: result.category,
     description: result.description,
-    overrideResponse: sanitizeOverrideResponse(result.overrideResponse, `createErrorRule id=${result.id}`),
+    overrideResponse: sanitizeOverrideResponse(
+      result.overrideResponse,
+      `createErrorRule id=${result.id}`
+    ),
     overrideStatusCode: result.overrideStatusCode,
     isEnabled: result.isEnabled,
     isDefault: result.isDefault,
@@ -219,7 +227,10 @@ export async function updateErrorRule(
     matchType: result.matchType as "regex" | "contains" | "exact",
     category: result.category,
     description: result.description,
-    overrideResponse: sanitizeOverrideResponse(result.overrideResponse, `updateErrorRule id=${result.id}`),
+    overrideResponse: sanitizeOverrideResponse(
+      result.overrideResponse,
+      `updateErrorRule id=${result.id}`
+    ),
     overrideStatusCode: result.overrideStatusCode,
     isEnabled: result.isEnabled,
     isDefault: result.isDefault,

@@ -60,13 +60,13 @@ export async function listErrorRules(): Promise<repo.ErrorRule[]> {
 export async function createErrorRuleAction(data: {
   pattern: string;
   category:
-  | "prompt_limit"
-  | "content_filter"
-  | "pdf_limit"
-  | "thinking_error"
-  | "parameter_error"
-  | "invalid_request"
-  | "cache_limit";
+    | "prompt_limit"
+    | "content_filter"
+    | "pdf_limit"
+    | "thinking_error"
+    | "parameter_error"
+    | "invalid_request"
+    | "cache_limit";
   matchType?: "contains" | "exact" | "regex";
   description?: string;
   /** 覆写响应体（JSON 格式，符合 Claude API 错误格式） */
@@ -430,9 +430,7 @@ export async function refreshCacheAction(): Promise<
  * 3. 验证状态码范围（400-599）
  * 4. message 为空时运行时会回退到原始错误消息
  */
-export async function testErrorRuleAction(input: {
-  message: string;
-}): Promise<
+export async function testErrorRuleAction(input: { message: string }): Promise<
   ActionResult<{
     matched: boolean;
     rule?: {
@@ -475,7 +473,9 @@ export async function testErrorRuleAction(input: {
 
     // 验证 matchType 是有效值
     const validMatchTypes = ["regex", "contains", "exact"] as const;
-    const matchType = validMatchTypes.includes(detection.matchType as typeof validMatchTypes[number])
+    const matchType = validMatchTypes.includes(
+      detection.matchType as (typeof validMatchTypes)[number]
+    )
       ? (detection.matchType as "regex" | "contains" | "exact")
       : "regex";
 
@@ -500,7 +500,7 @@ export async function testErrorRuleAction(input: {
           const overrideErrorObj = detection.overrideResponse.error as Record<string, unknown>;
           const overrideMessage =
             typeof overrideErrorObj?.message === "string" &&
-              overrideErrorObj.message.trim().length > 0
+            overrideErrorObj.message.trim().length > 0
               ? overrideErrorObj.message
               : rawMessage;
 
@@ -521,7 +521,11 @@ export async function testErrorRuleAction(input: {
 
       // 4. 验证状态码范围（与 error-handler.ts 运行时逻辑一致）
       const statusCodeError = validateOverrideStatusCodeRange(detection.overrideStatusCode);
-      if (!statusCodeError && detection.overrideStatusCode !== undefined && detection.overrideStatusCode !== null) {
+      if (
+        !statusCodeError &&
+        detection.overrideStatusCode !== undefined &&
+        detection.overrideStatusCode !== null
+      ) {
         finalStatusCode = detection.overrideStatusCode;
       } else if (statusCodeError) {
         warnings.push(
@@ -536,12 +540,12 @@ export async function testErrorRuleAction(input: {
         matched: detection.matched,
         rule: detection.matched
           ? {
-            category: detection.category ?? "unknown",
-            pattern: detection.pattern ?? "",
-            matchType,
-            overrideResponse: detection.overrideResponse ?? null,
-            overrideStatusCode: detection.overrideStatusCode ?? null,
-          }
+              category: detection.category ?? "unknown",
+              pattern: detection.pattern ?? "",
+              matchType,
+              overrideResponse: detection.overrideResponse ?? null,
+              overrideStatusCode: detection.overrideStatusCode ?? null,
+            }
           : undefined,
         finalResponse,
         finalStatusCode,
