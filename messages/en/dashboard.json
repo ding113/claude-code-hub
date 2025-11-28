@@ -404,6 +404,11 @@
       "deselectAll": "Clear",
       "selected": "Selected"
     },
+    "chartMode": {
+      "label": "Display Mode",
+      "overlay": "Overlay",
+      "stacked": "Stacked"
+    },
     "states": {
       "noData": "No statistics data available",
       "fetchFailed": "Failed to fetch statistics"

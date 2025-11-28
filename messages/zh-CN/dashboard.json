@@ -405,6 +405,11 @@
       "deselectAll": "清空",
       "selected": "已选"
     },
+    "chartMode": {
+      "label": "显示模式",
+      "overlay": "对比",
+      "stacked": "堆叠"
+    },
     "states": {
       "noData": "暂无统计数据",
       "fetchFailed": "获取统计数据失败"
