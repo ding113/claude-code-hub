@@ -2449,7 +2449,7 @@ export async function testProviderUnified(data: UnifiedTestArgs): Promise<Unifie
     };
   }
 
-  // Validate URL
+  // 验证 URL
   const urlValidation = await isUrlSafeForApiTest(data.providerUrl);
   if (!urlValidation.safe) {
     return {
@@ -2566,4 +2566,317 @@ export async function getProviderTestPresets(
       error: "获取预置配置失败",
     };
   }
+}
+
+// ============================================================================
+// 获取供应商模型
+// ============================================================================
+
+/**
+ * 获取模型参数
+ */
+export type FetchModelsArgs = {
+  providerUrl: string;
+  apiKey: string;
+  providerType: ProviderType;
+  proxyUrl?: string | null;
+  proxyFallbackToDirect?: boolean;
+};
+
+/**
+ * OpenAI 模型列表响应类型
+ */
+type OpenAIModelsResponse = {
+  object: "list";
+  data: Array<{
+    id: string;
+    object: "model";
+    created?: number;
+    owned_by?: string;
+  }>;
+};
+
+/**
+ * Gemini 模型列表响应类型
+ */
+type GeminiModelsResponse = {
+  models: Array<{
+    name: string;
+    displayName?: string;
+    description?: string;
+    supportedGenerationMethods?: string[];
+  }>;
+};
+
+/**
+ * 从供应商 API 获取可用模型列表
+ *
+ * 支持:
+ * - OpenAI Compatible / Codex: GET /v1/models
+ * - Claude / Claude-Auth: GET /v1/models (部分中继服务支持)
+ * - Gemini / Gemini-CLI: GET /v1beta/models
+ */
+export async function fetchProviderModels(
+  data: FetchModelsArgs
+): Promise<ActionResult<{ models: string[] }>> {
+  const session = await getSession();
+  if (!session || session.user.role !== "admin") {
+    return { ok: false, error: "无权限执行此操作" };
+  }
+
+  // 验证 URL
+  const urlValidation = validateProviderUrlForConnectivity(data.providerUrl);
+  if (!urlValidation.valid) {
+    return {
+      ok: false,
+      error: urlValidation.error.message,
+    };
+  }
+
+  // 如果提供了代理 URL，验证代理 URL
+  if (data.proxyUrl && !isValidProxyUrl(data.proxyUrl)) {
+    return {
+      ok: false,
+      error: "代理地址格式无效，支持格式: http://, https://, socks5://, socks4://",
+    };
+  }
+
+  const normalizedUrl = urlValidation.normalizedUrl.replace(/\/$/, "");
+
+  try {
+    // 根据供应商类型构建请求配置
+    const { endpoint, headers } = getModelsApiConfig(
+      data.providerType,
+      data.apiKey,
+      normalizedUrl
+    );
+
+    const url = normalizedUrl + endpoint;
+
+    // 如需要，创建代理代理
+    const tempProvider: ProviderProxyConfig = {
+      id: -1,
+      name: "fetch-models",
+      proxyUrl: data.proxyUrl ?? null,
+      proxyFallbackToDirect: data.proxyFallbackToDirect ?? false,
+    };
+
+    const proxyConfig = createProxyAgentForProvider(tempProvider, url);
+
+    interface UndiciFetchOptions extends RequestInit {
+      dispatcher?: unknown;
+    }
+
+    const init: UndiciFetchOptions = {
+      method: "GET",
+      headers: {
+        ...headers,
+        Accept: "application/json",
+      },
+      signal: AbortSignal.timeout(API_TEST_CONFIG.TIMEOUT_MS),
+    };
+
+    if (proxyConfig) {
+      init.dispatcher = proxyConfig.agent;
+    }
+
+    logger.debug("fetchProviderModels: Fetching models", {
+      providerType: data.providerType,
+      endpoint,
+      url: url.replace(/:\/\/[^@]*@/, "://***@"),
+    });
+
+    const response = await fetch(url, init);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorDetail: string | undefined;
+
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorDetail = extractErrorMessage(errorJson);
+      } catch {
+        errorDetail = errorText.substring(0, 200);
+      }
+
+      logger.warn("fetchProviderModels: API error", {
+        status: response.status,
+        errorDetail,
+      });
+
+      return {
+        ok: false,
+        error: `获取模型列表失败: HTTP ${response.status}${errorDetail ? ` - ${errorDetail}` : ""}`,
+      };
+    }
+
+    const responseData = await response.json();
+
+    // 根据供应商类型解析模型
+    const models = parseModelsResponse(data.providerType, responseData);
+
+    if (models.length === 0) {
+      return {
+        ok: false,
+        error: "未找到可用模型",
+      };
+    }
+
+    logger.info("fetchProviderModels: Success", {
+      providerType: data.providerType,
+      modelCount: models.length,
+    });
+
+    return {
+      ok: true,
+      data: { models },
+    };
+  } catch (error) {
+    logger.error("fetchProviderModels error", { 
+      error: error instanceof Error ? error.message : String(error)
+    });
+
+    if (error instanceof Error && isClientAbortError(error)) {
+      return {
+        ok: false,
+        error: "请求超时，请检查网络连接或供应商地址",
+      };
+    }
+
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "获取模型列表失败",
+    };
+  }
+}
+
+/**
+ * 根据供应商类型获取模型 API 配置
+ */
+function getModelsApiConfig(
+  providerType: ProviderType,
+  apiKey: string,
+  providerUrl: string
+): { endpoint: string; headers: Record<string, string> } {
+  switch (providerType) {
+    case "gemini":
+    case "gemini-cli": {
+      // Gemini 使用 /v1beta/models 端点
+      // 检查 API 密钥是否为 JSON 凭证（服务账户）
+      const isJsonCreds = apiKey.trim().startsWith("{");
+      if (isJsonCreds) {
+        // 对于 JSON 凭证，我们需要先获取访问令牌
+        // 为简单起见，现在假设使用 API 密钥认证
+        return {
+          endpoint: "/v1beta/models",
+          headers: {
+            "x-goog-api-key": apiKey,
+          },
+        };
+      }
+      return {
+        endpoint: `/v1beta/models?key=${apiKey}`,
+        headers: {},
+      };
+    }
+
+    case "claude":
+    case "claude-auth": {
+      // Claude 中继服务可能支持 /v1/models
+      const hostname = getHostnameFromUrl(providerUrl);
+      const isOfficialAnthropic = hostname
+        ? hostname.endsWith("anthropic.com") || hostname.endsWith("claude.ai")
+        : false;
+
+      const headers: Record<string, string> = {
+        "anthropic-version": "2023-06-01",
+      };
+
+      if (isOfficialAnthropic) {
+        headers["x-api-key"] = apiKey;
+      } else {
+        // 对于中继服务，尝试两种认证方法
+        headers["x-api-key"] = apiKey;
+        headers["Authorization"] = `Bearer ${apiKey}`;
+      }
+
+      return {
+        endpoint: "/v1/models",
+        headers,
+      };
+    }
+
+    case "openai-compatible":
+    case "codex":
+    default: {
+      // OpenAI 兼容服务使用 /v1/models
+      return {
+        endpoint: "/v1/models",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+        },
+      };
+    }
+  }
+}
+
+/**
+ * 根据供应商类型解析模型响应
+ */
+function parseModelsResponse(providerType: ProviderType, responseData: unknown): string[] {
+  if (!responseData || typeof responseData !== "object") {
+    return [];
+  }
+
+  const data = responseData as Record<string, unknown>;
+
+  // Gemini 格式: { models: [{ name: "models/gemini-pro", ... }] }
+  if (providerType === "gemini" || providerType === "gemini-cli") {
+    const geminiResponse = data as GeminiModelsResponse;
+    if (Array.isArray(geminiResponse.models)) {
+      return geminiResponse.models
+        .map((model) => {
+          // Gemini 模型名称类似于 "models/gemini-pro"，仅提取模型名称
+          const name = model.name || "";
+          return name.startsWith("models/") ? name.slice(7) : name;
+        })
+        .filter((name) => name.length > 0)
+        .sort();
+    }
+    return [];
+  }
+
+  // OpenAI 格式: { object: "list", data: [{ id: "gpt-4", ... }] }
+  const openaiResponse = data as OpenAIModelsResponse;
+  if (Array.isArray(openaiResponse.data)) {
+    return openaiResponse.data
+      .map((model) => model.id)
+      .filter((id) => typeof id === "string" && id.length > 0)
+      .sort();
+  }
+
+  // 尝试处理其他格式
+  // 部分供应商返回 { models: ["model1", "model2"] }
+  if (Array.isArray(data.models)) {
+    return (data.models as unknown[])
+      .filter((m): m is string => typeof m === "string")
+      .sort();
+  }
+
+  // 部分供应商直接返回数组
+  if (Array.isArray(data)) {
+    return (data as unknown[])
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (typeof item === "object" && item !== null) {
+          const obj = item as Record<string, unknown>;
+          return (obj.id || obj.name || obj.model) as string;
+        }
+        return "";
+      })
+      .filter((name) => typeof name === "string" && name.length > 0)
+      .sort();
+  }
+
+  return [];
 }
