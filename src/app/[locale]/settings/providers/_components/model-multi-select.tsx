@@ -160,9 +160,17 @@ export function ModelMultiSelect({
                   </div>
                 </CommandGroup>
 
-                {/* 模型列表（不分组，字母排序） */}
+                {/* 模型列表（已选中的优先显示） */}
                 <CommandGroup>
-                  {availableModels.map((model) => (
+                  {[...availableModels]
+                    .sort((a, b) => {
+                      const aSelected = selectedModels.includes(a);
+                      const bSelected = selectedModels.includes(b);
+                      if (aSelected && !bSelected) return -1;
+                      if (!aSelected && bSelected) return 1;
+                      return 0;
+                    })
+                    .map((model) => (
                     <CommandItem
                       key={model}
                       value={model}

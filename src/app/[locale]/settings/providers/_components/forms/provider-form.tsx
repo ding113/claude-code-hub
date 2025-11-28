@@ -39,6 +39,7 @@ import { ModelMultiSelect } from "../model-multi-select";
 import { ModelRedirectEditor } from "../model-redirect-editor";
 import { ProxyTestButton } from "./proxy-test-button";
 import { ApiTestButton } from "./api-test-button";
+import { FetchModelsButton } from "./fetch-models-button";
 import { UrlPreview } from "./url-preview";
 import { ChevronDown } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -706,19 +707,37 @@ export function ProviderForm({
                   </span>
                 </Label>
 
-                <ModelMultiSelect
-                  providerType={
-                    providerType as
-                      | "claude"
-                      | "codex"
-                      | "gemini"
-                      | "gemini-cli"
-                      | "openai-compatible"
-                  }
-                  selectedModels={allowedModels}
-                  onChange={setAllowedModels}
-                  disabled={isPending}
-                />
+                <div className="flex gap-2 items-start">
+                  <div className="flex-1">
+                    <ModelMultiSelect
+                      providerType={
+                        providerType as
+                          | "claude"
+                          | "codex"
+                          | "gemini"
+                          | "gemini-cli"
+                          | "openai-compatible"
+                      }
+                      selectedModels={allowedModels}
+                      onChange={setAllowedModels}
+                      disabled={isPending}
+                    />
+                  </div>
+                  <FetchModelsButton
+                    providerUrl={url}
+                    apiKey={key}
+                    providerType={providerType}
+                    proxyUrl={proxyUrl}
+                    proxyFallbackToDirect={proxyFallbackToDirect}
+                    disabled={isPending}
+                    providerId={provider?.id}
+                    onModelsLoaded={(models) => {
+                      // Merge with existing models, avoiding duplicates
+                      const merged = [...new Set([...allowedModels, ...models])];
+                      setAllowedModels(merged);
+                    }}
+                  />
+                </div>
 
                 {allowedModels.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-2 p-2 bg-muted/50 rounded-md">
