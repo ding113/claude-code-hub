@@ -168,7 +168,7 @@ export function ModelMultiSelect({
                       const bSelected = selectedModels.includes(b);
                       if (aSelected && !bSelected) return -1;
                       if (!aSelected && bSelected) return 1;
-                      return 0;
+                      return a.localeCompare(b);
                     })
                     .map((model) => (
                     <CommandItem

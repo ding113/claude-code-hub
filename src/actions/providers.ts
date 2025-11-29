@@ -2683,7 +2683,7 @@ export async function fetchProviderModels(
     logger.debug("fetchProviderModels: Fetching models", {
       providerType: data.providerType,
       endpoint,
-      url: url.replace(/:\/\/[^@]*@/, "://***@"),
+      url: url.replace(/key=([^&]*)/gi, "key=***").replace(/:\/\/[^@]*@/, "://***@"),
     });
 
     const response = await fetch(url, init);
@@ -2765,14 +2765,7 @@ function getModelsApiConfig(
       // 检查 API 密钥是否为 JSON 凭证（服务账户）
       const isJsonCreds = apiKey.trim().startsWith("{");
       if (isJsonCreds) {
-        // 对于 JSON 凭证，我们需要先获取访问令牌
-        // 为简单起见，现在假设使用 API 密钥认证
-        return {
-          endpoint: "/v1beta/models",
-          headers: {
-            "x-goog-api-key": apiKey,
-          },
-        };
+        throw new Error("Gemini JSON 凭证暂不支持获取模型列表，请使用 API Key");
       }
       return {
         endpoint: `/v1beta/models?key=${apiKey}`,
@@ -2856,10 +2849,16 @@ function parseModelsResponse(providerType: ProviderType, responseData: unknown):
   }
 
   // 尝试处理其他格式
-  // 部分供应商返回 { models: ["model1", "model2"] }
+  // 部分供应商返回 { models: ["model1", "model2"] } 或 { models: [{id: "model1"}, ...] }
   if (Array.isArray(data.models)) {
     return (data.models as unknown[])
-      .filter((m): m is string => typeof m === "string")
+      .map((m) => {
+        if (typeof m === "string") return m;
+        if (m && typeof m === "object" && "id" in m) return (m as { id: string }).id;
+        if (m && typeof m === "object" && "name" in m) return (m as { name: string }).name;
+        return null;
+      })
+      .filter((id): id is string => typeof id === "string" && id.length > 0)
       .sort();
   }
 

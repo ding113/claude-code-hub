@@ -65,12 +65,14 @@ export function FetchModelsButton({
         if (!result.ok) {
           toast.error(result.error || t("fillKeyFirst"));
           setStatus("error");
+          setTimeout(() => setStatus("idle"), 3000);
           return;
         }
 
         if (!result.data?.key) {
           toast.error(t("fillKeyFirst"));
           setStatus("error");
+          setTimeout(() => setStatus("idle"), 3000);
           return;
         }
 
@@ -80,6 +82,7 @@ export function FetchModelsButton({
       if (!resolvedKey) {
         toast.error(t("fillKeyFirst"));
         setStatus("error");
+        setTimeout(() => setStatus("idle"), 3000);
         return;
       }
 
@@ -95,12 +98,15 @@ export function FetchModelsButton({
       if (!response.ok) {
         toast.error(response.error || t("fetchFailed"));
         setStatus("error");
+        setTimeout(() => setStatus("idle"), 3000);
         return;
       }
 
       if (!response.data?.models || response.data.models.length === 0) {
         toast.warning(t("noModelsFound"));
-        setStatus("error");
+        setStatus("success");
+        setLastFetchCount(0);
+        setTimeout(() => setStatus("idle"), 3000);
         return;
       }
 
@@ -123,6 +129,7 @@ export function FetchModelsButton({
       console.error("Fetch models failed:", error);
       toast.error(t("fetchFailed"));
       setStatus("error");
+      setTimeout(() => setStatus("idle"), 3000);
     }
   };
 
