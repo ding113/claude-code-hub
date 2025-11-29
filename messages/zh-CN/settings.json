@@ -77,6 +77,8 @@
       },
       "allowGlobalView": "允许查看全站使用量",
       "allowGlobalViewDesc": "关闭后，普通用户在仪表盘仅能查看自己密钥的使用统计。",
+      "verboseProviderError": "详细供应商错误信息",
+      "verboseProviderErrorDesc": "开启后，当所有供应商不可用时返回详细错误信息（包含供应商数量、限流原因等）；关闭后仅返回简洁错误码。",
       "saveSettings": "保存设置",
       "keepDays": "保留天数",
       "keepDaysDesc": "清理超过此天数的历史日志",

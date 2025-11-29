@@ -1,5 +1,6 @@
 import type { Provider } from "@/types/provider";
 import { findProviderList, findProviderById } from "@/repository/provider";
+import { getSystemSettings } from "@/repository/system-config";
 import { RateLimitService } from "@/lib/rate-limit";
 import { SessionManager } from "@/lib/session-manager";
 import { isCircuitOpen, getCircuitState } from "@/lib/circuit-breaker";
@@ -328,12 +329,22 @@ export class ProxyProviderResolver {
     // 循环结束：所有可用供应商都已尝试或无可用供应商
     const status = 503;
 
+    // 获取系统设置中的 verboseProviderError 配置
+    // 使用 try/catch 降级保护，避免 DB 异常时导致故障放大
+    let verboseError = false;
+    try {
+      const systemSettings = await getSystemSettings();
+      verboseError = systemSettings.verboseProviderError;
+    } catch (e) {
+      logger.warn("ProviderSelector: Failed to get system settings, using default verboseError=false", { error: e });
+    }
+
     // 构建详细的错误消息
-    let message = "暂无可用的上游服务";
+    let message = "No available providers";
     let errorType = "no_available_providers";
 
     if (excludedProviders.length > 0) {
-      message = `所有供应商不可用（尝试了 ${excludedProviders.length} 个供应商）`;
+      message = `All providers unavailable (tried ${excludedProviders.length} providers)`;
       errorType = "all_providers_failed";
     } else {
       const selectionContext = session.getLastSelectionContext();
@@ -356,7 +367,7 @@ export class ProxyProviderResolver {
           unavailableCount === totalEnabled
         ) {
           // 全部因为限流
-          message = `所有可用供应商已达消费限额（${rateLimited.length} 个供应商）`;
+          message = `All providers rate limited (${rateLimited.length} providers)`;
           errorType = "rate_limit_exceeded";
         } else if (
           circuitOpen.length > 0 &&
@@ -364,11 +375,11 @@ export class ProxyProviderResolver {
           unavailableCount === totalEnabled
         ) {
           // 全部因为熔断
-          message = `所有可用供应商熔断器已打开（${circuitOpen.length} 个供应商）`;
+          message = `All providers circuit breaker open (${circuitOpen.length} providers)`;
           errorType = "circuit_breaker_open";
         } else if (rateLimited.length > 0 && circuitOpen.length > 0) {
           // 混合原因
-          message = `所有可用供应商不可用（${rateLimited.length} 个达限额，${circuitOpen.length} 个熔断）`;
+          message = `All providers unavailable (${rateLimited.length} rate limited, ${circuitOpen.length} circuit open)`;
           errorType = "mixed_unavailable";
         }
       }
@@ -381,7 +392,13 @@ export class ProxyProviderResolver {
       filteredProviders: session.getLastSelectionContext()?.filteredProviders,
     });
 
-    // 构建详细的错误响应
+    // 根据 verboseProviderError 配置决定返回详细错误还是简洁错误
+    if (!verboseError) {
+      // 简洁模式：返回固定的错误消息，不区分具体原因
+      return ProxyResponses.buildError(status, "No available providers", "no_available_providers");
+    }
+
+    // 详细模式：构建详细的错误响应
     const details: Record<string, unknown> = {
       totalAttempts: attemptCount,
       excludedCount: excludedProviders.length,

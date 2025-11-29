@@ -23,6 +23,9 @@ export interface SystemSettings {
   // 客户端版本检查配置
   enableClientVersionCheck: boolean;
 
+  // 供应商不可用时是否返回详细错误信息
+  verboseProviderError: boolean;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -46,4 +49,7 @@ export interface UpdateSystemSettingsInput {
 
   // 客户端版本检查配置（可选）
   enableClientVersionCheck?: boolean;
+
+  // 供应商不可用时是否返回详细错误信息（可选）
+  verboseProviderError?: boolean;
 }
