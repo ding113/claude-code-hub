@@ -336,7 +336,10 @@ export class ProxyProviderResolver {
       const systemSettings = await getSystemSettings();
       verboseError = systemSettings.verboseProviderError;
     } catch (e) {
-      logger.warn("ProviderSelector: Failed to get system settings, using default verboseError=false", { error: e });
+      logger.warn(
+        "ProviderSelector: Failed to get system settings, using default verboseError=false",
+        { error: e }
+      );
     }
 
     // 构建详细的错误消息
