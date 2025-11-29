@@ -606,13 +606,16 @@ export class ProxyForwarder {
       const bodyString = JSON.stringify(session.request.message);
       requestBody = bodyString;
 
-      // 检测流式请求
-      try {
-        const originalBody = session.request.message as Record<string, unknown>;
-        isStreaming = originalBody.stream === true;
-      } catch {
-        isStreaming = false;
-      }
+      // 检测流式请求：Gemini 支持两种方式
+      // 1. URL 路径检测（官方 Gemini API）: /v1beta/models/xxx:streamGenerateContent?alt=sse
+      // 2. 请求体 stream 字段（某些兼容 API）: { stream: true }
+      const geminiPathname = session.requestUrl.pathname || "";
+      const geminiSearchParams = session.requestUrl.searchParams;
+      const originalBody = session.request.message as Record<string, unknown>;
+      isStreaming =
+        geminiPathname.includes("streamGenerateContent") ||
+        geminiSearchParams.get("alt") === "sse" ||
+        originalBody?.stream === true;
 
       // 2. 准备认证和 Headers
       const accessToken = await GeminiAuth.getAccessToken(provider.key);
