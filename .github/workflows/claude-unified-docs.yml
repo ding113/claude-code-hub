@@ -1,8 +1,10 @@
 name: Claude Unified Documentation
 
 on:
-  release:
-    types: [published]
+  # 当推送新 tag 时触发（更可靠）
+  push:
+    tags:
+      - "v*"
 
   # 允许手动触发（用于重新生成文档）
   workflow_dispatch:
@@ -13,7 +15,7 @@ on:
         type: string
 
 concurrency:
-  group: unified-docs-${{ github.event.release.tag_name || github.event.inputs.tag_name }}
+  group: unified-docs-${{ github.ref_name || github.event.inputs.tag_name }}
   cancel-in-progress: true
 
 jobs:
@@ -25,19 +27,41 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
           token: ${{ secrets.GH_PAT }}
           submodules: recursive
 
+      - name: Verify submodule
+        run: |
+          echo "=== Submodule Status ==="
+          git submodule status
+          echo ""
+          echo "=== docs-site directory ==="
+          if [ -d "docs-site" ]; then
+            ls -la docs-site/
+            if [ -f "docs-site/src/app/docs/changelog/page.md" ]; then
+              echo "✅ docs-site/src/app/docs/changelog/page.md exists"
+            else
+              echo "⚠️ docs-site exists but changelog file not found"
+              ls -la docs-site/src/app/docs/ 2>/dev/null || echo "docs path not found"
+            fi
+          else
+            echo "❌ docs-site directory not found, attempting manual init..."
+            git submodule update --init --recursive
+            ls -la docs-site/ 2>/dev/null || echo "Still not found after init"
+          fi
+
       - name: Determine release tag
         id: release_info
         run: |
+          # 从 tag push 事件或手动输入获取 tag
           if [ -n "${{ github.event.inputs.tag_name }}" ]; then
             TAG="${{ github.event.inputs.tag_name }}"
           else
-            TAG="${{ github.event.release.tag_name }}"
+            # 从 refs/tags/v1.0.0 中提取 tag 名称
+            TAG="${GITHUB_REF#refs/tags/}"
           fi
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "date=$(date +%Y-%m-%d)" >> $GITHUB_OUTPUT
@@ -156,10 +180,21 @@ jobs:
 
             #### 2.2 更新 docs-site/src/app/docs/changelog/page.md
 
-            1. 读取当前 docs-site/src/app/docs/changelog/page.md 文件
-            2. 在 `# 更新日志` 标题和第一个 `---` 分隔线后插入新版本条目
-            3. 使用与现有条目相同的 Markdoc 格式
-            4. 保存更新后的文件
+            **注意**：docs-site 是一个 git submodule，可能未正确初始化。请先检查：
+
+            ```bash
+            ls -la docs-site/src/app/docs/changelog/page.md
+            ```
+
+            - 如果文件存在：
+              1. 读取当前 docs-site/src/app/docs/changelog/page.md 文件
+              2. 在 `# 更新日志` 标题和第一个 `---` 分隔线后插入新版本条目
+              3. 使用与现有条目相同的 Markdoc 格式
+              4. 保存更新后的文件
+
+            - 如果文件不存在：
+              1. 输出警告 "docs-site submodule 未初始化，跳过文档站点更新"
+              2. 继续执行后续步骤
 
             #### 2.3 更新 GitHub Release Notes
 
@@ -170,9 +205,16 @@ jobs:
                - 分类的变更列表
                - 破坏性变更说明（如有）
                - 贡献者致谢（如有外部贡献者）
-            3. 使用 `gh release edit` 命令更新 Release Notes：
+            3. 检查 Release 是否存在并更新：
                ```bash
-               gh release edit ${{ steps.release_info.outputs.tag }} --notes "生成的内容"
+               # 检查 release 是否存在
+               if gh release view ${{ steps.release_info.outputs.tag }} >/dev/null 2>&1; then
+                 # Release 存在，更新 notes
+                 gh release edit ${{ steps.release_info.outputs.tag }} --notes "生成的内容"
+               else
+                 # Release 不存在（可能只是 tag），创建 draft release
+                 gh release create ${{ steps.release_info.outputs.tag }} --draft --title "${{ steps.release_info.outputs.tag }}" --notes "生成的内容"
+               fi
                ```
 
             ### Phase 3: 提交变更
@@ -190,20 +232,30 @@ jobs:
                git push origin HEAD:main
                ```
 
-            3. 提交 docs-site 变更到文档仓库：
+            3. 提交 docs-site 变更到文档仓库（如果 submodule 存在且有变更）：
                ```bash
-               cd docs-site
-               git add -A
-               git commit -m "docs: update changelog for ${{ steps.release_info.outputs.tag }}"
-               git push origin HEAD:main
-               cd ..
+               if [ -d "docs-site/.git" ] || [ -f "docs-site/.git" ]; then
+                 cd docs-site
+                 if [ -n "$(git status --porcelain)" ]; then
+                   git add -A
+                   git commit -m "docs: update changelog for ${{ steps.release_info.outputs.tag }}"
+                   git push origin HEAD:main
+                 else
+                   echo "No changes in docs-site"
+                 fi
+                 cd ..
+               else
+                 echo "docs-site submodule not initialized, skipping"
+               fi
                ```
 
-            4. 更新主仓库的 submodule 引用：
+            4. 更新主仓库的 submodule 引用（如果有变更）：
                ```bash
-               git add docs-site
-               git commit -m "chore: update docs-site submodule [skip ci]" || true
-               git push origin HEAD:main || true
+               if [ -n "$(git status --porcelain docs-site)" ]; then
+                 git add docs-site
+                 git commit -m "chore: update docs-site submodule [skip ci]" || true
+                 git push origin HEAD:main || true
+               fi
                ```
 
             ## 重要提示
