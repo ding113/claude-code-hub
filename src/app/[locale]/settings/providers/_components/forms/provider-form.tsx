@@ -610,7 +610,10 @@ export function ProviderForm({
                 </Label>
                 <Select
                   value={providerType}
-                  onValueChange={(value) => setProviderType(value as ProviderType)}
+                  onValueChange={(value) => {
+                    setProviderType(value as ProviderType);
+                    setAllowedModels([]);
+                  }}
                   disabled={isPending}
                 >
                   <SelectTrigger id={isEdit ? "edit-provider-type" : "provider-type"}>
