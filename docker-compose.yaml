@@ -55,7 +55,7 @@ services:
       - ./.env
     environment:
       NODE_ENV: production
-      PORT: ${APP_PORT:-23000}
+      # 容器内使用 Dockerfile 默认端口 3000，对外通过 APP_PORT 暴露（默认 23000）
       DSN: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-claude_code_hub}
       REDIS_URL: redis://redis:6379
       AUTO_MIGRATE: ${AUTO_MIGRATE:-true}
@@ -64,11 +64,10 @@ services:
       # 设置时区为上海
       TZ: Asia/Shanghai
     ports:
-      - "${APP_PORT:-23000}:${APP_PORT:-23000}"
+      - "${APP_PORT:-23000}:3000"
     restart: unless-stopped
     healthcheck:
-      test:
-        ["CMD-SHELL", "curl -f http://localhost:${APP_PORT:-23000}/api/actions/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/actions/health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
