@@ -21,6 +21,8 @@ interface FetchModelsButtonProps {
 }
 
 type FetchStatus = "idle" | "loading" | "success" | "error";
+type FetchModelsResponse = Awaited<ReturnType<typeof fetchProviderModels>>;
+type FetchModelsErrorResponse = Extract<FetchModelsResponse, { ok: false }>;
 
 /**
  * 从 provider API 获取可用模型的 Button 组件
@@ -41,6 +43,36 @@ export function FetchModelsButton({
   const t = useTranslations("settings.providers.form.fetchModels");
   const [status, setStatus] = useState<FetchStatus>("idle");
   const [lastFetchCount, setLastFetchCount] = useState<number>(0);
+
+  const getFetchErrorMessage = (result: FetchModelsErrorResponse): string => {
+    if (!result.errorCode) {
+      return result.error || t("fetchFailed");
+    }
+
+    switch (result.errorCode) {
+      case "FETCH_MODELS_NO_PERMISSION":
+        return t("errors.noPermission");
+      case "FETCH_MODELS_INVALID_URL": {
+        const reason = result.errorParams?.reason ? ` (${result.errorParams.reason})` : "";
+        return t("errors.invalidUrl", { reason });
+      }
+      case "FETCH_MODELS_INVALID_PROXY":
+        return t("errors.invalidProxy");
+      case "FETCH_MODELS_HTTP_ERROR": {
+        const status = result.errorParams?.status ?? "unknown";
+        const detail = result.errorParams?.detail ? ` - ${result.errorParams.detail}` : "";
+        return t("errors.httpError", { status, detail });
+      }
+      case "FETCH_MODELS_EMPTY":
+        return t("errors.empty");
+      case "FETCH_MODELS_TIMEOUT":
+        return t("errors.timeout");
+      case "FETCH_MODELS_UNKNOWN":
+        return t("errors.unknown");
+      default:
+        return result.error || t("fetchFailed");
+    }
+  };
 
   const handleFetch = async () => {
     // 验证 URL
@@ -96,7 +128,7 @@ export function FetchModelsButton({
       });
 
       if (!response.ok) {
-        toast.error(response.error || t("fetchFailed"));
+        toast.error(getFetchErrorMessage(response));
         setStatus("error");
         setTimeout(() => setStatus("idle"), 3000);
         return;

@@ -2621,7 +2621,11 @@ export async function fetchProviderModels(
 ): Promise<ActionResult<{ models: string[] }>> {
   const session = await getSession();
   if (!session || session.user.role !== "admin") {
-    return { ok: false, error: "无权限执行此操作" };
+    return {
+      ok: false,
+      error: "无权限执行此操作",
+      errorCode: "FETCH_MODELS_NO_PERMISSION",
+    };
   }
 
   // 验证 URL
@@ -2630,6 +2634,10 @@ export async function fetchProviderModels(
     return {
       ok: false,
       error: urlValidation.error.message,
+      errorCode: "FETCH_MODELS_INVALID_URL",
+      errorParams: {
+        reason: urlValidation.error.details?.error ?? "",
+      },
     };
   }
 
@@ -2638,6 +2646,7 @@ export async function fetchProviderModels(
     return {
       ok: false,
       error: "代理地址格式无效，支持格式: http://, https://, socks5://, socks4://",
+      errorCode: "FETCH_MODELS_INVALID_PROXY",
     };
   }
 
@@ -2707,6 +2716,11 @@ export async function fetchProviderModels(
       return {
         ok: false,
         error: `获取模型列表失败: HTTP ${response.status}${errorDetail ? ` - ${errorDetail}` : ""}`,
+        errorCode: "FETCH_MODELS_HTTP_ERROR",
+        errorParams: {
+          status: String(response.status),
+          detail: errorDetail ?? "",
+        },
       };
     }
 
@@ -2719,6 +2733,7 @@ export async function fetchProviderModels(
       return {
         ok: false,
         error: "未找到可用模型",
+        errorCode: "FETCH_MODELS_EMPTY",
       };
     }
 
@@ -2740,12 +2755,14 @@ export async function fetchProviderModels(
       return {
         ok: false,
         error: "请求超时，请检查网络连接或供应商地址",
+        errorCode: "FETCH_MODELS_TIMEOUT",
       };
     }
 
     return {
       ok: false,
       error: error instanceof Error ? error.message : "获取模型列表失败",
+      errorCode: "FETCH_MODELS_UNKNOWN",
     };
   }
 }

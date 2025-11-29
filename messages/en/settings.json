@@ -798,7 +798,16 @@
         "noModelsFound": "No models found",
         "fillUrlFirst": "Please fill in provider URL first",
         "invalidUrl": "Invalid provider URL, only http/https supported",
-        "fillKeyFirst": "Please fill in API key first"
+        "fillKeyFirst": "Please fill in API key first",
+        "errors": {
+          "noPermission": "You don't have permission to fetch models.",
+          "invalidUrl": "Provider URL is invalid{reason}.",
+          "invalidProxy": "Proxy URL is invalid. Allowed formats: http://, https://, socks5://, socks4://",
+          "httpError": "Fetching models failed: HTTP {status}{detail}",
+          "empty": "No models returned by the provider.",
+          "timeout": "Request timed out. Please check the network or provider address.",
+          "unknown": "Failed to fetch models. Please try again."
+        }
       },
       "modelRedirect": {
         "currentRules": "Current Rules ({count})",
