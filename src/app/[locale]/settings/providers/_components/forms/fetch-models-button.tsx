@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Loader2, Download, CheckCircle2, XCircle } from "lucide-react";
 import { fetchProviderModels, getUnmaskedProviderKey } from "@/actions/providers";
@@ -43,6 +43,22 @@ export function FetchModelsButton({
   const t = useTranslations("settings.providers.form.fetchModels");
   const [status, setStatus] = useState<FetchStatus>("idle");
   const [lastFetchCount, setLastFetchCount] = useState<number>(0);
+  const timeoutRefs = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+
+  const scheduleStatusReset = () => {
+    const timer = setTimeout(() => {
+      setStatus("idle");
+      timeoutRefs.current = timeoutRefs.current.filter((item) => item !== timer);
+    }, 3000);
+    timeoutRefs.current.push(timer);
+  };
+
+  useEffect(() => {
+    return () => {
+      timeoutRefs.current.forEach((timer) => clearTimeout(timer));
+      timeoutRefs.current = [];
+    };
+  }, []);
 
   const getFetchErrorMessage = (result: FetchModelsErrorResponse): string => {
     if (!result.errorCode) {
@@ -67,6 +83,8 @@ export function FetchModelsButton({
         return t("errors.empty");
       case "FETCH_MODELS_TIMEOUT":
         return t("errors.timeout");
+      case "FETCH_MODELS_GEMINI_JSON_CREDS":
+        return t("errors.jsonCredsNotSupported");
       case "FETCH_MODELS_UNKNOWN":
         return t("errors.unknown");
       default:
@@ -97,14 +115,14 @@ export function FetchModelsButton({
         if (!result.ok) {
           toast.error(result.error || t("fillKeyFirst"));
           setStatus("error");
-          setTimeout(() => setStatus("idle"), 3000);
+          scheduleStatusReset();
           return;
         }
 
         if (!result.data?.key) {
           toast.error(t("fillKeyFirst"));
           setStatus("error");
-          setTimeout(() => setStatus("idle"), 3000);
+          scheduleStatusReset();
           return;
         }
 
@@ -114,7 +132,7 @@ export function FetchModelsButton({
       if (!resolvedKey) {
         toast.error(t("fillKeyFirst"));
         setStatus("error");
-        setTimeout(() => setStatus("idle"), 3000);
+        scheduleStatusReset();
         return;
       }
 
@@ -130,7 +148,7 @@ export function FetchModelsButton({
       if (!response.ok) {
         toast.error(getFetchErrorMessage(response));
         setStatus("error");
-        setTimeout(() => setStatus("idle"), 3000);
+        scheduleStatusReset();
         return;
       }
 
@@ -138,7 +156,7 @@ export function FetchModelsButton({
         toast.warning(t("noModelsFound"));
         setStatus("success");
         setLastFetchCount(0);
-        setTimeout(() => setStatus("idle"), 3000);
+        scheduleStatusReset();
         return;
       }
 
@@ -154,14 +172,12 @@ export function FetchModelsButton({
       });
 
       // 3 秒后重置状态
-      setTimeout(() => {
-        setStatus("idle");
-      }, 3000);
+      scheduleStatusReset();
     } catch (error) {
       console.error("Fetch models failed:", error);
       toast.error(t("fetchFailed"));
       setStatus("error");
-      setTimeout(() => setStatus("idle"), 3000);
+      scheduleStatusReset();
     }
   };
 

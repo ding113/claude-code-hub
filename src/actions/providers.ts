@@ -2650,6 +2650,15 @@ export async function fetchProviderModels(
     };
   }
 
+  const isGeminiProvider = data.providerType === "gemini" || data.providerType === "gemini-cli";
+  if (isGeminiProvider && data.apiKey.trim().startsWith("{")) {
+    return {
+      ok: false,
+      error: "Gemini JSON 凭证暂不支持获取模型列表，请使用 API Key",
+      errorCode: "FETCH_MODELS_GEMINI_JSON_CREDS",
+    };
+  }
+
   const normalizedUrl = urlValidation.normalizedUrl.replace(/\/$/, "");
 
   try {
@@ -2747,17 +2756,21 @@ export async function fetchProviderModels(
       data: { models },
     };
   } catch (error) {
-    logger.error("fetchProviderModels error", { 
-      error: error instanceof Error ? error.message : String(error)
-    });
-
     if (error instanceof Error && isClientAbortError(error)) {
+      logger.warn("fetchProviderModels timeout", {
+        providerType: data.providerType,
+        error: error.message,
+      });
       return {
         ok: false,
         error: "请求超时，请检查网络连接或供应商地址",
         errorCode: "FETCH_MODELS_TIMEOUT",
       };
     }
+
+    logger.error("fetchProviderModels error", {
+      error: error instanceof Error ? error.message : String(error),
+    });
 
     return {
       ok: false,
@@ -2779,11 +2792,6 @@ function getModelsApiConfig(
     case "gemini":
     case "gemini-cli": {
       // Gemini 使用 /v1beta/models 端点
-      // 检查 API 密钥是否为 JSON 凭证（服务账户）
-      const isJsonCreds = apiKey.trim().startsWith("{");
-      if (isJsonCreds) {
-        throw new Error("Gemini JSON 凭证暂不支持获取模型列表，请使用 API Key");
-      }
       return {
         endpoint: "/v1beta/models",
         headers: {
@@ -2836,6 +2844,20 @@ function getModelsApiConfig(
  * 根据供应商类型解析模型响应
  */
 function parseModelsResponse(providerType: ProviderType, responseData: unknown): string[] {
+  if (Array.isArray(responseData)) {
+    return (responseData as unknown[])
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (typeof item === "object" && item !== null) {
+          const obj = item as Record<string, unknown>;
+          return (obj.id || obj.name || obj.model) as string;
+        }
+        return "";
+      })
+      .filter((name) => typeof name === "string" && name.length > 0)
+      .sort();
+  }
+
   if (!responseData || typeof responseData !== "object") {
     return [];
   }
@@ -2878,21 +2900,6 @@ function parseModelsResponse(providerType: ProviderType, responseData: unknown):
         return null;
       })
       .filter((id): id is string => typeof id === "string" && id.length > 0)
-      .sort();
-  }
-
-  // 部分供应商直接返回数组
-  if (Array.isArray(data)) {
-    return (data as unknown[])
-      .map((item) => {
-        if (typeof item === "string") return item;
-        if (typeof item === "object" && item !== null) {
-          const obj = item as Record<string, unknown>;
-          return (obj.id || obj.name || obj.model) as string;
-        }
-        return "";
-      })
-      .filter((name) => typeof name === "string" && name.length > 0)
       .sort();
   }
 

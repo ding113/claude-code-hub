@@ -806,6 +806,7 @@
           "httpError": "Fetching models failed: HTTP {status}{detail}",
           "empty": "No models returned by the provider.",
           "timeout": "Request timed out. Please check the network or provider address.",
+          "jsonCredsNotSupported": "Gemini JSON credentials are not supported for fetching models. Please use an API key.",
           "unknown": "Failed to fetch models. Please try again."
         }
       },
