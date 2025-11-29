@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Documentation
+
+- Consolidate project documentation with BMAD-style PRD, architecture docs, and simplified CLAUDE.md references (#243) @ding113
+
 ### Added
 
 - Add error response override feature allowing custom response body and status code configuration for error rules (#234) @ding113
