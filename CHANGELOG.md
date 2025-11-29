@@ -4,6 +4,20 @@
 
 ---
 
+## [v0.3.18](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.18) - 2025-11-29
+
+### 新增
+
+- 添加独立文档站点 (docs-site) 作为 Git submodule
+
+### 其他
+
+- 统一文档自动化工作流，合并 PR changelog 和 Release Notes 生成流程
+- 添加文档更新 prompt 模板 (release-analysis, release-notes, changelog-update, docs-update)
+- 优化 CI/CD 配置和 .gitignore 规则
+
+---
+
 ## [v0.3.17](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.17) - 2025-11-29
 
 ### 其他
