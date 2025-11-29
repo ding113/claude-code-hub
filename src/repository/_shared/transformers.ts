@@ -112,6 +112,7 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     cleanupSchedule: dbSettings?.cleanupSchedule ?? "0 2 * * *",
     cleanupBatchSize: dbSettings?.cleanupBatchSize ?? 10000,
     enableClientVersionCheck: dbSettings?.enableClientVersionCheck ?? false,
+    verboseProviderError: dbSettings?.verboseProviderError ?? false,
     createdAt: dbSettings?.createdAt ? new Date(dbSettings.createdAt) : new Date(),
     updatedAt: dbSettings?.updatedAt ? new Date(dbSettings.updatedAt) : new Date(),
   };

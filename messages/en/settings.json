@@ -98,6 +98,8 @@
     "form": {
       "allowGlobalView": "Allow Global Usage View",
       "allowGlobalViewDesc": "When disabled, regular users can only view their own key usage statistics in the dashboard.",
+      "verboseProviderError": "Verbose Provider Error",
+      "verboseProviderErrorDesc": "When enabled, return detailed error messages when all providers are unavailable (including provider count, rate limit reasons, etc.); when disabled, only return a simple error code.",
       "cleanupSchedule": "Cleanup Schedule",
       "cleanupScheduleDesc": "Select the execution schedule for automatic cleanup",
       "configUpdated": "System settings updated. The page will refresh to apply currency display changes.",

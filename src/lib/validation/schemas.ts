@@ -561,6 +561,8 @@ export const UpdateSystemSettingsSchema = z.object({
     .optional(),
   // 客户端版本检查配置（可选）
   enableClientVersionCheck: z.boolean().optional(),
+  // 供应商不可用时是否返回详细错误信息（可选）
+  verboseProviderError: z.boolean().optional(),
 });
 
 // 导出类型推断

@@ -98,6 +98,8 @@
     "form": {
       "allowGlobalView": "允許查看全站使用量",
       "allowGlobalViewDesc": "關閉後，普通使用者在儀表板僅能查看自己金鑰的使用統計。",
+      "verboseProviderError": "詳細供應商錯誤資訊",
+      "verboseProviderErrorDesc": "開啟後，當所有供應商不可用時返回詳細錯誤資訊（包含供應商數量、限流原因等）；關閉後僅返回簡潔錯誤碼。",
       "cleanupSchedule": "清理週期",
       "cleanupScheduleDesc": "選擇自動清理的執行週期",
       "configUpdated": "系統設定已更新，頁面將重新整理以應用貨幣顯示變更。",
