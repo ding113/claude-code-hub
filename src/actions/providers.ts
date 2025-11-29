@@ -74,6 +74,7 @@ function resolveApiTestTimeoutMs(): number {
 // API 测试配置常量
 const API_TEST_CONFIG = {
   TIMEOUT_MS: resolveApiTestTimeoutMs(),
+  GEMINI_TIMEOUT_MS: 60000, // Gemini 3 有 thinking 功能，需要更长超时
   MAX_RESPONSE_PREVIEW_LENGTH: 500, // 响应内容预览最大长度（增加到 500 字符以显示更多内容）
   TEST_MAX_TOKENS: 100, // 测试请求的最大 token 数
   TEST_PROMPT: "Hello", // 测试请求的默认提示词
@@ -997,6 +998,7 @@ type ProviderApiTestArgs = {
   model?: string;
   proxyUrl?: string | null;
   proxyFallbackToDirect?: boolean;
+  timeoutMs?: number; // 自定义超时时间（毫秒）
 };
 
 type ProviderApiTestResult = ActionResult<
@@ -1772,6 +1774,7 @@ async function executeProviderApiTest(
     body: (model: string) => unknown;
     successMessage: string;
     userAgent: string; // 渠道特定的 User-Agent
+    timeoutMs?: number; // 自定义超时时间（毫秒）
     extract: (result: ProviderApiResponse) => {
       model?: string;
       usage?: Record<string, unknown>;
@@ -1833,6 +1836,7 @@ async function executeProviderApiTest(
         dispatcher?: unknown;
       }
 
+      const timeoutMs = options.timeoutMs ?? API_TEST_CONFIG.TIMEOUT_MS;
       const init: UndiciFetchOptions = {
         method: "POST",
         headers: {
@@ -1845,7 +1849,7 @@ async function executeProviderApiTest(
           Connection: "keep-alive",
         },
         body: JSON.stringify(options.body(model)),
-        signal: AbortSignal.timeout(API_TEST_CONFIG.TIMEOUT_MS),
+        signal: AbortSignal.timeout(timeoutMs),
       };
 
       if (proxyConfig) {
@@ -2276,6 +2280,26 @@ export async function testProviderOpenAIResponses(
 export async function testProviderGemini(
   data: ProviderApiTestArgs
 ): Promise<ProviderApiTestResult> {
+  // 校验超时范围（防止资源占用）
+  if (data.timeoutMs !== undefined) {
+    if (data.timeoutMs < API_TEST_TIMEOUT_LIMITS.MIN || data.timeoutMs > API_TEST_TIMEOUT_LIMITS.MAX) {
+      return {
+        ok: true,
+        data: {
+          success: false,
+          message: `超时时间必须在 ${API_TEST_TIMEOUT_LIMITS.MIN / 1000}-${API_TEST_TIMEOUT_LIMITS.MAX / 1000} 秒之间`,
+        },
+      };
+    }
+  }
+
+  logger.debug("testProviderGemini: Starting test", {
+    providerUrl: data.providerUrl,
+    model: data.model,
+    hasApiKey: !!data.apiKey,
+    apiKeyLength: data.apiKey?.length,
+  });
+
   // 预处理 Auth，如果是 API Key 保持原样，如果是 JSON 则解析 Access Token
   let processedApiKey = data.apiKey;
   let isJsonCreds = false;
@@ -2289,23 +2313,24 @@ export async function testProviderGemini(
     logger.warn("testProviderGemini:auth_process_failed", { error: e });
   }
 
-  return executeProviderApiTest(
+  // 第一次尝试：仅使用 header 认证（适合代理服务如 co.yes.vg）
+  const firstResult = await executeProviderApiTest(
     { ...data, apiKey: processedApiKey },
     {
-      path: (model, apiKey) => {
-        if (!isJsonCreds) {
-          return `/v1beta/models/${model}:generateContent?key=${apiKey}`;
-        }
-        return `/v1beta/models/${model}:generateContent`;
+      path: (model) => {
+        // 不在 URL 中放 key，仅用 header 认证
+        return `/v1beta/models/${model}:streamGenerateContent?alt=sse`;
       },
-      defaultModel: "gemini-1.5-pro",
-      headers: (apiKey, context) => {
-        void context;
+      defaultModel: "gemini-2.5-pro",
+      headers: (apiKey) => {
         const headers: Record<string, string> = {
           "Content-Type": "application/json",
+          "x-goog-api-client": "google-genai-sdk/1.30.0 gl-node/v24.11.0",
         };
         if (isJsonCreds) {
           headers["Authorization"] = `Bearer ${apiKey}`;
+        } else {
+          headers["x-goog-api-key"] = apiKey;
         }
         return headers;
       },
@@ -2318,7 +2343,8 @@ export async function testProviderGemini(
           },
         };
       },
-      userAgent: "GeminiCLI/v0.17.1 (platform; arch)",
+      userAgent: "GeminiCLI/v24.11.0 (linux; x64)",
+      timeoutMs: data.timeoutMs ?? API_TEST_CONFIG.GEMINI_TIMEOUT_MS,
       successMessage: "Gemini API 测试成功",
       extract: (result) => {
         const geminiResult = result as GeminiResponse;
@@ -2330,6 +2356,79 @@ export async function testProviderGemini(
       },
     }
   );
+
+  // 检查实际测试结果（注意：ok: true 只表示函数执行成功，data.success 才表示测试结果）
+  const resultData = (firstResult as { ok: boolean; data?: { success?: boolean; message?: string } }).data;
+  const testSuccess = resultData?.success === true;
+
+  // 如果测试成功，直接返回
+  if (testSuccess) {
+    return firstResult;
+  }
+
+  // JSON 凭证只支持 Bearer，不尝试 URL 认证
+  if (isJsonCreds) {
+    return firstResult;
+  }
+
+  // 检查是否是认证错误（401/403）
+  // 从 message 中解析 HTTP 状态码（格式："API 返回错误: HTTP 401"）
+  const message = resultData?.message;
+  const isAuthError = message?.includes("HTTP 401") || message?.includes("HTTP 403");
+  if (!isAuthError) {
+    return firstResult;
+  }
+
+  // 第二次尝试：同时使用 URL query 参数 + header（兼容官方 Gemini API）
+  logger.debug("testProviderGemini: Header-only auth failed, retrying with URL param + header", {
+    firstMessage: message,
+  });
+
+  const secondResult = await executeProviderApiTest(
+    { ...data, apiKey: processedApiKey },
+    {
+      path: (model, apiKey) => `/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`,
+      defaultModel: "gemini-2.5-pro",
+      headers: (apiKey) => ({
+        "Content-Type": "application/json",
+        "x-goog-api-client": "google-genai-sdk/1.30.0 gl-node/v24.11.0",
+        "x-goog-api-key": apiKey,
+      }),
+      body: (model) => {
+        void model;
+        return {
+          contents: [{ parts: [{ text: API_TEST_CONFIG.TEST_PROMPT }] }],
+          generationConfig: {
+            maxOutputTokens: API_TEST_CONFIG.TEST_MAX_TOKENS,
+          },
+        };
+      },
+      userAgent: "GeminiCLI/v24.11.0 (linux; x64)",
+      timeoutMs: data.timeoutMs ?? API_TEST_CONFIG.GEMINI_TIMEOUT_MS,
+      successMessage: "Gemini API 测试成功 (URL 认证)",
+      extract: (result) => {
+        const geminiResult = result as GeminiResponse;
+        return {
+          model: undefined,
+          usage: geminiResult.usageMetadata as Record<string, unknown>,
+          content: extractFirstTextSnippet(geminiResult),
+        };
+      },
+    }
+  );
+
+  // 如果第二次尝试成功，在 message 中添加提示
+  if (secondResult.ok && secondResult.data?.success) {
+    return {
+      ok: true,
+      data: {
+        ...secondResult.data,
+        message: secondResult.data.message + " [FALLBACK:URL_PARAM]",
+      },
+    };
+  }
+
+  return secondResult;
 }
 
 // ============================================================================
