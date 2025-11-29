@@ -31,6 +31,7 @@ AI Coding tools (especially CLI tools like Claude Code and Codex) are being wide
 ### Impact if Unsolved
 
 Without CCH, teams face:
+
 - No unified CLI Coding Agent management center
 - No centralized provider scheduling and usage monitoring
 - No seamless high availability through auto-switching
@@ -66,12 +67,14 @@ A server-deployed, multi-tenant AI Coding tool scheduling platform that provides
 ### Key Features
 
 **Core Features (Must-have):**
+
 - Multi-provider management
 - Auto-switching between providers
 - Auto circuit breaker with recovery
 - User-transparent/seamless experience
 
 **Additional Features:**
+
 - Multi-tenant support
 - Request logging
 - Billing/cost tracking
@@ -112,6 +115,7 @@ Community-driven open-source success - more users, more contributors, stronger e
 ### In Scope
 
 **Current:**
+
 - Multi-provider management (claude, claude-auth, codex, gemini, openai-compatible)
 - Auto-switching and circuit breaker
 - Session stickiness (5-min context caching)
@@ -120,11 +124,13 @@ Community-driven open-source success - more users, more contributors, stronger e
 - Format converters (Claude, OpenAI, Codex, Gemini)
 
 **Mid-term:**
+
 - Provider management refactoring
 - Provider balance/quota fetching
 - Intelligent scheduling based on real-time balance and quota data
 
 **Long-term:**
+
 - Database flexibility (MySQL, PostgreSQL, SQLite)
 - Electron client version
 - Full-chain integration (client + server parallel strategy)
@@ -187,6 +193,7 @@ No fixed schedule - development driven by available maintainer/contributor capac
 ### Key Milestones
 
 Milestones prioritized by community needs and feasibility:
+
 - Provider management refactoring (mid-term)
 - Provider balance/quota fetching (mid-term)
 - Multi-database support (long-term)
@@ -216,4 +223,4 @@ Milestones prioritized by community needs and feasibility:
 
 **This document was created using BMAD Method v6 - Phase 1 (Analysis)**
 
-*To continue: Run `/workflow-status` to see your progress and next recommended workflow.*
+_To continue: Run `/workflow-status` to see your progress and next recommended workflow._

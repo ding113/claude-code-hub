@@ -14,6 +14,7 @@
 This Product Requirements Document (PRD) defines the functional and non-functional requirements for Claude Code Hub. It serves as the source of truth for what will be built and provides traceability from requirements through implementation.
 
 **Related Documents:**
+
 - Product Brief: `docs/product-brief-claude-code-hub-2025-11-29.md`
 
 ---
@@ -49,6 +50,7 @@ Claude Code Hub is an intelligent AI API proxy platform designed for agile devel
 Functional Requirements (FRs) define **what** the system does - specific features and behaviors.
 
 Each requirement includes:
+
 - **ID**: Unique identifier (FR-001, FR-002, etc.)
 - **Priority**: Must Have / Should Have / Could Have / Won't Have (MoSCoW)
 - **Description**: What the system should do
@@ -57,12 +59,12 @@ Each requirement includes:
 
 ### Implementation Progress Summary
 
-| Status | Count | Percentage |
-|--------|-------|------------|
-| ✅ IMPLEMENTED | 24 | 65% |
-| ⚠️ PARTIAL | 10 | 27% |
-| ❌ NOT_IMPLEMENTED | 3 | 8% |
-| **Total** | **37** | **100%** |
+| Status             | Count  | Percentage |
+| ------------------ | ------ | ---------- |
+| ✅ IMPLEMENTED     | 24     | 65%        |
+| ⚠️ PARTIAL         | 10     | 27%        |
+| ❌ NOT_IMPLEMENTED | 3      | 8%         |
+| **Total**          | **37** | **100%**   |
 
 **Last Updated:** 2025-11-29
 
@@ -78,6 +80,7 @@ Each requirement includes:
 System shall support CRUD operations for upstream AI API providers, allowing administrators to add, configure, update, enable/disable, and remove providers.
 
 **Acceptance Criteria:**
+
 - [ ] Admin can create a new provider with name, URL, API key, and type
 - [ ] Admin can update provider configuration (weight, priority, limits, etc.)
 - [ ] Admin can enable/disable a provider without deleting it
@@ -94,6 +97,7 @@ System shall support CRUD operations for upstream AI API providers, allowing adm
 
 **Description:**
 System shall support multiple provider types with appropriate protocol handling:
+
 - `claude` - Standard Anthropic API
 - `claude-auth` - Claude relay services (Bearer auth only)
 - `codex` - OpenAI Codex/Response API
@@ -102,6 +106,7 @@ System shall support multiple provider types with appropriate protocol handling:
 - `openai-compatible` - OpenAI-compatible APIs
 
 **Acceptance Criteria:**
+
 - [ ] Each provider type has correct authentication handling
 - [ ] Each provider type uses appropriate request/response format
 - [ ] Provider type can be selected during provider creation
@@ -117,6 +122,7 @@ System shall support multiple provider types with appropriate protocol handling:
 
 **Description:**
 System shall automatically select the optimal provider for each request based on:
+
 - Provider weight (0-100, higher = more traffic)
 - Provider priority (lower number = higher priority, used for failover)
 - Provider availability (enabled, not circuit-broken)
@@ -124,6 +130,7 @@ System shall automatically select the optimal provider for each request based on
 - Group tags (for logical grouping)
 
 **Acceptance Criteria:**
+
 - [ ] Weighted random selection respects configured weights
 - [ ] Higher priority providers are preferred when available
 - [ ] Disabled providers are excluded from selection
@@ -140,11 +147,13 @@ System shall automatically select the optimal provider for each request based on
 
 **Description:**
 System shall implement per-provider circuit breaker pattern to prevent cascading failures:
+
 - CLOSED state: Normal operation
 - OPEN state: Requests fail fast, provider excluded
 - HALF-OPEN state: Limited traffic to test recovery
 
 **Acceptance Criteria:**
+
 - [ ] Circuit opens after configurable failure threshold (default: 5 failures)
 - [ ] Circuit remains open for configurable duration (default: 60s)
 - [ ] Half-open state allows configurable success threshold before closing
@@ -164,6 +173,7 @@ System shall implement per-provider circuit breaker pattern to prevent cascading
 System shall maintain session stickiness to route consecutive requests from the same conversation to the same provider, improving cache hit rates and reducing costs.
 
 **Acceptance Criteria:**
+
 - [ ] Session ID extracted from request headers (x-session-id or similar)
 - [ ] Session-to-provider mapping cached in Redis (default TTL: 5 minutes)
 - [ ] Subsequent requests in same session route to same provider
@@ -180,11 +190,13 @@ System shall maintain session stickiness to route consecutive requests from the 
 
 **Description:**
 System shall bidirectionally convert between different API formats:
+
 - Claude Messages API ↔ OpenAI Chat Completions API
 - Claude Messages API ↔ Codex Response API
 - Claude Messages API ↔ Gemini API
 
 **Acceptance Criteria:**
+
 - [ ] Requests in any supported format are converted to provider's format
 - [ ] Responses from provider are converted back to client's expected format
 - [ ] Streaming responses maintain correct format throughout
@@ -203,6 +215,7 @@ System shall bidirectionally convert between different API formats:
 System shall automatically retry failed requests on alternative providers without user awareness.
 
 **Acceptance Criteria:**
+
 - [ ] Transient errors trigger automatic retry on next available provider
 - [ ] Retry respects circuit breaker state
 - [ ] Maximum retry attempts configurable (default: 3)
@@ -223,6 +236,7 @@ System shall automatically retry failed requests on alternative providers withou
 System shall support multi-tenant user management with per-user quotas and limits.
 
 **Acceptance Criteria:**
+
 - [ ] Admin can create users with username and configuration
 - [ ] Each user has configurable rate limits (RPM, daily/weekly/monthly USD)
 - [ ] Users can be enabled/disabled
@@ -241,6 +255,7 @@ System shall support multi-tenant user management with per-user quotas and limit
 System shall support API key creation and management with per-key limits.
 
 **Acceptance Criteria:**
+
 - [ ] Users/admins can create multiple API keys
 - [ ] Each key has independent rate limits (can be stricter than user limits)
 - [ ] Keys can have expiration dates
@@ -260,6 +275,7 @@ System shall support API key creation and management with per-key limits.
 System shall authenticate API requests using API keys and admin requests using admin token.
 
 **Acceptance Criteria:**
+
 - [ ] Proxy endpoints require valid API key in Authorization header
 - [ ] Admin endpoints require valid admin token
 - [ ] Invalid credentials return 401 with clear message
@@ -276,6 +292,7 @@ System shall authenticate API requests using API keys and admin requests using a
 
 **Description:**
 System shall enforce multi-dimensional rate limits:
+
 - Requests per minute (RPM)
 - Cost per 5 hours (USD)
 - Cost per day (USD)
@@ -284,6 +301,7 @@ System shall enforce multi-dimensional rate limits:
 - Concurrent sessions
 
 **Acceptance Criteria:**
+
 - [ ] Limits enforced at user level and key level (stricter wins)
 - [ ] Limits enforced at provider level
 - [ ] Rate limit exceeded returns 429 with retry-after header
@@ -305,6 +323,7 @@ System shall enforce multi-dimensional rate limits:
 System shall limit concurrent active sessions per user/provider to prevent resource exhaustion.
 
 **Acceptance Criteria:**
+
 - [ ] Configurable concurrent session limit per provider
 - [ ] Configurable concurrent session limit per user
 - [ ] Excess sessions queued or rejected with clear message
@@ -325,6 +344,7 @@ System shall limit concurrent active sessions per user/provider to prevent resou
 System shall log all proxy requests with comprehensive metadata for debugging and analytics.
 
 **Acceptance Criteria:**
+
 - [ ] Each request logged with: timestamp, user, key, provider, model, tokens, cost
 - [ ] Logs include request/response status and duration
 - [ ] Logs queryable by time range, user, provider, model
@@ -343,6 +363,7 @@ System shall log all proxy requests with comprehensive metadata for debugging an
 System shall provide real-time monitoring dashboard showing system health and activity.
 
 **Acceptance Criteria:**
+
 - [ ] Dashboard shows active sessions count
 - [ ] Dashboard shows requests per second
 - [ ] Dashboard shows provider health status
@@ -364,6 +385,7 @@ System shall provide real-time monitoring dashboard showing system health and ac
 System shall aggregate and display usage statistics at multiple granularities.
 
 **Acceptance Criteria:**
+
 - [ ] Statistics available per user, per key, per provider, per model
 - [ ] Time-based aggregation: hourly, daily, weekly, monthly
 - [ ] Metrics include: request count, token count, cost (USD)
@@ -384,6 +406,7 @@ System shall aggregate and display usage statistics at multiple granularities.
 System shall display currently active sessions with details.
 
 **Acceptance Criteria:**
+
 - [ ] List of active sessions with user, provider, start time, duration
 - [ ] Session can be force-terminated by admin
 - [ ] Session history viewable
@@ -402,6 +425,7 @@ System shall display currently active sessions with details.
 System shall display health status of each provider including circuit breaker state.
 
 **Acceptance Criteria:**
+
 - [ ] Each provider shows: enabled/disabled, circuit state, recent error rate
 - [ ] Last successful/failed request timestamp visible
 - [ ] Connectivity test available (manual trigger)
@@ -422,6 +446,7 @@ System shall display health status of each provider including circuit breaker st
 System shall display usage leaderboard showing top users by various metrics.
 
 **Acceptance Criteria:**
+
 - [ ] Leaderboard by request count
 - [ ] Leaderboard by token usage
 - [ ] Leaderboard by cost
@@ -442,6 +467,7 @@ System shall display usage leaderboard showing top users by various metrics.
 System shall provide comprehensive admin dashboard for system management.
 
 **Acceptance Criteria:**
+
 - [ ] Dashboard requires admin authentication
 - [ ] Overview page shows system health summary
 - [ ] Navigation to all admin functions
@@ -460,6 +486,7 @@ System shall provide comprehensive admin dashboard for system management.
 System shall support configurable error classification rules for intelligent error handling.
 
 **Acceptance Criteria:**
+
 - [ ] Admin can define error patterns (regex on response body/status)
 - [ ] Each rule specifies: should retry, should circuit break
 - [ ] Rules have priority ordering
@@ -478,6 +505,7 @@ System shall support configurable error classification rules for intelligent err
 System shall filter requests containing sensitive or prohibited content.
 
 **Acceptance Criteria:**
+
 - [ ] Admin can define sensitive word/pattern list
 - [ ] Requests matching patterns are blocked with clear message
 - [ ] Regex patterns supported
@@ -496,6 +524,7 @@ System shall filter requests containing sensitive or prohibited content.
 System shall maintain model pricing data for accurate cost calculation.
 
 **Acceptance Criteria:**
+
 - [ ] Pricing data for all supported models
 - [ ] Input/output token pricing separate
 - [ ] Manual price override capability
@@ -514,6 +543,7 @@ System shall maintain model pricing data for accurate cost calculation.
 System shall track and optionally enforce minimum client versions.
 
 **Acceptance Criteria:**
+
 - [ ] Track client version from request headers
 - [ ] Define minimum required version
 - [ ] Warn or block outdated clients
@@ -534,6 +564,7 @@ System shall track and optionally enforce minimum client versions.
 System shall support runtime configuration without restart.
 
 **Acceptance Criteria:**
+
 - [ ] Key settings configurable via admin UI
 - [ ] Configuration changes take effect immediately
 - [ ] Configuration versioning/history
@@ -554,6 +585,7 @@ System shall support runtime configuration without restart.
 System shall support in-app notifications for users.
 
 **Acceptance Criteria:**
+
 - [ ] Admin can create system-wide notifications
 - [ ] Notifications can target specific users
 - [ ] Notifications have read/unread state
@@ -574,6 +606,7 @@ System shall support in-app notifications for users.
 System shall provide Claude Messages API-compatible endpoint.
 
 **Acceptance Criteria:**
+
 - [ ] Endpoint at `/v1/messages` accepts Claude format
 - [ ] All Claude API features supported (streaming, tools, thinking)
 - [ ] Response format matches Claude API specification
@@ -592,6 +625,7 @@ System shall provide Claude Messages API-compatible endpoint.
 System shall provide OpenAI Chat Completions API-compatible endpoint.
 
 **Acceptance Criteria:**
+
 - [ ] Endpoint at `/v1/chat/completions` accepts OpenAI format
 - [ ] Streaming SSE format matches OpenAI specification
 - [ ] Tool calling supported
@@ -610,6 +644,7 @@ System shall provide OpenAI Chat Completions API-compatible endpoint.
 System shall provide Codex Response API-compatible endpoint for CLI tools.
 
 **Acceptance Criteria:**
+
 - [ ] Endpoint at `/v1/responses` accepts Codex format
 - [ ] Instructions field handling configurable (auto/force_official/keep_original)
 - [ ] Streaming format matches Codex CLI expectations
@@ -629,6 +664,7 @@ System shall provide Codex Response API-compatible endpoint for CLI tools.
 System shall auto-generate OpenAPI documentation for all API endpoints.
 
 **Acceptance Criteria:**
+
 - [ ] OpenAPI JSON available at `/api/actions/openapi.json`
 - [ ] Swagger UI at `/api/actions/docs`
 - [ ] Scalar UI at `/api/actions/scalar`
@@ -649,6 +685,7 @@ System shall auto-generate OpenAPI documentation for all API endpoints.
 System shall support MCP (Model Context Protocol) passthrough for enhanced capabilities.
 
 **Acceptance Criteria:**
+
 - [ ] Configurable MCP passthrough per provider (none/minimax/glm/custom)
 - [ ] MCP URL auto-derived from provider URL if not specified
 - [ ] MCP requests properly routed
@@ -669,6 +706,7 @@ System shall support MCP (Model Context Protocol) passthrough for enhanced capab
 System shall fetch and display real-time balance/quota information from providers.
 
 **Acceptance Criteria:**
+
 - [ ] Periodic balance fetching for supported providers
 - [ ] Balance displayed in provider management UI
 - [ ] Low balance warnings
@@ -689,6 +727,7 @@ System shall fetch and display real-time balance/quota information from provider
 System shall incorporate real-time quota data into provider selection.
 
 **Acceptance Criteria:**
+
 - [ ] Providers with low quota deprioritized
 - [ ] Providers with exhausted quota excluded
 - [ ] Configurable quota thresholds
@@ -709,6 +748,7 @@ System shall incorporate real-time quota data into provider selection.
 System shall support per-provider model name mapping/redirects.
 
 **Acceptance Criteria:**
+
 - [ ] Admin can define model redirects per provider
 - [ ] Redirect applied transparently to requests
 - [ ] Original model name logged for analytics
@@ -727,6 +767,7 @@ System shall support per-provider model name mapping/redirects.
 System shall support HTTP/HTTPS/SOCKS5 proxy for upstream connections.
 
 **Acceptance Criteria:**
+
 - [ ] Per-provider proxy configuration
 - [ ] Support HTTP, HTTPS, and SOCKS5 protocols
 - [ ] Fallback to direct connection option
@@ -745,6 +786,7 @@ System shall support HTTP/HTTPS/SOCKS5 proxy for upstream connections.
 System shall support per-provider timeout configuration.
 
 **Acceptance Criteria:**
+
 - [ ] First byte timeout for streaming (default: 30s)
 - [ ] Idle timeout during streaming (default: 60s)
 - [ ] Request timeout for non-streaming (default: 120s)
@@ -765,6 +807,7 @@ System shall support per-provider timeout configuration.
 System shall support multiple database backends: PostgreSQL, MySQL, SQLite.
 
 **Acceptance Criteria:**
+
 - [ ] Database adapter abstraction layer
 - [ ] PostgreSQL support (current)
 - [ ] MySQL support
@@ -783,6 +826,7 @@ System shall support multiple database backends: PostgreSQL, MySQL, SQLite.
 System shall provide desktop client application for lightweight local deployment.
 
 **Acceptance Criteria:**
+
 - [ ] Cross-platform (Windows, macOS, Linux)
 - [ ] Local provider management
 - [ ] Sync with server deployment option
@@ -807,6 +851,7 @@ Non-Functional Requirements (NFRs) define **how** the system performs - quality 
 Proxy shall add minimal latency overhead to API requests.
 
 **Acceptance Criteria:**
+
 - [ ] Proxy overhead < 50ms for request processing (excluding upstream latency)
 - [ ] Streaming first byte overhead < 100ms
 - [ ] 95th percentile overhead < 100ms
@@ -825,6 +870,7 @@ AI coding tools are latency-sensitive; excessive overhead degrades user experien
 System shall handle high concurrent session load.
 
 **Acceptance Criteria:**
+
 - [ ] Support 100+ concurrent streaming sessions per instance
 - [ ] Horizontal scaling supported via stateless design
 - [ ] Redis handles distributed state
@@ -843,6 +889,7 @@ Team usage patterns create concurrent spikes during work hours.
 Streaming responses shall be reliable and efficient.
 
 **Acceptance Criteria:**
+
 - [ ] SSE/streaming properly buffered and forwarded
 - [ ] No message loss during streaming
 - [ ] Backpressure handled correctly
@@ -862,6 +909,7 @@ Streaming is the primary usage mode for AI coding tools.
 Authentication shall be secure and resistant to common attacks.
 
 **Acceptance Criteria:**
+
 - [ ] API keys stored hashed (not plaintext)
 - [ ] Constant-time key comparison
 - [ ] Rate limiting on auth failures
@@ -881,6 +929,7 @@ API keys provide access to paid AI services; compromise has financial impact.
 Sensitive data shall be protected in transit and at rest.
 
 **Acceptance Criteria:**
+
 - [ ] HTTPS enforced for all endpoints
 - [ ] Provider API keys encrypted at rest
 - [ ] Request content not logged by default
@@ -900,6 +949,7 @@ Platform handles sensitive API keys and potentially confidential code.
 System shall filter prohibited content effectively.
 
 **Acceptance Criteria:**
+
 - [ ] Sensitive word filtering < 5ms overhead
 - [ ] Regex patterns compiled and cached
 - [ ] False positive rate minimized
@@ -919,6 +969,7 @@ Teams may need to enforce content policies for compliance.
 System shall maintain high availability through fault tolerance.
 
 **Acceptance Criteria:**
+
 - [ ] Single provider failure doesn't affect service
 - [ ] Automatic failover < 1 second
 - [ ] Circuit breaker prevents cascade failures
@@ -938,6 +989,7 @@ AI coding tools are critical for developer productivity; downtime is costly.
 System shall scale horizontally to handle increased load.
 
 **Acceptance Criteria:**
+
 - [ ] Stateless application design
 - [ ] Session state in Redis (shared)
 - [ ] Database connection pooling
@@ -957,6 +1009,7 @@ Usage grows with team size; vertical scaling has limits.
 Admin interface shall support multiple languages.
 
 **Acceptance Criteria:**
+
 - [ ] i18n framework integrated (next-intl)
 - [ ] UI text externalized to message files
 - [ ] Language switching in UI
@@ -976,6 +1029,7 @@ Global developer community; English-only limits adoption.
 Admin interface shall work on various screen sizes.
 
 **Acceptance Criteria:**
+
 - [ ] Desktop-first design (primary use case)
 - [ ] Tablet usable for monitoring
 - [ ] Mobile readable for critical alerts
@@ -995,6 +1049,7 @@ Admins may need to check status from various devices.
 Codebase shall maintain high quality standards.
 
 **Acceptance Criteria:**
+
 - [ ] TypeScript strict mode enabled
 - [ ] ESLint with strict ruleset
 - [ ] Prettier for consistent formatting
@@ -1014,6 +1069,7 @@ Open source project; code quality affects contributor experience.
 APIs shall be well-documented and discoverable.
 
 **Acceptance Criteria:**
+
 - [ ] OpenAPI 3.0 specification auto-generated
 - [ ] Interactive documentation (Swagger/Scalar)
 - [ ] All endpoints documented with examples
@@ -1039,6 +1095,7 @@ Each epic maps to multiple functional requirements and will generate 2-10 storie
 Implement the foundational proxy functionality that routes requests to upstream providers with intelligent selection, failover, and format conversion.
 
 **Functional Requirements:**
+
 - FR-001: Multi-Provider Management
 - FR-002: Provider Type Support
 - FR-003: Intelligent Provider Selection
@@ -1062,6 +1119,7 @@ This is the core value proposition of CCH - without this, there is no product. E
 Implement multi-tenant user management with authentication, authorization, and rate limiting.
 
 **Functional Requirements:**
+
 - FR-008: User Management
 - FR-009: API Key Management
 - FR-010: Authentication
@@ -1083,6 +1141,7 @@ Enables team usage model with per-user quotas, essential for cost control and fa
 Implement comprehensive monitoring, logging, and analytics for operational visibility.
 
 **Functional Requirements:**
+
 - FR-013: Request Logging
 - FR-014: Real-Time Dashboard
 - FR-015: Usage Statistics
@@ -1105,6 +1164,7 @@ Provides observability into system operation, enables cost tracking, and helps i
 Implement admin dashboard with comprehensive system management capabilities.
 
 **Functional Requirements:**
+
 - FR-019: Admin Dashboard
 - FR-020: Error Rules Management
 - FR-021: Sensitive Words Filtering
@@ -1128,6 +1188,7 @@ Enables system administrators to manage CCH effectively without direct database 
 Implement API endpoints compatible with major AI coding tool formats.
 
 **Functional Requirements:**
+
 - FR-026: Claude Messages API Compatibility
 - FR-027: OpenAI Chat Completions Compatibility
 - FR-028: Codex Response API Compatibility
@@ -1149,6 +1210,7 @@ Enables CCH to work with all major AI coding tools without client-side changes.
 Implement advanced provider management features for optimized scheduling and operations.
 
 **Functional Requirements:**
+
 - FR-031: Provider Balance/Quota Fetching
 - FR-032: Quota-Aware Scheduling
 - FR-033: Model Redirects
@@ -1170,6 +1232,7 @@ Enables more intelligent resource utilization and supports advanced deployment s
 Expand platform capabilities for broader deployment scenarios.
 
 **Functional Requirements:**
+
 - FR-036: Multi-Database Support
 - FR-037: Electron Client
 
@@ -1228,18 +1291,21 @@ These are preliminary stories. Detailed stories will be created in Phase 4 (Impl
 ### Primary: Developer (Power User)
 
 **Profile:**
+
 - Experienced software developer
 - Uses AI coding tools daily (Claude Code, Cursor, Copilot)
 - Comfortable with CLI tools and API configuration
 - Values reliability and low latency
 
 **Needs:**
+
 - Seamless AI coding experience
 - High availability
 - Fast response times
 - Minimal configuration
 
 **Pain Points:**
+
 - Provider outages disrupting workflow
 - Managing multiple API keys
 - Inconsistent behavior across providers
@@ -1249,18 +1315,21 @@ These are preliminary stories. Detailed stories will be created in Phase 4 (Impl
 ### Primary: Team Administrator
 
 **Profile:**
+
 - Tech lead or DevOps engineer
 - Responsible for team tooling
 - Manages budgets and access
 - Monitors usage and costs
 
 **Needs:**
+
 - Centralized provider management
 - Usage visibility and cost tracking
 - Access control for team members
 - Easy deployment and maintenance
 
 **Pain Points:**
+
 - No visibility into AI tool usage
 - Difficulty controlling costs
 - Complex multi-provider management
@@ -1270,18 +1339,21 @@ These are preliminary stories. Detailed stories will be created in Phase 4 (Impl
 ### Secondary: New Developer
 
 **Profile:**
+
 - Junior developer or intern
 - New to AI-assisted development
 - Less technical confidence
 - Needs guidance and simple setup
 
 **Needs:**
+
 - One-click access to AI tools
 - No configuration required
 - Clear error messages
 - Stable experience
 
 **Pain Points:**
+
 - Confusion about API setup
 - Fear of incurring high costs
 - Uncertainty about tool behavior
@@ -1394,9 +1466,9 @@ These are preliminary stories. Detailed stories will be created in Phase 4 (Impl
 
 ## Revision History
 
-| Version | Date | Author | Changes |
-|---------|------|--------|---------|
-| 1.0 | 2025-11-29 | ding | Initial PRD |
+| Version | Date       | Author | Changes     |
+| ------- | ---------- | ------ | ----------- |
+| 1.0     | 2025-11-29 | ding   | Initial PRD |
 
 ---
 
@@ -1407,6 +1479,7 @@ These are preliminary stories. Detailed stories will be created in Phase 4 (Impl
 Run `/architecture` to create system architecture based on these requirements.
 
 The architecture will address:
+
 - All functional requirements (FRs)
 - All non-functional requirements (NFRs)
 - Technical stack decisions
@@ -1416,6 +1489,7 @@ The architecture will address:
 ### Phase 4: Sprint Planning
 
 After architecture is complete, run `/sprint-planning` to:
+
 - Break epics into detailed user stories
 - Estimate story complexity
 - Plan sprint iterations
@@ -1425,21 +1499,21 @@ After architecture is complete, run `/sprint-planning` to:
 
 **This document was created using BMAD Method v6 - Phase 2 (Planning)**
 
-*To continue: Run `/workflow-status` to see your progress and next recommended workflow.*
+_To continue: Run `/workflow-status` to see your progress and next recommended workflow._
 
 ---
 
 ## Appendix A: Requirements Traceability Matrix
 
-| Epic ID | Epic Name | Functional Requirements | Story Count (Est.) |
-|---------|-----------|-------------------------|-------------------|
-| EPIC-001 | Core Proxy Engine | FR-001, FR-002, FR-003, FR-004, FR-005, FR-006, FR-007 | 8-10 |
-| EPIC-002 | User & Access Management | FR-008, FR-009, FR-010, FR-011, FR-012 | 6-8 |
-| EPIC-003 | Monitoring & Analytics | FR-013, FR-014, FR-015, FR-016, FR-017, FR-018 | 6-8 |
-| EPIC-004 | Administration Console | FR-019, FR-020, FR-021, FR-022, FR-023, FR-024, FR-025 | 7-9 |
-| EPIC-005 | API Compatibility Layer | FR-026, FR-027, FR-028, FR-029, FR-030 | 5-7 |
-| EPIC-006 | Advanced Provider Intelligence | FR-031, FR-032, FR-033, FR-034, FR-035 | 5-7 |
-| EPIC-007 | Platform Expansion | FR-036, FR-037 | 4-6 |
+| Epic ID  | Epic Name                      | Functional Requirements                                | Story Count (Est.) |
+| -------- | ------------------------------ | ------------------------------------------------------ | ------------------ |
+| EPIC-001 | Core Proxy Engine              | FR-001, FR-002, FR-003, FR-004, FR-005, FR-006, FR-007 | 8-10               |
+| EPIC-002 | User & Access Management       | FR-008, FR-009, FR-010, FR-011, FR-012                 | 6-8                |
+| EPIC-003 | Monitoring & Analytics         | FR-013, FR-014, FR-015, FR-016, FR-017, FR-018         | 6-8                |
+| EPIC-004 | Administration Console         | FR-019, FR-020, FR-021, FR-022, FR-023, FR-024, FR-025 | 7-9                |
+| EPIC-005 | API Compatibility Layer        | FR-026, FR-027, FR-028, FR-029, FR-030                 | 5-7                |
+| EPIC-006 | Advanced Provider Intelligence | FR-031, FR-032, FR-033, FR-034, FR-035                 | 5-7                |
+| EPIC-007 | Platform Expansion             | FR-036, FR-037                                         | 4-6                |
 
 **Total Estimated Stories:** 41-55
 
@@ -1449,19 +1523,19 @@ After architecture is complete, run `/sprint-planning` to:
 
 ### Functional Requirements by Priority
 
-| Priority | Count | Requirements |
-|----------|-------|--------------|
-| Must Have | 16 | FR-001 to FR-011, FR-013, FR-019, FR-026, FR-027 |
-| Should Have | 14 | FR-012, FR-014 to FR-017, FR-020 to FR-024, FR-028, FR-029, FR-033 to FR-035 |
-| Could Have | 5 | FR-018, FR-025, FR-030, FR-031, FR-032 |
-| Won't Have | 2 | FR-036, FR-037 |
+| Priority    | Count | Requirements                                                                 |
+| ----------- | ----- | ---------------------------------------------------------------------------- |
+| Must Have   | 16    | FR-001 to FR-011, FR-013, FR-019, FR-026, FR-027                             |
+| Should Have | 14    | FR-012, FR-014 to FR-017, FR-020 to FR-024, FR-028, FR-029, FR-033 to FR-035 |
+| Could Have  | 5     | FR-018, FR-025, FR-030, FR-031, FR-032                                       |
+| Won't Have  | 2     | FR-036, FR-037                                                               |
 
 ### Non-Functional Requirements by Priority
 
-| Priority | Count | Requirements |
-|----------|-------|--------------|
-| Must Have | 7 | NFR-001 to NFR-005, NFR-007, NFR-011 |
-| Should Have | 5 | NFR-006, NFR-008 to NFR-010, NFR-012 |
+| Priority    | Count | Requirements                         |
+| ----------- | ----- | ------------------------------------ |
+| Must Have   | 7     | NFR-001 to NFR-005, NFR-007, NFR-011 |
+| Should Have | 5     | NFR-006, NFR-008 to NFR-010, NFR-012 |
 
 ### Implementation Priority Order
 

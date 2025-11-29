@@ -43,7 +43,7 @@ workflow_status:
 
   - name: tech-spec
     phase: 2
-    status: "optional"  # optional for level 2+
+    status: "optional" # optional for level 2+
     description: "Technical Specification"
 
   - name: create-ux-design
