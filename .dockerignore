@@ -27,3 +27,6 @@ yarn-error.log*
 # Data directories (PostgreSQL, Redis persistent data)
 data/redis
 data/postgres
+
+# Documentation submodule (not needed in container)
+docs-site

@@ -68,3 +68,7 @@ TRANSLATIONS_CHECKLIST.md
 /i18n-verification/
 
 /bmad
+
+# docs-site submodule build artifacts
+docs-site/.next/
+docs-site/node_modules/

@@ -1,0 +1,217 @@
+name: Claude Unified Documentation
+
+on:
+  release:
+    types: [published]
+
+  # 允许手动触发（用于重新生成文档）
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Release tag name (e.g., v0.3.17)"
+        required: true
+        type: string
+
+concurrency:
+  group: unified-docs-${{ github.event.release.tag_name || github.event.inputs.tag_name }}
+  cancel-in-progress: true
+
+jobs:
+  unified-documentation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT }}
+          submodules: recursive
+
+      - name: Determine release tag
+        id: release_info
+        run: |
+          if [ -n "${{ github.event.inputs.tag_name }}" ]; then
+            TAG="${{ github.event.inputs.tag_name }}"
+          else
+            TAG="${{ github.event.release.tag_name }}"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "date=$(date +%Y-%m-%d)" >> $GITHUB_OUTPUT
+
+          # 获取上一个 tag
+          PREV_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | grep -v "^$TAG$" | head -n 1)
+          if [ -z "$PREV_TAG" ]; then
+            PREV_TAG=$(git rev-list --max-parents=0 HEAD | head -n 1)
+          fi
+          echo "prev_tag=$PREV_TAG" >> $GITHUB_OUTPUT
+          echo "Current tag: $TAG"
+          echo "Previous tag: $PREV_TAG"
+
+      - name: Gather release context
+        id: context
+        run: |
+          TAG="${{ steps.release_info.outputs.tag }}"
+          PREV_TAG="${{ steps.release_info.outputs.prev_tag }}"
+
+          # 获取 commits
+          echo "Gathering commits from $PREV_TAG to $TAG..."
+          COMMITS=$(git log $PREV_TAG..$TAG --pretty=format:"- %s (%h) by @%an" 2>/dev/null || echo "Initial release")
+          echo "commits<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMITS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          # 获取 diff 摘要（限制大小以避免 token 超限）
+          echo "Gathering diff summary..."
+          DIFF_STAT=$(git diff $PREV_TAG..$TAG --stat 2>/dev/null | tail -50 || echo "No diff available")
+          echo "diff_stat<<EOF" >> $GITHUB_OUTPUT
+          echo "$DIFF_STAT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          # 获取变更的文件列表
+          CHANGED_FILES=$(git diff $PREV_TAG..$TAG --name-only 2>/dev/null | head -100 || echo "")
+          echo "changed_files<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGED_FILES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Run Claude for Unified Documentation Update
+        uses: anthropics/claude-code-action@v1
+        env:
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GH_PAT }}
+
+          prompt: |
+            你是 Claude Code Hub 项目的发布文档专家。请执行完整的文档更新流程。
+
+            ## 发布信息
+
+            - **当前版本**: ${{ steps.release_info.outputs.tag }}
+            - **上一版本**: ${{ steps.release_info.outputs.prev_tag }}
+            - **发布日期**: ${{ steps.release_info.outputs.date }}
+
+            ## Commits 列表
+
+            ${{ steps.context.outputs.commits }}
+
+            ## 变更的文件
+
+            ${{ steps.context.outputs.changed_files }}
+
+            ## Diff 统计
+
+            ${{ steps.context.outputs.diff_stat }}
+
+            ---
+
+            ## 任务
+
+            请按以下步骤执行文档更新：
+
+            ### Phase 1: 分析变更
+
+            1. 首先阅读 `.github/prompts/release-analysis.md` 了解分析要求
+            2. 仔细分析上述 commits 和变更文件
+            3. 如有需要，可以读取具体的源代码文件来理解变更
+            4. 生成结构化的变更报告（在心中记录，用于后续步骤）
+
+            变更分类标准：
+            - **新增**: 新功能、新 API、新配置项
+            - **优化**: 性能改进、体验改进、功能增强
+            - **修复**: Bug 修复
+            - **其他**: 文档、构建、重构、依赖更新
+
+            ### Phase 2: 更新三处文档
+
+            #### 2.1 更新 CHANGELOG.md
+
+            1. 读取当前 CHANGELOG.md 文件
+            2. 在文件顶部（标题后）插入新版本条目
+            3. 使用以下格式：
+
+            ```markdown
+            ## ${{ steps.release_info.outputs.tag }} (${{ steps.release_info.outputs.date }})
+
+            ### 新增
+            - 功能描述 (#PR编号)
+
+            ### 优化
+            - 优化描述 (#PR编号) [@贡献者]
+
+            ### 修复
+            - 修复描述 (#PR编号)
+
+            ### 其他
+            - 其他变更描述
+
+            ---
+            ```
+
+            4. 如果某个分类没有内容，跳过该分类
+            5. 保存更新后的 CHANGELOG.md
+
+            #### 2.2 更新 docs-site/src/app/docs/changelog/page.md
+
+            1. 读取当前 docs-site/src/app/docs/changelog/page.md 文件
+            2. 在 `# 更新日志` 标题和第一个 `---` 分隔线后插入新版本条目
+            3. 使用与现有条目相同的 Markdoc 格式
+            4. 保存更新后的文件
+
+            #### 2.3 更新 GitHub Release Notes
+
+            1. 读取 `.github/prompts/release-notes.md` 了解格式要求
+            2. 生成专业的 Release Notes 内容，包含：
+               - 版本摘要
+               - 亮点功能（如有重要变更）
+               - 分类的变更列表
+               - 破坏性变更说明（如有）
+               - 贡献者致谢（如有外部贡献者）
+            3. 使用 `gh release edit` 命令更新 Release Notes：
+               ```bash
+               gh release edit ${{ steps.release_info.outputs.tag }} --notes "生成的内容"
+               ```
+
+            ### Phase 3: 提交变更
+
+            1. 配置 git：
+               ```bash
+               git config user.name "github-actions[bot]"
+               git config user.email "github-actions[bot]@users.noreply.github.com"
+               ```
+
+            2. 提交主仓库的 CHANGELOG.md 变更：
+               ```bash
+               git add CHANGELOG.md
+               git commit -m "docs: update changelog for ${{ steps.release_info.outputs.tag }} [skip ci]"
+               git push origin HEAD:main
+               ```
+
+            3. 提交 docs-site 变更到文档仓库：
+               ```bash
+               cd docs-site
+               git add -A
+               git commit -m "docs: update changelog for ${{ steps.release_info.outputs.tag }}"
+               git push origin HEAD:main
+               cd ..
+               ```
+
+            4. 更新主仓库的 submodule 引用：
+               ```bash
+               git add docs-site
+               git commit -m "chore: update docs-site submodule [skip ci]" || true
+               git push origin HEAD:main || true
+               ```
+
+            ## 重要提示
+
+            - 使用中文分类标题（新增/优化/修复/其他）
+            - 描述要简洁但完整，面向用户
+            - 确保所有文件更新后再提交
+            - 如果某个步骤失败，继续执行其他步骤
+
+          claude_args: "--max-turns 999 --allowedTools Read,Write,Edit,Bash(gh:*),Bash(git:*),Bash(cd:*),Bash(cat:*)"
+          use_commit_signing: false
