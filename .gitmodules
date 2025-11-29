@@ -1,0 +1,3 @@
+[submodule "docs-site"]
+	path = docs-site
+	url = https://github.com/ding113/claude-code-hub-docs.git

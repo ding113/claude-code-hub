@@ -196,30 +196,6 @@ jobs:
             git commit -m "chore: sync VERSION file with release ${{ steps.next_version.outputs.new_tag }} [skip ci]"
           fi
 
-      - name: Install git-cliff
-        if: steps.check.outputs.needs_bump == 'true'
-        run: |
-          wget -q https://github.com/orhun/git-cliff/releases/download/v1.4.0/git-cliff-1.4.0-x86_64-unknown-linux-gnu.tar.gz
-          tar -xzf git-cliff-1.4.0-x86_64-unknown-linux-gnu.tar.gz
-          chmod +x git-cliff-1.4.0/git-cliff
-          sudo mv git-cliff-1.4.0/git-cliff /usr/local/bin/
-
-      - name: Generate changelog
-        if: steps.check.outputs.needs_bump == 'true'
-        id: changelog
-        run: |
-          # 获取上一个tag以来的更新日志
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          if [ -n "$LATEST_TAG" ]; then
-            # 排除VERSION文件的提交
-            CHANGELOG=$(git-cliff --config .github/cliff.toml $LATEST_TAG..HEAD --strip header | grep -v "bump version" | sed '/^$/d' || echo "- 代码优化和改进")
-          else
-            CHANGELOG=$(git-cliff --config .github/cliff.toml --strip header || echo "- 初始版本发布")
-          fi
-          echo "content<<EOF" >> $GITHUB_OUTPUT
-          echo "$CHANGELOG" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
       - name: Create and push tag
         if: steps.check.outputs.needs_bump == 'true'
         run: |
@@ -249,16 +225,12 @@ jobs:
             docker pull ${{ steps.image_names.outputs.ghcr_image }}:latest
             ```
 
-            ## 📦 主要更新
+            ---
 
-            ${{ steps.changelog.outputs.content }}
-
-            ## 📋 完整更新日志
-
-            查看 [所有版本](https://github.com/${{ github.repository }}/releases)
+            📝 详细更新日志将由 Claude 自动生成...
           draft: false
           prerelease: false
-          generate_release_notes: true
+          generate_release_notes: false
 
       # 自动清理旧的tags和releases(保持最近50个)
       - name: Cleanup old tags and releases

@@ -62,3 +62,6 @@ yarn.lock
 coverage
 .vercel
 *.pem
+
+# Documentation submodule
+docs-site
