@@ -2768,8 +2768,10 @@ function getModelsApiConfig(
         throw new Error("Gemini JSON 凭证暂不支持获取模型列表，请使用 API Key");
       }
       return {
-        endpoint: `/v1beta/models?key=${apiKey}`,
-        headers: {},
+        endpoint: "/v1beta/models",
+        headers: {
+          "x-goog-api-key": apiKey,
+        },
       };
     }
 
