@@ -4,6 +4,19 @@
 
 ---
 
+## [v0.3.19](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.19) - 2025-11-30
+
+### 新增
+
+- README 添加 DeepWiki 徽章，支持通过 AI 智能问答探索项目文档
+
+### 其他
+
+- 改进统一文档工作流，升级 checkout action 至 v5 (#244)
+- 更新 docs-site 子模块，添加首页内容
+
+---
+
 ## [v0.3.18](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.18) - 2025-11-29
 
 ### 新增
