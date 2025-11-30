@@ -2282,7 +2282,10 @@ export async function testProviderGemini(
 ): Promise<ProviderApiTestResult> {
   // 校验超时范围（防止资源占用）
   if (data.timeoutMs !== undefined) {
-    if (data.timeoutMs < API_TEST_TIMEOUT_LIMITS.MIN || data.timeoutMs > API_TEST_TIMEOUT_LIMITS.MAX) {
+    if (
+      data.timeoutMs < API_TEST_TIMEOUT_LIMITS.MIN ||
+      data.timeoutMs > API_TEST_TIMEOUT_LIMITS.MAX
+    ) {
       return {
         ok: true,
         data: {
@@ -2358,7 +2361,9 @@ export async function testProviderGemini(
   );
 
   // 检查实际测试结果（注意：ok: true 只表示函数执行成功，data.success 才表示测试结果）
-  const resultData = (firstResult as { ok: boolean; data?: { success?: boolean; message?: string } }).data;
+  const resultData = (
+    firstResult as { ok: boolean; data?: { success?: boolean; message?: string } }
+  ).data;
   const testSuccess = resultData?.success === true;
 
   // 如果测试成功，直接返回
@@ -2387,7 +2392,8 @@ export async function testProviderGemini(
   const secondResult = await executeProviderApiTest(
     { ...data, apiKey: processedApiKey },
     {
-      path: (model, apiKey) => `/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`,
+      path: (model, apiKey) =>
+        `/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`,
       defaultModel: "gemini-2.5-pro",
       headers: (apiKey) => ({
         "Content-Type": "application/json",

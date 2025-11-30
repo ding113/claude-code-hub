@@ -118,7 +118,9 @@ export function ApiTestButton({
   const [selectedPreset, setSelectedPreset] = useState<string>("");
   const [customPayload, setCustomPayload] = useState("");
   const [successContains, setSuccessContains] = useState("pong");
-  const [timeoutSeconds, setTimeoutSeconds] = useState(() => (initialApiFormat === "gemini" ? 60 : 15));
+  const [timeoutSeconds, setTimeoutSeconds] = useState(() =>
+    initialApiFormat === "gemini" ? 60 : 15
+  );
 
   useEffect(() => {
     if (isApiFormatManuallySelected) return;
@@ -242,19 +244,45 @@ export function ApiTestButton({
         const cleanMessage = rawMessage.replace(" [FALLBACK:URL_PARAM]", "");
 
         // 根据错误消息推断 subStatus
-        const inferSubStatus = (): "success" | "auth_error" | "server_error" | "network_error" | "client_error" | "rate_limit" => {
+        const inferSubStatus = ():
+          | "success"
+          | "auth_error"
+          | "server_error"
+          | "network_error"
+          | "client_error"
+          | "rate_limit" => {
           if (isSuccess) return "success";
           const msg = cleanMessage.toLowerCase();
-          if (msg.includes("429") || msg.includes("rate") || msg.includes("限流") || msg.includes("quota")) {
+          if (
+            msg.includes("429") ||
+            msg.includes("rate") ||
+            msg.includes("限流") ||
+            msg.includes("quota")
+          ) {
             return "rate_limit";
           }
-          if (msg.includes("401") || msg.includes("403") || msg.includes("认证") || msg.includes("auth")) {
+          if (
+            msg.includes("401") ||
+            msg.includes("403") ||
+            msg.includes("认证") ||
+            msg.includes("auth")
+          ) {
             return "auth_error";
           }
-          if (msg.includes("timeout") || msg.includes("超时") || msg.includes("econnrefused") || msg.includes("dns")) {
+          if (
+            msg.includes("timeout") ||
+            msg.includes("超时") ||
+            msg.includes("econnrefused") ||
+            msg.includes("dns")
+          ) {
             return "network_error";
           }
-          if (msg.includes("500") || msg.includes("502") || msg.includes("503") || msg.includes("504")) {
+          if (
+            msg.includes("500") ||
+            msg.includes("502") ||
+            msg.includes("503") ||
+            msg.includes("504")
+          ) {
             return "server_error";
           }
           return "client_error";
