@@ -64,8 +64,8 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
       startTransition(async () => {
         try {
           let res;
-          if (isEdit) {
-            res = await editUser(user?.id, {
+          if (isEdit && user?.id) {
+            res = await editUser(user.id, {
               name: data.name,
               note: data.note,
               rpm: data.rpm,
