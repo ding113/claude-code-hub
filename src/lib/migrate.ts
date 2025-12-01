@@ -1,10 +1,10 @@
 "use server";
 
-import { migrate } from "drizzle-orm/postgres-js/migrator";
-import { logger } from "@/lib/logger";
+import path from "node:path";
 import { drizzle } from "drizzle-orm/postgres-js";
+import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
-import path from "path";
+import { logger } from "@/lib/logger";
 
 /**
  * 自动执行数据库迁移

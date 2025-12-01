@@ -1,9 +1,9 @@
 "use server";
 
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { users } from "@/drizzle/schema";
-import { eq, isNull, and, sql } from "drizzle-orm";
-import type { User, CreateUserData, UpdateUserData } from "@/types/user";
+import type { CreateUserData, UpdateUserData, User } from "@/types/user";
 import { toUser } from "./_shared/transformers";
 
 export async function createUser(userData: CreateUserData): Promise<User> {

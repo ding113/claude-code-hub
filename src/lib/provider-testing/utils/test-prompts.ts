@@ -9,7 +9,7 @@
  */
 
 import type { ProviderType } from "@/types/provider";
-import type { ClaudeTestBody, CodexTestBody, OpenAITestBody, GeminiTestBody } from "../types";
+import type { ClaudeTestBody, CodexTestBody, GeminiTestBody, OpenAITestBody } from "../types";
 
 // ============================================================================
 // User-Agent Configurations (Critical for relay service authentication)

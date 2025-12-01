@@ -1,11 +1,11 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import * as React from "react";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChartConfig, ChartContainer, ChartTooltip } from "@/components/ui/chart";
+import { type ChartConfig, ChartContainer, ChartTooltip } from "@/components/ui/chart";
 import type { EventTimeline } from "@/types/statistics";
-import { useTranslations } from "next-intl";
 
 export interface RateLimitEventsChartProps {
   data: EventTimeline[];

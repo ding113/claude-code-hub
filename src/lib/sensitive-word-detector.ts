@@ -8,8 +8,8 @@
  * - 支持热重载
  */
 
-import { getActiveSensitiveWords } from "@/repository/sensitive-words";
 import { logger } from "@/lib/logger";
+import { getActiveSensitiveWords } from "@/repository/sensitive-words";
 
 export interface DetectionResult {
   matched: boolean;

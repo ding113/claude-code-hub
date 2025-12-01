@@ -1,6 +1,6 @@
+import { redirect } from "next/navigation";
 import { getUsers } from "@/actions/users";
 import { getSession } from "@/lib/auth";
-import { redirect } from "next/navigation";
 import { UsersPageClient } from "./users-page-client";
 
 export default async function UsersPage() {

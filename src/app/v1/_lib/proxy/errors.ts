@@ -6,7 +6,7 @@
  * 2. 智能截断：JSON 完整保存，文本限制 500 字符
  * 3. 可读性优先：纯文本格式化，便于排查问题
  */
-import { errorRuleDetector, type ErrorDetectionResult } from "@/lib/error-rule-detector";
+import { type ErrorDetectionResult, errorRuleDetector } from "@/lib/error-rule-detector";
 import type { ErrorOverrideResponse } from "@/repository/error-rules";
 
 export class ProxyError extends Error {
@@ -40,7 +40,7 @@ export class ProxyError extends Error {
   ): Promise<ProxyError> {
     const contentType = response.headers.get("content-type") || "";
     let body = "";
-    let parsed: unknown = undefined;
+    let parsed: unknown;
 
     // 1. 读取响应体
     try {
@@ -323,13 +323,13 @@ export class ProxyError extends Error {
   private static extractRequestIdFromText(str: string): string | undefined {
     // 模式 1: (request id: xxx) 或 (request_id: xxx) - 括号内格式
     const parenMatch = str.match(/\(request[_ ]id:\s*([^)]+)\)/i);
-    if (parenMatch && parenMatch[1]) {
+    if (parenMatch?.[1]) {
       return parenMatch[1].trim();
     }
 
     // 模式 2: "request_id": "xxx" - JSON 字段格式（用于部分损坏的 JSON）
     const jsonFieldMatch = str.match(/"request_id"\s*:\s*"([^"]+)"/);
-    if (jsonFieldMatch && jsonFieldMatch[1]) {
+    if (jsonFieldMatch?.[1]) {
       return jsonFieldMatch[1].trim();
     }
 
@@ -344,7 +344,7 @@ export class ProxyError extends Error {
     const headerNames = ["x-request-id", "request-id", "x-amzn-requestid"];
     for (const name of headerNames) {
       const value = headers.get(name);
-      if (value && value.trim()) {
+      if (value?.trim()) {
         return value.trim();
       }
     }
@@ -404,7 +404,7 @@ export class ProxyError extends Error {
 
     // 纯文本：截断到 500 字符
     if (body.length > 500) {
-      return body.substring(0, 500) + "...";
+      return `${body.substring(0, 500)}...`;
     }
 
     return body;

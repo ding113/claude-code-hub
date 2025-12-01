@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
+import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 import { getLeaderboardWithCache } from "@/lib/redis";
 import type { LeaderboardScope } from "@/lib/redis/leaderboard-cache";
-import { getSystemSettings } from "@/repository/system-config";
 import { formatCurrency } from "@/lib/utils";
-import { getSession } from "@/lib/auth";
+import { getSystemSettings } from "@/repository/system-config";
 
 // 需要数据库连接
 export const runtime = "nodejs";

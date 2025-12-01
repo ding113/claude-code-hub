@@ -7,8 +7,8 @@
 import { registerTransformer } from "../registry";
 import { transformOpenAIRequestToClaude } from "./request";
 import {
-  transformClaudeStreamResponseToOpenAI,
   transformClaudeNonStreamResponseToOpenAI,
+  transformClaudeStreamResponseToOpenAI,
 } from "./response";
 
 // 注册 OpenAI Compatible → Claude 转换器

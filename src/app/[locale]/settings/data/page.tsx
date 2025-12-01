@@ -1,20 +1,16 @@
 "use client";
 
-import { useState } from "react";
-import { useTranslations } from "next-intl";
 import { ChevronDown, ChevronRight } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { useState } from "react";
 import { Section } from "@/components/section";
+import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { SettingsPageHeader } from "../_components/settings-page-header";
-import { DatabaseStatusDisplay } from "./_components/database-status";
 import { DatabaseExport } from "./_components/database-export";
 import { DatabaseImport } from "./_components/database-import";
+import { DatabaseStatusDisplay } from "./_components/database-status";
 import { LogCleanupPanel } from "./_components/log-cleanup-panel";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { Button } from "@/components/ui/button";
 
 export default function SettingsDataPage() {
   const t = useTranslations("settings");
@@ -22,10 +18,7 @@ export default function SettingsDataPage() {
 
   return (
     <>
-      <SettingsPageHeader
-        title={t("data.title")}
-        description={t("data.description")}
-      />
+      <SettingsPageHeader title={t("data.title")} description={t("data.description")} />
 
       <Section
         title={t("data.section.status.title")}
@@ -77,22 +70,28 @@ export default function SettingsDataPage() {
             <div className="prose prose-sm dark:prose-invert max-w-none">
               <ul className="text-sm text-muted-foreground space-y-2">
                 <li>
-                  <strong>{t("data.guide.items.cleanup.title")}</strong>: {t("data.guide.items.cleanup.description")}
+                  <strong>{t("data.guide.items.cleanup.title")}</strong>:{" "}
+                  {t("data.guide.items.cleanup.description")}
                 </li>
                 <li>
-                  <strong>{t("data.guide.items.format.title")}</strong>: {t("data.guide.items.format.description")}
+                  <strong>{t("data.guide.items.format.title")}</strong>:{" "}
+                  {t("data.guide.items.format.description")}
                 </li>
                 <li>
-                  <strong>{t("data.guide.items.overwrite.title")}</strong>: {t("data.guide.items.overwrite.description")}
+                  <strong>{t("data.guide.items.overwrite.title")}</strong>:{" "}
+                  {t("data.guide.items.overwrite.description")}
                 </li>
                 <li>
-                  <strong>{t("data.guide.items.merge.title")}</strong>: {t("data.guide.items.merge.description")}
+                  <strong>{t("data.guide.items.merge.title")}</strong>:{" "}
+                  {t("data.guide.items.merge.description")}
                 </li>
                 <li>
-                  <strong>{t("data.guide.items.safety.title")}</strong>: {t("data.guide.items.safety.description")}
+                  <strong>{t("data.guide.items.safety.title")}</strong>:{" "}
+                  {t("data.guide.items.safety.description")}
                 </li>
                 <li>
-                  <strong>{t("data.guide.items.environment.title")}</strong>: {t("data.guide.items.environment.description")}
+                  <strong>{t("data.guide.items.environment.title")}</strong>:{" "}
+                  {t("data.guide.items.environment.description")}
                 </li>
               </ul>
             </div>

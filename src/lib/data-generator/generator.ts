@@ -1,16 +1,16 @@
-import type {
-  LogDistribution,
-  GeneratorParams,
-  GeneratorResult,
-  GeneratedLog,
-  WeightedItem,
-  ProviderInfo,
-  ModelInfo,
-  UserBreakdownResult,
-  UserBreakdownItem,
-} from "./types";
 import type { ProviderChainItem } from "@/types/message";
 import { analyzeLogDistribution } from "./analyzer";
+import type {
+  GeneratedLog,
+  GeneratorParams,
+  GeneratorResult,
+  LogDistribution,
+  ModelInfo,
+  ProviderInfo,
+  UserBreakdownItem,
+  UserBreakdownResult,
+  WeightedItem,
+} from "./types";
 
 const CNY_TO_USD = 7.1;
 const MAX_RECORDS = 10000;
@@ -124,19 +124,19 @@ export async function generateLogs(params: GeneratorParams): Promise<GeneratorRe
 
   let filteredUsers = distribution.userWeights;
   if (params.userIds && params.userIds.length > 0) {
-    filteredUsers = distribution.userWeights.filter((w) => params.userIds!.includes(w.item.id));
+    filteredUsers = distribution.userWeights.filter((w) => params.userIds?.includes(w.item.id));
   }
 
   let filteredProviders = distribution.providerWeights;
   if (params.providerIds && params.providerIds.length > 0) {
     filteredProviders = distribution.providerWeights.filter((w) =>
-      params.providerIds!.includes(w.item.id)
+      params.providerIds?.includes(w.item.id)
     );
   }
 
   let filteredModels = distribution.modelWeights;
   if (params.models && params.models.length > 0) {
-    filteredModels = distribution.modelWeights.filter((w) => params.models!.includes(w.item.name));
+    filteredModels = distribution.modelWeights.filter((w) => params.models?.includes(w.item.name));
   }
 
   if (filteredUsers.length === 0 || filteredProviders.length === 0 || filteredModels.length === 0) {

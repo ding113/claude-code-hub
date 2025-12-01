@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useLocale } from "next-intl";
 import { format as formatDate } from "date-fns";
+import { useLocale } from "next-intl";
+import { useEffect, useMemo, useState } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatDateDistance } from "@/lib/utils/date-format";
 
@@ -38,7 +38,7 @@ export function RelativeTime({
   const absolute = useMemo(() => {
     if (!date) return fallback;
     const dateObj = typeof date === "string" ? new Date(date) : date;
-    if (isNaN(dateObj.getTime())) return fallback;
+    if (Number.isNaN(dateObj.getTime())) return fallback;
     // date-fns does not fully support `z` for IANA abbreviations; use `OOOO` to show GMT offset.
     // Example output: 2024-05-01 13:45:12 GMT+08:00
     return formatDate(dateObj, "yyyy-MM-dd HH:mm:ss OOOO");
@@ -81,14 +81,13 @@ export function RelativeTime({
       <TooltipTrigger asChild>
         <time
           className={className}
-          tabIndex={0}
           // HTMLTimeElement `dateTime` attribute for semantics/SEO
           dateTime={
             typeof date === "string"
               ? new Date(date).toISOString()
               : date
-              ? date.toISOString()
-              : undefined
+                ? date.toISOString()
+                : undefined
           }
         >
           {timeAgo}

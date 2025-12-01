@@ -1,10 +1,10 @@
 "use client";
 
+import { type ComponentProps, useId } from "react";
 import { Input } from "@/components/ui/input";
-import { TagInput } from "@/components/ui/tag-input";
 import { Label } from "@/components/ui/label";
+import { TagInput } from "@/components/ui/tag-input";
 import { cn } from "@/lib/utils";
-import { useId, type ComponentProps } from "react";
 
 /**
  * 表单字段配置

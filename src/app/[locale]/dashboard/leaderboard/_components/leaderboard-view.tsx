@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent } from "@/components/ui/card";
-import { LeaderboardTable, type ColumnDef } from "./leaderboard-table";
-import type { LeaderboardEntry, ProviderLeaderboardEntry } from "@/repository/leaderboard";
-import { formatTokenAmount } from "@/lib/utils";
-import { useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { useEffect, useState } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { formatTokenAmount } from "@/lib/utils";
+import type { LeaderboardEntry, ProviderLeaderboardEntry } from "@/repository/leaderboard";
+import { type ColumnDef, LeaderboardTable } from "./leaderboard-table";
 
 interface LeaderboardViewProps {
   isAdmin: boolean;
@@ -47,7 +47,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     }
     // 移除 scope 和 period 从依赖数组，避免无限循环
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdmin, searchParams]);
+  }, [isAdmin, searchParams, period, scope]);
 
   useEffect(() => {
     let cancelled = false;

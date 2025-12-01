@@ -1,43 +1,44 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   Activity,
-  Server,
-  Zap,
-  DollarSign,
-  Clock,
   AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  Clock,
+  DollarSign,
   Globe,
   Moon,
-  Sun,
-  RefreshCw,
-  ArrowUp,
-  ArrowDown,
-  Wifi,
-  Shield,
-  User,
   PieChart as PieIcon,
+  RefreshCw,
+  Server,
+  Shield,
+  Sun,
+  User,
+  Wifi,
+  Zap,
 } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
+import type React from "react";
+import { useEffect, useRef, useState } from "react";
 import {
-  AreaChart,
   Area,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
+  AreaChart,
+  CartesianGrid,
   Cell,
-  Tooltip,
   Legend,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  CartesianGrid,
 } from "recharts";
-import { motion, AnimatePresence } from "framer-motion";
 import useSWR from "swr";
-import { useTranslations, useLocale } from "next-intl";
-import { useRouter, usePathname } from "@/i18n/routing";
-import { locales, localeLabels, type Locale } from "@/i18n/config";
 import { getDashboardRealtimeData } from "@/actions/dashboard-realtime";
+import { type Locale, localeLabels, locales } from "@/i18n/config";
+import { usePathname, useRouter } from "@/i18n/routing";
 
 /**
  * ============================================================================
@@ -180,7 +181,7 @@ const CountUp = ({
     const animate = (currentTime: number) => {
       const elapsed = currentTime - startTime;
       const progress = Math.min(elapsed / duration, 1);
-      const ease = 1 - Math.pow(1 - progress, 4);
+      const ease = 1 - (1 - progress) ** 4;
       const current = start + (end - start) * ease;
       setDisplayValue(current);
       if (progress < 1) requestAnimationFrame(animate);
@@ -442,7 +443,7 @@ const UserRankings = ({
             className={`flex items-center gap-3 p-2 rounded border ${
               index === 0
                 ? "bg-gradient-to-r from-orange-500/20 to-transparent border-orange-500/30"
-                : theme.border + " bg-white/5"
+                : `${theme.border} bg-white/5`
             }`}
           >
             <div

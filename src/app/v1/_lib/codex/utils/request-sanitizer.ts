@@ -8,9 +8,9 @@
  * 参考：claude-relay-service/src/validators/clients/codexCliValidator.js
  */
 
+import { CodexInstructionsCache } from "@/lib/codex-instructions-cache";
 import { logger } from "@/lib/logger";
 import { getDefaultInstructions } from "../../codex/constants/codex-instructions";
-import { CodexInstructionsCache } from "@/lib/codex-instructions-cache";
 
 /**
  * 功能开关：是否启用 Codex Instructions 注入
@@ -112,7 +112,7 @@ export async function sanitizeCodexRequest(
       model,
       strategy: effectiveStrategy,
       instructionsLength: officialInstructions.length,
-      instructionsPreview: officialInstructions.substring(0, 100) + "...",
+      instructionsPreview: `${officialInstructions.substring(0, 100)}...`,
     });
   } else if (effectiveStrategy === "keep_original") {
     // 策略 2: 始终透传，不添加重试标记

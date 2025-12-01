@@ -1,7 +1,7 @@
-import { getProviders, getProviderLimitUsageBatch } from "@/actions/providers";
-import { ProvidersQuotaManager } from "./_components/providers-quota-manager";
-import { getSystemSettings } from "@/repository/system-config";
 import { getTranslations } from "next-intl/server";
+import { getProviderLimitUsageBatch, getProviders } from "@/actions/providers";
+import { getSystemSettings } from "@/repository/system-config";
+import { ProvidersQuotaManager } from "./_components/providers-quota-manager";
 
 // 强制动态渲染 (此页面需要实时数据和认证)
 export const dynamic = "force-dynamic";

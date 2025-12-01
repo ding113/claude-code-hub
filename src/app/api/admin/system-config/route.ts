@@ -1,8 +1,8 @@
+import { z } from "zod";
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
-import { getSystemSettings, updateSystemSettings } from "@/repository/system-config";
 import { UpdateSystemSettingsSchema } from "@/lib/validation/schemas";
-import { z } from "zod";
+import { getSystemSettings, updateSystemSettings } from "@/repository/system-config";
 
 // 需要数据库连接
 export const runtime = "nodejs";

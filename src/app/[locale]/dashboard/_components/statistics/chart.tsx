@@ -1,16 +1,14 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import * as React from "react";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
-
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { cn, Decimal, formatCurrency, toDecimal } from "@/lib/utils";
+import { type ChartConfig, ChartContainer, ChartLegend, ChartTooltip } from "@/components/ui/chart";
 import type { CurrencyCode } from "@/lib/utils";
-import { ChartConfig, ChartContainer, ChartLegend, ChartTooltip } from "@/components/ui/chart";
-
-import type { UserStatisticsData, TimeRange } from "@/types/statistics";
+import { cn, Decimal, formatCurrency, toDecimal } from "@/lib/utils";
+import type { TimeRange, UserStatisticsData } from "@/types/statistics";
 import { TimeRangeSelector } from "./time-range-selector";
-import { useTranslations } from "next-intl";
 
 // 固定的调色盘，确保新增用户也能获得可辨识的颜色
 const USER_COLOR_PALETTE = [
@@ -70,7 +68,7 @@ export function UserStatisticsChart({
   // 重置选择状态(当 data.users 变化时)
   React.useEffect(() => {
     setSelectedUserIds(new Set(data.users.map((u) => u.id)));
-  }, [data.users, t]);
+  }, [data.users]);
 
   const isAdminMode = data.mode === "users";
   const enableUserFilter = isAdminMode && data.users.length > 1;

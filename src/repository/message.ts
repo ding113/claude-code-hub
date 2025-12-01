@@ -1,11 +1,11 @@
 "use server";
 
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { messageRequest, users, keys as keysTable, providers } from "@/drizzle/schema";
-import { eq, isNull, and, desc, sql, inArray } from "drizzle-orm";
-import type { MessageRequest, CreateMessageRequestData } from "@/types/message";
-import { toMessageRequest } from "./_shared/transformers";
+import { keys as keysTable, messageRequest, providers, users } from "@/drizzle/schema";
 import { formatCostForStorage } from "@/lib/utils/currency";
+import type { CreateMessageRequestData, MessageRequest } from "@/types/message";
+import { toMessageRequest } from "./_shared/transformers";
 
 /**
  * 创建消息请求记录
@@ -407,7 +407,7 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
     if (!providersMap.has(p.sessionId)) {
       providersMap.set(p.sessionId, []);
     }
-    providersMap.get(p.sessionId)!.push({
+    providersMap.get(p.sessionId)?.push({
       id: p.providerId!,
       name: p.providerName || "未知",
     });
@@ -437,7 +437,7 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
     if (!modelsMap.has(m.sessionId)) {
       modelsMap.set(m.sessionId, []);
     }
-    modelsMap.get(m.sessionId)!.push(m.model!);
+    modelsMap.get(m.sessionId)?.push(m.model!);
   }
 
   // 4. 批量获取用户信息（每个 session 的第一条请求）

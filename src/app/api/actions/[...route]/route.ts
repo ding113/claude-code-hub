@@ -12,32 +12,30 @@
  */
 
 import "@/lib/polyfills/file";
-import { OpenAPIHono } from "@hono/zod-openapi";
 import { swaggerUI } from "@hono/swagger-ui";
+import { OpenAPIHono } from "@hono/zod-openapi";
 import { apiReference } from "@scalar/hono-api-reference";
 import { handle } from "hono/vercel";
-import { createActionRoute } from "@/lib/api/action-adapter-openapi";
-
-// 导入 actions
-import * as userActions from "@/actions/users";
+import { z } from "zod";
+import * as activeSessionActions from "@/actions/active-sessions";
 import * as keyActions from "@/actions/keys";
-import * as providerActions from "@/actions/providers";
 import * as modelPriceActions from "@/actions/model-prices";
+import * as notificationActions from "@/actions/notifications";
+import * as overviewActions from "@/actions/overview";
+import * as providerActions from "@/actions/providers";
+import * as sensitiveWordActions from "@/actions/sensitive-words";
 import * as statisticsActions from "@/actions/statistics";
 import * as usageLogActions from "@/actions/usage-logs";
-import * as overviewActions from "@/actions/overview";
-import * as sensitiveWordActions from "@/actions/sensitive-words";
-import * as activeSessionActions from "@/actions/active-sessions";
-import * as notificationActions from "@/actions/notifications";
-
+// 导入 actions
+import * as userActions from "@/actions/users";
+import { createActionRoute } from "@/lib/api/action-adapter-openapi";
 // 导入 validation schemas
 import {
-  CreateUserSchema,
-  UpdateUserSchema,
   CreateProviderSchema,
+  CreateUserSchema,
   UpdateProviderSchema,
+  UpdateUserSchema,
 } from "@/lib/validation/schemas";
-import { z } from "zod";
 
 // 需要 Node.js runtime (数据库连接)
 export const runtime = "nodejs";

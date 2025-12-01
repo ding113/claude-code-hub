@@ -8,13 +8,13 @@
  * - 响应：Codex → OpenAI（上游返回 Codex 格式，转换为 OpenAI 格式返回给用户）
  */
 
-import { registerTransformer } from "../registry";
-import { transformOpenAIRequestToCodex } from "./request";
 // 复用现有的 Codex → OpenAI 响应转换器
 import {
-  transformCodexStreamResponseToOpenAI,
   transformCodexNonStreamResponseToOpenAI,
+  transformCodexStreamResponseToOpenAI,
 } from "../codex-to-openai/response";
+import { registerTransformer } from "../registry";
+import { transformOpenAIRequestToCodex } from "./request";
 
 // 注册 OpenAI Compatible → Codex 转换器
 // 请求：OpenAI → Codex（使用本模块的请求转换器）

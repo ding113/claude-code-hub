@@ -11,9 +11,9 @@
  */
 
 import { logger } from "@/lib/logger";
-import { getAllHealthStatus, getCircuitState, tripToHalfOpen } from "./circuit-breaker";
-import { executeProviderTest } from "./provider-testing/test-service";
 import type { ProviderType } from "@/types/provider";
+import { getAllHealthStatus, tripToHalfOpen } from "./circuit-breaker";
+import { executeProviderTest } from "./provider-testing/test-service";
 
 // Configuration
 const ENABLE_SMART_PROBING = process.env.ENABLE_SMART_PROBING === "true";

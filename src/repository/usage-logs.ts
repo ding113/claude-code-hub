@@ -1,10 +1,10 @@
 "use server";
 
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { messageRequest, users, keys as keysTable, providers } from "@/drizzle/schema";
-import { and, eq, isNull, desc, sql } from "drizzle-orm";
-import type { ProviderChainItem } from "@/types/message";
+import { keys as keysTable, messageRequest, providers, users } from "@/drizzle/schema";
 import { getEnvConfig } from "@/lib/config";
+import type { ProviderChainItem } from "@/types/message";
 
 export interface UsageLogFilters {
   userId?: number;
@@ -76,7 +76,7 @@ function normalizeLocalTimeStr(input: string): string {
   const normalized = input.replace("T", " ");
   // 如果没有秒数，补充 ":00"
   if (normalized.length === 16) {
-    return normalized + ":00";
+    return `${normalized}:00`;
   }
   return normalized;
 }

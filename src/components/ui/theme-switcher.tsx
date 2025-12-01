@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Laptop, Moon, Sun } from "lucide-react";
-import { useTheme } from "next-themes";
 import { useTranslations } from "next-intl";
+import { useTheme } from "next-themes";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -24,11 +24,7 @@ interface ThemeSwitcherProps {
   showLabel?: boolean;
 }
 
-export function ThemeSwitcher({
-  className,
-  size = "sm",
-  showLabel = false,
-}: ThemeSwitcherProps) {
+export function ThemeSwitcher({ className, size = "sm", showLabel = false }: ThemeSwitcherProps) {
   const t = useTranslations("common");
   const [mounted, setMounted] = useState(false);
 

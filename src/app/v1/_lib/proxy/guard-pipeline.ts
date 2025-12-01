@@ -1,11 +1,11 @@
-import type { ProxySession } from "./session";
 import { ProxyAuthenticator } from "./auth-guard";
-import { ProxyVersionGuard } from "./version-guard";
-import { ProxySessionGuard } from "./session-guard";
-import { ProxySensitiveWordGuard } from "./sensitive-word-guard";
-import { ProxyRateLimitGuard } from "./rate-limit-guard";
-import { ProxyProviderResolver } from "./provider-selector";
 import { ProxyMessageService } from "./message-service";
+import { ProxyProviderResolver } from "./provider-selector";
+import { ProxyRateLimitGuard } from "./rate-limit-guard";
+import { ProxySensitiveWordGuard } from "./sensitive-word-guard";
+import type { ProxySession } from "./session";
+import { ProxySessionGuard } from "./session-guard";
+import { ProxyVersionGuard } from "./version-guard";
 
 // Request type classification for pipeline presets
 export enum RequestType {
@@ -120,7 +120,6 @@ export class GuardPipelineBuilder {
     switch (type) {
       case RequestType.COUNT_TOKENS:
         return GuardPipelineBuilder.build(COUNT_TOKENS_PIPELINE);
-      case RequestType.CHAT:
       default:
         return GuardPipelineBuilder.build(CHAT_PIPELINE);
     }

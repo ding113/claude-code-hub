@@ -1,14 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { Pencil, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import type { SensitiveWord } from "@/repository/sensitive-words";
-import { updateSensitiveWordAction, deleteSensitiveWordAction } from "@/actions/sensitive-words";
-import { Button } from "@/components/ui/button";
+import { useState } from "react";
 import { toast } from "sonner";
-import { Trash2, Pencil } from "lucide-react";
+import { deleteSensitiveWordAction, updateSensitiveWordAction } from "@/actions/sensitive-words";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import type { SensitiveWord } from "@/repository/sensitive-words";
 import { EditWordDialog } from "./edit-word-dialog";
 
 interface WordListTableProps {

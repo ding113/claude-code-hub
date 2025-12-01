@@ -1,18 +1,17 @@
 "use client";
 
-import * as React from "react";
-import { useRouter } from "@/i18n/routing";
+import { useQuery } from "@tanstack/react-query";
+import { ArrowLeft, Check, Copy, Download, Hash, Monitor } from "lucide-react";
 import { useParams } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, Copy, Download, Check, Monitor, Hash } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { useEffect, useState } from "react";
 import { getSessionDetails } from "@/actions/active-sessions";
-import { useState, useEffect } from "react";
 import { Section } from "@/components/section";
 import { Badge } from "@/components/ui/badge";
-import { useQuery } from "@tanstack/react-query";
-import { formatCurrency, type CurrencyCode } from "@/lib/utils/currency";
-import { useTranslations } from "next-intl";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useRouter } from "@/i18n/routing";
+import { type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
 
 async function fetchSystemSettings(): Promise<{ currencyDisplay: CurrencyCode }> {
   const response = await fetch("/api/system-settings");
@@ -189,14 +188,12 @@ export default function SessionMessagesPage() {
             {/* User-Agent 信息 */}
             {sessionStats?.userAgent && (
               <Section title={t("details.clientInfo")} description={tDesc("clientInfo")}>
-                <>
-                  <div className="rounded-md border bg-muted/50 p-4">
-                    <div className="flex items-start gap-3">
-                      <Monitor className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                      <code className="text-sm font-mono break-all">{sessionStats.userAgent}</code>
-                    </div>
+                <div className="rounded-md border bg-muted/50 p-4">
+                  <div className="flex items-start gap-3">
+                    <Monitor className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                    <code className="text-sm font-mono break-all">{sessionStats.userAgent}</code>
                   </div>
-                </>
+                </div>
               </Section>
             )}
 
@@ -206,13 +203,11 @@ export default function SessionMessagesPage() {
                 title={t("details.requestMessages")}
                 description={t("details.requestMessagesDescription")}
               >
-                <>
-                  <div className="rounded-md border bg-muted/50 p-6">
-                    <pre className="text-xs overflow-x-auto whitespace-pre-wrap break-words font-mono">
-                      {JSON.stringify(messages, null, 2)}
-                    </pre>
-                  </div>
-                </>
+                <div className="rounded-md border bg-muted/50 p-6">
+                  <pre className="text-xs overflow-x-auto whitespace-pre-wrap break-words font-mono">
+                    {JSON.stringify(messages, null, 2)}
+                  </pre>
+                </div>
               </Section>
             )}
 
@@ -242,13 +237,11 @@ export default function SessionMessagesPage() {
                   </Button>
                 }
               >
-                <>
-                  <div className="rounded-md border bg-muted/50 p-6 max-h-[600px] overflow-auto">
-                    <pre className="text-xs whitespace-pre-wrap break-words font-mono">
-                      {formatResponse(response)}
-                    </pre>
-                  </div>
-                </>
+                <div className="rounded-md border bg-muted/50 p-6 max-h-[600px] overflow-auto">
+                  <pre className="text-xs whitespace-pre-wrap break-words font-mono">
+                    {formatResponse(response)}
+                  </pre>
+                </div>
               </Section>
             )}
 

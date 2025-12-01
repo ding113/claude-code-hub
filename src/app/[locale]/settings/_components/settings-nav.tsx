@@ -1,11 +1,10 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+import { ThemeSwitcher } from "@/components/ui/theme-switcher";
 import { Link, usePathname } from "@/i18n/routing";
-
 import { cn } from "@/lib/utils";
 import type { SettingsNavItem } from "../_lib/nav-items";
-import { ThemeSwitcher } from "@/components/ui/theme-switcher";
-import { useTranslations } from "next-intl";
 
 interface SettingsNavProps {
   items: SettingsNavItem[];

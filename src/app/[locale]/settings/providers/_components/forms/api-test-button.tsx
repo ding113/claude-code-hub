@@ -1,17 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Loader2, CheckCircle2, XCircle, Activity, AlertTriangle } from "lucide-react";
-import {
-  testProviderUnified,
-  testProviderGemini,
-  getUnmaskedProviderKey,
-  getProviderTestPresets,
-  type PresetConfigResponse,
-} from "@/actions/providers";
-import { toast } from "sonner";
+import { Activity, AlertTriangle, CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+import {
+  getProviderTestPresets,
+  getUnmaskedProviderKey,
+  type PresetConfigResponse,
+  testProviderGemini,
+  testProviderUnified,
+} from "@/actions/providers";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -19,8 +21,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { isValidUrl } from "@/lib/utils/validation";
 import type { ProviderType } from "@/types/provider";
@@ -158,7 +158,7 @@ export function ApiTestButton({
         setPresets([]);
       }
     });
-  }, [apiFormat, apiFormatToProviderType]);
+  }, [apiFormat, apiFormatToProviderType, selectedPreset]);
 
   useEffect(() => {
     if (isModelManuallyEdited) {
@@ -438,10 +438,8 @@ export function ApiTestButton({
           <SelectContent>
             <SelectItem value="anthropic-messages">{t("formatAnthropicMessages")}</SelectItem>
             <SelectItem value="openai-chat" disabled={!enableMultiProviderTypes}>
-              <>
-                {t("formatOpenAIChat")}
-                {!enableMultiProviderTypes && providerTypeT("openaiCompatibleDisabled")}
-              </>
+              {t("formatOpenAIChat")}
+              {!enableMultiProviderTypes && providerTypeT("openaiCompatibleDisabled")}
             </SelectItem>
             <SelectItem value="openai-responses">{t("formatOpenAIResponses")}</SelectItem>
             <SelectItem value="gemini">Gemini API</SelectItem>
@@ -476,7 +474,7 @@ export function ApiTestButton({
           value={timeoutSeconds}
           onChange={(e) => {
             const value = parseInt(e.target.value, 10);
-            if (!isNaN(value) && value >= 5 && value <= 120) {
+            if (!Number.isNaN(value) && value >= 5 && value <= 120) {
               setTimeoutSeconds(value);
             }
           }}

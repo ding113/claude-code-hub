@@ -1,11 +1,11 @@
 "use client";
 
-import * as React from "react";
-import { Pie, PieChart, Cell, Legend } from "recharts";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChartConfig, ChartContainer, ChartTooltip } from "@/components/ui/chart";
-import type { RateLimitType } from "@/types/statistics";
 import { useTranslations } from "next-intl";
+import * as React from "react";
+import { Cell, Legend, Pie, PieChart } from "recharts";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { type ChartConfig, ChartContainer, ChartTooltip } from "@/components/ui/chart";
+import type { RateLimitType } from "@/types/statistics";
 
 export interface RateLimitTypeBreakdownProps {
   data: Record<RateLimitType, number>;

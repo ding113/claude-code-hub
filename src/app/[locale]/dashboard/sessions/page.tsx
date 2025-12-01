@@ -1,16 +1,15 @@
 "use client";
 
-import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
+import { ArrowLeft } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { getAllSessions } from "@/actions/active-sessions";
 import { Section } from "@/components/section";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
 import { useRouter } from "@/i18n/routing";
-import { getAllSessions } from "@/actions/active-sessions";
-import { ActiveSessionsTable } from "./_components/active-sessions-table";
-import type { ActiveSessionInfo } from "@/types/session";
 import type { CurrencyCode } from "@/lib/utils/currency";
-import { useTranslations } from "next-intl";
+import type { ActiveSessionInfo } from "@/types/session";
+import { ActiveSessionsTable } from "./_components/active-sessions-table";
 
 const REFRESH_INTERVAL = 3000; // 3秒刷新一次
 

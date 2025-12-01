@@ -1,8 +1,8 @@
 import { logger } from "@/lib/logger";
 import { getRedisClient } from "@/lib/redis/client";
-import { CircuitBreakerAlertData } from "@/lib/wechat/message-templates";
-import { generateDailyLeaderboard } from "./tasks/daily-leaderboard";
+import type { CircuitBreakerAlertData } from "@/lib/wechat/message-templates";
 import { generateCostAlerts } from "./tasks/cost-alert";
+import { generateDailyLeaderboard } from "./tasks/daily-leaderboard";
 
 /**
  * 发送熔断器告警通知

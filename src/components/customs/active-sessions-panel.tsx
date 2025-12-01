@@ -1,6 +1,5 @@
 "use client";
 
-import * as React from "react";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { ActiveSessionsList } from "./active-sessions-list";
 

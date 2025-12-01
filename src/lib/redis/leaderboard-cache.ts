@@ -1,15 +1,15 @@
-import { getRedisClient } from "./client";
-import { logger } from "@/lib/logger";
 import { formatInTimeZone } from "date-fns-tz";
 import { getEnvConfig } from "@/lib/config";
+import { logger } from "@/lib/logger";
 import {
   findDailyLeaderboard,
-  findMonthlyLeaderboard,
-  LeaderboardEntry,
   findDailyProviderLeaderboard,
+  findMonthlyLeaderboard,
   findMonthlyProviderLeaderboard,
-  ProviderLeaderboardEntry,
+  type LeaderboardEntry,
+  type ProviderLeaderboardEntry,
 } from "@/repository/leaderboard";
+import { getRedisClient } from "./client";
 
 /**
  * 排行榜周期类型

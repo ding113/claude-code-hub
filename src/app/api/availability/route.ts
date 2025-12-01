@@ -11,9 +11,9 @@
  *   - maxBuckets: number, max time buckets (default: 100)
  */
 
-import { NextRequest, NextResponse } from "next/server";
-import { queryProviderAvailability, type AvailabilityQueryOptions } from "@/lib/availability";
+import { type NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { type AvailabilityQueryOptions, queryProviderAvailability } from "@/lib/availability";
 
 /**
  * GET /api/availability
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
       options.providerIds = providerIds
         .split(",")
         .map((id) => parseInt(id.trim(), 10))
-        .filter((id) => !isNaN(id));
+        .filter((id) => !Number.isNaN(id));
     }
 
     const bucketSizeMinutes = searchParams.get("bucketSizeMinutes");

@@ -12,8 +12,8 @@ import { createRoute, z } from "@hono/zod-openapi";
 import type { Context } from "hono";
 import { getCookie } from "hono/cookie";
 import type { ActionResult } from "@/actions/types";
-import { logger } from "@/lib/logger";
 import { validateKey } from "@/lib/auth";
+import { logger } from "@/lib/logger";
 
 // Server Action 函数签名 (支持两种格式)
 type ServerAction =

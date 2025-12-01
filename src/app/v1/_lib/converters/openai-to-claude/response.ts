@@ -17,8 +17,8 @@
  */
 
 import type { Context } from "hono";
-import type { TransformState } from "../types";
 import { logger } from "@/lib/logger";
+import type { TransformState } from "../types";
 
 /**
  * 解析 SSE 数据行
@@ -61,10 +61,10 @@ function buildOpenAISSE(data: Record<string, unknown>): string {
  * @returns 转换后的 SSE chunk 数组（OpenAI 格式）
  */
 export function transformClaudeStreamResponseToOpenAI(
-  ctx: Context,
+  _ctx: Context,
   model: string,
-  originalRequest: Record<string, unknown>,
-  transformedRequest: Record<string, unknown>,
+  _originalRequest: Record<string, unknown>,
+  _transformedRequest: Record<string, unknown>,
   chunk: string,
   state?: TransformState
 ): string[] {
@@ -251,7 +251,7 @@ export function transformClaudeStreamResponseToOpenAI(
             >
           | undefined;
 
-        if (toolCalls && toolCalls[index]) {
+        if (toolCalls?.[index]) {
           toolCalls[index].function.arguments += partialJson;
         }
 
@@ -368,10 +368,10 @@ export function transformClaudeStreamResponseToOpenAI(
  * @returns 转换后的 OpenAI 响应体
  */
 export function transformClaudeNonStreamResponseToOpenAI(
-  ctx: Context,
+  _ctx: Context,
   model: string,
-  originalRequest: Record<string, unknown>,
-  transformedRequest: Record<string, unknown>,
+  _originalRequest: Record<string, unknown>,
+  _transformedRequest: Record<string, unknown>,
   response: Record<string, unknown>
 ): Record<string, unknown> {
   // 检查响应类型

@@ -1,11 +1,10 @@
 "use client";
 import { useState } from "react";
-import { UserList } from "./user-list";
-import { KeyListHeader } from "./key-list-header";
-import { KeyList } from "./key-list";
-import type { UserDisplay } from "@/types/user";
-import type { User } from "@/types/user";
 import type { CurrencyCode } from "@/lib/utils/currency";
+import type { User, UserDisplay } from "@/types/user";
+import { KeyList } from "./key-list";
+import { KeyListHeader } from "./key-list-header";
+import { UserList } from "./user-list";
 
 interface UserKeyManagerProps {
   users: UserDisplay[];

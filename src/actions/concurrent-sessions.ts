@@ -1,7 +1,7 @@
 "use server";
 
-import { getActiveConcurrentSessions } from "@/lib/redis";
 import { logger } from "@/lib/logger";
+import { getActiveConcurrentSessions } from "@/lib/redis";
 import type { ActionResult } from "./types";
 
 /**

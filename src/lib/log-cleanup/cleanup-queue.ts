@@ -1,11 +1,11 @@
-import Queue from "bull";
-import type { Job } from "bull";
 import { createBullBoard } from "@bull-board/api";
 import { BullAdapter } from "@bull-board/api/bullAdapter";
 import { ExpressAdapter } from "@bull-board/express";
+import type { Job } from "bull";
+import Queue from "bull";
 import { logger } from "@/lib/logger";
-import { cleanupLogs } from "./service";
 import { getSystemSettings } from "@/repository/system-config";
+import { cleanupLogs } from "./service";
 
 /**
  * 队列实例（延迟初始化，避免模块加载时连接 Redis）
@@ -45,7 +45,7 @@ function getCleanupQueue(): Queue.Queue {
     // 使用 Node.js 内置的 URL 解析器
     const url = new URL(redisUrl);
     redisQueueOptions.host = url.hostname;
-    redisQueueOptions.port = parseInt(url.port || (useTls ? "6379" : "6379"));
+    redisQueueOptions.port = parseInt(url.port || (useTls ? "6379" : "6379"), 10);
     redisQueueOptions.password = url.password;
     redisQueueOptions.username = url.username; // 传递用户名
 

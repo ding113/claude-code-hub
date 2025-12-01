@@ -1,13 +1,12 @@
 "use client";
-import { useState } from "react";
 import { SquarePen, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
-import { EditKeyForm } from "./forms/edit-key-form";
-import { DeleteKeyConfirm } from "./forms/delete-key-confirm";
-import type { UserKeyDisplay } from "@/types/user";
-import type { User } from "@/types/user";
+import { useState } from "react";
 import { FormErrorBoundary } from "@/components/form-error-boundary";
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import type { User, UserKeyDisplay } from "@/types/user";
+import { DeleteKeyConfirm } from "./forms/delete-key-confirm";
+import { EditKeyForm } from "./forms/edit-key-form";
 
 interface KeyActionsProps {
   keyData: UserKeyDisplay;

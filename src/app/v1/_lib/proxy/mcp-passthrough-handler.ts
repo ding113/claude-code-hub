@@ -6,12 +6,12 @@
  * 例如：将 analyze_image、analyze_video 等工具调用透传到 GLM
  */
 
-import type { Provider } from "@/types/provider";
 import { logger } from "@/lib/logger";
-import { MinimaxMcpClient } from "@/lib/mcp/minimax-client";
 import { GlmMcpClient } from "@/lib/mcp/glm-client";
+import { MinimaxMcpClient } from "@/lib/mcp/minimax-client";
 import type { McpClientConfig } from "@/lib/mcp/types";
 import { McpError } from "@/lib/mcp/types";
+import type { Provider } from "@/types/provider";
 
 /**
  * MCP 工具调用信息
@@ -51,7 +51,7 @@ export class McpPassthroughHandler {
     }
 
     // 检查工具名称是否支持
-    const supportedTools = this.getSupportedTools(provider.mcpPassthroughType);
+    const supportedTools = McpPassthroughHandler.getSupportedTools(provider.mcpPassthroughType);
     return supportedTools.includes(toolName);
   }
 
@@ -96,9 +96,9 @@ export class McpPassthroughHandler {
       // 根据 MCP 类型选择客户端
       switch (provider.mcpPassthroughType) {
         case "minimax":
-          return await this.handleMinimaxToolCall(provider, toolCall);
+          return await McpPassthroughHandler.handleMinimaxToolCall(provider, toolCall);
         case "glm":
-          return await this.handleGlmToolCall(provider, toolCall);
+          return await McpPassthroughHandler.handleGlmToolCall(provider, toolCall);
         case "custom":
           throw new McpError("Custom MCP passthrough is not implemented yet");
         default:

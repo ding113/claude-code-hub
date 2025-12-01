@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
-import { APP_VERSION, GITHUB_REPO, compareVersions } from "@/lib/version";
+import { APP_VERSION, compareVersions, GITHUB_REPO } from "@/lib/version";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";

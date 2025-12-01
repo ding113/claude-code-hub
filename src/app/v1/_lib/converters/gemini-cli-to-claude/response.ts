@@ -22,8 +22,8 @@
  */
 
 import type { Context } from "hono";
-import type { TransformState } from "../types";
 import { logger } from "@/lib/logger";
+import type { TransformState } from "../types";
 
 /**
  * 响应转换状态
@@ -54,10 +54,10 @@ function buildSSE(event: string, data: Record<string, unknown>): string {
  * @returns 转换后的 SSE chunk 数组
  */
 export function transformGeminiCLIStreamResponseToClaude(
-  ctx: Context,
+  _ctx: Context,
   model: string,
-  originalRequest: Record<string, unknown>,
-  transformedRequest: Record<string, unknown>,
+  _originalRequest: Record<string, unknown>,
+  _transformedRequest: Record<string, unknown>,
   chunk: string,
   state?: TransformState
 ): string[] {
@@ -325,10 +325,10 @@ export function transformGeminiCLIStreamResponseToClaude(
  * @returns 转换后的 Claude 响应体
  */
 export function transformGeminiCLINonStreamResponseToClaude(
-  ctx: Context,
+  _ctx: Context,
   model: string,
-  originalRequest: Record<string, unknown>,
-  transformedRequest: Record<string, unknown>,
+  _originalRequest: Record<string, unknown>,
+  _transformedRequest: Record<string, unknown>,
   response: Record<string, unknown>
 ): Record<string, unknown> {
   const geminiResponse = response.response as Record<string, unknown> | undefined;

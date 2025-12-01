@@ -1,41 +1,41 @@
 "use server";
 
-import {
-  findProviderList,
-  createProvider,
-  updateProvider,
-  deleteProvider,
-  getProviderStatistics,
-  findProviderById,
-} from "@/repository/provider";
 import { revalidatePath } from "next/cache";
-import { logger } from "@/lib/logger";
-import { type ProviderDisplay, type ProviderType } from "@/types/provider";
-import { maskKey } from "@/lib/utils/validation";
-import { getSession } from "@/lib/auth";
-import { CreateProviderSchema, UpdateProviderSchema } from "@/lib/validation/schemas";
-import type { ActionResult } from "./types";
-import { getAllHealthStatus, resetCircuit, clearConfigCache } from "@/lib/circuit-breaker";
-import {
-  saveProviderCircuitConfig,
-  deleteProviderCircuitConfig,
-} from "@/lib/redis/circuit-breaker-config";
-import {
-  createProxyAgentForProvider,
-  isValidProxyUrl,
-  type ProviderProxyConfig,
-} from "@/lib/proxy-agent";
-import { CodexInstructionsCache } from "@/lib/codex-instructions-cache";
-import { isClientAbortError } from "@/app/v1/_lib/proxy/errors";
-import { PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { GeminiAuth } from "@/app/v1/_lib/gemini/auth";
+import { isClientAbortError } from "@/app/v1/_lib/proxy/errors";
+import { getSession } from "@/lib/auth";
+import { clearConfigCache, getAllHealthStatus, resetCircuit } from "@/lib/circuit-breaker";
+import { CodexInstructionsCache } from "@/lib/codex-instructions-cache";
+import { PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
+import { logger } from "@/lib/logger";
 import {
   executeProviderTest,
   type ProviderTestConfig,
   type TestStatus,
   type TestSubStatus,
 } from "@/lib/provider-testing";
-import { getPresetsForProvider, type PresetConfig } from "@/lib/provider-testing/presets";
+import { getPresetsForProvider } from "@/lib/provider-testing/presets";
+import {
+  createProxyAgentForProvider,
+  isValidProxyUrl,
+  type ProviderProxyConfig,
+} from "@/lib/proxy-agent";
+import {
+  deleteProviderCircuitConfig,
+  saveProviderCircuitConfig,
+} from "@/lib/redis/circuit-breaker-config";
+import { maskKey } from "@/lib/utils/validation";
+import { CreateProviderSchema, UpdateProviderSchema } from "@/lib/validation/schemas";
+import {
+  createProvider,
+  deleteProvider,
+  findProviderById,
+  findProviderList,
+  getProviderStatistics,
+  updateProvider,
+} from "@/repository/provider";
+import type { ProviderDisplay, ProviderType } from "@/types/provider";
+import type { ActionResult } from "./types";
 
 const API_TEST_TIMEOUT_LIMITS = {
   DEFAULT: 15000,
@@ -139,7 +139,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
           } else {
             // 尝试将其他类型转换为 Date
             const date = new Date(stats.last_call_time as string | number);
-            if (!isNaN(date.getTime())) {
+            if (!Number.isNaN(date.getTime())) {
               lastCallTimeStr = date.toISOString();
             }
           }
@@ -430,7 +430,7 @@ export async function editProvider(
     const validated = UpdateProviderSchema.parse(data);
 
     // 如果 website_url 被更新，重新生成 favicon URL
-    let faviconUrl: string | null | undefined = undefined; // undefined 表示不更新
+    let faviconUrl: string | null | undefined; // undefined 表示不更新
     if (validated.website_url !== undefined) {
       if (validated.website_url) {
         try {
@@ -1172,11 +1172,8 @@ function sanitizeErrorTextForLogging(text: string, maxLength = 500): string {
   let sanitized = text;
   sanitized = sanitized.replace(/\b(?:sk|rk|pk)-[a-zA-Z0-9]{16,}\b/giu, "[REDACTED_KEY]");
   sanitized = sanitized.replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, "[EMAIL]");
-  sanitized = sanitized.replace(/Bearer\s+[A-Za-z0-9._\-]+/gi, "Bearer [REDACTED]");
-  sanitized = sanitized.replace(
-    /(password|token|secret)\s*[:=]\s*['\"]?[^'"\s]+['\"]?/gi,
-    "$1:***"
-  );
+  sanitized = sanitized.replace(/Bearer\s+[A-Za-z0-9._-]+/gi, "Bearer [REDACTED]");
+  sanitized = sanitized.replace(/(password|token|secret)\s*[:=]\s*['"]?[^'"\s]+['"]?/gi, "$1:***");
   sanitized = sanitized.replace(/\/[\w.-]+\.(?:env|ya?ml|json|conf|ini)/gi, "[PATH]");
 
   if (sanitized.length > maxLength) {
@@ -1273,8 +1270,8 @@ function detectCloudflareGatewayError(response: Response): boolean {
   const headerIndicatesCloudflare = Boolean(
     cfRay ||
       cfCacheStatus ||
-      (server && server.toLowerCase().includes("cloudflare")) ||
-      (via && via.toLowerCase().includes("cloudflare"))
+      server?.toLowerCase().includes("cloudflare") ||
+      via?.toLowerCase().includes("cloudflare")
   );
 
   return headerIndicatesCloudflare && CLOUDFLARE_ERROR_STATUS_CODES.has(response.status);
@@ -1639,7 +1636,7 @@ function mergeStreamChunks(chunks: ProviderApiResponse[]): ProviderApiResponse {
         (base as OpenAIResponsesResponse).output = [
           {
             type: "message",
-            id: firstOutput?.id || "msg_" + Date.now(),
+            id: firstOutput?.id || `msg_${Date.now()}`,
             status: firstOutput?.status || "completed",
             role: "assistant",
             content: [{ type: "output_text", text: mergedText }],
@@ -2331,7 +2328,7 @@ export async function testProviderGemini(
           "x-goog-api-client": "google-genai-sdk/1.30.0 gl-node/v24.11.0",
         };
         if (isJsonCreds) {
-          headers["Authorization"] = `Bearer ${apiKey}`;
+          headers.Authorization = `Bearer ${apiKey}`;
         } else {
           headers["x-goog-api-key"] = apiKey;
         }
@@ -2429,7 +2426,7 @@ export async function testProviderGemini(
       ok: true,
       data: {
         ...secondResult.data,
-        message: secondResult.data.message + " [FALLBACK:URL_PARAM]",
+        message: `${secondResult.data.message} [FALLBACK:URL_PARAM]`,
       },
     };
   }

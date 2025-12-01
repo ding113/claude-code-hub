@@ -11,7 +11,7 @@ class NodeFile {
   readonly size: number;
   readonly type: string;
 
-  constructor(fileBits: BlobPart[], fileName: string, options: NodeFileOptions = {}) {
+  constructor(_fileBits: BlobPart[], fileName: string, options: NodeFileOptions = {}) {
     this.name = fileName;
     this.webkitRelativePath = "";
     this.lastModified =

@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { AlertCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useState, useTransition } from "react";
+import { toast } from "sonner";
+import { saveSystemSettings } from "@/actions/system-config";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle } from "lucide-react";
-import { saveSystemSettings } from "@/actions/system-config";
-import { toast } from "sonner";
 
 interface ClientVersionToggleProps {
   enabled: boolean;

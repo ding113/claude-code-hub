@@ -1,8 +1,8 @@
-import { NextRequest } from "next/server";
-import { getSession } from "@/lib/auth";
-import { cleanupLogs, CleanupConditions } from "@/lib/log-cleanup/service";
-import { logger } from "@/lib/logger";
+import type { NextRequest } from "next/server";
 import { z } from "zod";
+import { getSession } from "@/lib/auth";
+import { type CleanupConditions, cleanupLogs } from "@/lib/log-cleanup/service";
+import { logger } from "@/lib/logger";
 
 // 需要数据库连接
 export const runtime = "nodejs";

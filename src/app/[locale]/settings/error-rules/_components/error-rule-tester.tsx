@@ -1,14 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { AlertTriangle, CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { Button } from "@/components/ui/button";
+import { useState } from "react";
+import { toast } from "sonner";
+import { testErrorRuleAction } from "@/actions/error-rules";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { testErrorRuleAction } from "@/actions/error-rules";
-import { toast } from "sonner";
-import { AlertTriangle, CheckCircle2, Loader2, XCircle } from "lucide-react";
 import type { ErrorOverrideResponse } from "@/repository/error-rules";
 
 interface TestResult {

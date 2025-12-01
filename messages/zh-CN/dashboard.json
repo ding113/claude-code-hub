@@ -57,7 +57,6 @@
       "provider": "供应商",
       "model": "模型",
       "endpoint": "端点",
-      "endpoint": "端点",
       "status": "状态",
       "timeRange": "时间范围",
       "startTime": "开始时间",

@@ -1,12 +1,12 @@
 import { getTranslations } from "next-intl/server";
-import { redirect } from "@/i18n/routing";
-import { getSession } from "@/lib/auth";
 import { fetchClientVersionStats } from "@/actions/client-versions";
 import { fetchSystemSettings } from "@/actions/system-config";
-import { SettingsPageHeader } from "../_components/settings-page-header";
-import { ClientVersionToggle } from "./_components/client-version-toggle";
-import { ClientVersionStatsTable } from "./_components/client-version-stats-table";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { redirect } from "@/i18n/routing";
+import { getSession } from "@/lib/auth";
+import { SettingsPageHeader } from "../_components/settings-page-header";
+import { ClientVersionStatsTable } from "./_components/client-version-stats-table";
+import { ClientVersionToggle } from "./_components/client-version-toggle";
 
 export default async function ClientVersionsPage({
   params,

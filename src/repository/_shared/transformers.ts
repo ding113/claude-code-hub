@@ -1,10 +1,10 @@
-import type { User } from "@/types/user";
+import { formatCostForStorage } from "@/lib/utils/currency";
 import type { Key } from "@/types/key";
-import type { Provider } from "@/types/provider";
 import type { MessageRequest } from "@/types/message";
 import type { ModelPrice } from "@/types/model-price";
+import type { Provider } from "@/types/provider";
 import type { SystemSettings } from "@/types/system-config";
-import { formatCostForStorage } from "@/lib/utils/currency";
+import type { User } from "@/types/user";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function toUser(dbUser: any): User {

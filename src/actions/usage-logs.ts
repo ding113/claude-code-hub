@@ -4,9 +4,9 @@ import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 import {
   findUsageLogsWithDetails,
+  getUsedEndpoints,
   getUsedModels,
   getUsedStatusCodes,
-  getUsedEndpoints,
   type UsageLogFilters,
   type UsageLogsResult,
 } from "@/repository/usage-logs";

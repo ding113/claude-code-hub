@@ -1,5 +1,5 @@
-import { ProxyAgent } from "undici";
 import { SocksProxyAgent } from "socks-proxy-agent";
+import { ProxyAgent } from "undici";
 import type { Provider } from "@/types/provider";
 import { logger } from "./logger";
 

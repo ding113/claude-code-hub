@@ -5,14 +5,14 @@
  * Returns current status for all providers (lightweight query, last 15 minutes)
  */
 
-import { NextRequest, NextResponse } from "next/server";
-import { getCurrentProviderStatus } from "@/lib/availability";
+import { type NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { getCurrentProviderStatus } from "@/lib/availability";
 
 /**
  * GET /api/availability/current
  */
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   // Verify admin authentication using session cookies (consistent with /api/availability)
   const session = await getSession();
   if (!session || session.user.role !== "admin") {

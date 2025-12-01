@@ -1,4 +1,4 @@
-import Redis, { RedisOptions } from "ioredis";
+import Redis, { type RedisOptions } from "ioredis";
 import { logger } from "@/lib/logger";
 
 let redisClient: Redis | null = null;

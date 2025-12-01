@@ -1,5 +1,10 @@
 "use client";
-import { useMemo, useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { CheckCircle, Copy, Eye, EyeOff, ListPlus } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { useEffect, useMemo, useState } from "react";
+import { getProxyStatus } from "@/actions/proxy-status";
+import { FormErrorBoundary } from "@/components/form-error-boundary";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,18 +15,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { ListPlus, Copy, CheckCircle, Eye, EyeOff } from "lucide-react";
-import { isClipboardSupported, copyToClipboard } from "@/lib/utils/clipboard";
-import { useTranslations } from "next-intl";
+import { copyToClipboard, isClipboardSupported } from "@/lib/utils/clipboard";
+import { type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
+import type { ProxyStatusResponse } from "@/types/proxy-status";
+import type { User, UserDisplay } from "@/types/user";
 import { AddKeyForm } from "./forms/add-key-form";
 import { UserActions } from "./user-actions";
-import type { UserDisplay } from "@/types/user";
-import type { User } from "@/types/user";
-import { FormErrorBoundary } from "@/components/form-error-boundary";
-import { formatCurrency, type CurrencyCode } from "@/lib/utils/currency";
-import { useQuery } from "@tanstack/react-query";
-import { getProxyStatus } from "@/actions/proxy-status";
-import type { ProxyStatusResponse } from "@/types/proxy-status";
 
 const PROXY_STATUS_REFRESH_INTERVAL = 2000;
 

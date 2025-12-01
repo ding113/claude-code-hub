@@ -16,7 +16,7 @@
  * 5. Performance benchmarking
  */
 
-import { describe, test, expect, beforeAll } from "bun:test";
+import { beforeAll, describe, expect, test } from "bun:test";
 import { errorRuleDetector } from "@/lib/error-rule-detector";
 import { eventEmitter } from "@/lib/event-emitter";
 
@@ -230,7 +230,7 @@ describe("Safe-Regex ReDoS Detection", () => {
    */
 
   test("should skip loading dangerous regex patterns", async () => {
-    const statsBefore = errorRuleDetector.getStats();
+    const _statsBefore = errorRuleDetector.getStats();
 
     // Reload cache (which should skip any dangerous patterns)
     await errorRuleDetector.reload();

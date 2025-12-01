@@ -2,10 +2,12 @@
 
 import { useTranslations } from "next-intl";
 
-import { useState, useEffect } from "react";
-import { Label } from "@/components/ui/label";
+import { useEffect, useState } from "react";
+import { getKeys } from "@/actions/keys";
+import { getEndpointList, getModelList, getStatusCodeList } from "@/actions/usage-logs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -13,11 +15,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getEndpointList, getModelList, getStatusCodeList } from "@/actions/usage-logs";
-import { getKeys } from "@/actions/keys";
-import type { UserDisplay } from "@/types/user";
-import type { ProviderDisplay } from "@/types/provider";
 import type { Key } from "@/types/key";
+import type { ProviderDisplay } from "@/types/provider";
+import type { UserDisplay } from "@/types/user";
 
 interface UsageLogsFiltersProps {
   isAdmin: boolean;
@@ -112,7 +112,7 @@ export function UsageLogsFilters({
 
   // 处理用户选择变更
   const handleUserChange = async (userId: string) => {
-    const newUserId = userId ? parseInt(userId) : undefined;
+    const newUserId = userId ? parseInt(userId, 10) : undefined;
     const newFilters = { ...localFilters, userId: newUserId, keyId: undefined };
     setLocalFilters(newFilters);
 
@@ -173,10 +173,7 @@ export function UsageLogsFilters({
         {isAdmin && (
           <div className="space-y-2 lg:col-span-4">
             <Label>{t("logs.filters.user")}</Label>
-            <Select
-              value={localFilters.userId?.toString() || ""}
-              onValueChange={handleUserChange}
-            >
+            <Select value={localFilters.userId?.toString() || ""} onValueChange={handleUserChange}>
               <SelectTrigger>
                 <SelectValue placeholder={t("logs.filters.allUsers")} />
               </SelectTrigger>
@@ -199,13 +196,19 @@ export function UsageLogsFilters({
             onValueChange={(value: string) =>
               setLocalFilters({
                 ...localFilters,
-                keyId: value ? parseInt(value) : undefined,
+                keyId: value ? parseInt(value, 10) : undefined,
               })
             }
             disabled={isAdmin && !localFilters.userId && keys.length === 0}
           >
             <SelectTrigger>
-              <SelectValue placeholder={isAdmin && !localFilters.userId && keys.length === 0 ? t("logs.filters.selectUserFirst") : t("logs.filters.allKeys")} />
+              <SelectValue
+                placeholder={
+                  isAdmin && !localFilters.userId && keys.length === 0
+                    ? t("logs.filters.selectUserFirst")
+                    : t("logs.filters.allKeys")
+                }
+              />
             </SelectTrigger>
             <SelectContent>
               {keys.map((key) => (
@@ -226,7 +229,7 @@ export function UsageLogsFilters({
               onValueChange={(value: string) =>
                 setLocalFilters({
                   ...localFilters,
-                  providerId: value ? parseInt(value) : undefined,
+                  providerId: value ? parseInt(value, 10) : undefined,
                 })
               }
             >
@@ -296,9 +299,7 @@ export function UsageLogsFilters({
               ))}
             </SelectContent>
           </Select>
-          {endpointError && (
-            <p className="text-xs text-destructive">{endpointError}</p>
-          )}
+          {endpointError && <p className="text-xs text-destructive">{endpointError}</p>}
         </div>
 
         {/* 状态码选择 */}
@@ -309,7 +310,7 @@ export function UsageLogsFilters({
             onValueChange={(value: string) =>
               setLocalFilters({
                 ...localFilters,
-                statusCode: value ? parseInt(value) : undefined,
+                statusCode: value ? parseInt(value, 10) : undefined,
               })
             }
           >

@@ -97,7 +97,7 @@ Claude Code Hub 是一个面向团队的 AI API 代理平台，支持统一管�
 
 ### 7. 代码风格 Code Style
 
-- TypeScript + React 组件遵守 2 空格缩进、单引号和尾随逗号（ESLint/Prettier 默认配置）。
+- TypeScript + React 组件遵守 2 空格缩进、双引号和尾随逗号（Biome 默认配置）。
 - Tailwind CSS 样式与 JSX 同行，沿用 README 中的 emoji 样式和语气。
 - 工具函数保持单一职责，避免重复代码（DRY）。
 - 新增文件前参考 `src/` 下相同模块的实现，保持命名一致。
@@ -225,7 +225,7 @@ Example: `fix: handle redis timeout retry`
 
 ### 7. Code Style
 
-- Respect the shared ESLint + Prettier config (2-space indent, single quotes, trailing commas).
+- Respect the shared Biome config (2-space indent, double quotes, trailing commas).
 - Tailwind classes stay close to the JSX they style, mirroring patterns in `src/app`.
 - Keep utilities single-purpose and reuse helpers from `src/lib` or `src/actions` when possible.
 - Match the conversational tone (emojis + concise explanations) already used in `README.md`.

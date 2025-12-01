@@ -1,16 +1,16 @@
 "use client";
-import { useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { addUser, editUser } from "@/actions/users";
-import { DialogFormLayout, FormGrid } from "@/components/form/form-layout";
-import { TextField, TagInputField } from "@/components/form/form-field";
-import { useZodForm } from "@/lib/hooks/use-zod-form";
-import { CreateUserSchema } from "@/lib/validation/schemas";
-import { USER_DEFAULTS, USER_LIMITS } from "@/lib/constants/user.constants";
+import { useEffect, useTransition } from "react";
 import { toast } from "sonner";
-import { setZodErrorMap } from "@/lib/utils/zod-i18n";
+import { addUser, editUser } from "@/actions/users";
+import { TagInputField, TextField } from "@/components/form/form-field";
+import { DialogFormLayout, FormGrid } from "@/components/form/form-layout";
+import { USER_DEFAULTS, USER_LIMITS } from "@/lib/constants/user.constants";
+import { useZodForm } from "@/lib/hooks/use-zod-form";
 import { getErrorMessage } from "@/lib/utils/error-messages";
+import { setZodErrorMap } from "@/lib/utils/zod-i18n";
+import { CreateUserSchema } from "@/lib/validation/schemas";
 
 interface UserFormProps {
   user?: {
@@ -65,7 +65,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
         try {
           let res;
           if (isEdit) {
-            res = await editUser(user!.id, {
+            res = await editUser(user?.id, {
               name: data.name,
               note: data.note,
               rpm: data.rpm,
@@ -149,7 +149,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
         maxTagLength={50}
         placeholder={tForm("providerGroup.placeholder")}
         description={tForm("providerGroup.description")}
-        onInvalidTag={(tag, reason) => {
+        onInvalidTag={(_tag, reason) => {
           const messages: Record<string, string> = {
             empty: tUI("emptyTag"),
             duplicate: tUI("duplicateTag"),

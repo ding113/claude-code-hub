@@ -3,9 +3,9 @@
  * Configures locale routing and provides type-safe navigation utilities
  */
 
-import { defineRouting } from "next-intl/routing";
 import { createNavigation } from "next-intl/navigation";
-import { locales, defaultLocale } from "./config";
+import { defineRouting } from "next-intl/routing";
+import { defaultLocale, locales } from "./config";
 
 // Define routing configuration for next-intl
 export const routing = defineRouting({

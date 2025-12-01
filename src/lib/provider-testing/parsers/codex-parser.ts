@@ -4,7 +4,7 @@
  */
 
 import type { ParsedResponse, TokenUsage } from "../types";
-import { parseSSEStream, isSSEResponse, parseNDJSONStream } from "../utils/sse-collector";
+import { isSSEResponse, parseNDJSONStream, parseSSEStream } from "../utils/sse-collector";
 
 /**
  * Codex Response API response structure

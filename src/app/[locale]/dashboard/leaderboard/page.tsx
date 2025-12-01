@@ -1,12 +1,12 @@
+import { AlertCircle } from "lucide-react";
+import { getTranslations } from "next-intl/server";
 import { Section } from "@/components/section";
-import { LeaderboardView } from "./_components/leaderboard-view";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Link } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
 import { getSystemSettings } from "@/repository/system-config";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertCircle } from "lucide-react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Link } from "@/i18n/routing";
-import { getTranslations } from "next-intl/server";
+import { LeaderboardView } from "./_components/leaderboard-view";
 
 export const dynamic = "force-dynamic";
 

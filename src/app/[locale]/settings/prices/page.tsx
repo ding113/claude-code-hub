@@ -1,10 +1,10 @@
 import { getTranslations } from "next-intl/server";
 import { getModelPrices, getModelPricesPaginated } from "@/actions/model-prices";
 import { Section } from "@/components/section";
-import { PriceList } from "./_components/price-list";
-import { UploadPriceDialog } from "./_components/upload-price-dialog";
-import { SyncLiteLLMButton } from "./_components/sync-litellm-button";
 import { SettingsPageHeader } from "../_components/settings-page-header";
+import { PriceList } from "./_components/price-list";
+import { SyncLiteLLMButton } from "./_components/sync-litellm-button";
+import { UploadPriceDialog } from "./_components/upload-price-dialog";
 
 export const dynamic = "force-dynamic";
 
@@ -37,10 +37,10 @@ export default async function SettingsPricesPage({ searchParams }: SettingsPrice
   let initialPageSize = pageSize;
 
   if (pricesResult.ok) {
-    initialPrices = pricesResult.data!.data;
-    initialTotal = pricesResult.data!.total;
-    initialPage = pricesResult.data!.page;
-    initialPageSize = pricesResult.data!.pageSize;
+    initialPrices = pricesResult.data?.data;
+    initialTotal = pricesResult.data?.total;
+    initialPage = pricesResult.data?.page;
+    initialPageSize = pricesResult.data?.pageSize;
   } else {
     // 降级处理：获取所有数据
     const allPrices = await getModelPrices();

@@ -17,7 +17,7 @@ export class ProxyResponses {
     } = {
       error: {
         message,
-        type: errorType || this.getErrorType(status),
+        type: errorType || ProxyResponses.getErrorType(status),
       },
     };
 

@@ -1,14 +1,14 @@
-import type { Provider } from "@/types/provider";
-import { findProviderList, findProviderById } from "@/repository/provider";
-import { getSystemSettings } from "@/repository/system-config";
+import { getCircuitState, isCircuitOpen } from "@/lib/circuit-breaker";
+import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit";
 import { SessionManager } from "@/lib/session-manager";
-import { isCircuitOpen, getCircuitState } from "@/lib/circuit-breaker";
-import { ProxyResponses } from "./responses";
-import { logger } from "@/lib/logger";
-import type { ProxySession } from "./session";
-import type { ClientFormat } from "./format-mapper";
+import { findProviderById, findProviderList } from "@/repository/provider";
+import { getSystemSettings } from "@/repository/system-config";
 import type { ProviderChainItem } from "@/types/message";
+import type { Provider } from "@/types/provider";
+import type { ClientFormat } from "./format-mapper";
+import { ProxyResponses } from "./responses";
+import type { ProxySession } from "./session";
 
 /**
  * 检查供应商是否支持指定模型（用于调度器匹配）
@@ -408,7 +408,7 @@ export class ProxyProviderResolver {
     };
 
     if (session.getLastSelectionContext()?.filteredProviders) {
-      details.filteredProviders = session.getLastSelectionContext()!.filteredProviders;
+      details.filteredProviders = session.getLastSelectionContext()?.filteredProviders;
     }
 
     return ProxyResponses.buildError(status, message, errorType, details);
@@ -421,7 +421,7 @@ export class ProxyProviderResolver {
     session: ProxySession,
     excludeIds: number[]
   ): Promise<Provider | null> {
-    const { provider } = await this.pickRandomProvider(session, excludeIds);
+    const { provider } = await ProxyProviderResolver.pickRandomProvider(session, excludeIds);
     return provider;
   }
 
@@ -626,7 +626,7 @@ export class ProxyProviderResolver {
           details = `不支持模型 ${requestedModel}`;
         }
 
-        context.filteredProviders!.push({
+        context.filteredProviders?.push({
           id: p.id,
           name: p.name,
           reason,
@@ -703,7 +703,7 @@ export class ProxyProviderResolver {
     context.beforeHealthCheck = candidateProviders.length;
 
     // Step 3: 过滤超限供应商（健康度过滤）
-    const healthyProviders = await this.filterByLimits(candidateProviders);
+    const healthyProviders = await ProxyProviderResolver.filterByLimits(candidateProviders);
     context.afterHealthCheck = healthyProviders.length;
 
     // 记录过滤掉的供应商（熔断或限流）
@@ -714,14 +714,14 @@ export class ProxyProviderResolver {
     for (const p of filteredOut) {
       if (await isCircuitOpen(p.id)) {
         const state = getCircuitState(p.id);
-        context.filteredProviders!.push({
+        context.filteredProviders?.push({
           id: p.id,
           name: p.name,
           reason: "circuit_open",
           details: `熔断器${state === "open" ? "打开" : "半开"}`,
         });
       } else {
-        context.filteredProviders!.push({
+        context.filteredProviders?.push({
           id: p.id,
           name: p.name,
           reason: "rate_limited",
@@ -737,7 +737,7 @@ export class ProxyProviderResolver {
     }
 
     // Step 4: 优先级分层（只选择最高优先级的供应商）
-    const topPriorityProviders = this.selectTopPriority(healthyProviders);
+    const topPriorityProviders = ProxyProviderResolver.selectTopPriority(healthyProviders);
     const priorities = [...new Set(healthyProviders.map((p) => p.priority || 0))].sort(
       (a, b) => a - b
     );
@@ -754,7 +754,7 @@ export class ProxyProviderResolver {
       probability: totalWeight > 0 ? Math.round((p.weight / totalWeight) * 100) : 0,
     }));
 
-    const selected = this.selectOptimal(topPriorityProviders);
+    const selected = ProxyProviderResolver.selectOptimal(topPriorityProviders);
 
     // 详细的选择日志
     logger.info("ProviderSelector: Selection decision", {
@@ -856,7 +856,7 @@ export class ProxyProviderResolver {
     });
 
     // 加权随机选择（复用现有逻辑）
-    return this.weightedRandom(sorted);
+    return ProxyProviderResolver.weightedRandom(sorted);
   }
 
   /**

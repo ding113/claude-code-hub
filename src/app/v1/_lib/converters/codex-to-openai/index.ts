@@ -7,8 +7,8 @@
 import { registerTransformer } from "../registry";
 import { transformCodexRequestToOpenAI } from "./request";
 import {
-  transformCodexStreamResponseToOpenAI,
   transformCodexNonStreamResponseToOpenAI,
+  transformCodexStreamResponseToOpenAI,
 } from "./response";
 
 // 注册 Codex → OpenAI Compatible 转换器

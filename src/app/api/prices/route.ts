@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { getModelPricesPaginated } from "@/actions/model-prices";
-import type { PaginationParams } from "@/repository/model-price";
 import { getSession } from "@/lib/auth";
+import type { PaginationParams } from "@/repository/model-price";
 
 /**
  * GET /api/prices

@@ -1,9 +1,9 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
-import { RefreshCw, Calendar, CalendarDays, Clock } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Calendar, CalendarDays, Clock, RefreshCw } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 type WindowType = "5h" | "weekly" | "monthly" | "daily";
 

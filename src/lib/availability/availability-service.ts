@@ -4,19 +4,17 @@
  * Simple two-tier status: success (green) or failure (red)
  */
 
+import { and, desc, eq, gte, inArray, isNull, lte } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { messageRequest, providers } from "@/drizzle/schema";
-import { and, eq, gte, lte, sql, isNull, desc, inArray } from "drizzle-orm";
 import { logger } from "@/lib/logger";
-import {
-  type AvailabilityStatus,
-  type AvailabilityQueryOptions,
-  type AvailabilityQueryResult,
-  type ProviderAvailabilitySummary,
-  type TimeBucketMetrics,
-  type RequestStatusClassification,
-  AVAILABILITY_WEIGHTS,
-  AVAILABILITY_DEFAULTS,
+import type {
+  AvailabilityQueryOptions,
+  AvailabilityQueryResult,
+  AvailabilityStatus,
+  ProviderAvailabilitySummary,
+  RequestStatusClassification,
+  TimeBucketMetrics,
 } from "./types";
 
 // Maximum requests to load per query to prevent OOM
@@ -76,7 +74,7 @@ function calculatePercentile(sortedValues: number[], percentile: number): number
  * Determine optimal time bucket size based on data density
  */
 export function determineOptimalBucketSize(
-  totalRequests: number,
+  _totalRequests: number,
   timeRangeMinutes: number
 ): number {
   // Target: 20-100 data points per time series for good visualization

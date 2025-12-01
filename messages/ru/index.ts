@@ -5,6 +5,7 @@ import customs from "./customs.json";
 import dashboard from "./dashboard.json";
 import errors from "./errors.json";
 import forms from "./forms.json";
+import internal from "./internal.json";
 import notifications from "./notifications.json";
 import providerChain from "./provider-chain.json";
 import providers from "./providers.json";
@@ -14,7 +15,6 @@ import ui from "./ui.json";
 import usage from "./usage.json";
 import users from "./users.json";
 import validation from "./validation.json";
-import internal from "./internal.json";
 
 export default {
   auth,

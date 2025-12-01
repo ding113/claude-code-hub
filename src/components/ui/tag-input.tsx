@@ -1,10 +1,9 @@
 "use client";
 
-import * as React from "react";
 import { X } from "lucide-react";
-import { Badge } from "./badge";
-import { Input } from "./input";
+import * as React from "react";
 import { cn } from "@/lib/utils";
+import { Badge } from "./badge";
 
 export interface TagInputProps extends Omit<React.ComponentProps<"input">, "value" | "onChange"> {
   value: string[];

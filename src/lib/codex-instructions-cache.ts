@@ -8,8 +8,8 @@
  * - Fail Open 策略：Redis 不可用时降级
  */
 
-import { getRedisClient } from "@/lib/redis";
 import { logger } from "@/lib/logger";
+import { getRedisClient } from "@/lib/redis";
 
 export class CodexInstructionsCache {
   private static readonly CACHE_PREFIX = "codex:instructions";
@@ -20,7 +20,7 @@ export class CodexInstructionsCache {
    * 格式：codex:instructions:{providerId}:{model}
    */
   private static getCacheKey(providerId: number, model: string): string {
-    return `${this.CACHE_PREFIX}:${providerId}:${model}`;
+    return `${CodexInstructionsCache.CACHE_PREFIX}:${providerId}:${model}`;
   }
 
   /**
@@ -38,7 +38,7 @@ export class CodexInstructionsCache {
     }
 
     try {
-      const key = this.getCacheKey(providerId, model);
+      const key = CodexInstructionsCache.getCacheKey(providerId, model);
       const cached = await redis.get(key);
 
       if (cached) {
@@ -90,14 +90,14 @@ export class CodexInstructionsCache {
     }
 
     try {
-      const key = this.getCacheKey(providerId, model);
-      await redis.setex(key, this.TTL_SECONDS, instructions);
+      const key = CodexInstructionsCache.getCacheKey(providerId, model);
+      await redis.setex(key, CodexInstructionsCache.TTL_SECONDS, instructions);
 
       logger.info("[CodexInstructionsCache] Cached instructions successfully", {
         providerId,
         model,
         instructionsLength: instructions.length,
-        ttl: this.TTL_SECONDS,
+        ttl: CodexInstructionsCache.TTL_SECONDS,
       });
     } catch (error) {
       // Fail Open: Redis 错误时降级，不影响主流程
@@ -122,7 +122,7 @@ export class CodexInstructionsCache {
     }
 
     try {
-      const pattern = `${this.CACHE_PREFIX}:${providerId}:*`;
+      const pattern = `${CodexInstructionsCache.CACHE_PREFIX}:${providerId}:*`;
       const keys = await redis.keys(pattern);
 
       if (keys.length > 0) {

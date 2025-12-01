@@ -1,14 +1,14 @@
 "use client";
 
-import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { UserStatisticsChart } from "./chart";
-import { getUserStatistics } from "@/actions/statistics";
-import type { TimeRange, UserStatisticsData } from "@/types/statistics";
-import type { CurrencyCode } from "@/lib/utils";
-import { DEFAULT_TIME_RANGE } from "@/types/statistics";
-import { toast } from "sonner";
 import { useTranslations } from "next-intl";
+import * as React from "react";
+import { toast } from "sonner";
+import { getUserStatistics } from "@/actions/statistics";
+import type { CurrencyCode } from "@/lib/utils";
+import type { TimeRange, UserStatisticsData } from "@/types/statistics";
+import { DEFAULT_TIME_RANGE } from "@/types/statistics";
+import { UserStatisticsChart } from "./chart";
 
 interface StatisticsWrapperProps {
   initialData?: UserStatisticsData;

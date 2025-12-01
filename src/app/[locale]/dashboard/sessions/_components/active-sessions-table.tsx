@@ -1,5 +1,9 @@
 "use client";
 
+import { Eye } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -8,15 +12,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Eye } from "lucide-react";
 import { Link } from "@/i18n/routing";
 import { cn } from "@/lib/utils";
-import type { ActiveSessionInfo } from "@/types/session";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
-import { useTranslations } from "next-intl";
+import type { ActiveSessionInfo } from "@/types/session";
 
 interface ActiveSessionsTableProps {
   sessions: ActiveSessionInfo[];

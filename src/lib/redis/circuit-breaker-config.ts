@@ -9,9 +9,9 @@
  * 5. 降级策略：Redis 不可用时从数据库读取
  */
 
-import { getRedisClient } from "./client";
 import { logger } from "@/lib/logger";
 import { findProviderById, findProviderList } from "@/repository/provider";
+import { getRedisClient } from "./client";
 
 export interface CircuitBreakerConfig {
   failureThreshold: number;

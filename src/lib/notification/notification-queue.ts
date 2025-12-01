@@ -1,17 +1,17 @@
-import Queue from "bull";
 import type { Job } from "bull";
+import Queue from "bull";
 import { logger } from "@/lib/logger";
 import { sendWeChatNotification } from "@/lib/wechat/bot";
 import {
   buildCircuitBreakerAlert,
-  buildDailyLeaderboard,
   buildCostAlert,
-  CircuitBreakerAlertData,
-  DailyLeaderboardData,
-  CostAlertData,
+  buildDailyLeaderboard,
+  type CircuitBreakerAlertData,
+  type CostAlertData,
+  type DailyLeaderboardData,
 } from "@/lib/wechat/message-templates";
-import { generateDailyLeaderboard } from "./tasks/daily-leaderboard";
 import { generateCostAlerts } from "./tasks/cost-alert";
+import { generateDailyLeaderboard } from "./tasks/daily-leaderboard";
 
 /**
  * 通知任务类型
@@ -65,7 +65,7 @@ function getNotificationQueue(): Queue.Queue<NotificationJobData> {
     // 使用 Node.js 内置的 URL 解析器
     const url = new URL(redisUrl);
     redisQueueOptions.host = url.hostname;
-    redisQueueOptions.port = parseInt(url.port || (useTls ? "6379" : "6379"));
+    redisQueueOptions.port = parseInt(url.port || (useTls ? "6379" : "6379"), 10);
     redisQueueOptions.password = url.password;
     redisQueueOptions.username = url.username; // 传递用户名
 

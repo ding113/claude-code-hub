@@ -7,10 +7,10 @@
  * 3. 成功后更新数据库并刷新缓存
  */
 
-import fs from "fs/promises";
-import { logger } from "@/lib/logger";
-import path from "path";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { isClientAbortError } from "@/app/v1/_lib/proxy/errors";
+import { logger } from "@/lib/logger";
 
 const LITELLM_PRICE_URL =
   "https://jsd-proxy.ygxz.in/gh/BerriAI/litellm/model_prices_and_context_window.json";

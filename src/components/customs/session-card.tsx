@@ -1,13 +1,13 @@
 "use client";
 
-import { Card, CardContent } from "@/components/ui/card";
+import { useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
-import { cn, formatTokenAmount } from "@/lib/utils";
-import type { ActiveSessionInfo } from "@/types/session";
+import { Card, CardContent } from "@/components/ui/card";
 import { Link } from "@/i18n/routing";
+import { cn, formatTokenAmount } from "@/lib/utils";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
-import { useTranslations } from "next-intl";
+import type { ActiveSessionInfo } from "@/types/session";
 
 interface SessionCardProps {
   session: ActiveSessionInfo;

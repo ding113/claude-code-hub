@@ -1,10 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Search, Package, DollarSign, ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, DollarSign, Package, Search } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { Input } from "@/components/ui/input";
+import { useEffect, useState } from "react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -13,16 +21,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import type { ModelPrice } from "@/types/model-price";
 import { useDebounce } from "@/lib/hooks/use-debounce";
+import type { ModelPrice } from "@/types/model-price";
 
 interface PriceListProps {
   initialPrices: ModelPrice[];
@@ -119,7 +119,7 @@ export function PriceList({
     updateURL(debouncedSearchTerm, newPage, pageSize);
     fetchPrices(newPage, pageSize, debouncedSearchTerm);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearchTerm]); // 仅依赖 debouncedSearchTerm
+  }, [debouncedSearchTerm, fetchPrices, pageSize, searchTerm, updateURL]); // 仅依赖 debouncedSearchTerm
 
   // 搜索输入处理（只更新状态，不触发请求）
   const handleSearchChange = (value: string) => {

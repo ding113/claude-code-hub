@@ -2,27 +2,27 @@
 
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
+import { formatCostForStorage } from "@/lib/utils/currency";
 import {
-  getUserStatisticsFromDB,
+  getActiveKeysForUserFromDB,
   getActiveUsersFromDB,
   getKeyStatisticsFromDB,
-  getActiveKeysForUserFromDB,
   getMixedStatisticsFromDB,
+  getUserStatisticsFromDB,
 } from "@/repository/statistics";
 import { getSystemSettings } from "@/repository/system-config";
 import type {
-  TimeRange,
-  UserStatisticsData,
+  ChartDataItem,
+  DatabaseKey,
+  DatabaseKeyStatRow,
   DatabaseStatRow,
   DatabaseUser,
-  ChartDataItem,
   StatisticsUser,
-  DatabaseKeyStatRow,
-  DatabaseKey,
+  TimeRange,
+  UserStatisticsData,
 } from "@/types/statistics";
-import { TIME_RANGE_OPTIONS, DEFAULT_TIME_RANGE } from "@/types/statistics";
+import { DEFAULT_TIME_RANGE, TIME_RANGE_OPTIONS } from "@/types/statistics";
 import type { ActionResult } from "./types";
-import { formatCostForStorage } from "@/lib/utils/currency";
 
 /**
  * 生成图表数据使用的用户键，避免名称碰撞
@@ -162,7 +162,7 @@ export async function getUserStatistics(
 
     return {
       ok: false,
-      error: "获取统计数据失败：" + errorMessage,
+      error: `获取统计数据失败：${errorMessage}`,
     };
   }
 }

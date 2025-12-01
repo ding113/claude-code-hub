@@ -1,11 +1,11 @@
 "use client";
-import { useState } from "react";
+import { ServerCog } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { FormErrorBoundary } from "@/components/form-error-boundary";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
-import { ServerCog } from "lucide-react";
 import { ProviderForm } from "./forms/provider-form";
-import { FormErrorBoundary } from "@/components/form-error-boundary";
 
 interface AddProviderDialogProps {
   enableMultiProviderTypes: boolean;

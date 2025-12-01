@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useEffect, useState } from "react";
 import { getKeyLimitUsage } from "@/actions/keys";
-import { formatCurrency, type CurrencyCode } from "@/lib/utils/currency";
-import { Loader2, AlertCircle } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
+import { type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
 
 interface KeyLimitUsageProps {
   keyId: number;

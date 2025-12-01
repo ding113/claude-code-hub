@@ -1,15 +1,15 @@
 "use client";
 
-import * as React from "react";
-import { RateLimitFilters } from "./rate-limit-filters";
-import { RateLimitEventsChart } from "../../_components/rate-limit-events-chart";
-import { RateLimitTypeBreakdown } from "../../_components/rate-limit-type-breakdown";
-import { RateLimitTopUsers } from "../../_components/rate-limit-top-users";
-import { getRateLimitStats } from "@/actions/rate-limit-stats";
-import type { RateLimitEventFilters, RateLimitEventStats } from "@/types/statistics";
-import type { CurrencyCode } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import * as React from "react";
+import { getRateLimitStats } from "@/actions/rate-limit-stats";
+import type { CurrencyCode } from "@/lib/utils";
+import type { RateLimitEventFilters, RateLimitEventStats } from "@/types/statistics";
+import { RateLimitEventsChart } from "../../_components/rate-limit-events-chart";
+import { RateLimitTopUsers } from "../../_components/rate-limit-top-users";
+import { RateLimitTypeBreakdown } from "../../_components/rate-limit-type-breakdown";
+import { RateLimitFilters } from "./rate-limit-filters";
 
 export interface RateLimitDashboardProps {
   currencyCode?: CurrencyCode;
@@ -19,7 +19,7 @@ export interface RateLimitDashboardProps {
  * 限流事件统计仪表板
  * 包含过滤器和三个可视化组件
  */
-export function RateLimitDashboard({}: RateLimitDashboardProps) {
+export function RateLimitDashboard(_props: RateLimitDashboardProps) {
   const t = useTranslations("dashboard.rateLimits");
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);

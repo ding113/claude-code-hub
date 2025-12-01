@@ -1,8 +1,8 @@
 "use server";
 
-import { logger } from "@/lib/logger";
-import { ClientVersionChecker, type ClientVersionStats } from "@/lib/client-version-checker";
 import { getSession } from "@/lib/auth";
+import { ClientVersionChecker, type ClientVersionStats } from "@/lib/client-version-checker";
+import { logger } from "@/lib/logger";
 import type { ActionResult } from "./types";
 
 /**

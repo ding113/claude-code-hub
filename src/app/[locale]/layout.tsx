@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 import "../globals.css";
-import { Toaster } from "@/components/ui/sonner";
-import { Footer } from "@/components/customs/footer";
-import { AppProviders } from "../providers";
-import { getSystemSettings } from "@/repository/system-config";
-import { logger } from "@/lib/logger";
+import { notFound } from "next/navigation";
 import { NextIntlClientProvider } from "next-intl";
 import { getMessages } from "next-intl/server";
-import { locales, type Locale } from "@/i18n/config";
-import { notFound } from "next/navigation";
+import { Footer } from "@/components/customs/footer";
+import { Toaster } from "@/components/ui/sonner";
+import { type Locale, locales } from "@/i18n/config";
+import { logger } from "@/lib/logger";
+import { getSystemSettings } from "@/repository/system-config";
+import { AppProviders } from "../providers";
 
 const FALLBACK_TITLE = "Claude Code Hub";
 

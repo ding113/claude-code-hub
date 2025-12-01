@@ -1,8 +1,8 @@
+import { logger } from "@/lib/logger";
 import { getRedisClient } from "@/lib/redis/client";
-import { parseUserAgent, type ClientInfo } from "@/lib/ua-parser";
+import { type ClientInfo, parseUserAgent } from "@/lib/ua-parser";
 import { isVersionGreater, isVersionLess } from "@/lib/version";
 import { getActiveUserVersions, type RawUserVersion } from "@/repository/client-versions";
-import { logger } from "@/lib/logger";
 
 /**
  * Redis Key 前缀
@@ -36,7 +36,7 @@ const GA_THRESHOLD = (() => {
   const parsed = envValue ? parseInt(envValue, 10) : 2; // 默认 2，与文档一致
 
   // 边界校验：范围 1-10
-  if (isNaN(parsed) || parsed < 1) {
+  if (Number.isNaN(parsed) || parsed < 1) {
     logger.warn(
       { envValue, parsed },
       "[ClientVersionChecker] Invalid GA_THRESHOLD, using minimum value 1"
@@ -121,7 +121,7 @@ export class ClientVersionChecker {
       if (!versionCounts.has(user.version)) {
         versionCounts.set(user.version, new Set());
       }
-      versionCounts.get(user.version)!.add(user.userId);
+      versionCounts.get(user.version)?.add(user.userId);
     }
 
     // 2. 找到用户数 >= GA_THRESHOLD 的最新版本
@@ -189,7 +189,7 @@ export class ClientVersionChecker {
       }
 
       // 4. 使用内存计算逻辑
-      const gaVersion = this.computeGAVersionFromUsers(clientUsers);
+      const gaVersion = ClientVersionChecker.computeGAVersionFromUsers(clientUsers);
 
       if (!gaVersion) {
         logger.debug({ clientType }, "[ClientVersionChecker] 无 GA 版本（暂无用户使用该版本）");
@@ -204,12 +204,12 @@ export class ClientVersionChecker {
           if (!versionCounts.has(user.version)) {
             versionCounts.set(user.version, new Set());
           }
-          versionCounts.get(user.version)!.add(user.userId);
+          versionCounts.get(user.version)?.add(user.userId);
         }
 
         const cacheData = {
           version: gaVersion,
-          userCount: versionCounts.get(gaVersion)!.size,
+          userCount: versionCounts.get(gaVersion)?.size,
           updatedAt: Date.now(),
         };
         await redis.setex(
@@ -243,7 +243,7 @@ export class ClientVersionChecker {
     userVersion: string
   ): Promise<{ needsUpgrade: boolean; gaVersion: string | null }> {
     try {
-      const gaVersion = await this.detectGAVersion(clientType);
+      const gaVersion = await ClientVersionChecker.detectGAVersion(clientType);
       if (!gaVersion) {
         return { needsUpgrade: false, gaVersion: null }; // 无 GA 版本，放行
       }
@@ -316,7 +316,7 @@ export class ClientVersionChecker {
         if (!clientGroups.has(clientInfo.clientType)) {
           clientGroups.set(clientInfo.clientType, []);
         }
-        clientGroups.get(clientInfo.clientType)!.push({ ...user, clientInfo });
+        clientGroups.get(clientInfo.clientType)?.push({ ...user, clientInfo });
       }
 
       // 3. 为每个客户端类型生成统计（使用内存计算，不再查询数据库）
@@ -343,7 +343,7 @@ export class ClientVersionChecker {
           userId: u.userId,
           version: u.clientInfo.version,
         }));
-        const gaVersion = this.computeGAVersionFromUsers(usersWithVersion);
+        const gaVersion = ClientVersionChecker.computeGAVersionFromUsers(usersWithVersion);
 
         const userStats = uniqueUsers.map((user) => ({
           userId: user.userId,

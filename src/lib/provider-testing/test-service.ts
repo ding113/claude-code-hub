@@ -8,6 +8,7 @@
  * 3. Content validation (success_contains)
  */
 
+import { getPreset, getPresetPayload } from "./presets";
 import type {
   ProviderTestConfig,
   ProviderTestResult,
@@ -16,15 +17,14 @@ import type {
   ValidationDetails,
 } from "./types";
 import { TEST_DEFAULTS } from "./types";
-import { classifyHttpStatus } from "./validators/http-validator";
-import { evaluateContentValidation } from "./validators/content-validator";
 import {
+  DEFAULT_SUCCESS_CONTAINS,
   getTestBody,
   getTestHeaders,
   getTestUrl,
-  DEFAULT_SUCCESS_CONTAINS,
 } from "./utils/test-prompts";
-import { getPresetPayload, getPreset } from "./presets";
+import { evaluateContentValidation } from "./validators/content-validator";
+import { classifyHttpStatus } from "./validators/http-validator";
 
 /**
  * Execute a provider test with three-tier validation
@@ -96,7 +96,7 @@ export async function executeProviderTest(config: ProviderTestConfig): Promise<P
       // Read response body
       const responseBody = await response.text();
       const latencyMs = Date.now() - startTime;
-      const contentType = response.headers.get("content-type") || undefined;
+      const _contentType = response.headers.get("content-type") || undefined;
 
       // Tier 1: HTTP Status validation
       const httpResult = classifyHttpStatus(response.status, latencyMs, slowThresholdMs);

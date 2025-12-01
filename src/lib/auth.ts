@@ -1,6 +1,6 @@
+import { cookies } from "next/headers";
 import { config } from "@/lib/config/config";
 import { getEnvConfig } from "@/lib/config/env.schema";
-import { cookies } from "next/headers";
 import { findActiveKeyByKeyString } from "@/repository/key";
 import { findUserById } from "@/repository/user";
 import type { Key } from "@/types/key";

@@ -12,8 +12,8 @@
  * - 可追踪：记录所有临时文件的创建和清理
  */
 
-import { unlink, stat } from "fs/promises";
-import { existsSync } from "fs";
+import { existsSync } from "node:fs";
+import { stat, unlink } from "node:fs/promises";
 import { logger } from "@/lib/logger";
 
 export interface TempFileInfo {

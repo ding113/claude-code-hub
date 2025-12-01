@@ -11,7 +11,7 @@
  *   bun run tests/e2e-error-rules.test.ts
  */
 
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import {
   createErrorRuleAction,
   deleteErrorRuleAction,
@@ -21,7 +21,7 @@ import { isNonRetryableClientError } from "@/app/v1/_lib/proxy/errors";
 import { errorRuleDetector } from "@/lib/error-rule-detector";
 
 // Mock session for Server Actions (requires admin role)
-const mockAdminSession = {
+const _mockAdminSession = {
   user: {
     id: 1,
     name: "Test Admin",
@@ -126,7 +126,7 @@ describe("End-to-End Error Rules Workflow", () => {
 
     // Wait a bit more to ensure cache is fully refreshed
     setTimeout(() => {
-      const result = isNonRetryableClientError(error);
+      const _result = isNonRetryableClientError(error);
 
       // Should NOT match anymore (rule deleted)
       // Note: This might still match if there are other rules with similar patterns

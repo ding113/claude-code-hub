@@ -14,9 +14,9 @@
 
 import { logger } from "@/lib/logger";
 import {
-  loadProviderCircuitConfig,
-  DEFAULT_CIRCUIT_BREAKER_CONFIG,
   type CircuitBreakerConfig,
+  DEFAULT_CIRCUIT_BREAKER_CONFIG,
+  loadProviderCircuitConfig,
 } from "@/lib/redis/circuit-breaker-config";
 
 // 修复：导出 ProviderHealth 类型，供其他模块使用

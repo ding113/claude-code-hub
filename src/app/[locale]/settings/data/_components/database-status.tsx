@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { Database, Table, AlertCircle, RefreshCw } from "lucide-react";
+import { AlertCircle, Database, RefreshCw, Table } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { DatabaseStatus } from "@/types/database-backup";
 
@@ -17,21 +17,21 @@ export function DatabaseStatusDisplay() {
     setError(null);
 
     try {
-      const response = await fetch('/api/admin/database/status', {
-        method: 'GET',
-        credentials: 'include',
+      const response = await fetch("/api/admin/database/status", {
+        method: "GET",
+        credentials: "include",
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || t('error'));
+        throw new Error(errorData.error || t("error"));
       }
 
       const data: DatabaseStatus = await response.json();
       setStatus(data);
     } catch (err) {
-      console.error('Fetch status error:', err);
-      setError(err instanceof Error ? err.message : t('error'));
+      console.error("Fetch status error:", err);
+      setError(err instanceof Error ? err.message : t("error"));
     } finally {
       setIsLoading(false);
     }
@@ -44,7 +44,7 @@ export function DatabaseStatusDisplay() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-8">
-        <div className="text-sm text-muted-foreground">{t('loading')}</div>
+        <div className="text-sm text-muted-foreground">{t("loading")}</div>
       </div>
     );
   }
@@ -57,7 +57,7 @@ export function DatabaseStatusDisplay() {
           <p className="text-sm font-medium text-destructive">{error}</p>
         </div>
         <Button variant="outline" size="sm" onClick={fetchStatus}>
-          {t('retry')}
+          {t("retry")}
         </Button>
       </div>
     );
@@ -76,12 +76,12 @@ export function DatabaseStatusDisplay() {
           {status.isAvailable ? (
             <>
               <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-              <span className="text-sm font-medium">{t('connected')}</span>
+              <span className="text-sm font-medium">{t("connected")}</span>
             </>
           ) : (
             <>
               <div className="h-2 w-2 rounded-full bg-orange-500 animate-pulse" />
-              <span className="text-sm font-medium text-orange-500">{t('unavailable')}</span>
+              <span className="text-sm font-medium text-orange-500">{t("unavailable")}</span>
             </>
           )}
         </div>
@@ -103,18 +103,15 @@ export function DatabaseStatusDisplay() {
             {/* Table count */}
             <div className="flex items-center gap-2">
               <Table className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-semibold">{t('tables', { count: status.tableCount })}</span>
+              <span className="text-sm font-semibold">
+                {t("tables", { count: status.tableCount })}
+              </span>
             </div>
           </>
         )}
 
         {/* Refresh button */}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={fetchStatus}
-          className="ml-auto h-8"
-        >
+        <Button variant="ghost" size="sm" onClick={fetchStatus} className="ml-auto h-8">
           <RefreshCw className="h-3.5 w-3.5" />
         </Button>
       </div>

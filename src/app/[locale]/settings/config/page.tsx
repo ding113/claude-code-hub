@@ -1,9 +1,9 @@
 import { getTranslations } from "next-intl/server";
 import { Section } from "@/components/section";
-import { SettingsPageHeader } from "../_components/settings-page-header";
 import { getSystemSettings } from "@/repository/system-config";
-import { SystemSettingsForm } from "./_components/system-settings-form";
+import { SettingsPageHeader } from "../_components/settings-page-header";
 import { AutoCleanupForm } from "./_components/auto-cleanup-form";
+import { SystemSettingsForm } from "./_components/system-settings-form";
 
 export const dynamic = "force-dynamic";
 

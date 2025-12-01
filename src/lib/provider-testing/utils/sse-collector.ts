@@ -9,7 +9,7 @@
  * - Codex Response API: {"output":[{"content":[{"text":"..."}]}]}
  */
 
-import type { TokenUsage, ParsedResponse } from "../types";
+import type { ParsedResponse, TokenUsage } from "../types";
 
 /**
  * Extract text content from an SSE stream body
@@ -90,7 +90,6 @@ export function extractTextFromSSE(body: string): string {
       }
       if (obj.text && typeof obj.text === "string") {
         texts.push(obj.text);
-        continue;
       }
     } catch {
       // Not valid JSON, use raw payload (could be error message)
@@ -243,7 +242,7 @@ export function isSSEResponse(body: string, contentType?: string): boolean {
  *
  * Key feature: Falls back to raw body if SSE parsing fails
  */
-export function aggregateResponseText(body: string, contentType?: string): string {
+export function aggregateResponseText(body: string, _contentType?: string): string {
   if (!body || !body.trim()) {
     return "";
   }
@@ -251,7 +250,7 @@ export function aggregateResponseText(body: string, contentType?: string): strin
   // Try SSE parsing if it looks like SSE (same heuristic as relay-pulse)
   if (body.includes("event:") && body.includes("data:")) {
     const sseText = extractTextFromSSE(body);
-    if (sseText && sseText.trim()) {
+    if (sseText?.trim()) {
       return sseText;
     }
     // Fall through to other methods if SSE extraction returned empty

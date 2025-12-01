@@ -339,7 +339,7 @@ export function transformOpenAIRequestToCodex(
   logger.debug("[OpenAI→Codex] Request transformation completed", {
     inputCount: output.input.length,
     hasInstructions: !!output.instructions,
-    instructionsPreview: output.instructions ? output.instructions.slice(0, 100) + "..." : "N/A",
+    instructionsPreview: output.instructions ? `${output.instructions.slice(0, 100)}...` : "N/A",
     hasTools: !!output.tools,
     toolsCount: output.tools?.length || 0,
     systemMessagesHandled: !!extractedInstructions && processedFirstMessage,

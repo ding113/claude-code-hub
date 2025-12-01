@@ -10,11 +10,11 @@
  * - EventEmitter 驱动的自动缓存刷新
  */
 
-import { getActiveErrorRules, type ErrorOverrideResponse } from "@/repository/error-rules";
-import { logger } from "@/lib/logger";
-import { eventEmitter } from "@/lib/event-emitter";
-import { isValidErrorOverrideResponse } from "@/lib/error-override-validator";
 import safeRegex from "safe-regex";
+import { isValidErrorOverrideResponse } from "@/lib/error-override-validator";
+import { eventEmitter } from "@/lib/event-emitter";
+import { logger } from "@/lib/logger";
+import { type ErrorOverrideResponse, getActiveErrorRules } from "@/repository/error-rules";
 
 /**
  * 错误检测结果
@@ -148,7 +148,7 @@ class ErrorRuleDetector {
 
       for (const rule of rules) {
         // 在加载阶段验证 overrideResponse 格式，过滤畸形数据
-        let validatedOverrideResponse: ErrorOverrideResponse | undefined = undefined;
+        let validatedOverrideResponse: ErrorOverrideResponse | undefined;
         if (rule.overrideResponse) {
           if (isValidErrorOverrideResponse(rule.overrideResponse)) {
             validatedOverrideResponse = rule.overrideResponse;

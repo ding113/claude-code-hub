@@ -1,11 +1,11 @@
 "use client";
-import { useState, type ComponentProps } from "react";
+import { ListPlus } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { type ComponentProps, useState } from "react";
+import { FormErrorBoundary } from "@/components/form-error-boundary";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
-import { ListPlus } from "lucide-react";
 import { UserForm } from "./forms/user-form";
-import { FormErrorBoundary } from "@/components/form-error-boundary";
-import { useTranslations } from "next-intl";
 
 type ButtonProps = ComponentProps<typeof Button>;
 

@@ -1,10 +1,10 @@
-import { updateMessageRequestDuration, updateMessageRequestDetails } from "@/repository/message";
-import { logger } from "@/lib/logger";
-import { ProxyResponses } from "./responses";
-import { ProxyError, RateLimitError, isRateLimitError, getErrorOverride } from "./errors";
-import type { ProxySession } from "./session";
-import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { isValidErrorOverrideResponse } from "@/lib/error-override-validator";
+import { logger } from "@/lib/logger";
+import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
+import { updateMessageRequestDetails, updateMessageRequestDuration } from "@/repository/message";
+import { getErrorOverride, isRateLimitError, ProxyError, type RateLimitError } from "./errors";
+import { ProxyResponses } from "./responses";
+import type { ProxySession } from "./session";
 
 /** 覆写状态码最小值 */
 const OVERRIDE_STATUS_CODE_MIN = 400;
@@ -24,10 +24,15 @@ export class ProxyErrorHandler {
       rateLimitMetadata = error.toJSON();
 
       // 构建详细的 429 响应
-      const response = this.buildRateLimitResponse(error);
+      const response = ProxyErrorHandler.buildRateLimitResponse(error);
 
       // 记录错误到数据库（包含 rate_limit 元数据）
-      await this.logErrorToDatabase(session, errorMessage, statusCode, rateLimitMetadata);
+      await ProxyErrorHandler.logErrorToDatabase(
+        session,
+        errorMessage,
+        statusCode,
+        rateLimitMetadata
+      );
 
       return response;
     }
@@ -44,14 +49,14 @@ export class ProxyErrorHandler {
 
     // 后备方案：如果状态码仍是 500，尝试从 provider chain 中提取最后一次实际请求的状态码
     if (statusCode === 500) {
-      const lastRequestStatusCode = this.getLastRequestStatusCode(session);
+      const lastRequestStatusCode = ProxyErrorHandler.getLastRequestStatusCode(session);
       if (lastRequestStatusCode && lastRequestStatusCode !== 200) {
         statusCode = lastRequestStatusCode;
       }
     }
 
     // 记录错误到数据库（始终记录原始错误消息）
-    await this.logErrorToDatabase(session, errorMessage, statusCode, null);
+    await ProxyErrorHandler.logErrorToDatabase(session, errorMessage, statusCode, null);
 
     // 检测是否有覆写配置（响应体或状态码）
     if (error instanceof Error) {
@@ -217,7 +222,7 @@ export class ProxyErrorHandler {
       "X-RateLimit-Reset": resetTimestamp.toString(),
       // 额外的自定义头（便于客户端快速识别限流类型）
       "X-RateLimit-Type": error.limitType,
-      "Retry-After": this.calculateRetryAfter(error.resetTime),
+      "Retry-After": ProxyErrorHandler.calculateRetryAfter(error.resetTime),
     });
 
     return new Response(

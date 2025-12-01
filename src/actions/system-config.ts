@@ -1,12 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { logger } from "@/lib/logger";
-import { getSystemSettings, updateSystemSettings } from "@/repository/system-config";
 import { getSession } from "@/lib/auth";
+import { logger } from "@/lib/logger";
 import { UpdateSystemSettingsSchema } from "@/lib/validation/schemas";
-import type { ActionResult } from "./types";
+import { getSystemSettings, updateSystemSettings } from "@/repository/system-config";
 import type { SystemSettings } from "@/types/system-config";
+import type { ActionResult } from "./types";
 
 export async function fetchSystemSettings(): Promise<ActionResult<SystemSettings>> {
   try {

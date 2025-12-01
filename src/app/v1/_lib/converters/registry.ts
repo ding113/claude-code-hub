@@ -6,8 +6,8 @@
  */
 
 import type { Context } from "hono";
-import type { Format, RequestTransform, ResponseTransform, TransformState } from "./types";
 import { logger } from "@/lib/logger";
+import type { Format, RequestTransform, ResponseTransform, TransformState } from "./types";
 
 /**
  * 转换器注册表类
@@ -45,7 +45,7 @@ export class TransformerRegistry {
       if (!this.requests.has(from)) {
         this.requests.set(from, new Map());
       }
-      this.requests.get(from)!.set(to, request);
+      this.requests.get(from)?.set(to, request);
       logger.debug(`[Registry] Registered request transformer: ${from} → ${to}`);
     }
 
@@ -54,7 +54,7 @@ export class TransformerRegistry {
       if (!this.responses.has(from)) {
         this.responses.set(from, new Map());
       }
-      this.responses.get(from)!.set(to, response);
+      this.responses.get(from)?.set(to, response);
       logger.debug(`[Registry] Registered response transformer: ${from} → ${to}`);
     }
   }

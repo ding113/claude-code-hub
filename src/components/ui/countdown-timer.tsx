@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
 import { useLocale } from "next-intl";
+import { useEffect, useMemo, useState } from "react";
 import { formatDateDistance } from "@/lib/utils/date-format";
 
 interface CountdownTimerProps {

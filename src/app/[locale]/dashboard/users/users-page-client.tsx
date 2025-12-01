@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { UserKeyManager } from "../_components/user/user-key-manager";
+import { Search } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -10,9 +11,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search } from "lucide-react";
-import { useTranslations } from "next-intl";
-import type { UserDisplay, User } from "@/types/user";
+import type { User, UserDisplay } from "@/types/user";
+import { UserKeyManager } from "../_components/user/user-key-manager";
 
 interface UsersPageClientProps {
   users: UserDisplay[];

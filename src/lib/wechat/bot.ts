@@ -91,7 +91,7 @@ export class WeChatBot {
         }
 
         // 重试延迟: 1秒 -> 2秒 -> 4秒
-        const delay = Math.pow(2, attempt - 1) * 1000;
+        const delay = 2 ** (attempt - 1) * 1000;
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }

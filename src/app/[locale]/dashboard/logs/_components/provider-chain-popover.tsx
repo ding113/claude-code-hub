@@ -1,12 +1,12 @@
 "use client";
 
+import { InfoIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { InfoIcon } from "lucide-react";
-import type { ProviderChainItem } from "@/types/message";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { formatProviderDescription } from "@/lib/utils/provider-chain-formatter";
+import type { ProviderChainItem } from "@/types/message";
 
 interface ProviderChainPopoverProps {
   chain: ProviderChainItem[];
@@ -18,13 +18,13 @@ interface ProviderChainPopoverProps {
  */
 function isActualRequest(item: ProviderChainItem): boolean {
   // 并发限制失败：算作一次尝试
-  if (item.reason === 'concurrent_limit_failed') return true;
+  if (item.reason === "concurrent_limit_failed") return true;
 
   // 失败记录
-  if (item.reason === 'retry_failed' || item.reason === 'system_error') return true;
+  if (item.reason === "retry_failed" || item.reason === "system_error") return true;
 
   // 成功记录：必须有 statusCode
-  if ((item.reason === 'request_success' || item.reason === 'retry_success') && item.statusCode) {
+  if ((item.reason === "request_success" || item.reason === "retry_success") && item.statusCode) {
     return true;
   }
 
@@ -51,7 +51,8 @@ export function ProviderChainPopover({ chain, finalProvider }: ProviderChainPopo
           <span className="flex items-center gap-1">
             {finalProvider}
             <Badge variant="secondary" className="ml-1">
-              {requestCount}{t("logs.table.times")}
+              {requestCount}
+              {t("logs.table.times")}
             </Badge>
             <InfoIcon className="h-3 w-3 text-muted-foreground" />
           </span>
@@ -62,7 +63,10 @@ export function ProviderChainPopover({ chain, finalProvider }: ProviderChainPopo
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h4 className="font-semibold text-sm">{t("logs.providerChain.decisionChain")}</h4>
-            <Badge variant="outline">{requestCount}{t("logs.table.times")}</Badge>
+            <Badge variant="outline">
+              {requestCount}
+              {t("logs.table.times")}
+            </Badge>
           </div>
 
           <div className="rounded-md border bg-muted/50 p-4 max-h-[300px] overflow-y-auto overflow-x-hidden">

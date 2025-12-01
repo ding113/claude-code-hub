@@ -9,8 +9,8 @@
  * - internal/translator/codex/claude/codex_claude_response.go
  */
 
+import { createHash } from "node:crypto";
 import { logger } from "@/lib/logger";
-import { createHash } from "crypto";
 
 /**
  * Claude 工具名称最大长度限制

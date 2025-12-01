@@ -57,7 +57,6 @@
       "provider": "プロバイダー",
       "model": "モデル",
       "endpoint": "エンドポイント",
-      "endpoint": "エンドポイント",
       "status": "ステータス",
       "timeRange": "時間範囲",
       "startTime": "開始時間",

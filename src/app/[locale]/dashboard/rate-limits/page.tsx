@@ -1,9 +1,9 @@
+import { getTranslations } from "next-intl/server";
+import { Section } from "@/components/section";
 import { redirect } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
-import { Section } from "@/components/section";
 import { getSystemSettings } from "@/repository/system-config";
 import { RateLimitDashboard } from "./_components/rate-limit-dashboard";
-import { getTranslations } from "next-intl/server";
 
 export const dynamic = "force-dynamic";
 

@@ -13,13 +13,13 @@
  * - 计费之前（重要！）
  */
 
-import { sensitiveWordDetector } from "@/lib/sensitive-word-detector";
-import { extractTextFromMessages } from "@/lib/message-extractor";
-import { ProxyResponses } from "./responses";
-import { logger } from "@/lib/logger";
-import type { ProxySession } from "./session";
 import { db } from "@/drizzle/db";
 import { messageRequest } from "@/drizzle/schema";
+import { logger } from "@/lib/logger";
+import { extractTextFromMessages } from "@/lib/message-extractor";
+import { sensitiveWordDetector } from "@/lib/sensitive-word-detector";
+import { ProxyResponses } from "./responses";
+import type { ProxySession } from "./session";
 
 export class ProxySensitiveWordGuard {
   /**
@@ -58,10 +58,10 @@ export class ProxySensitiveWordGuard {
           });
 
           // 记录到数据库（异步，不阻塞响应）
-          void this.logBlockedRequest(session, result);
+          void ProxySensitiveWordGuard.logBlockedRequest(session, result);
 
           // 构造详细的错误信息
-          const errorMessage = this.buildErrorMessage(result);
+          const errorMessage = ProxySensitiveWordGuard.buildErrorMessage(result);
 
           return ProxyResponses.buildError(400, errorMessage);
         }

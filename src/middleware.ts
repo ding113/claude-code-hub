@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import createMiddleware from "next-intl/middleware";
-import { logger } from "@/lib/logger";
-import { isDevelopment } from "@/lib/config/env.schema";
-import { validateKey } from "@/lib/auth";
-import { routing } from "@/i18n/routing";
 import type { Locale } from "@/i18n/config";
+import { routing } from "@/i18n/routing";
+import { validateKey } from "@/lib/auth";
+import { isDevelopment } from "@/lib/config/env.schema";
+import { logger } from "@/lib/logger";
 
 // 使用 Node.js runtime 以支持数据库连接（postgres-js 需要 net 模块）
 export const runtime = "nodejs";
@@ -45,7 +45,7 @@ export async function middleware(request: NextRequest) {
   const isLocaleInPath = routing.locales.includes(potentialLocale as Locale);
 
   // Get the pathname without locale prefix
-  const pathWithoutLocale = isLocaleInPath ? pathname.slice(potentialLocale!.length + 1) : pathname;
+  const pathWithoutLocale = isLocaleInPath ? pathname.slice(potentialLocale?.length + 1) : pathname;
 
   // Check if current path (without locale) is a public path
   const isPublicPath = PUBLIC_PATH_PATTERNS.some(

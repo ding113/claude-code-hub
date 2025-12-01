@@ -1,10 +1,10 @@
 "use client";
 
+import type { LucideIcon } from "lucide-react";
 import * as React from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { type LucideIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 interface MetricCardProps {
   title: string;
@@ -46,7 +46,7 @@ export function MetricCard({
           const progress = Math.min(elapsed / duration, 1);
 
           // 使用 easeOutCubic 缓动函数
-          const easeProgress = 1 - Math.pow(1 - progress, 3);
+          const easeProgress = 1 - (1 - progress) ** 3;
           const currentValue = startValue + diff * easeProgress;
 
           setDisplayValue(currentValue);

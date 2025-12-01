@@ -13,8 +13,8 @@
  * 此文件提供统一的映射函数，避免在多个地方重复映射逻辑。
  */
 
-import type { Format } from "../converters/types";
 import type { ProviderType } from "@/types/provider";
+import type { Format } from "../converters/types";
 
 /**
  * Client Format（路由层检测到的请求格式）
@@ -107,10 +107,11 @@ export function mapClientFormatToTransformer(clientFormat: ClientFormat): Format
       return "gemini-cli"; // 直接 Gemini 格式内部使用 gemini-cli 转换器
     case "gemini-cli":
       return "gemini-cli";
-    default:
+    default: {
       // 类型守卫：如果有未处理的格式，TypeScript 会报错
       const _exhaustiveCheck: never = clientFormat;
       throw new Error(`Unknown client format: ${_exhaustiveCheck}`);
+    }
   }
 }
 
@@ -147,10 +148,11 @@ export function mapTransformerFormatToClient(transformerFormat: Format): ClientF
       return "claude";
     case "gemini-cli":
       return "gemini"; // 返回直接 Gemini 格式给客户端
-    default:
+    default: {
       // 类型守卫：如果有未处理的格式，TypeScript 会报错
       const _exhaustiveCheck: never = transformerFormat;
       throw new Error(`Unknown transformer format: ${_exhaustiveCheck}`);
+    }
   }
 }
 

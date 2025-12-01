@@ -1,6 +1,6 @@
+import type { Numeric } from "decimal.js-light";
 import Decimal from "decimal.js-light";
 import { logger } from "@/lib/logger";
-import type { Numeric } from "decimal.js-light";
 
 Decimal.set({
   precision: 30,

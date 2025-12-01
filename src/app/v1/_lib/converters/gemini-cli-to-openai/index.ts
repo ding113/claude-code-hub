@@ -11,8 +11,8 @@
 import { registerTransformer } from "../registry";
 import { transformGeminiCLIRequestToOpenAI } from "./request";
 import {
-  transformOpenAIStreamResponseToGeminiCLI,
   transformOpenAINonStreamResponseToGeminiCLI,
+  transformOpenAIStreamResponseToGeminiCLI,
 } from "./response";
 
 // 注册 Gemini CLI → OpenAI Compatible 转换器

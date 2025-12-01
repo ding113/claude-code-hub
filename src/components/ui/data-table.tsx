@@ -1,9 +1,16 @@
-'use client';
+"use client";
 
-import { ReactNode } from 'react';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
+import type { ReactNode } from "react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 
 /**
  * 表格列定义
@@ -12,7 +19,7 @@ export interface TableColumn<T = any> {
   key: string;
   title: string;
   width?: string;
-  align?: 'left' | 'center' | 'right';
+  align?: "left" | "center" | "right";
   sortable?: boolean;
   render?: (value: any, record: T, index: number) => ReactNode;
   className?: string;
@@ -57,7 +64,7 @@ export function DataTable<T extends TableData>({
   onRowClick,
   rowClassName,
   maxHeight,
-  stickyHeader = false
+  stickyHeader = false,
 }: DataTableProps<T>) {
   const t = useTranslations("ui");
   const renderCell = (column: TableColumn<T>, record: T, index: number) => {
@@ -93,13 +100,9 @@ export function DataTable<T extends TableData>({
         <div className="text-center">
           {emptyState ? (
             <>
-              <h3 className="text-sm font-medium text-muted-foreground mb-2">
-                {emptyState.title}
-              </h3>
+              <h3 className="text-sm font-medium text-muted-foreground mb-2">{emptyState.title}</h3>
               {emptyState.description && (
-                <p className="text-xs text-muted-foreground mb-3">
-                  {emptyState.description}
-                </p>
+                <p className="text-xs text-muted-foreground mb-3">{emptyState.description}</p>
               )}
               {emptyState.action}
             </>
@@ -112,11 +115,8 @@ export function DataTable<T extends TableData>({
   }
 
   return (
-    <div 
-      className={cn(
-        "relative",
-        maxHeight && "overflow-y-auto"
-      )}
+    <div
+      className={cn("relative", maxHeight && "overflow-y-auto")}
       style={maxHeight ? { maxHeight } : undefined}
     >
       <Table>
@@ -127,8 +127,8 @@ export function DataTable<T extends TableData>({
                 key={column.key}
                 className={cn(
                   "whitespace-nowrap",
-                  column.align === 'center' && "text-center",
-                  column.align === 'right' && "text-right",
+                  column.align === "center" && "text-center",
+                  column.align === "right" && "text-right",
                   column.className
                 )}
                 style={column.width ? { width: column.width } : undefined}
@@ -152,8 +152,8 @@ export function DataTable<T extends TableData>({
                 <TableCell
                   key={column.key}
                   className={cn(
-                    column.align === 'center' && "text-center",
-                    column.align === 'right' && "text-right",
+                    column.align === "center" && "text-center",
+                    column.align === "right" && "text-right",
                     column.className
                   )}
                 >
@@ -178,21 +178,14 @@ export interface TableContainerProps {
   actions?: ReactNode;
 }
 
-export function TableContainer({
-  children,
-  title,
-  description,
-  actions
-}: TableContainerProps) {
+export function TableContainer({ children, title, description, actions }: TableContainerProps) {
   return (
     <div className="space-y-4">
       {(title || actions) && (
         <div className="flex items-center justify-between">
           <div>
             {title && <h2 className="text-lg font-semibold">{title}</h2>}
-            {description && (
-              <p className="text-sm text-muted-foreground mt-1">{description}</p>
-            )}
+            {description && <p className="text-sm text-muted-foreground mt-1">{description}</p>}
           </div>
           {actions && <div>{actions}</div>}
         </div>
@@ -210,52 +203,52 @@ export const TableColumnTypes = {
    * 文本列
    */
   text: <T extends TableData>(
-    key: string, 
-    title: string, 
+    key: string,
+    title: string,
     options?: Partial<TableColumn<T>>
   ): TableColumn<T> => ({
     key,
     title,
-    ...options
+    ...options,
   }),
 
   /**
    * 数字列
    */
   number: <T extends TableData>(
-    key: string, 
-    title: string, 
+    key: string,
+    title: string,
     options?: Partial<TableColumn<T>>
   ): TableColumn<T> => ({
     key,
     title,
-    align: 'right',
-    ...options
+    align: "right",
+    ...options,
   }),
 
   /**
    * 日期列
    */
   date: <T extends TableData>(
-    key: string, 
-    title: string, 
+    key: string,
+    title: string,
     options?: Partial<TableColumn<T>>
   ): TableColumn<T> => ({
     key,
     title,
     render: (value) => {
-      if (!value) return '-';
+      if (!value) return "-";
       return new Date(value).toLocaleDateString();
     },
-    ...options
+    ...options,
   }),
 
   /**
    * 状态列
    */
   status: <T extends TableData>(
-    key: string, 
-    title: string, 
+    key: string,
+    title: string,
     statusMap?: Record<string, { text: string; className?: string }>,
     options?: Partial<TableColumn<T>>
   ): TableColumn<T> => ({
@@ -270,21 +263,21 @@ export const TableColumnTypes = {
         </span>
       );
     },
-    ...options
+    ...options,
   }),
 
   /**
    * 操作列
    */
   actions: <T extends TableData>(
-    title: string = '操作',
+    title: string = "操作",
     render: (value: any, record: T, index: number) => ReactNode,
     options?: Partial<TableColumn<T>>
   ): TableColumn<T> => ({
-    key: 'actions',
+    key: "actions",
     title,
-    width: 'auto',
+    width: "auto",
     render,
-    ...options
-  })
+    ...options,
+  }),
 };

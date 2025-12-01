@@ -7,7 +7,7 @@
  * - 监听器的自动注册和卸载
  */
 
-import { EventEmitter as NodeEventEmitter } from "events";
+import { EventEmitter as NodeEventEmitter } from "node:events";
 
 /**
  * 事件映射类型定义
