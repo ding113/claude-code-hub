@@ -355,7 +355,12 @@ export async function getDistinctProviderGroups(): Promise<string[]> {
   const result = await db
     .selectDistinct({ groupTag: providers.groupTag })
     .from(providers)
-    .where(and(isNull(providers.deletedAt), sql`${providers.groupTag} IS NOT NULL AND ${providers.groupTag} != ''`))
+    .where(
+      and(
+        isNull(providers.deletedAt),
+        sql`${providers.groupTag} IS NOT NULL AND ${providers.groupTag} != ''`
+      )
+    )
     .orderBy(providers.groupTag);
 
   return result.map((r) => r.groupTag).filter((tag): tag is string => tag !== null);

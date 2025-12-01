@@ -91,5 +91,14 @@ export function useZodForm<T extends z.ZodSchema>({
 
   const canSubmit = Object.keys(values).length > 0 && !isSubmitting;
 
-  return { values, errors, isSubmitting, canSubmit, setValue, handleSubmit, getFieldProps, getArrayFieldProps };
+  return {
+    values,
+    errors,
+    isSubmitting,
+    canSubmit,
+    setValue,
+    handleSubmit,
+    getFieldProps,
+    getArrayFieldProps,
+  };
 }

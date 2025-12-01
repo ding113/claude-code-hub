@@ -50,9 +50,7 @@ export function TagInput({
     if (!suggestions.length) return [];
     const search = inputValue.toLowerCase();
     return suggestions.filter(
-      (s) =>
-        s.toLowerCase().includes(search) &&
-        (allowDuplicates || !value.includes(s))
+      (s) => s.toLowerCase().includes(search) && (allowDuplicates || !value.includes(s))
     );
   }, [suggestions, inputValue, value, allowDuplicates]);
 
@@ -117,16 +115,12 @@ export function TagInput({
       if (showSuggestions && filteredSuggestions.length > 0) {
         if (e.key === "ArrowDown") {
           e.preventDefault();
-          setHighlightedIndex((prev) =>
-            prev < filteredSuggestions.length - 1 ? prev + 1 : 0
-          );
+          setHighlightedIndex((prev) => (prev < filteredSuggestions.length - 1 ? prev + 1 : 0));
           return;
         }
         if (e.key === "ArrowUp") {
           e.preventDefault();
-          setHighlightedIndex((prev) =>
-            prev > 0 ? prev - 1 : filteredSuggestions.length - 1
-          );
+          setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : filteredSuggestions.length - 1));
           return;
         }
         if (e.key === "Enter" && highlightedIndex >= 0) {
@@ -194,19 +188,22 @@ export function TagInput({
   );
 
   // Commit pending input value on blur (e.g., when clicking save button)
-  const handleBlur = React.useCallback((e: React.FocusEvent<HTMLInputElement>) => {
-    // 延迟关闭，允许点击建议项
-    setTimeout(() => {
-      // 检查焦点是否还在容器内
-      if (!containerRef.current?.contains(document.activeElement)) {
-        if (inputValue.trim()) {
-          addTag(inputValue);
+  const handleBlur = React.useCallback(
+    (e: React.FocusEvent<HTMLInputElement>) => {
+      // 延迟关闭，允许点击建议项
+      setTimeout(() => {
+        // 检查焦点是否还在容器内
+        if (!containerRef.current?.contains(document.activeElement)) {
+          if (inputValue.trim()) {
+            addTag(inputValue);
+          }
+          setShowSuggestions(false);
+          setHighlightedIndex(-1);
         }
-        setShowSuggestions(false);
-        setHighlightedIndex(-1);
-      }
-    }, 150);
-  }, [inputValue, addTag]);
+      }, 150);
+    },
+    [inputValue, addTag]
+  );
 
   const handleFocus = React.useCallback(() => {
     if (suggestions.length > 0) {

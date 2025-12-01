@@ -53,7 +53,9 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
   useEffect(() => {
     const urlScopeParam = searchParams.get("scope") as LeaderboardScope | null;
     const normalizedScope: LeaderboardScope =
-      (urlScopeParam === "provider" || urlScopeParam === "model") && isAdmin ? urlScopeParam : "user";
+      (urlScopeParam === "provider" || urlScopeParam === "model") && isAdmin
+        ? urlScopeParam
+        : "user";
 
     if (normalizedScope !== scope) {
       setScope(normalizedScope);
