@@ -45,7 +45,10 @@ export async function middleware(request: NextRequest) {
   const isLocaleInPath = routing.locales.includes(potentialLocale as Locale);
 
   // Get the pathname without locale prefix
-  const pathWithoutLocale = isLocaleInPath ? pathname.slice(potentialLocale?.length + 1) : pathname;
+  // When isLocaleInPath is true, potentialLocale is guaranteed to be defined
+  const pathWithoutLocale = isLocaleInPath
+    ? pathname.slice((potentialLocale?.length ?? 0) + 1)
+    : pathname;
 
   // Check if current path (without locale) is a public path
   const isPublicPath = PUBLIC_PATH_PATTERNS.some(
