@@ -269,6 +269,8 @@ export function UserStatisticsChart({
         return t("timeRange.7daysDescription");
       case "30days":
         return t("timeRange.30daysDescription");
+      case "thisMonth":
+        return t("timeRange.thisMonthDescription");
       default:
         return t("timeRange.default");
     }
