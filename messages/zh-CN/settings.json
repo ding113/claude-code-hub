@@ -395,6 +395,28 @@
         "openai": "OpenAI",
         "gemini": "Gemini"
       },
+      "fetchModels": {
+        "fetchModels": "获取模型",
+        "fetching": "获取中...",
+        "fetchSuccess": "获取成功",
+        "fetchFailed": "获取失败",
+        "fetchedCount": "已获取 {count} 个",
+        "modelsFound": "找到 {count} 个可用模型",
+        "noModelsFound": "未找到可用模型",
+        "fillUrlFirst": "请先填写供应商 URL",
+        "invalidUrl": "供应商 URL 无效，仅支持 http/https",
+        "fillKeyFirst": "请先填写 API 密钥",
+        "errors": {
+          "noPermission": "当前账号无权限获取模型列表",
+          "invalidUrl": "供应商 URL 无效{reason}",
+          "invalidProxy": "代理地址格式无效，仅支持 http://、https://、socks5://、socks4://",
+          "httpError": "获取模型失败：HTTP {status}{detail}",
+          "empty": "供应商没有返回任何模型",
+          "timeout": "请求超时，请检查网络连接或供应商地址",
+          "jsonCredsNotSupported": "暂不支持使用 Gemini JSON 凭证获取模型，请使用 API Key",
+          "unknown": "获取模型失败，请稍后再试"
+        }
+      },
       "modelRedirect": {
         "currentRules": "当前规则 ({count})",
         "addNewRule": "添加新规则",
