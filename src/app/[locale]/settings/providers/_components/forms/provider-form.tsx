@@ -804,7 +804,12 @@ export function ProviderForm({
                       value={costMultiplier}
                       onChange={(e) => {
                         const value = e.target.value;
-                        setCostMultiplier(value === "" ? 1.0 : parseFloat(value));
+                        if (value === "") {
+                          setCostMultiplier(1.0);
+                          return;
+                        }
+                        const num = parseFloat(value);
+                        setCostMultiplier(Number.isNaN(num) ? 1.0 : num);
                       }}
                       onFocus={(e) => e.target.select()}
                       placeholder={t("sections.routing.scheduleParams.costMultiplier.placeholder")}
