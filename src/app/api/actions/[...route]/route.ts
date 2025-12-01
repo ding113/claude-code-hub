@@ -376,8 +376,7 @@ const { route: getUserStatisticsRoute, handler: getUserStatisticsHandler } = cre
   statisticsActions.getUserStatistics,
   {
     requestSchema: z.object({
-      timeRange: z.enum(["hour", "day", "week", "month"]),
-      userId: z.number().int().positive().optional(),
+      timeRange: z.enum(["today", "7days", "30days", "thisMonth"]),
     }),
     description: "获取用户统计数据",
     summary: "根据时间范围获取使用统计 (管理员看所有,用户看自己)",

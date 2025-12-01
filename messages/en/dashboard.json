@@ -198,10 +198,16 @@
       "userRanking": "User Rankings",
       "providerRanking": "Provider Rankings",
       "modelRanking": "Model Rankings",
-      "dailyRanking": "Daily Rankings",
-      "weeklyRanking": "Weekly Rankings",
-      "monthlyRanking": "Monthly Rankings",
+      "dailyRanking": "Today",
+      "weeklyRanking": "This Week",
+      "monthlyRanking": "This Month",
       "allTimeRanking": "All Time"
+    },
+    "dateRange": {
+      "to": "to",
+      "prevPeriod": "Previous period",
+      "nextPeriod": "Next period",
+      "customRange": "Custom date range"
     },
     "columns": {
       "rank": "Rank",

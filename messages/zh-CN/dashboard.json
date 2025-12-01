@@ -198,10 +198,16 @@
       "userRanking": "用户排行",
       "providerRanking": "供应商排行",
       "modelRanking": "模型排行",
-      "dailyRanking": "今日排行",
-      "weeklyRanking": "本周排行",
-      "monthlyRanking": "本月排行",
-      "allTimeRanking": "全部时间"
+      "dailyRanking": "今日",
+      "weeklyRanking": "本周",
+      "monthlyRanking": "本月",
+      "allTimeRanking": "全部"
+    },
+    "dateRange": {
+      "to": "至",
+      "prevPeriod": "上一周期",
+      "nextPeriod": "下一周期",
+      "customRange": "自定义日期范围"
     },
     "columns": {
       "rank": "排名",

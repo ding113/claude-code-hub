@@ -97,7 +97,7 @@ const STATUS_ICONS: Record<TestStatus, React.ReactNode> = {
  * Test result card component with three-tier validation display
  * Shows status, latency, HTTP code, and content validation details
  */
-export function TestResultCard({ result, onClose }: TestResultCardProps) {
+export function TestResultCard({ result, onClose: _onClose }: TestResultCardProps) {
   const t = useTranslations("settings.providers.form.apiTest");
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
 

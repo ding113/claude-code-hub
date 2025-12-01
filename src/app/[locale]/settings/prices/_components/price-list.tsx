@@ -2,7 +2,7 @@
 
 import { ChevronLeft, ChevronRight, DollarSign, Package, Search } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -67,7 +67,7 @@ export function PriceList({
   }, []); // 空依赖数组，仅在挂载时执行一次
 
   // 更新 URL 搜索参数
-  const updateURL = (newSearchTerm: string, newPage: number, newPageSize: number) => {
+  const updateURL = useCallback((newSearchTerm: string, newPage: number, newPageSize: number) => {
     const url = new URL(window.location.href);
     if (newSearchTerm) {
       url.searchParams.set("search", newSearchTerm);
@@ -85,29 +85,32 @@ export function PriceList({
       url.searchParams.delete("size");
     }
     window.history.replaceState({}, "", url.toString());
-  };
+  }, []);
 
   // 获取价格数据
-  const fetchPrices = async (newPage: number, newPageSize: number, newSearchTerm: string) => {
-    setIsLoading(true);
-    try {
-      const response = await fetch(
-        `/api/prices?page=${newPage}&pageSize=${newPageSize}&search=${encodeURIComponent(newSearchTerm)}`
-      );
-      const result = await response.json();
+  const fetchPrices = useCallback(
+    async (newPage: number, newPageSize: number, newSearchTerm: string) => {
+      setIsLoading(true);
+      try {
+        const response = await fetch(
+          `/api/prices?page=${newPage}&pageSize=${newPageSize}&search=${encodeURIComponent(newSearchTerm)}`
+        );
+        const result = await response.json();
 
-      if (result.ok) {
-        setPrices(result.data.data);
-        setTotal(result.data.total);
-        setPage(result.data.page);
-        setPageSize(result.data.pageSize);
+        if (result.ok) {
+          setPrices(result.data.data);
+          setTotal(result.data.total);
+          setPage(result.data.page);
+          setPageSize(result.data.pageSize);
+        }
+      } catch (error) {
+        console.error("获取价格数据失败:", error);
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error) {
-      console.error("获取价格数据失败:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    },
+    []
+  );
 
   // 当防抖后的搜索词变化时，触发搜索（重置到第一页）
   useEffect(() => {

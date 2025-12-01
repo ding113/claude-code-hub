@@ -279,7 +279,7 @@ describe("Match Type Priority", () => {
       { message: "blocked by our content filter", expectedType: "regex" },
     ];
 
-    for (const { message, expectedType } of testCases) {
+    for (const { message, expectedType: _expectedType } of testCases) {
       const result = errorRuleDetector.detect(message);
       expect(result.matched).toBe(true);
       expect(result.matchType).toBeTruthy();

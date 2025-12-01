@@ -197,10 +197,16 @@
       "userRanking": "ユーザーランキング",
       "providerRanking": "プロバイダーランキング",
       "modelRanking": "モデルランキング",
-      "dailyRanking": "今日のランキング",
-      "weeklyRanking": "今週のランキング",
-      "monthlyRanking": "今月のランキング",
+      "dailyRanking": "今日",
+      "weeklyRanking": "今週",
+      "monthlyRanking": "今月",
       "allTimeRanking": "全期間"
+    },
+    "dateRange": {
+      "to": "～",
+      "prevPeriod": "前の期間",
+      "nextPeriod": "次の期間",
+      "customRange": "カスタム日付範囲"
     },
     "columns": {
       "rank": "ランク",
@@ -503,6 +509,7 @@
     "error": "取得に失敗しました",
     "networkError": "ネットワークエラー",
     "cost5h": "5時間消費",
+    "costDaily": "日次消費",
     "costWeekly": "週間消費",
     "costMonthly": "月間消費",
     "concurrentSessions": "同時セッション数",

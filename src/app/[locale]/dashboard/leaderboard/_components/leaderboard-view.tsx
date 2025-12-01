@@ -2,16 +2,18 @@
 
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatTokenAmount } from "@/lib/utils";
 import type {
+  DateRangeParams,
   LeaderboardEntry,
   LeaderboardPeriod,
   ModelLeaderboardEntry,
   ProviderLeaderboardEntry,
 } from "@/repository/leaderboard";
+import { DateRangePicker } from "./date-range-picker";
 import { type ColumnDef, LeaderboardTable } from "./leaderboard-table";
 
 interface LeaderboardViewProps {
@@ -23,9 +25,8 @@ type UserEntry = LeaderboardEntry & { totalCostFormatted?: string };
 type ProviderEntry = ProviderLeaderboardEntry & { totalCostFormatted?: string };
 type ModelEntry = ModelLeaderboardEntry & { totalCostFormatted?: string };
 type AnyEntry = UserEntry | ProviderEntry | ModelEntry;
-type PeriodData = Record<LeaderboardPeriod, AnyEntry[]>;
 
-const VALID_PERIODS: LeaderboardPeriod[] = ["daily", "weekly", "monthly", "allTime"];
+const VALID_PERIODS: LeaderboardPeriod[] = ["daily", "weekly", "monthly", "allTime", "custom"];
 
 export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
   const t = useTranslations("dashboard.leaderboard");
@@ -40,16 +41,13 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
 
   const [scope, setScope] = useState<LeaderboardScope>(initialScope);
   const [period, setPeriod] = useState<LeaderboardPeriod>(initialPeriod);
-  const [periodData, setPeriodData] = useState<PeriodData>({
-    daily: [],
-    weekly: [],
-    monthly: [],
-    allTime: [],
-  });
+  const [dateRange, setDateRange] = useState<DateRangeParams | undefined>(undefined);
+  const [data, setData] = useState<AnyEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // 与 URL 查询参数保持同步，支持外部携带 scope/period 直达特定榜单
+  // biome-ignore lint/correctness/useExhaustiveDependencies: period 和 scope 仅用于比较，不应触发 effect 重新执行
   useEffect(() => {
     const urlScopeParam = searchParams.get("scope") as LeaderboardScope | null;
     const normalizedScope: LeaderboardScope =
@@ -68,35 +66,28 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     if (normalizedPeriod !== period) {
       setPeriod(normalizedPeriod);
     }
-    // 移除 scope 和 period 从依赖数组，避免无限循环
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdmin, searchParams, period, scope]);
+  }, [isAdmin, searchParams]);
 
+  // Fetch data when period, scope, or dateRange changes
   useEffect(() => {
     let cancelled = false;
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [dailyRes, weeklyRes, monthlyRes, allTimeRes] = await Promise.all([
-          fetch(`/api/leaderboard?period=daily&scope=${scope}`),
-          fetch(`/api/leaderboard?period=weekly&scope=${scope}`),
-          fetch(`/api/leaderboard?period=monthly&scope=${scope}`),
-          fetch(`/api/leaderboard?period=allTime&scope=${scope}`),
-        ]);
+        let url = `/api/leaderboard?period=${period}&scope=${scope}`;
+        if (period === "custom" && dateRange) {
+          url += `&startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`;
+        }
+        const res = await fetch(url);
 
-        if (!dailyRes.ok || !weeklyRes.ok || !monthlyRes.ok || !allTimeRes.ok) {
+        if (!res.ok) {
           throw new Error(t("states.fetchFailed"));
         }
 
-        const [daily, weekly, monthly, allTime] = await Promise.all([
-          dailyRes.json(),
-          weeklyRes.json(),
-          monthlyRes.json(),
-          allTimeRes.json(),
-        ]);
+        const result = await res.json();
 
         if (!cancelled) {
-          setPeriodData({ daily, weekly, monthly, allTime });
+          setData(result);
           setError(null);
         }
       } catch (err) {
@@ -111,7 +102,15 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     return () => {
       cancelled = true;
     };
-  }, [scope, t]);
+  }, [scope, period, dateRange, t]);
+
+  const handlePeriodChange = useCallback(
+    (newPeriod: LeaderboardPeriod, newDateRange?: DateRangeParams) => {
+      setPeriod(newPeriod);
+      setDateRange(newDateRange);
+    },
+    []
+  );
 
   if (loading) {
     return (
@@ -257,12 +256,10 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     }
   };
 
-  const displayData = periodData[period];
-
   return (
     <div className="w-full">
-      {/* 单行双 toggle：scope + period */}
-      <div className="flex flex-wrap gap-4 items-center">
+      {/* Scope toggle */}
+      <div className="flex flex-wrap gap-4 items-center mb-4">
         <Tabs value={scope} onValueChange={(v) => setScope(v as LeaderboardScope)}>
           <TabsList className={isAdmin ? "grid grid-cols-3" : ""}>
             <TabsTrigger value="user">{t("tabs.userRanking")}</TabsTrigger>
@@ -270,20 +267,20 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
             {isAdmin && <TabsTrigger value="model">{t("tabs.modelRanking")}</TabsTrigger>}
           </TabsList>
         </Tabs>
+      </div>
 
-        <Tabs value={period} onValueChange={(v) => setPeriod(v as LeaderboardPeriod)}>
-          <TabsList className="grid grid-cols-4">
-            <TabsTrigger value="daily">{t("tabs.dailyRanking")}</TabsTrigger>
-            <TabsTrigger value="weekly">{t("tabs.weeklyRanking")}</TabsTrigger>
-            <TabsTrigger value="monthly">{t("tabs.monthlyRanking")}</TabsTrigger>
-            <TabsTrigger value="allTime">{t("tabs.allTimeRanking")}</TabsTrigger>
-          </TabsList>
-        </Tabs>
+      {/* Date range picker with quick period buttons */}
+      <div className="mb-6">
+        <DateRangePicker
+          period={period}
+          dateRange={dateRange}
+          onPeriodChange={handlePeriodChange}
+        />
       </div>
 
       {/* 数据表格 */}
-      <div className="mt-6">
-        <LeaderboardTable data={displayData} period={period} columns={columns} getRowKey={rowKey} />
+      <div>
+        <LeaderboardTable data={data} period={period} columns={columns} getRowKey={rowKey} />
       </div>
     </div>
   );

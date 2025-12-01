@@ -2,9 +2,13 @@ import { formatInTimeZone } from "date-fns-tz";
 import { getEnvConfig } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import {
+  type DateRangeParams,
   findAllTimeLeaderboard,
   findAllTimeModelLeaderboard,
   findAllTimeProviderLeaderboard,
+  findCustomRangeLeaderboard,
+  findCustomRangeModelLeaderboard,
+  findCustomRangeProviderLeaderboard,
   findDailyLeaderboard,
   findDailyModelLeaderboard,
   findDailyProviderLeaderboard,
@@ -21,7 +25,7 @@ import {
 } from "@/repository/leaderboard";
 import { getRedisClient } from "./client";
 
-export type { LeaderboardPeriod };
+export type { LeaderboardPeriod, DateRangeParams };
 export type LeaderboardScope = "user" | "provider" | "model";
 
 type LeaderboardData = LeaderboardEntry[] | ProviderLeaderboardEntry[] | ModelLeaderboardEntry[];
@@ -32,12 +36,16 @@ type LeaderboardData = LeaderboardEntry[] | ProviderLeaderboardEntry[] | ModelLe
 function buildCacheKey(
   period: LeaderboardPeriod,
   currencyDisplay: string,
-  scope: LeaderboardScope = "user"
+  scope: LeaderboardScope = "user",
+  dateRange?: DateRangeParams
 ): string {
   const now = new Date();
   const tz = getEnvConfig().TZ; // ensure date formatting aligns with configured timezone
 
-  if (period === "daily") {
+  if (period === "custom" && dateRange) {
+    // leaderboard:{scope}:custom:2025-01-01_2025-01-15:USD
+    return `leaderboard:${scope}:custom:${dateRange.startDate}_${dateRange.endDate}:${currencyDisplay}`;
+  } else if (period === "daily") {
     // leaderboard:{scope}:daily:2025-01-15:USD
     const dateStr = formatInTimeZone(now, tz, "yyyy-MM-dd");
     return `leaderboard:${scope}:daily:${dateStr}:${currencyDisplay}`;
@@ -60,8 +68,20 @@ function buildCacheKey(
  */
 async function queryDatabase(
   period: LeaderboardPeriod,
-  scope: LeaderboardScope
+  scope: LeaderboardScope,
+  dateRange?: DateRangeParams
 ): Promise<LeaderboardData> {
+  // 处理自定义日期范围
+  if (period === "custom" && dateRange) {
+    if (scope === "user") {
+      return await findCustomRangeLeaderboard(dateRange);
+    }
+    if (scope === "provider") {
+      return await findCustomRangeProviderLeaderboard(dateRange);
+    }
+    return await findCustomRangeModelLeaderboard(dateRange);
+  }
+
   if (scope === "user") {
     switch (period) {
       case "daily":
@@ -72,6 +92,8 @@ async function queryDatabase(
         return await findMonthlyLeaderboard();
       case "allTime":
         return await findAllTimeLeaderboard();
+      default:
+        return await findDailyLeaderboard();
     }
   }
   if (scope === "provider") {
@@ -84,6 +106,8 @@ async function queryDatabase(
         return await findMonthlyProviderLeaderboard();
       case "allTime":
         return await findAllTimeProviderLeaderboard();
+      default:
+        return await findDailyProviderLeaderboard();
     }
   }
   // model scope
@@ -96,6 +120,8 @@ async function queryDatabase(
       return await findMonthlyModelLeaderboard();
     case "allTime":
       return await findAllTimeModelLeaderboard();
+    default:
+      return await findDailyModelLeaderboard();
   }
 }
 
@@ -115,14 +141,17 @@ function sleep(ms: number): Promise<void> {
  * 3. 未获得锁的请求等待并重试（最多 5 秒）
  * 4. Redis 不可用时降级到直接查询
  *
- * @param period - 排行榜周期（daily / monthly）
+ * @param period - 排行榜周期（daily / weekly / monthly / allTime / custom）
  * @param currencyDisplay - 货币显示单位（影响缓存键）
+ * @param scope - 排行榜维度（user / provider / model）
+ * @param dateRange - 自定义日期范围（仅当 period 为 custom 时需要）
  * @returns 排行榜数据
  */
 export async function getLeaderboardWithCache(
   period: LeaderboardPeriod,
   currencyDisplay: string,
-  scope: LeaderboardScope = "user"
+  scope: LeaderboardScope = "user",
+  dateRange?: DateRangeParams
 ): Promise<LeaderboardData> {
   const redis = getRedisClient();
 
@@ -131,11 +160,12 @@ export async function getLeaderboardWithCache(
     logger.warn("[LeaderboardCache] Redis not available, fallback to direct query", {
       period,
       scope,
+      dateRange,
     });
-    return await queryDatabase(period, scope);
+    return await queryDatabase(period, scope, dateRange);
   }
 
-  const cacheKey = buildCacheKey(period, currencyDisplay, scope);
+  const cacheKey = buildCacheKey(period, currencyDisplay, scope, dateRange);
   const lockKey = `${cacheKey}:lock`;
 
   try {
@@ -153,7 +183,7 @@ export async function getLeaderboardWithCache(
       // 获得锁，查询数据库
       logger.debug("[LeaderboardCache] Acquired lock, computing", { period, scope, lockKey });
 
-      const data = await queryDatabase(period, scope);
+      const data = await queryDatabase(period, scope, dateRange);
 
       // 写入缓存（60 秒 TTL）
       await redis.setex(cacheKey, 60, JSON.stringify(data));
@@ -164,6 +194,7 @@ export async function getLeaderboardWithCache(
       logger.info("[LeaderboardCache] Cache updated", {
         period,
         scope,
+        dateRange,
         recordCount: data.length,
         cacheKey,
         ttl: 60,
@@ -189,7 +220,7 @@ export async function getLeaderboardWithCache(
 
       // 超时降级：直接查数据库
       logger.warn("[LeaderboardCache] Retry timeout, fallback to direct query", { period, scope });
-      return await queryDatabase(period, scope);
+      return await queryDatabase(period, scope, dateRange);
     }
   } catch (error) {
     // Redis 异常，降级到直接查询
@@ -198,7 +229,7 @@ export async function getLeaderboardWithCache(
       scope,
       error,
     });
-    return await queryDatabase(period, scope);
+    return await queryDatabase(period, scope, dateRange);
   }
 }
 

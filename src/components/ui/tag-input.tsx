@@ -189,7 +189,7 @@ export function TagInput({
 
   // Commit pending input value on blur (e.g., when clicking save button)
   const handleBlur = React.useCallback(
-    (e: React.FocusEvent<HTMLInputElement>) => {
+    (_e: React.FocusEvent<HTMLInputElement>) => {
       // 延迟关闭，允许点击建议项
       setTimeout(() => {
         // 检查焦点是否还在容器内

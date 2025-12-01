@@ -197,10 +197,16 @@
       "userRanking": "Рейтинг пользователей",
       "providerRanking": "Рейтинг поставщиков",
       "modelRanking": "Рейтинг моделей",
-      "dailyRanking": "Сегодняшний рейтинг",
-      "weeklyRanking": "Еженедельный рейтинг",
-      "monthlyRanking": "Ежемесячный рейтинг",
+      "dailyRanking": "Сегодня",
+      "weeklyRanking": "Эта неделя",
+      "monthlyRanking": "Этот месяц",
       "allTimeRanking": "Всё время"
+    },
+    "dateRange": {
+      "to": "по",
+      "prevPeriod": "Предыдущий период",
+      "nextPeriod": "Следующий период",
+      "customRange": "Произвольный диапазон"
     },
     "columns": {
       "rank": "Ранг",
@@ -503,6 +509,7 @@
     "error": "Ошибка загрузки",
     "networkError": "Сетевая ошибка",
     "cost5h": "Расход за 5 часов",
+    "costDaily": "Дневной расход",
     "costWeekly": "Недельный расход",
     "costMonthly": "Месячный расход",
     "concurrentSessions": "Параллельные сеансы",

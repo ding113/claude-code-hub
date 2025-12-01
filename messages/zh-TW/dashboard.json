@@ -198,10 +198,16 @@
       "userRanking": "使用者排名",
       "providerRanking": "供應商排名",
       "modelRanking": "模型排名",
-      "dailyRanking": "今日排名",
-      "weeklyRanking": "本週排名",
-      "monthlyRanking": "本月排名",
-      "allTimeRanking": "全部時間"
+      "dailyRanking": "今日",
+      "weeklyRanking": "本週",
+      "monthlyRanking": "本月",
+      "allTimeRanking": "全部"
+    },
+    "dateRange": {
+      "to": "至",
+      "prevPeriod": "上一週期",
+      "nextPeriod": "下一週期",
+      "customRange": "自訂日期範圍"
     },
     "columns": {
       "rank": "排名",
@@ -504,6 +510,7 @@
     "error": "取得失敗",
     "networkError": "網路錯誤",
     "cost5h": "5小時消費",
+    "costDaily": "每日消費",
     "costWeekly": "週消費",
     "costMonthly": "月消費",
     "concurrentSessions": "並發 Session",

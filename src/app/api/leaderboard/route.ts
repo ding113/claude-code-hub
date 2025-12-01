@@ -2,18 +2,26 @@ import { type NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 import { getLeaderboardWithCache } from "@/lib/redis";
-import type { LeaderboardPeriod, LeaderboardScope } from "@/lib/redis/leaderboard-cache";
+import type {
+  DateRangeParams,
+  LeaderboardPeriod,
+  LeaderboardScope,
+} from "@/lib/redis/leaderboard-cache";
 import { formatCurrency } from "@/lib/utils";
 import { getSystemSettings } from "@/repository/system-config";
 
-const VALID_PERIODS: LeaderboardPeriod[] = ["daily", "weekly", "monthly", "allTime"];
+const VALID_PERIODS: LeaderboardPeriod[] = ["daily", "weekly", "monthly", "allTime", "custom"];
+
+// 日期格式校验正则 (YYYY-MM-DD)
+const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
 // 需要数据库连接
 export const runtime = "nodejs";
 
 /**
  * 获取排行榜数据
- * GET /api/leaderboard?period=daily|monthly&scope=user|provider|model
+ * GET /api/leaderboard?period=daily|weekly|monthly|allTime|custom&scope=user|provider|model
+ * 当 period=custom 时，需要提供 startDate 和 endDate 参数 (YYYY-MM-DD 格式)
  *
  * 需要认证，普通用户需要 allowGlobalUsageView 权限
  * 实时计算 + Redis 乐观缓存（60 秒 TTL）
@@ -51,6 +59,8 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const period = (searchParams.get("period") || "daily") as LeaderboardPeriod;
     const scope = (searchParams.get("scope") as LeaderboardScope) || "user"; // 向后兼容：默认 user
+    const startDate = searchParams.get("startDate");
+    const endDate = searchParams.get("endDate");
 
     if (!VALID_PERIODS.includes(period)) {
       return NextResponse.json(
@@ -66,6 +76,24 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // 验证自定义日期范围参数
+    let dateRange: DateRangeParams | undefined;
+    if (period === "custom") {
+      if (!startDate || !endDate) {
+        return NextResponse.json(
+          { error: "当 period=custom 时，必须提供 startDate 和 endDate 参数" },
+          { status: 400 }
+        );
+      }
+      if (!DATE_REGEX.test(startDate) || !DATE_REGEX.test(endDate)) {
+        return NextResponse.json({ error: "日期格式必须是 YYYY-MM-DD" }, { status: 400 });
+      }
+      if (new Date(startDate) > new Date(endDate)) {
+        return NextResponse.json({ error: "startDate 不能大于 endDate" }, { status: 400 });
+      }
+      dateRange = { startDate, endDate };
+    }
+
     // 供应商榜和模型榜仅管理员可见
     if ((scope === "provider" || scope === "model") && !isAdmin) {
       return NextResponse.json(
@@ -75,7 +103,12 @@ export async function GET(request: NextRequest) {
     }
 
     // 使用 Redis 乐观缓存获取数据
-    const rawData = await getLeaderboardWithCache(period, systemSettings.currencyDisplay, scope);
+    const rawData = await getLeaderboardWithCache(
+      period,
+      systemSettings.currencyDisplay,
+      scope,
+      dateRange
+    );
 
     // 格式化金额字段
     const data = rawData.map((entry) => ({
@@ -89,6 +122,7 @@ export async function GET(request: NextRequest) {
       isAdmin: session.user.role === "admin",
       period,
       scope,
+      dateRange,
       entriesCount: data.length,
     });
 
