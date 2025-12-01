@@ -70,6 +70,8 @@
       "allStatusCodes": "すべてのステータスコード",
       "apiKey": "API キー",
       "statusCode": "ステータスコード",
+      "minRetryCount": "リトライ回数≥",
+      "minRetryCountPlaceholder": "回数を入力（0 で制限なし）",
       "apply": "フィルターを適用",
       "reset": "リセット"
     },
@@ -181,6 +183,7 @@
       "targetModel": "ターゲットモデル"
     },
     "statusCodes": {
+      "not200": "非 200（エラー／ブロック）",
       "200": "200 (成功)",
       "400": "400 (不正なリクエスト)",
       "401": "401 (未認証)",

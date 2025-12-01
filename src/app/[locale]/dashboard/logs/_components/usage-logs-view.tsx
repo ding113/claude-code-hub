@@ -60,8 +60,10 @@ export function UsageLogsView({
     startDateLocal?: string;
     endDateLocal?: string;
     statusCode?: number;
+    excludeStatusCode200?: boolean;
     model?: string;
     endpoint?: string;
+    minRetryCount?: number;
     page: number;
   } = {
     userId: searchParams.userId ? parseInt(searchParams.userId as string, 10) : undefined,
@@ -72,11 +74,14 @@ export function UsageLogsView({
     // 直接传递本地时间字符串，不转换为 Date
     startDateLocal: searchParams.startDate as string | undefined,
     endDateLocal: searchParams.endDate as string | undefined,
-    statusCode: searchParams.statusCode
-      ? parseInt(searchParams.statusCode as string, 10)
-      : undefined,
+    statusCode:
+      searchParams.statusCode && searchParams.statusCode !== "!200"
+        ? parseInt(searchParams.statusCode as string, 10)
+        : undefined,
+    excludeStatusCode200: searchParams.statusCode === "!200",
     model: searchParams.model as string | undefined,
     endpoint: searchParams.endpoint as string | undefined,
+    minRetryCount: searchParams.minRetry ? parseInt(searchParams.minRetry as string, 10) : undefined,
     page: searchParams.page ? parseInt(searchParams.page as string, 10) : 1,
   };
 
@@ -170,9 +175,16 @@ export function UsageLogsView({
     // 时间直接使用字符串格式（datetime-local 返回的格式）
     if (newFilters.startDateLocal) query.set("startDate", newFilters.startDateLocal);
     if (newFilters.endDateLocal) query.set("endDate", newFilters.endDateLocal);
-    if (newFilters.statusCode) query.set("statusCode", newFilters.statusCode.toString());
+    if (newFilters.excludeStatusCode200) {
+      query.set("statusCode", "!200");
+    } else if (newFilters.statusCode !== undefined) {
+      query.set("statusCode", newFilters.statusCode.toString());
+    }
     if (newFilters.model) query.set("model", newFilters.model);
     if (newFilters.endpoint) query.set("endpoint", newFilters.endpoint);
+    if (newFilters.minRetryCount !== undefined) {
+      query.set("minRetry", newFilters.minRetryCount.toString());
+    }
 
     router.push(`/dashboard/logs?${query.toString()}`);
   };

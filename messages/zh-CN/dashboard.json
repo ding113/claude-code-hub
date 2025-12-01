@@ -70,6 +70,8 @@
       "allStatusCodes": "全部状态码",
       "apiKey": "API 密钥",
       "statusCode": "状态码",
+      "minRetryCount": "重试次数≥",
+      "minRetryCountPlaceholder": "输入次数（0 表示不限）",
       "apply": "应用筛选",
       "reset": "重置"
     },
@@ -182,6 +184,7 @@
       "targetModel": "目标模型"
     },
     "statusCodes": {
+      "not200": "非 200（全部非成功请求）",
       "200": "200 (成功)",
       "400": "400 (错误请求)",
       "401": "401 (未授权)",

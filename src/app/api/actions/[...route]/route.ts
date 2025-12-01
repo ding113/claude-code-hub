@@ -393,10 +393,18 @@ const { route: getUsageLogsRoute, handler: getUsageLogsHandler } = createActionR
   usageLogActions.getUsageLogs,
   {
     requestSchema: z.object({
+      userId: z.number().int().positive().optional(),
+      keyId: z.number().int().positive().optional(),
+      providerId: z.number().int().positive().optional(),
       startDate: z.string().datetime().optional(),
       endDate: z.string().datetime().optional(),
+      startDateLocal: z.string().optional(),
+      endDateLocal: z.string().optional(),
       model: z.string().optional(),
+      endpoint: z.string().optional(),
       statusCode: z.number().optional(),
+      excludeStatusCode200: z.boolean().optional(),
+      minRetryCount: z.number().int().nonnegative().optional(),
       pageSize: z.number().int().positive().max(100).default(50).optional(),
       page: z.number().int().positive().default(1).optional(),
     }),

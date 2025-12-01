@@ -70,6 +70,8 @@
       "allStatusCodes": "All Status Codes",
       "apiKey": "API Key",
       "statusCode": "Status Code",
+      "minRetryCount": "Retry Count ≥",
+      "minRetryCountPlaceholder": "Enter minimum retries",
       "apply": "Apply Filter",
       "reset": "Reset"
     },
@@ -182,6 +184,7 @@
       "targetModel": "Target Model"
     },
     "statusCodes": {
+      "not200": "Non-200 (errors/blocked)",
       "200": "200 (Success)",
       "400": "400 (Bad Request)",
       "401": "401 (Unauthorized)",

@@ -33,8 +33,10 @@ interface UsageLogsFiltersProps {
     /** 本地时间字符串，格式: "YYYY-MM-DDTHH:mm" */
     endDateLocal?: string;
     statusCode?: number;
+    excludeStatusCode200?: boolean;
     model?: string;
     endpoint?: string;
+    minRetryCount?: number;
   };
   onChange: (filters: UsageLogsFiltersProps["filters"]) => void;
   onReset: () => void;
@@ -306,11 +308,16 @@ export function UsageLogsFilters({
         <div className="space-y-2 lg:col-span-4">
           <Label>{t("logs.filters.statusCode")}</Label>
           <Select
-            value={localFilters.statusCode?.toString() || ""}
+            value={
+              localFilters.excludeStatusCode200
+                ? "!200"
+                : localFilters.statusCode?.toString() || ""
+            }
             onValueChange={(value: string) =>
               setLocalFilters({
                 ...localFilters,
-                statusCode: value ? parseInt(value, 10) : undefined,
+                statusCode: value && value !== "!200" ? parseInt(value, 10) : undefined,
+                excludeStatusCode200: value === "!200",
               })
             }
           >
@@ -318,6 +325,7 @@ export function UsageLogsFilters({
               <SelectValue placeholder={t("logs.filters.allStatusCodes")} />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="!200">{t("logs.statusCodes.not200")}</SelectItem>
               <SelectItem value="200">{t("logs.statusCodes.200")}</SelectItem>
               <SelectItem value="400">{t("logs.statusCodes.400")}</SelectItem>
               <SelectItem value="401">{t("logs.statusCodes.401")}</SelectItem>
@@ -332,6 +340,24 @@ export function UsageLogsFilters({
                 ))}
             </SelectContent>
           </Select>
+        </div>
+
+        {/* 重试次数下限 */}
+        <div className="space-y-2 lg:col-span-4">
+          <Label>{t("logs.filters.minRetryCount")}</Label>
+          <Input
+            type="number"
+            min={0}
+            inputMode="numeric"
+            value={localFilters.minRetryCount?.toString() ?? ""}
+            placeholder={t("logs.filters.minRetryCountPlaceholder")}
+            onChange={(e) =>
+              setLocalFilters({
+                ...localFilters,
+                minRetryCount: e.target.value ? parseInt(e.target.value, 10) : undefined,
+              })
+            }
+          />
         </div>
       </div>
 

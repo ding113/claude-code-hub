@@ -70,6 +70,8 @@
       "allStatusCodes": "所有狀態碼",
       "apiKey": "API 金鑰",
       "statusCode": "狀態碼",
+      "minRetryCount": "重試次數≥",
+      "minRetryCountPlaceholder": "輸入次數（0 表示不限）",
       "apply": "套用篩選",
       "reset": "重設"
     },
@@ -182,6 +184,7 @@
       "targetModel": "目標模型"
     },
     "statusCodes": {
+      "not200": "非 200（所有非成功請求）",
       "200": "200 (成功)",
       "400": "400 (錯誤請求)",
       "401": "401 (未授權)",

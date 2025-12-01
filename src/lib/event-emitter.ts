@@ -15,6 +15,7 @@ import { EventEmitter as NodeEventEmitter } from "node:events";
 interface EventMap {
   errorRulesUpdated: [];
   sensitiveWordsUpdated: [];
+  requestFiltersUpdated: [];
 }
 
 /**
@@ -33,6 +34,13 @@ class GlobalEventEmitter extends NodeEventEmitter {
    */
   emitSensitiveWordsUpdated(): void {
     this.emit("sensitiveWordsUpdated");
+  }
+
+  /**
+   * 发送 requestFiltersUpdated 事件
+   */
+  emitRequestFiltersUpdated(): void {
+    this.emit("requestFiltersUpdated");
   }
 }
 
