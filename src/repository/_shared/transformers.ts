@@ -15,6 +15,7 @@ export function toUser(dbUser: any): User {
     rpm: dbUser?.rpm || 60,
     dailyQuota: dbUser?.dailyQuota ? parseFloat(dbUser.dailyQuota) : 0,
     providerGroup: dbUser?.providerGroup ?? null,
+    tags: dbUser?.tags ?? [],
     createdAt: dbUser?.createdAt ? new Date(dbUser.createdAt) : new Date(),
     updatedAt: dbUser?.updatedAt ? new Date(dbUser.updatedAt) : new Date(),
   };

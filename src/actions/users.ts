@@ -69,6 +69,7 @@ export async function getUsers(): Promise<UserDisplay[]> {
             rpm: user.rpm,
             dailyQuota: user.dailyQuota,
             providerGroup: user.providerGroup || undefined,
+            tags: user.tags || [],
             limit5hUsd: user.limit5hUsd ?? null,
             limitWeeklyUsd: user.limitWeeklyUsd ?? null,
             limitMonthlyUsd: user.limitMonthlyUsd ?? null,
@@ -123,6 +124,7 @@ export async function getUsers(): Promise<UserDisplay[]> {
             rpm: user.rpm,
             dailyQuota: user.dailyQuota,
             providerGroup: user.providerGroup || undefined,
+            tags: user.tags || [],
             limit5hUsd: user.limit5hUsd ?? null,
             limitWeeklyUsd: user.limitWeeklyUsd ?? null,
             limitMonthlyUsd: user.limitMonthlyUsd ?? null,
@@ -145,6 +147,7 @@ export async function addUser(data: {
   name: string;
   note?: string;
   providerGroup?: string | null;
+  tags?: string[];
   rpm?: number;
   dailyQuota?: number;
   limit5hUsd?: number | null;
@@ -171,6 +174,7 @@ export async function addUser(data: {
       name: data.name,
       note: data.note || "",
       providerGroup: data.providerGroup || "",
+      tags: data.tags || [],
       rpm: data.rpm || USER_DEFAULTS.RPM,
       dailyQuota: data.dailyQuota || USER_DEFAULTS.DAILY_QUOTA,
       limit5hUsd: data.limit5hUsd,
@@ -193,6 +197,7 @@ export async function addUser(data: {
       name: validatedData.name,
       description: validatedData.note || "",
       providerGroup: validatedData.providerGroup || null,
+      tags: validatedData.tags,
       rpm: validatedData.rpm,
       dailyQuota: validatedData.dailyQuota,
       limit5hUsd: validatedData.limit5hUsd ?? undefined,
@@ -232,6 +237,7 @@ export async function editUser(
     name?: string;
     note?: string;
     providerGroup?: string | null;
+    tags?: string[];
     rpm?: number;
     dailyQuota?: number;
     limit5hUsd?: number | null;
@@ -291,6 +297,7 @@ export async function editUser(
       name: validatedData.name,
       description: validatedData.note,
       providerGroup: validatedData.providerGroup,
+      tags: validatedData.tags,
       rpm: validatedData.rpm,
       dailyQuota: validatedData.dailyQuota,
       limit5hUsd: validatedData.limit5hUsd ?? undefined,

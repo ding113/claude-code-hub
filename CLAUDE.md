@@ -2,5 +2,4 @@
 @CONTRIBUTING.md
 @README.md
 @docs/product-brief-claude-code-hub-2025-11-29.md
-@docs/prd-claude-code-hub-2025-11-29.md
 @docs/architecture-claude-code-hub-2025-11-29.md

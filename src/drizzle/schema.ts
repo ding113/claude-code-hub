@@ -26,6 +26,8 @@ export const users = pgTable('users', {
   rpmLimit: integer('rpm_limit').default(60),
   dailyLimitUsd: numeric('daily_limit_usd', { precision: 10, scale: 2 }).default('100.00'),
   providerGroup: varchar('provider_group', { length: 50 }),
+  // 用户标签（用于分类和筛选）
+  tags: jsonb('tags').$type<string[]>().default([]),
 
   // New user-level quota fields (nullable for backward compatibility)
   limit5hUsd: numeric('limit_5h_usd', { precision: 10, scale: 2 }),

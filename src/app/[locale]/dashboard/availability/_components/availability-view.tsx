@@ -431,7 +431,7 @@ export function AvailabilityView() {
                               <TooltipContent side="top" className="max-w-xs">
                                 <div className="text-sm space-y-1">
                                   <div className="font-medium">
-                                    {formatBucketTime(bucketStart, data?.bucketSizeMinutes ?? 1)}
+                                    {formatBucketTime(bucketStart, data?.bucketSizeMinutes ?? 5)}
                                   </div>
                                   {hasData && bucket ? (
                                     <>

@@ -1,3 +1,5 @@
+import "server-only";
+
 import crypto from "node:crypto";
 import { logger } from "@/lib/logger";
 import type {

@@ -196,8 +196,11 @@
       "keys": "キー ランキング",
       "userRanking": "ユーザーランキング",
       "providerRanking": "プロバイダーランキング",
+      "modelRanking": "モデルランキング",
       "dailyRanking": "今日のランキング",
-      "monthlyRanking": "今月のランキング"
+      "weeklyRanking": "今週のランキング",
+      "monthlyRanking": "今月のランキング",
+      "allTimeRanking": "全期間"
     },
     "columns": {
       "rank": "ランク",
@@ -211,6 +214,7 @@
       "tokens": "トークン数",
       "consumedAmount": "消費金額",
       "provider": "プロバイダー",
+      "model": "モデル",
       "cost": "コスト",
       "successRate": "成功率",
       "avgResponseTime": "平均応答時間"
@@ -219,6 +223,7 @@
       "loading": "読み込み中...",
       "noData": "データなし",
       "todayNoData": "今日のデータなし",
+      "weekNoData": "今週のデータなし",
       "monthNoData": "今月のデータなし",
       "fetchFailed": "ランキングデータの取得に失敗しました"
     },
@@ -391,6 +396,8 @@
       "7daysDescription": "過去 7 日間の使用状況",
       "30days": "過去 30 日間",
       "30daysDescription": "過去 30 日間の使用状況",
+      "thisMonth": "今月",
+      "thisMonthDescription": "今月の使用状況",
       "default": "使用状況"
     },
     "mode": {
@@ -597,6 +604,11 @@
       "placeholder": "例: premium または premium,economy（オプション）",
       "description": "ユーザー専用のプロバイダーグループを指定します（複数可、カンマ区切り）。システムはgroupTagが一致するプロバイダーのみから選択します。空白=すべてのプロバイダーを使用"
     },
+    "tags": {
+      "label": "ユーザータグ",
+      "placeholder": "タグを入力（Enterで追加）",
+      "description": "分類とフィルタリングのためにタグを追加します（最大20個、各32文字まで）"
+    },
     "rpm": {
       "label": "RPM制限",
       "placeholder": "1分あたりのリクエスト数制限",
@@ -657,7 +669,9 @@
     "toolbar": {
       "searchPlaceholder": "ユーザー名で検索...",
       "groupFilter": "グループでフィルター",
-      "allGroups": "すべてのグループ"
+      "allGroups": "すべてのグループ",
+      "tagFilter": "タグでフィルター",
+      "allTags": "すべてのタグ"
     }
   },
   "availability": {

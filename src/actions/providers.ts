@@ -229,6 +229,19 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
   }
 }
 
+/**
+ * 获取所有可用的供应商分组标签（用于用户表单中的下拉建议）
+ */
+export async function getAvailableProviderGroups(): Promise<string[]> {
+  try {
+    const { getDistinctProviderGroups } = await import("@/repository/provider");
+    return await getDistinctProviderGroups();
+  } catch (error) {
+    logger.error("获取供应商分组失败:", error);
+    return [];
+  }
+}
+
 // 添加服务商
 export async function addProvider(data: {
   name: string;

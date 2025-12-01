@@ -2,16 +2,18 @@ import { type NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 import { getLeaderboardWithCache } from "@/lib/redis";
-import type { LeaderboardScope } from "@/lib/redis/leaderboard-cache";
+import type { LeaderboardPeriod, LeaderboardScope } from "@/lib/redis/leaderboard-cache";
 import { formatCurrency } from "@/lib/utils";
 import { getSystemSettings } from "@/repository/system-config";
+
+const VALID_PERIODS: LeaderboardPeriod[] = ["daily", "weekly", "monthly", "allTime"];
 
 // 需要数据库连接
 export const runtime = "nodejs";
 
 /**
  * 获取排行榜数据
- * GET /api/leaderboard?period=daily|monthly&scope=user|provider
+ * GET /api/leaderboard?period=daily|monthly&scope=user|provider|model
  *
  * 需要认证，普通用户需要 allowGlobalUsageView 权限
  * 实时计算 + Redis 乐观缓存（60 秒 TTL）
@@ -47,26 +49,29 @@ export async function GET(request: NextRequest) {
 
     // 验证参数
     const searchParams = request.nextUrl.searchParams;
-    const period = searchParams.get("period") || "daily";
+    const period = (searchParams.get("period") || "daily") as LeaderboardPeriod;
     const scope = (searchParams.get("scope") as LeaderboardScope) || "user"; // 向后兼容：默认 user
 
-    if (period !== "daily" && period !== "monthly") {
+    if (!VALID_PERIODS.includes(period)) {
       return NextResponse.json(
-        { error: "参数 period 必须是 'daily' 或 'monthly'" },
+        { error: `参数 period 必须是 ${VALID_PERIODS.join(", ")} 之一` },
         { status: 400 }
       );
     }
 
-    if (scope !== "user" && scope !== "provider") {
+    if (scope !== "user" && scope !== "provider" && scope !== "model") {
       return NextResponse.json(
-        { error: "参数 scope 必须是 'user' 或 'provider'" },
+        { error: "参数 scope 必须是 'user'、'provider' 或 'model'" },
         { status: 400 }
       );
     }
 
-    // 供应商榜仅管理员可见
-    if (scope === "provider" && !isAdmin) {
-      return NextResponse.json({ error: "仅管理员可查看供应商排行榜" }, { status: 403 });
+    // 供应商榜和模型榜仅管理员可见
+    if ((scope === "provider" || scope === "model") && !isAdmin) {
+      return NextResponse.json(
+        { error: scope === "provider" ? "仅管理员可查看供应商排行榜" : "仅管理员可查看模型排行榜" },
+        { status: 403 }
+      );
     }
 
     // 使用 Redis 乐观缓存获取数据

@@ -2,22 +2,29 @@ import { formatInTimeZone } from "date-fns-tz";
 import { getEnvConfig } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import {
+  findAllTimeLeaderboard,
+  findAllTimeModelLeaderboard,
+  findAllTimeProviderLeaderboard,
   findDailyLeaderboard,
+  findDailyModelLeaderboard,
   findDailyProviderLeaderboard,
   findMonthlyLeaderboard,
+  findMonthlyModelLeaderboard,
   findMonthlyProviderLeaderboard,
+  findWeeklyLeaderboard,
+  findWeeklyModelLeaderboard,
+  findWeeklyProviderLeaderboard,
   type LeaderboardEntry,
+  type LeaderboardPeriod,
+  type ModelLeaderboardEntry,
   type ProviderLeaderboardEntry,
 } from "@/repository/leaderboard";
 import { getRedisClient } from "./client";
 
-/**
- * 排行榜周期类型
- */
-type LeaderboardPeriod = "daily" | "monthly";
-export type LeaderboardScope = "user" | "provider";
+export type { LeaderboardPeriod };
+export type LeaderboardScope = "user" | "provider" | "model";
 
-type LeaderboardData = LeaderboardEntry[] | ProviderLeaderboardEntry[];
+type LeaderboardData = LeaderboardEntry[] | ProviderLeaderboardEntry[] | ModelLeaderboardEntry[];
 
 /**
  * 构建缓存键
@@ -34,10 +41,17 @@ function buildCacheKey(
     // leaderboard:{scope}:daily:2025-01-15:USD
     const dateStr = formatInTimeZone(now, tz, "yyyy-MM-dd");
     return `leaderboard:${scope}:daily:${dateStr}:${currencyDisplay}`;
-  } else {
+  } else if (period === "weekly") {
+    // leaderboard:{scope}:weekly:2025-W03:USD (ISO week)
+    const weekStr = formatInTimeZone(now, tz, "yyyy-'W'ww");
+    return `leaderboard:${scope}:weekly:${weekStr}:${currencyDisplay}`;
+  } else if (period === "monthly") {
     // leaderboard:{scope}:monthly:2025-01:USD
     const monthStr = formatInTimeZone(now, tz, "yyyy-MM");
     return `leaderboard:${scope}:monthly:${monthStr}:${currencyDisplay}`;
+  } else {
+    // allTime: leaderboard:{scope}:allTime:USD (no date component)
+    return `leaderboard:${scope}:allTime:${currencyDisplay}`;
   }
 }
 
@@ -49,12 +63,40 @@ async function queryDatabase(
   scope: LeaderboardScope
 ): Promise<LeaderboardData> {
   if (scope === "user") {
-    return period === "daily" ? await findDailyLeaderboard() : await findMonthlyLeaderboard();
+    switch (period) {
+      case "daily":
+        return await findDailyLeaderboard();
+      case "weekly":
+        return await findWeeklyLeaderboard();
+      case "monthly":
+        return await findMonthlyLeaderboard();
+      case "allTime":
+        return await findAllTimeLeaderboard();
+    }
   }
-  // provider scope
-  return period === "daily"
-    ? await findDailyProviderLeaderboard()
-    : await findMonthlyProviderLeaderboard();
+  if (scope === "provider") {
+    switch (period) {
+      case "daily":
+        return await findDailyProviderLeaderboard();
+      case "weekly":
+        return await findWeeklyProviderLeaderboard();
+      case "monthly":
+        return await findMonthlyProviderLeaderboard();
+      case "allTime":
+        return await findAllTimeProviderLeaderboard();
+    }
+  }
+  // model scope
+  switch (period) {
+    case "daily":
+      return await findDailyModelLeaderboard();
+    case "weekly":
+      return await findWeeklyModelLeaderboard();
+    case "monthly":
+      return await findMonthlyModelLeaderboard();
+    case "allTime":
+      return await findAllTimeModelLeaderboard();
+  }
 }
 
 /**

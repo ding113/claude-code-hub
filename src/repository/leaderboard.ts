@@ -59,10 +59,32 @@ export async function findMonthlyLeaderboard(): Promise<LeaderboardEntry[]> {
 }
 
 /**
+ * 查询本周消耗排行榜（不限制数量）
+ * 使用 SQL AT TIME ZONE 进行时区转换，确保"本周"基于配置时区
+ */
+export async function findWeeklyLeaderboard(): Promise<LeaderboardEntry[]> {
+  const timezone = getEnvConfig().TZ;
+  return findLeaderboardWithTimezone("weekly", timezone);
+}
+
+/**
+ * 查询全部时间消耗排行榜（不限制数量）
+ */
+export async function findAllTimeLeaderboard(): Promise<LeaderboardEntry[]> {
+  const timezone = getEnvConfig().TZ;
+  return findLeaderboardWithTimezone("allTime", timezone);
+}
+
+/**
+ * 排行榜周期类型
+ */
+export type LeaderboardPeriod = "daily" | "weekly" | "monthly" | "allTime";
+
+/**
  * 通用排行榜查询函数（使用 SQL AT TIME ZONE 确保时区正确）
  */
 async function findLeaderboardWithTimezone(
-  period: "daily" | "monthly",
+  period: LeaderboardPeriod,
   timezone: string
 ): Promise<LeaderboardEntry[]> {
   const rankings = await db
@@ -86,9 +108,13 @@ async function findLeaderboardWithTimezone(
     .where(
       and(
         isNull(messageRequest.deletedAt),
-        period === "daily"
-          ? sql`(${messageRequest.createdAt} AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date`
-          : sql`date_trunc('month', ${messageRequest.createdAt} AT TIME ZONE ${timezone}) = date_trunc('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})`
+        period === "allTime"
+          ? sql`1=1` // 全部时间，不限制日期
+          : period === "daily"
+            ? sql`(${messageRequest.createdAt} AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date`
+            : period === "weekly"
+              ? sql`(${messageRequest.createdAt} AT TIME ZONE ${timezone})::date >= (CURRENT_DATE AT TIME ZONE ${timezone} - INTERVAL '6 days')`
+              : sql`date_trunc('month', ${messageRequest.createdAt} AT TIME ZONE ${timezone}) = date_trunc('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})`
       )
     )
     .groupBy(messageRequest.userId, users.name)
@@ -122,10 +148,26 @@ export async function findMonthlyProviderLeaderboard(): Promise<ProviderLeaderbo
 }
 
 /**
+ * 查询本周供应商消耗排行榜（不限制数量）
+ */
+export async function findWeeklyProviderLeaderboard(): Promise<ProviderLeaderboardEntry[]> {
+  const timezone = getEnvConfig().TZ;
+  return findProviderLeaderboardWithTimezone("weekly", timezone);
+}
+
+/**
+ * 查询全部时间供应商消耗排行榜（不限制数量）
+ */
+export async function findAllTimeProviderLeaderboard(): Promise<ProviderLeaderboardEntry[]> {
+  const timezone = getEnvConfig().TZ;
+  return findProviderLeaderboardWithTimezone("allTime", timezone);
+}
+
+/**
  * 通用供应商排行榜查询函数（使用 SQL AT TIME ZONE 确保时区正确）
  */
 async function findProviderLeaderboardWithTimezone(
-  period: "daily" | "monthly",
+  period: LeaderboardPeriod,
   timezone: string
 ): Promise<ProviderLeaderboardEntry[]> {
   const rankings = await db
@@ -158,9 +200,13 @@ async function findProviderLeaderboardWithTimezone(
     .where(
       and(
         isNull(messageRequest.deletedAt),
-        period === "daily"
-          ? sql`(${messageRequest.createdAt} AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date`
-          : sql`date_trunc('month', ${messageRequest.createdAt} AT TIME ZONE ${timezone}) = date_trunc('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})`
+        period === "allTime"
+          ? sql`1=1`
+          : period === "daily"
+            ? sql`(${messageRequest.createdAt} AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date`
+            : period === "weekly"
+              ? sql`(${messageRequest.createdAt} AT TIME ZONE ${timezone})::date >= (CURRENT_DATE AT TIME ZONE ${timezone} - INTERVAL '6 days')`
+              : sql`date_trunc('month', ${messageRequest.createdAt} AT TIME ZONE ${timezone}) = date_trunc('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})`
       )
     )
     .groupBy(messageRequest.providerId, providers.name)
@@ -196,10 +242,26 @@ export async function findMonthlyModelLeaderboard(): Promise<ModelLeaderboardEnt
 }
 
 /**
+ * 查询本周模型调用排行榜（不限制数量）
+ */
+export async function findWeeklyModelLeaderboard(): Promise<ModelLeaderboardEntry[]> {
+  const timezone = getEnvConfig().TZ;
+  return findModelLeaderboardWithTimezone("weekly", timezone);
+}
+
+/**
+ * 查询全部时间模型调用排行榜（不限制数量）
+ */
+export async function findAllTimeModelLeaderboard(): Promise<ModelLeaderboardEntry[]> {
+  const timezone = getEnvConfig().TZ;
+  return findModelLeaderboardWithTimezone("allTime", timezone);
+}
+
+/**
  * 通用模型排行榜查询函数（使用 SQL AT TIME ZONE 确保时区正确）
  */
 async function findModelLeaderboardWithTimezone(
-  period: "daily" | "monthly",
+  period: LeaderboardPeriod,
   timezone: string
 ): Promise<ModelLeaderboardEntry[]> {
   const rankings = await db
@@ -228,9 +290,13 @@ async function findModelLeaderboardWithTimezone(
     .where(
       and(
         isNull(messageRequest.deletedAt),
-        period === "daily"
-          ? sql`(${messageRequest.createdAt} AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date`
-          : sql`date_trunc('month', ${messageRequest.createdAt} AT TIME ZONE ${timezone}) = date_trunc('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})`
+        period === "allTime"
+          ? sql`1=1`
+          : period === "daily"
+            ? sql`(${messageRequest.createdAt} AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date`
+            : period === "weekly"
+              ? sql`(${messageRequest.createdAt} AT TIME ZONE ${timezone})::date >= (CURRENT_DATE AT TIME ZONE ${timezone} - INTERVAL '6 days')`
+              : sql`date_trunc('month', ${messageRequest.createdAt} AT TIME ZONE ${timezone}) = date_trunc('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})`
       )
     )
     .groupBy(sql`COALESCE(${messageRequest.originalModel}, ${messageRequest.model})`) // 修复：GROUP BY 也需要使用相同的 COALESCE

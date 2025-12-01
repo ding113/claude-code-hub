@@ -24,6 +24,7 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
       text: t("badge", { count: user.keys.length }),
       variant: "outline" as const,
     },
+    tags: user.tags,
     metadata: [
       {
         label: t("activeKeys"),

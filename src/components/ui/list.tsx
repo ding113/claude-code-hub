@@ -22,6 +22,7 @@ export interface ListItemData {
     label: string;
     value: string;
   }>;
+  tags?: string[]; // 标签列表
 }
 
 /**
@@ -118,6 +119,29 @@ export function ListItem({
           {/* 描述 */}
           {data.description && !compact && (
             <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{data.description}</p>
+          )}
+
+          {/* 标签 */}
+          {data.tags && data.tags.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-1.5">
+              {data.tags.slice(0, compact ? 3 : 5).map((tag) => (
+                <Badge
+                  key={tag}
+                  variant="secondary"
+                  className="text-xs px-1.5 py-0 h-5 font-normal"
+                >
+                  {tag}
+                </Badge>
+              ))}
+              {data.tags.length > (compact ? 3 : 5) && (
+                <Badge
+                  variant="outline"
+                  className="text-xs px-1.5 py-0 h-5 font-normal text-muted-foreground"
+                >
+                  +{data.tags.length - (compact ? 3 : 5)}
+                </Badge>
+              )}
+            </div>
           )}
 
           {/* 元数据 */}

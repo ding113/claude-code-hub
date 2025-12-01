@@ -197,8 +197,11 @@
       "keys": "密钥排行",
       "userRanking": "用户排行",
       "providerRanking": "供应商排行",
+      "modelRanking": "模型排行",
       "dailyRanking": "今日排行",
-      "monthlyRanking": "本月排行"
+      "weeklyRanking": "本周排行",
+      "monthlyRanking": "本月排行",
+      "allTimeRanking": "全部时间"
     },
     "columns": {
       "rank": "排名",
@@ -212,6 +215,7 @@
       "tokens": "Token 数",
       "consumedAmount": "消耗金额",
       "provider": "供应商",
+      "model": "模型",
       "cost": "成本",
       "successRate": "成功率",
       "avgResponseTime": "平均响应时间"
@@ -220,6 +224,7 @@
       "loading": "加载中...",
       "noData": "暂无数据",
       "todayNoData": "今日暂无数据",
+      "weekNoData": "本周暂无数据",
       "monthNoData": "本月暂无数据",
       "fetchFailed": "获取排行榜数据失败"
     },
@@ -392,6 +397,8 @@
       "7daysDescription": "过去 7 天的使用情况",
       "30days": "过去 30 天",
       "30daysDescription": "过去 30 天的使用情况",
+      "thisMonth": "本月",
+      "thisMonthDescription": "本月的使用情况",
       "default": "使用情况"
     },
     "mode": {
@@ -603,6 +610,11 @@
       "placeholder": "输入分组标签",
       "description": "指定用户专属的供应商分组（支持多个，逗号分隔）。系统将只从 groupTag 匹配的供应商中选择。留空=使用所有供应商"
     },
+    "tags": {
+      "label": "用户标签",
+      "placeholder": "输入标签（回车添加）",
+      "description": "为用户添加标签，便于分类和筛选（最多20个，每个最长32字符）"
+    },
     "rpm": {
       "label": "RPM限制",
       "placeholder": "每分钟请求数限制",
@@ -728,7 +740,9 @@
     "toolbar": {
       "searchPlaceholder": "按用户名搜索...",
       "groupFilter": "按分组筛选",
-      "allGroups": "所有分组"
+      "allGroups": "所有分组",
+      "tagFilter": "按标签筛选",
+      "allTags": "所有标签"
     }
   },
   "availability": {

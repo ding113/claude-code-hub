@@ -348,6 +348,20 @@ export async function deleteProvider(id: number): Promise<boolean> {
 }
 
 /**
+ * 获取所有不同的供应商分组标签
+ * 用于用户表单中的供应商分组选择建议
+ */
+export async function getDistinctProviderGroups(): Promise<string[]> {
+  const result = await db
+    .selectDistinct({ groupTag: providers.groupTag })
+    .from(providers)
+    .where(and(isNull(providers.deletedAt), sql`${providers.groupTag} IS NOT NULL AND ${providers.groupTag} != ''`))
+    .orderBy(providers.groupTag);
+
+  return result.map((r) => r.groupTag).filter((tag): tag is string => tag !== null);
+}
+
+/**
  * 获取所有供应商的统计信息
  * 包括：今天的总金额、今天的调用次数、最近一次调用时间和模型
  *

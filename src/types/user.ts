@@ -9,6 +9,7 @@ export interface User {
   rpm: number; // 每分钟请求数限制
   dailyQuota: number; // 每日额度限制（美元）
   providerGroup: string | null; // 供应商分组
+  tags?: string[]; // 用户标签（可选）
   createdAt: Date;
   updatedAt: Date;
   deletedAt?: Date;
@@ -28,6 +29,7 @@ export interface CreateUserData {
   rpm?: number; // 可选，有默认值
   dailyQuota?: number; // 可选，有默认值
   providerGroup?: string | null; // 可选，供应商分组
+  tags?: string[]; // 可选，用户标签
   // User-level quota fields
   limit5hUsd?: number;
   limitWeeklyUsd?: number;
@@ -44,6 +46,7 @@ export interface UpdateUserData {
   rpm?: number;
   dailyQuota?: number;
   providerGroup?: string | null; // 可选，供应商分组
+  tags?: string[]; // 可选，用户标签
   // User-level quota fields
   limit5hUsd?: number;
   limitWeeklyUsd?: number;
@@ -95,6 +98,7 @@ export interface UserDisplay {
   rpm: number;
   dailyQuota: number;
   providerGroup?: string | null;
+  tags?: string[]; // 用户标签
   keys: UserKeyDisplay[];
   // User-level quota fields
   limit5hUsd?: number | null;

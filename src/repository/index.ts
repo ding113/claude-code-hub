@@ -1,3 +1,5 @@
+import "server-only";
+
 /**
  * Repository 层统一导出
  * 提供所有数据访问接口的统一入口
@@ -36,6 +38,7 @@ export {
   deleteProvider,
   findProviderById,
   findProviderList,
+  getDistinctProviderGroups,
   updateProvider,
 } from "./provider";
 // Statistics related exports
