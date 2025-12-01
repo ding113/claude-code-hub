@@ -802,7 +802,16 @@ export function ProviderForm({
                       id={isEdit ? "edit-cost" : "cost"}
                       type="number"
                       value={costMultiplier}
-                      onChange={(e) => setCostMultiplier(parseFloat(e.target.value) || 1.0)}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value === "") {
+                          setCostMultiplier(1.0);
+                          return;
+                        }
+                        const num = parseFloat(value);
+                        setCostMultiplier(Number.isNaN(num) ? 1.0 : num);
+                      }}
+                      onFocus={(e) => e.target.select()}
                       placeholder={t("sections.routing.scheduleParams.costMultiplier.placeholder")}
                       disabled={isPending}
                       min="0"
