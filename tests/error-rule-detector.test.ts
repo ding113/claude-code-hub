@@ -274,12 +274,12 @@ describe("Match Type Priority", () => {
    */
 
   test("should return match type information", () => {
-    const testCases = [
-      { message: "prompt is too long: 5000 tokens > 4096 maximum", expectedType: "regex" },
-      { message: "blocked by our content filter", expectedType: "regex" },
+    const testMessages = [
+      "prompt is too long: 5000 tokens > 4096 maximum",
+      "blocked by our content filter",
     ];
 
-    for (const { message, expectedType: _expectedType } of testCases) {
+    for (const message of testMessages) {
       const result = errorRuleDetector.detect(message);
       expect(result.matched).toBe(true);
       expect(result.matchType).toBeTruthy();

@@ -66,7 +66,6 @@ export interface UnifiedTestResultData {
 
 interface TestResultCardProps {
   result: UnifiedTestResultData;
-  onClose?: () => void;
 }
 
 const STATUS_COLORS: Record<TestStatus, { bg: string; text: string; border: string }> = {
@@ -97,7 +96,7 @@ const STATUS_ICONS: Record<TestStatus, React.ReactNode> = {
  * Test result card component with three-tier validation display
  * Shows status, latency, HTTP code, and content validation details
  */
-export function TestResultCard({ result, onClose: _onClose }: TestResultCardProps) {
+export function TestResultCard({ result }: TestResultCardProps) {
   const t = useTranslations("settings.providers.form.apiTest");
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
 
