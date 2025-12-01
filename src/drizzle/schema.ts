@@ -354,6 +354,9 @@ export const systemSettings = pgTable('system_settings', {
   // 客户端版本检查配置
   enableClientVersionCheck: boolean('enable_client_version_check').notNull().default(false),
 
+  // 供应商不可用时是否返回详细错误信息
+  verboseProviderError: boolean('verbose_provider_error').notNull().default(false),
+
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 });

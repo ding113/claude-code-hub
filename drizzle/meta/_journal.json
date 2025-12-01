@@ -155,6 +155,13 @@
       "when": 1764223312347,
       "tag": "0021_broad_black_panther",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1764409409921,
+      "tag": "0022_strange_next_avengers",
+      "breakpoints": true
     }
   ]
 }

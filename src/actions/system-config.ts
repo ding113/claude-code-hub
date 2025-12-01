@@ -34,6 +34,7 @@ export async function saveSystemSettings(formData: {
   cleanupSchedule?: string;
   cleanupBatchSize?: number;
   enableClientVersionCheck?: boolean;
+  verboseProviderError?: boolean;
 }): Promise<ActionResult<SystemSettings>> {
   try {
     const session = await getSession();
@@ -52,6 +53,7 @@ export async function saveSystemSettings(formData: {
       cleanupSchedule: validated.cleanupSchedule,
       cleanupBatchSize: validated.cleanupBatchSize,
       enableClientVersionCheck: validated.enableClientVersionCheck,
+      verboseProviderError: validated.verboseProviderError,
     });
 
     revalidatePath("/settings/config");
