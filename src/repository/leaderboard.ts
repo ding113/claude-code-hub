@@ -4,6 +4,7 @@ import { and, desc, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { messageRequest, providers, users } from "@/drizzle/schema";
 import { getEnvConfig } from "@/lib/config";
+import { getSystemSettings } from "./system-config";
 
 /**
  * 排行榜条目类型
@@ -295,17 +296,28 @@ export async function findAllTimeModelLeaderboard(): Promise<ModelLeaderboardEnt
 
 /**
  * 通用模型排行榜查询函数（使用 SQL AT TIME ZONE 确保时区正确）
+ * 根据系统配置的 billingModelSource 决定使用哪个模型字段进行统计
  */
 async function findModelLeaderboardWithTimezone(
   period: LeaderboardPeriod,
   timezone: string,
   dateRange?: DateRangeParams
 ): Promise<ModelLeaderboardEntry[]> {
+  // 获取系统设置中的计费模型来源配置
+  const systemSettings = await getSystemSettings();
+  const billingModelSource = systemSettings.billingModelSource;
+
+  // 根据配置决定模型字段的优先级
+  // original: 优先使用 originalModel（用户请求的模型），回退到 model
+  // redirected: 优先使用 model（重定向后的实际模型），回退到 originalModel
+  const modelField =
+    billingModelSource === "original"
+      ? sql<string>`COALESCE(${messageRequest.originalModel}, ${messageRequest.model})`
+      : sql<string>`COALESCE(${messageRequest.model}, ${messageRequest.originalModel})`;
+
   const rankings = await db
     .select({
-      // 使用 COALESCE：优先使用 originalModel（计费模型），回退到实际转发的 model
-      // 修复：当 originalModel 为 NULL（未配置模型重定向）时，使用 model 字段
-      model: sql<string>`COALESCE(${messageRequest.originalModel}, ${messageRequest.model})`,
+      model: modelField,
       totalRequests: sql<number>`count(*)::double precision`,
       totalCost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
       totalTokens: sql<number>`COALESCE(
@@ -325,7 +337,7 @@ async function findModelLeaderboardWithTimezone(
     })
     .from(messageRequest)
     .where(and(isNull(messageRequest.deletedAt), buildDateCondition(period, timezone, dateRange)))
-    .groupBy(sql`COALESCE(${messageRequest.originalModel}, ${messageRequest.model})`) // 修复：GROUP BY 也需要使用相同的 COALESCE
+    .groupBy(modelField)
     .orderBy(desc(sql`count(*)`)); // 按请求数排序
 
   return rankings

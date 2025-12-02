@@ -58,8 +58,13 @@ export function FilterTable({ filters }: Props) {
 
   if (filters.length === 0) {
     return (
-      <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">
-        {t("empty")}
+      <div className="flex flex-col items-center justify-center gap-4 py-12">
+        <p className="text-sm text-muted-foreground">{t("empty")}</p>
+        <FilterDialog
+          mode="create"
+          trigger={<Button size="sm">{t("add")}</Button>}
+          onOpenChange={() => setEditing(null)}
+        />
       </div>
     );
   }
