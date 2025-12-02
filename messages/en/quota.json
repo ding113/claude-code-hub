@@ -297,6 +297,12 @@
         "placeholder": "Leave blank for unlimited",
         "description": "Maximum cost per month"
       },
+      "limitTotalUsd": {
+        "label": "Total Cost Limit (USD)",
+        "placeholder": "Leave blank for unlimited",
+        "description": "Maximum cumulative spending (no reset)",
+        "descriptionWithUserLimit": "Cannot exceed user total limit ({limit})"
+      },
       "limitConcurrentSessions": {
         "label": "Concurrent Session Limit",
         "placeholder": "0 means unlimited",

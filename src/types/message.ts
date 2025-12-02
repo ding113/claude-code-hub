@@ -19,7 +19,8 @@ export interface ProviderChainItem {
     | "system_error" // 系统/网络错误（不计入熔断器）
     | "retry_with_official_instructions" // Codex instructions 自动重试（官方）
     | "retry_with_cached_instructions" // Codex instructions 智能重试（缓存）
-    | "client_error_non_retryable"; // 不可重试的客户端错误（Prompt 超限、内容过滤、PDF 限制、Thinking 格式）
+    | "client_error_non_retryable" // 不可重试的客户端错误（Prompt 超限、内容过滤、PDF 限制、Thinking 格式）
+    | "http2_fallback"; // HTTP/2 协议错误，回退到 HTTP/1.1（不切换供应商、不计入熔断器）
 
   // === 选择方法（细化） ===
   selectionMethod?:

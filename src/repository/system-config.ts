@@ -85,6 +85,7 @@ function createFallbackSettings(): SystemSettings {
     cleanupBatchSize: 10000,
     enableClientVersionCheck: false,
     verboseProviderError: false,
+    enableHttp2: false,
     createdAt: now,
     updatedAt: now,
   };
@@ -108,6 +109,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
         cleanupBatchSize: systemSettings.cleanupBatchSize,
         enableClientVersionCheck: systemSettings.enableClientVersionCheck,
         verboseProviderError: systemSettings.verboseProviderError,
+        enableHttp2: systemSettings.enableHttp2,
         createdAt: systemSettings.createdAt,
         updatedAt: systemSettings.updatedAt,
       })
@@ -139,6 +141,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
         cleanupBatchSize: systemSettings.cleanupBatchSize,
         enableClientVersionCheck: systemSettings.enableClientVersionCheck,
         verboseProviderError: systemSettings.verboseProviderError,
+        enableHttp2: systemSettings.enableHttp2,
         createdAt: systemSettings.createdAt,
         updatedAt: systemSettings.updatedAt,
       });
@@ -161,6 +164,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
         cleanupBatchSize: systemSettings.cleanupBatchSize,
         enableClientVersionCheck: systemSettings.enableClientVersionCheck,
         verboseProviderError: systemSettings.verboseProviderError,
+        enableHttp2: systemSettings.enableHttp2,
         createdAt: systemSettings.createdAt,
         updatedAt: systemSettings.updatedAt,
       })
@@ -237,6 +241,11 @@ export async function updateSystemSettings(
       updates.verboseProviderError = payload.verboseProviderError;
     }
 
+    // HTTP/2 配置字段（如果提供）
+    if (payload.enableHttp2 !== undefined) {
+      updates.enableHttp2 = payload.enableHttp2;
+    }
+
     const [updated] = await db
       .update(systemSettings)
       .set(updates)
@@ -253,6 +262,7 @@ export async function updateSystemSettings(
         cleanupBatchSize: systemSettings.cleanupBatchSize,
         enableClientVersionCheck: systemSettings.enableClientVersionCheck,
         verboseProviderError: systemSettings.verboseProviderError,
+        enableHttp2: systemSettings.enableHttp2,
         createdAt: systemSettings.createdAt,
         updatedAt: systemSettings.updatedAt,
       });

@@ -263,6 +263,25 @@ export class ProxyResponseHandler {
         usageRecord = usageResult.usageRecord;
         usageMetrics = usageResult.usageMetrics;
 
+        // Codex: Extract prompt_cache_key and update session binding
+        if (provider.providerType === "codex" && session.sessionId && provider.id) {
+          try {
+            const responseData = JSON.parse(responseText) as Record<string, unknown>;
+            const promptCacheKey = SessionManager.extractCodexPromptCacheKey(responseData);
+            if (promptCacheKey) {
+              void SessionManager.updateSessionWithCodexCacheKey(
+                session.sessionId,
+                promptCacheKey,
+                provider.id
+              ).catch((err) => {
+                logger.error("[ResponseHandler] Failed to update Codex session:", err);
+              });
+            }
+          } catch (parseError) {
+            logger.trace("[ResponseHandler] Failed to parse JSON for Codex session:", parseError);
+          }
+        }
+
         // 存储响应体到 Redis（5分钟过期）
         if (session.sessionId) {
           void SessionManager.storeSessionResponse(session.sessionId, responseText).catch((err) => {
@@ -776,6 +795,32 @@ export class ProxyResponseHandler {
 
         const usageResult = parseUsageFromResponseText(allContent, provider.providerType);
         usageForCost = usageResult.usageMetrics;
+
+        // Codex: Extract prompt_cache_key from SSE events and update session binding
+        if (provider.providerType === "codex" && session.sessionId && provider.id) {
+          try {
+            const sseEvents = parseSSEData(allContent);
+            for (const event of sseEvents) {
+              if (typeof event.data === "object" && event.data) {
+                const promptCacheKey = SessionManager.extractCodexPromptCacheKey(
+                  event.data as Record<string, unknown>
+                );
+                if (promptCacheKey) {
+                  void SessionManager.updateSessionWithCodexCacheKey(
+                    session.sessionId,
+                    promptCacheKey,
+                    provider.id
+                  ).catch((err) => {
+                    logger.error("[ResponseHandler] Failed to update Codex session (stream):", err);
+                  });
+                  break; // Only need first prompt_cache_key
+                }
+              }
+            }
+          } catch (parseError) {
+            logger.trace("[ResponseHandler] Failed to parse SSE for Codex session:", parseError);
+          }
+        }
 
         await updateRequestCostFromUsage(
           messageContext.id,

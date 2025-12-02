@@ -73,6 +73,7 @@ export async function getUsers(): Promise<UserDisplay[]> {
             limit5hUsd: user.limit5hUsd ?? null,
             limitWeeklyUsd: user.limitWeeklyUsd ?? null,
             limitMonthlyUsd: user.limitMonthlyUsd ?? null,
+            limitTotalUsd: user.limitTotalUsd ?? null,
             limitConcurrentSessions: user.limitConcurrentSessions ?? null,
             keys: keys.map((key) => {
               const stats = statisticsMap.get(key.id);
@@ -110,6 +111,7 @@ export async function getUsers(): Promise<UserDisplay[]> {
                 dailyResetTime: key.dailyResetTime,
                 limitWeeklyUsd: key.limitWeeklyUsd,
                 limitMonthlyUsd: key.limitMonthlyUsd,
+                limitTotalUsd: key.limitTotalUsd,
                 limitConcurrentSessions: key.limitConcurrentSessions || 0,
               };
             }),
@@ -128,6 +130,7 @@ export async function getUsers(): Promise<UserDisplay[]> {
             limit5hUsd: user.limit5hUsd ?? null,
             limitWeeklyUsd: user.limitWeeklyUsd ?? null,
             limitMonthlyUsd: user.limitMonthlyUsd ?? null,
+            limitTotalUsd: user.limitTotalUsd ?? null,
             limitConcurrentSessions: user.limitConcurrentSessions ?? null,
             keys: [],
           };
@@ -153,6 +156,7 @@ export async function addUser(data: {
   limit5hUsd?: number | null;
   limitWeeklyUsd?: number | null;
   limitMonthlyUsd?: number | null;
+  limitTotalUsd?: number | null;
   limitConcurrentSessions?: number | null;
 }): Promise<ActionResult> {
   try {
@@ -180,6 +184,7 @@ export async function addUser(data: {
       limit5hUsd: data.limit5hUsd,
       limitWeeklyUsd: data.limitWeeklyUsd,
       limitMonthlyUsd: data.limitMonthlyUsd,
+      limitTotalUsd: data.limitTotalUsd,
       limitConcurrentSessions: data.limitConcurrentSessions,
     });
 
@@ -203,6 +208,7 @@ export async function addUser(data: {
       limit5hUsd: validatedData.limit5hUsd ?? undefined,
       limitWeeklyUsd: validatedData.limitWeeklyUsd ?? undefined,
       limitMonthlyUsd: validatedData.limitMonthlyUsd ?? undefined,
+      limitTotalUsd: validatedData.limitTotalUsd ?? undefined,
       limitConcurrentSessions: validatedData.limitConcurrentSessions ?? undefined,
     });
 
@@ -243,6 +249,7 @@ export async function editUser(
     limit5hUsd?: number | null;
     limitWeeklyUsd?: number | null;
     limitMonthlyUsd?: number | null;
+    limitTotalUsd?: number | null;
     limitConcurrentSessions?: number | null;
   }
 ): Promise<ActionResult> {
@@ -303,6 +310,7 @@ export async function editUser(
       limit5hUsd: validatedData.limit5hUsd ?? undefined,
       limitWeeklyUsd: validatedData.limitWeeklyUsd ?? undefined,
       limitMonthlyUsd: validatedData.limitMonthlyUsd ?? undefined,
+      limitTotalUsd: validatedData.limitTotalUsd ?? undefined,
       limitConcurrentSessions: validatedData.limitConcurrentSessions ?? undefined,
     });
 

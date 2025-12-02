@@ -25,6 +25,7 @@ interface UserFormProps {
     limit5hUsd?: number | null;
     limitWeeklyUsd?: number | null;
     limitMonthlyUsd?: number | null;
+    limitTotalUsd?: number | null;
     limitConcurrentSessions?: number | null;
   };
   onSuccess?: () => void;
@@ -67,6 +68,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
       limit5hUsd: user?.limit5hUsd ?? null,
       limitWeeklyUsd: user?.limitWeeklyUsd ?? null,
       limitMonthlyUsd: user?.limitMonthlyUsd ?? null,
+      limitTotalUsd: user?.limitTotalUsd ?? null,
       limitConcurrentSessions: user?.limitConcurrentSessions ?? null,
     },
     onSubmit: async (data) => {
@@ -84,6 +86,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
               limit5hUsd: data.limit5hUsd,
               limitWeeklyUsd: data.limitWeeklyUsd,
               limitMonthlyUsd: data.limitMonthlyUsd,
+              limitTotalUsd: data.limitTotalUsd,
               limitConcurrentSessions: data.limitConcurrentSessions,
             });
           } else {
@@ -97,6 +100,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
               limit5hUsd: data.limit5hUsd,
               limitWeeklyUsd: data.limitWeeklyUsd,
               limitMonthlyUsd: data.limitMonthlyUsd,
+              limitTotalUsd: data.limitTotalUsd,
               limitConcurrentSessions: data.limitConcurrentSessions,
             });
           }
@@ -250,6 +254,16 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
             step={0.01}
             placeholder={tForm("limitMonthlyUsd.placeholder")}
             {...form.getFieldProps("limitMonthlyUsd")}
+          />
+
+          <TextField
+            label={tForm("limitTotalUsd.label")}
+            type="number"
+            min={0}
+            max={10000000}
+            step={0.01}
+            placeholder={tForm("limitTotalUsd.placeholder")}
+            {...form.getFieldProps("limitTotalUsd")}
           />
 
           <TextField

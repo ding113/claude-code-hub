@@ -80,9 +80,42 @@ export class ProxyRateLimitGuard {
       );
     }
 
+    // 3. 检查用户总消费限额（无重置时间）
+    const userTotalCheck = await RateLimitService.checkTotalCostLimit(
+      user.id,
+      "user",
+      user.limitTotalUsd ?? null,
+      undefined
+    );
+
+    if (!userTotalCheck.allowed) {
+      logger.warn(
+        `[RateLimit] User total limit exceeded: user=${user.id}, ${userTotalCheck.reason}`
+      );
+
+      const { getLocale } = await import("next-intl/server");
+      const locale = await getLocale();
+      const message = await getErrorMessageServer(locale, ERROR_CODES.RATE_LIMIT_TOTAL_EXCEEDED, {
+        current: (userTotalCheck.current || 0).toFixed(4),
+        limit: (user.limitTotalUsd || 0).toFixed(4),
+      });
+
+      const noReset = "9999-12-31T23:59:59.999Z";
+
+      throw new RateLimitError(
+        "rate_limit_error",
+        message,
+        "usd_total",
+        userTotalCheck.current || 0,
+        user.limitTotalUsd || 0,
+        noReset,
+        null
+      );
+    }
+
     // ========== Key 层限流检查 ==========
 
-    // 3. 检查 Key 金额限制
+    // 4. 检查 Key 金额限制
     const costCheck = await RateLimitService.checkCostLimits(key.id, "key", {
       limit_5h_usd: key.limit5hUsd,
       limit_daily_usd: key.limitDailyUsd,
@@ -126,7 +159,38 @@ export class ProxyRateLimitGuard {
       );
     }
 
-    // 4. 检查 Key 并发 Session 限制
+    // 5. 检查 Key 总消费限额
+    const keyTotalCheck = await RateLimitService.checkTotalCostLimit(
+      key.id,
+      "key",
+      key.limitTotalUsd ?? null,
+      key.key
+    );
+
+    if (!keyTotalCheck.allowed) {
+      logger.warn(`[RateLimit] Key total limit exceeded: key=${key.id}, ${keyTotalCheck.reason}`);
+
+      const { getLocale } = await import("next-intl/server");
+      const locale = await getLocale();
+      const message = await getErrorMessageServer(locale, ERROR_CODES.RATE_LIMIT_TOTAL_EXCEEDED, {
+        current: (keyTotalCheck.current || 0).toFixed(4),
+        limit: (key.limitTotalUsd || 0).toFixed(4),
+      });
+
+      const noReset = "9999-12-31T23:59:59.999Z";
+
+      throw new RateLimitError(
+        "rate_limit_error",
+        message,
+        "usd_total",
+        keyTotalCheck.current || 0,
+        key.limitTotalUsd || 0,
+        noReset,
+        null
+      );
+    }
+
+    // 6. 检查 Key 并发 Session 限制
     const sessionCheck = await RateLimitService.checkSessionLimit(
       key.id,
       "key",

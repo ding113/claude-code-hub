@@ -35,7 +35,8 @@
     "candidate": "{name}({probability}%)",
     "requestChain": "Цепочка запросов:",
     "systemError": "Системная ошибка",
-    "concurrentLimit": "Лимит параллельных запросов"
+    "concurrentLimit": "Лимит параллельных запросов",
+    "http2Fallback": "Откат HTTP/2"
   },
   "timeline": {
     "sessionReuse": "Повторное использование сессии",
@@ -117,6 +118,9 @@
     "modelRedirect": "Перенаправление модели",
     "modelRedirectFrom": "  Запрошенная модель: {model}",
     "modelRedirectTo": "  Перенаправлено на: {model}",
-    "modelRedirectBilling": "  Модель для расчета: {model}"
+    "modelRedirectBilling": "  Модель для расчета: {model}",
+    "http2Fallback": "Откат протокола HTTP/2",
+    "http2ErrorType": "Тип ошибки HTTP/2: {type}",
+    "http2FallbackNote": "Прозрачный откат на HTTP/1.1, не учитывается в автомате защиты"
   }
 }

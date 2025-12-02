@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -27,11 +28,14 @@ interface SystemSettingsFormProps {
     | "currencyDisplay"
     | "billingModelSource"
     | "verboseProviderError"
+    | "enableHttp2"
   >;
 }
 
 export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps) {
+  const router = useRouter();
   const t = useTranslations("settings.config.form");
+  const tCommon = useTranslations("settings.common");
   const [siteTitle, setSiteTitle] = useState(initialSettings.siteTitle);
   const [allowGlobalUsageView, setAllowGlobalUsageView] = useState(
     initialSettings.allowGlobalUsageView
@@ -45,6 +49,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   const [verboseProviderError, setVerboseProviderError] = useState(
     initialSettings.verboseProviderError
   );
+  const [enableHttp2, setEnableHttp2] = useState(initialSettings.enableHttp2);
   const [isPending, startTransition] = useTransition();
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -62,6 +67,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         currencyDisplay,
         billingModelSource,
         verboseProviderError,
+        enableHttp2,
       });
 
       if (!result.ok) {
@@ -75,13 +81,12 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setCurrencyDisplay(result.data.currencyDisplay);
         setBillingModelSource(result.data.billingModelSource);
         setVerboseProviderError(result.data.verboseProviderError);
+        setEnableHttp2(result.data.enableHttp2);
       }
 
       toast.success(t("configUpdated"));
-      // 刷新页面以应用货币显示变更
-      setTimeout(() => {
-        window.location.reload();
-      }, 1000);
+      // Refresh Server Components to apply changes (currency display, etc.)
+      router.refresh();
     });
   };
 
@@ -172,9 +177,24 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         />
       </div>
 
+      <div className="flex items-start justify-between gap-4 rounded-lg border border-dashed border-border px-4 py-3">
+        <div>
+          <Label htmlFor="enable-http2" className="text-sm font-medium">
+            {t("enableHttp2")}
+          </Label>
+          <p className="text-xs text-muted-foreground mt-1">{t("enableHttp2Desc")}</p>
+        </div>
+        <Switch
+          id="enable-http2"
+          checked={enableHttp2}
+          onCheckedChange={(checked) => setEnableHttp2(checked)}
+          disabled={isPending}
+        />
+      </div>
+
       <div className="flex justify-end">
         <Button type="submit" disabled={isPending}>
-          {isPending ? t("common.saving") : t("saveSettings")}
+          {isPending ? tCommon("saving") : t("saveSettings")}
         </Button>
       </div>
     </form>

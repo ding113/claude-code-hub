@@ -59,6 +59,7 @@
       "endpoint": "Endpoint",
       "status": "Status",
       "timeRange": "Time Range",
+      "dateRange": "Date Range",
       "startTime": "Start Time",
       "endTime": "End Time",
       "allUsers": "All Users",
@@ -516,6 +517,7 @@
     "costDaily": "Daily Cost",
     "costWeekly": "Weekly Cost",
     "costMonthly": "Monthly Cost",
+    "costTotal": "Total Cost",
     "concurrentSessions": "Concurrent Sessions",
     "noLimit": "No quota limits"
   },
@@ -540,7 +542,8 @@
     "limit5hUsd": {
       "label": "5-Hour Cost Limit (USD)",
       "placeholder": "Leave blank for unlimited",
-      "description": "Maximum cost within 5 hours"
+      "description": "Maximum cost within 5 hours",
+      "descriptionWithUserLimit": "Maximum cost within 5 hours (User limit: {limit})"
     },
     "limitDailyUsd": {
       "label": "Daily Cost Limit (USD)",
@@ -566,17 +569,26 @@
     "limitWeeklyUsd": {
       "label": "Weekly Cost Limit (USD)",
       "placeholder": "Leave blank for unlimited",
-      "description": "Maximum cost per week"
+      "description": "Maximum cost per week",
+      "descriptionWithUserLimit": "Maximum cost per week (User limit: {limit})"
     },
     "limitMonthlyUsd": {
       "label": "Monthly Cost Limit (USD)",
       "placeholder": "Leave blank for unlimited",
-      "description": "Maximum cost per month"
+      "description": "Maximum cost per month",
+      "descriptionWithUserLimit": "Maximum cost per month (User limit: {limit})"
+    },
+    "limitTotalUsd": {
+      "label": "Total Cost Limit (USD)",
+      "placeholder": "Leave blank for unlimited",
+      "description": "Maximum cumulative spending (no reset)",
+      "descriptionWithUserLimit": "Cannot exceed user total limit ({limit})"
     },
     "limitConcurrentSessions": {
       "label": "Concurrent Session Limit",
       "placeholder": "0 means unlimited",
-      "description": "Number of simultaneous conversations"
+      "description": "Number of simultaneous conversations",
+      "descriptionWithUserLimit": "Maximum sessions (User limit: {limit})"
     },
     "errors": {
       "userIdMissing": "User ID does not exist",
@@ -644,6 +656,11 @@
       "label": "Monthly Quota (USD)",
       "placeholder": "Leave empty for unlimited",
       "description": "Maximum monthly spending"
+    },
+    "limitTotalUsd": {
+      "label": "Total Quota (USD)",
+      "placeholder": "Leave empty for unlimited",
+      "description": "Maximum lifetime spending"
     },
     "limitConcurrentSessions": {
       "label": "Concurrent Sessions Limit",

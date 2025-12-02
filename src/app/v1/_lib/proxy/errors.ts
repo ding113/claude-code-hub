@@ -599,6 +599,7 @@ export class RateLimitError extends Error {
       | "usd_5h"
       | "usd_weekly"
       | "usd_monthly"
+      | "usd_total"
       | "concurrent_sessions"
       | "daily_quota",
     public readonly currentUsage: number,
@@ -686,4 +687,63 @@ export function categorizeError(error: Error): ErrorCategory {
   // - ETIMEDOUT: 连接或读取超时
   // - ECONNRESET: 连接被重置（非客户端主动）
   return ErrorCategory.SYSTEM_ERROR;
+}
+
+/**
+ * HTTP/2 协议错误检测模式
+ *
+ * 包含常见的 HTTP/2 协议层错误标识：
+ * - GOAWAY: 服务器关闭连接
+ * - RST_STREAM: 流被重置
+ * - PROTOCOL_ERROR: 协议错误
+ * - HTTP/2: 通用 HTTP/2 错误
+ * - ERR_HTTP2_*: Node.js/Chromium HTTP/2 错误代码
+ * - NGHTTP2_*: nghttp2 库错误代码
+ * - HTTP_1_1_REQUIRED: 服务器要求 HTTP/1.1
+ * - REFUSED_STREAM: 服务器拒绝流
+ */
+const HTTP2_ERROR_PATTERNS = [
+  "GOAWAY",
+  "RST_STREAM",
+  "PROTOCOL_ERROR",
+  "HTTP/2",
+  "ERR_HTTP2_",
+  "NGHTTP2_",
+  "HTTP_1_1_REQUIRED",
+  "REFUSED_STREAM",
+];
+
+/**
+ * 检测是否为 HTTP/2 协议错误
+ *
+ * HTTP/2 错误通常发生在协议协商或连接层面，例如：
+ * - 服务器不支持 HTTP/2
+ * - HTTP/2 连接被服务器关闭（GOAWAY）
+ * - HTTP/2 流被重置（RST_STREAM）
+ *
+ * 检测逻辑：
+ * 1. 检查错误名称
+ * 2. 检查错误消息
+ * 3. 检查错误代码（Node.js 风格）
+ *
+ * @param error - 错误对象
+ * @returns 是否为 HTTP/2 协议错误
+ *
+ * @example
+ * // Node.js HTTP/2 错误
+ * isHttp2Error(new Error('ERR_HTTP2_GOAWAY_SESSION')) // true
+ *
+ * // 通用 HTTP/2 错误
+ * isHttp2Error(new Error('HTTP/2 protocol error')) // true
+ *
+ * // 非 HTTP/2 错误
+ * isHttp2Error(new Error('Connection refused')) // false
+ */
+export function isHttp2Error(error: Error): boolean {
+  // 组合错误信息进行检测
+  const errorString = [error.name, error.message, (error as NodeJS.ErrnoException).code ?? ""]
+    .join(" ")
+    .toUpperCase();
+
+  return HTTP2_ERROR_PATTERNS.some((pattern) => errorString.includes(pattern.toUpperCase()));
 }

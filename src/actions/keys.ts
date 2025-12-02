@@ -32,6 +32,7 @@ export async function addKey(data: {
   dailyResetTime?: string;
   limitWeeklyUsd?: number | null;
   limitMonthlyUsd?: number | null;
+  limitTotalUsd?: number | null;
   limitConcurrentSessions?: number;
 }): Promise<ActionResult<{ generatedKey: string; name: string }>> {
   try {
@@ -54,6 +55,7 @@ export async function addKey(data: {
       dailyResetTime: data.dailyResetTime,
       limitWeeklyUsd: data.limitWeeklyUsd,
       limitMonthlyUsd: data.limitMonthlyUsd,
+      limitTotalUsd: data.limitTotalUsd,
       limitConcurrentSessions: data.limitConcurrentSessions,
     });
 
@@ -107,6 +109,17 @@ export async function addKey(data: {
     }
 
     if (
+      validatedData.limitTotalUsd &&
+      user.limitTotalUsd &&
+      validatedData.limitTotalUsd > user.limitTotalUsd
+    ) {
+      return {
+        ok: false,
+        error: `Key的总消费上限（${validatedData.limitTotalUsd}）不能超过用户限额（${user.limitTotalUsd}）`,
+      };
+    }
+
+    if (
       data.limitConcurrentSessions &&
       user.limitConcurrentSessions &&
       data.limitConcurrentSessions > user.limitConcurrentSessions
@@ -136,6 +149,7 @@ export async function addKey(data: {
       daily_reset_time: validatedData.dailyResetTime,
       limit_weekly_usd: validatedData.limitWeeklyUsd,
       limit_monthly_usd: validatedData.limitMonthlyUsd,
+      limit_total_usd: validatedData.limitTotalUsd,
       limit_concurrent_sessions: validatedData.limitConcurrentSessions,
     });
 
@@ -163,6 +177,7 @@ export async function editKey(
     dailyResetTime?: string;
     limitWeeklyUsd?: number | null;
     limitMonthlyUsd?: number | null;
+    limitTotalUsd?: number | null;
     limitConcurrentSessions?: number;
   }
 ): Promise<ActionResult> {
@@ -233,6 +248,17 @@ export async function editKey(
     }
 
     if (
+      validatedData.limitTotalUsd &&
+      user.limitTotalUsd &&
+      validatedData.limitTotalUsd > user.limitTotalUsd
+    ) {
+      return {
+        ok: false,
+        error: `Key的总消费上限（${validatedData.limitTotalUsd}）不能超过用户限额（${user.limitTotalUsd}）`,
+      };
+    }
+
+    if (
       validatedData.limitConcurrentSessions &&
       user.limitConcurrentSessions &&
       validatedData.limitConcurrentSessions > user.limitConcurrentSessions
@@ -257,6 +283,7 @@ export async function editKey(
       daily_reset_time: validatedData.dailyResetTime,
       limit_weekly_usd: validatedData.limitWeeklyUsd,
       limit_monthly_usd: validatedData.limitMonthlyUsd,
+      limit_total_usd: validatedData.limitTotalUsd,
       limit_concurrent_sessions: validatedData.limitConcurrentSessions,
     });
 
@@ -355,6 +382,7 @@ export async function getKeyLimitUsage(keyId: number): Promise<
     costDaily: { current: number; limit: number | null; resetAt?: Date };
     costWeekly: { current: number; limit: number | null; resetAt?: Date };
     costMonthly: { current: number; limit: number | null; resetAt?: Date };
+    costTotal: { current: number; limit: number | null };
     concurrentSessions: { current: number; limit: number };
   }>
 > {
@@ -378,21 +406,24 @@ export async function getKeyLimitUsage(keyId: number): Promise<
     const { RateLimitService } = await import("@/lib/rate-limit");
     const { SessionTracker } = await import("@/lib/session-tracker");
     const { getResetInfo, getResetInfoWithMode } = await import("@/lib/rate-limit/time-utils");
+    const { sumKeyTotalCost } = await import("@/repository/statistics");
 
     // 获取金额消费（优先 Redis，降级数据库）
-    const [cost5h, costDaily, costWeekly, costMonthly, concurrentSessions] = await Promise.all([
-      RateLimitService.getCurrentCost(keyId, "key", "5h"),
-      RateLimitService.getCurrentCost(
-        keyId,
-        "key",
-        "daily",
-        key.dailyResetTime,
-        key.dailyResetMode ?? "fixed"
-      ),
-      RateLimitService.getCurrentCost(keyId, "key", "weekly"),
-      RateLimitService.getCurrentCost(keyId, "key", "monthly"),
-      SessionTracker.getKeySessionCount(keyId),
-    ]);
+    const [cost5h, costDaily, costWeekly, costMonthly, totalCost, concurrentSessions] =
+      await Promise.all([
+        RateLimitService.getCurrentCost(keyId, "key", "5h"),
+        RateLimitService.getCurrentCost(
+          keyId,
+          "key",
+          "daily",
+          key.dailyResetTime,
+          key.dailyResetMode ?? "fixed"
+        ),
+        RateLimitService.getCurrentCost(keyId, "key", "weekly"),
+        RateLimitService.getCurrentCost(keyId, "key", "monthly"),
+        sumKeyTotalCost(key.key),
+        SessionTracker.getKeySessionCount(keyId),
+      ]);
 
     // 获取重置时间
     const resetInfo5h = getResetInfo("5h");
@@ -426,6 +457,10 @@ export async function getKeyLimitUsage(keyId: number): Promise<
           current: costMonthly,
           limit: key.limitMonthlyUsd,
           resetAt: resetInfoMonthly.resetAt,
+        },
+        costTotal: {
+          current: totalCost,
+          limit: key.limitTotalUsd ?? null,
         },
         concurrentSessions: {
           current: concurrentSessions,

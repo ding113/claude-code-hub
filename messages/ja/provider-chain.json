@@ -35,7 +35,8 @@
     "candidate": "{name}({probability}%)",
     "requestChain": "リクエストチェーン:",
     "systemError": "システムエラー",
-    "concurrentLimit": "同時実行制限"
+    "concurrentLimit": "同時実行制限",
+    "http2Fallback": "HTTP/2 フォールバック"
   },
   "timeline": {
     "sessionReuse": "セッション再利用",
@@ -117,6 +118,9 @@
     "modelRedirect": "モデルリダイレクト",
     "modelRedirectFrom": "  リクエストモデル: {model}",
     "modelRedirectTo": "  リダイレクト先: {model}",
-    "modelRedirectBilling": "  課金モデル: {model}"
+    "modelRedirectBilling": "  課金モデル: {model}",
+    "http2Fallback": "HTTP/2 プロトコルフォールバック",
+    "http2ErrorType": "HTTP/2 エラータイプ: {type}",
+    "http2FallbackNote": "HTTP/1.1 に透過的にフォールバック、サーキットブレーカーにカウントされません"
   }
 }

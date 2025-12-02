@@ -59,6 +59,7 @@
       "endpoint": "端點",
       "status": "狀態",
       "timeRange": "時間範圍",
+      "dateRange": "日期範圍",
       "startTime": "開始時間",
       "endTime": "結束時間",
       "allUsers": "所有使用者",

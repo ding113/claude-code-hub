@@ -18,6 +18,7 @@ interface LimitUsageData {
   costDaily: { current: number; limit: number | null };
   costWeekly: { current: number; limit: number | null };
   costMonthly: { current: number; limit: number | null };
+  costTotal: { current: number; limit: number | null };
   concurrentSessions: { current: number; limit: number };
 }
 
@@ -93,6 +94,12 @@ export function KeyLimitUsage({ keyId, currencyCode = "USD" }: KeyLimitUsageProp
       label: t("costMonthly"),
       current: data.costMonthly.current,
       limit: data.costMonthly.limit,
+      isCost: true,
+    },
+    {
+      label: t("costTotal"),
+      current: data.costTotal.current,
+      limit: data.costTotal.limit,
       isCost: true,
     },
     {

@@ -26,6 +26,7 @@ export default async function SettingsConfigPage() {
             currencyDisplay: settings.currencyDisplay,
             billingModelSource: settings.billingModelSource,
             verboseProviderError: settings.verboseProviderError,
+            enableHttp2: settings.enableHttp2,
           }}
         />
       </Section>

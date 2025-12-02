@@ -75,7 +75,7 @@ import {
   TRACK_COST_DAILY_ROLLING_WINDOW,
 } from "@/lib/redis/lua-scripts";
 import { SessionTracker } from "@/lib/session-tracker";
-import { sumUserCostToday } from "@/repository/statistics";
+import { sumKeyTotalCost, sumUserCostToday, sumUserTotalCost } from "@/repository/statistics";
 import {
   type DailyResetMode,
   getSecondsUntilMidnight,
@@ -243,6 +243,89 @@ export class RateLimitService {
     } catch (error) {
       logger.error("[RateLimit] Check failed, fallback to database:", error);
       return await RateLimitService.checkCostLimitsFromDatabase(id, type, costLimits);
+    }
+  }
+
+  /**
+   * 检查总消费限额（带 Redis 缓存优化）
+   * 使用 5 分钟 TTL 缓存减少数据库查询频率
+   */
+  static async checkTotalCostLimit(
+    entityId: number,
+    entityType: "key" | "user",
+    limitTotalUsd: number | null,
+    keyHash?: string
+  ): Promise<{ allowed: boolean; current?: number; reason?: string }> {
+    if (limitTotalUsd === null || limitTotalUsd === undefined || limitTotalUsd <= 0) {
+      return { allowed: true };
+    }
+
+    try {
+      let current = 0;
+      const cacheKey =
+        entityType === "key" ? `total_cost:key:${keyHash}` : `total_cost:user:${entityId}`;
+      const cacheTtl = 300; // 5 minutes
+
+      // 尝试从 Redis 缓存获取
+      const redis = RateLimitService.redis;
+      if (redis && redis.status === "ready") {
+        try {
+          const cached = await redis.get(cacheKey);
+          if (cached !== null) {
+            current = Number(cached);
+          } else {
+            // 缓存未命中，查询数据库
+            if (entityType === "key") {
+              if (!keyHash) {
+                logger.warn("[RateLimit] Missing key hash for total cost check, skip enforcement");
+                return { allowed: true };
+              }
+              current = await sumKeyTotalCost(keyHash);
+            } else {
+              current = await sumUserTotalCost(entityId);
+            }
+            // 异步写入缓存，不阻塞请求
+            redis.setex(cacheKey, cacheTtl, current.toString()).catch((err) => {
+              logger.warn("[RateLimit] Failed to cache total cost:", err);
+            });
+          }
+        } catch (redisError) {
+          // Redis 读取失败，降级到数据库查询
+          logger.warn("[RateLimit] Redis cache read failed, falling back to database:", redisError);
+          if (entityType === "key") {
+            if (!keyHash) {
+              return { allowed: true };
+            }
+            current = await sumKeyTotalCost(keyHash);
+          } else {
+            current = await sumUserTotalCost(entityId);
+          }
+        }
+      } else {
+        // Redis 不可用，直接查询数据库
+        if (entityType === "key") {
+          if (!keyHash) {
+            logger.warn("[RateLimit] Missing key hash for total cost check, skip enforcement");
+            return { allowed: true };
+          }
+          current = await sumKeyTotalCost(keyHash);
+        } else {
+          current = await sumUserTotalCost(entityId);
+        }
+      }
+
+      if (current >= limitTotalUsd) {
+        return {
+          allowed: false,
+          current,
+          reason: `${entityType === "key" ? "Key" : "User"} total spending limit reached (${current.toFixed(4)}/${limitTotalUsd})`,
+        };
+      }
+
+      return { allowed: true, current };
+    } catch (error) {
+      logger.error("[RateLimit] Total cost limit check failed:", error);
+      return { allowed: true }; // fail open
     }
   }
 

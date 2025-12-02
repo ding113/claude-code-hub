@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
   editProvider,
@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
+import { copyToClipboard, isClipboardSupported } from "@/lib/utils/clipboard";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
 import type { ProviderDisplay } from "@/types/provider";
@@ -81,6 +82,7 @@ export function ProviderRichListItem({
   const [showKeyDialog, setShowKeyDialog] = useState(false);
   const [unmaskedKey, setUnmaskedKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [clipboardAvailable, setClipboardAvailable] = useState(false);
   const [resetPending, startResetTransition] = useTransition();
   const [deletePending, startDeleteTransition] = useTransition();
   const [togglePending, startToggleTransition] = useTransition();
@@ -96,6 +98,10 @@ export function ProviderRichListItem({
   const typeKey = getProviderTypeTranslationKey(provider.providerType);
   const typeLabel = tTypes(`${typeKey}.label`);
   const typeDescription = tTypes(`${typeKey}.description`);
+
+  useEffect(() => {
+    setClipboardAvailable(isClipboardSupported());
+  }, []);
 
   // 处理编辑
   const handleEdit = () => {
@@ -160,13 +166,13 @@ export function ProviderRichListItem({
   // 处理复制密钥
   const handleCopy = async () => {
     if (unmaskedKey) {
-      try {
-        await navigator.clipboard.writeText(unmaskedKey);
+      const success = await copyToClipboard(unmaskedKey);
+
+      if (success) {
         setCopied(true);
         toast.success(tList("keyCopied"));
         setTimeout(() => setCopied(false), 3000);
-      } catch (error) {
-        console.error("复制失败:", error);
+      } else {
         toast.error(tList("copyFailed"));
       }
     }
@@ -271,12 +277,16 @@ export function ProviderRichListItem({
             {/* 名称 */}
             <span className="font-semibold truncate">{provider.name}</span>
 
-            {/* Group Tag */}
-            {provider.groupTag && (
-              <Badge variant="outline" className="flex-shrink-0">
-                {provider.groupTag}
-              </Badge>
-            )}
+            {/* Group Tags (supports comma-separated values) */}
+            {provider.groupTag
+              ?.split(",")
+              .map((t) => t.trim())
+              .filter(Boolean)
+              .map((tag, index) => (
+                <Badge key={`${tag}-${index}`} variant="outline" className="flex-shrink-0">
+                  {tag}
+                </Badge>
+              ))}
 
             {/* 熔断器警告 */}
             {healthStatus && healthStatus.circuitState === "open" && (
@@ -508,14 +518,19 @@ export function ProviderRichListItem({
               <code className="flex-1 font-mono bg-muted px-3 py-2 rounded text-sm break-all">
                 {unmaskedKey || tList("keyLoading")}
               </code>
-              <Button onClick={handleCopy} disabled={!unmaskedKey} size="icon" variant="outline">
-                {copied ? (
-                  <CheckCircle className="h-4 w-4 text-green-600" />
-                ) : (
-                  <Copy className="h-4 w-4" />
-                )}
-              </Button>
+              {clipboardAvailable && (
+                <Button onClick={handleCopy} disabled={!unmaskedKey} size="icon" variant="outline">
+                  {copied ? (
+                    <CheckCircle className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </Button>
+              )}
             </div>
+            {!clipboardAvailable && (
+              <p className="text-xs text-muted-foreground">{tList("clipboardUnavailable")}</p>
+            )}
           </div>
         </DialogContent>
       </Dialog>

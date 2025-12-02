@@ -2,7 +2,7 @@
 import { CheckCircle, Copy, Edit, Globe, Key, RotateCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { getUnmaskedProviderKey, resetProviderCircuit } from "@/actions/providers";
 import { FormErrorBoundary } from "@/components/form-error-boundary";
@@ -32,6 +32,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PROVIDER_LIMITS } from "@/lib/constants/provider.constants";
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
+import { copyToClipboard, isClipboardSupported } from "@/lib/utils/clipboard";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
 import type { ProviderDisplay } from "@/types/provider";
@@ -66,9 +67,11 @@ export function ProviderListItem({
   const [showKeyDialog, setShowKeyDialog] = useState(false);
   const [unmaskedKey, setUnmaskedKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [clipboardAvailable, setClipboardAvailable] = useState(false);
   const [resetPending, startResetTransition] = useTransition();
   const canEdit = currentUser?.role === "admin";
   const t = useTranslations("settings.providers.types");
+  const tList = useTranslations("settings.providers.list");
   const tTimeout = useTranslations("settings.providers.form.sections.timeout");
 
   const {
@@ -112,6 +115,10 @@ export function ProviderListItem({
   const typeLabel = t(`${typeKey}.label`);
   const typeDescription = t(`${typeKey}.description`);
 
+  useEffect(() => {
+    setClipboardAvailable(isClipboardSupported());
+  }, []);
+
   // 处理手动解除熔断
   const handleResetCircuit = () => {
     startResetTransition(async () => {
@@ -153,14 +160,14 @@ export function ProviderListItem({
   // 处理复制密钥
   const handleCopy = async () => {
     if (unmaskedKey) {
-      try {
-        await navigator.clipboard.writeText(unmaskedKey);
+      const success = await copyToClipboard(unmaskedKey);
+
+      if (success) {
         setCopied(true);
-        toast.success("密钥已复制到剪贴板");
+        toast.success(tList("keyCopied"));
         setTimeout(() => setCopied(false), 3000);
-      } catch (err) {
-        console.error("复制失败:", err);
-        toast.error("复制失败");
+      } else {
+        toast.error(tList("copyFailed"));
       }
     }
   };
@@ -741,20 +748,25 @@ export function ProviderListItem({
               <code className="flex-1 font-mono bg-muted px-3 py-2 rounded text-sm break-all border">
                 {unmaskedKey || "加载中..."}
               </code>
-              <Button
-                size="icon"
-                variant="outline"
-                onClick={handleCopy}
-                disabled={!unmaskedKey}
-                type="button"
-              >
-                {copied ? (
-                  <CheckCircle className="h-4 w-4 text-green-500" />
-                ) : (
-                  <Copy className="h-4 w-4" />
-                )}
-              </Button>
+              {clipboardAvailable && (
+                <Button
+                  size="icon"
+                  variant="outline"
+                  onClick={handleCopy}
+                  disabled={!unmaskedKey}
+                  type="button"
+                >
+                  {copied ? (
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </Button>
+              )}
             </div>
+            {!clipboardAvailable && (
+              <p className="text-xs text-muted-foreground">{tList("clipboardUnavailable")}</p>
+            )}
           </div>
         </DialogContent>
       </Dialog>

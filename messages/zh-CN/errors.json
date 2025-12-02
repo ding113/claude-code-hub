@@ -45,6 +45,13 @@
 
   "QUOTA_EXCEEDED": "配额已用尽",
   "RATE_LIMIT_EXCEEDED": "请求过于频繁，请稍后重试",
+  "RATE_LIMIT_RPM_EXCEEDED": "请求频率超限：当前 {current} 次/分钟（限制：{limit} 次/分钟）。将于 {resetTime} 重置",
+  "RATE_LIMIT_DAILY_QUOTA_EXCEEDED": "每日额度超限：当前 ${current} USD（限制：${limit} USD）。将于 {resetTime} 重置",
+  "RATE_LIMIT_5H_EXCEEDED": "5小时消费超限：当前 ${current} USD（限制：${limit} USD）。将于 {resetTime} 重置",
+  "RATE_LIMIT_WEEKLY_EXCEEDED": "周消费超限：当前 ${current} USD（限制：${limit} USD）。将于 {resetTime} 重置",
+  "RATE_LIMIT_MONTHLY_EXCEEDED": "月消费超限：当前 ${current} USD（限制：${limit} USD）。将于 {resetTime} 重置",
+  "RATE_LIMIT_TOTAL_EXCEEDED": "总消费上限已达到：${current} / ${limit} USD",
+  "RATE_LIMIT_CONCURRENT_SESSIONS_EXCEEDED": "并发 Session 超限：当前 {current} 个（限制：{limit} 个）。请等待活跃 Session 完成",
   "RESOURCE_BUSY": "资源正在使用中",
   "INVALID_STATE": "当前状态不允许此操作",
   "CONFLICT": "操作冲突",

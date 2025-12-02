@@ -26,6 +26,9 @@ export interface SystemSettings {
   // 供应商不可用时是否返回详细错误信息
   verboseProviderError: boolean;
 
+  // 启用 HTTP/2 连接供应商
+  enableHttp2: boolean;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -52,4 +55,7 @@ export interface UpdateSystemSettingsInput {
 
   // 供应商不可用时是否返回详细错误信息（可选）
   verboseProviderError?: boolean;
+
+  // 启用 HTTP/2 连接供应商（可选）
+  enableHttp2?: boolean;
 }

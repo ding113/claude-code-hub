@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth";
+import { invalidateSystemSettingsCache } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { UpdateSystemSettingsSchema } from "@/lib/validation/schemas";
 import { getSystemSettings, updateSystemSettings } from "@/repository/system-config";
@@ -35,6 +36,7 @@ export async function saveSystemSettings(formData: {
   cleanupBatchSize?: number;
   enableClientVersionCheck?: boolean;
   verboseProviderError?: boolean;
+  enableHttp2?: boolean;
 }): Promise<ActionResult<SystemSettings>> {
   try {
     const session = await getSession();
@@ -54,7 +56,11 @@ export async function saveSystemSettings(formData: {
       cleanupBatchSize: validated.cleanupBatchSize,
       enableClientVersionCheck: validated.enableClientVersionCheck,
       verboseProviderError: validated.verboseProviderError,
+      enableHttp2: validated.enableHttp2,
     });
+
+    // Invalidate the system settings cache so proxy requests get fresh settings
+    invalidateSystemSettingsCache();
 
     revalidatePath("/settings/config");
     revalidatePath("/dashboard");

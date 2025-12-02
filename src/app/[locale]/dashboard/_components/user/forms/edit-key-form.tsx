@@ -31,6 +31,7 @@ interface EditKeyFormProps {
     dailyResetTime?: string;
     limitWeeklyUsd?: number | null;
     limitMonthlyUsd?: number | null;
+    limitTotalUsd?: number | null;
     limitConcurrentSessions?: number;
   };
   user?: User;
@@ -63,6 +64,7 @@ export function EditKeyForm({ keyData, user, onSuccess }: EditKeyFormProps) {
       dailyResetTime: keyData?.dailyResetTime ?? "00:00",
       limitWeeklyUsd: keyData?.limitWeeklyUsd ?? null,
       limitMonthlyUsd: keyData?.limitMonthlyUsd ?? null,
+      limitTotalUsd: keyData?.limitTotalUsd ?? null,
       limitConcurrentSessions: keyData?.limitConcurrentSessions ?? 0,
     },
     onSubmit: async (data) => {
@@ -82,6 +84,7 @@ export function EditKeyForm({ keyData, user, onSuccess }: EditKeyFormProps) {
             dailyResetTime: data.dailyResetTime,
             limitWeeklyUsd: data.limitWeeklyUsd,
             limitMonthlyUsd: data.limitMonthlyUsd,
+            limitTotalUsd: data.limitTotalUsd,
             limitConcurrentSessions: data.limitConcurrentSessions,
           });
           if (!res.ok) {
@@ -226,6 +229,20 @@ export function EditKeyForm({ keyData, user, onSuccess }: EditKeyFormProps) {
           min={0}
           step={0.01}
           {...form.getFieldProps("limitMonthlyUsd")}
+        />
+
+        <NumberField
+          label={t("limitTotalUsd.label")}
+          placeholder={t("limitTotalUsd.placeholder")}
+          description={
+            user?.limitTotalUsd
+              ? t("limitTotalUsd.descriptionWithUserLimit", { limit: user.limitTotalUsd })
+              : t("limitTotalUsd.description")
+          }
+          min={0}
+          max={10000000}
+          step={0.01}
+          {...form.getFieldProps("limitTotalUsd")}
         />
 
         <NumberField

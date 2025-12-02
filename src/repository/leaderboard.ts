@@ -109,7 +109,7 @@ function buildDateCondition(
     case "daily":
       return sql`(${messageRequest.createdAt} AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date`;
     case "weekly":
-      return sql`(${messageRequest.createdAt} AT TIME ZONE ${timezone})::date >= (CURRENT_DATE AT TIME ZONE ${timezone} - INTERVAL '6 days')`;
+      return sql`date_trunc('week', ${messageRequest.createdAt} AT TIME ZONE ${timezone}) = date_trunc('week', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})`;
     case "monthly":
       return sql`date_trunc('month', ${messageRequest.createdAt} AT TIME ZONE ${timezone}) = date_trunc('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})`;
     default:

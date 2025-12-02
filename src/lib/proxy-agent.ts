@@ -11,6 +11,7 @@ export interface ProxyConfig {
   agent: ProxyAgent | SocksProxyAgent | any; // any to support non-undici agents
   fallbackToDirect: boolean;
   proxyUrl: string;
+  http2Enabled: boolean; // HTTP/2 是否启用（SOCKS 代理不支持 HTTP/2）
 }
 
 /**
@@ -33,13 +34,19 @@ export interface ProviderProxyConfig {
  * - socks5:// - SOCKS5 代理
  * - socks4:// - SOCKS4 代理
  *
+ * HTTP/2 支持：
+ * - HTTP/HTTPS 代理支持 HTTP/2（通过 undici 的 allowH2 选项）
+ * - SOCKS 代理不支持 HTTP/2（undici 限制）
+ *
  * @param provider 供应商配置（Provider 或 ProviderProxyConfig）
  * @param targetUrl 目标请求 URL
+ * @param enableHttp2 是否启用 HTTP/2（默认 false）
  * @returns 代理配置对象，如果未配置代理则返回 null
  */
 export function createProxyAgentForProvider(
   provider: Provider | ProviderProxyConfig,
-  targetUrl: string
+  targetUrl: string,
+  enableHttp2 = false
 ): ProxyConfig | null {
   // 未配置代理
   if (!provider.proxyUrl) {
@@ -57,10 +64,22 @@ export function createProxyAgentForProvider(
 
     // 根据协议选择 Agent
     let agent: ProxyAgent | SocksProxyAgent;
+    let actualHttp2Enabled = false; // 实际是否启用 HTTP/2
 
     if (parsedProxy.protocol === "socks5:" || parsedProxy.protocol === "socks4:") {
-      // SOCKS 代理
+      // SOCKS 代理（不支持 HTTP/2）
       agent = new SocksProxyAgent(proxyUrl);
+      actualHttp2Enabled = false; // SOCKS 不支持 HTTP/2
+
+      // 警告：SOCKS 代理不支持 HTTP/2
+      if (enableHttp2) {
+        logger.warn("SOCKS proxy does not support HTTP/2, falling back to HTTP/1.1", {
+          providerId: provider.id,
+          providerName: provider.name ?? "unknown",
+          protocol: parsedProxy.protocol,
+        });
+      }
+
       logger.debug("SOCKS ProxyAgent created", {
         providerId: provider.id,
         providerName: provider.name ?? "unknown",
@@ -68,10 +87,16 @@ export function createProxyAgentForProvider(
         proxyHost: parsedProxy.hostname,
         proxyPort: parsedProxy.port,
         targetUrl: new URL(targetUrl).origin,
+        http2Enabled: false, // SOCKS 不支持 HTTP/2
       });
     } else if (parsedProxy.protocol === "http:" || parsedProxy.protocol === "https:") {
       // HTTP/HTTPS 代理（使用 undici）
-      agent = new ProxyAgent(proxyUrl);
+      // 支持 HTTP/2：通过 allowH2 选项启用 ALPN 协商
+      agent = new ProxyAgent({
+        uri: proxyUrl,
+        allowH2: enableHttp2,
+      });
+      actualHttp2Enabled = enableHttp2;
       logger.debug("HTTP/HTTPS ProxyAgent created", {
         providerId: provider.id,
         providerName: provider.name ?? "unknown",
@@ -79,6 +104,7 @@ export function createProxyAgentForProvider(
         proxyHost: parsedProxy.hostname,
         proxyPort: parsedProxy.port,
         targetUrl: new URL(targetUrl).origin,
+        http2Enabled: enableHttp2,
       });
     } else {
       throw new Error(
@@ -90,6 +116,7 @@ export function createProxyAgentForProvider(
       agent,
       fallbackToDirect: provider.proxyFallbackToDirect ?? false,
       proxyUrl: maskProxyUrl(proxyUrl),
+      http2Enabled: actualHttp2Enabled,
     };
   } catch (error) {
     logger.error("Failed to create ProxyAgent", {

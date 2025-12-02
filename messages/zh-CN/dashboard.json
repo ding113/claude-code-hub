@@ -59,6 +59,7 @@
       "endpoint": "端点",
       "status": "状态",
       "timeRange": "时间范围",
+      "dateRange": "日期范围",
       "startTime": "开始时间",
       "endTime": "结束时间",
       "allUsers": "全部用户",
@@ -516,6 +517,7 @@
     "costDaily": "每日消费",
     "costWeekly": "周消费",
     "costMonthly": "月消费",
+    "costTotal": "总消费",
     "concurrentSessions": "并发 Session",
     "noLimit": "无限额限制"
   },
@@ -575,6 +577,12 @@
       "placeholder": "留空表示无限制",
       "description": "每月最大消费金额",
       "descriptionWithUserLimit": "每月最大消费金额（用户限额: ${limit}）"
+    },
+    "limitTotalUsd": {
+      "label": "总消费上限 (USD)",
+      "placeholder": "留空表示无限制",
+      "description": "累计消费上限（不重置）",
+      "descriptionWithUserLimit": "累计消费上限（用户限额: ${limit}）"
     },
     "limitConcurrentSessions": {
       "label": "并发 Session 上限",
@@ -648,6 +656,11 @@
       "label": "月限额 (USD)",
       "placeholder": "留空表示无限制",
       "description": "每月最大消费金额"
+    },
+    "limitTotalUsd": {
+      "label": "总限额 (USD)",
+      "placeholder": "留空表示无限制",
+      "description": "累计消费上限（不重置）"
     },
     "limitConcurrentSessions": {
       "label": "并发 Session 上限",
