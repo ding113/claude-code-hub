@@ -732,27 +732,57 @@ export async function sumUserCostToday(userId: number): Promise<number> {
 }
 
 /**
- * 查询 Key 历史总消费（不分时间窗口）
+ * 查询 Key 历史总消费（带时间边界优化）
  * 用于总消费限额检查
+ * @param keyHash - API Key 的哈希值
+ * @param maxAgeDays - 最大查询天数，默认 365 天（避免全表扫描）
  */
-export async function sumKeyTotalCost(keyHash: string): Promise<number> {
+export async function sumKeyTotalCost(keyHash: string, maxAgeDays: number = 365): Promise<number> {
+  // Validate maxAgeDays - use default 365 for invalid values
+  const validMaxAgeDays =
+    Number.isFinite(maxAgeDays) && maxAgeDays > 0 ? Math.floor(maxAgeDays) : 365;
+
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - validMaxAgeDays);
+
   const result = await db
     .select({ total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)` })
     .from(messageRequest)
-    .where(and(eq(messageRequest.key, keyHash), isNull(messageRequest.deletedAt)));
+    .where(
+      and(
+        eq(messageRequest.key, keyHash),
+        isNull(messageRequest.deletedAt),
+        gte(messageRequest.createdAt, cutoffDate)
+      )
+    );
 
   return Number(result[0]?.total || 0);
 }
 
 /**
- * 查询用户历史总消费（所有 Key 累计）
+ * 查询用户历史总消费（所有 Key 累计，带时间边界优化）
  * 用于总消费限额检查
+ * @param userId - 用户 ID
+ * @param maxAgeDays - 最大查询天数，默认 365 天（避免全表扫描）
  */
-export async function sumUserTotalCost(userId: number): Promise<number> {
+export async function sumUserTotalCost(userId: number, maxAgeDays: number = 365): Promise<number> {
+  // Validate maxAgeDays - use default 365 for invalid values
+  const validMaxAgeDays =
+    Number.isFinite(maxAgeDays) && maxAgeDays > 0 ? Math.floor(maxAgeDays) : 365;
+
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - validMaxAgeDays);
+
   const result = await db
     .select({ total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)` })
     .from(messageRequest)
-    .where(and(eq(messageRequest.userId, userId), isNull(messageRequest.deletedAt)));
+    .where(
+      and(
+        eq(messageRequest.userId, userId),
+        isNull(messageRequest.deletedAt),
+        gte(messageRequest.createdAt, cutoffDate)
+      )
+    );
 
   return Number(result[0]?.total || 0);
 }
