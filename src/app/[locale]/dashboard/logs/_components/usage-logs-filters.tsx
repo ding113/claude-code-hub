@@ -1,8 +1,9 @@
 "use client";
 
+import { addDays, format, parse } from "date-fns";
 import { useTranslations } from "next-intl";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getKeys } from "@/actions/keys";
 import { getEndpointList, getModelList, getStatusCodeList } from "@/actions/usage-logs";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ import {
 import type { Key } from "@/types/key";
 import type { ProviderDisplay } from "@/types/provider";
 import type { UserDisplay } from "@/types/user";
+import { LogsDateRangePicker } from "./logs-date-range-picker";
 
 interface UsageLogsFiltersProps {
   isAdmin: boolean;
@@ -139,35 +141,48 @@ export function UsageLogsFilters({
     onReset();
   };
 
+  // Memoized endDate calculation: endDateLocal is next day 00:00, subtract 1 day to show correct end date
+  const displayEndDate = useMemo(() => {
+    if (!localFilters.endDateLocal) return undefined;
+    const endDateStr = localFilters.endDateLocal.split("T")[0];
+    const endDate = parse(endDateStr, "yyyy-MM-dd", new Date());
+    return format(addDays(endDate, -1), "yyyy-MM-dd");
+  }, [localFilters.endDateLocal]);
+
+  // Memoized callback for date range changes
+  const handleDateRangeChange = useCallback((range: { startDate?: string; endDate?: string }) => {
+    if (range.startDate && range.endDate) {
+      // Convert to backend format:
+      // startDateLocal: "YYYY-MM-DDT00:00" (start of day)
+      // endDateLocal: "YYYY-MM-(DD+1)T00:00" (start of next day, for < comparison)
+      const endDate = parse(range.endDate, "yyyy-MM-dd", new Date());
+      const nextDay = addDays(endDate, 1);
+      setLocalFilters((prev) => ({
+        ...prev,
+        startDateLocal: `${range.startDate}T00:00`,
+        endDateLocal: `${format(nextDay, "yyyy-MM-dd")}T00:00`,
+      }));
+    } else {
+      setLocalFilters((prev) => ({
+        ...prev,
+        startDateLocal: undefined,
+        endDateLocal: undefined,
+      }));
+    }
+  }, []);
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-12">
-        {/* 时间范围 - 使用字符串存储，避免时区转换问题 */}
+        {/* 时间范围 - 使用日期范围选择器 */}
         <div className="space-y-2 lg:col-span-4">
-          <Label>{t("logs.filters.startTime")}</Label>
-          <Input
-            type="datetime-local"
-            value={localFilters.startDateLocal ?? ""}
-            onChange={(e) =>
-              setLocalFilters({
-                ...localFilters,
-                startDateLocal: e.target.value || undefined,
-              })
+          <Label>{t("logs.filters.dateRange")}</Label>
+          <LogsDateRangePicker
+            startDate={
+              localFilters.startDateLocal ? localFilters.startDateLocal.split("T")[0] : undefined
             }
-          />
-        </div>
-
-        <div className="space-y-2 lg:col-span-4">
-          <Label>{t("logs.filters.endTime")}</Label>
-          <Input
-            type="datetime-local"
-            value={localFilters.endDateLocal ?? ""}
-            onChange={(e) =>
-              setLocalFilters({
-                ...localFilters,
-                endDateLocal: e.target.value || undefined,
-              })
-            }
+            endDate={displayEndDate}
+            onDateRangeChange={handleDateRangeChange}
           />
         </div>
 

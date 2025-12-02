@@ -59,6 +59,7 @@
       "endpoint": "Endpoint",
       "status": "Status",
       "timeRange": "Time Range",
+      "dateRange": "Date Range",
       "startTime": "Start Time",
       "endTime": "End Time",
       "allUsers": "All Users",
