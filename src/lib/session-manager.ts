@@ -1,13 +1,15 @@
-import crypto from "crypto";
+import "server-only";
+
+import crypto from "node:crypto";
 import { logger } from "@/lib/logger";
-import { getRedisClient } from "./redis";
-import { SessionTracker } from "./session-tracker";
 import type {
   ActiveSessionInfo,
+  SessionProviderInfo,
   SessionStoreInfo,
   SessionUsageUpdate,
-  SessionProviderInfo,
 } from "@/types/session";
+import { getRedisClient } from "./redis";
+import { SessionTracker } from "./session-tracker";
 
 /**
  * Session 管理器
@@ -19,10 +21,11 @@ import type {
  * 4. 存储和查询活跃 session 详细信息（用于实时监控）
  */
 export class SessionManager {
-  private static readonly SESSION_TTL = parseInt(process.env.SESSION_TTL || "300"); // 5 分钟
+  private static readonly SESSION_TTL = parseInt(process.env.SESSION_TTL || "300", 10); // 5 分钟
   private static readonly STORE_MESSAGES = process.env.STORE_SESSION_MESSAGES === "true";
   private static readonly SHORT_CONTEXT_THRESHOLD = parseInt(
-    process.env.SHORT_CONTEXT_THRESHOLD || "2"
+    process.env.SHORT_CONTEXT_THRESHOLD || "2",
+    10
   ); // 短上下文阈值
   private static readonly ENABLE_SHORT_CONTEXT_DETECTION =
     process.env.ENABLE_SHORT_CONTEXT_DETECTION !== "false"; // 默认启用
@@ -183,13 +186,16 @@ export class SessionManager {
     // 1. 优先使用客户端传递的 session_id (来自 metadata.user_id 或 metadata.session_id)
     if (clientSessionId) {
       // 2. 短上下文并发检测（方案E）
-      if (this.ENABLE_SHORT_CONTEXT_DETECTION && messagesLength <= this.SHORT_CONTEXT_THRESHOLD) {
+      if (
+        SessionManager.ENABLE_SHORT_CONTEXT_DETECTION &&
+        messagesLength <= SessionManager.SHORT_CONTEXT_THRESHOLD
+      ) {
         // 检查该 session 是否有其他请求正在运行
         const concurrentCount = await SessionTracker.getConcurrentCount(clientSessionId);
 
         if (concurrentCount > 0) {
           // 场景B：有并发请求 → 这是并发短任务 → 强制新建 session
-          const newId = this.generateSessionId();
+          const newId = SessionManager.generateSessionId();
           logger.info("SessionManager: 检测到并发短任务，强制新建 session", {
             originalSessionId: clientSessionId,
             newSessionId: newId,
@@ -210,7 +216,7 @@ export class SessionManager {
       logger.debug("SessionManager: Using client-provided session", { sessionId: clientSessionId });
       // 刷新 TTL（滑动窗口）
       if (redis && redis.status === "ready") {
-        await this.refreshSessionTTL(clientSessionId).catch((err) => {
+        await SessionManager.refreshSessionTTL(clientSessionId).catch((err) => {
           logger.error("SessionManager: Failed to refresh TTL", { error: err });
         });
       }
@@ -225,10 +231,10 @@ export class SessionManager {
         messagesLength: Array.isArray(messages) ? messages.length : 0,
       }
     );
-    const contentHash = this.calculateMessagesHash(messages);
+    const contentHash = SessionManager.calculateMessagesHash(messages);
     if (!contentHash) {
       // 降级：无法计算哈希，生成新 session
-      const newId = this.generateSessionId();
+      const newId = SessionManager.generateSessionId();
       logger.warn("SessionManager: Cannot calculate hash, generating new session", {
         sessionId: newId,
       });
@@ -243,7 +249,7 @@ export class SessionManager {
 
         if (existingSessionId) {
           // 找到已有 session，刷新 TTL
-          await this.refreshSessionTTL(existingSessionId);
+          await SessionManager.refreshSessionTTL(existingSessionId);
           logger.trace("SessionManager: Reusing session via hash", {
             sessionId: existingSessionId,
             hash: contentHash,
@@ -252,10 +258,10 @@ export class SessionManager {
         }
 
         // 未找到：创建新 session
-        const newSessionId = this.generateSessionId();
+        const newSessionId = SessionManager.generateSessionId();
 
         // 存储映射关系（异步，不阻塞）
-        void this.storeSessionMapping(contentHash, newSessionId, keyId);
+        void SessionManager.storeSessionMapping(contentHash, newSessionId, keyId);
 
         logger.trace("SessionManager: Created new session with hash", {
           sessionId: newSessionId,
@@ -265,12 +271,12 @@ export class SessionManager {
       } catch (error) {
         logger.error("SessionManager: Redis error", { error });
         // 降级：Redis 错误，生成新 session
-        return this.generateSessionId();
+        return SessionManager.generateSessionId();
       }
     }
 
     // 4. Redis 不可用，降级生成新 session
-    return this.generateSessionId();
+    return SessionManager.generateSessionId();
   }
 
   /**
@@ -289,11 +295,15 @@ export class SessionManager {
       const hashKey = `hash:${contentHash}:session`;
 
       // 存储映射关系
-      pipeline.setex(hashKey, this.SESSION_TTL, sessionId);
+      pipeline.setex(hashKey, SessionManager.SESSION_TTL, sessionId);
 
       // 初始化 session 元数据
-      pipeline.setex(`session:${sessionId}:key`, this.SESSION_TTL, keyId.toString());
-      pipeline.setex(`session:${sessionId}:last_seen`, this.SESSION_TTL, Date.now().toString());
+      pipeline.setex(`session:${sessionId}:key`, SessionManager.SESSION_TTL, keyId.toString());
+      pipeline.setex(
+        `session:${sessionId}:last_seen`,
+        SessionManager.SESSION_TTL,
+        Date.now().toString()
+      );
 
       await pipeline.exec();
     } catch (error) {
@@ -312,9 +322,13 @@ export class SessionManager {
       const pipeline = redis.pipeline();
 
       // 刷新所有 session 相关 key 的 TTL
-      pipeline.expire(`session:${sessionId}:key`, this.SESSION_TTL);
-      pipeline.expire(`session:${sessionId}:provider`, this.SESSION_TTL);
-      pipeline.setex(`session:${sessionId}:last_seen`, this.SESSION_TTL, Date.now().toString());
+      pipeline.expire(`session:${sessionId}:key`, SessionManager.SESSION_TTL);
+      pipeline.expire(`session:${sessionId}:provider`, SessionManager.SESSION_TTL);
+      pipeline.setex(
+        `session:${sessionId}:last_seen`,
+        SessionManager.SESSION_TTL,
+        Date.now().toString()
+      );
 
       await pipeline.exec();
     } catch (error) {
@@ -336,7 +350,7 @@ export class SessionManager {
         key,
         providerId.toString(),
         "EX",
-        this.SESSION_TTL,
+        SessionManager.SESSION_TTL,
         "NX" // Only set if not exists
       );
 
@@ -365,7 +379,7 @@ export class SessionManager {
       const value = await redis.get(`session:${sessionId}:provider`);
       if (value) {
         const providerId = parseInt(value, 10);
-        if (!isNaN(providerId)) {
+        if (!Number.isNaN(providerId)) {
           return providerId;
         }
       }
@@ -397,7 +411,7 @@ export class SessionManager {
       }
 
       const providerId = parseInt(providerIdStr, 10);
-      if (isNaN(providerId)) {
+      if (Number.isNaN(providerId)) {
         return null;
       }
 
@@ -439,7 +453,13 @@ export class SessionManager {
       if (isFirstAttempt) {
         const key = `session:${sessionId}:provider`;
         // 使用 SET NX 绑定（避免覆盖并发请求）
-        const result = await redis.set(key, newProviderId.toString(), "EX", this.SESSION_TTL, "NX");
+        const result = await redis.set(
+          key,
+          newProviderId.toString(),
+          "EX",
+          SessionManager.SESSION_TTL,
+          "NX"
+        );
 
         if (result === "OK") {
           logger.info("SessionManager: Bound session to provider (first success)", {
@@ -467,7 +487,7 @@ export class SessionManager {
       // 2.0 故障转移成功：无条件更新绑定（减少缓存切换）
       if (isFailoverSuccess) {
         const key = `session:${sessionId}:provider`;
-        await redis.setex(key, this.SESSION_TTL, newProviderId.toString());
+        await redis.setex(key, SessionManager.SESSION_TTL, newProviderId.toString());
 
         logger.info("SessionManager: Updated binding after failover", {
           sessionId,
@@ -487,7 +507,13 @@ export class SessionManager {
       if (!currentProviderIdStr) {
         // 没有绑定，使用 SET NX 绑定
         const key = `session:${sessionId}:provider`;
-        const result = await redis.set(key, newProviderId.toString(), "EX", this.SESSION_TTL, "NX");
+        const result = await redis.set(
+          key,
+          newProviderId.toString(),
+          "EX",
+          SessionManager.SESSION_TTL,
+          "NX"
+        );
 
         if (result === "OK") {
           logger.info("SessionManager: Bound session (no previous binding)", {
@@ -510,7 +536,7 @@ export class SessionManager {
       }
 
       const currentProviderId = parseInt(currentProviderIdStr, 10);
-      if (isNaN(currentProviderId)) {
+      if (Number.isNaN(currentProviderId)) {
         logger.warn("SessionManager: Invalid provider ID in Redis", { currentProviderIdStr });
         return { updated: false, reason: "invalid_provider_id" };
       }
@@ -522,7 +548,7 @@ export class SessionManager {
       if (!currentProvider) {
         // 当前供应商不存在（可能被删除），直接更新
         const key = `session:${sessionId}:provider`;
-        await redis.setex(key, this.SESSION_TTL, newProviderId.toString());
+        await redis.setex(key, SessionManager.SESSION_TTL, newProviderId.toString());
 
         logger.info("SessionManager: Updated binding (current provider not found)", {
           sessionId,
@@ -545,7 +571,7 @@ export class SessionManager {
       // ========== 规则 A：新供应商优先级更高（数字更小）→ 直接迁移 ==========
       if (newProviderPriority < currentPriority) {
         const key = `session:${sessionId}:provider`;
-        await redis.setex(key, this.SESSION_TTL, newProviderId.toString());
+        await redis.setex(key, SessionManager.SESSION_TTL, newProviderId.toString());
 
         logger.info("SessionManager: Migrated to higher priority provider", {
           sessionId,
@@ -570,7 +596,7 @@ export class SessionManager {
       if (isCurrentCircuitOpen) {
         // 原供应商已熔断 → 更新到新供应商（备用供应商接管）
         const key = `session:${sessionId}:provider`;
-        await redis.setex(key, this.SESSION_TTL, newProviderId.toString());
+        await redis.setex(key, SessionManager.SESSION_TTL, newProviderId.toString());
 
         logger.info("SessionManager: Migrated to backup provider (circuit open)", {
           sessionId,
@@ -632,7 +658,7 @@ export class SessionManager {
       });
 
       // 设置 TTL
-      pipeline.expire(`session:${sessionId}:info`, this.SESSION_TTL);
+      pipeline.expire(`session:${sessionId}:info`, SessionManager.SESSION_TTL);
 
       await pipeline.exec();
       logger.trace("SessionManager: Stored session info", { sessionId });
@@ -661,7 +687,7 @@ export class SessionManager {
       });
 
       // 刷新 TTL
-      pipeline.expire(`session:${sessionId}:info`, this.SESSION_TTL);
+      pipeline.expire(`session:${sessionId}:info`, SessionManager.SESSION_TTL);
 
       await pipeline.exec();
       logger.trace("SessionManager: Updated session provider", {
@@ -716,8 +742,8 @@ export class SessionManager {
       pipeline.hset(`session:${sessionId}:info`, "status", usage.status);
 
       // 刷新 TTL
-      pipeline.expire(`session:${sessionId}:usage`, this.SESSION_TTL);
-      pipeline.expire(`session:${sessionId}:info`, this.SESSION_TTL);
+      pipeline.expire(`session:${sessionId}:usage`, SessionManager.SESSION_TTL);
+      pipeline.expire(`session:${sessionId}:info`, SessionManager.SESSION_TTL);
 
       await pipeline.exec();
       logger.trace("SessionManager: Updated session usage", { sessionId, status: usage.status });
@@ -730,7 +756,7 @@ export class SessionManager {
    * 存储 session 请求 messages（可选，受环境变量控制）
    */
   static async storeSessionMessages(sessionId: string, messages: unknown): Promise<void> {
-    if (!this.STORE_MESSAGES) {
+    if (!SessionManager.STORE_MESSAGES) {
       logger.trace("SessionManager: STORE_SESSION_MESSAGES is disabled, skipping");
       return;
     }
@@ -740,7 +766,7 @@ export class SessionManager {
 
     try {
       const messagesJson = JSON.stringify(messages);
-      await redis.setex(`session:${sessionId}:messages`, this.SESSION_TTL, messagesJson);
+      await redis.setex(`session:${sessionId}:messages`, SessionManager.SESSION_TTL, messagesJson);
       logger.trace("SessionManager: Stored session messages", { sessionId });
     } catch (error) {
       logger.error("SessionManager: Failed to store session messages", { error });
@@ -853,7 +879,7 @@ export class SessionManager {
         if (!info || Object.keys(info).length === 0) continue;
 
         // 使用辅助方法构建 session 对象
-        const session = this.buildSessionInfo(sessionIds[i], info, usage);
+        const session = SessionManager.buildSessionInfo(sessionIds[i], info, usage);
         sessions.push(session);
       }
 
@@ -887,7 +913,7 @@ export class SessionManager {
 
     try {
       const now = Date.now();
-      const fiveMinutesAgo = now - this.SESSION_TTL * 1000; // SESSION_TTL 是秒，转为毫秒
+      const fiveMinutesAgo = now - SessionManager.SESSION_TTL * 1000; // SESSION_TTL 是秒，转为毫秒
 
       // 1. 使用 SCAN 扫描所有 session:*:info key
       const allSessions: ActiveSessionInfo[] = [];
@@ -940,7 +966,7 @@ export class SessionManager {
             const sessionId = keys[i].replace("session:", "").replace(":info", "");
 
             // 使用辅助方法构建 session 对象
-            const session = this.buildSessionInfo(sessionId, info, usage);
+            const session = SessionManager.buildSessionInfo(sessionId, info, usage);
             allSessions.push(session);
           }
         }
@@ -1021,7 +1047,7 @@ export class SessionManager {
    * 获取 session 的 messages 内容
    */
   static async getSessionMessages(sessionId: string): Promise<unknown | null> {
-    if (!this.STORE_MESSAGES) {
+    if (!SessionManager.STORE_MESSAGES) {
       logger.warn("SessionManager: STORE_SESSION_MESSAGES is disabled");
       return null;
     }
@@ -1053,7 +1079,11 @@ export class SessionManager {
 
     try {
       const responseString = typeof response === "string" ? response : JSON.stringify(response);
-      await redis.setex(`session:${sessionId}:response`, this.SESSION_TTL, responseString);
+      await redis.setex(
+        `session:${sessionId}:response`,
+        SessionManager.SESSION_TTL,
+        responseString
+      );
       logger.trace("SessionManager: Stored session response", {
         sessionId,
         size: responseString.length,

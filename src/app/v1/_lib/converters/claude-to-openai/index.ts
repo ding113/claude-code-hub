@@ -4,12 +4,12 @@
  * 将 Claude 与 OpenAI Compatible 之间的请求/响应转换器注册到全局注册表。
  */
 
+import {
+  transformClaudeNonStreamResponseToOpenAI,
+  transformClaudeStreamResponseToOpenAI,
+} from "../openai-to-claude/response"; // 复用 OpenAI → Claude 的响应转换器（反向）
 import { registerTransformer } from "../registry";
 import { transformClaudeRequestToOpenAI } from "./request";
-import {
-  transformClaudeStreamResponseToOpenAI,
-  transformClaudeNonStreamResponseToOpenAI,
-} from "../openai-to-claude/response"; // 复用 OpenAI → Claude 的响应转换器（反向）
 
 // 注册 Claude → OpenAI Compatible 转换器
 // 请求：Claude → OpenAI（使用本模块的请求转换器）

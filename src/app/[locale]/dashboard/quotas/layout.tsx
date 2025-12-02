@@ -1,6 +1,6 @@
+import { getTranslations } from "next-intl/server";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Link } from "@/i18n/routing";
-import { getTranslations } from "next-intl/server";
 
 export default async function QuotasLayout({ children }: { children: React.ReactNode }) {
   const t = await getTranslations("quota.layout");

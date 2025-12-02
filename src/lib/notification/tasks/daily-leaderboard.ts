@@ -1,6 +1,6 @@
 import { logger } from "@/lib/logger";
+import type { DailyLeaderboardData } from "@/lib/wechat/message-templates";
 import { findDailyLeaderboard } from "@/repository/leaderboard";
-import { DailyLeaderboardData } from "@/lib/wechat/message-templates";
 
 /**
  * 生成每日排行榜数据

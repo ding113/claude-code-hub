@@ -13,9 +13,9 @@
  * - 默认开启,如测试发现问题可通过 ENABLE_CODEX_CLI_INJECTION 关闭
  */
 
-import type { ResponseRequest } from "./types/response";
 import { logger } from "@/lib/logger";
 import { CODEX_CLI_INSTRUCTIONS, isCodexCLIRequest } from "./constants/codex-cli-instructions";
+import type { ResponseRequest } from "./types/response";
 
 /**
  * 功能开关

@@ -1,9 +1,9 @@
 "use server";
 
-import { db } from "@/drizzle/db";
-import { logger } from "@/lib/logger";
-import { systemSettings } from "@/drizzle/schema";
 import { eq } from "drizzle-orm";
+import { db } from "@/drizzle/db";
+import { systemSettings } from "@/drizzle/schema";
+import { logger } from "@/lib/logger";
 import type { SystemSettings, UpdateSystemSettingsInput } from "@/types/system-config";
 import { toSystemSettings } from "./_shared/transformers";
 
@@ -84,6 +84,7 @@ function createFallbackSettings(): SystemSettings {
     cleanupSchedule: "0 2 * * *",
     cleanupBatchSize: 10000,
     enableClientVersionCheck: false,
+    verboseProviderError: false,
     createdAt: now,
     updatedAt: now,
   };
@@ -106,6 +107,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
         cleanupSchedule: systemSettings.cleanupSchedule,
         cleanupBatchSize: systemSettings.cleanupBatchSize,
         enableClientVersionCheck: systemSettings.enableClientVersionCheck,
+        verboseProviderError: systemSettings.verboseProviderError,
         createdAt: systemSettings.createdAt,
         updatedAt: systemSettings.updatedAt,
       })
@@ -136,6 +138,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
         cleanupSchedule: systemSettings.cleanupSchedule,
         cleanupBatchSize: systemSettings.cleanupBatchSize,
         enableClientVersionCheck: systemSettings.enableClientVersionCheck,
+        verboseProviderError: systemSettings.verboseProviderError,
         createdAt: systemSettings.createdAt,
         updatedAt: systemSettings.updatedAt,
       });
@@ -157,6 +160,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
         cleanupSchedule: systemSettings.cleanupSchedule,
         cleanupBatchSize: systemSettings.cleanupBatchSize,
         enableClientVersionCheck: systemSettings.enableClientVersionCheck,
+        verboseProviderError: systemSettings.verboseProviderError,
         createdAt: systemSettings.createdAt,
         updatedAt: systemSettings.updatedAt,
       })
@@ -228,6 +232,11 @@ export async function updateSystemSettings(
       updates.enableClientVersionCheck = payload.enableClientVersionCheck;
     }
 
+    // 供应商错误详情配置字段（如果提供）
+    if (payload.verboseProviderError !== undefined) {
+      updates.verboseProviderError = payload.verboseProviderError;
+    }
+
     const [updated] = await db
       .update(systemSettings)
       .set(updates)
@@ -243,6 +252,7 @@ export async function updateSystemSettings(
         cleanupSchedule: systemSettings.cleanupSchedule,
         cleanupBatchSize: systemSettings.cleanupBatchSize,
         enableClientVersionCheck: systemSettings.enableClientVersionCheck,
+        verboseProviderError: systemSettings.verboseProviderError,
         createdAt: systemSettings.createdAt,
         updatedAt: systemSettings.updatedAt,
       });

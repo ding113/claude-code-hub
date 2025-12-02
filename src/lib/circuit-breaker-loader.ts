@@ -6,8 +6,8 @@
  * 2. 在应用启动时调用，提升首次请求性能
  */
 
-import { loadAllProvidersCircuitConfig } from "@/lib/redis/circuit-breaker-config";
 import { logger } from "@/lib/logger";
+import { loadAllProvidersCircuitConfig } from "@/lib/redis/circuit-breaker-config";
 
 /**
  * 初始化所有供应商的熔断器配置

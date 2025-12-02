@@ -1,10 +1,10 @@
 import { getTranslations } from "next-intl/server";
-import { listSensitiveWords, getCacheStats } from "@/actions/sensitive-words";
+import { getCacheStats, listSensitiveWords } from "@/actions/sensitive-words";
 import { Section } from "@/components/section";
 import { SettingsPageHeader } from "../_components/settings-page-header";
-import { WordListTable } from "./_components/word-list-table";
 import { AddWordDialog } from "./_components/add-word-dialog";
 import { RefreshCacheButton } from "./_components/refresh-cache-button";
+import { WordListTable } from "./_components/word-list-table";
 
 export const dynamic = "force-dynamic";
 

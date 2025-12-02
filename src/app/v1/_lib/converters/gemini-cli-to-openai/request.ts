@@ -22,8 +22,8 @@
  * 3. 处理 systemInstruction, contents, tools, generationConfig 等字段
  */
 
+import { randomBytes } from "node:crypto";
 import { logger } from "@/lib/logger";
-import { randomBytes } from "crypto";
 
 /**
  * Gemini CLI 格式的请求体接口

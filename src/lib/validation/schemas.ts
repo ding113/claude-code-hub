@@ -1,10 +1,10 @@
 import { z } from "zod";
 import {
-  PROVIDER_LIMITS,
   PROVIDER_DEFAULTS,
+  PROVIDER_LIMITS,
   PROVIDER_TIMEOUT_LIMITS,
 } from "@/lib/constants/provider.constants";
-import { USER_LIMITS, USER_DEFAULTS } from "@/lib/constants/user.constants";
+import { USER_DEFAULTS, USER_LIMITS } from "@/lib/constants/user.constants";
 import { CURRENCY_CONFIG } from "@/lib/utils/currency";
 
 /**
@@ -14,6 +14,11 @@ export const CreateUserSchema = z.object({
   name: z.string().min(1, "用户名不能为空").max(64, "用户名不能超过64个字符"),
   note: z.string().max(200, "备注不能超过200个字符").optional().default(""),
   providerGroup: z.string().max(50, "供应商分组不能超过50个字符").optional().default(""),
+  tags: z
+    .array(z.string().max(32, "标签长度不能超过32个字符"))
+    .max(20, "标签数量不能超过20个")
+    .optional()
+    .default([]),
   rpm: z.coerce
     .number()
     .int("RPM必须是整数")
@@ -61,6 +66,10 @@ export const UpdateUserSchema = z.object({
   name: z.string().min(1, "用户名不能为空").max(64, "用户名不能超过64个字符").optional(),
   note: z.string().max(200, "备注不能超过200个字符").optional(),
   providerGroup: z.string().max(50, "供应商分组不能超过50个字符").nullable().optional(),
+  tags: z
+    .array(z.string().max(32, "标签长度不能超过32个字符"))
+    .max(20, "标签数量不能超过20个")
+    .optional(),
   rpm: z.coerce
     .number()
     .int("RPM必须是整数")
@@ -561,6 +570,8 @@ export const UpdateSystemSettingsSchema = z.object({
     .optional(),
   // 客户端版本检查配置（可选）
   enableClientVersionCheck: z.boolean().optional(),
+  // 供应商不可用时是否返回详细错误信息（可选）
+  verboseProviderError: z.boolean().optional(),
 });
 
 // 导出类型推断

@@ -1,8 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Activity, CheckCircle2, HelpCircle, RefreshCw, XCircle } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -10,17 +13,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { RefreshCw, Activity, CheckCircle2, XCircle, HelpCircle } from "lucide-react";
-import { useTranslations } from "next-intl";
-import { cn } from "@/lib/utils";
 import type {
   AvailabilityQueryResult,
   ProviderAvailabilitySummary,
   TimeBucketMetrics,
 } from "@/lib/availability";
+import { cn } from "@/lib/utils";
 
 type TimeRangeOption = "15min" | "1h" | "6h" | "24h" | "7d";
 type SortOption = "availability" | "name" | "requests";
@@ -92,7 +92,7 @@ function formatBucketTime(isoString: string, bucketSizeMinutes: number): string 
 /**
  * Format bucket size for display
  */
-function formatBucketSizeDisplay(minutes: number): string {
+function _formatBucketSizeDisplay(minutes: number): string {
   if (minutes >= 60) {
     const hours = minutes / 60;
     return hours === 1 ? "1 hour" : `${hours.toFixed(1)} hours`;
@@ -216,7 +216,6 @@ export function AvailabilityView() {
         case "red":
           // 错误 - 红色
           return "bg-red-100 text-red-700 border-red-300 dark:bg-red-900/30 dark:text-red-400 dark:border-red-700";
-        case "unknown":
         default:
           // 未知 - 灰色
           return "bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600";
@@ -432,7 +431,7 @@ export function AvailabilityView() {
                               <TooltipContent side="top" className="max-w-xs">
                                 <div className="text-sm space-y-1">
                                   <div className="font-medium">
-                                    {formatBucketTime(bucketStart, data!.bucketSizeMinutes)}
+                                    {formatBucketTime(bucketStart, data?.bucketSizeMinutes ?? 5)}
                                   </div>
                                   {hasData && bucket ? (
                                     <>

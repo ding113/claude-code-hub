@@ -1,7 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { Loader2, Settings } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { useState, useTransition } from "react";
+import { toast } from "sonner";
+import { editUser } from "@/actions/users";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -11,14 +16,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Settings, Loader2 } from "lucide-react";
-import { editUser } from "@/actions/users";
-import { toast } from "sonner";
-import { type CurrencyCode, CURRENCY_CONFIG } from "@/lib/utils/currency";
-import { useTranslations } from "next-intl";
+import { CURRENCY_CONFIG, type CurrencyCode } from "@/lib/utils/currency";
 
 interface UserQuota {
   rpm: { current: number; limit: number; window: "per_minute" };

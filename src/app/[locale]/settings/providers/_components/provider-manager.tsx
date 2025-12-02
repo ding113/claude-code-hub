@@ -1,15 +1,15 @@
 "use client";
-import { useState, useMemo } from "react";
 import { Search, X } from "lucide-react";
-import { ProviderList } from "./provider-list";
-import { ProviderTypeFilter } from "./provider-type-filter";
-import { ProviderSortDropdown, type SortKey } from "./provider-sort-dropdown";
+import { useTranslations } from "next-intl";
+import { useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { useDebounce } from "@/lib/hooks/use-debounce";
+import type { CurrencyCode } from "@/lib/utils/currency";
 import type { ProviderDisplay, ProviderType } from "@/types/provider";
 import type { User } from "@/types/user";
-import type { CurrencyCode } from "@/lib/utils/currency";
-import { useTranslations } from "next-intl";
+import { ProviderList } from "./provider-list";
+import { ProviderSortDropdown, type SortKey } from "./provider-sort-dropdown";
+import { ProviderTypeFilter } from "./provider-type-filter";
 
 interface ProviderManagerProps {
   providers: ProviderDisplay[];
@@ -52,7 +52,7 @@ export function ProviderManager({
         (p) =>
           p.name.toLowerCase().includes(term) ||
           p.url.toLowerCase().includes(term) ||
-          (p.groupTag && p.groupTag.toLowerCase().includes(term))
+          p.groupTag?.toLowerCase().includes(term)
       );
     }
 

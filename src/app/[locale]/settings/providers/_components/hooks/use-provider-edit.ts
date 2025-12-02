@@ -1,11 +1,11 @@
-import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { logger } from "@/lib/logger";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { editProvider } from "@/actions/providers";
-import type { ProviderDisplay } from "@/types/provider";
-import { clampWeight } from "@/lib/utils/validation";
 import { PROVIDER_LIMITS } from "@/lib/constants/provider.constants";
+import { logger } from "@/lib/logger";
+import { clampWeight } from "@/lib/utils/validation";
+import type { ProviderDisplay } from "@/types/provider";
 
 export function useProviderEdit(item: ProviderDisplay, canEdit: boolean) {
   const router = useRouter();

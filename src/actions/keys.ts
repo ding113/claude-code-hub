@@ -1,23 +1,23 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-import { logger } from "@/lib/logger";
 import { randomBytes } from "node:crypto";
+import { revalidatePath } from "next/cache";
+import { getSession } from "@/lib/auth";
+import { logger } from "@/lib/logger";
 import { KeyFormSchema } from "@/lib/validation/schemas";
+import type { KeyStatistics } from "@/repository/key";
 import {
+  countActiveKeysByUser,
   createKey,
-  updateKey,
   deleteKey,
   findActiveKeyByUserIdAndName,
   findKeyById,
-  countActiveKeysByUser,
-  findKeysWithStatistics,
   findKeyList,
+  findKeysWithStatistics,
+  updateKey,
 } from "@/repository/key";
-import { getSession } from "@/lib/auth";
-import type { ActionResult } from "./types";
-import type { KeyStatistics } from "@/repository/key";
 import type { Key } from "@/types/key";
+import type { ActionResult } from "./types";
 
 // 添加密钥
 // 说明：为提升前端可控性，避免直接抛错，返回判别式结果。
@@ -117,7 +117,7 @@ export async function addKey(data: {
       };
     }
 
-    const generatedKey = "sk-" + randomBytes(16).toString("hex");
+    const generatedKey = `sk-${randomBytes(16).toString("hex")}`;
 
     // 转换 expiresAt: undefined → null（永不过期），string → Date（设置日期）
     const expiresAt =

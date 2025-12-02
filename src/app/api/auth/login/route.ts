@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
+import { setAuthCookie, validateKey } from "@/lib/auth";
 import { logger } from "@/lib/logger";
-import { validateKey, setAuthCookie } from "@/lib/auth";
 
 // 需要数据库连接
 export const runtime = "nodejs";

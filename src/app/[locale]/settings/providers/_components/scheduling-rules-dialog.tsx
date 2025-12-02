@@ -1,5 +1,12 @@
 "use client";
 
+import { ChevronDown, ChevronRight, Info, Lightbulb } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { useState } from "react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Dialog,
   DialogContent,
@@ -8,13 +15,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Info, ChevronDown, ChevronRight, Lightbulb } from "lucide-react";
-import { useState } from "react";
-import { useTranslations } from "next-intl";
 
 interface ScenarioStep {
   step: string;

@@ -1,7 +1,7 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
 import { ArrowRight } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import type { BillingModelSource } from "@/types/system-config";
 
 interface ModelDisplayWithRedirectProps {
@@ -18,8 +18,7 @@ export function ModelDisplayWithRedirect({
   onRedirectClick,
 }: ModelDisplayWithRedirectProps) {
   // 判断是否发生重定向
-  const isRedirected =
-    originalModel && currentModel && originalModel !== currentModel;
+  const isRedirected = originalModel && currentModel && originalModel !== currentModel;
 
   // 根据计费模型来源配置决定显示哪个模型
   const billingModel = billingModelSource === "original" ? originalModel : currentModel;

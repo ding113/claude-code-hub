@@ -1,9 +1,9 @@
 "use server";
 
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { users } from "@/drizzle/schema";
-import { eq, isNull, and, sql } from "drizzle-orm";
-import type { User, CreateUserData, UpdateUserData } from "@/types/user";
+import type { CreateUserData, UpdateUserData, User } from "@/types/user";
 import { toUser } from "./_shared/transformers";
 
 export async function createUser(userData: CreateUserData): Promise<User> {
@@ -13,6 +13,7 @@ export async function createUser(userData: CreateUserData): Promise<User> {
     rpmLimit: userData.rpm,
     dailyLimitUsd: userData.dailyQuota?.toString(),
     providerGroup: userData.providerGroup,
+    tags: userData.tags ?? [],
     limit5hUsd: userData.limit5hUsd?.toString(),
     limitWeeklyUsd: userData.limitWeeklyUsd?.toString(),
     limitMonthlyUsd: userData.limitMonthlyUsd?.toString(),
@@ -27,6 +28,7 @@ export async function createUser(userData: CreateUserData): Promise<User> {
     rpm: users.rpmLimit,
     dailyQuota: users.dailyLimitUsd,
     providerGroup: users.providerGroup,
+    tags: users.tags,
     createdAt: users.createdAt,
     updatedAt: users.updatedAt,
     deletedAt: users.deletedAt,
@@ -49,6 +51,7 @@ export async function findUserList(limit: number = 50, offset: number = 0): Prom
       rpm: users.rpmLimit,
       dailyQuota: users.dailyLimitUsd,
       providerGroup: users.providerGroup,
+      tags: users.tags,
       createdAt: users.createdAt,
       updatedAt: users.updatedAt,
       deletedAt: users.deletedAt,
@@ -76,6 +79,7 @@ export async function findUserById(id: number): Promise<User | null> {
       rpm: users.rpmLimit,
       dailyQuota: users.dailyLimitUsd,
       providerGroup: users.providerGroup,
+      tags: users.tags,
       createdAt: users.createdAt,
       updatedAt: users.updatedAt,
       deletedAt: users.deletedAt,
@@ -103,6 +107,7 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
     rpmLimit?: number;
     dailyLimitUsd?: string;
     providerGroup?: string | null;
+    tags?: string[];
     updatedAt?: Date;
     limit5hUsd?: string;
     limitWeeklyUsd?: string;
@@ -118,6 +123,7 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
   if (userData.rpm !== undefined) dbData.rpmLimit = userData.rpm;
   if (userData.dailyQuota !== undefined) dbData.dailyLimitUsd = userData.dailyQuota.toString();
   if (userData.providerGroup !== undefined) dbData.providerGroup = userData.providerGroup;
+  if (userData.tags !== undefined) dbData.tags = userData.tags;
   if (userData.limit5hUsd !== undefined) dbData.limit5hUsd = userData.limit5hUsd.toString();
   if (userData.limitWeeklyUsd !== undefined)
     dbData.limitWeeklyUsd = userData.limitWeeklyUsd.toString();
@@ -138,6 +144,7 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
       rpm: users.rpmLimit,
       dailyQuota: users.dailyLimitUsd,
       providerGroup: users.providerGroup,
+      tags: users.tags,
       createdAt: users.createdAt,
       updatedAt: users.updatedAt,
       deletedAt: users.deletedAt,

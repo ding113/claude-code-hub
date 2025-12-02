@@ -98,6 +98,8 @@
     "form": {
       "allowGlobalView": "Allow Global Usage View",
       "allowGlobalViewDesc": "When disabled, regular users can only view their own key usage statistics in the dashboard.",
+      "verboseProviderError": "Verbose Provider Error",
+      "verboseProviderErrorDesc": "When enabled, return detailed error messages when all providers are unavailable (including provider count, rate limit reasons, etc.); when disabled, only return a simple error code.",
       "cleanupSchedule": "Cleanup Schedule",
       "cleanupScheduleDesc": "Select the execution schedule for automatic cleanup",
       "configUpdated": "System settings updated. The page will refresh to apply currency display changes.",
@@ -365,11 +367,13 @@
     "data": "Data",
     "errorRules": "Errors",
     "feedback": "Feedback",
+    "docs": "Documentation",
     "logs": "Logs",
     "notifications": "Notifications",
     "prices": "Pricing",
     "providers": "Providers",
-    "sensitiveWords": "Filters"
+    "sensitiveWords": "Filters",
+    "requestFilters": "Requests"
   },
   "notifications": {
     "title": "Push Notifications",
@@ -1502,6 +1506,71 @@
     "title": "Sensitive Words Management",
     "toggleFailed": "Toggle failed",
     "toggleFailedError": "Toggle failed:"
+  },
+  "requestFilters": {
+    "nav": "Request Filters",
+    "title": "Request Filters",
+    "description": "Configure header removal/override and body replacement rules to sanitize requests before forwarding upstream.",
+    "add": "Add Filter",
+    "addSuccess": "Filter created",
+    "addFailed": "Failed to create filter",
+    "edit": "Edit Filter",
+    "editSuccess": "Filter updated",
+    "editFailed": "Failed to update filter",
+    "delete": "Delete Filter",
+    "deleteSuccess": "Filter deleted",
+    "deleteFailed": "Delete failed",
+    "enable": "Enabled",
+    "disable": "Disabled",
+    "confirmDelete": "Delete filter \"{name}\"?",
+    "empty": "No filters yet. Click Add Filter to configure.",
+    "refreshCache": "Refresh Cache",
+    "refreshSuccess": "Cache refreshed, loaded {count} filters",
+    "refreshFailed": "Refresh failed",
+    "dialog": {
+      "createTitle": "Add Filter",
+      "editTitle": "Edit Filter",
+      "name": "Name",
+      "scope": "Scope",
+      "action": "Action",
+      "target": "Target field/path",
+      "replacement": "Replacement (optional)",
+      "description": "Description (optional)",
+      "priority": "Priority",
+      "matchType": "Match Type",
+      "matchTypeContains": "Contains",
+      "matchTypeExact": "Exact",
+      "matchTypeRegex": "Regex",
+      "jsonPathPlaceholder": "e.g. messages.0.content or data.items[0].token",
+      "targetPlaceholder": "Header name or text/path",
+      "replacementPlaceholder": "String or JSON, leave blank to clear",
+      "save": "Save",
+      "saving": "Saving...",
+      "validation": {
+        "fieldRequired": "Name and target are required"
+      }
+    },
+    "table": {
+      "name": "Name",
+      "scope": "Scope",
+      "action": "Action",
+      "target": "Target",
+      "replacement": "Replacement",
+      "priority": "Priority",
+      "status": "Status",
+      "createdAt": "Created At",
+      "actions": "Actions"
+    },
+    "scopeLabel": {
+      "header": "Header",
+      "body": "Body"
+    },
+    "actionLabel": {
+      "remove": "Remove Header",
+      "set": "Set Header",
+      "json_path": "JSON Path Replace",
+      "text_replace": "Text Replace"
+    }
   },
   "errorRules": {
     "nav": "Error Rules",

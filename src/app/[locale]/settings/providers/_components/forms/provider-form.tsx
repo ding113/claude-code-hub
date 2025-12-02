@@ -1,20 +1,8 @@
 "use client";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
-import { TagInput } from "@/components/ui/tag-input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { useState, useTransition, useEffect, useRef } from "react";
+import { ChevronDown } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { toast } from "sonner";
 import { addProvider, editProvider, removeProvider } from "@/actions/providers";
 import {
   AlertDialog,
@@ -22,26 +10,38 @@ import {
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
+  AlertDialogTrigger,
   AlertDialogHeader as AlertHeader,
   AlertDialogTitle as AlertTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { TagInput } from "@/components/ui/tag-input";
+import { PROVIDER_DEFAULTS, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
+import { extractBaseUrl, isValidUrl, validateNumericField } from "@/lib/utils/validation";
 import type {
-  ProviderDisplay,
-  ProviderType,
   CodexInstructionsStrategy,
   McpPassthroughType,
+  ProviderDisplay,
+  ProviderType,
 } from "@/types/provider";
-import { validateNumericField, isValidUrl, extractBaseUrl } from "@/lib/utils/validation";
-import { PROVIDER_DEFAULTS, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
-import { toast } from "sonner";
 import { ModelMultiSelect } from "../model-multi-select";
 import { ModelRedirectEditor } from "../model-redirect-editor";
-import { ProxyTestButton } from "./proxy-test-button";
 import { ApiTestButton } from "./api-test-button";
+import { ProxyTestButton } from "./proxy-test-button";
 import { UrlPreview } from "./url-preview";
-import { ChevronDown } from "lucide-react";
-import { useTranslations } from "next-intl";
 
 type Mode = "create" | "edit";
 
@@ -622,10 +622,8 @@ export function ProviderForm({
                     <SelectItem value="gemini">{t("providerTypes.gemini")}</SelectItem>
                     <SelectItem value="gemini-cli">{t("providerTypes.geminiCli")}</SelectItem>
                     <SelectItem value="openai-compatible" disabled={!enableMultiProviderTypes}>
-                      <>
-                        {t("providerTypes.openaiCompatible")}{" "}
-                        {!enableMultiProviderTypes && t("providerTypes.openaiCompatibleDisabled")}
-                      </>
+                      {t("providerTypes.openaiCompatible")}{" "}
+                      {!enableMultiProviderTypes && t("providerTypes.openaiCompatibleDisabled")}
                     </SelectItem>
                   </SelectContent>
                 </Select>
@@ -766,7 +764,7 @@ export function ProviderForm({
                       id={isEdit ? "edit-priority" : "priority"}
                       type="number"
                       value={priority}
-                      onChange={(e) => setPriority(parseInt(e.target.value) || 0)}
+                      onChange={(e) => setPriority(parseInt(e.target.value, 10) || 0)}
                       placeholder={t("sections.routing.scheduleParams.priority.placeholder")}
                       disabled={isPending}
                       min="0"
@@ -784,7 +782,7 @@ export function ProviderForm({
                       id={isEdit ? "edit-weight" : "weight"}
                       type="number"
                       value={weight}
-                      onChange={(e) => setWeight(parseInt(e.target.value) || 1)}
+                      onChange={(e) => setWeight(parseInt(e.target.value, 10) || 1)}
                       placeholder={t("sections.routing.scheduleParams.weight.placeholder")}
                       disabled={isPending}
                       min="1"
@@ -802,7 +800,16 @@ export function ProviderForm({
                       id={isEdit ? "edit-cost" : "cost"}
                       type="number"
                       value={costMultiplier}
-                      onChange={(e) => setCostMultiplier(parseFloat(e.target.value) || 1.0)}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value === "") {
+                          setCostMultiplier(1.0);
+                          return;
+                        }
+                        const num = parseFloat(value);
+                        setCostMultiplier(Number.isNaN(num) ? 1.0 : num);
+                      }}
+                      onFocus={(e) => e.target.select()}
                       placeholder={t("sections.routing.scheduleParams.costMultiplier.placeholder")}
                       disabled={isPending}
                       min="0"
@@ -824,7 +831,7 @@ export function ProviderForm({
                     placeholder={t("sections.routing.scheduleParams.group.placeholder")}
                     disabled={isPending}
                     maxTagLength={50}
-                    onInvalidTag={(tag, reason) => {
+                    onInvalidTag={(_tag, reason) => {
                       const messages: Record<string, string> = {
                         empty: tUI("emptyTag"),
                         duplicate: tUI("duplicateTag"),
@@ -1070,7 +1077,7 @@ export function ProviderForm({
                     value={failureThreshold ?? ""}
                     onChange={(e) => {
                       const val = e.target.value;
-                      setFailureThreshold(val === "" ? undefined : parseInt(val));
+                      setFailureThreshold(val === "" ? undefined : parseInt(val, 10));
                     }}
                     placeholder={t("sections.circuitBreaker.failureThreshold.placeholder")}
                     disabled={isPending}
@@ -1092,7 +1099,7 @@ export function ProviderForm({
                     value={openDurationMinutes ?? ""}
                     onChange={(e) => {
                       const val = e.target.value;
-                      setOpenDurationMinutes(val === "" ? undefined : parseInt(val));
+                      setOpenDurationMinutes(val === "" ? undefined : parseInt(val, 10));
                     }}
                     placeholder={t("sections.circuitBreaker.openDuration.placeholder")}
                     disabled={isPending}
@@ -1114,7 +1121,7 @@ export function ProviderForm({
                     value={halfOpenSuccessThreshold ?? ""}
                     onChange={(e) => {
                       const val = e.target.value;
-                      setHalfOpenSuccessThreshold(val === "" ? undefined : parseInt(val));
+                      setHalfOpenSuccessThreshold(val === "" ? undefined : parseInt(val, 10));
                     }}
                     placeholder={t("sections.circuitBreaker.successThreshold.placeholder")}
                     disabled={isPending}
@@ -1197,7 +1204,9 @@ export function ProviderForm({
                     value={firstByteTimeoutStreamingSeconds ?? ""}
                     onChange={(e) => {
                       const val = e.target.value;
-                      setFirstByteTimeoutStreamingSeconds(val === "" ? undefined : parseInt(val));
+                      setFirstByteTimeoutStreamingSeconds(
+                        val === "" ? undefined : parseInt(val, 10)
+                      );
                     }}
                     placeholder={t("sections.timeout.streamingFirstByte.placeholder")}
                     disabled={isPending}
@@ -1229,7 +1238,7 @@ export function ProviderForm({
                     value={streamingIdleTimeoutSeconds ?? ""}
                     onChange={(e) => {
                       const val = e.target.value;
-                      setStreamingIdleTimeoutSeconds(val === "" ? undefined : parseInt(val));
+                      setStreamingIdleTimeoutSeconds(val === "" ? undefined : parseInt(val, 10));
                     }}
                     placeholder={t("sections.timeout.streamingIdle.placeholder")}
                     disabled={isPending}
@@ -1262,7 +1271,9 @@ export function ProviderForm({
                     value={requestTimeoutNonStreamingSeconds ?? ""}
                     onChange={(e) => {
                       const val = e.target.value;
-                      setRequestTimeoutNonStreamingSeconds(val === "" ? undefined : parseInt(val));
+                      setRequestTimeoutNonStreamingSeconds(
+                        val === "" ? undefined : parseInt(val, 10)
+                      );
                     }}
                     placeholder={t("sections.timeout.nonStreamingTotal.placeholder")}
                     disabled={isPending}

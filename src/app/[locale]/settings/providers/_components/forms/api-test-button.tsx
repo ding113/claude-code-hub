@@ -1,16 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Loader2, CheckCircle2, XCircle, Activity, AlertTriangle } from "lucide-react";
-import {
-  testProviderUnified,
-  getUnmaskedProviderKey,
-  getProviderTestPresets,
-  type PresetConfigResponse,
-} from "@/actions/providers";
-import { toast } from "sonner";
+import { Activity, AlertTriangle, CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+import {
+  getProviderTestPresets,
+  getUnmaskedProviderKey,
+  type PresetConfigResponse,
+  testProviderGemini,
+  testProviderUnified,
+} from "@/actions/providers";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -18,8 +21,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { isValidUrl } from "@/lib/utils/validation";
 import type { ProviderType } from "@/types/provider";
@@ -117,6 +118,9 @@ export function ApiTestButton({
   const [selectedPreset, setSelectedPreset] = useState<string>("");
   const [customPayload, setCustomPayload] = useState("");
   const [successContains, setSuccessContains] = useState("pong");
+  const [timeoutSeconds, setTimeoutSeconds] = useState(() =>
+    initialApiFormat === "gemini" ? 60 : 15
+  );
 
   useEffect(() => {
     if (isApiFormatManuallySelected) return;
@@ -154,7 +158,7 @@ export function ApiTestButton({
         setPresets([]);
       }
     });
-  }, [apiFormat, apiFormatToProviderType]);
+  }, [apiFormat, apiFormatToProviderType, selectedPreset]);
 
   useEffect(() => {
     if (isModelManuallyEdited) {
@@ -165,6 +169,11 @@ export function ApiTestButton({
     const defaultModel = whitelistDefault ?? getDefaultModelForFormat(apiFormat);
     setTestModel(defaultModel);
   }, [apiFormat, isModelManuallyEdited, normalizedAllowedModels]);
+
+  // 根据 API 格式更新默认超时时间
+  useEffect(() => {
+    setTimeoutSeconds(apiFormat === "gemini" ? 60 : 15);
+  }, [apiFormat]);
 
   const handleTest = async () => {
     // 验证必填字段
@@ -205,31 +214,137 @@ export function ApiTestButton({
         return;
       }
 
-      // Use unified testing service
-      const response = await testProviderUnified({
-        providerUrl: providerUrl.trim(),
-        apiKey: resolvedKey,
-        providerType: apiFormatToProviderType[apiFormat],
-        model: testModel.trim() || undefined,
-        proxyUrl: proxyUrl?.trim() || null,
-        proxyFallbackToDirect,
-        // Custom configuration
-        preset: configMode === "preset" && selectedPreset ? selectedPreset : undefined,
-        customPayload: configMode === "custom" && customPayload ? customPayload : undefined,
-        successContains: successContains || undefined,
-      });
+      const providerForTest = apiFormatToProviderType[apiFormat];
+      let testResultData: UnifiedTestResultData | null = null;
 
-      if (!response.ok) {
-        toast.error(response.error || t("testFailed"));
-        return;
+      // Gemini 类型使用专门的测试函数
+      if (providerForTest === "gemini" || providerForTest === "gemini-cli") {
+        const response = await testProviderGemini({
+          providerUrl: providerUrl.trim(),
+          apiKey: resolvedKey,
+          model: testModel.trim() || undefined,
+          proxyUrl: proxyUrl?.trim() || null,
+          proxyFallbackToDirect,
+          timeoutMs: timeoutSeconds * 1000,
+        });
+
+        if (!response.ok) {
+          toast.error(response.error || t("testFailed"));
+          return;
+        }
+
+        if (!response.data) {
+          toast.error(t("noResult"));
+          return;
+        }
+
+        const isSuccess = response.data.success === true;
+        const rawMessage = response.data.message || t("testFailed");
+        const usedFallback = rawMessage.includes("[FALLBACK:URL_PARAM]");
+        const cleanMessage = rawMessage.replace(" [FALLBACK:URL_PARAM]", "");
+
+        // 根据错误消息推断 subStatus
+        const inferSubStatus = ():
+          | "success"
+          | "auth_error"
+          | "server_error"
+          | "network_error"
+          | "client_error"
+          | "rate_limit" => {
+          if (isSuccess) return "success";
+          const msg = cleanMessage.toLowerCase();
+          if (
+            msg.includes("429") ||
+            msg.includes("rate") ||
+            msg.includes("限流") ||
+            msg.includes("quota")
+          ) {
+            return "rate_limit";
+          }
+          if (
+            msg.includes("401") ||
+            msg.includes("403") ||
+            msg.includes("认证") ||
+            msg.includes("auth")
+          ) {
+            return "auth_error";
+          }
+          if (
+            msg.includes("timeout") ||
+            msg.includes("超时") ||
+            msg.includes("econnrefused") ||
+            msg.includes("dns")
+          ) {
+            return "network_error";
+          }
+          if (
+            msg.includes("500") ||
+            msg.includes("502") ||
+            msg.includes("503") ||
+            msg.includes("504")
+          ) {
+            return "server_error";
+          }
+          return "client_error";
+        };
+
+        const latencyMs = response.data.details?.responseTime ?? 0;
+        testResultData = {
+          success: isSuccess,
+          status: isSuccess ? (usedFallback ? "yellow" : "green") : "red",
+          subStatus: inferSubStatus(),
+          message: cleanMessage,
+          latencyMs,
+          testedAt: new Date().toISOString(),
+          validationDetails: {
+            httpPassed: isSuccess,
+            latencyPassed: isSuccess && latencyMs < 5000, // 5秒内算通过
+            contentPassed: isSuccess,
+          },
+        };
+
+        // 如果使用了 fallback 认证方式，显示警告
+        if (isSuccess && usedFallback) {
+          toast.warning("Header 认证失败，使用了 URL 参数认证", {
+            description: "实际代理转发仅使用 Header 认证，可能导致请求失败",
+            duration: 6000,
+          });
+        }
+      } else {
+        // 其他类型使用统一测试服务
+        const response = await testProviderUnified({
+          providerUrl: providerUrl.trim(),
+          apiKey: resolvedKey,
+          providerType: providerForTest,
+          model: testModel.trim() || undefined,
+          proxyUrl: proxyUrl?.trim() || null,
+          proxyFallbackToDirect,
+          timeoutMs: timeoutSeconds * 1000,
+          // Custom configuration
+          preset: configMode === "preset" && selectedPreset ? selectedPreset : undefined,
+          customPayload: configMode === "custom" && customPayload ? customPayload : undefined,
+          successContains: successContains || undefined,
+        });
+
+        if (!response.ok) {
+          toast.error(response.error || t("testFailed"));
+          return;
+        }
+
+        if (!response.data) {
+          toast.error(t("noResult"));
+          return;
+        }
+
+        testResultData = response.data;
       }
 
-      if (!response.data) {
+      if (!testResultData) {
         toast.error(t("noResult"));
         return;
       }
 
-      setTestResult(response.data);
+      setTestResult(testResultData);
 
       // 显示测试结果 toast
       const statusLabels = {
@@ -238,19 +353,19 @@ export function ApiTestButton({
         red: t("testFailed"),
       };
 
-      if (response.data.status === "green") {
+      if (testResultData.status === "green") {
         toast.success(statusLabels.green, {
-          description: `${t("responseModel")}: ${response.data.model || t("unknown")} | ${t("responseTime")}: ${response.data.latencyMs}ms`,
+          description: `${t("responseModel")}: ${testResultData.model || t("unknown")} | ${t("responseTime")}: ${testResultData.latencyMs}ms`,
           duration: API_TEST_UI_CONFIG.TOAST_SUCCESS_DURATION,
         });
-      } else if (response.data.status === "yellow") {
+      } else if (testResultData.status === "yellow") {
         toast.warning(statusLabels.yellow, {
-          description: response.data.message,
+          description: testResultData.message,
           duration: API_TEST_UI_CONFIG.TOAST_SUCCESS_DURATION,
         });
       } else {
         toast.error(statusLabels.red, {
-          description: response.data.errorMessage || response.data.message,
+          description: testResultData.errorMessage || testResultData.message,
           duration: API_TEST_UI_CONFIG.TOAST_ERROR_DURATION,
         });
       }
@@ -323,10 +438,8 @@ export function ApiTestButton({
           <SelectContent>
             <SelectItem value="anthropic-messages">{t("formatAnthropicMessages")}</SelectItem>
             <SelectItem value="openai-chat" disabled={!enableMultiProviderTypes}>
-              <>
-                {t("formatOpenAIChat")}
-                {!enableMultiProviderTypes && providerTypeT("openaiCompatibleDisabled")}
-              </>
+              {t("formatOpenAIChat")}
+              {!enableMultiProviderTypes && providerTypeT("openaiCompatibleDisabled")}
             </SelectItem>
             <SelectItem value="openai-responses">{t("formatOpenAIResponses")}</SelectItem>
             <SelectItem value="gemini">Gemini API</SelectItem>
@@ -349,6 +462,29 @@ export function ApiTestButton({
           disabled={isTesting}
         />
         <div className="text-xs text-muted-foreground">{t("testModelDesc")}</div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="test-timeout">超时时间（秒）</Label>
+        <Input
+          id="test-timeout"
+          type="number"
+          min={5}
+          max={120}
+          value={timeoutSeconds}
+          onChange={(e) => {
+            const value = parseInt(e.target.value, 10);
+            if (!Number.isNaN(value) && value >= 5 && value <= 120) {
+              setTimeoutSeconds(value);
+            }
+          }}
+          disabled={isTesting}
+          className="w-24"
+        />
+        <div className="text-xs text-muted-foreground">
+          测试请求的最大等待时间（5-120 秒）
+          {apiFormat === "gemini" && "，Gemini Thinking 模型建议 60 秒以上"}
+        </div>
       </div>
 
       {/* Request Configuration - Preset/Custom */}

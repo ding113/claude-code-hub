@@ -1,13 +1,12 @@
-import { Link } from "@/i18n/routing";
-
-import type { AuthSession } from "@/lib/auth";
-import { Button } from "@/components/ui/button";
-import { DashboardNav, type DashboardNavItem } from "./dashboard-nav";
-import { UserMenu } from "./user-menu";
+import { useTranslations } from "next-intl";
 import { VersionUpdateNotifier } from "@/components/customs/version-update-notifier";
+import { Button } from "@/components/ui/button";
 import { LanguageSwitcher } from "@/components/ui/language-switcher";
 import { ThemeSwitcher } from "@/components/ui/theme-switcher";
-import { useTranslations } from "next-intl";
+import { Link } from "@/i18n/routing";
+import type { AuthSession } from "@/lib/auth";
+import { DashboardNav, type DashboardNavItem } from "./dashboard-nav";
+import { UserMenu } from "./user-menu";
 
 interface DashboardHeaderProps {
   session: AuthSession | null;

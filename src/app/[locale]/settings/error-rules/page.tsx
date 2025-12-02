@@ -1,11 +1,11 @@
 import { getTranslations } from "next-intl/server";
-import { listErrorRules, getCacheStats } from "@/actions/error-rules";
+import { getCacheStats, listErrorRules } from "@/actions/error-rules";
 import { Section } from "@/components/section";
 import { SettingsPageHeader } from "../_components/settings-page-header";
-import { RuleListTable } from "./_components/rule-list-table";
 import { AddRuleDialog } from "./_components/add-rule-dialog";
-import { RefreshCacheButton } from "./_components/refresh-cache-button";
 import { ErrorRuleTester } from "./_components/error-rule-tester";
+import { RefreshCacheButton } from "./_components/refresh-cache-button";
+import { RuleListTable } from "./_components/rule-list-table";
 
 export const dynamic = "force-dynamic";
 

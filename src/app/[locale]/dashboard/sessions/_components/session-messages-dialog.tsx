@@ -1,6 +1,9 @@
 "use client";
 
-import * as React from "react";
+import { Eye } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { useState } from "react";
+import { getSessionMessages } from "@/actions/active-sessions";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,10 +13,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Eye } from "lucide-react";
-import { getSessionMessages } from "@/actions/active-sessions";
-import { useState } from "react";
-import { useTranslations } from "next-intl";
 
 interface SessionMessagesDialogProps {
   sessionId: string;

@@ -5,10 +5,10 @@
 
 "use client";
 
-import { useFormatter } from "next-intl";
-import type { DecimalInput, CurrencyCode } from "@/lib/utils/currency";
-import { toDecimal, CURRENCY_CONFIG } from "@/lib/utils/currency";
 import Decimal from "decimal.js-light";
+import { useFormatter } from "next-intl";
+import type { CurrencyCode, DecimalInput } from "@/lib/utils/currency";
+import { CURRENCY_CONFIG, toDecimal } from "@/lib/utils/currency";
 
 /**
  * Hook for formatting currency with user's locale

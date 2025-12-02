@@ -1,10 +1,9 @@
 "use client";
-import type { UserDisplay } from "@/types/user";
-import type { User } from "@/types/user";
-import { ListContainer, ListItem, ListItemData } from "@/components/ui/list";
-import { AddUserDialog } from "./add-user-dialog";
-import { useTranslations } from "next-intl";
 import { Users } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { ListContainer, ListItem, type ListItemData } from "@/components/ui/list";
+import type { User, UserDisplay } from "@/types/user";
+import { AddUserDialog } from "./add-user-dialog";
 
 interface UserListProps {
   users: UserDisplay[];
@@ -25,6 +24,7 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
       text: t("badge", { count: user.keys.length }),
       variant: "outline" as const,
     },
+    tags: user.tags,
     metadata: [
       {
         label: t("activeKeys"),

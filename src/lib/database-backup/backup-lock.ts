@@ -10,8 +10,8 @@
  * - Redis 不可用：降级为内存锁（单实例部署仍然安全）
  */
 
-import { getRedisClient } from "@/lib/redis";
 import { logger } from "@/lib/logger";
+import { getRedisClient } from "@/lib/redis";
 
 const LOCK_KEY = "database:backup:lock";
 const LOCK_TTL = 5 * 60 * 1000; // 5 分钟（毫秒）

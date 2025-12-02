@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { updateErrorRuleAction } from "@/actions/error-rules";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,7 +15,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -21,11 +22,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { updateErrorRuleAction } from "@/actions/error-rules";
-import { toast } from "sonner";
-import type { ErrorRule, ErrorOverrideResponse } from "@/repository/error-rules";
-import { RegexTester } from "./regex-tester";
+import { Textarea } from "@/components/ui/textarea";
+import type { ErrorOverrideResponse, ErrorRule } from "@/repository/error-rules";
 import { OverrideSection } from "./override-section";
+import { RegexTester } from "./regex-tester";
 
 interface EditRuleDialogProps {
   rule: ErrorRule;
@@ -99,7 +99,7 @@ export function EditRuleDialog({ rule, open, onOpenChange }: EditRuleDialogProps
       // Parse override status code
       if (overrideStatusCode.trim()) {
         const code = parseInt(overrideStatusCode.trim(), 10);
-        if (isNaN(code) || code < 400 || code > 599) {
+        if (Number.isNaN(code) || code < 400 || code > 599) {
           toast.error(t("errorRules.dialog.invalidStatusCode"));
           return;
         }

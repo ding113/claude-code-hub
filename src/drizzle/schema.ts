@@ -26,6 +26,8 @@ export const users = pgTable('users', {
   rpmLimit: integer('rpm_limit').default(60),
   dailyLimitUsd: numeric('daily_limit_usd', { precision: 10, scale: 2 }).default('100.00'),
   providerGroup: varchar('provider_group', { length: 50 }),
+  // 用户标签（用于分类和筛选）
+  tags: jsonb('tags').$type<string[]>().default([]),
 
   // New user-level quota fields (nullable for backward compatibility)
   limit5hUsd: numeric('limit_5h_usd', { precision: 10, scale: 2 }),
@@ -317,6 +319,30 @@ export const errorRules = pgTable('error_rules', {
   errorRulesMatchTypeIdx: index('idx_match_type').on(table.matchType),
 }));
 
+// Request Filters table
+export const requestFilters = pgTable('request_filters', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 100 }).notNull(),
+  description: text('description'),
+  scope: varchar('scope', { length: 20 })
+    .notNull()
+    .$type<'header' | 'body'>(),
+  action: varchar('action', { length: 30 })
+    .notNull()
+    .$type<'remove' | 'set' | 'json_path' | 'text_replace'>(),
+  matchType: varchar('match_type', { length: 20 }),
+  target: text('target').notNull(),
+  replacement: jsonb('replacement'),
+  priority: integer('priority').notNull().default(0),
+  isEnabled: boolean('is_enabled').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  requestFiltersEnabledIdx: index('idx_request_filters_enabled').on(table.isEnabled, table.priority),
+  requestFiltersScopeIdx: index('idx_request_filters_scope').on(table.scope),
+  requestFiltersActionIdx: index('idx_request_filters_action').on(table.action),
+}));
+
 // Sensitive Words table
 export const sensitiveWords = pgTable('sensitive_words', {
   id: serial('id').primaryKey(),
@@ -353,6 +379,9 @@ export const systemSettings = pgTable('system_settings', {
 
   // 客户端版本检查配置
   enableClientVersionCheck: boolean('enable_client_version_check').notNull().default(false),
+
+  // 供应商不可用时是否返回详细错误信息
+  verboseProviderError: boolean('verbose_provider_error').notNull().default(false),
 
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),

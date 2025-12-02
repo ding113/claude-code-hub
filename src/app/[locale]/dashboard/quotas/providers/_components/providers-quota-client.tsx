@@ -1,13 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown, Globe } from "lucide-react";
 import { useTranslations } from "next-intl";
-import type { ProviderType } from "@/types/provider";
+import { useMemo, useState } from "react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import type { CurrencyCode } from "@/lib/utils/currency";
-import type { QuotaSortKey } from "./provider-quota-sort-dropdown";
+import type { ProviderType } from "@/types/provider";
 import { ProviderQuotaListItem } from "./provider-quota-list-item";
+import type { QuotaSortKey } from "./provider-quota-sort-dropdown";
 
 interface ProviderQuota {
   cost5h: { current: number; limit: number | null; resetInfo: string };

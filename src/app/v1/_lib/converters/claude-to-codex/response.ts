@@ -21,9 +21,9 @@
  */
 
 import type { Context } from "hono";
-import type { TransformState } from "../types";
 import { logger } from "@/lib/logger";
 import { buildForwardMapFromRequest } from "../tool-name-mapper";
+import type { TransformState } from "../types";
 
 /**
  * 解析 SSE 数据行
@@ -66,9 +66,9 @@ function buildSSE(event: string, data: Record<string, unknown>): string {
  * @returns 转换后的 SSE chunk 数组（Codex 格式）
  */
 export function transformClaudeStreamResponseToCodex(
-  ctx: Context,
+  _ctx: Context,
   model: string,
-  originalRequest: Record<string, unknown>,
+  _originalRequest: Record<string, unknown>,
   transformedRequest: Record<string, unknown>,
   chunk: string,
   state?: TransformState
@@ -298,9 +298,9 @@ export function transformClaudeStreamResponseToCodex(
  * @returns 转换后的 Codex 响应体
  */
 export function transformClaudeNonStreamResponseToCodex(
-  ctx: Context,
+  _ctx: Context,
   model: string,
-  originalRequest: Record<string, unknown>,
+  _originalRequest: Record<string, unknown>,
   transformedRequest: Record<string, unknown>,
   response: Record<string, unknown>
 ): Record<string, unknown> {

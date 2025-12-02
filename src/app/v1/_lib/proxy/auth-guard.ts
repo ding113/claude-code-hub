@@ -1,8 +1,8 @@
-import { validateApiKeyAndGetUser } from "@/repository/key";
-import { ProxyResponses } from "./responses";
-import type { ProxySession, AuthState } from "./session";
 import { logger } from "@/lib/logger";
+import { validateApiKeyAndGetUser } from "@/repository/key";
 import { GEMINI_PROTOCOL } from "../gemini/protocol";
+import { ProxyResponses } from "./responses";
+import type { AuthState, ProxySession } from "./session";
 
 export class ProxyAuthenticator {
   static async ensure(session: ProxySession): Promise<Response | null> {

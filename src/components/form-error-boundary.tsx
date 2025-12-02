@@ -1,10 +1,10 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { AlertTriangle, RefreshCw } from "lucide-react";
 import { useTranslations } from "next-intl";
+import type { ReactNode } from "react";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, RefreshCw } from "lucide-react";
 
 /**
  * 表单专用错误边界 - 用于对话框内表单的错误处理

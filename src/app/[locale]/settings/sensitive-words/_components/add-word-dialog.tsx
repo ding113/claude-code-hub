@@ -1,7 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useState } from "react";
+import { toast } from "sonner";
+import { createSensitiveWordAction } from "@/actions/sensitive-words";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,7 +17,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -22,9 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus } from "lucide-react";
-import { createSensitiveWordAction } from "@/actions/sensitive-words";
-import { toast } from "sonner";
+import { Textarea } from "@/components/ui/textarea";
 
 export function AddWordDialog() {
   const t = useTranslations("settings");

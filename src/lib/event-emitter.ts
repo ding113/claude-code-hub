@@ -5,9 +5,12 @@
  * - 缓存数据更新事件（errorRulesUpdated、sensitiveWordsUpdated）
  * - 系统配置变更事件
  * - 监听器的自动注册和卸载
+ *
+ * 注意：此模块仅在 Node.js runtime 中使用
+ * 请确保通过动态导入 (dynamic import) 引入此模块
  */
 
-import { EventEmitter as NodeEventEmitter } from "events";
+import { EventEmitter as NodeEventEmitter } from "node:events";
 
 /**
  * 事件映射类型定义
@@ -15,6 +18,7 @@ import { EventEmitter as NodeEventEmitter } from "events";
 interface EventMap {
   errorRulesUpdated: [];
   sensitiveWordsUpdated: [];
+  requestFiltersUpdated: [];
 }
 
 /**
@@ -33,6 +37,13 @@ class GlobalEventEmitter extends NodeEventEmitter {
    */
   emitSensitiveWordsUpdated(): void {
     this.emit("sensitiveWordsUpdated");
+  }
+
+  /**
+   * 发送 requestFiltersUpdated 事件
+   */
+  emitRequestFiltersUpdated(): void {
+    this.emit("requestFiltersUpdated");
   }
 }
 

@@ -3,9 +3,9 @@
  * Provides locale-aware date formatting using date-fns and next-intl
  */
 
-import { format, formatDistance, formatRelative } from "date-fns";
-import { zhCN, zhTW, enUS, ru, ja } from "date-fns/locale";
 import type { Locale } from "date-fns";
+import { format, formatDistance, formatRelative } from "date-fns";
+import { enUS, ja, ru, zhCN, zhTW } from "date-fns/locale";
 
 /**
  * Map next-intl locale codes to date-fns locale objects

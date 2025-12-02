@@ -1,36 +1,26 @@
 "use client";
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
+  AlertTriangle,
   CheckCircle,
-  XCircle,
-  Edit,
   Copy,
-  Trash,
+  Edit,
   Globe,
   Key,
   RotateCcw,
-  AlertTriangle,
+  Trash,
+  XCircle,
 } from "lucide-react";
-import type { ProviderDisplay } from "@/types/provider";
-import type { User } from "@/types/user";
-import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
+import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { ProviderForm } from "./forms/provider-form";
-import { FormErrorBoundary } from "@/components/form-error-boundary";
-import { getUnmaskedProviderKey, resetProviderCircuit, removeProvider } from "@/actions/providers";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import type { CurrencyCode } from "@/lib/utils/currency";
-import { formatCurrency } from "@/lib/utils/currency";
+import {
+  editProvider,
+  getUnmaskedProviderKey,
+  removeProvider,
+  resetProviderCircuit,
+} from "@/actions/providers";
+import { FormErrorBoundary } from "@/components/form-error-boundary";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,8 +31,22 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import { editProvider } from "@/actions/providers";
+import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
+import type { CurrencyCode } from "@/lib/utils/currency";
+import { formatCurrency } from "@/lib/utils/currency";
+import type { ProviderDisplay } from "@/types/provider";
+import type { User } from "@/types/user";
+import { ProviderForm } from "./forms/provider-form";
 
 interface ProviderRichListItemProps {
   provider: ProviderDisplay;

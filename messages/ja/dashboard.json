@@ -57,7 +57,6 @@
       "provider": "プロバイダー",
       "model": "モデル",
       "endpoint": "エンドポイント",
-      "endpoint": "エンドポイント",
       "status": "ステータス",
       "timeRange": "時間範囲",
       "startTime": "開始時間",
@@ -71,6 +70,8 @@
       "allStatusCodes": "すべてのステータスコード",
       "apiKey": "API キー",
       "statusCode": "ステータスコード",
+      "minRetryCount": "リトライ回数≥",
+      "minRetryCountPlaceholder": "回数を入力（0 で制限なし）",
       "apply": "フィルターを適用",
       "reset": "リセット"
     },
@@ -182,6 +183,7 @@
       "targetModel": "ターゲットモデル"
     },
     "statusCodes": {
+      "not200": "非 200（エラー／ブロック）",
       "200": "200 (成功)",
       "400": "400 (不正なリクエスト)",
       "401": "401 (未認証)",
@@ -197,8 +199,17 @@
       "keys": "キー ランキング",
       "userRanking": "ユーザーランキング",
       "providerRanking": "プロバイダーランキング",
-      "dailyRanking": "今日のランキング",
-      "monthlyRanking": "今月のランキング"
+      "modelRanking": "モデルランキング",
+      "dailyRanking": "今日",
+      "weeklyRanking": "今週",
+      "monthlyRanking": "今月",
+      "allTimeRanking": "全期間"
+    },
+    "dateRange": {
+      "to": "～",
+      "prevPeriod": "前の期間",
+      "nextPeriod": "次の期間",
+      "customRange": "カスタム日付範囲"
     },
     "columns": {
       "rank": "ランク",
@@ -212,6 +223,7 @@
       "tokens": "トークン数",
       "consumedAmount": "消費金額",
       "provider": "プロバイダー",
+      "model": "モデル",
       "cost": "コスト",
       "successRate": "成功率",
       "avgResponseTime": "平均応答時間"
@@ -220,6 +232,7 @@
       "loading": "読み込み中...",
       "noData": "データなし",
       "todayNoData": "今日のデータなし",
+      "weekNoData": "今週のデータなし",
       "monthNoData": "今月のデータなし",
       "fetchFailed": "ランキングデータの取得に失敗しました"
     },
@@ -392,6 +405,8 @@
       "7daysDescription": "過去 7 日間の使用状況",
       "30days": "過去 30 日間",
       "30daysDescription": "過去 30 日間の使用状況",
+      "thisMonth": "今月",
+      "thisMonthDescription": "今月の使用状況",
       "default": "使用状況"
     },
     "mode": {
@@ -497,6 +512,7 @@
     "error": "取得に失敗しました",
     "networkError": "ネットワークエラー",
     "cost5h": "5時間消費",
+    "costDaily": "日次消費",
     "costWeekly": "週間消費",
     "costMonthly": "月間消費",
     "concurrentSessions": "同時セッション数",
@@ -598,6 +614,11 @@
       "placeholder": "例: premium または premium,economy（オプション）",
       "description": "ユーザー専用のプロバイダーグループを指定します（複数可、カンマ区切り）。システムはgroupTagが一致するプロバイダーのみから選択します。空白=すべてのプロバイダーを使用"
     },
+    "tags": {
+      "label": "ユーザータグ",
+      "placeholder": "タグを入力（Enterで追加）",
+      "description": "分類とフィルタリングのためにタグを追加します（最大20個、各32文字まで）"
+    },
     "rpm": {
       "label": "RPM制限",
       "placeholder": "1分あたりのリクエスト数制限",
@@ -658,7 +679,9 @@
     "toolbar": {
       "searchPlaceholder": "ユーザー名で検索...",
       "groupFilter": "グループでフィルター",
-      "allGroups": "すべてのグループ"
+      "allGroups": "すべてのグループ",
+      "tagFilter": "タグでフィルター",
+      "allTags": "すべてのタグ"
     }
   },
   "availability": {

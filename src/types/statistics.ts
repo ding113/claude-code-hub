@@ -1,4 +1,4 @@
-export type TimeRange = "today" | "7days" | "30days";
+export type TimeRange = "today" | "7days" | "30days" | "thisMonth";
 
 export interface TimeRangeConfig {
   label: string;
@@ -27,6 +27,12 @@ export const TIME_RANGE_OPTIONS: TimeRangeConfig[] = [
     key: "30days",
     resolution: "day",
     description: "30daysDescription", // Translation key
+  },
+  {
+    label: "thisMonth", // Translation key
+    key: "thisMonth",
+    resolution: "day",
+    description: "thisMonthDescription", // Translation key
   },
 ];
 

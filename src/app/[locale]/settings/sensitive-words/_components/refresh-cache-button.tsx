@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { useTranslations } from "next-intl";
-import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
-import { refreshCacheAction } from "@/actions/sensitive-words";
+import { useTranslations } from "next-intl";
+import { useState } from "react";
 import { toast } from "sonner";
+import { refreshCacheAction } from "@/actions/sensitive-words";
+import { Button } from "@/components/ui/button";
 
 interface RefreshCacheButtonProps {
   stats: {

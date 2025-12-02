@@ -1,19 +1,19 @@
 "use server";
 
+import { desc, isNull } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { messageRequest, users, providers } from "@/drizzle/schema";
-import { isNull, desc } from "drizzle-orm";
+import { messageRequest, providers, users } from "@/drizzle/schema";
 import { findAllLatestPrices } from "@/repository/model-price";
 import type {
-  LogDistribution,
-  HourlyDistribution,
-  WeightedItem,
-  UserInfo,
-  ProviderInfo,
-  ModelInfo,
-  TokenStats,
-  DurationStats,
   CostStats,
+  DurationStats,
+  HourlyDistribution,
+  LogDistribution,
+  ModelInfo,
+  ProviderInfo,
+  TokenStats,
+  UserInfo,
+  WeightedItem,
 } from "./types";
 
 const SAMPLE_LIMIT = 10000;
@@ -24,7 +24,7 @@ function calculateMeanAndStddev(values: number[]): { mean: number; stddev: numbe
   }
 
   const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
-  const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
+  const variance = values.reduce((sum, val) => sum + (val - mean) ** 2, 0) / values.length;
   const stddev = Math.sqrt(variance);
 
   return { mean, stddev };
@@ -165,8 +165,8 @@ export async function analyzeLogDistribution(): Promise<LogDistribution> {
 
         let inputPricePerM = 0.003;
         let outputPricePerM = 0.015;
-        let cacheWritePricePerM: number | undefined = undefined;
-        let cacheReadPricePerM: number | undefined = undefined;
+        let cacheWritePricePerM: number | undefined;
+        let cacheReadPricePerM: number | undefined;
 
         if (priceData) {
           if ("input_cost_per_token" in priceData) {

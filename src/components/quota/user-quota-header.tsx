@@ -1,15 +1,15 @@
 "use client";
 
-import { Card, CardHeader } from "@/components/ui/card";
+import { ChevronDown, ChevronRight, Settings, User } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { EditUserQuotaDialog } from "@/app/[locale]/dashboard/quotas/keys/_components/edit-user-quota-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { QuotaProgress } from "./quota-progress";
-import { User, ChevronDown, ChevronRight, Settings } from "lucide-react";
+import { Card, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { getUsageRate, getQuotaColorClass } from "@/lib/utils/quota-helpers";
-import { EditUserQuotaDialog } from "@/app/[locale]/dashboard/quotas/keys/_components/edit-user-quota-dialog";
 import type { CurrencyCode } from "@/lib/utils/currency";
-import { useTranslations } from "next-intl";
+import { getQuotaColorClass, getUsageRate } from "@/lib/utils/quota-helpers";
+import { QuotaProgress } from "./quota-progress";
 
 interface UserQuotaHeaderProps {
   userId: number;

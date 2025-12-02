@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { AlertCircle, CheckCircle2, XCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useEffect, useState } from "react";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 
 interface RegexTesterProps {
   pattern: string;

@@ -12,32 +12,30 @@
  */
 
 import "@/lib/polyfills/file";
-import { OpenAPIHono } from "@hono/zod-openapi";
 import { swaggerUI } from "@hono/swagger-ui";
+import { OpenAPIHono } from "@hono/zod-openapi";
 import { apiReference } from "@scalar/hono-api-reference";
 import { handle } from "hono/vercel";
-import { createActionRoute } from "@/lib/api/action-adapter-openapi";
-
-// 导入 actions
-import * as userActions from "@/actions/users";
+import { z } from "zod";
+import * as activeSessionActions from "@/actions/active-sessions";
 import * as keyActions from "@/actions/keys";
-import * as providerActions from "@/actions/providers";
 import * as modelPriceActions from "@/actions/model-prices";
+import * as notificationActions from "@/actions/notifications";
+import * as overviewActions from "@/actions/overview";
+import * as providerActions from "@/actions/providers";
+import * as sensitiveWordActions from "@/actions/sensitive-words";
 import * as statisticsActions from "@/actions/statistics";
 import * as usageLogActions from "@/actions/usage-logs";
-import * as overviewActions from "@/actions/overview";
-import * as sensitiveWordActions from "@/actions/sensitive-words";
-import * as activeSessionActions from "@/actions/active-sessions";
-import * as notificationActions from "@/actions/notifications";
-
+// 导入 actions
+import * as userActions from "@/actions/users";
+import { createActionRoute } from "@/lib/api/action-adapter-openapi";
 // 导入 validation schemas
 import {
-  CreateUserSchema,
-  UpdateUserSchema,
   CreateProviderSchema,
+  CreateUserSchema,
   UpdateProviderSchema,
+  UpdateUserSchema,
 } from "@/lib/validation/schemas";
-import { z } from "zod";
 
 // 需要 Node.js runtime (数据库连接)
 export const runtime = "nodejs";
@@ -378,8 +376,7 @@ const { route: getUserStatisticsRoute, handler: getUserStatisticsHandler } = cre
   statisticsActions.getUserStatistics,
   {
     requestSchema: z.object({
-      timeRange: z.enum(["hour", "day", "week", "month"]),
-      userId: z.number().int().positive().optional(),
+      timeRange: z.enum(["today", "7days", "30days", "thisMonth"]),
     }),
     description: "获取用户统计数据",
     summary: "根据时间范围获取使用统计 (管理员看所有,用户看自己)",
@@ -396,10 +393,18 @@ const { route: getUsageLogsRoute, handler: getUsageLogsHandler } = createActionR
   usageLogActions.getUsageLogs,
   {
     requestSchema: z.object({
+      userId: z.number().int().positive().optional(),
+      keyId: z.number().int().positive().optional(),
+      providerId: z.number().int().positive().optional(),
       startDate: z.string().datetime().optional(),
       endDate: z.string().datetime().optional(),
+      startDateLocal: z.string().optional(),
+      endDateLocal: z.string().optional(),
       model: z.string().optional(),
+      endpoint: z.string().optional(),
       statusCode: z.number().optional(),
+      excludeStatusCode200: z.boolean().optional(),
+      minRetryCount: z.number().int().nonnegative().optional(),
       pageSize: z.number().int().positive().max(100).default(50).optional(),
       page: z.number().int().positive().default(1).optional(),
     }),

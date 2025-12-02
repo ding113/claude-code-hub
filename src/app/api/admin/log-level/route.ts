@@ -1,5 +1,5 @@
 import { getSession } from "@/lib/auth";
-import { logger, setLogLevel, getLogLevel, type LogLevel } from "@/lib/logger";
+import { getLogLevel, type LogLevel, logger, setLogLevel } from "@/lib/logger";
 
 // 需要数据库连接
 export const runtime = "nodejs";

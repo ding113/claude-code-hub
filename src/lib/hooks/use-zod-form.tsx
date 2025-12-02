@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useCallback, useState } from "react";
 import { z } from "zod";
 
 interface UseZodFormOptions<T extends z.ZodSchema> {
@@ -75,7 +75,30 @@ export function useZodForm<T extends z.ZodSchema>({
     [values, errors, setValue]
   );
 
+  const getArrayFieldProps = useCallback(
+    (field: keyof Values) => {
+      const raw = (values as Record<string, unknown>)[field as string];
+      const value = (Array.isArray(raw) ? raw : []) as string[];
+      return {
+        value,
+        onChange: (val: string[]) => setValue(field, val),
+        error: errors[field as string],
+        touched: true,
+      };
+    },
+    [values, errors, setValue]
+  );
+
   const canSubmit = Object.keys(values).length > 0 && !isSubmitting;
 
-  return { values, errors, isSubmitting, canSubmit, setValue, handleSubmit, getFieldProps };
+  return {
+    values,
+    errors,
+    isSubmitting,
+    canSubmit,
+    setValue,
+    handleSubmit,
+    getFieldProps,
+    getArrayFieldProps,
+  };
 }

@@ -1,12 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { logger } from "@/lib/logger";
-import { getSystemSettings, updateSystemSettings } from "@/repository/system-config";
 import { getSession } from "@/lib/auth";
+import { logger } from "@/lib/logger";
 import { UpdateSystemSettingsSchema } from "@/lib/validation/schemas";
-import type { ActionResult } from "./types";
+import { getSystemSettings, updateSystemSettings } from "@/repository/system-config";
 import type { SystemSettings } from "@/types/system-config";
+import type { ActionResult } from "./types";
 
 export async function fetchSystemSettings(): Promise<ActionResult<SystemSettings>> {
   try {
@@ -34,6 +34,7 @@ export async function saveSystemSettings(formData: {
   cleanupSchedule?: string;
   cleanupBatchSize?: number;
   enableClientVersionCheck?: boolean;
+  verboseProviderError?: boolean;
 }): Promise<ActionResult<SystemSettings>> {
   try {
     const session = await getSession();
@@ -52,6 +53,7 @@ export async function saveSystemSettings(formData: {
       cleanupSchedule: validated.cleanupSchedule,
       cleanupBatchSize: validated.cleanupBatchSize,
       enableClientVersionCheck: validated.enableClientVersionCheck,
+      verboseProviderError: validated.verboseProviderError,
     });
 
     revalidatePath("/settings/config");

@@ -1,14 +1,14 @@
+import { getTranslations } from "next-intl/server";
+import { hasPriceTable } from "@/actions/model-prices";
+import { getUserStatistics } from "@/actions/statistics";
+import { getUsers } from "@/actions/users";
+import { OverviewPanel } from "@/components/customs/overview-panel";
 import { redirect } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
-import { getUserStatistics } from "@/actions/statistics";
-import { hasPriceTable } from "@/actions/model-prices";
 import { getSystemSettings } from "@/repository/system-config";
-import { getUsers } from "@/actions/users";
-import { StatisticsWrapper } from "./_components/statistics";
-import { OverviewPanel } from "@/components/customs/overview-panel";
-import { UserQuickOverview } from "./_components/user-quick-overview";
 import { DEFAULT_TIME_RANGE } from "@/types/statistics";
-import { getTranslations } from "next-intl/server";
+import { StatisticsWrapper } from "./_components/statistics";
+import { UserQuickOverview } from "./_components/user-quick-overview";
 
 export const dynamic = "force-dynamic";
 

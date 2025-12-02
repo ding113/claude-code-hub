@@ -1,9 +1,9 @@
-import type { ProxySession } from "./session";
-import { RateLimitService } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
-import { RateLimitError } from "./errors";
-import { getResetInfo, getDailyResetTime } from "@/lib/rate-limit/time-utils";
+import { RateLimitService } from "@/lib/rate-limit";
+import { getDailyResetTime, getResetInfo } from "@/lib/rate-limit/time-utils";
 import { ERROR_CODES, getErrorMessageServer } from "@/lib/utils/error-messages";
+import { RateLimitError } from "./errors";
+import type { ProxySession } from "./session";
 
 export class ProxyRateLimitGuard {
   /**
@@ -96,9 +96,8 @@ export class ProxyRateLimitGuard {
       logger.warn(`[RateLimit] Key cost limit exceeded: key=${key.id}, ${costCheck.reason}`);
 
       // 解析限流类型、当前使用量、限制值和重置时间
-      const { limitType, currentUsage, limitValue, resetTime } = this.parseCostLimitInfo(
-        costCheck.reason!
-      );
+      const { limitType, currentUsage, limitValue, resetTime } =
+        ProxyRateLimitGuard.parseCostLimitInfo(costCheck.reason!);
 
       // 获取国际化错误消息
       const { getLocale } = await import("next-intl/server");
@@ -138,7 +137,9 @@ export class ProxyRateLimitGuard {
       logger.warn(`[RateLimit] Key session limit exceeded: key=${key.id}, ${sessionCheck.reason}`);
 
       // 解析当前并发数和限制值
-      const { currentUsage, limitValue } = this.parseSessionLimitInfo(sessionCheck.reason!);
+      const { currentUsage, limitValue } = ProxyRateLimitGuard.parseSessionLimitInfo(
+        sessionCheck.reason!
+      );
 
       // 并发限制没有固定的重置时间，使用当前时间
       const resetTime = new Date().toISOString();

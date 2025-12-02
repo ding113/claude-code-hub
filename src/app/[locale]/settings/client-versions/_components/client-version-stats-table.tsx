@@ -1,9 +1,8 @@
 "use client";
 
-import type { ClientVersionStats } from "@/lib/client-version-checker";
-import { getClientTypeDisplayName } from "@/lib/ua-parser";
+import { AlertTriangle, Check, Code2, HelpCircle, Package, Terminal } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
-import { Code2, Terminal, HelpCircle, Package, Check, AlertTriangle } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -12,8 +11,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import type { ClientVersionStats } from "@/lib/client-version-checker";
+import { getClientTypeDisplayName } from "@/lib/ua-parser";
 import { formatDateDistance } from "@/lib/utils/date-format";
-import { useLocale, useTranslations } from "next-intl";
 
 interface ClientVersionStatsTableProps {
   data: ClientVersionStats[];

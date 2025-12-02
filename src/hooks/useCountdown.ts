@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 interface CountdownResult {
   days: number;
@@ -30,7 +30,7 @@ function calculateCountdown(targetDate: Date | null): CountdownResult {
     };
   }
 
-  const now = new Date().getTime();
+  const now = Date.now();
   const target = new Date(targetDate).getTime();
   const diff = target - now;
 
@@ -157,7 +157,7 @@ export function useCountdownProgress(targetDate: Date | null, startDate?: Date |
   return useMemo(() => {
     if (!targetDate || countdown.isExpired) return 100;
 
-    const now = new Date().getTime();
+    const now = Date.now();
     const target = new Date(targetDate).getTime();
     const start = startDate ? new Date(startDate).getTime() : now;
 

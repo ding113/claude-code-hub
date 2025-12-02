@@ -1,12 +1,12 @@
 "use server";
 
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { logger } from "@/lib/logger";
 import { providers } from "@/drizzle/schema";
-import { eq, isNull, and, desc, sql } from "drizzle-orm";
-import type { Provider, CreateProviderData, UpdateProviderData } from "@/types/provider";
-import { toProvider } from "./_shared/transformers";
 import { getEnvConfig } from "@/lib/config";
+import { logger } from "@/lib/logger";
+import type { CreateProviderData, Provider, UpdateProviderData } from "@/types/provider";
+import { toProvider } from "./_shared/transformers";
 
 export async function createProvider(providerData: CreateProviderData): Promise<Provider> {
   const dbData = {
@@ -345,6 +345,25 @@ export async function deleteProvider(id: number): Promise<boolean> {
     .returning({ id: providers.id });
 
   return result.length > 0;
+}
+
+/**
+ * 获取所有不同的供应商分组标签
+ * 用于用户表单中的供应商分组选择建议
+ */
+export async function getDistinctProviderGroups(): Promise<string[]> {
+  const result = await db
+    .selectDistinct({ groupTag: providers.groupTag })
+    .from(providers)
+    .where(
+      and(
+        isNull(providers.deletedAt),
+        sql`${providers.groupTag} IS NOT NULL AND ${providers.groupTag} != ''`
+      )
+    )
+    .orderBy(providers.groupTag);
+
+  return result.map((r) => r.groupTag).filter((tag): tag is string => tag !== null);
 }
 
 /**

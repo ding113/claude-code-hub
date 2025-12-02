@@ -1,9 +1,8 @@
 "use client";
 
-import * as React from "react";
-import { TIME_RANGE_OPTIONS, type TimeRange } from "@/types/statistics";
-import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
+import { cn } from "@/lib/utils";
+import { TIME_RANGE_OPTIONS, type TimeRange } from "@/types/statistics";
 
 interface TimeRangeSelectorProps {
   value: TimeRange;
@@ -14,7 +13,7 @@ interface TimeRangeSelectorProps {
 
 /**
  * 时间范围选择器组件
- * 提供今天、7天、30天的选择
+ * 提供今天、7天、30天、本月的选择
  */
 export function TimeRangeSelector({
   value,

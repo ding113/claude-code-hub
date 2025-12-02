@@ -1,7 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useState } from "react";
+import { toast } from "sonner";
+import { createErrorRuleAction } from "@/actions/error-rules";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,7 +17,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -22,12 +24,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus } from "lucide-react";
-import { createErrorRuleAction } from "@/actions/error-rules";
-import { toast } from "sonner";
-import { RegexTester } from "./regex-tester";
-import { OverrideSection } from "./override-section";
+import { Textarea } from "@/components/ui/textarea";
 import type { ErrorOverrideResponse } from "@/repository/error-rules";
+import { OverrideSection } from "./override-section";
+import { RegexTester } from "./regex-tester";
 
 export function AddRuleDialog() {
   const t = useTranslations("settings");
@@ -62,8 +62,8 @@ export function AddRuleDialog() {
     }
 
     // Parse and validate override response JSON (only when override is enabled)
-    let parsedOverrideResponse: ErrorOverrideResponse | undefined = undefined;
-    let parsedStatusCode: number | undefined = undefined;
+    let parsedOverrideResponse: ErrorOverrideResponse | undefined;
+    let parsedStatusCode: number | undefined;
 
     if (enableOverride) {
       if (overrideResponse.trim()) {
@@ -78,7 +78,7 @@ export function AddRuleDialog() {
       // Parse override status code
       if (overrideStatusCode.trim()) {
         const code = parseInt(overrideStatusCode.trim(), 10);
-        if (isNaN(code) || code < 400 || code > 599) {
+        if (Number.isNaN(code) || code < 400 || code > 599) {
           toast.error(t("errorRules.dialog.invalidStatusCode"));
           return;
         }

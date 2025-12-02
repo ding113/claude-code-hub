@@ -4,7 +4,7 @@
  */
 
 import type { ParsedResponse, TokenUsage } from "../types";
-import { parseSSEStream, isSSEResponse } from "../utils/sse-collector";
+import { isSSEResponse, parseSSEStream } from "../utils/sse-collector";
 
 /**
  * Anthropic non-streaming response structure

@@ -1,7 +1,10 @@
 "use client";
 
-import { useState } from "react";
 import { useTranslations } from "next-intl";
+import { useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { RelativeTime } from "@/components/ui/relative-time";
 import {
   Table,
   TableBody,
@@ -10,24 +13,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import type { UsageLogRow } from "@/repository/usage-logs";
-import { RelativeTime } from "@/components/ui/relative-time";
-import { ProviderChainPopover } from "./provider-chain-popover";
-import { ErrorDetailsDialog } from "./error-details-dialog";
-import { formatProviderSummary } from "@/lib/utils/provider-chain-formatter";
-import { ModelDisplayWithRedirect } from "./model-display-with-redirect";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn, formatTokenAmount } from "@/lib/utils";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
-import { cn, formatTokenAmount } from "@/lib/utils";
+import { formatProviderSummary } from "@/lib/utils/provider-chain-formatter";
+import type { UsageLogRow } from "@/repository/usage-logs";
 import type { BillingModelSource } from "@/types/system-config";
+import { ErrorDetailsDialog } from "./error-details-dialog";
+import { ModelDisplayWithRedirect } from "./model-display-with-redirect";
+import { ProviderChainPopover } from "./provider-chain-popover";
 
 const NON_BILLING_ENDPOINT = "/v1/messages/count_tokens";
 
@@ -37,7 +32,7 @@ const NON_BILLING_ENDPOINT = "/v1/messages/count_tokens";
  * - 1000ms 以下显示为毫秒（如 "850ms"）
  */
 function formatDuration(durationMs: number | null): string {
-  if (!durationMs) return '-';
+  if (!durationMs) return "-";
 
   // 1000ms 以上转换为秒
   if (durationMs >= 1000) {
@@ -144,7 +139,9 @@ export function UsageLogsTable({
                                   <ProviderChainPopover
                                     chain={log.providerChain}
                                     finalProvider={
-                                      log.providerChain[log.providerChain.length - 1].name || log.providerName || tChain("circuit.unknown")
+                                      log.providerChain[log.providerChain.length - 1].name ||
+                                      log.providerName ||
+                                      tChain("circuit.unknown")
                                     }
                                   />
                                 </div>
@@ -158,7 +155,11 @@ export function UsageLogsTable({
                                             {formatProviderSummary(log.providerChain, tChain)}
                                           </span>
                                         </TooltipTrigger>
-                                        <TooltipContent side="bottom" align="start" className="max-w-[500px]">
+                                        <TooltipContent
+                                          side="bottom"
+                                          align="start"
+                                          className="max-w-[500px]"
+                                        >
                                           <p className="text-xs whitespace-normal break-words font-mono">
                                             {formatProviderSummary(log.providerChain, tChain)}
                                           </p>
@@ -175,18 +176,22 @@ export function UsageLogsTable({
                           {/* 显示供应商倍率 Badge（不为 1.0 时） */}
                           {(() => {
                             // 从决策链中找到最后一个成功的供应商，使用它的倍率
-                            const successfulProvider = log.providerChain && log.providerChain.length > 0
-                              ? [...log.providerChain]
-                                  .reverse()
-                                  .find(item =>
-                                    item.reason === 'request_success' ||
-                                    item.reason === 'retry_success'
-                                  )
-                              : null;
+                            const successfulProvider =
+                              log.providerChain && log.providerChain.length > 0
+                                ? [...log.providerChain]
+                                    .reverse()
+                                    .find(
+                                      (item) =>
+                                        item.reason === "request_success" ||
+                                        item.reason === "retry_success"
+                                    )
+                                : null;
 
-                            const actualCostMultiplier = successfulProvider?.costMultiplier ?? log.costMultiplier;
+                            const actualCostMultiplier =
+                              successfulProvider?.costMultiplier ?? log.costMultiplier;
 
-                            return actualCostMultiplier && parseFloat(String(actualCostMultiplier)) !== 1.0 ? (
+                            return actualCostMultiplier &&
+                              parseFloat(String(actualCostMultiplier)) !== 1.0 ? (
                               <Badge
                                 variant="outline"
                                 className={
@@ -211,7 +216,9 @@ export function UsageLogsTable({
                                 originalModel={log.originalModel}
                                 currentModel={log.model}
                                 billingModelSource={billingModelSource}
-                                onRedirectClick={() => setDialogState({ logId: log.id, scrollToRedirect: true })}
+                                onRedirectClick={() =>
+                                  setDialogState({ logId: log.id, scrollToRedirect: true })
+                                }
                               />
                             </div>
                           </TooltipTrigger>
@@ -234,7 +241,11 @@ export function UsageLogsTable({
                       {formatTokenAmount(log.cacheReadInputTokens)}
                     </TableCell>
                     <TableCell className="text-right font-mono text-xs">
-                      {isNonBilling ? "-" : log.costUsd ? formatCurrency(log.costUsd, currencyCode, 6) : "-"}
+                      {isNonBilling
+                        ? "-"
+                        : log.costUsd
+                          ? formatCurrency(log.costUsd, currencyCode, 6)
+                          : "-"}
                     </TableCell>
                     <TableCell className="text-right font-mono text-xs">
                       {formatDuration(log.durationMs)}
@@ -257,7 +268,9 @@ export function UsageLogsTable({
                         onExternalOpenChange={(open) => {
                           if (!open) setDialogState({ logId: null, scrollToRedirect: false });
                         }}
-                        scrollToRedirect={dialogState.logId === log.id && dialogState.scrollToRedirect}
+                        scrollToRedirect={
+                          dialogState.logId === log.id && dialogState.scrollToRedirect
+                        }
                       />
                     </TableCell>
                   </TableRow>

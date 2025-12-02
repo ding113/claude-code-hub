@@ -1,12 +1,12 @@
 "use client";
-import { useState } from "react";
 import { SquarePen, Trash } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
-import { UserForm } from "./forms/user-form";
-import { DeleteUserConfirm } from "./forms/delete-user-confirm";
-import type { UserDisplay, User } from "@/types/user";
+import { useState } from "react";
 import { FormErrorBoundary } from "@/components/form-error-boundary";
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import type { User, UserDisplay } from "@/types/user";
+import { DeleteUserConfirm } from "./forms/delete-user-confirm";
+import { UserForm } from "./forms/user-form";
 
 interface UserActionsProps {
   user: UserDisplay;

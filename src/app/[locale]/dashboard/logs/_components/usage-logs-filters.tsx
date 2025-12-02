@@ -2,10 +2,12 @@
 
 import { useTranslations } from "next-intl";
 
-import { useState, useEffect } from "react";
-import { Label } from "@/components/ui/label";
+import { useEffect, useState } from "react";
+import { getKeys } from "@/actions/keys";
+import { getEndpointList, getModelList, getStatusCodeList } from "@/actions/usage-logs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -13,11 +15,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getEndpointList, getModelList, getStatusCodeList } from "@/actions/usage-logs";
-import { getKeys } from "@/actions/keys";
-import type { UserDisplay } from "@/types/user";
-import type { ProviderDisplay } from "@/types/provider";
 import type { Key } from "@/types/key";
+import type { ProviderDisplay } from "@/types/provider";
+import type { UserDisplay } from "@/types/user";
 
 interface UsageLogsFiltersProps {
   isAdmin: boolean;
@@ -33,8 +33,10 @@ interface UsageLogsFiltersProps {
     /** 本地时间字符串，格式: "YYYY-MM-DDTHH:mm" */
     endDateLocal?: string;
     statusCode?: number;
+    excludeStatusCode200?: boolean;
     model?: string;
     endpoint?: string;
+    minRetryCount?: number;
   };
   onChange: (filters: UsageLogsFiltersProps["filters"]) => void;
   onReset: () => void;
@@ -112,7 +114,7 @@ export function UsageLogsFilters({
 
   // 处理用户选择变更
   const handleUserChange = async (userId: string) => {
-    const newUserId = userId ? parseInt(userId) : undefined;
+    const newUserId = userId ? parseInt(userId, 10) : undefined;
     const newFilters = { ...localFilters, userId: newUserId, keyId: undefined };
     setLocalFilters(newFilters);
 
@@ -173,10 +175,7 @@ export function UsageLogsFilters({
         {isAdmin && (
           <div className="space-y-2 lg:col-span-4">
             <Label>{t("logs.filters.user")}</Label>
-            <Select
-              value={localFilters.userId?.toString() || ""}
-              onValueChange={handleUserChange}
-            >
+            <Select value={localFilters.userId?.toString() || ""} onValueChange={handleUserChange}>
               <SelectTrigger>
                 <SelectValue placeholder={t("logs.filters.allUsers")} />
               </SelectTrigger>
@@ -199,13 +198,19 @@ export function UsageLogsFilters({
             onValueChange={(value: string) =>
               setLocalFilters({
                 ...localFilters,
-                keyId: value ? parseInt(value) : undefined,
+                keyId: value ? parseInt(value, 10) : undefined,
               })
             }
             disabled={isAdmin && !localFilters.userId && keys.length === 0}
           >
             <SelectTrigger>
-              <SelectValue placeholder={isAdmin && !localFilters.userId && keys.length === 0 ? t("logs.filters.selectUserFirst") : t("logs.filters.allKeys")} />
+              <SelectValue
+                placeholder={
+                  isAdmin && !localFilters.userId && keys.length === 0
+                    ? t("logs.filters.selectUserFirst")
+                    : t("logs.filters.allKeys")
+                }
+              />
             </SelectTrigger>
             <SelectContent>
               {keys.map((key) => (
@@ -226,7 +231,7 @@ export function UsageLogsFilters({
               onValueChange={(value: string) =>
                 setLocalFilters({
                   ...localFilters,
-                  providerId: value ? parseInt(value) : undefined,
+                  providerId: value ? parseInt(value, 10) : undefined,
                 })
               }
             >
@@ -296,20 +301,21 @@ export function UsageLogsFilters({
               ))}
             </SelectContent>
           </Select>
-          {endpointError && (
-            <p className="text-xs text-destructive">{endpointError}</p>
-          )}
+          {endpointError && <p className="text-xs text-destructive">{endpointError}</p>}
         </div>
 
         {/* 状态码选择 */}
         <div className="space-y-2 lg:col-span-4">
           <Label>{t("logs.filters.statusCode")}</Label>
           <Select
-            value={localFilters.statusCode?.toString() || ""}
+            value={
+              localFilters.excludeStatusCode200 ? "!200" : localFilters.statusCode?.toString() || ""
+            }
             onValueChange={(value: string) =>
               setLocalFilters({
                 ...localFilters,
-                statusCode: value ? parseInt(value) : undefined,
+                statusCode: value && value !== "!200" ? parseInt(value, 10) : undefined,
+                excludeStatusCode200: value === "!200",
               })
             }
           >
@@ -317,6 +323,7 @@ export function UsageLogsFilters({
               <SelectValue placeholder={t("logs.filters.allStatusCodes")} />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="!200">{t("logs.statusCodes.not200")}</SelectItem>
               <SelectItem value="200">{t("logs.statusCodes.200")}</SelectItem>
               <SelectItem value="400">{t("logs.statusCodes.400")}</SelectItem>
               <SelectItem value="401">{t("logs.statusCodes.401")}</SelectItem>
@@ -331,6 +338,24 @@ export function UsageLogsFilters({
                 ))}
             </SelectContent>
           </Select>
+        </div>
+
+        {/* 重试次数下限 */}
+        <div className="space-y-2 lg:col-span-4">
+          <Label>{t("logs.filters.minRetryCount")}</Label>
+          <Input
+            type="number"
+            min={0}
+            inputMode="numeric"
+            value={localFilters.minRetryCount?.toString() ?? ""}
+            placeholder={t("logs.filters.minRetryCountPlaceholder")}
+            onChange={(e) =>
+              setLocalFilters({
+                ...localFilters,
+                minRetryCount: e.target.value ? parseInt(e.target.value, 10) : undefined,
+              })
+            }
+          />
         </div>
       </div>
 

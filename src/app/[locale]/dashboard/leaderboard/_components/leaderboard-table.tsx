@@ -1,5 +1,9 @@
 "use client";
 
+import { Award, Medal, Trophy } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -8,10 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Trophy, Medal, Award } from "lucide-react";
-import { useTranslations } from "next-intl";
+import type { LeaderboardPeriod } from "@/repository/leaderboard";
 
 // 支持动态列定义
 export interface ColumnDef<T> {
@@ -22,8 +23,8 @@ export interface ColumnDef<T> {
 
 interface LeaderboardTableProps<T> {
   data: T[];
-  period: "daily" | "monthly";
-  columns: ColumnDef<T>[]; // 不包含“排名”列，组件会自动添加
+  period: LeaderboardPeriod;
+  columns: ColumnDef<T>[]; // 不包含"排名"列，组件会自动添加
   getRowKey?: (row: T, index: number) => string | number;
 }
 
@@ -36,12 +37,18 @@ export function LeaderboardTable<T>({
   const t = useTranslations("dashboard.leaderboard");
 
   if (data.length === 0) {
+    const noDataKey =
+      period === "daily"
+        ? "states.todayNoData"
+        : period === "weekly"
+          ? "states.weekNoData"
+          : period === "monthly"
+            ? "states.monthNoData"
+            : "states.noData";
     return (
       <Card>
         <CardContent className="py-8">
-          <div className="text-center text-muted-foreground">
-            {t(period === "daily" ? "states.todayNoData" : "states.monthNoData")}
-          </div>
+          <div className="text-center text-muted-foreground">{t(noDataKey)}</div>
         </CardContent>
       </Card>
     );

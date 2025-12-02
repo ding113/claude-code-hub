@@ -1,10 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Search, Package, DollarSign, ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, DollarSign, Package, Search } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { Input } from "@/components/ui/input";
+import { useCallback, useEffect, useState } from "react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -13,16 +21,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import type { ModelPrice } from "@/types/model-price";
 import { useDebounce } from "@/lib/hooks/use-debounce";
+import type { ModelPrice } from "@/types/model-price";
 
 interface PriceListProps {
   initialPrices: ModelPrice[];
@@ -67,7 +67,7 @@ export function PriceList({
   }, []); // 空依赖数组，仅在挂载时执行一次
 
   // 更新 URL 搜索参数
-  const updateURL = (newSearchTerm: string, newPage: number, newPageSize: number) => {
+  const updateURL = useCallback((newSearchTerm: string, newPage: number, newPageSize: number) => {
     const url = new URL(window.location.href);
     if (newSearchTerm) {
       url.searchParams.set("search", newSearchTerm);
@@ -85,29 +85,32 @@ export function PriceList({
       url.searchParams.delete("size");
     }
     window.history.replaceState({}, "", url.toString());
-  };
+  }, []);
 
   // 获取价格数据
-  const fetchPrices = async (newPage: number, newPageSize: number, newSearchTerm: string) => {
-    setIsLoading(true);
-    try {
-      const response = await fetch(
-        `/api/prices?page=${newPage}&pageSize=${newPageSize}&search=${encodeURIComponent(newSearchTerm)}`
-      );
-      const result = await response.json();
+  const fetchPrices = useCallback(
+    async (newPage: number, newPageSize: number, newSearchTerm: string) => {
+      setIsLoading(true);
+      try {
+        const response = await fetch(
+          `/api/prices?page=${newPage}&pageSize=${newPageSize}&search=${encodeURIComponent(newSearchTerm)}`
+        );
+        const result = await response.json();
 
-      if (result.ok) {
-        setPrices(result.data.data);
-        setTotal(result.data.total);
-        setPage(result.data.page);
-        setPageSize(result.data.pageSize);
+        if (result.ok) {
+          setPrices(result.data.data);
+          setTotal(result.data.total);
+          setPage(result.data.page);
+          setPageSize(result.data.pageSize);
+        }
+      } catch (error) {
+        console.error("获取价格数据失败:", error);
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error) {
-      console.error("获取价格数据失败:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    },
+    []
+  );
 
   // 当防抖后的搜索词变化时，触发搜索（重置到第一页）
   useEffect(() => {
@@ -119,7 +122,7 @@ export function PriceList({
     updateURL(debouncedSearchTerm, newPage, pageSize);
     fetchPrices(newPage, pageSize, debouncedSearchTerm);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearchTerm]); // 仅依赖 debouncedSearchTerm
+  }, [debouncedSearchTerm, fetchPrices, pageSize, searchTerm, updateURL]); // 仅依赖 debouncedSearchTerm
 
   // 搜索输入处理（只更新状态，不触发请求）
   const handleSearchChange = (value: string) => {

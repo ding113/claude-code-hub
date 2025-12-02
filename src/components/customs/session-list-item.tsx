@@ -1,12 +1,11 @@
 "use client";
 
-import * as React from "react";
-import { User, Key, Cpu, Clock, CheckCircle, XCircle, Loader2 } from "lucide-react";
-import { cn, formatTokenAmount } from "@/lib/utils";
-import type { ActiveSessionInfo } from "@/types/session";
+import { CheckCircle, Clock, Cpu, Key, Loader2, User, XCircle } from "lucide-react";
 import { Link } from "@/i18n/routing";
+import { cn, formatTokenAmount } from "@/lib/utils";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
+import type { ActiveSessionInfo } from "@/types/session";
 
 /**
  * 格式化持续时长

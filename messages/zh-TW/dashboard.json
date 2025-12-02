@@ -57,7 +57,6 @@
       "provider": "供應商",
       "model": "模型",
       "endpoint": "端點",
-      "endpoint": "端點",
       "status": "狀態",
       "timeRange": "時間範圍",
       "startTime": "開始時間",
@@ -71,6 +70,8 @@
       "allStatusCodes": "所有狀態碼",
       "apiKey": "API 金鑰",
       "statusCode": "狀態碼",
+      "minRetryCount": "重試次數≥",
+      "minRetryCountPlaceholder": "輸入次數（0 表示不限）",
       "apply": "套用篩選",
       "reset": "重設"
     },
@@ -183,6 +184,7 @@
       "targetModel": "目標模型"
     },
     "statusCodes": {
+      "not200": "非 200（所有非成功請求）",
       "200": "200 (成功)",
       "400": "400 (錯誤請求)",
       "401": "401 (未授權)",
@@ -198,8 +200,17 @@
       "keys": "密鑰排名",
       "userRanking": "使用者排名",
       "providerRanking": "供應商排名",
-      "dailyRanking": "今日排名",
-      "monthlyRanking": "本月排名"
+      "modelRanking": "模型排名",
+      "dailyRanking": "今日",
+      "weeklyRanking": "本週",
+      "monthlyRanking": "本月",
+      "allTimeRanking": "全部"
+    },
+    "dateRange": {
+      "to": "至",
+      "prevPeriod": "上一週期",
+      "nextPeriod": "下一週期",
+      "customRange": "自訂日期範圍"
     },
     "columns": {
       "rank": "排名",
@@ -213,6 +224,7 @@
       "tokens": "Token 數",
       "consumedAmount": "消耗金額",
       "provider": "供應商",
+      "model": "模型",
       "cost": "成本",
       "successRate": "成功率",
       "avgResponseTime": "平均回應時間"
@@ -221,6 +233,7 @@
       "loading": "載入中...",
       "noData": "暫無資料",
       "todayNoData": "今日暫無資料",
+      "weekNoData": "本週暫無資料",
       "monthNoData": "本月暫無資料",
       "fetchFailed": "取得排行榜資料失敗"
     },
@@ -393,6 +406,8 @@
       "7daysDescription": "過去 7 天的使用情況",
       "30days": "過去 30 天",
       "30daysDescription": "過去 30 天的使用情況",
+      "thisMonth": "本月",
+      "thisMonthDescription": "本月的使用情況",
       "default": "使用情況"
     },
     "mode": {
@@ -498,6 +513,7 @@
     "error": "取得失敗",
     "networkError": "網路錯誤",
     "cost5h": "5小時消費",
+    "costDaily": "每日消費",
     "costWeekly": "週消費",
     "costMonthly": "月消費",
     "concurrentSessions": "並發 Session",
@@ -599,6 +615,11 @@
       "placeholder": "例如：premium 或 premium,economy（可選）",
       "description": "指定使用者專屬的供應商分組（支援多個，逗號分隔）。系統將只從 groupTag 符合的供應商中選擇。留空=使用所有供應商"
     },
+    "tags": {
+      "label": "使用者標籤",
+      "placeholder": "輸入標籤（按 Enter 新增）",
+      "description": "為使用者新增標籤，便於分類和篩選（最多20個，每個最長32字元）"
+    },
     "rpm": {
       "label": "RPM 限制",
       "placeholder": "每分鐘請求數限制",
@@ -659,7 +680,9 @@
     "toolbar": {
       "searchPlaceholder": "依使用者名稱搜尋...",
       "groupFilter": "依群組篩選",
-      "allGroups": "所有群組"
+      "allGroups": "所有群組",
+      "tagFilter": "依標籤篩選",
+      "allTags": "所有標籤"
     }
   },
   "availability": {

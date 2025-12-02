@@ -1,29 +1,11 @@
 "use client";
-import { useState, useTransition } from "react";
+import { CheckCircle, Copy, Edit, Globe, Key, RotateCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogTrigger,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Edit, Globe, Key, RotateCcw, Copy, CheckCircle } from "lucide-react";
-import type { ProviderDisplay } from "@/types/provider";
-import type { User } from "@/types/user";
-import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
 import { useTranslations } from "next-intl";
-import { ProviderForm } from "./forms/provider-form";
-import { Switch } from "@/components/ui/switch";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Slider } from "@/components/ui/slider";
-import { PROVIDER_LIMITS } from "@/lib/constants/provider.constants";
+import { useState, useTransition } from "react";
+import { toast } from "sonner";
+import { getUnmaskedProviderKey, resetProviderCircuit } from "@/actions/providers";
 import { FormErrorBoundary } from "@/components/form-error-boundary";
-import { useProviderEdit } from "./hooks/use-provider-edit";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,10 +16,28 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { resetProviderCircuit, getUnmaskedProviderKey } from "@/actions/providers";
-import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { PROVIDER_LIMITS } from "@/lib/constants/provider.constants";
+import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
+import type { ProviderDisplay } from "@/types/provider";
+import type { User } from "@/types/user";
+import { ProviderForm } from "./forms/provider-form";
+import { useProviderEdit } from "./hooks/use-provider-edit";
 
 interface ProviderListItemProps {
   item: ProviderDisplay;

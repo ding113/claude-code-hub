@@ -1,13 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import createMiddleware from "next-intl/middleware";
-import { logger } from "@/lib/logger";
-import { isDevelopment } from "@/lib/config/env.schema";
-import { validateKey } from "@/lib/auth";
-import { routing } from "@/i18n/routing";
 import type { Locale } from "@/i18n/config";
-
-// 使用 Node.js runtime 以支持数据库连接（postgres-js 需要 net 模块）
-export const runtime = "nodejs";
+import { routing } from "@/i18n/routing";
+import { validateKey } from "@/lib/auth";
+import { isDevelopment } from "@/lib/config/env.schema";
+import { logger } from "@/lib/logger";
 
 // Public paths that don't require authentication
 // Note: These paths will be automatically prefixed with locale by next-intl middleware
@@ -18,7 +15,7 @@ const API_PROXY_PATH = "/v1";
 // Create next-intl middleware for locale detection and routing
 const intlMiddleware = createMiddleware(routing);
 
-export async function middleware(request: NextRequest) {
+async function proxyHandler(request: NextRequest) {
   const method = request.method;
   const pathname = request.nextUrl.pathname;
 
@@ -45,7 +42,10 @@ export async function middleware(request: NextRequest) {
   const isLocaleInPath = routing.locales.includes(potentialLocale as Locale);
 
   // Get the pathname without locale prefix
-  const pathWithoutLocale = isLocaleInPath ? pathname.slice(potentialLocale!.length + 1) : pathname;
+  // When isLocaleInPath is true, potentialLocale is guaranteed to be defined
+  const pathWithoutLocale = isLocaleInPath
+    ? pathname.slice((potentialLocale?.length ?? 0) + 1)
+    : pathname;
 
   // Check if current path (without locale) is a public path
   const isPublicPath = PUBLIC_PATH_PATTERNS.some(
@@ -87,6 +87,9 @@ export async function middleware(request: NextRequest) {
   // Authentication passed, return locale response
   return localeResponse;
 }
+
+// Default export required for Next.js 16 proxy file
+export default proxyHandler;
 
 export const config = {
   matcher: [

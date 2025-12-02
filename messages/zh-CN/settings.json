@@ -4,13 +4,15 @@
     "prices": "价格表",
     "providers": "供应商",
     "sensitiveWords": "敏感词",
+    "requestFilters": "请求过滤",
     "clientVersions": "客户端升级提醒",
     "data": "数据管理",
     "logs": "日志",
     "notifications": "消息推送",
     "apiDocs": "API 文档",
     "errorRules": "错误规则",
-    "feedback": "反馈问题"
+    "feedback": "反馈问题",
+    "docs": "使用文档"
   },
   "common": {
     "save": "保存",
@@ -77,6 +79,8 @@
       },
       "allowGlobalView": "允许查看全站使用量",
       "allowGlobalViewDesc": "关闭后，普通用户在仪表盘仅能查看自己密钥的使用统计。",
+      "verboseProviderError": "详细供应商错误信息",
+      "verboseProviderErrorDesc": "开启后，当所有供应商不可用时返回详细错误信息（包含供应商数量、限流原因等）；关闭后仅返回简洁错误码。",
       "saveSettings": "保存设置",
       "keepDays": "保留天数",
       "keepDaysDesc": "清理超过此天数的历史日志",
@@ -1209,6 +1213,71 @@
       "status": "状态",
       "createdAt": "创建时间",
       "actions": "操作"
+    }
+  },
+  "requestFilters": {
+    "nav": "请求过滤",
+    "title": "请求过滤器",
+    "description": "配置 Header 删除/覆盖以及 Body 替换规则，在转发到上游前自动脱敏或规范化请求。",
+    "add": "新增过滤器",
+    "addSuccess": "创建成功",
+    "addFailed": "创建失败",
+    "edit": "编辑过滤器",
+    "editSuccess": "更新成功",
+    "editFailed": "更新失败",
+    "delete": "删除过滤器",
+    "deleteSuccess": "删除成功",
+    "deleteFailed": "删除失败",
+    "enable": "已启用",
+    "disable": "已禁用",
+    "confirmDelete": "确定删除过滤器\"{name}\"?",
+    "empty": "暂无过滤器，点击右上角新增。",
+    "refreshCache": "刷新缓存",
+    "refreshSuccess": "缓存已刷新，加载 {count} 条过滤器",
+    "refreshFailed": "刷新失败",
+    "dialog": {
+      "createTitle": "新增过滤器",
+      "editTitle": "编辑过滤器",
+      "name": "名称",
+      "scope": "作用域",
+      "action": "动作",
+      "target": "目标字段/路径",
+      "replacement": "替换值 (可选)",
+      "description": "描述 (可选)",
+      "priority": "优先级",
+      "matchType": "匹配类型",
+      "matchTypeContains": "包含",
+      "matchTypeExact": "精确匹配",
+      "matchTypeRegex": "正则",
+      "jsonPathPlaceholder": "例如: messages.0.content 或 data.items[0].token",
+      "targetPlaceholder": "Header 名称或文本/路径",
+      "replacementPlaceholder": "字符串或 JSON，留空表示删除",
+      "save": "保存",
+      "saving": "保存中...",
+      "validation": {
+        "fieldRequired": "名称和目标为必填项"
+      }
+    },
+    "table": {
+      "name": "名称",
+      "scope": "作用域",
+      "action": "动作",
+      "target": "目标",
+      "replacement": "替换值",
+      "priority": "优先级",
+      "status": "状态",
+      "createdAt": "创建时间",
+      "actions": "操作"
+    },
+    "scopeLabel": {
+      "header": "Header",
+      "body": "Body"
+    },
+    "actionLabel": {
+      "remove": "删除 Header",
+      "set": "设置 Header",
+      "json_path": "JSON 路径替换",
+      "text_replace": "文本替换"
     }
   },
   "logs": {

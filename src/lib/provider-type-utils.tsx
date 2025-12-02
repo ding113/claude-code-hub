@@ -1,11 +1,11 @@
-import { Claude, Anthropic, OpenAI, Gemini } from "@lobehub/icons";
+import { Anthropic, Claude, Gemini, OpenAI } from "@lobehub/icons";
 import type { ProviderType } from "@/types/provider";
 
 // Anthropic Avatar 橙色包装组件（与 Claude Code 颜色一致）
 const AnthropicOrangeAvatar: React.FC<{ className?: string }> = ({ className }) => {
   // 从 className 中提取尺寸，默认 12px（对应 h-3 w-3）
   const sizeMatch = className?.match(/h-(\d+)/);
-  const size = sizeMatch ? parseInt(sizeMatch[1]) * 4 : 12; // Tailwind: h-3 = 12px
+  const size = sizeMatch ? parseInt(sizeMatch[1], 10) * 4 : 12; // Tailwind: h-3 = 12px
 
   return <Anthropic.Avatar size={size} background="#ffffff" shape="circle" className={className} />;
 };

@@ -98,6 +98,8 @@
     "form": {
       "allowGlobalView": "允許查看全站使用量",
       "allowGlobalViewDesc": "關閉後，普通使用者在儀表板僅能查看自己金鑰的使用統計。",
+      "verboseProviderError": "詳細供應商錯誤資訊",
+      "verboseProviderErrorDesc": "開啟後，當所有供應商不可用時返回詳細錯誤資訊（包含供應商數量、限流原因等）；關閉後僅返回簡潔錯誤碼。",
       "cleanupSchedule": "清理週期",
       "cleanupScheduleDesc": "選擇自動清理的執行週期",
       "configUpdated": "系統設定已更新，頁面將重新整理以應用貨幣顯示變更。",
@@ -358,11 +360,13 @@
     "data": "資料管理",
     "errorRules": "錯誤規則",
     "feedback": "意見回饋",
+    "docs": "使用文檔",
     "logs": "日誌",
     "notifications": "訊息推送",
     "prices": "價格表",
     "providers": "供應商",
-    "sensitiveWords": "敏感詞"
+    "sensitiveWords": "敏感詞",
+    "requestFilters": "請求過濾"
   },
   "notifications": {
     "title": "訊息推送",
@@ -1460,6 +1464,71 @@
     "title": "敏感詞管理",
     "toggleFailed": "狀態切換失敗",
     "toggleFailedError": "狀態切換失敗:"
+  },
+  "requestFilters": {
+    "nav": "請求過濾",
+    "title": "請求過濾器",
+    "description": "上游轉發前先刪除/覆寫標頭或替換 Body，實現脫敏與格式化。",
+    "add": "新增過濾器",
+    "addSuccess": "建立成功",
+    "addFailed": "建立失敗",
+    "edit": "編輯過濾器",
+    "editSuccess": "更新成功",
+    "editFailed": "更新失敗",
+    "delete": "刪除過濾器",
+    "deleteSuccess": "刪除成功",
+    "deleteFailed": "刪除失敗",
+    "enable": "已啟用",
+    "disable": "已停用",
+    "confirmDelete": "確定刪除過濾器「{name}」？",
+    "empty": "尚無過濾器，點選右上角新增。",
+    "refreshCache": "刷新快取",
+    "refreshSuccess": "快取已刷新，載入 {count} 條過濾器",
+    "refreshFailed": "刷新失敗",
+    "dialog": {
+      "createTitle": "新增過濾器",
+      "editTitle": "編輯過濾器",
+      "name": "名稱",
+      "scope": "作用域",
+      "action": "動作",
+      "target": "目標欄位/路徑",
+      "replacement": "替換值 (選填)",
+      "description": "描述 (選填)",
+      "priority": "優先級",
+      "matchType": "匹配類型",
+      "matchTypeContains": "包含",
+      "matchTypeExact": "精確",
+      "matchTypeRegex": "正則",
+      "jsonPathPlaceholder": "例如: messages.0.content 或 data.items[0].token",
+      "targetPlaceholder": "Header 名稱或文字/路徑",
+      "replacementPlaceholder": "字串或 JSON，留空為清除",
+      "save": "保存",
+      "saving": "保存中...",
+      "validation": {
+        "fieldRequired": "名稱和目標為必填項"
+      }
+    },
+    "table": {
+      "name": "名稱",
+      "scope": "作用域",
+      "action": "動作",
+      "target": "目標",
+      "replacement": "替換值",
+      "priority": "優先級",
+      "status": "狀態",
+      "createdAt": "建立時間",
+      "actions": "操作"
+    },
+    "scopeLabel": {
+      "header": "Header",
+      "body": "Body"
+    },
+    "actionLabel": {
+      "remove": "刪除 Header",
+      "set": "設定 Header",
+      "json_path": "JSON 路徑替換",
+      "text_replace": "文字替換"
+    }
   },
   "errorRules": {
     "nav": "錯誤規則",

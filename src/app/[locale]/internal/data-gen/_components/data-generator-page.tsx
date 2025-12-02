@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { AlertCircle, Download, FileDown, Loader2, Settings } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useMemo, useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import {
   Table,
@@ -17,7 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { AlertCircle, Download, FileDown, Loader2, Settings } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { GeneratorResult, UserBreakdownResult } from "@/lib/data-generator/types";
 
 export function DataGeneratorPage() {
@@ -530,7 +530,7 @@ export function DataGeneratorPage() {
                   <CardDescription>
                     {t("table.userBreakdown.description", {
                       count: collapseByUser
-                        ? collapsedUserData?.length
+                        ? (collapsedUserData?.length ?? 0)
                         : userBreakdownResult.items.length,
                     })}
                   </CardDescription>

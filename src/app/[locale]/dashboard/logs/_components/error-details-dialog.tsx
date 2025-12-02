@@ -1,8 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { AlertCircle, ArrowRight, CheckCircle, ExternalLink, Loader2, Monitor } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { Link } from "@/i18n/routing";
+import { useEffect, useState } from "react";
+import { hasSessionMessages } from "@/actions/active-sessions";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -11,14 +14,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { AlertCircle, ArrowRight, CheckCircle, ExternalLink, Loader2, Monitor } from "lucide-react";
-import type { ProviderChainItem } from "@/types/message";
-import { hasSessionMessages } from "@/actions/active-sessions";
-import { formatProviderTimeline } from "@/lib/utils/provider-chain-formatter";
-import type { BillingModelSource } from "@/types/system-config";
+import { Link } from "@/i18n/routing";
 import { cn } from "@/lib/utils";
+import { formatProviderTimeline } from "@/lib/utils/provider-chain-formatter";
+import type { ProviderChainItem } from "@/types/message";
+import type { BillingModelSource } from "@/types/system-config";
 
 interface ErrorDetailsDialogProps {
   statusCode: number | null;
@@ -77,7 +77,8 @@ export function ErrorDetailsDialog({
   const isBlocked = !!blockedBy; // 是否被拦截
 
   // 解析 blockedReason JSON
-  let parsedBlockedReason: { word?: string; matchType?: string; matchedText?: string } | null = null;
+  let parsedBlockedReason: { word?: string; matchType?: string; matchedText?: string } | null =
+    null;
   if (blockedReason) {
     try {
       parsedBlockedReason = JSON.parse(blockedReason);
@@ -97,7 +98,7 @@ export function ErrorDetailsDialog({
           }
         })
         .catch((err) => {
-          console.error('Failed to check session messages:', err);
+          console.error("Failed to check session messages:", err);
         })
         .finally(() => {
           setCheckingMessages(false);
@@ -114,8 +115,8 @@ export function ErrorDetailsDialog({
     if (open && scrollToRedirect) {
       // 等待 DOM 渲染完成后滚动
       const timer = setTimeout(() => {
-        const element = document.getElementById('model-redirect-section');
-        element?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const element = document.getElementById("model-redirect-section");
+        element?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 100);
       return () => clearTimeout(timer);
     }
@@ -169,10 +170,7 @@ export function ErrorDetailsDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button
-          variant="ghost"
-          className="h-auto p-0 font-normal hover:bg-transparent"
-        >
+        <Button variant="ghost" className="h-auto p-0 font-normal hover:bg-transparent">
           <Badge variant="outline" className={getStatusBadgeClassName()}>
             {isInProgress ? t("logs.details.inProgress") : statusCode}
           </Badge>
@@ -189,15 +187,17 @@ export function ErrorDetailsDialog({
               <AlertCircle className="h-5 w-5 text-destructive" />
             )}
             {t("logs.details.statusTitle", {
-              status: isInProgress ? t("logs.details.inProgress") : statusCode || t("logs.details.unknown")
+              status: isInProgress
+                ? t("logs.details.inProgress")
+                : statusCode || t("logs.details.unknown"),
             })}
           </DialogTitle>
           <DialogDescription>
             {isInProgress
               ? t("logs.details.processing")
               : isSuccess
-              ? t("logs.details.success")
-              : t("logs.details.error")}
+                ? t("logs.details.success")
+                : t("logs.details.error")}
           </DialogDescription>
         </DialogHeader>
 
@@ -215,7 +215,9 @@ export function ErrorDetailsDialog({
                     {t("logs.details.blocked.type")}:
                   </span>
                   <Badge variant="outline" className="border-orange-600 text-orange-600">
-                    {blockedBy === 'sensitive_word' ? t("logs.details.blocked.sensitiveWord") : blockedBy}
+                    {blockedBy === "sensitive_word"
+                      ? t("logs.details.blocked.sensitiveWord")
+                      : blockedBy}
                   </Badge>
                 </div>
                 {parsedBlockedReason && (
@@ -236,9 +238,12 @@ export function ErrorDetailsDialog({
                           {t("logs.details.blocked.matchType")}:
                         </span>
                         <span className="text-orange-800 dark:text-orange-200">
-                          {parsedBlockedReason.matchType === 'contains' && t("logs.details.blocked.matchTypeContains")}
-                          {parsedBlockedReason.matchType === 'exact' && t("logs.details.blocked.matchTypeExact")}
-                          {parsedBlockedReason.matchType === 'regex' && t("logs.details.blocked.matchTypeRegex")}
+                          {parsedBlockedReason.matchType === "contains" &&
+                            t("logs.details.blocked.matchTypeContains")}
+                          {parsedBlockedReason.matchType === "exact" &&
+                            t("logs.details.blocked.matchTypeExact")}
+                          {parsedBlockedReason.matchType === "regex" &&
+                            t("logs.details.blocked.matchTypeRegex")}
                         </span>
                       </div>
                     )}
@@ -264,9 +269,7 @@ export function ErrorDetailsDialog({
               <h4 className="font-semibold text-sm">{t("logs.details.sessionId")}</h4>
               <div className="flex items-center gap-3">
                 <div className="flex-1 rounded-md border bg-muted/50 p-3">
-                  <code className="text-xs font-mono break-all">
-                    {sessionId}
-                  </code>
+                  <code className="text-xs font-mono break-all">{sessionId}</code>
                 </div>
                 {hasMessages && !checkingMessages && (
                   <Link href={`/dashboard/sessions/${sessionId}/messages`}>
@@ -287,7 +290,8 @@ export function ErrorDetailsDialog({
               <div className="rounded-md border bg-muted/50 p-3">
                 <div className="text-sm">
                   <span className="font-medium">{t("logs.details.messagesLabel")}:</span>{" "}
-                  <code className="text-base font-mono font-semibold">{messagesCount}</code> {t("logs.details.messagesUnit")}
+                  <code className="text-base font-mono font-semibold">{messagesCount}</code>{" "}
+                  {t("logs.details.messagesUnit")}
                 </div>
               </div>
             </div>
@@ -301,9 +305,7 @@ export function ErrorDetailsDialog({
                 {t("logs.details.clientInfo")}
               </h4>
               <div className="rounded-md border bg-muted/50 p-3">
-                <code className="text-xs font-mono break-all">
-                  {userAgent}
-                </code>
+                <code className="text-xs font-mono break-all">{userAgent}</code>
               </div>
             </div>
           )}
@@ -313,9 +315,7 @@ export function ErrorDetailsDialog({
             <div className="space-y-2">
               <h4 className="font-semibold text-sm">{t("logs.columns.endpoint")}</h4>
               <div className="rounded-md border bg-muted/50 p-3">
-                <code className="text-xs font-mono break-all">
-                  {endpoint}
-                </code>
+                <code className="text-xs font-mono break-all">{endpoint}</code>
               </div>
             </div>
           )}
@@ -329,27 +329,33 @@ export function ErrorDetailsDialog({
               </h4>
               <div className="rounded-md border bg-blue-50 dark:bg-blue-950/20 px-3 py-2">
                 <div className="flex items-center gap-2 text-sm flex-wrap">
-                  <code className={cn(
-                    "px-1.5 py-0.5 rounded text-xs",
-                    billingModelSource === "original"
-                      ? "bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200 ring-1 ring-green-300 dark:ring-green-700"
-                      : "bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200"
-                  )}>
+                  <code
+                    className={cn(
+                      "px-1.5 py-0.5 rounded text-xs",
+                      billingModelSource === "original"
+                        ? "bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200 ring-1 ring-green-300 dark:ring-green-700"
+                        : "bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200"
+                    )}
+                  >
                     {originalModel}
                   </code>
                   <ArrowRight className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" />
-                  <code className={cn(
-                    "px-1.5 py-0.5 rounded text-xs",
-                    billingModelSource === "redirected"
-                      ? "bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200 ring-1 ring-green-300 dark:ring-green-700"
-                      : "bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200"
-                  )}>
+                  <code
+                    className={cn(
+                      "px-1.5 py-0.5 rounded text-xs",
+                      billingModelSource === "redirected"
+                        ? "bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200 ring-1 ring-green-300 dark:ring-green-700"
+                        : "bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200"
+                    )}
+                  >
                     {currentModel}
                   </code>
                   <span className="text-xs text-muted-foreground ml-1">
-                    ({billingModelSource === "original"
+                    (
+                    {billingModelSource === "original"
                       ? t("logs.details.modelRedirect.billingOriginal")
-                      : t("logs.details.modelRedirect.billingRedirected")})
+                      : t("logs.details.modelRedirect.billingRedirected")}
+                    )
                   </span>
                 </div>
               </div>
@@ -370,30 +376,41 @@ export function ErrorDetailsDialog({
                   const error = JSON.parse(errorMessage);
 
                   // 检查是否是限流错误
-                  if (error.code === 'rate_limit_exceeded' || error.code === 'circuit_breaker_open' || error.code === 'mixed_unavailable') {
+                  if (
+                    error.code === "rate_limit_exceeded" ||
+                    error.code === "circuit_breaker_open" ||
+                    error.code === "mixed_unavailable"
+                  ) {
                     return (
                       <div className="rounded-md border bg-orange-50 dark:bg-orange-950/20 p-4 space-y-3">
                         <div className="font-semibold text-orange-900 dark:text-orange-100">
                           💰 {error.message}
                         </div>
-                        {error.details?.filteredProviders && error.details.filteredProviders.length > 0 && (
-                          <div className="space-y-2">
-                            <div className="text-sm font-medium text-orange-900 dark:text-orange-100">
-                              {t("logs.details.filteredProviders")}:
+                        {error.details?.filteredProviders &&
+                          error.details.filteredProviders.length > 0 && (
+                            <div className="space-y-2">
+                              <div className="text-sm font-medium text-orange-900 dark:text-orange-100">
+                                {t("logs.details.filteredProviders")}:
+                              </div>
+                              <ul className="text-sm space-y-1">
+                                {error.details.filteredProviders
+                                  .filter(
+                                    (p: { reason: string }) =>
+                                      p.reason === "rate_limited" || p.reason === "circuit_open"
+                                  )
+                                  .map((p: { id: number; name: string; details: string }) => (
+                                    <li
+                                      key={p.id}
+                                      className="text-orange-800 dark:text-orange-200 flex items-center gap-2"
+                                    >
+                                      <span className="text-orange-600">•</span>
+                                      <span className="font-medium">{p.name}</span>
+                                      <span className="text-xs">({p.details})</span>
+                                    </li>
+                                  ))}
+                              </ul>
                             </div>
-                            <ul className="text-sm space-y-1">
-                              {error.details.filteredProviders
-                                .filter((p: { reason: string }) => p.reason === 'rate_limited' || p.reason === 'circuit_open')
-                                .map((p: { id: number; name: string; details: string }) => (
-                                  <li key={p.id} className="text-orange-800 dark:text-orange-200 flex items-center gap-2">
-                                    <span className="text-orange-600">•</span>
-                                    <span className="font-medium">{p.name}</span>
-                                    <span className="text-xs">({p.details})</span>
-                                  </li>
-                                ))}
-                            </ul>
-                          </div>
-                        )}
+                          )}
                       </div>
                     );
                   }
@@ -421,43 +438,53 @@ export function ErrorDetailsDialog({
           )}
 
           {/* 被过滤的供应商（仅在成功请求时显示） */}
-          {isSuccess && providerChain && providerChain.length > 0 && (() => {
-            // 从决策链中提取被过滤的供应商
-            const filteredProviders = providerChain
-              .flatMap(item => item.decisionContext?.filteredProviders || [])
-              .filter(p => p.reason === 'rate_limited' || p.reason === 'circuit_open');
+          {isSuccess &&
+            providerChain &&
+            providerChain.length > 0 &&
+            (() => {
+              // 从决策链中提取被过滤的供应商
+              const filteredProviders = providerChain
+                .flatMap((item) => item.decisionContext?.filteredProviders || [])
+                .filter((p) => p.reason === "rate_limited" || p.reason === "circuit_open");
 
-            if (filteredProviders.length === 0) return null;
+              if (filteredProviders.length === 0) return null;
 
-            return (
-              <div className="space-y-2">
-                <h4 className="font-semibold text-sm flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4 text-orange-600" />
-                  {t("logs.details.filteredProviders")}
-                </h4>
-                <div className="rounded-md border bg-orange-50 dark:bg-orange-950/20 p-4">
-                  <ul className="text-sm space-y-2">
-                    {filteredProviders.map((p, index) => (
-                      <li key={`${p.id}-${index}`} className="text-orange-800 dark:text-orange-200 flex items-start gap-2">
-                        <span className="text-orange-600 mt-0.5">💰</span>
-                        <div className="flex-1">
-                          <span className="font-medium">{p.name}</span>
-                          <span className="text-xs ml-2">
-                            ({t(`logs.details.reasons.${p.reason === 'rate_limited' ? 'rateLimited' : 'circuitOpen'}`)})
-                          </span>
-                          {p.details && (
-                            <div className="text-xs text-orange-700 dark:text-orange-300 mt-0.5">
-                              {p.details}
-                            </div>
-                          )}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
+              return (
+                <div className="space-y-2">
+                  <h4 className="font-semibold text-sm flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 text-orange-600" />
+                    {t("logs.details.filteredProviders")}
+                  </h4>
+                  <div className="rounded-md border bg-orange-50 dark:bg-orange-950/20 p-4">
+                    <ul className="text-sm space-y-2">
+                      {filteredProviders.map((p, index) => (
+                        <li
+                          key={`${p.id}-${index}`}
+                          className="text-orange-800 dark:text-orange-200 flex items-start gap-2"
+                        >
+                          <span className="text-orange-600 mt-0.5">💰</span>
+                          <div className="flex-1">
+                            <span className="font-medium">{p.name}</span>
+                            <span className="text-xs ml-2">
+                              (
+                              {t(
+                                `logs.details.reasons.${p.reason === "rate_limited" ? "rateLimited" : "circuitOpen"}`
+                              )}
+                              )
+                            </span>
+                            {p.details && (
+                              <div className="text-xs text-orange-700 dark:text-orange-300 mt-0.5">
+                                {p.details}
+                              </div>
+                            )}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 </div>
-              </div>
-            );
-          })()}
+              );
+            })()}
 
           {/* 供应商决策链时间线 */}
           {providerChain && providerChain.length > 0 && (
@@ -491,8 +518,8 @@ export function ErrorDetailsDialog({
               {isInProgress
                 ? t("logs.details.noError.processing")
                 : isSuccess
-                ? t("logs.details.noError.success")
-                : t("logs.details.noError.default")}
+                  ? t("logs.details.noError.success")
+                  : t("logs.details.noError.default")}
             </div>
           )}
         </div>

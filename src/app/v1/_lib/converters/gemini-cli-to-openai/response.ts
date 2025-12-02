@@ -9,8 +9,8 @@
  */
 
 import type { Context } from "hono";
-import type { TransformState } from "../types";
 import { logger } from "@/lib/logger";
+import type { TransformState } from "../types";
 
 /**
  * OpenAI → Gemini 转换状态
@@ -76,10 +76,10 @@ function parseArgsToMap(argsStr: string): Record<string, unknown> {
  * @returns 转换后的 Gemini CLI chunk 数组
  */
 export function transformOpenAIStreamResponseToGeminiCLI(
-  ctx: Context,
+  _ctx: Context,
   model: string,
-  originalRequest: Record<string, unknown>,
-  transformedRequest: Record<string, unknown>,
+  _originalRequest: Record<string, unknown>,
+  _transformedRequest: Record<string, unknown>,
   chunk: string,
   state?: TransformState
 ): string[] {
@@ -311,10 +311,10 @@ export function transformOpenAIStreamResponseToGeminiCLI(
  * @returns 转换后的 Gemini CLI 响应体
  */
 export function transformOpenAINonStreamResponseToGeminiCLI(
-  ctx: Context,
+  _ctx: Context,
   model: string,
-  originalRequest: Record<string, unknown>,
-  transformedRequest: Record<string, unknown>,
+  _originalRequest: Record<string, unknown>,
+  _transformedRequest: Record<string, unknown>,
   response: Record<string, unknown>
 ): Record<string, unknown> {
   // 基础 Gemini 响应结构

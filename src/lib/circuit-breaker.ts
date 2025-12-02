@@ -1,23 +1,31 @@
+import "server-only";
+
 /**
- * 简单的熔断器服务（内存实现 + 动态配置）
+ * 简单的熔断器服务（内存实现 + Redis 持久化 + 动态配置）
  *
  * 状态机：
  * - Closed（关闭）：正常状态，请求通过
  * - Open（打开）：失败次数超过阈值，请求被拒绝
  * - Half-Open（半开）：等待一段时间后，允许少量请求尝试
  *
- * 改进：
+ * 特性：
  * - 支持每个供应商独立的熔断器配置（从 Redis/数据库读取）
  * - 内存缓存配置以提升性能
- * - 降级策略：配置读取失败时使用默认值
+ * - Redis 持久化运行时状态（支持多实例共享、重启恢复）
+ * - 降级策略：配置/状态读取失败时使用默认值
  */
 
 import { logger } from "@/lib/logger";
 import {
-  loadProviderCircuitConfig,
-  DEFAULT_CIRCUIT_BREAKER_CONFIG,
   type CircuitBreakerConfig,
+  DEFAULT_CIRCUIT_BREAKER_CONFIG,
+  loadProviderCircuitConfig,
 } from "@/lib/redis/circuit-breaker-config";
+import {
+  type CircuitBreakerState,
+  loadCircuitState,
+  saveCircuitState,
+} from "@/lib/redis/circuit-breaker-state";
 
 // 修复：导出 ProviderHealth 类型，供其他模块使用
 export interface ProviderHealth {
@@ -37,7 +45,13 @@ const healthMap = new Map<number, ProviderHealth>();
 // 配置缓存 TTL（5 分钟）
 const CONFIG_CACHE_TTL = 5 * 60 * 1000;
 
-function getOrCreateHealth(providerId: number): ProviderHealth {
+// 标记已从 Redis 加载过状态的供应商（避免重复加载）
+const loadedFromRedis = new Set<number>();
+
+/**
+ * 获取或创建供应商的健康状态（同步版本，用于内部）
+ */
+function getOrCreateHealthSync(providerId: number): ProviderHealth {
   let health = healthMap.get(providerId);
   if (!health) {
     health = {
@@ -55,11 +69,78 @@ function getOrCreateHealth(providerId: number): ProviderHealth {
 }
 
 /**
+ * 获取或创建供应商的健康状态（异步版本，首次会尝试从 Redis 加载）
+ */
+async function getOrCreateHealth(providerId: number): Promise<ProviderHealth> {
+  let health = healthMap.get(providerId);
+
+  // 如果内存中没有，且尚未从 Redis 加载过，尝试从 Redis 恢复
+  if (!health && !loadedFromRedis.has(providerId)) {
+    loadedFromRedis.add(providerId);
+
+    try {
+      const redisState = await loadCircuitState(providerId);
+      if (redisState) {
+        health = {
+          ...redisState,
+          config: null,
+          configLoadedAt: null,
+        };
+        healthMap.set(providerId, health);
+        logger.debug(`[CircuitBreaker] Restored state from Redis for provider ${providerId}`, {
+          providerId,
+          state: redisState.circuitState,
+        });
+        return health;
+      }
+    } catch (error) {
+      logger.warn(`[CircuitBreaker] Failed to load state from Redis for provider ${providerId}`, {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  if (!health) {
+    health = {
+      failureCount: 0,
+      lastFailureTime: null,
+      circuitState: "closed",
+      circuitOpenUntil: null,
+      halfOpenSuccessCount: 0,
+      config: null,
+      configLoadedAt: null,
+    };
+    healthMap.set(providerId, health);
+  }
+
+  return health;
+}
+
+/**
+ * 将健康状态保存到 Redis（异步，非阻塞）
+ */
+function persistStateToRedis(providerId: number, health: ProviderHealth): void {
+  const state: CircuitBreakerState = {
+    failureCount: health.failureCount,
+    lastFailureTime: health.lastFailureTime,
+    circuitState: health.circuitState,
+    circuitOpenUntil: health.circuitOpenUntil,
+    halfOpenSuccessCount: health.halfOpenSuccessCount,
+  };
+
+  saveCircuitState(providerId, state).catch((error) => {
+    logger.warn(`[CircuitBreaker] Failed to persist state to Redis for provider ${providerId}`, {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  });
+}
+
+/**
  * 获取供应商的熔断器配置（带缓存）
  * 缓存策略：内存缓存 5 分钟，避免频繁查询 Redis
  */
 async function getProviderConfig(providerId: number): Promise<CircuitBreakerConfig> {
-  const health = getOrCreateHealth(providerId);
+  const health = await getOrCreateHealth(providerId);
 
   // 检查内存缓存是否有效
   const now = Date.now();
@@ -91,7 +172,7 @@ export async function getProviderHealthInfo(providerId: number): Promise<{
   health: ProviderHealth;
   config: CircuitBreakerConfig;
 }> {
-  const health = getOrCreateHealth(providerId);
+  const health = await getOrCreateHealth(providerId);
   const config = await getProviderConfig(providerId);
   return { health, config };
 }
@@ -100,7 +181,7 @@ export async function getProviderHealthInfo(providerId: number): Promise<{
  * 检查熔断器是否打开（不允许请求）
  */
 export async function isCircuitOpen(providerId: number): Promise<boolean> {
-  const health = getOrCreateHealth(providerId);
+  const health = await getOrCreateHealth(providerId);
 
   if (health.circuitState === "closed") {
     return false;
@@ -112,6 +193,8 @@ export async function isCircuitOpen(providerId: number): Promise<boolean> {
       health.circuitState = "half-open";
       health.halfOpenSuccessCount = 0;
       logger.info(`[CircuitBreaker] Provider ${providerId} transitioned to half-open`);
+      // 持久化状态变更到 Redis
+      persistStateToRedis(providerId, health);
       return false; // 允许尝试
     }
     return true; // 仍在打开状态
@@ -125,7 +208,7 @@ export async function isCircuitOpen(providerId: number): Promise<boolean> {
  * 记录请求失败
  */
 export async function recordFailure(providerId: number, error: Error): Promise<void> {
-  const health = getOrCreateHealth(providerId);
+  const health = await getOrCreateHealth(providerId);
   const config = await getProviderConfig(providerId);
 
   health.failureCount++;
@@ -170,6 +253,9 @@ export async function recordFailure(providerId: number, error: Error): Promise<v
       }
     );
   }
+
+  // 持久化状态变更到 Redis
+  persistStateToRedis(providerId, health);
 }
 
 /**
@@ -225,12 +311,14 @@ async function triggerCircuitBreakerAlert(
  * 记录请求成功
  */
 export async function recordSuccess(providerId: number): Promise<void> {
-  const health = getOrCreateHealth(providerId);
+  const health = await getOrCreateHealth(providerId);
   const config = await getProviderConfig(providerId);
+  let stateChanged = false;
 
   if (health.circuitState === "half-open") {
     // 半开状态下成功
     health.halfOpenSuccessCount++;
+    stateChanged = true;
 
     if (health.halfOpenSuccessCount >= config.halfOpenSuccessThreshold) {
       // 关闭熔断器
@@ -269,15 +357,22 @@ export async function recordSuccess(providerId: number): Promise<void> {
       );
       health.failureCount = 0;
       health.lastFailureTime = null;
+      stateChanged = true;
     }
+  }
+
+  // 仅在状态变化时持久化到 Redis
+  if (stateChanged) {
+    persistStateToRedis(providerId, health);
   }
 }
 
 /**
  * 获取供应商的熔断器状态（用于决策链记录）
+ * 注意：这是同步函数，仅访问内存中的状态
  */
 export function getCircuitState(providerId: number): "closed" | "open" | "half-open" {
-  const health = getOrCreateHealth(providerId);
+  const health = getOrCreateHealthSync(providerId);
   return health.circuitState;
 }
 
@@ -299,6 +394,8 @@ export function getAllHealthStatus(): Record<number, ProviderHealth> {
         logger.info(
           `[CircuitBreaker] Provider ${providerId} auto-transitioned to half-open (on status check)`
         );
+        // 持久化状态变更到 Redis
+        persistStateToRedis(providerId, health);
       }
     }
 
@@ -312,7 +409,7 @@ export function getAllHealthStatus(): Record<number, ProviderHealth> {
  * 手动重置熔断器（用于运维手动恢复）
  */
 export function resetCircuit(providerId: number): void {
-  const health = getOrCreateHealth(providerId);
+  const health = getOrCreateHealthSync(providerId);
 
   const oldState = health.circuitState;
 
@@ -331,6 +428,9 @@ export function resetCircuit(providerId: number): void {
       newState: "closed",
     }
   );
+
+  // 持久化状态变更到 Redis
+  persistStateToRedis(providerId, health);
 }
 
 /**
@@ -338,7 +438,7 @@ export function resetCircuit(providerId: number): void {
  * 比直接 resetCircuit 更安全，允许通过 HALF_OPEN 阶段验证恢复
  */
 export function tripToHalfOpen(providerId: number): boolean {
-  const health = getOrCreateHealth(providerId);
+  const health = getOrCreateHealthSync(providerId);
 
   // 只有 OPEN 状态才能转换到 HALF_OPEN
   if (health.circuitState !== "open") {
@@ -368,6 +468,9 @@ export function tripToHalfOpen(providerId: number): boolean {
     }
   );
 
+  // 持久化状态变更到 Redis
+  persistStateToRedis(providerId, health);
+
   return true;
 }
 
@@ -381,4 +484,22 @@ export function clearConfigCache(providerId: number): void {
     health.configLoadedAt = null;
     logger.debug(`[CircuitBreaker] Cleared config cache for provider ${providerId}`);
   }
+}
+
+/**
+ * 清除供应商的所有熔断器状态（内存 + Redis）
+ * 用于供应商删除时调用
+ */
+export async function clearProviderState(providerId: number): Promise<void> {
+  // 清除内存状态
+  healthMap.delete(providerId);
+  loadedFromRedis.delete(providerId);
+
+  // 清除 Redis 状态
+  const { deleteCircuitState } = await import("@/lib/redis/circuit-breaker-state");
+  await deleteCircuitState(providerId);
+
+  logger.info(`[CircuitBreaker] Cleared all state for provider ${providerId}`, {
+    providerId,
+  });
 }

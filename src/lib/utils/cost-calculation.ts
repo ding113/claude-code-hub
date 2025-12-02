@@ -1,5 +1,5 @@
 import type { ModelPriceData } from "@/types/model-price";
-import { Decimal, COST_SCALE, toDecimal } from "./currency";
+import { COST_SCALE, Decimal, toDecimal } from "./currency";
 
 type UsageMetrics = {
   input_tokens?: number;

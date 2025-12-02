@@ -1,10 +1,8 @@
 "use client";
 
-import * as React from "react";
-import { useLocale } from "next-intl";
-import { useRouter, usePathname } from "@/i18n/routing";
-import { locales, localeLabels, type Locale } from "@/i18n/config";
 import { Languages } from "lucide-react";
+import { useLocale } from "next-intl";
+import * as React from "react";
 import {
   Select,
   SelectContent,
@@ -12,6 +10,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { type Locale, localeLabels, locales } from "@/i18n/config";
+import { usePathname, useRouter } from "@/i18n/routing";
 import { cn } from "@/lib/utils/index";
 
 interface LanguageSwitcherProps {
@@ -68,17 +68,10 @@ export function LanguageSwitcher({ className, size = "sm" }: LanguageSwitcherPro
 
   return (
     <div className={cn("flex items-center gap-2", className)}>
-      <Select
-        value={currentLocale}
-        onValueChange={handleLocaleChange}
-        disabled={isTransitioning}
-      >
+      <Select value={currentLocale} onValueChange={handleLocaleChange} disabled={isTransitioning}>
         <SelectTrigger
           size={size}
-          className={cn(
-            "w-auto min-w-[8rem]",
-            isTransitioning && "opacity-50 cursor-wait"
-          )}
+          className={cn("w-auto min-w-[8rem]", isTransitioning && "opacity-50 cursor-wait")}
           aria-label="Select language"
         >
           <div className="flex items-center gap-2">

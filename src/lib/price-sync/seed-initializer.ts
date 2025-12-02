@@ -7,8 +7,8 @@
  * 3. 降级策略：种子文件读取失败时记录警告但不阻塞启动
  */
 
-import fs from "fs/promises";
-import path from "path";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { logger } from "@/lib/logger";
 import { hasAnyPriceRecords } from "@/repository/model-price";
 

@@ -1,13 +1,13 @@
 "use client";
 
 import { CheckCircle, XCircle } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
 import { CircularProgress } from "@/components/ui/circular-progress";
 import { CountdownTimer } from "@/components/ui/countdown-timer";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getProviderTypeConfig } from "@/lib/provider-type-utils";
-import { formatCurrency, type CurrencyCode } from "@/lib/utils/currency";
-import { useTranslations } from "next-intl";
+import { type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
 import type { ProviderType } from "@/types/provider";
 
 interface ProviderQuota {
@@ -68,7 +68,7 @@ export function ProviderQuotaListItem({
               {resetAt ? (
                 <CountdownTimer
                   targetDate={resetAt}
-                  prefix={t("list.resetIn") + " "}
+                  prefix={`${t("list.resetIn")} `}
                   className="text-[10px] text-muted-foreground"
                 />
               ) : resetInfo ? (

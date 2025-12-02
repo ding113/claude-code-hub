@@ -1,13 +1,13 @@
 "use client";
 
-import { useMemo } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { QuotaProgress } from "@/components/quota/quota-progress";
-import { formatCurrency, type CurrencyCode } from "@/lib/utils/currency";
-import { formatDateDistance } from "@/lib/utils/date-format";
 import { useLocale, useTranslations } from "next-intl";
+import { useMemo } from "react";
+import { QuotaProgress } from "@/components/quota/quota-progress";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
+import { formatDateDistance } from "@/lib/utils/date-format";
 
 interface UserQuota {
   rpm: { current: number; limit: number; window: "per_minute" };

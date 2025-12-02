@@ -133,7 +133,7 @@ export function previewProxyUrls(baseUrl: string, providerType?: string): Record
   };
 
   // 获取当前供应商类型对应的端点列表（默认显示 Claude）
-  const endpoints = providerType ? endpointsByType[providerType] || [] : endpointsByType["claude"];
+  const endpoints = providerType ? endpointsByType[providerType] || [] : endpointsByType.claude;
 
   // 如果没有匹配的端点，显示常见端点
   if (endpoints.length === 0) {

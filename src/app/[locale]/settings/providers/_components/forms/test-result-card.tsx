@@ -1,5 +1,18 @@
 "use client";
 
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  Copy,
+  ExternalLink,
+  FileText,
+  XCircle,
+  Zap,
+} from "lucide-react";
+import { useTranslations } from "next-intl";
+import { useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,19 +23,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  CheckCircle2,
-  XCircle,
-  AlertTriangle,
-  Clock,
-  Zap,
-  FileText,
-  Copy,
-  ExternalLink,
-} from "lucide-react";
-import { useState } from "react";
-import { toast } from "sonner";
-import { useTranslations } from "next-intl";
 import type { TestStatus, TestSubStatus } from "@/lib/provider-testing";
 
 /**
@@ -66,7 +66,6 @@ export interface UnifiedTestResultData {
 
 interface TestResultCardProps {
   result: UnifiedTestResultData;
-  onClose?: () => void;
 }
 
 const STATUS_COLORS: Record<TestStatus, { bg: string; text: string; border: string }> = {
@@ -97,7 +96,7 @@ const STATUS_ICONS: Record<TestStatus, React.ReactNode> = {
  * Test result card component with three-tier validation display
  * Shows status, latency, HTTP code, and content validation details
  */
-export function TestResultCard({ result, onClose }: TestResultCardProps) {
+export function TestResultCard({ result }: TestResultCardProps) {
   const t = useTranslations("settings.providers.form.apiTest");
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
 

@@ -1,6 +1,6 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { Link } from "@/i18n/routing";
-import { readFile } from "fs/promises";
-import { join } from "path";
 
 async function getVersion(): Promise<string> {
   try {

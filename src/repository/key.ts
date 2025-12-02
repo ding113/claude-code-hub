@@ -1,12 +1,12 @@
 "use server";
 
+import { and, count, desc, eq, gt, gte, isNull, lt, or, sql, sum } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { keys, users, messageRequest, providers } from "@/drizzle/schema";
-import { eq, isNull, and, or, gt, gte, lt, count, sum, desc, sql } from "drizzle-orm";
-import type { Key, CreateKeyData, UpdateKeyData } from "@/types/key";
+import { keys, messageRequest, providers, users } from "@/drizzle/schema";
+import { Decimal, toCostDecimal } from "@/lib/utils/currency";
+import type { CreateKeyData, Key, UpdateKeyData } from "@/types/key";
 import type { User } from "@/types/user";
 import { toKey, toUser } from "./_shared/transformers";
-import { Decimal, toCostDecimal } from "@/lib/utils/currency";
 
 export async function findKeyById(id: number): Promise<Key | null> {
   const [key] = await db

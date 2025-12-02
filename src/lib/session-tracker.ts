@@ -1,5 +1,5 @@
-import { getRedisClient } from "./redis";
 import { logger } from "@/lib/logger";
+import { getRedisClient } from "./redis";
 
 /**
  * Session 追踪器 - 统一管理活跃 Session 集合
@@ -87,7 +87,7 @@ export class SessionTracker {
             // 如果是类型冲突（WRONGTYPE），自动修复
             if (err.message?.includes("WRONGTYPE")) {
               logger.warn("SessionTracker: Type conflict detected, auto-fixing");
-              await this.initialize(); // 重新初始化，清理旧数据
+              await SessionTracker.initialize(); // 重新初始化，清理旧数据
               return; // 本次追踪失败，下次请求会成功
             }
           }
@@ -132,7 +132,7 @@ export class SessionTracker {
             logger.error("SessionTracker: Pipeline command failed", { error: err });
             if (err.message?.includes("WRONGTYPE")) {
               logger.warn("SessionTracker: Type conflict detected, auto-fixing");
-              await this.initialize();
+              await SessionTracker.initialize();
               return;
             }
           }
@@ -188,7 +188,7 @@ export class SessionTracker {
             logger.error("SessionTracker: Pipeline command failed", { error: err });
             if (err.message?.includes("WRONGTYPE")) {
               logger.warn("SessionTracker: Type conflict detected, auto-fixing");
-              await this.initialize();
+              await SessionTracker.initialize();
               return;
             }
           }
@@ -223,7 +223,7 @@ export class SessionTracker {
           return 0;
         }
 
-        return await this.countFromZSet(key);
+        return await SessionTracker.countFromZSet(key);
       }
 
       return 0;
@@ -256,7 +256,7 @@ export class SessionTracker {
           return 0;
         }
 
-        return await this.countFromZSet(key);
+        return await SessionTracker.countFromZSet(key);
       }
 
       return 0;
@@ -289,7 +289,7 @@ export class SessionTracker {
           return 0;
         }
 
-        return await this.countFromZSet(key);
+        return await SessionTracker.countFromZSet(key);
       }
 
       return 0;
@@ -325,7 +325,7 @@ export class SessionTracker {
 
     try {
       const now = Date.now();
-      const fiveMinutesAgo = now - this.SESSION_TTL;
+      const fiveMinutesAgo = now - SessionTracker.SESSION_TTL;
 
       // 第一阶段：批量清理过期 session 并获取 session IDs
       const cleanupPipeline = redis.pipeline();
@@ -431,7 +431,7 @@ export class SessionTracker {
         }
 
         const now = Date.now();
-        const fiveMinutesAgo = now - this.SESSION_TTL;
+        const fiveMinutesAgo = now - SessionTracker.SESSION_TTL;
 
         // 清理过期 session
         await redis.zremrangebyscore(key, "-inf", fiveMinutesAgo);
@@ -465,7 +465,7 @@ export class SessionTracker {
 
     try {
       const now = Date.now();
-      const fiveMinutesAgo = now - this.SESSION_TTL;
+      const fiveMinutesAgo = now - SessionTracker.SESSION_TTL;
 
       // 1. 清理过期 session（5 分钟前）
       await redis.zremrangebyscore(key, "-inf", fiveMinutesAgo);

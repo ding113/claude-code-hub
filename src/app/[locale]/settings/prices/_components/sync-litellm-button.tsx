@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { useTranslations } from "next-intl";
 import { RefreshCw } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { syncLiteLLMPrices } from "@/actions/model-prices";
-import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { useState } from "react";
+import { toast } from "sonner";
+import { syncLiteLLMPrices } from "@/actions/model-prices";
+import { Button } from "@/components/ui/button";
 
 /**
  * LiteLLM 价格同步按钮组件

@@ -1,7 +1,6 @@
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { messageRequest, providers, keys, users } from "@/drizzle/schema";
-import { and, eq, isNull } from "drizzle-orm";
-import { sql } from "drizzle-orm";
+import { keys, messageRequest, providers, users } from "@/drizzle/schema";
 import type { ProxyStatusResponse } from "@/types/proxy-status";
 
 type ActiveRequestRow = {

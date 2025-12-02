@@ -16,7 +16,7 @@ export class GeminiAuth {
   }
 
   static parse(key: string): GeminiAuthCredentials | string {
-    if (this.isJson(key)) {
+    if (GeminiAuth.isJson(key)) {
       try {
         return JSON.parse(key) as GeminiAuthCredentials;
       } catch {
@@ -27,7 +27,7 @@ export class GeminiAuth {
   }
 
   static async getAccessToken(key: string): Promise<string> {
-    const parsed = this.parse(key);
+    const parsed = GeminiAuth.parse(key);
     if (typeof parsed === "string") {
       return parsed; // Assume it's an API Key or Access Token
     }
@@ -77,7 +77,7 @@ export class GeminiAuth {
   }
 
   static isApiKey(key: string): boolean {
-    const parsed = this.parse(key);
+    const parsed = GeminiAuth.parse(key);
     return typeof parsed === "string" && !key.startsWith("ya29."); // ya29. is typical prefix for Google Access Tokens
   }
 }

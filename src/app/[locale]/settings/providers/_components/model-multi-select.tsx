@@ -1,9 +1,11 @@
 "use client";
-import { useState, useEffect } from "react";
 import { Check, ChevronsUpDown, Loader2, Plus } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useTranslations } from "next-intl";
+import { useEffect, useState } from "react";
+import { getAvailableModelsByProviderType } from "@/actions/model-prices";
 import { Badge } from "@/components/ui/badge";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Command,
   CommandEmpty,
@@ -12,11 +14,9 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getAvailableModelsByProviderType } from "@/actions/model-prices";
-import { useTranslations } from "next-intl";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 interface ModelMultiSelectProps {
   providerType: "claude" | "claude-auth" | "codex" | "gemini" | "gemini-cli" | "openai-compatible";
@@ -60,7 +60,7 @@ export function ModelMultiSelect({
       setLoading(false);
     }
     loadModels();
-  }, [providerType]);
+  }, []);
 
   const toggleModel = (model: string) => {
     if (selectedModels.includes(model)) {

@@ -1,6 +1,14 @@
 "use client";
 
+import { Settings } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { QuotaCountdownCompact } from "@/components/quota/quota-countdown";
+import { QuotaProgress } from "@/components/quota/quota-progress";
+import { QuotaWindowType } from "@/components/quota/quota-window-type";
+import { UserQuotaHeader } from "@/components/quota/user-quota-header";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import {
@@ -11,18 +19,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Settings } from "lucide-react";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
-import { UserQuotaHeader } from "@/components/quota/user-quota-header";
-import { QuotaProgress } from "@/components/quota/quota-progress";
-import { QuotaWindowType } from "@/components/quota/quota-window-type";
-import { QuotaCountdownCompact } from "@/components/quota/quota-countdown";
-import { hasKeyQuotaSet, isUserExceeded, getUsageRate } from "@/lib/utils/quota-helpers";
+import { getUsageRate, hasKeyQuotaSet, isUserExceeded } from "@/lib/utils/quota-helpers";
 import { EditKeyQuotaDialog } from "./edit-key-quota-dialog";
-import { useTranslations } from "next-intl";
 
 interface KeyQuota {
   cost5h: { current: number; limit: number | null; resetAt?: Date };

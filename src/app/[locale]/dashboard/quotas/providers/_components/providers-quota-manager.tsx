@@ -1,15 +1,15 @@
 "use client";
 
-import { useState, useMemo } from "react";
 import { Search, X } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { useMemo, useState } from "react";
 import { ProviderTypeFilter } from "@/app/[locale]/settings/providers/_components/provider-type-filter";
-import { ProviderQuotaSortDropdown, type QuotaSortKey } from "./provider-quota-sort-dropdown";
-import { ProvidersQuotaClient } from "./providers-quota-client";
 import { Input } from "@/components/ui/input";
 import { useDebounce } from "@/lib/hooks/use-debounce";
-import type { ProviderType } from "@/types/provider";
 import type { CurrencyCode } from "@/lib/utils/currency";
-import { useTranslations } from "next-intl";
+import type { ProviderType } from "@/types/provider";
+import { ProviderQuotaSortDropdown, type QuotaSortKey } from "./provider-quota-sort-dropdown";
+import { ProvidersQuotaClient } from "./providers-quota-client";
 
 interface ProviderQuota {
   cost5h: { current: number; limit: number | null; resetInfo: string };

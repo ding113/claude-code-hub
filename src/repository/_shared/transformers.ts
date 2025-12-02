@@ -1,10 +1,10 @@
-import type { User } from "@/types/user";
+import { formatCostForStorage } from "@/lib/utils/currency";
 import type { Key } from "@/types/key";
-import type { Provider } from "@/types/provider";
 import type { MessageRequest } from "@/types/message";
 import type { ModelPrice } from "@/types/model-price";
+import type { Provider } from "@/types/provider";
 import type { SystemSettings } from "@/types/system-config";
-import { formatCostForStorage } from "@/lib/utils/currency";
+import type { User } from "@/types/user";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function toUser(dbUser: any): User {
@@ -15,6 +15,7 @@ export function toUser(dbUser: any): User {
     rpm: dbUser?.rpm || 60,
     dailyQuota: dbUser?.dailyQuota ? parseFloat(dbUser.dailyQuota) : 0,
     providerGroup: dbUser?.providerGroup ?? null,
+    tags: dbUser?.tags ?? [],
     createdAt: dbUser?.createdAt ? new Date(dbUser.createdAt) : new Date(),
     updatedAt: dbUser?.updatedAt ? new Date(dbUser.updatedAt) : new Date(),
   };
@@ -112,6 +113,7 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     cleanupSchedule: dbSettings?.cleanupSchedule ?? "0 2 * * *",
     cleanupBatchSize: dbSettings?.cleanupBatchSize ?? 10000,
     enableClientVersionCheck: dbSettings?.enableClientVersionCheck ?? false,
+    verboseProviderError: dbSettings?.verboseProviderError ?? false,
     createdAt: dbSettings?.createdAt ? new Date(dbSettings.createdAt) : new Date(),
     updatedAt: dbSettings?.updatedAt ? new Date(dbSettings.updatedAt) : new Date(),
   };

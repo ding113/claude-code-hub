@@ -98,6 +98,8 @@
     "form": {
       "allowGlobalView": "Разрешить просмотр глобального использования",
       "allowGlobalViewDesc": "При отключении обычные пользователи могут видеть только статистику использования своих ключей на панели.",
+      "verboseProviderError": "Подробные ошибки провайдеров",
+      "verboseProviderErrorDesc": "При включении возвращает подробные сообщения об ошибках при недоступности всех провайдеров (количество провайдеров, причины ограничений и т.д.); при отключении возвращает только простой код ошибки.",
       "cleanupSchedule": "График очистки",
       "cleanupScheduleDesc": "Выбрать расписание автоматической очистки",
       "configUpdated": "Параметры системы обновлены. Страница обновится для применения изменений валюты.",
@@ -358,11 +360,13 @@
     "data": "Данные",
     "errorRules": "Ошибки",
     "feedback": "Отзывы",
+    "docs": "Документация",
     "logs": "Логи",
     "notifications": "Уведомления",
     "prices": "Цены",
     "providers": "Поставщики",
-    "sensitiveWords": "Фильтры"
+    "sensitiveWords": "Фильтры",
+    "requestFilters": "Запросы"
   },
   "notifications": {
     "title": "Push-уведомления",
@@ -1454,6 +1458,71 @@
     "title": "Управление чувствительными словами",
     "toggleFailed": "Ошибка переключения",
     "toggleFailedError": "Ошибка переключения:"
+  },
+  "requestFilters": {
+    "nav": "Фильтры запросов",
+    "title": "Фильтры запросов",
+    "description": "Настройте удаление/замену заголовков и замену тела перед отправкой вверх по цепочке для маскировки запросов.",
+    "add": "Добавить фильтр",
+    "addSuccess": "Создано",
+    "addFailed": "Не удалось создать",
+    "edit": "Редактировать фильтр",
+    "editSuccess": "Обновлено",
+    "editFailed": "Не удалось обновить",
+    "delete": "Удалить фильтр",
+    "deleteSuccess": "Удалено",
+    "deleteFailed": "Не удалось удалить",
+    "enable": "Включено",
+    "disable": "Отключено",
+    "confirmDelete": "Удалить фильтр \"{name}\"?",
+    "empty": "Фильтров пока нет. Добавьте новый.",
+    "refreshCache": "Обновить кэш",
+    "refreshSuccess": "Кэш обновлен, загружено {count} фильтров",
+    "refreshFailed": "Обновление не удалось",
+    "dialog": {
+      "createTitle": "Добавить фильтр",
+      "editTitle": "Редактировать фильтр",
+      "name": "Название",
+      "scope": "Область",
+      "action": "Действие",
+      "target": "Поле/путь",
+      "replacement": "Значение (опционально)",
+      "description": "Описание (опционально)",
+      "priority": "Приоритет",
+      "matchType": "Тип совпадения",
+      "matchTypeContains": "Содержит",
+      "matchTypeExact": "Точное",
+      "matchTypeRegex": "Регулярное выражение",
+      "jsonPathPlaceholder": "например: messages.0.content или data.items[0].token",
+      "targetPlaceholder": "Имя заголовка или текст/путь",
+      "replacementPlaceholder": "Строка или JSON, пусто — удалить",
+      "save": "Сохранить",
+      "saving": "Сохранение...",
+      "validation": {
+        "fieldRequired": "Название и цель обязательны"
+      }
+    },
+    "table": {
+      "name": "Название",
+      "scope": "Область",
+      "action": "Действие",
+      "target": "Цель",
+      "replacement": "Значение",
+      "priority": "Приоритет",
+      "status": "Статус",
+      "createdAt": "Создано",
+      "actions": "Действия"
+    },
+    "scopeLabel": {
+      "header": "Header",
+      "body": "Body"
+    },
+    "actionLabel": {
+      "remove": "Удалить header",
+      "set": "Установить header",
+      "json_path": "Замена по JSON пути",
+      "text_replace": "Замена текста"
+    }
   },
   "errorRules": {
     "nav": "Правила ошибок",

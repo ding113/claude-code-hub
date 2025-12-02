@@ -1,4 +1,6 @@
 "use client";
+import { Filter } from "lucide-react";
+import { useTranslations } from "next-intl";
 import {
   Select,
   SelectContent,
@@ -6,14 +8,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Filter } from "lucide-react";
-import type { ProviderType } from "@/types/provider";
 import {
-  PROVIDER_TYPE_CONFIG,
   getAllProviderTypes,
   getProviderTypeTranslationKey,
+  PROVIDER_TYPE_CONFIG,
 } from "@/lib/provider-type-utils";
-import { useTranslations } from "next-intl";
+import type { ProviderType } from "@/types/provider";
 
 interface ProviderTypeFilterProps {
   value: ProviderType | "all";

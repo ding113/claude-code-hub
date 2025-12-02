@@ -1,16 +1,17 @@
 "use client";
-import { useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { addUser, editUser } from "@/actions/users";
-import { DialogFormLayout, FormGrid } from "@/components/form/form-layout";
-import { TextField, TagInputField } from "@/components/form/form-field";
-import { useZodForm } from "@/lib/hooks/use-zod-form";
-import { CreateUserSchema } from "@/lib/validation/schemas";
-import { USER_DEFAULTS, USER_LIMITS } from "@/lib/constants/user.constants";
+import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { setZodErrorMap } from "@/lib/utils/zod-i18n";
+import { getAvailableProviderGroups } from "@/actions/providers";
+import { addUser, editUser } from "@/actions/users";
+import { ArrayTagInputField, TagInputField, TextField } from "@/components/form/form-field";
+import { DialogFormLayout, FormGrid } from "@/components/form/form-layout";
+import { USER_DEFAULTS, USER_LIMITS } from "@/lib/constants/user.constants";
+import { useZodForm } from "@/lib/hooks/use-zod-form";
 import { getErrorMessage } from "@/lib/utils/error-messages";
+import { setZodErrorMap } from "@/lib/utils/zod-i18n";
+import { CreateUserSchema } from "@/lib/validation/schemas";
 
 interface UserFormProps {
   user?: {
@@ -20,6 +21,7 @@ interface UserFormProps {
     rpm: number;
     dailyQuota: number;
     providerGroup?: string | null;
+    tags?: string[];
     limit5hUsd?: number | null;
     limitWeeklyUsd?: number | null;
     limitMonthlyUsd?: number | null;
@@ -33,6 +35,7 @@ interface UserFormProps {
 
 export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
   const [isPending, startTransition] = useTransition();
+  const [providerGroupSuggestions, setProviderGroupSuggestions] = useState<string[]>([]);
   const router = useRouter();
   const isEdit = Boolean(user?.id);
   const isAdmin = currentUser?.role === "admin";
@@ -47,6 +50,11 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
     setZodErrorMap(tErrors);
   }, [tErrors]);
 
+  // 加载供应商分组建议
+  useEffect(() => {
+    getAvailableProviderGroups().then(setProviderGroupSuggestions);
+  }, []);
+
   const form = useZodForm({
     schema: CreateUserSchema, // Use CreateUserSchema for both, it has all fields with defaults
     defaultValues: {
@@ -55,6 +63,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
       rpm: user?.rpm || USER_DEFAULTS.RPM,
       dailyQuota: user?.dailyQuota || USER_DEFAULTS.DAILY_QUOTA,
       providerGroup: user?.providerGroup || "",
+      tags: user?.tags || [],
       limit5hUsd: user?.limit5hUsd ?? null,
       limitWeeklyUsd: user?.limitWeeklyUsd ?? null,
       limitMonthlyUsd: user?.limitMonthlyUsd ?? null,
@@ -64,13 +73,14 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
       startTransition(async () => {
         try {
           let res;
-          if (isEdit) {
-            res = await editUser(user!.id, {
+          if (isEdit && user?.id) {
+            res = await editUser(user.id, {
               name: data.name,
               note: data.note,
               rpm: data.rpm,
               dailyQuota: data.dailyQuota,
               providerGroup: data.providerGroup || null,
+              tags: data.tags,
               limit5hUsd: data.limit5hUsd,
               limitWeeklyUsd: data.limitWeeklyUsd,
               limitMonthlyUsd: data.limitMonthlyUsd,
@@ -83,6 +93,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
               rpm: data.rpm,
               dailyQuota: data.dailyQuota,
               providerGroup: data.providerGroup || null,
+              tags: data.tags,
               limit5hUsd: data.limit5hUsd,
               limitWeeklyUsd: data.limitWeeklyUsd,
               limitMonthlyUsd: data.limitMonthlyUsd,
@@ -149,7 +160,8 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
         maxTagLength={50}
         placeholder={tForm("providerGroup.placeholder")}
         description={tForm("providerGroup.description")}
-        onInvalidTag={(tag, reason) => {
+        suggestions={providerGroupSuggestions}
+        onInvalidTag={(_tag, reason) => {
           const messages: Record<string, string> = {
             empty: tUI("emptyTag"),
             duplicate: tUI("duplicateTag"),
@@ -163,6 +175,25 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
         onChange={form.getFieldProps("providerGroup").onChange}
         error={form.getFieldProps("providerGroup").error}
         touched={form.getFieldProps("providerGroup").touched}
+      />
+
+      <ArrayTagInputField
+        label={tForm("tags.label")}
+        maxTagLength={32}
+        maxTags={20}
+        placeholder={tForm("tags.placeholder")}
+        description={tForm("tags.description")}
+        onInvalidTag={(_tag, reason) => {
+          const messages: Record<string, string> = {
+            empty: tUI("emptyTag"),
+            duplicate: tUI("duplicateTag"),
+            too_long: tUI("tooLong", { max: 32 }),
+            invalid_format: tUI("invalidFormat"),
+            max_tags: tUI("maxTags"),
+          };
+          toast.error(messages[reason] || reason);
+        }}
+        {...form.getArrayFieldProps("tags")}
       />
 
       <FormGrid columns={2}>

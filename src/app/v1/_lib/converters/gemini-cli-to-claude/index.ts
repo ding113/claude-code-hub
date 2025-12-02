@@ -7,8 +7,8 @@
 import { registerTransformer } from "../registry";
 import { transformGeminiCLIRequestToClaude } from "./request";
 import {
-  transformGeminiCLIStreamResponseToClaude,
   transformGeminiCLINonStreamResponseToClaude,
+  transformGeminiCLIStreamResponseToClaude,
 } from "./response";
 
 // 注册 Gemini CLI → Claude 转换器

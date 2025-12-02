@@ -1,16 +1,11 @@
 "use client";
-import { useState, useEffect } from "react";
-import { DataTable, TableColumnTypes } from "@/components/ui/data-table";
+import { Check, ChevronDown, ChevronRight, Copy, ExternalLink, Eye, EyeOff } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Copy, Check, ExternalLink, ChevronDown, ChevronRight, Eye, EyeOff } from "lucide-react";
-import { KeyActions } from "./key-actions";
-import { KeyLimitUsage } from "./key-limit-usage";
-import type { UserKeyDisplay } from "@/types/user";
-import type { User } from "@/types/user";
-import { RelativeTime } from "@/components/ui/relative-time";
-import { formatCurrency, type CurrencyCode } from "@/lib/utils/currency";
-import { Link } from "@/i18n/routing";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { DataTable, TableColumnTypes } from "@/components/ui/data-table";
+import { RelativeTime } from "@/components/ui/relative-time";
 import {
   Table,
   TableBody,
@@ -19,8 +14,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useTranslations } from "next-intl";
-import { isClipboardSupported, copyToClipboard } from "@/lib/utils/clipboard";
+import { Link } from "@/i18n/routing";
+import { copyToClipboard, isClipboardSupported } from "@/lib/utils/clipboard";
+import { type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
+import type { User, UserKeyDisplay } from "@/types/user";
+import { KeyActions } from "./key-actions";
+import { KeyLimitUsage } from "./key-limit-usage";
 
 interface KeyListProps {
   keys: UserKeyDisplay[];
@@ -183,37 +182,35 @@ export function KeyList({
         return (
           <div className="group inline-flex items-center gap-1">
             <div className={`font-mono ${isVisible ? "select-all" : "truncate"}`}>{displayKey}</div>
-            {record.canCopy && record.fullKey && (
-              <>
-                {clipboardAvailable ? (
-                  // HTTPS 环境：显示复制按钮
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleCopyKey(record)}
-                    className="h-5 w-5 p-0 hover:bg-muted flex-shrink-0"
-                    title={t("copyKeyTooltip")}
-                  >
-                    {copiedKeyId === record.id ? (
-                      <Check className="h-3 w-3 text-green-600" />
-                    ) : (
-                      <Copy className="h-3 w-3" />
-                    )}
-                  </Button>
-                ) : (
-                  // HTTP 环境：显示显示/隐藏按钮
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => toggleKeyVisibility(record.id)}
-                    className="h-5 w-5 p-0 hover:bg-muted flex-shrink-0"
-                    title={isVisible ? t("hideKeyTooltip") : t("showKeyTooltip")}
-                  >
-                    {isVisible ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-                  </Button>
-                )}
-              </>
-            )}
+            {record.canCopy &&
+              record.fullKey &&
+              (clipboardAvailable ? (
+                // HTTPS 环境：显示复制按钮
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleCopyKey(record)}
+                  className="h-5 w-5 p-0 hover:bg-muted flex-shrink-0"
+                  title={t("copyKeyTooltip")}
+                >
+                  {copiedKeyId === record.id ? (
+                    <Check className="h-3 w-3 text-green-600" />
+                  ) : (
+                    <Copy className="h-3 w-3" />
+                  )}
+                </Button>
+              ) : (
+                // HTTP 环境：显示显示/隐藏按钮
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => toggleKeyVisibility(record.id)}
+                  className="h-5 w-5 p-0 hover:bg-muted flex-shrink-0"
+                  title={isVisible ? t("hideKeyTooltip") : t("showKeyTooltip")}
+                >
+                  {isVisible ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                </Button>
+              ))}
           </div>
         );
       },
@@ -251,7 +248,7 @@ export function KeyList({
         </div>
       ),
     }),
-    TableColumnTypes.actions<UserKeyDisplay>(t("columns.actions"), (value, record) => (
+    TableColumnTypes.actions<UserKeyDisplay>(t("columns.actions"), (_value, record) => (
       <div className="flex items-center gap-1">
         <Link href={`/dashboard/logs?keyId=${record.id}`}>
           <Button variant="ghost" size="sm" className="h-7 text-xs" title={t("viewLogsTooltip")}>

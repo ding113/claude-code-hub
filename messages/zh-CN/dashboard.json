@@ -57,7 +57,6 @@
       "provider": "供应商",
       "model": "模型",
       "endpoint": "端点",
-      "endpoint": "端点",
       "status": "状态",
       "timeRange": "时间范围",
       "startTime": "开始时间",
@@ -71,6 +70,8 @@
       "allStatusCodes": "全部状态码",
       "apiKey": "API 密钥",
       "statusCode": "状态码",
+      "minRetryCount": "重试次数≥",
+      "minRetryCountPlaceholder": "输入次数（0 表示不限）",
       "apply": "应用筛选",
       "reset": "重置"
     },
@@ -183,6 +184,7 @@
       "targetModel": "目标模型"
     },
     "statusCodes": {
+      "not200": "非 200（全部非成功请求）",
       "200": "200 (成功)",
       "400": "400 (错误请求)",
       "401": "401 (未授权)",
@@ -198,8 +200,17 @@
       "keys": "密钥排行",
       "userRanking": "用户排行",
       "providerRanking": "供应商排行",
-      "dailyRanking": "今日排行",
-      "monthlyRanking": "本月排行"
+      "modelRanking": "模型排行",
+      "dailyRanking": "今日",
+      "weeklyRanking": "本周",
+      "monthlyRanking": "本月",
+      "allTimeRanking": "全部"
+    },
+    "dateRange": {
+      "to": "至",
+      "prevPeriod": "上一周期",
+      "nextPeriod": "下一周期",
+      "customRange": "自定义日期范围"
     },
     "columns": {
       "rank": "排名",
@@ -213,6 +224,7 @@
       "tokens": "Token 数",
       "consumedAmount": "消耗金额",
       "provider": "供应商",
+      "model": "模型",
       "cost": "成本",
       "successRate": "成功率",
       "avgResponseTime": "平均响应时间"
@@ -221,6 +233,7 @@
       "loading": "加载中...",
       "noData": "暂无数据",
       "todayNoData": "今日暂无数据",
+      "weekNoData": "本周暂无数据",
       "monthNoData": "本月暂无数据",
       "fetchFailed": "获取排行榜数据失败"
     },
@@ -393,6 +406,8 @@
       "7daysDescription": "过去 7 天的使用情况",
       "30days": "过去 30 天",
       "30daysDescription": "过去 30 天的使用情况",
+      "thisMonth": "本月",
+      "thisMonthDescription": "本月的使用情况",
       "default": "使用情况"
     },
     "mode": {
@@ -604,6 +619,11 @@
       "placeholder": "输入分组标签",
       "description": "指定用户专属的供应商分组（支持多个，逗号分隔）。系统将只从 groupTag 匹配的供应商中选择。留空=使用所有供应商"
     },
+    "tags": {
+      "label": "用户标签",
+      "placeholder": "输入标签（回车添加）",
+      "description": "为用户添加标签，便于分类和筛选（最多20个，每个最长32字符）"
+    },
     "rpm": {
       "label": "RPM限制",
       "placeholder": "每分钟请求数限制",
@@ -729,7 +749,9 @@
     "toolbar": {
       "searchPlaceholder": "按用户名搜索...",
       "groupFilter": "按分组筛选",
-      "allGroups": "所有分组"
+      "allGroups": "所有分组",
+      "tagFilter": "按标签筛选",
+      "allTags": "所有标签"
     }
   },
   "availability": {

@@ -115,7 +115,7 @@ export class HeaderProcessor {
       return url.host;
     } catch (error) {
       logger.error("提取 host 失败:", error);
-      const match = baseUrl.match(/^https?:\/\/([^\/]+)/);
+      const match = baseUrl.match(/^https?:\/\/([^/]+)/);
       return match ? match[1] : "localhost";
     }
   }

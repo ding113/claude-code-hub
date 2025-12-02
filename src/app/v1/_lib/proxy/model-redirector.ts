@@ -1,5 +1,5 @@
-import type { Provider } from "@/types/provider";
 import { logger } from "@/lib/logger";
+import type { Provider } from "@/types/provider";
 import type { ProxySession } from "./session";
 
 /**

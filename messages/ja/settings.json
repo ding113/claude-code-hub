@@ -98,6 +98,8 @@
     "form": {
       "allowGlobalView": "グローバル使用量表示を許可",
       "allowGlobalViewDesc": "無効にすると、一般ユーザーはダッシュボードで自分のキーの使用統計のみを表示できます。",
+      "verboseProviderError": "詳細なプロバイダーエラー",
+      "verboseProviderErrorDesc": "有効にすると、すべてのプロバイダーが利用不可の場合に詳細なエラーメッセージ（プロバイダー数、レート制限の理由など）を返します。無効の場合は簡潔なエラーコードのみを返します。",
       "cleanupSchedule": "クリーンアップスケジュール",
       "cleanupScheduleDesc": "自動クリーンアップの実行スケジュールを選択します",
       "configUpdated": "システム設定が更新されました。ページが更新され、通貨表示の変更が適用されます。",
@@ -358,11 +360,13 @@
     "data": "データ",
     "errorRules": "エラー",
     "feedback": "報告",
+    "docs": "ドキュメント",
     "logs": "ログ",
     "notifications": "通知",
     "prices": "価格表",
     "providers": "供給元",
-    "sensitiveWords": "フィルター"
+    "sensitiveWords": "フィルター",
+    "requestFilters": "リクエスト"
   },
   "notifications": {
     "title": "プッシュ通知",
@@ -1454,6 +1458,71 @@
     "title": "センシティブワード管理",
     "toggleFailed": "トグルに失敗しました",
     "toggleFailedError": "トグルに失敗しました："
+  },
+  "requestFilters": {
+    "nav": "リクエストフィルター",
+    "title": "リクエストフィルター",
+    "description": "上流に送る前にヘッダー削除/上書きやボディ置換を行い、リクエストをサニタイズします。",
+    "add": "フィルター追加",
+    "addSuccess": "作成しました",
+    "addFailed": "作成に失敗しました",
+    "edit": "フィルター編集",
+    "editSuccess": "更新しました",
+    "editFailed": "更新に失敗しました",
+    "delete": "フィルター削除",
+    "deleteSuccess": "削除しました",
+    "deleteFailed": "削除に失敗しました",
+    "enable": "有効",
+    "disable": "無効",
+    "confirmDelete": "フィルター \"{name}\" を削除しますか?",
+    "empty": "フィルターがありません。追加してください。",
+    "refreshCache": "キャッシュ更新",
+    "refreshSuccess": "{count} 件読み込みました",
+    "refreshFailed": "更新に失敗しました",
+    "dialog": {
+      "createTitle": "フィルター追加",
+      "editTitle": "フィルター編集",
+      "name": "名称",
+      "scope": "スコープ",
+      "action": "アクション",
+      "target": "対象フィールド/パス",
+      "replacement": "置換値 (任意)",
+      "description": "説明 (任意)",
+      "priority": "優先度",
+      "matchType": "マッチタイプ",
+      "matchTypeContains": "含む",
+      "matchTypeExact": "完全一致",
+      "matchTypeRegex": "正規表現",
+      "jsonPathPlaceholder": "例: messages.0.content / data.items[0].token",
+      "targetPlaceholder": "ヘッダー名またはテキスト/パス",
+      "replacementPlaceholder": "文字列またはJSON。空でクリア",
+      "save": "保存",
+      "saving": "保存中...",
+      "validation": {
+        "fieldRequired": "名称と対象は必須です"
+      }
+    },
+    "table": {
+      "name": "名称",
+      "scope": "スコープ",
+      "action": "アクション",
+      "target": "対象",
+      "replacement": "置換値",
+      "priority": "優先度",
+      "status": "状態",
+      "createdAt": "作成日時",
+      "actions": "操作"
+    },
+    "scopeLabel": {
+      "header": "Header",
+      "body": "Body"
+    },
+    "actionLabel": {
+      "remove": "ヘッダー削除",
+      "set": "ヘッダー設定",
+      "json_path": "JSONパス置換",
+      "text_replace": "テキスト置換"
+    }
   },
   "errorRules": {
     "nav": "エラールール",

@@ -6,14 +6,14 @@
 import type { ProviderType } from "@/types/provider";
 import type { ParsedResponse } from "../types";
 import { parseAnthropicResponse } from "./anthropic-parser";
-import { parseOpenAIResponse } from "./openai-parser";
 import { parseCodexResponse } from "./codex-parser";
 import { parseGeminiResponse } from "./gemini-parser";
+import { parseOpenAIResponse } from "./openai-parser";
 
 export { parseAnthropicResponse } from "./anthropic-parser";
-export { parseOpenAIResponse } from "./openai-parser";
 export { parseCodexResponse } from "./codex-parser";
 export { parseGeminiResponse } from "./gemini-parser";
+export { parseOpenAIResponse } from "./openai-parser";
 
 /**
  * Parser function type

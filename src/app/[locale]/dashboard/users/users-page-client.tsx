@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { UserKeyManager } from "../_components/user/user-key-manager";
+import { Search } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { useMemo, useState } from "react";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -10,9 +12,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search } from "lucide-react";
-import { useTranslations } from "next-intl";
-import type { UserDisplay, User } from "@/types/user";
+import type { User, UserDisplay } from "@/types/user";
+import { UserKeyManager } from "../_components/user/user-key-manager";
 
 interface UsersPageClientProps {
   users: UserDisplay[];
@@ -23,6 +24,7 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
   const t = useTranslations("dashboard.users");
   const [searchTerm, setSearchTerm] = useState("");
   const [groupFilter, setGroupFilter] = useState("all");
+  const [tagFilter, setTagFilter] = useState("all");
 
   // Extract unique groups from users
   const uniqueGroups = useMemo(() => {
@@ -32,19 +34,30 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
     return [...new Set(groups)];
   }, [users]);
 
-  // Filter users based on search term and group filter
+  // Extract unique tags from users
+  const uniqueTags = useMemo(() => {
+    const tags = users.flatMap((u) => u.tags || []);
+    return [...new Set(tags)].sort();
+  }, [users]);
+
+  // Filter users based on search term, group filter, and tag filter
   const filteredUsers = useMemo(() => {
     return users.filter((user) => {
-      // Search filter: match username
+      // Search filter: match username or tag
       const matchesSearch =
-        searchTerm === "" || user.name.toLowerCase().includes(searchTerm.toLowerCase());
+        searchTerm === "" ||
+        user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (user.tags || []).some((tag) => tag.toLowerCase().includes(searchTerm.toLowerCase()));
 
       // Group filter
       const matchesGroup = groupFilter === "all" || user.providerGroup === groupFilter;
 
-      return matchesSearch && matchesGroup;
+      // Tag filter
+      const matchesTag = tagFilter === "all" || (user.tags || []).includes(tagFilter);
+
+      return matchesSearch && matchesGroup && matchesTag;
     });
-  }, [users, searchTerm, groupFilter]);
+  }, [users, searchTerm, groupFilter, tagFilter]);
 
   return (
     <div className="space-y-4">
@@ -84,6 +97,25 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
             ))}
           </SelectContent>
         </Select>
+
+        {/* Tag filter */}
+        {uniqueTags.length > 0 && (
+          <Select value={tagFilter} onValueChange={setTagFilter}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder={t("toolbar.tagFilter")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("toolbar.allTags")}</SelectItem>
+              {uniqueTags.map((tag) => (
+                <SelectItem key={tag} value={tag}>
+                  <Badge variant="secondary" className="mr-1 text-xs">
+                    {tag}
+                  </Badge>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
       {/* User Key Manager with filtered users */}

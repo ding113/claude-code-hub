@@ -1,6 +1,10 @@
 "use client";
 
+import { ArrowUpDown } from "lucide-react";
+import { useTranslations } from "next-intl";
 import * as React from "react";
+import { getUsers } from "@/actions/users";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -10,10 +14,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { getUsers } from "@/actions/users";
-import { useTranslations } from "next-intl";
-import { ArrowUpDown } from "lucide-react";
-import { Button } from "@/components/ui/button";
 
 export interface RateLimitTopUsersProps {
   data: Record<number, number>;

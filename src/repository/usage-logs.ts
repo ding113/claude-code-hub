@@ -1,10 +1,10 @@
 "use server";
 
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { messageRequest, users, keys as keysTable, providers } from "@/drizzle/schema";
-import { and, eq, isNull, desc, sql } from "drizzle-orm";
-import type { ProviderChainItem } from "@/types/message";
+import { keys as keysTable, messageRequest, providers, users } from "@/drizzle/schema";
 import { getEnvConfig } from "@/lib/config";
+import type { ProviderChainItem } from "@/types/message";
 
 export interface UsageLogFilters {
   userId?: number;
@@ -15,8 +15,12 @@ export interface UsageLogFilters {
   /** 本地时间字符串，格式: "YYYY-MM-DD HH:mm:ss" 或 "YYYY-MM-DDTHH:mm" */
   endDateLocal?: string;
   statusCode?: number;
+  /** 排除 200 状态码（筛选所有非 200 的请求，包括 NULL） */
+  excludeStatusCode200?: boolean;
   model?: string;
   endpoint?: string;
+  /** 最低重试次数（provider_chain 长度 - 1） */
+  minRetryCount?: number;
   page?: number;
   pageSize?: number;
 }
@@ -76,7 +80,7 @@ function normalizeLocalTimeStr(input: string): string {
   const normalized = input.replace("T", " ");
   // 如果没有秒数，补充 ":00"
   if (normalized.length === 16) {
-    return normalized + ":00";
+    return `${normalized}:00`;
   }
   return normalized;
 }
@@ -89,8 +93,10 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
     startDateLocal,
     endDateLocal,
     statusCode,
+    excludeStatusCode200,
     model,
     endpoint,
+    minRetryCount,
     page = 1,
     pageSize = 50,
   } = filters;
@@ -155,6 +161,11 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
 
   if (statusCode !== undefined) {
     conditions.push(eq(messageRequest.statusCode, statusCode));
+  } else if (excludeStatusCode200) {
+    // 包含 status_code 为空或非 200 的请求
+    conditions.push(
+      sql`(${messageRequest.statusCode} IS NULL OR ${messageRequest.statusCode} <> 200)`
+    );
   }
 
   if (model) {
@@ -163,6 +174,13 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
 
   if (endpoint) {
     conditions.push(eq(messageRequest.endpoint, endpoint));
+  }
+
+  if (minRetryCount !== undefined) {
+    // 重试次数 = provider_chain 长度 - 1（最小为 0）
+    conditions.push(
+      sql`GREATEST(COALESCE(jsonb_array_length(${messageRequest.providerChain}) - 1, 0), 0) >= ${minRetryCount}`
+    );
   }
 
   // 查询总数和统计数据

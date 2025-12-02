@@ -70,6 +70,8 @@
       "allStatusCodes": "All Status Codes",
       "apiKey": "API Key",
       "statusCode": "Status Code",
+      "minRetryCount": "Retry Count ≥",
+      "minRetryCountPlaceholder": "Enter minimum retries",
       "apply": "Apply Filter",
       "reset": "Reset"
     },
@@ -182,6 +184,7 @@
       "targetModel": "Target Model"
     },
     "statusCodes": {
+      "not200": "Non-200 (errors/blocked)",
       "200": "200 (Success)",
       "400": "400 (Bad Request)",
       "401": "401 (Unauthorized)",
@@ -197,8 +200,17 @@
       "keys": "Key Rankings",
       "userRanking": "User Rankings",
       "providerRanking": "Provider Rankings",
-      "dailyRanking": "Daily Rankings",
-      "monthlyRanking": "Monthly Rankings"
+      "modelRanking": "Model Rankings",
+      "dailyRanking": "Today",
+      "weeklyRanking": "This Week",
+      "monthlyRanking": "This Month",
+      "allTimeRanking": "All Time"
+    },
+    "dateRange": {
+      "to": "to",
+      "prevPeriod": "Previous period",
+      "nextPeriod": "Next period",
+      "customRange": "Custom date range"
     },
     "columns": {
       "rank": "Rank",
@@ -212,6 +224,7 @@
       "tokens": "Tokens",
       "consumedAmount": "Consumed Amount",
       "provider": "Provider",
+      "model": "Model",
       "cost": "Cost",
       "successRate": "Success Rate",
       "avgResponseTime": "Avg Response Time"
@@ -220,6 +233,7 @@
       "loading": "Loading...",
       "noData": "No data available",
       "todayNoData": "No data available for today",
+      "weekNoData": "No data available for this week",
       "monthNoData": "No data available for this month",
       "fetchFailed": "Failed to fetch leaderboard data"
     },
@@ -392,6 +406,8 @@
       "7daysDescription": "Usage for the last 7 days",
       "30days": "Last 30 Days",
       "30daysDescription": "Usage for the last 30 days",
+      "thisMonth": "This Month",
+      "thisMonthDescription": "Usage for this month",
       "default": "Usage"
     },
     "mode": {
@@ -599,6 +615,11 @@
       "placeholder": "e.g., premium or premium,economy (optional)",
       "description": "Specify user-specific provider groups (supports multiple, comma-separated). The system will only select from providers matching the groupTag. Leave blank = use all providers"
     },
+    "tags": {
+      "label": "User Tags",
+      "placeholder": "Enter tag (press Enter to add)",
+      "description": "Add tags for categorization and filtering (max 20 tags, 32 characters each)"
+    },
     "rpm": {
       "label": "RPM Limit",
       "placeholder": "Requests per minute limit",
@@ -659,7 +680,9 @@
     "toolbar": {
       "searchPlaceholder": "Search by username...",
       "groupFilter": "Filter by Group",
-      "allGroups": "All Groups"
+      "allGroups": "All Groups",
+      "tagFilter": "Filter by Tag",
+      "allTags": "All Tags"
     }
   },
   "availability": {

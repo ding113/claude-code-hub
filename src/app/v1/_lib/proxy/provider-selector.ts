@@ -1,13 +1,40 @@
-import type { Provider } from "@/types/provider";
-import { findProviderList, findProviderById } from "@/repository/provider";
+import { getCircuitState, isCircuitOpen } from "@/lib/circuit-breaker";
+import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit";
 import { SessionManager } from "@/lib/session-manager";
-import { isCircuitOpen, getCircuitState } from "@/lib/circuit-breaker";
-import { ProxyResponses } from "./responses";
-import { logger } from "@/lib/logger";
-import type { ProxySession } from "./session";
-import type { ClientFormat } from "./format-mapper";
+import { findProviderById, findProviderList } from "@/repository/provider";
+import { getSystemSettings } from "@/repository/system-config";
 import type { ProviderChainItem } from "@/types/message";
+import type { Provider } from "@/types/provider";
+import type { ClientFormat } from "./format-mapper";
+import { ProxyResponses } from "./responses";
+import type { ProxySession } from "./session";
+
+// 系统设置缓存 - 避免每次请求失败都查询数据库
+const SETTINGS_CACHE_TTL_MS = 60_000; // 60 seconds
+let cachedVerboseProviderError: { value: boolean; expiresAt: number } | null = null;
+
+async function getVerboseProviderErrorCached(): Promise<boolean> {
+  const now = Date.now();
+  if (cachedVerboseProviderError && cachedVerboseProviderError.expiresAt > now) {
+    return cachedVerboseProviderError.value;
+  }
+
+  try {
+    const systemSettings = await getSystemSettings();
+    cachedVerboseProviderError = {
+      value: systemSettings.verboseProviderError,
+      expiresAt: now + SETTINGS_CACHE_TTL_MS,
+    };
+    return systemSettings.verboseProviderError;
+  } catch (e) {
+    logger.warn(
+      "ProviderSelector: Failed to get system settings, using default verboseError=false",
+      { error: e }
+    );
+    return false;
+  }
+}
 
 /**
  * 检查供应商是否支持指定模型（用于调度器匹配）
@@ -328,12 +355,15 @@ export class ProxyProviderResolver {
     // 循环结束：所有可用供应商都已尝试或无可用供应商
     const status = 503;
 
+    // 获取系统设置中的 verboseProviderError 配置（使用缓存避免频繁查询数据库）
+    const verboseError = await getVerboseProviderErrorCached();
+
     // 构建详细的错误消息
-    let message = "暂无可用的上游服务";
+    let message = "No available providers";
     let errorType = "no_available_providers";
 
     if (excludedProviders.length > 0) {
-      message = `所有供应商不可用（尝试了 ${excludedProviders.length} 个供应商）`;
+      message = `All providers unavailable (tried ${excludedProviders.length} providers)`;
       errorType = "all_providers_failed";
     } else {
       const selectionContext = session.getLastSelectionContext();
@@ -356,7 +386,7 @@ export class ProxyProviderResolver {
           unavailableCount === totalEnabled
         ) {
           // 全部因为限流
-          message = `所有可用供应商已达消费限额（${rateLimited.length} 个供应商）`;
+          message = `All providers rate limited (${rateLimited.length} providers)`;
           errorType = "rate_limit_exceeded";
         } else if (
           circuitOpen.length > 0 &&
@@ -364,11 +394,11 @@ export class ProxyProviderResolver {
           unavailableCount === totalEnabled
         ) {
           // 全部因为熔断
-          message = `所有可用供应商熔断器已打开（${circuitOpen.length} 个供应商）`;
+          message = `All providers circuit breaker open (${circuitOpen.length} providers)`;
           errorType = "circuit_breaker_open";
         } else if (rateLimited.length > 0 && circuitOpen.length > 0) {
           // 混合原因
-          message = `所有可用供应商不可用（${rateLimited.length} 个达限额，${circuitOpen.length} 个熔断）`;
+          message = `All providers unavailable (${rateLimited.length} rate limited, ${circuitOpen.length} circuit open)`;
           errorType = "mixed_unavailable";
         }
       }
@@ -381,14 +411,20 @@ export class ProxyProviderResolver {
       filteredProviders: session.getLastSelectionContext()?.filteredProviders,
     });
 
-    // 构建详细的错误响应
+    // 根据 verboseProviderError 配置决定返回详细错误还是简洁错误
+    if (!verboseError) {
+      // 简洁模式：返回固定的错误消息，不区分具体原因
+      return ProxyResponses.buildError(status, "No available providers", "no_available_providers");
+    }
+
+    // 详细模式：构建详细的错误响应
     const details: Record<string, unknown> = {
       totalAttempts: attemptCount,
       excludedCount: excludedProviders.length,
     };
 
     if (session.getLastSelectionContext()?.filteredProviders) {
-      details.filteredProviders = session.getLastSelectionContext()!.filteredProviders;
+      details.filteredProviders = session.getLastSelectionContext()?.filteredProviders;
     }
 
     return ProxyResponses.buildError(status, message, errorType, details);
@@ -401,7 +437,7 @@ export class ProxyProviderResolver {
     session: ProxySession,
     excludeIds: number[]
   ): Promise<Provider | null> {
-    const { provider } = await this.pickRandomProvider(session, excludeIds);
+    const { provider } = await ProxyProviderResolver.pickRandomProvider(session, excludeIds);
     return provider;
   }
 
@@ -606,7 +642,7 @@ export class ProxyProviderResolver {
           details = `不支持模型 ${requestedModel}`;
         }
 
-        context.filteredProviders!.push({
+        context.filteredProviders?.push({
           id: p.id,
           name: p.name,
           reason,
@@ -683,7 +719,7 @@ export class ProxyProviderResolver {
     context.beforeHealthCheck = candidateProviders.length;
 
     // Step 3: 过滤超限供应商（健康度过滤）
-    const healthyProviders = await this.filterByLimits(candidateProviders);
+    const healthyProviders = await ProxyProviderResolver.filterByLimits(candidateProviders);
     context.afterHealthCheck = healthyProviders.length;
 
     // 记录过滤掉的供应商（熔断或限流）
@@ -694,14 +730,14 @@ export class ProxyProviderResolver {
     for (const p of filteredOut) {
       if (await isCircuitOpen(p.id)) {
         const state = getCircuitState(p.id);
-        context.filteredProviders!.push({
+        context.filteredProviders?.push({
           id: p.id,
           name: p.name,
           reason: "circuit_open",
           details: `熔断器${state === "open" ? "打开" : "半开"}`,
         });
       } else {
-        context.filteredProviders!.push({
+        context.filteredProviders?.push({
           id: p.id,
           name: p.name,
           reason: "rate_limited",
@@ -717,7 +753,7 @@ export class ProxyProviderResolver {
     }
 
     // Step 4: 优先级分层（只选择最高优先级的供应商）
-    const topPriorityProviders = this.selectTopPriority(healthyProviders);
+    const topPriorityProviders = ProxyProviderResolver.selectTopPriority(healthyProviders);
     const priorities = [...new Set(healthyProviders.map((p) => p.priority || 0))].sort(
       (a, b) => a - b
     );
@@ -734,7 +770,7 @@ export class ProxyProviderResolver {
       probability: totalWeight > 0 ? Math.round((p.weight / totalWeight) * 100) : 0,
     }));
 
-    const selected = this.selectOptimal(topPriorityProviders);
+    const selected = ProxyProviderResolver.selectOptimal(topPriorityProviders);
 
     // 详细的选择日志
     logger.info("ProviderSelector: Selection decision", {
@@ -836,7 +872,7 @@ export class ProxyProviderResolver {
     });
 
     // 加权随机选择（复用现有逻辑）
-    return this.weightedRandom(sorted);
+    return ProxyProviderResolver.weightedRandom(sorted);
   }
 
   /**

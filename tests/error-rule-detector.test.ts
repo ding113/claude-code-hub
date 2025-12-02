@@ -16,7 +16,7 @@
  * 5. Performance benchmarking
  */
 
-import { describe, test, expect, beforeAll } from "bun:test";
+import { beforeAll, describe, expect, test } from "bun:test";
 import { errorRuleDetector } from "@/lib/error-rule-detector";
 import { eventEmitter } from "@/lib/event-emitter";
 
@@ -230,7 +230,7 @@ describe("Safe-Regex ReDoS Detection", () => {
    */
 
   test("should skip loading dangerous regex patterns", async () => {
-    const statsBefore = errorRuleDetector.getStats();
+    const _statsBefore = errorRuleDetector.getStats();
 
     // Reload cache (which should skip any dangerous patterns)
     await errorRuleDetector.reload();
@@ -274,12 +274,12 @@ describe("Match Type Priority", () => {
    */
 
   test("should return match type information", () => {
-    const testCases = [
-      { message: "prompt is too long: 5000 tokens > 4096 maximum", expectedType: "regex" },
-      { message: "blocked by our content filter", expectedType: "regex" },
+    const testMessages = [
+      "prompt is too long: 5000 tokens > 4096 maximum",
+      "blocked by our content filter",
     ];
 
-    for (const { message, expectedType } of testCases) {
+    for (const message of testMessages) {
       const result = errorRuleDetector.detect(message);
       expect(result.matched).toBe(true);
       expect(result.matchType).toBeTruthy();

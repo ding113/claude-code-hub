@@ -1,13 +1,12 @@
 "use client";
-import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
 import { useTranslations } from "next-intl";
+import { useTransition } from "react";
+import { toast } from "sonner";
 import { addKey } from "@/actions/keys";
+import { DateField, NumberField, TextField } from "@/components/form/form-field";
 import { DialogFormLayout, FormGrid } from "@/components/form/form-layout";
-import { TextField, DateField, NumberField } from "@/components/form/form-field";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -15,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useZodForm } from "@/lib/hooks/use-zod-form";
 import { KeyFormSchema } from "@/lib/validation/schemas";
 import type { User } from "@/types/user";

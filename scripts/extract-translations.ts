@@ -14,8 +14,8 @@
  *   --target     Target directory to scan (default: src/app/[locale])
  */
 
-import * as fs from "fs";
-import * as path from "path";
+import * as fs from "node:fs";
+import * as path from "node:path";
 
 // Translation key naming convention: namespace.section.key
 // Example: dashboard.stats.totalRequests, settings.providers.addButton
@@ -38,7 +38,7 @@ interface ExtractionReport {
 }
 
 // Chinese character detection regex
-const CHINESE_REGEX = /[\u4e00-\u9fa5]+/g;
+const _CHINESE_REGEX = /[\u4e00-\u9fa5]+/g;
 
 // Namespace mapping based on file path
 const NAMESPACE_MAP: Record<string, string> = {
@@ -163,7 +163,7 @@ function generateKey(
 
   // Use Pinyin-like mapping for key (simplified)
   const keyPart = Array.from(safeKey)
-    .map((char, i) => `key${i}`)
+    .map((_char, i) => `key${i}`)
     .join("");
 
   return {
@@ -272,7 +272,7 @@ function generateTranslationFiles(strings: ExtractedString[], dryRun: boolean): 
     }
 
     if (!dryRun) {
-      fs.writeFileSync(translationFile, JSON.stringify(translations, null, 2) + "\n", "utf-8");
+      fs.writeFileSync(translationFile, `${JSON.stringify(translations, null, 2)}\n`, "utf-8");
       console.log(`✓ Updated ${namespace}.json with ${items.length} strings`);
     } else {
       console.log(`[DRY RUN] Would update ${namespace}.json with ${items.length} strings`);

@@ -1,11 +1,9 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { Upload, AlertCircle } from "lucide-react";
+import { AlertCircle, Upload } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,7 +14,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import type { ImportProgressEvent } from "@/types/database-backup";
 
 export function DatabaseImport() {
@@ -34,13 +34,13 @@ export function DatabaseImport() {
     if (progressContainerRef.current) {
       progressContainerRef.current.scrollTop = progressContainerRef.current.scrollHeight;
     }
-  }, [progressMessages]);
+  }, []);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      if (!file.name.endsWith('.dump')) {
-        toast.error(t('fileError'));
+      if (!file.name.endsWith(".dump")) {
+        toast.error(t("fileError"));
         return;
       }
       setSelectedFile(file);
@@ -49,7 +49,7 @@ export function DatabaseImport() {
 
   const handleImportClick = () => {
     if (!selectedFile) {
-      toast.error(t('noFileSelected'));
+      toast.error(t("noFileSelected"));
       return;
     }
     setShowConfirmDialog(true);
@@ -65,19 +65,19 @@ export function DatabaseImport() {
     try {
       // 构造表单数据
       const formData = new FormData();
-      formData.append('file', selectedFile);
-      formData.append('cleanFirst', cleanFirst.toString());
+      formData.append("file", selectedFile);
+      formData.append("cleanFirst", cleanFirst.toString());
 
       // 调用导入 API（SSE 流式响应，自动携带 cookie）
-      const response = await fetch('/api/admin/database/import', {
-        method: 'POST',
-        credentials: 'include',
+      const response = await fetch("/api/admin/database/import", {
+        method: "POST",
+        credentials: "include",
         body: formData,
       });
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || t('failed'));
+        throw new Error(error.error || t("failed"));
       }
 
       // Handle SSE stream
@@ -85,7 +85,7 @@ export function DatabaseImport() {
       const decoder = new TextDecoder();
 
       if (!reader) {
-        throw new Error(t('streamError'));
+        throw new Error(t("streamError"));
       }
 
       let hasReceivedCompletion = false;
@@ -96,12 +96,9 @@ export function DatabaseImport() {
         if (done) {
           // 流正常结束，检查是否收到完成事件
           if (!hasReceivedCompletion) {
-            setProgressMessages(prev => [
-              ...prev,
-              `⚠️ ${t('streamInterrupted')}`
-            ]);
-            toast.warning(t('streamInterrupted'), {
-              description: t('streamInterruptedDesc'),
+            setProgressMessages((prev) => [...prev, `⚠️ ${t("streamInterrupted")}`]);
+            toast.warning(t("streamInterrupted"), {
+              description: t("streamInterruptedDesc"),
               duration: 6000,
             });
           }
@@ -109,45 +106,45 @@ export function DatabaseImport() {
         }
 
         const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
+        const lines = chunk.split("\n");
 
         for (const line of lines) {
-          if (line.startsWith('data: ')) {
+          if (line.startsWith("data: ")) {
             try {
               const data: ImportProgressEvent = JSON.parse(line.slice(6));
 
-              if (data.type === 'progress') {
-                setProgressMessages(prev => [...prev, data.message]);
-              } else if (data.type === 'complete') {
+              if (data.type === "progress") {
+                setProgressMessages((prev) => [...prev, data.message]);
+              } else if (data.type === "complete") {
                 hasReceivedCompletion = true;
-                setProgressMessages(prev => [...prev, `✅ ${data.message}`]);
+                setProgressMessages((prev) => [...prev, `✅ ${data.message}`]);
 
                 // 检查是否有警告（exitCode 非 0 表示有可忽略错误）
                 if (data.exitCode && data.exitCode !== 0) {
-                  toast.success(t('successWithWarnings'), {
-                    description: t('successWithWarningsDesc'),
+                  toast.success(t("successWithWarnings"), {
+                    description: t("successWithWarningsDesc"),
                     duration: 6000,
                   });
                 } else {
-                  toast.success(t('successMessage'), {
-                    description: cleanFirst ? t('successCleanModeDesc') : t('successMergeModeDesc'),
+                  toast.success(t("successMessage"), {
+                    description: cleanFirst ? t("successCleanModeDesc") : t("successMergeModeDesc"),
                     duration: 5000,
                   });
                 }
-              } else if (data.type === 'error') {
+              } else if (data.type === "error") {
                 hasReceivedCompletion = true;
-                setProgressMessages(prev => [...prev, `❌ ${data.message}`]);
+                setProgressMessages((prev) => [...prev, `❌ ${data.message}`]);
 
                 // 显示详细错误信息
-                toast.error(t('failedMessage'), {
+                toast.error(t("failedMessage"), {
                   description: data.message,
                   duration: 8000,
                 });
               }
             } catch (parseError) {
-              console.error('Parse SSE error:', parseError);
+              console.error("Parse SSE error:", parseError);
               // 解析错误也要通知用户
-              toast.error(t('parseError'), {
+              toast.error(t("parseError"), {
                 description: String(parseError),
               });
             }
@@ -158,14 +155,14 @@ export function DatabaseImport() {
       // 清空文件选择
       setSelectedFile(null);
       if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+        fileInputRef.current.value = "";
       }
     } catch (error) {
-      console.error('Import error:', error);
-      toast.error(error instanceof Error ? error.message : t('error'));
-      setProgressMessages(prev => [
+      console.error("Import error:", error);
+      toast.error(error instanceof Error ? error.message : t("error"));
+      setProgressMessages((prev) => [
         ...prev,
-        `❌ ${t('error')}: ${error instanceof Error ? error.message : t('errorUnknown')}`
+        `❌ ${t("error")}: ${error instanceof Error ? error.message : t("errorUnknown")}`,
       ]);
     } finally {
       setIsImporting(false);
@@ -174,13 +171,11 @@ export function DatabaseImport() {
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-muted-foreground">
-        {t('descriptionFull')}
-      </p>
+      <p className="text-sm text-muted-foreground">{t("descriptionFull")}</p>
 
       {/* File selection */}
       <div className="flex flex-col gap-2">
-        <Label htmlFor="backup-file">{t('selectFileLabel')}</Label>
+        <Label htmlFor="backup-file">{t("selectFileLabel")}</Label>
         <div className="flex gap-2">
           <input
             ref={fileInputRef}
@@ -194,9 +189,9 @@ export function DatabaseImport() {
         </div>
         {selectedFile && (
           <p className="text-xs text-muted-foreground">
-            {t('fileSelected', {
+            {t("fileSelected", {
               name: selectedFile.name,
-              size: (selectedFile.size / 1024 / 1024).toFixed(2)
+              size: (selectedFile.size / 1024 / 1024).toFixed(2),
             })}
           </p>
         )}
@@ -215,11 +210,9 @@ export function DatabaseImport() {
             htmlFor="clean-first"
             className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
           >
-            {t('cleanFirstLabel')}
+            {t("cleanFirstLabel")}
           </Label>
-          <p className="text-xs text-muted-foreground">
-            {t('cleanFirstDescription')}
-          </p>
+          <p className="text-xs text-muted-foreground">{t("cleanFirstDescription")}</p>
         </div>
       </div>
 
@@ -230,13 +223,13 @@ export function DatabaseImport() {
         className="w-full sm:w-auto"
       >
         <Upload className="mr-2 h-4 w-4" />
-        {isImporting ? t('importing') : t('button')}
+        {isImporting ? t("importing") : t("button")}
       </Button>
 
       {/* Progress display */}
       {progressMessages.length > 0 && (
         <div className="mt-2 rounded-md border border-border bg-muted/30 p-3">
-          <h3 className="text-sm font-medium mb-2">{t('progressTitle')}</h3>
+          <h3 className="text-sm font-medium mb-2">{t("progressTitle")}</h3>
           <div
             ref={progressContainerRef}
             className="max-h-60 overflow-y-auto rounded bg-background p-2 font-mono text-xs space-y-1"
@@ -256,32 +249,28 @@ export function DatabaseImport() {
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <AlertCircle className="h-5 w-5 text-orange-500" />
-              {t('confirmTitle')}
+              {t("confirmTitle")}
             </AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="text-muted-foreground text-sm space-y-2">
-                <p>
-                  {cleanFirst ? t('confirmOverwrite') : t('confirmMerge')}
-                </p>
+                <p>{cleanFirst ? t("confirmOverwrite") : t("confirmMerge")}</p>
                 <p className="font-semibold text-foreground">
-                  {cleanFirst ? t('warningOverwrite') : t('warningMerge')}
+                  {cleanFirst ? t("warningOverwrite") : t("warningMerge")}
                 </p>
                 <p>
-                  {t('backupFile')} <span className="font-mono text-xs">{selectedFile?.name}</span>
+                  {t("backupFile")} <span className="font-mono text-xs">{selectedFile?.name}</span>
                 </p>
-                <p className="text-xs text-muted-foreground">
-                  {t('backupRecommendation')}
-                </p>
+                <p className="text-xs text-muted-foreground">{t("backupRecommendation")}</p>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
+            <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmImport}
               className="bg-orange-500 hover:bg-orange-600 text-white"
             >
-              {t('confirm')}
+              {t("confirm")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -14,8 +14,8 @@
  * 4. Backward compatibility with hardcoded regex patterns
  */
 
-import { describe, test, expect, beforeAll } from "bun:test";
-import { ProxyError, isNonRetryableClientError } from "@/app/v1/_lib/proxy/errors";
+import { beforeAll, describe, expect, test } from "bun:test";
+import { isNonRetryableClientError, ProxyError } from "@/app/v1/_lib/proxy/errors";
 import { errorRuleDetector } from "@/lib/error-rule-detector";
 
 // Wait for initial cache load
@@ -255,7 +255,7 @@ describe("Edge Cases and Boundary Conditions", () => {
   });
 
   test("should handle very long error message", () => {
-    const longMessage = "prompt is too long: " + "x".repeat(10000) + " maximum tokens";
+    const longMessage = `prompt is too long: ${"x".repeat(10000)} maximum tokens`;
     const error = new Error(longMessage);
     expect(isNonRetryableClientError(error)).toBe(true);
   });

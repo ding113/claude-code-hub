@@ -1,11 +1,10 @@
-import { Section } from "@/components/section";
-import { AvailabilityView } from "./_components/availability-view";
-import { getSession } from "@/lib/auth";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertCircle } from "lucide-react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Link } from "@/i18n/routing";
 import { getTranslations } from "next-intl/server";
+import { Section } from "@/components/section";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { getSession } from "@/lib/auth";
+import { AvailabilityView } from "./_components/availability-view";
 
 export const dynamic = "force-dynamic";
 

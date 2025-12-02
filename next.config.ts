@@ -21,6 +21,9 @@ const nextConfig: NextConfig = {
     "ioredis",
     "postgres",
     "drizzle-orm",
+    "pino",
+    "pino-pretty",
+    "thread-stream",
   ],
 
   // 强制包含 undici 到 standalone 输出
@@ -36,25 +39,6 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: "500mb",
     },
-  },
-
-  // Webpack 配置：显式标记 Node.js 内置模块为 external
-  // 修复 CI 构建时 postgres 包导入 net/tls/crypto 等模块的问题
-  webpack: (config, { isServer }) => {
-    if (isServer) {
-      // 排除 Node.js 内置模块，避免打包到服务端 bundle
-      config.externals.push({
-        net: "commonjs net",
-        tls: "commonjs tls",
-        crypto: "commonjs crypto",
-        stream: "commonjs stream",
-        perf_hooks: "commonjs perf_hooks",
-        fs: "commonjs fs",
-        path: "commonjs path",
-        os: "commonjs os",
-      });
-    }
-    return config;
   },
 };
 

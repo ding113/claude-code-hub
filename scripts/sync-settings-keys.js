@@ -5,8 +5,8 @@
  * - Fills missing keys with zh-CN text as placeholder
  * - Drops extra keys not present in zh-CN (notably for en, but applies consistently)
  */
-const fs = require("fs");
-const path = require("path");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const ROOT = process.cwd();
 const MESSAGES_DIR = path.join(ROOT, "messages");
@@ -37,7 +37,7 @@ function mergeWithCanonical(cn, target) {
       result[k] = mergeWithCanonical(v, tchild);
     } else {
       // Canonical expects a leaf (string/number/bool/array/null). If target is an object, ignore it.
-      if (Object.prototype.hasOwnProperty.call(target || {}, k) && !isObject(tVal)) {
+      if (Object.hasOwn(target || {}, k) && !isObject(tVal)) {
         result[k] = tVal;
       } else {
         result[k] = v;
@@ -61,7 +61,7 @@ function loadJSON(p) {
 }
 
 function saveJSON(p, data) {
-  fs.writeFileSync(p, JSON.stringify(data, null, 2) + "\n", "utf8");
+  fs.writeFileSync(p, `${JSON.stringify(data, null, 2)}\n`, "utf8");
 }
 
 function ensureSettings(locale) {

@@ -1,28 +1,31 @@
-import { HeaderProcessor } from "../headers";
-import { buildProxyUrl } from "../url";
+import type { Readable } from "node:stream";
+import { createGunzip, constants as zlibConstants } from "node:zlib";
+import type { Dispatcher } from "undici";
+import { request as undiciRequest } from "undici";
 import {
-  recordFailure,
-  recordSuccess,
   getCircuitState,
   getProviderHealthInfo,
+  recordFailure,
+  recordSuccess,
 } from "@/lib/circuit-breaker";
-import { ProxyProviderResolver } from "./provider-selector";
-import { ProxyError, categorizeError, ErrorCategory, isClientAbortError } from "./errors";
-import { ModelRedirector } from "./model-redirector";
-import { SessionManager } from "@/lib/session-manager";
+import { CodexInstructionsCache } from "@/lib/codex-instructions-cache";
+import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
-import type { ProxySession } from "./session";
+import { createProxyAgentForProvider } from "@/lib/proxy-agent";
+import { SessionManager } from "@/lib/session-manager";
+import { getDefaultInstructions } from "../codex/constants/codex-instructions";
+import { isOfficialCodexClient, sanitizeCodexRequest } from "../codex/utils/request-sanitizer";
 import { defaultRegistry } from "../converters";
 import type { Format } from "../converters/types";
-import { mapClientFormatToTransformer, mapProviderTypeToTransformer } from "./format-mapper";
-import { isOfficialCodexClient, sanitizeCodexRequest } from "../codex/utils/request-sanitizer";
-import { getDefaultInstructions } from "../codex/constants/codex-instructions";
-import { CodexInstructionsCache } from "@/lib/codex-instructions-cache";
-import { createProxyAgentForProvider } from "@/lib/proxy-agent";
-import type { Dispatcher } from "undici";
-import { getEnvConfig } from "@/lib/config/env.schema";
-import { GEMINI_PROTOCOL } from "../gemini/protocol";
 import { GeminiAuth } from "../gemini/auth";
+import { GEMINI_PROTOCOL } from "../gemini/protocol";
+import { HeaderProcessor } from "../headers";
+import { buildProxyUrl } from "../url";
+import { categorizeError, ErrorCategory, isClientAbortError, ProxyError } from "./errors";
+import { mapClientFormatToTransformer, mapProviderTypeToTransformer } from "./format-mapper";
+import { ModelRedirector } from "./model-redirector";
+import { ProxyProviderResolver } from "./provider-selector";
+import type { ProxySession } from "./session";
 
 const STANDARD_ENDPOINTS = [
   "/v1/messages",
@@ -606,13 +609,16 @@ export class ProxyForwarder {
       const bodyString = JSON.stringify(session.request.message);
       requestBody = bodyString;
 
-      // 检测流式请求
-      try {
-        const originalBody = session.request.message as Record<string, unknown>;
-        isStreaming = originalBody.stream === true;
-      } catch {
-        isStreaming = false;
-      }
+      // 检测流式请求：Gemini 支持两种方式
+      // 1. URL 路径检测（官方 Gemini API）: /v1beta/models/xxx:streamGenerateContent?alt=sse
+      // 2. 请求体 stream 字段（某些兼容 API）: { stream: true }
+      const geminiPathname = session.requestUrl.pathname || "";
+      const geminiSearchParams = session.requestUrl.searchParams;
+      const originalBody = session.request.message as Record<string, unknown>;
+      isStreaming =
+        geminiPathname.includes("streamGenerateContent") ||
+        geminiSearchParams.get("alt") === "sse" ||
+        originalBody?.stream === true;
 
       // 2. 准备认证和 Headers
       const accessToken = await GeminiAuth.getAccessToken(provider.key);
@@ -620,6 +626,12 @@ export class ProxyForwarder {
 
       const headers = new Headers();
       headers.set("Content-Type", "application/json");
+
+      // ⭐ 统一禁用 gzip 压缩（不仅限于流式请求）
+      // 原因：undici（Node.js fetch）在连接提前关闭时会对不完整的 gzip 流抛出 "TypeError: terminated"
+      // Bun 的 fetch 实现更宽松，不会报错，这导致 bun dev 正常但 Docker 构建后失败
+      // 参考：Gunzip.emit → emitErrorNT → emitErrorCloseNT 错误链
+      headers.set("accept-encoding", "identity");
 
       if (isApiKey) {
         headers.set(GEMINI_PROTOCOL.HEADERS.API_KEY, accessToken);
@@ -976,10 +988,19 @@ export class ProxyForwarder {
 
     (init as Record<string, unknown>).verbose = true;
 
+    // ⭐ 检测是否为 Gemini 供应商（需要特殊处理以绕过 undici 自动解压）
+    const isGeminiProvider =
+      provider.providerType === "gemini" || provider.providerType === "gemini-cli";
+
     let response: Response;
     const fetchStartTime = Date.now();
     try {
-      response = await fetch(proxyUrl, init);
+      // ⭐ Gemini 使用 undici.request 绕过 fetch 的自动解压
+      // 原因：undici fetch 无法关闭自动解压，上游可能无视 accept-encoding: identity 返回 gzip
+      // 当 gzip 流被提前终止时（如连接关闭），undici Gunzip 会抛出 "TypeError: terminated"
+      response = isGeminiProvider
+        ? await ProxyForwarder.fetchWithoutAutoDecode(proxyUrl, init, provider.id, provider.name)
+        : await fetch(proxyUrl, init);
       // ⭐ fetch 成功：收到 HTTP 响应头，保留响应超时继续监控
       // 注意：undici 的 fetch 在收到 HTTP 响应头后就 resolve，但实际数据（SSE 首字节 / 完整 JSON）
       // 还没到达。responseTimeoutId 需要延续到 response-handler 中才能真正控制"首字节"或"总耗时"
@@ -1314,5 +1335,225 @@ export class ProxyForwarder {
     });
 
     return headerProcessor.process(session.headers);
+  }
+
+  /**
+   * 使用 undici.request 绕过 fetch 的自动解压
+   *
+   * 原因：Node/undici 的 fetch 会自动根据 Content-Encoding 解压响应，且无法关闭。
+   * 当上游服务器忽略 accept-encoding: identity 仍返回 gzip 时，如果 gzip 流被提前终止
+   * （如连接关闭），undici 的 Gunzip 会抛出 "TypeError: terminated" 错误。
+   *
+   * 解决方案：使用 undici.request 获取未解压的原始流，手动用容错方式处理 gzip。
+   */
+  private static async fetchWithoutAutoDecode(
+    url: string,
+    init: RequestInit & { dispatcher?: Dispatcher },
+    providerId: number,
+    providerName: string
+  ): Promise<Response> {
+    logger.debug("ProxyForwarder: Using undici.request to bypass auto-decompression", {
+      providerId,
+      providerName,
+      url: new URL(url).origin, // 只记录域名，隐藏路径和参数
+      method: init.method,
+      reason: "Gemini provider requires manual gzip handling to avoid terminated error",
+    });
+
+    // 将 Headers 对象转换为 Record<string, string>
+    const headersObj: Record<string, string> = {};
+    if (init.headers instanceof Headers) {
+      init.headers.forEach((value, key) => {
+        headersObj[key] = value;
+      });
+    } else if (init.headers && typeof init.headers === "object") {
+      Object.assign(headersObj, init.headers);
+    }
+
+    // 使用 undici.request 获取未自动解压的响应
+    const undiciRes = await undiciRequest(url, {
+      method: init.method as string,
+      headers: headersObj,
+      body: init.body as string | Buffer | undefined,
+      signal: init.signal as AbortSignal | undefined,
+      dispatcher: init.dispatcher,
+    });
+
+    // ⭐ 立即为 undici body 添加错误处理，防止 uncaughtException
+    // 必须在任何其他操作之前设置，否则 ECONNRESET 等错误会导致 uncaughtException
+    const rawBody = undiciRes.body as Readable;
+    rawBody.on("error", (err) => {
+      logger.warn("ProxyForwarder: undici body stream error (caught early)", {
+        providerId,
+        providerName,
+        error: err.message,
+        errorCode: (err as NodeJS.ErrnoException).code,
+      });
+    });
+
+    // 构建响应头
+    const responseHeaders = new Headers();
+    for (const [key, value] of Object.entries(undiciRes.headers)) {
+      if (value === undefined) continue;
+      if (Array.isArray(value)) {
+        value.forEach((v) => responseHeaders.append(key, v));
+      } else {
+        responseHeaders.append(key, value);
+      }
+    }
+
+    // 检测响应是否为 gzip 压缩
+    const encoding = responseHeaders.get("content-encoding")?.toLowerCase() || "";
+    let bodyStream: ReadableStream<Uint8Array>;
+
+    if (encoding.includes("gzip")) {
+      logger.debug("ProxyForwarder: Gemini response is gzip encoded, decompressing manually", {
+        providerId,
+        providerName,
+        contentEncoding: encoding,
+      });
+
+      // 创建容错 Gunzip 解压器
+      const gunzip = createGunzip({
+        flush: zlibConstants.Z_SYNC_FLUSH,
+        finishFlush: zlibConstants.Z_SYNC_FLUSH,
+      });
+
+      // 捕获 Gunzip 错误但不抛出（容错处理）
+      gunzip.on("error", (err) => {
+        logger.warn("ProxyForwarder: Gemini gunzip decompression error (ignored)", {
+          providerId,
+          providerName,
+          error: err.message,
+          note: "Partial data may be returned, but no crash",
+        });
+        // 尝试结束流，避免挂起
+        try {
+          gunzip.end();
+        } catch {
+          // ignore
+        }
+      });
+
+      // 将 undici body (Node Readable) pipe 到 Gunzip
+      // 注意：使用前面已添加错误处理器的 rawBody
+      rawBody.pipe(gunzip);
+
+      // 将 Gunzip 流转换为 Web ReadableStream（容错版本）
+      bodyStream = ProxyForwarder.nodeStreamToWebStreamSafe(gunzip, providerId, providerName);
+
+      // 移�� content-encoding 和 content-length（避免下游再解压或使用错误长度）
+      responseHeaders.delete("content-encoding");
+      responseHeaders.delete("content-length");
+    } else {
+      // 非 gzip：直接转换 Node 流为 Web 流
+      logger.debug("ProxyForwarder: Response is not gzip encoded, passing through", {
+        providerId,
+        providerName,
+        contentEncoding: encoding || "(none)",
+      });
+      // 注意：使用前面已添加错误处理器的 rawBody
+      bodyStream = ProxyForwarder.nodeStreamToWebStreamSafe(rawBody, providerId, providerName);
+    }
+
+    logger.debug("ProxyForwarder: undici.request completed, returning wrapped response", {
+      providerId,
+      providerName,
+      statusCode: undiciRes.statusCode,
+      hasGzip: encoding.includes("gzip"),
+    });
+
+    return new Response(bodyStream, {
+      status: undiciRes.statusCode,
+      statusText: String(undiciRes.statusCode),
+      headers: responseHeaders,
+    });
+  }
+
+  /**
+   * 将 Node.js Readable 流转换为 Web ReadableStream（容错版本）
+   *
+   * 关键特性：吞掉上游流的错误事件，避免 "terminated" 错误冒泡到调用者
+   */
+  private static nodeStreamToWebStreamSafe(
+    nodeStream: Readable,
+    providerId: number,
+    providerName: string
+  ): ReadableStream<Uint8Array> {
+    let chunkCount = 0;
+    let totalBytes = 0;
+
+    return new ReadableStream<Uint8Array>({
+      start(controller) {
+        logger.debug("ProxyForwarder: Starting Node-to-Web stream conversion", {
+          providerId,
+          providerName,
+        });
+
+        nodeStream.on("data", (chunk: Buffer | Uint8Array) => {
+          chunkCount++;
+          totalBytes += chunk.length;
+          try {
+            const buf = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk);
+            controller.enqueue(buf);
+          } catch {
+            // 如果 controller 已关闭，忽略
+          }
+        });
+
+        nodeStream.on("end", () => {
+          logger.debug("ProxyForwarder: Node stream ended normally", {
+            providerId,
+            providerName,
+            chunkCount,
+            totalBytes,
+          });
+          try {
+            controller.close();
+          } catch {
+            // 如果已关闭，忽略
+          }
+        });
+
+        nodeStream.on("close", () => {
+          logger.debug("ProxyForwarder: Node stream closed", {
+            providerId,
+            providerName,
+            chunkCount,
+            totalBytes,
+          });
+          try {
+            controller.close();
+          } catch {
+            // 如果已关闭，忽略
+          }
+        });
+
+        // ⭐ 关键：吞掉错误事件，避免 "terminated" 冒泡
+        nodeStream.on("error", (err) => {
+          logger.warn("ProxyForwarder: Upstream stream error (gracefully closed)", {
+            providerId,
+            providerName,
+            error: err.message,
+            errorName: err.name,
+          });
+          try {
+            controller.close();
+          } catch {
+            // 如果已关闭，忽略
+          }
+        });
+      },
+
+      cancel(reason) {
+        try {
+          nodeStream.destroy(
+            reason instanceof Error ? reason : reason ? new Error(String(reason)) : undefined
+          );
+        } catch {
+          // ignore
+        }
+      },
+    });
   }
 }

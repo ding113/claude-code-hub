@@ -1,12 +1,12 @@
 "use server";
 
-import { WeChatBot } from "@/lib/wechat/bot";
 import { logger } from "@/lib/logger";
+import { WeChatBot } from "@/lib/wechat/bot";
 import {
   getNotificationSettings,
-  updateNotificationSettings,
   type NotificationSettings,
   type UpdateNotificationSettingsInput,
+  updateNotificationSettings,
 } from "@/repository/notifications";
 
 /**

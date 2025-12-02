@@ -9,7 +9,7 @@
  */
 
 import type { ProviderType } from "@/types/provider";
-import type { ClaudeTestBody, CodexTestBody, OpenAITestBody, GeminiTestBody } from "../types";
+import type { ClaudeTestBody, CodexTestBody, GeminiTestBody, OpenAITestBody } from "../types";
 
 // ============================================================================
 // User-Agent Configurations (Critical for relay service authentication)
@@ -203,8 +203,8 @@ export const API_ENDPOINTS: Record<ProviderType, string> = {
   "claude-auth": "/v1/messages",
   codex: "/v1/responses",
   "openai-compatible": "/v1/chat/completions",
-  gemini: "/v1beta/models/{model}:generateContent",
-  "gemini-cli": "/v1beta/models/{model}:generateContent",
+  gemini: "/v1beta/models/{model}:streamGenerateContent",
+  "gemini-cli": "/v1beta/models/{model}:streamGenerateContent",
 };
 
 /**
@@ -271,10 +271,11 @@ export function getTestHeaders(providerType: ProviderType, apiKey: string): Reco
 
     case "gemini":
     case "gemini-cli":
-      // Gemini uses URL parameter for API key
+      // Gemini: 同时使用 header 和 URL 参数认证（最大兼容性）
       return {
         ...baseHeaders,
         ...GEMINI_TEST_HEADERS,
+        "x-goog-api-key": apiKey,
       };
 
     default:
@@ -289,7 +290,7 @@ export function getTestUrl(
   baseUrl: string,
   providerType: ProviderType,
   model?: string,
-  apiKey?: string
+  _apiKey?: string // Gemini API key now passed via header, kept for backward compatibility
 ): string {
   // Remove trailing slash
   const cleanBaseUrl = baseUrl.replace(/\/$/, "");
@@ -301,10 +302,9 @@ export function getTestUrl(
   // Gemini needs model in URL
   if (providerType === "gemini" || providerType === "gemini-cli") {
     url = url.replace("{model}", targetModel);
-    // Add API key as query parameter for Gemini
-    if (apiKey) {
-      url += `?key=${apiKey}`;
-    }
+    // Only add alt=sse for streaming, API key is passed via header (x-goog-api-key)
+    // Note: Gemini tests now use dedicated testProviderGemini function
+    url += `?alt=sse`;
   }
 
   return url;

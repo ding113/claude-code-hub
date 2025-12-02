@@ -17,8 +17,8 @@
  * - reasoning.effort → thinking.budget_tokens
  */
 
+import { randomBytes } from "node:crypto";
 import { logger } from "@/lib/logger";
-import { randomBytes } from "crypto";
 
 /**
  * Response API 格式的请求体接口（简化类型定义）

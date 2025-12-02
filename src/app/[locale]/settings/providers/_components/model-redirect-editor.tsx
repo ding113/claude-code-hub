@@ -1,11 +1,11 @@
 "use client";
+import { AlertCircle, ArrowRight, Check, Pencil, Plus, X } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
-import { Plus, X, ArrowRight, AlertCircle, Pencil, Check } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { useTranslations } from "next-intl";
 
 interface ModelRedirectEditorProps {
   value: Record<string, string>;

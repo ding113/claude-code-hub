@@ -1,4 +1,4 @@
-import { GeminiRequest, GeminiContent, GeminiResponse } from "./types";
+import type { GeminiContent, GeminiRequest, GeminiResponse } from "./types";
 
 // Define input message types for request transformation
 interface ContentPart {
@@ -230,7 +230,7 @@ export class GeminiAdapter {
     if (isStream) {
       // Return a chunk structure
       return {
-        id: "chatcmpl-" + Date.now(),
+        id: `chatcmpl-${Date.now()}`,
         object: "chat.completion.chunk",
         created: Math.floor(Date.now() / 1000),
         model: "gemini-model", // Placeholder
@@ -245,7 +245,7 @@ export class GeminiAdapter {
       };
     } else {
       return {
-        id: "chatcmpl-" + Date.now(),
+        id: `chatcmpl-${Date.now()}`,
         object: "chat.completion",
         created: Math.floor(Date.now() / 1000),
         model: "gemini-model",

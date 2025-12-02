@@ -1,8 +1,8 @@
-import { Metadata } from "next";
+import { Book, LogIn } from "lucide-react";
+import type { Metadata } from "next";
+import { Link } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
 import { DashboardHeader } from "../dashboard/_components/dashboard-header";
-import { Link } from "@/i18n/routing";
-import { Book, LogIn } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "使用文档 - Claude Code Hub",

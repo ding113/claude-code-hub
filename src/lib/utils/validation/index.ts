@@ -1,10 +1,11 @@
 export {
-  validateNumericField,
-  clampWeight,
   clampIntInRange,
   clampTpm,
+  clampWeight,
   formatTpmDisplay,
+  validateNumericField,
 } from "./provider";
+
 import { logger } from "@/lib/logger";
 
 /**

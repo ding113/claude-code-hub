@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useTranslations } from "next-intl";
 import { Menu } from "lucide-react";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { useTranslations } from "next-intl";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { TocNav, type TocItem } from "./_components/toc-nav";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { QuickLinks } from "./_components/quick-links";
+import { type TocItem, TocNav } from "./_components/toc-nav";
 
 const headingClasses = {
   h2: "scroll-m-20 text-2xl font-semibold leading-snug text-foreground",
@@ -29,7 +29,6 @@ function CodeBlock({ code, language }: CodeBlockProps) {
       className="group relative my-5 overflow-x-auto rounded-md bg-black px-3 py-4 sm:px-4 sm:py-5 font-mono text-[11px] sm:text-[13px] text-white"
       role="region"
       aria-label={t("codeExamples.label", { language })}
-      tabIndex={0}
     >
       <code className="block whitespace-pre leading-relaxed">{code.trim()}</code>
     </pre>
@@ -1478,7 +1477,7 @@ export default function UsageDocPage() {
       items.push({
         id: heading.id,
         text: heading.textContent || "",
-        level: parseInt(heading.tagName[1]),
+        level: parseInt(heading.tagName[1], 10),
       });
     });
 

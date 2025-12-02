@@ -10,11 +10,10 @@
  * - EventEmitter 驱动的自动缓存刷新
  */
 
-import { getActiveErrorRules, type ErrorOverrideResponse } from "@/repository/error-rules";
-import { logger } from "@/lib/logger";
-import { eventEmitter } from "@/lib/event-emitter";
-import { isValidErrorOverrideResponse } from "@/lib/error-override-validator";
 import safeRegex from "safe-regex";
+import { isValidErrorOverrideResponse } from "@/lib/error-override-validator";
+import { logger } from "@/lib/logger";
+import { type ErrorOverrideResponse, getActiveErrorRules } from "@/repository/error-rules";
 
 /**
  * 错误检测结果
@@ -76,12 +75,27 @@ class ErrorRuleDetector {
   private initializationPromise: Promise<void> | null = null; // 防止并发初始化竞态
 
   constructor() {
-    // 监听数据库变更事件，自动刷新缓存
-    eventEmitter.on("errorRulesUpdated", () => {
-      this.reload().catch((error) => {
-        logger.error("[ErrorRuleDetector] Failed to reload cache on event:", error);
-      });
-    });
+    // 延迟初始化事件监听（仅在 Node.js runtime 中）
+    this.setupEventListener();
+  }
+
+  /**
+   * 设置事件监听器（仅在 Node.js runtime）
+   */
+  private async setupEventListener(): Promise<void> {
+    // 仅在 Node.js runtime 中设置事件监听
+    if (typeof process !== "undefined" && process.env.NEXT_RUNTIME !== "edge") {
+      try {
+        const { eventEmitter } = await import("@/lib/event-emitter");
+        eventEmitter.on("errorRulesUpdated", () => {
+          this.reload().catch((error) => {
+            logger.error("[ErrorRuleDetector] Failed to reload cache on event:", error);
+          });
+        });
+      } catch {
+        // 忽略导入错误（可能在 Edge runtime 中）
+      }
+    }
   }
 
   /**
@@ -148,7 +162,7 @@ class ErrorRuleDetector {
 
       for (const rule of rules) {
         // 在加载阶段验证 overrideResponse 格式，过滤畸形数据
-        let validatedOverrideResponse: ErrorOverrideResponse | undefined = undefined;
+        let validatedOverrideResponse: ErrorOverrideResponse | undefined;
         if (rule.overrideResponse) {
           if (isValidErrorOverrideResponse(rule.overrideResponse)) {
             validatedOverrideResponse = rule.overrideResponse;

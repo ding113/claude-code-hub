@@ -1,11 +1,11 @@
 "use client";
 
-import * as React from "react";
-import { Pie, PieChart, Cell, Legend } from "recharts";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChartConfig, ChartContainer, ChartTooltip } from "@/components/ui/chart";
-import type { RateLimitType } from "@/types/statistics";
 import { useTranslations } from "next-intl";
+import * as React from "react";
+import { Cell, Legend, Pie, PieChart } from "recharts";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { type ChartConfig, ChartContainer, ChartTooltip } from "@/components/ui/chart";
+import type { RateLimitType } from "@/types/statistics";
 
 export interface RateLimitTypeBreakdownProps {
   data: Record<RateLimitType, number>;
@@ -102,7 +102,7 @@ export function RateLimitTypeBreakdown({ data }: RateLimitTypeBreakdownProps) {
                 cx="50%"
                 cy="50%"
                 outerRadius={80}
-                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
               >
                 {chartData.map((entry, index) => (
                   <Cell key={`cell-${entry.type}`} fill={COLORS[index % COLORS.length]} />

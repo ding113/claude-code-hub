@@ -1,22 +1,22 @@
 "use client";
 
-import { useState, useTransition, useEffect, useRef, useCallback } from "react";
+import { Pause, Play, RefreshCw } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { getUsageLogs } from "@/actions/usage-logs";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Pause, Play } from "lucide-react";
-import { UsageLogsFilters } from "./usage-logs-filters";
-import { UsageLogsTable } from "./usage-logs-table";
-import type { UsageLogsResult } from "@/repository/usage-logs";
-import type { UserDisplay } from "@/types/user";
-import type { ProviderDisplay } from "@/types/provider";
-import type { Key } from "@/types/key";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatTokenAmount } from "@/lib/utils";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
-import { formatTokenAmount } from "@/lib/utils";
-import { useTranslations } from "next-intl";
+import type { UsageLogsResult } from "@/repository/usage-logs";
+import type { Key } from "@/types/key";
+import type { ProviderDisplay } from "@/types/provider";
 import type { BillingModelSource } from "@/types/system-config";
+import type { UserDisplay } from "@/types/user";
+import { UsageLogsFilters } from "./usage-logs-filters";
+import { UsageLogsTable } from "./usage-logs-table";
 
 interface UsageLogsViewProps {
   isAdmin: boolean;
@@ -49,7 +49,7 @@ export function UsageLogsView({
   // 追踪新增记录（用于动画高亮）
   const [newLogIds, setNewLogIds] = useState<Set<number>>(new Set());
   const previousLogsRef = useRef<Map<number, boolean>>(new Map());
-  const previousParamsRef = useRef<string>('');
+  const previousParamsRef = useRef<string>("");
 
   // 从 URL 参数解析筛选条件
   // 注意：时间使用字符串传递，避免 Date 序列化导致的时区问题
@@ -60,20 +60,31 @@ export function UsageLogsView({
     startDateLocal?: string;
     endDateLocal?: string;
     statusCode?: number;
+    excludeStatusCode200?: boolean;
     model?: string;
     endpoint?: string;
+    minRetryCount?: number;
     page: number;
   } = {
-    userId: searchParams.userId ? parseInt(searchParams.userId as string) : undefined,
-    keyId: searchParams.keyId ? parseInt(searchParams.keyId as string) : undefined,
-    providerId: searchParams.providerId ? parseInt(searchParams.providerId as string) : undefined,
+    userId: searchParams.userId ? parseInt(searchParams.userId as string, 10) : undefined,
+    keyId: searchParams.keyId ? parseInt(searchParams.keyId as string, 10) : undefined,
+    providerId: searchParams.providerId
+      ? parseInt(searchParams.providerId as string, 10)
+      : undefined,
     // 直接传递本地时间字符串，不转换为 Date
     startDateLocal: searchParams.startDate as string | undefined,
     endDateLocal: searchParams.endDate as string | undefined,
-    statusCode: searchParams.statusCode ? parseInt(searchParams.statusCode as string) : undefined,
+    statusCode:
+      searchParams.statusCode && searchParams.statusCode !== "!200"
+        ? parseInt(searchParams.statusCode as string, 10)
+        : undefined,
+    excludeStatusCode200: searchParams.statusCode === "!200",
     model: searchParams.model as string | undefined,
     endpoint: searchParams.endpoint as string | undefined,
-    page: searchParams.page ? parseInt(searchParams.page as string) : 1,
+    minRetryCount: searchParams.minRetry
+      ? parseInt(searchParams.minRetry as string, 10)
+      : undefined,
+    page: searchParams.page ? parseInt(searchParams.page as string, 10) : 1,
   };
 
   // 使用 ref 来存储最新的值,避免闭包陷阱
@@ -87,37 +98,38 @@ export function UsageLogsView({
 
   // 加载数据
   // shouldDetectNew: 是否检测新增记录（只在刷新时为 true，筛选/翻页时为 false）
-  const loadData = useCallback(async (shouldDetectNew = false) => {
-    startTransition(async () => {
-      const result = await getUsageLogs(filtersRef.current);
-      if (result.ok && result.data) {
-        // 只在刷新时检测新增（非筛选/翻页）
-        if (shouldDetectNew && previousLogsRef.current.size > 0) {
-          const newIds = result.data.logs
-            .filter(log => !previousLogsRef.current.has(log.id))
-            .map(log => log.id)
-            .slice(0, 10); // 限制最多高亮 10 条
+  const loadData = useCallback(
+    async (shouldDetectNew = false) => {
+      startTransition(async () => {
+        const result = await getUsageLogs(filtersRef.current);
+        if (result.ok && result.data) {
+          // 只在刷新时检测新增（非筛选/翻页）
+          if (shouldDetectNew && previousLogsRef.current.size > 0) {
+            const newIds = result.data.logs
+              .filter((log) => !previousLogsRef.current.has(log.id))
+              .map((log) => log.id)
+              .slice(0, 10); // 限制最多高亮 10 条
 
-          if (newIds.length > 0) {
-            setNewLogIds(new Set(newIds));
-            // 800ms 后清除高亮
-            setTimeout(() => setNewLogIds(new Set()), 800);
+            if (newIds.length > 0) {
+              setNewLogIds(new Set(newIds));
+              // 800ms 后清除高亮
+              setTimeout(() => setNewLogIds(new Set()), 800);
+            }
           }
+
+          // 更新记录缓存
+          previousLogsRef.current = new Map(result.data.logs.map((log) => [log.id, true]));
+
+          setData(result.data);
+          setError(null);
+        } else {
+          setError(!result.ok && "error" in result ? result.error : t("logs.error.loadFailed"));
+          setData(null);
         }
-
-        // 更新记录缓存
-        previousLogsRef.current = new Map(
-          result.data.logs.map(log => [log.id, true])
-        );
-
-        setData(result.data);
-        setError(null);
-      } else {
-        setError(!result.ok && 'error' in result ? result.error : t("logs.error.loadFailed"));
-        setData(null);
-      }
-    });
-  }, [startTransition, t]);
+      });
+    },
+    [t]
+  );
 
   // 手动刷新（检测新增）
   const handleManualRefresh = async () => {
@@ -153,10 +165,10 @@ export function UsageLogsView({
     }, 3000); // 3 秒间隔
 
     return () => clearInterval(intervalId);
-  }, [isAutoRefresh, loadData]);  
+  }, [isAutoRefresh, loadData]);
 
   // 处理筛选条件变更
-  const handleFilterChange = (newFilters: Omit<typeof filters, 'page'>) => {
+  const handleFilterChange = (newFilters: Omit<typeof filters, "page">) => {
     const query = new URLSearchParams();
 
     if (newFilters.userId) query.set("userId", newFilters.userId.toString());
@@ -165,9 +177,16 @@ export function UsageLogsView({
     // 时间直接使用字符串格式（datetime-local 返回的格式）
     if (newFilters.startDateLocal) query.set("startDate", newFilters.startDateLocal);
     if (newFilters.endDateLocal) query.set("endDate", newFilters.endDateLocal);
-    if (newFilters.statusCode) query.set("statusCode", newFilters.statusCode.toString());
+    if (newFilters.excludeStatusCode200) {
+      query.set("statusCode", "!200");
+    } else if (newFilters.statusCode !== undefined) {
+      query.set("statusCode", newFilters.statusCode.toString());
+    }
     if (newFilters.model) query.set("model", newFilters.model);
     if (newFilters.endpoint) query.set("endpoint", newFilters.endpoint);
+    if (newFilters.minRetryCount !== undefined) {
+      query.set("minRetry", newFilters.minRetryCount.toString());
+    }
 
     router.push(`/dashboard/logs?${query.toString()}`);
   };
@@ -212,11 +231,15 @@ export function UsageLogsView({
             <CardContent className="text-xs text-muted-foreground space-y-1">
               <div className="flex justify-between">
                 <span>{t("logs.stats.input")}:</span>
-                <span className="font-mono">{formatTokenAmount(data.summary.totalInputTokens)}</span>
+                <span className="font-mono">
+                  {formatTokenAmount(data.summary.totalInputTokens)}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span>{t("logs.stats.output")}:</span>
-                <span className="font-mono">{formatTokenAmount(data.summary.totalOutputTokens)}</span>
+                <span className="font-mono">
+                  {formatTokenAmount(data.summary.totalOutputTokens)}
+                </span>
               </div>
             </CardContent>
           </Card>
@@ -280,9 +303,7 @@ export function UsageLogsView({
                 disabled={isPending}
                 className="gap-2"
               >
-                <RefreshCw
-                  className={`h-4 w-4 ${isManualRefreshing ? 'animate-spin' : ''}`}
-                />
+                <RefreshCw className={`h-4 w-4 ${isManualRefreshing ? "animate-spin" : ""}`} />
                 {t("logs.actions.refresh")}
               </Button>
 

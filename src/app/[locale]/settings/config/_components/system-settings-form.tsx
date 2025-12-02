@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
+import { useState, useTransition } from "react";
+import { toast } from "sonner";
+import { saveSystemSettings } from "@/actions/system-config";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -13,16 +14,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { saveSystemSettings } from "@/actions/system-config";
-import { toast } from "sonner";
-import { CURRENCY_CONFIG } from "@/lib/utils";
-import type { SystemSettings, BillingModelSource } from "@/types/system-config";
+import { Switch } from "@/components/ui/switch";
 import type { CurrencyCode } from "@/lib/utils";
+import { CURRENCY_CONFIG } from "@/lib/utils";
+import type { BillingModelSource, SystemSettings } from "@/types/system-config";
 
 interface SystemSettingsFormProps {
   initialSettings: Pick<
     SystemSettings,
-    "siteTitle" | "allowGlobalUsageView" | "currencyDisplay" | "billingModelSource"
+    | "siteTitle"
+    | "allowGlobalUsageView"
+    | "currencyDisplay"
+    | "billingModelSource"
+    | "verboseProviderError"
   >;
 }
 
@@ -37,6 +41,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   );
   const [billingModelSource, setBillingModelSource] = useState<BillingModelSource>(
     initialSettings.billingModelSource
+  );
+  const [verboseProviderError, setVerboseProviderError] = useState(
+    initialSettings.verboseProviderError
   );
   const [isPending, startTransition] = useTransition();
 
@@ -54,6 +61,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         allowGlobalUsageView,
         currencyDisplay,
         billingModelSource,
+        verboseProviderError,
       });
 
       if (!result.ok) {
@@ -66,6 +74,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setAllowGlobalUsageView(result.data.allowGlobalUsageView);
         setCurrencyDisplay(result.data.currencyDisplay);
         setBillingModelSource(result.data.billingModelSource);
+        setVerboseProviderError(result.data.verboseProviderError);
       }
 
       toast.success(t("configUpdated"));
@@ -144,6 +153,21 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
           id="allow-global-usage"
           checked={allowGlobalUsageView}
           onCheckedChange={(checked) => setAllowGlobalUsageView(checked)}
+          disabled={isPending}
+        />
+      </div>
+
+      <div className="flex items-start justify-between gap-4 rounded-lg border border-dashed border-border px-4 py-3">
+        <div>
+          <Label htmlFor="verbose-provider-error" className="text-sm font-medium">
+            {t("verboseProviderError")}
+          </Label>
+          <p className="text-xs text-muted-foreground mt-1">{t("verboseProviderErrorDesc")}</p>
+        </div>
+        <Switch
+          id="verbose-provider-error"
+          checked={verboseProviderError}
+          onCheckedChange={(checked) => setVerboseProviderError(checked)}
           disabled={isPending}
         />
       </div>

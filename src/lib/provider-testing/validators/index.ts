@@ -4,14 +4,13 @@
  */
 
 export {
-  classifyHttpStatus,
-  isHttpSuccess,
-  getSubStatusDescription,
-  type HttpValidationResult,
-} from "./http-validator";
-
-export {
+  type ContentValidationResult,
   evaluateContentValidation,
   extractTextContent,
-  type ContentValidationResult,
 } from "./content-validator";
+export {
+  classifyHttpStatus,
+  getSubStatusDescription,
+  type HttpValidationResult,
+  isHttpSuccess,
+} from "./http-validator";

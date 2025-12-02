@@ -1,10 +1,10 @@
 "use client";
 
+import { type ComponentProps, useId } from "react";
 import { Input } from "@/components/ui/input";
-import { TagInput } from "@/components/ui/tag-input";
 import { Label } from "@/components/ui/label";
+import { TagInput } from "@/components/ui/tag-input";
 import { cn } from "@/lib/utils";
-import { useId, type ComponentProps } from "react";
 
 /**
  * 表单字段配置
@@ -125,13 +125,27 @@ export function DateField(props: FormFieldProps) {
 }
 
 /**
- * 标签输入字段组件 Props
+ * 标签输入字段组件 Props (字符串值，逗号分隔)
  */
 export interface TagInputFieldProps
   extends Omit<ComponentProps<typeof TagInput>, "value" | "onChange"> {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  error?: string;
+  touched?: boolean;
+  required?: boolean;
+  description?: string;
+}
+
+/**
+ * 数组标签输入字段组件 Props (数组值)
+ */
+export interface ArrayTagInputFieldProps
+  extends Omit<ComponentProps<typeof TagInput>, "value" | "onChange"> {
+  label: string;
+  value: string[];
+  onChange: (value: string[]) => void;
   error?: string;
   touched?: boolean;
   required?: boolean;
@@ -183,6 +197,61 @@ export function TagInputField({
         id={fieldId}
         value={tagsArray}
         onChange={handleChange}
+        className={cn(
+          hasError ? "border-destructive focus-visible:ring-destructive" : undefined,
+          className
+        )}
+        aria-invalid={hasError}
+        aria-describedby={
+          hasError ? `${fieldId}-error` : description ? `${fieldId}-description` : undefined
+        }
+      />
+      {description && !hasError && (
+        <div id={`${fieldId}-description`} className="text-xs text-muted-foreground">
+          {description}
+        </div>
+      )}
+      {hasError && (
+        <div id={`${fieldId}-error`} className="text-xs text-destructive" role="alert">
+          {error}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 数组标签输入字段组件
+ * 直接接受 string[] 值，适用于存储为数组的标签字段
+ */
+export function ArrayTagInputField({
+  label,
+  value,
+  onChange,
+  error,
+  touched,
+  required,
+  description,
+  className,
+  ...tagInputProps
+}: ArrayTagInputFieldProps) {
+  const hasError = Boolean(touched && error);
+  const autoId = useId();
+  const fieldId = tagInputProps.id || `field-${autoId}`;
+
+  return (
+    <div className="grid gap-2">
+      <Label
+        htmlFor={fieldId}
+        className={cn(required && "after:content-['*'] after:ml-0.5 after:text-destructive")}
+      >
+        {label}
+      </Label>
+      <TagInput
+        {...tagInputProps}
+        id={fieldId}
+        value={value || []}
+        onChange={onChange}
         className={cn(
           hasError ? "border-destructive focus-visible:ring-destructive" : undefined,
           className

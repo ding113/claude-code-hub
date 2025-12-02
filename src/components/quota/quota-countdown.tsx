@@ -1,9 +1,9 @@
 "use client";
 
-import { useCountdown } from "@/hooks/useCountdown";
-import { Clock, AlertTriangle } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { AlertTriangle, Clock } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useCountdown } from "@/hooks/useCountdown";
+import { cn } from "@/lib/utils";
 
 interface QuotaCountdownProps {
   resetAt: Date | null;
@@ -152,7 +152,7 @@ export function QuotaCountdownWithProgress({
   const getProgress = () => {
     if (!resetAt || countdown.isExpired) return 100;
 
-    const now = new Date().getTime();
+    const now = Date.now();
     const target = new Date(resetAt).getTime();
     const start = startAt ? new Date(startAt).getTime() : now;
 

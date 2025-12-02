@@ -1,21 +1,25 @@
 "use server";
 
-import { findUserList, createUser, updateUser, deleteUser, findUserById } from "@/repository/user";
-import { logger } from "@/lib/logger";
-import { findKeyList, findKeyUsageToday, findKeysWithStatistics } from "@/repository/key";
-import { revalidatePath } from "next/cache";
 import { randomBytes } from "node:crypto";
-import { type UserDisplay } from "@/types/user";
-import { maskKey } from "@/lib/utils/validation";
-import { CreateUserSchema, UpdateUserSchema } from "@/lib/validation/schemas";
-import { USER_DEFAULTS } from "@/lib/constants/user.constants";
-import { createKey } from "@/repository/key";
+import { revalidatePath } from "next/cache";
+import { getLocale, getTranslations } from "next-intl/server";
 import { getSession } from "@/lib/auth";
-import type { ActionResult } from "./types";
-import { ERROR_CODES } from "@/lib/utils/error-messages";
-import { formatZodError } from "@/lib/utils/zod-i18n";
-import { getTranslations, getLocale } from "next-intl/server";
+import { USER_DEFAULTS } from "@/lib/constants/user.constants";
+import { logger } from "@/lib/logger";
 import { getUnauthorizedFields } from "@/lib/permissions/user-field-permissions";
+import { ERROR_CODES } from "@/lib/utils/error-messages";
+import { maskKey } from "@/lib/utils/validation";
+import { formatZodError } from "@/lib/utils/zod-i18n";
+import { CreateUserSchema, UpdateUserSchema } from "@/lib/validation/schemas";
+import {
+  createKey,
+  findKeyList,
+  findKeysWithStatistics,
+  findKeyUsageToday,
+} from "@/repository/key";
+import { createUser, deleteUser, findUserById, findUserList, updateUser } from "@/repository/user";
+import type { UserDisplay } from "@/types/user";
+import type { ActionResult } from "./types";
 
 // 获取用户数据
 export async function getUsers(): Promise<UserDisplay[]> {
@@ -65,6 +69,7 @@ export async function getUsers(): Promise<UserDisplay[]> {
             rpm: user.rpm,
             dailyQuota: user.dailyQuota,
             providerGroup: user.providerGroup || undefined,
+            tags: user.tags || [],
             limit5hUsd: user.limit5hUsd ?? null,
             limitWeeklyUsd: user.limitWeeklyUsd ?? null,
             limitMonthlyUsd: user.limitMonthlyUsd ?? null,
@@ -119,6 +124,7 @@ export async function getUsers(): Promise<UserDisplay[]> {
             rpm: user.rpm,
             dailyQuota: user.dailyQuota,
             providerGroup: user.providerGroup || undefined,
+            tags: user.tags || [],
             limit5hUsd: user.limit5hUsd ?? null,
             limitWeeklyUsd: user.limitWeeklyUsd ?? null,
             limitMonthlyUsd: user.limitMonthlyUsd ?? null,
@@ -141,6 +147,7 @@ export async function addUser(data: {
   name: string;
   note?: string;
   providerGroup?: string | null;
+  tags?: string[];
   rpm?: number;
   dailyQuota?: number;
   limit5hUsd?: number | null;
@@ -167,6 +174,7 @@ export async function addUser(data: {
       name: data.name,
       note: data.note || "",
       providerGroup: data.providerGroup || "",
+      tags: data.tags || [],
       rpm: data.rpm || USER_DEFAULTS.RPM,
       dailyQuota: data.dailyQuota || USER_DEFAULTS.DAILY_QUOTA,
       limit5hUsd: data.limit5hUsd,
@@ -189,6 +197,7 @@ export async function addUser(data: {
       name: validatedData.name,
       description: validatedData.note || "",
       providerGroup: validatedData.providerGroup || null,
+      tags: validatedData.tags,
       rpm: validatedData.rpm,
       dailyQuota: validatedData.dailyQuota,
       limit5hUsd: validatedData.limit5hUsd ?? undefined,
@@ -198,7 +207,7 @@ export async function addUser(data: {
     });
 
     // 为新用户创建默认密钥
-    const generatedKey = "sk-" + randomBytes(16).toString("hex");
+    const generatedKey = `sk-${randomBytes(16).toString("hex")}`;
     await createKey({
       user_id: newUser.id,
       name: "default",
@@ -228,6 +237,7 @@ export async function editUser(
     name?: string;
     note?: string;
     providerGroup?: string | null;
+    tags?: string[];
     rpm?: number;
     dailyQuota?: number;
     limit5hUsd?: number | null;
@@ -268,7 +278,7 @@ export async function editUser(
     if (unauthorizedFields.length > 0) {
       return {
         ok: false,
-        error: tError("PERMISSION_DENIED") + `: ${unauthorizedFields.join(", ")}`,
+        error: `${tError("PERMISSION_DENIED")}: ${unauthorizedFields.join(", ")}`,
         errorCode: ERROR_CODES.PERMISSION_DENIED,
       };
     }
@@ -287,6 +297,7 @@ export async function editUser(
       name: validatedData.name,
       description: validatedData.note,
       providerGroup: validatedData.providerGroup,
+      tags: validatedData.tags,
       rpm: validatedData.rpm,
       dailyQuota: validatedData.dailyQuota,
       limit5hUsd: validatedData.limit5hUsd ?? undefined,

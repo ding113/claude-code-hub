@@ -1,19 +1,18 @@
 "use server";
 
+import { and, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { sql, and, eq, gte, lt, isNull } from "drizzle-orm";
+import { keys, messageRequest } from "@/drizzle/schema";
 import { getEnvConfig } from "@/lib/config";
-import { messageRequest } from "@/drizzle/schema";
-import { keys } from "@/drizzle/schema";
 import type {
-  TimeRange,
+  DatabaseKey,
+  DatabaseKeyStatRow,
   DatabaseStatRow,
   DatabaseUser,
-  DatabaseKeyStatRow,
-  DatabaseKey,
-  RateLimitEventStats,
   RateLimitEventFilters,
+  RateLimitEventStats,
   RateLimitType,
+  TimeRange,
 } from "@/types/statistics";
 
 /**
@@ -103,6 +102,42 @@ export async function getUserStatisticsFromDB(timeRange: TimeRange): Promise<Dat
         WITH date_range AS (
           SELECT generate_series(
             (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date - INTERVAL '29 days',
+            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
+            '1 day'::interval
+          )::date AS date
+        ),
+        daily_stats AS (
+          SELECT
+            u.id AS user_id,
+            u.name AS user_name,
+            dr.date,
+            COUNT(mr.id) AS api_calls,
+            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
+          FROM users u
+          CROSS JOIN date_range dr
+          LEFT JOIN message_request mr ON u.id = mr.user_id
+            AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
+            AND mr.deleted_at IS NULL
+          WHERE u.deleted_at IS NULL
+          GROUP BY u.id, u.name, dr.date
+        )
+        SELECT
+          user_id,
+          user_name,
+          date,
+          api_calls::integer,
+          total_cost::numeric
+        FROM daily_stats
+        ORDER BY date ASC, user_name ASC
+      `;
+      break;
+
+    case "thisMonth":
+      // 本月（天分辨率，从本月第一天到今天）
+      query = sql`
+        WITH date_range AS (
+          SELECT generate_series(
+            DATE_TRUNC('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
             (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
             '1 day'::interval
           )::date AS date
@@ -254,6 +289,47 @@ export async function getKeyStatisticsFromDB(
         WITH date_range AS (
           SELECT generate_series(
             (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date - INTERVAL '29 days',
+            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
+            '1 day'::interval
+          )::date AS date
+        ),
+        user_keys AS (
+          SELECT id, name, key
+          FROM keys
+          WHERE user_id = ${userId}
+            AND deleted_at IS NULL
+        ),
+        daily_stats AS (
+          SELECT
+            k.id AS key_id,
+            k.name AS key_name,
+            dr.date,
+            COUNT(mr.id) AS api_calls,
+            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
+          FROM user_keys k
+          CROSS JOIN date_range dr
+          LEFT JOIN message_request mr ON mr.key = k.key
+            AND mr.user_id = ${userId}
+            AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
+            AND mr.deleted_at IS NULL
+          GROUP BY k.id, k.name, dr.date
+        )
+        SELECT
+          key_id,
+          key_name,
+          date,
+          api_calls::integer,
+          total_cost::numeric
+        FROM daily_stats
+        ORDER BY date ASC, key_name ASC
+      `;
+      break;
+
+    case "thisMonth":
+      query = sql`
+        WITH date_range AS (
+          SELECT generate_series(
+            DATE_TRUNC('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
             (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
             '1 day'::interval
           )::date AS date
@@ -520,6 +596,78 @@ export async function getMixedStatisticsFromDB(
         WITH date_range AS (
           SELECT generate_series(
             (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date - INTERVAL '29 days',
+            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
+            '1 day'::interval
+          )::date AS date
+        ),
+        daily_stats AS (
+          SELECT
+            dr.date,
+            COUNT(mr.id) AS api_calls,
+            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
+          FROM date_range dr
+          LEFT JOIN message_request mr ON (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
+            AND mr.user_id != ${userId}
+            AND mr.deleted_at IS NULL
+          GROUP BY dr.date
+        )
+        SELECT
+          -1 AS user_id,
+          '其他用户' AS user_name,
+          date,
+          api_calls::integer,
+          total_cost::numeric
+        FROM daily_stats
+        ORDER BY date ASC
+      `;
+      break;
+
+    case "thisMonth":
+      // 自己的密钥明细（天分辨率，本月）
+      ownKeysQuery = sql`
+        WITH date_range AS (
+          SELECT generate_series(
+            DATE_TRUNC('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
+            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
+            '1 day'::interval
+          )::date AS date
+        ),
+        user_keys AS (
+          SELECT id, name, key
+          FROM keys
+          WHERE user_id = ${userId}
+            AND deleted_at IS NULL
+        ),
+        daily_stats AS (
+          SELECT
+            k.id AS key_id,
+            k.name AS key_name,
+            dr.date,
+            COUNT(mr.id) AS api_calls,
+            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
+          FROM user_keys k
+          CROSS JOIN date_range dr
+          LEFT JOIN message_request mr ON mr.key = k.key
+            AND mr.user_id = ${userId}
+            AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
+            AND mr.deleted_at IS NULL
+          GROUP BY k.id, k.name, dr.date
+        )
+        SELECT
+          key_id,
+          key_name,
+          date,
+          api_calls::integer,
+          total_cost::numeric
+        FROM daily_stats
+        ORDER BY date ASC, key_name ASC
+      `;
+
+      // 其他用户汇总（天分辨率，本月）
+      othersQuery = sql`
+        WITH date_range AS (
+          SELECT generate_series(
+            DATE_TRUNC('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
             (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
             '1 day'::interval
           )::date AS date

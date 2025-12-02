@@ -1,17 +1,17 @@
 "use client";
-import { useTransition } from "react";
-import {
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogClose,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { removeKey } from "@/actions/keys";
+import { useTransition } from "react";
 import { toast } from "sonner";
+import { removeKey } from "@/actions/keys";
+import { Button } from "@/components/ui/button";
+import {
+  DialogClose,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface DeleteKeyConfirmProps {
   keyData?: {
@@ -52,7 +52,7 @@ export function DeleteKeyConfirm({
       <DialogHeader>
         <DialogTitle>{t("title")}</DialogTitle>
         <DialogDescription>
-          {t("description", { name: keyData?.name, maskedKey: keyData?.maskedKey })}
+          {t("description", { name: keyData?.name ?? "", maskedKey: keyData?.maskedKey ?? "" })}
         </DialogDescription>
       </DialogHeader>
 
