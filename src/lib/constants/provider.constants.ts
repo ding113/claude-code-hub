@@ -15,7 +15,7 @@ export const PROVIDER_LIMITS = {
 } as const;
 
 export const PROVIDER_DEFAULTS = {
-  IS_ENABLED: false,
+  IS_ENABLED: true,
   WEIGHT: 1,
 } as const;
 
