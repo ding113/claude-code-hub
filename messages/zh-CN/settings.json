@@ -175,6 +175,7 @@
       "getKeyFailed": "获取密钥失败",
       "keyCopied": "密钥已复制到剪贴板",
       "copyFailed": "复制失败",
+      "clipboardUnavailable": "当前环境无法访问剪贴板，请手动选择复制。",
       "resetCircuitSuccess": "熔断器已重置",
       "resetCircuitSuccessDesc": "供应商 \"{name}\" 的熔断状态已解除",
       "resetCircuitFailed": "重置熔断器失败",

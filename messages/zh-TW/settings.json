@@ -1377,6 +1377,7 @@
       "getKeyFailed": "獲取密鑰失敗",
       "keyCopied": "密鑰已複製到剪貼板",
       "copyFailed": "複製失敗",
+      "clipboardUnavailable": "目前環境無法使用剪貼簿，請手動選取複製。",
       "resetCircuitSuccess": "熔斷器已重置",
       "resetCircuitSuccessDesc": "供應商 \"{name}\" 的熔斷狀態已解除",
       "resetCircuitFailed": "重置熔斷器失敗",

@@ -562,6 +562,7 @@
       "getKeyFailed": "Failed to get key",
       "keyCopied": "Key copied to clipboard",
       "copyFailed": "Copy failed",
+      "clipboardUnavailable": "Clipboard access is blocked in this environment. Select and copy the key manually.",
       "resetCircuitSuccess": "Circuit breaker reset",
       "resetCircuitSuccessDesc": "Provider \"{name}\" circuit breaker status cleared",
       "resetCircuitFailed": "Failed to reset circuit breaker",

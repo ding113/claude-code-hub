@@ -1371,6 +1371,7 @@
       "getKeyFailed": "キーの取得に失敗しました",
       "keyCopied": "キーがクリップボードにコピーされました",
       "copyFailed": "コピーに失敗しました",
+      "clipboardUnavailable": "この環境ではクリップボードを使用できません。手動でコピーしてください。",
       "resetCircuitSuccess": "サーキットブレーカーがリセットされました",
       "resetCircuitSuccessDesc": "プロバイダー \"{name}\" のサーキットブレーカーステータスがクリアされました",
       "resetCircuitFailed": "サーキットブレーカーのリセットに失敗しました",
