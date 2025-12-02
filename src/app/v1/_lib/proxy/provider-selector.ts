@@ -530,12 +530,23 @@ export class ProxyProviderResolver {
     }
     // 全局用户（userGroup 为空）可以复用任何供应商
 
+    // Re-apply limit/balance checks for reused providers to avoid bypassing filterByLimits
+    const [eligibleProvider] = await this.filterByLimits([provider]);
+    if (!eligibleProvider) {
+      logger.warn("ProviderSelector: Session provider failed limit checks", {
+        sessionId: session.sessionId,
+        providerId: provider.id,
+        providerName: provider.name,
+      });
+      return null;
+    }
+
     logger.info("ProviderSelector: Reusing provider", {
-      providerName: provider.name,
-      providerId: provider.id,
+      providerName: eligibleProvider.name,
+      providerId: eligibleProvider.id,
       sessionId: session.sessionId,
     });
-    return provider;
+    return eligibleProvider;
   }
 
   private static async pickRandomProvider(
@@ -802,7 +813,7 @@ export class ProxyProviderResolver {
    * 过滤超限供应商
    *
    * 注意：并发 Session 限制检查已移至原子性检查（ensure 方法中），
-   * 此处仅检查金额限制和熔断器状态
+   * 此处仅检查金额限制、余额和熔断器状态
    */
   private static async filterByLimits(providers: Provider[]): Promise<Provider[]> {
     const results = await Promise.all(
@@ -826,6 +837,40 @@ export class ProxyProviderResolver {
         if (!costCheck.allowed) {
           logger.debug("ProviderSelector: Provider cost limit exceeded", { providerId: p.id });
           return null;
+        }
+
+        // 2. 检查余额（自然余额控制）
+        // 余额 <= 0 的供应商不可选（包括负数和0）
+        // 余额 null 视为无限额度，可选
+        if (p.balanceUsd !== null && p.balanceUsd <= 0) {
+          logger.debug("ProviderSelector: Provider balance exhausted or negative", {
+            providerId: p.id,
+            balance: p.balanceUsd,
+          });
+          return null;
+        }
+
+        // 3. 检查扣款失败隔离标记（Redis）
+        // 仅用于数据库错误时的临时隔离（30秒）
+        try {
+          const { getRedisClient } = await import("@/lib/redis");
+          const redis = await getRedisClient();
+          if (redis) {
+            const isolationKey = `provider:deduction_failed:${p.id}`;
+            const isIsolated = await redis.get(isolationKey);
+            if (isIsolated) {
+              logger.debug("ProviderSelector: Provider isolated due to DB error", {
+                providerId: p.id,
+              });
+              return null;
+            }
+          }
+        } catch (redisError) {
+          logger.warn("ProviderSelector: Failed to check deduction failure flag", {
+            providerId: p.id,
+            error: redisError instanceof Error ? redisError.message : String(redisError),
+          });
+          // Fail-open: Redis 不可用不影响选择流程
         }
 
         // 并发 Session 限制已移至原子性检查（avoid race condition）

@@ -26,6 +26,7 @@ export interface Provider {
   // 优先级和分组配置
   priority: number;
   costMultiplier: number;
+  balanceUsd: number | null; // 供应商余额（null/0 视为无限制）
   groupTag: string | null;
 
   // 供应商类型：扩展支持 4 种类型
@@ -111,6 +112,7 @@ export interface ProviderDisplay {
   // 优先级和分组配置
   priority: number;
   costMultiplier: number;
+  balanceUsd: number | null; // 供应商余额
   groupTag: string | null;
   // 供应商类型
   providerType: ProviderType;
@@ -174,6 +176,7 @@ export interface CreateProviderData {
   // 优先级和分组配置
   priority?: number;
   cost_multiplier?: number;
+  balance_usd?: number | null; // 供应商余额
   group_tag?: string | null;
 
   // 供应商类型和模型配置
@@ -236,6 +239,7 @@ export interface UpdateProviderData {
   // 优先级和分组配置
   priority?: number;
   cost_multiplier?: number;
+  balance_usd?: number | null; // 供应商余额
   group_tag?: string | null;
 
   // 供应商类型和模型配置

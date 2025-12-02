@@ -295,7 +295,8 @@ export class ProxyResponseHandler {
             session.getOriginalModel(),
             session.getCurrentModel(),
             usageMetrics,
-            provider.costMultiplier
+            provider.costMultiplier,
+            provider.id // 传入 providerId 用于余额扣减
           );
 
           // 追踪消费到 Redis（用于限流）
@@ -827,7 +828,8 @@ export class ProxyResponseHandler {
           session.getOriginalModel(),
           session.getCurrentModel(),
           usageForCost,
-          provider.costMultiplier
+          provider.costMultiplier,
+          provider.id // 传入 providerId 用于余额扣减
         );
 
         // 追踪消费到 Redis（用于限流）
@@ -1356,7 +1358,8 @@ async function updateRequestCostFromUsage(
   originalModel: string | null,
   redirectedModel: string | null,
   usage: UsageMetrics | null,
-  costMultiplier: number = 1.0
+  costMultiplier: number = 1.0,
+  providerId?: number // 可选：供应商ID，用于余额扣减
 ): Promise<void> {
   if (!usage) {
     logger.warn("[CostCalculation] No usage data, skipping cost update", { messageId });
@@ -1450,6 +1453,60 @@ async function updateRequestCostFromUsage(
 
   if (cost.gt(0)) {
     await updateMessageRequestCost(messageId, cost);
+
+    // 扣减供应商余额
+    if (providerId) {
+      try {
+        const { decrementProviderBalance } = await import("@/repository/provider");
+        const success = await decrementProviderBalance(providerId, cost);
+
+        if (!success) {
+          // 扣款失败：仅在数据库错误或供应商不存在时发生
+          // 不存在"透支超限"的情况（新方案允许无限透支）
+          logger.error("[BalanceDeduction] Provider balance deduction failed", {
+            messageId,
+            providerId,
+            cost: cost.toString(),
+            reason: "db_error_or_provider_not_found",
+          });
+
+          // 设置短期隔离（30秒），避免DB错误时的重试雪崩
+          try {
+            const { getRedisClient } = await import("@/lib/redis");
+            const redis = await getRedisClient();
+            if (redis) {
+              const isolationKey = `provider:deduction_failed:${providerId}`;
+              const isolationTTL = 30; // 30秒短期隔离
+              await redis.setex(isolationKey, isolationTTL, "1");
+              logger.warn("[BalanceDeduction] Provider temporarily isolated due to DB error", {
+                providerId,
+                isolationTTL,
+              });
+            }
+          } catch (redisError) {
+            logger.error("[BalanceDeduction] Failed to set deduction failure flag in Redis", {
+              providerId,
+              error: redisError instanceof Error ? redisError.message : String(redisError),
+            });
+            // Fail-open: Redis 不可用不影响主流程
+          }
+        } else {
+          logger.debug("[BalanceDeduction] Provider balance decremented successfully", {
+            messageId,
+            providerId,
+            cost: cost.toString(),
+          });
+        }
+      } catch (error) {
+        logger.error("[BalanceDeduction] Failed to decrement provider balance", {
+          messageId,
+          providerId,
+          cost: cost.toString(),
+          error: error instanceof Error ? error.message : String(error),
+        });
+        // Fail-open: 扣减失败不影响主流程
+      }
+    }
   } else {
     logger.warn("[CostCalculation] Calculated cost is zero or negative", {
       messageId,
@@ -1504,7 +1561,8 @@ async function finalizeRequestStats(
     session.getOriginalModel(),
     session.getCurrentModel(),
     usageMetrics,
-    provider.costMultiplier
+    provider.costMultiplier,
+    provider.id // 传入 providerId 用于余额扣减
   );
 
   // 5. 追踪消费到 Redis（用于限流）

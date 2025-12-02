@@ -5,6 +5,7 @@ import { db } from "@/drizzle/db";
 import { providers } from "@/drizzle/schema";
 import { getEnvConfig } from "@/lib/config";
 import { logger } from "@/lib/logger";
+import { Decimal, toCostDecimal } from "@/lib/utils/currency";
 import type { CreateProviderData, Provider, UpdateProviderData } from "@/types/provider";
 import { toProvider } from "./_shared/transformers";
 
@@ -18,6 +19,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     priority: providerData.priority,
     costMultiplier:
       providerData.cost_multiplier != null ? providerData.cost_multiplier.toString() : "1.0",
+    balanceUsd: providerData.balance_usd != null ? providerData.balance_usd.toString() : null,
     groupTag: providerData.group_tag,
     providerType: providerData.provider_type,
     modelRedirects: providerData.model_redirects,
@@ -63,6 +65,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     weight: providers.weight,
     priority: providers.priority,
     costMultiplier: providers.costMultiplier,
+    balanceUsd: providers.balanceUsd,
     groupTag: providers.groupTag,
     providerType: providers.providerType,
     modelRedirects: providers.modelRedirects,
@@ -115,6 +118,7 @@ export async function findProviderList(
       weight: providers.weight,
       priority: providers.priority,
       costMultiplier: providers.costMultiplier,
+      balanceUsd: providers.balanceUsd,
       groupTag: providers.groupTag,
       providerType: providers.providerType,
       modelRedirects: providers.modelRedirects,
@@ -235,6 +239,7 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       weight: providers.weight,
       priority: providers.priority,
       costMultiplier: providers.costMultiplier,
+      balanceUsd: providers.balanceUsd,
       groupTag: providers.groupTag,
       providerType: providers.providerType,
       modelRedirects: providers.modelRedirects,
@@ -348,6 +353,9 @@ export async function updateProvider(
     dbData.requestTimeoutNonStreamingMs = providerData.request_timeout_non_streaming_ms;
   if (providerData.website_url !== undefined) dbData.websiteUrl = providerData.website_url;
   if (providerData.favicon_url !== undefined) dbData.faviconUrl = providerData.favicon_url;
+  if (providerData.balance_usd !== undefined)
+    dbData.balanceUsd =
+      providerData.balance_usd != null ? providerData.balance_usd.toString() : null;
   if (providerData.tpm !== undefined) dbData.tpm = providerData.tpm;
   if (providerData.rpm !== undefined) dbData.rpm = providerData.rpm;
   if (providerData.rpd !== undefined) dbData.rpd = providerData.rpd;
@@ -366,6 +374,7 @@ export async function updateProvider(
       weight: providers.weight,
       priority: providers.priority,
       costMultiplier: providers.costMultiplier,
+      balanceUsd: providers.balanceUsd,
       groupTag: providers.groupTag,
       providerType: providers.providerType,
       modelRedirects: providers.modelRedirects,
@@ -557,4 +566,107 @@ export async function getProviderStatistics(): Promise<
     });
     throw error;
   }
+}
+
+/**
+ * 原子扣减供应商余额（自然余额控制）
+ * @param providerId 供应商ID
+ * @param amount 扣减金额
+ * @returns true 表示扣减成功，false 表示数据库错误或供应商不存在
+ *
+ * 说明：
+ * - 无透支上限，余额可以变为任意负数
+ * - 不修改 is_enabled 字段（手动禁用与余额控制分离）
+ * - 余额 <= 0 的供应商会在选择阶段被自然排除
+ */
+export async function decrementProviderBalance(
+  providerId: number,
+  amount: Decimal
+): Promise<boolean> {
+  const normalized = toCostDecimal(amount);
+  if (!normalized || normalized.lte(0)) {
+    return true; // 无需扣减
+  }
+
+  try {
+    const [row] = await db
+      .update(providers)
+      .set({
+        balanceUsd: sql`balance_usd - ${normalized.toString()}`,
+        // 不修改 is_enabled（手动禁用与余额控制完全分离）
+      })
+      .where(
+        and(
+          eq(providers.id, providerId),
+          isNull(providers.deletedAt)
+          // 无透支上限检查，允许余额变为任意负数
+          // balance_usd IS NULL (无限额度) 的供应商，SQL 计算后仍为 NULL
+        )
+      )
+      .returning({ balanceUsd: providers.balanceUsd });
+
+    if (!row) {
+      logger.debug("[ProviderRepo] Balance debit failed - provider not found", {
+        providerId,
+        amount: normalized.toString(),
+      });
+      return false; // 供应商不存在
+    }
+
+    // 监控负余额（可选）
+    if (row.balanceUsd !== null && parseFloat(row.balanceUsd) < -10) {
+      logger.warn("[ProviderRepo] Large negative balance detected", {
+        providerId,
+        balance: row.balanceUsd,
+        amount: normalized.toString(),
+      });
+    }
+
+    logger.debug("[ProviderRepo] Balance deducted successfully", {
+      providerId,
+      amount: normalized.toString(),
+      newBalance: row.balanceUsd,
+    });
+
+    return true; // 扣减成功
+  } catch (error) {
+    // 数据库错误（宕机、死锁、约束错误等）
+    logger.error("[ProviderRepo] Balance deduction DB error", {
+      providerId,
+      amount: normalized.toString(),
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false; // 不能返回 true，否则会造成计费漏洞
+  }
+}
+
+/**
+ * 增加供应商余额（充值）
+ * @param providerId 供应商ID
+ * @param amount 充值金额
+ *
+ * 说明：
+ * - 只增加余额，不修改 is_enabled 字段
+ * - 充值后余额 > 0，供应商会在选择阶段自然可用（通过余额检查，不是字段修改）
+ */
+export async function incrementProviderBalance(providerId: number, amount: Decimal): Promise<void> {
+  const normalized = toCostDecimal(amount);
+  if (!normalized || normalized.lte(0)) {
+    return;
+  }
+
+  await db
+    .update(providers)
+    .set({
+      balanceUsd: sql`coalesce(balance_usd, 0) + ${normalized.toString()}`,
+      // 不修改 is_enabled（手动禁用与余额控制完全分离）
+    })
+    .where(and(eq(providers.id, providerId), isNull(providers.deletedAt)))
+    .execute();
+
+  logger.info("[ProviderRepo] Provider balance recharged", {
+    providerId,
+    amount: normalized.toString(),
+    note: "Provider becomes selectable when balance > 0 (via selector logic, not field change)",
+  });
 }

@@ -191,4 +191,25 @@ export class ProxyStatusTracker {
     const result = await db.execute(query);
     return Array.from(result) as unknown as LastRequestRow[];
   }
+
+  /**
+   * 获取指定供应商正在处理的请求数
+   * 用于余额并发预检查，防止超支
+   */
+  async getProviderActiveRequests(providerId: number): Promise<number> {
+    const [result] = await db
+      .select({
+        count: sql<number>`COUNT(*)::int`,
+      })
+      .from(messageRequest)
+      .where(
+        and(
+          eq(messageRequest.providerId, providerId),
+          isNull(messageRequest.deletedAt),
+          isNull(messageRequest.durationMs) // 未完成的请求
+        )
+      );
+
+    return result?.count ?? 0;
+  }
 }
