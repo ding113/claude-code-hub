@@ -31,27 +31,6 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GH_PAT }}
-          submodules: recursive
-
-      - name: Verify submodule
-        run: |
-          echo "=== Submodule Status ==="
-          git submodule status
-          echo ""
-          echo "=== docs-site directory ==="
-          if [ -d "docs-site" ]; then
-            ls -la docs-site/
-            if [ -f "docs-site/src/app/docs/changelog/page.md" ]; then
-              echo "✅ docs-site/src/app/docs/changelog/page.md exists"
-            else
-              echo "⚠️ docs-site exists but changelog file not found"
-              ls -la docs-site/src/app/docs/ 2>/dev/null || echo "docs path not found"
-            fi
-          else
-            echo "❌ docs-site directory not found, attempting manual init..."
-            git submodule update --init --recursive
-            ls -la docs-site/ 2>/dev/null || echo "Still not found after init"
-          fi
 
       - name: Determine release tag
         id: release_info
@@ -149,7 +128,7 @@ jobs:
             - **修复**: Bug 修复
             - **其他**: 文档、构建、重构、依赖更新
 
-            ### Phase 2: 更新三处文档
+            ### Phase 2: 更新文档
 
             #### 2.1 更新 CHANGELOG.md
 
@@ -178,25 +157,7 @@ jobs:
             4. 如果某个分类没有内容，跳过该分类
             5. 保存更新后的 CHANGELOG.md
 
-            #### 2.2 更新 docs-site/src/app/docs/changelog/page.md
-
-            **注意**：docs-site 是一个 git submodule，可能未正确初始化。请先检查：
-
-            ```bash
-            ls -la docs-site/src/app/docs/changelog/page.md
-            ```
-
-            - 如果文件存在：
-              1. 读取当前 docs-site/src/app/docs/changelog/page.md 文件
-              2. 在 `# 更新日志` 标题和第一个 `---` 分隔线后插入新版本条目
-              3. 使用与现有条目相同的 Markdoc 格式
-              4. 保存更新后的文件
-
-            - 如果文件不存在：
-              1. 输出警告 "docs-site submodule 未初始化，跳过文档站点更新"
-              2. 继续执行后续步骤
-
-            #### 2.3 更新 GitHub Release Notes
+            #### 2.2 更新 GitHub Release Notes
 
             1. 读取 `.github/prompts/release-notes.md` 了解格式要求
             2. 生成专业的 Release Notes 内容，包含：
@@ -225,37 +186,11 @@ jobs:
                git config user.email "github-actions[bot]@users.noreply.github.com"
                ```
 
-            2. 提交主仓库的 CHANGELOG.md 变更：
+            2. 提交 CHANGELOG.md 变更：
                ```bash
                git add CHANGELOG.md
                git commit -m "docs: update changelog for ${{ steps.release_info.outputs.tag }} [skip ci]"
                git push origin HEAD:main
-               ```
-
-            3. 提交 docs-site 变更到文档仓库（如果 submodule 存在且有变更）：
-               ```bash
-               if [ -d "docs-site/.git" ] || [ -f "docs-site/.git" ]; then
-                 cd docs-site
-                 if [ -n "$(git status --porcelain)" ]; then
-                   git add -A
-                   git commit -m "docs: update changelog for ${{ steps.release_info.outputs.tag }}"
-                   git push origin HEAD:main
-                 else
-                   echo "No changes in docs-site"
-                 fi
-                 cd ..
-               else
-                 echo "docs-site submodule not initialized, skipping"
-               fi
-               ```
-
-            4. 更新主仓库的 submodule 引用（如果有变更）：
-               ```bash
-               if [ -n "$(git status --porcelain docs-site)" ]; then
-                 git add docs-site
-                 git commit -m "chore: update docs-site submodule [skip ci]" || true
-                 git push origin HEAD:main || true
-               fi
                ```
 
             ## 重要提示
