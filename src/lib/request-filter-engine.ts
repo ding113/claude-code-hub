@@ -1,6 +1,5 @@
 import safeRegex from "safe-regex";
 import type { ProxySession } from "@/app/v1/_lib/proxy/session";
-import { eventEmitter } from "@/lib/event-emitter";
 import { logger } from "@/lib/logger";
 import type {
   RequestFilter,
@@ -90,9 +89,21 @@ export class RequestFilterEngine {
   private initializationPromise: Promise<void> | null = null;
 
   constructor() {
-    eventEmitter.on("requestFiltersUpdated", () => {
-      void this.reload();
-    });
+    // 延迟初始化事件监听（仅在 Node.js runtime 中）
+    this.setupEventListener();
+  }
+
+  private async setupEventListener(): Promise<void> {
+    if (typeof process !== "undefined" && process.env.NEXT_RUNTIME !== "edge") {
+      try {
+        const { eventEmitter } = await import("@/lib/event-emitter");
+        eventEmitter.on("requestFiltersUpdated", () => {
+          void this.reload();
+        });
+      } catch {
+        // 忽略导入错误
+      }
+    }
   }
 
   async reload(): Promise<void> {

@@ -12,7 +12,6 @@
 
 import safeRegex from "safe-regex";
 import { isValidErrorOverrideResponse } from "@/lib/error-override-validator";
-import { eventEmitter } from "@/lib/event-emitter";
 import { logger } from "@/lib/logger";
 import { type ErrorOverrideResponse, getActiveErrorRules } from "@/repository/error-rules";
 
@@ -76,12 +75,27 @@ class ErrorRuleDetector {
   private initializationPromise: Promise<void> | null = null; // 防止并发初始化竞态
 
   constructor() {
-    // 监听数据库变更事件，自动刷新缓存
-    eventEmitter.on("errorRulesUpdated", () => {
-      this.reload().catch((error) => {
-        logger.error("[ErrorRuleDetector] Failed to reload cache on event:", error);
-      });
-    });
+    // 延迟初始化事件监听（仅在 Node.js runtime 中）
+    this.setupEventListener();
+  }
+
+  /**
+   * 设置事件监听器（仅在 Node.js runtime）
+   */
+  private async setupEventListener(): Promise<void> {
+    // 仅在 Node.js runtime 中设置事件监听
+    if (typeof process !== "undefined" && process.env.NEXT_RUNTIME !== "edge") {
+      try {
+        const { eventEmitter } = await import("@/lib/event-emitter");
+        eventEmitter.on("errorRulesUpdated", () => {
+          this.reload().catch((error) => {
+            logger.error("[ErrorRuleDetector] Failed to reload cache on event:", error);
+          });
+        });
+      } catch {
+        // 忽略导入错误（可能在 Edge runtime 中）
+      }
+    }
   }
 
   /**

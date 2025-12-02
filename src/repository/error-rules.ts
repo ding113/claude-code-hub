@@ -3,8 +3,8 @@
 import { desc, eq } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { errorRules } from "@/drizzle/schema";
+import { emitErrorRulesUpdated } from "@/lib/emit-event";
 import { validateErrorOverrideResponse } from "@/lib/error-override-validator";
-import { eventEmitter } from "@/lib/event-emitter";
 import { logger } from "@/lib/logger";
 
 /**
@@ -378,5 +378,5 @@ export async function initializeDefaultErrorRules(): Promise<void> {
 
   // 通知 ErrorRuleDetector 重新加载缓存
   // 这确保迁移完成后检测器能正确加载规则
-  eventEmitter.emit("errorRulesUpdated");
+  await emitErrorRulesUpdated();
 }

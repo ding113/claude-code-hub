@@ -3,7 +3,7 @@
 import { desc, eq } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { requestFilters } from "@/drizzle/schema";
-import { eventEmitter } from "@/lib/event-emitter";
+import { emitRequestFiltersUpdated } from "@/lib/emit-event";
 
 export type RequestFilterScope = "header" | "body";
 export type RequestFilterAction = "remove" | "set" | "json_path" | "text_replace";
@@ -94,7 +94,7 @@ export async function createRequestFilter(data: CreateRequestFilterInput): Promi
     })
     .returning();
 
-  eventEmitter.emitRequestFiltersUpdated();
+  await emitRequestFiltersUpdated();
   return mapRow(row);
 }
 
@@ -127,7 +127,7 @@ export async function updateRequestFilter(
     return null;
   }
 
-  eventEmitter.emitRequestFiltersUpdated();
+  await emitRequestFiltersUpdated();
   return mapRow(row);
 }
 
@@ -137,7 +137,7 @@ export async function deleteRequestFilter(id: number): Promise<boolean> {
   });
 
   if (rows.length > 0) {
-    eventEmitter.emitRequestFiltersUpdated();
+    await emitRequestFiltersUpdated();
     return true;
   }
 

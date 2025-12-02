@@ -6,9 +6,6 @@ import { validateKey } from "@/lib/auth";
 import { isDevelopment } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 
-// 使用 Node.js runtime 以支持数据库连接（postgres-js 需要 net 模块）
-export const runtime = "nodejs";
-
 // Public paths that don't require authentication
 // Note: These paths will be automatically prefixed with locale by next-intl middleware
 const PUBLIC_PATH_PATTERNS = ["/login", "/usage-doc", "/api/auth/login", "/api/auth/logout"];
@@ -18,7 +15,7 @@ const API_PROXY_PATH = "/v1";
 // Create next-intl middleware for locale detection and routing
 const intlMiddleware = createMiddleware(routing);
 
-export async function middleware(request: NextRequest) {
+async function proxyHandler(request: NextRequest) {
   const method = request.method;
   const pathname = request.nextUrl.pathname;
 
@@ -90,6 +87,9 @@ export async function middleware(request: NextRequest) {
   // Authentication passed, return locale response
   return localeResponse;
 }
+
+// Default export required for Next.js 16 proxy file
+export default proxyHandler;
 
 export const config = {
   matcher: [
