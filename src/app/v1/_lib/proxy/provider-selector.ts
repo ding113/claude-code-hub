@@ -10,6 +10,32 @@ import type { ClientFormat } from "./format-mapper";
 import { ProxyResponses } from "./responses";
 import type { ProxySession } from "./session";
 
+// 系统设置缓存 - 避免每次请求失败都查询数据库
+const SETTINGS_CACHE_TTL_MS = 60_000; // 60 seconds
+let cachedVerboseProviderError: { value: boolean; expiresAt: number } | null = null;
+
+async function getVerboseProviderErrorCached(): Promise<boolean> {
+  const now = Date.now();
+  if (cachedVerboseProviderError && cachedVerboseProviderError.expiresAt > now) {
+    return cachedVerboseProviderError.value;
+  }
+
+  try {
+    const systemSettings = await getSystemSettings();
+    cachedVerboseProviderError = {
+      value: systemSettings.verboseProviderError,
+      expiresAt: now + SETTINGS_CACHE_TTL_MS,
+    };
+    return systemSettings.verboseProviderError;
+  } catch (e) {
+    logger.warn(
+      "ProviderSelector: Failed to get system settings, using default verboseError=false",
+      { error: e }
+    );
+    return false;
+  }
+}
+
 /**
  * 检查供应商是否支持指定模型（用于调度器匹配）
  *
@@ -329,18 +355,8 @@ export class ProxyProviderResolver {
     // 循环结束：所有可用供应商都已尝试或无可用供应商
     const status = 503;
 
-    // 获取系统设置中的 verboseProviderError 配置
-    // 使用 try/catch 降级保护，避免 DB 异常时导致故障放大
-    let verboseError = false;
-    try {
-      const systemSettings = await getSystemSettings();
-      verboseError = systemSettings.verboseProviderError;
-    } catch (e) {
-      logger.warn(
-        "ProviderSelector: Failed to get system settings, using default verboseError=false",
-        { error: e }
-      );
-    }
+    // 获取系统设置中的 verboseProviderError 配置（使用缓存避免频繁查询数据库）
+    const verboseError = await getVerboseProviderErrorCached();
 
     // 构建详细的错误消息
     let message = "No available providers";

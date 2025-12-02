@@ -9,6 +9,7 @@ import {
   createRequestFilter,
   deleteRequestFilter,
   getAllRequestFilters,
+  getRequestFilterById,
   type RequestFilter,
   type RequestFilterAction,
   type RequestFilterMatchType,
@@ -108,12 +109,28 @@ export async function updateRequestFilterAction(
   const session = await getSession();
   if (!isAdmin(session)) return { ok: false, error: "权限不足" };
 
-  // ReDoS validation: only applies when action is text_replace with regex matchType
-  // Check if we're setting regex pattern that could be unsafe
-  const isTextReplace = updates.action === "text_replace" || updates.action === undefined;
-  const isRegex = updates.matchType === "regex";
-  if (isTextReplace && isRegex && updates.target && !safeRegex(updates.target)) {
-    return { ok: false, error: "正则表达式存在 ReDoS 风险" };
+  // ReDoS validation: applies when action is text_replace with regex matchType
+  // Must check BOTH explicit updates AND existing filter state to prevent bypass
+  if (updates.target) {
+    // Determine effective matchType and action (from updates or existing filter)
+    let effectiveMatchType = updates.matchType;
+    let effectiveAction = updates.action;
+
+    // If matchType or action not in updates, need to check existing filter
+    if (effectiveMatchType === undefined || effectiveAction === undefined) {
+      const existing = await getRequestFilterById(id);
+      if (existing) {
+        if (effectiveMatchType === undefined) effectiveMatchType = existing.matchType;
+        if (effectiveAction === undefined) effectiveAction = existing.action;
+      }
+    }
+
+    const isTextReplace = effectiveAction === "text_replace";
+    const isRegex = effectiveMatchType === "regex";
+
+    if (isTextReplace && isRegex && !safeRegex(updates.target)) {
+      return { ok: false, error: "正则表达式存在 ReDoS 风险" };
+    }
   }
 
   try {

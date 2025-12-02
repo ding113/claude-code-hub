@@ -66,6 +66,17 @@ export async function getAllRequestFilters(): Promise<RequestFilter[]> {
   return rows.map(mapRow);
 }
 
+/**
+ * 根据 ID 获取单个请求过滤器
+ */
+export async function getRequestFilterById(id: number): Promise<RequestFilter | null> {
+  const row = await db.query.requestFilters.findFirst({
+    where: eq(requestFilters.id, id),
+  });
+
+  return row ? mapRow(row) : null;
+}
+
 interface CreateRequestFilterInput {
   name: string;
   description?: string;
