@@ -33,6 +33,7 @@ export const users = pgTable('users', {
   limit5hUsd: numeric('limit_5h_usd', { precision: 10, scale: 2 }),
   limitWeeklyUsd: numeric('limit_weekly_usd', { precision: 10, scale: 2 }),
   limitMonthlyUsd: numeric('limit_monthly_usd', { precision: 10, scale: 2 }),
+  limitTotalUsd: numeric('limit_total_usd', { precision: 10, scale: 2 }),
   limitConcurrentSessions: integer('limit_concurrent_sessions'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
@@ -68,6 +69,7 @@ export const keys = pgTable('keys', {
     .notNull(), // HH:mm 格式，如 "18:00"（仅 fixed 模式使用）
   limitWeeklyUsd: numeric('limit_weekly_usd', { precision: 10, scale: 2 }),
   limitMonthlyUsd: numeric('limit_monthly_usd', { precision: 10, scale: 2 }),
+  limitTotalUsd: numeric('limit_total_usd', { precision: 10, scale: 2 }),
   limitConcurrentSessions: integer('limit_concurrent_sessions').default(0),
 
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),

@@ -53,6 +53,7 @@
   "RATE_LIMIT_5H_EXCEEDED": "5-hour cost limit exceeded: ${current} USD (limit: ${limit} USD). Resets at {resetTime}",
   "RATE_LIMIT_WEEKLY_EXCEEDED": "Weekly cost limit exceeded: ${current} USD (limit: ${limit} USD). Resets at {resetTime}",
   "RATE_LIMIT_MONTHLY_EXCEEDED": "Monthly cost limit exceeded: ${current} USD (limit: ${limit} USD). Resets at {resetTime}",
+  "RATE_LIMIT_TOTAL_EXCEEDED": "Total spending limit exceeded: ${current} USD (limit: ${limit} USD)",
   "RATE_LIMIT_CONCURRENT_SESSIONS_EXCEEDED": "Concurrent sessions limit exceeded: {current} sessions (limit: {limit}). Please wait for active sessions to complete",
   "RATE_LIMIT_DAILY_QUOTA_EXCEEDED": "Daily quota exceeded: ${current} USD (limit: ${limit} USD). Resets at {resetTime}",
 

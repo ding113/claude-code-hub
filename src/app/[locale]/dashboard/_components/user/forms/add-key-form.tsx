@@ -42,6 +42,7 @@ export function AddKeyForm({ userId, user, onSuccess }: AddKeyFormProps) {
       dailyResetTime: "00:00",
       limitWeeklyUsd: null,
       limitMonthlyUsd: null,
+      limitTotalUsd: null,
       limitConcurrentSessions: 0,
     },
     onSubmit: async (data) => {
@@ -61,6 +62,7 @@ export function AddKeyForm({ userId, user, onSuccess }: AddKeyFormProps) {
           dailyResetTime: data.dailyResetTime,
           limitWeeklyUsd: data.limitWeeklyUsd,
           limitMonthlyUsd: data.limitMonthlyUsd,
+          limitTotalUsd: data.limitTotalUsd,
           limitConcurrentSessions: data.limitConcurrentSessions,
         });
 
@@ -215,6 +217,20 @@ export function AddKeyForm({ userId, user, onSuccess }: AddKeyFormProps) {
           min={0}
           step={0.01}
           {...form.getFieldProps("limitMonthlyUsd")}
+        />
+
+        <NumberField
+          label={t("limitTotalUsd.label")}
+          placeholder={t("limitTotalUsd.placeholder")}
+          description={
+            user?.limitTotalUsd
+              ? t("limitTotalUsd.descriptionWithUserLimit", { limit: user.limitTotalUsd })
+              : t("limitTotalUsd.description")
+          }
+          min={0}
+          max={10000000}
+          step={0.01}
+          {...form.getFieldProps("limitTotalUsd")}
         />
 
         <NumberField

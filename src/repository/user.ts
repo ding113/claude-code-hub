@@ -17,6 +17,7 @@ export async function createUser(userData: CreateUserData): Promise<User> {
     limit5hUsd: userData.limit5hUsd?.toString(),
     limitWeeklyUsd: userData.limitWeeklyUsd?.toString(),
     limitMonthlyUsd: userData.limitMonthlyUsd?.toString(),
+    limitTotalUsd: userData.limitTotalUsd?.toString(),
     limitConcurrentSessions: userData.limitConcurrentSessions,
   };
 
@@ -35,6 +36,7 @@ export async function createUser(userData: CreateUserData): Promise<User> {
     limit5hUsd: users.limit5hUsd,
     limitWeeklyUsd: users.limitWeeklyUsd,
     limitMonthlyUsd: users.limitMonthlyUsd,
+    limitTotalUsd: users.limitTotalUsd,
     limitConcurrentSessions: users.limitConcurrentSessions,
   });
 
@@ -58,6 +60,7 @@ export async function findUserList(limit: number = 50, offset: number = 0): Prom
       limit5hUsd: users.limit5hUsd,
       limitWeeklyUsd: users.limitWeeklyUsd,
       limitMonthlyUsd: users.limitMonthlyUsd,
+      limitTotalUsd: users.limitTotalUsd,
       limitConcurrentSessions: users.limitConcurrentSessions,
     })
     .from(users)
@@ -86,6 +89,7 @@ export async function findUserById(id: number): Promise<User | null> {
       limit5hUsd: users.limit5hUsd,
       limitWeeklyUsd: users.limitWeeklyUsd,
       limitMonthlyUsd: users.limitMonthlyUsd,
+      limitTotalUsd: users.limitTotalUsd,
       limitConcurrentSessions: users.limitConcurrentSessions,
     })
     .from(users)
@@ -112,6 +116,7 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
     limit5hUsd?: string;
     limitWeeklyUsd?: string;
     limitMonthlyUsd?: string;
+    limitTotalUsd?: string | null;
     limitConcurrentSessions?: number;
   }
 
@@ -129,6 +134,9 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
     dbData.limitWeeklyUsd = userData.limitWeeklyUsd.toString();
   if (userData.limitMonthlyUsd !== undefined)
     dbData.limitMonthlyUsd = userData.limitMonthlyUsd.toString();
+  if (userData.limitTotalUsd !== undefined)
+    dbData.limitTotalUsd =
+      userData.limitTotalUsd === null ? null : userData.limitTotalUsd.toString();
   if (userData.limitConcurrentSessions !== undefined)
     dbData.limitConcurrentSessions = userData.limitConcurrentSessions;
 
@@ -151,6 +159,7 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
       limit5hUsd: users.limit5hUsd,
       limitWeeklyUsd: users.limitWeeklyUsd,
       limitMonthlyUsd: users.limitMonthlyUsd,
+      limitTotalUsd: users.limitTotalUsd,
       limitConcurrentSessions: users.limitConcurrentSessions,
     });
 

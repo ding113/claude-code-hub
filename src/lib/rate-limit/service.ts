@@ -75,7 +75,7 @@ import {
   TRACK_COST_DAILY_ROLLING_WINDOW,
 } from "@/lib/redis/lua-scripts";
 import { SessionTracker } from "@/lib/session-tracker";
-import { sumUserCostToday } from "@/repository/statistics";
+import { sumKeyTotalCost, sumUserCostToday, sumUserTotalCost } from "@/repository/statistics";
 import {
   type DailyResetMode,
   getSecondsUntilMidnight,
@@ -243,6 +243,46 @@ export class RateLimitService {
     } catch (error) {
       logger.error("[RateLimit] Check failed, fallback to database:", error);
       return await RateLimitService.checkCostLimitsFromDatabase(id, type, costLimits);
+    }
+  }
+
+  /**
+   * 检查总消费限额（无时间窗口，不使用 Redis）
+   */
+  static async checkTotalCostLimit(
+    entityId: number,
+    entityType: "key" | "user",
+    limitTotalUsd: number | null,
+    keyHash?: string
+  ): Promise<{ allowed: boolean; current?: number; reason?: string }> {
+    if (limitTotalUsd === null || limitTotalUsd === undefined || limitTotalUsd <= 0) {
+      return { allowed: true };
+    }
+
+    try {
+      let current = 0;
+      if (entityType === "key") {
+        if (!keyHash) {
+          logger.warn("[RateLimit] Missing key hash for total cost check, skip enforcement");
+          return { allowed: true };
+        }
+        current = await sumKeyTotalCost(keyHash);
+      } else {
+        current = await sumUserTotalCost(entityId);
+      }
+
+      if (current >= limitTotalUsd) {
+        return {
+          allowed: false,
+          current,
+          reason: `${entityType === "key" ? "Key" : "用户"} 总消费上限已达到（${current.toFixed(4)}/${limitTotalUsd}）`,
+        };
+      }
+
+      return { allowed: true, current };
+    } catch (error) {
+      logger.error("[RateLimit] Total cost limit check failed:", error);
+      return { allowed: true }; // fail open
     }
   }
 

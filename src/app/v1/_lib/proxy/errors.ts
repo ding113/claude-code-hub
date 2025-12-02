@@ -599,6 +599,7 @@ export class RateLimitError extends Error {
       | "usd_5h"
       | "usd_weekly"
       | "usd_monthly"
+      | "usd_total"
       | "concurrent_sessions"
       | "daily_quota",
     public readonly currentUsage: number,

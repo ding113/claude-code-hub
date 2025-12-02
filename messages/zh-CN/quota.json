@@ -300,6 +300,12 @@
         "description": "每月最大消费金额",
         "descriptionWithUserLimit": "每月最大消费金额（用户限额: ${limit}）"
       },
+      "limitTotalUsd": {
+        "label": "总消费上限 (USD)",
+        "placeholder": "留空表示无限制",
+        "description": "累计消费上限（不重置）",
+        "descriptionWithUserLimit": "累计消费上限（用户限额: ${limit}）"
+      },
       "limitConcurrentSessions": {
         "label": "并发 Session 上限",
         "placeholder": "0 表示无限制",

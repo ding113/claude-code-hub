@@ -732,6 +732,32 @@ export async function sumUserCostToday(userId: number): Promise<number> {
 }
 
 /**
+ * 查询 Key 历史总消费（不分时间窗口）
+ * 用于总消费限额检查
+ */
+export async function sumKeyTotalCost(keyHash: string): Promise<number> {
+  const result = await db
+    .select({ total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)` })
+    .from(messageRequest)
+    .where(and(eq(messageRequest.key, keyHash), isNull(messageRequest.deletedAt)));
+
+  return Number(result[0]?.total || 0);
+}
+
+/**
+ * 查询用户历史总消费（所有 Key 累计）
+ * 用于总消费限额检查
+ */
+export async function sumUserTotalCost(userId: number): Promise<number> {
+  const result = await db
+    .select({ total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)` })
+    .from(messageRequest)
+    .where(and(eq(messageRequest.userId, userId), isNull(messageRequest.deletedAt)));
+
+  return Number(result[0]?.total || 0);
+}
+
+/**
  * 查询 Key 在指定时间范围内的消费总和
  * 用于 Key 层限额检查（Redis 降级）
  */

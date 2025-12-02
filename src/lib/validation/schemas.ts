@@ -50,6 +50,12 @@ export const CreateUserSchema = z.object({
     .max(200000, "月消费上限不能超过200000美元")
     .nullable()
     .optional(),
+  limitTotalUsd: z.coerce
+    .number()
+    .min(0, "总消费上限不能为负数")
+    .max(10000000, "总消费上限不能超过10000000美元")
+    .nullable()
+    .optional(),
   limitConcurrentSessions: z.coerce
     .number()
     .int("并发Session上限必须是整数")
@@ -97,6 +103,12 @@ export const UpdateUserSchema = z.object({
     .number()
     .min(0, "月消费上限不能为负数")
     .max(200000, "月消费上限不能超过200000美元")
+    .nullable()
+    .optional(),
+  limitTotalUsd: z.coerce
+    .number()
+    .min(0, "总消费上限不能为负数")
+    .max(10000000, "总消费上限不能超过10000000美元")
     .nullable()
     .optional(),
   limitConcurrentSessions: z.coerce
@@ -149,6 +161,12 @@ export const KeyFormSchema = z.object({
     .number()
     .min(0, "月消费上限不能为负数")
     .max(200000, "月消费上限不能超过200000美元")
+    .nullable()
+    .optional(),
+  limitTotalUsd: z.coerce
+    .number()
+    .min(0, "总消费上限不能为负数")
+    .max(10000000, "总消费上限不能超过10000000美元")
     .nullable()
     .optional(),
   limitConcurrentSessions: z.coerce

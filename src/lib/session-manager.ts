@@ -1111,4 +1111,104 @@ export class SessionManager {
       return null;
     }
   }
+
+  /**
+   * 从 Codex 响应中提取 prompt_cache_key 作为 Session ID
+   *
+   * Codex 响应中包含 prompt_cache_key 字段（UUID 格式），用于标识缓存上下文。
+   * 这个字段出现在 response.created、response.in_progress、response.completed 等事件中。
+   *
+   * @param responseData - Codex 响应数据（流式事件的 data 部分或完整响应）
+   * @returns prompt_cache_key 或 null
+   */
+  static extractCodexPromptCacheKey(responseData: Record<string, unknown>): string | null {
+    // 检查 response 对象中的 prompt_cache_key（SSE 事件格式）
+    const response = responseData.response as Record<string, unknown> | undefined;
+    if (
+      response &&
+      typeof response.prompt_cache_key === "string" &&
+      response.prompt_cache_key.length > 0
+    ) {
+      logger.trace("SessionManager: Extracted prompt_cache_key from response object", {
+        promptCacheKey: response.prompt_cache_key,
+      });
+      return response.prompt_cache_key;
+    }
+
+    // 备选：直接在顶层检查（非流式响应格式）
+    if (
+      typeof responseData.prompt_cache_key === "string" &&
+      responseData.prompt_cache_key.length > 0
+    ) {
+      logger.trace("SessionManager: Extracted prompt_cache_key from top level", {
+        promptCacheKey: responseData.prompt_cache_key,
+      });
+      return responseData.prompt_cache_key;
+    }
+
+    return null;
+  }
+
+  /**
+   * 使用 Codex 的 prompt_cache_key 更新 Session 绑定
+   *
+   * 策略：如果响应中包含 prompt_cache_key，使用它作为 Session ID 的来源。
+   * 这类似于 Claude 从请求 metadata 中提取 session_id 的机制。
+   *
+   * Session ID 格式：codex_{prompt_cache_key}（添加前缀以区分来源）
+   *
+   * @param currentSessionId - 当前的 Session ID（可能是生成的或从请求提取的）
+   * @param promptCacheKey - Codex 响应中的 prompt_cache_key
+   * @param providerId - 供应商 ID
+   * @returns 更新后的 Session ID 和是否创建了新绑定
+   */
+  static async updateSessionWithCodexCacheKey(
+    currentSessionId: string,
+    promptCacheKey: string,
+    providerId: number
+  ): Promise<{ sessionId: string; updated: boolean }> {
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") {
+      logger.debug("SessionManager: Redis not ready, skipping Codex session update");
+      return { sessionId: currentSessionId, updated: false };
+    }
+
+    try {
+      // 使用 prompt_cache_key 作为新的 Session ID（添加前缀以区分）
+      const codexSessionId = `codex_${promptCacheKey}`;
+
+      // 检查是否已经存在绑定
+      const existingProvider = await redis.get(`session:${codexSessionId}:provider`);
+
+      if (existingProvider) {
+        // 已存在绑定，刷新 TTL
+        await redis.expire(`session:${codexSessionId}:provider`, SessionManager.SESSION_TTL);
+        logger.debug("SessionManager: Refreshed Codex session TTL", {
+          sessionId: codexSessionId,
+          providerId: parseInt(existingProvider, 10),
+        });
+        return { sessionId: codexSessionId, updated: false };
+      }
+
+      // 新建绑定
+      await redis.set(
+        `session:${codexSessionId}:provider`,
+        providerId.toString(),
+        "EX",
+        SessionManager.SESSION_TTL
+      );
+
+      logger.info("SessionManager: Created Codex session from prompt_cache_key", {
+        sessionId: codexSessionId,
+        promptCacheKey,
+        providerId,
+        ttl: SessionManager.SESSION_TTL,
+      });
+
+      return { sessionId: codexSessionId, updated: true };
+    } catch (error) {
+      logger.error("SessionManager: Failed to update Codex session", { error });
+      return { sessionId: currentSessionId, updated: false };
+    }
+  }
 }

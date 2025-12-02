@@ -19,6 +19,7 @@ export interface Key {
   dailyResetTime: string; // HH:mm 格式
   limitWeeklyUsd: number | null;
   limitMonthlyUsd: number | null;
+  limitTotalUsd?: number | null;
   limitConcurrentSessions: number;
 
   createdAt: Date;
@@ -44,6 +45,7 @@ export interface CreateKeyData {
   daily_reset_time?: string;
   limit_weekly_usd?: number | null;
   limit_monthly_usd?: number | null;
+  limit_total_usd?: number | null;
   limit_concurrent_sessions?: number;
 }
 
@@ -63,5 +65,6 @@ export interface UpdateKeyData {
   daily_reset_time?: string;
   limit_weekly_usd?: number | null;
   limit_monthly_usd?: number | null;
+  limit_total_usd?: number | null;
   limit_concurrent_sessions?: number;
 }

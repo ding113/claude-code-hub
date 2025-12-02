@@ -24,6 +24,7 @@ export async function findKeyById(id: number): Promise<Key | null> {
       dailyResetTime: keys.dailyResetTime,
       limitWeeklyUsd: keys.limitWeeklyUsd,
       limitMonthlyUsd: keys.limitMonthlyUsd,
+      limitTotalUsd: keys.limitTotalUsd,
       limitConcurrentSessions: keys.limitConcurrentSessions,
       createdAt: keys.createdAt,
       updatedAt: keys.updatedAt,
@@ -52,6 +53,7 @@ export async function findKeyList(userId: number): Promise<Key[]> {
       dailyResetTime: keys.dailyResetTime,
       limitWeeklyUsd: keys.limitWeeklyUsd,
       limitMonthlyUsd: keys.limitMonthlyUsd,
+      limitTotalUsd: keys.limitTotalUsd,
       limitConcurrentSessions: keys.limitConcurrentSessions,
       createdAt: keys.createdAt,
       updatedAt: keys.updatedAt,
@@ -79,6 +81,7 @@ export async function createKey(keyData: CreateKeyData): Promise<Key> {
     limitWeeklyUsd: keyData.limit_weekly_usd != null ? keyData.limit_weekly_usd.toString() : null,
     limitMonthlyUsd:
       keyData.limit_monthly_usd != null ? keyData.limit_monthly_usd.toString() : null,
+    limitTotalUsd: keyData.limit_total_usd != null ? keyData.limit_total_usd.toString() : null,
     limitConcurrentSessions: keyData.limit_concurrent_sessions,
   };
 
@@ -96,6 +99,7 @@ export async function createKey(keyData: CreateKeyData): Promise<Key> {
     dailyResetTime: keys.dailyResetTime,
     limitWeeklyUsd: keys.limitWeeklyUsd,
     limitMonthlyUsd: keys.limitMonthlyUsd,
+    limitTotalUsd: keys.limitTotalUsd,
     limitConcurrentSessions: keys.limitConcurrentSessions,
     createdAt: keys.createdAt,
     updatedAt: keys.updatedAt,
@@ -131,6 +135,9 @@ export async function updateKey(id: number, keyData: UpdateKeyData): Promise<Key
   if (keyData.limit_monthly_usd !== undefined)
     dbData.limitMonthlyUsd =
       keyData.limit_monthly_usd != null ? keyData.limit_monthly_usd.toString() : null;
+  if (keyData.limit_total_usd !== undefined)
+    dbData.limitTotalUsd =
+      keyData.limit_total_usd != null ? keyData.limit_total_usd.toString() : null;
   if (keyData.limit_concurrent_sessions !== undefined)
     dbData.limitConcurrentSessions = keyData.limit_concurrent_sessions;
 
@@ -152,6 +159,7 @@ export async function updateKey(id: number, keyData: UpdateKeyData): Promise<Key
       dailyResetTime: keys.dailyResetTime,
       limitWeeklyUsd: keys.limitWeeklyUsd,
       limitMonthlyUsd: keys.limitMonthlyUsd,
+      limitTotalUsd: keys.limitTotalUsd,
       limitConcurrentSessions: keys.limitConcurrentSessions,
       createdAt: keys.createdAt,
       updatedAt: keys.updatedAt,
@@ -181,6 +189,7 @@ export async function findActiveKeyByUserIdAndName(
       dailyResetTime: keys.dailyResetTime,
       limitWeeklyUsd: keys.limitWeeklyUsd,
       limitMonthlyUsd: keys.limitMonthlyUsd,
+      limitTotalUsd: keys.limitTotalUsd,
       limitConcurrentSessions: keys.limitConcurrentSessions,
       createdAt: keys.createdAt,
       updatedAt: keys.updatedAt,
@@ -271,6 +280,7 @@ export async function findActiveKeyByKeyString(keyString: string): Promise<Key |
       dailyResetTime: keys.dailyResetTime,
       limitWeeklyUsd: keys.limitWeeklyUsd,
       limitMonthlyUsd: keys.limitMonthlyUsd,
+      limitTotalUsd: keys.limitTotalUsd,
       limitConcurrentSessions: keys.limitConcurrentSessions,
       createdAt: keys.createdAt,
       updatedAt: keys.updatedAt,
@@ -310,6 +320,7 @@ export async function validateApiKeyAndGetUser(
       keyDailyResetTime: keys.dailyResetTime,
       keyLimitWeeklyUsd: keys.limitWeeklyUsd,
       keyLimitMonthlyUsd: keys.limitMonthlyUsd,
+      keyLimitTotalUsd: keys.limitTotalUsd,
       keyLimitConcurrentSessions: keys.limitConcurrentSessions,
       keyCreatedAt: keys.createdAt,
       keyUpdatedAt: keys.updatedAt,
@@ -322,6 +333,7 @@ export async function validateApiKeyAndGetUser(
       userRpm: users.rpmLimit,
       userDailyQuota: users.dailyLimitUsd,
       userProviderGroup: users.providerGroup,
+      userLimitTotalUsd: users.limitTotalUsd,
       userCreatedAt: users.createdAt,
       userUpdatedAt: users.updatedAt,
       userDeletedAt: users.deletedAt,
@@ -352,6 +364,7 @@ export async function validateApiKeyAndGetUser(
     rpm: row.userRpm,
     dailyQuota: row.userDailyQuota,
     providerGroup: row.userProviderGroup,
+    limitTotalUsd: row.userLimitTotalUsd,
     createdAt: row.userCreatedAt,
     updatedAt: row.userUpdatedAt,
     deletedAt: row.userDeletedAt,
@@ -371,6 +384,7 @@ export async function validateApiKeyAndGetUser(
     dailyResetTime: row.keyDailyResetTime,
     limitWeeklyUsd: row.keyLimitWeeklyUsd,
     limitMonthlyUsd: row.keyLimitMonthlyUsd,
+    limitTotalUsd: row.keyLimitTotalUsd,
     limitConcurrentSessions: row.keyLimitConcurrentSessions,
     createdAt: row.keyCreatedAt,
     updatedAt: row.keyUpdatedAt,
