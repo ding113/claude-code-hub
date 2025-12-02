@@ -350,6 +350,9 @@ export async function deleteProvider(id: number): Promise<boolean> {
 /**
  * 获取所有不同的供应商分组标签
  * 用于用户表单中的供应商分组选择建议
+ *
+ * 注意：groupTag 字段以逗号分隔存储多个标签（如 "cli,chat"），
+ * 此函数会拆分并去重，返回单个标签的数组（如 ["chat", "cli"]）
  */
 export async function getDistinctProviderGroups(): Promise<string[]> {
   const result = await db
@@ -363,7 +366,18 @@ export async function getDistinctProviderGroups(): Promise<string[]> {
     )
     .orderBy(providers.groupTag);
 
-  return result.map((r) => r.groupTag).filter((tag): tag is string => tag !== null);
+  // 拆分逗号分隔的标签并去重
+  const allTags = result
+    .map((r) => r.groupTag)
+    .filter((tag): tag is string => tag !== null)
+    .flatMap((tag) =>
+      tag
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean)
+    );
+
+  return [...new Set(allTags)].sort();
 }
 
 /**

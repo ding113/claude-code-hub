@@ -45,14 +45,17 @@ export function ProviderManager({
   const filteredProviders = useMemo(() => {
     let result = providers;
 
-    // 搜索过滤（name, url, groupTag）
+    // 搜索过滤（name, url, groupTag - 支持匹配逗号分隔的单个标签）
     if (debouncedSearchTerm) {
       const term = debouncedSearchTerm.toLowerCase();
       result = result.filter(
         (p) =>
           p.name.toLowerCase().includes(term) ||
           p.url.toLowerCase().includes(term) ||
-          p.groupTag?.toLowerCase().includes(term)
+          p.groupTag
+            ?.split(",")
+            .map((t) => t.trim().toLowerCase())
+            .some((tag) => tag.includes(term))
       );
     }
 

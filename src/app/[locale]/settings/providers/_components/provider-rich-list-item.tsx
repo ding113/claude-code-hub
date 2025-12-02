@@ -277,12 +277,16 @@ export function ProviderRichListItem({
             {/* 名称 */}
             <span className="font-semibold truncate">{provider.name}</span>
 
-            {/* Group Tag */}
-            {provider.groupTag && (
-              <Badge variant="outline" className="flex-shrink-0">
-                {provider.groupTag}
-              </Badge>
-            )}
+            {/* Group Tags (supports comma-separated values) */}
+            {provider.groupTag
+              ?.split(",")
+              .map((t) => t.trim())
+              .filter(Boolean)
+              .map((tag, index) => (
+                <Badge key={`${tag}-${index}`} variant="outline" className="flex-shrink-0">
+                  {tag}
+                </Badge>
+              ))}
 
             {/* 熔断器警告 */}
             {healthStatus && healthStatus.circuitState === "open" && (

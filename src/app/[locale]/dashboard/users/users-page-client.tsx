@@ -26,12 +26,18 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
   const [groupFilter, setGroupFilter] = useState("all");
   const [tagFilter, setTagFilter] = useState("all");
 
-  // Extract unique groups from users
+  // Extract unique groups from users (split comma-separated values)
   const uniqueGroups = useMemo(() => {
-    const groups = users
+    const allTags = users
       .map((u) => u.providerGroup)
-      .filter((group): group is string => Boolean(group));
-    return [...new Set(groups)];
+      .filter((group): group is string => Boolean(group))
+      .flatMap((group) =>
+        group
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean)
+      );
+    return [...new Set(allTags)].sort();
   }, [users]);
 
   // Extract unique tags from users
@@ -49,8 +55,15 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
         user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (user.tags || []).some((tag) => tag.toLowerCase().includes(searchTerm.toLowerCase()));
 
-      // Group filter
-      const matchesGroup = groupFilter === "all" || user.providerGroup === groupFilter;
+      // Group filter (supports comma-separated providerGroup values)
+      const matchesGroup =
+        groupFilter === "all" ||
+        (user.providerGroup
+          ?.split(",")
+          .map((t) => t.trim())
+          .filter(Boolean)
+          .includes(groupFilter) ??
+          false);
 
       // Tag filter
       const matchesTag = tagFilter === "all" || (user.tags || []).includes(tagFilter);
