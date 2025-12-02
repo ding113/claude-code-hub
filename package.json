@@ -67,7 +67,7 @@
     "react-day-picker": "^9",
     "react-dom": "^19",
     "react-hook-form": "^7",
-    "recharts": "^2",
+    "recharts": "^3",
     "safe-regex": "^2",
     "socks-proxy-agent": "^8",
     "sonner": "^2",
