@@ -114,6 +114,7 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     cleanupBatchSize: dbSettings?.cleanupBatchSize ?? 10000,
     enableClientVersionCheck: dbSettings?.enableClientVersionCheck ?? false,
     verboseProviderError: dbSettings?.verboseProviderError ?? false,
+    enableHttp2: dbSettings?.enableHttp2 ?? false,
     createdAt: dbSettings?.createdAt ? new Date(dbSettings.createdAt) : new Date(),
     updatedAt: dbSettings?.updatedAt ? new Date(dbSettings.updatedAt) : new Date(),
   };

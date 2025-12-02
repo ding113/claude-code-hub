@@ -27,6 +27,7 @@ interface SystemSettingsFormProps {
     | "currencyDisplay"
     | "billingModelSource"
     | "verboseProviderError"
+    | "enableHttp2"
   >;
 }
 
@@ -45,6 +46,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   const [verboseProviderError, setVerboseProviderError] = useState(
     initialSettings.verboseProviderError
   );
+  const [enableHttp2, setEnableHttp2] = useState(initialSettings.enableHttp2);
   const [isPending, startTransition] = useTransition();
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -62,6 +64,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         currencyDisplay,
         billingModelSource,
         verboseProviderError,
+        enableHttp2,
       });
 
       if (!result.ok) {
@@ -75,6 +78,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setCurrencyDisplay(result.data.currencyDisplay);
         setBillingModelSource(result.data.billingModelSource);
         setVerboseProviderError(result.data.verboseProviderError);
+        setEnableHttp2(result.data.enableHttp2);
       }
 
       toast.success(t("configUpdated"));
@@ -168,6 +172,21 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
           id="verbose-provider-error"
           checked={verboseProviderError}
           onCheckedChange={(checked) => setVerboseProviderError(checked)}
+          disabled={isPending}
+        />
+      </div>
+
+      <div className="flex items-start justify-between gap-4 rounded-lg border border-dashed border-border px-4 py-3">
+        <div>
+          <Label htmlFor="enable-http2" className="text-sm font-medium">
+            {t("enableHttp2")}
+          </Label>
+          <p className="text-xs text-muted-foreground mt-1">{t("enableHttp2Desc")}</p>
+        </div>
+        <Switch
+          id="enable-http2"
+          checked={enableHttp2}
+          onCheckedChange={(checked) => setEnableHttp2(checked)}
           disabled={isPending}
         />
       </div>

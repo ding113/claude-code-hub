@@ -7,7 +7,7 @@ import type { ProviderChainItem } from "@/types/message";
  * 1. 有 statusCode：实际请求成功
  * 2. 无 statusCode：仅表示选择成功（中间状态，不应显示）
  */
-function getProviderStatus(item: ProviderChainItem): "✓" | "✗" | "⚡" | null {
+function getProviderStatus(item: ProviderChainItem): "✓" | "✗" | "⚡" | "↓" | null {
   // 成功标记：必须有 statusCode 且是成功状态码
   if ((item.reason === "request_success" || item.reason === "retry_success") && item.statusCode) {
     return "✓";
@@ -19,6 +19,10 @@ function getProviderStatus(item: ProviderChainItem): "✓" | "✗" | "⚡" | nul
   // 并发限制失败
   if (item.reason === "concurrent_limit_failed") {
     return "⚡";
+  }
+  // HTTP/2 回退（协议降级，不是失败）
+  if (item.reason === "http2_fallback") {
+    return "↓";
   }
   // 中间状态（选择成功但还没有请求结果）
   return null;
@@ -33,6 +37,9 @@ function isActualRequest(item: ProviderChainItem): boolean {
 
   // 失败记录
   if (item.reason === "retry_failed" || item.reason === "system_error") return true;
+
+  // HTTP/2 回退：算作一次中间事件（显示但不计入失败）
+  if (item.reason === "http2_fallback") return true;
 
   // 成功记录：必须有 statusCode
   if ((item.reason === "request_success" || item.reason === "retry_success") && item.statusCode) {
@@ -185,7 +192,8 @@ export function formatProviderDescription(
 
     requests.forEach((item, index) => {
       const status = getProviderStatus(item);
-      const statusEmoji = status === "✓" ? "✅" : status === "⚡" ? "⚡" : "❌";
+      const statusEmoji =
+        status === "✓" ? "✅" : status === "⚡" ? "⚡" : status === "↓" ? "⬇️" : "❌";
 
       desc += `${index + 1}. ${item.name} ${statusEmoji}`;
 
@@ -194,6 +202,8 @@ export function formatProviderDescription(
         desc += ` ${t("description.systemError")}`;
       } else if (item.reason === "concurrent_limit_failed") {
         desc += ` ${t("description.concurrentLimit")}`;
+      } else if (item.reason === "http2_fallback") {
+        desc += ` ${t("description.http2Fallback")}`;
       }
 
       desc += "\n";
@@ -421,6 +431,28 @@ export function formatProviderTimeline(
         timeline += `\n${t("timeline.systemErrorNote")}`;
       }
 
+      continue;
+    }
+
+    // === HTTP/2 协议回退 ===
+    if (item.reason === "http2_fallback") {
+      timeline += `${t("timeline.http2Fallback")}\n\n`;
+
+      timeline += `${t("timeline.provider", { provider: item.name })}\n`;
+
+      // 使用结构化错误数据
+      if (item.errorDetails?.system) {
+        const s = item.errorDetails.system;
+        timeline += `${t("timeline.http2ErrorType", { type: s.errorName || t("timeline.unknown") })}\n`;
+
+        if (s.errorCode) {
+          timeline += `${t("timeline.errorCode", { code: s.errorCode })}\n`;
+        }
+      } else if (item.errorMessage) {
+        timeline += `${t("timeline.error", { error: item.errorMessage })}\n`;
+      }
+
+      timeline += `\n${t("timeline.http2FallbackNote")}`;
       continue;
     }
 

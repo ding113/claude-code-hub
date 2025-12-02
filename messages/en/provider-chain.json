@@ -35,7 +35,8 @@
     "candidate": "{name}({probability}%)",
     "requestChain": "Request Chain:",
     "systemError": "System Error",
-    "concurrentLimit": "Concurrent Limit"
+    "concurrentLimit": "Concurrent Limit",
+    "http2Fallback": "HTTP/2 Fallback"
   },
   "timeline": {
     "sessionReuse": "Session Reuse",
@@ -117,6 +118,9 @@
     "modelRedirect": "Model Redirect",
     "modelRedirectFrom": "  Requested Model: {model}",
     "modelRedirectTo": "  Redirected To: {model}",
-    "modelRedirectBilling": "  Billing Model: {model}"
+    "modelRedirectBilling": "  Billing Model: {model}",
+    "http2Fallback": "HTTP/2 Protocol Fallback",
+    "http2ErrorType": "HTTP/2 Error Type: {type}",
+    "http2FallbackNote": "Transparently fell back to HTTP/1.1, not counted in circuit breaker"
   }
 }

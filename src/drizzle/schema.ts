@@ -383,6 +383,9 @@ export const systemSettings = pgTable('system_settings', {
   // 供应商不可用时是否返回详细错误信息
   verboseProviderError: boolean('verbose_provider_error').notNull().default(false),
 
+  // 启用 HTTP/2 连接供应商（默认关闭，启用后自动回退到 HTTP/1.1 失败时）
+  enableHttp2: boolean('enable_http2').notNull().default(false),
+
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 });

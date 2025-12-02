@@ -35,7 +35,8 @@
     "candidate": "{name}({probability}%)",
     "requestChain": "请求链路:",
     "systemError": "系统错误",
-    "concurrentLimit": "并发限制"
+    "concurrentLimit": "并发限制",
+    "http2Fallback": "HTTP/2 回退"
   },
   "timeline": {
     "sessionReuse": "会话复用",
@@ -117,6 +118,9 @@
     "modelRedirect": "模型重定向",
     "modelRedirectFrom": "  请求模型: {model}",
     "modelRedirectTo": "  实际转发: {model}",
-    "modelRedirectBilling": "  计费依据: {model}"
+    "modelRedirectBilling": "  计费依据: {model}",
+    "http2Fallback": "HTTP/2 协议回退",
+    "http2ErrorType": "HTTP/2 错误类型: {type}",
+    "http2FallbackNote": "已透明回退到 HTTP/1.1，不计入熔断器"
   }
 }

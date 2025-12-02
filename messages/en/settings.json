@@ -100,6 +100,8 @@
       "allowGlobalViewDesc": "When disabled, regular users can only view their own key usage statistics in the dashboard.",
       "verboseProviderError": "Verbose Provider Error",
       "verboseProviderErrorDesc": "When enabled, return detailed error messages when all providers are unavailable (including provider count, rate limit reasons, etc.); when disabled, only return a simple error code.",
+      "enableHttp2": "Enable HTTP/2",
+      "enableHttp2Desc": "When enabled, proxy requests will prefer HTTP/2 protocol. Automatically falls back to HTTP/1.1 on failure.",
       "cleanupSchedule": "Cleanup Schedule",
       "cleanupScheduleDesc": "Select the execution schedule for automatic cleanup",
       "configUpdated": "System settings updated. The page will refresh to apply currency display changes.",
