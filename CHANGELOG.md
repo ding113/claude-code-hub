@@ -4,6 +4,18 @@
 
 ---
 
+## [v0.3.21](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.21) - 2025-12-02
+
+### 优化
+
+- 增强数据库安全性：Docker Compose 中 PostgreSQL 端口默认不再对外暴露，仅允许容器内部网络访问
+
+### 其他
+
+- 简化 CI 工作流，移除 submodule 验证相关逻辑
+
+---
+
 ## [v0.3.20](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.20) - 2025-12-02
 
 ### 新增
