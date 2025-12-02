@@ -3,8 +3,10 @@ services:
     image: postgres:18
     container_name: claude-code-hub-db
     restart: unless-stopped
-    ports:
-      - "35432:5432"
+    # 不对外暴露数据库端口，仅允许容器内部网络访问
+    # 如需调试，可取消注释下行（仅绑定本机）：
+    # ports:
+    #   - "127.0.0.1:35432:5432"
     env_file:
       - ./.env
     environment:
