@@ -5,6 +5,9 @@
  * - 缓存数据更新事件（errorRulesUpdated、sensitiveWordsUpdated）
  * - 系统配置变更事件
  * - 监听器的自动注册和卸载
+ *
+ * 注意：此模块仅在 Node.js runtime 中使用
+ * 请确保通过动态导入 (dynamic import) 引入此模块
  */
 
 import { EventEmitter as NodeEventEmitter } from "node:events";

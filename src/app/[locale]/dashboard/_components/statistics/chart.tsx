@@ -441,7 +441,9 @@ export function UserStatisticsChart({
                 if (!filteredPayload.length) {
                   return (
                     <div className="rounded-lg border bg-background p-3 shadow-sm min-w-[200px]">
-                      <div className="font-medium text-center">{formatTooltipDate(label)}</div>
+                      <div className="font-medium text-center">
+                        {formatTooltipDate(String(label ?? ""))}
+                      </div>
                     </div>
                   );
                 }
@@ -449,7 +451,9 @@ export function UserStatisticsChart({
                 return (
                   <div className="rounded-lg border bg-background p-3 shadow-sm min-w-[200px]">
                     <div className="grid gap-2">
-                      <div className="font-medium text-center">{formatTooltipDate(label)}</div>
+                      <div className="font-medium text-center">
+                        {formatTooltipDate(String(label ?? ""))}
+                      </div>
                       <div className="grid gap-1.5">
                         {[...filteredPayload]
                           .sort((a, b) => (Number(b.value ?? 0) || 0) - (Number(a.value ?? 0) || 0))
