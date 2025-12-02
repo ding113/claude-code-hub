@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -32,7 +33,9 @@ interface SystemSettingsFormProps {
 }
 
 export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps) {
+  const router = useRouter();
   const t = useTranslations("settings.config.form");
+  const tCommon = useTranslations("settings.common");
   const [siteTitle, setSiteTitle] = useState(initialSettings.siteTitle);
   const [allowGlobalUsageView, setAllowGlobalUsageView] = useState(
     initialSettings.allowGlobalUsageView
@@ -82,10 +85,8 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
       }
 
       toast.success(t("configUpdated"));
-      // 刷新页面以应用货币显示变更
-      setTimeout(() => {
-        window.location.reload();
-      }, 1000);
+      // Refresh Server Components to apply changes (currency display, etc.)
+      router.refresh();
     });
   };
 
@@ -193,7 +194,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
 
       <div className="flex justify-end">
         <Button type="submit" disabled={isPending}>
-          {isPending ? t("common.saving") : t("saveSettings")}
+          {isPending ? tCommon("saving") : t("saveSettings")}
         </Button>
       </div>
     </form>
