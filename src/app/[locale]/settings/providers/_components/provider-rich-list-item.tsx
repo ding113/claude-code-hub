@@ -478,8 +478,7 @@ export function ProviderRichListItem({
                   }
                   title={canEdit ? tList("rechargeBalance") : undefined}
                 >
-                  {provider.balanceUsd < 0 ? "-" : ""}$
-                  {Math.abs(provider.balanceUsd).toFixed(2)}
+                  {provider.balanceUsd < 0 ? "-" : ""}${Math.abs(provider.balanceUsd).toFixed(2)}
                 </span>
                 {provider.balanceUsd < 0 && (
                   <Badge variant="destructive" className="text-xs px-1.5 py-0">
@@ -487,7 +486,10 @@ export function ProviderRichListItem({
                   </Badge>
                 )}
                 {provider.balanceUsd === 0 && (
-                  <Badge variant="outline" className="text-xs px-1.5 py-0 text-orange-600 border-orange-600">
+                  <Badge
+                    variant="outline"
+                    className="text-xs px-1.5 py-0 text-orange-600 border-orange-600"
+                  >
                     {tList("balanceExhausted")}
                   </Badge>
                 )}
@@ -708,7 +710,9 @@ export function ProviderRichListItem({
                   {tList("rechargeDialog.cancel")}
                 </Button>
                 <Button onClick={handleRecharge} disabled={rechargePending}>
-                  {rechargePending ? tList("rechargeDialog.processing") : tList("rechargeDialog.submit")}
+                  {rechargePending
+                    ? tList("rechargeDialog.processing")
+                    : tList("rechargeDialog.submit")}
                 </Button>
               </div>
             </div>

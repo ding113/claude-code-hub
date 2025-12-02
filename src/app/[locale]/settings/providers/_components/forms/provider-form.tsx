@@ -87,9 +87,7 @@ export function ProviderForm({
   const [costMultiplier, setCostMultiplier] = useState<number>(
     sourceProvider?.costMultiplier ?? 1.0
   );
-  const [balanceUsd, setBalanceUsd] = useState<number | null>(
-    sourceProvider?.balanceUsd ?? null
-  );
+  const [balanceUsd, setBalanceUsd] = useState<number | null>(sourceProvider?.balanceUsd ?? null);
   const [groupTag, setGroupTag] = useState<string[]>(
     sourceProvider?.groupTag
       ? sourceProvider.groupTag

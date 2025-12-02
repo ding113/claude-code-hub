@@ -2769,9 +2769,7 @@ export async function rechargeProviderBalance(
  * @description 将供应商余额设置为 null（无限制/后付费模式）
  * @param providerId - 供应商ID
  */
-export async function setProviderBalanceUnlimited(
-  providerId: number
-): Promise<ActionResult<void>> {
+export async function setProviderBalanceUnlimited(providerId: number): Promise<ActionResult<void>> {
   const session = await getSession();
   if (!session || session.user.role !== "admin") {
     return {
@@ -2796,10 +2794,7 @@ export async function setProviderBalanceUnlimited(
       };
     }
 
-    await db
-      .update(providers)
-      .set({ balanceUsd: null })
-      .where(eq(providers.id, providerId));
+    await db.update(providers).set({ balanceUsd: null }).where(eq(providers.id, providerId));
 
     logger.info("[ProviderAction] Balance set to unlimited", {
       providerId,

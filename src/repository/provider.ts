@@ -287,7 +287,8 @@ export async function updateProvider(
   if (providerData.website_url !== undefined) dbData.websiteUrl = providerData.website_url;
   if (providerData.favicon_url !== undefined) dbData.faviconUrl = providerData.favicon_url;
   if (providerData.balance_usd !== undefined)
-    dbData.balanceUsd = providerData.balance_usd != null ? providerData.balance_usd.toString() : null;
+    dbData.balanceUsd =
+      providerData.balance_usd != null ? providerData.balance_usd.toString() : null;
   if (providerData.tpm !== undefined) dbData.tpm = providerData.tpm;
   if (providerData.rpm !== undefined) dbData.rpm = providerData.rpm;
   if (providerData.rpd !== undefined) dbData.rpd = providerData.rpd;
@@ -566,10 +567,7 @@ export async function decrementProviderBalance(
  * - 只增加余额，不修改 is_enabled 字段
  * - 充值后余额 > 0，供应商会在选择阶段自然可用（通过余额检查，不是字段修改）
  */
-export async function incrementProviderBalance(
-  providerId: number,
-  amount: Decimal
-): Promise<void> {
+export async function incrementProviderBalance(providerId: number, amount: Decimal): Promise<void> {
   const normalized = toCostDecimal(amount);
   if (!normalized || normalized.lte(0)) {
     return;

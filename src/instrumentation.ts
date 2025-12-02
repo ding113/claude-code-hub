@@ -79,9 +79,8 @@ export async function register() {
       await scheduleNotifications();
 
       // 初始化智能探测调度器（如果启用）
-      const { startProbeScheduler, isSmartProbingEnabled } = await import(
-        "@/lib/circuit-breaker-probe"
-      );
+      const { startProbeScheduler, isSmartProbingEnabled } =
+        await import("@/lib/circuit-breaker-probe");
       if (isSmartProbingEnabled()) {
         startProbeScheduler();
         logger.info("Smart probing scheduler started");
@@ -125,9 +124,8 @@ export async function register() {
       );
 
       // 初始化智能探测调度器（开发环境也支持）
-      const { startProbeScheduler, isSmartProbingEnabled } = await import(
-        "@/lib/circuit-breaker-probe"
-      );
+      const { startProbeScheduler, isSmartProbingEnabled } =
+        await import("@/lib/circuit-breaker-probe");
       if (isSmartProbingEnabled()) {
         startProbeScheduler();
         logger.info("Smart probing scheduler started (development mode)");
