@@ -370,3 +370,140 @@ jobs:
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # 同步 main 分支到 dev 分支 (rebase dev onto main)
+      - name: Sync main to dev branch
+        if: steps.check.outputs.needs_bump == 'true'
+        id: sync_dev
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+
+          echo "=========================================="
+          echo "Starting dev branch sync after release..."
+          echo "=========================================="
+
+          # 配置 git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # 确保在 main 分支的最新状态
+          git fetch origin main
+          git checkout main
+          git reset --hard origin/main
+
+          # 获取 dev 分支
+          echo "Fetching dev branch..."
+          if ! git fetch origin dev:dev 2>/dev/null; then
+            echo "::warning::dev branch not found, skipping sync"
+            echo "sync_status=skipped" >> $GITHUB_OUTPUT
+            echo "sync_reason=dev branch not found" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # 检查 dev 是否有领先于 main 的 commit
+          git checkout dev
+
+          AHEAD_COUNT=$(git rev-list --count main..dev)
+          BEHIND_COUNT=$(git rev-list --count dev..main)
+
+          echo "Dev branch status:"
+          echo "  - Ahead of main: $AHEAD_COUNT commits"
+          echo "  - Behind main: $BEHIND_COUNT commits"
+
+          # 如果 dev 没有落后于 main，跳过同步
+          if [ "$BEHIND_COUNT" -eq 0 ]; then
+            echo "::notice::dev branch is already up to date with main"
+            echo "sync_status=skipped" >> $GITHUB_OUTPUT
+            echo "sync_reason=already up to date" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo ""
+          echo "Attempting to rebase dev onto main..."
+          echo "This will preserve $AHEAD_COUNT commits from dev"
+
+          # 尝试 rebase
+          if git rebase main; then
+            echo "Rebase successful!"
+
+            # 使用 --force-with-lease 安全推送
+            echo "Pushing rebased dev branch..."
+            if git push origin dev --force-with-lease; then
+              echo "::notice::Successfully synced main to dev branch (rebased $AHEAD_COUNT commits)"
+              echo "sync_status=success" >> $GITHUB_OUTPUT
+              echo "ahead_count=$AHEAD_COUNT" >> $GITHUB_OUTPUT
+            else
+              echo "::error::Failed to push rebased dev branch"
+              echo "sync_status=push_failed" >> $GITHUB_OUTPUT
+              echo "sync_reason=push failed, possibly due to concurrent changes" >> $GITHUB_OUTPUT
+              exit 1
+            fi
+          else
+            echo "::warning::Rebase failed due to conflicts, will trigger autofix"
+            git rebase --abort
+            echo "sync_status=conflict" >> $GITHUB_OUTPUT
+            echo "sync_reason=merge conflicts detected" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      # 如果同步失败(冲突)，触发 autofix workflow
+      - name: Trigger autofix for sync conflicts
+        if: steps.check.outputs.needs_bump == 'true' && steps.sync_dev.outputs.sync_status == 'conflict'
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Triggering Claude CI Auto-Fix workflow for dev sync..."
+
+          # 使用 workflow 文件名而非名称，避免重命名后触发失败
+          if gh workflow run claude-ci-autofix.yml \
+              --field task_type=sync-dev \
+              --field target_branch=dev \
+              --field source_branch=main \
+              --field release_tag=${{ steps.next_version.outputs.new_tag }}; then
+            echo "::notice::Autofix workflow triggered to resolve conflicts"
+          else
+            echo "::error::Failed to trigger autofix workflow. Manual intervention required."
+            echo "::error::Please run: gh workflow run claude-ci-autofix.yml --field task_type=sync-dev --field target_branch=dev --field source_branch=main"
+            exit 1
+          fi
+
+      # 同步结果汇总
+      - name: Sync summary
+        if: steps.check.outputs.needs_bump == 'true' && always()
+        run: |
+          echo "=========================================="
+          echo "Dev Branch Sync Summary"
+          echo "=========================================="
+
+          SYNC_STATUS="${{ steps.sync_dev.outputs.sync_status }}"
+          SYNC_REASON="${{ steps.sync_dev.outputs.sync_reason }}"
+          AHEAD_COUNT="${{ steps.sync_dev.outputs.ahead_count }}"
+
+          case "$SYNC_STATUS" in
+            "success")
+              echo "Status: SUCCESS"
+              echo "Preserved $AHEAD_COUNT commits from dev branch"
+              ;;
+            "skipped")
+              echo "Status: SKIPPED"
+              echo "Reason: $SYNC_REASON"
+              ;;
+            "conflict")
+              echo "Status: CONFLICT - Autofix triggered"
+              echo "Reason: $SYNC_REASON"
+              echo "The Claude CI Auto-Fix workflow has been triggered to resolve conflicts"
+              ;;
+            "push_failed")
+              echo "Status: PUSH FAILED"
+              echo "Reason: $SYNC_REASON"
+              echo "Manual intervention may be required"
+              ;;
+            *)
+              echo "Status: UNKNOWN ($SYNC_STATUS)"
+              ;;
+          esac
+
+          echo "=========================================="

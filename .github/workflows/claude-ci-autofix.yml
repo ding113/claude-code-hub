@@ -5,12 +5,144 @@ on:
     workflows: ["PR Build Check", "Non-Main Branch CI/CD"]
     types: [completed]
 
+  # 支持手动触发或被其他 workflow 调用
+  workflow_dispatch:
+    inputs:
+      task_type:
+        description: 'Task type (ci-fix or sync-dev)'
+        required: true
+        default: 'ci-fix'
+        type: choice
+        options:
+          - ci-fix
+          - sync-dev
+      target_branch:
+        description: 'Target branch for sync-dev task'
+        required: false
+        default: 'dev'
+        type: string
+      source_branch:
+        description: 'Source branch for sync-dev task'
+        required: false
+        default: 'main'
+        type: string
+      release_tag:
+        description: 'Release tag that triggered sync'
+        required: false
+        type: string
+
 jobs:
+  # Job for dev branch sync (triggered by workflow_dispatch)
+  sync-dev:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.task_type == 'sync-dev'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      # 安全验证：只允许 dev 分支作为目标，main 分支作为源
+      - name: Validate branch parameters
+        run: |
+          TARGET="${{ github.event.inputs.target_branch }}"
+          SOURCE="${{ github.event.inputs.source_branch }}"
+
+          if [[ "$TARGET" != "dev" ]]; then
+            echo "::error::Security: Only 'dev' branch is allowed as target. Got: $TARGET"
+            exit 1
+          fi
+
+          if [[ "$SOURCE" != "main" ]]; then
+            echo "::error::Security: Only 'main' branch is allowed as source. Got: $SOURCE"
+            exit 1
+          fi
+
+          echo "Branch validation passed: syncing $SOURCE -> $TARGET"
+
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.target_branch }}
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Run Claude Code for Dev Sync
+        uses: anthropics/claude-code-action@v1
+        env:
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+
+          prompt: |
+            You are a Git branch synchronization assistant for the repository ${{ github.repository }}.
+
+            Context:
+            - Source branch: ${{ github.event.inputs.source_branch }} (contains new release)
+            - Target branch: ${{ github.event.inputs.target_branch }} (needs to be synced)
+            - Release tag: ${{ github.event.inputs.release_tag }}
+
+            Task: Sync the target branch with source branch while preserving target branch's ahead commits.
+
+            ## Instructions:
+
+            1. **Analyze the situation**:
+               ```bash
+               git fetch origin
+               git checkout ${{ github.event.inputs.target_branch }}
+               git log --oneline -10
+               git rev-list --count origin/${{ github.event.inputs.source_branch }}..HEAD
+               ```
+
+            2. **Attempt rebase**:
+               ```bash
+               git rebase origin/${{ github.event.inputs.source_branch }}
+               ```
+
+            3. **If conflicts occur**:
+               - Use `git status` to identify conflicting files
+               - Read conflicting files with Read tool
+               - Analyze the conflict markers (<<<<<<<, =======, >>>>>>>)
+               - Resolve conflicts by choosing the correct version or merging changes
+               - Use Edit tool to fix conflicts
+               - Run `git add <resolved-file>` for each resolved file
+               - Continue with `git rebase --continue`
+               - Repeat until all conflicts are resolved
+
+            4. **Verify the result**:
+               ```bash
+               bun install
+               bun run typecheck
+               bun run lint
+               ```
+
+            5. **Push the synced branch**:
+               ```bash
+               git push origin ${{ github.event.inputs.target_branch }} --force-with-lease
+               ```
+
+            ## Conflict Resolution Guidelines:
+            - For VERSION file: Keep the source branch version (newer release)
+            - For package.json/bun.lockb: Accept source changes, then run `bun install`
+            - For code changes: Prefer target branch changes (feature work) unless they conflict with critical fixes
+            - For config files: Merge both changes if possible
+
+            ## Important:
+            - Preserve all commits from target branch that are ahead of source
+            - Don't lose any feature work
+            - If you cannot resolve a conflict, document it clearly and abort
+
+          claude_args: "--max-turns 999 --allowedTools Read,Write,Edit,Bash(gh:*),Bash(git:*),Bash(bun:*),Bash(npm:*)"
+          use_commit_signing: false
+
   auto-fix:
     # Only run on failure, skip Claude's own fix branches
     if: |
-      github.event.workflow_run.conclusion == 'failure' &&
-      !startsWith(github.event.workflow_run.head_branch, 'claude-fix-')
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'failure' &&
+       !startsWith(github.event.workflow_run.head_branch, 'claude-fix-')) ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.task_type == 'ci-fix')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
