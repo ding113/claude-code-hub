@@ -23,7 +23,7 @@ import { GEMINI_PROTOCOL } from "../gemini/protocol";
 import { HeaderProcessor } from "../headers";
 import { buildProxyUrl } from "../url";
 import {
-  categorizeError,
+  categorizeErrorAsync,
   ErrorCategory,
   isClientAbortError,
   isHttp2Error,
@@ -226,7 +226,8 @@ export class ProxyForwarder {
           lastError = error as Error;
 
           // ⭐ 1. 分类错误（供应商错误 vs 系统错误 vs 客户端中断）
-          const errorCategory = categorizeError(lastError);
+          // 使用异步版本确保错误规则已加载
+          const errorCategory = await categorizeErrorAsync(lastError);
           const errorMessage =
             lastError instanceof ProxyError
               ? lastError.getDetailedErrorMessage()
