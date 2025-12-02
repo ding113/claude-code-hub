@@ -156,6 +156,9 @@ export const providers = pgTable('providers', {
   limitMonthlyUsd: numeric('limit_monthly_usd', { precision: 10, scale: 2 }),
   limitConcurrentSessions: integer('limit_concurrent_sessions').default(0),
 
+  // 供应商余额（预付费余额，null/0 视为无限制）
+  balanceUsd: numeric('balance_usd', { precision: 18, scale: 4 }),
+
   // 熔断器配置（每个供应商独立配置）
   circuitBreakerFailureThreshold: integer('circuit_breaker_failure_threshold').default(5),
   circuitBreakerOpenDuration: integer('circuit_breaker_open_duration').default(1800000), // 30分钟（毫秒）

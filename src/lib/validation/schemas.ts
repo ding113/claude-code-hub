@@ -268,6 +268,13 @@ export const CreateProviderSchema = z.object({
     .max(1000, "并发Session上限不能超过1000")
     .optional()
     .default(0),
+  // 供应商余额（预付费模式）
+  balance_usd: z.coerce
+    .number()
+    .min(0, "供应商余额不能为负数")
+    .max(1000000, "供应商余额不能超过1000000美元")
+    .nullable()
+    .optional(),
   // 熔断器配置
   circuit_breaker_failure_threshold: z.coerce
     .number()
@@ -447,6 +454,13 @@ export const UpdateProviderSchema = z
       .int("并发Session上限必须是整数")
       .min(0, "并发Session上限不能为负数")
       .max(1000, "并发Session上限不能超过1000")
+      .optional(),
+    // 供应商余额（预付费模式）
+    balance_usd: z.coerce
+      .number()
+      .min(0, "供应商余额不能为负数")
+      .max(1000000, "供应商余额不能超过1000000美元")
+      .nullable()
       .optional(),
     // 熔断器配置
     circuit_breaker_failure_threshold: z.coerce

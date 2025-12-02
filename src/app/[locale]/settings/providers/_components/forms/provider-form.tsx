@@ -87,6 +87,9 @@ export function ProviderForm({
   const [costMultiplier, setCostMultiplier] = useState<number>(
     sourceProvider?.costMultiplier ?? 1.0
   );
+  const [balanceUsd, setBalanceUsd] = useState<number | null>(
+    sourceProvider?.balanceUsd ?? null
+  );
   const [groupTag, setGroupTag] = useState<string[]>(
     sourceProvider?.groupTag
       ? sourceProvider.groupTag
@@ -291,6 +294,7 @@ export function ProviderForm({
             priority?: number;
             weight?: number;
             cost_multiplier?: number;
+            balance_usd?: number | null;
             group_tag?: string | null;
             limit_5h_usd?: number | null;
             limit_daily_usd?: number | null;
@@ -325,6 +329,8 @@ export function ProviderForm({
             priority: priority,
             weight: weight,
             cost_multiplier: costMultiplier,
+            // ⭐ 编辑模式不允许修改余额，余额通过单独的充值功能管理
+            // balance_usd: balanceUsd,  // 已移除
             group_tag: groupTag.length > 0 ? groupTag.join(",") : null,
             limit_5h_usd: limit5hUsd,
             limit_daily_usd: limitDailyUsd,
@@ -382,6 +388,7 @@ export function ProviderForm({
             weight: weight,
             priority: priority,
             cost_multiplier: costMultiplier,
+            balance_usd: balanceUsd,
             group_tag: groupTag.length > 0 ? groupTag.join(",") : null,
             limit_5h_usd: limit5hUsd,
             limit_daily_usd: limitDailyUsd,
@@ -870,6 +877,10 @@ export function ProviderForm({
               <span className="text-xs text-muted-foreground">
                 {(() => {
                   const limits: string[] = [];
+                  if (balanceUsd !== null)
+                    limits.push(
+                      t("sections.rateLimit.summary.balance", { amount: balanceUsd.toFixed(2) })
+                    );
                   if (limit5hUsd)
                     limits.push(t("sections.rateLimit.summary.fiveHour", { amount: limit5hUsd }));
                   if (limitDailyUsd)
@@ -1028,6 +1039,45 @@ export function ProviderForm({
                     step="1"
                   />
                 </div>
+              </div>
+
+              {/* 供应商余额（预付费模式） */}
+              <div className="space-y-2">
+                <Label htmlFor={isEdit ? "edit-balance-usd" : "balance-usd"}>
+                  {t("sections.rateLimit.balanceUsd.label")}
+                </Label>
+                {isEdit ? (
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="edit-balance-usd"
+                      type="text"
+                      value={
+                        balanceUsd !== null
+                          ? `$${balanceUsd.toFixed(4)}`
+                          : t("sections.rateLimit.balanceUsd.unlimited")
+                      }
+                      disabled
+                      className="bg-muted cursor-not-allowed"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {t("sections.rateLimit.balanceUsd.editHint")}
+                    </p>
+                  </div>
+                ) : (
+                  <Input
+                    id="balance-usd"
+                    type="number"
+                    value={balanceUsd?.toString() ?? ""}
+                    onChange={(e) => setBalanceUsd(validateNumericField(e.target.value))}
+                    placeholder={t("sections.rateLimit.balanceUsd.placeholder")}
+                    disabled={isPending}
+                    min="0"
+                    step="0.01"
+                  />
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {t("sections.rateLimit.balanceUsd.desc")}
+                </p>
               </div>
             </div>
           </CollapsibleContent>

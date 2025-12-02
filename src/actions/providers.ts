@@ -178,6 +178,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         weight: provider.weight,
         priority: provider.priority,
         costMultiplier: provider.costMultiplier,
+        balanceUsd: provider.balanceUsd,
         groupTag: provider.groupTag,
         providerType: provider.providerType,
         modelRedirects: provider.modelRedirects,
@@ -263,6 +264,7 @@ export async function addProvider(data: {
   limit_weekly_usd?: number | null;
   limit_monthly_usd?: number | null;
   limit_concurrent_sessions?: number | null;
+  balance_usd?: number | null;
   circuit_breaker_failure_threshold?: number;
   circuit_breaker_open_duration?: number;
   circuit_breaker_half_open_success_threshold?: number;
@@ -408,6 +410,7 @@ export async function editProvider(
     limit_weekly_usd?: number | null;
     limit_monthly_usd?: number | null;
     limit_concurrent_sessions?: number | null;
+    balance_usd?: number | null;
     circuit_breaker_failure_threshold?: number;
     circuit_breaker_open_duration?: number;
     circuit_breaker_half_open_success_threshold?: number;
@@ -2679,6 +2682,145 @@ export async function getProviderTestPresets(
     return {
       ok: false,
       error: "获取预置配置失败",
+    };
+  }
+}
+
+/**
+ * 供应商余额充值
+ *
+ * @description 为指定供应商充值余额（预付费模式）
+ * @param providerId - 供应商ID
+ * @param amount - 充值金额（USD）
+ */
+export async function rechargeProviderBalance(
+  providerId: number,
+  amount: number
+): Promise<ActionResult<void>> {
+  const session = await getSession();
+  if (!session || session.user.role !== "admin") {
+    return {
+      ok: false,
+      error: "未授权",
+    };
+  }
+
+  // 参数验证
+  if (!Number.isFinite(providerId) || providerId <= 0) {
+    return {
+      ok: false,
+      error: "无效的供应商ID",
+    };
+  }
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return {
+      ok: false,
+      error: "充值金额必须大于0",
+    };
+  }
+
+  try {
+    const { incrementProviderBalance } = await import("@/repository/provider");
+    const { Decimal } = await import("@/lib/utils/currency");
+
+    // 查询供应商是否存在
+    const provider = await findProviderById(providerId);
+    if (!provider) {
+      return {
+        ok: false,
+        error: "供应商不存在",
+      };
+    }
+
+    // 执行充值
+    await incrementProviderBalance(providerId, new Decimal(amount));
+
+    logger.info("[ProviderAction] Balance recharged successfully", {
+      providerId,
+      providerName: provider.name,
+      amount,
+      operator: session.user.id,
+    });
+
+    // 重新验证页面缓存
+    revalidatePath("/providers");
+
+    return {
+      ok: true,
+      data: undefined,
+    };
+  } catch (error) {
+    logger.error("[ProviderAction] Recharge balance failed", {
+      providerId,
+      amount,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "充值失败",
+    };
+  }
+}
+
+/**
+ * 设置供应商余额为无限
+ *
+ * @description 将供应商余额设置为 null（无限制/后付费模式）
+ * @param providerId - 供应商ID
+ */
+export async function setProviderBalanceUnlimited(
+  providerId: number
+): Promise<ActionResult<void>> {
+  const session = await getSession();
+  if (!session || session.user.role !== "admin") {
+    return {
+      ok: false,
+      error: "未授权",
+    };
+  }
+
+  if (!Number.isFinite(providerId) || providerId <= 0) {
+    return {
+      ok: false,
+      error: "无效的供应商ID",
+    };
+  }
+
+  try {
+    const provider = await findProviderById(providerId);
+    if (!provider) {
+      return {
+        ok: false,
+        error: "供应商不存在",
+      };
+    }
+
+    await db
+      .update(providers)
+      .set({ balanceUsd: null })
+      .where(eq(providers.id, providerId));
+
+    logger.info("[ProviderAction] Balance set to unlimited", {
+      providerId,
+      providerName: provider.name,
+      operator: session.user.id,
+    });
+
+    revalidatePath("/providers");
+
+    return {
+      ok: true,
+      data: undefined,
+    };
+  } catch (error) {
+    logger.error("[ProviderAction] Set unlimited balance failed", {
+      providerId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "设置失败",
     };
   }
 }

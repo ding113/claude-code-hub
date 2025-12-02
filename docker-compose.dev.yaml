@@ -1,0 +1,43 @@
+# 开发模式配置：仅启动数据库和 Redis
+# 使用方式：docker compose -f docker-compose.dev.yaml up -d
+
+services:
+  postgres:
+    image: postgres:18
+    container_name: claude-code-hub-db-dev
+    restart: unless-stopped
+    ports:
+      - "35432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: your-secure-password_change-me
+      POSTGRES_DB: claude_code_hub
+      PGDATA: /data/pgdata
+      TZ: Asia/Shanghai
+      PGTZ: Asia/Shanghai
+    volumes:
+      # 持久化数据库数据到本地 ./data/postgres 目录
+      - ./data/postgres:/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d claude_code_hub"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: claude-code-hub-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      # 持久化 Redis 数据到本地 ./data/redis 目录
+      - ./data/redis:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s

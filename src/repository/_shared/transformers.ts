@@ -46,6 +46,7 @@ export function toProvider(dbProvider: any): Provider {
     weight: dbProvider?.weight ?? 1,
     priority: dbProvider?.priority ?? 0,
     costMultiplier: dbProvider?.costMultiplier ? parseFloat(dbProvider.costMultiplier) : 1.0,
+    balanceUsd: dbProvider?.balanceUsd != null ? parseFloat(dbProvider.balanceUsd) : null,
     groupTag: dbProvider?.groupTag ?? null,
     providerType: dbProvider?.providerType ?? "claude",
     modelRedirects: dbProvider?.modelRedirects ?? null,

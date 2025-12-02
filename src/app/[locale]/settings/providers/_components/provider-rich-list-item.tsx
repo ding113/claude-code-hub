@@ -78,12 +78,15 @@ export function ProviderRichListItem({
   const router = useRouter();
   const [openEdit, setOpenEdit] = useState(false);
   const [openClone, setOpenClone] = useState(false);
+  const [openRecharge, setOpenRecharge] = useState(false);
+  const [rechargeAmount, setRechargeAmount] = useState("");
   const [showKeyDialog, setShowKeyDialog] = useState(false);
   const [unmaskedKey, setUnmaskedKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [resetPending, startResetTransition] = useTransition();
   const [deletePending, startDeleteTransition] = useTransition();
   const [togglePending, startToggleTransition] = useTransition();
+  const [rechargePending, startRechargeTransition] = useTransition();
 
   const canEdit = currentUser?.role === "admin";
   const tTypes = useTranslations("settings.providers.types");
@@ -230,6 +233,73 @@ export function ProviderRichListItem({
     });
   };
 
+  // 处理余额充值
+  const handleRecharge = () => {
+    const amount = parseFloat(rechargeAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toast.error(tList("rechargeDialog.invalidAmount"), {
+        description: tList("rechargeDialog.invalidAmountDesc"),
+      });
+      return;
+    }
+
+    startRechargeTransition(async () => {
+      try {
+        const { rechargeProviderBalance } = await import("@/actions/providers");
+        const res = await rechargeProviderBalance(provider.id, amount);
+        if (res.ok) {
+          toast.success(tList("rechargeDialog.successTitle"), {
+            description: tList("rechargeDialog.successDesc", {
+              amount: amount.toFixed(2),
+              name: provider.name,
+            }),
+          });
+          setOpenRecharge(false);
+          setRechargeAmount("");
+          router.refresh();
+        } else {
+          toast.error(tList("rechargeDialog.failedTitle"), {
+            description: res.error || tList("unknownError"),
+          });
+        }
+      } catch (error) {
+        console.error("充值失败:", error);
+        toast.error(tList("rechargeDialog.failedTitle"), {
+          description: tList("rechargeDialog.errorDesc"),
+        });
+      }
+    });
+  };
+
+  // 处理设置无限余额
+  const handleSetUnlimited = () => {
+    startRechargeTransition(async () => {
+      try {
+        const { setProviderBalanceUnlimited } = await import("@/actions/providers");
+        const res = await setProviderBalanceUnlimited(provider.id);
+        if (res.ok) {
+          toast.success(tList("rechargeDialog.unlimitedSuccessTitle"), {
+            description: tList("rechargeDialog.unlimitedSuccessDesc", {
+              name: provider.name,
+            }),
+          });
+          setOpenRecharge(false);
+          setRechargeAmount("");
+          router.refresh();
+        } else {
+          toast.error(tList("rechargeDialog.failedTitle"), {
+            description: res.error || tList("unknownError"),
+          });
+        }
+      } catch (error) {
+        console.error("设置无限余额失败:", error);
+        toast.error(tList("rechargeDialog.failedTitle"), {
+          description: tList("rechargeDialog.errorDesc"),
+        });
+      }
+    });
+  };
+
   return (
     <>
       <div className="flex items-center gap-4 py-3 px-4 border-b hover:bg-muted/50 transition-colors">
@@ -363,6 +433,66 @@ export function ProviderRichListItem({
           </div>
           <div className="text-xs font-mono text-muted-foreground mt-0.5">
             {formatCurrency(parseFloat(provider.todayTotalCostUsd || "0"), currencyCode)}
+          </div>
+        </div>
+
+        {/* 余额显示（仅大屏） */}
+        <div className="hidden xl:flex flex-col items-center flex-shrink-0 min-w-[120px]">
+          <div className="text-xs text-muted-foreground mb-1">{tList("balance")}</div>
+          <div className="flex items-center gap-1">
+            {provider.balanceUsd === null ? (
+              <Badge
+                variant="secondary"
+                className={`font-mono ${canEdit ? "cursor-pointer hover:bg-secondary/80" : ""}`}
+                onClick={
+                  canEdit
+                    ? (e) => {
+                        e.stopPropagation();
+                        setOpenRecharge(true);
+                      }
+                    : undefined
+                }
+                title={canEdit ? tList("rechargeBalance") : undefined}
+              >
+                {tList("balanceUnlimited")}
+              </Badge>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <span
+                  className={`font-mono font-medium ${
+                    provider.balanceUsd < 0
+                      ? "text-red-600"
+                      : provider.balanceUsd === 0
+                        ? "text-orange-600"
+                        : provider.balanceUsd < 5
+                          ? "text-yellow-600"
+                          : "text-green-600"
+                  } ${canEdit ? "cursor-pointer hover:underline" : ""}`}
+                  onClick={
+                    canEdit
+                      ? (e) => {
+                          e.stopPropagation();
+                          setOpenRecharge(true);
+                        }
+                      : undefined
+                  }
+                  title={canEdit ? tList("rechargeBalance") : undefined}
+                >
+                  {provider.balanceUsd < 0 ? "-" : ""}$
+                  {Math.abs(provider.balanceUsd).toFixed(2)}
+                </span>
+                {provider.balanceUsd < 0 && (
+                  <Badge variant="destructive" className="text-xs px-1.5 py-0">
+                    {tList("balanceOverdraft")}
+                  </Badge>
+                )}
+                {provider.balanceUsd === 0 && (
+                  <Badge variant="outline" className="text-xs px-1.5 py-0 text-orange-600 border-orange-600">
+                    {tList("balanceExhausted")}
+                  </Badge>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -515,6 +645,72 @@ export function ProviderRichListItem({
                   <Copy className="h-4 w-4" />
                 )}
               </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 余额充值 Dialog */}
+      <Dialog open={openRecharge} onOpenChange={setOpenRecharge}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{tList("rechargeDialog.title")}</DialogTitle>
+            <DialogDescription>
+              {tList("rechargeDialog.description", { name: provider.name })}{" "}
+              {provider.balanceUsd === null ? (
+                <span className="font-semibold">{tList("balanceUnlimited")}</span>
+              ) : (
+                <span className="font-semibold">${provider.balanceUsd.toFixed(2)}</span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label htmlFor="recharge-amount" className="text-sm font-medium">
+                {tList("rechargeDialog.amountLabel")}
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                  $
+                </span>
+                <input
+                  id="recharge-amount"
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  placeholder="0.00"
+                  value={rechargeAmount}
+                  onChange={(e) => setRechargeAmount(e.target.value)}
+                  className="w-full pl-7 pr-3 py-2 border rounded-md"
+                  disabled={rechargePending}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">{tList("rechargeDialog.amountDesc")}</p>
+            </div>
+            <div className="flex justify-between gap-2">
+              <Button
+                variant="outline"
+                onClick={handleSetUnlimited}
+                disabled={rechargePending}
+                className="flex-1"
+              >
+                {tList("rechargeDialog.setUnlimited")}
+              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setOpenRecharge(false);
+                    setRechargeAmount("");
+                  }}
+                  disabled={rechargePending}
+                >
+                  {tList("rechargeDialog.cancel")}
+                </Button>
+                <Button onClick={handleRecharge} disabled={rechargePending}>
+                  {rechargePending ? tList("rechargeDialog.processing") : tList("rechargeDialog.submit")}
+                </Button>
+              </div>
             </div>
           </div>
         </DialogContent>

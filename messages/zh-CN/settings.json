@@ -160,6 +160,11 @@
       "todayUsageCount": "{count} 次",
       "circuitBroken": "熔断中",
       "officialWebsite": "官网",
+      "balance": "余额",
+      "balanceUnlimited": "无限",
+      "balanceOverdraft": "已透支",
+      "balanceExhausted": "已耗尽",
+      "rechargeBalance": "充值余额",
       "viewFullKey": "查看完整 API Key",
       "viewFullKeyDesc": "请妥善保管，不要泄露给他人",
       "keyLoading": "加载中...",
@@ -172,6 +177,24 @@
       "deleteFailed": "删除失败",
       "deleteError": "操作过程中出现异常",
       "unknownError": "未知错误",
+      "rechargeDialog": {
+        "title": "供应商余额管理",
+        "description": "为 {name} 充值余额或设置为无限额度。当前余额:",
+        "amountLabel": "充值金额 (USD)",
+        "amountDesc": "输入要充值的金额",
+        "cancel": "取消",
+        "submit": "充值",
+        "setUnlimited": "设置为无限额度",
+        "processing": "处理中...",
+        "invalidAmount": "无效金额",
+        "invalidAmountDesc": "请输入大于 0 的有效金额",
+        "successTitle": "充值成功",
+        "successDesc": "已为 {name} 充值 ${amount}",
+        "unlimitedSuccessTitle": "设置成功",
+        "unlimitedSuccessDesc": "{name} 已设置为无限额度",
+        "failedTitle": "操作失败",
+        "errorDesc": "处理请求时发生错误"
+      },
       "getKeyFailed": "获取密钥失败",
       "keyCopied": "密钥已复制到剪贴板",
       "copyFailed": "复制失败",
@@ -708,12 +731,20 @@
         "rateLimit": {
           "title": "限流配置",
           "summary": {
+            "balance": "余额: ${amount}",
             "fiveHour": "5h: {amount}",
             "daily": "日: {amount} (重置 {resetTime})",
             "weekly": "周: {amount}",
             "monthly": "月: {amount}",
             "concurrent": "并发: {count}",
             "none": "无限制"
+          },
+          "balanceUsd": {
+            "label": "供应商余额 (USD)",
+            "placeholder": "留空表示无限制",
+            "desc": "供应商预付费余额，每次请求后自动扣减。余额为 0 时将自动停用供应商。留空表示无限制（后付费模式）",
+            "editHint": "编辑模式下余额只读，请使用充值功能管理余额",
+            "unlimited": "无限制"
           },
           "limit5h": {
             "label": "5小时消费上限 (USD)",

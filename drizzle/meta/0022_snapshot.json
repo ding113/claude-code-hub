@@ -1,5 +1,5 @@
 {
-  "id": "e640479e-c32a-4c4e-9546-97cb40f69a0e",
+  "id": "a7541def-d7e2-4679-84fe-e6987f742601",
   "prevId": "c1a2ce3e-8996-44e3-87ca-e64437d86004",
   "version": "7",
   "dialect": "postgresql",
@@ -1026,6 +1026,12 @@
           "notNull": false,
           "default": 0
         },
+        "balance_usd": {
+          "name": "balance_usd",
+          "type": "numeric(18, 4)",
+          "primaryKey": false,
+          "notNull": false
+        },
         "circuit_breaker_failure_threshold": {
           "name": "circuit_breaker_failure_threshold",
           "type": "integer",
@@ -1389,13 +1395,6 @@
         },
         "enable_client_version_check": {
           "name": "enable_client_version_check",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "verbose_provider_error": {
-          "name": "verbose_provider_error",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,

@@ -547,6 +547,11 @@
       "todayUsageCount": "{count} times",
       "circuitBroken": "Circuit Broken",
       "officialWebsite": "Official",
+      "balance": "Balance",
+      "balanceUnlimited": "Unlimited",
+      "balanceOverdraft": "Overdraft",
+      "balanceExhausted": "Exhausted",
+      "rechargeBalance": "Recharge Balance",
       "viewFullKey": "View Complete API Key",
       "viewFullKeyDesc": "Please keep it safe and don't share it with others",
       "keyLoading": "Loading...",
@@ -559,6 +564,24 @@
       "deleteFailed": "Delete failed",
       "deleteError": "An error occurred during operation",
       "unknownError": "Unknown error",
+      "rechargeDialog": {
+        "title": "Manage Provider Balance",
+        "description": "Add balance to {name} or set unlimited. Current balance:",
+        "amountLabel": "Amount (USD)",
+        "amountDesc": "Enter the amount to add to the provider's balance",
+        "cancel": "Cancel",
+        "submit": "Recharge",
+        "setUnlimited": "Set Unlimited",
+        "processing": "Processing...",
+        "invalidAmount": "Invalid amount",
+        "invalidAmountDesc": "Please enter a valid amount greater than 0",
+        "successTitle": "Recharge successful",
+        "successDesc": "Added ${amount} to {name}",
+        "unlimitedSuccessTitle": "Success",
+        "unlimitedSuccessDesc": "{name} has been set to unlimited balance",
+        "failedTitle": "Operation failed",
+        "errorDesc": "An error occurred while processing the request"
+      },
       "getKeyFailed": "Failed to get key",
       "keyCopied": "Key copied to clipboard",
       "copyFailed": "Copy failed",
@@ -1119,12 +1142,20 @@
         "rateLimit": {
           "title": "Rate Limit",
           "summary": {
+            "balance": "Balance: ${amount}",
             "fiveHour": "5h: ${amount}",
             "daily": "Day: ${amount} (reset ${resetTime})",
             "weekly": "Week: ${amount}",
             "monthly": "Month: ${amount}",
             "concurrent": "Concurrent: {count}",
             "none": "Unlimited"
+          },
+          "balanceUsd": {
+            "label": "Provider Balance (USD)",
+            "placeholder": "Leave empty for unlimited",
+            "desc": "Prepaid provider balance, automatically deducted after each request. Provider will be disabled when balance reaches 0. Leave empty for unlimited (postpaid mode)",
+            "editHint": "Balance is read-only in edit mode. Use recharge function to manage balance",
+            "unlimited": "Unlimited"
           },
           "limit5h": {
             "label": "5h Spend Limit (USD)",
