@@ -1,4 +1,4 @@
-CREATE TABLE "request_filters" (
+CREATE TABLE IF NOT EXISTS "request_filters" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"name" varchar(100) NOT NULL,
 	"description" text,
@@ -13,6 +13,6 @@ CREATE TABLE "request_filters" (
 	"updated_at" timestamp with time zone DEFAULT now()
 );
 --> statement-breakpoint
-CREATE INDEX "idx_request_filters_enabled" ON "request_filters" USING btree ("is_enabled","priority");--> statement-breakpoint
-CREATE INDEX "idx_request_filters_scope" ON "request_filters" USING btree ("scope");--> statement-breakpoint
-CREATE INDEX "idx_request_filters_action" ON "request_filters" USING btree ("action");
+CREATE INDEX IF NOT EXISTS "idx_request_filters_enabled" ON "request_filters" USING btree ("is_enabled","priority");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_request_filters_scope" ON "request_filters" USING btree ("scope");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_request_filters_action" ON "request_filters" USING btree ("action");
