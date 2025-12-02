@@ -309,9 +309,7 @@ export function UsageLogsFilters({
           <Label>{t("logs.filters.statusCode")}</Label>
           <Select
             value={
-              localFilters.excludeStatusCode200
-                ? "!200"
-                : localFilters.statusCode?.toString() || ""
+              localFilters.excludeStatusCode200 ? "!200" : localFilters.statusCode?.toString() || ""
             }
             onValueChange={(value: string) =>
               setLocalFilters({

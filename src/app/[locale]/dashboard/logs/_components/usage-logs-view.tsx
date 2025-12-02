@@ -81,7 +81,9 @@ export function UsageLogsView({
     excludeStatusCode200: searchParams.statusCode === "!200",
     model: searchParams.model as string | undefined,
     endpoint: searchParams.endpoint as string | undefined,
-    minRetryCount: searchParams.minRetry ? parseInt(searchParams.minRetry as string, 10) : undefined,
+    minRetryCount: searchParams.minRetry
+      ? parseInt(searchParams.minRetry as string, 10)
+      : undefined,
     page: searchParams.page ? parseInt(searchParams.page as string, 10) : 1,
   };
 

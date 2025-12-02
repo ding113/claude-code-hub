@@ -319,6 +319,30 @@ export const errorRules = pgTable('error_rules', {
   errorRulesMatchTypeIdx: index('idx_match_type').on(table.matchType),
 }));
 
+// Request Filters table
+export const requestFilters = pgTable('request_filters', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 100 }).notNull(),
+  description: text('description'),
+  scope: varchar('scope', { length: 20 })
+    .notNull()
+    .$type<'header' | 'body'>(),
+  action: varchar('action', { length: 30 })
+    .notNull()
+    .$type<'remove' | 'set' | 'json_path' | 'text_replace'>(),
+  matchType: varchar('match_type', { length: 20 }),
+  target: text('target').notNull(),
+  replacement: jsonb('replacement'),
+  priority: integer('priority').notNull().default(0),
+  isEnabled: boolean('is_enabled').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  requestFiltersEnabledIdx: index('idx_request_filters_enabled').on(table.isEnabled, table.priority),
+  requestFiltersScopeIdx: index('idx_request_filters_scope').on(table.scope),
+  requestFiltersActionIdx: index('idx_request_filters_action').on(table.action),
+}));
+
 // Sensitive Words table
 export const sensitiveWords = pgTable('sensitive_words', {
   id: serial('id').primaryKey(),

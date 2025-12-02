@@ -23,6 +23,11 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     label: "错误规则",
   },
   {
+    href: "/settings/request-filters",
+    labelKey: "nav.requestFilters",
+    label: "请求过滤",
+  },
+  {
     href: "/settings/client-versions",
     labelKey: "nav.clientVersions",
     label: "客户端升级提醒",
