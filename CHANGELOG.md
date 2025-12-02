@@ -4,6 +4,41 @@
 
 ---
 
+## [v0.3.20](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.20) - 2025-12-02
+
+### 新增
+
+- 实现请求过滤器功能，支持对请求内容进行规则匹配和自动替换 (#251)
+- 添加用户标签(tags)功能，支持对用户进行分类管理 (#251)
+- 排行榜增强：支持按标签筛选用户 (#251)
+- 统计图表新增「本月」时间范围选项 (#251)
+- 添加 `verboseProviderError` 系统设置，可控制供应商错误信息的详细程度 (#236) ([@sususu98](https://github.com/sususu98))
+- 熔断器状态持久化到 Redis，支持多实例共享和重启恢复 (#251)
+- 导航栏新增文档入口，链接至 claude-code-hub.app (#251)
+
+### 优化
+
+- 从 ESLint + Prettier 迁移至 Biome，提升代码格式化和检查效率 (#251)
+- 升级 recharts 依赖并优化图表功能 (#250)
+- 排行榜缓存逻辑重构，提升查询性能 (#251)
+- 供应商成本系数(costMultiplier)现可设置为 0，支持免计费供应商 (#241)
+- 更新多项依赖以提升性能和安全性 (#250)
+
+### 修复
+
+- 修复 Gemini 流式响应 gzip 解压崩溃问题 (#246) ([@sususu98](https://github.com/sususu98))
+- 修复 Gemini 供应商测试连接认证问题 (#246) ([@sususu98](https://github.com/sususu98))
+- 修复 Gemini 流式请求超时检测错误 (#246) ([@sususu98](https://github.com/sususu98))
+- 空状态下添加按钮并正确应用 billingModelSource 配置 (#251)
+- 数据库迁移添加 IF NOT EXISTS 以确保幂等性 (#252)
+
+### 其他
+
+- 移除 Git submodules 相关配置 (#251)
+- 重构测试结构，移除未使用的测试代码 (#251)
+
+---
+
 ## [v0.3.19](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.19) - 2025-11-30
 
 ### 新增
