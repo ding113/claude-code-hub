@@ -460,21 +460,34 @@ export async function getAllHealthStatusAsync(
 
   // Only include status for requested providers (not all in healthMap)
   for (const providerId of providerIds) {
-    const health = healthMap.get(providerId);
-    if (health) {
-      // Check and update expired circuit breaker status
-      if (health.circuitState === "open") {
-        if (health.circuitOpenUntil && now > health.circuitOpenUntil) {
-          health.circuitState = "half-open";
-          health.halfOpenSuccessCount = 0;
-          logger.info(
-            `[CircuitBreaker] Provider ${providerId} auto-transitioned to half-open (on status check)`
-          );
-          persistStateToRedis(providerId, health);
-        }
-      }
-      status[providerId] = { ...health };
+    let health = healthMap.get(providerId);
+
+    // Create default closed state for providers not in healthMap
+    if (!health) {
+      health = {
+        failureCount: 0,
+        lastFailureTime: null,
+        circuitState: "closed",
+        circuitOpenUntil: null,
+        halfOpenSuccessCount: 0,
+        config: null,
+        configLoadedAt: null,
+      };
+      healthMap.set(providerId, health);
     }
+
+    // Check and update expired circuit breaker status
+    if (health.circuitState === "open") {
+      if (health.circuitOpenUntil && now > health.circuitOpenUntil) {
+        health.circuitState = "half-open";
+        health.halfOpenSuccessCount = 0;
+        logger.info(
+          `[CircuitBreaker] Provider ${providerId} auto-transitioned to half-open (on status check)`
+        );
+        persistStateToRedis(providerId, health);
+      }
+    }
+    status[providerId] = { ...health };
   }
 
   return status;
