@@ -84,6 +84,7 @@ export interface UserKeyDisplay {
   // 限额配置
   limit5hUsd: number | null; // 5小时消费上限（美元）
   limitDailyUsd: number | null; // 每日消费上限
+  dailyResetMode: "fixed" | "rolling"; // 每日重置模式
   dailyResetTime: string; // 每日重置时间
   limitWeeklyUsd: number | null; // 周消费上限（美元）
   limitMonthlyUsd: number | null; // 月消费上限（美元）
