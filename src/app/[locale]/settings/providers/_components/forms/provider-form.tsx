@@ -132,6 +132,9 @@ export function ProviderForm({
   const [halfOpenSuccessThreshold, setHalfOpenSuccessThreshold] = useState<number | undefined>(
     sourceProvider?.circuitBreakerHalfOpenSuccessThreshold
   );
+  const [maxRetryAttempts, setMaxRetryAttempts] = useState<number | null>(
+    sourceProvider?.maxRetryAttempts ?? null
+  );
 
   // 代理配置
   const [proxyUrl, setProxyUrl] = useState<string>(sourceProvider?.proxyUrl ?? "");
@@ -299,6 +302,7 @@ export function ProviderForm({
             limit_weekly_usd?: number | null;
             limit_monthly_usd?: number | null;
             limit_concurrent_sessions?: number | null;
+            max_retry_attempts?: number | null;
             circuit_breaker_failure_threshold?: number;
             circuit_breaker_open_duration?: number;
             circuit_breaker_half_open_success_threshold?: number;
@@ -333,6 +337,7 @@ export function ProviderForm({
             limit_weekly_usd: limitWeeklyUsd,
             limit_monthly_usd: limitMonthlyUsd,
             limit_concurrent_sessions: limitConcurrentSessions,
+            max_retry_attempts: maxRetryAttempts,
             circuit_breaker_failure_threshold: failureThreshold ?? 5,
             circuit_breaker_open_duration: openDurationMinutes
               ? openDurationMinutes * 60000
@@ -390,6 +395,7 @@ export function ProviderForm({
             limit_weekly_usd: limitWeeklyUsd,
             limit_monthly_usd: limitMonthlyUsd,
             limit_concurrent_sessions: limitConcurrentSessions ?? 0,
+            max_retry_attempts: maxRetryAttempts,
             circuit_breaker_failure_threshold: failureThreshold ?? 5,
             circuit_breaker_open_duration: openDurationMinutes
               ? openDurationMinutes * 60000
@@ -444,6 +450,7 @@ export function ProviderForm({
           setLimitWeeklyUsd(null);
           setLimitMonthlyUsd(null);
           setLimitConcurrentSessions(null);
+          setMaxRetryAttempts(null);
           setFailureThreshold(5);
           setOpenDurationMinutes(30);
           setHalfOpenSuccessThreshold(2);
@@ -1057,6 +1064,7 @@ export function ProviderForm({
                   failureThreshold: failureThreshold ?? 5,
                   openDuration: openDurationMinutes ?? 30,
                   successThreshold: halfOpenSuccessThreshold ?? 2,
+                  maxRetryAttempts: maxRetryAttempts ?? PROVIDER_DEFAULTS.MAX_RETRY_ATTEMPTS,
                 })}
               </span>
             </button>
@@ -1131,6 +1139,28 @@ export function ProviderForm({
                   />
                   <p className="text-xs text-muted-foreground">
                     {t("sections.circuitBreaker.successThreshold.desc")}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor={isEdit ? "edit-max-retry-attempts" : "max-retry-attempts"}>
+                    {t("sections.circuitBreaker.maxRetryAttempts.label")}
+                  </Label>
+                  <Input
+                    id={isEdit ? "edit-max-retry-attempts" : "max-retry-attempts"}
+                    type="number"
+                    value={maxRetryAttempts ?? ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setMaxRetryAttempts(val === "" ? null : parseInt(val, 10));
+                    }}
+                    placeholder={t("sections.circuitBreaker.maxRetryAttempts.placeholder")}
+                    disabled={isPending}
+                    min="1"
+                    max="10"
+                    step="1"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t("sections.circuitBreaker.maxRetryAttempts.desc")}
                   </p>
                 </div>
               </div>

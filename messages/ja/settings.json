@@ -748,7 +748,7 @@
       "baseUrlPlaceholder": "例：https://open.bigmodel.cn/api/anthropic",
       "baseUrlRequired": "プロバイダーURLを入力してください",
       "circuitBreakerConfig": "熔断器配置",
-      "circuitBreakerConfigSummary": "{failureThreshold} 次失败 / {openDuration} 分钟熔断 / {successThreshold} 次成功恢复",
+      "circuitBreakerConfigSummary": "{failureThreshold} 次失败 / {openDuration} 分钟熔断 / {successThreshold} 次成功恢复 / 每个供应商最多 {maxRetryAttempts} 次尝试",
       "circuitBreakerDesc": "供应商连续失败时自动熔断，避免影响整体服务质量",
       "clearSearch": "検索をクリア",
       "codexInstructions": "Codexインストラクション方針",
@@ -1054,7 +1054,7 @@
         },
         "circuitBreaker": {
           "title": "サーキットブレーカー設定",
-          "summary": "{failureThreshold} 回失敗 / {openDuration} 分間ブレーク / {successThreshold} 回成功で回復",
+          "summary": "{failureThreshold} 回失敗 / {openDuration} 分間ブレーク / {successThreshold} 回成功で回復 / 各プロバイダー最大 {maxRetryAttempts} 回試行",
           "desc": "連続失敗時に自動的にブレークして全体の品質を保護します",
           "failureThreshold": {
             "label": "失敗しきい値（回）",
@@ -1070,6 +1070,11 @@
             "label": "回復しきい値（回）",
             "placeholder": "2",
             "desc": "半開状態で何回成功したら完全回復するか"
+          },
+          "maxRetryAttempts": {
+            "label": "プロバイダーごとの最大試行回数",
+            "placeholder": "2",
+            "desc": "初回呼び出しを含め、同一プロバイダーで試行する上限。超えると他のプロバイダーへ切り替えます。未入力の場合はデフォルト値を使用。"
           }
         },
         "proxy": {

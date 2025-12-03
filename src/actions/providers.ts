@@ -31,7 +31,6 @@ import {
   deleteProvider,
   findAllProviders,
   findProviderById,
-  findProviderList,
   getProviderStatistics,
   updateProvider,
 } from "@/repository/provider";
@@ -194,6 +193,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         limitWeeklyUsd: provider.limitWeeklyUsd,
         limitMonthlyUsd: provider.limitMonthlyUsd,
         limitConcurrentSessions: provider.limitConcurrentSessions,
+        maxRetryAttempts: provider.maxRetryAttempts,
         circuitBreakerFailureThreshold: provider.circuitBreakerFailureThreshold,
         circuitBreakerOpenDuration: provider.circuitBreakerOpenDuration,
         circuitBreakerHalfOpenSuccessThreshold: provider.circuitBreakerHalfOpenSuccessThreshold,
@@ -264,6 +264,7 @@ export async function addProvider(data: {
   limit_weekly_usd?: number | null;
   limit_monthly_usd?: number | null;
   limit_concurrent_sessions?: number | null;
+  max_retry_attempts?: number | null;
   circuit_breaker_failure_threshold?: number;
   circuit_breaker_open_duration?: number;
   circuit_breaker_half_open_success_threshold?: number;
@@ -331,6 +332,7 @@ export async function addProvider(data: {
       limit_weekly_usd: validated.limit_weekly_usd ?? null,
       limit_monthly_usd: validated.limit_monthly_usd ?? null,
       limit_concurrent_sessions: validated.limit_concurrent_sessions ?? 0,
+      max_retry_attempts: validated.max_retry_attempts ?? null,
       circuit_breaker_failure_threshold: validated.circuit_breaker_failure_threshold ?? 5,
       circuit_breaker_open_duration: validated.circuit_breaker_open_duration ?? 1800000,
       circuit_breaker_half_open_success_threshold:
@@ -409,6 +411,7 @@ export async function editProvider(
     limit_weekly_usd?: number | null;
     limit_monthly_usd?: number | null;
     limit_concurrent_sessions?: number | null;
+    max_retry_attempts?: number | null;
     circuit_breaker_failure_threshold?: number;
     circuit_breaker_open_duration?: number;
     circuit_breaker_half_open_success_threshold?: number;

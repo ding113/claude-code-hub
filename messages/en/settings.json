@@ -825,7 +825,7 @@
       "baseUrlPlaceholder": "e.g. https://open.bigmodel.cn/api/anthropic",
       "baseUrlRequired": "Please fill in provider URL first",
       "circuitBreakerConfig": "Circuit Breaker Configuration",
-      "circuitBreakerConfigSummary": "{failureThreshold} failures / {openDuration} min circuit break / {successThreshold} successes to recover",
+      "circuitBreakerConfigSummary": "{failureThreshold} failures / {openDuration} min circuit break / {successThreshold} successes to recover / {maxRetryAttempts} attempts per provider",
       "circuitBreakerDesc": "Auto circuit break on consecutive failures to avoid overall service quality impact",
       "clearSearch": "Clear search",
       "codexInstructions": "Codex Instructions Policy",
@@ -1166,7 +1166,7 @@
         },
         "circuitBreaker": {
           "title": "Circuit Breaker",
-          "summary": "{failureThreshold} failures / {openDuration} min break / {successThreshold} successes to recover",
+          "summary": "{failureThreshold} failures / {openDuration} min break / {successThreshold} successes to recover / {maxRetryAttempts} attempts per provider",
           "desc": "Automatically break on consecutive failures to protect overall service quality",
           "failureThreshold": {
             "label": "Failure Threshold",
@@ -1182,6 +1182,11 @@
             "label": "Recovery Threshold",
             "placeholder": "2",
             "desc": "Number of successes in half-open to fully recover"
+          },
+          "maxRetryAttempts": {
+            "label": "Max Attempts Per Provider",
+            "placeholder": "2",
+            "desc": "Total tries (including the first call) before switching providers. Leave empty to use the system default."
           }
         },
         "proxy": {

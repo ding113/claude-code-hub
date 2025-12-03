@@ -748,7 +748,7 @@
       "baseUrlPlaceholder": "например: https://open.bigmodel.cn/api/anthropic",
       "baseUrlRequired": "Пожалуйста, сначала заполните URL поставщика",
       "circuitBreakerConfig": "Конфигурация автоматического выключателя",
-      "circuitBreakerConfigSummary": "{failureThreshold} сбоев / {openDuration} мин. размыкания / {successThreshold} успехов для восстановления",
+      "circuitBreakerConfigSummary": "{failureThreshold} сбоев / {openDuration} мин. размыкания / {successThreshold} успехов для восстановления / максимум {maxRetryAttempts} попыток на провайдера",
       "circuitBreakerDesc": "Автоматическое размыкание при последовательных сбоях провайдера для предотвращения влияния на общее качество сервиса",
       "clearSearch": "Очистить поиск",
       "codexInstructions": "Политика инструкций Codex",
@@ -1054,7 +1054,7 @@
         },
         "circuitBreaker": {
           "title": "Предохранитель",
-          "summary": "{failureThreshold} неудач / {openDuration} мин. блокировки / {successThreshold} успеха для восстановления",
+          "summary": "{failureThreshold} неудач / {openDuration} мин. блокировки / {successThreshold} успеха для восстановления / до {maxRetryAttempts} попыток на провайдера",
           "desc": "Автоматическое отключение при серии неудач для защиты качества сервиса",
           "failureThreshold": {
             "label": "Порог неудач",
@@ -1070,6 +1070,11 @@
             "label": "Порог восстановления",
             "placeholder": "2",
             "desc": "Сколько успешных запросов в полураскрытом режиме для полного восстановления"
+          },
+          "maxRetryAttempts": {
+            "label": "Максимум попыток на провайдера",
+            "placeholder": "2",
+            "desc": "Общее число попыток (включая первую) перед переключением на другого провайдера. Оставьте пустым для значения по умолчанию."
           }
         },
         "proxy": {
