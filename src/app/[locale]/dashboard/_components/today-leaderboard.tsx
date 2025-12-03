@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import { Award, Medal, Trophy } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -110,7 +110,9 @@ function LeaderboardCard({
           <CardTitle className="text-sm font-semibold">{title}</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-sm text-destructive" role="alert">{errorText}</div>
+          <div className="text-sm text-destructive" role="alert">
+            {errorText}
+          </div>
         </CardContent>
       </Card>
     );
@@ -161,7 +163,11 @@ function LeaderboardCard({
   );
 }
 
-export function TodayLeaderboard({ currencyCode, isAdmin, allowGlobalUsageView }: TodayLeaderboardProps) {
+export function TodayLeaderboard({
+  currencyCode,
+  isAdmin,
+  allowGlobalUsageView,
+}: TodayLeaderboardProps) {
   const t = useTranslations("dashboard.leaderboard");
   const [userEntries, setUserEntries] = useState<NormalizedEntry[]>([]);
   const [providerEntries, setProviderEntries] = useState<NormalizedEntry[]>([]);
@@ -233,7 +239,11 @@ export function TodayLeaderboard({ currencyCode, isAdmin, allowGlobalUsageView }
           if (userResult.status === "fulfilled") {
             setUserEntries(normalize.user(userResult.value));
           } else {
-            setError(userResult.reason instanceof Error ? userResult.reason.message : t("states.fetchFailed"));
+            setError(
+              userResult.reason instanceof Error
+                ? userResult.reason.message
+                : t("states.fetchFailed")
+            );
             setUserEntries([]);
           }
 
@@ -241,7 +251,11 @@ export function TodayLeaderboard({ currencyCode, isAdmin, allowGlobalUsageView }
           if (providerResult.status === "fulfilled") {
             setProviderEntries(normalize.provider(providerResult.value));
           } else {
-            setProviderError(providerResult.reason instanceof Error ? providerResult.reason.message : t("states.fetchFailed"));
+            setProviderError(
+              providerResult.reason instanceof Error
+                ? providerResult.reason.message
+                : t("states.fetchFailed")
+            );
             setProviderEntries([]);
           }
 
@@ -249,7 +263,11 @@ export function TodayLeaderboard({ currencyCode, isAdmin, allowGlobalUsageView }
           if (modelResult.status === "fulfilled") {
             setModelEntries(normalize.model(modelResult.value));
           } else {
-            setModelError(modelResult.reason instanceof Error ? modelResult.reason.message : t("states.fetchFailed"));
+            setModelError(
+              modelResult.reason instanceof Error
+                ? modelResult.reason.message
+                : t("states.fetchFailed")
+            );
             setModelEntries([]);
           }
         } else {
@@ -304,7 +322,17 @@ export function TodayLeaderboard({ currencyCode, isAdmin, allowGlobalUsageView }
     ];
 
     return list.filter((item) => item.shouldShow);
-  }, [allowGlobalUsageView, error, isAdmin, modelEntries, modelError, providerEntries, providerError, t, userEntries]);
+  }, [
+    allowGlobalUsageView,
+    error,
+    isAdmin,
+    modelEntries,
+    modelError,
+    providerEntries,
+    providerError,
+    t,
+    userEntries,
+  ]);
 
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

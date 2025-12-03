@@ -86,6 +86,29 @@
       "all": "All",
       "warning": "Near Limit (>60%)",
       "exceeded": "Exceeded (≥100%)"
+    },
+    "withQuotas": "With Quotas",
+    "unlimited": "Unlimited",
+    "totalCost": "Total Cost",
+    "totalCostAllTime": "All-time Total",
+    "todayCost": "Today's Cost",
+    "keys": "Keys",
+    "more": "more",
+    "noLimitSet": "-",
+    "noUnlimited": "No unlimited users",
+    "noKeys": "No keys",
+    "limit5h": "5-Hour Limit",
+    "limitWeekly": "Weekly Limit",
+    "limitMonthly": "Monthly Limit",
+    "limitTotal": "Total Limit",
+    "limitConcurrent": "Concurrent Sessions",
+    "role": {
+      "admin": "Admin",
+      "user": "User"
+    },
+    "keyStatus": {
+      "enabled": "Enabled",
+      "disabled": "Disabled"
     }
   },
   "providers": {

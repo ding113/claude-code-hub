@@ -732,6 +732,28 @@ export async function sumUserCostToday(userId: number): Promise<number> {
 }
 
 /**
+ * 查询 Key 历史总消费（通过 Key ID）
+ * 用于显示 Key 的历史总消费统计
+ * @param keyId - Key 的数据库 ID
+ * @param maxAgeDays - 最大查询天数，默认 365 天（避免全表扫描）
+ */
+export async function sumKeyTotalCostById(
+  keyId: number,
+  maxAgeDays: number = 365
+): Promise<number> {
+  // 先查询 key 字符串
+  const keyRecord = await db
+    .select({ key: keys.key })
+    .from(keys)
+    .where(eq(keys.id, keyId))
+    .limit(1);
+
+  if (!keyRecord || keyRecord.length === 0) return 0;
+
+  return sumKeyTotalCost(keyRecord[0].key, maxAgeDays);
+}
+
+/**
  * 查询 Key 历史总消费（带时间边界优化）
  * 用于总消费限额检查
  * @param keyHash - API Key 的哈希值
