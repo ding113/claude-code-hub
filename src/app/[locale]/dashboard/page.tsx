@@ -57,7 +57,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
               </Button>
             </Link>
           </div>
-          <TodayLeaderboard currencyCode={systemSettings.currencyDisplay} isAdmin={isAdmin} />
+          <TodayLeaderboard currencyCode={systemSettings.currencyDisplay} isAdmin={isAdmin} allowGlobalUsageView={systemSettings.allowGlobalUsageView} />
         </div>
       )}
     </div>

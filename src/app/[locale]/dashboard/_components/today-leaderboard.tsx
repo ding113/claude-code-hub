@@ -27,6 +27,7 @@ interface NormalizedEntry {
 interface TodayLeaderboardProps {
   currencyCode: CurrencyCode;
   isAdmin: boolean;
+  allowGlobalUsageView: boolean;
 }
 
 function RankBadge({ rank }: { rank: number }) {
@@ -160,7 +161,7 @@ function LeaderboardCard({
   );
 }
 
-export function TodayLeaderboard({ currencyCode, isAdmin }: TodayLeaderboardProps) {
+export function TodayLeaderboard({ currencyCode, isAdmin, allowGlobalUsageView }: TodayLeaderboardProps) {
   const t = useTranslations("dashboard.leaderboard");
   const [userEntries, setUserEntries] = useState<NormalizedEntry[]>([]);
   const [providerEntries, setProviderEntries] = useState<NormalizedEntry[]>([]);
@@ -218,8 +219,8 @@ export function TodayLeaderboard({ currencyCode, isAdmin }: TodayLeaderboardProp
         setProviderError(null);
         setModelError(null);
 
-        if (isAdmin) {
-          // Admin: fetch all three scopes in parallel
+        if (isAdmin || allowGlobalUsageView) {
+          // Admin or users with global usage view: fetch all three scopes in parallel
           const [userResult, providerResult, modelResult] = await Promise.allSettled([
             fetchScope<LeaderboardEntry>("user"),
             fetchScope<ProviderLeaderboardEntry>("provider"),
@@ -275,7 +276,7 @@ export function TodayLeaderboard({ currencyCode, isAdmin }: TodayLeaderboardProp
     return () => {
       cancelled = true;
     };
-  }, [isAdmin, t]);
+  }, [allowGlobalUsageView, isAdmin, t]);
 
   const cards = useMemo(() => {
     const list = [
@@ -291,19 +292,19 @@ export function TodayLeaderboard({ currencyCode, isAdmin }: TodayLeaderboardProp
         title: t("providerRankings"),
         entries: providerEntries,
         error: providerError,
-        shouldShow: isAdmin,
+        shouldShow: isAdmin || allowGlobalUsageView,
       },
       {
         key: "model",
         title: t("modelRankings"),
         entries: modelEntries,
         error: modelError,
-        shouldShow: isAdmin,
+        shouldShow: isAdmin || allowGlobalUsageView,
       },
     ];
 
     return list.filter((item) => item.shouldShow);
-  }, [error, isAdmin, modelEntries, modelError, providerEntries, providerError, t, userEntries]);
+  }, [allowGlobalUsageView, error, isAdmin, modelEntries, modelError, providerEntries, providerError, t, userEntries]);
 
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

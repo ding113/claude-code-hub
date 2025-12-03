@@ -29,6 +29,7 @@ import { CreateProviderSchema, UpdateProviderSchema } from "@/lib/validation/sch
 import {
   createProvider,
   deleteProvider,
+  findAllProviders,
   findProviderById,
   findProviderList,
   getProviderStatistics,
@@ -103,7 +104,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
 
     // 并行获取供应商列表和统计数据
     const [providers, statistics] = await Promise.all([
-      findProviderList(),
+      findAllProviders(),
       getProviderStatistics().catch((error) => {
         logger.trace("getProviders:statistics_error", {
           message: error.message,
@@ -563,7 +564,7 @@ export async function getProvidersHealthStatus() {
       return {};
     }
 
-    const providerIds = await findProviderList().then((providers) => providers.map((p) => p.id));
+    const providerIds = await findAllProviders().then((providers) => providers.map((p) => p.id));
     const healthStatus = await getAllHealthStatusAsync(providerIds);
 
     // 转换为前端友好的格式

@@ -94,10 +94,10 @@ export async function GET(request: NextRequest) {
       dateRange = { startDate, endDate };
     }
 
-    // 供应商榜和模型榜仅管理员可见
-    if ((scope === "provider" || scope === "model") && !isAdmin) {
+    // 供应商榜和模型榜需要管理员或全局使用量查看权限
+    if ((scope === "provider" || scope === "model") && !hasPermission) {
       return NextResponse.json(
-        { error: scope === "provider" ? "仅管理员可查看供应商排行榜" : "仅管理员可查看模型排行榜" },
+        { error: scope === "provider" ? "无权限查看供应商排行榜" : "无权限查看模型排行榜" },
         { status: 403 }
       );
     }

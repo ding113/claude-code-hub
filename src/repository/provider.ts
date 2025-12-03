@@ -160,6 +160,66 @@ export async function findProviderList(
   return result.map(toProvider);
 }
 
+/**
+ * Fetch all providers without pagination limits.
+ * Use this when you need the complete provider list (e.g., for selection, health status).
+ */
+export async function findAllProviders(): Promise<Provider[]> {
+  const result = await db
+    .select({
+      id: providers.id,
+      name: providers.name,
+      url: providers.url,
+      key: providers.key,
+      isEnabled: providers.isEnabled,
+      weight: providers.weight,
+      priority: providers.priority,
+      costMultiplier: providers.costMultiplier,
+      groupTag: providers.groupTag,
+      providerType: providers.providerType,
+      modelRedirects: providers.modelRedirects,
+      allowedModels: providers.allowedModels,
+      joinClaudePool: providers.joinClaudePool,
+      codexInstructionsStrategy: providers.codexInstructionsStrategy,
+      mcpPassthroughType: providers.mcpPassthroughType,
+      mcpPassthroughUrl: providers.mcpPassthroughUrl,
+      limit5hUsd: providers.limit5hUsd,
+      limitDailyUsd: providers.limitDailyUsd,
+      dailyResetMode: providers.dailyResetMode,
+      dailyResetTime: providers.dailyResetTime,
+      limitWeeklyUsd: providers.limitWeeklyUsd,
+      limitMonthlyUsd: providers.limitMonthlyUsd,
+      limitConcurrentSessions: providers.limitConcurrentSessions,
+      circuitBreakerFailureThreshold: providers.circuitBreakerFailureThreshold,
+      circuitBreakerOpenDuration: providers.circuitBreakerOpenDuration,
+      circuitBreakerHalfOpenSuccessThreshold: providers.circuitBreakerHalfOpenSuccessThreshold,
+      proxyUrl: providers.proxyUrl,
+      proxyFallbackToDirect: providers.proxyFallbackToDirect,
+      firstByteTimeoutStreamingMs: providers.firstByteTimeoutStreamingMs,
+      streamingIdleTimeoutMs: providers.streamingIdleTimeoutMs,
+      requestTimeoutNonStreamingMs: providers.requestTimeoutNonStreamingMs,
+      websiteUrl: providers.websiteUrl,
+      faviconUrl: providers.faviconUrl,
+      tpm: providers.tpm,
+      rpm: providers.rpm,
+      rpd: providers.rpd,
+      cc: providers.cc,
+      createdAt: providers.createdAt,
+      updatedAt: providers.updatedAt,
+      deletedAt: providers.deletedAt,
+    })
+    .from(providers)
+    .where(isNull(providers.deletedAt))
+    .orderBy(desc(providers.createdAt));
+
+  logger.trace("findAllProviders:query_result", {
+    count: result.length,
+    ids: result.map((r) => r.id),
+  });
+
+  return result.map(toProvider);
+}
+
 export async function findProviderById(id: number): Promise<Provider | null> {
   const [provider] = await db
     .select({
