@@ -63,7 +63,7 @@ export function UserQuotaListItem({ user, currencyCode = "USD" }: UserQuotaListI
 
   return (
     <Card className="border bg-card">
-      <CardContent className="space-y-4 p-4 sm:p-5">
+      <CardContent className="space-y-3 p-3 sm:p-4">
         {/* Header: name + badges */}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-2">
@@ -112,7 +112,7 @@ export function UserQuotaListItem({ user, currencyCode = "USD" }: UserQuotaListI
         </div>
 
         {/* Quota summary */}
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-2">
           {/* RPM */}
           <div className="space-y-2">
             <div className="flex items-center justify-between text-sm">
@@ -167,7 +167,7 @@ export function UserQuotaListItem({ user, currencyCode = "USD" }: UserQuotaListI
         </div>
 
         {/* Other limits */}
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <div className="text-sm space-y-1">
             <p className="text-muted-foreground">{t("limit5h")}</p>
             <p className="font-medium">
@@ -214,7 +214,7 @@ export function UserQuotaListItem({ user, currencyCode = "USD" }: UserQuotaListI
         </div>
 
         {/* Keys preview + full list */}
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             <span className="text-foreground font-medium">{t("keys")}:</span>
             {topKeys.length === 0 && <span className="text-muted-foreground">{t("noKeys")}</span>}

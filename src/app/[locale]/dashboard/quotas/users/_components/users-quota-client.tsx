@@ -102,7 +102,7 @@ export function UsersQuotaClient({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <Collapsible open={withQuotasOpen} onOpenChange={setWithQuotasOpen}>
         <CollapsibleTrigger className={COLLAPSIBLE_TRIGGER_CLASS}>
           <span>
@@ -112,7 +112,7 @@ export function UsersQuotaClient({
             className={`h-4 w-4 transition-transform duration-200 ${withQuotasOpen ? "rotate-180" : ""}`}
           />
         </CollapsibleTrigger>
-        <CollapsibleContent className="mt-3 space-y-3">
+        <CollapsibleContent className="mt-2 space-y-2">
           {withQuotas.length === 0 && (
             <p className="px-2 text-sm text-muted-foreground">{t("noMatches")}</p>
           )}
@@ -131,7 +131,7 @@ export function UsersQuotaClient({
             className={`h-4 w-4 transition-transform duration-200 ${unlimitedOpen ? "rotate-180" : ""}`}
           />
         </CollapsibleTrigger>
-        <CollapsibleContent className="mt-3 space-y-3">
+        <CollapsibleContent className="mt-2 space-y-2">
           {unlimited.length === 0 && (
             <p className="px-2 text-sm text-muted-foreground">{t("noUnlimited")}</p>
           )}

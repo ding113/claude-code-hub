@@ -36,7 +36,7 @@ export function UserUnlimitedItem({ user, currencyCode = "USD" }: UserUnlimitedI
 
   return (
     <Card className="border bg-card">
-      <CardContent className="space-y-3 p-4 sm:p-5">
+      <CardContent className="space-y-2 p-3 sm:p-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-2">
