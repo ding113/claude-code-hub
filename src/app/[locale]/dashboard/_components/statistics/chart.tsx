@@ -381,7 +381,7 @@ export function UserStatisticsChart({
             </div>
           </div>
         )}
-        <ChartContainer config={chartConfig} className="aspect-auto h-[280px] w-full">
+        <ChartContainer config={chartConfig} className="aspect-auto h-[280px] min-h-[280px] w-full">
           <AreaChart
             data={numericChartData}
             margin={{
@@ -429,6 +429,7 @@ export function UserStatisticsChart({
             />
             <ChartTooltip
               cursor={false}
+              wrapperStyle={{ transform: "translateY(-100%)", marginTop: "-20px" }}
               content={({ active, payload, label }) => {
                 if (!active || !payload || !payload.length) return null;
 
