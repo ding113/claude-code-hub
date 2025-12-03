@@ -23,6 +23,7 @@ import {
 } from "@/lib/redis/circuit-breaker-config";
 import {
   type CircuitBreakerState,
+  loadAllCircuitStates,
   loadCircuitState,
   saveCircuitState,
 } from "@/lib/redis/circuit-breaker-state";
@@ -401,6 +402,80 @@ export function getAllHealthStatus(): Record<number, ProviderHealth> {
 
     status[providerId] = { ...health };
   });
+
+  return status;
+}
+
+/**
+ * Asynchronously get health status for specified providers (with Redis batch loading)
+ * Used for admin dashboard to display circuit breaker status
+ *
+ * @param providerIds - Array of provider IDs to fetch status for
+ * @returns Promise resolving to a record mapping provider ID to health status
+ */
+export async function getAllHealthStatusAsync(
+  providerIds: number[]
+): Promise<Record<number, ProviderHealth>> {
+  // Early return for empty input
+  if (providerIds.length === 0) {
+    return {};
+  }
+
+  const now = Date.now();
+  const status: Record<number, ProviderHealth> = {};
+
+  // Filter to only load providers not yet in memory (avoid redundant Redis queries)
+  const notLoadedIds = providerIds.filter((id) => !loadedFromRedis.has(id));
+
+  if (notLoadedIds.length > 0) {
+    try {
+      const redisStates = await loadAllCircuitStates(notLoadedIds);
+
+      for (const [providerId, redisState] of redisStates) {
+        loadedFromRedis.add(providerId);
+
+        const health: ProviderHealth = {
+          ...redisState,
+          config: null,
+          configLoadedAt: null,
+        };
+        healthMap.set(providerId, health);
+
+        logger.debug(`[CircuitBreaker] Restored state from Redis for provider ${providerId}`, {
+          providerId,
+          state: redisState.circuitState,
+        });
+      }
+
+      // Mark IDs without Redis state as "loaded" to prevent repeated queries
+      for (const id of notLoadedIds) {
+        loadedFromRedis.add(id);
+      }
+    } catch (error) {
+      logger.warn(`[CircuitBreaker] Failed to batch load states from Redis`, {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  // Only include status for requested providers (not all in healthMap)
+  for (const providerId of providerIds) {
+    const health = healthMap.get(providerId);
+    if (health) {
+      // Check and update expired circuit breaker status
+      if (health.circuitState === "open") {
+        if (health.circuitOpenUntil && now > health.circuitOpenUntil) {
+          health.circuitState = "half-open";
+          health.halfOpenSuccessCount = 0;
+          logger.info(
+            `[CircuitBreaker] Provider ${providerId} auto-transitioned to half-open (on status check)`
+          );
+          persistStateToRedis(providerId, health);
+        }
+      }
+      status[providerId] = { ...health };
+    }
+  }
 
   return status;
 }

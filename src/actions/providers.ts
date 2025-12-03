@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { GeminiAuth } from "@/app/v1/_lib/gemini/auth";
 import { isClientAbortError } from "@/app/v1/_lib/proxy/errors";
 import { getSession } from "@/lib/auth";
-import { clearConfigCache, getAllHealthStatus, resetCircuit } from "@/lib/circuit-breaker";
+import { clearConfigCache, getAllHealthStatusAsync, resetCircuit } from "@/lib/circuit-breaker";
 import { CodexInstructionsCache } from "@/lib/codex-instructions-cache";
 import { PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
@@ -563,7 +563,8 @@ export async function getProvidersHealthStatus() {
       return {};
     }
 
-    const healthStatus = getAllHealthStatus();
+    const providerIds = await findProviderList().then((providers) => providers.map((p) => p.id));
+    const healthStatus = await getAllHealthStatusAsync(providerIds);
 
     // 转换为前端友好的格式
     const enrichedStatus: Record<
