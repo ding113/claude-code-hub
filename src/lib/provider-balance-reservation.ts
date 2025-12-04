@@ -1,4 +1,4 @@
-import Decimal from "decimal.js-light";
+import type Decimal from "decimal.js-light";
 import { logger } from "@/lib/logger";
 import { getRedisClient } from "@/lib/redis";
 import { RESERVE_PROVIDER_BALANCE, SETTLE_PROVIDER_BALANCE } from "@/lib/redis/lua-scripts";

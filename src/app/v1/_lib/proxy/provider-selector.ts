@@ -1,10 +1,10 @@
 import { getCircuitState, isCircuitOpen } from "@/lib/circuit-breaker";
 import { logger } from "@/lib/logger";
-import { RateLimitService } from "@/lib/rate-limit";
 import { reserveProviderBalance } from "@/lib/provider-balance-reservation";
-import { SessionManager } from "@/lib/session-manager";
 import { isInMemoryIsolated } from "@/lib/provider-isolation-memory";
-import { findAllProviders, findProviderById, findProviderList } from "@/repository/provider";
+import { RateLimitService } from "@/lib/rate-limit";
+import { SessionManager } from "@/lib/session-manager";
+import { findAllProviders, findProviderById } from "@/repository/provider";
 import { getSystemSettings } from "@/repository/system-config";
 import type { ProviderChainItem } from "@/types/message";
 import type { Provider } from "@/types/provider";
@@ -622,7 +622,7 @@ export class ProxyProviderResolver {
     // 全局用户（userGroup 为空）可以复用任何供应商
 
     // Re-apply limit/balance checks for reused providers to avoid bypassing filterByLimits
-    const [eligibleProvider] = await this.filterByLimits([provider]);
+    const [eligibleProvider] = await ProxyProviderResolver.filterByLimits([provider]);
     if (!eligibleProvider) {
       logger.warn("ProviderSelector: Session provider failed limit checks", {
         sessionId: session.sessionId,

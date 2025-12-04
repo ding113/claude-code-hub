@@ -5,7 +5,7 @@ import { db } from "@/drizzle/db";
 import { providers } from "@/drizzle/schema";
 import { getEnvConfig } from "@/lib/config";
 import { logger } from "@/lib/logger";
-import { Decimal, toCostDecimal } from "@/lib/utils/currency";
+import { type Decimal, toCostDecimal } from "@/lib/utils/currency";
 import type { CreateProviderData, Provider, UpdateProviderData } from "@/types/provider";
 import { toProvider } from "./_shared/transformers";
 
