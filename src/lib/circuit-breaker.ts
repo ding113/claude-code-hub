@@ -71,31 +71,50 @@ function getOrCreateHealthSync(providerId: number): ProviderHealth {
 
 /**
  * 获取或创建供应商的健康状态（异步版本，首次会尝试从 Redis 加载）
+ * 对于 open/half-open 状态，始终检查 Redis 以同步外部重置操作
  */
 async function getOrCreateHealth(providerId: number): Promise<ProviderHealth> {
   let health = healthMap.get(providerId);
 
-  // 如果内存中没有，且尚未从 Redis 加载过，尝试从 Redis 恢复
-  if (!health && !loadedFromRedis.has(providerId)) {
+  // Determine if we need to check Redis:
+  // 1. No health in memory AND not yet loaded from Redis (initial load)
+  // 2. OR health exists but is in non-closed state (may have been reset externally)
+  const needsRedisCheck =
+    (!health && !loadedFromRedis.has(providerId)) || (health && health.circuitState !== "closed");
+
+  if (needsRedisCheck) {
     loadedFromRedis.add(providerId);
 
     try {
       const redisState = await loadCircuitState(providerId);
       if (redisState) {
-        health = {
-          ...redisState,
-          config: null,
-          configLoadedAt: null,
-        };
-        healthMap.set(providerId, health);
-        logger.debug(`[CircuitBreaker] Restored state from Redis for provider ${providerId}`, {
-          providerId,
-          state: redisState.circuitState,
-        });
+        // If Redis has different state, use Redis state (source of truth)
+        if (!health || redisState.circuitState !== health.circuitState) {
+          health = {
+            ...redisState,
+            config: health?.config || null,
+            configLoadedAt: health?.configLoadedAt || null,
+          };
+          healthMap.set(providerId, health);
+          logger.debug(`[CircuitBreaker] Synced state from Redis for provider ${providerId}`, {
+            providerId,
+            state: redisState.circuitState,
+          });
+        }
         return health;
+      } else if (health && health.circuitState !== "closed") {
+        // Redis has no state (was reset/deleted), reset memory to closed
+        health.circuitState = "closed";
+        health.failureCount = 0;
+        health.lastFailureTime = null;
+        health.circuitOpenUntil = null;
+        health.halfOpenSuccessCount = 0;
+        logger.info(
+          `[CircuitBreaker] Provider ${providerId} reset to closed (Redis state cleared)`
+        );
       }
     } catch (error) {
-      logger.warn(`[CircuitBreaker] Failed to load state from Redis for provider ${providerId}`, {
+      logger.warn(`[CircuitBreaker] Failed to sync state from Redis for provider ${providerId}`, {
         error: error instanceof Error ? error.message : String(error),
       });
     }
