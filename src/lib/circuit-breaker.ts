@@ -411,11 +411,16 @@ export function getAllHealthStatus(): Record<number, ProviderHealth> {
  * Used for admin dashboard to display circuit breaker status
  *
  * @param providerIds - Array of provider IDs to fetch status for
+ * @param options - Optional configuration
+ * @param options.forceRefresh - When true, always reload from Redis (for admin dashboard)
  * @returns Promise resolving to a record mapping provider ID to health status
  */
 export async function getAllHealthStatusAsync(
-  providerIds: number[]
+  providerIds: number[],
+  options?: { forceRefresh?: boolean }
 ): Promise<Record<number, ProviderHealth>> {
+  const { forceRefresh = false } = options || {};
+
   // Early return for empty input
   if (providerIds.length === 0) {
     return {};
@@ -424,12 +429,26 @@ export async function getAllHealthStatusAsync(
   const now = Date.now();
   const status: Record<number, ProviderHealth> = {};
 
-  // Filter to only load providers not yet in memory (avoid redundant Redis queries)
-  const notLoadedIds = providerIds.filter((id) => !loadedFromRedis.has(id));
+  // If forceRefresh, clear loadedFromRedis for these providers to force Redis reload
+  if (forceRefresh) {
+    for (const id of providerIds) {
+      loadedFromRedis.delete(id);
+    }
+  }
 
-  if (notLoadedIds.length > 0) {
+  // Find providers that need Redis refresh:
+  // 1. Not in loadedFromRedis (never loaded)
+  // 2. OR (when not forceRefresh) providers with non-closed state that may have changed
+  const needsRefresh = providerIds.filter((id) => {
+    if (!loadedFromRedis.has(id)) return true;
+    // Always refresh non-closed states to catch recovery
+    const memoryState = healthMap.get(id);
+    return memoryState && memoryState.circuitState !== "closed";
+  });
+
+  if (needsRefresh.length > 0) {
     try {
-      const redisStates = await loadAllCircuitStates(notLoadedIds);
+      const redisStates = await loadAllCircuitStates(needsRefresh);
 
       for (const [providerId, redisState] of redisStates) {
         loadedFromRedis.add(providerId);
@@ -448,7 +467,7 @@ export async function getAllHealthStatusAsync(
       }
 
       // Mark IDs without Redis state as "loaded" to prevent repeated queries
-      for (const id of notLoadedIds) {
+      for (const id of needsRefresh) {
         loadedFromRedis.add(id);
       }
     } catch (error) {

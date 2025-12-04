@@ -568,7 +568,7 @@ export async function getProvidersHealthStatus() {
     }
 
     const providerIds = await findAllProviders().then((providers) => providers.map((p) => p.id));
-    const healthStatus = await getAllHealthStatusAsync(providerIds);
+    const healthStatus = await getAllHealthStatusAsync(providerIds, { forceRefresh: true });
 
     // 转换为前端友好的格式
     const enrichedStatus: Record<
