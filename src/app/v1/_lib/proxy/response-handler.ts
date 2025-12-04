@@ -1,4 +1,5 @@
 import { AsyncTaskManager } from "@/lib/async-task-manager";
+import Decimal from "decimal.js-light";
 import { logger } from "@/lib/logger";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { RateLimitService } from "@/lib/rate-limit";
@@ -7,6 +8,11 @@ import { SessionTracker } from "@/lib/session-tracker";
 import { calculateRequestCost } from "@/lib/utils/cost-calculation";
 import { parseSSEData } from "@/lib/utils/sse";
 import {
+  getInMemoryIsolationTTL,
+  isInMemoryIsolated,
+  setInMemoryIsolation,
+} from "@/lib/provider-isolation-memory";
+import {
   updateMessageRequestCost,
   updateMessageRequestDetails,
   updateMessageRequestDuration,
@@ -14,6 +20,7 @@ import {
 import { findLatestPriceByModel } from "@/repository/model-price";
 import { getSystemSettings } from "@/repository/system-config";
 import type { SessionUsageUpdate } from "@/types/session";
+import { settleProviderBalance } from "@/lib/provider-balance-reservation";
 import { defaultRegistry } from "../converters";
 import type { Format, TransformState } from "../converters/types";
 import { GeminiAdapter } from "../gemini/adapter";
@@ -1488,7 +1495,13 @@ async function updateRequestCostFromUsage(
               providerId,
               error: redisError instanceof Error ? redisError.message : String(redisError),
             });
-            // Fail-open: Redis 不可用不影响主流程
+            // Redis 不可用时，退化到进程内隔离，避免完全无保护
+            const isolationTTL = getInMemoryIsolationTTL();
+            setInMemoryIsolation(providerId, isolationTTL);
+            logger.warn("[BalanceDeduction] Applied in-memory isolation fallback", {
+              providerId,
+              isolationTTL,
+            });
           }
         } else {
           logger.debug("[BalanceDeduction] Provider balance decremented successfully", {
@@ -1505,6 +1518,20 @@ async function updateRequestCostFromUsage(
           error: error instanceof Error ? error.message : String(error),
         });
         // Fail-open: 扣减失败不影响主流程
+      }
+    }
+
+    // 释放预占（如果存在）
+    if (providerId) {
+      const reservation = session.getBalanceReservation();
+      if (reservation && reservation.providerId === providerId) {
+        await settleProviderBalance({
+          providerId,
+          reserveId: reservation.reserveId,
+          actualCost: cost,
+          estimate: new Decimal(reservation.estimate || "0"),
+        });
+        session.setBalanceReservation(null);
       }
     }
   } else {

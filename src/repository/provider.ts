@@ -670,3 +670,18 @@ export async function incrementProviderBalance(providerId: number, amount: Decim
     note: "Provider becomes selectable when balance > 0 (via selector logic, not field change)",
   });
 }
+
+/**
+ * 将供应商余额设置为无限（置为 null）
+ */
+export async function clearProviderBalance(providerId: number): Promise<void> {
+  await db
+    .update(providers)
+    .set({ balanceUsd: null })
+    .where(and(eq(providers.id, providerId), isNull(providers.deletedAt)))
+    .execute();
+
+  logger.info("[ProviderRepo] Provider balance cleared (unlimited)", {
+    providerId,
+  });
+}

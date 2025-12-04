@@ -228,6 +228,131 @@ return tostring(total)
 `;
 
 /**
+ * 供应商余额预占（原子）
+ *
+ * KEYS[1]: provider:{id}:balance (Hash: { balance, reserved })
+ * KEYS[2]: provider:{id}:balance:reserve:{reserveId} (String, 可选，幂等)
+ * ARGV[1]: estimate_cost
+ * ARGV[2]: reserved_cap (上限，0 表示不启用)
+ * ARGV[3]: reserve_ttl_seconds（用于 KEYS[2]）
+ * ARGV[4]: initial_balance（当 Hash 中无 balance 时用此初始值；null/空串则视为 0）
+ *
+ * 返回：
+ * {allowed, balance, reserved, reserved_added, reused}
+ */
+export const RESERVE_PROVIDER_BALANCE = `
+local state_key = KEYS[1]
+local reserve_key = KEYS[2]
+local estimate_cost = tonumber(ARGV[1])
+local reserved_cap = tonumber(ARGV[2])
+local reserve_ttl = tonumber(ARGV[3])
+local initial_balance_str = ARGV[4]
+
+if not estimate_cost or estimate_cost <= 0 then
+  return {1, 0, 0, 0, 0}
+end
+
+local function to_number(value, fallback)
+  local n = tonumber(value)
+  if n == nil then
+    return fallback
+  end
+  return n
+end
+
+-- 初始化 balance
+if redis.call('HEXISTS', state_key, 'balance') == 0 then
+  if initial_balance_str and initial_balance_str ~= '' then
+    redis.call('HSET', state_key, 'balance', initial_balance_str)
+  else
+    redis.call('HSET', state_key, 'balance', '0')
+  end
+end
+
+local balance = to_number(redis.call('HGET', state_key, 'balance'), 0)
+local reserved = to_number(redis.call('HGET', state_key, 'reserved'), 0)
+
+-- 幂等：已有 reserve_key 则视为已预占
+if reserve_key and reserve_key ~= '' then
+  local existing = redis.call('GET', reserve_key)
+  if existing then
+    return {1, balance, reserved, tonumber(existing), 1}
+  end
+end
+
+local available = balance - reserved
+if available < estimate_cost then
+  return {0, balance, reserved, 0, 0}
+end
+
+local cap = reserved_cap
+if not cap or cap <= 0 then
+  cap = balance
+end
+
+if cap > 0 and (reserved + estimate_cost) > cap then
+  return {0, balance, reserved, 0, 0}
+end
+
+reserved = reserved + estimate_cost
+redis.call('HSET', state_key, 'reserved', reserved)
+redis.call('EXPIRE', state_key, 3600) -- 兜底 TTL 1 小时
+
+if reserve_key and reserve_key ~= '' then
+  redis.call('SETEX', reserve_key, reserve_ttl, tostring(estimate_cost))
+end
+
+return {1, balance, reserved, estimate_cost, 0}
+`;
+
+/**
+ * 供应商余额结算（原子）
+ *
+ * KEYS[1]: provider:{id}:balance (Hash: { balance, reserved })
+ * KEYS[2]: provider:{id}:balance:reserve:{reserveId} (String, 可选)
+ * ARGV[1]: actual_cost
+ * ARGV[2]: estimate_cost
+ *
+ * 返回：{balance, reserved}
+ */
+export const SETTLE_PROVIDER_BALANCE = `
+local state_key = KEYS[1]
+local reserve_key = KEYS[2]
+local actual_cost = tonumber(ARGV[1]) or 0
+local estimate_cost = tonumber(ARGV[2]) or 0
+
+local function to_number(value, fallback)
+  local n = tonumber(value)
+  if n == nil then
+    return fallback
+  end
+  return n
+end
+
+local balance = to_number(redis.call('HGET', state_key, 'balance'), 0)
+local reserved = to_number(redis.call('HGET', state_key, 'reserved'), 0)
+
+-- 释放预占
+reserved = reserved - estimate_cost
+if reserved < 0 then
+  reserved = 0
+end
+
+-- 扣减真实费用
+balance = balance - actual_cost
+
+redis.call('HSET', state_key, 'balance', balance)
+redis.call('HSET', state_key, 'reserved', reserved)
+redis.call('EXPIRE', state_key, 3600) -- 兜底 TTL 1 小时
+
+if reserve_key and reserve_key ~= '' then
+  redis.call('DEL', reserve_key)
+end
+
+return {balance, reserved}
+`;
+
+/**
  * 查询 24小时滚动窗口当前消费
  *
  * 功能：

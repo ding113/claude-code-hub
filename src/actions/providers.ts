@@ -37,6 +37,8 @@ import {
 import type { ProviderDisplay, ProviderType } from "@/types/provider";
 import type { ActionResult } from "./types";
 
+const MAX_RECHARGE_AMOUNT = 1_000_000; // 单次充值上限（USD）
+
 const API_TEST_TIMEOUT_LIMITS = {
   DEFAULT: 15000,
   MIN: 5000,
@@ -2725,6 +2727,13 @@ export async function rechargeProviderBalance(
     };
   }
 
+  if (amount > MAX_RECHARGE_AMOUNT) {
+    return {
+      ok: false,
+      error: `单次充值金额不能超过 $${MAX_RECHARGE_AMOUNT.toLocaleString()}`,
+    };
+  }
+
   try {
     const { incrementProviderBalance } = await import("@/repository/provider");
     const { Decimal } = await import("@/lib/utils/currency");
@@ -2799,7 +2808,8 @@ export async function setProviderBalanceUnlimited(providerId: number): Promise<A
       };
     }
 
-    await db.update(providers).set({ balanceUsd: null }).where(eq(providers.id, providerId));
+    const { clearProviderBalance } = await import("@/repository/provider");
+    await clearProviderBalance(providerId);
 
     logger.info("[ProviderAction] Balance set to unlimited", {
       providerId,

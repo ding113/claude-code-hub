@@ -26,7 +26,7 @@ export interface Provider {
   // 优先级和分组配置
   priority: number;
   costMultiplier: number;
-  balanceUsd: number | null; // 供应商余额（null/0 视为无限制）
+  balanceUsd: number | null; // 供应商余额（null 视为无限，0/负数视为用尽）
   groupTag: string | null;
 
   // 供应商类型：扩展支持 4 种类型
