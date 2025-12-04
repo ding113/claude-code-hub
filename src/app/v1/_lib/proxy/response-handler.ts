@@ -303,7 +303,8 @@ export class ProxyResponseHandler {
             session.getCurrentModel(),
             usageMetrics,
             provider.costMultiplier,
-            provider.id // 传入 providerId 用于余额扣减
+            provider.id, // 传入 providerId 用于余额扣减
+            session // 传入 session 用于余额预占结算
           );
 
           // 追踪消费到 Redis（用于限流）
@@ -836,7 +837,8 @@ export class ProxyResponseHandler {
           session.getCurrentModel(),
           usageForCost,
           provider.costMultiplier,
-          provider.id // 传入 providerId 用于余额扣减
+          provider.id, // 传入 providerId 用于余额扣减
+          session // 传入 session 用于余额预占结算
         );
 
         // 追踪消费到 Redis（用于限流）
@@ -1366,7 +1368,8 @@ async function updateRequestCostFromUsage(
   redirectedModel: string | null,
   usage: UsageMetrics | null,
   costMultiplier: number = 1.0,
-  providerId?: number // 可选：供应商ID，用于余额扣减
+  providerId?: number, // 可选：供应商ID，用于余额扣减
+  session?: ProxySession // 可选：会话对象，用于余额预占结算
 ): Promise<void> {
   if (!usage) {
     logger.warn("[CostCalculation] No usage data, skipping cost update", { messageId });
@@ -1522,7 +1525,7 @@ async function updateRequestCostFromUsage(
     }
 
     // 释放预占（如果存在）
-    if (providerId) {
+    if (providerId && session) {
       const reservation = session.getBalanceReservation();
       if (reservation && reservation.providerId === providerId) {
         await settleProviderBalance({
@@ -1589,7 +1592,8 @@ async function finalizeRequestStats(
     session.getCurrentModel(),
     usageMetrics,
     provider.costMultiplier,
-    provider.id // 传入 providerId 用于余额扣减
+    provider.id, // 传入 providerId 用于余额扣减
+    session // 传入 session 用于余额预占结算
   );
 
   // 5. 追踪消费到 Redis（用于限流）
