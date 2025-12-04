@@ -1,33 +1,40 @@
 "use client";
 
+import { ChevronDown } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
-import { useMemo } from "react";
-import { QuotaProgress } from "@/components/quota/quota-progress";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
-import { type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
-import { formatDateDistance } from "@/lib/utils/date-format";
+import { useMemo, useState } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import type { UserQuotaWithUsage, UsersQuotaClientProps } from "./types";
+import { UserQuotaListItem } from "./user-quota-list-item";
+import { UserUnlimitedItem } from "./user-unlimited-item";
 
-interface UserQuota {
-  rpm: { current: number; limit: number; window: "per_minute" };
-  dailyCost: { current: number; limit: number; resetAt: Date };
+const COLLAPSIBLE_TRIGGER_CLASS =
+  "flex w-full items-center justify-between rounded-lg border bg-card px-4 py-3 text-sm font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 transition-colors";
+
+function getUsageRate(user: UserQuotaWithUsage): number {
+  const rpmRate =
+    user.quota?.rpm && user.quota.rpm.limit > 0
+      ? (user.quota.rpm.current / user.quota.rpm.limit) * 100
+      : 0;
+  const dailyRate =
+    user.quota?.dailyCost && user.quota.dailyCost.limit > 0
+      ? (user.quota.dailyCost.current / user.quota.dailyCost.limit) * 100
+      : 0;
+  return Math.max(rpmRate, dailyRate);
 }
 
-interface UserWithQuota {
-  id: number;
-  name: string;
-  note?: string;
-  role: string;
-  quota: UserQuota | null;
-}
-
-interface UsersQuotaClientProps {
-  users: UserWithQuota[];
-  currencyCode?: CurrencyCode;
-  searchQuery?: string;
-  sortBy?: "name" | "usage";
-  filter?: "all" | "warning" | "exceeded";
+function hasQuota(user: UserQuotaWithUsage): boolean {
+  const limits = [
+    user.quota?.rpm?.limit ?? 0,
+    user.quota?.dailyCost?.limit ?? 0,
+    user.limit5hUsd ?? 0,
+    user.limitWeeklyUsd ?? 0,
+    user.limitMonthlyUsd ?? 0,
+    user.limitTotalUsd ?? 0,
+    user.limitConcurrentSessions ?? 0,
+  ];
+  return limits.some((limit) => (limit ?? 0) > 0);
 }
 
 export function UsersQuotaClient({
@@ -37,121 +44,102 @@ export function UsersQuotaClient({
   sortBy = "name",
   filter = "all",
 }: UsersQuotaClientProps) {
-  const locale = useLocale();
   const t = useTranslations("quota.users");
+  const locale = useLocale();
+  const [withQuotasOpen, setWithQuotasOpen] = useState(true);
+  const [unlimitedOpen, setUnlimitedOpen] = useState(false);
 
-  // 计算使用率（用于排序和筛选）
-  const usersWithUsage = useMemo(() => {
-    return users.map((user) => {
-      const dailyUsage = user.quota?.dailyCost.limit
-        ? (user.quota.dailyCost.current / user.quota.dailyCost.limit) * 100
-        : 0;
-      return { ...user, usagePercentage: dailyUsage };
-    });
-  }, [users]);
+  const processedUsers = useMemo(() => {
+    let result = users;
 
-  // 筛选
-  const filteredUsers = useMemo(() => {
-    let result = usersWithUsage;
-
-    // 搜索
     if (searchQuery) {
-      result = result.filter((user) => user.name.toLowerCase().includes(searchQuery.toLowerCase()));
+      const lower = searchQuery.toLowerCase();
+      result = result.filter((user) => user.name.toLowerCase().includes(lower));
     }
 
-    // 状态筛选
     if (filter === "warning") {
-      result = result.filter((user) => user.usagePercentage >= 60 && user.usagePercentage < 100);
+      result = result.filter((user) => {
+        const rate = getUsageRate(user);
+        return rate >= 60 && rate < 100;
+      });
     } else if (filter === "exceeded") {
-      result = result.filter((user) => user.usagePercentage >= 100);
+      result = result.filter((user) => getUsageRate(user) >= 100);
     }
 
-    return result;
-  }, [usersWithUsage, searchQuery, filter]);
-
-  // 排序
-  const sortedUsers = useMemo(() => {
-    const sorted = [...filteredUsers];
-    if (sortBy === "name") {
-      sorted.sort((a, b) => a.name.localeCompare(b.name, "zh-CN"));
-    } else if (sortBy === "usage") {
-      sorted.sort((a, b) => b.usagePercentage - a.usagePercentage);
+    const sorted = [...result];
+    if (sortBy === "usage") {
+      sorted.sort((a, b) => getUsageRate(b) - getUsageRate(a));
+    } else {
+      sorted.sort((a, b) => a.name.localeCompare(b.name, locale));
     }
+
     return sorted;
-  }, [filteredUsers, sortBy]);
+  }, [users, searchQuery, sortBy, filter, locale]);
+
+  const { withQuotas, unlimited } = useMemo(() => {
+    const withQuotaUsers: UserQuotaWithUsage[] = [];
+    const unlimitedUsers: UserQuotaWithUsage[] = [];
+
+    processedUsers.forEach((user) => {
+      if (hasQuota(user)) {
+        withQuotaUsers.push(user);
+      } else {
+        unlimitedUsers.push(user);
+      }
+    });
+
+    return { withQuotas: withQuotaUsers, unlimited: unlimitedUsers };
+  }, [processedUsers]);
+
+  if (processedUsers.length === 0) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center py-10">
+          <p className="text-muted-foreground">{searchQuery ? t("noMatches") : t("noData")}</p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
-    <>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {sortedUsers.map((user) => (
-          <Card key={user.id}>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">{user.name}</CardTitle>
-                <Badge variant={user.role === "admin" ? "default" : "secondary"}>{user.role}</Badge>
-              </div>
-              <CardDescription>{user.note || t("noNote")}</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {user.quota ? (
-                <>
-                  {/* RPM 限额 */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">{t("rpm.label")}</span>
-                      <span className="font-medium">
-                        {user.quota.rpm.current} / {user.quota.rpm.limit}
-                      </span>
-                    </div>
-                    <Progress
-                      value={
-                        user.quota.rpm.limit > 0
-                          ? (user.quota.rpm.current / user.quota.rpm.limit) * 100
-                          : 0
-                      }
-                      className="h-2"
-                    />
-                    <p className="text-xs text-muted-foreground">{t("rpm.description")}</p>
-                  </div>
+    <div className="space-y-3">
+      <Collapsible open={withQuotasOpen} onOpenChange={setWithQuotasOpen}>
+        <CollapsibleTrigger className={COLLAPSIBLE_TRIGGER_CLASS}>
+          <span>
+            {t("withQuotas")} ({withQuotas.length})
+          </span>
+          <ChevronDown
+            className={`h-4 w-4 transition-transform duration-200 ${withQuotasOpen ? "rotate-180" : ""}`}
+          />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+          {withQuotas.length === 0 && (
+            <p className="px-2 text-sm text-muted-foreground">{t("noMatches")}</p>
+          )}
+          {withQuotas.map((user) => (
+            <UserQuotaListItem key={user.id} user={user} currencyCode={currencyCode} />
+          ))}
+        </CollapsibleContent>
+      </Collapsible>
 
-                  {/* 每日消费限额 */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">{t("dailyCost.label")}</span>
-                      <span className="font-medium">
-                        {formatCurrency(user.quota.dailyCost.current, currencyCode)} /{" "}
-                        {formatCurrency(user.quota.dailyCost.limit, currencyCode)}
-                      </span>
-                    </div>
-                    <QuotaProgress
-                      current={user.quota.dailyCost.current}
-                      limit={user.quota.dailyCost.limit}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      {t("dailyCost.resetAt")}{" "}
-                      {formatDateDistance(
-                        new Date(user.quota.dailyCost.resetAt),
-                        new Date(),
-                        locale
-                      )}
-                    </p>
-                  </div>
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground">{t("noQuotaData")}</p>
-              )}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {sortedUsers.length === 0 && (
-        <Card>
-          <CardContent className="flex items-center justify-center py-10">
-            <p className="text-muted-foreground">{searchQuery ? t("noMatches") : t("noData")}</p>
-          </CardContent>
-        </Card>
-      )}
-    </>
+      <Collapsible open={unlimitedOpen} onOpenChange={setUnlimitedOpen}>
+        <CollapsibleTrigger className={COLLAPSIBLE_TRIGGER_CLASS}>
+          <span>
+            {t("unlimited")} ({unlimited.length})
+          </span>
+          <ChevronDown
+            className={`h-4 w-4 transition-transform duration-200 ${unlimitedOpen ? "rotate-180" : ""}`}
+          />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+          {unlimited.length === 0 && (
+            <p className="px-2 text-sm text-muted-foreground">{t("noUnlimited")}</p>
+          )}
+          {unlimited.map((user) => (
+            <UserUnlimitedItem key={user.id} user={user} currencyCode={currencyCode} />
+          ))}
+        </CollapsibleContent>
+      </Collapsible>
+    </div>
   );
 }

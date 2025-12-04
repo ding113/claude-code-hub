@@ -36,6 +36,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     limitMonthlyUsd:
       providerData.limit_monthly_usd != null ? providerData.limit_monthly_usd.toString() : null,
     limitConcurrentSessions: providerData.limit_concurrent_sessions,
+    maxRetryAttempts: providerData.max_retry_attempts ?? null,
     circuitBreakerFailureThreshold: providerData.circuit_breaker_failure_threshold ?? 5,
     circuitBreakerOpenDuration: providerData.circuit_breaker_open_duration ?? 1800000,
     circuitBreakerHalfOpenSuccessThreshold:
@@ -77,6 +78,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     limitWeeklyUsd: providers.limitWeeklyUsd,
     limitMonthlyUsd: providers.limitMonthlyUsd,
     limitConcurrentSessions: providers.limitConcurrentSessions,
+    maxRetryAttempts: providers.maxRetryAttempts,
     circuitBreakerFailureThreshold: providers.circuitBreakerFailureThreshold,
     circuitBreakerOpenDuration: providers.circuitBreakerOpenDuration,
     circuitBreakerHalfOpenSuccessThreshold: providers.circuitBreakerHalfOpenSuccessThreshold,
@@ -128,6 +130,7 @@ export async function findProviderList(
       limitWeeklyUsd: providers.limitWeeklyUsd,
       limitMonthlyUsd: providers.limitMonthlyUsd,
       limitConcurrentSessions: providers.limitConcurrentSessions,
+      maxRetryAttempts: providers.maxRetryAttempts,
       circuitBreakerFailureThreshold: providers.circuitBreakerFailureThreshold,
       circuitBreakerOpenDuration: providers.circuitBreakerOpenDuration,
       circuitBreakerHalfOpenSuccessThreshold: providers.circuitBreakerHalfOpenSuccessThreshold,
@@ -153,6 +156,67 @@ export async function findProviderList(
     .offset(offset);
 
   logger.trace("findProviderList:query_result", {
+    count: result.length,
+    ids: result.map((r) => r.id),
+  });
+
+  return result.map(toProvider);
+}
+
+/**
+ * Fetch all providers without pagination limits.
+ * Use this when you need the complete provider list (e.g., for selection, health status).
+ */
+export async function findAllProviders(): Promise<Provider[]> {
+  const result = await db
+    .select({
+      id: providers.id,
+      name: providers.name,
+      url: providers.url,
+      key: providers.key,
+      isEnabled: providers.isEnabled,
+      weight: providers.weight,
+      priority: providers.priority,
+      costMultiplier: providers.costMultiplier,
+      groupTag: providers.groupTag,
+      providerType: providers.providerType,
+      modelRedirects: providers.modelRedirects,
+      allowedModels: providers.allowedModels,
+      joinClaudePool: providers.joinClaudePool,
+      codexInstructionsStrategy: providers.codexInstructionsStrategy,
+      mcpPassthroughType: providers.mcpPassthroughType,
+      mcpPassthroughUrl: providers.mcpPassthroughUrl,
+      limit5hUsd: providers.limit5hUsd,
+      limitDailyUsd: providers.limitDailyUsd,
+      dailyResetMode: providers.dailyResetMode,
+      dailyResetTime: providers.dailyResetTime,
+      limitWeeklyUsd: providers.limitWeeklyUsd,
+      limitMonthlyUsd: providers.limitMonthlyUsd,
+      limitConcurrentSessions: providers.limitConcurrentSessions,
+      maxRetryAttempts: providers.maxRetryAttempts,
+      circuitBreakerFailureThreshold: providers.circuitBreakerFailureThreshold,
+      circuitBreakerOpenDuration: providers.circuitBreakerOpenDuration,
+      circuitBreakerHalfOpenSuccessThreshold: providers.circuitBreakerHalfOpenSuccessThreshold,
+      proxyUrl: providers.proxyUrl,
+      proxyFallbackToDirect: providers.proxyFallbackToDirect,
+      firstByteTimeoutStreamingMs: providers.firstByteTimeoutStreamingMs,
+      streamingIdleTimeoutMs: providers.streamingIdleTimeoutMs,
+      requestTimeoutNonStreamingMs: providers.requestTimeoutNonStreamingMs,
+      websiteUrl: providers.websiteUrl,
+      faviconUrl: providers.faviconUrl,
+      tpm: providers.tpm,
+      rpm: providers.rpm,
+      rpd: providers.rpd,
+      cc: providers.cc,
+      createdAt: providers.createdAt,
+      updatedAt: providers.updatedAt,
+      deletedAt: providers.deletedAt,
+    })
+    .from(providers)
+    .where(isNull(providers.deletedAt))
+    .orderBy(desc(providers.createdAt));
+
+  logger.trace("findAllProviders:query_result", {
     count: result.length,
     ids: result.map((r) => r.id),
   });
@@ -186,6 +250,7 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       limitWeeklyUsd: providers.limitWeeklyUsd,
       limitMonthlyUsd: providers.limitMonthlyUsd,
       limitConcurrentSessions: providers.limitConcurrentSessions,
+      maxRetryAttempts: providers.maxRetryAttempts,
       circuitBreakerFailureThreshold: providers.circuitBreakerFailureThreshold,
       circuitBreakerOpenDuration: providers.circuitBreakerOpenDuration,
       circuitBreakerHalfOpenSuccessThreshold: providers.circuitBreakerHalfOpenSuccessThreshold,
@@ -263,6 +328,8 @@ export async function updateProvider(
       providerData.limit_monthly_usd != null ? providerData.limit_monthly_usd.toString() : null;
   if (providerData.limit_concurrent_sessions !== undefined)
     dbData.limitConcurrentSessions = providerData.limit_concurrent_sessions;
+  if (providerData.max_retry_attempts !== undefined)
+    dbData.maxRetryAttempts = providerData.max_retry_attempts;
   if (providerData.circuit_breaker_failure_threshold !== undefined)
     dbData.circuitBreakerFailureThreshold = providerData.circuit_breaker_failure_threshold;
   if (providerData.circuit_breaker_open_duration !== undefined)
@@ -314,6 +381,7 @@ export async function updateProvider(
       limitWeeklyUsd: providers.limitWeeklyUsd,
       limitMonthlyUsd: providers.limitMonthlyUsd,
       limitConcurrentSessions: providers.limitConcurrentSessions,
+      maxRetryAttempts: providers.maxRetryAttempts,
       circuitBreakerFailureThreshold: providers.circuitBreakerFailureThreshold,
       circuitBreakerOpenDuration: providers.circuitBreakerOpenDuration,
       circuitBreakerHalfOpenSuccessThreshold: providers.circuitBreakerHalfOpenSuccessThreshold,

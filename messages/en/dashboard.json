@@ -196,6 +196,14 @@
   "leaderboard": {
     "title": "Cost Leaderboard",
     "description": "View cost statistics rankings for users and keys",
+    "todayTitle": "Today's Leaderboard",
+    "viewAll": "View All",
+    "userRankings": "User Rankings",
+    "providerRankings": "Provider Rankings",
+    "modelRankings": "Model Rankings",
+    "noData": "No data for today",
+    "requests": "requests",
+    "tokens": "tokens",
     "tabs": {
       "users": "User Rankings",
       "keys": "Key Rankings",

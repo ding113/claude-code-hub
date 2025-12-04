@@ -67,6 +67,7 @@ export interface Provider {
   limitConcurrentSessions: number;
 
   // 熔断器配置（每个供应商独立配置）
+  maxRetryAttempts: number | null;
   circuitBreakerFailureThreshold: number;
   circuitBreakerOpenDuration: number; // 毫秒
   circuitBreakerHalfOpenSuccessThreshold: number;
@@ -133,6 +134,7 @@ export interface ProviderDisplay {
   limitMonthlyUsd: number | null;
   limitConcurrentSessions: number;
   // 熔断器配置
+  maxRetryAttempts: number | null;
   circuitBreakerFailureThreshold: number;
   circuitBreakerOpenDuration: number; // 毫秒
   circuitBreakerHalfOpenSuccessThreshold: number;
@@ -193,6 +195,7 @@ export interface CreateProviderData {
   limit_concurrent_sessions?: number;
 
   // 熔断器配置
+  max_retry_attempts?: number | null;
   circuit_breaker_failure_threshold?: number;
   circuit_breaker_open_duration?: number; // 毫秒
   circuit_breaker_half_open_success_threshold?: number;
@@ -254,6 +257,7 @@ export interface UpdateProviderData {
   limit_concurrent_sessions?: number;
 
   // 熔断器配置
+  max_retry_attempts?: number | null;
   circuit_breaker_failure_threshold?: number;
   circuit_breaker_open_duration?: number; // 毫秒
   circuit_breaker_half_open_success_threshold?: number;

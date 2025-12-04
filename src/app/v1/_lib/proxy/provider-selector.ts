@@ -2,7 +2,7 @@ import { getCircuitState, isCircuitOpen } from "@/lib/circuit-breaker";
 import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit";
 import { SessionManager } from "@/lib/session-manager";
-import { findProviderById, findProviderList } from "@/repository/provider";
+import { findAllProviders, findProviderById } from "@/repository/provider";
 import { getSystemSettings } from "@/repository/system-config";
 import type { ProviderChainItem } from "@/types/message";
 import type { Provider } from "@/types/provider";
@@ -545,7 +545,7 @@ export class ProxyProviderResolver {
     provider: Provider | null;
     context: NonNullable<ProviderChainItem["decisionContext"]>;
   }> {
-    const allProviders = await findProviderList();
+    const allProviders = await findAllProviders();
     const requestedModel = session?.getCurrentModel() || "";
 
     // 原始请求格式映射到目标供应商类型；缺省为 claude 以兼容历史请求

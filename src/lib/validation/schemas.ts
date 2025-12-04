@@ -286,6 +286,13 @@ export const CreateProviderSchema = z.object({
     .max(1000, "并发Session上限不能超过1000")
     .optional()
     .default(0),
+  max_retry_attempts: z.coerce
+    .number()
+    .int("重试次数必须是整数")
+    .min(PROVIDER_LIMITS.MAX_RETRY_ATTEMPTS.MIN, "重试次数不能少于1次")
+    .max(PROVIDER_LIMITS.MAX_RETRY_ATTEMPTS.MAX, "重试次数不能超过10次")
+    .nullable()
+    .optional(),
   // 熔断器配置
   circuit_breaker_failure_threshold: z.coerce
     .number()
@@ -465,6 +472,13 @@ export const UpdateProviderSchema = z
       .int("并发Session上限必须是整数")
       .min(0, "并发Session上限不能为负数")
       .max(1000, "并发Session上限不能超过1000")
+      .optional(),
+    max_retry_attempts: z.coerce
+      .number()
+      .int("重试次数必须是整数")
+      .min(PROVIDER_LIMITS.MAX_RETRY_ATTEMPTS.MIN, "重试次数不能少于1次")
+      .max(PROVIDER_LIMITS.MAX_RETRY_ATTEMPTS.MAX, "重试次数不能超过10次")
+      .nullable()
       .optional(),
     // 熔断器配置
     circuit_breaker_failure_threshold: z.coerce

@@ -159,6 +159,8 @@ export const providers = pgTable('providers', {
   limitConcurrentSessions: integer('limit_concurrent_sessions').default(0),
 
   // 熔断器配置（每个供应商独立配置）
+  // null = 使用全局默认值 (env.MAX_RETRY_ATTEMPTS_DEFAULT 或 2)
+  maxRetryAttempts: integer('max_retry_attempts'),
   circuitBreakerFailureThreshold: integer('circuit_breaker_failure_threshold').default(5),
   circuitBreakerOpenDuration: integer('circuit_breaker_open_duration').default(1800000), // 30分钟（毫秒）
   circuitBreakerHalfOpenSuccessThreshold: integer('circuit_breaker_half_open_success_threshold').default(2),

@@ -86,6 +86,29 @@
       "all": "全部",
       "warning": "接近限额 (>60%)",
       "exceeded": "已超限 (≥100%)"
+    },
+    "withQuotas": "有限额",
+    "unlimited": "无限额",
+    "totalCost": "总消费",
+    "totalCostAllTime": "历史累计",
+    "todayCost": "今日消费",
+    "keys": "密钥",
+    "more": "更多",
+    "noLimitSet": "-",
+    "noUnlimited": "无无限额用户",
+    "noKeys": "无密钥",
+    "limit5h": "5小时限额",
+    "limitWeekly": "周限额",
+    "limitMonthly": "月限额",
+    "limitTotal": "总限额",
+    "limitConcurrent": "并发 Session",
+    "role": {
+      "admin": "管理员",
+      "user": "用户"
+    },
+    "keyStatus": {
+      "enabled": "启用",
+      "disabled": "禁用"
     }
   },
   "providers": {

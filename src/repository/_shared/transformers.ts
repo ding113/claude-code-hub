@@ -66,6 +66,10 @@ export function toProvider(dbProvider: any): Provider {
     limitWeeklyUsd: dbProvider?.limitWeeklyUsd ? parseFloat(dbProvider.limitWeeklyUsd) : null,
     limitMonthlyUsd: dbProvider?.limitMonthlyUsd ? parseFloat(dbProvider.limitMonthlyUsd) : null,
     limitConcurrentSessions: dbProvider?.limitConcurrentSessions ?? 0,
+    maxRetryAttempts:
+      dbProvider?.maxRetryAttempts !== undefined && dbProvider?.maxRetryAttempts !== null
+        ? Number(dbProvider.maxRetryAttempts)
+        : null,
     circuitBreakerFailureThreshold: dbProvider?.circuitBreakerFailureThreshold ?? 5,
     circuitBreakerOpenDuration: dbProvider?.circuitBreakerOpenDuration ?? 1800000,
     circuitBreakerHalfOpenSuccessThreshold: dbProvider?.circuitBreakerHalfOpenSuccessThreshold ?? 2,

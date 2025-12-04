@@ -23,6 +23,7 @@ import {
 } from "@/lib/redis/circuit-breaker-config";
 import {
   type CircuitBreakerState,
+  loadAllCircuitStates,
   loadCircuitState,
   saveCircuitState,
 } from "@/lib/redis/circuit-breaker-state";
@@ -401,6 +402,112 @@ export function getAllHealthStatus(): Record<number, ProviderHealth> {
 
     status[providerId] = { ...health };
   });
+
+  return status;
+}
+
+/**
+ * Asynchronously get health status for specified providers (with Redis batch loading)
+ * Used for admin dashboard to display circuit breaker status
+ *
+ * @param providerIds - Array of provider IDs to fetch status for
+ * @param options - Optional configuration
+ * @param options.forceRefresh - When true, always reload from Redis (for admin dashboard)
+ * @returns Promise resolving to a record mapping provider ID to health status
+ */
+export async function getAllHealthStatusAsync(
+  providerIds: number[],
+  options?: { forceRefresh?: boolean }
+): Promise<Record<number, ProviderHealth>> {
+  const { forceRefresh = false } = options || {};
+
+  // Early return for empty input
+  if (providerIds.length === 0) {
+    return {};
+  }
+
+  const now = Date.now();
+  const status: Record<number, ProviderHealth> = {};
+
+  // If forceRefresh, clear loadedFromRedis for these providers to force Redis reload
+  if (forceRefresh) {
+    for (const id of providerIds) {
+      loadedFromRedis.delete(id);
+    }
+  }
+
+  // Find providers that need Redis refresh:
+  // 1. Not in loadedFromRedis (never loaded)
+  // 2. OR (when not forceRefresh) providers with non-closed state that may have changed
+  const needsRefresh = providerIds.filter((id) => {
+    if (!loadedFromRedis.has(id)) return true;
+    // Always refresh non-closed states to catch recovery
+    const memoryState = healthMap.get(id);
+    return memoryState && memoryState.circuitState !== "closed";
+  });
+
+  if (needsRefresh.length > 0) {
+    try {
+      const redisStates = await loadAllCircuitStates(needsRefresh);
+
+      for (const [providerId, redisState] of redisStates) {
+        loadedFromRedis.add(providerId);
+
+        const health: ProviderHealth = {
+          ...redisState,
+          config: null,
+          configLoadedAt: null,
+        };
+        healthMap.set(providerId, health);
+
+        logger.debug(`[CircuitBreaker] Restored state from Redis for provider ${providerId}`, {
+          providerId,
+          state: redisState.circuitState,
+        });
+      }
+
+      // Mark IDs without Redis state as "loaded" to prevent repeated queries
+      for (const id of needsRefresh) {
+        loadedFromRedis.add(id);
+      }
+    } catch (error) {
+      logger.warn(`[CircuitBreaker] Failed to batch load states from Redis`, {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  // Only include status for requested providers (not all in healthMap)
+  for (const providerId of providerIds) {
+    let health = healthMap.get(providerId);
+
+    // Create default closed state for providers not in healthMap
+    if (!health) {
+      health = {
+        failureCount: 0,
+        lastFailureTime: null,
+        circuitState: "closed",
+        circuitOpenUntil: null,
+        halfOpenSuccessCount: 0,
+        config: null,
+        configLoadedAt: null,
+      };
+      healthMap.set(providerId, health);
+    }
+
+    // Check and update expired circuit breaker status
+    if (health.circuitState === "open") {
+      if (health.circuitOpenUntil && now > health.circuitOpenUntil) {
+        health.circuitState = "half-open";
+        health.halfOpenSuccessCount = 0;
+        logger.info(
+          `[CircuitBreaker] Provider ${providerId} auto-transitioned to half-open (on status check)`
+        );
+        persistStateToRedis(providerId, health);
+      }
+    }
+    status[providerId] = { ...health };
+  }
 
   return status;
 }

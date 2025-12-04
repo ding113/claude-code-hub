@@ -540,9 +540,9 @@
       "baseUrl": "基礎 URL",
       "baseUrlPlaceholder": "例如: https://open.bigmodel.cn/api/anthropic",
       "baseUrlRequired": "請先填寫供應商 URL",
-      "circuitBreakerConfig": "熔断器配置",
-      "circuitBreakerConfigSummary": "{failureThreshold} 次失败 / {openDuration} 分钟熔断 / {successThreshold} 次成功恢复",
-      "circuitBreakerDesc": "供应商连续失败时自动熔断，避免影响整体服务质量",
+      "circuitBreakerConfig": "斷路器設定",
+      "circuitBreakerConfigSummary": "{failureThreshold} 次失敗 / {openDuration} 分鐘熔斷 / {successThreshold} 次成功恢復 / 每個供應商最多 {maxRetryAttempts} 次嘗試",
+      "circuitBreakerDesc": "連續失敗時自動熔斷，避免影響整體服務品質",
       "clearSearch": "清除搜尋",
       "codexInstructions": "Codex Instructions 策略",
       "codexInstructionsAuto": "自動 (推薦)",
@@ -1054,7 +1054,7 @@
         },
         "circuitBreaker": {
           "title": "斷路器設定",
-          "summary": "{failureThreshold} 次失敗 / {openDuration} 分鐘熔斷 / {successThreshold} 次成功恢復",
+          "summary": "{failureThreshold} 次失敗 / {openDuration} 分鐘熔斷 / {successThreshold} 次成功恢復 / 每個供應商最多 {maxRetryAttempts} 次嘗試",
           "desc": "連續失敗時自動熔斷，避免影響整體服務品質",
           "failureThreshold": {
             "label": "失敗閾值（次）",
@@ -1070,6 +1070,11 @@
             "label": "恢復閾值（次）",
             "placeholder": "2",
             "desc": "半開狀態下成功多少次後完全恢復"
+          },
+          "maxRetryAttempts": {
+            "label": "單供應商最大嘗試次數",
+            "placeholder": "2",
+            "desc": "包含首次呼叫在內，單一供應商最多嘗試次數，超過即切換。留空使用系統預設值。"
           }
         },
         "proxy": {

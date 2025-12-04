@@ -1,14 +1,15 @@
+import { ArrowRight } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 import { hasPriceTable } from "@/actions/model-prices";
 import { getUserStatistics } from "@/actions/statistics";
-import { getUsers } from "@/actions/users";
 import { OverviewPanel } from "@/components/customs/overview-panel";
-import { redirect } from "@/i18n/routing";
+import { Button } from "@/components/ui/button";
+import { Link, redirect } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
 import { getSystemSettings } from "@/repository/system-config";
 import { DEFAULT_TIME_RANGE } from "@/types/statistics";
 import { StatisticsWrapper } from "./_components/statistics";
-import { UserQuickOverview } from "./_components/user-quick-overview";
+import { TodayLeaderboard } from "./_components/today-leaderboard";
 
 export const dynamic = "force-dynamic";
 
@@ -24,15 +25,15 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
     return redirect({ href: "/settings/prices?required=true", locale });
   }
 
-  const [session, statistics, systemSettings, users] = await Promise.all([
+  const [session, statistics, systemSettings] = await Promise.all([
     getSession(),
     getUserStatistics(DEFAULT_TIME_RANGE),
     getSystemSettings(),
-    getUsers(),
   ]);
 
   // 检查是否是 admin 用户
   const isAdmin = session?.user?.role === "admin";
+  const canViewLeaderboard = isAdmin || systemSettings.allowGlobalUsageView;
 
   return (
     <div className="space-y-6">
@@ -45,13 +46,24 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
         />
       </div>
 
-      {/* User Quick Overview Section */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold">{t("overview.title")}</h2>
+      {canViewLeaderboard && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-bold">{t("leaderboard.todayTitle")}</h2>
+            <Link href="/dashboard/leaderboard">
+              <Button variant="link" size="sm" className="px-0 sm:px-2">
+                {t("leaderboard.viewAll")}
+                <ArrowRight className="ml-1 h-3 w-3" />
+              </Button>
+            </Link>
+          </div>
+          <TodayLeaderboard
+            currencyCode={systemSettings.currencyDisplay}
+            isAdmin={isAdmin}
+            allowGlobalUsageView={systemSettings.allowGlobalUsageView}
+          />
         </div>
-        <UserQuickOverview users={users} isAdmin={isAdmin} />
-      </div>
+      )}
     </div>
   );
 }
