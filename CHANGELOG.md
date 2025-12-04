@@ -4,6 +4,18 @@
 
 ---
 
+## [v0.3.24](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.24) - 2025-12-04
+
+### 修复
+
+- 增强熔断器 Redis 状态同步逻辑，非关闭状态下始终检查 Redis 以同步外部重置操作 (#267)
+
+### 其他
+
+- 更新项目依赖
+
+---
+
 ## [v0.3.23](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.23) - 2025-12-04
 
 ### 新增
