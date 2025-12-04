@@ -324,10 +324,13 @@ export class ProxyProviderResolver {
               await ProxyProviderResolver.pickRandomProvider(session, excludedProviders);
 
             if (!fallbackProvider) {
-              logger.error("ProviderSelector: No fallback providers available after invalid balance", {
-                excludedCount: excludedProviders.length,
-                totalAttempts: attemptCount,
-              });
+              logger.error(
+                "ProviderSelector: No fallback providers available after invalid balance",
+                {
+                  excludedCount: excludedProviders.length,
+                  totalAttempts: attemptCount,
+                }
+              );
               break;
             }
 
@@ -372,10 +375,13 @@ export class ProxyProviderResolver {
               await ProxyProviderResolver.pickRandomProvider(session, excludedProviders);
 
             if (!fallbackProvider) {
-              logger.error("ProviderSelector: No fallback providers available after reserve rejection", {
-                excludedCount: excludedProviders.length,
-                totalAttempts: attemptCount,
-              });
+              logger.error(
+                "ProviderSelector: No fallback providers available after reserve rejection",
+                {
+                  excludedCount: excludedProviders.length,
+                  totalAttempts: attemptCount,
+                }
+              );
               break;
             }
 

@@ -337,8 +337,9 @@ export class RateLimitService {
     type: "key" | "provider",
     costLimits: CostLimit[]
   ): Promise<{ allowed: boolean; reason?: string }> {
-    const { sumKeyCostInTimeRange, sumProviderCostInTimeRange } =
-      await import("@/repository/statistics");
+    const { sumKeyCostInTimeRange, sumProviderCostInTimeRange } = await import(
+      "@/repository/statistics"
+    );
 
     for (const limit of costLimits) {
       if (!limit.amount || limit.amount <= 0) continue;
@@ -739,8 +740,9 @@ export class RateLimitService {
       }
 
       // Slow Path: 数据库查询
-      const { sumKeyCostInTimeRange, sumProviderCostInTimeRange } =
-        await import("@/repository/statistics");
+      const { sumKeyCostInTimeRange, sumProviderCostInTimeRange } = await import(
+        "@/repository/statistics"
+      );
 
       const { startTime, endTime } = getTimeRangeForPeriodWithMode(
         period,

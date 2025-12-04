@@ -70,13 +70,11 @@ export class ProxySession {
   private _lastSelectionContext?: ProviderChainItem["decisionContext"];
 
   // 余额预占信息
-  private balanceReservation:
-    | {
-        providerId: number;
-        reserveId?: string;
-        estimate: string;
-      }
-    | null = null;
+  private balanceReservation: {
+    providerId: number;
+    reserveId?: string;
+    estimate: string;
+  } | null = null;
 
   private constructor(init: {
     startTime: number;
@@ -459,17 +457,17 @@ export class ProxySession {
     return this._lastSelectionContext;
   }
 
-  setBalanceReservation(reservation: { providerId: number; reserveId?: string; estimate: string } | null): void {
+  setBalanceReservation(
+    reservation: { providerId: number; reserveId?: string; estimate: string } | null
+  ): void {
     this.balanceReservation = reservation;
   }
 
-  getBalanceReservation():
-    | {
-        providerId: number;
-        reserveId?: string;
-        estimate: string;
-      }
-    | null {
+  getBalanceReservation(): {
+    providerId: number;
+    reserveId?: string;
+    estimate: string;
+  } | null {
     return this.balanceReservation || null;
   }
 }

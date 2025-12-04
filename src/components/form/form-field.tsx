@@ -127,10 +127,8 @@ export function DateField(props: FormFieldProps) {
 /**
  * 标签输入字段组件 Props (字符串值，逗号分隔)
  */
-export interface TagInputFieldProps extends Omit<
-  ComponentProps<typeof TagInput>,
-  "value" | "onChange"
-> {
+export interface TagInputFieldProps
+  extends Omit<ComponentProps<typeof TagInput>, "value" | "onChange"> {
   label: string;
   value: string;
   onChange: (value: string) => void;

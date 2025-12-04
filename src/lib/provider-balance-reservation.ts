@@ -8,7 +8,9 @@ const DEFAULT_ESTIMATE = Number(process.env.BALANCE_RESERVE_ESTIMATE_USD ?? 0.1)
 const MIN_ESTIMATE = 0.01;
 const MAX_ESTIMATE = 1;
 const RESERVED_CAP_MULTIPLIER = Number(process.env.BALANCE_RESERVED_CAP_MULTIPLIER ?? 1.0);
-const REDIS_FAIL_CLOSE_THRESHOLD = Number(process.env.BALANCE_REDIS_FAIL_CLOSE_THRESHOLD_USD ?? 0.1);
+const REDIS_FAIL_CLOSE_THRESHOLD = Number(
+  process.env.BALANCE_REDIS_FAIL_CLOSE_THRESHOLD_USD ?? 0.1
+);
 const RESERVE_TTL_SECONDS = 300; // 5 分钟，避免悬挂占用
 
 function clampEstimate(value: number): number {
@@ -56,11 +58,20 @@ export async function reserveProviderBalance(opts: {
 
   const estimate = toCostDecimal(opts.estimatedCost ?? clampEstimate(DEFAULT_ESTIMATE));
   if (!estimate || estimate.lte(0)) {
-    return { allowed: true, balance: opts.balanceUsd, reserved: 0, reservedAdded: 0, reused: false };
+    return {
+      allowed: true,
+      balance: opts.balanceUsd,
+      reserved: 0,
+      reservedAdded: 0,
+      reused: false,
+    };
   }
 
   const estimateStr = estimate.toFixed(COST_SCALE);
-  const reservedCap = Math.max(0, opts.balanceUsd * (opts.reservedCapMultiplier ?? RESERVED_CAP_MULTIPLIER));
+  const reservedCap = Math.max(
+    0,
+    opts.balanceUsd * (opts.reservedCapMultiplier ?? RESERVED_CAP_MULTIPLIER)
+  );
   const reservedCapStr = reservedCap.toFixed(6);
   const { stateKey, reserveKey } = buildKeys(opts.providerId, opts.reserveId);
   const keys = reserveKey ? [stateKey, reserveKey] : [stateKey];
@@ -92,7 +103,13 @@ export async function reserveProviderBalance(opts: {
       error: error instanceof Error ? error.message : String(error),
     });
     // fail-open，但不记录预占
-    return { allowed: true, balance: opts.balanceUsd, reserved: 0, reservedAdded: 0, reused: false };
+    return {
+      allowed: true,
+      balance: opts.balanceUsd,
+      reserved: 0,
+      reservedAdded: 0,
+      reused: false,
+    };
   }
 }
 
@@ -104,7 +121,9 @@ export async function settleProviderBalance(opts: {
 }): Promise<void> {
   const redis = await getRedisClient();
   if (!redis) {
-    logger.warn("[BalanceReserve] Redis unavailable during settle", { providerId: opts.providerId });
+    logger.warn("[BalanceReserve] Redis unavailable during settle", {
+      providerId: opts.providerId,
+    });
     return;
   }
 
@@ -121,13 +140,7 @@ export async function settleProviderBalance(opts: {
   const estimateStr = estimate.toFixed(COST_SCALE);
 
   try {
-    await redis.eval(
-      SETTLE_PROVIDER_BALANCE,
-      numKeys,
-      ...keys,
-      actualStr,
-      estimateStr
-    );
+    await redis.eval(SETTLE_PROVIDER_BALANCE, numKeys, ...keys, actualStr, estimateStr);
   } catch (error) {
     logger.error("[BalanceReserve] Settle eval failed", {
       providerId: opts.providerId,
