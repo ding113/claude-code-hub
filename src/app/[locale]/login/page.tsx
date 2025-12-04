@@ -60,8 +60,9 @@ function LoginPageContent() {
         return;
       }
 
-      // 登录成功，跳转到原页面
-      router.push(from);
+      // 登录成功，按服务端返回的目标跳转，回退到原页面
+      const redirectTarget = data.redirectTo || from;
+      router.push(redirectTarget);
       router.refresh();
     } catch {
       setError(t("errors.networkError"));

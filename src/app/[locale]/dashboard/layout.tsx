@@ -20,6 +20,10 @@ export default async function DashboardLayout({
     return redirect({ href: "/login?from=/dashboard", locale });
   }
 
+  if (session.user.role !== "admin" && !session.key.canLoginWebUi) {
+    return redirect({ href: "/my-usage", locale });
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <DashboardHeader session={session} />
