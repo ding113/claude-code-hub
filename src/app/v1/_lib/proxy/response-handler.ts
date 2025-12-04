@@ -526,6 +526,21 @@ export class ProxyResponseHandler {
           }
         );
 
+        // ⭐ gemini 透传立即清除首字节超时：透传路径收到响应即视为首字节到达
+        const sessionWithCleanup = session as typeof session & {
+          clearResponseTimeout?: () => void;
+        };
+        if (sessionWithCleanup.clearResponseTimeout) {
+          sessionWithCleanup.clearResponseTimeout();
+          logger.debug(
+            "[ResponseHandler] Gemini passthrough: First byte timeout cleared on response received",
+            {
+              providerId: provider.id,
+              providerName: provider.name,
+            }
+          );
+        }
+
         const responseForStats = response.clone();
         const statusCode = response.status;
 

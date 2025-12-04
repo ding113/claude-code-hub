@@ -46,6 +46,16 @@ const MAX_ATTEMPTS_PER_PROVIDER = 2; // 每个供应商最多尝试次数（首�
 const MAX_PROVIDER_SWITCHES = 20; // 保险栓：最多切换 20 次供应商（防止无限循环）
 
 /**
+ * undici request 超时配置（毫秒）
+ *
+ * 背景：undiciRequest() 在使用非 undici 原生 dispatcher（如 SocksProxyAgent）时，
+ * 不会继承全局 Agent 的超时配置，需要显式传递超时参数。
+ *
+ * 这个值与 proxy-agent.ts 中的 UNDICI_TIMEOUT_MS 保持一致。
+ */
+const UNDICI_REQUEST_TIMEOUT_MS = 600_000; // 600 秒 = 10 分钟，LLM 服务最大超时时间
+
+/**
  * 过滤私有参数（下划线前缀）
  *
  * 目的：防止私有参数（如 _canRetryWithOfficialInstructions）泄露到上游供应商
@@ -1470,12 +1480,15 @@ export class ProxyForwarder {
     }
 
     // 使用 undici.request 获取未自动解压的响应
+    // ⭐ 显式配置超时：确保使用非 undici 原生 dispatcher（如 SocksProxyAgent）时也能正确应用超时
     const undiciRes = await undiciRequest(url, {
       method: init.method as string,
       headers: headersObj,
       body: init.body as string | Buffer | undefined,
       signal: init.signal as AbortSignal | undefined,
       dispatcher: init.dispatcher,
+      bodyTimeout: UNDICI_REQUEST_TIMEOUT_MS,
+      headersTimeout: UNDICI_REQUEST_TIMEOUT_MS,
     });
 
     // ⭐ 立即为 undici body 添加错误处理，防止 uncaughtException
