@@ -117,7 +117,11 @@ export function KeyListHeader({
     const now = Date.now();
     const exp = activeUser.expiresAt ? new Date(activeUser.expiresAt).getTime() : null;
 
-    let status: { code: string; badge: string; variant: "default" | "secondary" | "destructive" | "outline" };
+    let status: {
+      code: string;
+      badge: string;
+      variant: "default" | "secondary" | "destructive" | "outline";
+    };
 
     if (!activeUser.isEnabled) {
       status = { code: "disabled", badge: "已禁用", variant: "secondary" };
