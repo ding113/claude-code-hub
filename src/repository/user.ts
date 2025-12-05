@@ -19,6 +19,8 @@ export async function createUser(userData: CreateUserData): Promise<User> {
     limitMonthlyUsd: userData.limitMonthlyUsd?.toString(),
     limitTotalUsd: userData.limitTotalUsd?.toString(),
     limitConcurrentSessions: userData.limitConcurrentSessions,
+    isEnabled: userData.isEnabled ?? true,
+    expiresAt: userData.expiresAt ?? null,
   };
 
   const [user] = await db.insert(users).values(dbData).returning({
@@ -38,6 +40,8 @@ export async function createUser(userData: CreateUserData): Promise<User> {
     limitMonthlyUsd: users.limitMonthlyUsd,
     limitTotalUsd: users.limitTotalUsd,
     limitConcurrentSessions: users.limitConcurrentSessions,
+    isEnabled: users.isEnabled,
+    expiresAt: users.expiresAt,
   });
 
   return toUser(user);
@@ -62,6 +66,8 @@ export async function findUserList(limit: number = 50, offset: number = 0): Prom
       limitMonthlyUsd: users.limitMonthlyUsd,
       limitTotalUsd: users.limitTotalUsd,
       limitConcurrentSessions: users.limitConcurrentSessions,
+      isEnabled: users.isEnabled,
+      expiresAt: users.expiresAt,
     })
     .from(users)
     .where(isNull(users.deletedAt))
@@ -91,6 +97,8 @@ export async function findUserById(id: number): Promise<User | null> {
       limitMonthlyUsd: users.limitMonthlyUsd,
       limitTotalUsd: users.limitTotalUsd,
       limitConcurrentSessions: users.limitConcurrentSessions,
+      isEnabled: users.isEnabled,
+      expiresAt: users.expiresAt,
     })
     .from(users)
     .where(and(eq(users.id, id), isNull(users.deletedAt)));
@@ -118,6 +126,8 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
     limitMonthlyUsd?: string;
     limitTotalUsd?: string | null;
     limitConcurrentSessions?: number;
+    isEnabled?: boolean;
+    expiresAt?: Date | null;
   }
 
   const dbData: UpdateDbData = {
@@ -139,6 +149,8 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
       userData.limitTotalUsd === null ? null : userData.limitTotalUsd.toString();
   if (userData.limitConcurrentSessions !== undefined)
     dbData.limitConcurrentSessions = userData.limitConcurrentSessions;
+  if (userData.isEnabled !== undefined) dbData.isEnabled = userData.isEnabled;
+  if (userData.expiresAt !== undefined) dbData.expiresAt = userData.expiresAt;
 
   const [user] = await db
     .update(users)
@@ -161,6 +173,8 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
       limitMonthlyUsd: users.limitMonthlyUsd,
       limitTotalUsd: users.limitTotalUsd,
       limitConcurrentSessions: users.limitConcurrentSessions,
+      isEnabled: users.isEnabled,
+      expiresAt: users.expiresAt,
     });
 
   if (!user) return null;
@@ -173,6 +187,20 @@ export async function deleteUser(id: number): Promise<boolean> {
     .update(users)
     .set({ deletedAt: new Date() })
     .where(and(eq(users.id, id), isNull(users.deletedAt)))
+    .returning({ id: users.id });
+
+  return result.length > 0;
+}
+
+/**
+ * Mark an expired user as disabled (idempotent operation)
+ * Only updates if the user is currently enabled
+ */
+export async function markUserExpired(userId: number): Promise<boolean> {
+  const result = await db
+    .update(users)
+    .set({ isEnabled: false, updatedAt: new Date() })
+    .where(and(eq(users.id, userId), eq(users.isEnabled, true), isNull(users.deletedAt)))
     .returning({ id: users.id });
 
   return result.length > 0;

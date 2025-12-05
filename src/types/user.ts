@@ -19,6 +19,9 @@ export interface User {
   limitMonthlyUsd?: number; // 月消费上限（美元）
   limitTotalUsd?: number | null; // 总消费上限（美元）
   limitConcurrentSessions?: number; // 并发 Session 上限
+  // User status and expiry management
+  isEnabled: boolean; // 用户启用状态
+  expiresAt?: Date | null; // 用户过期时间
 }
 
 /**
@@ -37,6 +40,9 @@ export interface CreateUserData {
   limitMonthlyUsd?: number;
   limitTotalUsd?: number | null;
   limitConcurrentSessions?: number;
+  // User status and expiry management
+  isEnabled?: boolean;
+  expiresAt?: Date | null;
 }
 
 /**
@@ -55,6 +61,9 @@ export interface UpdateUserData {
   limitMonthlyUsd?: number;
   limitTotalUsd?: number | null;
   limitConcurrentSessions?: number;
+  // User status and expiry management
+  isEnabled?: boolean;
+  expiresAt?: Date | null;
 }
 
 /**
@@ -111,6 +120,9 @@ export interface UserDisplay {
   limitMonthlyUsd?: number | null;
   limitTotalUsd?: number | null;
   limitConcurrentSessions?: number | null;
+  // User status and expiry management
+  isEnabled: boolean; // 用户启用状态
+  expiresAt?: Date | null; // 用户过期时间
 }
 
 /**

@@ -1,10 +1,11 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle, Copy, Eye, EyeOff, ListPlus } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { getProxyStatus } from "@/actions/proxy-status";
 import { FormErrorBoundary } from "@/components/form-error-boundary";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -17,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { copyToClipboard, isClipboardSupported } from "@/lib/utils/clipboard";
 import { type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
+import { formatDate, formatDateDistance } from "@/lib/utils/date-format";
 import type { ProxyStatusResponse } from "@/types/proxy-status";
 import type { User, UserDisplay } from "@/types/user";
 import { AddKeyForm } from "./forms/add-key-form";
@@ -95,6 +97,8 @@ export function KeyListHeader({
   const [keyVisible, setKeyVisible] = useState(false);
   const [clipboardAvailable, setClipboardAvailable] = useState(false);
   const t = useTranslations("dashboard.keyListHeader");
+  const tUsers = useTranslations("users");
+  const locale = useLocale();
 
   // 检测 clipboard 是否可用
   useEffect(() => {
@@ -105,6 +109,36 @@ export function KeyListHeader({
     activeUser?.keys.reduce((sum, key) => sum + (key.todayUsage ?? 0), 0) ?? 0;
 
   const formatRelativeTime = useMemo(() => createFormatRelativeTime(t), [t]);
+
+  // 获取用户状态和过期信息
+  const userStatusInfo = useMemo(() => {
+    if (!activeUser) return null;
+
+    const now = Date.now();
+    const exp = activeUser.expiresAt ? new Date(activeUser.expiresAt).getTime() : null;
+
+    let status: {
+      code: string;
+      badge: string;
+      variant: "default" | "secondary" | "destructive" | "outline";
+    };
+
+    if (!activeUser.isEnabled) {
+      status = { code: "disabled", badge: "已禁用", variant: "secondary" };
+    } else if (exp && exp <= now) {
+      status = { code: "expired", badge: "已过期", variant: "destructive" };
+    } else if (exp && exp - now <= 72 * 60 * 60 * 1000) {
+      status = { code: "expiringSoon", badge: "即将过期", variant: "outline" };
+    } else {
+      status = { code: "active", badge: "已启用", variant: "default" };
+    }
+
+    const expiryText = activeUser.expiresAt
+      ? `${formatDateDistance(activeUser.expiresAt, new Date(), locale, { addSuffix: true })} (${formatDate(activeUser.expiresAt, "yyyy-MM-dd", locale)})`
+      : tUsers("neverExpires");
+
+    return { status, expiryText };
+  }, [activeUser, locale, tUsers]);
 
   const proxyStatusEnabled = Boolean(activeUser);
   const {
@@ -214,6 +248,11 @@ export function KeyListHeader({
         <div>
           <div className="flex items-center gap-2 text-base font-semibold tracking-tight">
             <span>{activeUser ? activeUser.name : "-"}</span>
+            {activeUser && userStatusInfo && (
+              <Badge variant={userStatusInfo.status.variant} className="text-xs">
+                {userStatusInfo.status.badge}
+              </Badge>
+            )}
             {activeUser && <UserActions user={activeUser} currentUser={currentUser} />}
           </div>
           <div className="mt-1">
@@ -222,6 +261,12 @@ export function KeyListHeader({
                 {t("todayUsage")} {activeUser ? formatCurrency(totalTodayUsage, currencyCode) : "-"}{" "}
                 / {activeUser ? formatCurrency(activeUser.dailyQuota, currencyCode) : "-"}
               </div>
+              {activeUser && userStatusInfo && (
+                <div className="flex items-center gap-1">
+                  <span>过期时间:</span>
+                  <span className="text-foreground">{userStatusInfo.expiryText}</span>
+                </div>
+              )}
               {proxyStatusContent}
             </div>
           </div>
@@ -258,6 +303,8 @@ export function KeyListHeader({
                           limitWeeklyUsd: activeUser.limitWeeklyUsd ?? undefined,
                           limitMonthlyUsd: activeUser.limitMonthlyUsd ?? undefined,
                           limitConcurrentSessions: activeUser.limitConcurrentSessions ?? undefined,
+                          isEnabled: activeUser.isEnabled,
+                          expiresAt: activeUser.expiresAt ?? undefined,
                         }
                       : undefined
                   }
