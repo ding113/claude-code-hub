@@ -9,11 +9,13 @@
  *   - bucketSizeMinutes: number, time bucket size (default: auto)
  *   - includeDisabled: boolean, include disabled providers (default: false)
  *   - maxBuckets: number, max time buckets (default: 100)
+ *   - includeCircuitBreaker: boolean, include circuit breaker status (default: true)
  */
 
 import { type NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { type AvailabilityQueryOptions, queryProviderAvailability } from "@/lib/availability";
+import { getAllHealthStatusAsync } from "@/lib/circuit-breaker";
 
 /**
  * GET /api/availability
@@ -67,7 +69,28 @@ export async function GET(request: NextRequest) {
       options.maxBuckets = parseInt(maxBuckets, 10);
     }
 
+    const includeCircuitBreaker = searchParams.get("includeCircuitBreaker") !== "false";
+
     const result = await queryProviderAvailability(options);
+
+    // Enrich providers with circuit breaker status
+    if (includeCircuitBreaker && result.providers.length > 0) {
+      const providerIds = result.providers.map((p) => p.providerId);
+      const circuitBreakerStatus = await getAllHealthStatusAsync(providerIds, {
+        forceRefresh: true,
+      });
+
+      for (const provider of result.providers) {
+        const cbStatus = circuitBreakerStatus[provider.providerId];
+        if (cbStatus) {
+          provider.circuitBreakerStatus = cbStatus.circuitState;
+          provider.circuitBreakerOpenUntil = cbStatus.circuitOpenUntil
+            ? new Date(cbStatus.circuitOpenUntil).toISOString()
+            : null;
+          provider.circuitBreakerFailureCount = cbStatus.failureCount;
+        }
+      }
+    }
 
     return NextResponse.json(result);
   } catch (error) {

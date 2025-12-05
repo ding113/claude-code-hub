@@ -72,6 +72,11 @@ export interface TimeBucketMetrics {
 }
 
 /**
+ * Circuit breaker state for availability display
+ */
+export type CircuitBreakerStatus = "closed" | "open" | "half-open";
+
+/**
  * Provider availability summary
  */
 export interface ProviderAvailabilitySummary {
@@ -97,6 +102,12 @@ export interface ProviderAvailabilitySummary {
   lastRequestAt: string | null;
   /** Time bucket metrics */
   timeBuckets: TimeBucketMetrics[];
+  /** Circuit breaker state (real-time from Redis/memory) */
+  circuitBreakerStatus?: CircuitBreakerStatus;
+  /** Circuit breaker open until timestamp (ISO string) */
+  circuitBreakerOpenUntil?: string | null;
+  /** Circuit breaker failure count */
+  circuitBreakerFailureCount?: number;
 }
 
 /**

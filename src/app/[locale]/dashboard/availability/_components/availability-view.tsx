@@ -1,6 +1,15 @@
 "use client";
 
-import { Activity, CheckCircle2, HelpCircle, RefreshCw, XCircle } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  CheckCircle2,
+  HelpCircle,
+  RefreshCw,
+  ShieldAlert,
+  ShieldCheck,
+  XCircle,
+} from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +26,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type {
   AvailabilityQueryResult,
+  CircuitBreakerStatus,
   ProviderAvailabilitySummary,
   TimeBucketMetrics,
 } from "@/lib/availability";
@@ -230,6 +240,73 @@ export function AvailabilityView() {
     );
   };
 
+  const getCircuitBreakerIcon = (status: CircuitBreakerStatus) => {
+    switch (status) {
+      case "open":
+        return <ShieldAlert className="h-4 w-4 text-red-500" />;
+      case "half-open":
+        return <AlertTriangle className="h-4 w-4 text-orange-500" />;
+      case "closed":
+        return <ShieldCheck className="h-4 w-4 text-green-500" />;
+    }
+  };
+
+  const getCircuitBreakerBadge = (
+    status: CircuitBreakerStatus | undefined,
+    openUntil: string | null | undefined,
+    failureCount: number | undefined
+  ) => {
+    if (!status || status === "closed") return null;
+
+    const getCircuitBreakerClassName = () => {
+      switch (status) {
+        case "open":
+          return "bg-red-100 text-red-700 border-red-300 dark:bg-red-900/30 dark:text-red-400 dark:border-red-700";
+        case "half-open":
+          return "bg-orange-100 text-orange-700 border-orange-300 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-700";
+        default:
+          return "";
+      }
+    };
+
+    const formatRemainingTime = (until: string | null | undefined) => {
+      if (!until) return "";
+      const remaining = new Date(until).getTime() - Date.now();
+      if (remaining <= 0) return "";
+      const seconds = Math.ceil(remaining / 1000);
+      if (seconds < 60) return ` (${seconds}s)`;
+      const minutes = Math.ceil(seconds / 60);
+      return ` (${minutes}m)`;
+    };
+
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge variant="outline" className={`gap-1 ${getCircuitBreakerClassName()}`}>
+            {getCircuitBreakerIcon(status)}
+            {t(`circuitBreaker.${status}`)}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-xs">
+          <div className="text-sm space-y-1">
+            <div className="font-medium">{t(`circuitBreaker.${status}Description`)}</div>
+            {failureCount !== undefined && failureCount > 0 && (
+              <div>
+                {t("circuitBreaker.failureCount")}: {failureCount}
+              </div>
+            )}
+            {status === "open" && openUntil && (
+              <div>
+                {t("circuitBreaker.retryAt")}: {new Date(openUntil).toLocaleTimeString()}
+                {formatRemainingTime(openUntil)}
+              </div>
+            )}
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    );
+  };
+
   const formatLatency = (ms: number) => {
     if (ms < 1000) return `${Math.round(ms)}ms`;
     return `${(ms / 1000).toFixed(2)}s`;
@@ -239,12 +316,15 @@ export function AvailabilityView() {
 
   // Summary counts
   const getSummaryCounts = () => {
-    if (!data?.providers) return { healthy: 0, unhealthy: 0, unknown: 0, total: 0 };
+    if (!data?.providers)
+      return { healthy: 0, unhealthy: 0, unknown: 0, total: 0, circuitOpen: 0, circuitHalfOpen: 0 };
     return {
       healthy: data.providers.filter((p) => p.currentStatus === "green").length,
       unhealthy: data.providers.filter((p) => p.currentStatus === "red").length,
       unknown: data.providers.filter((p) => p.currentStatus === "unknown").length,
       total: data.providers.length,
+      circuitOpen: data.providers.filter((p) => p.circuitBreakerStatus === "open").length,
+      circuitHalfOpen: data.providers.filter((p) => p.circuitBreakerStatus === "half-open").length,
     };
   };
 
@@ -296,7 +376,7 @@ export function AvailabilityView() {
     <TooltipProvider>
       <div className="space-y-6">
         {/* Summary Cards */}
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-5">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -340,6 +420,24 @@ export function AvailabilityView() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-slate-500">{summary.unknown}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-red-600 flex items-center gap-1">
+                <ShieldAlert className="h-4 w-4" />
+                {t("summary.circuitOpen")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-red-600">
+                {summary.circuitOpen}
+                {summary.circuitHalfOpen > 0 && (
+                  <span className="text-orange-500 text-base ml-2">
+                    (+{summary.circuitHalfOpen} {t("circuitBreaker.half-open")})
+                  </span>
+                )}
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -398,11 +496,16 @@ export function AvailabilityView() {
                 {sortedProviders.map((provider) => (
                   <div key={provider.providerId} className="flex items-center gap-3">
                     {/* Provider name */}
-                    <div className="w-40 shrink-0 flex items-center gap-2">
+                    <div className="w-52 shrink-0 flex items-center gap-2 flex-wrap">
                       <span className="font-medium truncate text-sm" title={provider.providerName}>
                         {provider.providerName}
                       </span>
                       {getStatusBadge(provider.currentStatus)}
+                      {getCircuitBreakerBadge(
+                        provider.circuitBreakerStatus,
+                        provider.circuitBreakerOpenUntil,
+                        provider.circuitBreakerFailureCount
+                      )}
                     </div>
 
                     {/* Heatmap cells - CSS grid for responsive width */}

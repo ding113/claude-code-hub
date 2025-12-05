@@ -885,6 +885,24 @@
     "toast": {
       "refreshSuccess": "可用性数据已刷新",
       "refreshFailed": "刷新失败，请重试"
+    },
+    "circuitBreaker": {
+      "open": "熔断中",
+      "half-open": "半开状态",
+      "closed": "正常",
+      "openDescription": "熔断器已打开，请求被阻断。将自动重试恢复。",
+      "half-openDescription": "熔断器正在测试恢复，允许有限请求通过。",
+      "closedDescription": "熔断器关闭，服务正常。",
+      "failureCount": "失败次数",
+      "retryAt": "重试时间"
+    },
+    "summary": {
+      "title": "可用性摘要",
+      "healthyProviders": "健康供应商",
+      "unhealthyProviders": "异常供应商",
+      "unknownProviders": "无数据",
+      "totalProviders": "供应商总数",
+      "circuitOpen": "熔断中"
     }
   }
 }

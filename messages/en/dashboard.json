@@ -820,6 +820,24 @@
     "toast": {
       "refreshSuccess": "Availability data refreshed",
       "refreshFailed": "Refresh failed, please retry"
+    },
+    "circuitBreaker": {
+      "open": "Circuit Open",
+      "half-open": "Half-Open",
+      "closed": "Normal",
+      "openDescription": "Circuit breaker is open, requests are blocked. Will retry automatically.",
+      "half-openDescription": "Circuit breaker is testing recovery. Limited requests allowed.",
+      "closedDescription": "Circuit breaker is closed, service is normal.",
+      "failureCount": "Failure Count",
+      "retryAt": "Retry At"
+    },
+    "summary": {
+      "title": "Availability Summary",
+      "healthyProviders": "Healthy Providers",
+      "unhealthyProviders": "Unhealthy Providers",
+      "unknownProviders": "No Data",
+      "totalProviders": "Total Providers",
+      "circuitOpen": "Circuit Open"
     }
   }
 }
