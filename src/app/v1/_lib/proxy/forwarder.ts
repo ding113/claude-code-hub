@@ -1314,7 +1314,7 @@ export class ProxyForwarder {
             providerName: provider.name,
             proxyUrl: new URL(proxyUrl).origin, // 只记录域名，隐藏查询参数和 API Key
 
-            // ⭐ 详细错误信息（关键诊断字段）
+
             errorType: err.constructor.name,
             errorName: err.name,
             errorMessage: err.message,
@@ -1322,7 +1322,17 @@ export class ProxyForwarder {
             errorSyscall: err.syscall, // ⭐ 如 'getaddrinfo'（DNS查询）、'connect'（TCP连接）
             errorErrno: err.errno,
             errorCause: err.cause,
+
+            errorCauseMessage: (err.cause as Error | undefined)?.message,
+            errorCauseStack: (err.cause as Error | undefined)?.stack?.split("\n").slice(0, 2).join("\n"),
             errorStack: err.stack?.split("\n").slice(0, 3).join("\n"), // 前3行堆栈
+
+            targetUrl: proxyUrl, // 完整目标 URL（用于调试）
+            headerKeys: Array.from(processedHeaders.keys()),
+            headerCount: Array.from(processedHeaders.keys()).length,
+            invalidHeaders: Array.from(processedHeaders.entries())
+              .filter(([_, v]) => v === undefined || v === null || v === "")
+              .map(([k]) => k),
 
             // 请求上下文
             method: session.method,
@@ -1347,7 +1357,18 @@ export class ProxyForwarder {
           errorSyscall: err.syscall, // ⭐ 如 'getaddrinfo'（DNS查询）、'connect'（TCP连接）
           errorErrno: err.errno,
           errorCause: err.cause,
+          // ⭐ 增强诊断：undici 参数验证错误的具体说明
+          errorCauseMessage: (err.cause as Error | undefined)?.message,
+          errorCauseStack: (err.cause as Error | undefined)?.stack?.split("\n").slice(0, 2).join("\n"),
           errorStack: err.stack?.split("\n").slice(0, 3).join("\n"), // 前3行堆栈
+
+          // ⭐ 请求参数诊断（帮助定位 UND_ERR_INVALID_ARG）
+          targetUrl: proxyUrl, // 完整目标 URL（用于调试）
+          headerKeys: Array.from(processedHeaders.keys()),
+          headerCount: Array.from(processedHeaders.keys()).length,
+          invalidHeaders: Array.from(processedHeaders.entries())
+            .filter(([_, v]) => v === undefined || v === null || v === "")
+            .map(([k]) => k),
 
           // 请求上下文
           method: session.method,
