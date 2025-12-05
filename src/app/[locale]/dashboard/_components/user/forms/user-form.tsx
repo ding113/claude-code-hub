@@ -77,6 +77,13 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
       expiresAt: user?.expiresAt ? user.expiresAt.toISOString().split("T")[0] : "",
     },
     onSubmit: async (data) => {
+      // 将纯日期转换为当天结束时间（本地时区 23:59:59.999），避免默认 UTC 零点导致提前过期
+      const toEndOfDay = (dateStr: string) => {
+        const d = new Date(dateStr);
+        d.setHours(23, 59, 59, 999);
+        return d;
+      };
+
       startTransition(async () => {
         try {
           let res;
@@ -94,7 +101,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
               limitTotalUsd: data.limitTotalUsd,
               limitConcurrentSessions: data.limitConcurrentSessions,
               isEnabled: data.isEnabled,
-              expiresAt: data.expiresAt ? new Date(data.expiresAt) : null,
+              expiresAt: data.expiresAt ? toEndOfDay(data.expiresAt) : null,
             });
           } else {
             res = await addUser({
@@ -110,7 +117,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
               limitTotalUsd: data.limitTotalUsd,
               limitConcurrentSessions: data.limitConcurrentSessions,
               isEnabled: data.isEnabled,
-              expiresAt: data.expiresAt ? new Date(data.expiresAt) : null,
+              expiresAt: data.expiresAt ? toEndOfDay(data.expiresAt) : null,
             });
           }
 

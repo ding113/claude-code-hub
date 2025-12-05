@@ -21,6 +21,47 @@ import { createUser, deleteUser, findUserById, findUserList, updateUser } from "
 import type { UserDisplay } from "@/types/user";
 import type { ActionResult } from "./types";
 
+/**
+ * 验证过期时间的公共函数
+ * @param expiresAt - 过期时间
+ * @param tError - 翻译函数
+ * @returns 验证结果,如果有错误返回错误信息和错误码
+ */
+async function validateExpiresAt(
+  expiresAt: Date,
+  tError: Awaited<ReturnType<typeof getTranslations<"errors">>>,
+  options: { allowPast?: boolean } = {}
+): Promise<{ error: string; errorCode: string } | null> {
+  // 检查是否为有效日期
+  if (Number.isNaN(expiresAt.getTime())) {
+    return {
+      error: tError("INVALID_FORMAT", { field: tError("EXPIRES_AT_FIELD") }),
+      errorCode: ERROR_CODES.INVALID_FORMAT,
+    };
+  }
+
+  // 拒绝过去或当前时间（可配置允许过去时间，用于立即让用户过期）
+  const now = new Date();
+  if (!options.allowPast && expiresAt <= now) {
+    return {
+      error: tError("EXPIRES_AT_MUST_BE_FUTURE"),
+      errorCode: "EXPIRES_AT_MUST_BE_FUTURE",
+    };
+  }
+
+  // 限制最大续期时长(10年)
+  const maxExpiry = new Date(now);
+  maxExpiry.setFullYear(maxExpiry.getFullYear() + 10);
+  if (expiresAt > maxExpiry) {
+    return {
+      error: tError("EXPIRES_AT_TOO_FAR"),
+      errorCode: "EXPIRES_AT_TOO_FAR",
+    };
+  }
+
+  return null;
+}
+
 // 获取用户数据
 export async function getUsers(): Promise<UserDisplay[]> {
   try {
@@ -196,10 +237,38 @@ export async function addUser(data: {
     });
 
     if (!validationResult.success) {
+      const issue = validationResult.error.issues[0];
+      const { code, params } = await import("@/lib/utils/error-messages").then((m) =>
+        m.zodErrorToCode(issue.code, {
+          minimum: "minimum" in issue ? issue.minimum : undefined,
+          maximum: "maximum" in issue ? issue.maximum : undefined,
+          type: "expected" in issue ? issue.expected : undefined,
+          received: "received" in issue ? issue.received : undefined,
+          validation: "validation" in issue ? issue.validation : undefined,
+          path: issue.path,
+          message: "message" in issue ? issue.message : undefined,
+          params: "params" in issue ? issue.params : undefined,
+        })
+      );
+
+      // For custom errors with nested field keys, translate them
+      let translatedParams = params;
+      if (issue.code === "custom" && params?.field && typeof params.field === "string") {
+        try {
+          translatedParams = {
+            ...params,
+            field: tError(params.field as string),
+          };
+        } catch {
+          // Keep original if translation fails
+        }
+      }
+
       return {
         ok: false,
         error: formatZodError(validationResult.error),
-        errorCode: ERROR_CODES.INVALID_FORMAT,
+        errorCode: code,
+        errorParams: translatedParams,
       };
     }
 
@@ -281,10 +350,38 @@ export async function editUser(
     const validationResult = UpdateUserSchema.safeParse(data);
 
     if (!validationResult.success) {
+      const issue = validationResult.error.issues[0];
+      const { code, params } = await import("@/lib/utils/error-messages").then((m) =>
+        m.zodErrorToCode(issue.code, {
+          minimum: "minimum" in issue ? issue.minimum : undefined,
+          maximum: "maximum" in issue ? issue.maximum : undefined,
+          type: "expected" in issue ? issue.expected : undefined,
+          received: "received" in issue ? issue.received : undefined,
+          validation: "validation" in issue ? issue.validation : undefined,
+          path: issue.path,
+          message: "message" in issue ? issue.message : undefined,
+          params: "params" in issue ? issue.params : undefined,
+        })
+      );
+
+      // For custom errors with nested field keys, translate them
+      let translatedParams = params;
+      if (issue.code === "custom" && params?.field && typeof params.field === "string") {
+        try {
+          translatedParams = {
+            ...params,
+            field: tError(params.field as string),
+          };
+        } catch {
+          // Keep original if translation fails
+        }
+      }
+
       return {
         ok: false,
         error: formatZodError(validationResult.error),
-        errorCode: ERROR_CODES.INVALID_FORMAT,
+        errorCode: code,
+        errorParams: translatedParams,
       };
     }
 
@@ -308,6 +405,18 @@ export async function editUser(
         error: tError("PERMISSION_DENIED"),
         errorCode: ERROR_CODES.PERMISSION_DENIED,
       };
+    }
+
+    // 如果设置了过期时间,进行验证
+    if (data.expiresAt !== undefined && data.expiresAt !== null) {
+      const validationResult = await validateExpiresAt(data.expiresAt, tError, { allowPast: true });
+      if (validationResult) {
+        return {
+          ok: false,
+          error: validationResult.error,
+          errorCode: validationResult.errorCode,
+        };
+      }
     }
 
     // Update user with validated data
@@ -459,11 +568,24 @@ export async function renewUser(
 
     // Parse and validate expiration date
     const expiresAt = new Date(data.expiresAt);
-    if (isNaN(expiresAt.getTime())) {
+
+    // 验证过期时间
+    const validationResult = await validateExpiresAt(expiresAt, tError);
+    if (validationResult) {
       return {
         ok: false,
-        error: tError("INVALID_FORMAT"),
-        errorCode: ERROR_CODES.INVALID_FORMAT,
+        error: validationResult.error,
+        errorCode: validationResult.errorCode,
+      };
+    }
+
+    // 检查用户是否存在
+    const user = await findUserById(userId);
+    if (!user) {
+      return {
+        ok: false,
+        error: tError("USER_NOT_FOUND"),
+        errorCode: ERROR_CODES.NOT_FOUND,
       };
     }
 
@@ -479,7 +601,14 @@ export async function renewUser(
       updateData.isEnabled = true;
     }
 
-    await updateUser(userId, updateData);
+    const updated = await updateUser(userId, updateData);
+    if (!updated) {
+      return {
+        ok: false,
+        error: tError("USER_NOT_FOUND"),
+        errorCode: ERROR_CODES.NOT_FOUND,
+      };
+    }
 
     revalidatePath("/dashboard");
     return { ok: true };
