@@ -1,5 +1,6 @@
 import { logger } from "@/lib/logger";
 import { validateApiKeyAndGetUser } from "@/repository/key";
+import { markUserExpired } from "@/repository/user";
 import { GEMINI_PROTOCOL } from "../gemini/protocol";
 import { ProxyResponses } from "./responses";
 import type { AuthState, ProxySession } from "./session";
@@ -72,6 +73,35 @@ export class ProxyAuthenticator {
         apiKeyLength: apiKey.length,
         fromHeader: !!headers.authHeader || !!headers.apiKeyHeader || !!headers.geminiApiKeyHeader,
         fromQuery: !!headers.geminiApiKeyQuery,
+      });
+      return { user: null, key: null, apiKey, success: false };
+    }
+
+    // Check user status and expiration
+    const { user } = authResult;
+
+    // 1. Check if user is disabled
+    if (!user.isEnabled) {
+      logger.warn("[ProxyAuthenticator] User is disabled", {
+        userId: user.id,
+        userName: user.name,
+      });
+      return { user: null, key: null, apiKey, success: false };
+    }
+
+    // 2. Check if user is expired (lazy expiration check)
+    if (user.expiresAt && user.expiresAt.getTime() <= Date.now()) {
+      logger.warn("[ProxyAuthenticator] User has expired", {
+        userId: user.id,
+        userName: user.name,
+        expiresAt: user.expiresAt.toISOString(),
+      });
+      // Best-effort lazy mark user as disabled (idempotent)
+      markUserExpired(user.id).catch((error) => {
+        logger.error("[ProxyAuthenticator] Failed to mark user as expired", {
+          userId: user.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
       });
       return { user: null, key: null, apiKey, success: false };
     }

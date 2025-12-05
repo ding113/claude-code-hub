@@ -61,5 +61,9 @@
   "CREATE_USER_FAILED": "创建用户失败，请稍后重试",
   "UPDATE_USER_FAILED": "更新用户失败，请稍后重试",
   "DELETE_USER_FAILED": "删除用户失败，请稍后重试",
-  "GET_USER_QUOTA_FAILED": "获取用户限额使用情况失败"
+  "GET_USER_QUOTA_FAILED": "获取用户限额使用情况失败",
+  "EXPIRES_AT_FIELD": "过期时间",
+  "EXPIRES_AT_MUST_BE_FUTURE": "过期时间必须是未来时间",
+  "EXPIRES_AT_TOO_FAR": "过期时间不能超过10年",
+  "CANNOT_DISABLE_SELF": "不能禁用自己的账户"
 }

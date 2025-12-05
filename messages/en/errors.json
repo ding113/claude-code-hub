@@ -62,5 +62,9 @@
   "CREATE_USER_FAILED": "Failed to create user, please try again later",
   "UPDATE_USER_FAILED": "Failed to update user, please try again later",
   "DELETE_USER_FAILED": "Failed to delete user, please try again later",
-  "GET_USER_QUOTA_FAILED": "Failed to get user quota information"
+  "GET_USER_QUOTA_FAILED": "Failed to get user quota information",
+  "EXPIRES_AT_FIELD": "Expiration date",
+  "EXPIRES_AT_MUST_BE_FUTURE": "Expiration date must be in the future",
+  "EXPIRES_AT_TOO_FAR": "Expiration date cannot exceed 10 years",
+  "CANNOT_DISABLE_SELF": "Cannot disable your own account"
 }

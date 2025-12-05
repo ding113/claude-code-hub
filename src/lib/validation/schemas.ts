@@ -63,6 +63,13 @@ export const CreateUserSchema = z.object({
     .max(1000, "并发Session上限不能超过1000")
     .nullable()
     .optional(),
+  // User status and expiry management
+  isEnabled: z.boolean().optional().default(true),
+  expiresAt: z
+    .string()
+    .optional()
+    .default("")
+    .transform((val) => (val === "" ? undefined : val)),
 });
 
 /**
@@ -118,6 +125,21 @@ export const UpdateUserSchema = z.object({
     .max(1000, "并发Session上限不能超过1000")
     .nullable()
     .optional(),
+  // User status and expiry management
+  isEnabled: z.boolean().optional(),
+  expiresAt: z.preprocess(
+    (val) => {
+      // 兼容服务端传入的 Date 对象，统一转为字符串再走后续校验
+      if (val instanceof Date) return val.toISOString();
+      // null/undefined/空字符串 -> 视为未设置
+      if (val === null || val === undefined || val === "") return undefined;
+      return val;
+    },
+    z
+      .string()
+      .optional()
+      .transform((val) => (!val || val === "" ? undefined : val))
+  ),
 });
 
 /**

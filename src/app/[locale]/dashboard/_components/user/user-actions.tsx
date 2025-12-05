@@ -40,7 +40,7 @@ export function UserActions({ user, currentUser }: UserActionsProps) {
             <SquarePen className="h-3.5 w-3.5" />
           </button>
         </DialogTrigger>
-        <DialogContent>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
           <FormErrorBoundary>
             <UserForm user={user} onSuccess={() => setOpenEdit(false)} currentUser={currentUser} />
           </FormErrorBoundary>

@@ -480,6 +480,32 @@
     "badge": "{count} Keys",
     "activeKeys": "Active Keys",
     "totalKeys": "Total Keys",
+    "expiresAt": "Expiration",
+    "status": {
+      "active": "Active",
+      "expiringSoon": "Expiring Soon",
+      "expired": "Expired",
+      "disabled": "Disabled"
+    },
+    "actions": {
+      "renew": "Renew",
+      "renew30d": "Renew for 30 days",
+      "renew90d": "Renew for 90 days",
+      "renew1y": "Renew for 1 year",
+      "renewCustom": "Custom...",
+      "customRenewTitle": "Custom Renewal",
+      "customRenewDescription": "Set a new expiration date for user {userName}",
+      "expirationDate": "Expiration Date",
+      "enableOnRenew": "Enable user on renewal",
+      "cancel": "Cancel",
+      "confirm": "Confirm",
+      "customPrompt": "Enter a new expiry date (YYYY-MM-DD). Leave empty to cancel.",
+      "invalidDate": "Please enter a valid date",
+      "enable": "Enable",
+      "disable": "Disable",
+      "success": "Operation succeeded",
+      "failed": "Operation failed, please try again"
+    },
     "emptyState": {
       "title": "No Users",
       "description": "You haven't created any users yet. Users are the foundation for managing API keys and usage quotas. Create your first user to get started!",
@@ -674,6 +700,15 @@
       "label": "Concurrent Sessions Limit",
       "placeholder": "0 means unlimited",
       "description": "Number of simultaneous conversations"
+    },
+    "isEnabled": {
+      "label": "Enable User",
+      "description": "Disabled users cannot access the API"
+    },
+    "expiresAt": {
+      "label": "Expiration Date",
+      "placeholder": "Leave empty for never expires",
+      "description": "User will be automatically disabled after expiration"
     }
   },
   "deleteKeyConfirm": {
