@@ -119,7 +119,9 @@ export function UsageLogsSection({ initialData = null }: UsageLogsSectionProps) 
             <Label>{t("filters.model")}</Label>
             <Select
               value={filters.model ?? "__all__"}
-              onValueChange={(value) => handleFilterChange({ model: value === "__all__" ? undefined : value })}
+              onValueChange={(value) =>
+                handleFilterChange({ model: value === "__all__" ? undefined : value })
+              }
             >
               <SelectTrigger>
                 <SelectValue placeholder={t("filters.allModels")} />
@@ -139,7 +141,9 @@ export function UsageLogsSection({ initialData = null }: UsageLogsSectionProps) 
             <Select
               value={filters.statusCode?.toString() ?? "__all__"}
               onValueChange={(value) =>
-                handleFilterChange({ statusCode: value === "__all__" ? undefined : parseInt(value, 10) })
+                handleFilterChange({
+                  statusCode: value === "__all__" ? undefined : parseInt(value, 10),
+                })
               }
             >
               <SelectTrigger>
