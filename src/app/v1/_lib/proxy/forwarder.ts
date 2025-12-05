@@ -1367,7 +1367,6 @@ export class ProxyForwarder {
             .join("\n"),
           errorStack: err.stack?.split("\n").slice(0, 3).join("\n"), // 前3行堆栈
 
-          // ⭐ 请求参数诊断（帮助定位 UND_ERR_INVALID_ARG）
           targetUrl: proxyUrl, // 完整目标 URL（用于调试）
           headerKeys: Array.from(processedHeaders.keys()),
           headerCount: Array.from(processedHeaders.keys()).length,
@@ -1485,7 +1484,7 @@ export class ProxyForwarder {
     }
 
     const headerProcessor = HeaderProcessor.createForProxy({
-      blacklist: ["content-length"], // 删除原始 Content-Length，让 fetch 自动计算（转换请求后长度变化）
+      blacklist: ["content-length", "connection"], // 删除 content-length（动态计算）和 connection（undici 自动管理）
       overrides,
     });
 
@@ -1530,7 +1529,7 @@ export class ProxyForwarder {
       method: init.method as string,
       headers: headersObj,
       body: init.body as string | Buffer | undefined,
-      signal: init.signal as AbortSignal | undefined,
+      signal: init.signal,
       dispatcher: init.dispatcher,
     });
 
