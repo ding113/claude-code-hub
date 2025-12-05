@@ -58,7 +58,13 @@ const SESSION_KEY_SUFFIXES = [
 
 type Database = PostgresJsDatabase<typeof schema>;
 type PostgresClient = ReturnType<typeof postgres>;
-type ProviderType = 'claude' | 'claude-auth' | 'codex' | 'gemini-cli' | 'gemini' | 'openai-compatible';
+type ProviderType =
+  | "claude"
+  | "claude-auth"
+  | "codex"
+  | "gemini-cli"
+  | "gemini"
+  | "openai-compatible";
 
 interface ProviderRecord {
   id: number;
