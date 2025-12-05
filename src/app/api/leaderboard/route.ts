@@ -94,14 +94,6 @@ export async function GET(request: NextRequest) {
       dateRange = { startDate, endDate };
     }
 
-    // 供应商榜和模型榜仅管理员可见
-    if ((scope === "provider" || scope === "model") && !isAdmin) {
-      return NextResponse.json(
-        { error: scope === "provider" ? "仅管理员可查看供应商排行榜" : "仅管理员可查看模型排行榜" },
-        { status: 403 }
-      );
-    }
-
     // 使用 Redis 乐观缓存获取数据
     const rawData = await getLeaderboardWithCache(
       period,

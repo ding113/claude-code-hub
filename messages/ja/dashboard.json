@@ -195,6 +195,14 @@
   "leaderboard": {
     "title": "コスト ランキング",
     "description": "ユーザーとキーのコスト統計ランキングを表示します",
+    "todayTitle": "今日のリーダーボード",
+    "viewAll": "すべて見る",
+    "userRankings": "ユーザーランキング",
+    "providerRankings": "プロバイダーランキング",
+    "modelRankings": "モデルランキング",
+    "noData": "本日のデータはありません",
+    "requests": "リクエスト",
+    "tokens": "トークン",
     "tabs": {
       "users": "ユーザー ランキング",
       "keys": "キー ランキング",

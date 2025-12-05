@@ -25,6 +25,7 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GH_PAT }}
+          allowed_non_write_users: "*"
 
           prompt: |
             You are a duplicate issue detector for the repository ${{ github.repository }}.

@@ -10,7 +10,7 @@
  */
 
 import { logger } from "@/lib/logger";
-import { findProviderById, findProviderList } from "@/repository/provider";
+import { findAllProviders, findProviderById } from "@/repository/provider";
 import { getRedisClient } from "./client";
 
 export interface CircuitBreakerConfig {
@@ -174,7 +174,7 @@ export async function loadAllProvidersCircuitConfig(): Promise<void> {
     logger.info(`[CircuitBreakerConfig] Starting to preload all provider configs`);
 
     // 从数据库获取所有供应商
-    const providers = await findProviderList();
+    const providers = await findAllProviders();
 
     logger.info(`[CircuitBreakerConfig] Found ${providers.length} providers to preload`);
 

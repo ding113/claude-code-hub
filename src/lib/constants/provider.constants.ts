@@ -4,6 +4,8 @@
 export const PROVIDER_LIMITS = {
   // 权重：用于加权轮询，1-100 覆盖绝大多数场景
   WEIGHT: { MIN: 1, MAX: 100 },
+  // 单个供应商最大重试次数
+  MAX_RETRY_ATTEMPTS: { MIN: 1, MAX: 10 },
   // 5小时消费上限：保持 1000 USD 上限，步进 1 美元
   LIMIT_5H_USD: { MIN: 0.1, MAX: 1000, STEP: 1 },
   // 周消费上限：降低到 5000 USD，步进 1 美元
@@ -17,6 +19,7 @@ export const PROVIDER_LIMITS = {
 export const PROVIDER_DEFAULTS = {
   IS_ENABLED: true,
   WEIGHT: 1,
+  MAX_RETRY_ATTEMPTS: 2,
 } as const;
 
 /**

@@ -108,6 +108,7 @@ export async function getUsers(): Promise<UserDisplay[]> {
                 // 限额配置
                 limit5hUsd: key.limit5hUsd,
                 limitDailyUsd: key.limitDailyUsd,
+                dailyResetMode: key.dailyResetMode,
                 dailyResetTime: key.dailyResetTime,
                 limitWeeklyUsd: key.limitWeeklyUsd,
                 limitMonthlyUsd: key.limitMonthlyUsd,

@@ -558,7 +558,7 @@
       "limitPlaceholderUnlimited": "留空表示无限制",
       "limitPlaceholder0": "0 表示无限制",
       "circuitBreakerConfig": "熔断器配置",
-      "circuitBreakerConfigSummary": "{failureThreshold} 次失败 / {openDuration} 分钟熔断 / {successThreshold} 次成功恢复",
+      "circuitBreakerConfigSummary": "{failureThreshold} 次失败 / {openDuration} 分钟熔断 / {successThreshold} 次成功恢复 / 每个供应商最多 {maxRetryAttempts} 次尝试",
       "circuitBreakerDesc": "供应商连续失败时自动熔断，避免影响整体服务质量",
       "failureThreshold": "失败阈值（次）",
       "failureThresholdPlaceholder": "5",
@@ -569,6 +569,11 @@
       "successThreshold": "恢复阈值（次）",
       "successThresholdPlaceholder": "2",
       "successThresholdDesc": "半开状态下成功多少次后完全恢复",
+      "maxRetryAttempts": {
+        "label": "单供应商最大尝试次数",
+        "placeholder": "2",
+        "desc": "包含首次调用在内，单个供应商最多尝试几次后切换。留空使用系统默认值。"
+      },
       "proxyConfig": "代理配置",
       "proxyConfigSummary": "已配置代理",
       "proxyConfigSummaryFallback": " (启用降级)",
@@ -755,7 +760,7 @@
         },
         "circuitBreaker": {
           "title": "熔断器配置",
-          "summary": "{failureThreshold} 次失败 / {openDuration} 分钟熔断 / {successThreshold} 次成功恢复",
+          "summary": "{failureThreshold} 次失败 / {openDuration} 分钟熔断 / {successThreshold} 次成功恢复 / 每个供应商最多 {maxRetryAttempts} 次尝试",
           "desc": "供应商连续失败时自动熔断，避免影响整体服务质量",
           "failureThreshold": {
             "label": "失败阈值（次）",
@@ -771,6 +776,11 @@
             "label": "恢复阈值（次）",
             "placeholder": "2",
             "desc": "半开状态下成功多少次后完全恢复"
+          },
+          "maxRetryAttempts": {
+            "label": "单供应商最大尝试次数",
+            "placeholder": "2",
+            "desc": "包含首次调用在内，单个供应商最多尝试次数，超过后切换其他供应商。留空使用系统默认值。"
           }
         },
         "proxy": {

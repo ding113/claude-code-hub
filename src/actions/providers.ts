@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { GeminiAuth } from "@/app/v1/_lib/gemini/auth";
 import { isClientAbortError } from "@/app/v1/_lib/proxy/errors";
 import { getSession } from "@/lib/auth";
-import { clearConfigCache, getAllHealthStatus, resetCircuit } from "@/lib/circuit-breaker";
+import { clearConfigCache, getAllHealthStatusAsync, resetCircuit } from "@/lib/circuit-breaker";
 import { CodexInstructionsCache } from "@/lib/codex-instructions-cache";
 import { PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
@@ -29,8 +29,8 @@ import { CreateProviderSchema, UpdateProviderSchema } from "@/lib/validation/sch
 import {
   createProvider,
   deleteProvider,
+  findAllProviders,
   findProviderById,
-  findProviderList,
   getProviderStatistics,
   updateProvider,
 } from "@/repository/provider";
@@ -103,7 +103,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
 
     // 并行获取供应商列表和统计数据
     const [providers, statistics] = await Promise.all([
-      findProviderList(),
+      findAllProviders(),
       getProviderStatistics().catch((error) => {
         logger.trace("getProviders:statistics_error", {
           message: error.message,
@@ -193,6 +193,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         limitWeeklyUsd: provider.limitWeeklyUsd,
         limitMonthlyUsd: provider.limitMonthlyUsd,
         limitConcurrentSessions: provider.limitConcurrentSessions,
+        maxRetryAttempts: provider.maxRetryAttempts,
         circuitBreakerFailureThreshold: provider.circuitBreakerFailureThreshold,
         circuitBreakerOpenDuration: provider.circuitBreakerOpenDuration,
         circuitBreakerHalfOpenSuccessThreshold: provider.circuitBreakerHalfOpenSuccessThreshold,
@@ -263,6 +264,7 @@ export async function addProvider(data: {
   limit_weekly_usd?: number | null;
   limit_monthly_usd?: number | null;
   limit_concurrent_sessions?: number | null;
+  max_retry_attempts?: number | null;
   circuit_breaker_failure_threshold?: number;
   circuit_breaker_open_duration?: number;
   circuit_breaker_half_open_success_threshold?: number;
@@ -330,6 +332,7 @@ export async function addProvider(data: {
       limit_weekly_usd: validated.limit_weekly_usd ?? null,
       limit_monthly_usd: validated.limit_monthly_usd ?? null,
       limit_concurrent_sessions: validated.limit_concurrent_sessions ?? 0,
+      max_retry_attempts: validated.max_retry_attempts ?? null,
       circuit_breaker_failure_threshold: validated.circuit_breaker_failure_threshold ?? 5,
       circuit_breaker_open_duration: validated.circuit_breaker_open_duration ?? 1800000,
       circuit_breaker_half_open_success_threshold:
@@ -408,6 +411,7 @@ export async function editProvider(
     limit_weekly_usd?: number | null;
     limit_monthly_usd?: number | null;
     limit_concurrent_sessions?: number | null;
+    max_retry_attempts?: number | null;
     circuit_breaker_failure_threshold?: number;
     circuit_breaker_open_duration?: number;
     circuit_breaker_half_open_success_threshold?: number;
@@ -563,7 +567,8 @@ export async function getProvidersHealthStatus() {
       return {};
     }
 
-    const healthStatus = getAllHealthStatus();
+    const providerIds = await findAllProviders().then((providers) => providers.map((p) => p.id));
+    const healthStatus = await getAllHealthStatusAsync(providerIds, { forceRefresh: true });
 
     // 转换为前端友好的格式
     const enrichedStatus: Record<

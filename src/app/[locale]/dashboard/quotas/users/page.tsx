@@ -4,24 +4,65 @@ import { getUserLimitUsage, getUsers } from "@/actions/users";
 import { QuotaToolbar } from "@/components/quota/quota-toolbar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Link } from "@/i18n/routing";
+import { sumKeyTotalCostById, sumUserTotalCost } from "@/repository/statistics";
 import { getSystemSettings } from "@/repository/system-config";
+import type { UserKeyWithUsage, UserQuotaWithUsage } from "./_components/types";
 import { UsersQuotaClient } from "./_components/users-quota-client";
 
-// 强制动态渲染 (此页面需要实时数据和认证)
+// Force dynamic rendering (this page needs real-time data and auth)
 export const dynamic = "force-dynamic";
 
-async function getUsersWithQuotas() {
+// Max age for "all time" total usage query (100 years in days)
+const ALL_TIME_MAX_AGE_DAYS = 36500;
+
+async function getUsersWithQuotas(): Promise<UserQuotaWithUsage[]> {
   const users = await getUsers();
 
   const usersWithQuotas = await Promise.all(
     users.map(async (user) => {
-      const result = await getUserLimitUsage(user.id);
+      // Fetch quota usage and total cost in parallel
+      const [quotaResult, totalUsage] = await Promise.all([
+        getUserLimitUsage(user.id),
+        sumUserTotalCost(user.id, ALL_TIME_MAX_AGE_DAYS),
+      ]);
+
+      // Map keys with their total usage
+      const keysWithUsage: UserKeyWithUsage[] = await Promise.all(
+        user.keys.map(async (key) => {
+          const keyTotalUsage = await sumKeyTotalCostById(key.id, ALL_TIME_MAX_AGE_DAYS);
+          return {
+            id: key.id,
+            name: key.name,
+            status: key.status,
+            todayUsage: key.todayUsage,
+            totalUsage: keyTotalUsage,
+            limit5hUsd: key.limit5hUsd,
+            limitDailyUsd: key.limitDailyUsd,
+            limitWeeklyUsd: key.limitWeeklyUsd,
+            limitMonthlyUsd: key.limitMonthlyUsd,
+            limitTotalUsd: key.limitTotalUsd ?? null,
+            limitConcurrentSessions: key.limitConcurrentSessions,
+            dailyResetMode: key.dailyResetMode,
+            dailyResetTime: key.dailyResetTime,
+          };
+        })
+      );
+
       return {
         id: user.id,
         name: user.name,
         note: user.note,
         role: user.role,
-        quota: result.ok ? result.data : null,
+        providerGroup: user.providerGroup,
+        tags: user.tags,
+        quota: quotaResult.ok ? quotaResult.data : null,
+        limit5hUsd: user.limit5hUsd ?? null,
+        limitWeeklyUsd: user.limitWeeklyUsd ?? null,
+        limitMonthlyUsd: user.limitMonthlyUsd ?? null,
+        limitTotalUsd: user.limitTotalUsd ?? null,
+        limitConcurrentSessions: user.limitConcurrentSessions ?? null,
+        totalUsage,
+        keys: keysWithUsage,
       };
     })
   );

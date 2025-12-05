@@ -196,6 +196,14 @@
   "leaderboard": {
     "title": "成本排行榜",
     "description": "查看用戶和密鑰的成本統計排名",
+    "todayTitle": "今日排行榜",
+    "viewAll": "查看全部",
+    "userRankings": "使用者排名",
+    "providerRankings": "供應商排名",
+    "modelRankings": "模型排名",
+    "noData": "今日暫無資料",
+    "requests": "請求",
+    "tokens": "Token",
     "tabs": {
       "users": "使用者排名",
       "keys": "密鑰排名",
