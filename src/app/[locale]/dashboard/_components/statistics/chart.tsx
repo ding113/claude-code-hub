@@ -41,6 +41,18 @@ const USER_COLOR_PALETTE = [
 // 根据索引循环分配颜色，避免重复定义数组
 const getUserColor = (index: number) => USER_COLOR_PALETTE[index % USER_COLOR_PALETTE.length];
 
+/**
+ * 解析日期字符串为本地 Date 对象
+ * 避免 new Date() 对纯日期字符串的 UTC 解析行为
+ * 支持格式: "2025-12-06" 或 "2025-12-06T00:00" 或 "2025-12-06 00:00:00"
+ */
+function parseLocalDate(dateStr: string): Date {
+  const normalized = dateStr.replace("T", " ").split(" ");
+  const [year, month, day] = normalized[0].split("-").map(Number);
+  const timePart = normalized[1]?.split(":").map(Number) || [0, 0, 0];
+  return new Date(year, month - 1, day, timePart[0] || 0, timePart[1] || 0, timePart[2] || 0);
+}
+
 export interface UserStatisticsChartProps {
   data: UserStatisticsData;
   onTimeRangeChange?: (timeRange: TimeRange) => void;
@@ -226,8 +238,10 @@ export function UserStatisticsChart({
   }, [data.users, userTotals, activeChart]);
 
   // 格式化日期显示（根据分辨率）
+  // 使用 parseLocalDate 避免 new Date() 将纯日期字符串解析为 UTC 的问题
   const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
+    const date = parseLocalDate(dateStr);
+
     if (data.resolution === "hour") {
       return date.toLocaleTimeString("zh-CN", {
         hour: "2-digit",
@@ -241,9 +255,10 @@ export function UserStatisticsChart({
     }
   };
 
-  // 格式化tooltip日期
+  // 格式化tooltip日期（同样使用 parseLocalDate 避免时区问题）
   const formatTooltipDate = (dateStr: string) => {
-    const date = new Date(dateStr);
+    const date = parseLocalDate(dateStr);
+
     if (data.resolution === "hour") {
       return date.toLocaleString("zh-CN", {
         month: "long",
