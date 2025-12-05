@@ -284,8 +284,18 @@ export async function updateErrorRuleAction(
       };
     }
 
-    // 直接使用 updates，不做额外处理
-    const processedUpdates = updates;
+    // 复制 updates，以便在需要时调整 isDefault 字段
+    const processedUpdates: typeof updates & { isDefault?: boolean } = {
+      ...updates,
+    };
+
+    // 如果是默认规则，编辑时自动转换为自定义规则
+    // 这样用户的修改不会被"同步规则"操作覆盖
+    let convertedFromDefault = false;
+    if (currentRule.isDefault) {
+      processedUpdates.isDefault = false;
+      convertedFromDefault = true;
+    }
 
     const result = await repo.updateErrorRule(id, processedUpdates);
 
@@ -303,9 +313,17 @@ export async function updateErrorRuleAction(
 
     revalidatePath("/settings/error-rules");
 
+    if (convertedFromDefault) {
+      logger.info("[ErrorRulesAction] Converted default rule to custom on edit", {
+        id,
+        userId: session.user.id,
+      });
+    }
+
     logger.info("[ErrorRulesAction] Updated error rule", {
       id,
       updates,
+      convertedFromDefault,
       userId: session.user.id,
     });
 
@@ -563,6 +581,9 @@ export async function testErrorRuleAction(input: { message: string }): Promise<
 
 /**
  * 获取缓存统计信息
+ *
+ * 注意：此函数会确保缓存已初始化（懒加载），
+ * 避免在新的 worker 进程中返回空统计信息
  */
 export async function getCacheStats() {
   try {
@@ -570,6 +591,10 @@ export async function getCacheStats() {
     if (!session || session.user.role !== "admin") {
       return null;
     }
+
+    // 确保缓存已初始化（懒加载）
+    // 解决重启后新 worker 进程中缓存为空的问题
+    await errorRuleDetector.ensureInitialized();
 
     return errorRuleDetector.getStats();
   } catch (error) {

@@ -24,7 +24,7 @@ import { GEMINI_PROTOCOL } from "../gemini/protocol";
 import { HeaderProcessor } from "../headers";
 import { buildProxyUrl } from "../url";
 import {
-  categorizeError,
+  categorizeErrorAsync,
   ErrorCategory,
   isClientAbortError,
   isHttp2Error,
@@ -62,6 +62,16 @@ function resolveMaxAttemptsForProvider(
   }
   return clampRetryAttempts(provider.maxRetryAttempts);
 }
+
+/**
+ * undici request 超时配置（毫秒）
+ *
+ * 背景：undiciRequest() 在使用非 undici 原生 dispatcher（如 SocksProxyAgent）时，
+ * 不会继承全局 Agent 的超时配置，需要显式传递超时参数。
+ *
+ * 这个值与 proxy-agent.ts 中的 UNDICI_TIMEOUT_MS 保持一致。
+ */
+const UNDICI_REQUEST_TIMEOUT_MS = 600_000; // 600 秒 = 10 分钟，LLM 服务最大超时时间
 
 /**
  * 过滤私有参数（下划线前缀）
@@ -253,7 +263,8 @@ export class ProxyForwarder {
           lastError = error as Error;
 
           // ⭐ 1. 分类错误（供应商错误 vs 系统错误 vs 客户端中断）
-          const errorCategory = categorizeError(lastError);
+          // 使用异步版本确保错误规则已加载
+          const errorCategory = await categorizeErrorAsync(lastError);
           const errorMessage =
             lastError instanceof ProxyError
               ? lastError.getDetailedErrorMessage()
@@ -1525,12 +1536,15 @@ export class ProxyForwarder {
     }
 
     // 使用 undici.request 获取未自动解压的响应
+    // ⭐ 显式配置超时：确保使用非 undici 原生 dispatcher（如 SocksProxyAgent）时也能正确应用超时
     const undiciRes = await undiciRequest(url, {
       method: init.method as string,
       headers: headersObj,
       body: init.body as string | Buffer | undefined,
       signal: init.signal,
       dispatcher: init.dispatcher,
+      bodyTimeout: UNDICI_REQUEST_TIMEOUT_MS,
+      headersTimeout: UNDICI_REQUEST_TIMEOUT_MS,
     });
 
     // ⭐ 立即为 undici body 添加错误处理，防止 uncaughtException
