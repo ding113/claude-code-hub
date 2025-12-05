@@ -118,14 +118,14 @@ export function UsageLogsSection({ initialData = null }: UsageLogsSectionProps) 
           <div className="space-y-1.5">
             <Label>{t("filters.model")}</Label>
             <Select
-              value={filters.model ?? ""}
-              onValueChange={(value) => handleFilterChange({ model: value || undefined })}
+              value={filters.model ?? "__all__"}
+              onValueChange={(value) => handleFilterChange({ model: value === "__all__" ? undefined : value })}
             >
               <SelectTrigger>
                 <SelectValue placeholder={t("filters.allModels")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">{t("filters.allModels")}</SelectItem>
+                <SelectItem value="__all__">{t("filters.allModels")}</SelectItem>
                 {models.map((model) => (
                   <SelectItem key={model} value={model}>
                     {model}
@@ -137,16 +137,16 @@ export function UsageLogsSection({ initialData = null }: UsageLogsSectionProps) 
           <div className="space-y-1.5">
             <Label>{t("filters.status")}</Label>
             <Select
-              value={filters.statusCode?.toString() ?? ""}
+              value={filters.statusCode?.toString() ?? "__all__"}
               onValueChange={(value) =>
-                handleFilterChange({ statusCode: value ? parseInt(value, 10) : undefined })
+                handleFilterChange({ statusCode: value === "__all__" ? undefined : parseInt(value, 10) })
               }
             >
               <SelectTrigger>
                 <SelectValue placeholder={t("filters.allStatus")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">{t("filters.allStatus")}</SelectItem>
+                <SelectItem value="__all__">{t("filters.allStatus")}</SelectItem>
                 <SelectItem value="200">200</SelectItem>
                 <SelectItem value="400">400</SelectItem>
                 <SelectItem value="401">401</SelectItem>
