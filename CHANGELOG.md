@@ -4,6 +4,16 @@
 
 ---
 
+## [v0.3.25](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.25) - 2025-12-05
+
+### 修复
+
+- 增强代理转发器日志安全性，隐藏 URL 中的查询参数和 API 密钥 (#272)
+- 增强代理转发器错误诊断，添加详细的错误原因、堆栈追踪和请求上下文信息 (#272)
+- 优化请求头处理，将 "connection" 加入黑名单以改善 undici 兼容性 (#272)
+
+---
+
 ## [v0.3.24](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.24) - 2025-12-04
 
 ### 修复
