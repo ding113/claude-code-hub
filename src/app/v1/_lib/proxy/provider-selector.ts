@@ -1,5 +1,7 @@
 import { getCircuitState, isCircuitOpen } from "@/lib/circuit-breaker";
 import { logger } from "@/lib/logger";
+import { reserveProviderBalance } from "@/lib/provider-balance-reservation";
+import { isInMemoryIsolated } from "@/lib/provider-isolation-memory";
 import { RateLimitService } from "@/lib/rate-limit";
 import { SessionManager } from "@/lib/session-manager";
 import { findAllProviders, findProviderById } from "@/repository/provider";
@@ -309,6 +311,95 @@ export class ProxyProviderResolver {
           attempt: attemptCount,
         });
 
+        // 余额预占（仅针对有限额供应商）
+        if (session.provider.balanceUsd !== null) {
+          const balanceUsd = Number(session.provider.balanceUsd);
+          if (!Number.isFinite(balanceUsd) || balanceUsd <= 0) {
+            logger.warn("ProviderSelector: Balance value invalid, skipping provider", {
+              providerId: session.provider.id,
+              balance: session.provider.balanceUsd,
+            });
+            excludedProviders.push(session.provider.id);
+            const { provider: fallbackProvider, context: retryContext } =
+              await ProxyProviderResolver.pickRandomProvider(session, excludedProviders);
+
+            if (!fallbackProvider) {
+              logger.error(
+                "ProviderSelector: No fallback providers available after invalid balance",
+                {
+                  excludedCount: excludedProviders.length,
+                  totalAttempts: attemptCount,
+                }
+              );
+              break;
+            }
+
+            session.setProvider(fallbackProvider);
+            session.setLastSelectionContext(retryContext);
+            continue;
+          }
+
+          const reserveId = session.sessionId
+            ? `${session.sessionId}:${session.provider.id}`
+            : undefined;
+
+          const reserveResult = await reserveProviderBalance({
+            providerId: session.provider.id,
+            balanceUsd,
+            reserveId,
+          });
+
+          if (!reserveResult.allowed) {
+            logger.warn("ProviderSelector: Balance reservation rejected, trying fallback", {
+              providerId: session.provider.id,
+              balance: session.provider.balanceUsd,
+              reserved: reserveResult.reserved,
+            });
+
+            const failedContext = session.getLastSelectionContext();
+            session.addProviderToChain(session.provider, {
+              reason: "retry_failed",
+              selectionMethod: failedContext?.groupFilterApplied
+                ? "group_filtered"
+                : "weighted_random",
+              circuitState: getCircuitState(session.provider.id),
+              attemptNumber: attemptCount,
+              errorMessage: "余额预占失败",
+              decisionContext: failedContext,
+            });
+
+            session.setBalanceReservation(null);
+            excludedProviders.push(session.provider.id);
+
+            const { provider: fallbackProvider, context: retryContext } =
+              await ProxyProviderResolver.pickRandomProvider(session, excludedProviders);
+
+            if (!fallbackProvider) {
+              logger.error(
+                "ProviderSelector: No fallback providers available after reserve rejection",
+                {
+                  excludedCount: excludedProviders.length,
+                  totalAttempts: attemptCount,
+                }
+              );
+              break;
+            }
+
+            session.setProvider(fallbackProvider);
+            session.setLastSelectionContext(retryContext);
+            continue;
+          }
+
+          session.setBalanceReservation({
+            providerId: session.provider.id,
+            reserveId,
+            estimate: reserveResult.reservedAdded.toString(),
+          });
+        } else {
+          // 无限额无需预占
+          session.setBalanceReservation(null);
+        }
+
         // 只在首次选择时记录到决策链（重试时的记录由 forwarder.ts 在请求完成后统一记录）
         if (attemptCount === 1) {
           const successContext = session.getLastSelectionContext();
@@ -530,12 +621,23 @@ export class ProxyProviderResolver {
     }
     // 全局用户（userGroup 为空）可以复用任何供应商
 
+    // Re-apply limit/balance checks for reused providers to avoid bypassing filterByLimits
+    const [eligibleProvider] = await ProxyProviderResolver.filterByLimits([provider]);
+    if (!eligibleProvider) {
+      logger.warn("ProviderSelector: Session provider failed limit checks", {
+        sessionId: session.sessionId,
+        providerId: provider.id,
+        providerName: provider.name,
+      });
+      return null;
+    }
+
     logger.info("ProviderSelector: Reusing provider", {
-      providerName: provider.name,
-      providerId: provider.id,
+      providerName: eligibleProvider.name,
+      providerId: eligibleProvider.id,
       sessionId: session.sessionId,
     });
-    return provider;
+    return eligibleProvider;
   }
 
   private static async pickRandomProvider(
@@ -802,7 +904,7 @@ export class ProxyProviderResolver {
    * 过滤超限供应商
    *
    * 注意：并发 Session 限制检查已移至原子性检查（ensure 方法中），
-   * 此处仅检查金额限制和熔断器状态
+   * 此处仅检查金额限制、余额和熔断器状态
    */
   private static async filterByLimits(providers: Provider[]): Promise<Provider[]> {
     const results = await Promise.all(
@@ -825,6 +927,48 @@ export class ProxyProviderResolver {
 
         if (!costCheck.allowed) {
           logger.debug("ProviderSelector: Provider cost limit exceeded", { providerId: p.id });
+          return null;
+        }
+
+        // 2. 检查余额（自然余额控制）
+        // 余额 <= 0 的供应商不可选（包括负数和0）
+        // 余额 null 视为无限额度，可选
+        if (p.balanceUsd !== null && p.balanceUsd <= 0) {
+          logger.debug("ProviderSelector: Provider balance exhausted or negative", {
+            providerId: p.id,
+            balance: p.balanceUsd,
+          });
+          return null;
+        }
+
+        // 3. 检查扣款失败隔离标记（Redis）
+        // 仅用于数据库错误时的临时隔离（30秒）
+        try {
+          const { getRedisClient } = await import("@/lib/redis");
+          const redis = await getRedisClient();
+          if (redis) {
+            const isolationKey = `provider:deduction_failed:${p.id}`;
+            const isIsolated = await redis.get(isolationKey);
+            if (isIsolated) {
+              logger.debug("ProviderSelector: Provider isolated due to DB error", {
+                providerId: p.id,
+              });
+              return null;
+            }
+          }
+        } catch (redisError) {
+          logger.warn("ProviderSelector: Failed to check deduction failure flag", {
+            providerId: p.id,
+            error: redisError instanceof Error ? redisError.message : String(redisError),
+          });
+          // Fail-open: Redis 不可用不影响选择流程
+        }
+
+        // 3.1 本地隔离兜底（Redis 不可用时，避免无保护放行）
+        if (isInMemoryIsolated(p.id)) {
+          logger.debug("ProviderSelector: Provider isolated via in-memory fallback", {
+            providerId: p.id,
+          });
           return null;
         }
 

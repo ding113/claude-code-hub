@@ -69,6 +69,13 @@ export class ProxySession {
   // 上次选择的决策上下文（用于记录到 providerChain）
   private _lastSelectionContext?: ProviderChainItem["decisionContext"];
 
+  // 余额预占信息
+  private balanceReservation: {
+    providerId: number;
+    reserveId?: string;
+    estimate: string;
+  } | null = null;
+
   private constructor(init: {
     startTime: number;
     method: string;
@@ -448,6 +455,20 @@ export class ProxySession {
    */
   getLastSelectionContext(): ProviderChainItem["decisionContext"] | undefined {
     return this._lastSelectionContext;
+  }
+
+  setBalanceReservation(
+    reservation: { providerId: number; reserveId?: string; estimate: string } | null
+  ): void {
+    this.balanceReservation = reservation;
+  }
+
+  getBalanceReservation(): {
+    providerId: number;
+    reserveId?: string;
+    estimate: string;
+  } | null {
+    return this.balanceReservation || null;
   }
 }
 

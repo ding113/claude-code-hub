@@ -293,6 +293,13 @@ export const CreateProviderSchema = z.object({
     .max(PROVIDER_LIMITS.MAX_RETRY_ATTEMPTS.MAX, "重试次数不能超过10次")
     .nullable()
     .optional(),
+  // 供应商余额（预付费模式）
+  balance_usd: z.coerce
+    .number()
+    .min(0, "供应商余额不能为负数")
+    .max(1000000, "供应商余额不能超过1000000美元")
+    .nullable()
+    .optional(),
   // 熔断器配置
   circuit_breaker_failure_threshold: z.coerce
     .number()
@@ -478,6 +485,13 @@ export const UpdateProviderSchema = z
       .int("重试次数必须是整数")
       .min(PROVIDER_LIMITS.MAX_RETRY_ATTEMPTS.MIN, "重试次数不能少于1次")
       .max(PROVIDER_LIMITS.MAX_RETRY_ATTEMPTS.MAX, "重试次数不能超过10次")
+      .nullable()
+      .optional(),
+    // 供应商余额（预付费模式）
+    balance_usd: z.coerce
+      .number()
+      .min(0, "供应商余额不能为负数")
+      .max(1000000, "供应商余额不能超过1000000美元")
       .nullable()
       .optional(),
     // 熔断器配置
