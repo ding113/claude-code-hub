@@ -159,11 +159,14 @@ function parseCliArgs(args: string[]): CliOptions {
         return id;
       });
     } else if (arg.startsWith("--id=")) {
-      providerIds = arg.split("=")[1].split(",").map((s) => {
-        const id = Number.parseInt(s.trim(), 10);
-        if (Number.isNaN(id)) throw new Error(`无效的供应商 ID: ${s}`);
-        return id;
-      });
+      providerIds = arg
+        .split("=")[1]
+        .split(",")
+        .map((s) => {
+          const id = Number.parseInt(s.trim(), 10);
+          if (Number.isNaN(id)) throw new Error(`无效的供应商 ID: ${s}`);
+          return id;
+        });
     } else if (arg === "--name") {
       namePattern = args[++i];
       if (!namePattern) throw new Error("--name 需要一个匹配模式");
@@ -186,7 +189,9 @@ function parseCliArgs(args: string[]): CliOptions {
   }
 
   // 确定模式
-  const modeCount = [priorityValue !== null, providerIds !== null, namePattern !== null].filter(Boolean).length;
+  const modeCount = [priorityValue !== null, providerIds !== null, namePattern !== null].filter(
+    Boolean
+  ).length;
   if (modeCount > 1) {
     throw new Error("--priority, --id, --name 不能同时使用，请选择一种筛选方式");
   }
@@ -300,10 +305,7 @@ async function fetchProvidersByPriority(
   threshold: number,
   providerType?: string
 ): Promise<ProviderRecord[]> {
-  const conditions = [
-    isNull(schema.providers.deletedAt),
-    lt(schema.providers.priority, threshold),
-  ];
+  const conditions = [isNull(schema.providers.deletedAt), lt(schema.providers.priority, threshold)];
 
   if (providerType && providerType !== "all") {
     if (providerType === "claude") {
@@ -339,10 +341,7 @@ async function fetchProvidersByPriority(
   }));
 }
 
-async function fetchProvidersByIds(
-  db: Database,
-  ids: number[]
-): Promise<ProviderRecord[]> {
+async function fetchProvidersByIds(db: Database, ids: number[]): Promise<ProviderRecord[]> {
   const rows = await db
     .select({
       id: schema.providers.id,
@@ -364,10 +363,7 @@ async function fetchProvidersByIds(
   }));
 }
 
-async function fetchProvidersByName(
-  db: Database,
-  pattern: string
-): Promise<ProviderRecord[]> {
+async function fetchProvidersByName(db: Database, pattern: string): Promise<ProviderRecord[]> {
   const rows = await db
     .select({
       id: schema.providers.id,
@@ -873,9 +869,10 @@ async function main(): Promise<void> {
           console.log("\n请重新运行脚本。");
           return;
         }
-        const filteredProviders = selectedType === "all"
-          ? allProviders
-          : allProviders.filter((p) => p.providerType === selectedType);
+        const filteredProviders =
+          selectedType === "all"
+            ? allProviders
+            : allProviders.filter((p) => p.providerType === selectedType);
 
         if (filteredProviders.length === 0) {
           console.log(`\n没有找到类型为 "${selectedType}" 的供应商。`);
