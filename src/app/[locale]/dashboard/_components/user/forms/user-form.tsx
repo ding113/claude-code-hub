@@ -7,6 +7,7 @@ import { getAvailableProviderGroups } from "@/actions/providers";
 import { addUser, editUser } from "@/actions/users";
 import { ArrayTagInputField, TagInputField, TextField } from "@/components/form/form-field";
 import { DialogFormLayout, FormGrid } from "@/components/form/form-layout";
+import { Switch } from "@/components/ui/switch";
 import { USER_DEFAULTS, USER_LIMITS } from "@/lib/constants/user.constants";
 import { useZodForm } from "@/lib/hooks/use-zod-form";
 import { getErrorMessage } from "@/lib/utils/error-messages";
@@ -27,6 +28,8 @@ interface UserFormProps {
     limitMonthlyUsd?: number | null;
     limitTotalUsd?: number | null;
     limitConcurrentSessions?: number | null;
+    isEnabled?: boolean;
+    expiresAt?: Date | null;
   };
   onSuccess?: () => void;
   currentUser?: {
@@ -70,6 +73,8 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
       limitMonthlyUsd: user?.limitMonthlyUsd ?? null,
       limitTotalUsd: user?.limitTotalUsd ?? null,
       limitConcurrentSessions: user?.limitConcurrentSessions ?? null,
+      isEnabled: user?.isEnabled ?? true,
+      expiresAt: user?.expiresAt ? user.expiresAt.toISOString().split("T")[0] : "",
     },
     onSubmit: async (data) => {
       startTransition(async () => {
@@ -88,6 +93,8 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
               limitMonthlyUsd: data.limitMonthlyUsd,
               limitTotalUsd: data.limitTotalUsd,
               limitConcurrentSessions: data.limitConcurrentSessions,
+              isEnabled: data.isEnabled,
+              expiresAt: data.expiresAt ? new Date(data.expiresAt) : null,
             });
           } else {
             res = await addUser({
@@ -102,6 +109,8 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
               limitMonthlyUsd: data.limitMonthlyUsd,
               limitTotalUsd: data.limitTotalUsd,
               limitConcurrentSessions: data.limitConcurrentSessions,
+              isEnabled: data.isEnabled,
+              expiresAt: data.expiresAt ? new Date(data.expiresAt) : null,
             });
           }
 
@@ -276,6 +285,33 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
             {...form.getFieldProps("limitConcurrentSessions")}
           />
         </FormGrid>
+      )}
+
+      {/* Admin-only user status fields */}
+      {isAdmin && (
+        <>
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <label htmlFor="is-enabled" className="text-sm font-medium">
+                {tForm("isEnabled.label")}
+              </label>
+              <p className="text-xs text-muted-foreground mt-1">{tForm("isEnabled.description")}</p>
+            </div>
+            <Switch
+              id="is-enabled"
+              checked={form.values.isEnabled ?? true}
+              onCheckedChange={(checked) => form.setValue("isEnabled", checked)}
+            />
+          </div>
+
+          <TextField
+            label={tForm("expiresAt.label")}
+            type="date"
+            placeholder={tForm("expiresAt.placeholder")}
+            description={tForm("expiresAt.description")}
+            {...form.getFieldProps("expiresAt")}
+          />
+        </>
       )}
     </DialogFormLayout>
   );

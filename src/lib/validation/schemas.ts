@@ -63,6 +63,13 @@ export const CreateUserSchema = z.object({
     .max(1000, "并发Session上限不能超过1000")
     .nullable()
     .optional(),
+  // User status and expiry management
+  isEnabled: z.boolean().optional().default(true),
+  expiresAt: z
+    .string()
+    .optional()
+    .default("")
+    .transform((val) => (val === "" ? undefined : val)),
 });
 
 /**
@@ -118,6 +125,12 @@ export const UpdateUserSchema = z.object({
     .max(1000, "并发Session上限不能超过1000")
     .nullable()
     .optional(),
+  // User status and expiry management
+  isEnabled: z.boolean().optional(),
+  expiresAt: z
+    .string()
+    .optional()
+    .transform((val) => (!val || val === "" ? undefined : val)),
 });
 
 /**

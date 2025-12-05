@@ -75,6 +75,8 @@ export async function getUsers(): Promise<UserDisplay[]> {
             limitMonthlyUsd: user.limitMonthlyUsd ?? null,
             limitTotalUsd: user.limitTotalUsd ?? null,
             limitConcurrentSessions: user.limitConcurrentSessions ?? null,
+            isEnabled: user.isEnabled,
+            expiresAt: user.expiresAt ?? null,
             keys: keys.map((key) => {
               const stats = statisticsMap.get(key.id);
               // 用户可以查看和复制自己的密钥，管理员可以查看和复制所有密钥
@@ -133,6 +135,8 @@ export async function getUsers(): Promise<UserDisplay[]> {
             limitMonthlyUsd: user.limitMonthlyUsd ?? null,
             limitTotalUsd: user.limitTotalUsd ?? null,
             limitConcurrentSessions: user.limitConcurrentSessions ?? null,
+            isEnabled: user.isEnabled,
+            expiresAt: user.expiresAt ?? null,
             keys: [],
           };
         }
@@ -159,6 +163,8 @@ export async function addUser(data: {
   limitMonthlyUsd?: number | null;
   limitTotalUsd?: number | null;
   limitConcurrentSessions?: number | null;
+  isEnabled?: boolean;
+  expiresAt?: Date | null;
 }): Promise<ActionResult> {
   try {
     // Get translations for error messages
@@ -211,6 +217,8 @@ export async function addUser(data: {
       limitMonthlyUsd: validatedData.limitMonthlyUsd ?? undefined,
       limitTotalUsd: validatedData.limitTotalUsd ?? undefined,
       limitConcurrentSessions: validatedData.limitConcurrentSessions ?? undefined,
+      isEnabled: data.isEnabled ?? true,
+      expiresAt: data.expiresAt ?? null,
     });
 
     // 为新用户创建默认密钥
@@ -252,6 +260,8 @@ export async function editUser(
     limitMonthlyUsd?: number | null;
     limitTotalUsd?: number | null;
     limitConcurrentSessions?: number | null;
+    isEnabled?: boolean;
+    expiresAt?: Date | null;
   }
 ): Promise<ActionResult> {
   try {
@@ -313,6 +323,8 @@ export async function editUser(
       limitMonthlyUsd: validatedData.limitMonthlyUsd ?? undefined,
       limitTotalUsd: validatedData.limitTotalUsd ?? undefined,
       limitConcurrentSessions: validatedData.limitConcurrentSessions ?? undefined,
+      isEnabled: data.isEnabled,
+      expiresAt: data.expiresAt,
     });
 
     revalidatePath("/dashboard");
@@ -419,5 +431,108 @@ export async function getUserLimitUsage(userId: number): Promise<
     const tError = await getTranslations("errors");
     const message = error instanceof Error ? error.message : tError("GET_USER_QUOTA_FAILED");
     return { ok: false, error: message, errorCode: ERROR_CODES.OPERATION_FAILED };
+  }
+}
+
+/**
+ * 续期用户（延长过期时间）
+ */
+export async function renewUser(
+  userId: number,
+  data: {
+    expiresAt: string; // ISO 8601 string to avoid serialization issues
+    enableUser?: boolean; // 是否同时启用用户
+  }
+): Promise<ActionResult> {
+  try {
+    // Get translations for error messages
+    const tError = await getTranslations("errors");
+
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    // Parse and validate expiration date
+    const expiresAt = new Date(data.expiresAt);
+    if (isNaN(expiresAt.getTime())) {
+      return {
+        ok: false,
+        error: tError("INVALID_FORMAT"),
+        errorCode: ERROR_CODES.INVALID_FORMAT,
+      };
+    }
+
+    // Update user expiration date and optionally enable user
+    const updateData: {
+      expiresAt: Date;
+      isEnabled?: boolean;
+    } = {
+      expiresAt,
+    };
+
+    if (data.enableUser === true) {
+      updateData.isEnabled = true;
+    }
+
+    await updateUser(userId, updateData);
+
+    revalidatePath("/dashboard");
+    return { ok: true };
+  } catch (error) {
+    logger.error("Failed to renew user:", error);
+    const tError = await getTranslations("errors");
+    const message = error instanceof Error ? error.message : tError("UPDATE_USER_FAILED");
+    return {
+      ok: false,
+      error: message,
+      errorCode: ERROR_CODES.UPDATE_FAILED,
+    };
+  }
+}
+
+/**
+ * 切换用户启用/禁用状态
+ */
+export async function toggleUserEnabled(userId: number, enabled: boolean): Promise<ActionResult> {
+  try {
+    // Get translations for error messages
+    const tError = await getTranslations("errors");
+
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    // Prevent disabling self
+    if (session.user.id === userId && !enabled) {
+      return {
+        ok: false,
+        error: tError("CANNOT_DISABLE_SELF"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    await updateUser(userId, { isEnabled: enabled });
+
+    revalidatePath("/dashboard");
+    return { ok: true };
+  } catch (error) {
+    logger.error("Failed to toggle user enabled status:", error);
+    const tError = await getTranslations("errors");
+    const message = error instanceof Error ? error.message : tError("UPDATE_USER_FAILED");
+    return {
+      ok: false,
+      error: message,
+      errorCode: ERROR_CODES.UPDATE_FAILED,
+    };
   }
 }
