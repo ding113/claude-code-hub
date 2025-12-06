@@ -30,7 +30,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
-          token: ${{ secrets.GH_PAT }}
+          token: ${{ secrets.GITHUB_TOKEN || secrets.GH_PAT }}
 
       - name: Determine release tag
         id: release_info
@@ -80,13 +80,13 @@ jobs:
           echo "$CHANGED_FILES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Run Claude for Unified Documentation Update
+      - name: Run Claude Code for Unified Docs Update
         uses: anthropics/claude-code-action@v1
         env:
           ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ secrets.GH_PAT }}
+          github_token: ${{ secrets.GITHUB_TOKEN || secrets.GH_PAT }}
 
           prompt: |
             你是 Claude Code Hub 项目的发布文档专家。请执行完整的文档更新流程。

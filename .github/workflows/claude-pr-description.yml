@@ -29,7 +29,7 @@ jobs:
           ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ secrets.GH_PAT }}
+          github_token: ${{ secrets.GITHUB_TOKEN || secrets.GH_PAT }}
           # Allow external contributors (fork PRs) to trigger this workflow
           allowed_non_write_users: "*"
 

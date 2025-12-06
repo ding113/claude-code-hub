@@ -61,12 +61,10 @@ jobs:
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: '1.3.2'
 
       - name: Install dependencies and format code
         run: |
-          bun install --frozen-lockfile
+          bun install
           bun run format
 
       - name: Commit formatted code

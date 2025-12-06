@@ -1,11 +1,11 @@
 # syntax=docker/dockerfile:1
 
-FROM --platform=$BUILDPLATFORM oven/bun:1.3.2-slim AS build-base
+FROM --platform=$BUILDPLATFORM oven/bun:slim AS build-base
 WORKDIR /app
 
 FROM build-base AS deps
-COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile
+COPY package.json ./
+RUN bun install
 
 FROM deps AS build
 COPY . .

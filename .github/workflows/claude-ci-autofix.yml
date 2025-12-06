@@ -209,13 +209,13 @@ jobs:
               headBranch: '${{ github.event.workflow_run.head_branch }}'
             };
 
-      - name: Run Claude Code for CI Fix
+      - name: Run Claude Code for Auto-Fix
         uses: anthropics/claude-code-action@v1
         env:
           ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ secrets.GH_PAT }}
+          github_token: ${{ secrets.GITHUB_TOKEN || secrets.GH_PAT }}
 
           prompt: |
             You are a CI failure auto-fixer for the repository ${{ github.repository }}.
