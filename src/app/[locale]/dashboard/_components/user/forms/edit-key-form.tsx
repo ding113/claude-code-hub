@@ -1,10 +1,11 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { editKey } from "@/actions/keys";
-import { DateField, NumberField, TextField } from "@/components/form/form-field";
+import { getAvailableProviderGroups } from "@/actions/providers";
+import { DateField, NumberField, TagInputField, TextField } from "@/components/form/form-field";
 import { DialogFormLayout, FormGrid } from "@/components/form/form-layout";
 import { Label } from "@/components/ui/label";
 import {
@@ -25,6 +26,7 @@ interface EditKeyFormProps {
     name: string;
     expiresAt: string;
     canLoginWebUi?: boolean;
+    providerGroup?: string | null;
     limit5hUsd?: number | null;
     limitDailyUsd?: number | null;
     dailyResetMode?: "fixed" | "rolling";
@@ -40,8 +42,15 @@ interface EditKeyFormProps {
 
 export function EditKeyForm({ keyData, user, onSuccess }: EditKeyFormProps) {
   const [isPending, startTransition] = useTransition();
+  const [providerGroupSuggestions, setProviderGroupSuggestions] = useState<string[]>([]);
   const router = useRouter();
   const t = useTranslations("quota.keys.editKeyForm");
+  const tUI = useTranslations("ui.tagInput");
+
+  // Load provider group suggestions
+  useEffect(() => {
+    getAvailableProviderGroups().then(setProviderGroupSuggestions);
+  }, []);
 
   const formatExpiresAt = (expiresAt: string) => {
     if (!expiresAt || expiresAt === "永不过期") return "";
@@ -58,6 +67,7 @@ export function EditKeyForm({ keyData, user, onSuccess }: EditKeyFormProps) {
       name: keyData?.name || "",
       expiresAt: formatExpiresAt(keyData?.expiresAt || ""),
       canLoginWebUi: keyData?.canLoginWebUi ?? true,
+      providerGroup: keyData?.providerGroup || "",
       limit5hUsd: keyData?.limit5hUsd ?? null,
       limitDailyUsd: keyData?.limitDailyUsd ?? null,
       dailyResetMode: keyData?.dailyResetMode ?? "fixed",
@@ -78,6 +88,7 @@ export function EditKeyForm({ keyData, user, onSuccess }: EditKeyFormProps) {
             name: data.name,
             expiresAt: data.expiresAt || undefined,
             canLoginWebUi: data.canLoginWebUi,
+            providerGroup: data.providerGroup || null,
             limit5hUsd: data.limit5hUsd,
             limitDailyUsd: data.limitDailyUsd,
             dailyResetMode: data.dailyResetMode,
@@ -144,6 +155,32 @@ export function EditKeyForm({ keyData, user, onSuccess }: EditKeyFormProps) {
           onCheckedChange={(checked) => form.setValue("canLoginWebUi", checked)}
         />
       </div>
+
+      <TagInputField
+        label={t("providerGroup.label")}
+        maxTagLength={50}
+        placeholder={t("providerGroup.placeholder")}
+        description={
+          user?.providerGroup
+            ? t("providerGroup.descriptionWithUserGroup", { group: user.providerGroup })
+            : t("providerGroup.description")
+        }
+        suggestions={providerGroupSuggestions}
+        onInvalidTag={(_tag, reason) => {
+          const messages: Record<string, string> = {
+            empty: tUI("emptyTag"),
+            duplicate: tUI("duplicateTag"),
+            too_long: tUI("tooLong", { max: 50 }),
+            invalid_format: tUI("invalidFormat"),
+            max_tags: tUI("maxTags"),
+          };
+          toast.error(messages[reason] || reason);
+        }}
+        value={String(form.getFieldProps("providerGroup").value)}
+        onChange={form.getFieldProps("providerGroup").onChange}
+        error={form.getFieldProps("providerGroup").error}
+        touched={form.getFieldProps("providerGroup").touched}
+      />
 
       <FormGrid columns={2}>
         <NumberField

@@ -495,40 +495,61 @@ export class ProxyProviderResolver {
     }
 
     // 修复：检查用户分组权限（严格分组隔离 + 支持多分组）
+    // Check if session provider matches user's group
+    // Priority: key.providerGroup > user.providerGroup
+    const keyGroup = session?.authState?.key?.providerGroup;
     const userGroup = session?.authState?.user?.providerGroup;
-    if (userGroup) {
-      // 用户有分组，支持多个分组（逗号分隔）
-      const userGroups = userGroup
+    const effectiveGroup = keyGroup || userGroup;
+    if (effectiveGroup) {
+      // User/key has group restriction, support multiple groups (comma-separated)
+      const groups = effectiveGroup
         .split(",")
         .map((g) => g.trim())
         .filter(Boolean);
 
-      // 检查供应商的 groupTag 与用户的分组是否有交集
-      // 修复 #190: 支持供应商多标签（如 "cli,chat"）与用户单标签（如 "cli"）的匹配
-      if (provider.groupTag) {
-        // 将供应商的 groupTag 拆分成标签数组
-        const providerTags = provider.groupTag
-          .split(",")
-          .map((tag) => tag.trim())
-          .filter(Boolean);
-
-        // 检查是否有交集
-        const hasIntersection = providerTags.some((tag) => userGroups.includes(tag));
-
-        if (!hasIntersection) {
-          logger.warn("ProviderSelector: Session provider not in user groups", {
+      // Check if provider's groupTag intersects with the effective groups
+      // Fix #190: Support provider multi-tags (e.g. "cli,chat") matching user single-tag (e.g. "cli")
+      // Fix #281: Reject providers without groupTag when user/key has group restrictions
+      if (!provider.groupTag) {
+        // Provider has no group tag but user/key requires group - reject reuse
+        logger.warn(
+          "ProviderSelector: Session provider has no group tag but user/key requires group",
+          {
             sessionId: session.sessionId,
             providerId: provider.id,
             providerName: provider.name,
-            providerTags: providerTags.join(","),
-            userGroups: userGroups.join(","),
-            message: "Strict group isolation: rejecting cross-group session reuse",
-          });
-          return null; // 不允许复用，重新选择
-        }
+            effectiveGroups: groups.join(","),
+            keyGroupOverride: !!keyGroup,
+            message:
+              "Strict group isolation: rejecting untagged provider for group-scoped user/key",
+          }
+        );
+        return null; // Reject reuse, re-select
+      }
+
+      // Split provider's groupTag into tag array
+      const providerTags = provider.groupTag
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter(Boolean);
+
+      // Check for intersection
+      const hasIntersection = providerTags.some((tag) => groups.includes(tag));
+
+      if (!hasIntersection) {
+        logger.warn("ProviderSelector: Session provider not in user groups", {
+          sessionId: session.sessionId,
+          providerId: provider.id,
+          providerName: provider.name,
+          providerTags: providerTags.join(","),
+          effectiveGroups: groups.join(","),
+          keyGroupOverride: !!keyGroup,
+          message: "Strict group isolation: rejecting cross-group session reuse",
+        });
+        return null; // Reject reuse, re-select
       }
     }
-    // 全局用户（userGroup 为空）可以复用任何供应商
+    // Global user/key (effectiveGroup is empty) can reuse any provider
 
     logger.info("ProviderSelector: Reusing provider", {
       providerName: provider.name,
@@ -660,55 +681,59 @@ export class ProxyProviderResolver {
       return { provider: null, context };
     }
 
-    // Step 2: 用户分组过滤（如果用户指定了分组）
+    // Step 2: Provider group filter (key > user priority)
     let candidateProviders = enabledProviders;
-    const userGroup = session?.authState?.user?.providerGroup;
+    const keyGroupPick = session?.authState?.key?.providerGroup;
+    const userGroupPick = session?.authState?.user?.providerGroup;
+    const effectiveGroupPick = keyGroupPick || userGroupPick;
 
-    if (userGroup) {
-      context.userGroup = userGroup;
+    if (effectiveGroupPick) {
+      context.userGroup = effectiveGroupPick;
 
-      // 修复：支持多个分组（逗号分隔，如 "fero,chen"）
-      const userGroups = userGroup
+      // Support multiple groups (comma-separated, e.g. "fero,chen")
+      const groups = effectiveGroupPick
         .split(",")
         .map((g) => g.trim())
         .filter(Boolean);
 
-      // 过滤：供应商的 groupTag 与用户的分组有交集
-      // 修复 #190: 支持供应商多标签（如 "cli,chat"）与用户单标签（如 "cli"）的匹配
+      // Filter: provider's groupTag intersects with effective groups
+      // Fix #190: Support provider multi-tags (e.g. "cli,chat") matching user single-tag (e.g. "cli")
       const groupFiltered = enabledProviders.filter((p) => {
         if (!p.groupTag) return false;
 
-        // 将供应商的 groupTag 拆分成标签数组
+        // Split provider's groupTag into tag array
         const providerTags = p.groupTag
           .split(",")
           .map((tag) => tag.trim())
           .filter(Boolean);
 
-        // 检查是否有交集：用户的分组中是否有任意一个标签在供应商的标签列表中
-        return providerTags.some((tag) => userGroups.includes(tag));
+        // Check for intersection: any of user's groups in provider's tag list
+        return providerTags.some((tag) => groups.includes(tag));
       });
 
       if (groupFiltered.length > 0) {
         candidateProviders = groupFiltered;
         context.groupFilterApplied = true;
         context.afterGroupFilter = groupFiltered.length;
-        logger.debug("ProviderSelector: User multi-group filter applied", {
-          userGroup,
-          userGroups,
+        logger.debug("ProviderSelector: Effective group filter applied", {
+          effectiveGroup: effectiveGroupPick,
+          keyGroupOverride: !!keyGroupPick,
+          groups,
           count: groupFiltered.length,
         });
       } else {
-        // 修复：严格分组隔离，无可用供应商时返回错误而不是 fallback
+        // Strict group isolation: return error when no available providers instead of fallback
         context.groupFilterApplied = false;
         context.afterGroupFilter = 0;
-        logger.error("ProviderSelector: User groups have no available providers", {
-          userGroup,
-          userGroups,
+        logger.error("ProviderSelector: Effective groups have no available providers", {
+          effectiveGroup: effectiveGroupPick,
+          keyGroupOverride: !!keyGroupPick,
+          groups,
           enabledProviders: enabledProviders.length,
           message: "Strict group isolation: returning null instead of fallback",
         });
 
-        // 返回 null 表示无可用供应商
+        // Return null to indicate no available provider
         return {
           provider: null,
           context,
@@ -778,7 +803,7 @@ export class ProxyProviderResolver {
       totalProviders: allProviders.length,
       enabledCount: enabledProviders.length,
       excludedIds: excludeIds,
-      userGroup: userGroup || "none",
+      userGroup: effectiveGroupPick || "none",
       afterGroupFilter: candidateProviders.map((p) => p.name),
       afterHealthFilter: healthyProviders.length,
       filteredOut: filteredOut.map((p) => p.name),

@@ -646,6 +646,12 @@
       "description": "Number of simultaneous conversations",
       "descriptionWithUserLimit": "Maximum sessions (User limit: {limit})"
     },
+    "providerGroup": {
+      "label": "Provider Group",
+      "placeholder": "Enter provider group tags, press Enter to add",
+      "description": "Limit to specific provider groups (empty = inherit from user)",
+      "descriptionWithUserGroup": "Limit to specific provider groups (User group: {group})"
+    },
     "errors": {
       "userIdMissing": "User ID does not exist",
       "createFailed": "Failed to create, please try again later",

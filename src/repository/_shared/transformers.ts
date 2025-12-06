@@ -43,6 +43,7 @@ export function toKey(dbKey: any): Key {
         ? parseFloat(dbKey.limitTotalUsd)
         : null,
     limitConcurrentSessions: dbKey?.limitConcurrentSessions ?? 0,
+    providerGroup: dbKey?.providerGroup ?? null,
     createdAt: dbKey?.createdAt ? new Date(dbKey.createdAt) : new Date(),
     updatedAt: dbKey?.updatedAt ? new Date(dbKey.updatedAt) : new Date(),
   };

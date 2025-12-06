@@ -26,6 +26,7 @@ export async function findKeyById(id: number): Promise<Key | null> {
       limitMonthlyUsd: keys.limitMonthlyUsd,
       limitTotalUsd: keys.limitTotalUsd,
       limitConcurrentSessions: keys.limitConcurrentSessions,
+      providerGroup: keys.providerGroup,
       createdAt: keys.createdAt,
       updatedAt: keys.updatedAt,
       deletedAt: keys.deletedAt,
@@ -55,6 +56,7 @@ export async function findKeyList(userId: number): Promise<Key[]> {
       limitMonthlyUsd: keys.limitMonthlyUsd,
       limitTotalUsd: keys.limitTotalUsd,
       limitConcurrentSessions: keys.limitConcurrentSessions,
+      providerGroup: keys.providerGroup,
       createdAt: keys.createdAt,
       updatedAt: keys.updatedAt,
       deletedAt: keys.deletedAt,
@@ -83,6 +85,7 @@ export async function createKey(keyData: CreateKeyData): Promise<Key> {
       keyData.limit_monthly_usd != null ? keyData.limit_monthly_usd.toString() : null,
     limitTotalUsd: keyData.limit_total_usd != null ? keyData.limit_total_usd.toString() : null,
     limitConcurrentSessions: keyData.limit_concurrent_sessions,
+    providerGroup: keyData.provider_group ?? null,
   };
 
   const [key] = await db.insert(keys).values(dbData).returning({
@@ -101,6 +104,7 @@ export async function createKey(keyData: CreateKeyData): Promise<Key> {
     limitMonthlyUsd: keys.limitMonthlyUsd,
     limitTotalUsd: keys.limitTotalUsd,
     limitConcurrentSessions: keys.limitConcurrentSessions,
+    providerGroup: keys.providerGroup,
     createdAt: keys.createdAt,
     updatedAt: keys.updatedAt,
     deletedAt: keys.deletedAt,
@@ -140,6 +144,7 @@ export async function updateKey(id: number, keyData: UpdateKeyData): Promise<Key
       keyData.limit_total_usd != null ? keyData.limit_total_usd.toString() : null;
   if (keyData.limit_concurrent_sessions !== undefined)
     dbData.limitConcurrentSessions = keyData.limit_concurrent_sessions;
+  if (keyData.provider_group !== undefined) dbData.providerGroup = keyData.provider_group;
 
   const [key] = await db
     .update(keys)
@@ -161,6 +166,7 @@ export async function updateKey(id: number, keyData: UpdateKeyData): Promise<Key
       limitMonthlyUsd: keys.limitMonthlyUsd,
       limitTotalUsd: keys.limitTotalUsd,
       limitConcurrentSessions: keys.limitConcurrentSessions,
+      providerGroup: keys.providerGroup,
       createdAt: keys.createdAt,
       updatedAt: keys.updatedAt,
       deletedAt: keys.deletedAt,
@@ -191,6 +197,7 @@ export async function findActiveKeyByUserIdAndName(
       limitMonthlyUsd: keys.limitMonthlyUsd,
       limitTotalUsd: keys.limitTotalUsd,
       limitConcurrentSessions: keys.limitConcurrentSessions,
+      providerGroup: keys.providerGroup,
       createdAt: keys.createdAt,
       updatedAt: keys.updatedAt,
       deletedAt: keys.deletedAt,
@@ -282,6 +289,7 @@ export async function findActiveKeyByKeyString(keyString: string): Promise<Key |
       limitMonthlyUsd: keys.limitMonthlyUsd,
       limitTotalUsd: keys.limitTotalUsd,
       limitConcurrentSessions: keys.limitConcurrentSessions,
+      providerGroup: keys.providerGroup,
       createdAt: keys.createdAt,
       updatedAt: keys.updatedAt,
       deletedAt: keys.deletedAt,
@@ -322,6 +330,7 @@ export async function validateApiKeyAndGetUser(
       keyLimitMonthlyUsd: keys.limitMonthlyUsd,
       keyLimitTotalUsd: keys.limitTotalUsd,
       keyLimitConcurrentSessions: keys.limitConcurrentSessions,
+      keyProviderGroup: keys.providerGroup,
       keyCreatedAt: keys.createdAt,
       keyUpdatedAt: keys.updatedAt,
       keyDeletedAt: keys.deletedAt,
@@ -390,6 +399,7 @@ export async function validateApiKeyAndGetUser(
     limitMonthlyUsd: row.keyLimitMonthlyUsd,
     limitTotalUsd: row.keyLimitTotalUsd,
     limitConcurrentSessions: row.keyLimitConcurrentSessions,
+    providerGroup: row.keyProviderGroup,
     createdAt: row.keyCreatedAt,
     updatedAt: row.keyUpdatedAt,
     deletedAt: row.keyDeletedAt,

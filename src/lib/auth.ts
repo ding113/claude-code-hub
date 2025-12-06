@@ -49,6 +49,7 @@ export async function validateKey(
       key: keyString,
       isEnabled: true,
       canLoginWebUi: true, // Admin Token 始终可以登录 Web UI
+      providerGroup: null,
       limit5hUsd: null,
       limitDailyUsd: null,
       dailyResetMode: "fixed",

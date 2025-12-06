@@ -198,6 +198,7 @@ export const KeyFormSchema = z.object({
     .max(1000, "并发Session上限不能超过1000")
     .optional()
     .default(0),
+  providerGroup: z.string().max(50, "供应商分组不能超过50个字符").optional().default(""),
 });
 
 /**

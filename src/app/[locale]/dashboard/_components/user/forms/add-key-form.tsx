@@ -1,10 +1,11 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { addKey } from "@/actions/keys";
-import { DateField, NumberField, TextField } from "@/components/form/form-field";
+import { getAvailableProviderGroups } from "@/actions/providers";
+import { DateField, NumberField, TagInputField, TextField } from "@/components/form/form-field";
 import { DialogFormLayout, FormGrid } from "@/components/form/form-layout";
 import { Label } from "@/components/ui/label";
 import {
@@ -27,8 +28,15 @@ interface AddKeyFormProps {
 
 export function AddKeyForm({ userId, user, onSuccess }: AddKeyFormProps) {
   const [isPending, startTransition] = useTransition();
+  const [providerGroupSuggestions, setProviderGroupSuggestions] = useState<string[]>([]);
   const router = useRouter();
   const t = useTranslations("dashboard.addKeyForm");
+  const tUI = useTranslations("ui.tagInput");
+
+  // Load provider group suggestions
+  useEffect(() => {
+    getAvailableProviderGroups().then(setProviderGroupSuggestions);
+  }, []);
 
   const form = useZodForm({
     schema: KeyFormSchema,
@@ -36,6 +44,7 @@ export function AddKeyForm({ userId, user, onSuccess }: AddKeyFormProps) {
       name: "",
       expiresAt: "",
       canLoginWebUi: true,
+      providerGroup: "",
       limit5hUsd: null,
       limitDailyUsd: null,
       dailyResetMode: "fixed" as const,
@@ -56,6 +65,7 @@ export function AddKeyForm({ userId, user, onSuccess }: AddKeyFormProps) {
           name: data.name,
           expiresAt: data.expiresAt || undefined,
           canLoginWebUi: data.canLoginWebUi,
+          providerGroup: data.providerGroup || null,
           limit5hUsd: data.limit5hUsd,
           limitDailyUsd: data.limitDailyUsd,
           dailyResetMode: data.dailyResetMode,
@@ -132,6 +142,32 @@ export function AddKeyForm({ userId, user, onSuccess }: AddKeyFormProps) {
           onCheckedChange={(checked) => form.setValue("canLoginWebUi", checked)}
         />
       </div>
+
+      <TagInputField
+        label={t("providerGroup.label")}
+        maxTagLength={50}
+        placeholder={t("providerGroup.placeholder")}
+        description={
+          user?.providerGroup
+            ? t("providerGroup.descriptionWithUserGroup", { group: user.providerGroup })
+            : t("providerGroup.description")
+        }
+        suggestions={providerGroupSuggestions}
+        onInvalidTag={(_tag, reason) => {
+          const messages: Record<string, string> = {
+            empty: tUI("emptyTag"),
+            duplicate: tUI("duplicateTag"),
+            too_long: tUI("tooLong", { max: 50 }),
+            invalid_format: tUI("invalidFormat"),
+            max_tags: tUI("maxTags"),
+          };
+          toast.error(messages[reason] || reason);
+        }}
+        value={String(form.getFieldProps("providerGroup").value)}
+        onChange={form.getFieldProps("providerGroup").onChange}
+        error={form.getFieldProps("providerGroup").error}
+        touched={form.getFieldProps("providerGroup").touched}
+      />
 
       <FormGrid columns={2}>
         <NumberField

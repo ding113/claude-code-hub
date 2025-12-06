@@ -211,6 +211,13 @@
       "when": 1765029260679,
       "tag": "0029_chemical_tenebrous",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1765030525131,
+      "tag": "0030_unusual_goliath",
+      "breakpoints": true
     }
   ]
 }
