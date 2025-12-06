@@ -26,6 +26,9 @@ export interface ActiveSessionInfo {
   outputTokens?: number; // 总输出 Token
   cacheCreationInputTokens?: number; // 总缓存创建 Token
   cacheReadInputTokens?: number; // 总缓存读取 Token
+  // 差异化缓存计费：5分钟和1小时缓存创建 token 数
+  cacheCreation5mInputTokens?: number;
+  cacheCreation1hInputTokens?: number;
   totalTokens?: number; // 总 Token 数
   costUsd?: string; // 总成本
 
@@ -59,6 +62,9 @@ export interface SessionUsageUpdate {
   outputTokens?: number;
   cacheCreationInputTokens?: number;
   cacheReadInputTokens?: number;
+  // 差异化缓存计费：5分钟和1小时缓存创建 token 数
+  cacheCreation5mInputTokens?: number;
+  cacheCreation1hInputTokens?: number;
   costUsd?: string;
   status: "completed" | "error";
   statusCode?: number;

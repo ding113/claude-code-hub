@@ -27,6 +27,9 @@ export type UsageMetrics = {
   output_tokens?: number;
   cache_creation_input_tokens?: number;
   cache_read_input_tokens?: number;
+  // 差异化缓存计费：5分钟和1小时缓存创建 token 数
+  cache_creation_5m_input_tokens?: number;
+  cache_creation_1h_input_tokens?: number;
 };
 
 export class ProxyResponseHandler {
@@ -344,6 +347,8 @@ export class ProxyResponseHandler {
             outputTokens: usageMetrics?.output_tokens,
             cacheCreationInputTokens: usageMetrics?.cache_creation_input_tokens,
             cacheReadInputTokens: usageMetrics?.cache_read_input_tokens,
+            cacheCreation5mInputTokens: usageMetrics?.cache_creation_5m_input_tokens,
+            cacheCreation1hInputTokens: usageMetrics?.cache_creation_1h_input_tokens,
             providerChain: session.getProviderChain(),
             model: session.getCurrentModel() ?? undefined, // ⭐ 更新重定向后的模型
             providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
@@ -885,6 +890,8 @@ export class ProxyResponseHandler {
           outputTokens: usageForCost?.output_tokens,
           cacheCreationInputTokens: usageForCost?.cache_creation_input_tokens,
           cacheReadInputTokens: usageForCost?.cache_read_input_tokens,
+          cacheCreation5mInputTokens: usageForCost?.cache_creation_5m_input_tokens,
+          cacheCreation1hInputTokens: usageForCost?.cache_creation_1h_input_tokens,
           providerChain: session.getProviderChain(),
           model: session.getCurrentModel() ?? undefined, // ⭐ 更新重定向后的模型
           providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
@@ -1194,6 +1201,20 @@ function extractUsageMetrics(value: unknown): UsageMetrics | null {
   if (typeof usage.cache_creation_input_tokens === "number") {
     result.cache_creation_input_tokens = usage.cache_creation_input_tokens;
     hasAny = true;
+  }
+
+  // Claude 差异化缓存计费：解析 cache_creation 嵌套对象
+  // 格式：{ cache_creation: { ephemeral_5m_input_tokens: 797, ephemeral_1h_input_tokens: 0 } }
+  const cacheCreation = usage.cache_creation as Record<string, unknown> | undefined;
+  if (cacheCreation && typeof cacheCreation === "object") {
+    if (typeof cacheCreation.ephemeral_5m_input_tokens === "number") {
+      result.cache_creation_5m_input_tokens = cacheCreation.ephemeral_5m_input_tokens;
+      hasAny = true;
+    }
+    if (typeof cacheCreation.ephemeral_1h_input_tokens === "number") {
+      result.cache_creation_1h_input_tokens = cacheCreation.ephemeral_1h_input_tokens;
+      hasAny = true;
+    }
   }
 
   // Claude 格式：顶层 cache_read_input_tokens（扁平结构）
@@ -1562,6 +1583,8 @@ async function finalizeRequestStats(
     outputTokens: usageMetrics.output_tokens,
     cacheCreationInputTokens: usageMetrics.cache_creation_input_tokens,
     cacheReadInputTokens: usageMetrics.cache_read_input_tokens,
+    cacheCreation5mInputTokens: usageMetrics.cache_creation_5m_input_tokens,
+    cacheCreation1hInputTokens: usageMetrics.cache_creation_1h_input_tokens,
     providerChain: session.getProviderChain(),
     model: session.getCurrentModel() ?? undefined,
     providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）

@@ -96,6 +96,9 @@ export async function updateMessageRequestDetails(
     outputTokens?: number;
     cacheCreationInputTokens?: number;
     cacheReadInputTokens?: number;
+    // 差异化缓存计费：5分钟和1小时缓存创建 token 数
+    cacheCreation5mInputTokens?: number;
+    cacheCreation1hInputTokens?: number;
     providerChain?: CreateMessageRequestData["provider_chain"];
     errorMessage?: string;
     model?: string; // ⭐ 新增：支持更新重定向后的模型名称
@@ -120,6 +123,13 @@ export async function updateMessageRequestDetails(
   }
   if (details.cacheReadInputTokens !== undefined) {
     updateData.cacheReadInputTokens = details.cacheReadInputTokens;
+  }
+  // 差异化缓存计费：5分钟和1小时缓存创建 token 数
+  if (details.cacheCreation5mInputTokens !== undefined) {
+    updateData.cacheCreation5mInputTokens = details.cacheCreation5mInputTokens;
+  }
+  if (details.cacheCreation1hInputTokens !== undefined) {
+    updateData.cacheCreation1hInputTokens = details.cacheCreation1hInputTokens;
   }
   if (details.providerChain !== undefined) {
     updateData.providerChain = details.providerChain;
