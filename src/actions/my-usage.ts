@@ -305,8 +305,8 @@ export async function getMyUsageLogs(
 
     const usageFilters: UsageLogFilters = {
       keyId: session.key.id,
-      startDateLocal: filters.startDate ? `${filters.startDate}T00:00` : undefined,
-      endDateLocal: filters.endDate ? `${filters.endDate}T24:00` : undefined,
+      startTime: filters.startDate ? new Date(`${filters.startDate}T00:00`).getTime() : undefined,
+      endTime: filters.endDate ? new Date(`${filters.endDate}T23:59:59.999`).getTime() : undefined,
       model: filters.model,
       statusCode: filters.statusCode,
       page,
