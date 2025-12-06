@@ -325,7 +325,16 @@
       "copyMessages": "Копировать сообщения",
       "downloadMessages": "Скачать сообщения",
       "copied": "Скопировано",
-      "copyResponse": "Копировать тело ответа"
+      "copyResponse": "Копировать тело ответа",
+      "terminate": "Прервать",
+      "terminateTitle": "Прервать сессию",
+      "terminateDescription": "Вы уверены, что хотите прервать эту сессию? После прерывания привязка поставщика будет очищена, и следующий запрос выберет нового поставщика.",
+      "sessionIdLabel": "ID сессии: {sessionId}",
+      "cancel": "Отмена",
+      "confirmTerminate": "Прервать",
+      "terminating": "Прерывание...",
+      "terminateSuccess": "Сессия успешно прервана",
+      "terminateFailed": "Не удалось прервать сессию"
     },
     "status": {
       "loading": "Загрузка...",

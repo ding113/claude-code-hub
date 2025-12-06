@@ -1211,4 +1211,132 @@ export class SessionManager {
       return { sessionId: currentSessionId, updated: false };
     }
   }
+
+  /**
+   * 终止 Session（主动打断）
+   *
+   * 功能：删除 Session 在 Redis 中的所有绑定关系，强制下次请求重新选择供应商
+   * 用途：管理员主动打断长时间占用同一供应商的 Session
+   *
+   * @param sessionId - Session ID
+   * @returns 是否成功删除
+   */
+  static async terminateSession(sessionId: string): Promise<boolean> {
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") {
+      logger.warn("SessionManager: Redis not ready, cannot terminate session");
+      return false;
+    }
+
+    try {
+      // 1. 先查询绑定信息（用于从 ZSET 中移除）
+      const [providerIdStr, keyIdStr] = await Promise.all([
+        redis.get(`session:${sessionId}:provider`),
+        redis.get(`session:${sessionId}:key`),
+      ]);
+
+      const providerId = providerIdStr ? parseInt(providerIdStr, 10) : null;
+      const keyId = keyIdStr ? parseInt(keyIdStr, 10) : null;
+
+      // 2. 删除所有 Session 相关的 key
+      const pipeline = redis.pipeline();
+
+      // 基础绑定信息
+      pipeline.del(`session:${sessionId}:provider`);
+      pipeline.del(`session:${sessionId}:key`);
+      pipeline.del(`session:${sessionId}:info`);
+      pipeline.del(`session:${sessionId}:last_seen`);
+      pipeline.del(`session:${sessionId}:concurrent_count`);
+
+      // 可选：messages 和 response（如果启用了存储）
+      pipeline.del(`session:${sessionId}:messages`);
+      pipeline.del(`session:${sessionId}:response`);
+
+      // 3. 从 ZSET 中移除
+      pipeline.zrem("global:active_sessions", sessionId);
+
+      if (providerId) {
+        pipeline.zrem(`provider:${providerId}:active_sessions`, sessionId);
+      }
+
+      if (keyId) {
+        pipeline.zrem(`key:${keyId}:active_sessions`, sessionId);
+      }
+
+      // 4. 删除 hash 映射（如果存在）
+      // 注意：无法直接反查 hash，只能清理已知的 session key
+      // hash 会在 TTL 后自动过期，不影响功能
+
+      const results = await pipeline.exec();
+
+      // 5. 检查结果
+      let deletedKeys = 0;
+      if (results) {
+        for (const [err, result] of results) {
+          if (!err && typeof result === "number" && result > 0) {
+            deletedKeys += result;
+          }
+        }
+      }
+
+      logger.info("SessionManager: Terminated session", {
+        sessionId,
+        providerId,
+        keyId,
+        deletedKeys,
+      });
+
+      return deletedKeys > 0;
+    } catch (error) {
+      logger.error("SessionManager: Failed to terminate session", { error, sessionId });
+      return false;
+    }
+  }
+
+  /**
+   * 批量终止 Session
+   *
+   * 采用分块处理策略，避免大批量操作时对 Redis 造成过大压力
+   *
+   * @param sessionIds - Session ID 列表
+   * @returns 成功终止的数量
+   */
+  static async terminateSessionsBatch(sessionIds: string[]): Promise<number> {
+    if (sessionIds.length === 0) {
+      return 0;
+    }
+
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") {
+      logger.warn("SessionManager: Redis not ready, cannot terminate sessions");
+      return 0;
+    }
+
+    try {
+      // 分块处理，每批 20 个，避免并发过高
+      const CHUNK_SIZE = 20;
+      let successCount = 0;
+
+      for (let i = 0; i < sessionIds.length; i += CHUNK_SIZE) {
+        const chunk = sessionIds.slice(i, i + CHUNK_SIZE);
+        const results = await Promise.all(
+          chunk.map(async (sessionId) => {
+            const success = await SessionManager.terminateSession(sessionId);
+            return success ? 1 : 0;
+          })
+        );
+        successCount += results.reduce<number>((sum, value) => sum + value, 0);
+      }
+
+      logger.info("SessionManager: Terminated sessions batch", {
+        total: sessionIds.length,
+        successCount,
+      });
+
+      return successCount;
+    } catch (error) {
+      logger.error("SessionManager: Failed to terminate sessions batch", { error });
+      return 0;
+    }
+  }
 }
