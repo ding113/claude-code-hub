@@ -1,0 +1,31 @@
+# 工具容器配置
+# 用于在 Docker 环境中运行维护脚本
+#
+# 使用方法（在项目根目录执行）：
+#   docker compose -f docker-compose.yaml -f deploy/docker-compose.tools.yaml run --rm tools bun run scripts/clear-session-bindings.ts
+#
+# 带参数示例：
+#   docker compose -f docker-compose.yaml -f deploy/docker-compose.tools.yaml run --rm tools bun run scripts/clear-session-bindings.ts --priority 10 --dry-run
+#   docker compose -f docker-compose.yaml -f deploy/docker-compose.tools.yaml run --rm tools bun run scripts/clear-session-bindings.ts --id 1,2,3 --yes
+#
+# 说明：
+#   - 必须同时指定主 docker-compose.yaml 以共享网络
+#   - tools 服务会自动加入主服务网络，可直接访问 postgres 和 redis
+
+services:
+  tools:
+    image: oven/bun:1.3.2-slim
+    working_dir: /app
+    init: true
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    environment:
+      DSN: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-claude_code_hub}
+      REDIS_URL: redis://redis:6379
+      TZ: Asia/Shanghai
+    profiles:
+      - tools
+    stdin_open: true
+    tty: true
