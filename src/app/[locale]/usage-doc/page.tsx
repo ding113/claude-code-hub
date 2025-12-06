@@ -625,9 +625,66 @@ sk_xxxxxxxxxxxxxxxxxx`}
               )
             )}
           </ol>
-          <CodeBlock
-            language="toml"
-            code={`model_provider = "cch"
+
+          <Tabs defaultValue="auth-json" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="auth-json">{t("codex.configuration.authJson.title")}</TabsTrigger>
+              <TabsTrigger value="env-var">{t("codex.configuration.envVars.title")}</TabsTrigger>
+            </TabsList>
+
+            {/* auth.json 方式 */}
+            <TabsContent value="auth-json" className="space-y-4 mt-4">
+              <div className="space-y-3">
+                <p>{t("codex.configuration.authJson.configTomlDescription")}</p>
+                <CodeBlock
+                  language="toml"
+                  code={`model_provider = "cch"
+model = "gpt-5.1-codex"
+model_reasoning_effort = "high"
+disable_response_storage = true
+sandbox_mode = "workspace-write"
+${os === "windows" ? "windows_wsl_setup_acknowledged = true\n" : ""}
+[features]
+plan_tool = true
+apply_patch_freeform = true
+view_image_tool = true
+web_search_request = true
+unified_exec = false
+streamable_shell = false
+rmcp_client = true
+
+[model_providers.cch]
+name = "cch"
+base_url = "${resolvedOrigin}/v1"
+wire_api = "responses"
+requires_openai_auth = true
+
+[sandbox_workspace_write]
+network_access = true`}
+                />
+                <p>{t("codex.configuration.configFile.step4")}</p>
+                <CodeBlock
+                  language="json"
+                  code={`{
+  "OPENAI_API_KEY": "your-api-key-here"
+}`}
+                />
+                <blockquote className="space-y-2 rounded-lg border-l-2 border-primary/50 bg-muted/40 px-4 py-3">
+                  <p className="font-semibold text-foreground">
+                    {t("codex.configuration.authJson.note")}
+                  </p>
+                  <p>{t("codex.configuration.authJson.noteText")}</p>
+                </blockquote>
+              </div>
+            </TabsContent>
+
+            {/* 环境变量方式 */}
+            <TabsContent value="env-var" className="space-y-4 mt-4">
+              <div className="space-y-3">
+                <p>{t("codex.configuration.envVars.configTomlDescription")}</p>
+                <CodeBlock
+                  language="toml"
+                  code={`model_provider = "cch"
 model = "gpt-5.1-codex"
 model_reasoning_effort = "high"
 disable_response_storage = true
@@ -651,16 +708,32 @@ requires_openai_auth = true
 
 [sandbox_workspace_write]
 network_access = true`}
-          />
-          <ol className="list-decimal space-y-2 pl-6" start={4}>
-            <li>{t("codex.configuration.configFile.step4")}</li>
-          </ol>
-          <CodeBlock
-            language="json"
-            code={`{
-  "OPENAI_API_KEY": "your-api-key-here"
-}`}
-          />
+                />
+                {os === "windows" ? (
+                  <>
+                    <p>{t("codex.configuration.envVars.windows.instruction")}</p>
+                    <CodeBlock
+                      language="powershell"
+                      code={`[System.Environment]::SetEnvironmentVariable("CCH_API_KEY", "your-api-key-here", [System.EnvironmentVariableTarget]::User)`}
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      {t("codex.configuration.envVars.windows.note")}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p>{t("codex.configuration.envVars.unix.instruction")}</p>
+                    <CodeBlock
+                      language="bash"
+                      code={`echo 'export CCH_API_KEY="your-api-key-here"' >> ${shellConfig.split(" ")[0]}
+source ${shellConfig.split(" ")[0]}`}
+                    />
+                  </>
+                )}
+              </div>
+            </TabsContent>
+          </Tabs>
+
           <blockquote className="space-y-2 rounded-lg border-l-2 border-primary/50 bg-muted/40 px-4 py-3">
             <p className="font-semibold text-foreground">
               {t("codex.configuration.configFile.important")}
@@ -673,31 +746,6 @@ network_access = true`}
               )}
             </ul>
           </blockquote>
-        </div>
-
-        <h4 className={headingClasses.h4}>{t("codex.configuration.envVars.title")}</h4>
-        <div className="space-y-3">
-          {os === "windows" ? (
-            <>
-              <p>{t("codex.configuration.envVars.windows.instruction")}</p>
-              <CodeBlock
-                language="powershell"
-                code={`[System.Environment]::SetEnvironmentVariable("CCH_API_KEY", "your-api-key-here", [System.EnvironmentVariableTarget]::User)`}
-              />
-              <p className="text-sm text-muted-foreground">
-                {t("codex.configuration.envVars.windows.note")}
-              </p>
-            </>
-          ) : (
-            <>
-              <p>{t("codex.configuration.envVars.unix.instruction")}</p>
-              <CodeBlock
-                language="bash"
-                code={`echo 'export CCH_API_KEY="your-api-key-here"' >> ${shellConfig.split(" ")[0]}
-source ${shellConfig.split(" ")[0]}`}
-              />
-            </>
-          )}
         </div>
       </div>
     );
