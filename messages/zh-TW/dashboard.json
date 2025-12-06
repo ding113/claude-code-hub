@@ -340,6 +340,8 @@
       "selectedCount": "已選 {count} 個",
       "selectAll": "全選",
       "selectSessionLabel": "選擇會話",
+      "multiSelect": "多選",
+      "cancelMultiSelect": "取消",
       "terminateSessionTitle": "終止會話",
       "terminateSessionDescription": "確定要終止此會話嗎？此操作無法撤銷。",
       "batchTerminateSuccess": "已終止 {count} 個會話",

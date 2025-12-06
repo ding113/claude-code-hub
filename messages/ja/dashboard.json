@@ -339,6 +339,8 @@
       "selectedCount": "{count} 件を選択中",
       "selectAll": "すべて選択",
       "selectSessionLabel": "セッションを選択",
+      "multiSelect": "複数選択",
+      "cancelMultiSelect": "キャンセル",
       "terminateSessionTitle": "セッションを終了",
       "terminateSessionDescription": "このセッションを終了してもよろしいですか？この操作は元に戻せません。",
       "batchTerminateSuccess": "{count} 件のセッションを終了しました",

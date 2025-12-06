@@ -339,6 +339,8 @@
       "selectedCount": "Выбрано: {count}",
       "selectAll": "Выбрать все",
       "selectSessionLabel": "Выбрать сессию",
+      "multiSelect": "Множественный выбор",
+      "cancelMultiSelect": "Отмена",
       "terminateSessionTitle": "Прервать сессию",
       "terminateSessionDescription": "Вы уверены, что хотите прервать эту сессию? Это действие нельзя отменить.",
       "batchTerminateSuccess": "Прервано {count} сессий",

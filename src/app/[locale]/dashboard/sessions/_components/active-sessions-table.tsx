@@ -66,7 +66,8 @@ export function ActiveSessionsTable({
   const [isTerminatingSingle, setIsTerminatingSingle] = useState(false);
   const [isBatchTerminating, setIsBatchTerminating] = useState(false);
   const [selectedSessionIds, setSelectedSessionIds] = useState<string[]>([]);
-  const showSelection = !inactive;
+  const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
+  const showSelection = !inactive && isMultiSelectMode;
 
   // 使用 Set 优化成员检查性能
   const selectedIdsSet = useMemo(() => new Set(selectedSessionIds), [selectedSessionIds]);
@@ -162,6 +163,18 @@ export function ActiveSessionsTable({
     }
   };
 
+  // 切换多选模式
+  const toggleMultiSelectMode = () => {
+    if (isMultiSelectMode) {
+      // 退出多选模式，清空选择
+      setSelectedSessionIds([]);
+      setIsMultiSelectMode(false);
+    } else {
+      // 进入多选模式
+      setIsMultiSelectMode(true);
+    }
+  };
+
   const totalColumns = showSelection ? 12 : 11;
   const allSelected = showSelection && selectedSessionIds.length > 0 && selectedSessionIds.length === sortedSessions.length;
 
@@ -179,19 +192,41 @@ export function ActiveSessionsTable({
           {isLoading && (
             <div className="text-sm text-muted-foreground animate-pulse">{t("table.refreshing")}</div>
           )}
-          {showSelection && (
+
+          {/* 多选模式控制 */}
+          {!inactive && (
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">
-                {t("actions.selectedCount", { count: selectedSessionIds.length })}
-              </span>
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={handleTerminateSelected}
-                disabled={isBatchTerminating || selectedSessionIds.length === 0}
-              >
-                {isBatchTerminating ? t("actions.terminating") : t("actions.terminateSelected")}
-              </Button>
+              {isMultiSelectMode ? (
+                <>
+                  <span className="text-sm text-muted-foreground">
+                    {t("actions.selectedCount", { count: selectedSessionIds.length })}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={handleTerminateSelected}
+                    disabled={isBatchTerminating || selectedSessionIds.length === 0}
+                  >
+                    {isBatchTerminating ? t("actions.terminating") : t("actions.terminateSelected")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={toggleMultiSelectMode}
+                  >
+                    {t("actions.cancelMultiSelect")}
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={toggleMultiSelectMode}
+                  disabled={sessions.length === 0}
+                >
+                  {t("actions.multiSelect")}
+                </Button>
+              )}
             </div>
           )}
         </div>
