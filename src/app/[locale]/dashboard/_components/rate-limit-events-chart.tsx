@@ -92,8 +92,9 @@ export function RateLimitEventsChart({ data }: RateLimitEventsChartProps) {
             />
             <ChartTooltip
               cursor={false}
+              wrapperStyle={{ zIndex: 1000 }}
               content={({ active, payload }) => {
-                if (!active || !payload || !payload.length) return null;
+                if (!active || !payload || !payload.length) return <div className="hidden" />;
 
                 const data = payload[0].payload as EventTimeline;
 

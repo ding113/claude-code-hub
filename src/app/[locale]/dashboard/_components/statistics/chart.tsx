@@ -429,9 +429,9 @@ export function UserStatisticsChart({
             />
             <ChartTooltip
               cursor={false}
-              wrapperStyle={{ transform: "translateY(-100%)", marginTop: "-20px" }}
+              wrapperStyle={{ transform: "translateY(-100%)", marginTop: "-20px", zIndex: 1000 }}
               content={({ active, payload, label }) => {
-                if (!active || !payload || !payload.length) return null;
+                if (!active || !payload || !payload.length) return <div className="hidden" />;
 
                 const filteredPayload = payload.filter((entry) => {
                   const value =
@@ -440,13 +440,7 @@ export function UserStatisticsChart({
                 });
 
                 if (!filteredPayload.length) {
-                  return (
-                    <div className="rounded-lg border bg-background p-3 shadow-sm min-w-[200px]">
-                      <div className="font-medium text-center">
-                        {formatTooltipDate(String(label ?? ""))}
-                      </div>
-                    </div>
-                  );
+                  return <div className="hidden" />;
                 }
 
                 return (
