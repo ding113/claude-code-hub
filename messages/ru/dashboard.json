@@ -334,7 +334,15 @@
       "confirmTerminate": "Прервать",
       "terminating": "Прерывание...",
       "terminateSuccess": "Сессия успешно прервана",
-      "terminateFailed": "Не удалось прервать сессию"
+      "terminateFailed": "Не удалось прервать сессию",
+      "terminateSelected": "Прервать выбранные",
+      "selectedCount": "Выбрано: {count}",
+      "selectAll": "Выбрать все",
+      "selectSessionLabel": "Выбрать сессию",
+      "batchTerminateSuccess": "Прервано {count} сессий",
+      "batchTerminatePartial": "Без прав: {unauthorized} · Отсутствуют: {missing}",
+      "batchTerminateNone": "Не удалось прервать ни одной сессии",
+      "noSelection": "Выберите хотя бы одну сессию"
     },
     "status": {
       "loading": "Загрузка...",

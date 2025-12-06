@@ -2,9 +2,9 @@
 
 import { Eye, XCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { terminateActiveSession } from "@/actions/active-sessions";
+import { terminateActiveSession, terminateActiveSessionsBatch } from "@/actions/active-sessions";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -62,13 +63,41 @@ export function ActiveSessionsTable({
 }: ActiveSessionsTableProps) {
   const t = useTranslations("dashboard.sessions");
   const [sessionToTerminate, setSessionToTerminate] = useState<string | null>(null);
-  const [isTerminating, setIsTerminating] = useState(false);
+  const [isTerminatingSingle, setIsTerminatingSingle] = useState(false);
+  const [isBatchTerminating, setIsBatchTerminating] = useState(false);
+  const [selectedSessionIds, setSelectedSessionIds] = useState<string[]>([]);
+  const showSelection = !inactive;
 
   // 按开始时间降序排序（最新的在前）
-  const sortedSessions = [...sessions].sort((a, b) => b.startTime - a.startTime);
+  const sortedSessions = useMemo(() => [...sessions].sort((a, b) => b.startTime - a.startTime), [sessions]);
+
+  // 确保选中项始终存在于当前列表
+  useEffect(() => {
+    setSelectedSessionIds((prev) => prev.filter((id) => sessions.some((session) => session.sessionId === id)));
+  }, [sessions]);
+
+  const toggleSelection = (sessionId: string, checked: boolean) => {
+    setSelectedSessionIds((prev) => {
+      if (checked) {
+        if (prev.includes(sessionId)) {
+          return prev;
+        }
+        return [...prev, sessionId];
+      }
+      return prev.filter((id) => id !== sessionId);
+    });
+  };
+
+  const toggleSelectAll = (checked: boolean) => {
+    if (!checked) {
+      setSelectedSessionIds([]);
+      return;
+    }
+    setSelectedSessionIds(sortedSessions.map((session) => session.sessionId));
+  };
 
   const handleTerminateSession = async (sessionId: string) => {
-    setIsTerminating(true);
+    setIsTerminatingSingle(true);
     try {
       const result = await terminateActiveSession(sessionId);
       if (result.ok) {
@@ -80,14 +109,61 @@ export function ActiveSessionsTable({
     } catch (_error) {
       toast.error(t("actions.terminateFailed"));
     } finally {
-      setIsTerminating(false);
+      setIsTerminatingSingle(false);
       setSessionToTerminate(null);
     }
   };
 
+  const handleTerminateSelected = async () => {
+    if (selectedSessionIds.length === 0) {
+      toast.error(t("actions.noSelection"));
+      return;
+    }
+
+    setIsBatchTerminating(true);
+    try {
+      const result = await terminateActiveSessionsBatch(selectedSessionIds);
+      if (!result.ok) {
+        toast.error(result.error || t("actions.terminateFailed"));
+        return;
+      }
+
+      const summary = result.data;
+      if (!summary) {
+        toast.error(t("actions.terminateFailed"));
+        return;
+      }
+
+      if (summary.successCount > 0) {
+        toast.success(t("actions.batchTerminateSuccess", { count: summary.successCount }));
+        onSessionTerminated?.();
+      } else {
+        toast.warning(t("actions.batchTerminateNone"));
+      }
+
+      if (summary.unauthorizedCount > 0 || summary.missingCount > 0) {
+        toast.warning(
+          t("actions.batchTerminatePartial", {
+            unauthorized: summary.unauthorizedCount,
+            missing: summary.missingCount,
+          })
+        );
+      }
+
+      setSelectedSessionIds([]);
+    } catch (_error) {
+      toast.error(t("actions.terminateFailed"));
+    } finally {
+      setIsBatchTerminating(false);
+    }
+  };
+
+  const totalColumns = showSelection ? 12 : 11;
+  const allSelected = showSelection && selectedSessionIds.length > 0 && selectedSessionIds.length === sortedSessions.length;
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="text-sm text-muted-foreground">
           {t("table.count", {
             count: sessions.length,
@@ -95,9 +171,26 @@ export function ActiveSessionsTable({
           })}
           {inactive && <span className="ml-2 text-xs">{t("table.notCountedInConcurrency")}</span>}
         </div>
-        {isLoading && (
-          <div className="text-sm text-muted-foreground animate-pulse">{t("table.refreshing")}</div>
-        )}
+        <div className="flex items-center gap-3">
+          {isLoading && (
+            <div className="text-sm text-muted-foreground animate-pulse">{t("table.refreshing")}</div>
+          )}
+          {showSelection && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">
+                {t("actions.selectedCount", { count: selectedSessionIds.length })}
+              </span>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={handleTerminateSelected}
+                disabled={isBatchTerminating || selectedSessionIds.length === 0}
+              >
+                {isBatchTerminating ? t("actions.terminating") : t("actions.terminateSelected")}
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div
@@ -109,6 +202,16 @@ export function ActiveSessionsTable({
         <Table>
           <TableHeader>
             <TableRow>
+              {showSelection && (
+                <TableHead className="w-12">
+                  <Checkbox
+                    aria-label={t("actions.selectAll")}
+                    checked={allSelected}
+                    onCheckedChange={(checked) => toggleSelectAll(Boolean(checked))}
+                    disabled={sortedSessions.length === 0 || isBatchTerminating}
+                  />
+                </TableHead>
+              )}
               <TableHead>{t("columns.sessionId")}</TableHead>
               <TableHead>{t("columns.user")}</TableHead>
               <TableHead>{t("columns.key")}</TableHead>
@@ -125,13 +228,23 @@ export function ActiveSessionsTable({
           <TableBody>
             {sortedSessions.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={11} className="text-center text-muted-foreground">
+                <TableCell colSpan={totalColumns} className="text-center text-muted-foreground">
                   {t("table.noActiveSessions")}
                 </TableCell>
               </TableRow>
             ) : (
               sortedSessions.map((session) => (
                 <TableRow key={session.sessionId}>
+                  {showSelection && (
+                    <TableCell>
+                      <Checkbox
+                        aria-label={t("actions.selectSessionLabel")}
+                        checked={selectedSessionIds.includes(session.sessionId)}
+                        onCheckedChange={(checked) => toggleSelection(session.sessionId, Boolean(checked))}
+                        disabled={isBatchTerminating}
+                      />
+                    </TableCell>
+                  )}
                   <TableCell className="font-mono text-xs">
                     {session.sessionId.substring(0, 16)}...
                   </TableCell>
@@ -179,7 +292,7 @@ export function ActiveSessionsTable({
                           variant="ghost"
                           size="sm"
                           onClick={() => setSessionToTerminate(session.sessionId)}
-                          disabled={isTerminating}
+                          disabled={isTerminatingSingle}
                         >
                           <XCircle className="h-4 w-4 mr-1" />
                           {t("actions.terminate")}
@@ -218,13 +331,13 @@ export function ActiveSessionsTable({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isTerminating}>{t("actions.cancel")}</AlertDialogCancel>
+            <AlertDialogCancel disabled={isTerminatingSingle}>{t("actions.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => sessionToTerminate && handleTerminateSession(sessionToTerminate)}
-              disabled={isTerminating}
+              disabled={isTerminatingSingle}
             >
-              {isTerminating ? t("actions.terminating") : t("actions.confirmTerminate")}
+              {isTerminatingSingle ? t("actions.terminating") : t("actions.confirmTerminate")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

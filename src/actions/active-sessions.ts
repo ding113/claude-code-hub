@@ -9,6 +9,7 @@ import {
 } from "@/lib/cache/session-cache";
 import { logger } from "@/lib/logger";
 import type { ActiveSessionInfo } from "@/types/session";
+import { summarizeTerminateSessionsBatch } from "./active-sessions-utils";
 import type { ActionResult } from "./types";
 
 /**
@@ -553,9 +554,18 @@ export async function terminateActiveSession(sessionId: string): Promise<ActionR
  *
  * @param sessionIds - Session ID 列表
  */
+type BatchTerminationActionResult = {
+  successCount: number;
+  failedCount: number;
+  unauthorizedCount: number;
+  missingCount: number;
+  requestedCount: number;
+  processedCount: number;
+};
+
 export async function terminateActiveSessionsBatch(
   sessionIds: string[]
-): Promise<ActionResult<{ successCount: number; failedCount: number }>> {
+): Promise<ActionResult<BatchTerminationActionResult>> {
   try {
     // 0. 验证用户权限
     const authSession = await getSession();
@@ -569,32 +579,75 @@ export async function terminateActiveSessionsBatch(
     const isAdmin = authSession.user.role === "admin";
     const currentUserId = authSession.user.id;
 
-    if (sessionIds.length === 0) {
+    const uniqueSessionIds = Array.from(new Set(sessionIds));
+
+    if (uniqueSessionIds.length === 0) {
       return {
         ok: true,
-        data: { successCount: 0, failedCount: 0 },
+        data: {
+          successCount: 0,
+          failedCount: 0,
+          unauthorizedCount: 0,
+          missingCount: 0,
+          requestedCount: 0,
+          processedCount: 0,
+        },
       };
     }
 
     // 1. 验证每个 Session 的所有权
     const { aggregateMultipleSessionStats } = await import("@/repository/message");
-    const sessionsData = await aggregateMultipleSessionStats(sessionIds);
+    const sessionsData = await aggregateMultipleSessionStats(uniqueSessionIds);
 
-    // 2. 过滤出有权限终止的 Session
-    const allowedSessionIds = sessionsData
-      .filter((s) => isAdmin || s.userId === currentUserId)
-      .map((s) => s.sessionId);
+    const {
+      uniqueRequestedIds,
+      allowedSessionIds,
+      unauthorizedSessionIds,
+      missingSessionIds,
+    } = summarizeTerminateSessionsBatch(uniqueSessionIds, sessionsData, currentUserId, isAdmin);
+
+    const unauthorizedCount = unauthorizedSessionIds.length;
+    const missingCount = missingSessionIds.length;
+
+    const buildResult = (
+      params: { successCount?: number; processedCount?: number } = {}
+    ): BatchTerminationActionResult => {
+      const successCountValue = params.successCount ?? 0;
+      const processedCountValue = params.processedCount ?? 0;
+      const allowedFailedCount = Math.max(processedCountValue - successCountValue, 0);
+
+      return {
+        successCount: successCountValue,
+        failedCount: allowedFailedCount + unauthorizedCount + missingCount,
+        unauthorizedCount,
+        missingCount,
+        requestedCount: uniqueRequestedIds.length,
+        processedCount: processedCountValue,
+      };
+    };
 
     if (allowedSessionIds.length === 0) {
+      const summary = buildResult();
+      logger.info("Batch session termination skipped (no authorized sessions)", {
+        requested: summary.requestedCount,
+        unauthorized: summary.unauthorizedCount,
+        missing: summary.missingCount,
+        terminatedByUserId: currentUserId,
+        isAdmin,
+      });
+
       return {
-        ok: false,
-        error: "无权终止任何 Session",
+        ok: true,
+        data: summary,
       };
     }
 
     // 3. 批量终止
     const { SessionManager } = await import("@/lib/session-manager");
     const successCount = await SessionManager.terminateSessionsBatch(allowedSessionIds);
+    const processedCount = allowedSessionIds.length;
+    const allowedFailedCount = Math.max(processedCount - successCount, 0);
+    const failedCount = allowedFailedCount + unauthorizedCount + missingCount;
 
     // 4. 清除缓存
     const { clearActiveSessionsCache, clearAllSessionsCache, clearSessionDetailsCache } =
@@ -610,18 +663,19 @@ export async function terminateActiveSessionsBatch(
 
     logger.info("Sessions terminated in batch", {
       total: sessionIds.length,
+      requested: uniqueRequestedIds.length,
       allowed: allowedSessionIds.length,
+      unauthorized: unauthorizedSessionIds.length,
+      missing: missingSessionIds.length,
       successCount,
+      failedCount,
       terminatedByUserId: currentUserId,
       isAdmin,
     });
 
     return {
       ok: true,
-      data: {
-        successCount,
-        failedCount: allowedSessionIds.length - successCount,
-      },
+      data: buildResult({ successCount, failedCount, processedCount }),
     };
   } catch (error) {
     logger.error("Failed to terminate active sessions batch:", error);

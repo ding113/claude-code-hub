@@ -335,7 +335,15 @@
       "confirmTerminate": "Confirm Termination",
       "terminating": "Terminating...",
       "terminateSuccess": "Session terminated successfully",
-      "terminateFailed": "Failed to terminate session"
+      "terminateFailed": "Failed to terminate session",
+      "terminateSelected": "Terminate Selected",
+      "selectedCount": "{count} selected",
+      "selectAll": "Select All",
+      "selectSessionLabel": "Select session",
+      "batchTerminateSuccess": "Terminated {count} session(s)",
+      "batchTerminatePartial": "Unauthorized: {unauthorized} · Missing: {missing}",
+      "batchTerminateNone": "No sessions were terminated",
+      "noSelection": "Please select at least one session"
     },
     "status": {
       "loading": "Loading...",
