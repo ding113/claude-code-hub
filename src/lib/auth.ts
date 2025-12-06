@@ -14,7 +14,17 @@ export interface AuthSession {
   key: Key;
 }
 
-export async function validateKey(keyString: string): Promise<AuthSession | null> {
+export async function validateKey(
+  keyString: string,
+  options?: {
+    /**
+     * 允许仅访问只读页面（如 my-usage），跳过 canLoginWebUi 校验
+     */
+    allowReadOnlyAccess?: boolean;
+  }
+): Promise<AuthSession | null> {
+  const allowReadOnlyAccess = options?.allowReadOnlyAccess ?? false;
+
   const adminToken = config.auth.adminToken;
   if (adminToken && keyString === adminToken) {
     const now = new Date();
@@ -59,7 +69,7 @@ export async function validateKey(keyString: string): Promise<AuthSession | null
   }
 
   // 检查 Web UI 登录权限
-  if (!key.canLoginWebUi) {
+  if (!allowReadOnlyAccess && !key.canLoginWebUi) {
     return null;
   }
 
@@ -69,6 +79,12 @@ export async function validateKey(keyString: string): Promise<AuthSession | null
   }
 
   return { user, key };
+}
+
+export function getLoginRedirectTarget(session: AuthSession): string {
+  if (session.user.role === "admin") return "/dashboard";
+  if (session.key.canLoginWebUi) return "/dashboard";
+  return "/my-usage";
 }
 
 export async function setAuthCookie(keyString: string) {
@@ -93,11 +109,16 @@ export async function clearAuthCookie() {
   cookieStore.delete(AUTH_COOKIE_NAME);
 }
 
-export async function getSession(): Promise<AuthSession | null> {
+export async function getSession(options?: {
+  /**
+   * 允许仅访问只读页面（如 my-usage），跳过 canLoginWebUi 校验
+   */
+  allowReadOnlyAccess?: boolean;
+}): Promise<AuthSession | null> {
   const keyString = await getAuthCookie();
   if (!keyString) {
     return null;
   }
 
-  return validateKey(keyString);
+  return validateKey(keyString, options);
 }

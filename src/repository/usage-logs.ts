@@ -67,6 +67,29 @@ export interface UsageLogsResult {
   summary: UsageLogSummary;
 }
 
+export async function getTotalUsageForKey(keyString: string): Promise<number> {
+  const [row] = await db
+    .select({ total: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)` })
+    .from(messageRequest)
+    .where(and(eq(messageRequest.key, keyString), isNull(messageRequest.deletedAt)));
+
+  return Number(row?.total ?? 0);
+}
+
+export async function getDistinctModelsForKey(keyString: string): Promise<string[]> {
+  const result = await db.execute(
+    sql`select distinct coalesce(${messageRequest.originalModel}, ${messageRequest.model}) as model
+        from ${messageRequest}
+        where ${messageRequest.key} = ${keyString}
+          and ${messageRequest.deletedAt} is null
+        order by model asc`
+  );
+
+  return Array.from(result)
+    .map((row) => (row as { model?: string }).model)
+    .filter((model): model is string => !!model && model.trim().length > 0);
+}
+
 /**
  * 查询使用日志（支持多种筛选条件和分页）
  */

@@ -6,6 +6,7 @@ import dashboard from "./dashboard.json";
 import errors from "./errors.json";
 import forms from "./forms.json";
 import internal from "./internal.json";
+import myUsage from "./myUsage.json";
 import notifications from "./notifications.json";
 import providerChain from "./provider-chain.json";
 import providers from "./providers.json";
@@ -24,14 +25,15 @@ export default {
   dashboard,
   errors,
   forms,
-  internal,
   notifications,
   "provider-chain": providerChain,
   providers,
   quota,
+  myUsage,
   settings,
   ui,
   usage,
   users,
   validation,
+  internal,
 };
