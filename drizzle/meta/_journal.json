@@ -204,6 +204,13 @@
       "when": 1764865332897,
       "tag": "0028_abnormal_pretty_boy",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1765029260679,
+      "tag": "0029_chemical_tenebrous",
+      "breakpoints": true
     }
   ]
 }
