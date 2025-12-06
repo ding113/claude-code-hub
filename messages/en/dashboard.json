@@ -340,6 +340,8 @@
       "selectedCount": "{count} selected",
       "selectAll": "Select All",
       "selectSessionLabel": "Select session",
+      "terminateSessionTitle": "Terminate Session",
+      "terminateSessionDescription": "Are you sure you want to terminate this session? This action cannot be undone.",
       "batchTerminateSuccess": "Terminated {count} session(s)",
       "batchTerminatePartial": "Unauthorized: {unauthorized} · Missing: {missing}",
       "batchTerminateAllowedFailed": "Failed to terminate {count} authorized session(s)",

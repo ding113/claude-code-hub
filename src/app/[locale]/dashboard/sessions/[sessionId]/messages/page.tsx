@@ -1,12 +1,23 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Check, Copy, Download, Hash, Monitor } from "lucide-react";
+import { ArrowLeft, Check, Copy, Download, Hash, Monitor, XCircle } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
-import { getSessionDetails } from "@/actions/active-sessions";
+import { toast } from "sonner";
+import { getSessionDetails, terminateActiveSession } from "@/actions/active-sessions";
 import { Section } from "@/components/section";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,6 +53,8 @@ export default function SessionMessagesPage() {
   const [error, setError] = useState<string | null>(null);
   const [copiedMessages, setCopiedMessages] = useState(false);
   const [copiedResponse, setCopiedResponse] = useState(false);
+  const [showTerminateDialog, setShowTerminateDialog] = useState(false);
+  const [isTerminating, setIsTerminating] = useState(false);
 
   const { data: systemSettings } = useQuery({
     queryKey: ["system-settings"],
@@ -113,6 +126,25 @@ export default function SessionMessagesPage() {
     URL.revokeObjectURL(url);
   };
 
+  const handleTerminateSession = async () => {
+    setIsTerminating(true);
+    try {
+      const result = await terminateActiveSession(sessionId);
+      if (result.ok) {
+        toast.success(t("actions.terminateSuccess"));
+        // 终止成功后返回列表页
+        router.push("/dashboard/sessions");
+      } else {
+        toast.error(result.error || t("actions.terminateFailed"));
+      }
+    } catch (_error) {
+      toast.error(t("actions.terminateFailed"));
+    } finally {
+      setIsTerminating(false);
+      setShowTerminateDialog(false);
+    }
+  };
+
   // 格式化响应体（尝试美化 JSON）
   const formatResponse = (raw: string) => {
     try {
@@ -146,32 +178,46 @@ export default function SessionMessagesPage() {
         </div>
 
         {/* 操作按钮 */}
-        {messages !== null && (
-          <div className="flex gap-2">
+        <div className="flex gap-2">
+          {messages !== null && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCopyMessages}
+                disabled={copiedMessages}
+              >
+                {copiedMessages ? (
+                  <>
+                    <Check className="h-4 w-4 mr-2" />
+                    {t("actions.copied")}
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-4 w-4 mr-2" />
+                    {t("actions.copyMessages")}
+                  </>
+                )}
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleDownload}>
+                <Download className="h-4 w-4 mr-2" />
+                {t("actions.downloadMessages")}
+              </Button>
+            </>
+          )}
+          {/* 终止 Session 按钮 */}
+          {sessionStats && (
             <Button
-              variant="outline"
+              variant="destructive"
               size="sm"
-              onClick={handleCopyMessages}
-              disabled={copiedMessages}
+              onClick={() => setShowTerminateDialog(true)}
+              disabled={isTerminating}
             >
-              {copiedMessages ? (
-                <>
-                  <Check className="h-4 w-4 mr-2" />
-                  {t("actions.copied")}
-                </>
-              ) : (
-                <>
-                  <Copy className="h-4 w-4 mr-2" />
-                  {t("actions.copyMessages")}
-                </>
-              )}
+              <XCircle className="h-4 w-4 mr-2" />
+              {t("actions.terminate")}
             </Button>
-            <Button variant="outline" size="sm" onClick={handleDownload}>
-              <Download className="h-4 w-4 mr-2" />
-              {t("actions.downloadMessages")}
-            </Button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* 内容区域 */}
@@ -449,6 +495,30 @@ export default function SessionMessagesPage() {
           )}
         </div>
       )}
+
+      {/* 终止 Session 确认对话框 */}
+      <AlertDialog open={showTerminateDialog} onOpenChange={setShowTerminateDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("actions.terminateSessionTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("actions.terminateSessionDescription")}
+              <br />
+              <code className="text-xs font-mono mt-2 block">{sessionId}</code>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isTerminating}>{t("actions.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleTerminateSession}
+              disabled={isTerminating}
+            >
+              {isTerminating ? t("actions.terminating") : t("actions.confirmTerminate")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

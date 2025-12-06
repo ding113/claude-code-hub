@@ -339,6 +339,8 @@
       "selectedCount": "Выбрано: {count}",
       "selectAll": "Выбрать все",
       "selectSessionLabel": "Выбрать сессию",
+      "terminateSessionTitle": "Прервать сессию",
+      "terminateSessionDescription": "Вы уверены, что хотите прервать эту сессию? Это действие нельзя отменить.",
       "batchTerminateSuccess": "Прервано {count} сессий",
       "batchTerminatePartial": "Без прав: {unauthorized} · Отсутствуют: {missing}",
       "batchTerminateAllowedFailed": "Не удалось прервать {count} разрешённых сессий",
