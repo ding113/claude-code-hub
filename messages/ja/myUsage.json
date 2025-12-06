@@ -2,7 +2,12 @@
   "header": {
     "title": "マイ利用状況",
     "subtitle": "クォータと利用ログを確認",
-    "logout": "ログアウト"
+    "logout": "ログアウト",
+    "keyLabel": "キー",
+    "userLabel": "ユーザー",
+    "providerGroup": "プロバイダーグループ",
+    "noProviderGroup": "デフォルト",
+    "inherited": "（継承）"
   },
   "quota": {
     "5h": "5時間クォータ",
@@ -58,5 +63,20 @@
     "noLogs": "ログがありません",
     "unknownModel": "不明なモデル",
     "billingModel": "課金: {model}"
+  },
+  "expiration": {
+    "title": "有効期限",
+    "keyExpires": "キーの期限",
+    "userExpires": "ユーザーの期限",
+    "neverExpires": "期限なし",
+    "expired": "期限切れ",
+    "expiresIn": "{time} で期限",
+    "expiringWarning": "まもなく期限"
+  },
+  "providerGroup": {
+    "keyGroup": "キーグループ",
+    "userGroup": "ユーザーグループ",
+    "allProviders": "すべてのプロバイダー",
+    "inheritedFromUser": "ユーザーから継承"
   }
 }

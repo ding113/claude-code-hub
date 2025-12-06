@@ -3,9 +3,9 @@
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { getMyAvailableModels, getMyUsageLogs, type MyUsageLogsResult } from "@/actions/my-usage";
+import { LogsDateRangePicker } from "@/app/[locale]/dashboard/logs/_components/logs-date-range-picker";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -81,6 +81,10 @@ export function UsageLogsSection({ initialData = null }: UsageLogsSectionProps) 
     loadLogs(true);
   };
 
+  const handleDateRangeChange = (range: { startDate?: string; endDate?: string }) => {
+    handleFilterChange(range);
+  };
+
   const handlePageChange = (page: number) => {
     setFilters((prev) => ({ ...prev, page }));
     startTransition(async () => {
@@ -99,20 +103,14 @@ export function UsageLogsSection({ initialData = null }: UsageLogsSectionProps) 
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="space-y-1.5">
-            <Label>{t("filters.startDate")}</Label>
-            <Input
-              type="date"
-              value={filters.startDate ?? ""}
-              onChange={(e) => handleFilterChange({ startDate: e.target.value })}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>{t("filters.endDate")}</Label>
-            <Input
-              type="date"
-              value={filters.endDate ?? ""}
-              onChange={(e) => handleFilterChange({ endDate: e.target.value })}
+          <div className="space-y-1.5 sm:col-span-2 lg:col-span-2">
+            <Label>
+              {t("filters.startDate")} / {t("filters.endDate")}
+            </Label>
+            <LogsDateRangePicker
+              startDate={filters.startDate}
+              endDate={filters.endDate}
+              onDateRangeChange={handleDateRangeChange}
             />
           </div>
           <div className="space-y-1.5">

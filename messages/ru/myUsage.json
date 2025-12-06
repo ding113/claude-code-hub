@@ -2,7 +2,12 @@
   "header": {
     "title": "Мои расходы",
     "subtitle": "Лимиты и журналы использования",
-    "logout": "Выйти"
+    "logout": "Выйти",
+    "keyLabel": "Ключ",
+    "userLabel": "Пользователь",
+    "providerGroup": "Группа провайдеров",
+    "noProviderGroup": "По умолчанию",
+    "inherited": "(наследовано)"
   },
   "quota": {
     "5h": "Лимит 5 часов",
@@ -50,7 +55,7 @@
       "tokens": "Токены (вх/вых)",
       "cost": "Стоимость {currency}",
       "status": "Статус",
-      "endpoint": "Endpoint"
+      "endpoint": "API Endpoint"
     },
     "pagination": "Показано {from}-{to} из {total}",
     "prev": "Назад",
@@ -58,5 +63,20 @@
     "noLogs": "Нет записей",
     "unknownModel": "Неизвестная модель",
     "billingModel": "Биллинг: {model}"
+  },
+  "expiration": {
+    "title": "Срок действия",
+    "keyExpires": "Срок ключа",
+    "userExpires": "Срок пользователя",
+    "neverExpires": "Бессрочно",
+    "expired": "Истёк",
+    "expiresIn": "через {time}",
+    "expiringWarning": "Скоро истечёт"
+  },
+  "providerGroup": {
+    "keyGroup": "Группа ключа",
+    "userGroup": "Группа пользователя",
+    "allProviders": "Все провайдеры",
+    "inheritedFromUser": "Наследовано от пользователя"
   }
 }

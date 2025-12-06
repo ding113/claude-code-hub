@@ -2,7 +2,12 @@
   "header": {
     "title": "我的用量",
     "subtitle": "查看額度與使用記錄",
-    "logout": "登出"
+    "logout": "登出",
+    "keyLabel": "金鑰",
+    "userLabel": "使用者",
+    "providerGroup": "供應商分組",
+    "noProviderGroup": "預設",
+    "inherited": "（繼承）"
   },
   "quota": {
     "5h": "5小時額度",
@@ -50,7 +55,7 @@
       "tokens": "Tokens (入/出)",
       "cost": "{currency} 花費",
       "status": "狀態",
-      "endpoint": "Endpoint"
+      "endpoint": "API 端點"
     },
     "pagination": "顯示 {from}-{to} / {total}",
     "prev": "上一頁",
@@ -58,5 +63,20 @@
     "noLogs": "暫無日誌",
     "unknownModel": "未知模型",
     "billingModel": "計費：{model}"
+  },
+  "expiration": {
+    "title": "到期時間",
+    "keyExpires": "金鑰到期",
+    "userExpires": "使用者到期",
+    "neverExpires": "永不過期",
+    "expired": "已過期",
+    "expiresIn": "剩餘 {time}",
+    "expiringWarning": "即將到期"
+  },
+  "providerGroup": {
+    "keyGroup": "金鑰分組",
+    "userGroup": "使用者分組",
+    "allProviders": "全部供應商",
+    "inheritedFromUser": "繼承自使用者"
   }
 }

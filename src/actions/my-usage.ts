@@ -44,6 +44,16 @@ export interface MyUsageQuota {
   userCurrentTotalUsd: number;
   userCurrentConcurrentSessions: number;
 
+  userLimitDailyUsd: number | null;
+  userExpiresAt: Date | null;
+  userProviderGroup: string | null;
+  userName: string;
+  userIsEnabled: boolean;
+
+  keyProviderGroup: string | null;
+  keyName: string;
+  keyIsEnabled: boolean;
+
   expiresAt: Date | null;
   dailyResetMode: "fixed" | "rolling";
   dailyResetTime: string;
@@ -194,9 +204,19 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       userCurrentTotalUsd: userTotalCost,
       userCurrentConcurrentSessions: userKeyConcurrent,
 
+      userLimitDailyUsd: user.dailyQuota ?? null,
+      userExpiresAt: user.expiresAt ?? null,
+      userProviderGroup: user.providerGroup ?? null,
+      userName: user.name,
+      userIsEnabled: user.isEnabled ?? true,
+
+      keyProviderGroup: key.providerGroup ?? null,
+      keyName: key.name,
+      keyIsEnabled: key.isEnabled ?? true,
+
       expiresAt: key.expiresAt ?? null,
-      dailyResetMode: key.dailyResetMode,
-      dailyResetTime: key.dailyResetTime,
+      dailyResetMode: key.dailyResetMode ?? "fixed",
+      dailyResetTime: key.dailyResetTime ?? "00:00",
     };
 
     return { ok: true, data: quota };
@@ -215,7 +235,7 @@ export async function getMyTodayStats(): Promise<ActionResult<MyTodayStats>> {
     const billingModelSource = settings.billingModelSource;
     const currencyCode = settings.currencyDisplay;
 
-    const timezone = getEnvConfig().TZ;
+    const timezone = getEnvConfig().TZ || "UTC";
     const startOfDay = sql`(CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date`;
 
     const [aggregate] = await db
@@ -300,7 +320,8 @@ export async function getMyUsageLogs(
 
     const settings = await getSystemSettings();
 
-    const pageSize = filters.pageSize && filters.pageSize > 0 ? filters.pageSize : 20;
+    const rawPageSize = filters.pageSize && filters.pageSize > 0 ? filters.pageSize : 20;
+    const pageSize = Math.min(rawPageSize, 100);
     const page = filters.page && filters.page > 0 ? filters.page : 1;
 
     const usageFilters: UsageLogFilters = {
@@ -324,7 +345,7 @@ export async function getMyUsageLogs(
           : null;
 
       const billingModel =
-        settings.billingModelSource === "original" ? log.originalModel : log.model;
+        (settings.billingModelSource === "original" ? log.originalModel : log.model) ?? null;
 
       return {
         id: log.id,

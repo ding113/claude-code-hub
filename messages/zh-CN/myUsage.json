@@ -2,7 +2,12 @@
   "header": {
     "title": "我的用量",
     "subtitle": "查看额度与使用记录",
-    "logout": "退出登录"
+    "logout": "退出登录",
+    "keyLabel": "密钥",
+    "userLabel": "用户",
+    "providerGroup": "供应商分组",
+    "noProviderGroup": "默认",
+    "inherited": "（继承）"
   },
   "quota": {
     "5h": "5小时额度",
@@ -50,7 +55,7 @@
       "tokens": "Tokens (入/出)",
       "cost": "{currency} 消耗",
       "status": "状态",
-      "endpoint": "Endpoint"
+      "endpoint": "API 端点"
     },
     "pagination": "显示 {from}-{to} / {total}",
     "prev": "上一页",
@@ -58,5 +63,20 @@
     "noLogs": "暂无日志",
     "unknownModel": "未知模型",
     "billingModel": "计费：{model}"
+  },
+  "expiration": {
+    "title": "过期时间",
+    "keyExpires": "密钥过期",
+    "userExpires": "用户过期",
+    "neverExpires": "永不过期",
+    "expired": "已过期",
+    "expiresIn": "剩余 {time}",
+    "expiringWarning": "即将过期"
+  },
+  "providerGroup": {
+    "keyGroup": "密钥分组",
+    "userGroup": "用户分组",
+    "allProviders": "全部供应商",
+    "inheritedFromUser": "继承自用户"
   }
 }

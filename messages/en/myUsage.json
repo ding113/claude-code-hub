@@ -2,7 +2,12 @@
   "header": {
     "title": "My Usage",
     "subtitle": "View your quotas and usage logs",
-    "logout": "Logout"
+    "logout": "Logout",
+    "keyLabel": "Key",
+    "userLabel": "User",
+    "providerGroup": "Provider Group",
+    "noProviderGroup": "Default",
+    "inherited": "(inherited)"
   },
   "quota": {
     "5h": "5h Quota",
@@ -39,7 +44,7 @@
       "model": "Model",
       "status": "Status",
       "allModels": "All models",
-      "allStatus": "All status",
+      "allStatus": "All statuses",
       "apply": "Apply",
       "reset": "Reset"
     },
@@ -58,5 +63,20 @@
     "noLogs": "No logs",
     "unknownModel": "Unknown model",
     "billingModel": "Billing: {model}"
+  },
+  "expiration": {
+    "title": "Expiration",
+    "keyExpires": "Key Expires",
+    "userExpires": "User Expires",
+    "neverExpires": "Never",
+    "expired": "Expired",
+    "expiresIn": "in {time}",
+    "expiringWarning": "Expiring Soon"
+  },
+  "providerGroup": {
+    "keyGroup": "Key Group",
+    "userGroup": "User Group",
+    "allProviders": "All Providers",
+    "inheritedFromUser": "Inherited from User"
   }
 }
