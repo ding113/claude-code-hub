@@ -326,7 +326,16 @@
       "copyMessages": "複製 Messages",
       "downloadMessages": "下載 Messages",
       "copied": "已複製",
-      "copyResponse": "複製回應主體"
+      "copyResponse": "複製回應主體",
+      "terminate": "終止",
+      "terminateTitle": "終止會話",
+      "terminateDescription": "確定要終止此會話嗎？終止後會清除供應商綁定，下一次請求將重新選擇供應商。",
+      "sessionIdLabel": "會話 ID：{sessionId}",
+      "cancel": "取消",
+      "confirmTerminate": "確認終止",
+      "terminating": "終止中...",
+      "terminateSuccess": "會話已成功終止",
+      "terminateFailed": "終止會話失敗"
     },
     "status": {
       "loading": "載入中...",

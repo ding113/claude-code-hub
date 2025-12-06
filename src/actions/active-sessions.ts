@@ -464,3 +464,166 @@ export async function getSessionDetails(sessionId: string): Promise<
     };
   }
 }
+
+/**
+ * 终止活跃 Session（主动打断）
+ *
+ * 功能：删除 Session 的 Redis 绑定关系，强制下次请求重新选择供应商
+ * 权限：管理员可终止所有 Session，普通用户只能终止自己的 Session
+ *
+ * @param sessionId - Session ID
+ */
+export async function terminateActiveSession(sessionId: string): Promise<ActionResult<void>> {
+  try {
+    // 0. 验证用户权限
+    const authSession = await getSession();
+    if (!authSession) {
+      return {
+        ok: false,
+        error: "未登录",
+      };
+    }
+
+    const isAdmin = authSession.user.role === "admin";
+    const currentUserId = authSession.user.id;
+
+    // 1. 获取 session 统计数据以验证所有权
+    const { aggregateSessionStats } = await import("@/repository/message");
+    const sessionStats = await aggregateSessionStats(sessionId);
+
+    if (!sessionStats) {
+      return {
+        ok: false,
+        error: "Session 不存在或已过期",
+      };
+    }
+
+    // 2. 权限检查：管理员可终止所有，普通用户只能终止自己的
+    if (!isAdmin && sessionStats.userId !== currentUserId) {
+      logger.warn(
+        `[Security] User ${currentUserId} attempted to terminate session ${sessionId} owned by user ${sessionStats.userId}`
+      );
+      return {
+        ok: false,
+        error: "无权终止该 Session",
+      };
+    }
+
+    // 3. 终止 Session
+    const { SessionManager } = await import("@/lib/session-manager");
+    const success = await SessionManager.terminateSession(sessionId);
+
+    if (!success) {
+      return {
+        ok: false,
+        error: "终止 Session 失败（Redis 不可用或 Session 已过期）",
+      };
+    }
+
+    // 4. 清除缓存
+    const { clearActiveSessionsCache, clearSessionDetailsCache, clearAllSessionsCache } =
+      await import("@/lib/cache/session-cache");
+
+    clearActiveSessionsCache();
+    clearSessionDetailsCache(sessionId);
+    clearAllSessionsCache();
+
+    logger.info("Session terminated by user", {
+      sessionId,
+      terminatedByUserId: currentUserId,
+      sessionOwnerUserId: sessionStats.userId,
+      isAdmin,
+    });
+
+    return {
+      ok: true,
+      data: undefined,
+    };
+  } catch (error) {
+    logger.error("Failed to terminate active session:", error);
+    return {
+      ok: false,
+      error: "终止 Session 失败",
+    };
+  }
+}
+
+/**
+ * 批量终止活跃 Session
+ *
+ * @param sessionIds - Session ID 列表
+ */
+export async function terminateActiveSessionsBatch(
+  sessionIds: string[]
+): Promise<ActionResult<{ successCount: number; failedCount: number }>> {
+  try {
+    // 0. 验证用户权限
+    const authSession = await getSession();
+    if (!authSession) {
+      return {
+        ok: false,
+        error: "未登录",
+      };
+    }
+
+    const isAdmin = authSession.user.role === "admin";
+    const currentUserId = authSession.user.id;
+
+    if (sessionIds.length === 0) {
+      return {
+        ok: true,
+        data: { successCount: 0, failedCount: 0 },
+      };
+    }
+
+    // 1. 验证每个 Session 的所有权
+    const { aggregateMultipleSessionStats } = await import("@/repository/message");
+    const sessionsData = await aggregateMultipleSessionStats(sessionIds);
+
+    // 2. 过滤出有权限终止的 Session
+    const allowedSessionIds = sessionsData
+      .filter((s) => isAdmin || s.userId === currentUserId)
+      .map((s) => s.sessionId);
+
+    if (allowedSessionIds.length === 0) {
+      return {
+        ok: false,
+        error: "无权终止任何 Session",
+      };
+    }
+
+    // 3. 批量终止
+    const { SessionManager } = await import("@/lib/session-manager");
+    const successCount = await SessionManager.terminateSessionsBatch(allowedSessionIds);
+
+    // 4. 清除缓存
+    const { clearActiveSessionsCache, clearAllSessionsCache } = await import(
+      "@/lib/cache/session-cache"
+    );
+
+    clearActiveSessionsCache();
+    clearAllSessionsCache();
+
+    logger.info("Sessions terminated in batch", {
+      total: sessionIds.length,
+      allowed: allowedSessionIds.length,
+      successCount,
+      terminatedByUserId: currentUserId,
+      isAdmin,
+    });
+
+    return {
+      ok: true,
+      data: {
+        successCount,
+        failedCount: allowedSessionIds.length - successCount,
+      },
+    };
+  } catch (error) {
+    logger.error("Failed to terminate active sessions batch:", error);
+    return {
+      ok: false,
+      error: "批量终止 Session 失败",
+    };
+  }
+}

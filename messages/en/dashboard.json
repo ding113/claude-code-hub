@@ -326,7 +326,16 @@
       "copyMessages": "Copy Messages",
       "downloadMessages": "Download Messages",
       "copied": "Copied",
-      "copyResponse": "Copy Response"
+      "copyResponse": "Copy Response",
+      "terminate": "Terminate",
+      "terminateTitle": "Terminate Session",
+      "terminateDescription": "Are you sure you want to terminate this session? After termination, the provider binding for this session will be cleared, and the next request will reselect a provider.",
+      "sessionIdLabel": "Session ID: {sessionId}",
+      "cancel": "Cancel",
+      "confirmTerminate": "Confirm Termination",
+      "terminating": "Terminating...",
+      "terminateSuccess": "Session terminated successfully",
+      "terminateFailed": "Failed to terminate session"
     },
     "status": {
       "loading": "Loading...",

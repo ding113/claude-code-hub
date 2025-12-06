@@ -326,7 +326,16 @@
       "copyMessages": "复制 Messages",
       "downloadMessages": "下载 Messages",
       "copied": "已复制",
-      "copyResponse": "复制响应体"
+      "copyResponse": "复制响应体",
+      "terminate": "终止",
+      "terminateTitle": "终止 Session",
+      "terminateDescription": "确认要终止此 Session 吗？终止后，该 Session 的供应商绑定将被清除，下次请求将重新选择供应商。",
+      "sessionIdLabel": "Session ID: {sessionId}",
+      "cancel": "取消",
+      "confirmTerminate": "确认终止",
+      "terminating": "终止中...",
+      "terminateSuccess": "Session 已成功终止",
+      "terminateFailed": "终止 Session 失败"
     },
     "status": {
       "loading": "加载中...",

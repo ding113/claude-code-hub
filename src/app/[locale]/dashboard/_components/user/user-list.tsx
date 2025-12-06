@@ -2,7 +2,7 @@
 import { addDays } from "date-fns";
 import { Loader2, Users } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
-import { useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { renewUser, toggleUserEnabled } from "@/actions/users";
 import { Button } from "@/components/ui/button";
@@ -55,7 +55,7 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
   const EXPIRING_SOON_MS = 72 * 60 * 60 * 1000; // 72 hours
 
   // Calculate user status based on isEnabled and expiresAt
-  const getStatusInfo = (user: UserDisplay, now: number) => {
+  const getStatusInfo = useCallback((user: UserDisplay, now: number) => {
     const exp = user.expiresAt ? new Date(user.expiresAt).getTime() : null;
     if (!user.isEnabled) {
       return {
@@ -79,15 +79,18 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
       code: "active" as const,
       badgeVariant: "default" as const,
     };
-  };
+  }, []);
 
   // Format expiration time
-  const formatExpiry = (expiresAt: Date | null | undefined) => {
-    if (!expiresAt) return tUsers("neverExpires");
-    const relative = formatDateDistance(expiresAt, new Date(), locale, { addSuffix: true });
-    const absolute = formatDate(expiresAt, "yyyy-MM-dd", locale);
-    return `${relative} · ${absolute}`;
-  };
+  const formatExpiry = useCallback(
+    (expiresAt: Date | null | undefined) => {
+      if (!expiresAt) return tUsers("neverExpires");
+      const relative = formatDateDistance(expiresAt, new Date(), locale, { addSuffix: true });
+      const absolute = formatDate(expiresAt, "yyyy-MM-dd", locale);
+      return `${relative} · ${absolute}`;
+    },
+    [tUsers, locale]
+  );
 
   // Handle renew user
   const handleRenew = (userId: number, targetDate: Date, enableUser?: boolean) => {
@@ -191,7 +194,7 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
         };
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [users, now, locale, t, tUsers]
+    [users, now, t, formatExpiry, getStatusInfo]
   );
 
   // 特别设计的空状态 - 仅管理员可见

@@ -1,7 +1,20 @@
 "use client";
 
-import { Eye } from "lucide-react";
+import { Eye, XCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useState } from "react";
+import { toast } from "sonner";
+import { terminateActiveSession } from "@/actions/active-sessions";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,6 +36,7 @@ interface ActiveSessionsTableProps {
   isLoading: boolean;
   inactive?: boolean; // 标记是否为非活跃 session
   currencyCode?: CurrencyCode;
+  onSessionTerminated?: () => void; // 终止后的回调
 }
 
 function formatDuration(durationMs: number | undefined): string {
@@ -44,11 +58,32 @@ export function ActiveSessionsTable({
   isLoading,
   inactive = false,
   currencyCode = "USD",
+  onSessionTerminated,
 }: ActiveSessionsTableProps) {
   const t = useTranslations("dashboard.sessions");
+  const [sessionToTerminate, setSessionToTerminate] = useState<string | null>(null);
+  const [isTerminating, setIsTerminating] = useState(false);
 
   // 按开始时间降序排序（最新的在前）
   const sortedSessions = [...sessions].sort((a, b) => b.startTime - a.startTime);
+
+  const handleTerminateSession = async (sessionId: string) => {
+    setIsTerminating(true);
+    try {
+      const result = await terminateActiveSession(sessionId);
+      if (result.ok) {
+        toast.success(t("actions.terminateSuccess"));
+        onSessionTerminated?.();
+      } else {
+        toast.error(result.error || t("actions.terminateFailed"));
+      }
+    } catch (_error) {
+      toast.error(t("actions.terminateFailed"));
+    } finally {
+      setIsTerminating(false);
+      setSessionToTerminate(null);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -132,12 +167,25 @@ export function ActiveSessionsTable({
                     {formatDuration(session.durationMs)}
                   </TableCell>
                   <TableCell className="text-center">
-                    <Link href={`/dashboard/sessions/${session.sessionId}/messages`}>
-                      <Button variant="ghost" size="sm">
-                        <Eye className="h-4 w-4 mr-1" />
-                        {t("actions.view")}
-                      </Button>
-                    </Link>
+                    <div className="flex items-center gap-2 justify-center">
+                      <Link href={`/dashboard/sessions/${session.sessionId}/messages`}>
+                        <Button variant="ghost" size="sm">
+                          <Eye className="h-4 w-4 mr-1" />
+                          {t("actions.view")}
+                        </Button>
+                      </Link>
+                      {!inactive && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSessionToTerminate(session.sessionId)}
+                          disabled={isTerminating}
+                        >
+                          <XCircle className="h-4 w-4 mr-1" />
+                          {t("actions.terminate")}
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
@@ -145,6 +193,42 @@ export function ActiveSessionsTable({
           </TableBody>
         </Table>
       </div>
+
+      {/* 终止确认对话框 */}
+      <AlertDialog
+        open={!!sessionToTerminate}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSessionToTerminate(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("actions.terminateTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("actions.terminateDescription")}
+              {sessionToTerminate && (
+                <span className="font-mono text-sm mt-2 block">
+                  {t("actions.sessionIdLabel", {
+                    sessionId: `${sessionToTerminate.substring(0, 32)}...`,
+                  })}
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isTerminating}>{t("actions.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => sessionToTerminate && handleTerminateSession(sessionToTerminate)}
+              disabled={isTerminating}
+            >
+              {isTerminating ? t("actions.terminating") : t("actions.confirmTerminate")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
