@@ -167,6 +167,27 @@ export function setSessionDetailsCache(
 }
 
 /**
+ * 清空活跃 Sessions 的缓存
+ */
+export function clearActiveSessionsCache() {
+  activeSessionsCache.delete("active_sessions");
+}
+
+/**
+ * 清空所有 Sessions 的缓存（包括活跃和非活跃）
+ */
+export function clearAllSessionsCache() {
+  activeSessionsCache.delete("all_sessions");
+}
+
+/**
+ * 清空指定 Session 详情的缓存
+ */
+export function clearSessionDetailsCache(sessionId: string) {
+  sessionDetailsCache.delete(sessionId);
+}
+
+/**
  * 清空所有 Session 缓存
  */
 export function clearAllSessionCache() {
