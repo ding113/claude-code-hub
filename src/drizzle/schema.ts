@@ -254,6 +254,9 @@ export const messageRequest = pgTable('message_request', {
   outputTokens: integer('output_tokens'),
   cacheCreationInputTokens: integer('cache_creation_input_tokens'),
   cacheReadInputTokens: integer('cache_read_input_tokens'),
+  // 差异化缓存计费：5分钟和1小时缓存创建 token 数
+  cacheCreation5mInputTokens: integer('cache_creation_5m_input_tokens'),
+  cacheCreation1hInputTokens: integer('cache_creation_1h_input_tokens'),
 
   // 错误信息
   errorMessage: text('error_message'),

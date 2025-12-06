@@ -179,6 +179,9 @@ export interface MessageRequest {
   outputTokens?: number;
   cacheCreationInputTokens?: number;
   cacheReadInputTokens?: number;
+  // 差异化缓存计费：5分钟和1小时缓存创建 token 数
+  cacheCreation5mInputTokens?: number;
+  cacheCreation1hInputTokens?: number;
 
   // 错误信息
   errorMessage?: string;
@@ -228,6 +231,9 @@ export interface CreateMessageRequestData {
   output_tokens?: number;
   cache_creation_input_tokens?: number;
   cache_read_input_tokens?: number;
+  // 差异化缓存计费：5分钟和1小时缓存创建 token 数
+  cache_creation_5m_input_tokens?: number;
+  cache_creation_1h_input_tokens?: number;
 
   // 错误信息
   error_message?: string;
