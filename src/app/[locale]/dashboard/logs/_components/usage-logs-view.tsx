@@ -52,13 +52,13 @@ export function UsageLogsView({
   const previousParamsRef = useRef<string>("");
 
   // 从 URL 参数解析筛选条件
-  // 注意：时间使用字符串传递，避免 Date 序列化导致的时区问题
+  // 使用毫秒时间戳传递时间，避免时区问题
   const filters: {
     userId?: number;
     keyId?: number;
     providerId?: number;
-    startDateLocal?: string;
-    endDateLocal?: string;
+    startTime?: number;
+    endTime?: number;
     statusCode?: number;
     excludeStatusCode200?: boolean;
     model?: string;
@@ -71,9 +71,9 @@ export function UsageLogsView({
     providerId: searchParams.providerId
       ? parseInt(searchParams.providerId as string, 10)
       : undefined,
-    // 直接传递本地时间字符串，不转换为 Date
-    startDateLocal: searchParams.startDate as string | undefined,
-    endDateLocal: searchParams.endDate as string | undefined,
+    // 使用毫秒时间戳，无时区歧义
+    startTime: searchParams.startTime ? parseInt(searchParams.startTime as string, 10) : undefined,
+    endTime: searchParams.endTime ? parseInt(searchParams.endTime as string, 10) : undefined,
     statusCode:
       searchParams.statusCode && searchParams.statusCode !== "!200"
         ? parseInt(searchParams.statusCode as string, 10)
@@ -174,9 +174,9 @@ export function UsageLogsView({
     if (newFilters.userId) query.set("userId", newFilters.userId.toString());
     if (newFilters.keyId) query.set("keyId", newFilters.keyId.toString());
     if (newFilters.providerId) query.set("providerId", newFilters.providerId.toString());
-    // 时间直接使用字符串格式（datetime-local 返回的格式）
-    if (newFilters.startDateLocal) query.set("startDate", newFilters.startDateLocal);
-    if (newFilters.endDateLocal) query.set("endDate", newFilters.endDateLocal);
+    // 使用毫秒时间戳传递时间，无时区歧义
+    if (newFilters.startTime) query.set("startTime", newFilters.startTime.toString());
+    if (newFilters.endTime) query.set("endTime", newFilters.endTime.toString());
     if (newFilters.excludeStatusCode200) {
       query.set("statusCode", "!200");
     } else if (newFilters.statusCode !== undefined) {

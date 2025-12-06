@@ -36,6 +36,8 @@ export async function validateKey(
       rpm: 0,
       dailyQuota: 0,
       providerGroup: null,
+      isEnabled: true,
+      expiresAt: null,
       createdAt: now,
       updatedAt: now,
     };

@@ -30,10 +30,10 @@ interface UsageLogsFiltersProps {
     userId?: number;
     keyId?: number;
     providerId?: number;
-    /** 本地时间字符串，格式: "YYYY-MM-DDTHH:mm" */
-    startDateLocal?: string;
-    /** 本地时间字符串，格式: "YYYY-MM-DDTHH:mm" */
-    endDateLocal?: string;
+    /** 开始时间戳（毫秒，浏览器本地时区的 00:00:00） */
+    startTime?: number;
+    /** 结束时间戳（毫秒，浏览器本地时区的次日 00:00:00，用于 < 比较） */
+    endTime?: number;
     statusCode?: number;
     excludeStatusCode200?: boolean;
     model?: string;
@@ -141,35 +141,66 @@ export function UsageLogsFilters({
     onReset();
   };
 
-  // Memoized endDate calculation: endDateLocal is next day 00:00, subtract 1 day to show correct end date
+  // Helper: convert timestamp to display date string (YYYY-MM-DD)
+  const timestampToDateString = useCallback((timestamp: number): string => {
+    const date = new Date(timestamp);
+    return format(date, "yyyy-MM-dd");
+  }, []);
+
+  // Helper: parse date string to timestamp (start of day in browser timezone)
+  const dateStringToTimestamp = useCallback((dateStr: string): number => {
+    const [year, month, day] = dateStr.split("-").map(Number);
+    return new Date(year, month - 1, day, 0, 0, 0, 0).getTime();
+  }, []);
+
+  // Memoized startDate for display (from timestamp)
+  const displayStartDate = useMemo(() => {
+    if (!localFilters.startTime) return undefined;
+    return timestampToDateString(localFilters.startTime);
+  }, [localFilters.startTime, timestampToDateString]);
+
+  // Memoized endDate calculation: endTime is next day 00:00, subtract 1 day to show correct end date
   const displayEndDate = useMemo(() => {
-    if (!localFilters.endDateLocal) return undefined;
-    const endDateStr = localFilters.endDateLocal.split("T")[0];
-    const endDate = parse(endDateStr, "yyyy-MM-dd", new Date());
-    return format(addDays(endDate, -1), "yyyy-MM-dd");
-  }, [localFilters.endDateLocal]);
+    if (!localFilters.endTime) return undefined;
+    // endTime is next day 00:00, so subtract 1 day to get actual end date
+    const actualEndDate = new Date(localFilters.endTime - 24 * 60 * 60 * 1000);
+    return format(actualEndDate, "yyyy-MM-dd");
+  }, [localFilters.endTime]);
 
   // Memoized callback for date range changes
-  const handleDateRangeChange = useCallback((range: { startDate?: string; endDate?: string }) => {
-    if (range.startDate && range.endDate) {
-      // Convert to backend format:
-      // startDateLocal: "YYYY-MM-DDT00:00" (start of day)
-      // endDateLocal: "YYYY-MM-(DD+1)T00:00" (start of next day, for < comparison)
-      const endDate = parse(range.endDate, "yyyy-MM-dd", new Date());
-      const nextDay = addDays(endDate, 1);
-      setLocalFilters((prev) => ({
-        ...prev,
-        startDateLocal: `${range.startDate}T00:00`,
-        endDateLocal: `${format(nextDay, "yyyy-MM-dd")}T00:00`,
-      }));
-    } else {
-      setLocalFilters((prev) => ({
-        ...prev,
-        startDateLocal: undefined,
-        endDateLocal: undefined,
-      }));
-    }
-  }, []);
+  const handleDateRangeChange = useCallback(
+    (range: { startDate?: string; endDate?: string }) => {
+      if (range.startDate && range.endDate) {
+        // Convert to millisecond timestamps:
+        // startTime: start of selected start date (00:00:00.000 in browser timezone)
+        // endTime: start of day AFTER selected end date (for < comparison)
+        const startTimestamp = dateStringToTimestamp(range.startDate);
+        const endDate = parse(range.endDate, "yyyy-MM-dd", new Date());
+        const nextDay = addDays(endDate, 1);
+        const endTimestamp = new Date(
+          nextDay.getFullYear(),
+          nextDay.getMonth(),
+          nextDay.getDate(),
+          0,
+          0,
+          0,
+          0
+        ).getTime();
+        setLocalFilters((prev) => ({
+          ...prev,
+          startTime: startTimestamp,
+          endTime: endTimestamp,
+        }));
+      } else {
+        setLocalFilters((prev) => ({
+          ...prev,
+          startTime: undefined,
+          endTime: undefined,
+        }));
+      }
+    },
+    [dateStringToTimestamp]
+  );
 
   return (
     <div className="space-y-4">
@@ -178,9 +209,7 @@ export function UsageLogsFilters({
         <div className="space-y-2 lg:col-span-4">
           <Label>{t("logs.filters.dateRange")}</Label>
           <LogsDateRangePicker
-            startDate={
-              localFilters.startDateLocal ? localFilters.startDateLocal.split("T")[0] : undefined
-            }
+            startDate={displayStartDate}
             endDate={displayEndDate}
             onDateRangeChange={handleDateRangeChange}
           />

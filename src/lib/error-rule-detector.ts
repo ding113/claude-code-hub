@@ -8,6 +8,7 @@
  * - 支持热重载
  * - ReDoS 风险检测（safe-regex）
  * - EventEmitter 驱动的自动缓存刷新
+ * - 数据库异常保护：失败时不抛异常，下次检测时重试
  */
 
 import safeRegex from "safe-regex";
@@ -73,6 +74,7 @@ class ErrorRuleDetector {
   private isLoading: boolean = false;
   private isInitialized: boolean = false; // 跟踪初始化状态
   private initializationPromise: Promise<void> | null = null; // 防止并发初始化竞态
+  private dbLoadedSuccessfully: boolean = false; // 是否成功从数据库加载过
 
   constructor() {
     // 延迟初始化事件监听（仅在 Node.js runtime 中）
@@ -88,6 +90,9 @@ class ErrorRuleDetector {
       try {
         const { eventEmitter } = await import("@/lib/event-emitter");
         eventEmitter.on("errorRulesUpdated", () => {
+          // 重置标记，强制下次从数据库重新加载
+          this.dbLoadedSuccessfully = false;
+          this.isInitialized = false;
           this.reload().catch((error) => {
             logger.error("[ErrorRuleDetector] Failed to reload cache on event:", error);
           });
@@ -102,9 +107,16 @@ class ErrorRuleDetector {
    * 确保规则已加载（懒加载，首次使用时或显式 reload 时调用）
    * 避免在数据库未准备好时过早加载
    * 使用 Promise 合并模式防止并发请求时的竞态条件
+   *
+   * 重要：如果从未成功从数据库加载过，每次调用都会尝试重新加载
+   * 一旦成功加载，后续调用将跳过加载（直到重启/事件触发）
+   *
+   * 公开此方法供外部调用（如 Server Actions），确保在读取缓存统计等
+   * 操作前缓存已初始化，解决新 worker 进程中缓存为空的问题
    */
-  private async ensureInitialized(): Promise<void> {
-    if (this.isInitialized) {
+  async ensureInitialized(): Promise<void> {
+    // 只有成功从数据库加载过，才跳过初始化
+    if (this.dbLoadedSuccessfully && this.isInitialized) {
       return;
     }
 
@@ -119,6 +131,11 @@ class ErrorRuleDetector {
 
   /**
    * 从数据库重新加载错误规则
+   *
+   * 数据库异常保护策略：
+   * - 失败时不抛出异常，只记录错误日志
+   * - 保留现有缓存（如果有），下次检测时重试加载
+   * - 成功加载后标记 dbLoadedSuccessfully，后续不再重试
    */
   async reload(): Promise<void> {
     if (this.isLoading) {
@@ -134,20 +151,22 @@ class ErrorRuleDetector {
       let rules;
       try {
         rules = await getActiveErrorRules();
+        this.dbLoadedSuccessfully = true;
       } catch (dbError) {
-        // 优雅处理表不存在的情况（迁移还未执行时）
-        // 这允许应用在迁移前正常启动，迁移后会自动重载
         const errorMessage = (dbError as Error).message || "";
+
+        // 记录数据库错误（区分表不存在和其他错误）
         if (errorMessage.includes("relation") && errorMessage.includes("does not exist")) {
           logger.warn(
-            "[ErrorRuleDetector] error_rules table does not exist yet (migration pending), using empty rules"
+            "[ErrorRuleDetector] error_rules table does not exist yet (migration pending)"
           );
-          this.lastReloadTime = Date.now();
-          this.isLoading = false; // 关键：early return 时必须清除 isLoading，否则后续 reload 会被永久阻塞
-          return;
+        } else {
+          logger.error("[ErrorRuleDetector] Database error while loading error rules:", dbError);
         }
-        // 其他数据库错误继续抛出
-        throw dbError;
+
+        // 保留现有缓存，下次检测时重试
+        this.lastReloadTime = Date.now();
+        return;
       }
 
       // 使用局部变量收集新数据，避免 reload 期间 detect() 返回空结果

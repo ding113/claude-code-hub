@@ -20,6 +20,8 @@ export function toUser(dbUser: any): User {
       dbUser?.limitTotalUsd !== null && dbUser?.limitTotalUsd !== undefined
         ? parseFloat(dbUser.limitTotalUsd)
         : null,
+    isEnabled: dbUser?.isEnabled ?? true,
+    expiresAt: dbUser?.expiresAt ? new Date(dbUser.expiresAt) : null,
     createdAt: dbUser?.createdAt ? new Date(dbUser.createdAt) : new Date(),
     updatedAt: dbUser?.updatedAt ? new Date(dbUser.updatedAt) : new Date(),
   };

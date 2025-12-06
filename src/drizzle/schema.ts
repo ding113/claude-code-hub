@@ -35,12 +35,21 @@ export const users = pgTable('users', {
   limitMonthlyUsd: numeric('limit_monthly_usd', { precision: 10, scale: 2 }),
   limitTotalUsd: numeric('limit_total_usd', { precision: 10, scale: 2 }),
   limitConcurrentSessions: integer('limit_concurrent_sessions'),
+
+  // User status and expiry management
+  isEnabled: boolean('is_enabled').notNull().default(true),
+  expiresAt: timestamp('expires_at', { withTimezone: true }),
+
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 }, (table) => ({
-  // 优化用户列表查询的复合索引（按角色排序，管理员优先）
+  // 优化用户列表查询的复合索引（按角色排序,管理员优先）
   usersActiveRoleSortIdx: index('idx_users_active_role_sort').on(table.deletedAt, table.role, table.id).where(sql`${table.deletedAt} IS NULL`),
+  // 优化过期用户查询的复合索引（用于定时任务），仅索引未删除的用户
+  usersEnabledExpiresAtIdx: index('idx_users_enabled_expires_at')
+    .on(table.isEnabled, table.expiresAt)
+    .where(sql`${table.deletedAt} IS NULL`),
   // 基础索引
   usersCreatedAtIdx: index('idx_users_created_at').on(table.createdAt),
   usersDeletedAtIdx: index('idx_users_deleted_at').on(table.deletedAt),

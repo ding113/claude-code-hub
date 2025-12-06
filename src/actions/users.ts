@@ -21,6 +21,47 @@ import { createUser, deleteUser, findUserById, findUserList, updateUser } from "
 import type { UserDisplay } from "@/types/user";
 import type { ActionResult } from "./types";
 
+/**
+ * 验证过期时间的公共函数
+ * @param expiresAt - 过期时间
+ * @param tError - 翻译函数
+ * @returns 验证结果,如果有错误返回错误信息和错误码
+ */
+async function validateExpiresAt(
+  expiresAt: Date,
+  tError: Awaited<ReturnType<typeof getTranslations<"errors">>>,
+  options: { allowPast?: boolean } = {}
+): Promise<{ error: string; errorCode: string } | null> {
+  // 检查是否为有效日期
+  if (Number.isNaN(expiresAt.getTime())) {
+    return {
+      error: tError("INVALID_FORMAT", { field: tError("EXPIRES_AT_FIELD") }),
+      errorCode: ERROR_CODES.INVALID_FORMAT,
+    };
+  }
+
+  // 拒绝过去或当前时间（可配置允许过去时间，用于立即让用户过期）
+  const now = new Date();
+  if (!options.allowPast && expiresAt <= now) {
+    return {
+      error: tError("EXPIRES_AT_MUST_BE_FUTURE"),
+      errorCode: "EXPIRES_AT_MUST_BE_FUTURE",
+    };
+  }
+
+  // 限制最大续期时长(10年)
+  const maxExpiry = new Date(now);
+  maxExpiry.setFullYear(maxExpiry.getFullYear() + 10);
+  if (expiresAt > maxExpiry) {
+    return {
+      error: tError("EXPIRES_AT_TOO_FAR"),
+      errorCode: "EXPIRES_AT_TOO_FAR",
+    };
+  }
+
+  return null;
+}
+
 // 获取用户数据
 export async function getUsers(): Promise<UserDisplay[]> {
   try {
@@ -75,6 +116,8 @@ export async function getUsers(): Promise<UserDisplay[]> {
             limitMonthlyUsd: user.limitMonthlyUsd ?? null,
             limitTotalUsd: user.limitTotalUsd ?? null,
             limitConcurrentSessions: user.limitConcurrentSessions ?? null,
+            isEnabled: user.isEnabled,
+            expiresAt: user.expiresAt ?? null,
             keys: keys.map((key) => {
               const stats = statisticsMap.get(key.id);
               // 用户可以查看和复制自己的密钥，管理员可以查看和复制所有密钥
@@ -133,6 +176,8 @@ export async function getUsers(): Promise<UserDisplay[]> {
             limitMonthlyUsd: user.limitMonthlyUsd ?? null,
             limitTotalUsd: user.limitTotalUsd ?? null,
             limitConcurrentSessions: user.limitConcurrentSessions ?? null,
+            isEnabled: user.isEnabled,
+            expiresAt: user.expiresAt ?? null,
             keys: [],
           };
         }
@@ -159,6 +204,8 @@ export async function addUser(data: {
   limitMonthlyUsd?: number | null;
   limitTotalUsd?: number | null;
   limitConcurrentSessions?: number | null;
+  isEnabled?: boolean;
+  expiresAt?: Date | null;
 }): Promise<ActionResult> {
   try {
     // Get translations for error messages
@@ -190,10 +237,38 @@ export async function addUser(data: {
     });
 
     if (!validationResult.success) {
+      const issue = validationResult.error.issues[0];
+      const { code, params } = await import("@/lib/utils/error-messages").then((m) =>
+        m.zodErrorToCode(issue.code, {
+          minimum: "minimum" in issue ? issue.minimum : undefined,
+          maximum: "maximum" in issue ? issue.maximum : undefined,
+          type: "expected" in issue ? issue.expected : undefined,
+          received: "received" in issue ? issue.received : undefined,
+          validation: "validation" in issue ? issue.validation : undefined,
+          path: issue.path,
+          message: "message" in issue ? issue.message : undefined,
+          params: "params" in issue ? issue.params : undefined,
+        })
+      );
+
+      // For custom errors with nested field keys, translate them
+      let translatedParams = params;
+      if (issue.code === "custom" && params?.field && typeof params.field === "string") {
+        try {
+          translatedParams = {
+            ...params,
+            field: tError(params.field as string),
+          };
+        } catch {
+          // Keep original if translation fails
+        }
+      }
+
       return {
         ok: false,
         error: formatZodError(validationResult.error),
-        errorCode: ERROR_CODES.INVALID_FORMAT,
+        errorCode: code,
+        errorParams: translatedParams,
       };
     }
 
@@ -211,6 +286,8 @@ export async function addUser(data: {
       limitMonthlyUsd: validatedData.limitMonthlyUsd ?? undefined,
       limitTotalUsd: validatedData.limitTotalUsd ?? undefined,
       limitConcurrentSessions: validatedData.limitConcurrentSessions ?? undefined,
+      isEnabled: data.isEnabled ?? true,
+      expiresAt: data.expiresAt ?? null,
     });
 
     // 为新用户创建默认密钥
@@ -252,6 +329,8 @@ export async function editUser(
     limitMonthlyUsd?: number | null;
     limitTotalUsd?: number | null;
     limitConcurrentSessions?: number | null;
+    isEnabled?: boolean;
+    expiresAt?: Date | null;
   }
 ): Promise<ActionResult> {
   try {
@@ -271,10 +350,38 @@ export async function editUser(
     const validationResult = UpdateUserSchema.safeParse(data);
 
     if (!validationResult.success) {
+      const issue = validationResult.error.issues[0];
+      const { code, params } = await import("@/lib/utils/error-messages").then((m) =>
+        m.zodErrorToCode(issue.code, {
+          minimum: "minimum" in issue ? issue.minimum : undefined,
+          maximum: "maximum" in issue ? issue.maximum : undefined,
+          type: "expected" in issue ? issue.expected : undefined,
+          received: "received" in issue ? issue.received : undefined,
+          validation: "validation" in issue ? issue.validation : undefined,
+          path: issue.path,
+          message: "message" in issue ? issue.message : undefined,
+          params: "params" in issue ? issue.params : undefined,
+        })
+      );
+
+      // For custom errors with nested field keys, translate them
+      let translatedParams = params;
+      if (issue.code === "custom" && params?.field && typeof params.field === "string") {
+        try {
+          translatedParams = {
+            ...params,
+            field: tError(params.field as string),
+          };
+        } catch {
+          // Keep original if translation fails
+        }
+      }
+
       return {
         ok: false,
         error: formatZodError(validationResult.error),
-        errorCode: ERROR_CODES.INVALID_FORMAT,
+        errorCode: code,
+        errorParams: translatedParams,
       };
     }
 
@@ -300,6 +407,18 @@ export async function editUser(
       };
     }
 
+    // 如果设置了过期时间,进行验证
+    if (data.expiresAt !== undefined && data.expiresAt !== null) {
+      const validationResult = await validateExpiresAt(data.expiresAt, tError, { allowPast: true });
+      if (validationResult) {
+        return {
+          ok: false,
+          error: validationResult.error,
+          errorCode: validationResult.errorCode,
+        };
+      }
+    }
+
     // Update user with validated data
     await updateUser(userId, {
       name: validatedData.name,
@@ -313,6 +432,8 @@ export async function editUser(
       limitMonthlyUsd: validatedData.limitMonthlyUsd ?? undefined,
       limitTotalUsd: validatedData.limitTotalUsd ?? undefined,
       limitConcurrentSessions: validatedData.limitConcurrentSessions ?? undefined,
+      isEnabled: data.isEnabled,
+      expiresAt: data.expiresAt,
     });
 
     revalidatePath("/dashboard");
@@ -419,5 +540,128 @@ export async function getUserLimitUsage(userId: number): Promise<
     const tError = await getTranslations("errors");
     const message = error instanceof Error ? error.message : tError("GET_USER_QUOTA_FAILED");
     return { ok: false, error: message, errorCode: ERROR_CODES.OPERATION_FAILED };
+  }
+}
+
+/**
+ * 续期用户（延长过期时间）
+ */
+export async function renewUser(
+  userId: number,
+  data: {
+    expiresAt: string; // ISO 8601 string to avoid serialization issues
+    enableUser?: boolean; // 是否同时启用用户
+  }
+): Promise<ActionResult> {
+  try {
+    // Get translations for error messages
+    const tError = await getTranslations("errors");
+
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    // Parse and validate expiration date
+    const expiresAt = new Date(data.expiresAt);
+
+    // 验证过期时间
+    const validationResult = await validateExpiresAt(expiresAt, tError);
+    if (validationResult) {
+      return {
+        ok: false,
+        error: validationResult.error,
+        errorCode: validationResult.errorCode,
+      };
+    }
+
+    // 检查用户是否存在
+    const user = await findUserById(userId);
+    if (!user) {
+      return {
+        ok: false,
+        error: tError("USER_NOT_FOUND"),
+        errorCode: ERROR_CODES.NOT_FOUND,
+      };
+    }
+
+    // Update user expiration date and optionally enable user
+    const updateData: {
+      expiresAt: Date;
+      isEnabled?: boolean;
+    } = {
+      expiresAt,
+    };
+
+    if (data.enableUser === true) {
+      updateData.isEnabled = true;
+    }
+
+    const updated = await updateUser(userId, updateData);
+    if (!updated) {
+      return {
+        ok: false,
+        error: tError("USER_NOT_FOUND"),
+        errorCode: ERROR_CODES.NOT_FOUND,
+      };
+    }
+
+    revalidatePath("/dashboard");
+    return { ok: true };
+  } catch (error) {
+    logger.error("Failed to renew user:", error);
+    const tError = await getTranslations("errors");
+    const message = error instanceof Error ? error.message : tError("UPDATE_USER_FAILED");
+    return {
+      ok: false,
+      error: message,
+      errorCode: ERROR_CODES.UPDATE_FAILED,
+    };
+  }
+}
+
+/**
+ * 切换用户启用/禁用状态
+ */
+export async function toggleUserEnabled(userId: number, enabled: boolean): Promise<ActionResult> {
+  try {
+    // Get translations for error messages
+    const tError = await getTranslations("errors");
+
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    // Prevent disabling self
+    if (session.user.id === userId && !enabled) {
+      return {
+        ok: false,
+        error: tError("CANNOT_DISABLE_SELF"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    await updateUser(userId, { isEnabled: enabled });
+
+    revalidatePath("/dashboard");
+    return { ok: true };
+  } catch (error) {
+    logger.error("Failed to toggle user enabled status:", error);
+    const tError = await getTranslations("errors");
+    const message = error instanceof Error ? error.message : tError("UPDATE_USER_FAILED");
+    return {
+      ok: false,
+      error: message,
+      errorCode: ERROR_CODES.UPDATE_FAILED,
+    };
   }
 }

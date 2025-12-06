@@ -468,16 +468,14 @@ function extractErrorContentForDetection(error: Error): string {
 const errorDetectionCache = new WeakMap<Error, ErrorDetectionResult>();
 
 /**
- * 检测错误规则（带缓存）
+ * 检测错误规则（异步版本，带缓存）
  *
  * 同一个 Error 对象只执行一次规则匹配，后续调用直接返回缓存结果
  *
- * 优化：避免在规则尚未初始化时缓存空结果
- * - 如果规则已初始化，正常缓存结果
- * - 如果规则未初始化，触发异步加载并返回同步结果（可能为空）
- *   后续请求会自动获取正确的缓存结果
+ * 重要：此函数会确保错误规则在检测前已从数据库加载，
+ * 解决冷启动时规则未初始化导致检测失败的问题
  */
-function detectErrorRuleOnce(error: Error): ErrorDetectionResult {
+async function detectErrorRuleOnceAsync(error: Error): Promise<ErrorDetectionResult> {
   const cached = errorDetectionCache.get(error);
   if (cached) {
     return cached;
@@ -485,26 +483,52 @@ function detectErrorRuleOnce(error: Error): ErrorDetectionResult {
 
   const content = extractErrorContentForDetection(error);
 
-  // 避免在规则尚未初始化时缓存可能不完整的结果
-  if (!errorRuleDetector.hasInitialized()) {
-    // 触发异步初始化，但不阻塞当前请求
-    void errorRuleDetector
-      .detectAsync(content)
-      .then((result) => errorDetectionCache.set(error, result))
-      .catch(() => undefined);
-
-    // 返回同步结果（可能为空），不缓存以允许后续请求重新检测
-    return errorRuleDetector.detect(content);
-  }
-
-  const result = errorRuleDetector.detect(content);
+  // 使用 detectAsync 确保规则已加载
+  const result = await errorRuleDetector.detectAsync(content);
   errorDetectionCache.set(error, result);
   return result;
 }
 
+/**
+ * 向后兼容的同步检测入口，供尚未迁移的调用方/测试使用
+ *
+ * 若缓存已命中，直接返回结果；
+ * 若缓存尚未初始化，会立即返回当前同步检测结果，
+ * 并在后台触发一次 detectErrorRuleOnceAsync 以完成加载并填充缓存。
+ *
+ * 注意：生产代码路径（forwarder、error-handler）应使用异步版本
+ * isNonRetryableClientErrorAsync 以确保规则已加载
+ */
 export function isNonRetryableClientError(error: Error): boolean {
+  const cached = errorDetectionCache.get(error);
+  if (cached) {
+    return cached.matched;
+  }
+
+  const content = extractErrorContentForDetection(error);
+  const result = errorRuleDetector.detect(content);
+
+  // 只有规则已初始化时才缓存结果，避免缓存可能不完整的结果
+  if (errorRuleDetector.hasInitialized()) {
+    errorDetectionCache.set(error, result);
+  } else {
+    // 触发异步初始化，后续调用会获取正确结果
+    void detectErrorRuleOnceAsync(error).catch(() => undefined);
+  }
+
+  return result.matched;
+}
+
+/**
+ * 检测是否为不可重试的客户端输入错误（异步版本）
+ *
+ * 此函数会确保错误规则已加载后再进行检测
+ * 生产代码路径（forwarder、error-handler）应优先使用此版本
+ */
+export async function isNonRetryableClientErrorAsync(error: Error): Promise<boolean> {
   // 使用缓存的检测结果，避免重复执行规则匹配
-  return detectErrorRuleOnce(error).matched;
+  const result = await detectErrorRuleOnceAsync(error);
+  return result.matched;
 }
 
 /**
@@ -518,7 +542,7 @@ export interface ErrorOverrideResult {
 }
 
 /**
- * 检测错误并返回覆写配置（如果配置了）
+ * 检测错误并返回覆写配置（异步版本）
  *
  * 用于在返回错误响应时应用覆写，将复杂的上游错误转换为友好的用户提示
  * 支持三种覆写模式：
@@ -526,12 +550,16 @@ export interface ErrorOverrideResult {
  * 2. 仅覆写状态码
  * 3. 同时覆写响应体和状态码
  *
+ * 此函数会确保错误规则已加载后再进行检测
+ *
  * @param error - 错误对象
  * @returns 覆写配置（如果配置了响应体或状态码），否则返回 undefined
  */
-export function getErrorOverride(error: Error): ErrorOverrideResult | undefined {
+export async function getErrorOverrideAsync(
+  error: Error
+): Promise<ErrorOverrideResult | undefined> {
   // 使用缓存的检测结果，避免重复执行规则匹配
-  const result = detectErrorRuleOnce(error);
+  const result = await detectErrorRuleOnceAsync(error);
 
   // 只要配置了响应体或状态码，就返回覆写配置
   if (result.matched && (result.overrideResponse || result.overrideStatusCode)) {
@@ -635,7 +663,7 @@ export function isRateLimitError(error: unknown): error is RateLimitError {
 }
 
 /**
- * 判断错误类型
+ * 判断错误类型（异步版本）
  *
  * 分类规则（优先级从高到低）：
  * 1. 客户端主动中断（AbortError 或 error.code === 'ECONNRESET' 且 statusCode === 499）
@@ -660,17 +688,20 @@ export function isRateLimitError(error: unknown): error is RateLimitError {
  *    → 不应计入供应商熔断器（不是供应商服务不可用）
  *    → 应先重试1次当前供应商（可能是临时网络抖动）
  *
+ * 此函数会确保错误规则已加载后再进行检测
+ *
  * @param error - 捕获的错误对象
  * @returns 错误分类（CLIENT_ABORT、NON_RETRYABLE_CLIENT_ERROR、PROVIDER_ERROR 或 SYSTEM_ERROR）
  */
-export function categorizeError(error: Error): ErrorCategory {
+export async function categorizeErrorAsync(error: Error): Promise<ErrorCategory> {
   // 优先级 1: 客户端中断检测（优先级最高）- 使用统一的精确检测函数
   if (isClientAbortError(error)) {
     return ErrorCategory.CLIENT_ABORT; // 客户端主动中断
   }
 
   // 优先级 2: 不可重试的客户端输入错误检测（白名单模式）
-  if (isNonRetryableClientError(error)) {
+  // 使用异步版本确保错误规则已加载
+  if (await isNonRetryableClientErrorAsync(error)) {
     return ErrorCategory.NON_RETRYABLE_CLIENT_ERROR; // 客户端输入错误
   }
 

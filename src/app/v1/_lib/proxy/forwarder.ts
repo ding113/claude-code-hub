@@ -24,7 +24,7 @@ import { GEMINI_PROTOCOL } from "../gemini/protocol";
 import { HeaderProcessor } from "../headers";
 import { buildProxyUrl } from "../url";
 import {
-  categorizeError,
+  categorizeErrorAsync,
   ErrorCategory,
   isClientAbortError,
   isHttp2Error,
@@ -62,6 +62,16 @@ function resolveMaxAttemptsForProvider(
   }
   return clampRetryAttempts(provider.maxRetryAttempts);
 }
+
+/**
+ * undici request 超时配置（毫秒）
+ *
+ * 背景：undiciRequest() 在使用非 undici 原生 dispatcher（如 SocksProxyAgent）时，
+ * 不会继承全局 Agent 的超时配置，需要显式传递超时参数。
+ *
+ * 这个值与 proxy-agent.ts 中的 UNDICI_TIMEOUT_MS 保持一致。
+ */
+const UNDICI_REQUEST_TIMEOUT_MS = 600_000; // 600 秒 = 10 分钟，LLM 服务最大超时时间
 
 /**
  * 过滤私有参数（下划线前缀）
@@ -253,7 +263,8 @@ export class ProxyForwarder {
           lastError = error as Error;
 
           // ⭐ 1. 分类错误（供应商错误 vs 系统错误 vs 客户端中断）
-          const errorCategory = categorizeError(lastError);
+          // 使用异步版本确保错误规则已加载
+          const errorCategory = await categorizeErrorAsync(lastError);
           const errorMessage =
             lastError instanceof ProxyError
               ? lastError.getDetailedErrorMessage()
@@ -1314,7 +1325,6 @@ export class ProxyForwarder {
             providerName: provider.name,
             proxyUrl: new URL(proxyUrl).origin, // 只记录域名，隐藏查询参数和 API Key
 
-            // ⭐ 详细错误信息（关键诊断字段）
             errorType: err.constructor.name,
             errorName: err.name,
             errorMessage: err.message,
@@ -1322,7 +1332,20 @@ export class ProxyForwarder {
             errorSyscall: err.syscall, // ⭐ 如 'getaddrinfo'（DNS查询）、'connect'（TCP连接）
             errorErrno: err.errno,
             errorCause: err.cause,
+
+            errorCauseMessage: (err.cause as Error | undefined)?.message,
+            errorCauseStack: (err.cause as Error | undefined)?.stack
+              ?.split("\n")
+              .slice(0, 2)
+              .join("\n"),
             errorStack: err.stack?.split("\n").slice(0, 3).join("\n"), // 前3行堆栈
+
+            targetUrl: proxyUrl, // 完整目标 URL（用于调试）
+            headerKeys: Array.from(processedHeaders.keys()),
+            headerCount: Array.from(processedHeaders.keys()).length,
+            invalidHeaders: Array.from(processedHeaders.entries())
+              .filter(([_, v]) => v === undefined || v === null || v === "")
+              .map(([k]) => k),
 
             // 请求上下文
             method: session.method,
@@ -1347,7 +1370,20 @@ export class ProxyForwarder {
           errorSyscall: err.syscall, // ⭐ 如 'getaddrinfo'（DNS查询）、'connect'（TCP连接）
           errorErrno: err.errno,
           errorCause: err.cause,
+          // ⭐ 增强诊断：undici 参数验证错误的具体说明
+          errorCauseMessage: (err.cause as Error | undefined)?.message,
+          errorCauseStack: (err.cause as Error | undefined)?.stack
+            ?.split("\n")
+            .slice(0, 2)
+            .join("\n"),
           errorStack: err.stack?.split("\n").slice(0, 3).join("\n"), // 前3行堆栈
+
+          targetUrl: proxyUrl, // 完整目标 URL（用于调试）
+          headerKeys: Array.from(processedHeaders.keys()),
+          headerCount: Array.from(processedHeaders.keys()).length,
+          invalidHeaders: Array.from(processedHeaders.entries())
+            .filter(([_, v]) => v === undefined || v === null || v === "")
+            .map(([k]) => k),
 
           // 请求上下文
           method: session.method,
@@ -1459,7 +1495,7 @@ export class ProxyForwarder {
     }
 
     const headerProcessor = HeaderProcessor.createForProxy({
-      blacklist: ["content-length"], // 删除原始 Content-Length，让 fetch 自动计算（转换请求后长度变化）
+      blacklist: ["content-length", "connection"], // 删除 content-length（动态计算）和 connection（undici 自动管理）
       overrides,
     });
 
@@ -1500,12 +1536,15 @@ export class ProxyForwarder {
     }
 
     // 使用 undici.request 获取未自动解压的响应
+    // ⭐ 显式配置超时：确保使用非 undici 原生 dispatcher（如 SocksProxyAgent）时也能正确应用超时
     const undiciRes = await undiciRequest(url, {
       method: init.method as string,
       headers: headersObj,
       body: init.body as string | Buffer | undefined,
-      signal: init.signal as AbortSignal | undefined,
+      signal: init.signal,
       dispatcher: init.dispatcher,
+      bodyTimeout: UNDICI_REQUEST_TIMEOUT_MS,
+      headersTimeout: UNDICI_REQUEST_TIMEOUT_MS,
     });
 
     // ⭐ 立即为 undici body 添加错误处理，防止 uncaughtException

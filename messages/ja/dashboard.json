@@ -479,6 +479,26 @@
     "badge": "{count} 個のキー",
     "activeKeys": "アクティブキー",
     "totalKeys": "総キー数",
+    "expiresAt": "有効期限",
+    "status": {
+      "active": "有効",
+      "expiringSoon": "まもなく期限切れ",
+      "expired": "期限切れ",
+      "disabled": "無効"
+    },
+    "actions": {
+      "renew": "更新",
+      "renew30d": "30日間更新",
+      "renew90d": "90日間更新",
+      "renew1y": "1年間更新",
+      "renewCustom": "カスタム...",
+      "customPrompt": "新しい有効期限を入力してください（YYYY-MM-DD）。キャンセルするには空のままにしてください。",
+      "invalidDate": "有効な日付を入力してください",
+      "enable": "有効化",
+      "disable": "無効化",
+      "success": "操作に成功しました",
+      "failed": "操作に失敗しました。後でもう一度お試しください"
+    },
     "emptyState": {
       "title": "ユーザーがいません",
       "description": "まだユーザーを作成していません。ユーザーは API キーと使用制限を管理するための基本単位です。最初のユーザーを作成して始めましょう！",

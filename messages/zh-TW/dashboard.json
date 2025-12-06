@@ -480,6 +480,26 @@
     "badge": "{count} 個金鑰",
     "activeKeys": "活躍金鑰",
     "totalKeys": "總金鑰數",
+    "expiresAt": "過期時間",
+    "status": {
+      "active": "已啟用",
+      "expiringSoon": "即將過期",
+      "expired": "已過期",
+      "disabled": "已停用"
+    },
+    "actions": {
+      "renew": "續期",
+      "renew30d": "續期 30 天",
+      "renew90d": "續期 90 天",
+      "renew1y": "續期 1 年",
+      "renewCustom": "自訂...",
+      "customPrompt": "請輸入新的過期日期（YYYY-MM-DD），取消請留空",
+      "invalidDate": "請輸入有效日期",
+      "enable": "啟用",
+      "disable": "停用",
+      "success": "操作成功",
+      "failed": "操作失敗，請稍後再試"
+    },
     "emptyState": {
       "title": "暫無使用者",
       "description": "您還沒有建立任何使用者。使用者是管理 API 金鑰和使用限額的基礎單位，建立第一個使用者開始使用吧！",
