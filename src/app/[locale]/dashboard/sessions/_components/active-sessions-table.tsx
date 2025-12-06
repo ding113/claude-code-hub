@@ -67,18 +67,27 @@ export function ActiveSessionsTable({
   const [isBatchTerminating, setIsBatchTerminating] = useState(false);
   const [selectedSessionIds, setSelectedSessionIds] = useState<string[]>([]);
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
+  const [terminatingSessionIds, setTerminatingSessionIds] = useState<Set<string>>(new Set());
   const showSelection = !inactive && isMultiSelectMode;
 
   // 使用 Set 优化成员检查性能
   const selectedIdsSet = useMemo(() => new Set(selectedSessionIds), [selectedSessionIds]);
 
   // 按开始时间降序排序（最新的在前）
-  const sortedSessions = useMemo(() => [...sessions].sort((a, b) => b.startTime - a.startTime), [sessions]);
+  const sortedSessions = useMemo(
+    () => [...sessions].sort((a, b) => b.startTime - a.startTime),
+    [sessions]
+  );
 
-  // 确保选中项始终存在于当前列表
+  // 确保选中项始终存在于当前列表（排除正在终止的会话）
   useEffect(() => {
-    setSelectedSessionIds((prev) => prev.filter((id) => sessions.some((session) => session.sessionId === id)));
-  }, [sessions]);
+    setSelectedSessionIds((prev) =>
+      prev.filter(
+        (id) =>
+          terminatingSessionIds.has(id) || sessions.some((session) => session.sessionId === id)
+      )
+    );
+  }, [sessions, terminatingSessionIds]);
 
   const toggleSelection = (sessionId: string, checked: boolean) => {
     setSelectedSessionIds((prev) => {
@@ -121,6 +130,8 @@ export function ActiveSessionsTable({
       return;
     }
 
+    // 标记正在终止的会话
+    setTerminatingSessionIds(new Set(selectedSessionIds));
     setIsBatchTerminating(true);
     try {
       const result = await terminateActiveSessionsBatch(selectedSessionIds);
@@ -152,7 +163,9 @@ export function ActiveSessionsTable({
       }
 
       if (summary.allowedFailedCount > 0) {
-        toast.warning(t("actions.batchTerminateAllowedFailed", { count: summary.allowedFailedCount }));
+        toast.warning(
+          t("actions.batchTerminateAllowedFailed", { count: summary.allowedFailedCount })
+        );
       }
 
       setSelectedSessionIds([]);
@@ -160,6 +173,7 @@ export function ActiveSessionsTable({
       toast.error(t("actions.terminateFailed"));
     } finally {
       setIsBatchTerminating(false);
+      setTerminatingSessionIds(new Set());
     }
   };
 
@@ -176,7 +190,10 @@ export function ActiveSessionsTable({
   };
 
   const totalColumns = showSelection ? 12 : 11;
-  const allSelected = showSelection && selectedSessionIds.length > 0 && selectedSessionIds.length === sortedSessions.length;
+  const allSelected =
+    showSelection &&
+    selectedSessionIds.length > 0 &&
+    selectedSessionIds.length === sortedSessions.length;
 
   return (
     <div className="space-y-4">
@@ -190,7 +207,9 @@ export function ActiveSessionsTable({
         </div>
         <div className="flex items-center gap-3">
           {isLoading && (
-            <div className="text-sm text-muted-foreground animate-pulse">{t("table.refreshing")}</div>
+            <div className="text-sm text-muted-foreground animate-pulse">
+              {t("table.refreshing")}
+            </div>
           )}
 
           {/* 多选模式控制 */}
@@ -209,11 +228,7 @@ export function ActiveSessionsTable({
                   >
                     {isBatchTerminating ? t("actions.terminating") : t("actions.terminateSelected")}
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={toggleMultiSelectMode}
-                  >
+                  <Button size="sm" variant="outline" onClick={toggleMultiSelectMode}>
                     {t("actions.cancelMultiSelect")}
                   </Button>
                 </>
@@ -279,7 +294,9 @@ export function ActiveSessionsTable({
                       <Checkbox
                         aria-label={t("actions.selectSessionLabel")}
                         checked={selectedIdsSet.has(session.sessionId)}
-                        onCheckedChange={(checked) => toggleSelection(session.sessionId, Boolean(checked))}
+                        onCheckedChange={(checked) =>
+                          toggleSelection(session.sessionId, Boolean(checked))
+                        }
                         disabled={isBatchTerminating}
                       />
                     </TableCell>
@@ -370,7 +387,9 @@ export function ActiveSessionsTable({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isTerminatingSingle}>{t("actions.cancel")}</AlertDialogCancel>
+            <AlertDialogCancel disabled={isTerminatingSingle}>
+              {t("actions.cancel")}
+            </AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => sessionToTerminate && handleTerminateSession(sessionToTerminate)}

@@ -605,12 +605,8 @@ export async function terminateActiveSessionsBatch(
     const { aggregateMultipleSessionStats } = await import("@/repository/message");
     const sessionsData = await aggregateMultipleSessionStats(uniqueSessionIds);
 
-    const {
-      uniqueRequestedIds,
-      allowedSessionIds,
-      unauthorizedSessionIds,
-      missingSessionIds,
-    } = summarizeTerminateSessionsBatch(uniqueSessionIds, sessionsData, currentUserId, isAdmin);
+    const { uniqueRequestedIds, allowedSessionIds, unauthorizedSessionIds, missingSessionIds } =
+      summarizeTerminateSessionsBatch(uniqueSessionIds, sessionsData, currentUserId, isAdmin);
 
     const unauthorizedCount = unauthorizedSessionIds.length;
     const missingCount = missingSessionIds.length;
@@ -620,6 +616,19 @@ export async function terminateActiveSessionsBatch(
     ): BatchTerminationActionResult => {
       const successCountValue = params.successCount ?? 0;
       const processedCountValue = params.processedCount ?? 0;
+
+      // 输入验证：确保参数为有效数字
+      if (!Number.isFinite(successCountValue) || successCountValue < 0) {
+        logger.error("Invalid successCount in buildResult", { successCount: successCountValue });
+        throw new Error("Invalid successCount: must be a non-negative finite number");
+      }
+      if (!Number.isFinite(processedCountValue) || processedCountValue < 0) {
+        logger.error("Invalid processedCount in buildResult", {
+          processedCount: processedCountValue,
+        });
+        throw new Error("Invalid processedCount: must be a non-negative finite number");
+      }
+
       const allowedFailedCount = Math.max(processedCountValue - successCountValue, 0);
 
       return {

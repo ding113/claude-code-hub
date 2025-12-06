@@ -1230,13 +1230,27 @@ export class SessionManager {
 
     try {
       // 1. 先查询绑定信息（用于从 ZSET 中移除）
-      const [providerIdStr, keyIdStr] = await Promise.all([
-        redis.get(`session:${sessionId}:provider`),
-        redis.get(`session:${sessionId}:key`),
-      ]);
+      let providerId: number | null = null;
+      let keyId: number | null = null;
 
-      const providerId = providerIdStr ? parseInt(providerIdStr, 10) : null;
-      const keyId = keyIdStr ? parseInt(keyIdStr, 10) : null;
+      try {
+        const [providerIdStr, keyIdStr] = await Promise.all([
+          redis.get(`session:${sessionId}:provider`),
+          redis.get(`session:${sessionId}:key`),
+        ]);
+
+        providerId = providerIdStr ? parseInt(providerIdStr, 10) : null;
+        keyId = keyIdStr ? parseInt(keyIdStr, 10) : null;
+      } catch (lookupError) {
+        // Redis 查询失败不应阻止清理操作，继续执行删除
+        logger.warn(
+          "SessionManager: Failed to lookup session binding info, continuing with cleanup",
+          {
+            sessionId,
+            error: lookupError,
+          }
+        );
+      }
 
       // 2. 删除所有 Session 相关的 key
       const pipeline = redis.pipeline();
@@ -1252,7 +1266,7 @@ export class SessionManager {
       pipeline.del(`session:${sessionId}:messages`);
       pipeline.del(`session:${sessionId}:response`);
 
-      // 3. 从 ZSET 中移除
+      // 3. 从 ZSET 中移除（始终尝试，即使查询失败）
       pipeline.zrem("global:active_sessions", sessionId);
 
       if (providerId) {

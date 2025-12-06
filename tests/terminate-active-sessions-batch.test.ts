@@ -1,12 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import {
-  summarizeTerminateSessionsBatch,
   type AggregateSessionStatsEntry,
+  summarizeTerminateSessionsBatch,
 } from "@/actions/active-sessions-utils";
 
 let sessionIndex = 0;
 
-function buildSessionEntry(overrides: Partial<AggregateSessionStatsEntry>): AggregateSessionStatsEntry {
+function buildSessionEntry(
+  overrides: Partial<AggregateSessionStatsEntry>
+): AggregateSessionStatsEntry {
   const sessionId = overrides.sessionId ?? `session-${sessionIndex++}`;
   return {
     sessionId,
