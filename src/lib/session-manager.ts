@@ -1296,6 +1296,8 @@ export class SessionManager {
   /**
    * 批量终止 Session
    *
+   * 采用分块处理策略，避免大批量操作时对 Redis 造成过大压力
+   *
    * @param sessionIds - Session ID 列表
    * @returns 成功终止的数量
    */
@@ -1311,14 +1313,20 @@ export class SessionManager {
     }
 
     try {
-      const results = await Promise.all(
-        sessionIds.map(async (sessionId) => {
-          const success = await SessionManager.terminateSession(sessionId);
-          return success ? 1 : 0;
-        })
-      );
+      // 分块处理，每批 20 个，避免并发过高
+      const CHUNK_SIZE = 20;
+      let successCount = 0;
 
-      const successCount = results.reduce<number>((sum, value) => sum + value, 0);
+      for (let i = 0; i < sessionIds.length; i += CHUNK_SIZE) {
+        const chunk = sessionIds.slice(i, i + CHUNK_SIZE);
+        const results = await Promise.all(
+          chunk.map(async (sessionId) => {
+            const success = await SessionManager.terminateSession(sessionId);
+            return success ? 1 : 0;
+          })
+        );
+        successCount += results.reduce<number>((sum, value) => sum + value, 0);
+      }
 
       logger.info("SessionManager: Terminated sessions batch", {
         total: sessionIds.length,

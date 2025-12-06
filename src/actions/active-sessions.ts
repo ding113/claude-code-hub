@@ -597,12 +597,16 @@ export async function terminateActiveSessionsBatch(
     const successCount = await SessionManager.terminateSessionsBatch(allowedSessionIds);
 
     // 4. 清除缓存
-    const { clearActiveSessionsCache, clearAllSessionsCache } = await import(
-      "@/lib/cache/session-cache"
-    );
+    const { clearActiveSessionsCache, clearAllSessionsCache, clearSessionDetailsCache } =
+      await import("@/lib/cache/session-cache");
 
     clearActiveSessionsCache();
     clearAllSessionsCache();
+
+    // 清除每个终止 Session 的详情缓存
+    for (const sid of allowedSessionIds) {
+      clearSessionDetailsCache(sid);
+    }
 
     logger.info("Sessions terminated in batch", {
       total: sessionIds.length,

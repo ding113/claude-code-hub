@@ -157,12 +157,11 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
     setCustomRenewDialog({ open: false, user: null });
   };
 
-  const now = Date.now();
-
   // Transform user data to list items
   const listItems: Array<{ user: UserDisplay; item: ListItemData }> = useMemo(
-    () =>
-      users.map((user) => {
+    () => {
+      const now = Date.now();
+      return users.map((user) => {
         const statusInfo = getStatusInfo(user, now);
         const activeKeys = user.keys.filter((k) => k.status === "enabled").length;
         return {
@@ -192,9 +191,10 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
             ],
           },
         };
-      }),
+      });
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [users, now, t, formatExpiry, getStatusInfo]
+    [users, t, formatExpiry, getStatusInfo]
   );
 
   // 特别设计的空状态 - 仅管理员可见
