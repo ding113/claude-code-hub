@@ -341,6 +341,7 @@
       "selectSessionLabel": "Выбрать сессию",
       "batchTerminateSuccess": "Прервано {count} сессий",
       "batchTerminatePartial": "Без прав: {unauthorized} · Отсутствуют: {missing}",
+      "batchTerminateAllowedFailed": "Не удалось прервать {count} разрешённых сессий",
       "batchTerminateNone": "Не удалось прервать ни одной сессии",
       "noSelection": "Выберите хотя бы одну сессию"
     },

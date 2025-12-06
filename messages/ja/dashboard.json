@@ -341,6 +341,7 @@
       "selectSessionLabel": "セッションを選択",
       "batchTerminateSuccess": "{count} 件のセッションを終了しました",
       "batchTerminatePartial": "未許可 {unauthorized} 件 · 見つからない {missing} 件",
+      "batchTerminateAllowedFailed": "許可済みだが終了失敗 {count} 件",
       "batchTerminateNone": "終了できたセッションはありません",
       "noSelection": "少なくとも1つのセッションを選択してください"
     },

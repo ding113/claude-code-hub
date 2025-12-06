@@ -342,6 +342,7 @@
       "selectSessionLabel": "选择会话",
       "batchTerminateSuccess": "已终止 {count} 个 Session",
       "batchTerminatePartial": "无权限 {unauthorized} 个 · 未找到 {missing} 个",
+      "batchTerminateAllowedFailed": "有权限但终止失败 {count} 个",
       "batchTerminateNone": "没有任何 Session 被终止",
       "noSelection": "请至少选择一个 Session"
     },

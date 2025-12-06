@@ -342,6 +342,7 @@
       "selectSessionLabel": "選擇會話",
       "batchTerminateSuccess": "已終止 {count} 個會話",
       "batchTerminatePartial": "無權限 {unauthorized} 個 · 未找到 {missing} 個",
+      "batchTerminateAllowedFailed": "有權限但終止失敗 {count} 個",
       "batchTerminateNone": "沒有任何會話被終止",
       "noSelection": "請至少選擇一個會話"
     },

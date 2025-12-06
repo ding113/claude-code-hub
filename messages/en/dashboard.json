@@ -342,6 +342,7 @@
       "selectSessionLabel": "Select session",
       "batchTerminateSuccess": "Terminated {count} session(s)",
       "batchTerminatePartial": "Unauthorized: {unauthorized} · Missing: {missing}",
+      "batchTerminateAllowedFailed": "Failed to terminate {count} authorized session(s)",
       "batchTerminateNone": "No sessions were terminated",
       "noSelection": "Please select at least one session"
     },

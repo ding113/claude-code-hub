@@ -1,5 +1,5 @@
 export type AggregateSessionStatsResult = Awaited<
-  ReturnType<typeof import("@/repository/message")>["aggregateMultipleSessionStats"]
+  ReturnType<typeof import("@/repository/message")["aggregateMultipleSessionStats"]>
 >;
 
 export type AggregateSessionStatsEntry = AggregateSessionStatsResult[number];

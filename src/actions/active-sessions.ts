@@ -557,10 +557,13 @@ export async function terminateActiveSession(sessionId: string): Promise<ActionR
 type BatchTerminationActionResult = {
   successCount: number;
   failedCount: number;
+  allowedFailedCount: number;
   unauthorizedCount: number;
   missingCount: number;
   requestedCount: number;
   processedCount: number;
+  unauthorizedSessionIds: string[];
+  missingSessionIds: string[];
 };
 
 export async function terminateActiveSessionsBatch(
@@ -587,8 +590,11 @@ export async function terminateActiveSessionsBatch(
         data: {
           successCount: 0,
           failedCount: 0,
+          allowedFailedCount: 0,
           unauthorizedCount: 0,
           missingCount: 0,
+          unauthorizedSessionIds: [],
+          missingSessionIds: [],
           requestedCount: 0,
           processedCount: 0,
         },
@@ -619,8 +625,11 @@ export async function terminateActiveSessionsBatch(
       return {
         successCount: successCountValue,
         failedCount: allowedFailedCount + unauthorizedCount + missingCount,
+        allowedFailedCount,
         unauthorizedCount,
         missingCount,
+        unauthorizedSessionIds,
+        missingSessionIds,
         requestedCount: uniqueRequestedIds.length,
         processedCount: processedCountValue,
       };
@@ -675,7 +684,7 @@ export async function terminateActiveSessionsBatch(
 
     return {
       ok: true,
-      data: buildResult({ successCount, failedCount, processedCount }),
+      data: buildResult({ successCount, processedCount }),
     };
   } catch (error) {
     logger.error("Failed to terminate active sessions batch:", error);

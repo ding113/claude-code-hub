@@ -68,6 +68,9 @@ export function ActiveSessionsTable({
   const [selectedSessionIds, setSelectedSessionIds] = useState<string[]>([]);
   const showSelection = !inactive;
 
+  // 使用 Set 优化成员检查性能
+  const selectedIdsSet = useMemo(() => new Set(selectedSessionIds), [selectedSessionIds]);
+
   // 按开始时间降序排序（最新的在前）
   const sortedSessions = useMemo(() => [...sessions].sort((a, b) => b.startTime - a.startTime), [sessions]);
 
@@ -79,10 +82,7 @@ export function ActiveSessionsTable({
   const toggleSelection = (sessionId: string, checked: boolean) => {
     setSelectedSessionIds((prev) => {
       if (checked) {
-        if (prev.includes(sessionId)) {
-          return prev;
-        }
-        return [...prev, sessionId];
+        return selectedIdsSet.has(sessionId) ? prev : [...prev, sessionId];
       }
       return prev.filter((id) => id !== sessionId);
     });
@@ -148,6 +148,10 @@ export function ActiveSessionsTable({
             missing: summary.missingCount,
           })
         );
+      }
+
+      if (summary.allowedFailedCount > 0) {
+        toast.warning(t("actions.batchTerminateAllowedFailed", { count: summary.allowedFailedCount }));
       }
 
       setSelectedSessionIds([]);
@@ -239,7 +243,7 @@ export function ActiveSessionsTable({
                     <TableCell>
                       <Checkbox
                         aria-label={t("actions.selectSessionLabel")}
-                        checked={selectedSessionIds.includes(session.sessionId)}
+                        checked={selectedIdsSet.has(session.sessionId)}
                         onCheckedChange={(checked) => toggleSelection(session.sessionId, Boolean(checked))}
                         disabled={isBatchTerminating}
                       />
