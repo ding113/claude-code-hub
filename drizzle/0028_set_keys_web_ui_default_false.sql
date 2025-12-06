@@ -1,1 +1,0 @@
-ALTER TABLE keys ALTER COLUMN can_login_web_ui SET DEFAULT false;
