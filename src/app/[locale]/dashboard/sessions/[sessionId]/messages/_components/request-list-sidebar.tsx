@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  AlertCircle,
-  CheckCircle,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  Loader2,
-} from "lucide-react";
+import { AlertCircle, CheckCircle, ChevronLeft, ChevronRight, Clock, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { getSessionRequests } from "@/actions/active-sessions";
@@ -72,14 +65,12 @@ export function RequestListSidebar({
           setError(result.error || t("requestList.fetchFailed"));
         }
       } catch (err) {
-        setError(
-          err instanceof Error ? err.message : t("requestList.unknownError"),
-        );
+        setError(err instanceof Error ? err.message : t("requestList.unknownError"));
       } finally {
         setIsLoading(false);
       }
     },
-    [sessionId, t],
+    [sessionId, t]
   );
 
   useEffect(() => {
@@ -168,9 +159,7 @@ export function RequestListSidebar({
               </div>
             ))
           ) : error ? (
-            <div className="p-4 text-center text-sm text-destructive">
-              {error}
-            </div>
+            <div className="p-4 text-center text-sm text-destructive">{error}</div>
           ) : requests.length === 0 ? (
             <div className="p-4 text-center text-sm text-muted-foreground">
               {t("requestList.noRequests")}
@@ -183,17 +172,14 @@ export function RequestListSidebar({
                 className={cn(
                   "w-full p-2 rounded-md text-left transition-colors",
                   "hover:bg-accent hover:text-accent-foreground",
-                  selectedSeq === request.sequence &&
-                    "bg-accent text-accent-foreground",
+                  selectedSeq === request.sequence && "bg-accent text-accent-foreground"
                 )}
                 onClick={() => onSelect(request.sequence)}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     {getStatusIcon(request.statusCode)}
-                    <span className="text-sm font-medium">
-                      #{request.sequence}
-                    </span>
+                    <span className="text-sm font-medium">#{request.sequence}</span>
                   </div>
                   <div className="flex items-center gap-1 text-xs text-muted-foreground">
                     <Clock className="h-3 w-3" />
@@ -211,7 +197,7 @@ export function RequestListSidebar({
                         "text-[10px] px-1 py-0",
                         request.statusCode >= 200 && request.statusCode < 300
                           ? "border-green-300 text-green-700 dark:border-green-700 dark:text-green-400"
-                          : "border-red-300 text-red-700 dark:border-red-700 dark:text-red-400",
+                          : "border-red-300 text-red-700 dark:border-red-700 dark:text-red-400"
                       )}
                     >
                       {request.statusCode}
