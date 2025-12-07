@@ -162,8 +162,8 @@ export class ProxySession {
   setProvider(provider: Provider | null): void {
     this.provider = provider;
     if (provider) {
-    this.providerType = provider.providerType as ProviderType;
-  }
+      this.providerType = provider.providerType as ProviderType;
+    }
   }
 
   setCacheTtlResolved(ttl: CacheTtlResolved | null): void {

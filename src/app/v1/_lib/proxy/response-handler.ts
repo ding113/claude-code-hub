@@ -1215,10 +1215,7 @@ function extractUsageMetrics(value: unknown): UsageMetrics | null {
     }
   }
 
-  if (
-    result.cache_creation_input_tokens === undefined &&
-    cacheCreationDetailedTotal > 0
-  ) {
+  if (result.cache_creation_input_tokens === undefined && cacheCreationDetailedTotal > 0) {
     result.cache_creation_input_tokens = cacheCreationDetailedTotal;
   }
 
@@ -1558,8 +1555,7 @@ async function finalizeRequestStats(
     usageMetrics.cache_creation_1h_input_tokens ??
     (resolvedCacheTtl === "1h" ? usageMetrics.cache_creation_input_tokens : undefined);
   const cacheTotal =
-    usageMetrics.cache_creation_input_tokens ??
-    ((cache5m ?? 0) + (cache1h ?? 0) || undefined);
+    usageMetrics.cache_creation_input_tokens ?? ((cache5m ?? 0) + (cache1h ?? 0) || undefined);
 
   const normalizedUsage: UsageMetrics = {
     ...usageMetrics,
@@ -1586,7 +1582,11 @@ async function finalizeRequestStats(
     if (session.request.model) {
       const priceData = await findLatestPriceByModel(session.request.model);
       if (priceData?.priceData) {
-        const cost = calculateRequestCost(normalizedUsage, priceData.priceData, provider.costMultiplier);
+        const cost = calculateRequestCost(
+          normalizedUsage,
+          priceData.priceData,
+          provider.costMultiplier
+        );
         if (cost.gt(0)) {
           costUsdStr = cost.toString();
         }

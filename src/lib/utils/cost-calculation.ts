@@ -62,9 +62,7 @@ export function calculateRequestCost(
 
   if (typeof usage.cache_creation_input_tokens === "number") {
     const remaining =
-      usage.cache_creation_input_tokens -
-      (cache5mTokens ?? 0) -
-      (cache1hTokens ?? 0);
+      usage.cache_creation_input_tokens - (cache5mTokens ?? 0) - (cache1hTokens ?? 0);
 
     if (remaining > 0) {
       const target = usage.cache_ttl === "1h" ? "1h" : "5m";

@@ -175,7 +175,9 @@ export function AddKeyForm({ userId, user, onSuccess }: AddKeyFormProps) {
         <Label>Cache TTL 覆写</Label>
         <Select
           value={form.values.cacheTtlPreference}
-          onValueChange={(val) => form.setValue("cacheTtlPreference", val as "inherit" | "5m" | "1h")}
+          onValueChange={(val) =>
+            form.setValue("cacheTtlPreference", val as "inherit" | "5m" | "1h")
+          }
         >
           <SelectTrigger>
             <SelectValue placeholder="inherit" />
