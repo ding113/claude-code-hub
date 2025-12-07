@@ -5,6 +5,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { renewUser, toggleUserEnabled } from "@/actions/users";
+import { DatePickerField } from "@/components/form/date-picker-field";
 import { FormErrorBoundary } from "@/components/form-error-boundary";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,7 +23,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ListContainer, ListItem, type ListItemData } from "@/components/ui/list";
 import { Switch } from "@/components/ui/switch";
@@ -91,7 +91,9 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
   const formatExpiry = useCallback(
     (expiresAt: Date | null | undefined) => {
       if (!expiresAt) return tUsers("neverExpires");
-      const relative = formatDateDistance(expiresAt, new Date(), locale, { addSuffix: true });
+      const relative = formatDateDistance(expiresAt, new Date(), locale, {
+        addSuffix: true,
+      });
       const absolute = formatDate(expiresAt, "yyyy-MM-dd", locale);
       return `${relative} · ${absolute}`;
     },
@@ -345,16 +347,13 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="custom-date">{t("actions.expirationDate")}</Label>
-              <Input
-                id="custom-date"
-                type="date"
-                value={customDate}
-                onChange={(e) => setCustomDate(e.target.value)}
-                min={new Date().toISOString().split("T")[0]}
-              />
-            </div>
+            <DatePickerField
+              id="custom-date"
+              label={t("actions.expirationDate")}
+              value={customDate}
+              onChange={setCustomDate}
+              minDate={new Date()}
+            />
             {customRenewDialog.user && !customRenewDialog.user.isEnabled && (
               <div className="flex items-center space-x-2">
                 <Switch

@@ -5,6 +5,7 @@ import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { getAvailableProviderGroups } from "@/actions/providers";
 import { addUser, editUser } from "@/actions/users";
+import { DatePickerField } from "@/components/form/date-picker-field";
 import { ArrayTagInputField, TagInputField, TextField } from "@/components/form/form-field";
 import { DialogFormLayout, FormGrid } from "@/components/form/form-layout";
 import { Switch } from "@/components/ui/switch";
@@ -311,12 +312,14 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
             />
           </div>
 
-          <TextField
+          <DatePickerField
             label={tForm("expiresAt.label")}
-            type="date"
             placeholder={tForm("expiresAt.placeholder")}
             description={tForm("expiresAt.description")}
-            {...form.getFieldProps("expiresAt")}
+            value={String(form.values.expiresAt || "")}
+            onChange={(val) => form.setValue("expiresAt", val)}
+            error={form.getFieldProps("expiresAt").error}
+            touched={form.getFieldProps("expiresAt").touched}
           />
         </>
       )}

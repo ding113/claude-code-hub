@@ -5,7 +5,8 @@ import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { addKey } from "@/actions/keys";
 import { getAvailableProviderGroups } from "@/actions/providers";
-import { DateField, NumberField, TagInputField, TextField } from "@/components/form/form-field";
+import { DatePickerField } from "@/components/form/date-picker-field";
+import { NumberField, TagInputField, TextField } from "@/components/form/form-field";
 import { DialogFormLayout, FormGrid } from "@/components/form/form-layout";
 import { Label } from "@/components/ui/label";
 import {
@@ -90,7 +91,10 @@ export function AddKeyForm({ userId, user, onSuccess }: AddKeyFormProps) {
         }
 
         startTransition(() => {
-          onSuccess?.({ generatedKey: payload.generatedKey, name: payload.name });
+          onSuccess?.({
+            generatedKey: payload.generatedKey,
+            name: payload.name,
+          });
           router.refresh();
         });
       } catch (err) {
@@ -124,11 +128,14 @@ export function AddKeyForm({ userId, user, onSuccess }: AddKeyFormProps) {
         {...form.getFieldProps("name")}
       />
 
-      <DateField
+      <DatePickerField
         label={t("expiresAt.label")}
         placeholder={t("expiresAt.placeholder")}
         description={t("expiresAt.description")}
-        {...form.getFieldProps("expiresAt")}
+        value={String(form.values.expiresAt || "")}
+        onChange={(val) => form.setValue("expiresAt", val)}
+        error={form.getFieldProps("expiresAt").error}
+        touched={form.getFieldProps("expiresAt").touched}
       />
 
       <div className="flex items-start justify-between gap-4 rounded-lg border border-dashed border-border px-4 py-3">
@@ -151,7 +158,9 @@ export function AddKeyForm({ userId, user, onSuccess }: AddKeyFormProps) {
         placeholder={t("providerGroup.placeholder")}
         description={
           user?.providerGroup
-            ? t("providerGroup.descriptionWithUserGroup", { group: user.providerGroup })
+            ? t("providerGroup.descriptionWithUserGroup", {
+                group: user.providerGroup,
+              })
             : t("providerGroup.description")
         }
         suggestions={providerGroupSuggestions}
@@ -199,7 +208,9 @@ export function AddKeyForm({ userId, user, onSuccess }: AddKeyFormProps) {
           placeholder={t("limit5hUsd.placeholder")}
           description={
             user?.limit5hUsd
-              ? t("limit5hUsd.descriptionWithUserLimit", { limit: user.limit5hUsd })
+              ? t("limit5hUsd.descriptionWithUserLimit", {
+                  limit: user.limit5hUsd,
+                })
               : t("limit5hUsd.description")
           }
           min={0}
@@ -258,7 +269,9 @@ export function AddKeyForm({ userId, user, onSuccess }: AddKeyFormProps) {
           placeholder={t("limitWeeklyUsd.placeholder")}
           description={
             user?.limitWeeklyUsd
-              ? t("limitWeeklyUsd.descriptionWithUserLimit", { limit: user.limitWeeklyUsd })
+              ? t("limitWeeklyUsd.descriptionWithUserLimit", {
+                  limit: user.limitWeeklyUsd,
+                })
               : t("limitWeeklyUsd.description")
           }
           min={0}
@@ -271,7 +284,9 @@ export function AddKeyForm({ userId, user, onSuccess }: AddKeyFormProps) {
           placeholder={t("limitMonthlyUsd.placeholder")}
           description={
             user?.limitMonthlyUsd
-              ? t("limitMonthlyUsd.descriptionWithUserLimit", { limit: user.limitMonthlyUsd })
+              ? t("limitMonthlyUsd.descriptionWithUserLimit", {
+                  limit: user.limitMonthlyUsd,
+                })
               : t("limitMonthlyUsd.description")
           }
           min={0}
@@ -284,7 +299,9 @@ export function AddKeyForm({ userId, user, onSuccess }: AddKeyFormProps) {
           placeholder={t("limitTotalUsd.placeholder")}
           description={
             user?.limitTotalUsd
-              ? t("limitTotalUsd.descriptionWithUserLimit", { limit: user.limitTotalUsd })
+              ? t("limitTotalUsd.descriptionWithUserLimit", {
+                  limit: user.limitTotalUsd,
+                })
               : t("limitTotalUsd.description")
           }
           min={0}
