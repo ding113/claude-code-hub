@@ -21,7 +21,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useRouter } from "@/i18n/routing";
+import { usePathname, useRouter } from "@/i18n/routing";
 import { type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
 import { RequestListSidebar } from "./_components/request-list-sidebar";
 
@@ -45,6 +45,7 @@ export default function SessionMessagesPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
+  const pathname = usePathname();
   const sessionId = params.sessionId as string;
 
   // 从 URL 获取当前选中的请求序号
@@ -76,11 +77,11 @@ export default function SessionMessagesPage() {
   // 处理请求选择（更新 URL）
   const handleSelectRequest = useCallback(
     (seq: number) => {
-      const url = new URL(window.location.href);
-      url.searchParams.set("seq", seq.toString());
-      router.replace(url.pathname + url.search);
+      const params = new URLSearchParams(window.location.search);
+      params.set("seq", seq.toString());
+      router.replace(`${pathname}?${params.toString()}`);
     },
-    [router]
+    [router, pathname]
   );
 
   useEffect(() => {

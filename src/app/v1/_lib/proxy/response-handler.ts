@@ -101,11 +101,13 @@ export class ProxyResponseHandler {
 
             // 存储响应体到 Redis（5分钟过期）
             if (session.sessionId) {
-              void SessionManager.storeSessionResponse(session.sessionId, responseText).catch(
-                (err) => {
-                  logger.error("[ResponseHandler] Failed to store response:", err);
-                }
-              );
+              void SessionManager.storeSessionResponse(
+                session.sessionId,
+                responseText,
+                session.requestSequence
+              ).catch((err) => {
+                logger.error("[ResponseHandler] Failed to store response:", err);
+              });
             }
 
             // 使用共享的统计处理方法
@@ -287,7 +289,11 @@ export class ProxyResponseHandler {
 
         // 存储响应体到 Redis（5分钟过期）
         if (session.sessionId) {
-          void SessionManager.storeSessionResponse(session.sessionId, responseText).catch((err) => {
+          void SessionManager.storeSessionResponse(
+            session.sessionId,
+            responseText,
+            session.requestSequence
+          ).catch((err) => {
             logger.error("[ResponseHandler] Failed to store response:", err);
           });
         }
@@ -572,14 +578,16 @@ export class ProxyResponseHandler {
 
             // 存储响应体到 Redis（5分钟过期）
             if (session.sessionId) {
-              void SessionManager.storeSessionResponse(session.sessionId, allContent).catch(
-                (err) => {
-                  logger.error(
-                    "[ResponseHandler] Failed to store stream passthrough response:",
-                    err
-                  );
-                }
-              );
+              void SessionManager.storeSessionResponse(
+                session.sessionId,
+                allContent,
+                session.requestSequence
+              ).catch((err) => {
+                logger.error(
+                  "[ResponseHandler] Failed to store stream passthrough response:",
+                  err
+                );
+              });
             }
 
             // 使用共享的统计处理方法
@@ -800,7 +808,11 @@ export class ProxyResponseHandler {
       const finalizeStream = async (allContent: string): Promise<void> => {
         // 存储响应体到 Redis（5分钟过期）
         if (session.sessionId) {
-          void SessionManager.storeSessionResponse(session.sessionId, allContent).catch((err) => {
+          void SessionManager.storeSessionResponse(
+            session.sessionId,
+            allContent,
+            session.requestSequence
+          ).catch((err) => {
             logger.error("[ResponseHandler] Failed to store stream response:", err);
           });
         }
