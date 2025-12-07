@@ -4,6 +4,43 @@
 
 ---
 
+## [v0.3.26](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.26) - 2025-12-07
+
+### 新增
+
+- 新增个人使用页面 (my-usage)，用户可查看个人配额、使用日志和过期信息 (#282)
+- Session 内请求追踪功能，支持在 Session 详情页查看单个请求详情 (#289)
+- 批量终止活跃 Session 功能，管理员可在 Session 管理页批量终止 Session (#279) [@Silentely](https://github.com/Silentely)
+- 用户过期时间管理功能，支持设置用户账户过期日期 (#273) [@NightYuYyy](https://github.com/NightYuYyy)
+- Cache TTL 偏好设置，供应商和密钥管理支持配置缓存 TTL 偏好
+- 供应商分组功能，密钥可关联指定的供应商分组
+- 错误覆写支持多格式和异步规则检测 (#258) [@sususu98](https://github.com/sususu98)
+- 新增模型相关错误模式（输入/上下文限制等），增强错误识别和报告能力
+
+### 优化
+
+- 替换原生日期选择器为 shadcn/ui DatePickerField，提升日期选择体验
+- 个人使用页面筛选器与请求日志页面对齐，统一用户体验
+- 图表工具提示可见性改进，数据展示更清晰
+- 登录流程和权限管理增强，支持只读访问路径
+- Gemini 透传超时机制优化 + undici 超时配置 (#258) [@sususu98](https://github.com/sususu98)
+
+### 修复
+
+- 修复 CORS 预检请求返回 401 的问题 (#287) [@ylxmf2005](https://github.com/ylxmf2005)
+- 修复 Session 消息页面 URL locale 重复问题和响应体存储问题
+- 修复迁移索引创建缺少 IF NOT EXISTS 导致的重复创建错误
+- 修复用户 Schema 中 providerGroup 字段未设置 nullable 的问题
+- 修复代理转发器和供应商链格式化的错误处理
+- 修复日期筛选时区问题，使用毫秒时间戳确保准确性 (#274)
+
+### 其他
+
+- 更新 GitHub 工作流文件，改进 CI/CD 流程
+- 代码格式化更新
+
+---
+
 ## [v0.3.25](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.25) - 2025-12-05
 
 ### 修复
