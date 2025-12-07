@@ -355,6 +355,16 @@ const DEFAULT_ERROR_RULES = [
     isEnabled: true,
     priority: 90,
   },
+  // Tool use validation errors (non-retryable)
+  {
+    pattern: "`tool_use` ids must be unique|tool_use.*ids must be unique",
+    category: "validation_error",
+    description: "Duplicate tool_use IDs in request (client error)",
+    matchType: "regex" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 89,
+  },
   // Model-related errors (non-retryable)
   {
     pattern: '"actualModel" is null|actualModel.*null',
