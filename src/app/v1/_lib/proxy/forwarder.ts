@@ -15,6 +15,7 @@ import { PROVIDER_DEFAULTS, PROVIDER_LIMITS } from "@/lib/constants/provider.con
 import { logger } from "@/lib/logger";
 import { createProxyAgentForProvider } from "@/lib/proxy-agent";
 import { SessionManager } from "@/lib/session-manager";
+import type { CacheTtlPreference, CacheTtlResolved } from "@/types/cache";
 import { getDefaultInstructions } from "../codex/constants/codex-instructions";
 import { isOfficialCodexClient, sanitizeCodexRequest } from "../codex/utils/request-sanitizer";
 import { defaultRegistry } from "../converters";
@@ -23,7 +24,6 @@ import { GeminiAuth } from "../gemini/auth";
 import { GEMINI_PROTOCOL } from "../gemini/protocol";
 import { HeaderProcessor } from "../headers";
 import { buildProxyUrl } from "../url";
-import type { CacheTtlPreference, CacheTtlResolved } from "@/types/cache";
 import {
   categorizeErrorAsync,
   ErrorCategory,
