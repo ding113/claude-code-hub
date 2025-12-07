@@ -34,6 +34,7 @@ import {
   getProviderStatistics,
   updateProvider,
 } from "@/repository/provider";
+import type { CacheTtlPreference } from "@/types/cache";
 import type { ProviderDisplay, ProviderType } from "@/types/provider";
 import type { ActionResult } from "./types";
 
@@ -265,6 +266,7 @@ export async function addProvider(data: {
   limit_weekly_usd?: number | null;
   limit_monthly_usd?: number | null;
   limit_concurrent_sessions?: number | null;
+  cache_ttl_preference?: CacheTtlPreference | null;
   max_retry_attempts?: number | null;
   circuit_breaker_failure_threshold?: number;
   circuit_breaker_open_duration?: number;
@@ -1180,7 +1182,7 @@ function extractFirstTextSnippet(
   return undefined;
 }
 
-function clipText(value: unknown, maxLength?: number): string | undefined {
+function clipText(value: unknown, maxLength = 500): string | undefined {
   const limit = maxLength ?? API_TEST_CONFIG.MAX_RESPONSE_PREVIEW_LENGTH;
   return typeof value === "string" ? value.substring(0, limit) : undefined;
 }
@@ -1219,7 +1221,7 @@ function extractErrorMessage(errorJson: unknown): string | undefined {
 
     // 尝试从 upstream_error.error.message 提取
     const nestedMessage = normalizeErrorValue(
-      (upstreamErrorObj.error as { message?: unknown } | undefined)?.message
+      (upstreamErrorObj.error as Record<string, unknown> | undefined)?.message
     );
     if (nestedMessage) {
       return nestedMessage;

@@ -48,7 +48,7 @@ export async function validateKey(
       name: "ADMIN_TOKEN",
       key: keyString,
       isEnabled: true,
-      canLoginWebUi: true, // Admin Token 始终可以登录 Web UI
+      canLoginWebUi: true, // Admin Token
       providerGroup: null,
       limit5hUsd: null,
       limitDailyUsd: null,
@@ -57,6 +57,7 @@ export async function validateKey(
       limitWeeklyUsd: null,
       limitMonthlyUsd: null,
       limitConcurrentSessions: 0,
+      cacheTtlPreference: null,
       createdAt: now,
       updatedAt: now,
     };

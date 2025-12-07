@@ -145,6 +145,8 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
           totalOutputTokens: 0,
           totalCacheCreationTokens: 0,
           totalCacheReadTokens: 0,
+          totalCacheCreation5mTokens: 0,
+          totalCacheCreation1hTokens: 0,
         },
       };
     }
