@@ -5,6 +5,7 @@ import type { ProviderChainItem } from "@/types/message";
 import type { Provider, ProviderType } from "@/types/provider";
 import type { User } from "@/types/user";
 import type { ClientFormat } from "./format-mapper";
+import type { CacheTtlResolved } from "@/types/cache";
 
 export interface AuthState {
   user: User | null;
@@ -68,6 +69,9 @@ export class ProxySession {
 
   // 上次选择的决策上下文（用于记录到 providerChain）
   private _lastSelectionContext?: ProviderChainItem["decisionContext"];
+
+  // Cache TTL override (resolved)
+  private cacheTtlResolved: CacheTtlResolved | null = null;
 
   private constructor(init: {
     startTime: number;
@@ -158,8 +162,16 @@ export class ProxySession {
   setProvider(provider: Provider | null): void {
     this.provider = provider;
     if (provider) {
-      this.providerType = provider.providerType as ProviderType;
-    }
+    this.providerType = provider.providerType as ProviderType;
+  }
+  }
+
+  setCacheTtlResolved(ttl: CacheTtlResolved | null): void {
+    this.cacheTtlResolved = ttl;
+  }
+
+  getCacheTtlResolved(): CacheTtlResolved | null {
+    return this.cacheTtlResolved;
   }
 
   /**

@@ -27,6 +27,7 @@ interface EditKeyFormProps {
     expiresAt: string;
     canLoginWebUi?: boolean;
     providerGroup?: string | null;
+    cacheTtlPreference?: "inherit" | "5m" | "1h";
     limit5hUsd?: number | null;
     limitDailyUsd?: number | null;
     dailyResetMode?: "fixed" | "rolling";
@@ -68,6 +69,7 @@ export function EditKeyForm({ keyData, user, onSuccess }: EditKeyFormProps) {
       expiresAt: formatExpiresAt(keyData?.expiresAt || ""),
       canLoginWebUi: keyData?.canLoginWebUi ?? true,
       providerGroup: keyData?.providerGroup || "",
+      cacheTtlPreference: keyData?.cacheTtlPreference ?? "inherit",
       limit5hUsd: keyData?.limit5hUsd ?? null,
       limitDailyUsd: keyData?.limitDailyUsd ?? null,
       dailyResetMode: keyData?.dailyResetMode ?? "fixed",
@@ -89,6 +91,7 @@ export function EditKeyForm({ keyData, user, onSuccess }: EditKeyFormProps) {
             expiresAt: data.expiresAt || undefined,
             canLoginWebUi: data.canLoginWebUi,
             providerGroup: data.providerGroup || null,
+            cacheTtlPreference: data.cacheTtlPreference,
             limit5hUsd: data.limit5hUsd,
             limitDailyUsd: data.limitDailyUsd,
             dailyResetMode: data.dailyResetMode,
@@ -181,6 +184,26 @@ export function EditKeyForm({ keyData, user, onSuccess }: EditKeyFormProps) {
         error={form.getFieldProps("providerGroup").error}
         touched={form.getFieldProps("providerGroup").touched}
       />
+
+      <div className="space-y-2">
+        <Label>Cache TTL 覆写</Label>
+        <Select
+          value={form.values.cacheTtlPreference}
+          onValueChange={(val) => form.setValue("cacheTtlPreference", val as "inherit" | "5m" | "1h")}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="inherit" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="inherit">不覆写（跟随供应商/客户端）</SelectItem>
+            <SelectItem value="5m">5m</SelectItem>
+            <SelectItem value="1h">1h</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          强制为包含 cache_control 的请求设置 Anthropic prompt cache TTL。
+        </p>
+      </div>
 
       <FormGrid columns={2}>
         <NumberField

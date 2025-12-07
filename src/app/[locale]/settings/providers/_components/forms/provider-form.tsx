@@ -118,6 +118,9 @@ export function ProviderForm({
   const [joinClaudePool, setJoinClaudePool] = useState<boolean>(
     sourceProvider?.joinClaudePool ?? false
   );
+  const [cacheTtlPreference, setCacheTtlPreference] = useState<"inherit" | "5m" | "1h">(
+    sourceProvider?.cacheTtlPreference ?? "inherit"
+  );
 
   // 熔断器配置（以分钟为单位显示，提交时转换为毫秒）
   // 允许 undefined，用户可以清空输入框，提交时使用默认值
@@ -337,6 +340,7 @@ export function ProviderForm({
             limit_weekly_usd: limitWeeklyUsd,
             limit_monthly_usd: limitMonthlyUsd,
             limit_concurrent_sessions: limitConcurrentSessions,
+            cache_ttl_preference: cacheTtlPreference,
             max_retry_attempts: maxRetryAttempts,
             circuit_breaker_failure_threshold: failureThreshold ?? 5,
             circuit_breaker_open_duration: openDurationMinutes
@@ -395,6 +399,7 @@ export function ProviderForm({
             limit_weekly_usd: limitWeeklyUsd,
             limit_monthly_usd: limitMonthlyUsd,
             limit_concurrent_sessions: limitConcurrentSessions ?? 0,
+            cache_ttl_preference: cacheTtlPreference,
             max_retry_attempts: maxRetryAttempts,
             circuit_breaker_failure_threshold: failureThreshold ?? 5,
             circuit_breaker_open_duration: openDurationMinutes
@@ -851,6 +856,26 @@ export function ProviderForm({
                   />
                   <p className="text-xs text-muted-foreground">
                     {t("sections.routing.scheduleParams.group.desc")}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Cache TTL 覆写</Label>
+                  <Select
+                    value={cacheTtlPreference}
+                    onValueChange={(val) => setCacheTtlPreference(val as "inherit" | "5m" | "1h")}
+                    disabled={isPending}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="inherit" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="inherit">不覆写（跟随客户端）</SelectItem>
+                      <SelectItem value="5m">5m</SelectItem>
+                      <SelectItem value="1h">1h</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    强制设置 prompt cache TTL；仅影响包含 cache_control 的请求。
                   </p>
                 </div>
               </div>

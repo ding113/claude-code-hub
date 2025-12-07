@@ -84,6 +84,9 @@ export const keys = pgTable('keys', {
   // Provider group override (null = inherit from user)
   providerGroup: varchar('provider_group', { length: 50 }),
 
+  // Cache TTL override：null/NULL 表示遵循供应商或客户端请求
+  cacheTtlPreference: varchar('cache_ttl_preference', { length: 10 }),
+
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -202,6 +205,9 @@ export const providers = pgTable('providers', {
   websiteUrl: text('website_url'),
   faviconUrl: text('favicon_url'),
 
+  // Cache TTL override（null = 不覆写，沿用客户端请求）
+  cacheTtlPreference: varchar('cache_ttl_preference', { length: 10 }),
+
   // 废弃（保留向后兼容，但不再使用）
   tpm: integer('tpm').default(0),
   rpm: integer('rpm').default(0),
@@ -257,6 +263,9 @@ export const messageRequest = pgTable('message_request', {
   outputTokens: integer('output_tokens'),
   cacheCreationInputTokens: integer('cache_creation_input_tokens'),
   cacheReadInputTokens: integer('cache_read_input_tokens'),
+  cacheCreation5mInputTokens: integer('cache_creation_5m_input_tokens'),
+  cacheCreation1hInputTokens: integer('cache_creation_1h_input_tokens'),
+  cacheTtlApplied: varchar('cache_ttl_applied', { length: 10 }),
 
   // 错误信息
   errorMessage: text('error_message'),

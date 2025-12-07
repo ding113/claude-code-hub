@@ -23,6 +23,7 @@ import { GeminiAuth } from "../gemini/auth";
 import { GEMINI_PROTOCOL } from "../gemini/protocol";
 import { HeaderProcessor } from "../headers";
 import { buildProxyUrl } from "../url";
+import type { CacheTtlPreference, CacheTtlResolved } from "@/types/cache";
 import {
   categorizeErrorAsync,
   ErrorCategory,
@@ -45,6 +46,63 @@ const STANDARD_ENDPOINTS = [
 
 const RETRY_LIMITS = PROVIDER_LIMITS.MAX_RETRY_ATTEMPTS;
 const MAX_PROVIDER_SWITCHES = 20; // 保险栓：最多切换 20 次供应商（防止无限循环）
+
+type CacheTtlOption = CacheTtlPreference | null | undefined;
+
+function resolveCacheTtlPreference(
+  keyPref: CacheTtlOption,
+  providerPref: CacheTtlOption
+): CacheTtlResolved | null {
+  const normalize = (value: CacheTtlOption): CacheTtlResolved | null => {
+    if (!value || value === "inherit") return null;
+    return value;
+  };
+
+  return normalize(keyPref) ?? normalize(providerPref) ?? null;
+}
+
+function applyCacheTtlOverrideToMessage(
+  message: Record<string, unknown>,
+  ttl: CacheTtlResolved
+): boolean {
+  let applied = false;
+  const messages = (message as Record<string, unknown>).messages;
+
+  if (!Array.isArray(messages)) {
+    return applied;
+  }
+
+  for (const msg of messages) {
+    if (!msg || typeof msg !== "object") continue;
+    const msgObj = msg as Record<string, unknown>;
+    const content = msgObj.content;
+
+    if (!Array.isArray(content)) continue;
+
+    msgObj.content = content.map((item) => {
+      if (!item || typeof item !== "object") return item;
+      const itemObj = item as Record<string, unknown>;
+      const cacheControl = itemObj.cache_control;
+
+      if (cacheControl && typeof cacheControl === "object") {
+        const ccObj = cacheControl as Record<string, unknown>;
+        if (ccObj.type === "ephemeral") {
+          applied = true;
+          return {
+            ...itemObj,
+            cache_control: {
+              ...ccObj,
+              ttl: ttl === "1h" ? "1h" : "5m",
+            },
+          };
+        }
+      }
+      return item;
+    });
+  }
+
+  return applied;
+}
 
 function clampRetryAttempts(value: number): number {
   const numeric = Number(value);
@@ -637,6 +695,12 @@ export class ProxyForwarder {
       throw new Error("Provider is required");
     }
 
+    const resolvedCacheTtl = resolveCacheTtlPreference(
+      session.authState?.key?.cacheTtlPreference,
+      provider.cacheTtlPreference
+    );
+    session.setCacheTtlResolved(resolvedCacheTtl);
+
     // 应用模型重定向（如果配置了）
     const wasRedirected = ModelRedirector.apply(session, provider);
     if (wasRedirected) {
@@ -743,6 +807,20 @@ export class ProxyForwarder {
         }
       }
 
+      if (
+        resolvedCacheTtl &&
+        (provider.providerType === "claude" || provider.providerType === "claude-auth")
+      ) {
+        const applied = applyCacheTtlOverrideToMessage(session.request.message, resolvedCacheTtl);
+        if (applied) {
+          logger.info("ProxyForwarder: Applied cache TTL override to request", {
+            providerId: provider.id,
+            providerName: provider.name,
+            cacheTtl: resolvedCacheTtl,
+          });
+        }
+      }
+
       // Codex 请求清洗（即使格式相同也要执行，除非是官方客户端）
       if (toFormat === "codex") {
         const isOfficialClient = isOfficialCodexClient(session.userAgent);
@@ -800,6 +878,19 @@ export class ProxyForwarder {
               providerId: provider.id,
             });
           }
+        }
+      }
+
+      if (
+        resolvedCacheTtl &&
+        (provider.providerType === "claude" || provider.providerType === "claude-auth")
+      ) {
+        const applied = applyCacheTtlOverrideToMessage(session.request.message, resolvedCacheTtl);
+        if (applied) {
+          logger.debug("ProxyForwarder: Applied cache TTL override to request", {
+            providerId: provider.id,
+            ttl: resolvedCacheTtl,
+          });
         }
       }
 
@@ -1492,6 +1583,23 @@ export class ProxyForwarder {
       logger.debug("ProxyForwarder: Codex provider detected, setting User-Agent", {
         originalUA: session.userAgent ? "provided" : "fallback",
       });
+    }
+
+    // 针对 1h 缓存 TTL，补充 Anthropic beta header（避免客户端遗漏）
+    if (session.getCacheTtlResolved && session.getCacheTtlResolved() === "1h") {
+      const existingBeta = session.headers.get("anthropic-beta") || "";
+      const betaFlags = new Set(
+        existingBeta
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+      );
+      betaFlags.add("extended-cache-ttl-2025-04-11");
+      // 确保包含基础的 prompt-caching 标记
+      if (betaFlags.size === 1) {
+        betaFlags.add("prompt-caching-2024-07-31");
+      }
+      overrides["anthropic-beta"] = Array.from(betaFlags).join(", ");
     }
 
     const headerProcessor = HeaderProcessor.createForProxy({

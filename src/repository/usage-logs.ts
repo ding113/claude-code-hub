@@ -39,6 +39,9 @@ export interface UsageLogRow {
   outputTokens: number | null;
   cacheCreationInputTokens: number | null;
   cacheReadInputTokens: number | null;
+  cacheCreation5mInputTokens: number | null;
+  cacheCreation1hInputTokens: number | null;
+  cacheTtlApplied: string | null;
   totalTokens: number;
   costUsd: string | null;
   costMultiplier: string | null; // 供应商倍率
@@ -59,6 +62,8 @@ export interface UsageLogSummary {
   totalOutputTokens: number;
   totalCacheCreationTokens: number;
   totalCacheReadTokens: number;
+  totalCacheCreation5mTokens: number;
+  totalCacheCreation1hTokens: number;
 }
 
 export interface UsageLogsResult {
@@ -195,6 +200,8 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       totalOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens})::double precision, 0::double precision)`,
       totalCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens})::double precision, 0::double precision)`,
       totalCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens})::double precision, 0::double precision)`,
+      totalCacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens})::double precision, 0::double precision)`,
+      totalCacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens})::double precision, 0::double precision)`,
     })
     .from(messageRequest)
     .where(and(...conditions));
@@ -225,6 +232,9 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       outputTokens: messageRequest.outputTokens,
       cacheCreationInputTokens: messageRequest.cacheCreationInputTokens,
       cacheReadInputTokens: messageRequest.cacheReadInputTokens,
+      cacheCreation5mInputTokens: messageRequest.cacheCreation5mInputTokens,
+      cacheCreation1hInputTokens: messageRequest.cacheCreation1hInputTokens,
+      cacheTtlApplied: messageRequest.cacheTtlApplied,
       costUsd: messageRequest.costUsd,
       costMultiplier: messageRequest.costMultiplier, // 供应商倍率
       durationMs: messageRequest.durationMs,
@@ -254,6 +264,9 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
     return {
       ...row,
       totalTokens: totalRowTokens,
+      cacheCreation5mInputTokens: row.cacheCreation5mInputTokens,
+      cacheCreation1hInputTokens: row.cacheCreation1hInputTokens,
+      cacheTtlApplied: row.cacheTtlApplied,
       costUsd: row.costUsd?.toString() ?? null,
       providerChain: row.providerChain as ProviderChainItem[] | null,
       endpoint: row.endpoint,
@@ -271,6 +284,8 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       totalOutputTokens: summaryResult?.totalOutputTokens ?? 0,
       totalCacheCreationTokens: summaryResult?.totalCacheCreationTokens ?? 0,
       totalCacheReadTokens: summaryResult?.totalCacheReadTokens ?? 0,
+      totalCacheCreation5mTokens: summaryResult?.totalCacheCreation5mTokens ?? 0,
+      totalCacheCreation1hTokens: summaryResult?.totalCacheCreation1hTokens ?? 0,
     },
   };
 }

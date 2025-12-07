@@ -1,4 +1,5 @@
 import type { Numeric } from "decimal.js-light";
+import type { CacheTtlApplied } from "./cache";
 
 /**
  * 供应商信息（用于决策链）
@@ -179,6 +180,9 @@ export interface MessageRequest {
   outputTokens?: number;
   cacheCreationInputTokens?: number;
   cacheReadInputTokens?: number;
+  cacheCreation5mInputTokens?: number;
+  cacheCreation1hInputTokens?: number;
+  cacheTtlApplied?: CacheTtlApplied | null;
 
   // 错误信息
   errorMessage?: string;
@@ -228,6 +232,9 @@ export interface CreateMessageRequestData {
   output_tokens?: number;
   cache_creation_input_tokens?: number;
   cache_read_input_tokens?: number;
+  cache_creation_5m_input_tokens?: number;
+  cache_creation_1h_input_tokens?: number;
+  cache_ttl_applied?: CacheTtlApplied | null;
 
   // 错误信息
   error_message?: string;

@@ -44,6 +44,7 @@ export function toKey(dbKey: any): Key {
         : null,
     limitConcurrentSessions: dbKey?.limitConcurrentSessions ?? 0,
     providerGroup: dbKey?.providerGroup ?? null,
+    cacheTtlPreference: dbKey?.cacheTtlPreference ?? null,
     createdAt: dbKey?.createdAt ? new Date(dbKey.createdAt) : new Date(),
     updatedAt: dbKey?.updatedAt ? new Date(dbKey.updatedAt) : new Date(),
   };
@@ -83,6 +84,7 @@ export function toProvider(dbProvider: any): Provider {
     requestTimeoutNonStreamingMs: dbProvider?.requestTimeoutNonStreamingMs ?? 600000,
     websiteUrl: dbProvider?.websiteUrl ?? null,
     faviconUrl: dbProvider?.faviconUrl ?? null,
+    cacheTtlPreference: dbProvider?.cacheTtlPreference ?? null,
     tpm: dbProvider?.tpm ?? null,
     rpm: dbProvider?.rpm ?? null,
     rpd: dbProvider?.rpd ?? null,
@@ -103,6 +105,9 @@ export function toMessageRequest(dbMessage: any): MessageRequest {
       const formatted = formatCostForStorage(dbMessage?.costUsd);
       return formatted ?? undefined;
     })(),
+    cacheCreation5mInputTokens: dbMessage?.cacheCreation5mInputTokens ?? undefined,
+    cacheCreation1hInputTokens: dbMessage?.cacheCreation1hInputTokens ?? undefined,
+    cacheTtlApplied: dbMessage?.cacheTtlApplied ?? null,
   };
 }
 

@@ -7,6 +7,8 @@ import {
 import { USER_DEFAULTS, USER_LIMITS } from "@/lib/constants/user.constants";
 import { CURRENCY_CONFIG } from "@/lib/utils/currency";
 
+const CACHE_TTL_PREFERENCE = z.enum(["inherit", "5m", "1h"]);
+
 /**
  * 用户创建数据验证schema
  */
@@ -199,6 +201,7 @@ export const KeyFormSchema = z.object({
     .optional()
     .default(0),
   providerGroup: z.string().max(50, "供应商分组不能超过50个字符").optional().default(""),
+  cacheTtlPreference: CACHE_TTL_PREFERENCE.optional().default("inherit"),
 });
 
 /**
@@ -309,6 +312,7 @@ export const CreateProviderSchema = z.object({
     .max(1000, "并发Session上限不能超过1000")
     .optional()
     .default(0),
+  cache_ttl_preference: CACHE_TTL_PREFERENCE.optional().default("inherit"),
   max_retry_attempts: z.coerce
     .number()
     .int("重试次数必须是整数")
@@ -484,23 +488,24 @@ export const UpdateProviderSchema = z
       .max(50000, "周消费上限不能超过50000美元")
       .nullable()
       .optional(),
-    limit_monthly_usd: z.coerce
-      .number()
-      .min(0, "月消费上限不能为负数")
-      .max(200000, "月消费上限不能超过200000美元")
-      .nullable()
-      .optional(),
-    limit_concurrent_sessions: z.coerce
-      .number()
-      .int("并发Session上限必须是整数")
-      .min(0, "并发Session上限不能为负数")
-      .max(1000, "并发Session上限不能超过1000")
-      .optional(),
-    max_retry_attempts: z.coerce
-      .number()
-      .int("重试次数必须是整数")
-      .min(PROVIDER_LIMITS.MAX_RETRY_ATTEMPTS.MIN, "重试次数不能少于1次")
-      .max(PROVIDER_LIMITS.MAX_RETRY_ATTEMPTS.MAX, "重试次数不能超过10次")
+  limit_monthly_usd: z.coerce
+    .number()
+    .min(0, "月消费上限不能为负数")
+    .max(200000, "月消费上限不能超过200000美元")
+    .nullable()
+    .optional(),
+  limit_concurrent_sessions: z.coerce
+    .number()
+    .int("并发Session上限必须是整数")
+    .min(0, "并发Session上限不能为负数")
+    .max(1000, "并发Session上限不能超过1000")
+    .optional(),
+  cache_ttl_preference: CACHE_TTL_PREFERENCE.optional(),
+  max_retry_attempts: z.coerce
+    .number()
+    .int("重试次数必须是整数")
+    .min(PROVIDER_LIMITS.MAX_RETRY_ATTEMPTS.MIN, "重试次数不能少于1次")
+    .max(PROVIDER_LIMITS.MAX_RETRY_ATTEMPTS.MAX, "重试次数不能超过10次")
       .nullable()
       .optional(),
     // 熔断器配置

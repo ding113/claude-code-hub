@@ -45,6 +45,7 @@ export function AddKeyForm({ userId, user, onSuccess }: AddKeyFormProps) {
       expiresAt: "",
       canLoginWebUi: true,
       providerGroup: "",
+      cacheTtlPreference: "inherit",
       limit5hUsd: null,
       limitDailyUsd: null,
       dailyResetMode: "fixed" as const,
@@ -74,6 +75,7 @@ export function AddKeyForm({ userId, user, onSuccess }: AddKeyFormProps) {
           limitMonthlyUsd: data.limitMonthlyUsd,
           limitTotalUsd: data.limitTotalUsd,
           limitConcurrentSessions: data.limitConcurrentSessions,
+          cacheTtlPreference: data.cacheTtlPreference,
         });
 
         if (!result.ok) {
@@ -168,6 +170,26 @@ export function AddKeyForm({ userId, user, onSuccess }: AddKeyFormProps) {
         error={form.getFieldProps("providerGroup").error}
         touched={form.getFieldProps("providerGroup").touched}
       />
+
+      <div className="space-y-2">
+        <Label>Cache TTL 覆写</Label>
+        <Select
+          value={form.values.cacheTtlPreference}
+          onValueChange={(val) => form.setValue("cacheTtlPreference", val as "inherit" | "5m" | "1h")}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="inherit" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="inherit">不覆写（跟随供应商/客户端）</SelectItem>
+            <SelectItem value="5m">5m</SelectItem>
+            <SelectItem value="1h">1h</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          强制为包含 cache_control 的请求设置 Anthropic prompt cache TTL。
+        </p>
+      </div>
 
       <FormGrid columns={2}>
         <NumberField

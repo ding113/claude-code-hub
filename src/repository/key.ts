@@ -27,6 +27,7 @@ export async function findKeyById(id: number): Promise<Key | null> {
       limitTotalUsd: keys.limitTotalUsd,
       limitConcurrentSessions: keys.limitConcurrentSessions,
       providerGroup: keys.providerGroup,
+      cacheTtlPreference: keys.cacheTtlPreference,
       createdAt: keys.createdAt,
       updatedAt: keys.updatedAt,
       deletedAt: keys.deletedAt,
@@ -57,6 +58,7 @@ export async function findKeyList(userId: number): Promise<Key[]> {
       limitTotalUsd: keys.limitTotalUsd,
       limitConcurrentSessions: keys.limitConcurrentSessions,
       providerGroup: keys.providerGroup,
+      cacheTtlPreference: keys.cacheTtlPreference,
       createdAt: keys.createdAt,
       updatedAt: keys.updatedAt,
       deletedAt: keys.deletedAt,
@@ -86,6 +88,7 @@ export async function createKey(keyData: CreateKeyData): Promise<Key> {
     limitTotalUsd: keyData.limit_total_usd != null ? keyData.limit_total_usd.toString() : null,
     limitConcurrentSessions: keyData.limit_concurrent_sessions,
     providerGroup: keyData.provider_group ?? null,
+    cacheTtlPreference: keyData.cache_ttl_preference ?? null,
   };
 
   const [key] = await db.insert(keys).values(dbData).returning({
@@ -145,6 +148,8 @@ export async function updateKey(id: number, keyData: UpdateKeyData): Promise<Key
   if (keyData.limit_concurrent_sessions !== undefined)
     dbData.limitConcurrentSessions = keyData.limit_concurrent_sessions;
   if (keyData.provider_group !== undefined) dbData.providerGroup = keyData.provider_group;
+  if (keyData.cache_ttl_preference !== undefined)
+    dbData.cacheTtlPreference = keyData.cache_ttl_preference ?? null;
 
   const [key] = await db
     .update(keys)
@@ -167,6 +172,7 @@ export async function updateKey(id: number, keyData: UpdateKeyData): Promise<Key
       limitTotalUsd: keys.limitTotalUsd,
       limitConcurrentSessions: keys.limitConcurrentSessions,
       providerGroup: keys.providerGroup,
+      cacheTtlPreference: keys.cacheTtlPreference,
       createdAt: keys.createdAt,
       updatedAt: keys.updatedAt,
       deletedAt: keys.deletedAt,
@@ -198,6 +204,7 @@ export async function findActiveKeyByUserIdAndName(
       limitTotalUsd: keys.limitTotalUsd,
       limitConcurrentSessions: keys.limitConcurrentSessions,
       providerGroup: keys.providerGroup,
+      cacheTtlPreference: keys.cacheTtlPreference,
       createdAt: keys.createdAt,
       updatedAt: keys.updatedAt,
       deletedAt: keys.deletedAt,
@@ -331,6 +338,7 @@ export async function validateApiKeyAndGetUser(
       keyLimitTotalUsd: keys.limitTotalUsd,
       keyLimitConcurrentSessions: keys.limitConcurrentSessions,
       keyProviderGroup: keys.providerGroup,
+      keyCacheTtlPreference: keys.cacheTtlPreference,
       keyCreatedAt: keys.createdAt,
       keyUpdatedAt: keys.updatedAt,
       keyDeletedAt: keys.deletedAt,
@@ -400,6 +408,7 @@ export async function validateApiKeyAndGetUser(
     limitTotalUsd: row.keyLimitTotalUsd,
     limitConcurrentSessions: row.keyLimitConcurrentSessions,
     providerGroup: row.keyProviderGroup,
+    cacheTtlPreference: row.keyCacheTtlPreference,
     createdAt: row.keyCreatedAt,
     updatedAt: row.keyUpdatedAt,
     deletedAt: row.keyDeletedAt,

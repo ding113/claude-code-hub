@@ -35,6 +35,7 @@ export async function addKey(data: {
   limitTotalUsd?: number | null;
   limitConcurrentSessions?: number;
   providerGroup?: string | null;
+  cacheTtlPreference?: "inherit" | "5m" | "1h";
 }): Promise<ActionResult<{ generatedKey: string; name: string }>> {
   try {
     // 权限检查：用户只能给自己添加Key，管理员可以给所有人添加Key
@@ -59,6 +60,7 @@ export async function addKey(data: {
       limitTotalUsd: data.limitTotalUsd,
       limitConcurrentSessions: data.limitConcurrentSessions,
       providerGroup: data.providerGroup,
+      cacheTtlPreference: data.cacheTtlPreference,
     });
 
     // 检查是否存在同名的生效key
@@ -154,6 +156,7 @@ export async function addKey(data: {
       limit_total_usd: validatedData.limitTotalUsd,
       limit_concurrent_sessions: validatedData.limitConcurrentSessions,
       provider_group: validatedData.providerGroup || null,
+      cache_ttl_preference: validatedData.cacheTtlPreference,
     });
 
     revalidatePath("/dashboard");
@@ -183,6 +186,7 @@ export async function editKey(
     limitTotalUsd?: number | null;
     limitConcurrentSessions?: number;
     providerGroup?: string | null;
+    cacheTtlPreference?: "inherit" | "5m" | "1h";
   }
 ): Promise<ActionResult> {
   try {
@@ -290,6 +294,7 @@ export async function editKey(
       limit_total_usd: validatedData.limitTotalUsd,
       limit_concurrent_sessions: validatedData.limitConcurrentSessions,
       provider_group: validatedData.providerGroup || null,
+      cache_ttl_preference: validatedData.cacheTtlPreference,
     });
 
     revalidatePath("/dashboard");

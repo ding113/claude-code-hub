@@ -1,3 +1,5 @@
+import type { CacheTtlPreference } from "./cache";
+
 /**
  * 密钥数据库实体类型
  */
@@ -24,6 +26,9 @@ export interface Key {
 
   // Provider group override (null = inherit from user)
   providerGroup: string | null;
+
+  // Cache TTL override (inherit -> follow provider/client)
+  cacheTtlPreference: CacheTtlPreference | null;
 
   createdAt: Date;
   updatedAt: Date;
@@ -52,6 +57,9 @@ export interface CreateKeyData {
   limit_concurrent_sessions?: number;
   // Provider group override (null = inherit from user)
   provider_group?: string | null;
+
+  // Cache TTL override
+  cache_ttl_preference?: CacheTtlPreference;
 }
 
 /**
@@ -74,4 +82,7 @@ export interface UpdateKeyData {
   limit_concurrent_sessions?: number;
   // Provider group override (null = inherit from user)
   provider_group?: string | null;
+
+  // Cache TTL override
+  cache_ttl_preference?: CacheTtlPreference;
 }

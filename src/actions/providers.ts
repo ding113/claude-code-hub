@@ -204,6 +204,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         requestTimeoutNonStreamingMs: provider.requestTimeoutNonStreamingMs,
         websiteUrl: provider.websiteUrl,
         faviconUrl: provider.faviconUrl,
+        cacheTtlPreference: provider.cacheTtlPreference,
         tpm: provider.tpm,
         rpm: provider.rpm,
         rpd: provider.rpd,
@@ -347,6 +348,7 @@ export async function addProvider(data: {
       request_timeout_non_streaming_ms:
         validated.request_timeout_non_streaming_ms ??
         PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS,
+      cache_ttl_preference: validated.cache_ttl_preference ?? "inherit",
       website_url: validated.website_url ?? null,
       favicon_url: faviconUrl,
       tpm: validated.tpm ?? null,

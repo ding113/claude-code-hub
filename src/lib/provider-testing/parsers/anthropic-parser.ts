@@ -24,6 +24,10 @@ interface AnthropicResponse {
     output_tokens?: number;
     cache_creation_input_tokens?: number;
     cache_read_input_tokens?: number;
+    cache_creation?: {
+      ephemeral_5m_input_tokens?: number;
+      ephemeral_1h_input_tokens?: number;
+    };
   };
   error?: {
     type?: string;
@@ -67,7 +71,17 @@ export function parseAnthropicResponse(body: string, contentType?: string): Pars
         outputTokens: data.usage.output_tokens || 0,
         cacheCreationInputTokens: data.usage.cache_creation_input_tokens,
         cacheReadInputTokens: data.usage.cache_read_input_tokens,
+        cacheCreation5mInputTokens: data.usage.cache_creation?.ephemeral_5m_input_tokens,
+        cacheCreation1hInputTokens: data.usage.cache_creation?.ephemeral_1h_input_tokens,
       };
+
+      if (
+        usage.cacheCreationInputTokens === undefined &&
+        (usage.cacheCreation5mInputTokens || usage.cacheCreation1hInputTokens)
+      ) {
+        usage.cacheCreationInputTokens =
+          (usage.cacheCreation5mInputTokens || 0) + (usage.cacheCreation1hInputTokens || 0);
+      }
     }
 
     return {

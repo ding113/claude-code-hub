@@ -27,6 +27,11 @@ export async function createMessageRequest(
     userAgent: data.user_agent, // User-Agent
     endpoint: data.endpoint, // 请求端点（可为空）
     messagesCount: data.messages_count, // Messages 数量
+    cacheTtlApplied: data.cache_ttl_applied,
+    cacheCreationInputTokens: data.cache_creation_input_tokens,
+    cacheCreation5mInputTokens: data.cache_creation_5m_input_tokens,
+    cacheCreation1hInputTokens: data.cache_creation_1h_input_tokens,
+    cacheReadInputTokens: data.cache_read_input_tokens,
   };
 
   const [result] = await db.insert(messageRequest).values(dbData).returning({
@@ -43,6 +48,11 @@ export async function createMessageRequest(
     userAgent: messageRequest.userAgent, // 新增
     endpoint: messageRequest.endpoint, // 新增：返回端点
     messagesCount: messageRequest.messagesCount, // 新增
+    cacheTtlApplied: messageRequest.cacheTtlApplied,
+    cacheCreationInputTokens: messageRequest.cacheCreationInputTokens,
+    cacheCreation5mInputTokens: messageRequest.cacheCreation5mInputTokens,
+    cacheCreation1hInputTokens: messageRequest.cacheCreation1hInputTokens,
+    cacheReadInputTokens: messageRequest.cacheReadInputTokens,
     createdAt: messageRequest.createdAt,
     updatedAt: messageRequest.updatedAt,
     deletedAt: messageRequest.deletedAt,
@@ -96,6 +106,9 @@ export async function updateMessageRequestDetails(
     outputTokens?: number;
     cacheCreationInputTokens?: number;
     cacheReadInputTokens?: number;
+    cacheCreation5mInputTokens?: number;
+    cacheCreation1hInputTokens?: number;
+    cacheTtlApplied?: string | null;
     providerChain?: CreateMessageRequestData["provider_chain"];
     errorMessage?: string;
     model?: string; // ⭐ 新增：支持更新重定向后的模型名称
@@ -120,6 +133,15 @@ export async function updateMessageRequestDetails(
   }
   if (details.cacheReadInputTokens !== undefined) {
     updateData.cacheReadInputTokens = details.cacheReadInputTokens;
+  }
+  if (details.cacheCreation5mInputTokens !== undefined) {
+    updateData.cacheCreation5mInputTokens = details.cacheCreation5mInputTokens;
+  }
+  if (details.cacheCreation1hInputTokens !== undefined) {
+    updateData.cacheCreation1hInputTokens = details.cacheCreation1hInputTokens;
+  }
+  if (details.cacheTtlApplied !== undefined) {
+    updateData.cacheTtlApplied = details.cacheTtlApplied;
   }
   if (details.providerChain !== undefined) {
     updateData.providerChain = details.providerChain;
@@ -188,6 +210,9 @@ export async function findMessageRequestBySessionId(
       outputTokens: messageRequest.outputTokens,
       cacheCreationInputTokens: messageRequest.cacheCreationInputTokens,
       cacheReadInputTokens: messageRequest.cacheReadInputTokens,
+      cacheCreation5mInputTokens: messageRequest.cacheCreation5mInputTokens,
+      cacheCreation1hInputTokens: messageRequest.cacheCreation1hInputTokens,
+      cacheTtlApplied: messageRequest.cacheTtlApplied,
       errorMessage: messageRequest.errorMessage,
       providerChain: messageRequest.providerChain,
       blockedBy: messageRequest.blockedBy,
