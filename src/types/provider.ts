@@ -218,7 +218,7 @@ export interface CreateProviderData {
   // 供应商官网地址
   website_url?: string | null;
   favicon_url?: string | null;
-  cache_ttl_preference?: CacheTtlPreference;
+  cache_ttl_preference?: CacheTtlPreference | null;
 
   // 废弃字段（保留向后兼容）
   // TPM (Tokens Per Minute): 每分钟可处理的文本总量
@@ -281,7 +281,7 @@ export interface UpdateProviderData {
   // 供应商官网地址
   website_url?: string | null;
   favicon_url?: string | null;
-  cache_ttl_preference?: CacheTtlPreference;
+  cache_ttl_preference?: CacheTtlPreference | null;
 
   // 废弃字段（保留向后兼容）
   // TPM (Tokens Per Minute): 每分钟可处理的文本总量
