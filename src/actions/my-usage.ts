@@ -12,6 +12,7 @@ import type { CurrencyCode } from "@/lib/utils";
 import { getSystemSettings } from "@/repository/system-config";
 import {
   findUsageLogsWithDetails,
+  getDistinctEndpointsForKey,
   getDistinctModelsForKey,
   getTotalUsageForKey,
   type UsageLogFilters,
@@ -307,6 +308,9 @@ export interface MyUsageLogsFilters {
   endDate?: string;
   model?: string;
   statusCode?: number;
+  excludeStatusCode200?: boolean;
+  endpoint?: string;
+  minRetryCount?: number;
   page?: number;
   pageSize?: number;
 }
@@ -332,6 +336,9 @@ export async function getMyUsageLogs(
       endTime: filters.endDate ? new Date(`${filters.endDate}T23:59:59.999`).getTime() : undefined,
       model: filters.model,
       statusCode: filters.statusCode,
+      excludeStatusCode200: filters.excludeStatusCode200,
+      endpoint: filters.endpoint,
+      minRetryCount: filters.minRetryCount,
       page,
       pageSize,
     };
@@ -389,6 +396,19 @@ export async function getMyAvailableModels(): Promise<ActionResult<string[]>> {
   } catch (error) {
     logger.error("[my-usage] getMyAvailableModels failed", error);
     return { ok: false, error: "Failed to get model list" };
+  }
+}
+
+export async function getMyAvailableEndpoints(): Promise<ActionResult<string[]>> {
+  try {
+    const session = await getSession({ allowReadOnlyAccess: true });
+    if (!session) return { ok: false, error: "Unauthorized" };
+
+    const endpoints = await getDistinctEndpointsForKey(session.key.key);
+    return { ok: true, data: endpoints };
+  } catch (error) {
+    logger.error("[my-usage] getMyAvailableEndpoints failed", error);
+    return { ok: false, error: "Failed to get endpoint list" };
   }
 }
 

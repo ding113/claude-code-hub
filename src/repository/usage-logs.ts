@@ -95,6 +95,21 @@ export async function getDistinctModelsForKey(keyString: string): Promise<string
     .filter((model): model is string => !!model && model.trim().length > 0);
 }
 
+export async function getDistinctEndpointsForKey(keyString: string): Promise<string[]> {
+  const result = await db.execute(
+    sql`select distinct ${messageRequest.endpoint} as endpoint
+        from ${messageRequest}
+        where ${messageRequest.key} = ${keyString}
+          and ${messageRequest.deletedAt} is null
+          and ${messageRequest.endpoint} is not null
+        order by endpoint asc`
+  );
+
+  return Array.from(result)
+    .map((row) => (row as { endpoint?: string }).endpoint)
+    .filter((endpoint): endpoint is string => !!endpoint && endpoint.trim().length > 0);
+}
+
 /**
  * 查询使用日志（支持多种筛选条件和分页）
  */
