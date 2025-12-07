@@ -396,13 +396,16 @@ export function formatProviderTimeline(
           if (meaning) {
             timeline += `${t("timeline.errorType") + meaning}\n`;
           } else {
-            timeline += `${t("timeline.errorType") + (s.errorName || t("timeline.unknown"))}\n`;
+            // 无已知含义时，优先显示完整错误消息
+            timeline += `${t("timeline.errorType") + (s.errorMessage || s.errorName || t("timeline.unknown"))}\n`;
           }
         } else {
-          timeline += `${t("timeline.errorType") + (s.errorName || t("timeline.unknown"))}\n`;
+          // 无错误码时，显示完整错误消息而非简单的 errorName（如 "TypeError"）
+          timeline += `${t("timeline.errorType") + (s.errorMessage || s.errorName || t("timeline.unknown"))}\n`;
         }
 
-        timeline += `${t("timeline.error", { error: s.errorName })}\n`;
+        // 显示完整的错误消息（优先使用 errorMessage，因为它包含更多细节）
+        timeline += `${t("timeline.error", { error: s.errorMessage || s.errorName })}\n`;
 
         // 计算请求耗时
         if (i > 0 && item.timestamp && chain[i - 1]?.timestamp) {
@@ -443,7 +446,8 @@ export function formatProviderTimeline(
       // 使用结构化错误数据
       if (item.errorDetails?.system) {
         const s = item.errorDetails.system;
-        timeline += `${t("timeline.http2ErrorType", { type: s.errorName || t("timeline.unknown") })}\n`;
+        // 优先使用完整错误消息，提供更多排错信息
+        timeline += `${t("timeline.http2ErrorType", { type: s.errorMessage || s.errorName || t("timeline.unknown") })}\n`;
 
         if (s.errorCode) {
           timeline += `${t("timeline.errorCode", { code: s.errorCode })}\n`;

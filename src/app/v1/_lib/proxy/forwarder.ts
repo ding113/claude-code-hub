@@ -347,6 +347,7 @@ export class ProxyForwarder {
                 system: {
                   errorType: "ClientAbort",
                   errorName: lastError.name,
+                  errorMessage: lastError.message || "Client aborted request",
                   errorCode: "CLIENT_ABORT",
                   errorStack: lastError.stack?.split("\n").slice(0, 3).join("\n"),
                 },
@@ -425,6 +426,7 @@ export class ProxyForwarder {
                 system: {
                   errorType: err.constructor.name,
                   errorName: err.name,
+                  errorMessage: err.message || err.name || "Unknown error",
                   errorCode: err.code,
                   errorSyscall: err.syscall,
                   errorStack: err.stack?.split("\n").slice(0, 3).join("\n"),
@@ -1303,6 +1305,7 @@ export class ProxyForwarder {
             system: {
               errorType: "Http2Error",
               errorName: err.name,
+              errorMessage: err.message || err.name || "HTTP/2 protocol error",
               errorCode: err.code || "HTTP2_FAILED",
               errorStack: err.stack?.split("\n").slice(0, 3).join("\n"),
             },

@@ -79,6 +79,7 @@ export interface ProviderChainItem {
     system?: {
       errorType: string; // 如 "TypeError"
       errorName: string; // 如 "fetch failed"
+      errorMessage?: string; // 完整错误消息（如 "fetch failed: connect ETIMEDOUT 192.168.1.1:443"）
       errorCode?: string; // 如 "ENOTFOUND"
       errorSyscall?: string; // 如 "getaddrinfo"
       errorStack?: string; // 堆栈前3行
