@@ -382,7 +382,7 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
         </DialogContent>
       </Dialog>
 
-      {/* 编辑用户对话框 */}
+      {/* Edit user dialog */}
       <Dialog
         open={Boolean(editUser)}
         onOpenChange={(open) => {
@@ -402,7 +402,7 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
         </DialogContent>
       </Dialog>
 
-      {/* 删除用户对话框 */}
+      {/* Delete user dialog */}
       <Dialog
         open={Boolean(deleteUser)}
         onOpenChange={(open) => {

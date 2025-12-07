@@ -1,7 +1,6 @@
 "use client";
 
 import { useLocale, useTranslations } from "next-intl";
-import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { getContrastTextColor, getGroupColor } from "@/lib/utils/color";
@@ -38,12 +37,12 @@ export function UserUnlimitedItem({ user, currencyCode = "USD" }: UserUnlimitedI
   const locale = useLocale();
   const expiresAtDate = user.expiresAt ? new Date(user.expiresAt) : null;
 
-  const expiryText = useMemo(() => {
+  const expiryText = (() => {
     if (!expiresAtDate) return tUsersCommon("neverExpires");
     return `${formatDateDistance(expiresAtDate, new Date(), locale, { addSuffix: true })} · ${formatDate(expiresAtDate, "yyyy-MM-dd", locale)}`;
-  }, [expiresAtDate, locale, tUsersCommon]);
+  })();
 
-  const expiryStatus = useMemo(() => {
+  const expiryStatus = (() => {
     const now = Date.now();
     const expTs = expiresAtDate?.getTime() ?? null;
 
@@ -57,7 +56,7 @@ export function UserUnlimitedItem({ user, currencyCode = "USD" }: UserUnlimitedI
       return { label: tStatus("expiringSoon"), variant: "outline" as const };
     }
     return { label: tStatus("active"), variant: "default" as const };
-  }, [expiresAtDate, tStatus, user.isEnabled]);
+  })();
   const topKeys = [...user.keys]
     .sort((a, b) => b.todayUsage - a.todayUsage || b.totalUsage - a.totalUsage)
     .slice(0, MAX_INLINE_KEYS);

@@ -50,12 +50,12 @@ export function UserQuotaListItem({ user, currencyCode = "USD" }: UserQuotaListI
   const [keysOpen, setKeysOpen] = useState(false);
   const expiresAtDate = user.expiresAt ? new Date(user.expiresAt) : null;
 
-  const expiryText = useMemo(() => {
+  const expiryText = (() => {
     if (!expiresAtDate) return tUsersCommon("neverExpires");
     return `${formatDateDistance(expiresAtDate, new Date(), locale, { addSuffix: true })} · ${formatDate(expiresAtDate, "yyyy-MM-dd", locale)}`;
-  }, [expiresAtDate, locale, tUsersCommon]);
+  })();
 
-  const expiryStatus = useMemo(() => {
+  const expiryStatus = (() => {
     const now = Date.now();
     const expTs = expiresAtDate?.getTime() ?? null;
 
@@ -69,7 +69,7 @@ export function UserQuotaListItem({ user, currencyCode = "USD" }: UserQuotaListI
       return { label: tStatus("expiringSoon"), variant: "outline" as const };
     }
     return { label: tStatus("active"), variant: "default" as const };
-  }, [expiresAtDate, tStatus, user.isEnabled]);
+  })();
 
   const sortedKeys = useMemo(() => {
     return [...user.keys].sort((a, b) => {
@@ -249,7 +249,7 @@ export function UserQuotaListItem({ user, currencyCode = "USD" }: UserQuotaListI
           <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             <span className="text-foreground font-medium">{t("keys")}:</span>
             {topKeys.length === 0 && <span className="text-muted-foreground">{t("noKeys")}</span>}
-            {topKeys.map((key) => (
+            {topKeys.map((key: UserKeyWithUsage) => (
               <KeyPreview key={key.id} keyData={key} currencyCode={currencyCode} />
             ))}
             {remainingKeys.length > 0 && (
@@ -265,7 +265,7 @@ export function UserQuotaListItem({ user, currencyCode = "USD" }: UserQuotaListI
                   </Button>
                 </CollapsibleTrigger>
                 <CollapsibleContent className="mt-2 space-y-2">
-                  {remainingKeys.map((key) => (
+                  {remainingKeys.map((key: UserKeyWithUsage) => (
                     <div
                       key={key.id}
                       className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm"
