@@ -26,6 +26,8 @@ export interface UserQuotaWithUsage {
   name: string;
   note?: string;
   role: "admin" | "user";
+  isEnabled: boolean;
+  expiresAt: Date | null;
   providerGroup?: string | null;
   tags?: string[];
   quota: UserQuotaSnapshot | null;

@@ -11,7 +11,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Progress } from "@/components/ui/progress";
 import { getContrastTextColor, getGroupColor } from "@/lib/utils/color";
 import { type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
-import { formatDateDistance } from "@/lib/utils/date-format";
+import { formatDate, formatDateDistance } from "@/lib/utils/date-format";
 import type { UserKeyWithUsage, UserQuotaWithUsage } from "./types";
 
 interface UserQuotaListItemProps {
@@ -21,6 +21,7 @@ interface UserQuotaListItemProps {
 
 const MAX_INLINE_TAGS = 3;
 const TOP_KEY_COUNT = 3;
+const EXPIRING_SOON_MS = 72 * 60 * 60 * 1000;
 
 function KeyPreview({
   keyData,
@@ -43,8 +44,32 @@ function formatLimitValue(limit: number | null, currencyCode: CurrencyCode, plac
 
 export function UserQuotaListItem({ user, currencyCode = "USD" }: UserQuotaListItemProps) {
   const t = useTranslations("quota.users");
+  const tUsersCommon = useTranslations("users");
+  const tStatus = useTranslations("dashboard.userList.status");
   const locale = useLocale();
   const [keysOpen, setKeysOpen] = useState(false);
+  const expiresAtDate = user.expiresAt ? new Date(user.expiresAt) : null;
+
+  const expiryText = useMemo(() => {
+    if (!expiresAtDate) return tUsersCommon("neverExpires");
+    return `${formatDateDistance(expiresAtDate, new Date(), locale, { addSuffix: true })} · ${formatDate(expiresAtDate, "yyyy-MM-dd", locale)}`;
+  }, [expiresAtDate, locale, tUsersCommon]);
+
+  const expiryStatus = useMemo(() => {
+    const now = Date.now();
+    const expTs = expiresAtDate?.getTime() ?? null;
+
+    if (!user.isEnabled) {
+      return { label: tStatus("disabled"), variant: "secondary" as const };
+    }
+    if (expTs && expTs <= now) {
+      return { label: tStatus("expired"), variant: "destructive" as const };
+    }
+    if (expTs && expTs - now <= EXPIRING_SOON_MS) {
+      return { label: tStatus("expiringSoon"), variant: "outline" as const };
+    }
+    return { label: tStatus("active"), variant: "default" as const };
+  }, [expiresAtDate, tStatus, user.isEnabled]);
 
   const sortedKeys = useMemo(() => {
     return [...user.keys].sort((a, b) => {
@@ -103,6 +128,12 @@ export function UserQuotaListItem({ user, currencyCode = "USD" }: UserQuotaListI
             )}
 
             {user.note && <p className="text-sm text-muted-foreground line-clamp-2">{user.note}</p>}
+
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span>{t("expiresAtLabel")}:</span>
+              <span className="font-medium text-foreground">{expiryText}</span>
+              <Badge variant={expiryStatus.variant}>{expiryStatus.label}</Badge>
+            </div>
           </div>
 
           <div className="text-right space-y-1">
