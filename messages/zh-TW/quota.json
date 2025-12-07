@@ -84,7 +84,8 @@
       "all": "全部",
       "warning": "接近限額 (>60%)",
       "exceeded": "已超限 (≥100%)"
-    }
+    },
+    "expiresAtLabel": "過期時間"
   },
   "providers": {
     "title": "供應商限額統計",

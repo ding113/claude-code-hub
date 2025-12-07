@@ -1,10 +1,11 @@
 "use client";
 import { addDays } from "date-fns";
-import { Loader2, Users } from "lucide-react";
+import { Loader2, MoreVertical, SquarePen, Trash, Users } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { renewUser, toggleUserEnabled } from "@/actions/users";
+import { FormErrorBoundary } from "@/components/form-error-boundary";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -28,6 +29,8 @@ import { Switch } from "@/components/ui/switch";
 import { formatDate, formatDateDistance } from "@/lib/utils/date-format";
 import type { User, UserDisplay } from "@/types/user";
 import { AddUserDialog } from "./add-user-dialog";
+import { DeleteUserConfirm } from "./forms/delete-user-confirm";
+import { UserForm } from "./forms/user-form";
 
 interface UserListProps {
   users: UserDisplay[];
@@ -39,6 +42,7 @@ interface UserListProps {
 export function UserList({ users, activeUserId, onUserSelect, currentUser }: UserListProps) {
   const t = useTranslations("dashboard.userList");
   const tUsers = useTranslations("users");
+  const tUserActions = useTranslations("dashboard.userActions");
   const locale = useLocale();
   const isAdmin = currentUser?.role === "admin";
   const [pendingUserId, setPendingUserId] = useState<number | null>(null);
@@ -51,6 +55,8 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
   }>({ open: false, user: null });
   const [customDate, setCustomDate] = useState("");
   const [enableOnRenew, setEnableOnRenew] = useState(false);
+  const [editUser, setEditUser] = useState<UserDisplay | null>(null);
+  const [deleteUser, setDeleteUser] = useState<UserDisplay | null>(null);
 
   const EXPIRING_SOON_MS = 72 * 60 * 60 * 1000; // 72 hours
 
@@ -241,20 +247,25 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
                 compact
                 actions={
                   isAdmin ? (
-                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center" onClick={(e) => e.stopPropagation()}>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button
-                            size="sm"
-                            variant="outline"
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
                             disabled={isPending && pendingUserId === user.id}
                           >
-                            {t("actions.renew")}
+                            {isPending && pendingUserId === user.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <MoreVertical className="h-4 w-4" />
+                            )}
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent>
+                        <DropdownMenuContent align="end" className="w-56">
                           <DropdownMenuItem
-                            onClick={() =>
+                            onSelect={() =>
                               handleRenew(
                                 user.id,
                                 addDays(new Date(), 30),
@@ -265,7 +276,7 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
                             {t("actions.renew30d")}
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onClick={() =>
+                            onSelect={() =>
                               handleRenew(
                                 user.id,
                                 addDays(new Date(), 90),
@@ -276,7 +287,7 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
                             {t("actions.renew90d")}
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onClick={() =>
+                            onSelect={() =>
                               handleRenew(
                                 user.id,
                                 addDays(new Date(), 365),
@@ -287,22 +298,27 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
                             {t("actions.renew1y")}
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => handleCustomRenew(user)}>
+                          <DropdownMenuItem onSelect={() => handleCustomRenew(user)}>
                             {t("actions.renewCustom")}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onSelect={() => handleToggle(user, !user.isEnabled)}>
+                            {user.isEnabled ? t("actions.disable") : t("actions.enable")}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onSelect={() => setEditUser(user)}>
+                            <SquarePen className="mr-2 h-4 w-4" />
+                            {tUserActions("edit")}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="text-destructive"
+                            onSelect={() => setDeleteUser(user)}
+                          >
+                            <Trash className="mr-2 h-4 w-4" />
+                            {tUserActions("delete")}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
-                      <Button
-                        size="sm"
-                        variant={user.isEnabled ? "outline" : "default"}
-                        disabled={isPending && pendingUserId === user.id}
-                        onClick={() => handleToggle(user, !user.isEnabled)}
-                      >
-                        {isPending && pendingUserId === user.id && (
-                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                        )}
-                        {user.isEnabled ? t("actions.disable") : t("actions.enable")}
-                      </Button>
                     </div>
                   ) : undefined
                 }
@@ -363,6 +379,42 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
               {t("actions.confirm")}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit user dialog */}
+      <Dialog
+        open={Boolean(editUser)}
+        onOpenChange={(open) => {
+          if (!open) setEditUser(null);
+        }}
+      >
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
+          <FormErrorBoundary>
+            {editUser ? (
+              <UserForm
+                user={editUser}
+                onSuccess={() => setEditUser(null)}
+                currentUser={currentUser}
+              />
+            ) : null}
+          </FormErrorBoundary>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete user dialog */}
+      <Dialog
+        open={Boolean(deleteUser)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteUser(null);
+        }}
+      >
+        <DialogContent>
+          <FormErrorBoundary>
+            {deleteUser ? (
+              <DeleteUserConfirm user={deleteUser} onSuccess={() => setDeleteUser(null)} />
+            ) : null}
+          </FormErrorBoundary>
         </DialogContent>
       </Dialog>
     </div>

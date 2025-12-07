@@ -1,10 +1,11 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { getContrastTextColor, getGroupColor } from "@/lib/utils/color";
 import { type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
+import { formatDate, formatDateDistance } from "@/lib/utils/date-format";
 import type { UserKeyWithUsage, UserQuotaWithUsage } from "./types";
 
 interface UserUnlimitedItemProps {
@@ -13,6 +14,7 @@ interface UserUnlimitedItemProps {
 }
 
 const MAX_INLINE_KEYS = 3;
+const EXPIRING_SOON_MS = 72 * 60 * 60 * 1000;
 
 function KeyChip({
   keyData,
@@ -30,6 +32,31 @@ function KeyChip({
 
 export function UserUnlimitedItem({ user, currencyCode = "USD" }: UserUnlimitedItemProps) {
   const t = useTranslations("quota.users");
+  const tUsersCommon = useTranslations("users");
+  const tStatus = useTranslations("dashboard.userList.status");
+  const locale = useLocale();
+  const expiresAtDate = user.expiresAt ? new Date(user.expiresAt) : null;
+
+  const expiryText = (() => {
+    if (!expiresAtDate) return tUsersCommon("neverExpires");
+    return `${formatDateDistance(expiresAtDate, new Date(), locale, { addSuffix: true })} · ${formatDate(expiresAtDate, "yyyy-MM-dd", locale)}`;
+  })();
+
+  const expiryStatus = (() => {
+    const now = Date.now();
+    const expTs = expiresAtDate?.getTime() ?? null;
+
+    if (!user.isEnabled) {
+      return { label: tStatus("disabled"), variant: "secondary" as const };
+    }
+    if (expTs && expTs <= now) {
+      return { label: tStatus("expired"), variant: "destructive" as const };
+    }
+    if (expTs && expTs - now <= EXPIRING_SOON_MS) {
+      return { label: tStatus("expiringSoon"), variant: "outline" as const };
+    }
+    return { label: tStatus("active"), variant: "default" as const };
+  })();
   const topKeys = [...user.keys]
     .sort((a, b) => b.todayUsage - a.todayUsage || b.totalUsage - a.totalUsage)
     .slice(0, MAX_INLINE_KEYS);
@@ -38,7 +65,7 @@ export function UserUnlimitedItem({ user, currencyCode = "USD" }: UserUnlimitedI
     <Card className="border bg-card">
       <CardContent className="space-y-2 p-3 sm:p-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-          <div className="space-y-1">
+          <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-semibold text-base sm:text-lg">{user.name}</span>
               <Badge variant={user.role === "admin" ? "default" : "secondary"} className="text-xs">
@@ -58,6 +85,11 @@ export function UserUnlimitedItem({ user, currencyCode = "USD" }: UserUnlimitedI
                 })()}
             </div>
             {user.note && <p className="text-sm text-muted-foreground line-clamp-2">{user.note}</p>}
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span>{t("expiresAtLabel")}:</span>
+              <span className="font-medium text-foreground">{expiryText}</span>
+              <Badge variant={expiryStatus.variant}>{expiryStatus.label}</Badge>
+            </div>
           </div>
 
           <div className="text-right space-y-1">

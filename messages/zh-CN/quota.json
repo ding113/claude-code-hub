@@ -92,6 +92,7 @@
     "totalCost": "总消费",
     "totalCostAllTime": "历史累计",
     "todayCost": "今日消费",
+    "expiresAtLabel": "过期时间",
     "keys": "密钥",
     "more": "更多",
     "noLimitSet": "-",

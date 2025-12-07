@@ -53,6 +53,8 @@ async function getUsersWithQuotas(): Promise<UserQuotaWithUsage[]> {
         name: user.name,
         note: user.note,
         role: user.role,
+        isEnabled: user.isEnabled,
+        expiresAt: user.expiresAt ?? null,
         providerGroup: user.providerGroup,
         tags: user.tags,
         quota: quotaResult.ok ? quotaResult.data : null,

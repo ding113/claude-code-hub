@@ -92,6 +92,7 @@
     "totalCost": "Total Cost",
     "totalCostAllTime": "All-time Total",
     "todayCost": "Today's Cost",
+    "expiresAtLabel": "Expiration",
     "keys": "Keys",
     "more": "more",
     "noLimitSet": "-",

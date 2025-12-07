@@ -86,7 +86,8 @@
       "all": "すべて",
       "warning": "制限に近い (>60%)",
       "exceeded": "超過 (≥100%)"
-    }
+    },
+    "expiresAtLabel": "有効期限"
   },
   "providers": {
     "title": "プロバイダークォータ統計",
