@@ -305,6 +305,7 @@ export function ProviderForm({
             limit_weekly_usd?: number | null;
             limit_monthly_usd?: number | null;
             limit_concurrent_sessions?: number | null;
+            cache_ttl_preference?: "inherit" | "5m" | "1h";
             max_retry_attempts?: number | null;
             circuit_breaker_failure_threshold?: number;
             circuit_breaker_open_duration?: number;
