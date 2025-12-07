@@ -28,6 +28,7 @@ export interface UsageLogRow {
   id: number;
   createdAt: Date | null;
   sessionId: string | null; // Session ID
+  requestSequence: number | null; // Request Sequence（Session 内请求序号）
   userName: string;
   keyName: string;
   providerName: string | null; // 改为可选：被拦截的请求没有 provider
@@ -238,6 +239,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       id: messageRequest.id,
       createdAt: messageRequest.createdAt,
       sessionId: messageRequest.sessionId, // Session ID
+      requestSequence: messageRequest.requestSequence, // Request Sequence
       userName: users.name,
       keyName: keysTable.name,
       providerName: providers.name, // 被拦截的请求为 null
@@ -280,6 +282,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
 
     return {
       ...row,
+      requestSequence: row.requestSequence ?? null,
       totalTokens: totalRowTokens,
       cacheCreation5mInputTokens: row.cacheCreation5mInputTokens,
       cacheCreation1hInputTokens: row.cacheCreation1hInputTokens,

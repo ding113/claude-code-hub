@@ -361,6 +361,14 @@
     "errors": {
       "copyFailed": "复制失败"
     },
+    "requestList": {
+      "title": "请求列表",
+      "noRequests": "暂无请求记录",
+      "fetchFailed": "获取请求列表失败",
+      "unknownError": "未知错误",
+      "prev": "上一页",
+      "next": "下一页"
+    },
     "back": "返回",
     "loadingError": "加载失败"
   },

@@ -34,6 +34,10 @@ export class ProxySessionGuard {
       // 4. 设置到 session 对象
       session.setSessionId(sessionId);
 
+      // 4.1 获取并设置请求序号（Session 内唯一标识每个请求）
+      const requestSequence = await SessionManager.getNextRequestSequence(sessionId);
+      session.setRequestSequence(requestSequence);
+
       // 5. 追踪 session（添加到活跃集合）
       void SessionTracker.trackSession(sessionId, keyId).catch((err) => {
         logger.error("[ProxySessionGuard] Failed to track session:", err);
@@ -52,10 +56,10 @@ export class ProxySessionGuard {
               apiType: session.originalFormat === "openai" ? "codex" : "chat",
             });
 
-            // 可选：存储 messages（受环境变量控制）
+            // 可选：存储 messages（受环境变量控制，按请求序号独立存储）
             const messages = session.getMessages();
             if (messages) {
-              await SessionManager.storeSessionMessages(sessionId, messages);
+              await SessionManager.storeSessionMessages(sessionId, messages, requestSequence);
             }
           }
         } catch (error) {
@@ -64,7 +68,7 @@ export class ProxySessionGuard {
       })();
 
       logger.debug(
-        `[ProxySessionGuard] Session assigned: ${sessionId} (key=${keyId}, messagesLength=${session.getMessagesLength()}, clientProvided=${!!clientSessionId})`
+        `[ProxySessionGuard] Session assigned: ${sessionId}:${requestSequence} (key=${keyId}, messagesLength=${session.getMessagesLength()}, clientProvided=${!!clientSessionId})`
       );
     } catch (error) {
       logger.error("[ProxySessionGuard] Failed to assign session:", error);

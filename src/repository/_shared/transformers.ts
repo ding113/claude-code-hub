@@ -99,6 +99,7 @@ export function toMessageRequest(dbMessage: any): MessageRequest {
   return {
     ...dbMessage,
     costMultiplier: dbMessage?.costMultiplier ? parseFloat(dbMessage.costMultiplier) : undefined,
+    requestSequence: dbMessage?.requestSequence ?? undefined,
     createdAt: dbMessage?.createdAt ? new Date(dbMessage.createdAt) : new Date(),
     updatedAt: dbMessage?.updatedAt ? new Date(dbMessage.updatedAt) : new Date(),
     costUsd: (() => {

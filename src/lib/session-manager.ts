@@ -85,6 +85,58 @@ export class SessionManager {
   }
 
   /**
+   * 获取 Session 内下一个请求序号（原子操作）
+   *
+   * 使用 Redis INCR 保证并发安全，序号从 1 开始递增
+   * 每个请求在同一 Session 内获得唯一序号，用于独立存储 messages
+   *
+   * @param sessionId - Session ID
+   * @returns 请求序号（从 1 开始），Redis 不可用时返回 1
+   */
+  static async getNextRequestSequence(sessionId: string): Promise<number> {
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") {
+      logger.warn("SessionManager: Redis not ready, returning default sequence 1");
+      return 1;
+    }
+
+    try {
+      const key = `session:${sessionId}:seq`;
+      const sequence = await redis.incr(key);
+
+      // 首次创建时设置过期时间
+      if (sequence === 1) {
+        await redis.expire(key, SessionManager.SESSION_TTL);
+      }
+
+      logger.trace("SessionManager: Got next request sequence", { sessionId, sequence });
+      return sequence;
+    } catch (error) {
+      logger.error("SessionManager: Failed to get request sequence", { error, sessionId });
+      return 1;
+    }
+  }
+
+  /**
+   * 获取 Session 当前的请求计数
+   *
+   * @param sessionId - Session ID
+   * @returns 当前请求数量，不存在返回 0
+   */
+  static async getSessionRequestCount(sessionId: string): Promise<number> {
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") return 0;
+
+    try {
+      const count = await redis.get(`session:${sessionId}:seq`);
+      return count ? parseInt(count, 10) : 0;
+    } catch (error) {
+      logger.error("SessionManager: Failed to get request count", { error, sessionId });
+      return 0;
+    }
+  }
+
+  /**
    * 计算 messages 内容哈希（用于 session 匹配）
    *
    * ⚠️ 注意: 这是一个降级方案,仅在无法从 metadata 提取 session ID 时使用
@@ -754,8 +806,16 @@ export class SessionManager {
 
   /**
    * 存储 session 请求 messages（可选，受环境变量控制）
+   *
+   * @param sessionId - Session ID
+   * @param messages - 消息内容
+   * @param requestSequence - 可选，请求序号。提供时使用新的 key 格式存储独立消息
    */
-  static async storeSessionMessages(sessionId: string, messages: unknown): Promise<void> {
+  static async storeSessionMessages(
+    sessionId: string,
+    messages: unknown,
+    requestSequence?: number
+  ): Promise<void> {
     if (!SessionManager.STORE_MESSAGES) {
       logger.trace("SessionManager: STORE_SESSION_MESSAGES is disabled, skipping");
       return;
@@ -766,8 +826,17 @@ export class SessionManager {
 
     try {
       const messagesJson = JSON.stringify(messages);
-      await redis.setex(`session:${sessionId}:messages`, SessionManager.SESSION_TTL, messagesJson);
-      logger.trace("SessionManager: Stored session messages", { sessionId });
+      // 新格式：session:{sessionId}:req:{sequence}:messages（独立存储每个请求）
+      // 旧格式：session:{sessionId}:messages（向后兼容）
+      const key = requestSequence
+        ? `session:${sessionId}:req:${requestSequence}:messages`
+        : `session:${sessionId}:messages`;
+      await redis.setex(key, SessionManager.SESSION_TTL, messagesJson);
+      logger.trace("SessionManager: Stored session messages", {
+        sessionId,
+        requestSequence,
+        key,
+      });
     } catch (error) {
       logger.error("SessionManager: Failed to store session messages", { error });
     }
@@ -1045,8 +1114,15 @@ export class SessionManager {
 
   /**
    * 获取 session 的 messages 内容
+   *
+   * @param sessionId - Session ID
+   * @param requestSequence - 可选，请求序号。提供时读取特定请求的消息
+   * @returns 消息内容（解析后的 JSON 对象）
    */
-  static async getSessionMessages(sessionId: string): Promise<unknown | null> {
+  static async getSessionMessages(
+    sessionId: string,
+    requestSequence?: number
+  ): Promise<unknown | null> {
     if (!SessionManager.STORE_MESSAGES) {
       logger.warn("SessionManager: STORE_SESSION_MESSAGES is disabled");
       return null;
@@ -1056,7 +1132,18 @@ export class SessionManager {
     if (!redis || redis.status !== "ready") return null;
 
     try {
-      const messagesJson = await redis.get(`session:${sessionId}:messages`);
+      // 优先尝试新格式
+      if (requestSequence) {
+        const newKey = `session:${sessionId}:req:${requestSequence}:messages`;
+        const messagesJson = await redis.get(newKey);
+        if (messagesJson) {
+          return JSON.parse(messagesJson);
+        }
+      }
+
+      // 向后兼容：尝试旧格式
+      const legacyKey = `session:${sessionId}:messages`;
+      const messagesJson = await redis.get(legacyKey);
       if (!messagesJson) {
         return null;
       }
@@ -1072,20 +1159,27 @@ export class SessionManager {
    *
    * @param sessionId - Session ID
    * @param response - 响应体内容（字符串或对象）
+   * @param requestSequence - 可选，请求序号。提供时使用新的 key 格式存储独立响应
    */
-  static async storeSessionResponse(sessionId: string, response: string | object): Promise<void> {
+  static async storeSessionResponse(
+    sessionId: string,
+    response: string | object,
+    requestSequence?: number
+  ): Promise<void> {
     const redis = getRedisClient();
     if (!redis || redis.status !== "ready") return;
 
     try {
       const responseString = typeof response === "string" ? response : JSON.stringify(response);
-      await redis.setex(
-        `session:${sessionId}:response`,
-        SessionManager.SESSION_TTL,
-        responseString
-      );
+      // 新格式：session:{sessionId}:req:{sequence}:response（独立存储每个请求）
+      // 旧格式：session:{sessionId}:response（向后兼容）
+      const key = requestSequence
+        ? `session:${sessionId}:req:${requestSequence}:response`
+        : `session:${sessionId}:response`;
+      await redis.setex(key, SessionManager.SESSION_TTL, responseString);
       logger.trace("SessionManager: Stored session response", {
         sessionId,
+        requestSequence,
         size: responseString.length,
       });
     } catch (error) {
@@ -1097,14 +1191,27 @@ export class SessionManager {
    * 获取 session 响应体
    *
    * @param sessionId - Session ID
+   * @param requestSequence - 可选，请求序号。提供时读取特定请求的响应
    * @returns 响应体内容（字符串）
    */
-  static async getSessionResponse(sessionId: string): Promise<string | null> {
+  static async getSessionResponse(
+    sessionId: string,
+    requestSequence?: number
+  ): Promise<string | null> {
     const redis = getRedisClient();
     if (!redis || redis.status !== "ready") return null;
 
     try {
-      const response = await redis.get(`session:${sessionId}:response`);
+      // 优先尝试新格式
+      if (requestSequence) {
+        const newKey = `session:${sessionId}:req:${requestSequence}:response`;
+        const response = await redis.get(newKey);
+        if (response) return response;
+      }
+
+      // 向后兼容：尝试旧格式
+      const legacyKey = `session:${sessionId}:response`;
+      const response = await redis.get(legacyKey);
       return response;
     } catch (error) {
       logger.error("SessionManager: Failed to get session response", { error });

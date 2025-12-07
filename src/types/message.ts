@@ -167,6 +167,9 @@ export interface MessageRequest {
   // Session ID（用于会话粘性和日志追踪）
   sessionId?: string;
 
+  // Request Sequence（Session 内请求序号）
+  requestSequence?: number;
+
   // 上游决策链（记录尝试的供应商列表）
   providerChain?: ProviderChainItem[];
 
@@ -218,6 +221,9 @@ export interface CreateMessageRequestData {
 
   // Session ID（用于会话粘性和日志追踪）
   session_id?: string;
+
+  // Request Sequence（Session 内请求序号，用于区分同一 Session 的不同请求）
+  request_sequence?: number;
 
   // 上游决策链
   provider_chain?: ProviderChainItem[];

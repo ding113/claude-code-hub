@@ -25,6 +25,7 @@ interface ErrorDetailsDialogProps {
   errorMessage: string | null;
   providerChain: ProviderChainItem[] | null;
   sessionId: string | null;
+  requestSequence?: number | null; // Request Sequence（Session 内请求序号）
   blockedBy?: string | null; // 拦截类型
   blockedReason?: string | null; // 拦截原因（JSON 字符串）
   originalModel?: string | null; // 原始模型（重定向前）
@@ -43,6 +44,7 @@ export function ErrorDetailsDialog({
   errorMessage,
   providerChain,
   sessionId,
+  requestSequence,
   blockedBy,
   blockedReason,
   originalModel,
@@ -269,10 +271,23 @@ export function ErrorDetailsDialog({
               <h4 className="font-semibold text-sm">{t("logs.details.sessionId")}</h4>
               <div className="flex items-center gap-3">
                 <div className="flex-1 rounded-md border bg-muted/50 p-3">
-                  <code className="text-xs font-mono break-all">{sessionId}</code>
+                  <div className="flex items-center gap-2">
+                    <code className="text-xs font-mono break-all">{sessionId}</code>
+                    {requestSequence && (
+                      <Badge variant="outline" className="text-xs shrink-0">
+                        #{requestSequence}
+                      </Badge>
+                    )}
+                  </div>
                 </div>
                 {hasMessages && !checkingMessages && (
-                  <Link href={`/dashboard/sessions/${sessionId}/messages`}>
+                  <Link
+                    href={
+                      requestSequence
+                        ? `/dashboard/sessions/${sessionId}/messages?seq=${requestSequence}`
+                        : `/dashboard/sessions/${sessionId}/messages`
+                    }
+                  >
                     <Button variant="outline" size="sm">
                       <ExternalLink className="h-4 w-4 mr-2" />
                       {t("logs.details.viewDetails")}

@@ -54,6 +54,9 @@ export class ProxySession {
   // Session ID（用于会话粘性和并发限流）
   sessionId: string | null;
 
+  // Request Sequence（Session 内请求序号）
+  requestSequence: number = 1;
+
   // 请求格式追踪：记录原始请求格式和供应商类型
   originalFormat: ClientFormat = "claude";
   providerType: ProviderType | null = null;
@@ -193,6 +196,20 @@ export class ProxySession {
    */
   setSessionId(sessionId: string): void {
     this.sessionId = sessionId;
+  }
+
+  /**
+   * 设置请求序号（Session 内）
+   */
+  setRequestSequence(sequence: number): void {
+    this.requestSequence = sequence;
+  }
+
+  /**
+   * 获取请求序号（Session 内）
+   */
+  getRequestSequence(): number {
+    return this.requestSequence;
   }
 
   /**

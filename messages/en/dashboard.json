@@ -361,6 +361,14 @@
     "errors": {
       "copyFailed": "Copy Failed"
     },
+    "requestList": {
+      "title": "Requests",
+      "noRequests": "No requests found",
+      "fetchFailed": "Failed to fetch requests",
+      "unknownError": "Unknown error occurred",
+      "prev": "Prev",
+      "next": "Next"
+    },
     "back": "Back",
     "loadingError": "Loading failed"
   },

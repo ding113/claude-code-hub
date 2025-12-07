@@ -243,6 +243,9 @@ export const messageRequest = pgTable('message_request', {
   // Session ID（用于会话粘性和日志追踪）
   sessionId: varchar('session_id', { length: 64 }),
 
+  // Request Sequence（Session 内请求序号，用于区分同一 Session 的不同请求）
+  requestSequence: integer('request_sequence').default(1),
+
   // 上游决策链（记录尝试的供应商列表）
   providerChain: jsonb('provider_chain').$type<Array<{ id: number; name: string }>>(),
 
@@ -290,6 +293,8 @@ export const messageRequest = pgTable('message_request', {
   messageRequestUserQueryIdx: index('idx_message_request_user_query').on(table.userId, table.createdAt).where(sql`${table.deletedAt} IS NULL`),
   // Session 查询索引（按 session 聚合查看对话）
   messageRequestSessionIdIdx: index('idx_message_request_session_id').on(table.sessionId).where(sql`${table.deletedAt} IS NULL`),
+  // Session + Sequence 复合索引（用于 Session 内请求列表查询）
+  messageRequestSessionSeqIdx: index('idx_message_request_session_seq').on(table.sessionId, table.requestSequence).where(sql`${table.deletedAt} IS NULL`),
   // Endpoint 过滤查询索引（仅针对未删除数据）
   messageRequestEndpointIdx: index('idx_message_request_endpoint').on(table.endpoint).where(sql`${table.deletedAt} IS NULL`),
   // 基础索引

@@ -361,6 +361,14 @@
     "errors": {
       "copyFailed": "複製失敗"
     },
+    "requestList": {
+      "title": "請求列表",
+      "noRequests": "暫無請求記錄",
+      "fetchFailed": "取得請求列表失敗",
+      "unknownError": "未知錯誤",
+      "prev": "上一頁",
+      "next": "下一頁"
+    },
     "back": "返回",
     "loadingError": "載入失敗"
   },

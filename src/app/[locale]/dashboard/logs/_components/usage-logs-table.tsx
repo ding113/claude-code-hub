@@ -273,6 +273,7 @@ export function UsageLogsTable({
                         errorMessage={log.errorMessage}
                         providerChain={log.providerChain}
                         sessionId={log.sessionId}
+                        requestSequence={log.requestSequence}
                         blockedBy={log.blockedBy}
                         blockedReason={log.blockedReason}
                         originalModel={log.originalModel}

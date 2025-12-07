@@ -24,6 +24,7 @@ export async function createMessageRequest(
     costUsd: formattedCost ?? undefined,
     costMultiplier: data.cost_multiplier?.toString() ?? undefined, // 供应商倍率（转为字符串）
     sessionId: data.session_id, // Session ID
+    requestSequence: data.request_sequence, // Request Sequence（Session 内请求序号）
     userAgent: data.user_agent, // User-Agent
     endpoint: data.endpoint, // 请求端点（可为空）
     messagesCount: data.messages_count, // Messages 数量
@@ -45,6 +46,7 @@ export async function createMessageRequest(
     costUsd: messageRequest.costUsd,
     costMultiplier: messageRequest.costMultiplier, // 新增
     sessionId: messageRequest.sessionId, // 新增
+    requestSequence: messageRequest.requestSequence, // Request Sequence
     userAgent: messageRequest.userAgent, // 新增
     endpoint: messageRequest.endpoint, // 新增：返回端点
     messagesCount: messageRequest.messagesCount, // 新增
@@ -584,4 +586,73 @@ export async function findUsageLogs(params: {
   const logs = results.map(toMessageRequest);
 
   return { logs, total };
+}
+
+/**
+ * 查询指定 Session 的所有请求记录（用于 Session 详情页的请求列表）
+ *
+ * @param sessionId - Session ID
+ * @param options - 分页参数
+ * @returns 请求列表和总数
+ */
+export async function findRequestsBySessionId(
+  sessionId: string,
+  options?: { limit?: number; offset?: number }
+): Promise<{
+  requests: Array<{
+    id: number;
+    sequence: number;
+    model: string | null;
+    statusCode: number | null;
+    costUsd: string | null;
+    createdAt: Date | null;
+    inputTokens: number | null;
+    outputTokens: number | null;
+    errorMessage: string | null;
+  }>;
+  total: number;
+}> {
+  const { limit = 20, offset = 0 } = options || {};
+
+  // 查询总数
+  const [countResult] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(messageRequest)
+    .where(and(eq(messageRequest.sessionId, sessionId), isNull(messageRequest.deletedAt)));
+
+  const total = countResult?.count ?? 0;
+
+  // 查询分页数据，按 requestSequence 排序
+  const results = await db
+    .select({
+      id: messageRequest.id,
+      sequence: messageRequest.requestSequence,
+      model: messageRequest.model,
+      statusCode: messageRequest.statusCode,
+      costUsd: messageRequest.costUsd,
+      createdAt: messageRequest.createdAt,
+      inputTokens: messageRequest.inputTokens,
+      outputTokens: messageRequest.outputTokens,
+      errorMessage: messageRequest.errorMessage,
+    })
+    .from(messageRequest)
+    .where(and(eq(messageRequest.sessionId, sessionId), isNull(messageRequest.deletedAt)))
+    .orderBy(messageRequest.requestSequence)
+    .limit(limit)
+    .offset(offset);
+
+  return {
+    requests: results.map((r) => ({
+      id: r.id,
+      sequence: r.sequence ?? 1,
+      model: r.model,
+      statusCode: r.statusCode,
+      costUsd: r.costUsd,
+      createdAt: r.createdAt,
+      inputTokens: r.inputTokens,
+      outputTokens: r.outputTokens,
+      errorMessage: r.errorMessage,
+    })),
+    total,
+  };
 }

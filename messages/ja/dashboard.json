@@ -360,6 +360,14 @@
     "errors": {
       "copyFailed": "コピー失敗"
     },
+    "requestList": {
+      "title": "リクエスト一覧",
+      "noRequests": "リクエストがありません",
+      "fetchFailed": "リクエスト一覧の取得に失敗しました",
+      "unknownError": "不明なエラー",
+      "prev": "前へ",
+      "next": "次へ"
+    },
     "back": "戻る",
     "loadingError": "読み込み失敗"
   },

@@ -373,19 +373,27 @@ export async function hasSessionMessages(sessionId: string): Promise<ActionResul
 }
 
 /**
- * 获取 session 的完整详情（messages + response + 聚合统计）
- * 用于 session messages 详情页面
+ * 获取 Session 详情（包括 messages 和 response）
  *
- * 优化：添加缓存支持
+ * 功能：获取指定 Session 的消息内容和响应数据
+ * 权限：管理员可查看所有 Session，普通用户只能查看自己的 Session
+ *
+ * @param sessionId - Session ID
+ * @param requestSequence - 请求序号（可选，用于获取 Session 内特定请求的消息）
+ *
  * 安全修复：添加用户权限检查
  */
-export async function getSessionDetails(sessionId: string): Promise<
+export async function getSessionDetails(
+  sessionId: string,
+  requestSequence?: number
+): Promise<
   ActionResult<{
     messages: unknown | null;
     response: string | null;
     sessionStats: Awaited<
       ReturnType<typeof import("@/repository/message").aggregateSessionStats>
     > | null;
+    currentSequence: number | null;
   }>
 > {
   try {
@@ -444,9 +452,10 @@ export async function getSessionDetails(sessionId: string): Promise<
 
     // 5. 并行获取 messages 和 response（不缓存，因为这些数据较大）
     const { SessionManager } = await import("@/lib/session-manager");
-    const [messages, response] = await Promise.all([
-      SessionManager.getSessionMessages(sessionId),
-      SessionManager.getSessionResponse(sessionId),
+    const [messages, response, requestCount] = await Promise.all([
+      SessionManager.getSessionMessages(sessionId, requestSequence),
+      SessionManager.getSessionResponse(sessionId, requestSequence),
+      SessionManager.getSessionRequestCount(sessionId),
     ]);
 
     return {
@@ -455,6 +464,7 @@ export async function getSessionDetails(sessionId: string): Promise<
         messages,
         response,
         sessionStats,
+        currentSequence: requestSequence ?? (requestCount > 0 ? requestCount : null),
       },
     };
   } catch (error) {
@@ -462,6 +472,96 @@ export async function getSessionDetails(sessionId: string): Promise<
     return {
       ok: false,
       error: "获取 session 详情失败",
+    };
+  }
+}
+
+/**
+ * 获取 Session 内的所有请求列表（分页）
+ *
+ * 功能：获取指定 Session 中的所有请求记录，用于 Session 详情页的请求列表侧边栏
+ * 权限：管理员可查看所有 Session，普通用户只能查看自己的 Session
+ *
+ * @param sessionId - Session ID
+ * @param page - 页码（从 1 开始）
+ * @param pageSize - 每页数量（默认 20）
+ */
+export async function getSessionRequests(
+  sessionId: string,
+  page: number = 1,
+  pageSize: number = 20
+): Promise<
+  ActionResult<{
+    requests: Array<{
+      id: number;
+      sequence: number;
+      model: string | null;
+      statusCode: number | null;
+      costUsd: string | null;
+      createdAt: Date | null;
+      inputTokens: number | null;
+      outputTokens: number | null;
+      errorMessage: string | null;
+    }>;
+    total: number;
+    hasMore: boolean;
+  }>
+> {
+  try {
+    // 0. 验证用户权限
+    const authSession = await getSession();
+    if (!authSession) {
+      return {
+        ok: false,
+        error: "未登录",
+      };
+    }
+
+    const isAdmin = authSession.user.role === "admin";
+    const currentUserId = authSession.user.id;
+
+    // 1. 验证 Session 所有权
+    const { aggregateSessionStats } = await import("@/repository/message");
+    const sessionStats = await aggregateSessionStats(sessionId);
+
+    if (!sessionStats) {
+      return {
+        ok: false,
+        error: "Session 不存在",
+      };
+    }
+
+    if (!isAdmin && sessionStats.userId !== currentUserId) {
+      logger.warn(
+        `[Security] User ${currentUserId} attempted to access session requests ${sessionId} owned by user ${sessionStats.userId}`
+      );
+      return {
+        ok: false,
+        error: "无权访问该 Session",
+      };
+    }
+
+    // 2. 查询请求列表
+    const { findRequestsBySessionId } = await import("@/repository/message");
+    const offset = (page - 1) * pageSize;
+    const { requests, total } = await findRequestsBySessionId(sessionId, {
+      limit: pageSize,
+      offset,
+    });
+
+    return {
+      ok: true,
+      data: {
+        requests,
+        total,
+        hasMore: offset + requests.length < total,
+      },
+    };
+  } catch (error) {
+    logger.error("Failed to get session requests:", error);
+    return {
+      ok: false,
+      error: "获取 Session 请求列表失败",
     };
   }
 }
