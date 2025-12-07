@@ -325,7 +325,29 @@
       "copyMessages": "メッセージをコピー",
       "downloadMessages": "メッセージをダウンロード",
       "copied": "コピーしました",
-      "copyResponse": "レスポンスボディをコピー"
+      "copyResponse": "レスポンスボディをコピー",
+      "terminate": "強制終了",
+      "terminateTitle": "セッションを強制終了",
+      "terminateDescription": "このセッションを強制終了しますか？終了するとプロバイダーのバインドが解除され、次回リクエストで再選択されます。",
+      "sessionIdLabel": "Session ID: {sessionId}",
+      "cancel": "キャンセル",
+      "confirmTerminate": "終了する",
+      "terminating": "終了しています...",
+      "terminateSuccess": "セッションを強制終了しました",
+      "terminateFailed": "セッションの強制終了に失敗しました",
+      "terminateSelected": "選択したセッションを終了",
+      "selectedCount": "{count} 件を選択中",
+      "selectAll": "すべて選択",
+      "selectSessionLabel": "セッションを選択",
+      "multiSelect": "複数選択",
+      "cancelMultiSelect": "キャンセル",
+      "terminateSessionTitle": "セッションを終了",
+      "terminateSessionDescription": "このセッションを終了してもよろしいですか？この操作は元に戻せません。",
+      "batchTerminateSuccess": "{count} 件のセッションを終了しました",
+      "batchTerminatePartial": "未許可 {unauthorized} 件 · 見つからない {missing} 件",
+      "batchTerminateAllowedFailed": "許可済みだが終了失敗 {count} 件",
+      "batchTerminateNone": "終了できたセッションはありません",
+      "noSelection": "少なくとも1つのセッションを選択してください"
     },
     "status": {
       "loading": "読み込み中...",
@@ -337,6 +359,14 @@
     },
     "errors": {
       "copyFailed": "コピー失敗"
+    },
+    "requestList": {
+      "title": "リクエスト一覧",
+      "noRequests": "リクエストがありません",
+      "fetchFailed": "リクエスト一覧の取得に失敗しました",
+      "unknownError": "不明なエラー",
+      "prev": "前へ",
+      "next": "次へ"
     },
     "back": "戻る",
     "loadingError": "読み込み失敗"
@@ -479,6 +509,26 @@
     "badge": "{count} 個のキー",
     "activeKeys": "アクティブキー",
     "totalKeys": "総キー数",
+    "expiresAt": "有効期限",
+    "status": {
+      "active": "有効",
+      "expiringSoon": "まもなく期限切れ",
+      "expired": "期限切れ",
+      "disabled": "無効"
+    },
+    "actions": {
+      "renew": "更新",
+      "renew30d": "30日間更新",
+      "renew90d": "90日間更新",
+      "renew1y": "1年間更新",
+      "renewCustom": "カスタム...",
+      "customPrompt": "新しい有効期限を入力してください（YYYY-MM-DD）。キャンセルするには空のままにしてください。",
+      "invalidDate": "有効な日付を入力してください",
+      "enable": "有効化",
+      "disable": "無効化",
+      "success": "操作に成功しました",
+      "failed": "操作に失敗しました。後でもう一度お試しください"
+    },
     "emptyState": {
       "title": "ユーザーがいません",
       "description": "まだユーザーを作成していません。ユーザーは API キーと使用制限を管理するための基本単位です。最初のユーザーを作成して始めましょう！",

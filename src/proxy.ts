@@ -10,6 +10,10 @@ import { logger } from "@/lib/logger";
 // Note: These paths will be automatically prefixed with locale by next-intl middleware
 const PUBLIC_PATH_PATTERNS = ["/login", "/usage-doc", "/api/auth/login", "/api/auth/logout"];
 
+// Paths that allow read-only access (for canLoginWebUi=false keys)
+// These paths bypass the canLoginWebUi check in validateKey
+const READ_ONLY_PATH_PATTERNS = ["/my-usage"];
+
 const API_PROXY_PATH = "/v1";
 
 // Create next-intl middleware for locale detection and routing
@@ -57,6 +61,11 @@ async function proxyHandler(request: NextRequest) {
     return localeResponse;
   }
 
+  // Check if current path allows read-only access (for canLoginWebUi=false keys)
+  const isReadOnlyPath = READ_ONLY_PATH_PATTERNS.some(
+    (pattern) => pathWithoutLocale === pattern || pathWithoutLocale.startsWith(`${pattern}/`)
+  );
+
   // Check authentication for protected routes
   const authToken = request.cookies.get("auth-token");
 
@@ -71,7 +80,7 @@ async function proxyHandler(request: NextRequest) {
   }
 
   // Validate key permissions (canLoginWebUi, isEnabled, expiresAt, etc.)
-  const session = await validateKey(authToken.value);
+  const session = await validateKey(authToken.value, { allowReadOnlyAccess: isReadOnlyPath });
   if (!session) {
     // Invalid key or insufficient permissions, clear cookie and redirect to login
     const url = request.nextUrl.clone();

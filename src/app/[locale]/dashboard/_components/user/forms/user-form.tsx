@@ -5,8 +5,10 @@ import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { getAvailableProviderGroups } from "@/actions/providers";
 import { addUser, editUser } from "@/actions/users";
+import { DatePickerField } from "@/components/form/date-picker-field";
 import { ArrayTagInputField, TagInputField, TextField } from "@/components/form/form-field";
 import { DialogFormLayout, FormGrid } from "@/components/form/form-layout";
+import { Switch } from "@/components/ui/switch";
 import { USER_DEFAULTS, USER_LIMITS } from "@/lib/constants/user.constants";
 import { useZodForm } from "@/lib/hooks/use-zod-form";
 import { getErrorMessage } from "@/lib/utils/error-messages";
@@ -27,6 +29,8 @@ interface UserFormProps {
     limitMonthlyUsd?: number | null;
     limitTotalUsd?: number | null;
     limitConcurrentSessions?: number | null;
+    isEnabled?: boolean;
+    expiresAt?: Date | null;
   };
   onSuccess?: () => void;
   currentUser?: {
@@ -70,8 +74,17 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
       limitMonthlyUsd: user?.limitMonthlyUsd ?? null,
       limitTotalUsd: user?.limitTotalUsd ?? null,
       limitConcurrentSessions: user?.limitConcurrentSessions ?? null,
+      isEnabled: user?.isEnabled ?? true,
+      expiresAt: user?.expiresAt ? user.expiresAt.toISOString().split("T")[0] : "",
     },
     onSubmit: async (data) => {
+      // 将纯日期转换为当天结束时间（本地时区 23:59:59.999），避免默认 UTC 零点导致提前过期
+      const toEndOfDay = (dateStr: string) => {
+        const d = new Date(dateStr);
+        d.setHours(23, 59, 59, 999);
+        return d;
+      };
+
       startTransition(async () => {
         try {
           let res;
@@ -88,6 +101,8 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
               limitMonthlyUsd: data.limitMonthlyUsd,
               limitTotalUsd: data.limitTotalUsd,
               limitConcurrentSessions: data.limitConcurrentSessions,
+              isEnabled: data.isEnabled,
+              expiresAt: data.expiresAt ? toEndOfDay(data.expiresAt) : null,
             });
           } else {
             res = await addUser({
@@ -102,6 +117,8 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
               limitMonthlyUsd: data.limitMonthlyUsd,
               limitTotalUsd: data.limitTotalUsd,
               limitConcurrentSessions: data.limitConcurrentSessions,
+              isEnabled: data.isEnabled,
+              expiresAt: data.expiresAt ? toEndOfDay(data.expiresAt) : null,
             });
           }
 
@@ -276,6 +293,35 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
             {...form.getFieldProps("limitConcurrentSessions")}
           />
         </FormGrid>
+      )}
+
+      {/* Admin-only user status fields */}
+      {isAdmin && (
+        <>
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <label htmlFor="is-enabled" className="text-sm font-medium">
+                {tForm("isEnabled.label")}
+              </label>
+              <p className="text-xs text-muted-foreground mt-1">{tForm("isEnabled.description")}</p>
+            </div>
+            <Switch
+              id="is-enabled"
+              checked={form.values.isEnabled ?? true}
+              onCheckedChange={(checked) => form.setValue("isEnabled", checked)}
+            />
+          </div>
+
+          <DatePickerField
+            label={tForm("expiresAt.label")}
+            placeholder={tForm("expiresAt.placeholder")}
+            description={tForm("expiresAt.description")}
+            value={String(form.values.expiresAt || "")}
+            onChange={(val) => form.setValue("expiresAt", val)}
+            error={form.getFieldProps("expiresAt").error}
+            touched={form.getFieldProps("expiresAt").touched}
+          />
+        </>
       )}
     </DialogFormLayout>
   );

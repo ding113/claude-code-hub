@@ -326,7 +326,29 @@
       "copyMessages": "复制 Messages",
       "downloadMessages": "下载 Messages",
       "copied": "已复制",
-      "copyResponse": "复制响应体"
+      "copyResponse": "复制响应体",
+      "terminate": "终止",
+      "terminateTitle": "终止 Session",
+      "terminateDescription": "确认要终止此 Session 吗？终止后，该 Session 的供应商绑定将被清除，下次请求将重新选择供应商。",
+      "sessionIdLabel": "Session ID: {sessionId}",
+      "cancel": "取消",
+      "confirmTerminate": "确认终止",
+      "terminating": "终止中...",
+      "terminateSuccess": "Session 已成功终止",
+      "terminateFailed": "终止 Session 失败",
+      "terminateSelected": "终止所选",
+      "selectedCount": "已选 {count} 个",
+      "selectAll": "全选",
+      "selectSessionLabel": "选择会话",
+      "multiSelect": "多选",
+      "cancelMultiSelect": "取消",
+      "terminateSessionTitle": "终止 Session",
+      "terminateSessionDescription": "确定要终止此 Session 吗？此操作无法撤销。",
+      "batchTerminateSuccess": "已终止 {count} 个 Session",
+      "batchTerminatePartial": "无权限 {unauthorized} 个 · 未找到 {missing} 个",
+      "batchTerminateAllowedFailed": "有权限但终止失败 {count} 个",
+      "batchTerminateNone": "没有任何 Session 被终止",
+      "noSelection": "请至少选择一个 Session"
     },
     "status": {
       "loading": "加载中...",
@@ -338,6 +360,14 @@
     },
     "errors": {
       "copyFailed": "复制失败"
+    },
+    "requestList": {
+      "title": "请求列表",
+      "noRequests": "暂无请求记录",
+      "fetchFailed": "获取请求列表失败",
+      "unknownError": "未知错误",
+      "prev": "上一页",
+      "next": "下一页"
     },
     "back": "返回",
     "loadingError": "加载失败"
@@ -480,6 +510,32 @@
     "badge": "{count} 个 Key",
     "activeKeys": "活跃密钥",
     "totalKeys": "总密钥",
+    "expiresAt": "过期时间",
+    "status": {
+      "active": "已启用",
+      "expiringSoon": "即将过期",
+      "expired": "已过期",
+      "disabled": "已禁用"
+    },
+    "actions": {
+      "renew": "续期",
+      "renew30d": "续期 30 天",
+      "renew90d": "续期 90 天",
+      "renew1y": "续期 1 年",
+      "renewCustom": "自定义...",
+      "customRenewTitle": "自定义续期时间",
+      "customRenewDescription": "为用户 {userName} 设置新的过期时间",
+      "expirationDate": "过期日期",
+      "enableOnRenew": "同时启用用户",
+      "cancel": "取消",
+      "confirm": "确认",
+      "customPrompt": "请输入新的过期日期（YYYY-MM-DD），取消请留空",
+      "invalidDate": "请输入有效日期",
+      "enable": "启用",
+      "disable": "禁用",
+      "success": "操作成功",
+      "failed": "操作失败，请稍后再试"
+    },
     "emptyState": {
       "title": "暂无用户",
       "description": "您还没有创建任何用户。用户是管理 API 密钥和使用限额的基础单位，创建第一个用户开始使用吧！",
@@ -598,6 +654,12 @@
       "description": "同时运行的对话数量",
       "descriptionWithUserLimit": "同时运行的对话数量（用户限额: {limit}）"
     },
+    "providerGroup": {
+      "label": "供应商分组",
+      "placeholder": "输入供应商分组标签，按回车添加",
+      "description": "限制可使用的供应商分组（留空继承用户设置）",
+      "descriptionWithUserGroup": "限制可使用的供应商分组（用户分组: {group}）"
+    },
     "errors": {
       "userIdMissing": "用户ID不存在",
       "createFailed": "创建失败，请稍后重试",
@@ -674,6 +736,15 @@
       "label": "并发 Session 上限",
       "placeholder": "0 表示无限制",
       "description": "同时运行的对话数量"
+    },
+    "isEnabled": {
+      "label": "启用用户",
+      "description": "禁用后用户将无法使用 API"
+    },
+    "expiresAt": {
+      "label": "过期时间",
+      "placeholder": "留空表示永不过期",
+      "description": "用户过期后将自动禁用"
     }
   },
   "deleteKeyConfirm": {

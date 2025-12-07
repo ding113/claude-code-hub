@@ -92,6 +92,7 @@
     "totalCost": "总消费",
     "totalCostAllTime": "历史累计",
     "todayCost": "今日消费",
+    "expiresAtLabel": "过期时间",
     "keys": "密钥",
     "more": "更多",
     "noLimitSet": "-",
@@ -334,6 +335,12 @@
         "placeholder": "0 表示无限制",
         "description": "同时运行的对话数量",
         "descriptionWithUserLimit": "同时运行的对话数量（用户限额: {limit}）"
+      },
+      "providerGroup": {
+        "label": "供应商分组",
+        "placeholder": "输入供应商分组标签，按回车添加",
+        "description": "限制可使用的供应商分组（留空继承用户设置）",
+        "descriptionWithUserGroup": "限制可使用的供应商分组（用户分组: {group}）"
       },
       "submitText": "保存修改",
       "loadingText": "保存中...",

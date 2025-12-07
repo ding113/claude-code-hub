@@ -26,6 +26,8 @@ export async function findKeyById(id: number): Promise<Key | null> {
       limitMonthlyUsd: keys.limitMonthlyUsd,
       limitTotalUsd: keys.limitTotalUsd,
       limitConcurrentSessions: keys.limitConcurrentSessions,
+      providerGroup: keys.providerGroup,
+      cacheTtlPreference: keys.cacheTtlPreference,
       createdAt: keys.createdAt,
       updatedAt: keys.updatedAt,
       deletedAt: keys.deletedAt,
@@ -55,6 +57,8 @@ export async function findKeyList(userId: number): Promise<Key[]> {
       limitMonthlyUsd: keys.limitMonthlyUsd,
       limitTotalUsd: keys.limitTotalUsd,
       limitConcurrentSessions: keys.limitConcurrentSessions,
+      providerGroup: keys.providerGroup,
+      cacheTtlPreference: keys.cacheTtlPreference,
       createdAt: keys.createdAt,
       updatedAt: keys.updatedAt,
       deletedAt: keys.deletedAt,
@@ -83,6 +87,8 @@ export async function createKey(keyData: CreateKeyData): Promise<Key> {
       keyData.limit_monthly_usd != null ? keyData.limit_monthly_usd.toString() : null,
     limitTotalUsd: keyData.limit_total_usd != null ? keyData.limit_total_usd.toString() : null,
     limitConcurrentSessions: keyData.limit_concurrent_sessions,
+    providerGroup: keyData.provider_group ?? null,
+    cacheTtlPreference: keyData.cache_ttl_preference ?? null,
   };
 
   const [key] = await db.insert(keys).values(dbData).returning({
@@ -101,6 +107,7 @@ export async function createKey(keyData: CreateKeyData): Promise<Key> {
     limitMonthlyUsd: keys.limitMonthlyUsd,
     limitTotalUsd: keys.limitTotalUsd,
     limitConcurrentSessions: keys.limitConcurrentSessions,
+    providerGroup: keys.providerGroup,
     createdAt: keys.createdAt,
     updatedAt: keys.updatedAt,
     deletedAt: keys.deletedAt,
@@ -140,6 +147,9 @@ export async function updateKey(id: number, keyData: UpdateKeyData): Promise<Key
       keyData.limit_total_usd != null ? keyData.limit_total_usd.toString() : null;
   if (keyData.limit_concurrent_sessions !== undefined)
     dbData.limitConcurrentSessions = keyData.limit_concurrent_sessions;
+  if (keyData.provider_group !== undefined) dbData.providerGroup = keyData.provider_group;
+  if (keyData.cache_ttl_preference !== undefined)
+    dbData.cacheTtlPreference = keyData.cache_ttl_preference ?? null;
 
   const [key] = await db
     .update(keys)
@@ -161,6 +171,8 @@ export async function updateKey(id: number, keyData: UpdateKeyData): Promise<Key
       limitMonthlyUsd: keys.limitMonthlyUsd,
       limitTotalUsd: keys.limitTotalUsd,
       limitConcurrentSessions: keys.limitConcurrentSessions,
+      providerGroup: keys.providerGroup,
+      cacheTtlPreference: keys.cacheTtlPreference,
       createdAt: keys.createdAt,
       updatedAt: keys.updatedAt,
       deletedAt: keys.deletedAt,
@@ -191,6 +203,8 @@ export async function findActiveKeyByUserIdAndName(
       limitMonthlyUsd: keys.limitMonthlyUsd,
       limitTotalUsd: keys.limitTotalUsd,
       limitConcurrentSessions: keys.limitConcurrentSessions,
+      providerGroup: keys.providerGroup,
+      cacheTtlPreference: keys.cacheTtlPreference,
       createdAt: keys.createdAt,
       updatedAt: keys.updatedAt,
       deletedAt: keys.deletedAt,
@@ -282,6 +296,7 @@ export async function findActiveKeyByKeyString(keyString: string): Promise<Key |
       limitMonthlyUsd: keys.limitMonthlyUsd,
       limitTotalUsd: keys.limitTotalUsd,
       limitConcurrentSessions: keys.limitConcurrentSessions,
+      providerGroup: keys.providerGroup,
       createdAt: keys.createdAt,
       updatedAt: keys.updatedAt,
       deletedAt: keys.deletedAt,
@@ -322,6 +337,8 @@ export async function validateApiKeyAndGetUser(
       keyLimitMonthlyUsd: keys.limitMonthlyUsd,
       keyLimitTotalUsd: keys.limitTotalUsd,
       keyLimitConcurrentSessions: keys.limitConcurrentSessions,
+      keyProviderGroup: keys.providerGroup,
+      keyCacheTtlPreference: keys.cacheTtlPreference,
       keyCreatedAt: keys.createdAt,
       keyUpdatedAt: keys.updatedAt,
       keyDeletedAt: keys.deletedAt,
@@ -334,6 +351,8 @@ export async function validateApiKeyAndGetUser(
       userDailyQuota: users.dailyLimitUsd,
       userProviderGroup: users.providerGroup,
       userLimitTotalUsd: users.limitTotalUsd,
+      userIsEnabled: users.isEnabled,
+      userExpiresAt: users.expiresAt,
       userCreatedAt: users.createdAt,
       userUpdatedAt: users.updatedAt,
       userDeletedAt: users.deletedAt,
@@ -365,6 +384,8 @@ export async function validateApiKeyAndGetUser(
     dailyQuota: row.userDailyQuota,
     providerGroup: row.userProviderGroup,
     limitTotalUsd: row.userLimitTotalUsd,
+    isEnabled: row.userIsEnabled,
+    expiresAt: row.userExpiresAt,
     createdAt: row.userCreatedAt,
     updatedAt: row.userUpdatedAt,
     deletedAt: row.userDeletedAt,
@@ -386,6 +407,8 @@ export async function validateApiKeyAndGetUser(
     limitMonthlyUsd: row.keyLimitMonthlyUsd,
     limitTotalUsd: row.keyLimitTotalUsd,
     limitConcurrentSessions: row.keyLimitConcurrentSessions,
+    providerGroup: row.keyProviderGroup,
+    cacheTtlPreference: row.keyCacheTtlPreference,
     createdAt: row.keyCreatedAt,
     updatedAt: row.keyUpdatedAt,
     deletedAt: row.keyDeletedAt,

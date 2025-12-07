@@ -2,6 +2,7 @@ import "@/lib/polyfills/file";
 import { Hono } from "hono";
 import { handle } from "hono/vercel";
 import { handleChatCompletions } from "@/app/v1/_lib/codex/chat-completions-handler";
+import { registerCors } from "@/app/v1/_lib/cors";
 import { handleProxyRequest } from "@/app/v1/_lib/proxy-handler";
 import { logger } from "@/lib/logger";
 import { sensitiveWordDetector } from "@/lib/sensitive-word-detector";
@@ -20,6 +21,8 @@ sensitiveWordDetector.reload().catch((err) => {
 });
 
 const app = new Hono().basePath("/v1");
+
+registerCors(app);
 
 // OpenAI Compatible API 路由
 app.post("/chat/completions", handleChatCompletions);

@@ -278,7 +278,7 @@
       "title": "cch サービスに接続",
 
       "configFile": {
-        "title": "方法1: 設定ファイル方式 (推奨)",
+        "title": "設定ファイルのセットアップ",
         "steps": [
           "ファイルエクスプローラーを開き、${configPath} フォルダを見つける (存在しない場合は作成)",
           "config.toml ファイルを作成",
@@ -294,8 +294,16 @@
         ]
       },
 
+      "authJson": {
+        "title": "設定ファイル方式",
+        "configTomlDescription": "config.toml ファイルを作成 (auth.json でキーを保存する場合、env_key フィールドは不要):",
+        "note": "注記",
+        "noteText": "この方法では、auth.json ファイルに API キーを保存するため、config.toml に env_key フィールドを設定する必要がありません。"
+      },
+
       "envVars": {
-        "title": "方法2: 環境変数設定",
+        "title": "環境変数方式",
+        "configTomlDescription": "config.toml ファイルを作成 (環境変数を使用する場合、env_key フィールドが必要):",
 
         "windows": {
           "instruction": "PowerShell で実行:",

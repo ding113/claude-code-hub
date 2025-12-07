@@ -40,7 +40,7 @@ export default function ActiveSessionsPage() {
   const router = useRouter();
   const t = useTranslations("dashboard.sessions");
 
-  const { data, isLoading, error } = useQuery<
+  const { data, isLoading, error, refetch } = useQuery<
     { active: ActiveSessionInfo[]; inactive: ActiveSessionInfo[] },
     Error
   >({
@@ -94,6 +94,7 @@ export default function ActiveSessionsPage() {
               sessions={activeSessions}
               isLoading={isLoading}
               currencyCode={currencyCode}
+              onSessionTerminated={() => refetch()}
             />
           </Section>
 

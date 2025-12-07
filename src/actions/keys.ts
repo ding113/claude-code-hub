@@ -34,6 +34,8 @@ export async function addKey(data: {
   limitMonthlyUsd?: number | null;
   limitTotalUsd?: number | null;
   limitConcurrentSessions?: number;
+  providerGroup?: string | null;
+  cacheTtlPreference?: "inherit" | "5m" | "1h";
 }): Promise<ActionResult<{ generatedKey: string; name: string }>> {
   try {
     // 权限检查：用户只能给自己添加Key，管理员可以给所有人添加Key
@@ -57,6 +59,8 @@ export async function addKey(data: {
       limitMonthlyUsd: data.limitMonthlyUsd,
       limitTotalUsd: data.limitTotalUsd,
       limitConcurrentSessions: data.limitConcurrentSessions,
+      providerGroup: data.providerGroup,
+      cacheTtlPreference: data.cacheTtlPreference,
     });
 
     // 检查是否存在同名的生效key
@@ -151,6 +155,8 @@ export async function addKey(data: {
       limit_monthly_usd: validatedData.limitMonthlyUsd,
       limit_total_usd: validatedData.limitTotalUsd,
       limit_concurrent_sessions: validatedData.limitConcurrentSessions,
+      provider_group: validatedData.providerGroup || null,
+      cache_ttl_preference: validatedData.cacheTtlPreference,
     });
 
     revalidatePath("/dashboard");
@@ -179,6 +185,8 @@ export async function editKey(
     limitMonthlyUsd?: number | null;
     limitTotalUsd?: number | null;
     limitConcurrentSessions?: number;
+    providerGroup?: string | null;
+    cacheTtlPreference?: "inherit" | "5m" | "1h";
   }
 ): Promise<ActionResult> {
   try {
@@ -285,12 +293,14 @@ export async function editKey(
       limit_monthly_usd: validatedData.limitMonthlyUsd,
       limit_total_usd: validatedData.limitTotalUsd,
       limit_concurrent_sessions: validatedData.limitConcurrentSessions,
+      provider_group: validatedData.providerGroup || null,
+      cache_ttl_preference: validatedData.cacheTtlPreference,
     });
 
     revalidatePath("/dashboard");
     return { ok: true };
   } catch (error) {
-    logger.error("更新密钥失败:", error);
+    logger.error("Failed to update key:", error);
     const message = error instanceof Error ? error.message : "更新密钥失败，请稍后重试";
     return { ok: false, error: message };
   }

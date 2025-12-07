@@ -274,7 +274,7 @@
       "title": "连接 cch 服务",
 
       "configFile": {
-        "title": "方法一：配置文件方式（推荐）",
+        "title": "配置文件设置",
         "steps": [
           "打开文件资源管理器，找到 ${configPath} 文件夹（不存在则创建）",
           "创建 config.toml 文件",
@@ -290,8 +290,16 @@
         ]
       },
 
+      "authJson": {
+        "title": "配置文件方式",
+        "configTomlDescription": "创建 config.toml 文件（使用 auth.json 存储密钥时，无需 env_key 字段）：",
+        "note": "提示",
+        "noteText": "此方式通过 auth.json 文件存储 API 密钥，config.toml 中无需配置 env_key 字段。"
+      },
+
       "envVars": {
-        "title": "方法二：环境变量配置",
+        "title": "环境变量方式",
+        "configTomlDescription": "创建 config.toml 文件（使用环境变量时，需要配置 env_key 字段）：",
 
         "windows": {
           "instruction": "在 PowerShell 中运行：",

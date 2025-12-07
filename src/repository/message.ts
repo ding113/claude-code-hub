@@ -24,9 +24,15 @@ export async function createMessageRequest(
     costUsd: formattedCost ?? undefined,
     costMultiplier: data.cost_multiplier?.toString() ?? undefined, // 供应商倍率（转为字符串）
     sessionId: data.session_id, // Session ID
+    requestSequence: data.request_sequence, // Request Sequence（Session 内请求序号）
     userAgent: data.user_agent, // User-Agent
     endpoint: data.endpoint, // 请求端点（可为空）
     messagesCount: data.messages_count, // Messages 数量
+    cacheTtlApplied: data.cache_ttl_applied,
+    cacheCreationInputTokens: data.cache_creation_input_tokens,
+    cacheCreation5mInputTokens: data.cache_creation_5m_input_tokens,
+    cacheCreation1hInputTokens: data.cache_creation_1h_input_tokens,
+    cacheReadInputTokens: data.cache_read_input_tokens,
   };
 
   const [result] = await db.insert(messageRequest).values(dbData).returning({
@@ -40,9 +46,15 @@ export async function createMessageRequest(
     costUsd: messageRequest.costUsd,
     costMultiplier: messageRequest.costMultiplier, // 新增
     sessionId: messageRequest.sessionId, // 新增
+    requestSequence: messageRequest.requestSequence, // Request Sequence
     userAgent: messageRequest.userAgent, // 新增
     endpoint: messageRequest.endpoint, // 新增：返回端点
     messagesCount: messageRequest.messagesCount, // 新增
+    cacheTtlApplied: messageRequest.cacheTtlApplied,
+    cacheCreationInputTokens: messageRequest.cacheCreationInputTokens,
+    cacheCreation5mInputTokens: messageRequest.cacheCreation5mInputTokens,
+    cacheCreation1hInputTokens: messageRequest.cacheCreation1hInputTokens,
+    cacheReadInputTokens: messageRequest.cacheReadInputTokens,
     createdAt: messageRequest.createdAt,
     updatedAt: messageRequest.updatedAt,
     deletedAt: messageRequest.deletedAt,
@@ -96,6 +108,9 @@ export async function updateMessageRequestDetails(
     outputTokens?: number;
     cacheCreationInputTokens?: number;
     cacheReadInputTokens?: number;
+    cacheCreation5mInputTokens?: number;
+    cacheCreation1hInputTokens?: number;
+    cacheTtlApplied?: string | null;
     providerChain?: CreateMessageRequestData["provider_chain"];
     errorMessage?: string;
     model?: string; // ⭐ 新增：支持更新重定向后的模型名称
@@ -120,6 +135,15 @@ export async function updateMessageRequestDetails(
   }
   if (details.cacheReadInputTokens !== undefined) {
     updateData.cacheReadInputTokens = details.cacheReadInputTokens;
+  }
+  if (details.cacheCreation5mInputTokens !== undefined) {
+    updateData.cacheCreation5mInputTokens = details.cacheCreation5mInputTokens;
+  }
+  if (details.cacheCreation1hInputTokens !== undefined) {
+    updateData.cacheCreation1hInputTokens = details.cacheCreation1hInputTokens;
+  }
+  if (details.cacheTtlApplied !== undefined) {
+    updateData.cacheTtlApplied = details.cacheTtlApplied;
   }
   if (details.providerChain !== undefined) {
     updateData.providerChain = details.providerChain;
@@ -188,6 +212,9 @@ export async function findMessageRequestBySessionId(
       outputTokens: messageRequest.outputTokens,
       cacheCreationInputTokens: messageRequest.cacheCreationInputTokens,
       cacheReadInputTokens: messageRequest.cacheReadInputTokens,
+      cacheCreation5mInputTokens: messageRequest.cacheCreation5mInputTokens,
+      cacheCreation1hInputTokens: messageRequest.cacheCreation1hInputTokens,
+      cacheTtlApplied: messageRequest.cacheTtlApplied,
       errorMessage: messageRequest.errorMessage,
       providerChain: messageRequest.providerChain,
       blockedBy: messageRequest.blockedBy,
@@ -559,4 +586,73 @@ export async function findUsageLogs(params: {
   const logs = results.map(toMessageRequest);
 
   return { logs, total };
+}
+
+/**
+ * 查询指定 Session 的所有请求记录（用于 Session 详情页的请求列表）
+ *
+ * @param sessionId - Session ID
+ * @param options - 分页参数
+ * @returns 请求列表和总数
+ */
+export async function findRequestsBySessionId(
+  sessionId: string,
+  options?: { limit?: number; offset?: number }
+): Promise<{
+  requests: Array<{
+    id: number;
+    sequence: number;
+    model: string | null;
+    statusCode: number | null;
+    costUsd: string | null;
+    createdAt: Date | null;
+    inputTokens: number | null;
+    outputTokens: number | null;
+    errorMessage: string | null;
+  }>;
+  total: number;
+}> {
+  const { limit = 20, offset = 0 } = options || {};
+
+  // 查询总数
+  const [countResult] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(messageRequest)
+    .where(and(eq(messageRequest.sessionId, sessionId), isNull(messageRequest.deletedAt)));
+
+  const total = countResult?.count ?? 0;
+
+  // 查询分页数据，按 requestSequence 排序
+  const results = await db
+    .select({
+      id: messageRequest.id,
+      sequence: messageRequest.requestSequence,
+      model: messageRequest.model,
+      statusCode: messageRequest.statusCode,
+      costUsd: messageRequest.costUsd,
+      createdAt: messageRequest.createdAt,
+      inputTokens: messageRequest.inputTokens,
+      outputTokens: messageRequest.outputTokens,
+      errorMessage: messageRequest.errorMessage,
+    })
+    .from(messageRequest)
+    .where(and(eq(messageRequest.sessionId, sessionId), isNull(messageRequest.deletedAt)))
+    .orderBy(messageRequest.requestSequence)
+    .limit(limit)
+    .offset(offset);
+
+  return {
+    requests: results.map((r) => ({
+      id: r.id,
+      sequence: r.sequence ?? 1,
+      model: r.model,
+      statusCode: r.statusCode,
+      costUsd: r.costUsd,
+      createdAt: r.createdAt,
+      inputTokens: r.inputTokens,
+      outputTokens: r.outputTokens,
+      errorMessage: r.errorMessage,
+    })),
+    total,
+  };
 }

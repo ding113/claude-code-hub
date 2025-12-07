@@ -235,7 +235,24 @@ export function UsageLogsTable({
                       {formatTokenAmount(log.outputTokens)}
                     </TableCell>
                     <TableCell className="text-right font-mono text-xs">
-                      {formatTokenAmount(log.cacheCreationInputTokens)}
+                      <TooltipProvider>
+                        <Tooltip delayDuration={250}>
+                          <TooltipTrigger asChild>
+                            <div className="flex items-center justify-end gap-1 cursor-help">
+                              <span>{formatTokenAmount(log.cacheCreationInputTokens)}</span>
+                              {log.cacheTtlApplied ? (
+                                <Badge variant="outline" className="text-[10px] leading-tight px-1">
+                                  {log.cacheTtlApplied}
+                                </Badge>
+                              ) : null}
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent align="end" className="text-xs space-y-1">
+                            <div>5m: {formatTokenAmount(log.cacheCreation5mInputTokens)}</div>
+                            <div>1h: {formatTokenAmount(log.cacheCreation1hInputTokens)}</div>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                     </TableCell>
                     <TableCell className="text-right font-mono text-xs">
                       {formatTokenAmount(log.cacheReadInputTokens)}
@@ -256,6 +273,7 @@ export function UsageLogsTable({
                         errorMessage={log.errorMessage}
                         providerChain={log.providerChain}
                         sessionId={log.sessionId}
+                        requestSequence={log.requestSequence}
                         blockedBy={log.blockedBy}
                         blockedReason={log.blockedReason}
                         originalModel={log.originalModel}

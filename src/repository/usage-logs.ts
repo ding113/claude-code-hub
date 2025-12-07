@@ -3,17 +3,16 @@
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest, providers, users } from "@/drizzle/schema";
-import { getEnvConfig } from "@/lib/config";
 import type { ProviderChainItem } from "@/types/message";
 
 export interface UsageLogFilters {
   userId?: number;
   keyId?: number;
   providerId?: number;
-  /** 本地时间字符串，格式: "YYYY-MM-DD HH:mm:ss" 或 "YYYY-MM-DDTHH:mm" */
-  startDateLocal?: string;
-  /** 本地时间字符串，格式: "YYYY-MM-DD HH:mm:ss" 或 "YYYY-MM-DDTHH:mm" */
-  endDateLocal?: string;
+  /** 开始时间戳（毫秒），用于 >= 比较 */
+  startTime?: number;
+  /** 结束时间戳（毫秒），用于 < 比较 */
+  endTime?: number;
   statusCode?: number;
   /** 排除 200 状态码（筛选所有非 200 的请求，包括 NULL） */
   excludeStatusCode200?: boolean;
@@ -29,6 +28,7 @@ export interface UsageLogRow {
   id: number;
   createdAt: Date | null;
   sessionId: string | null; // Session ID
+  requestSequence: number | null; // Request Sequence（Session 内请求序号）
   userName: string;
   keyName: string;
   providerName: string | null; // 改为可选：被拦截的请求没有 provider
@@ -40,6 +40,9 @@ export interface UsageLogRow {
   outputTokens: number | null;
   cacheCreationInputTokens: number | null;
   cacheReadInputTokens: number | null;
+  cacheCreation5mInputTokens: number | null;
+  cacheCreation1hInputTokens: number | null;
+  cacheTtlApplied: string | null;
   totalTokens: number;
   costUsd: string | null;
   costMultiplier: string | null; // 供应商倍率
@@ -60,6 +63,8 @@ export interface UsageLogSummary {
   totalOutputTokens: number;
   totalCacheCreationTokens: number;
   totalCacheReadTokens: number;
+  totalCacheCreation5mTokens: number;
+  totalCacheCreation1hTokens: number;
 }
 
 export interface UsageLogsResult {
@@ -68,30 +73,55 @@ export interface UsageLogsResult {
   summary: UsageLogSummary;
 }
 
+export async function getTotalUsageForKey(keyString: string): Promise<number> {
+  const [row] = await db
+    .select({ total: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)` })
+    .from(messageRequest)
+    .where(and(eq(messageRequest.key, keyString), isNull(messageRequest.deletedAt)));
+
+  return Number(row?.total ?? 0);
+}
+
+export async function getDistinctModelsForKey(keyString: string): Promise<string[]> {
+  const result = await db.execute(
+    sql`select distinct coalesce(${messageRequest.originalModel}, ${messageRequest.model}) as model
+        from ${messageRequest}
+        where ${messageRequest.key} = ${keyString}
+          and ${messageRequest.deletedAt} is null
+        order by model asc`
+  );
+
+  return Array.from(result)
+    .map((row) => (row as { model?: string }).model)
+    .filter((model): model is string => !!model && model.trim().length > 0);
+}
+
+export async function getDistinctEndpointsForKey(keyString: string): Promise<string[]> {
+  const result = await db.execute(
+    sql`select distinct ${messageRequest.endpoint} as endpoint
+        from ${messageRequest}
+        where ${messageRequest.key} = ${keyString}
+          and ${messageRequest.deletedAt} is null
+          and ${messageRequest.endpoint} is not null
+        order by endpoint asc`
+  );
+
+  return Array.from(result)
+    .map((row) => (row as { endpoint?: string }).endpoint)
+    .filter((endpoint): endpoint is string => !!endpoint && endpoint.trim().length > 0);
+}
+
 /**
  * 查询使用日志（支持多种筛选条件和分页）
  */
-/**
- * 将本地时间字符串标准化为 "YYYY-MM-DD HH:mm:ss" 格式
- * 支持输入格式: "YYYY-MM-DDTHH:mm" 或 "YYYY-MM-DD HH:mm:ss"
- */
-function normalizeLocalTimeStr(input: string): string {
-  // 处理 datetime-local 格式: "2025-11-26T00:00" → "2025-11-26 00:00:00"
-  const normalized = input.replace("T", " ");
-  // 如果没有秒数，补充 ":00"
-  if (normalized.length === 16) {
-    return `${normalized}:00`;
-  }
-  return normalized;
-}
 
 export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promise<UsageLogsResult> {
   const {
     userId,
     keyId,
     providerId,
-    startDateLocal,
-    endDateLocal,
+    startTime,
+    endTime,
     statusCode,
     excludeStatusCode200,
     model,
@@ -131,6 +161,8 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
           totalOutputTokens: 0,
           totalCacheCreationTokens: 0,
           totalCacheReadTokens: 0,
+          totalCacheCreation5mTokens: 0,
+          totalCacheCreation1hTokens: 0,
         },
       };
     }
@@ -140,23 +172,17 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
     conditions.push(eq(messageRequest.providerId, providerId));
   }
 
-  // 时区感知的时间比较
-  // 将数据库的 timestamptz 转换为配置的时区后，与前端传来的本地时间字符串比较
-  // 注意：前端直接传递用户选择的本地时间字符串，避免 Date 序列化导致的时区问题
-  const timezone = getEnvConfig().TZ;
-
-  if (startDateLocal) {
-    const localTimeStr = normalizeLocalTimeStr(startDateLocal);
-    conditions.push(
-      sql`(${messageRequest.createdAt} AT TIME ZONE 'UTC' AT TIME ZONE ${timezone})::timestamp >= ${localTimeStr}::timestamp`
-    );
+  // 使用毫秒时间戳进行时间比较
+  // 前端传递的是浏览器本地时区的毫秒时间戳，直接与数据库的 timestamptz 比较
+  // PostgreSQL 会自动处理时区转换
+  if (startTime !== undefined) {
+    const startDate = new Date(startTime);
+    conditions.push(sql`${messageRequest.createdAt} >= ${startDate.toISOString()}::timestamptz`);
   }
 
-  if (endDateLocal) {
-    const localTimeStr = normalizeLocalTimeStr(endDateLocal);
-    conditions.push(
-      sql`(${messageRequest.createdAt} AT TIME ZONE 'UTC' AT TIME ZONE ${timezone})::timestamp < ${localTimeStr}::timestamp`
-    );
+  if (endTime !== undefined) {
+    const endDate = new Date(endTime);
+    conditions.push(sql`${messageRequest.createdAt} < ${endDate.toISOString()}::timestamptz`);
   }
 
   if (statusCode !== undefined) {
@@ -192,6 +218,8 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       totalOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens})::double precision, 0::double precision)`,
       totalCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens})::double precision, 0::double precision)`,
       totalCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens})::double precision, 0::double precision)`,
+      totalCacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens})::double precision, 0::double precision)`,
+      totalCacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens})::double precision, 0::double precision)`,
     })
     .from(messageRequest)
     .where(and(...conditions));
@@ -211,6 +239,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       id: messageRequest.id,
       createdAt: messageRequest.createdAt,
       sessionId: messageRequest.sessionId, // Session ID
+      requestSequence: messageRequest.requestSequence, // Request Sequence
       userName: users.name,
       keyName: keysTable.name,
       providerName: providers.name, // 被拦截的请求为 null
@@ -222,6 +251,9 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       outputTokens: messageRequest.outputTokens,
       cacheCreationInputTokens: messageRequest.cacheCreationInputTokens,
       cacheReadInputTokens: messageRequest.cacheReadInputTokens,
+      cacheCreation5mInputTokens: messageRequest.cacheCreation5mInputTokens,
+      cacheCreation1hInputTokens: messageRequest.cacheCreation1hInputTokens,
+      cacheTtlApplied: messageRequest.cacheTtlApplied,
       costUsd: messageRequest.costUsd,
       costMultiplier: messageRequest.costMultiplier, // 供应商倍率
       durationMs: messageRequest.durationMs,
@@ -250,7 +282,11 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
 
     return {
       ...row,
+      requestSequence: row.requestSequence ?? null,
       totalTokens: totalRowTokens,
+      cacheCreation5mInputTokens: row.cacheCreation5mInputTokens,
+      cacheCreation1hInputTokens: row.cacheCreation1hInputTokens,
+      cacheTtlApplied: row.cacheTtlApplied,
       costUsd: row.costUsd?.toString() ?? null,
       providerChain: row.providerChain as ProviderChainItem[] | null,
       endpoint: row.endpoint,
@@ -268,6 +304,8 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       totalOutputTokens: summaryResult?.totalOutputTokens ?? 0,
       totalCacheCreationTokens: summaryResult?.totalCacheCreationTokens ?? 0,
       totalCacheReadTokens: summaryResult?.totalCacheReadTokens ?? 0,
+      totalCacheCreation5mTokens: summaryResult?.totalCacheCreation5mTokens ?? 0,
+      totalCacheCreation1hTokens: summaryResult?.totalCacheCreation1hTokens ?? 0,
     },
   };
 }

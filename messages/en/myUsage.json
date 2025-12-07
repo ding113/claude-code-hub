@@ -1,0 +1,82 @@
+{
+  "header": {
+    "title": "My Usage",
+    "subtitle": "View your quotas and usage logs",
+    "logout": "Logout",
+    "keyLabel": "Key",
+    "userLabel": "User",
+    "providerGroup": "Provider Group",
+    "noProviderGroup": "Default",
+    "inherited": "(inherited)"
+  },
+  "quota": {
+    "5h": "5h Quota",
+    "daily": "Daily Quota",
+    "weekly": "Weekly Quota",
+    "monthly": "Monthly Quota",
+    "total": "Total Quota",
+    "concurrent": "Concurrent Sessions",
+    "keyLevel": "Key",
+    "userLevel": "User",
+    "unlimited": "Unlimited",
+    "empty": "No quota data"
+  },
+  "today": {
+    "title": "Today's Usage",
+    "autoRefresh": "Auto refresh every {seconds}s",
+    "refresh": "Refresh",
+    "calls": "Calls",
+    "tokensIn": "Input tokens",
+    "tokensOut": "Output tokens",
+    "cost": "{currency} cost",
+    "modelBreakdown": "By model",
+    "unknownModel": "Unknown model",
+    "billingModel": "Billing model: {model}",
+    "callsShort": "{count} calls",
+    "tokensShort": "In {in} / Out {out}",
+    "noData": "No data today"
+  },
+  "logs": {
+    "title": "Usage Logs",
+    "filters": {
+      "startDate": "Start date",
+      "endDate": "End date",
+      "model": "Model",
+      "status": "Status",
+      "allModels": "All models",
+      "allStatus": "All statuses",
+      "apply": "Apply",
+      "reset": "Reset"
+    },
+    "loadFailed": "Failed to load logs",
+    "table": {
+      "time": "Time",
+      "model": "Model",
+      "tokens": "Tokens (in/out)",
+      "cost": "{currency} cost",
+      "status": "Status",
+      "endpoint": "Endpoint"
+    },
+    "pagination": "Showing {from}-{to} of {total}",
+    "prev": "Prev",
+    "next": "Next",
+    "noLogs": "No logs",
+    "unknownModel": "Unknown model",
+    "billingModel": "Billing: {model}"
+  },
+  "expiration": {
+    "title": "Expiration",
+    "keyExpires": "Key Expires",
+    "userExpires": "User Expires",
+    "neverExpires": "Never",
+    "expired": "Expired",
+    "expiresIn": "in {time}",
+    "expiringWarning": "Expiring Soon"
+  },
+  "providerGroup": {
+    "keyGroup": "Key Group",
+    "userGroup": "User Group",
+    "allProviders": "All Providers",
+    "inheritedFromUser": "Inherited from User"
+  }
+}

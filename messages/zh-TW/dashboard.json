@@ -326,7 +326,29 @@
       "copyMessages": "複製 Messages",
       "downloadMessages": "下載 Messages",
       "copied": "已複製",
-      "copyResponse": "複製回應主體"
+      "copyResponse": "複製回應主體",
+      "terminate": "終止",
+      "terminateTitle": "終止會話",
+      "terminateDescription": "確定要終止此會話嗎？終止後會清除供應商綁定，下一次請求將重新選擇供應商。",
+      "sessionIdLabel": "會話 ID：{sessionId}",
+      "cancel": "取消",
+      "confirmTerminate": "確認終止",
+      "terminating": "終止中...",
+      "terminateSuccess": "會話已成功終止",
+      "terminateFailed": "終止會話失敗",
+      "terminateSelected": "終止所選",
+      "selectedCount": "已選 {count} 個",
+      "selectAll": "全選",
+      "selectSessionLabel": "選擇會話",
+      "multiSelect": "多選",
+      "cancelMultiSelect": "取消",
+      "terminateSessionTitle": "終止會話",
+      "terminateSessionDescription": "確定要終止此會話嗎？此操作無法撤銷。",
+      "batchTerminateSuccess": "已終止 {count} 個會話",
+      "batchTerminatePartial": "無權限 {unauthorized} 個 · 未找到 {missing} 個",
+      "batchTerminateAllowedFailed": "有權限但終止失敗 {count} 個",
+      "batchTerminateNone": "沒有任何會話被終止",
+      "noSelection": "請至少選擇一個會話"
     },
     "status": {
       "loading": "載入中...",
@@ -338,6 +360,14 @@
     },
     "errors": {
       "copyFailed": "複製失敗"
+    },
+    "requestList": {
+      "title": "請求列表",
+      "noRequests": "暫無請求記錄",
+      "fetchFailed": "取得請求列表失敗",
+      "unknownError": "未知錯誤",
+      "prev": "上一頁",
+      "next": "下一頁"
     },
     "back": "返回",
     "loadingError": "載入失敗"
@@ -480,6 +510,26 @@
     "badge": "{count} 個金鑰",
     "activeKeys": "活躍金鑰",
     "totalKeys": "總金鑰數",
+    "expiresAt": "過期時間",
+    "status": {
+      "active": "已啟用",
+      "expiringSoon": "即將過期",
+      "expired": "已過期",
+      "disabled": "已停用"
+    },
+    "actions": {
+      "renew": "續期",
+      "renew30d": "續期 30 天",
+      "renew90d": "續期 90 天",
+      "renew1y": "續期 1 年",
+      "renewCustom": "自訂...",
+      "customPrompt": "請輸入新的過期日期（YYYY-MM-DD），取消請留空",
+      "invalidDate": "請輸入有效日期",
+      "enable": "啟用",
+      "disable": "停用",
+      "success": "操作成功",
+      "failed": "操作失敗，請稍後再試"
+    },
     "emptyState": {
       "title": "暫無使用者",
       "description": "您還沒有建立任何使用者。使用者是管理 API 金鑰和使用限額的基礎單位，建立第一個使用者開始使用吧！",

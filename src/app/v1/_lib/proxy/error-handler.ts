@@ -1,8 +1,13 @@
-import { isValidErrorOverrideResponse } from "@/lib/error-override-validator";
+import {
+  isClaudeErrorFormat,
+  isGeminiErrorFormat,
+  isOpenAIErrorFormat,
+  isValidErrorOverrideResponse,
+} from "@/lib/error-override-validator";
 import { logger } from "@/lib/logger";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { updateMessageRequestDetails, updateMessageRequestDuration } from "@/repository/message";
-import { getErrorOverride, isRateLimitError, ProxyError, type RateLimitError } from "./errors";
+import { getErrorOverrideAsync, isRateLimitError, ProxyError, type RateLimitError } from "./errors";
 import { ProxyResponses } from "./responses";
 import type { ProxySession } from "./session";
 
@@ -59,8 +64,9 @@ export class ProxyErrorHandler {
     await ProxyErrorHandler.logErrorToDatabase(session, errorMessage, statusCode, null);
 
     // 检测是否有覆写配置（响应体或状态码）
+    // 使用异步版本确保错误规则已加载
     if (error instanceof Error) {
-      const override = getErrorOverride(error);
+      const override = await getErrorOverrideAsync(error);
       if (override) {
         // 运行时校验覆写状态码范围（400-599），防止数据库脏数据导致 Response 抛 RangeError
         let validatedStatusCode = override.statusCode;
@@ -121,26 +127,27 @@ export class ProxyErrorHandler {
               ? overrideErrorObj.message
               : errorMessage;
 
-          // 构建最终响应：注入 request_id（如果有），并确保 message 不为空
-          // 移除覆写配置中的 request_id，只使用上游的 request_id
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const { request_id: _ignoredRequestId, ...overrideWithoutRequestId } =
-            override.response as Record<string, unknown>;
-
+          // 构建覆写响应体
+          // 设计原则：只输出用户配置的字段，不额外注入 request_id 等字段
+          // 唯一的特殊处理：message 为空时回退到原始错误消息
           const responseBody = {
-            ...overrideWithoutRequestId,
+            ...override.response,
             error: {
               ...overrideErrorObj,
               message: overrideMessage,
             },
-            ...(safeRequestId ? { request_id: safeRequestId } : {}),
           };
 
           logger.info("ProxyErrorHandler: Applied error override response", {
             original: errorMessage.substring(0, 200),
-            overrideType: override.response.error?.type,
+            format: isClaudeErrorFormat(override.response)
+              ? "claude"
+              : isGeminiErrorFormat(override.response)
+                ? "gemini"
+                : isOpenAIErrorFormat(override.response)
+                  ? "openai"
+                  : "unknown",
             statusCode: responseStatusCode,
-            hasRequestId: !!safeRequestId,
           });
 
           logger.error("ProxyErrorHandler: Request failed (overridden)", {

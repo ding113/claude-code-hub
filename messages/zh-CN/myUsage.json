@@ -1,0 +1,82 @@
+{
+  "header": {
+    "title": "我的用量",
+    "subtitle": "查看额度与使用记录",
+    "logout": "退出登录",
+    "keyLabel": "密钥",
+    "userLabel": "用户",
+    "providerGroup": "供应商分组",
+    "noProviderGroup": "默认",
+    "inherited": "（继承）"
+  },
+  "quota": {
+    "5h": "5小时额度",
+    "daily": "日额度",
+    "weekly": "周额度",
+    "monthly": "月额度",
+    "total": "总额度",
+    "concurrent": "并发会话",
+    "keyLevel": "密钥",
+    "userLevel": "用户",
+    "unlimited": "不限",
+    "empty": "暂无额度数据"
+  },
+  "today": {
+    "title": "今日使用",
+    "autoRefresh": "每{seconds}s自动刷新",
+    "refresh": "刷新",
+    "calls": "调用次数",
+    "tokensIn": "输入 Tokens",
+    "tokensOut": "输出 Tokens",
+    "cost": "{currency} 消耗",
+    "modelBreakdown": "按模型",
+    "unknownModel": "未知模型",
+    "billingModel": "计费模型：{model}",
+    "callsShort": "{count} 次",
+    "tokensShort": "入 {in} / 出 {out}",
+    "noData": "今日暂无数据"
+  },
+  "logs": {
+    "title": "使用日志",
+    "filters": {
+      "startDate": "开始日期",
+      "endDate": "结束日期",
+      "model": "模型",
+      "status": "状态码",
+      "allModels": "全部模型",
+      "allStatus": "全部状态",
+      "apply": "应用",
+      "reset": "重置"
+    },
+    "loadFailed": "日志加载失败",
+    "table": {
+      "time": "时间",
+      "model": "模型",
+      "tokens": "Tokens (入/出)",
+      "cost": "{currency} 消耗",
+      "status": "状态",
+      "endpoint": "API 端点"
+    },
+    "pagination": "显示 {from}-{to} / {total}",
+    "prev": "上一页",
+    "next": "下一页",
+    "noLogs": "暂无日志",
+    "unknownModel": "未知模型",
+    "billingModel": "计费：{model}"
+  },
+  "expiration": {
+    "title": "过期时间",
+    "keyExpires": "密钥过期",
+    "userExpires": "用户过期",
+    "neverExpires": "永不过期",
+    "expired": "已过期",
+    "expiresIn": "剩余 {time}",
+    "expiringWarning": "即将过期"
+  },
+  "providerGroup": {
+    "keyGroup": "密钥分组",
+    "userGroup": "用户分组",
+    "allProviders": "全部供应商",
+    "inheritedFromUser": "继承自用户"
+  }
+}

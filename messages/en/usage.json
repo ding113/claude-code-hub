@@ -278,7 +278,7 @@
       "title": "Connect to cch service",
 
       "configFile": {
-        "title": "Method 1: Configuration file method (recommended)",
+        "title": "Configuration file setup",
         "steps": [
           "Open file explorer, find the ${configPath} folder (create if it doesn't exist)",
           "Create a config.toml file",
@@ -294,8 +294,16 @@
         ]
       },
 
+      "authJson": {
+        "title": "Config file method",
+        "configTomlDescription": "Create config.toml file (when using auth.json to store the key, env_key field is not required):",
+        "note": "Note",
+        "noteText": "This method stores the API key in auth.json file, no need to configure env_key field in config.toml."
+      },
+
       "envVars": {
-        "title": "Method 2: Environment variable configuration",
+        "title": "Environment variable method",
+        "configTomlDescription": "Create config.toml file (when using environment variables, env_key field is required):",
 
         "windows": {
           "instruction": "Run in PowerShell:",

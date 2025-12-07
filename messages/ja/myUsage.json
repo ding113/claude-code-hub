@@ -1,0 +1,82 @@
+{
+  "header": {
+    "title": "マイ利用状況",
+    "subtitle": "クォータと利用ログを確認",
+    "logout": "ログアウト",
+    "keyLabel": "キー",
+    "userLabel": "ユーザー",
+    "providerGroup": "プロバイダーグループ",
+    "noProviderGroup": "デフォルト",
+    "inherited": "（継承）"
+  },
+  "quota": {
+    "5h": "5時間クォータ",
+    "daily": "日次クォータ",
+    "weekly": "週次クォータ",
+    "monthly": "月次クォータ",
+    "total": "総クォータ",
+    "concurrent": "同時セッション",
+    "keyLevel": "キー",
+    "userLevel": "ユーザー",
+    "unlimited": "無制限",
+    "empty": "クォータ情報がありません"
+  },
+  "today": {
+    "title": "本日の利用",
+    "autoRefresh": "{seconds}秒ごとに自動更新",
+    "refresh": "更新",
+    "calls": "リクエスト数",
+    "tokensIn": "入力トークン",
+    "tokensOut": "出力トークン",
+    "cost": "{currency} コスト",
+    "modelBreakdown": "モデル別",
+    "unknownModel": "不明なモデル",
+    "billingModel": "課金モデル: {model}",
+    "callsShort": "{count} 回",
+    "tokensShort": "入力 {in} / 出力 {out}",
+    "noData": "本日のデータはありません"
+  },
+  "logs": {
+    "title": "利用ログ",
+    "filters": {
+      "startDate": "開始日",
+      "endDate": "終了日",
+      "model": "モデル",
+      "status": "ステータス",
+      "allModels": "すべてのモデル",
+      "allStatus": "すべてのステータス",
+      "apply": "適用",
+      "reset": "リセット"
+    },
+    "loadFailed": "ログの取得に失敗しました",
+    "table": {
+      "time": "時間",
+      "model": "モデル",
+      "tokens": "トークン (入/出)",
+      "cost": "{currency} コスト",
+      "status": "ステータス",
+      "endpoint": "エンドポイント"
+    },
+    "pagination": "{from}-{to}/{total} を表示",
+    "prev": "前へ",
+    "next": "次へ",
+    "noLogs": "ログがありません",
+    "unknownModel": "不明なモデル",
+    "billingModel": "課金: {model}"
+  },
+  "expiration": {
+    "title": "有効期限",
+    "keyExpires": "キーの期限",
+    "userExpires": "ユーザーの期限",
+    "neverExpires": "期限なし",
+    "expired": "期限切れ",
+    "expiresIn": "{time} で期限",
+    "expiringWarning": "まもなく期限"
+  },
+  "providerGroup": {
+    "keyGroup": "キーグループ",
+    "userGroup": "ユーザーグループ",
+    "allProviders": "すべてのプロバイダー",
+    "inheritedFromUser": "ユーザーから継承"
+  }
+}

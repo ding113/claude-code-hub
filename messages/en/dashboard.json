@@ -326,7 +326,29 @@
       "copyMessages": "Copy Messages",
       "downloadMessages": "Download Messages",
       "copied": "Copied",
-      "copyResponse": "Copy Response"
+      "copyResponse": "Copy Response",
+      "terminate": "Terminate",
+      "terminateTitle": "Terminate Session",
+      "terminateDescription": "Are you sure you want to terminate this session? After termination, the provider binding for this session will be cleared, and the next request will reselect a provider.",
+      "sessionIdLabel": "Session ID: {sessionId}",
+      "cancel": "Cancel",
+      "confirmTerminate": "Confirm Termination",
+      "terminating": "Terminating...",
+      "terminateSuccess": "Session terminated successfully",
+      "terminateFailed": "Failed to terminate session",
+      "terminateSelected": "Terminate Selected",
+      "selectedCount": "{count} selected",
+      "selectAll": "Select All",
+      "selectSessionLabel": "Select session",
+      "multiSelect": "Multi Select",
+      "cancelMultiSelect": "Cancel",
+      "terminateSessionTitle": "Terminate Session",
+      "terminateSessionDescription": "Are you sure you want to terminate this session? This action cannot be undone.",
+      "batchTerminateSuccess": "Terminated {count} session(s)",
+      "batchTerminatePartial": "Unauthorized: {unauthorized} · Missing: {missing}",
+      "batchTerminateAllowedFailed": "Failed to terminate {count} authorized session(s)",
+      "batchTerminateNone": "No sessions were terminated",
+      "noSelection": "Please select at least one session"
     },
     "status": {
       "loading": "Loading...",
@@ -338,6 +360,14 @@
     },
     "errors": {
       "copyFailed": "Copy Failed"
+    },
+    "requestList": {
+      "title": "Requests",
+      "noRequests": "No requests found",
+      "fetchFailed": "Failed to fetch requests",
+      "unknownError": "Unknown error occurred",
+      "prev": "Prev",
+      "next": "Next"
     },
     "back": "Back",
     "loadingError": "Loading failed"
@@ -480,6 +510,32 @@
     "badge": "{count} Keys",
     "activeKeys": "Active Keys",
     "totalKeys": "Total Keys",
+    "expiresAt": "Expiration",
+    "status": {
+      "active": "Active",
+      "expiringSoon": "Expiring Soon",
+      "expired": "Expired",
+      "disabled": "Disabled"
+    },
+    "actions": {
+      "renew": "Renew",
+      "renew30d": "Renew for 30 days",
+      "renew90d": "Renew for 90 days",
+      "renew1y": "Renew for 1 year",
+      "renewCustom": "Custom...",
+      "customRenewTitle": "Custom Renewal",
+      "customRenewDescription": "Set a new expiration date for user {userName}",
+      "expirationDate": "Expiration Date",
+      "enableOnRenew": "Enable user on renewal",
+      "cancel": "Cancel",
+      "confirm": "Confirm",
+      "customPrompt": "Enter a new expiry date (YYYY-MM-DD). Leave empty to cancel.",
+      "invalidDate": "Please enter a valid date",
+      "enable": "Enable",
+      "disable": "Disable",
+      "success": "Operation succeeded",
+      "failed": "Operation failed, please try again"
+    },
     "emptyState": {
       "title": "No Users",
       "description": "You haven't created any users yet. Users are the foundation for managing API keys and usage quotas. Create your first user to get started!",
@@ -598,6 +654,12 @@
       "description": "Number of simultaneous conversations",
       "descriptionWithUserLimit": "Maximum sessions (User limit: {limit})"
     },
+    "providerGroup": {
+      "label": "Provider Group",
+      "placeholder": "Enter provider group tags, press Enter to add",
+      "description": "Limit to specific provider groups (empty = inherit from user)",
+      "descriptionWithUserGroup": "Limit to specific provider groups (User group: {group})"
+    },
     "errors": {
       "userIdMissing": "User ID does not exist",
       "createFailed": "Failed to create, please try again later",
@@ -674,6 +736,15 @@
       "label": "Concurrent Sessions Limit",
       "placeholder": "0 means unlimited",
       "description": "Number of simultaneous conversations"
+    },
+    "isEnabled": {
+      "label": "Enable User",
+      "description": "Disabled users cannot access the API"
+    },
+    "expiresAt": {
+      "label": "Expiration Date",
+      "placeholder": "Leave empty for never expires",
+      "description": "User will be automatically disabled after expiration"
     }
   },
   "deleteKeyConfirm": {

@@ -92,6 +92,7 @@
     "totalCost": "Total Cost",
     "totalCostAllTime": "All-time Total",
     "todayCost": "Today's Cost",
+    "expiresAtLabel": "Expiration",
     "keys": "Keys",
     "more": "more",
     "noLimitSet": "-",
@@ -330,6 +331,12 @@
         "label": "Concurrent Session Limit",
         "placeholder": "0 means unlimited",
         "description": "Number of simultaneous conversations"
+      },
+      "providerGroup": {
+        "label": "Provider Group",
+        "placeholder": "Enter provider group tags, press Enter to add",
+        "description": "Limit to specific provider groups (empty = inherit from user)",
+        "descriptionWithUserGroup": "Limit to specific provider groups (User group: {group})"
       },
       "submitText": "Save Changes",
       "loadingText": "Saving...",

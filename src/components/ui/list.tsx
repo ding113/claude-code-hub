@@ -145,12 +145,15 @@ export function ListItem({
           )}
 
           {/* 元数据 */}
-          {data.metadata && data.metadata.length > 0 && !compact && (
-            <div className="flex flex-wrap gap-2 mt-2">
+          {data.metadata && data.metadata.length > 0 && (
+            <div className={cn("flex flex-wrap gap-2 mt-2", compact && "mt-1")}>
               {data.metadata.map((meta, index) => (
                 <span
                   key={index}
-                  className="inline-flex items-center text-xs text-muted-foreground"
+                  className={cn(
+                    "inline-flex items-center text-xs text-muted-foreground",
+                    compact && "text-[11px]"
+                  )}
                 >
                   <span className="font-medium">{meta.label}:</span>
                   <span className="ml-1">{meta.value}</span>

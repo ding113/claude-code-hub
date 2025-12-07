@@ -8,11 +8,11 @@ import { validateErrorOverrideResponse } from "@/lib/error-override-validator";
 import { logger } from "@/lib/logger";
 
 /**
- * 错误覆写响应体类型
- * 参考 Claude API 错误格式: https://platform.claude.com/docs/en/api/errors
+ * Claude API 错误格式
+ * 参考: https://platform.claude.com/docs/en/api/errors
  */
-export interface ErrorOverrideResponse {
-  type: string; // 通常为 "error"
+export interface ClaudeErrorResponse {
+  type: "error";
   error: {
     type: string; // 错误类型，如 "invalid_request_error"
     message: string; // 错误消息
@@ -21,6 +21,41 @@ export interface ErrorOverrideResponse {
   request_id?: string; // 请求 ID（会自动从上游注入）
   [key: string]: unknown; // 其他可选字段
 }
+
+/**
+ * Gemini API 错误格式
+ * 参考: Google gRPC Status 标准
+ */
+export interface GeminiErrorResponse {
+  error: {
+    code: number; // HTTP 状态码，如 400
+    message: string; // 错误消息
+    status: string; // 错误状态，如 "INVALID_ARGUMENT"
+    details?: unknown[]; // 可选的错误详情
+    [key: string]: unknown; // 其他可选字段
+  };
+  [key: string]: unknown; // 其他可选字段
+}
+
+/**
+ * OpenAI API 错误格式
+ * 参考: https://platform.openai.com/docs/guides/error-codes
+ */
+export interface OpenAIErrorResponse {
+  error: {
+    message: string; // 错误消息
+    type: string; // 错误类型，如 "invalid_request_error"
+    param?: string | null; // 可选的参数名（指向出错的请求参数）
+    code?: string | null; // 可选的错误代码，如 "model_not_found"
+    [key: string]: unknown; // 其他可选字段
+  };
+  [key: string]: unknown; // 其他可选字段
+}
+
+/**
+ * 错误覆写响应体类型（支持 Claude、Gemini、OpenAI 三种格式）
+ */
+export type ErrorOverrideResponse = ClaudeErrorResponse | GeminiErrorResponse | OpenAIErrorResponse;
 
 export interface ErrorRule {
   id: number;
@@ -205,6 +240,8 @@ export async function updateErrorRule(
     overrideResponse: ErrorOverrideResponse | null;
     overrideStatusCode: number | null;
     isEnabled: boolean;
+    /** 是否为默认规则（编辑默认规则时会自动设为 false） */
+    isDefault: boolean;
     priority: number;
   }>
 ): Promise<ErrorRule | null> {
@@ -262,6 +299,53 @@ const DEFAULT_ERROR_RULES = [
     isEnabled: true,
     priority: 100,
   },
+  // Issue #288: Add patterns for input length errors that should not trigger retry
+  {
+    pattern: "Input is too long",
+    category: "input_limit",
+    description: "Input content length exceeds provider limit",
+    matchType: "contains" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 95,
+  },
+  {
+    pattern: "CONTENT_LENGTH_EXCEEDS_THRESHOLD",
+    category: "input_limit",
+    description: "AWS Bedrock content length threshold exceeded",
+    matchType: "contains" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 94,
+  },
+  {
+    pattern: "ValidationException",
+    category: "validation_error",
+    description: "AWS/Bedrock validation error (non-retryable)",
+    matchType: "contains" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 93,
+  },
+  {
+    pattern:
+      "context.*(length|window|limit).*exceed|exceed.*(context|token|length).*(limit|window)",
+    category: "context_limit",
+    description: "Context window or token limit exceeded",
+    matchType: "regex" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 92,
+  },
+  {
+    pattern: "max_tokens.*exceed|exceed.*max_tokens|maximum.*tokens.*allowed",
+    category: "token_limit",
+    description: "Max tokens parameter exceeds model limit",
+    matchType: "regex" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 91,
+  },
   {
     pattern: "blocked by.*content filter",
     category: "content_filter",
@@ -270,6 +354,34 @@ const DEFAULT_ERROR_RULES = [
     isDefault: true,
     isEnabled: true,
     priority: 90,
+  },
+  // Model-related errors (non-retryable)
+  {
+    pattern: '"actualModel" is null|actualModel.*null',
+    category: "model_error",
+    description: "Model parameter is null (Java NPE)",
+    matchType: "regex" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 88,
+  },
+  {
+    pattern: "unknown model|model.*not.*found|model.*does.*not.*exist",
+    category: "model_error",
+    description: "Unknown or non-existent model",
+    matchType: "regex" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 87,
+  },
+  {
+    pattern: "模型名称.*为空|模型名称不能为空|未指定模型",
+    category: "model_error",
+    description: "Model name is empty or not specified (Chinese)",
+    matchType: "regex" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 86,
   },
   {
     pattern: "PDF has too many pages|maximum of.*PDF pages",

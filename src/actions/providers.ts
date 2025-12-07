@@ -34,6 +34,7 @@ import {
   getProviderStatistics,
   updateProvider,
 } from "@/repository/provider";
+import type { CacheTtlPreference } from "@/types/cache";
 import type { ProviderDisplay, ProviderType } from "@/types/provider";
 import type { ActionResult } from "./types";
 
@@ -204,6 +205,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         requestTimeoutNonStreamingMs: provider.requestTimeoutNonStreamingMs,
         websiteUrl: provider.websiteUrl,
         faviconUrl: provider.faviconUrl,
+        cacheTtlPreference: provider.cacheTtlPreference,
         tpm: provider.tpm,
         rpm: provider.rpm,
         rpd: provider.rpd,
@@ -264,6 +266,7 @@ export async function addProvider(data: {
   limit_weekly_usd?: number | null;
   limit_monthly_usd?: number | null;
   limit_concurrent_sessions?: number | null;
+  cache_ttl_preference?: CacheTtlPreference | null;
   max_retry_attempts?: number | null;
   circuit_breaker_failure_threshold?: number;
   circuit_breaker_open_duration?: number;
@@ -347,6 +350,7 @@ export async function addProvider(data: {
       request_timeout_non_streaming_ms:
         validated.request_timeout_non_streaming_ms ??
         PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS,
+      cache_ttl_preference: validated.cache_ttl_preference ?? "inherit",
       website_url: validated.website_url ?? null,
       favicon_url: faviconUrl,
       tpm: validated.tpm ?? null,
@@ -411,6 +415,7 @@ export async function editProvider(
     limit_weekly_usd?: number | null;
     limit_monthly_usd?: number | null;
     limit_concurrent_sessions?: number | null;
+    cache_ttl_preference?: "inherit" | "5m" | "1h";
     max_retry_attempts?: number | null;
     circuit_breaker_failure_threshold?: number;
     circuit_breaker_open_duration?: number;
@@ -1177,7 +1182,7 @@ function extractFirstTextSnippet(
   return undefined;
 }
 
-function clipText(value: unknown, maxLength?: number): string | undefined {
+function clipText(value: unknown, maxLength = 500): string | undefined {
   const limit = maxLength ?? API_TEST_CONFIG.MAX_RESPONSE_PREVIEW_LENGTH;
   return typeof value === "string" ? value.substring(0, limit) : undefined;
 }
@@ -1216,7 +1221,7 @@ function extractErrorMessage(errorJson: unknown): string | undefined {
 
     // 尝试从 upstream_error.error.message 提取
     const nestedMessage = normalizeErrorValue(
-      (upstreamErrorObj.error as { message?: unknown } | undefined)?.message
+      (upstreamErrorObj.error as Record<string, unknown> | undefined)?.message
     );
     if (nestedMessage) {
       return nestedMessage;

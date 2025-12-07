@@ -5,6 +5,9 @@ type UsageMetrics = {
   input_tokens?: number;
   output_tokens?: number;
   cache_creation_input_tokens?: number;
+  cache_creation_5m_input_tokens?: number;
+  cache_creation_1h_input_tokens?: number;
+  cache_ttl?: "5m" | "1h" | "mixed";
   cache_read_input_tokens?: number;
 };
 
@@ -36,17 +39,45 @@ export function calculateRequestCost(
   const inputCostPerToken = priceData.input_cost_per_token;
   const outputCostPerToken = priceData.output_cost_per_token;
 
-  const cacheCreationCost =
+  const cacheCreation5mCost =
     priceData.cache_creation_input_token_cost ??
-    (inputCostPerToken != null ? inputCostPerToken * 0.1 : undefined);
+    (inputCostPerToken != null ? inputCostPerToken * 1.25 : undefined);
+
+  const cacheCreation1hCost =
+    priceData.cache_creation_input_token_cost_above_1hr ??
+    (inputCostPerToken != null ? inputCostPerToken * 2 : undefined) ??
+    cacheCreation5mCost;
 
   const cacheReadCost =
     priceData.cache_read_input_token_cost ??
-    (outputCostPerToken != null ? outputCostPerToken * 0.1 : undefined);
+    (inputCostPerToken != null
+      ? inputCostPerToken * 0.1
+      : outputCostPerToken != null
+        ? outputCostPerToken * 0.1
+        : undefined);
+
+  // Derive cache creation tokens by TTL
+  let cache5mTokens = usage.cache_creation_5m_input_tokens;
+  let cache1hTokens = usage.cache_creation_1h_input_tokens;
+
+  if (typeof usage.cache_creation_input_tokens === "number") {
+    const remaining =
+      usage.cache_creation_input_tokens - (cache5mTokens ?? 0) - (cache1hTokens ?? 0);
+
+    if (remaining > 0) {
+      const target = usage.cache_ttl === "1h" ? "1h" : "5m";
+      if (target === "1h") {
+        cache1hTokens = (cache1hTokens ?? 0) + remaining;
+      } else {
+        cache5mTokens = (cache5mTokens ?? 0) + remaining;
+      }
+    }
+  }
 
   segments.push(multiplyCost(usage.input_tokens, inputCostPerToken));
   segments.push(multiplyCost(usage.output_tokens, outputCostPerToken));
-  segments.push(multiplyCost(usage.cache_creation_input_tokens, cacheCreationCost));
+  segments.push(multiplyCost(cache5mTokens, cacheCreation5mCost));
+  segments.push(multiplyCost(cache1hTokens, cacheCreation1hCost));
   segments.push(multiplyCost(usage.cache_read_input_tokens, cacheReadCost));
 
   const total = segments.reduce((acc, segment) => acc.plus(segment), new Decimal(0));

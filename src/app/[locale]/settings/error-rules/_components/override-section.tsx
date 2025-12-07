@@ -1,10 +1,16 @@
 "use client";
 
-import { CheckCircle2, XCircle } from "lucide-react";
+import { CheckCircle2, ChevronDown, XCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,14 +21,36 @@ type JsonValidationState =
   | { state: "valid" }
   | { state: "invalid"; message: string };
 
-/** 默认的覆写响应模板 */
-const DEFAULT_OVERRIDE_RESPONSE = `{
+/** Claude 格式的覆写响应模板 */
+const CLAUDE_OVERRIDE_TEMPLATE = `{
   "type": "error",
   "error": {
     "type": "invalid_request_error",
     "message": "Your custom error message here"
   }
 }`;
+
+/** Gemini 格式的覆写响应模板 */
+const GEMINI_OVERRIDE_TEMPLATE = `{
+  "error": {
+    "code": 400,
+    "message": "Your custom error message here",
+    "status": "INVALID_ARGUMENT"
+  }
+}`;
+
+/** OpenAI 格式的覆写响应模板 */
+const OPENAI_OVERRIDE_TEMPLATE = `{
+  "error": {
+    "message": "Your custom error message here",
+    "type": "invalid_request_error",
+    "param": null,
+    "code": null
+  }
+}`;
+
+/** 默认的覆写响应模板（保持向后兼容） */
+const DEFAULT_OVERRIDE_RESPONSE = CLAUDE_OVERRIDE_TEMPLATE;
 
 interface OverrideSectionProps {
   /** 输入框 ID 前缀，用于区分 add/edit 对话框 */
@@ -61,14 +89,17 @@ export function OverrideSection({
   }, [overrideResponse]);
 
   /** 处理使用模板按钮点击 */
-  const handleUseTemplate = useCallback(() => {
-    // 如果输入框已有内容，弹出确认对话框
-    if (overrideResponse.trim().length > 0) {
-      const confirmed = window.confirm(t("errorRules.dialog.useTemplateConfirm"));
-      if (!confirmed) return;
-    }
-    onOverrideResponseChange(DEFAULT_OVERRIDE_RESPONSE);
-  }, [overrideResponse, onOverrideResponseChange, t]);
+  const handleUseTemplate = useCallback(
+    (template: string) => {
+      // 如果输入框已有内容，弹出确认对话框
+      if (overrideResponse.trim().length > 0) {
+        const confirmed = window.confirm(t("errorRules.dialog.useTemplateConfirm"));
+        if (!confirmed) return;
+      }
+      onOverrideResponseChange(template);
+    },
+    [overrideResponse, onOverrideResponseChange, t]
+  );
 
   return (
     <div className="rounded-lg border p-4 space-y-4">
@@ -105,15 +136,25 @@ export function OverrideSection({
                     {t("errorRules.dialog.invalidJson")}
                   </span>
                 )}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 text-xs"
-                  onClick={handleUseTemplate}
-                >
-                  {t("errorRules.dialog.useTemplate")}
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button type="button" variant="ghost" size="sm" className="h-6 text-xs">
+                      {t("errorRules.dialog.useTemplate")}
+                      <ChevronDown className="ml-1 h-3 w-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onSelect={() => handleUseTemplate(CLAUDE_OVERRIDE_TEMPLATE)}>
+                      Claude API
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => handleUseTemplate(GEMINI_OVERRIDE_TEMPLATE)}>
+                      Gemini API
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => handleUseTemplate(OPENAI_OVERRIDE_TEMPLATE)}>
+                      OpenAI API
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
             <Textarea

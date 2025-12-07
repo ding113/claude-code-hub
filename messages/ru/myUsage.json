@@ -1,0 +1,82 @@
+{
+  "header": {
+    "title": "Мои расходы",
+    "subtitle": "Лимиты и журналы использования",
+    "logout": "Выйти",
+    "keyLabel": "Ключ",
+    "userLabel": "Пользователь",
+    "providerGroup": "Группа провайдеров",
+    "noProviderGroup": "По умолчанию",
+    "inherited": "(наследовано)"
+  },
+  "quota": {
+    "5h": "Лимит 5 часов",
+    "daily": "Дневной лимит",
+    "weekly": "Недельный лимит",
+    "monthly": "Месячный лимит",
+    "total": "Общий лимит",
+    "concurrent": "Одновременные сессии",
+    "keyLevel": "Ключ",
+    "userLevel": "Пользователь",
+    "unlimited": "Без лимита",
+    "empty": "Нет данных о лимитах"
+  },
+  "today": {
+    "title": "Использование сегодня",
+    "autoRefresh": "Автообновление каждые {seconds}с",
+    "refresh": "Обновить",
+    "calls": "Запросы",
+    "tokensIn": "Входные токены",
+    "tokensOut": "Выходные токены",
+    "cost": "Стоимость {currency}",
+    "modelBreakdown": "По моделям",
+    "unknownModel": "Неизвестная модель",
+    "billingModel": "Биллинговая модель: {model}",
+    "callsShort": "{count} раз",
+    "tokensShort": "Вх {in} / Вых {out}",
+    "noData": "Нет данных за сегодня"
+  },
+  "logs": {
+    "title": "Журнал использования",
+    "filters": {
+      "startDate": "Дата начала",
+      "endDate": "Дата окончания",
+      "model": "Модель",
+      "status": "Статус",
+      "allModels": "Все модели",
+      "allStatus": "Все статусы",
+      "apply": "Применить",
+      "reset": "Сбросить"
+    },
+    "loadFailed": "Не удалось загрузить логи",
+    "table": {
+      "time": "Время",
+      "model": "Модель",
+      "tokens": "Токены (вх/вых)",
+      "cost": "Стоимость {currency}",
+      "status": "Статус",
+      "endpoint": "API Endpoint"
+    },
+    "pagination": "Показано {from}-{to} из {total}",
+    "prev": "Назад",
+    "next": "Вперед",
+    "noLogs": "Нет записей",
+    "unknownModel": "Неизвестная модель",
+    "billingModel": "Биллинг: {model}"
+  },
+  "expiration": {
+    "title": "Срок действия",
+    "keyExpires": "Срок ключа",
+    "userExpires": "Срок пользователя",
+    "neverExpires": "Бессрочно",
+    "expired": "Истёк",
+    "expiresIn": "через {time}",
+    "expiringWarning": "Скоро истечёт"
+  },
+  "providerGroup": {
+    "keyGroup": "Группа ключа",
+    "userGroup": "Группа пользователя",
+    "allProviders": "Все провайдеры",
+    "inheritedFromUser": "Наследовано от пользователя"
+  }
+}

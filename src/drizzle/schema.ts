@@ -35,12 +35,21 @@ export const users = pgTable('users', {
   limitMonthlyUsd: numeric('limit_monthly_usd', { precision: 10, scale: 2 }),
   limitTotalUsd: numeric('limit_total_usd', { precision: 10, scale: 2 }),
   limitConcurrentSessions: integer('limit_concurrent_sessions'),
+
+  // User status and expiry management
+  isEnabled: boolean('is_enabled').notNull().default(true),
+  expiresAt: timestamp('expires_at', { withTimezone: true }),
+
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 }, (table) => ({
-  // 优化用户列表查询的复合索引（按角色排序，管理员优先）
+  // 优化用户列表查询的复合索引（按角色排序,管理员优先）
   usersActiveRoleSortIdx: index('idx_users_active_role_sort').on(table.deletedAt, table.role, table.id).where(sql`${table.deletedAt} IS NULL`),
+  // 优化过期用户查询的复合索引（用于定时任务），仅索引未删除的用户
+  usersEnabledExpiresAtIdx: index('idx_users_enabled_expires_at')
+    .on(table.isEnabled, table.expiresAt)
+    .where(sql`${table.deletedAt} IS NULL`),
   // 基础索引
   usersCreatedAtIdx: index('idx_users_created_at').on(table.createdAt),
   usersDeletedAtIdx: index('idx_users_deleted_at').on(table.deletedAt),
@@ -56,7 +65,7 @@ export const keys = pgTable('keys', {
   expiresAt: timestamp('expires_at'),
 
   // Web UI 登录权限控制
-  canLoginWebUi: boolean('can_login_web_ui').default(true),
+  canLoginWebUi: boolean('can_login_web_ui').default(false),
 
   // 金额限流配置
   limit5hUsd: numeric('limit_5h_usd', { precision: 10, scale: 2 }),
@@ -71,6 +80,12 @@ export const keys = pgTable('keys', {
   limitMonthlyUsd: numeric('limit_monthly_usd', { precision: 10, scale: 2 }),
   limitTotalUsd: numeric('limit_total_usd', { precision: 10, scale: 2 }),
   limitConcurrentSessions: integer('limit_concurrent_sessions').default(0),
+
+  // Provider group override (null = inherit from user)
+  providerGroup: varchar('provider_group', { length: 50 }),
+
+  // Cache TTL override：null/NULL 表示遵循供应商或客户端请求
+  cacheTtlPreference: varchar('cache_ttl_preference', { length: 10 }),
 
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
@@ -190,6 +205,9 @@ export const providers = pgTable('providers', {
   websiteUrl: text('website_url'),
   faviconUrl: text('favicon_url'),
 
+  // Cache TTL override（null = 不覆写，沿用客户端请求）
+  cacheTtlPreference: varchar('cache_ttl_preference', { length: 10 }),
+
   // 废弃（保留向后兼容，但不再使用）
   tpm: integer('tpm').default(0),
   rpm: integer('rpm').default(0),
@@ -225,6 +243,9 @@ export const messageRequest = pgTable('message_request', {
   // Session ID（用于会话粘性和日志追踪）
   sessionId: varchar('session_id', { length: 64 }),
 
+  // Request Sequence（Session 内请求序号，用于区分同一 Session 的不同请求）
+  requestSequence: integer('request_sequence').default(1),
+
   // 上游决策链（记录尝试的供应商列表）
   providerChain: jsonb('provider_chain').$type<Array<{ id: number; name: string }>>(),
 
@@ -245,6 +266,9 @@ export const messageRequest = pgTable('message_request', {
   outputTokens: integer('output_tokens'),
   cacheCreationInputTokens: integer('cache_creation_input_tokens'),
   cacheReadInputTokens: integer('cache_read_input_tokens'),
+  cacheCreation5mInputTokens: integer('cache_creation_5m_input_tokens'),
+  cacheCreation1hInputTokens: integer('cache_creation_1h_input_tokens'),
+  cacheTtlApplied: varchar('cache_ttl_applied', { length: 10 }),
 
   // 错误信息
   errorMessage: text('error_message'),
@@ -269,6 +293,8 @@ export const messageRequest = pgTable('message_request', {
   messageRequestUserQueryIdx: index('idx_message_request_user_query').on(table.userId, table.createdAt).where(sql`${table.deletedAt} IS NULL`),
   // Session 查询索引（按 session 聚合查看对话）
   messageRequestSessionIdIdx: index('idx_message_request_session_id').on(table.sessionId).where(sql`${table.deletedAt} IS NULL`),
+  // Session + Sequence 复合索引（用于 Session 内请求列表查询）
+  messageRequestSessionSeqIdx: index('idx_message_request_session_seq').on(table.sessionId, table.requestSequence).where(sql`${table.deletedAt} IS NULL`),
   // Endpoint 过滤查询索引（仅针对未删除数据）
   messageRequestEndpointIdx: index('idx_message_request_endpoint').on(table.endpoint).where(sql`${table.deletedAt} IS NULL`),
   // 基础索引

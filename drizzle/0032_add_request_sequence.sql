@@ -1,0 +1,2 @@
+ALTER TABLE "message_request" ADD COLUMN "request_sequence" integer DEFAULT 1;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_message_request_session_seq" ON "message_request" USING btree ("session_id","request_sequence") WHERE "message_request"."deleted_at" IS NULL;

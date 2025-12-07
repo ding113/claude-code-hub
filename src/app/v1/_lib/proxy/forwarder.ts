@@ -15,6 +15,7 @@ import { PROVIDER_DEFAULTS, PROVIDER_LIMITS } from "@/lib/constants/provider.con
 import { logger } from "@/lib/logger";
 import { createProxyAgentForProvider } from "@/lib/proxy-agent";
 import { SessionManager } from "@/lib/session-manager";
+import type { CacheTtlPreference, CacheTtlResolved } from "@/types/cache";
 import { getDefaultInstructions } from "../codex/constants/codex-instructions";
 import { isOfficialCodexClient, sanitizeCodexRequest } from "../codex/utils/request-sanitizer";
 import { defaultRegistry } from "../converters";
@@ -24,7 +25,7 @@ import { GEMINI_PROTOCOL } from "../gemini/protocol";
 import { HeaderProcessor } from "../headers";
 import { buildProxyUrl } from "../url";
 import {
-  categorizeError,
+  categorizeErrorAsync,
   ErrorCategory,
   isClientAbortError,
   isHttp2Error,
@@ -46,6 +47,63 @@ const STANDARD_ENDPOINTS = [
 const RETRY_LIMITS = PROVIDER_LIMITS.MAX_RETRY_ATTEMPTS;
 const MAX_PROVIDER_SWITCHES = 20; // 保险栓：最多切换 20 次供应商（防止无限循环）
 
+type CacheTtlOption = CacheTtlPreference | null | undefined;
+
+function resolveCacheTtlPreference(
+  keyPref: CacheTtlOption,
+  providerPref: CacheTtlOption
+): CacheTtlResolved | null {
+  const normalize = (value: CacheTtlOption): CacheTtlResolved | null => {
+    if (!value || value === "inherit") return null;
+    return value;
+  };
+
+  return normalize(keyPref) ?? normalize(providerPref) ?? null;
+}
+
+function applyCacheTtlOverrideToMessage(
+  message: Record<string, unknown>,
+  ttl: CacheTtlResolved
+): boolean {
+  let applied = false;
+  const messages = (message as Record<string, unknown>).messages;
+
+  if (!Array.isArray(messages)) {
+    return applied;
+  }
+
+  for (const msg of messages) {
+    if (!msg || typeof msg !== "object") continue;
+    const msgObj = msg as Record<string, unknown>;
+    const content = msgObj.content;
+
+    if (!Array.isArray(content)) continue;
+
+    msgObj.content = content.map((item) => {
+      if (!item || typeof item !== "object") return item;
+      const itemObj = item as Record<string, unknown>;
+      const cacheControl = itemObj.cache_control;
+
+      if (cacheControl && typeof cacheControl === "object") {
+        const ccObj = cacheControl as Record<string, unknown>;
+        if (ccObj.type === "ephemeral") {
+          applied = true;
+          return {
+            ...itemObj,
+            cache_control: {
+              ...ccObj,
+              ttl: ttl === "1h" ? "1h" : "5m",
+            },
+          };
+        }
+      }
+      return item;
+    });
+  }
+
+  return applied;
+}
+
 function clampRetryAttempts(value: number): number {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return RETRY_LIMITS.MIN;
@@ -62,6 +120,16 @@ function resolveMaxAttemptsForProvider(
   }
   return clampRetryAttempts(provider.maxRetryAttempts);
 }
+
+/**
+ * undici request 超时配置（毫秒）
+ *
+ * 背景：undiciRequest() 在使用非 undici 原生 dispatcher（如 SocksProxyAgent）时，
+ * 不会继承全局 Agent 的超时配置，需要显式传递超时参数。
+ *
+ * 这个值与 proxy-agent.ts 中的 UNDICI_TIMEOUT_MS 保持一致。
+ */
+const UNDICI_REQUEST_TIMEOUT_MS = 600_000; // 600 秒 = 10 分钟，LLM 服务最大超时时间
 
 /**
  * 过滤私有参数（下划线前缀）
@@ -253,7 +321,8 @@ export class ProxyForwarder {
           lastError = error as Error;
 
           // ⭐ 1. 分类错误（供应商错误 vs 系统错误 vs 客户端中断）
-          const errorCategory = categorizeError(lastError);
+          // 使用异步版本确保错误规则已加载
+          const errorCategory = await categorizeErrorAsync(lastError);
           const errorMessage =
             lastError instanceof ProxyError
               ? lastError.getDetailedErrorMessage()
@@ -278,6 +347,7 @@ export class ProxyForwarder {
                 system: {
                   errorType: "ClientAbort",
                   errorName: lastError.name,
+                  errorMessage: lastError.message || "Client aborted request",
                   errorCode: "CLIENT_ABORT",
                   errorStack: lastError.stack?.split("\n").slice(0, 3).join("\n"),
                 },
@@ -356,6 +426,7 @@ export class ProxyForwarder {
                 system: {
                   errorType: err.constructor.name,
                   errorName: err.name,
+                  errorMessage: err.message || err.name || "Unknown error",
                   errorCode: err.code,
                   errorSyscall: err.syscall,
                   errorStack: err.stack?.split("\n").slice(0, 3).join("\n"),
@@ -626,6 +697,12 @@ export class ProxyForwarder {
       throw new Error("Provider is required");
     }
 
+    const resolvedCacheTtl = resolveCacheTtlPreference(
+      session.authState?.key?.cacheTtlPreference,
+      provider.cacheTtlPreference
+    );
+    session.setCacheTtlResolved(resolvedCacheTtl);
+
     // 应用模型重定向（如果配置了）
     const wasRedirected = ModelRedirector.apply(session, provider);
     if (wasRedirected) {
@@ -732,6 +809,20 @@ export class ProxyForwarder {
         }
       }
 
+      if (
+        resolvedCacheTtl &&
+        (provider.providerType === "claude" || provider.providerType === "claude-auth")
+      ) {
+        const applied = applyCacheTtlOverrideToMessage(session.request.message, resolvedCacheTtl);
+        if (applied) {
+          logger.info("ProxyForwarder: Applied cache TTL override to request", {
+            providerId: provider.id,
+            providerName: provider.name,
+            cacheTtl: resolvedCacheTtl,
+          });
+        }
+      }
+
       // Codex 请求清洗（即使格式相同也要执行，除非是官方客户端）
       if (toFormat === "codex") {
         const isOfficialClient = isOfficialCodexClient(session.userAgent);
@@ -789,6 +880,19 @@ export class ProxyForwarder {
               providerId: provider.id,
             });
           }
+        }
+      }
+
+      if (
+        resolvedCacheTtl &&
+        (provider.providerType === "claude" || provider.providerType === "claude-auth")
+      ) {
+        const applied = applyCacheTtlOverrideToMessage(session.request.message, resolvedCacheTtl);
+        if (applied) {
+          logger.debug("ProxyForwarder: Applied cache TTL override to request", {
+            providerId: provider.id,
+            ttl: resolvedCacheTtl,
+          });
         }
       }
 
@@ -1201,6 +1305,7 @@ export class ProxyForwarder {
             system: {
               errorType: "Http2Error",
               errorName: err.name,
+              errorMessage: err.message || err.name || "HTTP/2 protocol error",
               errorCode: err.code || "HTTP2_FAILED",
               errorStack: err.stack?.split("\n").slice(0, 3).join("\n"),
             },
@@ -1483,6 +1588,23 @@ export class ProxyForwarder {
       });
     }
 
+    // 针对 1h 缓存 TTL，补充 Anthropic beta header（避免客户端遗漏）
+    if (session.getCacheTtlResolved && session.getCacheTtlResolved() === "1h") {
+      const existingBeta = session.headers.get("anthropic-beta") || "";
+      const betaFlags = new Set(
+        existingBeta
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+      );
+      betaFlags.add("extended-cache-ttl-2025-04-11");
+      // 确保包含基础的 prompt-caching 标记
+      if (betaFlags.size === 1) {
+        betaFlags.add("prompt-caching-2024-07-31");
+      }
+      overrides["anthropic-beta"] = Array.from(betaFlags).join(", ");
+    }
+
     const headerProcessor = HeaderProcessor.createForProxy({
       blacklist: ["content-length", "connection"], // 删除 content-length（动态计算）和 connection（undici 自动管理）
       overrides,
@@ -1525,12 +1647,15 @@ export class ProxyForwarder {
     }
 
     // 使用 undici.request 获取未自动解压的响应
+    // ⭐ 显式配置超时：确保使用非 undici 原生 dispatcher（如 SocksProxyAgent）时也能正确应用超时
     const undiciRes = await undiciRequest(url, {
       method: init.method as string,
       headers: headersObj,
       body: init.body as string | Buffer | undefined,
       signal: init.signal,
       dispatcher: init.dispatcher,
+      bodyTimeout: UNDICI_REQUEST_TIMEOUT_MS,
+      headersTimeout: UNDICI_REQUEST_TIMEOUT_MS,
     });
 
     // ⭐ 立即为 undici body 添加错误处理，防止 uncaughtException
