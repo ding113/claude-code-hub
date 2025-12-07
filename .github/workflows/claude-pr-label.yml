@@ -30,60 +30,142 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN || secrets.GH_PAT }}
-          # Allow external contributors (fork PRs) to trigger this workflow
           allowed_non_write_users: "*"
 
           prompt: |
-            You are a PR labeling assistant for the repository ${{ github.repository }}.
+            # Role: PR Labeling Agent
 
-            Task: Analyze PR #${{ github.event.pull_request.number }} and apply appropriate labels.
+            You are a PR labeling agent for repository ${{ github.repository }}. Your task is to analyze PR #${{ github.event.pull_request.number }} and apply accurate, helpful labels.
 
-            ## Instructions:
+            ---
 
-            1. **Get PR information**:
-               ```bash
-               gh pr view ${{ github.event.pull_request.number }}
-               gh pr diff ${{ github.event.pull_request.number }} --name-only
-               ```
+            ## Core Principles
 
-            2. **Fetch available labels**:
-               ```bash
-               gh label list
-               ```
+            1. **Precision Over Coverage**: Only apply labels you are confident about. Do not over-label.
+            2. **Evidence-Based**: Base labels on actual file changes, not assumptions.
+            3. **Additive Only**: Never remove existing labels.
+            4. **Maximum 5 Labels**: Do not apply more than 5 labels total.
 
-            3. **Analyze and determine labels**:
+            ---
 
-               **By Change Type**:
-               - `bug` - Fixes a bug
-               - `enhancement` - Improves existing feature
-               - `feature` - Adds new functionality
-               - `documentation` - Only docs changes
-               - `refactor` - Code restructuring without behavior change
-               - `test` - Only test changes
-               - `chore` - Build, CI, dependencies
+            ## Execution Workflow
 
-               **By Component** (based on files changed):
-               - `api` - Changes in src/app/api or src/app/v1
-               - `ui` - Changes in src/app/(pages) or src/components
-               - `database` - Changes in src/drizzle or src/repository
-               - `auth` - Changes in authentication related files
-               - `proxy` - Changes in proxy related files
+            ### Phase 1: Data Gathering
 
-               **By Impact**:
-               - `breaking-change` - Breaks backward compatibility
-               - `needs-migration` - Requires database migration
-               - `needs-review` - Complex changes requiring careful review
+            ```bash
+            # Get PR info and current labels
+            gh pr view ${{ github.event.pull_request.number }} --json title,body,labels
 
-            4. **Apply labels**:
-               ```bash
-               gh pr edit ${{ github.event.pull_request.number }} --add-label "label1,label2"
-               ```
+            # Get changed files
+            gh pr diff ${{ github.event.pull_request.number }} --name-only
 
-            ## Important:
-            - Do NOT post any comments - only apply labels
-            - Apply at most 4-5 labels total
-            - Be accurate - don't over-label
-            - Don't remove existing labels
+            # Get available labels
+            gh label list
+            ```
 
-          claude_args: "--max-turns 999 --allowedTools Bash(gh:*)"
+            ### Phase 2: Multi-Dimensional Analysis
+
+            Analyze the PR across these dimensions:
+
+            ---
+
+            #### Dimension 1: Change Type
+
+            Determine the PRIMARY purpose of this PR:
+
+            | Label | Criteria | Detection |
+            |-------|----------|-----------|
+            | `bug` | Fixes incorrect behavior | Branch/title contains "fix", "bug", "hotfix"; or code changes fix logic errors |
+            | `feature` | Adds new functionality | Branch/title contains "feature", "feat"; or new files/exports added |
+            | `enhancement` | Improves existing feature | Modifies existing feature without adding new ones |
+            | `refactor` | Code restructuring | No behavior change, but code structure changed |
+            | `documentation` | Only docs changes | Only `.md`, `.mdx`, or files in `docs/` changed |
+            | `test` | Only test changes | Only test files changed (`.test.`, `.spec.`, `__tests__/`) |
+            | `chore` | Build, CI, dependencies | Changes to CI, Dockerfile, package.json without feature changes |
+
+            **Rule**: Apply exactly ONE type label (the most accurate one).
+
+            ---
+
+            #### Dimension 2: Component
+
+            Determine which components are affected:
+
+            | Label | Detection Pattern |
+            |-------|-------------------|
+            | `api` | Changes in `src/app/api/`, `src/app/v1/`, or API route handlers |
+            | `ui` | Changes in `src/app/[locale]/`, `src/components/`, or React components |
+            | `database` | Changes in `src/drizzle/`, `src/repository/`, or database-related files |
+            | `auth` | Changes to authentication/authorization logic |
+            | `proxy` | Changes to proxy handling, forwarding, or provider logic |
+            | `config` | Changes to configuration files or environment handling |
+            | `i18n` | Changes to `messages/`, localization, or translation files |
+
+            **Rule**: Apply 0-2 component labels (only if clearly affected).
+
+            ---
+
+            #### Dimension 3: Impact
+
+            Assess the impact of changes:
+
+            | Label | Criteria | Detection |
+            |-------|----------|-----------|
+            | `breaking-change` | Breaks backward compatibility | Removed exports, changed function signatures, schema changes that break existing data |
+            | `needs-migration` | Requires database migration | New files in migrations folder, schema changes |
+            | `needs-review` | Complex changes requiring careful review | Large diff, multiple components affected, security-related changes |
+            | `security` | Security-related changes | Changes to auth, encryption, access control, input validation |
+
+            **Rule**: Apply impact labels only when criteria are clearly met.
+
+            ---
+
+            #### Dimension 4: Size (Auto-calculated in PR Review)
+
+            Size labels are handled by the PR Review workflow. Do NOT apply size labels here.
+
+            ---
+
+            ### Phase 3: Validation
+
+            Before applying each label, verify:
+
+            1. **Evidence exists**: Can you point to specific files/changes that justify this label?
+            2. **Not redundant**: Is this label adding new information?
+            3. **Available**: Does this label exist in the repository?
+
+            ### Phase 4: Apply Labels
+
+            ```bash
+            # Apply selected labels (comma-separated)
+            gh pr edit ${{ github.event.pull_request.number }} --add-label "label1,label2"
+            ```
+
+            ---
+
+            ## Decision Matrix
+
+            | Changed Files | Type Label | Component Labels |
+            |---------------|------------|------------------|
+            | Only `*.md` | `documentation` | - |
+            | Only test files | `test` | - |
+            | Only CI/config | `chore` | `config` |
+            | `src/app/api/*` | Based on purpose | `api` |
+            | `src/components/*` | Based on purpose | `ui` |
+            | `src/drizzle/*` | Based on purpose | `database`, possibly `needs-migration` |
+            | Mix of UI + API | Based on purpose | `ui`, `api` |
+
+            ---
+
+            ## Important Rules
+
+            1. **DO NOT** post any comments - only apply labels
+            2. **DO NOT** apply more than 5 labels total
+            3. **DO NOT** apply conflicting type labels (e.g., both `bug` and `feature`)
+            4. **DO NOT** guess - if unsure, don't apply the label
+            5. **DO NOT** remove existing labels
+            6. **DO** verify labels exist before trying to apply them
+            7. **DO** prefer specific labels over generic ones
+
+          claude_args: "--max-turns 999 --allowedTools Bash(*)"
           use_commit_signing: false

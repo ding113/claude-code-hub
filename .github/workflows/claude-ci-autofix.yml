@@ -5,7 +5,7 @@ on:
     workflows: ["PR Build Check", "Non-Main Branch CI/CD"]
     types: [completed]
 
-  # 支持手动触发或被其他 workflow 调用
+  # Support manual trigger or call from other workflows
   workflow_dispatch:
     inputs:
       task_type:
@@ -42,7 +42,7 @@ jobs:
       pull-requests: write
 
     steps:
-      # 安全验证：只允许 dev 分支作为目标，main 分支作为源
+      # Security validation: only allow dev as target, main as source
       - name: Validate branch parameters
         run: |
           TARGET="${{ github.event.inputs.target_branch }}"
@@ -76,64 +76,147 @@ jobs:
           github_token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
 
           prompt: |
-            You are a Git branch synchronization assistant for the repository ${{ github.repository }}.
+            # Role: Git Branch Synchronization Assistant
 
-            Context:
-            - Source branch: ${{ github.event.inputs.source_branch }} (contains new release)
-            - Target branch: ${{ github.event.inputs.target_branch }} (needs to be synced)
-            - Release tag: ${{ github.event.inputs.release_tag }}
+            You are a Git branch synchronization assistant for repository ${{ github.repository }}.
 
-            Task: Sync the target branch with source branch while preserving target branch's ahead commits.
+            ---
 
-            ## Instructions:
+            ## Context
 
-            1. **Analyze the situation**:
+            - **Source Branch**: ${{ github.event.inputs.source_branch }} (contains new release)
+            - **Target Branch**: ${{ github.event.inputs.target_branch }} (needs to be synced)
+            - **Release Tag**: ${{ github.event.inputs.release_tag }}
+
+            ---
+
+            ## Core Principles
+
+            1. **PRESERVE WORK**: Never lose commits from the target branch.
+            2. **SAFE OPERATIONS**: Use --force-with-lease, not --force.
+            3. **VERIFY BEFORE PUSH**: Always verify the result compiles and works.
+            4. **DOCUMENT CONFLICTS**: If conflicts cannot be resolved, document clearly.
+
+            ---
+
+            ## Execution Workflow
+
+            ### Phase 1: Analysis
+
+            ```bash
+            git fetch origin
+            git checkout ${{ github.event.inputs.target_branch }}
+            
+            # Understand the current state
+            echo "=== Current branch commits ==="
+            git log --oneline -10
+            
+            echo "=== Commits ahead of source ==="
+            git rev-list --count origin/${{ github.event.inputs.source_branch }}..HEAD
+            
+            echo "=== Commits behind source ==="
+            git rev-list --count HEAD..origin/${{ github.event.inputs.source_branch }}
+            
+            echo "=== Files that will conflict (preview) ==="
+            git diff --name-only origin/${{ github.event.inputs.source_branch }}
+            ```
+
+            ### Phase 2: Rebase Attempt
+
+            ```bash
+            git rebase origin/${{ github.event.inputs.source_branch }}
+            ```
+
+            ### Phase 3: Conflict Resolution (If Needed)
+
+            **If conflicts occur:**
+
+            1. **Identify conflicts:**
                ```bash
-               git fetch origin
-               git checkout ${{ github.event.inputs.target_branch }}
-               git log --oneline -10
-               git rev-list --count origin/${{ github.event.inputs.source_branch }}..HEAD
+               git status
                ```
 
-            2. **Attempt rebase**:
+            2. **For each conflicting file, analyze:**
+               - Read the file with conflict markers
+               - Understand what source branch changed (usually release fixes)
+               - Understand what target branch changed (usually feature work)
+
+            3. **Resolution priorities:**
+
+               | File Type | Resolution Strategy |
+               |-----------|---------------------|
+               | `VERSION` | Keep source (newer release version) |
+               | `package.json` version | Keep source (newer release) |
+               | `bun.lockb` / `package-lock.json` | Accept source, then regenerate |
+               | Database migrations | Keep both, ensure ordering |
+               | Source code | Merge intelligently, prefer target for features |
+               | Config files | Merge both changes if possible |
+
+            4. **Resolve and continue:**
                ```bash
-               git rebase origin/${{ github.event.inputs.source_branch }}
+               # After editing file to resolve
+               git add <resolved-file>
+               git rebase --continue
                ```
 
-            3. **If conflicts occur**:
-               - Use `git status` to identify conflicting files
-               - Read conflicting files with Read tool
-               - Analyze the conflict markers (<<<<<<<, =======, >>>>>>>)
-               - Resolve conflicts by choosing the correct version or merging changes
-               - Use Edit tool to fix conflicts
-               - Run `git add <resolved-file>` for each resolved file
-               - Continue with `git rebase --continue`
-               - Repeat until all conflicts are resolved
+            5. **Repeat until complete**
 
-            4. **Verify the result**:
-               ```bash
-               bun install
-               bun run typecheck
-               bun run lint
-               ```
+            ### Phase 4: Verification
 
-            5. **Push the synced branch**:
-               ```bash
-               git push origin ${{ github.event.inputs.target_branch }} --force-with-lease
-               ```
+            ```bash
+            # Install dependencies (lockfile may have changed)
+            bun install
 
-            ## Conflict Resolution Guidelines:
-            - For VERSION file: Keep the source branch version (newer release)
-            - For package.json/bun.lockb: Accept source changes, then run `bun install`
-            - For code changes: Prefer target branch changes (feature work) unless they conflict with critical fixes
-            - For config files: Merge both changes if possible
+            # Verify compilation
+            bun run typecheck
 
-            ## Important:
-            - Preserve all commits from target branch that are ahead of source
-            - Don't lose any feature work
-            - If you cannot resolve a conflict, document it clearly and abort
+            # Verify linting
+            bun run lint
 
-          claude_args: "--max-turns 999 --allowedTools Read,Write,Edit,Bash(gh:*),Bash(git:*),Bash(bun:*),Bash(npm:*)"
+            # Check the final state
+            git log --oneline -10
+            ```
+
+            ### Phase 5: Push
+
+            ```bash
+            # Use --force-with-lease for safety
+            git push origin ${{ github.event.inputs.target_branch }} --force-with-lease
+            ```
+
+            ---
+
+            ## Conflict Resolution Guidelines
+
+            **Safe to auto-resolve:**
+            - VERSION file changes (take source)
+            - Package version bumps (take source)
+            - Whitespace/formatting only changes
+            - Non-overlapping changes in same file
+
+            **Requires careful merging:**
+            - Code logic changes from both branches
+            - Configuration changes affecting behavior
+            - Database schema changes
+
+            **Abort and document if:**
+            - Semantic conflicts (same code changed differently)
+            - Cannot determine correct resolution
+            - Changes would break functionality
+
+            ---
+
+            ## Important Rules
+
+            1. **DO** preserve all feature commits from target branch
+            2. **DO** use --force-with-lease (not --force)
+            3. **DO** verify compilation before pushing
+            4. **DO** document any unresolved conflicts
+            5. **DO NOT** lose any commits
+            6. **DO NOT** push if verification fails
+            7. **DO NOT** resolve conflicts you don't understand
+
+          claude_args: "--max-turns 999 --allowedTools Read,Write,Edit,Bash(*)"
           use_commit_signing: false
 
   auto-fix:
@@ -218,77 +301,244 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN || secrets.GH_PAT }}
 
           prompt: |
-            You are a CI failure auto-fixer for the repository ${{ github.repository }}.
+            # Role: CI Failure Auto-Fix Assistant
 
-            Context:
-            - Workflow: ${{ fromJSON(steps.failure_details.outputs.result).workflowName }}
-            - Failed run: ${{ fromJSON(steps.failure_details.outputs.result).runUrl }}
-            - Branch: ${{ fromJSON(steps.failure_details.outputs.result).headBranch }}
-            - Has PR: ${{ fromJSON(steps.failure_details.outputs.result).hasPR }}
-            - PR Number: ${{ fromJSON(steps.failure_details.outputs.result).prNumber }}
-            - Failed jobs: ${{ join(fromJSON(steps.failure_details.outputs.result).failedJobs, ', ') }}
+            You are a CI failure auto-fixer for repository ${{ github.repository }}. Your task is to analyze CI failures and apply safe, minimal fixes.
 
-            Error logs:
+            ---
+
+            ## Context
+
+            - **Workflow**: ${{ fromJSON(steps.failure_details.outputs.result).workflowName }}
+            - **Failed Run**: ${{ fromJSON(steps.failure_details.outputs.result).runUrl }}
+            - **Branch**: ${{ fromJSON(steps.failure_details.outputs.result).headBranch }}
+            - **Has PR**: ${{ fromJSON(steps.failure_details.outputs.result).hasPR }}
+            - **PR Number**: ${{ fromJSON(steps.failure_details.outputs.result).prNumber }}
+            - **Failed Jobs**: ${{ join(fromJSON(steps.failure_details.outputs.result).failedJobs, ', ') }}
+
+            ---
+
+            ## Error Logs
+
             ```
             ${{ toJSON(fromJSON(steps.failure_details.outputs.result).errorLogs) }}
             ```
 
-            Task: Analyze and fix the CI failure.
+            ---
 
-            ## Instructions:
+            ## Core Principles
 
-            1. **Analyze the error logs** to identify:
-               - ESLint/Prettier errors → Run `bun run lint:fix` or `bun run format`
-               - TypeScript errors → Fix type definitions
-               - Test failures → Fix tests or code
-               - Build errors → Check dependencies and config
+            1. **SAFE FIXES ONLY**: Only fix obvious, mechanical issues.
+            2. **NO BEHAVIOR CHANGES**: Never alter application logic or functionality.
+            3. **MINIMAL SCOPE**: Fix only what's broken, don't improve or refactor.
+            4. **VERIFY FIXES**: Always verify the fix resolves the issue.
+            5. **DOCUMENT UNFIXABLE**: If something can't be safely fixed, document why.
 
-            2. **Apply fixes**:
-               - Use Read tool to examine files
-               - Use Edit tool to fix issues
-               - Run fix commands if applicable
+            ---
 
-            3. **Verify fixes**:
-               - Run `bun run typecheck` for type errors
-               - Run `bun run lint` for lint errors
+            ## Execution Workflow
 
-            4. **Commit and push**:
+            ### Phase 1: Error Categorization
 
-               **If has PR (hasPR = true)**:
-               ```bash
-               git checkout -b claude-fix-pr-${{ fromJSON(steps.failure_details.outputs.result).prNumber }}-${{ github.run_id }}
-               git add .
-               git commit -m "fix: auto-fix CI failures in ${{ fromJSON(steps.failure_details.outputs.result).workflowName }}"
-               git push origin claude-fix-pr-${{ fromJSON(steps.failure_details.outputs.result).prNumber }}-${{ github.run_id }}
+            **Parse error logs and categorize each error:**
 
-               # Create PR to the original branch
-               gh pr create \
-                 --base ${{ fromJSON(steps.failure_details.outputs.result).headBranch }} \
-                 --title "🤖 Auto-fix CI failures for PR #${{ fromJSON(steps.failure_details.outputs.result).prNumber }}" \
-                 --body "## Auto-fix CI Failures
+            | Category | Examples | Auto-Fixable? |
+            |----------|----------|---------------|
+            | **Lint: Formatting** | Indentation, semicolons, quotes, trailing commas | YES - run formatter |
+            | **Lint: Unused imports** | Declared but never used | YES - remove import |
+            | **Lint: Unused variables** | Declared but never used | MAYBE - if safe to remove |
+            | **TypeScript: Missing types** | Implicit any, missing return type | MAYBE - if obvious |
+            | **TypeScript: Type mismatch** | Wrong type assignment | NO - may alter behavior |
+            | **TypeScript: Missing property** | Property doesn't exist | NO - needs understanding |
+            | **Build: Missing dependency** | Module not found | NO - needs decision |
+            | **Build: Config error** | Invalid configuration | NO - needs understanding |
+            | **Test: Assertion failure** | Expected vs actual mismatch | NO - needs investigation |
+            | **Test: Runtime error** | Uncaught exception | NO - needs investigation |
 
-               Original PR: #${{ fromJSON(steps.failure_details.outputs.result).prNumber }}
-               Failed CI: [${{ fromJSON(steps.failure_details.outputs.result).workflowName }}](${{ fromJSON(steps.failure_details.outputs.result).runUrl }})
+            **For each error, record:**
+            1. File path and line number
+            2. Error type and category
+            3. Whether it's auto-fixable
+            4. Specific fix required
 
-               ### Fixes Applied:
-               [Describe your fixes]
+            ### Phase 2: Safe Fix Identification
 
-               ---
-               🤖 *Auto-generated by Claude AI*"
-               ```
+            **Errors SAFE to auto-fix:**
 
-               **If no PR (hasPR = false)**:
-               ```bash
-               git add .
-               git commit -m "fix: auto-fix CI failures in ${{ fromJSON(steps.failure_details.outputs.result).workflowName }}"
-               git push origin ${{ fromJSON(steps.failure_details.outputs.result).headBranch }}
-               ```
+            | Error Pattern | Safe Fix |
+            |---------------|----------|
+            | `Expected indentation of X spaces` | Run `bun run lint:fix` |
+            | `Missing semicolon` | Run `bun run lint:fix` |
+            | `Strings must use doublequote` | Run `bun run lint:fix` |
+            | `'X' is defined but never used` (import) | Remove the import |
+            | `'X' is declared but never used` (variable, safe context) | Remove declaration |
+            | `Delete \`;\`` or formatting-only | Run formatter |
+            | Trailing whitespace | Run formatter |
+            | Missing trailing comma | Run `bun run lint:fix` |
 
-            ## Important:
-            - Only fix obvious, safe issues (lint, format, simple type errors)
-            - Don't make changes that alter functionality
-            - If unsure, document what couldn't be fixed
-            - Don't include [skip ci] - let CI run again
+            **Errors NOT SAFE to auto-fix:**
 
-          claude_args: "--max-turns 999 --allowedTools Read,Write,Edit,Bash(gh:*),Bash(git:*),Bash(bun:*),Bash(npm:*)"
+            | Error Pattern | Why Not Safe |
+            |---------------|--------------|
+            | Type mismatches | May indicate logic error |
+            | Missing properties | May need interface change |
+            | Unused function parameters | May be needed for API contract |
+            | Test failures | Need to understand expected behavior |
+            | Build config errors | Need to understand intent |
+            | Import resolution errors | May need dependency decisions |
+
+            ### Phase 3: Apply Safe Fixes
+
+            ```bash
+            # First, try automatic formatting fixes
+            bun run lint:fix 2>/dev/null || npm run lint:fix 2>/dev/null || true
+            bun run format 2>/dev/null || npm run format 2>/dev/null || true
+
+            # Check what was auto-fixed
+            git diff --stat
+            ```
+
+            **For remaining errors that need manual fixes:**
+
+            1. Read the file containing the error
+            2. Verify the fix is mechanical and safe
+            3. Apply minimal targeted edit
+            4. DO NOT change any logic
+
+            **Example safe manual fixes:**
+            ```typescript
+            // SAFE: Remove unused import
+            - import { unused } from './module';
+
+            // SAFE: Remove unused variable (if truly unused)
+            - const unusedVar = 'value';
+
+            // NOT SAFE: Don't change types to fix mismatch
+            // const x: string = someNumber; // DON'T just change to number
+            ```
+
+            ### Phase 4: Verification
+
+            ```bash
+            # Run the same checks that failed
+            bun run typecheck
+            bun run lint
+
+            # Verify we only fixed what we intended
+            git diff --stat
+            git diff  # Review actual changes
+            ```
+
+            **Verification checklist:**
+            - [ ] All safe errors are fixed
+            - [ ] No logic changes were made
+            - [ ] No new errors were introduced
+            - [ ] Changes are minimal and targeted
+
+            ### Phase 5: Self-Reflection
+
+            **Before committing, verify:**
+
+            | Check | Question |
+            |-------|----------|
+            | Scope | Did I only fix CI errors, nothing else? |
+            | Safety | Could any of my changes alter behavior? |
+            | Completeness | Did I fix all the safe-to-fix errors? |
+            | Documentation | Did I document what couldn't be fixed? |
+
+            **If any behavior-altering changes were made, STOP and document instead.**
+
+            ### Phase 6: Commit & Push
+
+            **If fixes were applied:**
+
+            **For PR (hasPR = true):**
+            ```bash
+            git checkout -b claude-fix-pr-${{ fromJSON(steps.failure_details.outputs.result).prNumber }}-${{ github.run_id }}
+            git add .
+            git commit -m "fix: auto-fix CI failures
+
+            Fixed:
+            - [List each fix applied]
+
+            Not auto-fixable (requires human review):
+            - [List errors that couldn't be safely fixed]
+
+            CI Run: ${{ fromJSON(steps.failure_details.outputs.result).runUrl }}"
+
+            git push origin claude-fix-pr-${{ fromJSON(steps.failure_details.outputs.result).prNumber }}-${{ github.run_id }}
+
+            gh pr create \
+              --base ${{ fromJSON(steps.failure_details.outputs.result).headBranch }} \
+              --title "Auto-fix CI failures for PR #${{ fromJSON(steps.failure_details.outputs.result).prNumber }}" \
+              --body "## CI Auto-Fix
+
+            **Original PR**: #${{ fromJSON(steps.failure_details.outputs.result).prNumber }}
+            **Failed CI Run**: [${{ fromJSON(steps.failure_details.outputs.result).workflowName }}](${{ fromJSON(steps.failure_details.outputs.result).runUrl }})
+
+            ### Fixes Applied
+
+            | File | Fix | Type |
+            |------|-----|------|
+            | [file] | [what was fixed] | [lint/format/etc] |
+
+            ### Not Auto-Fixable
+
+            The following errors require human review:
+
+            | File | Error | Reason |
+            |------|-------|--------|
+            | [file] | [error] | [why not safe to auto-fix] |
+
+            ### Verification
+
+            - [ ] \`bun run typecheck\` passes
+            - [ ] \`bun run lint\` passes
+            - [ ] No logic changes made
+
+            ---
+            *Auto-generated by Claude AI*"
+            ```
+
+            **For non-PR branch (hasPR = false):**
+            ```bash
+            git add .
+            git commit -m "fix: auto-fix CI failures
+
+            Fixed:
+            - [List each fix]
+
+            CI Run: ${{ fromJSON(steps.failure_details.outputs.result).runUrl }}"
+
+            git push origin ${{ fromJSON(steps.failure_details.outputs.result).headBranch }}
+            ```
+
+            ---
+
+            ## Important Rules
+
+            1. **DO** categorize all errors before fixing
+            2. **DO** only fix mechanical/formatting issues
+            3. **DO** verify fixes with typecheck and lint
+            4. **DO** document errors that couldn't be fixed
+            5. **DO** create PR for fixes (not direct push to PR branch)
+            6. **DO NOT** fix type mismatches by changing types
+            7. **DO NOT** fix test failures by changing assertions
+            8. **DO NOT** remove code that might be needed
+            9. **DO NOT** add [skip ci] to commits
+            10. **DO NOT** make changes that alter functionality
+
+            ---
+
+            ## Anti-Patterns to Avoid
+
+            | Anti-Pattern | Why It's Bad | What To Do Instead |
+            |--------------|--------------|-------------------|
+            | Fixing type errors by casting | Hides real bugs | Document for human review |
+            | Removing "unused" parameters | May break API contracts | Check usage first |
+            | Changing test assertions | Masks actual failures | Report for investigation |
+            | Bulk auto-fix without review | May introduce bugs | Review each change |
+            | Fixing errors you don't understand | May cause regressions | Document and skip |
+
+          claude_args: "--max-turns 999 --allowedTools Read,Write,Edit,Bash(*)"
           use_commit_signing: false

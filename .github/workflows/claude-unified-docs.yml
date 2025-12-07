@@ -200,5 +200,5 @@ jobs:
             - 确保所有文件更新后再提交
             - 如果某个步骤失败，继续执行其他步骤
 
-          claude_args: "--max-turns 999 --allowedTools Read,Write,Edit,Bash(gh:*),Bash(git:*),Bash(cd:*),Bash(cat:*)"
+          claude_args: "--max-turns 999 --allowedTools Read,Write,Edit,Bash(*)"
           use_commit_signing: false
