@@ -60,6 +60,7 @@ export function toProvider(dbProvider: any): Provider {
     costMultiplier: dbProvider?.costMultiplier ? parseFloat(dbProvider.costMultiplier) : 1.0,
     groupTag: dbProvider?.groupTag ?? null,
     providerType: dbProvider?.providerType ?? "claude",
+    preserveClientIp: dbProvider?.preserveClientIp ?? false,
     modelRedirects: dbProvider?.modelRedirects ?? null,
     codexInstructionsStrategy: dbProvider?.codexInstructionsStrategy ?? "auto",
     mcpPassthroughType: dbProvider?.mcpPassthroughType ?? "none",

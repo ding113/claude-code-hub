@@ -122,6 +122,8 @@ export const providers = pgTable('providers', {
     .notNull()
     .default('claude')
     .$type<'claude' | 'claude-auth' | 'codex' | 'gemini-cli' | 'gemini' | 'openai-compatible'>(),
+  // 是否透传客户端 IP（默认关闭，避免暴露真实来源）
+  preserveClientIp: boolean('preserve_client_ip').notNull().default(false),
 
   // 模型重定向：将请求的模型名称重定向到另一个模型
   modelRedirects: jsonb('model_redirects').$type<Record<string, string>>(),

@@ -993,6 +993,11 @@
             "desc": "啟用後，此供應商將與 Claude 類型供應商共同參與負載均衡",
             "help": "僅當存在映射至 claude-* 的規則時可用。當用戶請求 claude-* 模型時，此供應商也會被納入調度。"
           },
+          "preserveClientIp": {
+            "label": "透傳客戶端 IP",
+            "desc": "向上游轉發 x-forwarded-for / x-real-ip，可能暴露真實來源 IP",
+            "help": "預設關閉以保護隱私；僅在需要上游感知終端 IP 時開啟。"
+          },
           "modelWhitelist": {
             "title": "模型允許清單",
             "desc": "限制此供應商可處理的模型。預設可處理該類型下的所有模型。",

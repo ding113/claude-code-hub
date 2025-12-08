@@ -79,6 +79,9 @@ export function ProviderForm({
   const [providerType, setProviderType] = useState<ProviderType>(
     sourceProvider?.providerType ?? "claude"
   );
+  const [preserveClientIp, setPreserveClientIp] = useState<boolean>(
+    sourceProvider?.preserveClientIp ?? false
+  );
   const [modelRedirects, setModelRedirects] = useState<Record<string, string>>(
     sourceProvider?.modelRedirects ?? {}
   );
@@ -319,6 +322,7 @@ export function ProviderForm({
             codex_instructions_strategy?: CodexInstructionsStrategy;
             mcp_passthrough_type?: McpPassthroughType;
             mcp_passthrough_url?: string | null;
+            preserve_client_ip?: boolean;
             tpm?: number | null;
             rpm?: number | null;
             rpd?: number | null;
@@ -327,6 +331,7 @@ export function ProviderForm({
             name: name.trim(),
             url: url.trim(),
             provider_type: providerType,
+            preserve_client_ip: preserveClientIp,
             model_redirects: parsedModelRedirects,
             allowed_models: allowedModels.length > 0 ? allowedModels : null,
             join_claude_pool: joinClaudePool,
@@ -384,6 +389,7 @@ export function ProviderForm({
             url: url.trim(),
             key: key.trim(),
             provider_type: providerType,
+            preserve_client_ip: preserveClientIp,
             model_redirects: parsedModelRedirects,
             allowed_models: allowedModels.length > 0 ? allowedModels : null,
             join_claude_pool: joinClaudePool,
@@ -443,6 +449,7 @@ export function ProviderForm({
           setUrl("");
           setKey("");
           setProviderType("claude");
+          setPreserveClientIp(false);
           setModelRedirects({});
           setAllowedModels([]);
           setJoinClaudePool(false);
@@ -647,6 +654,28 @@ export function ProviderForm({
                       {t("sections.routing.providerTypeDisabledNote")}
                     </span>
                   )}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor={isEdit ? "edit-preserve-client-ip" : "preserve-client-ip"}>
+                      {t("sections.routing.preserveClientIp.label")}
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      {t("sections.routing.preserveClientIp.desc")}
+                    </p>
+                  </div>
+                  <Switch
+                    id={isEdit ? "edit-preserve-client-ip" : "preserve-client-ip"}
+                    checked={preserveClientIp}
+                    onCheckedChange={setPreserveClientIp}
+                    disabled={isPending}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {t("sections.routing.preserveClientIp.help")}
                 </p>
               </div>
 

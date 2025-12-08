@@ -181,6 +181,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         costMultiplier: provider.costMultiplier,
         groupTag: provider.groupTag,
         providerType: provider.providerType,
+        preserveClientIp: provider.preserveClientIp,
         modelRedirects: provider.modelRedirects,
         allowedModels: provider.allowedModels,
         joinClaudePool: provider.joinClaudePool,
@@ -256,6 +257,7 @@ export async function addProvider(data: {
   cost_multiplier?: number;
   group_tag?: string | null;
   provider_type?: ProviderType;
+  preserve_client_ip?: boolean;
   model_redirects?: Record<string, string> | null;
   allowed_models?: string[] | null;
   join_claude_pool?: boolean;
@@ -406,6 +408,7 @@ export async function editProvider(
     cost_multiplier?: number;
     group_tag?: string | null;
     provider_type?: ProviderType;
+    preserve_client_ip?: boolean;
     model_redirects?: Record<string, string> | null;
     allowed_models?: string[] | null;
     join_claude_pool?: boolean;

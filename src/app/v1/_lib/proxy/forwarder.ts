@@ -1563,6 +1563,8 @@ export class ProxyForwarder {
     provider: NonNullable<typeof session.provider>
   ): Headers {
     const outboundKey = provider.key;
+    const preserveClientIp = provider.preserveClientIp ?? false;
+    const { clientIp, xForwardedFor } = ProxyForwarder.resolveClientIp(session.headers);
 
     // 构建请求头覆盖规则
     const overrides: Record<string, string> = {
@@ -1588,6 +1590,15 @@ export class ProxyForwarder {
       });
     }
 
+    if (preserveClientIp) {
+      if (xForwardedFor) {
+        overrides["x-forwarded-for"] = xForwardedFor;
+      }
+      if (clientIp) {
+        overrides["x-real-ip"] = clientIp;
+      }
+    }
+
     // 针对 1h 缓存 TTL，补充 Anthropic beta header（避免客户端遗漏）
     if (session.getCacheTtlResolved && session.getCacheTtlResolved() === "1h") {
       const existingBeta = session.headers.get("anthropic-beta") || "";
@@ -1607,10 +1618,37 @@ export class ProxyForwarder {
 
     const headerProcessor = HeaderProcessor.createForProxy({
       blacklist: ["content-length", "connection"], // 删除 content-length（动态计算）和 connection（undici 自动管理）
+      preserveClientIpHeaders: preserveClientIp,
       overrides,
     });
 
     return headerProcessor.process(session.headers);
+  }
+
+  private static resolveClientIp(headers: Headers): {
+    clientIp: string | null;
+    xForwardedFor: string | null;
+  } {
+    const xffRaw = headers.get("x-forwarded-for");
+    const xffParts =
+      xffRaw
+        ?.split(",")
+        .map((ip) => ip.trim())
+        .filter(Boolean) ?? [];
+
+    const candidateIps = [
+      ...xffParts,
+      headers.get("x-real-ip")?.trim(),
+      headers.get("x-client-ip")?.trim(),
+      headers.get("x-originating-ip")?.trim(),
+      headers.get("x-remote-ip")?.trim(),
+      headers.get("x-remote-addr")?.trim(),
+    ].filter((ip): ip is string => !!ip);
+
+    const clientIp = candidateIps[0] ?? null;
+    const xForwardedFor = xffParts.length > 0 ? xffParts.join(", ") : clientIp;
+
+    return { clientIp, xForwardedFor: xForwardedFor ?? null };
   }
 
   /**
