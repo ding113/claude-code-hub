@@ -76,7 +76,7 @@ export function TodayUsageCard({
                     <div>{t("callsShort", { count: item.calls })}</div>
                     <div>{t("tokensShort", { in: item.inputTokens, out: item.outputTokens })}</div>
                     <div className="font-semibold text-foreground">
-                      {`${stats.currencyCode || "USD"} ${Number(item.costUsd).toFixed(4)}`}
+                      {`${stats.currencyCode || "USD"} ${Number(item.costUsd ?? 0).toFixed(4)}`}
                     </div>
                   </div>
                 </div>
