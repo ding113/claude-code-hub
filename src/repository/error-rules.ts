@@ -365,6 +365,16 @@ const DEFAULT_ERROR_RULES = [
     isEnabled: true,
     priority: 89,
   },
+  // Tool result validation errors (non-retryable)
+  {
+    pattern: "unexpected.*tool_use_id.*tool_result|tool_result.*must have.*corresponding.*tool_use",
+    category: "validation_error",
+    description: "tool_result block missing corresponding tool_use (client error)",
+    matchType: "regex" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 88,
+  },
   // Model-related errors (non-retryable)
   {
     pattern: '"actualModel" is null|actualModel.*null',

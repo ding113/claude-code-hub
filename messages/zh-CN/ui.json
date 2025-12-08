@@ -53,5 +53,12 @@
     "tooLong": "标签长度不能超过 {max} 个字符",
     "invalidFormat": "标签只能包含字母、数字、下划线和连字符",
     "removeTag": "移除标签 {tag}"
+  },
+  "providerGroupSelect": {
+    "placeholder": "选择供应商分组",
+    "searchPlaceholder": "搜索分组...",
+    "noGroupsAvailable": "无可用分组",
+    "clearAll": "清除全部",
+    "removeGroup": "移除分组 {group}"
   }
 }

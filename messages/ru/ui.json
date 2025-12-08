@@ -53,5 +53,12 @@
     "tooLong": "Длина тега не может превышать {max} символов",
     "invalidFormat": "Теги могут содержать только буквы, цифры, подчеркивания и дефисы",
     "removeTag": "Удалить тег {tag}"
+  },
+  "providerGroupSelect": {
+    "placeholder": "Выберите группы провайдеров",
+    "searchPlaceholder": "Поиск групп...",
+    "noGroupsAvailable": "Нет доступных групп",
+    "clearAll": "Очистить все",
+    "removeGroup": "Удалить группу {group}"
   }
 }
