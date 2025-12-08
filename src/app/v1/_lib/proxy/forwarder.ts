@@ -1625,7 +1625,10 @@ export class ProxyForwarder {
     return headerProcessor.process(session.headers);
   }
 
-  private static resolveClientIp(headers: Headers): { clientIp: string | null; xForwardedFor: string | null } {
+  private static resolveClientIp(headers: Headers): {
+    clientIp: string | null;
+    xForwardedFor: string | null;
+  } {
     const xffRaw = headers.get("x-forwarded-for");
     const xffParts =
       xffRaw
