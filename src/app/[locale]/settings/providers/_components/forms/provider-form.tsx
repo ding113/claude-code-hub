@@ -322,6 +322,7 @@ export function ProviderForm({
             codex_instructions_strategy?: CodexInstructionsStrategy;
             mcp_passthrough_type?: McpPassthroughType;
             mcp_passthrough_url?: string | null;
+            preserve_client_ip?: boolean;
             tpm?: number | null;
             rpm?: number | null;
             rpd?: number | null;
