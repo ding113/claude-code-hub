@@ -283,7 +283,7 @@ export function KeyListHeader({
                 <ListPlus className="h-3.5 w-3.5" /> {t("addKey")}
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-h-[80vh] flex flex-col overflow-y-auto">
               <FormErrorBoundary>
                 <AddKeyForm
                   userId={activeUser?.id}
