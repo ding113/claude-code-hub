@@ -234,6 +234,7 @@ export const CreateProviderSchema = z.object({
     .enum(["claude", "claude-auth", "codex", "gemini", "gemini-cli", "openai-compatible"])
     .optional()
     .default("claude"),
+  preserve_client_ip: z.boolean().optional().default(false),
   model_redirects: z.record(z.string(), z.string()).nullable().optional(),
   allowed_models: z.array(z.string()).nullable().optional(),
   join_claude_pool: z.boolean().optional().default(false),
@@ -428,6 +429,7 @@ export const UpdateProviderSchema = z
     provider_type: z
       .enum(["claude", "claude-auth", "codex", "gemini", "gemini-cli", "openai-compatible"])
       .optional(),
+    preserve_client_ip: z.boolean().optional(),
     model_redirects: z.record(z.string(), z.string()).nullable().optional(),
     allowed_models: z.array(z.string()).nullable().optional(),
     join_claude_pool: z.boolean().optional(),

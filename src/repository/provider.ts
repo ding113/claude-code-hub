@@ -20,6 +20,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
       providerData.cost_multiplier != null ? providerData.cost_multiplier.toString() : "1.0",
     groupTag: providerData.group_tag,
     providerType: providerData.provider_type,
+    preserveClientIp: providerData.preserve_client_ip ?? false,
     modelRedirects: providerData.model_redirects,
     allowedModels: providerData.allowed_models,
     joinClaudePool: providerData.join_claude_pool ?? false,
@@ -66,6 +67,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     costMultiplier: providers.costMultiplier,
     groupTag: providers.groupTag,
     providerType: providers.providerType,
+    preserveClientIp: providers.preserveClientIp,
     modelRedirects: providers.modelRedirects,
     allowedModels: providers.allowedModels,
     joinClaudePool: providers.joinClaudePool,
@@ -119,6 +121,7 @@ export async function findProviderList(
       costMultiplier: providers.costMultiplier,
       groupTag: providers.groupTag,
       providerType: providers.providerType,
+      preserveClientIp: providers.preserveClientIp,
       modelRedirects: providers.modelRedirects,
       allowedModels: providers.allowedModels,
       joinClaudePool: providers.joinClaudePool,
@@ -183,6 +186,7 @@ export async function findAllProviders(): Promise<Provider[]> {
       costMultiplier: providers.costMultiplier,
       groupTag: providers.groupTag,
       providerType: providers.providerType,
+      preserveClientIp: providers.preserveClientIp,
       modelRedirects: providers.modelRedirects,
       allowedModels: providers.allowedModels,
       joinClaudePool: providers.joinClaudePool,
@@ -241,6 +245,7 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       costMultiplier: providers.costMultiplier,
       groupTag: providers.groupTag,
       providerType: providers.providerType,
+      preserveClientIp: providers.preserveClientIp,
       modelRedirects: providers.modelRedirects,
       allowedModels: providers.allowedModels,
       joinClaudePool: providers.joinClaudePool,
@@ -304,6 +309,8 @@ export async function updateProvider(
       providerData.cost_multiplier != null ? providerData.cost_multiplier.toString() : "1.0";
   if (providerData.group_tag !== undefined) dbData.groupTag = providerData.group_tag;
   if (providerData.provider_type !== undefined) dbData.providerType = providerData.provider_type;
+  if (providerData.preserve_client_ip !== undefined)
+    dbData.preserveClientIp = providerData.preserve_client_ip;
   if (providerData.model_redirects !== undefined)
     dbData.modelRedirects = providerData.model_redirects;
   if (providerData.allowed_models !== undefined) dbData.allowedModels = providerData.allowed_models;
@@ -375,6 +382,7 @@ export async function updateProvider(
       costMultiplier: providers.costMultiplier,
       groupTag: providers.groupTag,
       providerType: providers.providerType,
+      preserveClientIp: providers.preserveClientIp,
       modelRedirects: providers.modelRedirects,
       allowedModels: providers.allowedModels,
       joinClaudePool: providers.joinClaudePool,

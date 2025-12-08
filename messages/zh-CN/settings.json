@@ -680,6 +680,11 @@
             "desc": "启用后，此供应商将与 Claude 类型供应商一起参与负载均衡调度",
             "help": "仅当模型重定向配置中存在映射到 claude-* 模型时可用。启用后，当用户请求 claude-* 模型时，此供应商也会参与调度选择。"
           },
+          "preserveClientIp": {
+            "label": "透传客户端 IP",
+            "desc": "向上游转发 x-forwarded-for / x-real-ip，可能暴露真实来源 IP",
+            "help": "默认关闭以保护隐私；仅在需要上游感知终端 IP 时开启。"
+          },
           "modelWhitelist": {
             "title": "模型白名单",
             "desc": "限制此供应商可以处理的模型。默认情况下，供应商可以处理该类型下的所有模型。",
