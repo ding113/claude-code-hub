@@ -36,8 +36,12 @@ export function AddKeyForm({ userId, user, onSuccess }: AddKeyFormProps) {
 
   // Load provider group suggestions
   useEffect(() => {
-    getAvailableProviderGroups().then(setProviderGroupSuggestions);
-  }, []);
+    if (user?.id) {
+      getAvailableProviderGroups(user.id).then(setProviderGroupSuggestions);
+    } else {
+      getAvailableProviderGroups().then(setProviderGroupSuggestions);
+    }
+  }, [user?.id]);
 
   const form = useZodForm({
     schema: KeyFormSchema,
