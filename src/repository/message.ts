@@ -258,6 +258,7 @@ export async function aggregateSessionStats(sessionId: string): Promise<{
   keyId: number;
   userAgent: string | null;
   apiType: string | null;
+  cacheTtlApplied: string | null;
 } | null> {
   // 1. 聚合统计
   const [stats] = await db
@@ -307,6 +308,27 @@ export async function aggregateSessionStats(sessionId: string): Promise<{
       )
     );
 
+  // 3.1 查询 Cache TTL 列表（去重，用于显示缓存时间信息）
+  const cacheTtlList = await db
+    .selectDistinct({ cacheTtl: messageRequest.cacheTtlApplied })
+    .from(messageRequest)
+    .where(
+      and(
+        eq(messageRequest.sessionId, sessionId),
+        isNull(messageRequest.deletedAt),
+        sql`${messageRequest.cacheTtlApplied} IS NOT NULL`
+      )
+    );
+
+  // 聚合 Cache TTL：单一值直接返回，多值返回 "mixed"
+  const uniqueCacheTtls = cacheTtlList.map((c) => c.cacheTtl).filter(Boolean) as string[];
+  const cacheTtlApplied =
+    uniqueCacheTtls.length === 0
+      ? null
+      : uniqueCacheTtls.length === 1
+        ? uniqueCacheTtls[0]
+        : "mixed";
+
   // 4. 获取用户信息（第一条请求）
   const [userInfo] = await db
     .select({
@@ -350,6 +372,7 @@ export async function aggregateSessionStats(sessionId: string): Promise<{
     keyId: userInfo.keyId,
     userAgent: userInfo.userAgent,
     apiType: userInfo.apiType,
+    cacheTtlApplied,
   };
 }
 
@@ -381,6 +404,7 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
     keyId: number;
     userAgent: string | null;
     apiType: string | null;
+    cacheTtlApplied: string | null;
   }>
 > {
   if (sessionIds.length === 0) {
@@ -467,6 +491,34 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
     modelsMap.get(m.sessionId)?.push(m.model!);
   }
 
+  // 3.1 批量查询 Cache TTL 列表（按 session 分组）
+  const cacheTtlResults = await db
+    .selectDistinct({
+      sessionId: messageRequest.sessionId,
+      cacheTtl: messageRequest.cacheTtlApplied,
+    })
+    .from(messageRequest)
+    .where(
+      and(
+        inArray(messageRequest.sessionId, sessionIds),
+        isNull(messageRequest.deletedAt),
+        sql`${messageRequest.cacheTtlApplied} IS NOT NULL`
+      )
+    );
+
+  // 创建 sessionId → cacheTtls 的 Map
+  const cacheTtlMap = new Map<string, string[]>();
+  for (const c of cacheTtlResults) {
+    if (!c.sessionId) continue;
+
+    if (!cacheTtlMap.has(c.sessionId)) {
+      cacheTtlMap.set(c.sessionId, []);
+    }
+    if (c.cacheTtl) {
+      cacheTtlMap.get(c.sessionId)?.push(c.cacheTtl);
+    }
+  }
+
   // 4. 批量获取用户信息（每个 session 的第一条请求）
   // 使用 DISTINCT ON + ORDER BY 优化
   const userInfoResults = await db
@@ -528,6 +580,12 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
       keyId: userInfo.keyId,
       userAgent: userInfo.userAgent,
       apiType: userInfo.apiType,
+      cacheTtlApplied: (() => {
+        const ttls = cacheTtlMap.get(sessionId) || [];
+        if (ttls.length === 0) return null;
+        if (ttls.length === 1) return ttls[0];
+        return "mixed";
+      })(),
     });
   }
 

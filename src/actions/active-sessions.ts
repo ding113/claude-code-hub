@@ -354,14 +354,31 @@ export async function getSessionMessages(sessionId: string): Promise<ActionResul
 /**
  * 检查指定 session 是否有 messages 数据
  * 用于判断是否显示"查看详情"按钮
+ *
+ * @param sessionId - Session ID
+ * @param requestSequence - 可选，请求序号。提供时检查特定请求的消息
  */
-export async function hasSessionMessages(sessionId: string): Promise<ActionResult<boolean>> {
+export async function hasSessionMessages(
+  sessionId: string,
+  requestSequence?: number
+): Promise<ActionResult<boolean>> {
   try {
     const { SessionManager } = await import("@/lib/session-manager");
-    const messages = await SessionManager.getSessionMessages(sessionId);
+
+    // 如果指定了序号，检查特定请求
+    if (requestSequence !== undefined) {
+      const messages = await SessionManager.getSessionMessages(sessionId, requestSequence);
+      return {
+        ok: true,
+        data: messages !== null,
+      };
+    }
+
+    // 否则检查 Session 是否有任意请求的 messages
+    const hasAny = await SessionManager.hasAnySessionMessages(sessionId);
     return {
       ok: true,
-      data: messages !== null,
+      data: hasAny,
     };
   } catch (error) {
     logger.error("Failed to check session messages:", error);
@@ -719,7 +736,9 @@ export async function terminateActiveSessionsBatch(
 
       // 输入验证：确保参数为有效数字
       if (!Number.isFinite(successCountValue) || successCountValue < 0) {
-        logger.error("Invalid successCount in buildResult", { successCount: successCountValue });
+        logger.error("Invalid successCount in buildResult", {
+          successCount: successCountValue,
+        });
         throw new Error("Invalid successCount: must be a non-negative finite number");
       }
       if (!Number.isFinite(processedCountValue) || processedCountValue < 0) {

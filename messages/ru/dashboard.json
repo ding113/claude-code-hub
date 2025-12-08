@@ -172,8 +172,11 @@
       "clickStatusCode": "Нажмите на код состояния, чтобы просмотреть полную хронологию",
       "viewDetails": "Просмотр деталей",
       "reasons": {
-        "rateLimited": "Лимит затрат провайдера",
+        "rateLimited": "Лимит стоимости поставщика",
         "circuitOpen": "Размыкатель цепи открыт"
+      },
+      "billingDetails": {
+        "title": "Детали биллинга"
       }
     },
     "providerChain": {
@@ -190,6 +193,16 @@
       "401": "401 (Не авторизован)",
       "429": "429 (Ограничение)",
       "500": "500 (Ошибка сервера)"
+    },
+    "billingDetails": {
+      "input": "Входные",
+      "output": "Выходные",
+      "cacheWrite5m": "Запись кэша (5m)",
+      "cacheWrite1h": "Запись кэша (1h)",
+      "cacheRead": "Чтение кэша",
+      "cacheTtl": "TTL кэша",
+      "multiplier": "Множитель поставщика",
+      "totalCost": "Общая стоимость"
     }
   },
   "leaderboard": {
@@ -305,6 +318,7 @@
       "totalInput": "Общий ввод",
       "totalOutput": "Общий вывод",
       "cacheCreation": "Создание кэша",
+      "cacheTtlMixed": "Смешанный",
       "cacheRead": "Чтение из кэша",
       "total": "Всего",
       "totalFee": "Общая плата",
