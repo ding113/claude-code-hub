@@ -1357,7 +1357,13 @@ function parseUsageFromResponseText(
 
       const data = event.data as Record<string, unknown>;
 
-      // Standard usage fields
+      // Claude message_start format: data.message.usage (preferred)
+      if (data.message && typeof data.message === "object") {
+        const messageObj = data.message as Record<string, unknown>;
+        applyUsageValue(messageObj.usage, `sse.${event.event}.message.usage`);
+      }
+
+      // Fallback: Standard usage fields (data.usage)
       applyUsageValue(data.usage, `sse.${event.event}.usage`);
 
       // Gemini usageMetadata
