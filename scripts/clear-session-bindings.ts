@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * 清除指定供应商的会话绑定
  *
@@ -25,10 +26,10 @@
  *   --help, -h               显示帮助信息
  */
 
-import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import { and, asc, isNull, lt, or, eq, inArray, ilike } from "drizzle-orm";
-import Redis, { type RedisOptions } from "ioredis";
 import { createInterface, type Interface as ReadlineInterface } from "node:readline";
+import { and, asc, eq, ilike, inArray, isNull, lt, or } from "drizzle-orm";
+import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import Redis, { type RedisOptions } from "ioredis";
 import postgres from "postgres";
 
 import * as schema from "../src/drizzle/schema";
@@ -58,6 +59,27 @@ const SESSION_KEY_SUFFIXES = [
 
 type Database = PostgresJsDatabase<typeof schema>;
 type PostgresClient = ReturnType<typeof postgres>;
+type ProviderType =
+  | "claude"
+  | "claude-auth"
+  | "codex"
+  | "gemini-cli"
+  | "gemini"
+  | "openai-compatible";
+
+const VALID_PROVIDER_TYPES: ReadonlyArray<ProviderType | "all"> = [
+  "claude",
+  "claude-auth",
+  "codex",
+  "gemini-cli",
+  "gemini",
+  "openai-compatible",
+  "all",
+];
+
+function isValidProviderType(value: string): value is ProviderType | "all" {
+  return VALID_PROVIDER_TYPES.includes(value as ProviderType | "all");
+}
 
 interface ProviderRecord {
   id: number;
@@ -77,7 +99,7 @@ interface CliOptions {
   priorityThreshold?: number;
   providerIds?: number[];
   namePattern?: string;
-  providerType?: string;
+  providerType?: ProviderType | "all";
   assumeYes: boolean;
   dryRun: boolean;
 }
@@ -135,7 +157,7 @@ function parseCliArgs(args: string[]): CliOptions {
   let priorityValue: number | null = null;
   let providerIds: number[] | null = null;
   let namePattern: string | null = null;
-  let providerType: string | undefined;
+  let providerType: ProviderType | "all" | undefined;
   let assumeYes = false;
   let dryRun = false;
 
@@ -159,20 +181,35 @@ function parseCliArgs(args: string[]): CliOptions {
         return id;
       });
     } else if (arg.startsWith("--id=")) {
-      providerIds = arg.split("=")[1].split(",").map((s) => {
-        const id = Number.parseInt(s.trim(), 10);
-        if (Number.isNaN(id)) throw new Error(`无效的供应商 ID: ${s}`);
-        return id;
-      });
+      providerIds = arg
+        .split("=")[1]
+        .split(",")
+        .map((s) => {
+          const id = Number.parseInt(s.trim(), 10);
+          if (Number.isNaN(id)) throw new Error(`无效的供应商 ID: ${s}`);
+          return id;
+        });
     } else if (arg === "--name") {
       namePattern = args[++i];
       if (!namePattern) throw new Error("--name 需要一个匹配模式");
     } else if (arg.startsWith("--name=")) {
       namePattern = arg.split("=")[1];
     } else if (arg === "--type") {
-      providerType = args[++i];
+      const typeValue = args[++i];
+      if (!typeValue || !isValidProviderType(typeValue)) {
+        throw new Error(
+          `无效的供应商类型: ${typeValue}。有效值: ${VALID_PROVIDER_TYPES.join(", ")}`
+        );
+      }
+      providerType = typeValue;
     } else if (arg.startsWith("--type=")) {
-      providerType = arg.split("=")[1];
+      const typeValue = arg.split("=")[1];
+      if (!isValidProviderType(typeValue)) {
+        throw new Error(
+          `无效的供应商类型: ${typeValue}。有效值: ${VALID_PROVIDER_TYPES.join(", ")}`
+        );
+      }
+      providerType = typeValue;
     } else if (arg === "--yes" || arg === "-y") {
       assumeYes = true;
     } else if (arg === "--dry-run") {
@@ -186,7 +223,9 @@ function parseCliArgs(args: string[]): CliOptions {
   }
 
   // 确定模式
-  const modeCount = [priorityValue !== null, providerIds !== null, namePattern !== null].filter(Boolean).length;
+  const modeCount = [priorityValue !== null, providerIds !== null, namePattern !== null].filter(
+    Boolean
+  ).length;
   if (modeCount > 1) {
     throw new Error("--priority, --id, --name 不能同时使用，请选择一种筛选方式");
   }
@@ -298,12 +337,9 @@ async function fetchAllProviders(db: Database): Promise<ProviderRecord[]> {
 async function fetchProvidersByPriority(
   db: Database,
   threshold: number,
-  providerType?: string
+  providerType?: ProviderType | "all"
 ): Promise<ProviderRecord[]> {
-  const conditions = [
-    isNull(schema.providers.deletedAt),
-    lt(schema.providers.priority, threshold),
-  ];
+  const conditions = [isNull(schema.providers.deletedAt), lt(schema.providers.priority, threshold)];
 
   if (providerType && providerType !== "all") {
     if (providerType === "claude") {
@@ -339,10 +375,7 @@ async function fetchProvidersByPriority(
   }));
 }
 
-async function fetchProvidersByIds(
-  db: Database,
-  ids: number[]
-): Promise<ProviderRecord[]> {
+async function fetchProvidersByIds(db: Database, ids: number[]): Promise<ProviderRecord[]> {
   const rows = await db
     .select({
       id: schema.providers.id,
@@ -364,10 +397,7 @@ async function fetchProvidersByIds(
   }));
 }
 
-async function fetchProvidersByName(
-  db: Database,
-  pattern: string
-): Promise<ProviderRecord[]> {
+async function fetchProvidersByName(db: Database, pattern: string): Promise<ProviderRecord[]> {
   const rows = await db
     .select({
       id: schema.providers.id,
@@ -609,11 +639,11 @@ class InteractiveMenu {
   displayProviderList(providers: ProviderRecord[]): void {
     console.log("\n可用供应商列表：\n");
     console.log("  序号  ID    名称                          优先级  类型           状态");
-    console.log("  " + "-".repeat(75));
+    console.log(`  ${"-".repeat(75)}`);
 
     providers.forEach((p, index) => {
       const status = p.isEnabled ? "启用" : "禁用";
-      const name = p.name.length > 28 ? p.name.substring(0, 25) + "..." : p.name.padEnd(28);
+      const name = p.name.length > 28 ? `${p.name.substring(0, 25)}...` : p.name.padEnd(28);
       console.log(
         `  ${String(index + 1).padStart(4)}  ${String(p.id).padStart(4)}  ${name}  ${String(p.priority).padStart(6)}  ${p.providerType.padEnd(13)}  ${status}`
       );
@@ -775,7 +805,7 @@ function displaySelectedProviders(providers: ProviderRecord[]): void {
 }
 
 function displayResult(result: CleanupResult, dryRun: boolean): void {
-  console.log("\n" + "=".repeat(60));
+  console.log(`\n${"=".repeat(60)}`);
   console.log(dryRun ? "  Dry-Run 结果摘要" : "  清理完成");
   console.log("=".repeat(60));
   console.log(`  Session 数量:     ${result.sessionCount}`);
@@ -873,9 +903,10 @@ async function main(): Promise<void> {
           console.log("\n请重新运行脚本。");
           return;
         }
-        const filteredProviders = selectedType === "all"
-          ? allProviders
-          : allProviders.filter((p) => p.providerType === selectedType);
+        const filteredProviders =
+          selectedType === "all"
+            ? allProviders
+            : allProviders.filter((p) => p.providerType === selectedType);
 
         if (filteredProviders.length === 0) {
           console.log(`\n没有找到类型为 "${selectedType}" 的供应商。`);
