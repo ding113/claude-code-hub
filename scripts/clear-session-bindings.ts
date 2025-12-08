@@ -350,7 +350,7 @@ async function fetchProvidersByPriority(
         )!
       );
     } else {
-      conditions.push(eq(schema.providers.providerType, providerType));
+      conditions.push(eq(schema.providers.providerType, providerType as ProviderType));
     }
   }
 
