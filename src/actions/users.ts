@@ -446,11 +446,17 @@ export async function editUser(
       // 只有在 providerGroup 真正变化时才级联更新
       if (oldUserForCascade.providerGroup !== data.providerGroup) {
         const oldUserGroups = oldUserForCascade.providerGroup
-          ? oldUserForCascade.providerGroup.split(",").map((g) => g.trim()).filter(Boolean)
+          ? oldUserForCascade.providerGroup
+              .split(",")
+              .map((g) => g.trim())
+              .filter(Boolean)
           : [];
 
         const newUserGroups = data.providerGroup
-          ? data.providerGroup.split(",").map((g) => g.trim()).filter(Boolean)
+          ? data.providerGroup
+              .split(",")
+              .map((g) => g.trim())
+              .filter(Boolean)
           : [];
 
         // 计算被移除的分组
