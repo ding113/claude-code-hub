@@ -72,44 +72,52 @@ export const CreateUserSchema = z.object({
       // null/undefined/空字符串 -> 视为未设置
       if (val === null || val === undefined || val === "") return undefined;
 
-      // 已经是 Date 对象 -> 直接返回
+      // 已经是 Date 对象
       if (val instanceof Date) {
-        // 验证是否为有效日期
-        if (Number.isNaN(val.getTime())) return undefined;
+        // 验证是否为有效日期，无效则返回原值让后续报错
+        if (Number.isNaN(val.getTime())) return val;
         return val;
       }
 
       // 字符串日期 -> 转换为 Date 对象
       if (typeof val === "string") {
         const date = new Date(val);
-        // 验证是否为有效日期
-        if (Number.isNaN(date.getTime())) return undefined;
+        // 验证是否为有效日期，无效则返回原值让后续报错
+        if (Number.isNaN(date.getTime())) return val;
         return date;
       }
 
-      return undefined;
+      // 其他类型返回原值，让 z.date() 报错
+      return val;
     },
     z
       .date()
       .optional()
-      .refine(
-        (date) => {
-          if (!date) return true; // 允许空值
-          // 拒绝过去或当前时间
-          return date > new Date();
-        },
-        { message: "过期时间必须是将来时间" }
-      )
-      .refine(
-        (date) => {
-          if (!date) return true;
-          // 限制最大续期时长(10年)
-          const maxExpiry = new Date();
-          maxExpiry.setFullYear(maxExpiry.getFullYear() + 10);
-          return date <= maxExpiry;
-        },
-        { message: "过期时间不能超过10年" }
-      )
+      .superRefine((date, ctx) => {
+        if (!date) {
+          return; // 允许空值
+        }
+
+        const now = new Date();
+
+        // 检查是否为将来时间
+        if (date <= now) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "过期时间必须是将来时间",
+          });
+        }
+
+        // 限制最大续期时长(10年)
+        const maxExpiry = new Date(now.getTime());
+        maxExpiry.setFullYear(maxExpiry.getFullYear() + 10);
+        if (date > maxExpiry) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "过期时间不能超过10年",
+          });
+        }
+      })
   ),
 });
 
@@ -170,16 +178,48 @@ export const UpdateUserSchema = z.object({
   isEnabled: z.boolean().optional(),
   expiresAt: z.preprocess(
     (val) => {
-      // 兼容服务端传入的 Date 对象，统一转为字符串再走后续校验
-      if (val instanceof Date) return val.toISOString();
       // null/undefined/空字符串 -> 视为未设置
       if (val === null || val === undefined || val === "") return undefined;
+
+      // 已经是 Date 对象
+      if (val instanceof Date) {
+        // 验证是否为有效日期，无效则返回原值让后续报错
+        if (Number.isNaN(val.getTime())) return val;
+        return val;
+      }
+
+      // 字符串日期 -> 转换为 Date 对象
+      if (typeof val === "string") {
+        const date = new Date(val);
+        // 验证是否为有效日期，无效则返回原值让后续报错
+        if (Number.isNaN(date.getTime())) return val;
+        return date;
+      }
+
+      // 其他类型返回原值，让 z.date() 报错
       return val;
     },
     z
-      .string()
+      .date()
       .optional()
-      .transform((val) => (!val || val === "" ? undefined : val))
+      .superRefine((date, ctx) => {
+        if (!date) {
+          return; // 允许空值
+        }
+
+        // 更新时不限制过去时间（允许立即让用户过期）
+
+        // 限制最大续期时长(10年)
+        const now = new Date();
+        const maxExpiry = new Date(now.getTime());
+        maxExpiry.setFullYear(maxExpiry.getFullYear() + 10);
+        if (date > maxExpiry) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "过期时间不能超过10年",
+          });
+        }
+      })
   ),
 });
 

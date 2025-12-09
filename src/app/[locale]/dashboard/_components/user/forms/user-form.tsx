@@ -3,6 +3,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
+import { z } from "zod";
 import { getAvailableProviderGroups } from "@/actions/providers";
 import { addUser, editUser } from "@/actions/users";
 import { DatePickerField } from "@/components/form/date-picker-field";
@@ -14,6 +15,11 @@ import { useZodForm } from "@/lib/hooks/use-zod-form";
 import { getErrorMessage } from "@/lib/utils/error-messages";
 import { setZodErrorMap } from "@/lib/utils/zod-i18n";
 import { CreateUserSchema } from "@/lib/validation/schemas";
+
+// 前端表单使用的 schema（接受字符串日期）
+const UserFormSchema = CreateUserSchema.extend({
+  expiresAt: z.string().optional(),
+});
 
 interface UserFormProps {
   user?: {
@@ -61,7 +67,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
   }, []);
 
   const form = useZodForm({
-    schema: CreateUserSchema, // Use CreateUserSchema for both, it has all fields with defaults
+    schema: UserFormSchema, // 使用前端表单的 schema（接受字符串日期）
     defaultValues: {
       name: user?.name || "",
       note: user?.note || "",

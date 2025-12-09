@@ -208,7 +208,32 @@ export async function addUser(data: {
   limitConcurrentSessions?: number | null;
   isEnabled?: boolean;
   expiresAt?: Date | null;
-}): Promise<ActionResult> {
+}): Promise<
+  ActionResult<{
+    user: {
+      id: number;
+      name: string;
+      note?: string;
+      role: string;
+      isEnabled: boolean;
+      expiresAt: Date | null;
+      rpm: number;
+      dailyQuota: number;
+      providerGroup?: string;
+      tags: string[];
+      limit5hUsd: number | null;
+      limitWeeklyUsd: number | null;
+      limitMonthlyUsd: number | null;
+      limitTotalUsd: number | null;
+      limitConcurrentSessions: number | null;
+    };
+    defaultKey: {
+      id: number;
+      name: string;
+      key: string;
+    };
+  }>
+> {
   try {
     // Get translations for error messages
     const tError = await getTranslations("errors");
@@ -437,18 +462,6 @@ export async function editUser(
       };
     }
 
-    // 如果设置了过期时间,进行验证
-    if (data.expiresAt !== undefined && data.expiresAt !== null) {
-      const validationResult = await validateExpiresAt(data.expiresAt, tError, { allowPast: true });
-      if (validationResult) {
-        return {
-          ok: false,
-          error: validationResult.error,
-          errorCode: validationResult.errorCode,
-        };
-      }
-    }
-
     // 在更新前获取旧用户数据（用于级联更新判断）
     const oldUserForCascade = data.providerGroup !== undefined ? await findUserById(userId) : null;
 
@@ -465,8 +478,8 @@ export async function editUser(
       limitMonthlyUsd: validatedData.limitMonthlyUsd ?? undefined,
       limitTotalUsd: validatedData.limitTotalUsd ?? undefined,
       limitConcurrentSessions: validatedData.limitConcurrentSessions ?? undefined,
-      isEnabled: data.isEnabled,
-      expiresAt: data.expiresAt,
+      isEnabled: validatedData.isEnabled,
+      expiresAt: validatedData.expiresAt,
     });
 
     // 级联更新 KEY 的 providerGroup（仅针对减少场景）
