@@ -67,11 +67,50 @@ export const CreateUserSchema = z.object({
     .optional(),
   // User status and expiry management
   isEnabled: z.boolean().optional().default(true),
-  expiresAt: z
-    .string()
-    .optional()
-    .default("")
-    .transform((val) => (val === "" ? undefined : val)),
+  expiresAt: z.preprocess(
+    (val) => {
+      // null/undefined/空字符串 -> 视为未设置
+      if (val === null || val === undefined || val === "") return undefined;
+
+      // 已经是 Date 对象 -> 直接返回
+      if (val instanceof Date) {
+        // 验证是否为有效日期
+        if (Number.isNaN(val.getTime())) return undefined;
+        return val;
+      }
+
+      // 字符串日期 -> 转换为 Date 对象
+      if (typeof val === "string") {
+        const date = new Date(val);
+        // 验证是否为有效日期
+        if (Number.isNaN(date.getTime())) return undefined;
+        return date;
+      }
+
+      return undefined;
+    },
+    z
+      .date()
+      .optional()
+      .refine(
+        (date) => {
+          if (!date) return true; // 允许空值
+          // 拒绝过去或当前时间
+          return date > new Date();
+        },
+        { message: "过期时间必须是将来时间" }
+      )
+      .refine(
+        (date) => {
+          if (!date) return true;
+          // 限制最大续期时长(10年)
+          const maxExpiry = new Date();
+          maxExpiry.setFullYear(maxExpiry.getFullYear() + 10);
+          return date <= maxExpiry;
+        },
+        { message: "过期时间不能超过10年" }
+      )
+  ),
 });
 
 /**
