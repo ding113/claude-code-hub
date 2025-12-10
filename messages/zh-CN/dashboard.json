@@ -299,6 +299,9 @@
       "refreshing": "刷新中...",
       "noActiveSessions": "暂无活跃 Session"
     },
+    "pagination": {
+      "total": "个"
+    },
     "details": {
       "title": "Session Messages",
       "messages": "消息列表",

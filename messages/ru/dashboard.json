@@ -298,6 +298,9 @@
       "refreshing": "Обновление...",
       "noActiveSessions": "Нет активных сеансов"
     },
+    "pagination": {
+      "total": "всего"
+    },
     "details": {
       "title": "Сообщения сеанса",
       "messages": "Список сообщений",

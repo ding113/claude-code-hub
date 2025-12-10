@@ -299,6 +299,9 @@
       "refreshing": "Refreshing...",
       "noActiveSessions": "No active sessions"
     },
+    "pagination": {
+      "total": "total"
+    },
     "details": {
       "title": "Session Messages",
       "messages": "Messages",
