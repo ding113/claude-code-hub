@@ -74,7 +74,14 @@
       "minRetryCount": "Retry Count ≥",
       "minRetryCountPlaceholder": "Enter minimum retries",
       "apply": "Apply Filter",
-      "reset": "Reset"
+      "reset": "Reset",
+      "last7days": "Last 7 Days",
+      "last30days": "Last 30 Days",
+      "customRange": "Custom Range",
+      "export": "Export",
+      "exporting": "Exporting...",
+      "exportSuccess": "Export completed successfully",
+      "exportError": "Export failed"
     },
     "columns": {
       "time": "Time",
