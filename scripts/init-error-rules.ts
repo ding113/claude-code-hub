@@ -4,10 +4,10 @@
  *
  * Usage: bun run scripts/init-error-rules.ts
  *
- * This script syncs DEFAULT_ERROR_RULES to the database:
- * - Deletes all existing default rules (isDefault=true)
- * - Re-inserts the latest default rules
- * - User-created rules (isDefault=false) are preserved
+ * This script syncs DEFAULT_ERROR_RULES to the database with "user-first" strategy:
+ * - If pattern doesn't exist: insert new rule
+ * - If pattern exists and isDefault=true: update to latest
+ * - If pattern exists and isDefault=false: skip (preserve user customization)
  */
 
 import { syncDefaultErrorRules } from "@/repository/error-rules";
@@ -16,8 +16,10 @@ async function main() {
   console.log("Syncing default error rules...");
 
   try {
-    const count = await syncDefaultErrorRules();
-    console.log(`✓ Default error rules synced successfully (${count} rules)`);
+    const result = await syncDefaultErrorRules();
+    console.log(
+      `✓ Default error rules synced: ${result.inserted} inserted, ${result.updated} updated, ${result.skipped} skipped, ${result.deleted} deleted`
+    );
   } catch (error) {
     console.error("✗ Failed to sync default error rules:", error);
     process.exit(1);
