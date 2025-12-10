@@ -1,6 +1,6 @@
 "use server";
 
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { errorRules } from "@/drizzle/schema";
 import { emitErrorRulesUpdated } from "@/lib/emit-event";
@@ -355,6 +355,26 @@ const DEFAULT_ERROR_RULES = [
     isEnabled: true,
     priority: 90,
   },
+  // Tool use validation errors (non-retryable)
+  {
+    pattern: "`tool_use` ids must be unique|tool_use.*ids must be unique",
+    category: "validation_error",
+    description: "Duplicate tool_use IDs in request (client error)",
+    matchType: "regex" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 89,
+  },
+  // Tool result validation errors (non-retryable)
+  {
+    pattern: "unexpected.*tool_use_id.*tool_result|tool_result.*must have.*corresponding.*tool_use",
+    category: "validation_error",
+    description: "tool_result block missing corresponding tool_use (client error)",
+    matchType: "regex" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 88,
+  },
   // Model-related errors (non-retryable)
   {
     pattern: '"actualModel" is null|actualModel.*null',
@@ -443,31 +463,90 @@ const DEFAULT_ERROR_RULES = [
 /**
  * 同步默认错误规则（推荐使用）
  *
- * 将代码中的默认规则同步到数据库：
- * - 删除所有已有的默认规则（isDefault=true）
- * - 重新插入最新的 DEFAULT_ERROR_RULES
- * - 用户自定义规则（isDefault=false）保持不变
+ * 将代码中的默认规则同步到数据库，采用"用户自定义优先"策略：
+ * - pattern 不存在：插入新规则
+ * - pattern 存在且 isDefault=true：更新为最新默认规则
+ * - pattern 存在且 isDefault=false：跳过（保留用户的自定义版本）
+ * - 不再存在于 DEFAULT_ERROR_RULES 中的默认规则：删除
  *
  * 使用场景：
  * 1. 系统启动时自动同步（instrumentation.ts）
  * 2. 用户点击"刷新缓存"按钮时手动同步
  *
- * @returns 同步的规则数量
+ * @returns 同步统计：inserted（新增）、updated（更新）、skipped（跳过）、deleted（删除过期规则）
  */
-export async function syncDefaultErrorRules(): Promise<number> {
-  await db.transaction(async (tx) => {
-    // 1. 删除所有默认规则
-    await tx.delete(errorRules).where(eq(errorRules.isDefault, true));
+export async function syncDefaultErrorRules(): Promise<{
+  inserted: number;
+  updated: number;
+  skipped: number;
+  deleted: number;
+}> {
+  const counters = { inserted: 0, updated: 0, skipped: 0, deleted: 0 };
 
-    // 2. 重新插入最新的默认规则
+  await db.transaction(async (tx) => {
+    // 获取所有默认规则的 patterns
+    const defaultPatterns = DEFAULT_ERROR_RULES.map((r) => r.pattern);
+    const defaultPatternSet = new Set(defaultPatterns);
+
+    // 一次查询获取数据库中所有默认规则（isDefault=true）
+    const allDefaultRulesInDb = await tx.query.errorRules.findMany({
+      where: eq(errorRules.isDefault, true),
+      columns: { id: true, pattern: true },
+    });
+
+    // 删除不再存在于 DEFAULT_ERROR_RULES 中的默认规则
+    for (const rule of allDefaultRulesInDb) {
+      if (!defaultPatternSet.has(rule.pattern)) {
+        await tx.delete(errorRules).where(eq(errorRules.id, rule.id));
+        counters.deleted += 1;
+      }
+    }
+
+    // 一次查询获取数据库中这些 pattern 的现有记录（包括用户自定义的）
+    const existingRules = await tx.query.errorRules.findMany({
+      where: inArray(errorRules.pattern, defaultPatterns),
+      columns: { pattern: true, isDefault: true },
+    });
+
+    // 构建 pattern -> isDefault 的映射
+    const existingMap = new Map(existingRules.map((r) => [r.pattern, r.isDefault]));
+
     for (const rule of DEFAULT_ERROR_RULES) {
-      await tx.insert(errorRules).values(rule);
+      const existingIsDefault = existingMap.get(rule.pattern);
+
+      if (existingIsDefault === undefined) {
+        // pattern 不存在，直接插入
+        await tx.insert(errorRules).values(rule);
+        counters.inserted += 1;
+        continue;
+      }
+
+      if (existingIsDefault === true) {
+        // pattern 存在且是默认规则，更新它
+        await tx
+          .update(errorRules)
+          .set({
+            matchType: rule.matchType,
+            category: rule.category,
+            description: rule.description,
+            isEnabled: rule.isEnabled,
+            isDefault: true,
+            priority: rule.priority,
+            updatedAt: new Date(),
+          })
+          .where(eq(errorRules.pattern, rule.pattern));
+        counters.updated += 1;
+        continue;
+      }
+
+      // pattern 存在但已被用户自定义（isDefault=false），跳过
+      counters.skipped += 1;
     }
   });
 
   // 注意：不在此处触发 eventEmitter，由调用方决定是否刷新缓存
   // 这样可以避免调用方手动 reload() 时导致双重刷新
-  return DEFAULT_ERROR_RULES.length;
+  return counters;
 }
 
 /**

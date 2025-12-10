@@ -175,6 +175,9 @@
       "reasons": {
         "rateLimited": "Provider Cost Limit",
         "circuitOpen": "Circuit Breaker Open"
+      },
+      "billingDetails": {
+        "title": "Billing Details"
       }
     },
     "providerChain": {
@@ -191,6 +194,16 @@
       "401": "401 (Unauthorized)",
       "429": "429 (Rate Limited)",
       "500": "500 (Server Error)"
+    },
+    "billingDetails": {
+      "input": "Input",
+      "output": "Output",
+      "cacheWrite5m": "Cache Write (5m)",
+      "cacheWrite1h": "Cache Write (1h)",
+      "cacheRead": "Cache Read",
+      "cacheTtl": "Cache TTL",
+      "multiplier": "Provider Multiplier",
+      "totalCost": "Total Cost"
     }
   },
   "leaderboard": {
@@ -306,6 +319,7 @@
       "totalInput": "Total Input",
       "totalOutput": "Total Output",
       "cacheCreation": "Cache Creation",
+      "cacheTtlMixed": "Mixed",
       "cacheRead": "Cache Read",
       "total": "Total",
       "totalFee": "Total Fee",

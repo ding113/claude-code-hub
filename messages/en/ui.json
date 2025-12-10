@@ -53,5 +53,12 @@
     "tooLong": "Tag length cannot exceed {max} characters",
     "invalidFormat": "Tags can only contain letters, numbers, underscores and hyphens",
     "removeTag": "Remove tag {tag}"
+  },
+  "providerGroupSelect": {
+    "placeholder": "Select provider groups",
+    "searchPlaceholder": "Search groups...",
+    "noGroupsAvailable": "No groups available",
+    "clearAll": "Clear all",
+    "removeGroup": "Remove group {group}"
   }
 }

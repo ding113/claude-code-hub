@@ -53,5 +53,12 @@
     "tooLong": "標籤長度不能超過 {max} 個字元",
     "invalidFormat": "標籤只能包含字母、數字、底線和連字符",
     "removeTag": "移除標籤 {tag}"
+  },
+  "providerGroupSelect": {
+    "placeholder": "選擇供應商分組",
+    "searchPlaceholder": "搜尋分組...",
+    "noGroupsAvailable": "無可用分組",
+    "clearAll": "清除全部",
+    "removeGroup": "移除分組 {group}"
   }
 }

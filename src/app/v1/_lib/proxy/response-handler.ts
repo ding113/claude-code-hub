@@ -353,6 +353,9 @@ export class ProxyResponseHandler {
             outputTokens: usageMetrics?.output_tokens,
             cacheCreationInputTokens: usageMetrics?.cache_creation_input_tokens,
             cacheReadInputTokens: usageMetrics?.cache_read_input_tokens,
+            cacheCreation5mInputTokens: usageMetrics?.cache_creation_5m_input_tokens,
+            cacheCreation1hInputTokens: usageMetrics?.cache_creation_1h_input_tokens,
+            cacheTtlApplied: usageMetrics?.cache_ttl ?? null,
             providerChain: session.getProviderChain(),
             model: session.getCurrentModel() ?? undefined, // ⭐ 更新重定向后的模型
             providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
@@ -897,6 +900,9 @@ export class ProxyResponseHandler {
           outputTokens: usageForCost?.output_tokens,
           cacheCreationInputTokens: usageForCost?.cache_creation_input_tokens,
           cacheReadInputTokens: usageForCost?.cache_read_input_tokens,
+          cacheCreation5mInputTokens: usageForCost?.cache_creation_5m_input_tokens,
+          cacheCreation1hInputTokens: usageForCost?.cache_creation_1h_input_tokens,
+          cacheTtlApplied: usageForCost?.cache_ttl ?? null,
           providerChain: session.getProviderChain(),
           model: session.getCurrentModel() ?? undefined, // ⭐ 更新重定向后的模型
           providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
@@ -1107,7 +1113,10 @@ export class ProxyResponseHandler {
         try {
           reader.releaseLock();
         } catch (releaseError) {
-          logger.warn("Failed to release reader lock", { taskId, releaseError });
+          logger.warn("Failed to release reader lock", {
+            taskId,
+            releaseError,
+          });
         }
         AsyncTaskManager.cleanup(taskId);
       }
@@ -1357,7 +1366,13 @@ function parseUsageFromResponseText(
 
       const data = event.data as Record<string, unknown>;
 
-      // Standard usage fields
+      // Claude message_start format: data.message.usage (preferred)
+      if (data.message && typeof data.message === "object") {
+        const messageObj = data.message as Record<string, unknown>;
+        applyUsageValue(messageObj.usage, `sse.${event.event}.message.usage`);
+      }
+
+      // Fallback: Standard usage fields (data.usage)
       applyUsageValue(data.usage, `sse.${event.event}.usage`);
 
       // Gemini usageMetadata
@@ -1416,7 +1431,9 @@ async function updateRequestCostFromUsage(
   costMultiplier: number = 1.0
 ): Promise<void> {
   if (!usage) {
-    logger.warn("[CostCalculation] No usage data, skipping cost update", { messageId });
+    logger.warn("[CostCalculation] No usage data, skipping cost update", {
+      messageId,
+    });
     return;
   }
 

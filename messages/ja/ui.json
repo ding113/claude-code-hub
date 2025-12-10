@@ -53,5 +53,12 @@
     "tooLong": "タグの長さは{max}文字を超えることはできません",
     "invalidFormat": "タグには英数字、アンダースコア、ハイフンのみ使用できます",
     "removeTag": "タグ {tag} を削除"
+  },
+  "providerGroupSelect": {
+    "placeholder": "プロバイダーグループを選択",
+    "searchPlaceholder": "グループを検索...",
+    "noGroupsAvailable": "利用可能なグループがありません",
+    "clearAll": "すべてクリア",
+    "removeGroup": "グループ {group} を削除"
   }
 }

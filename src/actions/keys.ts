@@ -134,6 +134,36 @@ export async function addKey(data: {
       };
     }
 
+    // 验证 providerGroup：Key 的供应商分组必须是用户分组的子集
+    if (validatedData.providerGroup) {
+      const keyGroups = validatedData.providerGroup
+        .split(",")
+        .map((g) => g.trim())
+        .filter(Boolean);
+
+      if (keyGroups.length > 0) {
+        // 如果用户没有配置 providerGroup，Key 也不能设置
+        if (!user.providerGroup) {
+          return {
+            ok: false,
+            error: "用户未配置供应商分组，Key不能设置供应商分组",
+          };
+        }
+
+        const userGroups = user.providerGroup
+          .split(",")
+          .map((g) => g.trim())
+          .filter(Boolean);
+        const invalidGroups = keyGroups.filter((g) => !userGroups.includes(g));
+        if (invalidGroups.length > 0) {
+          return {
+            ok: false,
+            error: `Key的供应商分组包含用户未授权的分组：${invalidGroups.join(", ")}`,
+          };
+        }
+      }
+    }
+
     const generatedKey = `sk-${randomBytes(16).toString("hex")}`;
 
     // 转换 expiresAt: undefined → null（永不过期），string → Date（设置日期）
@@ -277,6 +307,36 @@ export async function editKey(
       };
     }
 
+    // 验证 providerGroup：Key 的供应商分组必须是用户分组的子集
+    if (validatedData.providerGroup) {
+      const keyGroups = validatedData.providerGroup
+        .split(",")
+        .map((g) => g.trim())
+        .filter(Boolean);
+
+      if (keyGroups.length > 0) {
+        // 如果用户没有配置 providerGroup，Key 也不能设置
+        if (!user.providerGroup) {
+          return {
+            ok: false,
+            error: "用户未配置供应商分组，Key不能设置供应商分组",
+          };
+        }
+
+        const userGroups = user.providerGroup
+          .split(",")
+          .map((g) => g.trim())
+          .filter(Boolean);
+        const invalidGroups = keyGroups.filter((g) => !userGroups.includes(g));
+        if (invalidGroups.length > 0) {
+          return {
+            ok: false,
+            error: `Key的供应商分组包含用户未授权的分组：${invalidGroups.join(", ")}`,
+          };
+        }
+      }
+    }
+
     // 转换 expiresAt: undefined → null（清除日期），string → Date（设置日期）
     const expiresAt =
       validatedData.expiresAt === undefined ? null : new Date(validatedData.expiresAt);
@@ -326,7 +386,10 @@ export async function removeKey(keyId: number): Promise<ActionResult> {
 
     const activeKeyCount = await countActiveKeysByUser(key.userId);
     if (activeKeyCount <= 1) {
-      return { ok: false, error: "该用户至少需要保留一个可用的密钥，无法删除最后一个密钥" };
+      return {
+        ok: false,
+        error: "该用户至少需要保留一个可用的密钥，无法删除最后一个密钥",
+      };
     }
 
     await deleteKey(keyId);

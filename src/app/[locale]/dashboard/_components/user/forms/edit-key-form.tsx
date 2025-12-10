@@ -51,8 +51,12 @@ export function EditKeyForm({ keyData, user, onSuccess }: EditKeyFormProps) {
 
   // Load provider group suggestions
   useEffect(() => {
-    getAvailableProviderGroups().then(setProviderGroupSuggestions);
-  }, []);
+    if (user?.id) {
+      getAvailableProviderGroups(user.id).then(setProviderGroupSuggestions);
+    } else {
+      getAvailableProviderGroups().then(setProviderGroupSuggestions);
+    }
+  }, [user?.id]);
 
   const formatExpiresAt = (expiresAt: string) => {
     if (!expiresAt || expiresAt === "永不过期") return "";

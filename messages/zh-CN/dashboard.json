@@ -173,8 +173,11 @@
       "clickStatusCode": "点击状态码查看完整时间线",
       "viewDetails": "查看详情",
       "reasons": {
-        "rateLimited": "供应商费用限制",
+        "rateLimited": "供应商费用已达限额",
         "circuitOpen": "熔断器打开"
+      },
+      "billingDetails": {
+        "title": "计费详情"
       }
     },
     "providerChain": {
@@ -191,6 +194,16 @@
       "401": "401 (未授权)",
       "429": "429 (限流)",
       "500": "500 (服务器错误)"
+    },
+    "billingDetails": {
+      "input": "输入",
+      "output": "输出",
+      "cacheWrite5m": "缓存写入 (5m)",
+      "cacheWrite1h": "缓存写入 (1h)",
+      "cacheRead": "缓存读取",
+      "cacheTtl": "缓存 TTL",
+      "multiplier": "供应商倍率",
+      "totalCost": "总费用"
     }
   },
   "leaderboard": {
@@ -306,6 +319,7 @@
       "totalInput": "总输入",
       "totalOutput": "总输出",
       "cacheCreation": "缓存创建",
+      "cacheTtlMixed": "混合",
       "cacheRead": "缓存读取",
       "total": "总计",
       "totalFee": "总费用",

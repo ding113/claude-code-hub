@@ -91,13 +91,19 @@ export class SessionManager {
    * 每个请求在同一 Session 内获得唯一序号，用于独立存储 messages
    *
    * @param sessionId - Session ID
-   * @returns 请求序号（从 1 开始），Redis 不可用时返回 1
+   * @returns 请求序号（从 1 开始），Redis 不可用时返回基于时间戳的唯一序号
    */
   static async getNextRequestSequence(sessionId: string): Promise<number> {
     const redis = getRedisClient();
     if (!redis || redis.status !== "ready") {
-      logger.warn("SessionManager: Redis not ready, returning default sequence 1");
-      return 1;
+      // 改进的 fallback：使用时间戳 + 随机数生成伪唯一序号
+      // 避免 Redis 不可用时所有请求都返回 1 导致的冲突
+      const fallbackSeq = (Date.now() % 1000000) + Math.floor(Math.random() * 1000);
+      logger.warn("SessionManager: Redis not ready, using fallback sequence", {
+        sessionId,
+        fallbackSeq,
+      });
+      return fallbackSeq;
     }
 
     try {
@@ -109,11 +115,20 @@ export class SessionManager {
         await redis.expire(key, SessionManager.SESSION_TTL);
       }
 
-      logger.trace("SessionManager: Got next request sequence", { sessionId, sequence });
+      logger.trace("SessionManager: Got next request sequence", {
+        sessionId,
+        sequence,
+      });
       return sequence;
     } catch (error) {
-      logger.error("SessionManager: Failed to get request sequence", { error, sessionId });
-      return 1;
+      // 改进的 fallback：使用时间戳 + 随机数生成伪唯一序号
+      const fallbackSeq = (Date.now() % 1000000) + Math.floor(Math.random() * 1000);
+      logger.error("SessionManager: Failed to get request sequence, using fallback", {
+        error,
+        sessionId,
+        fallbackSeq,
+      });
+      return fallbackSeq;
     }
   }
 
@@ -131,7 +146,10 @@ export class SessionManager {
       const count = await redis.get(`session:${sessionId}:seq`);
       return count ? parseInt(count, 10) : 0;
     } catch (error) {
-      logger.error("SessionManager: Failed to get request count", { error, sessionId });
+      logger.error("SessionManager: Failed to get request count", {
+        error,
+        sessionId,
+      });
       return 0;
     }
   }
@@ -265,7 +283,9 @@ export class SessionManager {
       }
 
       // 3. 长上下文 or 无并发 → 正常复用
-      logger.debug("SessionManager: Using client-provided session", { sessionId: clientSessionId });
+      logger.debug("SessionManager: Using client-provided session", {
+        sessionId: clientSessionId,
+      });
       // 刷新 TTL（滑动窗口）
       if (redis && redis.status === "ready") {
         await SessionManager.refreshSessionTTL(clientSessionId).catch((err) => {
@@ -359,7 +379,9 @@ export class SessionManager {
 
       await pipeline.exec();
     } catch (error) {
-      logger.error("SessionManager: Failed to store session mapping", { error });
+      logger.error("SessionManager: Failed to store session mapping", {
+        error,
+      });
     }
   }
 
@@ -407,7 +429,10 @@ export class SessionManager {
       );
 
       if (result === "OK") {
-        logger.trace("SessionManager: Bound session to provider", { sessionId, providerId });
+        logger.trace("SessionManager: Bound session to provider", {
+          sessionId,
+          providerId,
+        });
       } else {
         // 已绑定过，不覆盖（避免并发请求选择不同供应商）
         logger.debug("SessionManager: Session already bound, skipping", {
@@ -478,7 +503,9 @@ export class SessionManager {
 
       return provider.priority;
     } catch (error) {
-      logger.error("SessionManager: Failed to get session provider priority", { error });
+      logger.error("SessionManager: Failed to get session provider priority", {
+        error,
+      });
       return null;
     }
   }
@@ -589,7 +616,9 @@ export class SessionManager {
 
       const currentProviderId = parseInt(currentProviderIdStr, 10);
       if (Number.isNaN(currentProviderId)) {
-        logger.warn("SessionManager: Invalid provider ID in Redis", { currentProviderIdStr });
+        logger.warn("SessionManager: Invalid provider ID in Redis", {
+          currentProviderIdStr,
+        });
         return { updated: false, reason: "invalid_provider_id" };
       }
 
@@ -682,7 +711,9 @@ export class SessionManager {
         details: `保持原供应商 ${currentProvider.name} (priority=${currentPriority}, 健康)，拒绝供应商 ${newProviderId} (priority=${newProviderPriority})`,
       };
     } catch (error) {
-      logger.error("SessionManager: Failed to update session binding", { error });
+      logger.error("SessionManager: Failed to update session binding", {
+        error,
+      });
       return { updated: false, reason: "error", details: String(error) };
     }
   }
@@ -747,7 +778,9 @@ export class SessionManager {
         providerName: providerInfo.providerName,
       });
     } catch (error) {
-      logger.error("SessionManager: Failed to update session provider", { error });
+      logger.error("SessionManager: Failed to update session provider", {
+        error,
+      });
     }
   }
 
@@ -798,7 +831,10 @@ export class SessionManager {
       pipeline.expire(`session:${sessionId}:info`, SessionManager.SESSION_TTL);
 
       await pipeline.exec();
-      logger.trace("SessionManager: Updated session usage", { sessionId, status: usage.status });
+      logger.trace("SessionManager: Updated session usage", {
+        sessionId,
+        status: usage.status,
+      });
     } catch (error) {
       logger.error("SessionManager: Failed to update session usage", { error });
     }
@@ -838,7 +874,9 @@ export class SessionManager {
         key,
       });
     } catch (error) {
-      logger.error("SessionManager: Failed to store session messages", { error });
+      logger.error("SessionManager: Failed to store session messages", {
+        error,
+      });
     }
   }
 
@@ -913,7 +951,9 @@ export class SessionManager {
         return [];
       }
 
-      logger.trace("SessionManager: Found active sessions", { count: sessionIds.length });
+      logger.trace("SessionManager: Found active sessions", {
+        count: sessionIds.length,
+      });
 
       // 2. 批量获取 session 详细信息
       const sessions: ActiveSessionInfo[] = [];
@@ -1155,6 +1195,58 @@ export class SessionManager {
   }
 
   /**
+   * 检查 Session 是否有任意请求的 messages
+   *
+   * 使用 Redis SCAN 检查是否存在任意格式的 messages key：
+   * - 新格式：session:{sessionId}:req:*:messages
+   * - 旧格式：session:{sessionId}:messages
+   *
+   * @param sessionId - Session ID
+   * @returns 是否存在任意 messages
+   */
+  static async hasAnySessionMessages(sessionId: string): Promise<boolean> {
+    if (!SessionManager.STORE_MESSAGES) {
+      return false;
+    }
+
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") return false;
+
+    try {
+      // 1. 先检查旧格式（直接 EXISTS 更高效）
+      const legacyKey = `session:${sessionId}:messages`;
+      const legacyExists = await redis.exists(legacyKey);
+      if (legacyExists) {
+        return true;
+      }
+
+      // 2. 检查新格式：使用 SCAN 搜索 session:{sessionId}:req:*:messages
+      let cursor = "0";
+      do {
+        const [nextCursor, keys] = (await redis.scan(
+          cursor,
+          "MATCH",
+          `session:${sessionId}:req:*:messages`,
+          "COUNT",
+          100
+        )) as [string, string[]];
+
+        cursor = nextCursor;
+
+        // 找到任意一个就返回 true
+        if (keys.length > 0) {
+          return true;
+        }
+      } while (cursor !== "0");
+
+      return false;
+    } catch (error) {
+      logger.error("SessionManager: Failed to check session messages existence", { error });
+      return false;
+    }
+  }
+
+  /**
    * 存储 session 响应体（临时存储，5分钟过期）
    *
    * @param sessionId - Session ID
@@ -1183,7 +1275,9 @@ export class SessionManager {
         size: responseString.length,
       });
     } catch (error) {
-      logger.error("SessionManager: Failed to store session response", { error });
+      logger.error("SessionManager: Failed to store session response", {
+        error,
+      });
     }
   }
 
@@ -1409,7 +1503,10 @@ export class SessionManager {
 
       return deletedKeys > 0;
     } catch (error) {
-      logger.error("SessionManager: Failed to terminate session", { error, sessionId });
+      logger.error("SessionManager: Failed to terminate session", {
+        error,
+        sessionId,
+      });
       return false;
     }
   }
@@ -1456,7 +1553,9 @@ export class SessionManager {
 
       return successCount;
     } catch (error) {
-      logger.error("SessionManager: Failed to terminate sessions batch", { error });
+      logger.error("SessionManager: Failed to terminate sessions batch", {
+        error,
+      });
       return 0;
     }
   }

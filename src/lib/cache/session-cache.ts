@@ -107,6 +107,7 @@ const activeSessionsCache = new SessionCache<
     keyId: number;
     userAgent: string | null;
     apiType: string | null;
+    cacheTtlApplied: string | null;
   }>
 >(2);
 
@@ -130,6 +131,7 @@ const sessionDetailsCache = new SessionCache<{
   keyId: number;
   userAgent: string | null;
   apiType: string | null;
+  cacheTtlApplied: string | null;
 }>(1);
 
 /**

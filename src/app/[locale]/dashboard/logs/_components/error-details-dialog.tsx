@@ -1,6 +1,14 @@
 "use client";
 
-import { AlertCircle, ArrowRight, CheckCircle, ExternalLink, Loader2, Monitor } from "lucide-react";
+import {
+  AlertCircle,
+  ArrowRight,
+  CheckCircle,
+  DollarSign,
+  ExternalLink,
+  Loader2,
+  Monitor,
+} from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { hasSessionMessages } from "@/actions/active-sessions";
@@ -15,7 +23,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Link } from "@/i18n/routing";
-import { cn } from "@/lib/utils";
+import { cn, formatTokenAmount } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils/currency";
 import { formatProviderTimeline } from "@/lib/utils/provider-chain-formatter";
 import type { ProviderChainItem } from "@/types/message";
 import type { BillingModelSource } from "@/types/system-config";
@@ -34,6 +43,15 @@ interface ErrorDetailsDialogProps {
   messagesCount?: number | null; // Messages 数量
   endpoint?: string | null; // API 端点
   billingModelSource?: BillingModelSource; // 计费模型来源
+  // 计费详情
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  cacheCreation5mInputTokens?: number | null;
+  cacheCreation1hInputTokens?: number | null;
+  cacheReadInputTokens?: number | null;
+  cacheTtlApplied?: string | null;
+  costUsd?: string | null;
+  costMultiplier?: string | null;
   externalOpen?: boolean; // 外部控制弹窗开关
   onExternalOpenChange?: (open: boolean) => void; // 外部控制回调
   scrollToRedirect?: boolean; // 是否滚动到重定向部分
@@ -53,6 +71,14 @@ export function ErrorDetailsDialog({
   messagesCount,
   endpoint,
   billingModelSource = "original",
+  inputTokens,
+  outputTokens,
+  cacheCreation5mInputTokens,
+  cacheCreation1hInputTokens,
+  cacheReadInputTokens,
+  cacheTtlApplied,
+  costUsd,
+  costMultiplier,
   externalOpen,
   onExternalOpenChange,
   scrollToRedirect,
@@ -93,7 +119,7 @@ export function ErrorDetailsDialog({
   useEffect(() => {
     if (open && sessionId) {
       setCheckingMessages(true);
-      hasSessionMessages(sessionId)
+      hasSessionMessages(sessionId, requestSequence ?? undefined)
         .then((result) => {
           if (result.ok) {
             setHasMessages(result.data);
@@ -110,7 +136,7 @@ export function ErrorDetailsDialog({
       setHasMessages(false);
       setCheckingMessages(false);
     }
-  }, [open, sessionId]);
+  }, [open, sessionId, requestSequence]);
 
   // 滚动到重定向部分
   useEffect(() => {
@@ -335,6 +361,89 @@ export function ErrorDetailsDialog({
             </div>
           )}
 
+          {/* 计费详情 */}
+          {costUsd && (
+            <div className="space-y-2">
+              <h4 className="font-semibold text-sm flex items-center gap-2">
+                <DollarSign className="h-4 w-4 text-green-600" />
+                {t("logs.details.billingDetails.title")}
+              </h4>
+              <div className="rounded-md border bg-muted/50 p-4">
+                <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">{t("logs.billingDetails.input")}:</span>
+                    <span className="font-mono">{formatTokenAmount(inputTokens)} tokens</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">
+                      {t("logs.billingDetails.output")}:
+                    </span>
+                    <span className="font-mono">{formatTokenAmount(outputTokens)} tokens</span>
+                  </div>
+                  {(cacheCreation5mInputTokens ?? 0) > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">
+                        {t("logs.billingDetails.cacheWrite5m")}:
+                      </span>
+                      <span className="font-mono">
+                        {formatTokenAmount(cacheCreation5mInputTokens)} tokens{" "}
+                        <span className="text-orange-600">(1.25x)</span>
+                      </span>
+                    </div>
+                  )}
+                  {(cacheCreation1hInputTokens ?? 0) > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">
+                        {t("logs.billingDetails.cacheWrite1h")}:
+                      </span>
+                      <span className="font-mono">
+                        {formatTokenAmount(cacheCreation1hInputTokens)} tokens{" "}
+                        <span className="text-orange-600">(2x)</span>
+                      </span>
+                    </div>
+                  )}
+                  {(cacheReadInputTokens ?? 0) > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">
+                        {t("logs.billingDetails.cacheRead")}:
+                      </span>
+                      <span className="font-mono">
+                        {formatTokenAmount(cacheReadInputTokens)} tokens{" "}
+                        <span className="text-green-600">(0.1x)</span>
+                      </span>
+                    </div>
+                  )}
+                  {cacheTtlApplied && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">
+                        {t("logs.billingDetails.cacheTtl")}:
+                      </span>
+                      <Badge variant="outline" className="text-xs">
+                        {cacheTtlApplied}
+                      </Badge>
+                    </div>
+                  )}
+                  {costMultiplier && parseFloat(String(costMultiplier)) !== 1.0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">
+                        {t("logs.billingDetails.multiplier")}:
+                      </span>
+                      <span className="font-mono">
+                        {parseFloat(String(costMultiplier)).toFixed(2)}x
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div className="mt-3 pt-3 border-t flex justify-between items-center">
+                  <span className="font-medium">{t("logs.billingDetails.totalCost")}:</span>
+                  <span className="font-mono text-lg font-semibold text-green-600">
+                    {formatCurrency(costUsd, "USD", 6)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* 模型重定向信息 */}
           {originalModel && currentModel && originalModel !== currentModel && (
             <div id="model-redirect-section" className="space-y-1.5">
@@ -398,8 +507,9 @@ export function ErrorDetailsDialog({
                   ) {
                     return (
                       <div className="rounded-md border bg-orange-50 dark:bg-orange-950/20 p-4 space-y-3">
-                        <div className="font-semibold text-orange-900 dark:text-orange-100">
-                          💰 {error.message}
+                        <div className="font-semibold text-orange-900 dark:text-orange-100 flex items-center gap-2">
+                          <DollarSign className="h-4 w-4" />
+                          {error.message}
                         </div>
                         {error.details?.filteredProviders &&
                           error.details.filteredProviders.length > 0 && (
@@ -477,7 +587,7 @@ export function ErrorDetailsDialog({
                           key={`${p.id}-${index}`}
                           className="text-orange-800 dark:text-orange-200 flex items-start gap-2"
                         >
-                          <span className="text-orange-600 mt-0.5">💰</span>
+                          <DollarSign className="h-4 w-4 text-orange-600 mt-0.5 flex-shrink-0" />
                           <div className="flex-1">
                             <span className="font-medium">{p.name}</span>
                             <span className="text-xs ml-2">

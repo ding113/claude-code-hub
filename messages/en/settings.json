@@ -1086,6 +1086,11 @@
             "desc": "When enabled, this provider will participate in load balancing with Claude-type providers",
             "help": "Available only when there is a redirect mapping to claude-* models. When users request claude-* models, this provider also joins scheduling."
           },
+          "preserveClientIp": {
+            "label": "Forward client IP",
+            "desc": "Pass x-forwarded-for / x-real-ip to upstream providers (may expose real client IP)",
+            "help": "Keep off by default for privacy. Enable only when upstream must see the end-user IP."
+          },
           "modelWhitelist": {
             "title": "Model Allowlist",
             "desc": "Restrict which models this provider can serve. By default, a provider can serve all models of its type.",

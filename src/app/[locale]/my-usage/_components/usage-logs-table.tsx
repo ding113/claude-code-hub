@@ -77,7 +77,7 @@ export function UsageLogsTable({
                     {log.inputTokens}/{log.outputTokens}
                   </TableCell>
                   <TableCell className="text-right text-sm font-mono">
-                    {currencyCode} {log.cost.toFixed(4)}
+                    {currencyCode} {(log.cost ?? 0).toFixed(4)}
                   </TableCell>
                   <TableCell>
                     <Badge

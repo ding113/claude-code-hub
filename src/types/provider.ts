@@ -32,6 +32,8 @@ export interface Provider {
 
   // 供应商类型：扩展支持 4 种类型
   providerType: ProviderType;
+  // 是否透传客户端 IP
+  preserveClientIp: boolean;
   modelRedirects: Record<string, string> | null;
 
   // 模型列表：双重语义
@@ -119,6 +121,8 @@ export interface ProviderDisplay {
   groupTag: string | null;
   // 供应商类型
   providerType: ProviderType;
+  // 是否透传客户端 IP
+  preserveClientIp: boolean;
   modelRedirects: Record<string, string> | null;
   // 模型列表（双重语义）
   allowedModels: string[] | null;
@@ -184,6 +188,7 @@ export interface CreateProviderData {
 
   // 供应商类型和模型配置
   provider_type?: ProviderType;
+  preserve_client_ip?: boolean;
   model_redirects?: Record<string, string> | null;
   allowed_models?: string[] | null;
   join_claude_pool?: boolean;
@@ -247,6 +252,7 @@ export interface UpdateProviderData {
 
   // 供应商类型和模型配置
   provider_type?: ProviderType;
+  preserve_client_ip?: boolean;
   model_redirects?: Record<string, string> | null;
   allowed_models?: string[] | null;
   join_claude_pool?: boolean;

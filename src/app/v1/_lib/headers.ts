@@ -10,6 +10,8 @@ export interface HeaderProcessorConfig {
   overrides?: Record<string, string>;
   /** 是否保留原始 authorization（默认 false） */
   preserveAuthorization?: boolean;
+  /** 是否保留客户端 IP 相关头（默认 false，开启后不再删除 x-forwarded-for/x-real-ip 等） */
+  preserveClientIpHeaders?: boolean;
 }
 
 /**
@@ -22,20 +24,23 @@ export class HeaderProcessor {
   constructor(config: HeaderProcessorConfig = {}) {
     // 初始化黑名单（默认包含代理相关的 headers）
     // 目的：保护客户端隐私，避免真实 IP 和来源信息泄露给上游供应商
-    const defaultBlacklist = [
+    const clientIpHeaders = [
       // 标准代理转发头
       "x-forwarded-for", // 客户端真实 IP 链
-      "x-forwarded-host", // 原始请求 Host
-      "x-forwarded-port", // 原始请求端口
-      "x-forwarded-proto", // 原始请求协议 (http/https)
-      "forwarded", // RFC 7239 标准转发头
-
       // 真实 IP 相关
       "x-real-ip", // Nginx 常用的真实 IP 头
       "x-client-ip", // 部分代理使用
       "x-originating-ip", // Microsoft 相关服务
       "x-remote-ip", // 部分代理使用
       "x-remote-addr", // 部分代理使用
+    ];
+
+    const defaultBlacklist = [
+      ...clientIpHeaders,
+      "x-forwarded-host", // 原始请求 Host
+      "x-forwarded-port", // 原始请求端口
+      "x-forwarded-proto", // 原始请求协议 (http/https)
+      "forwarded", // RFC 7239 标准转发头
 
       // CDN/云服务商特定头
       "cf-connecting-ip", // Cloudflare 客户端 IP
@@ -64,13 +69,18 @@ export class HeaderProcessor {
       "tracestate", // W3C Trace Context 状态
     ];
 
+    const clientIpHeaderSet = new Set(clientIpHeaders);
+    const filteredBlacklist = config.preserveClientIpHeaders
+      ? defaultBlacklist.filter((h) => !clientIpHeaderSet.has(h))
+      : defaultBlacklist;
+
     // 如果不保留 authorization，添加到黑名单
     if (!config.preserveAuthorization) {
-      defaultBlacklist.push("authorization");
+      filteredBlacklist.push("authorization");
     }
 
     this.blacklist = new Set(
-      [...defaultBlacklist, ...(config.blacklist || [])].map((h) => h.toLowerCase())
+      [...filteredBlacklist, ...(config.blacklist || [])].map((h) => h.toLowerCase())
     );
 
     // 初始化覆盖规则

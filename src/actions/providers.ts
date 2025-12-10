@@ -181,6 +181,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         costMultiplier: provider.costMultiplier,
         groupTag: provider.groupTag,
         providerType: provider.providerType,
+        preserveClientIp: provider.preserveClientIp,
         modelRedirects: provider.modelRedirects,
         allowedModels: provider.allowedModels,
         joinClaudePool: provider.joinClaudePool,
@@ -235,10 +236,38 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
 /**
  * 获取所有可用的供应商分组标签（用于用户表单中的下拉建议）
  */
-export async function getAvailableProviderGroups(): Promise<string[]> {
+/**
+ * 获取所有可用的供应商分组列表
+ * @param userId - 可选的用户ID，用于过滤用户可用的分组
+ * @returns 供应商分组列表
+ */
+export async function getAvailableProviderGroups(userId?: number): Promise<string[]> {
   try {
     const { getDistinctProviderGroups } = await import("@/repository/provider");
-    return await getDistinctProviderGroups();
+    const allGroups = await getDistinctProviderGroups();
+
+    // 如果没有提供 userId，返回所有分组（向后兼容）
+    if (!userId) {
+      return allGroups;
+    }
+
+    // 查询用户配置的 providerGroup
+    const { findUserById } = await import("@/repository/user");
+    const user = await findUserById(userId);
+
+    if (!user || !user.providerGroup) {
+      // 用户未配置 providerGroup，返回所有分组
+      return allGroups;
+    }
+
+    // 解析用户的 providerGroup（逗号分隔）
+    const userGroups = user.providerGroup
+      .split(",")
+      .map((g) => g.trim())
+      .filter(Boolean);
+
+    // 过滤：只返回用户配置的分组
+    return allGroups.filter((group) => userGroups.includes(group));
   } catch (error) {
     logger.error("获取供应商分组失败:", error);
     return [];
@@ -256,6 +285,7 @@ export async function addProvider(data: {
   cost_multiplier?: number;
   group_tag?: string | null;
   provider_type?: ProviderType;
+  preserve_client_ip?: boolean;
   model_redirects?: Record<string, string> | null;
   allowed_models?: string[] | null;
   join_claude_pool?: boolean;
@@ -406,6 +436,7 @@ export async function editProvider(
     cost_multiplier?: number;
     group_tag?: string | null;
     provider_type?: ProviderType;
+    preserve_client_ip?: boolean;
     model_redirects?: Record<string, string> | null;
     allowed_models?: string[] | null;
     join_claude_pool?: boolean;

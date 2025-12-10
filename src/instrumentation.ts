@@ -9,18 +9,20 @@ import { logger } from "@/lib/logger";
  * 同步错误规则并初始化检测器
  * 提取为独立函数以避免代码重复
  *
- * 每次启动都会同步 DEFAULT_ERROR_RULES 到数据库：
- * - 删除所有预置规则（isDefault=true）
- * - 重新插入最新的预置规则
- * - 用户自定义规则（isDefault=false）保持不变
+ * 每次启动都会同步 DEFAULT_ERROR_RULES 到数据库，采用"用户自定义优先"策略：
+ * - pattern 不存在：插入新规则
+ * - pattern 存在且 isDefault=true：更新为最新默认规则
+ * - pattern 存在且 isDefault=false：跳过（保留用户的自定义版本）
  *
  * 注意: 此函数会传播关键错误,调用者应决定是否需要优雅降级
  */
 async function syncErrorRulesAndInitializeDetector(): Promise<void> {
   // 同步默认错误规则到数据库 - 每次启动都完整同步
   const { syncDefaultErrorRules } = await import("@/repository/error-rules");
-  const syncedCount = await syncDefaultErrorRules();
-  logger.info(`Default error rules synced successfully (${syncedCount} rules)`);
+  const syncResult = await syncDefaultErrorRules();
+  logger.info(
+    `Default error rules synced: ${syncResult.inserted} inserted, ${syncResult.updated} updated, ${syncResult.skipped} skipped, ${syncResult.deleted} deleted`
+  );
 
   // 加载错误规则缓存 - 让关键错误传播
   const { errorRuleDetector } = await import("@/lib/error-rule-detector");

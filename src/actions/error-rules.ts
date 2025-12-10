@@ -387,13 +387,17 @@ export async function deleteErrorRuleAction(id: number): Promise<ActionResult> {
 /**
  * 手动刷新缓存
  *
- * 同时同步默认规则到数据库：
- * - 删除所有已有的默认规则（isDefault=true）
- * - 重新插入最新的默认规则
- * - 用户自定义规则（isDefault=false）保持不变
+ * 同时同步默认规则到数据库，采用"用户自定义优先"策略：
+ * - pattern 不存在：插入新规则
+ * - pattern 存在且 isDefault=true：更新为最新默认规则
+ * - pattern 存在且 isDefault=false：跳过（保留用户的自定义版本）
+ * - 不再存在于 DEFAULT_ERROR_RULES 中的默认规则：删除
  */
 export async function refreshCacheAction(): Promise<
-  ActionResult<{ stats: ReturnType<typeof errorRuleDetector.getStats>; syncedCount: number }>
+  ActionResult<{
+    stats: ReturnType<typeof errorRuleDetector.getStats>;
+    syncResult: { inserted: number; updated: number; skipped: number; deleted: number };
+  }>
 > {
   try {
     const session = await getSession();
@@ -405,7 +409,7 @@ export async function refreshCacheAction(): Promise<
     }
 
     // 1. 同步默认规则到数据库
-    const syncedCount = await repo.syncDefaultErrorRules();
+    const syncResult = await repo.syncDefaultErrorRules();
 
     // 2. 重新加载缓存
     await errorRuleDetector.reload();
@@ -413,7 +417,7 @@ export async function refreshCacheAction(): Promise<
     const stats = errorRuleDetector.getStats();
 
     logger.info("[ErrorRulesAction] Default rules synced and cache refreshed", {
-      syncedCount,
+      syncResult,
       stats,
       userId: session.user.id,
     });
@@ -423,7 +427,7 @@ export async function refreshCacheAction(): Promise<
 
     return {
       ok: true,
-      data: { stats, syncedCount },
+      data: { stats, syncResult },
     };
   } catch (error) {
     logger.error("[ErrorRulesAction] Failed to sync rules and refresh cache:", error);

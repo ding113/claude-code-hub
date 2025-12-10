@@ -293,8 +293,8 @@ export default function SessionMessagesPage() {
                     title={t("details.requestMessages")}
                     description={t("details.requestMessagesDescription")}
                   >
-                    <div className="rounded-md border bg-muted/50 p-6">
-                      <pre className="text-xs overflow-x-auto whitespace-pre-wrap break-words font-mono">
+                    <div className="rounded-md border bg-muted/50 p-6 max-h-[600px] overflow-auto">
+                      <pre className="text-xs whitespace-pre-wrap break-words font-mono">
                         {JSON.stringify(messages, null, 2)}
                       </pre>
                     </div>
@@ -490,8 +490,15 @@ export default function SessionMessagesPage() {
 
                       {sessionStats.totalCacheCreationTokens > 0 && (
                         <div className="flex items-center justify-between">
-                          <span className="text-sm text-muted-foreground">
+                          <span className="text-sm text-muted-foreground flex items-center gap-2">
                             {t("details.cacheCreation")}
+                            {sessionStats.cacheTtlApplied && (
+                              <Badge variant="outline" className="text-xs">
+                                {sessionStats.cacheTtlApplied === "mixed"
+                                  ? t("details.cacheTtlMixed")
+                                  : sessionStats.cacheTtlApplied}
+                              </Badge>
+                            )}
                           </span>
                           <code className="text-sm font-mono">
                             {sessionStats.totalCacheCreationTokens.toLocaleString()}

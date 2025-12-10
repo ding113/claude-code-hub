@@ -61,6 +61,18 @@ export interface ActionRouteOptions {
    * 权限要求
    */
   requiredRole?: "admin" | "user";
+
+  /**
+   * 请求示例（显示在 API 文档中）
+   */
+  requestExamples?: Record<
+    string,
+    {
+      summary?: string;
+      description?: string;
+      value: unknown;
+    }
+  >;
 }
 
 /**
@@ -164,6 +176,7 @@ export function createActionRoute(
     tags = [module],
     requiresAuth = true,
     requiredRole,
+    requestExamples,
   } = options;
 
   // 创建 OpenAPI 路由定义
@@ -178,6 +191,7 @@ export function createActionRoute(
         content: {
           "application/json": {
             schema: requestSchema,
+            ...(requestExamples && { examples: requestExamples }),
           },
         },
         description: "请求参数",

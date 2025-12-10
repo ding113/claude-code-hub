@@ -258,11 +258,70 @@ export function UsageLogsTable({
                       {formatTokenAmount(log.cacheReadInputTokens)}
                     </TableCell>
                     <TableCell className="text-right font-mono text-xs">
-                      {isNonBilling
-                        ? "-"
-                        : log.costUsd
-                          ? formatCurrency(log.costUsd, currencyCode, 6)
-                          : "-"}
+                      {isNonBilling ? (
+                        "-"
+                      ) : log.costUsd ? (
+                        <TooltipProvider>
+                          <Tooltip delayDuration={250}>
+                            <TooltipTrigger asChild>
+                              <span className="cursor-help">
+                                {formatCurrency(log.costUsd, currencyCode, 6)}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent align="end" className="text-xs space-y-1 max-w-[300px]">
+                              <div>
+                                {t("logs.billingDetails.input")}:{" "}
+                                {formatTokenAmount(log.inputTokens)} tokens
+                              </div>
+                              <div>
+                                {t("logs.billingDetails.output")}:{" "}
+                                {formatTokenAmount(log.outputTokens)} tokens
+                              </div>
+                              {(log.cacheCreation5mInputTokens ?? 0) > 0 && (
+                                <div>
+                                  {t("logs.billingDetails.cacheWrite5m")}:{" "}
+                                  {formatTokenAmount(log.cacheCreation5mInputTokens)} tokens (1.25x)
+                                </div>
+                              )}
+                              {(log.cacheCreation1hInputTokens ?? 0) > 0 && (
+                                <div>
+                                  {t("logs.billingDetails.cacheWrite1h")}:{" "}
+                                  {formatTokenAmount(log.cacheCreation1hInputTokens)} tokens (2x)
+                                </div>
+                              )}
+                              {(log.cacheReadInputTokens ?? 0) > 0 && (
+                                <div>
+                                  {t("logs.billingDetails.cacheRead")}:{" "}
+                                  {formatTokenAmount(log.cacheReadInputTokens)} tokens (0.1x)
+                                </div>
+                              )}
+                              {(() => {
+                                const successfulProvider =
+                                  log.providerChain && log.providerChain.length > 0
+                                    ? [...log.providerChain]
+                                        .reverse()
+                                        .find(
+                                          (item) =>
+                                            item.reason === "request_success" ||
+                                            item.reason === "retry_success"
+                                        )
+                                    : null;
+                                const actualCostMultiplier =
+                                  successfulProvider?.costMultiplier ?? log.costMultiplier;
+                                return actualCostMultiplier &&
+                                  parseFloat(String(actualCostMultiplier)) !== 1.0 ? (
+                                  <div>
+                                    {t("logs.billingDetails.multiplier")}:{" "}
+                                    {parseFloat(String(actualCostMultiplier)).toFixed(2)}x
+                                  </div>
+                                ) : null;
+                              })()}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : (
+                        "-"
+                      )}
                     </TableCell>
                     <TableCell className="text-right font-mono text-xs">
                       {formatDuration(log.durationMs)}
@@ -282,6 +341,14 @@ export function UsageLogsTable({
                         messagesCount={log.messagesCount}
                         endpoint={log.endpoint}
                         billingModelSource={billingModelSource}
+                        inputTokens={log.inputTokens}
+                        outputTokens={log.outputTokens}
+                        cacheCreation5mInputTokens={log.cacheCreation5mInputTokens}
+                        cacheCreation1hInputTokens={log.cacheCreation1hInputTokens}
+                        cacheReadInputTokens={log.cacheReadInputTokens}
+                        cacheTtlApplied={log.cacheTtlApplied}
+                        costUsd={log.costUsd}
+                        costMultiplier={log.costMultiplier}
                         externalOpen={dialogState.logId === log.id ? true : undefined}
                         onExternalOpenChange={(open) => {
                           if (!open) setDialogState({ logId: null, scrollToRedirect: false });
