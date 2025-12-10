@@ -391,7 +391,9 @@
       "fetchFailed": "Failed to fetch requests",
       "unknownError": "Unknown error occurred",
       "prev": "Prev",
-      "next": "Next"
+      "next": "Next",
+      "orderAsc": "Switch to ascending order (oldest first)",
+      "orderDesc": "Switch to descending order (newest first)"
     },
     "back": "Back",
     "loadingError": "Loading failed"

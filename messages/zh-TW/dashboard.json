@@ -391,7 +391,9 @@
       "fetchFailed": "取得請求列表失敗",
       "unknownError": "未知錯誤",
       "prev": "上一頁",
-      "next": "下一頁"
+      "next": "下一頁",
+      "orderAsc": "切換為正序（最早的在前）",
+      "orderDesc": "切換為倒序（最新的在前）"
     },
     "back": "返回",
     "loadingError": "載入失敗"

@@ -390,7 +390,9 @@
       "fetchFailed": "リクエスト一覧の取得に失敗しました",
       "unknownError": "不明なエラー",
       "prev": "前へ",
-      "next": "次へ"
+      "next": "次へ",
+      "orderAsc": "昇順に切り替え（古い順）",
+      "orderDesc": "降順に切り替え（新しい順）"
     },
     "back": "戻る",
     "loadingError": "読み込み失敗"
