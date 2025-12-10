@@ -190,7 +190,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     {
       header: t("columns.successRate"),
       className: "text-right",
-      cell: (row) => `${(((row as ProviderEntry).successRate || 0) * 100).toFixed(1)}%`,
+      cell: (row) => `${(Number((row as ProviderEntry).successRate || 0) * 100).toFixed(1)}%`,
     },
     {
       header: t("columns.avgResponseTime"),
@@ -230,7 +230,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     {
       header: t("columns.successRate"),
       className: "text-right",
-      cell: (row) => `${(((row as ModelEntry).successRate || 0) * 100).toFixed(1)}%`,
+      cell: (row) => `${(Number((row as ModelEntry).successRate || 0) * 100).toFixed(1)}%`,
     },
   ];
 

@@ -403,7 +403,7 @@ export default function SessionMessagesPage() {
                             <code className="text-sm font-mono font-semibold">
                               {sessionStats.totalDurationMs < 1000
                                 ? `${sessionStats.totalDurationMs}ms`
-                                : `${(sessionStats.totalDurationMs / 1000).toFixed(2)}s`}
+                                : `${(Number(sessionStats.totalDurationMs) / 1000).toFixed(2)}s`}
                             </code>
                           </div>
                         </>

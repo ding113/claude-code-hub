@@ -178,8 +178,8 @@ export function EditKeyQuotaDialog({
                   <p className="text-xs text-muted-foreground">
                     {t("cost5h.current", {
                       currency: currencySymbol,
-                      current: currentQuota.cost5h.current.toFixed(4),
-                      limit: currentQuota.cost5h.limit.toFixed(2),
+                      current: Number(currentQuota.cost5h.current).toFixed(4),
+                      limit: Number(currentQuota.cost5h.limit).toFixed(2),
                     })}
                   </p>
                 )}
@@ -204,8 +204,8 @@ export function EditKeyQuotaDialog({
                   <p className="text-xs text-muted-foreground">
                     {t("costDaily.current", {
                       currency: currencySymbol,
-                      current: currentQuota.costDaily.current.toFixed(4),
-                      limit: currentQuota.costDaily.limit.toFixed(2),
+                      current: Number(currentQuota.costDaily.current).toFixed(4),
+                      limit: Number(currentQuota.costDaily.limit).toFixed(2),
                     })}
                   </p>
                 )}
@@ -272,8 +272,8 @@ export function EditKeyQuotaDialog({
                   <p className="text-xs text-muted-foreground">
                     {t("costWeekly.current", {
                       currency: currencySymbol,
-                      current: currentQuota.costWeekly.current.toFixed(4),
-                      limit: currentQuota.costWeekly.limit.toFixed(2),
+                      current: Number(currentQuota.costWeekly.current).toFixed(4),
+                      limit: Number(currentQuota.costWeekly.limit).toFixed(2),
                     })}
                   </p>
                 )}
@@ -298,8 +298,8 @@ export function EditKeyQuotaDialog({
                   <p className="text-xs text-muted-foreground">
                     {t("costMonthly.current", {
                       currency: currencySymbol,
-                      current: currentQuota.costMonthly.current.toFixed(4),
-                      limit: currentQuota.costMonthly.limit.toFixed(2),
+                      current: Number(currentQuota.costMonthly.current).toFixed(4),
+                      limit: Number(currentQuota.costMonthly.limit).toFixed(2),
                     })}
                   </p>
                 )}

@@ -109,7 +109,7 @@ export function UserQuotaHeader({
                   {rpmCurrent}/{rpmLimit}
                 </span>
                 <span className="text-xs text-muted-foreground w-12 text-right flex-shrink-0">
-                  {rpmRate.toFixed(1)}%
+                  {Number(rpmRate).toFixed(1)}%
                 </span>
               </div>
 
@@ -124,10 +124,10 @@ export function UserQuotaHeader({
                   className="flex-1"
                 />
                 <span className="text-sm font-mono w-24 text-right flex-shrink-0">
-                  ${dailyCostCurrent.toFixed(2)}/${dailyCostLimit}
+                  ${Number(dailyCostCurrent).toFixed(2)}/${dailyCostLimit}
                 </span>
                 <span className="text-xs text-muted-foreground w-12 text-right flex-shrink-0">
-                  {dailyRate.toFixed(1)}%
+                  {Number(dailyRate).toFixed(1)}%
                 </span>
               </div>
             </div>

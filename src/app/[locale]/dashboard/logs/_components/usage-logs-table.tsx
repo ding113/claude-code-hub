@@ -36,7 +36,7 @@ function formatDuration(durationMs: number | null): string {
 
   // 1000ms 以上转换为秒
   if (durationMs >= 1000) {
-    return `${(durationMs / 1000).toFixed(2)}s`;
+    return `${(Number(durationMs) / 1000).toFixed(2)}s`;
   }
 
   // 1000ms 以下显示毫秒

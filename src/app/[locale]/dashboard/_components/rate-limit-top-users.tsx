@@ -126,7 +126,8 @@ export function RateLimitTopUsers({ data }: RateLimitTopUsersProps) {
               </TableHeader>
               <TableBody>
                 {tableData.map((row, index) => {
-                  const percentage = ((row.eventCount / totalEvents) * 100).toFixed(1);
+                  const percentage =
+                    totalEvents > 0 ? ((row.eventCount / totalEvents) * 100).toFixed(1) : "0.0";
                   return (
                     <TableRow key={row.userId}>
                       <TableCell className="font-medium">#{index + 1}</TableCell>

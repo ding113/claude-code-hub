@@ -86,7 +86,7 @@ export function ProviderQuotaListItem({
                 {t("list.limit")}: {formatCurrency(limit, currencyCode)}
               </div>
               <div className="text-xs font-semibold">
-                {percentage.toFixed(1)}% {t("list.used")}
+                {Number(percentage).toFixed(1)}% {t("list.used")}
               </div>
             </div>
           </TooltipContent>
@@ -128,7 +128,7 @@ export function ProviderQuotaListItem({
                 {t("list.limit")}: {limit}
               </div>
               <div className="text-xs font-semibold">
-                {percentage.toFixed(1)}% {t("list.used")}
+                {Number(percentage).toFixed(1)}% {t("list.used")}
               </div>
             </div>
           </TooltipContent>

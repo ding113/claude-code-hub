@@ -228,7 +228,7 @@ export function UserQuotaListItem({ user, currencyCode = "USD" }: UserQuotaListI
                   </span>
                 </div>
                 <QuotaProgress current={user.totalUsage} limit={totalLimit} className="h-2" />
-                <p className="text-xs text-muted-foreground">{totalProgress.toFixed(1)}%</p>
+                <p className="text-xs text-muted-foreground">{Number(totalProgress).toFixed(1)}%</p>
               </div>
             ) : (
               <p className="font-medium">{t("noLimitSet")}</p>

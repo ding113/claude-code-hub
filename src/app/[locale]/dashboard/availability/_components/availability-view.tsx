@@ -95,7 +95,7 @@ function formatBucketTime(isoString: string, bucketSizeMinutes: number): string 
 function _formatBucketSizeDisplay(minutes: number): string {
   if (minutes >= 60) {
     const hours = minutes / 60;
-    return hours === 1 ? "1 hour" : `${hours.toFixed(1)} hours`;
+    return hours === 1 ? "1 hour" : `${Number(hours).toFixed(1)} hours`;
   }
   if (minutes >= 1) {
     return `${Math.round(minutes)} min`;
@@ -232,10 +232,10 @@ export function AvailabilityView() {
 
   const formatLatency = (ms: number) => {
     if (ms < 1000) return `${Math.round(ms)}ms`;
-    return `${(ms / 1000).toFixed(2)}s`;
+    return `${(Number(ms) / 1000).toFixed(2)}s`;
   };
 
-  const formatPercentage = (value: number) => `${(value * 100).toFixed(1)}%`;
+  const formatPercentage = (value: number) => `${(Number(value) * 100).toFixed(1)}%`;
 
   // Summary counts
   const getSummaryCounts = () => {
