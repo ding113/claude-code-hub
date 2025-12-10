@@ -26,8 +26,10 @@ import { HeaderProcessor } from "../headers";
 import { buildProxyUrl } from "../url";
 import {
   categorizeErrorAsync,
+  EmptyResponseError,
   ErrorCategory,
   isClientAbortError,
+  isEmptyResponseError,
   isHttp2Error,
   ProxyError,
 } from "./errors";
@@ -213,6 +215,87 @@ export class ProxyForwarder {
 
         try {
           const response = await ProxyForwarder.doForward(session, currentProvider);
+
+          // ========== 空响应检测（仅非流式）==========
+          const contentType = response.headers.get("content-type") || "";
+          const isSSE = contentType.includes("text/event-stream");
+
+          if (!isSSE) {
+            // 非流式响应：检测空响应
+            const contentLength = response.headers.get("content-length");
+
+            // 检测 Content-Length: 0 的情况
+            if (contentLength === "0") {
+              throw new EmptyResponseError(currentProvider.id, currentProvider.name, "empty_body");
+            }
+
+            // 对于没有 Content-Length 的情况，需要 clone 并检查响应体
+            // 注意：这会增加一定的性能开销，但对于非流式响应是可接受的
+            if (!contentLength) {
+              const clonedResponse = response.clone();
+              const responseText = await clonedResponse.text();
+
+              if (!responseText || responseText.trim() === "") {
+                throw new EmptyResponseError(
+                  currentProvider.id,
+                  currentProvider.name,
+                  "empty_body"
+                );
+              }
+
+              // 尝试解析 JSON 并检查是否有输出内容
+              try {
+                const responseJson = JSON.parse(responseText) as Record<string, unknown>;
+
+                // 检测 Claude 格式的空响应
+                if (responseJson.type === "message") {
+                  const content = responseJson.content as unknown[];
+                  if (!content || content.length === 0) {
+                    throw new EmptyResponseError(
+                      currentProvider.id,
+                      currentProvider.name,
+                      "missing_content"
+                    );
+                  }
+                }
+
+                // 检测 OpenAI 格式的空响应
+                if (responseJson.choices !== undefined) {
+                  const choices = responseJson.choices as unknown[];
+                  if (!choices || choices.length === 0) {
+                    throw new EmptyResponseError(
+                      currentProvider.id,
+                      currentProvider.name,
+                      "missing_content"
+                    );
+                  }
+                }
+
+                // 检测 usage 中的 output_tokens
+                const usage = responseJson.usage as Record<string, unknown> | undefined;
+                if (usage) {
+                  const outputTokens =
+                    (usage.output_tokens as number) || (usage.completion_tokens as number) || 0;
+
+                  if (outputTokens === 0) {
+                    // 输出 token 为 0，可能是空响应
+                    logger.warn("ProxyForwarder: Response has zero output tokens", {
+                      providerId: currentProvider.id,
+                      providerName: currentProvider.name,
+                      usage,
+                    });
+                    // 注意：不抛出错误，因为某些请求（如 count_tokens）可能合法地返回 0 output tokens
+                  }
+                }
+              } catch (_parseError) {
+                // JSON 解析失败但响应体不为空，不视为空响应错误
+                logger.debug("ProxyForwarder: Non-JSON response body, skipping content check", {
+                  providerId: currentProvider.id,
+                  contentType,
+                });
+              }
+            }
+          }
 
           // ========== 成功分支 ==========
           recordSuccess(currentProvider.id);
@@ -479,8 +562,98 @@ export class ProxyForwarder {
             break; // ⭐ 跳出内层循环，进入供应商切换逻辑
           }
 
-          // ⭐ 5. 供应商错误处理（所有 4xx/5xx HTTP 错误，计入熔断器，直接切换）
+          // ⭐ 5. 上游 404 错误处理（不计入熔断器，直接切换供应商）
+          if (errorCategory === ErrorCategory.RESOURCE_NOT_FOUND) {
+            const proxyError = lastError as ProxyError;
+
+            logger.warn(
+              "ProxyForwarder: Upstream 404 error, switching provider without circuit breaker",
+              {
+                providerId: currentProvider.id,
+                providerName: currentProvider.name,
+                statusCode: 404,
+                error: errorMessage,
+                attemptNumber: attemptCount,
+                totalProvidersAttempted,
+              }
+            );
+
+            // 记录到失败列表（避免重新选择）
+            failedProviderIds.push(currentProvider.id);
+
+            // 记录到决策链（标记为 resource_not_found，不计入熔断）
+            session.addProviderToChain(currentProvider, {
+              reason: "resource_not_found",
+              circuitState: getCircuitState(currentProvider.id),
+              attemptNumber: attemptCount,
+              errorMessage: errorMessage,
+              statusCode: 404,
+              errorDetails: {
+                provider: {
+                  id: currentProvider.id,
+                  name: currentProvider.name,
+                  statusCode: 404,
+                  statusText: proxyError.message,
+                  upstreamBody: proxyError.upstreamError?.body,
+                  upstreamParsed: proxyError.upstreamError?.parsed,
+                },
+              },
+            });
+
+            // 不调用 recordFailure()，不计入熔断器
+
+            break; // ⭐ 跳出内层循环，进入供应商切换逻辑
+          }
+
+          // ⭐ 6. 供应商错误处理（所有 4xx/5xx HTTP 错误 + 空响应错误，计入熔断器，直接切换）
           if (errorCategory === ErrorCategory.PROVIDER_ERROR) {
+            // 🆕 空响应错误特殊处理（EmptyResponseError 不是 ProxyError）
+            if (isEmptyResponseError(lastError)) {
+              const emptyError = lastError as EmptyResponseError;
+
+              logger.warn("ProxyForwarder: Empty response detected, will switch provider", {
+                providerId: currentProvider.id,
+                providerName: currentProvider.name,
+                reason: emptyError.reason,
+                error: emptyError.message,
+                attemptNumber: attemptCount,
+                totalProvidersAttempted,
+              });
+
+              // 记录到失败列表
+              failedProviderIds.push(currentProvider.id);
+
+              // 获取熔断器健康信息
+              const { health, config } = await getProviderHealthInfo(currentProvider.id);
+
+              // 记录到决策链
+              session.addProviderToChain(currentProvider, {
+                reason: "retry_failed",
+                circuitState: getCircuitState(currentProvider.id),
+                attemptNumber: attemptCount,
+                errorMessage: emptyError.message,
+                circuitFailureCount: health.failureCount + 1,
+                circuitFailureThreshold: config.failureThreshold,
+                statusCode: 520, // Web Server Returned an Unknown Error
+                errorDetails: {
+                  provider: {
+                    id: currentProvider.id,
+                    name: currentProvider.name,
+                    statusCode: 520,
+                    statusText: `Empty response: ${emptyError.reason}`,
+                  },
+                },
+              });
+
+              // 计入熔断器
+              if (!session.isProbeRequest()) {
+                await recordFailure(currentProvider.id, lastError);
+              }
+
+              break; // 跳出内层循环，进入供应商切换逻辑
+            }
+
+            // 常规 ProxyError 处理
             const proxyError = lastError as ProxyError;
             const statusCode = proxyError.statusCode;
 
@@ -706,7 +879,9 @@ export class ProxyForwarder {
     // 应用模型重定向（如果配置了）
     const wasRedirected = ModelRedirector.apply(session, provider);
     if (wasRedirected) {
-      logger.debug("ProxyForwarder: Model redirected", { providerId: provider.id });
+      logger.debug("ProxyForwarder: Model redirected", {
+        providerId: provider.id,
+      });
     }
 
     let proxyUrl: string;

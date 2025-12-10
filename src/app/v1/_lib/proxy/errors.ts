@@ -443,6 +443,7 @@ export enum ErrorCategory {
   SYSTEM_ERROR, // 系统/网络问题（fetch 网络异常）→ 不计入熔断器 + 先重试1次
   CLIENT_ABORT, // 客户端主动中断 → 不计入熔断器 + 不重试 + 直接返回
   NON_RETRYABLE_CLIENT_ERROR, // 客户端输入错误（Prompt 超限、内容过滤、PDF 限制、Thinking 格式、参数缺失/额外参数、非法请求）→ 不计入熔断器 + 不重试 + 直接返回
+  RESOURCE_NOT_FOUND, // 上游 404 错误 → 不计入熔断器 + 直接切换供应商
 }
 
 /**
@@ -663,6 +664,50 @@ export function isRateLimitError(error: unknown): error is RateLimitError {
 }
 
 /**
+ * 空响应错误类 - 用于检测上游返回空响应或缺少输出 token 的情况
+ *
+ * 设计原则：
+ * 1. 结构化错误：携带供应商信息和失败原因
+ * 2. 计入熔断器：空响应视为供应商问题
+ * 3. 触发故障切换：尝试其他供应商
+ */
+export class EmptyResponseError extends Error {
+  constructor(
+    public readonly providerId: number,
+    public readonly providerName: string,
+    public readonly reason: "empty_body" | "no_output_tokens" | "missing_content"
+  ) {
+    const reasonMessages = {
+      empty_body: "Response body is empty",
+      no_output_tokens: "Response has no output tokens",
+      missing_content: "Response is missing content field",
+    };
+    super(`Empty response from provider ${providerName}: ${reasonMessages[reason]}`);
+    this.name = "EmptyResponseError";
+  }
+
+  /**
+   * 获取适合记录的 JSON 元数据
+   */
+  toJSON() {
+    return {
+      type: "empty_response_error",
+      provider_id: this.providerId,
+      provider_name: this.providerName,
+      reason: this.reason,
+      message: this.message,
+    };
+  }
+}
+
+/**
+ * 类型守卫：检查是否为 EmptyResponseError
+ */
+export function isEmptyResponseError(error: unknown): error is EmptyResponseError {
+  return error instanceof EmptyResponseError;
+}
+
+/**
  * 判断错误类型（异步版本）
  *
  * 分类规则（优先级从高到低）：
@@ -707,7 +752,16 @@ export async function categorizeErrorAsync(error: Error): Promise<ErrorCategory>
 
   // 优先级 3: ProxyError = HTTP 错误（4xx 或 5xx）
   if (error instanceof ProxyError) {
-    return ErrorCategory.PROVIDER_ERROR; // 所有 HTTP 错误都是供应商问题
+    // 优先级 3.1: 404 错误特殊处理 - 不计入熔断器，仅触发故障切换
+    if (error.statusCode === 404) {
+      return ErrorCategory.RESOURCE_NOT_FOUND; // 上游资源不存在
+    }
+    return ErrorCategory.PROVIDER_ERROR; // 其他 HTTP 错误都是供应商问题
+  }
+
+  // 优先级 3.2: 空响应错误 - 计入熔断器 + 触发故障切换
+  if (error instanceof EmptyResponseError) {
+    return ErrorCategory.PROVIDER_ERROR; // 空响应视为供应商问题
   }
 
   // 优先级 4: 其他所有错误都是系统错误
