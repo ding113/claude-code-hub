@@ -45,7 +45,7 @@ export function OverviewPanel({ currencyCode = "USD", isAdmin = false }: Overvie
   // 格式化响应时间
   const formatResponseTime = (ms: number) => {
     if (ms < 1000) return `${ms}ms`;
-    return `${(ms / 1000).toFixed(1)}s`;
+    return `${(Number(ms) / 1000).toFixed(1)}s`;
   };
 
   const metrics = data || {

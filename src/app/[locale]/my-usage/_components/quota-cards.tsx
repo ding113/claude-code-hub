@@ -210,8 +210,13 @@ function QuotaColumn({
   muted?: boolean;
 }) {
   const t = useTranslations("myUsage.quota");
-  const formatValue = (value: number) =>
-    currency ? `${currency} ${value.toFixed(2)}` : value.toString();
+  const formatValue = (value: number) => {
+    const num = Number(value);
+    if (!Number.isFinite(num)) {
+      return currency ? `${currency} 0.00` : "0";
+    }
+    return currency ? `${currency} ${num.toFixed(2)}` : String(num);
+  };
 
   const progressClass = `h-2 ${
     tone === "danger"

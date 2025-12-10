@@ -16,7 +16,7 @@ function formatDuration(durationMs: number | undefined): string {
   if (durationMs < 1000) {
     return `${durationMs}ms`;
   } else if (durationMs < 60000) {
-    return `${(durationMs / 1000).toFixed(1)}s`;
+    return `${(Number(durationMs) / 1000).toFixed(1)}s`;
   } else {
     const minutes = Math.floor(durationMs / 60000);
     const seconds = Math.floor((durationMs % 60000) / 1000);

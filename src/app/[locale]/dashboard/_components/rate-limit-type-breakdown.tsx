@@ -77,7 +77,8 @@ export function RateLimitTypeBreakdown({ data }: RateLimitTypeBreakdownProps) {
                   if (!active || !payload || !payload.length) return <div className="hidden" />;
 
                   const data = payload[0].payload;
-                  const percentage = ((data.count / totalEvents) * 100).toFixed(1);
+                  const percentage =
+                    totalEvents > 0 ? ((data.count / totalEvents) * 100).toFixed(1) : "0.0";
 
                   return (
                     <div className="rounded-lg border bg-background p-3 shadow-sm">
