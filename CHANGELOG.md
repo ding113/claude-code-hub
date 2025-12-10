@@ -4,6 +4,38 @@
 
 ---
 
+## [v0.3.27](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.27) - 2025-12-10
+
+### 新增
+
+- 供应商新增 IP 透传功能（`preserve_client_ip`），可将客户端 IP 传递给上游供应商 (#294) [@NightYuYyy](https://github.com/NightYuYyy)
+- 新增会话绑定清理工具 (`scripts/clear-session-bindings.ts`)，支持按优先级、ID、名称筛选清理 (#268) [@sususu98](https://github.com/sususu98)
+- 仪表盘新增计费详情展示功能
+
+### 优化
+
+- 用户管理 API 增强：改进验证逻辑和响应结构，支持更多字段 (#303) [@NightYuYyy](https://github.com/NightYuYyy)
+- 改进 Session 绑定清理工具的类型安全性 (#268) [@sususu98](https://github.com/sususu98)
+
+### 修复
+
+- 修复缓存创建 tokens（5 分钟/1 小时）和 TTL 未保存到数据库的问题，同时修复 React 渲染 bug (#310)
+- 修复从 Claude message_start SSE 事件中提取缓存创建 tokens 的问题
+- 添加 tool_use_id 错误规则并修复密钥供应商分组 bugs
+- 修复 key provider group 相关问题 (#296) [@Hwwwww-dev](https://github.com/Hwwwww-dev)
+- 修复 KeyListHeader 组件中 DialogContent 样式问题 (#295) [@Hwwwww-dev](https://github.com/Hwwwww-dev)
+- 解决应用 CORS 头时的 TypeError immutable 错误 (#292) [@sususu98](https://github.com/sususu98)
+- 修复点击同步规则时的错误 (#309) [@sususu98](https://github.com/sususu98)
+- 修复 my-usage 页面成本值的空值处理问题
+- 修复迁移索引缺少 IF NOT EXISTS 导致的幂等性问题
+
+### 其他
+
+- 更新 LiteLLM 价格数据
+- 多语言翻译更新（日语、俄语、简体中文、繁体中文）
+
+---
+
 ## [v0.3.26](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.26) - 2025-12-07
 
 ### 新增
