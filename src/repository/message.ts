@@ -1,6 +1,6 @@
 "use server";
 
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest, providers, users } from "@/drizzle/schema";
 import { formatCostForStorage } from "@/lib/utils/currency";
@@ -655,7 +655,7 @@ export async function findUsageLogs(params: {
  */
 export async function findRequestsBySessionId(
   sessionId: string,
-  options?: { limit?: number; offset?: number }
+  options?: { limit?: number; offset?: number; order?: "asc" | "desc" }
 ): Promise<{
   requests: Array<{
     id: number;
@@ -670,7 +670,7 @@ export async function findRequestsBySessionId(
   }>;
   total: number;
 }> {
-  const { limit = 20, offset = 0 } = options || {};
+  const { limit = 20, offset = 0, order = "asc" } = options || {};
 
   // 查询总数
   const [countResult] = await db
@@ -680,7 +680,7 @@ export async function findRequestsBySessionId(
 
   const total = countResult?.count ?? 0;
 
-  // 查询分页数据，按 requestSequence 排序
+  // 查询分页数据，按 requestSequence 排序（支持正序/倒序）
   const results = await db
     .select({
       id: messageRequest.id,
@@ -695,7 +695,9 @@ export async function findRequestsBySessionId(
     })
     .from(messageRequest)
     .where(and(eq(messageRequest.sessionId, sessionId), isNull(messageRequest.deletedAt)))
-    .orderBy(messageRequest.requestSequence)
+    .orderBy(
+      order === "asc" ? asc(messageRequest.requestSequence) : desc(messageRequest.requestSequence)
+    )
     .limit(limit)
     .offset(offset);
 

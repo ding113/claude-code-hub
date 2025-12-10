@@ -1,6 +1,14 @@
 "use client";
 
-import { AlertCircle, CheckCircle, ChevronLeft, ChevronRight, Clock, Loader2 } from "lucide-react";
+import {
+  AlertCircle,
+  ArrowDownUp,
+  CheckCircle,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Loader2,
+} from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { getSessionRequests } from "@/actions/active-sessions";
@@ -47,16 +55,17 @@ export function RequestListSidebar({
   const [hasMore, setHasMore] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [order, setOrder] = useState<"asc" | "desc">("asc");
 
   const pageSize = 20;
 
   const fetchRequests = useCallback(
-    async (pageNum: number) => {
+    async (pageNum: number, sortOrder: "asc" | "desc") => {
       setIsLoading(true);
       setError(null);
 
       try {
-        const result = await getSessionRequests(sessionId, pageNum, pageSize);
+        const result = await getSessionRequests(sessionId, pageNum, pageSize, sortOrder);
         if (result.ok) {
           setRequests(result.data.requests);
           setTotal(result.data.total);
@@ -74,8 +83,8 @@ export function RequestListSidebar({
   );
 
   useEffect(() => {
-    void fetchRequests(page);
-  }, [fetchRequests, page]);
+    void fetchRequests(page, order);
+  }, [fetchRequests, page, order]);
 
   // 格式化相对时间
   const formatRelativeTime = (date: Date | null) => {
@@ -137,14 +146,30 @@ export function RequestListSidebar({
             </Badge>
           )}
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6"
-          onClick={() => onCollapsedChange?.(true)}
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-1">
+          {/* 排序切换按钮 */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={() => {
+              setOrder((prev) => (prev === "asc" ? "desc" : "asc"));
+              setPage(1); // 切换排序时重置到第一页
+            }}
+            title={order === "asc" ? t("requestList.orderDesc") : t("requestList.orderAsc")}
+          >
+            <ArrowDownUp className="h-4 w-4" />
+          </Button>
+          {/* 折叠按钮 */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={() => onCollapsedChange?.(true)}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       {/* Request List */}
