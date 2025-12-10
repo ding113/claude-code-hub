@@ -77,9 +77,18 @@ export async function findAllTimeLeaderboard(): Promise<LeaderboardEntry[]> {
 }
 
 /**
+ * 查询过去24小时消耗排行榜（用于通知推送）
+ * 使用滚动24小时窗口而非日历日
+ */
+export async function findLast24HoursLeaderboard(): Promise<LeaderboardEntry[]> {
+  const timezone = getEnvConfig().TZ;
+  return findLeaderboardWithTimezone("last24h", timezone);
+}
+
+/**
  * 排行榜周期类型
  */
-export type LeaderboardPeriod = "daily" | "weekly" | "monthly" | "allTime" | "custom";
+export type LeaderboardPeriod = "daily" | "weekly" | "monthly" | "allTime" | "custom" | "last24h";
 
 /**
  * 自定义日期范围参数
@@ -108,6 +117,8 @@ function buildDateCondition(
       return sql`1=1`;
     case "daily":
       return sql`(${messageRequest.createdAt} AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date`;
+    case "last24h":
+      return sql`${messageRequest.createdAt} >= (CURRENT_TIMESTAMP - INTERVAL '24 hours')`;
     case "weekly":
       return sql`date_trunc('week', ${messageRequest.createdAt} AT TIME ZONE ${timezone}) = date_trunc('week', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})`;
     case "monthly":

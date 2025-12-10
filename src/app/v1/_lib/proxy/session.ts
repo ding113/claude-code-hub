@@ -315,6 +315,7 @@ export class ProxySession {
         | "retry_success"
         | "retry_failed" // 供应商错误（已计入熔断器）
         | "system_error" // 系统/网络错误（不计入熔断器）
+        | "resource_not_found" // 上游 404 错误（不计入熔断器，仅切换供应商）
         | "retry_with_official_instructions" // Codex instructions 自动重试（官方）
         | "retry_with_cached_instructions" // Codex instructions 智能重试（缓存）
         | "client_error_non_retryable" // 不可重试的客户端错误（Prompt 超限、内容过滤、PDF 限制、Thinking 格式）

@@ -57,7 +57,7 @@ export interface DailyLeaderboardData {
 }
 
 export function buildDailyLeaderboard(data: DailyLeaderboardData): string {
-  const lines = ["## 📊 今日用户消费排行榜", "", `> 统计日期: **${data.date}**`, ""];
+  const lines = ["## 📊 过去24小时用户消费排行榜", "", `> 统计时间: **${data.date}**`, ""];
 
   if (data.entries.length === 0) {
     lines.push("暂无数据");
@@ -76,7 +76,7 @@ export function buildDailyLeaderboard(data: DailyLeaderboardData): string {
 
     lines.push(
       "---",
-      "**今日总览**",
+      "**总览**",
       `总请求 ${data.totalRequests.toLocaleString()} 次 · 总消费 $${data.totalCost.toFixed(4)}`,
       "",
       formatDateTime(new Date().toISOString())

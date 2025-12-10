@@ -74,7 +74,14 @@
       "minRetryCount": "Количество ретраев ≥",
       "minRetryCountPlaceholder": "Введите минимум (0 — без ограничения)",
       "apply": "Применить фильтр",
-      "reset": "Сброс"
+      "reset": "Сброс",
+      "last7days": "Последние 7 дней",
+      "last30days": "Последние 30 дней",
+      "customRange": "Произвольный диапазон",
+      "export": "Экспорт",
+      "exporting": "Экспорт...",
+      "exportSuccess": "Экспорт завершен",
+      "exportError": "Ошибка экспорта"
     },
     "columns": {
       "time": "Время",
@@ -297,6 +304,9 @@
       "notCountedInConcurrency": "(не учитывается в параллельных запросах)",
       "refreshing": "Обновление...",
       "noActiveSessions": "Нет активных сеансов"
+    },
+    "pagination": {
+      "total": "всего"
     },
     "details": {
       "title": "Сообщения сеанса",

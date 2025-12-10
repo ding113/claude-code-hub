@@ -1,11 +1,18 @@
 "use client";
 
 import { addDays, format, parse } from "date-fns";
+import { Download } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { getKeys } from "@/actions/keys";
-import { getEndpointList, getModelList, getStatusCodeList } from "@/actions/usage-logs";
+import {
+  exportUsageLogs,
+  getEndpointList,
+  getModelList,
+  getStatusCodeList,
+} from "@/actions/usage-logs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -61,6 +68,7 @@ export function UsageLogsFilters({
   const [endpointError, setEndpointError] = useState<string | null>(null);
   const [keys, setKeys] = useState<Key[]>(initialKeys);
   const [localFilters, setLocalFilters] = useState(filters);
+  const [isExporting, setIsExporting] = useState(false);
 
   // 加载筛选器选项
   useEffect(() => {
@@ -139,6 +147,35 @@ export function UsageLogsFilters({
     setLocalFilters({});
     setKeys([]);
     onReset();
+  };
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      const result = await exportUsageLogs(localFilters);
+      if (!result.ok) {
+        toast.error(result.error || t("logs.filters.exportError"));
+        return;
+      }
+
+      // Create and download the file
+      const blob = new Blob([result.data], { type: "text/csv;charset=utf-8;" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `usage-logs-${format(new Date(), "yyyy-MM-dd-HHmmss")}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      toast.success(t("logs.filters.exportSuccess"));
+    } catch (error) {
+      console.error("Export failed:", error);
+      toast.error(t("logs.filters.exportError"));
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   // Helper: convert timestamp to display date string (YYYY-MM-DD)
@@ -408,6 +445,10 @@ export function UsageLogsFilters({
         <Button onClick={handleApply}>{t("logs.filters.apply")}</Button>
         <Button variant="outline" onClick={handleReset}>
           {t("logs.filters.reset")}
+        </Button>
+        <Button variant="outline" onClick={handleExport} disabled={isExporting}>
+          <Download className="mr-2 h-4 w-4" />
+          {isExporting ? t("logs.filters.exporting") : t("logs.filters.export")}
         </Button>
       </div>
     </div>

@@ -132,18 +132,41 @@ export async function getActiveSessions(): Promise<ActionResult<ActiveSessionInf
 }
 
 /**
- * 获取所有 session（包括活跃和非活跃的）
+ * 获取所有 session（包括活跃和非活跃的）- 支持分页
  * 用于实时监控页面的完整视图
  *
  * 修复：统一使用数据库聚合查询，确保与其他页面数据一致
  * 安全修复：添加用户权限隔离
+ *
+ * @param activePage - 活跃 session 页码（从 1 开始）
+ * @param inactivePage - 非活跃 session 页码（从 1 开始）
+ * @param pageSize - 每页数量（默认 20）
  */
-export async function getAllSessions(): Promise<
+export async function getAllSessions(
+  activePage: number = 1,
+  inactivePage: number = 1,
+  pageSize: number = 20
+): Promise<
   ActionResult<{
     active: ActiveSessionInfo[];
     inactive: ActiveSessionInfo[];
+    totalActive: number;
+    totalInactive: number;
+    hasMoreActive: boolean;
+    hasMoreInactive: boolean;
   }>
 > {
+  // Input validation: ensure page numbers and pageSize are positive integers
+  const safeActivePage = Math.max(1, Number.isFinite(activePage) ? Math.floor(activePage) : 1);
+  const safeInactivePage = Math.max(
+    1,
+    Number.isFinite(inactivePage) ? Math.floor(inactivePage) : 1
+  );
+  const safePageSize = Math.min(
+    Math.max(1, Number.isFinite(pageSize) ? Math.floor(pageSize) : 20),
+    200
+  );
+
   try {
     // 0. 验证用户权限
     const authSession = await getSession();
@@ -208,7 +231,25 @@ export async function getAllSessions(): Promise<
         }
       }
 
-      return { ok: true, data: { active, inactive } };
+      // 应用分页
+      const totalActive = active.length;
+      const totalInactive = inactive.length;
+      const activeOffset = (safeActivePage - 1) * safePageSize;
+      const inactiveOffset = (safeInactivePage - 1) * safePageSize;
+      const paginatedActive = active.slice(activeOffset, activeOffset + safePageSize);
+      const paginatedInactive = inactive.slice(inactiveOffset, inactiveOffset + safePageSize);
+
+      return {
+        ok: true,
+        data: {
+          active: paginatedActive,
+          inactive: paginatedInactive,
+          totalActive,
+          totalInactive,
+          hasMoreActive: activeOffset + paginatedActive.length < totalActive,
+          hasMoreInactive: inactiveOffset + paginatedInactive.length < totalInactive,
+        },
+      };
     }
 
     // 2. 从 Redis 获取所有 session ID（包括活跃和非活跃）
@@ -216,7 +257,17 @@ export async function getAllSessions(): Promise<
     const allSessionIds = await SessionManager.getAllSessionIds();
 
     if (allSessionIds.length === 0) {
-      return { ok: true, data: { active: [], inactive: [] } };
+      return {
+        ok: true,
+        data: {
+          active: [],
+          inactive: [],
+          totalActive: 0,
+          totalInactive: 0,
+          hasMoreActive: false,
+          hasMoreInactive: false,
+        },
+      };
     }
 
     // 3. 使用批量聚合查询（性能优化）
@@ -277,7 +328,25 @@ export async function getAllSessions(): Promise<
       `[SessionCache] All sessions fetched and cached, active: ${active.length}, inactive: ${inactive.length} (filtered for user: ${currentUserId})`
     );
 
-    return { ok: true, data: { active, inactive } };
+    // 7. 应用分页
+    const totalActive = active.length;
+    const totalInactive = inactive.length;
+    const activeOffset = (safeActivePage - 1) * safePageSize;
+    const inactiveOffset = (safeInactivePage - 1) * safePageSize;
+    const paginatedActive = active.slice(activeOffset, activeOffset + safePageSize);
+    const paginatedInactive = inactive.slice(inactiveOffset, inactiveOffset + safePageSize);
+
+    return {
+      ok: true,
+      data: {
+        active: paginatedActive,
+        inactive: paginatedInactive,
+        totalActive,
+        totalInactive,
+        hasMoreActive: activeOffset + paginatedActive.length < totalActive,
+        hasMoreInactive: inactiveOffset + paginatedInactive.length < totalInactive,
+      },
+    };
   } catch (error) {
     logger.error("Failed to get all sessions:", error);
     return {

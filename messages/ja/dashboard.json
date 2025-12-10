@@ -74,7 +74,14 @@
       "minRetryCount": "リトライ回数≥",
       "minRetryCountPlaceholder": "回数を入力（0 で制限なし）",
       "apply": "フィルターを適用",
-      "reset": "リセット"
+      "reset": "リセット",
+      "last7days": "過去7日間",
+      "last30days": "過去30日間",
+      "customRange": "カスタム範囲",
+      "export": "エクスポート",
+      "exporting": "エクスポート中...",
+      "exportSuccess": "エクスポートが完了しました",
+      "exportError": "エクスポートに失敗しました"
     },
     "columns": {
       "time": "時間",
@@ -297,6 +304,9 @@
       "notCountedInConcurrency": "(同時実行数には含まれません)",
       "refreshing": "更新中...",
       "noActiveSessions": "アクティブなセッションはありません"
+    },
+    "pagination": {
+      "total": "件"
     },
     "details": {
       "title": "セッション メッセージ",

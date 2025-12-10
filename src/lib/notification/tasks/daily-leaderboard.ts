@@ -1,9 +1,9 @@
 import { logger } from "@/lib/logger";
 import type { DailyLeaderboardData } from "@/lib/wechat/message-templates";
-import { findDailyLeaderboard } from "@/repository/leaderboard";
+import { findLast24HoursLeaderboard } from "@/repository/leaderboard";
 
 /**
- * 生成每日排行榜数据
+ * 生成每日排行榜数据（过去24小时）
  * @param topN 显示前 N 名用户
  * @returns 排行榜数据
  */
@@ -14,8 +14,8 @@ export async function generateDailyLeaderboard(topN: number): Promise<DailyLeade
       topN,
     });
 
-    // 获取今日排行榜
-    const leaderboard = await findDailyLeaderboard();
+    // 获取过去24小时排行榜
+    const leaderboard = await findLast24HoursLeaderboard();
 
     if (!leaderboard || leaderboard.length === 0) {
       logger.info({ action: "daily_leaderboard_empty" });

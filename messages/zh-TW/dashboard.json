@@ -74,7 +74,14 @@
       "minRetryCount": "重試次數≥",
       "minRetryCountPlaceholder": "輸入次數（0 表示不限）",
       "apply": "套用篩選",
-      "reset": "重設"
+      "reset": "重設",
+      "last7days": "近7天",
+      "last30days": "近30天",
+      "customRange": "自訂範圍",
+      "export": "匯出",
+      "exporting": "匯出中...",
+      "exportSuccess": "匯出成功",
+      "exportError": "匯出失敗"
     },
     "columns": {
       "time": "時間",
@@ -298,6 +305,9 @@
       "notCountedInConcurrency": "(不計入並發數)",
       "refreshing": "重新整理中...",
       "noActiveSessions": "暫無活躍 Session"
+    },
+    "pagination": {
+      "total": "個"
     },
     "details": {
       "title": "會話訊息",
