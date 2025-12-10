@@ -380,7 +380,7 @@ export function ErrorDetailsDialog({
                     </span>
                     <span className="font-mono">{formatTokenAmount(outputTokens)} tokens</span>
                   </div>
-                  {cacheCreation5mInputTokens && cacheCreation5mInputTokens > 0 && (
+                  {(cacheCreation5mInputTokens ?? 0) > 0 && (
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">
                         {t("logs.billingDetails.cacheWrite5m")}:
@@ -391,7 +391,7 @@ export function ErrorDetailsDialog({
                       </span>
                     </div>
                   )}
-                  {cacheCreation1hInputTokens && cacheCreation1hInputTokens > 0 && (
+                  {(cacheCreation1hInputTokens ?? 0) > 0 && (
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">
                         {t("logs.billingDetails.cacheWrite1h")}:
@@ -402,7 +402,7 @@ export function ErrorDetailsDialog({
                       </span>
                     </div>
                   )}
-                  {cacheReadInputTokens && cacheReadInputTokens > 0 && (
+                  {(cacheReadInputTokens ?? 0) > 0 && (
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">
                         {t("logs.billingDetails.cacheRead")}:

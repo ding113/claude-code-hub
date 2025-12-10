@@ -277,22 +277,19 @@ export function UsageLogsTable({
                                 {t("logs.billingDetails.output")}:{" "}
                                 {formatTokenAmount(log.outputTokens)} tokens
                               </div>
-                              {log.cacheCreation5mInputTokens &&
-                                log.cacheCreation5mInputTokens > 0 && (
-                                  <div>
-                                    {t("logs.billingDetails.cacheWrite5m")}:{" "}
-                                    {formatTokenAmount(log.cacheCreation5mInputTokens)} tokens
-                                    (1.25x)
-                                  </div>
-                                )}
-                              {log.cacheCreation1hInputTokens &&
-                                log.cacheCreation1hInputTokens > 0 && (
-                                  <div>
-                                    {t("logs.billingDetails.cacheWrite1h")}:{" "}
-                                    {formatTokenAmount(log.cacheCreation1hInputTokens)} tokens (2x)
-                                  </div>
-                                )}
-                              {log.cacheReadInputTokens && log.cacheReadInputTokens > 0 && (
+                              {(log.cacheCreation5mInputTokens ?? 0) > 0 && (
+                                <div>
+                                  {t("logs.billingDetails.cacheWrite5m")}:{" "}
+                                  {formatTokenAmount(log.cacheCreation5mInputTokens)} tokens (1.25x)
+                                </div>
+                              )}
+                              {(log.cacheCreation1hInputTokens ?? 0) > 0 && (
+                                <div>
+                                  {t("logs.billingDetails.cacheWrite1h")}:{" "}
+                                  {formatTokenAmount(log.cacheCreation1hInputTokens)} tokens (2x)
+                                </div>
+                              )}
+                              {(log.cacheReadInputTokens ?? 0) > 0 && (
                                 <div>
                                   {t("logs.billingDetails.cacheRead")}:{" "}
                                   {formatTokenAmount(log.cacheReadInputTokens)} tokens (0.1x)
