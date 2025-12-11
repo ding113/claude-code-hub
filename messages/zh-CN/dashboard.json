@@ -210,7 +210,9 @@
       "cacheRead": "缓存读取",
       "cacheTtl": "缓存 TTL",
       "multiplier": "供应商倍率",
-      "totalCost": "总费用"
+      "totalCost": "总费用",
+      "context1m": "1M 上下文",
+      "context1mPricing": "输入 >200k 2倍, 输出 >200k 1.5倍"
     }
   },
   "leaderboard": {

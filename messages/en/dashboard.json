@@ -210,7 +210,9 @@
       "cacheRead": "Cache Read",
       "cacheTtl": "Cache TTL",
       "multiplier": "Provider Multiplier",
-      "totalCost": "Total Cost"
+      "totalCost": "Total Cost",
+      "context1m": "1M Context",
+      "context1mPricing": "Input 2x >200k, Output 1.5x >200k"
     }
   },
   "leaderboard": {

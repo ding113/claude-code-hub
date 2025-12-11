@@ -210,7 +210,9 @@
       "cacheRead": "快取讀取",
       "cacheTtl": "快取 TTL",
       "multiplier": "供應商倍率",
-      "totalCost": "總費用"
+      "totalCost": "總費用",
+      "context1m": "1M 上下文",
+      "context1mPricing": "輸入 >200k 2倍, 輸出 >200k 1.5倍"
     }
   },
   "leaderboard": {

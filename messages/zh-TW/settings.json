@@ -1029,6 +1029,15 @@
               "placeholder": "例如：premium, economy",
               "desc": "分組標籤。僅供 providerGroup 與此值相符的用戶使用。例：設為「premium」表示僅供 providerGroup=\"premium\" 的用戶使用"
             }
+          },
+          "context1m": {
+            "label": "1M 上下文視窗",
+            "options": {
+              "inherit": "跟隨客戶端",
+              "forceEnable": "強制啟用",
+              "disabled": "停用"
+            },
+            "desc": "設定 1M 上下文視窗支援。僅對 Sonnet 模型生效（claude-sonnet-4-5、claude-sonnet-4）。啟用後將套用階梯定價。"
           }
         },
         "rateLimit": {

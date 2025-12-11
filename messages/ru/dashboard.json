@@ -209,7 +209,9 @@
       "cacheRead": "Чтение кэша",
       "cacheTtl": "TTL кэша",
       "multiplier": "Множитель поставщика",
-      "totalCost": "Общая стоимость"
+      "totalCost": "Общая стоимость",
+      "context1m": "1M Контекст",
+      "context1mPricing": "Вход >200k 2x, Выход >200k 1.5x"
     }
   },
   "leaderboard": {
