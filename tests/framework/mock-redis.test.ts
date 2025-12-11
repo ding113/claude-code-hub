@@ -229,12 +229,8 @@ describe("Redis Mock Infrastructure", () => {
     test("createFailingMockRedis should throw on operations", async () => {
       const failingRedis = createFailingMockRedis();
 
-      await expect(failingRedis.get("any-key")).rejects.toThrow(
-        "Redis connection failed"
-      );
-      await expect(failingRedis.set("any-key", "value")).rejects.toThrow(
-        "Redis connection failed"
-      );
+      await expect(failingRedis.get("any-key")).rejects.toThrow("Redis connection failed");
+      await expect(failingRedis.set("any-key", "value")).rejects.toThrow("Redis connection failed");
     });
 
     test("createSlowMockRedis should delay operations", async () => {

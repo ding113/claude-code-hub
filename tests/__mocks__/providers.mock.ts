@@ -74,9 +74,7 @@ export interface OpenAICompletion {
 /**
  * Create a mock Claude API response
  */
-export function createClaudeResponse(
-  overrides: Partial<ClaudeMessage> = {}
-): ClaudeMessage {
+export function createClaudeResponse(overrides: Partial<ClaudeMessage> = {}): ClaudeMessage {
   return {
     id: `msg_mock_${Date.now()}`,
     type: "message",
@@ -96,9 +94,7 @@ export function createClaudeResponse(
 /**
  * Create a mock OpenAI API response
  */
-export function createOpenAIResponse(
-  overrides: Partial<OpenAICompletion> = {}
-): OpenAICompletion {
+export function createOpenAIResponse(overrides: Partial<OpenAICompletion> = {}): OpenAICompletion {
   return {
     id: `chatcmpl-mock-${Date.now()}`,
     object: "chat.completion",
@@ -206,42 +202,36 @@ export const claudeHandler = http.post(
 /**
  * Default OpenAI API handler (success)
  */
-export const openAIHandler = http.post(
-  "https://api.openai.com/v1/chat/completions",
-  async () => {
-    return HttpResponse.json(createOpenAIResponse());
-  }
-);
+export const openAIHandler = http.post("https://api.openai.com/v1/chat/completions", async () => {
+  return HttpResponse.json(createOpenAIResponse());
+});
 
 /**
  * Default Codex API handler (success)
  * Codex uses OpenAI's /v1/responses endpoint
  */
-export const codexHandler = http.post(
-  "https://api.openai.com/v1/responses",
-  async () => {
-    return HttpResponse.json({
-      id: `resp_mock_${Date.now()}`,
-      object: "response",
-      created_at: Math.floor(Date.now() / 1000),
-      status: "completed",
-      output: [
-        {
-          type: "message",
-          id: `msg_mock_${Date.now()}`,
-          status: "completed",
-          role: "assistant",
-          content: [{ type: "output_text", text: "Mock Codex response" }],
-        },
-      ],
-      usage: {
-        input_tokens: 100,
-        output_tokens: 50,
-        total_tokens: 150,
+export const codexHandler = http.post("https://api.openai.com/v1/responses", async () => {
+  return HttpResponse.json({
+    id: `resp_mock_${Date.now()}`,
+    object: "response",
+    created_at: Math.floor(Date.now() / 1000),
+    status: "completed",
+    output: [
+      {
+        type: "message",
+        id: `msg_mock_${Date.now()}`,
+        status: "completed",
+        role: "assistant",
+        content: [{ type: "output_text", text: "Mock Codex response" }],
       },
-    });
-  }
-);
+    ],
+    usage: {
+      input_tokens: 100,
+      output_tokens: 50,
+      total_tokens: 150,
+    },
+  });
+});
 
 // ============================================================================
 // Handler Factories for Custom Responses
@@ -379,8 +369,6 @@ export function resetToDefaultHandlers() {
 /**
  * Helper to add custom handlers
  */
-export function addHandlers(
-  ...handlers: ReturnType<typeof http.post>[]
-) {
+export function addHandlers(...handlers: ReturnType<typeof http.post>[]) {
   server.use(...handlers);
 }

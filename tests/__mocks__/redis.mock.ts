@@ -93,19 +93,14 @@ export async function seedMockRedisHash(
 /**
  * Get all keys matching a pattern (for debugging)
  */
-export async function getMockRedisKeys(
-  redis: MockRedisClient,
-  pattern = "*"
-): Promise<string[]> {
+export async function getMockRedisKeys(redis: MockRedisClient, pattern = "*"): Promise<string[]> {
   return redis.keys(pattern);
 }
 
 /**
  * Dump all data from mock Redis (for debugging)
  */
-export async function dumpMockRedis(
-  redis: MockRedisClient
-): Promise<Record<string, unknown>> {
+export async function dumpMockRedis(redis: MockRedisClient): Promise<Record<string, unknown>> {
   const keys = await redis.keys("*");
   const result: Record<string, unknown> = {};
 
@@ -143,15 +138,7 @@ export function createFailingMockRedis(): MockRedisClient {
   const redis = createMockRedis();
 
   // Override commands to throw errors
-  const failingCommands = [
-    "get",
-    "set",
-    "zadd",
-    "zcard",
-    "zrangebyscore",
-    "hget",
-    "hset",
-  ];
+  const failingCommands = ["get", "set", "zadd", "zcard", "zrangebyscore", "hget", "hset"];
   for (const cmd of failingCommands) {
     // biome-ignore lint/suspicious/noExplicitAny: Mock override requires any
     (redis as any)[cmd] = async () => {

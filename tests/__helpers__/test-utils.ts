@@ -73,10 +73,7 @@ export async function retry<T>(
 /**
  * Create a mock HTTP request
  */
-export function createMockRequest(
-  url: string,
-  options: RequestInit = {}
-): Request {
+export function createMockRequest(url: string, options: RequestInit = {}): Request {
   return new Request(url, {
     method: "POST",
     headers: {
@@ -204,10 +201,7 @@ export function expectDatesApproximatelyEqual(
 /**
  * Assert that an array contains items matching a predicate
  */
-export function expectArrayContainsWhere<T>(
-  array: T[],
-  predicate: (item: T) => boolean
-): void {
+export function expectArrayContainsWhere<T>(array: T[], predicate: (item: T) => boolean): void {
   const found = array.some(predicate);
   expect(found).toBe(true);
 }

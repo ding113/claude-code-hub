@@ -238,10 +238,7 @@ describe("Database Mock Infrastructure", () => {
     describe("Provider Repository", () => {
       test("findAll should return all providers", async () => {
         seedMockDataStore(store, {
-          providers: [
-            createMockProvider({ id: 1 }),
-            createMockProvider({ id: 2 }),
-          ],
+          providers: [createMockProvider({ id: 1 }), createMockProvider({ id: 2 })],
         });
 
         const repo = createMockProviderRepository(store);

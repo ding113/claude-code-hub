@@ -115,9 +115,7 @@ export function resetMockIdCounter(): void {
 /**
  * Create a mock provider with default values
  */
-export function createMockProvider(
-  overrides: Partial<MockProvider> = {}
-): MockProvider {
+export function createMockProvider(overrides: Partial<MockProvider> = {}): MockProvider {
   const id = overrides.id ?? mockIdCounter++;
   return {
     id,
@@ -190,9 +188,7 @@ export function createMockKey(overrides: Partial<MockKey> = {}): MockKey {
 /**
  * Create a mock message (request log) with default values
  */
-export function createMockMessage(
-  overrides: Partial<MockMessage> = {}
-): MockMessage {
+export function createMockMessage(overrides: Partial<MockMessage> = {}): MockMessage {
   const id = overrides.id ?? mockIdCounter++;
   return {
     id,
@@ -213,9 +209,7 @@ export function createMockMessage(
 /**
  * Create a mock error rule with default values
  */
-export function createMockErrorRule(
-  overrides: Partial<MockErrorRule> = {}
-): MockErrorRule {
+export function createMockErrorRule(overrides: Partial<MockErrorRule> = {}): MockErrorRule {
   const id = overrides.id ?? mockIdCounter++;
   return {
     id,

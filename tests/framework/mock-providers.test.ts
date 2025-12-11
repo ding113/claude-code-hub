@@ -96,20 +96,17 @@ describe("Provider Mock Infrastructure (MSW)", () => {
     });
 
     test("should intercept OpenAI API requests", async () => {
-      const response = await fetch(
-        "https://api.openai.com/v1/chat/completions",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: "Bearer test-key",
-          },
-          body: JSON.stringify({
-            model: "gpt-4o",
-            messages: [{ role: "user", content: "Hello" }],
-          }),
-        }
-      );
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer test-key",
+        },
+        body: JSON.stringify({
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "Hello" }],
+        }),
+      });
 
       expect(response.ok).toBe(true);
 
@@ -172,14 +169,11 @@ describe("Provider Mock Infrastructure (MSW)", () => {
         })
       );
 
-      const response = await fetch(
-        "https://api.openai.com/v1/chat/completions",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "gpt-4", messages: [] }),
-        }
-      );
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "gpt-4", messages: [] }),
+      });
 
       const data = await response.json();
       expect(data.model).toBe("gpt-4-turbo");
@@ -207,14 +201,11 @@ describe("Provider Mock Infrastructure (MSW)", () => {
     test("mockOpenAIError should return error response", async () => {
       server.use(mockOpenAIError(401, "Invalid API key"));
 
-      const response = await fetch(
-        "https://api.openai.com/v1/chat/completions",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "gpt-4", messages: [] }),
-        }
-      );
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "gpt-4", messages: [] }),
+      });
 
       expect(response.status).toBe(401);
 

@@ -122,8 +122,7 @@ export async function initializeMswServer() {
     return mswServer;
   } catch (error) {
     // Provide detailed error information for debugging
-    const errorMessage =
-      error instanceof Error ? error.message : String(error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
     const errorStack = error instanceof Error ? error.stack : "";
 
     console.error("[Test Setup] MSW server initialization failed:");
@@ -134,14 +133,10 @@ export async function initializeMswServer() {
 
     // In CI environment, fail fast instead of silently continuing
     if (process.env.CI === "true") {
-      throw new Error(
-        `MSW initialization failed in CI environment: ${errorMessage}`
-      );
+      throw new Error(`MSW initialization failed in CI environment: ${errorMessage}`);
     }
 
-    console.warn(
-      "[Test Setup] Continuing without MSW - HTTP requests will hit real network!"
-    );
+    console.warn("[Test Setup] Continuing without MSW - HTTP requests will hit real network!");
     return null;
   }
 }
