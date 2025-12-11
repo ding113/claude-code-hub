@@ -210,6 +210,12 @@ export const providers = pgTable('providers', {
   // Cache TTL override（null = 不覆写，沿用客户端请求）
   cacheTtlPreference: varchar('cache_ttl_preference', { length: 10 }),
 
+  // 1M Context Window 偏好配置（仅对 Anthropic 类型供应商有效）
+  // - 'inherit' (默认): 遵循客户端请求，客户端带 1M header 则启用
+  // - 'force_enable': 强制启用 1M 上下文（仅对支持的模型生效）
+  // - 'disabled': 禁用 1M 上下文，即使客户端请求也不启用
+  context1mPreference: varchar('context_1m_preference', { length: 20 }),
+
   // 废弃（保留向后兼容，但不再使用）
   tpm: integer('tpm').default(0),
   rpm: integer('rpm').default(0),
@@ -271,6 +277,9 @@ export const messageRequest = pgTable('message_request', {
   cacheCreation5mInputTokens: integer('cache_creation_5m_input_tokens'),
   cacheCreation1hInputTokens: integer('cache_creation_1h_input_tokens'),
   cacheTtlApplied: varchar('cache_ttl_applied', { length: 10 }),
+
+  // 1M Context Window 应用状态
+  context1mApplied: boolean('context_1m_applied').default(false),
 
   // 错误信息
   errorMessage: text('error_message'),
