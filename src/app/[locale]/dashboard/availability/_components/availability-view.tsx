@@ -402,11 +402,17 @@ export function AvailabilityView() {
               <div className="space-y-3">
                 {/* Provider rows with heatmap */}
                 {sortedProviders.map((provider) => (
-                  <div key={provider.providerId} className="flex flex-col sm:flex-row sm:items-center gap-3">
+                  <div
+                    key={provider.providerId}
+                    className="flex flex-col sm:flex-row sm:items-center gap-3"
+                  >
                     {/* Provider name and summary - on same row for mobile */}
                     <div className="flex items-center justify-between sm:contents">
                       <div className="w-auto sm:w-32 md:w-40 shrink-0 flex items-center gap-2">
-                        <span className="font-medium truncate text-sm" title={provider.providerName}>
+                        <span
+                          className="font-medium truncate text-sm"
+                          title={provider.providerName}
+                        >
                           {provider.providerName}
                         </span>
                         {getStatusBadge(provider.currentStatus)}
