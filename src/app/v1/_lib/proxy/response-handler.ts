@@ -213,6 +213,7 @@ export class ProxyResponseHandler {
             providerChain: session.getProviderChain(),
             model: session.getCurrentModel() ?? undefined, // ⭐ 更新重定向后的模型
             providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
+            context1mApplied: session.getContext1mApplied(),
           });
           const tracker = ProxyStatusTracker.getInstance();
           tracker.endRequest(messageContext.user.id, messageContext.id);
@@ -304,7 +305,8 @@ export class ProxyResponseHandler {
             session.getOriginalModel(),
             session.getCurrentModel(),
             usageMetrics,
-            provider.costMultiplier
+            provider.costMultiplier,
+            session.getContext1mApplied()
           );
 
           // 追踪消费到 Redis（用于限流）
@@ -321,7 +323,8 @@ export class ProxyResponseHandler {
               const cost = calculateRequestCost(
                 usageMetrics,
                 priceData.priceData,
-                provider.costMultiplier
+                provider.costMultiplier,
+                session.getContext1mApplied()
               );
               if (cost.gt(0)) {
                 costUsdStr = cost.toString();
@@ -359,6 +362,7 @@ export class ProxyResponseHandler {
             providerChain: session.getProviderChain(),
             model: session.getCurrentModel() ?? undefined, // ⭐ 更新重定向后的模型
             providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
+            context1mApplied: session.getContext1mApplied(),
           });
 
           // 记录请求结束
@@ -857,7 +861,8 @@ export class ProxyResponseHandler {
           session.getOriginalModel(),
           session.getCurrentModel(),
           usageForCost,
-          provider.costMultiplier
+          provider.costMultiplier,
+          session.getContext1mApplied()
         );
 
         // 追踪消费到 Redis（用于限流）
@@ -872,7 +877,8 @@ export class ProxyResponseHandler {
               const cost = calculateRequestCost(
                 usageForCost,
                 priceData.priceData,
-                provider.costMultiplier
+                provider.costMultiplier,
+                session.getContext1mApplied()
               );
               if (cost.gt(0)) {
                 costUsdStr = cost.toString();
@@ -906,6 +912,7 @@ export class ProxyResponseHandler {
           providerChain: session.getProviderChain(),
           model: session.getCurrentModel() ?? undefined, // ⭐ 更新重定向后的模型
           providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
+          context1mApplied: session.getContext1mApplied(),
         });
       };
 
@@ -1478,7 +1485,8 @@ async function updateRequestCostFromUsage(
   originalModel: string | null,
   redirectedModel: string | null,
   usage: UsageMetrics | null,
-  costMultiplier: number = 1.0
+  costMultiplier: number = 1.0,
+  context1mApplied: boolean = false
 ): Promise<void> {
   if (!usage) {
     logger.warn("[CostCalculation] No usage data, skipping cost update", {
@@ -1561,7 +1569,7 @@ async function updateRequestCostFromUsage(
   }
 
   // 计算费用
-  const cost = calculateRequestCost(usage, priceData.priceData, costMultiplier);
+  const cost = calculateRequestCost(usage, priceData.priceData, costMultiplier, context1mApplied);
 
   logger.info("[CostCalculation] Cost calculated successfully", {
     messageId,
@@ -1618,6 +1626,7 @@ async function finalizeRequestStats(
       providerChain: session.getProviderChain(),
       model: session.getCurrentModel() ?? undefined,
       providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
+      context1mApplied: session.getContext1mApplied(),
     });
     return;
   }
@@ -1646,7 +1655,8 @@ async function finalizeRequestStats(
     session.getOriginalModel(),
     session.getCurrentModel(),
     normalizedUsage,
-    provider.costMultiplier
+    provider.costMultiplier,
+    session.getContext1mApplied()
   );
 
   // 5. 追踪消费到 Redis（用于限流）
@@ -1661,7 +1671,8 @@ async function finalizeRequestStats(
         const cost = calculateRequestCost(
           normalizedUsage,
           priceData.priceData,
-          provider.costMultiplier
+          provider.costMultiplier,
+          session.getContext1mApplied()
         );
         if (cost.gt(0)) {
           costUsdStr = cost.toString();
@@ -1695,6 +1706,7 @@ async function finalizeRequestStats(
     providerChain: session.getProviderChain(),
     model: session.getCurrentModel() ?? undefined,
     providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
+    context1mApplied: session.getContext1mApplied(),
   });
 }
 
@@ -1718,7 +1730,12 @@ async function trackCostToRedis(session: ProxySession, usage: UsageMetrics | nul
   const priceData = await findLatestPriceByModel(modelName);
   if (!priceData?.priceData) return;
 
-  const cost = calculateRequestCost(usage, priceData.priceData, provider.costMultiplier);
+  const cost = calculateRequestCost(
+    usage,
+    priceData.priceData,
+    provider.costMultiplier,
+    session.getContext1mApplied()
+  );
   if (cost.lte(0)) return;
 
   const costFloat = parseFloat(cost.toString());
@@ -1784,6 +1801,7 @@ async function persistRequestFailure(options: {
       providerChain: session.getProviderChain(),
       model: session.getCurrentModel() ?? undefined,
       providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
+      context1mApplied: session.getContext1mApplied(),
     });
 
     logger.info("ResponseHandler: Successfully persisted request failure", {

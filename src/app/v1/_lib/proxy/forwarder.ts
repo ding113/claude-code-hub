@@ -15,6 +15,7 @@ import { PROVIDER_DEFAULTS, PROVIDER_LIMITS } from "@/lib/constants/provider.con
 import { logger } from "@/lib/logger";
 import { createProxyAgentForProvider } from "@/lib/proxy-agent";
 import { SessionManager } from "@/lib/session-manager";
+import { shouldApplyContext1m } from "@/lib/special-attributes";
 import type { CacheTtlPreference, CacheTtlResolved } from "@/types/cache";
 import { getDefaultInstructions } from "../codex/constants/codex-instructions";
 import { isOfficialCodexClient, sanitizeCodexRequest } from "../codex/utils/request-sanitizer";
@@ -875,6 +876,22 @@ export class ProxyForwarder {
       provider.cacheTtlPreference
     );
     session.setCacheTtlResolved(resolvedCacheTtl);
+
+    // 解析 1M 上下文是否应用
+    // 注意：此时模型重定向尚未发生，getCurrentModel() 返回原始模型
+    // 1M 功能仅对 Anthropic 类型供应商有效
+    const isAnthropicProvider =
+      provider.providerType === "claude" || provider.providerType === "claude-auth";
+    if (isAnthropicProvider) {
+      const currentModel = session.getCurrentModel() || "";
+      const clientRequests1m = session.clientRequestsContext1m();
+      const context1mApplied = shouldApplyContext1m(
+        provider.context1mPreference as "inherit" | "force_enable" | "disabled" | null,
+        currentModel,
+        clientRequests1m
+      );
+      session.setContext1mApplied(context1mApplied);
+    }
 
     // 应用模型重定向（如果配置了）
     const wasRedirected = ModelRedirector.apply(session, provider);
@@ -1788,6 +1805,24 @@ export class ProxyForwarder {
       if (betaFlags.size === 1) {
         betaFlags.add("prompt-caching-2024-07-31");
       }
+      overrides["anthropic-beta"] = Array.from(betaFlags).join(", ");
+    }
+
+    // 针对 1M 上下文，补充 Anthropic beta header
+    // 逻辑：根据供应商 context1mPreference 决定是否应用 1M 上下文
+    // - 'disabled': 不应用（已在调度阶段被过滤）
+    // - 'force_enable': 强制应用（仅对支持的模型）
+    // - 'inherit' 或 null: 遵循客户端请求
+    if (session.getContext1mApplied?.()) {
+      const existingBeta =
+        overrides["anthropic-beta"] || session.headers.get("anthropic-beta") || "";
+      const betaFlags = new Set(
+        existingBeta
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+      );
+      betaFlags.add("context-1m-2025-08-07");
       overrides["anthropic-beta"] = Array.from(betaFlags).join(", ");
     }
 
