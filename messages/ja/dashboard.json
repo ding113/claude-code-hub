@@ -209,7 +209,9 @@
       "cacheRead": "キャッシュ読み取り",
       "cacheTtl": "キャッシュ TTL",
       "multiplier": "プロバイダー倍率",
-      "totalCost": "合計費用"
+      "totalCost": "合計費用",
+      "context1m": "1M コンテキスト",
+      "context1mPricing": "入力 >200k 2倍, 出力 >200k 1.5倍"
     }
   },
   "leaderboard": {

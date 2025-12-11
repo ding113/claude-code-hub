@@ -1122,6 +1122,15 @@
               "placeholder": "e.g. premium, economy",
               "desc": "Group tag. Only users whose providerGroup matches can use this provider. Example: set to \"premium\" to serve users with providerGroup=\"premium\" only"
             }
+          },
+          "context1m": {
+            "label": "1M Context Window",
+            "options": {
+              "inherit": "Inherit (follow client request)",
+              "forceEnable": "Force Enable (for supported models)",
+              "disabled": "Disabled"
+            },
+            "desc": "Configure 1M context window support. Only affects Sonnet models (claude-sonnet-4-5, claude-sonnet-4). Tiered pricing applies when enabled."
           }
         },
         "rateLimit": {
