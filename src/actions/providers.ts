@@ -24,6 +24,7 @@ import {
   deleteProviderCircuitConfig,
   saveProviderCircuitConfig,
 } from "@/lib/redis/circuit-breaker-config";
+import type { Context1mPreference } from "@/lib/special-attributes";
 import { maskKey } from "@/lib/utils/validation";
 import { CreateProviderSchema, UpdateProviderSchema } from "@/lib/validation/schemas";
 import {
@@ -92,7 +93,10 @@ const CLOUDFLARE_ERROR_STATUS_CODES = new Set([520, 521, 522, 523, 524, 525, 526
 export async function getProviders(): Promise<ProviderDisplay[]> {
   try {
     const session = await getSession();
-    logger.trace("getProviders:session", { hasSession: !!session, role: session?.user.role });
+    logger.trace("getProviders:session", {
+      hasSession: !!session,
+      role: session?.user.role,
+    });
 
     if (!session || session.user.role !== "admin") {
       logger.trace("getProviders:unauthorized", {
@@ -207,6 +211,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         websiteUrl: provider.websiteUrl,
         faviconUrl: provider.faviconUrl,
         cacheTtlPreference: provider.cacheTtlPreference,
+        context1mPreference: provider.context1mPreference,
         tpm: provider.tpm,
         rpm: provider.rpm,
         rpd: provider.rpd,
@@ -297,6 +302,7 @@ export async function addProvider(data: {
   limit_monthly_usd?: number | null;
   limit_concurrent_sessions?: number | null;
   cache_ttl_preference?: CacheTtlPreference | null;
+  context_1m_preference?: Context1mPreference | null;
   max_retry_attempts?: number | null;
   circuit_breaker_failure_threshold?: number;
   circuit_breaker_open_duration?: number;
@@ -390,7 +396,10 @@ export async function addProvider(data: {
     };
 
     const provider = await createProvider(payload);
-    logger.trace("addProvider:created_success", { name: validated.name, providerId: provider.id });
+    logger.trace("addProvider:created_success", {
+      name: validated.name,
+      providerId: provider.id,
+    });
 
     // 同步熔断器配置到 Redis
     try {
@@ -399,7 +408,9 @@ export async function addProvider(data: {
         openDuration: provider.circuitBreakerOpenDuration,
         halfOpenSuccessThreshold: provider.circuitBreakerHalfOpenSuccessThreshold,
       });
-      logger.debug("addProvider:config_synced_to_redis", { providerId: provider.id });
+      logger.debug("addProvider:config_synced_to_redis", {
+        providerId: provider.id,
+      });
     } catch (error) {
       logger.warn("addProvider:redis_sync_failed", {
         providerId: provider.id,
@@ -447,6 +458,7 @@ export async function editProvider(
     limit_monthly_usd?: number | null;
     limit_concurrent_sessions?: number | null;
     cache_ttl_preference?: "inherit" | "5m" | "1h";
+    context_1m_preference?: Context1mPreference | null;
     max_retry_attempts?: number | null;
     circuit_breaker_failure_threshold?: number;
     circuit_breaker_open_duration?: number;
@@ -490,7 +502,10 @@ export async function editProvider(
           const url = new URL(validated.website_url);
           const domain = url.hostname;
           faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
-          logger.trace("editProvider:favicon_generated", { domain, faviconUrl });
+          logger.trace("editProvider:favicon_generated", {
+            domain,
+            faviconUrl,
+          });
         } catch (error) {
           logger.warn("editProvider:favicon_fetch_failed", {
             websiteUrl: validated.website_url,
@@ -604,7 +619,9 @@ export async function getProvidersHealthStatus() {
     }
 
     const providerIds = await findAllProviders().then((providers) => providers.map((p) => p.id));
-    const healthStatus = await getAllHealthStatusAsync(providerIds, { forceRefresh: true });
+    const healthStatus = await getAllHealthStatusAsync(providerIds, {
+      forceRefresh: true,
+    });
 
     // 转换为前端友好的格式
     const enrichedStatus: Record<
@@ -1891,7 +1908,9 @@ async function executeProviderApiTest(
       const init: UndiciFetchOptions = {
         method: "POST",
         headers: {
-          ...options.headers(data.apiKey, { providerUrl: normalizedProviderUrl }),
+          ...options.headers(data.apiKey, {
+            providerUrl: normalizedProviderUrl,
+          }),
           // 使用渠道特定的 User-Agent，避免被 Cloudflare Bot 检测拦截
           "User-Agent": options.userAgent,
           Accept: "application/json, text/event-stream",
@@ -2413,7 +2432,10 @@ export async function testProviderGemini(
 
   // 检查实际测试结果（注意：ok: true 只表示函数执行成功，data.success 才表示测试结果）
   const resultData = (
-    firstResult as { ok: boolean; data?: { success?: boolean; message?: string } }
+    firstResult as {
+      ok: boolean;
+      data?: { success?: boolean; message?: string };
+    }
   ).data;
   const testSuccess = resultData?.success === true;
 

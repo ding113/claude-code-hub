@@ -1,4 +1,6 @@
 // 供应商类型枚举
+
+import type { Context1mPreference } from "@/lib/special-attributes";
 import type { CacheTtlPreference } from "./cache";
 
 export type ProviderType =
@@ -92,6 +94,9 @@ export interface Provider {
   // Cache TTL override（inherit 表示不强制覆写）
   cacheTtlPreference: CacheTtlPreference | null;
 
+  // 1M Context Window 偏好配置（仅对 Anthropic 类型供应商有效）
+  context1mPreference: Context1mPreference | null;
+
   // 废弃（保留向后兼容，但不再使用）
   // TPM (Tokens Per Minute): 每分钟可处理的文本总量
   tpm: number | null;
@@ -158,6 +163,7 @@ export interface ProviderDisplay {
   websiteUrl: string | null;
   faviconUrl: string | null;
   cacheTtlPreference: CacheTtlPreference | null;
+  context1mPreference: Context1mPreference | null;
   // 废弃字段（保留向后兼容）
   tpm: number | null;
   rpm: number | null;
@@ -224,6 +230,7 @@ export interface CreateProviderData {
   website_url?: string | null;
   favicon_url?: string | null;
   cache_ttl_preference?: CacheTtlPreference | null;
+  context_1m_preference?: Context1mPreference | null;
 
   // 废弃字段（保留向后兼容）
   // TPM (Tokens Per Minute): 每分钟可处理的文本总量
@@ -288,6 +295,7 @@ export interface UpdateProviderData {
   website_url?: string | null;
   favicon_url?: string | null;
   cache_ttl_preference?: CacheTtlPreference | null;
+  context_1m_preference?: Context1mPreference | null;
 
   // 废弃字段（保留向后兼容）
   // TPM (Tokens Per Minute): 每分钟可处理的文本总量

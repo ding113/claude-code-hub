@@ -8,6 +8,7 @@ import { USER_DEFAULTS, USER_LIMITS } from "@/lib/constants/user.constants";
 import { CURRENCY_CONFIG } from "@/lib/utils/currency";
 
 const CACHE_TTL_PREFERENCE = z.enum(["inherit", "5m", "1h"]);
+const CONTEXT_1M_PREFERENCE = z.enum(["inherit", "force_enable", "disabled"]);
 
 /**
  * 用户创建数据验证schema
@@ -393,6 +394,7 @@ export const CreateProviderSchema = z.object({
     .optional()
     .default(0),
   cache_ttl_preference: CACHE_TTL_PREFERENCE.optional().default("inherit"),
+  context_1m_preference: CONTEXT_1M_PREFERENCE.nullable().optional(),
   max_retry_attempts: z.coerce
     .number()
     .int("重试次数必须是整数")
@@ -582,6 +584,7 @@ export const UpdateProviderSchema = z
       .max(1000, "并发Session上限不能超过1000")
       .optional(),
     cache_ttl_preference: CACHE_TTL_PREFERENCE.optional(),
+    context_1m_preference: CONTEXT_1M_PREFERENCE.nullable().optional(),
     max_retry_attempts: z.coerce
       .number()
       .int("重试次数必须是整数")

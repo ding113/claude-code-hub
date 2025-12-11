@@ -201,6 +201,9 @@ export interface MessageRequest {
   // Messages 数量（用于短请求检测和分析）
   messagesCount?: number;
 
+  // 1M 上下文窗口是否已应用
+  context1mApplied?: boolean;
+
   createdAt: Date;
   updatedAt: Date;
   deletedAt?: Date;

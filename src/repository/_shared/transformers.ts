@@ -110,6 +110,7 @@ export function toMessageRequest(dbMessage: any): MessageRequest {
     cacheCreation5mInputTokens: dbMessage?.cacheCreation5mInputTokens ?? undefined,
     cacheCreation1hInputTokens: dbMessage?.cacheCreation1hInputTokens ?? undefined,
     cacheTtlApplied: dbMessage?.cacheTtlApplied ?? null,
+    context1mApplied: dbMessage?.context1mApplied ?? false,
   };
 }
 
