@@ -569,6 +569,13 @@ export class ProxyProviderResolver {
     const allProviders = await findAllProviders();
     const requestedModel = session?.getCurrentModel() || "";
 
+    // === Step 1: 分组预过滤（静默，用户只能看到自己分组内的供应商）===
+    const keyGroupPick = session?.authState?.key?.providerGroup;
+    const userGroupPick = session?.authState?.user?.providerGroup;
+    const effectiveGroupPick = keyGroupPick || userGroupPick;
+
+    let visibleProviders = allProviders;
+
     // 原始请求格式映射到目标供应商类型；缺省为 claude 以兼容历史请求
     const targetType: "claude" | "codex" | "openai-compatible" | "gemini" | "gemini-cli" = (() => {
       switch (session?.originalFormat) {
@@ -587,13 +594,65 @@ export class ProxyProviderResolver {
       }
     })();
 
-    // === 初始化决策上下文 ===
+    if (effectiveGroupPick) {
+      const groups = effectiveGroupPick
+        .split(",")
+        .map((g) => g.trim())
+        .filter(Boolean);
+
+      const groupFiltered = allProviders.filter((p) => {
+        if (!p.groupTag) return false;
+        const providerTags = p.groupTag
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean);
+        return providerTags.some((tag) => groups.includes(tag));
+      });
+
+      if (groupFiltered.length > 0) {
+        visibleProviders = groupFiltered;
+        logger.debug("ProviderSelector: Group pre-filter applied (silent)", {
+          effectiveGroup: effectiveGroupPick,
+          keyGroupOverride: !!keyGroupPick,
+          groups,
+          originalCount: allProviders.length,
+          filteredCount: groupFiltered.length,
+        });
+      } else {
+        // 严格分组隔离：用户分组内没有供应商
+        logger.error("ProviderSelector: User group has no providers", {
+          effectiveGroup: effectiveGroupPick,
+          groups,
+        });
+        return {
+          provider: null,
+          context: {
+            totalProviders: 0,
+            enabledProviders: 0,
+            targetType,
+            requestedModel,
+            groupFilterApplied: true,
+            userGroup: effectiveGroupPick || undefined,
+            afterGroupFilter: 0,
+            beforeHealthCheck: 0,
+            afterHealthCheck: 0,
+            filteredProviders: [],
+            priorityLevels: [],
+            selectedPriority: 0,
+            candidatesAtPriority: [],
+          },
+        };
+      }
+    }
+
+    // === 初始化决策上下文（使用 visibleProviders）===
     const context: NonNullable<ProviderChainItem["decisionContext"]> = {
-      totalProviders: allProviders.length,
+      totalProviders: visibleProviders.length,
       enabledProviders: 0,
       targetType, // 根据原始请求格式推断目标供应商类型（修复：不再根据模型名推断）
       requestedModel, // 新增：记录请求的模型
-      groupFilterApplied: false,
+      groupFilterApplied: !!effectiveGroupPick,
+      userGroup: effectiveGroupPick || undefined,
       beforeHealthCheck: 0,
       afterHealthCheck: 0,
       filteredProviders: [],
@@ -603,14 +662,14 @@ export class ProxyProviderResolver {
       excludedProviderIds: excludeIds.length > 0 ? excludeIds : undefined,
     };
 
-    // Step 1: 基础过滤 + 格式/模型匹配（新逻辑）
-    const enabledProviders = allProviders.filter((provider) => {
-      // 1a. 基础过滤
+    // Step 2: 基础过滤 + 格式/模型匹配（使用 visibleProviders）
+    const enabledProviders = visibleProviders.filter((provider) => {
+      // 2a. 基础过滤
       if (!provider.isEnabled || excludeIds.includes(provider.id)) {
         return false;
       }
 
-      // 1b. 格式类型匹配（新增）
+      // 2b. 格式类型匹配（新增）
       // 根据 session.originalFormat 限制候选供应商类型，避免格式错配
       if (session?.originalFormat) {
         const isFormatCompatible = checkFormatProviderTypeCompatibility(
@@ -622,7 +681,7 @@ export class ProxyProviderResolver {
         }
       }
 
-      // 1c. 模型匹配（保留原有逻辑）
+      // 2c. 模型匹配（保留原有逻辑）
       if (!requestedModel) {
         // 没有模型信息时，只选择 Anthropic 提供商（向后兼容）
         return provider.providerType === "claude";
@@ -633,8 +692,8 @@ export class ProxyProviderResolver {
 
     context.enabledProviders = enabledProviders.length;
 
-    // 记录被过滤的供应商
-    for (const p of allProviders) {
+    // 记录被过滤的供应商（遍历 visibleProviders）
+    for (const p of visibleProviders) {
       if (!enabledProviders.includes(p)) {
         let reason:
           | "circuit_open"
@@ -675,75 +734,19 @@ export class ProxyProviderResolver {
     if (enabledProviders.length === 0) {
       logger.warn("ProviderSelector: No providers support the requested model", {
         requestedModel,
-        totalProviders: allProviders.length,
+        totalProviders: visibleProviders.length,
         excludedCount: excludeIds.length,
       });
       return { provider: null, context };
     }
 
-    // Step 2: Provider group filter (key > user priority)
-    let candidateProviders = enabledProviders;
-    const keyGroupPick = session?.authState?.key?.providerGroup;
-    const userGroupPick = session?.authState?.user?.providerGroup;
-    const effectiveGroupPick = keyGroupPick || userGroupPick;
-
-    if (effectiveGroupPick) {
-      context.userGroup = effectiveGroupPick;
-
-      // Support multiple groups (comma-separated, e.g. "fero,chen")
-      const groups = effectiveGroupPick
-        .split(",")
-        .map((g) => g.trim())
-        .filter(Boolean);
-
-      // Filter: provider's groupTag intersects with effective groups
-      // Fix #190: Support provider multi-tags (e.g. "cli,chat") matching user single-tag (e.g. "cli")
-      const groupFiltered = enabledProviders.filter((p) => {
-        if (!p.groupTag) return false;
-
-        // Split provider's groupTag into tag array
-        const providerTags = p.groupTag
-          .split(",")
-          .map((tag) => tag.trim())
-          .filter(Boolean);
-
-        // Check for intersection: any of user's groups in provider's tag list
-        return providerTags.some((tag) => groups.includes(tag));
-      });
-
-      if (groupFiltered.length > 0) {
-        candidateProviders = groupFiltered;
-        context.groupFilterApplied = true;
-        context.afterGroupFilter = groupFiltered.length;
-        logger.debug("ProviderSelector: Effective group filter applied", {
-          effectiveGroup: effectiveGroupPick,
-          keyGroupOverride: !!keyGroupPick,
-          groups,
-          count: groupFiltered.length,
-        });
-      } else {
-        // Strict group isolation: return error when no available providers instead of fallback
-        context.groupFilterApplied = false;
-        context.afterGroupFilter = 0;
-        logger.error("ProviderSelector: Effective groups have no available providers", {
-          effectiveGroup: effectiveGroupPick,
-          keyGroupOverride: !!keyGroupPick,
-          groups,
-          enabledProviders: enabledProviders.length,
-          message: "Strict group isolation: returning null instead of fallback",
-        });
-
-        // Return null to indicate no available provider
-        return {
-          provider: null,
-          context,
-        };
-      }
-    }
+    // Step 3: 候选供应商（分组过滤已在 Step 1 完成）
+    const candidateProviders = enabledProviders;
+    context.afterGroupFilter = enabledProviders.length;
 
     context.beforeHealthCheck = candidateProviders.length;
 
-    // Step 3: 过滤超限供应商（健康度过滤）
+    // Step 4: 过滤超限供应商（健康度过滤）
     const healthyProviders = await ProxyProviderResolver.filterByLimits(candidateProviders);
     context.afterHealthCheck = healthyProviders.length;
 
@@ -777,7 +780,7 @@ export class ProxyProviderResolver {
       return { provider: null, context };
     }
 
-    // Step 4: 优先级分层（只选择最高优先级的供应商）
+    // Step 5: 优先级分层（只选择最高优先级的供应商）
     const topPriorityProviders = ProxyProviderResolver.selectTopPriority(healthyProviders);
     const priorities = [...new Set(healthyProviders.map((p) => p.priority || 0))].sort(
       (a, b) => a - b
@@ -785,7 +788,7 @@ export class ProxyProviderResolver {
     context.priorityLevels = priorities;
     context.selectedPriority = Math.min(...healthyProviders.map((p) => p.priority || 0));
 
-    // Step 5: 成本排序 + 加权选择 + 计算概率
+    // Step 6: 成本排序 + 加权选择 + 计算概率
     const totalWeight = topPriorityProviders.reduce((sum, p) => sum + p.weight, 0);
     context.candidatesAtPriority = topPriorityProviders.map((p) => ({
       id: p.id,
@@ -800,7 +803,7 @@ export class ProxyProviderResolver {
     // 详细的选择日志
     logger.info("ProviderSelector: Selection decision", {
       requestedModel,
-      totalProviders: allProviders.length,
+      totalProviders: visibleProviders.length,
       enabledCount: enabledProviders.length,
       excludedIds: excludeIds,
       userGroup: effectiveGroupPick || "none",
