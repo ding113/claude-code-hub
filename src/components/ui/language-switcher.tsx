@@ -1,15 +1,15 @@
 "use client";
 
-import { Languages } from "lucide-react";
+import { Check, Languages } from "lucide-react";
 import { useLocale } from "next-intl";
 import * as React from "react";
+import { Button } from "@/components/ui/button";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { type Locale, localeLabels, locales } from "@/i18n/config";
 import { usePathname, useRouter } from "@/i18n/routing";
 import { cn } from "@/lib/utils/index";
@@ -24,15 +24,6 @@ interface LanguageSwitcherProps {
  *
  * Provides a dropdown UI for switching between supported locales.
  * Automatically persists locale preference via cookie and maintains current route.
- *
- * Features:
- * - Supports 5 locales: zh-CN, zh-TW, en, ru, ja
- * - Displays native language names (简体中文, 繁體中文, English, Русский, 日本語)
- * - Persists locale via NEXT_LOCALE cookie (handled by next-intl middleware)
- * - Maintains current route when switching locales
- * - Keyboard accessible (Tab, Enter, Arrow keys, Escape)
- * - Loading state during locale transition
- * - Mobile responsive
  */
 export function LanguageSwitcher({ className, size = "sm" }: LanguageSwitcherProps) {
   const currentLocale = useLocale() as Locale;
@@ -40,9 +31,8 @@ export function LanguageSwitcher({ className, size = "sm" }: LanguageSwitcherPro
   const pathname = usePathname();
   const [isTransitioning, setIsTransitioning] = React.useState(false);
 
-  // Handle locale change
   const handleLocaleChange = React.useCallback(
-    (newLocale: string) => {
+    (newLocale: Locale) => {
       if (newLocale === currentLocale || isTransitioning) {
         return;
       }
@@ -50,14 +40,7 @@ export function LanguageSwitcher({ className, size = "sm" }: LanguageSwitcherPro
       setIsTransitioning(true);
 
       try {
-        // Use next-intl's router to navigate with locale
-        // This automatically:
-        // 1. Updates the URL with the new locale prefix
-        // 2. Sets the NEXT_LOCALE cookie
-        // 3. Maintains the current pathname
-        // 4. Preserves query parameters and hash
-        // Fallback to dashboard if pathname is undefined
-        router.push(pathname || "/dashboard", { locale: newLocale as Locale });
+        router.push(pathname || "/dashboard", { locale: newLocale });
       } catch (error) {
         console.error("Failed to switch locale:", error);
         setIsTransitioning(false);
@@ -66,39 +49,38 @@ export function LanguageSwitcher({ className, size = "sm" }: LanguageSwitcherPro
     [currentLocale, pathname, router, isTransitioning]
   );
 
+  const buttonSize = size === "sm" ? "icon" : "default";
+
   return (
-    <div className={cn("flex items-center gap-2", className)}>
-      <Select value={currentLocale} onValueChange={handleLocaleChange} disabled={isTransitioning}>
-        <SelectTrigger
-          size={size}
-          className={cn("w-auto min-w-[8rem]", isTransitioning && "opacity-50 cursor-wait")}
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size={buttonSize}
+          className={cn(
+            "relative rounded-full border border-border/60 bg-card/70 text-foreground shadow-xs transition-all duration-200 hover:border-border hover:bg-accent/60",
+            buttonSize === "icon" && "size-9",
+            isTransitioning && "cursor-wait opacity-50",
+            className
+          )}
           aria-label="Select language"
+          disabled={isTransitioning}
         >
-          <div className="flex items-center gap-2">
-            <Languages className="size-4" />
-            <SelectValue>
-              {isTransitioning ? "Switching..." : localeLabels[currentLocale]}
-            </SelectValue>
-          </div>
-        </SelectTrigger>
-        <SelectContent align="end">
-          {locales.map((locale) => (
-            <SelectItem
-              key={locale}
-              value={locale}
-              className="cursor-pointer"
-              aria-current={locale === currentLocale ? "true" : undefined}
-            >
-              <span className="flex items-center gap-2">
-                {localeLabels[locale]}
-                {locale === currentLocale && (
-                  <span className="text-xs text-muted-foreground">(current)</span>
-                )}
-              </span>
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
+          <Languages className="size-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-[10rem]" sideOffset={8}>
+        {locales.map((locale) => (
+          <DropdownMenuItem
+            key={locale}
+            onClick={() => handleLocaleChange(locale)}
+            className="flex cursor-pointer items-center justify-between"
+          >
+            <span>{localeLabels[locale]}</span>
+            {locale === currentLocale && <Check className="size-4" />}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
