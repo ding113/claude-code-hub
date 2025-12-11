@@ -295,6 +295,7 @@ export class ProxyErrorHandler {
       statusCode: statusCode,
       model: session.getCurrentModel() ?? undefined,
       providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
+      context1mApplied: session.getContext1mApplied(),
     });
 
     // 记录请求结束

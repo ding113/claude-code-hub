@@ -76,6 +76,9 @@ export class ProxySession {
   // Cache TTL override (resolved)
   private cacheTtlResolved: CacheTtlResolved | null = null;
 
+  // 1M Context Window applied (resolved)
+  private context1mApplied: boolean = false;
+
   private constructor(init: {
     startTime: number;
     method: string;
@@ -175,6 +178,26 @@ export class ProxySession {
 
   getCacheTtlResolved(): CacheTtlResolved | null {
     return this.cacheTtlResolved;
+  }
+
+  setContext1mApplied(applied: boolean): void {
+    this.context1mApplied = applied;
+  }
+
+  getContext1mApplied(): boolean {
+    return this.context1mApplied;
+  }
+
+  /**
+   * 检查客户端是否请求 1M 上下文（根据 anthropic-beta header）
+   */
+  clientRequestsContext1m(): boolean {
+    const betaHeader = this.headers.get("anthropic-beta");
+    if (!betaHeader) return false;
+    return betaHeader.split(",").some((flag) => {
+      const trimmed = flag.trim();
+      return trimmed === "context-1m-2025-08-07" || trimmed.startsWith("context-1m-");
+    });
   }
 
   /**
