@@ -396,6 +396,80 @@ class ErrorRuleDetector {
       this.exactPatterns.size === 0
     );
   }
+
+  /**
+   * 从内存中的规则数组直接加载规则（用于测试环境）
+   *
+   * 绕过数据库查询，直接从传入的规则数组初始化检测器缓存。
+   * 主要用于单元测试，避免测试环境依赖数据库连接。
+   *
+   * @param rules - 规则数组，每个规则包含 pattern, matchType, category, description, priority
+   */
+  loadDefaultRulesFromMemory(
+    rules: Array<{
+      pattern: string;
+      matchType: "regex" | "contains" | "exact";
+      category: string;
+      description?: string;
+      priority: number;
+    }>
+  ): void {
+    const newRegexPatterns: RegexPattern[] = [];
+    const newContainsPatterns: ContainsPattern[] = [];
+    const newExactPatterns = new Map<string, ExactPattern>();
+
+    for (const rule of rules) {
+      switch (rule.matchType) {
+        case "contains": {
+          newContainsPatterns.push({
+            text: rule.pattern.toLowerCase(),
+            category: rule.category,
+            description: rule.description,
+          });
+          break;
+        }
+        case "exact": {
+          newExactPatterns.set(rule.pattern.toLowerCase(), {
+            text: rule.pattern.toLowerCase(),
+            category: rule.category,
+            description: rule.description,
+          });
+          break;
+        }
+        case "regex": {
+          if (!safeRegex(rule.pattern)) {
+            logger.warn(
+              `[ErrorRuleDetector] ReDoS risk detected in pattern: ${rule.pattern}, skipping`
+            );
+            continue;
+          }
+          try {
+            newRegexPatterns.push({
+              pattern: new RegExp(rule.pattern, "i"),
+              category: rule.category,
+              description: rule.description,
+            });
+          } catch {
+            logger.warn(`[ErrorRuleDetector] Invalid regex pattern: ${rule.pattern}, skipping`);
+            continue;
+          }
+          break;
+        }
+      }
+    }
+
+    this.regexPatterns = newRegexPatterns;
+    this.containsPatterns = newContainsPatterns;
+    this.exactPatterns = newExactPatterns;
+    this.lastReloadTime = Date.now();
+    this.isInitialized = true;
+
+    logger.info(
+      `[ErrorRuleDetector] Loaded ${rules.length} rules from memory: ` +
+        `contains=${newContainsPatterns.length}, exact=${newExactPatterns.size}, ` +
+        `regex=${newRegexPatterns.length}`
+    );
+  }
 }
 
 /**

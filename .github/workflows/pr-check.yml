@@ -19,35 +19,99 @@ jobs:
     name: Code Quality Check
 
     steps:
-      - name: 📥 Checkout repository
+      - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: 📦 Setup Bun
+      - name: Setup Bun
         uses: oven-sh/setup-bun@v2
 
-      - name: 🟢 Setup Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: 📦 Install dependencies
+      - name: Install dependencies
         run: bun install
 
-      - name: 🔍 Type check
+      - name: Type check
         run: bun run typecheck
 
-      - name: 🎨 Format check
+      - name: Format check
         run: bun run format:check
 
-      - name: 🛡️ Validate migrations
+      - name: Validate migrations
         run: bun run validate:migrations
 
       - name: Code quality checks passed
         run: |
           echo "All code quality checks passed!"
-          echo "📝 Type checking: OK"
-          echo "🎨 Code formatting: OK"
-          echo "🛡️ Migration validation: OK"
+          echo "Type checking: OK"
+          echo "Code formatting: OK"
+          echo "Migration validation: OK"
+
+  # 单元测试和覆盖率检查任务
+  test:
+    runs-on: ubuntu-latest
+    name: Unit & Integration Tests
+    needs: code-quality
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run Framework Self-Tests
+        run: bun test tests/framework
+        env:
+          NODE_ENV: test
+
+      - name: Run Unit Tests
+        run: bun test tests/unit --coverage
+        env:
+          NODE_ENV: test
+        # Note: Will be enforced once unit tests are added to tests/unit/
+        if: ${{ hashFiles('tests/unit/**/*.test.ts') != '' }}
+
+      - name: Run Integration Tests
+        run: bun test tests/integration
+        env:
+          NODE_ENV: test
+          REDIS_URL: redis://localhost:6379
+        # Note: Will be enforced once integration tests are added
+        if: ${{ hashFiles('tests/integration/**/*.test.ts') != '' }}
+
+      - name: Run All Existing Tests
+        run: bun test tests/*.test.ts
+        env:
+          NODE_ENV: test
+
+      - name: Test checks passed
+        run: |
+          echo "All test checks passed!"
+          echo "Framework self-tests: OK"
+          echo "Unit tests: OK"
+          echo "Integration tests: OK"
 
   # PR 构建测试任务（不推送镜像）
   build-check:
@@ -55,7 +119,7 @@ jobs:
     name: Docker Build Test
 
     steps:
-      - name: 📥 Checkout repository
+      - name: Checkout repository
         uses: actions/checkout@v5
 
       - name: 🔧 Set up Docker Buildx

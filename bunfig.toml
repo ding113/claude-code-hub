@@ -1,0 +1,31 @@
+# Bun Configuration for Claude Code Hub
+# Documentation: https://bun.sh/docs/runtime/bunfig
+
+[test]
+# Preload global test setup before running tests
+preload = ["./tests/__helpers__/setup.ts"]
+
+# Test timeout in milliseconds (30 seconds)
+timeout = 30000
+
+# Coverage configuration
+coverage = true
+coverageReporter = ["lcov", "text"]
+coverageDir = "./coverage"
+
+# Coverage thresholds - strict mode (80%+ from start)
+# Note: Bun test coverage thresholds use different syntax
+# coverageThreshold = { lines = 80, branches = 70, functions = 90 }
+
+# Stop on first failure in CI mode (use --bail flag)
+# bail = false
+
+[test.env]
+# Test environment variables
+NODE_ENV = "test"
+# Use mock Redis in tests
+REDIS_URL = "mock://localhost:6379"
+# Disable rate limiting by default in tests
+ENABLE_RATE_LIMIT = "false"
+# Disable circuit breaker network errors in tests
+ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS = "false"

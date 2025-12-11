@@ -289,7 +289,7 @@ export async function deleteErrorRule(id: number): Promise<boolean> {
 /**
  * 默认错误规则定义
  */
-const DEFAULT_ERROR_RULES = [
+export const DEFAULT_ERROR_RULES = [
   {
     pattern: "prompt is too long.*(tokens.*maximum|maximum.*tokens)",
     category: "prompt_limit",
