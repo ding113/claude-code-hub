@@ -452,6 +452,7 @@
     "availability": "可用性監控",
     "quotasManagement": "額度管理",
     "userManagement": "使用者管理",
+    "providers": "供應商管理",
     "documentation": "文件",
     "systemSettings": "系統設定",
     "feedback": "意見回饋",
