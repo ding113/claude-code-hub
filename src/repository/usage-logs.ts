@@ -53,6 +53,7 @@ export interface UsageLogRow {
   blockedReason: string | null; // 拦截原因（JSON 字符串）
   userAgent: string | null; // User-Agent（客户端信息）
   messagesCount: number | null; // Messages 数量
+  context1mApplied: boolean | null; // 是否应用了1M上下文窗口
 }
 
 export interface UsageLogSummary {
@@ -263,6 +264,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       blockedReason: messageRequest.blockedReason, // 拦截原因
       userAgent: messageRequest.userAgent, // User-Agent
       messagesCount: messageRequest.messagesCount, // Messages 数量
+      context1mApplied: messageRequest.context1mApplied, // 1M上下文窗口
     })
     .from(messageRequest)
     .innerJoin(users, eq(messageRequest.userId, users.id))

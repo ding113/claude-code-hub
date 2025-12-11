@@ -115,6 +115,7 @@ export async function updateMessageRequestDetails(
     errorMessage?: string;
     model?: string; // ⭐ 新增：支持更新重定向后的模型名称
     providerId?: number; // ⭐ 新增：支持更新最终供应商ID（重试切换后）
+    context1mApplied?: boolean; // 是否应用了1M上下文窗口
   }
 ): Promise<void> {
   const updateData: Record<string, unknown> = {
@@ -156,6 +157,9 @@ export async function updateMessageRequestDetails(
   }
   if (details.providerId !== undefined) {
     updateData.providerId = details.providerId;
+  }
+  if (details.context1mApplied !== undefined) {
+    updateData.context1mApplied = details.context1mApplied;
   }
 
   await db.update(messageRequest).set(updateData).where(eq(messageRequest.id, id));
