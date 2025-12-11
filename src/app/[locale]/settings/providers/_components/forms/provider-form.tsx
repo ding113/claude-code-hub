@@ -1725,7 +1725,7 @@ export function ProviderForm({
         </Collapsible>
 
         {isEdit ? (
-          <div className="flex items-center justify-between pt-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-4">
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button type="button" variant="destructive" disabled={isPending}>
@@ -1739,7 +1739,7 @@ export function ProviderForm({
                     {t("deleteDialog.description", { name: provider?.name ?? "" })}
                   </AlertDialogDescription>
                 </AlertHeader>
-                <div className="flex gap-2 justify-end">
+                <div className="flex flex-col-reverse sm:flex-row gap-2 justify-end">
                   <AlertDialogCancel>{t("deleteDialog.cancel")}</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={() => {

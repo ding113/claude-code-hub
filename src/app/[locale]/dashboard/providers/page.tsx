@@ -51,7 +51,7 @@ export default async function DashboardProvidersPage({
         title={t("providers.section.title")}
         description={t("providers.section.description")}
         actions={
-          <div className="flex gap-2">
+          <>
             <Button asChild variant="outline">
               <Link href="/dashboard/leaderboard?scope=provider">
                 <BarChart3 className="h-4 w-4" />
@@ -60,7 +60,7 @@ export default async function DashboardProvidersPage({
             </Button>
             <SchedulingRulesDialog />
             <AddProviderDialog enableMultiProviderTypes={enableMultiProviderTypes} />
-          </div>
+          </>
         }
       >
         <ProviderManager
