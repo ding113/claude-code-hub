@@ -5,6 +5,8 @@ WORKDIR /app
 
 FROM build-base AS deps
 COPY package.json ./
+# Install Python for native module compilation (better-sqlite3)
+RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 RUN bun install
 
 FROM deps AS build
