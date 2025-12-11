@@ -50,6 +50,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     websiteUrl: providerData.website_url ?? null,
     faviconUrl: providerData.favicon_url ?? null,
     cacheTtlPreference: providerData.cache_ttl_preference ?? null,
+    context1mPreference: providerData.context_1m_preference ?? null,
     tpm: providerData.tpm,
     rpm: providerData.rpm,
     rpd: providerData.rpd,
@@ -93,6 +94,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     websiteUrl: providers.websiteUrl,
     faviconUrl: providers.faviconUrl,
     cacheTtlPreference: providers.cacheTtlPreference,
+    context1mPreference: providers.context1mPreference,
     tpm: providers.tpm,
     rpm: providers.rpm,
     rpd: providers.rpd,
@@ -147,6 +149,7 @@ export async function findProviderList(
       websiteUrl: providers.websiteUrl,
       faviconUrl: providers.faviconUrl,
       cacheTtlPreference: providers.cacheTtlPreference,
+      context1mPreference: providers.context1mPreference,
       tpm: providers.tpm,
       rpm: providers.rpm,
       rpd: providers.rpd,
@@ -212,6 +215,7 @@ export async function findAllProviders(): Promise<Provider[]> {
       websiteUrl: providers.websiteUrl,
       faviconUrl: providers.faviconUrl,
       cacheTtlPreference: providers.cacheTtlPreference,
+      context1mPreference: providers.context1mPreference,
       tpm: providers.tpm,
       rpm: providers.rpm,
       rpd: providers.rpd,
@@ -271,6 +275,7 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       websiteUrl: providers.websiteUrl,
       faviconUrl: providers.faviconUrl,
       cacheTtlPreference: providers.cacheTtlPreference,
+      context1mPreference: providers.context1mPreference,
       tpm: providers.tpm,
       rpm: providers.rpm,
       rpd: providers.rpd,
@@ -362,6 +367,8 @@ export async function updateProvider(
   if (providerData.favicon_url !== undefined) dbData.faviconUrl = providerData.favicon_url;
   if (providerData.cache_ttl_preference !== undefined)
     dbData.cacheTtlPreference = providerData.cache_ttl_preference ?? null;
+  if (providerData.context_1m_preference !== undefined)
+    dbData.context1mPreference = providerData.context_1m_preference ?? null;
   if (providerData.tpm !== undefined) dbData.tpm = providerData.tpm;
   if (providerData.rpm !== undefined) dbData.rpm = providerData.rpm;
   if (providerData.rpd !== undefined) dbData.rpd = providerData.rpd;
@@ -408,6 +415,7 @@ export async function updateProvider(
       websiteUrl: providers.websiteUrl,
       faviconUrl: providers.faviconUrl,
       cacheTtlPreference: providers.cacheTtlPreference,
+      context1mPreference: providers.context1mPreference,
       tpm: providers.tpm,
       rpm: providers.rpm,
       rpd: providers.rpd,
