@@ -2,7 +2,7 @@
 
 import { ChevronDown, ExternalLink } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { SETTINGS_NAV_ITEMS } from "@/app/[locale]/settings/_lib/nav-items";
 import {
   DropdownMenu,
@@ -13,6 +13,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Link, usePathname } from "@/i18n/routing";
 import { cn } from "@/lib/utils";
+
+const OPEN_DELAY_MS = 150;
+const CLOSE_DELAY_MS = 200;
 
 export interface DashboardNavItem {
   href: string;
@@ -32,6 +35,18 @@ export function DashboardNav({ items }: DashboardNavProps) {
   const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const openTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Cleanup timeouts on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (openTimeoutRef.current) {
+        clearTimeout(openTimeoutRef.current);
+      }
+      if (closeTimeoutRef.current) {
+        clearTimeout(closeTimeoutRef.current);
+      }
+    };
+  }, []);
+
   if (items.length === 0) {
     return null;
   }
@@ -45,7 +60,7 @@ export function DashboardNav({ items }: DashboardNavProps) {
   };
 
   const handleMouseEnter = () => {
-    // 清除所有延时
+    // Clear any existing timeouts
     if (closeTimeoutRef.current) {
       clearTimeout(closeTimeoutRef.current);
       closeTimeoutRef.current = null;
@@ -53,29 +68,29 @@ export function DashboardNav({ items }: DashboardNavProps) {
     if (openTimeoutRef.current) {
       clearTimeout(openTimeoutRef.current);
     }
-    // 延迟150ms打开，避免鼠标快速划过时误触发
+    // Delay opening to prevent accidental triggers when moving mouse quickly
     openTimeoutRef.current = setTimeout(() => {
       setSettingsOpen(true);
-    }, 150);
+    }, OPEN_DELAY_MS);
   };
 
   const handleMouseLeave = () => {
-    // 清除打开延时
+    // Clear open timeout
     if (openTimeoutRef.current) {
       clearTimeout(openTimeoutRef.current);
       openTimeoutRef.current = null;
     }
-    // 延迟200ms关闭，给用户足够时间移动到菜单
+    // Delay closing to give user time to move to the menu
     if (closeTimeoutRef.current) {
       clearTimeout(closeTimeoutRef.current);
     }
     closeTimeoutRef.current = setTimeout(() => {
       setSettingsOpen(false);
-    }, 200);
+    }, CLOSE_DELAY_MS);
   };
 
   const renderSettingsDropdown = (item: DashboardNavItem, isActive: boolean) => {
-    // 在设置页面时完全禁用下拉菜单
+    // Disable dropdown menu completely when on a settings page
     if (isActive) {
       return (
         <div
@@ -90,7 +105,7 @@ export function DashboardNav({ items }: DashboardNavProps) {
     }
 
     return (
-      <div onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
+      <div onPointerEnter={handleMouseEnter} onPointerLeave={handleMouseLeave}>
         <DropdownMenu modal={false} open={settingsOpen} onOpenChange={setSettingsOpen}>
           <DropdownMenuTrigger asChild>
             <Link
@@ -105,9 +120,15 @@ export function DashboardNav({ items }: DashboardNavProps) {
             </Link>
           </DropdownMenuTrigger>
 
-          <DropdownMenuContent align="start" className="w-56" sideOffset={4}>
+          <DropdownMenuContent
+            align="start"
+            className="w-56"
+            sideOffset={4}
+            onPointerEnter={handleMouseEnter}
+            onPointerLeave={handleMouseLeave}
+          >
             {SETTINGS_NAV_ITEMS.map((subItem, index) => {
-              const showSeparator = index === 10;
+              const showSeparator = subItem.external && !SETTINGS_NAV_ITEMS[index - 1]?.external;
 
               return (
                 <div key={subItem.href}>
@@ -118,13 +139,13 @@ export function DashboardNav({ items }: DashboardNavProps) {
                         href={subItem.href}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center justify-between"
+                        className="flex cursor-pointer items-center justify-between"
                       >
                         <span>{t(subItem.labelKey || "")}</span>
                         <ExternalLink className="size-3 opacity-50" />
                       </a>
                     ) : (
-                      <Link href={subItem.href} className="flex items-center justify-between">
+                      <Link href={subItem.href} className="flex cursor-pointer items-center justify-between">
                         {t(subItem.labelKey || "")}
                       </Link>
                     )}
