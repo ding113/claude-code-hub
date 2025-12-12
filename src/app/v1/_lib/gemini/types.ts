@@ -51,11 +51,21 @@ export interface GeminiRequest {
   };
 }
 
+export interface GeminiTokenDetail {
+  modality: "TEXT" | "IMAGE" | "AUDIO" | "VIDEO";
+  tokenCount: number;
+}
+
 export interface GeminiUsageMetadata {
   promptTokenCount: number;
   candidatesTokenCount: number;
   totalTokenCount: number;
-  cachedContentTokenCount?: number; // Gemini 缓存支持
+  cachedContentTokenCount?: number; // Gemini 缓存命中的 token 数
+  thoughtsTokenCount?: number; // Gemini 思考模型的推理 token
+  // 详细信息（按 modality 分类）
+  promptTokensDetails?: GeminiTokenDetail[];
+  cacheTokensDetails?: GeminiTokenDetail[];
+  candidatesTokensDetails?: GeminiTokenDetail[];
 }
 
 export interface GeminiCandidate {
