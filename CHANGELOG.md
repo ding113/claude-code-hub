@@ -4,6 +4,14 @@
 
 ---
 
+## [v0.3.29](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.29) - 2025-12-12
+
+### 其他
+
+- 更新 LiteLLM 模型价格数据
+
+---
+
 ## [v0.3.28](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.28) - 2025-12-10
 
 ### 新增
