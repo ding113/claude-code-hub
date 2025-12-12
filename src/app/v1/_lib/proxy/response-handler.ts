@@ -651,7 +651,7 @@ export class ProxyResponseHandler {
                 const openAIChunk = GeminiAdapter.transformResponse(geminiResponse, true);
                 const output = `data: ${JSON.stringify(openAIChunk)}\n\n`;
                 controller.enqueue(new TextEncoder().encode(output));
-              } catch { }
+              } catch {}
             }
           },
         });
