@@ -10,12 +10,13 @@
 // =============================================================================
 
 /**
- * Models that support 1M context window
+ * Model prefixes that support 1M context window
  * Only Sonnet models support this feature as of 2025-08
+ * Note: Longer prefixes must come first for correct matching
  */
-export const CONTEXT_1M_SUPPORTED_MODELS = [
-  "claude-sonnet-4-5-20250929",
-  "claude-sonnet-4-20250514",
+export const CONTEXT_1M_SUPPORTED_MODEL_PREFIXES = [
+  "claude-sonnet-4-5",
+  "claude-sonnet-4",
 ] as const;
 
 /**
@@ -46,11 +47,20 @@ export const CONTEXT_1M_OUTPUT_PREMIUM_MULTIPLIER = 1.5;
 
 /**
  * Check if a model supports 1M context window
- * Uses partial matching to handle model variants
+ * Uses prefix matching to handle model variants (e.g., claude-sonnet-4, claude-sonnet-4-20250514)
  */
 export function isContext1mSupportedModel(model: string): boolean {
   if (!model) return false;
-  return CONTEXT_1M_SUPPORTED_MODELS.some((supported) => model.includes(supported));
+  return CONTEXT_1M_SUPPORTED_MODEL_PREFIXES.some((prefix) => {
+    // Exact match for base model name
+    if (model === prefix) return true;
+    // Prefix match with dash separator and at least one more character
+    const prefixWithDash = `${prefix}-`;
+    if (model.startsWith(prefixWithDash) && model.length > prefixWithDash.length) {
+      return true;
+    }
+    return false;
+  });
 }
 
 /**

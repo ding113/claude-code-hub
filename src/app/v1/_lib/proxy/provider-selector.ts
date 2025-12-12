@@ -643,6 +643,7 @@ export class ProxyProviderResolver {
           | "format_type_mismatch"
           | "type_mismatch"
           | "model_not_allowed"
+          | "context_1m_disabled"
           | "disabled" = "disabled";
         let details = "";
 
@@ -697,7 +698,7 @@ export class ProxyProviderResolver {
           context.filteredProviders?.push({
             id: p.id,
             name: p.name,
-            reason: "context_1m_disabled" as "disabled",
+            reason: "context_1m_disabled",
             details: "供应商禁用了 1M 上下文功能",
           });
         }

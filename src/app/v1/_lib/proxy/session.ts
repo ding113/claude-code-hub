@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import type { Context } from "hono";
+import { clientRequestsContext1m as clientRequestsContext1mHelper } from "@/lib/special-attributes";
 import type { CacheTtlResolved } from "@/types/cache";
 import type { Key } from "@/types/key";
 import type { ProviderChainItem } from "@/types/message";
@@ -189,15 +190,10 @@ export class ProxySession {
   }
 
   /**
-   * 检查客户端是否请求 1M 上下文（根据 anthropic-beta header）
+   * Check if client requests 1M context (based on anthropic-beta header)
    */
   clientRequestsContext1m(): boolean {
-    const betaHeader = this.headers.get("anthropic-beta");
-    if (!betaHeader) return false;
-    return betaHeader.split(",").some((flag) => {
-      const trimmed = flag.trim();
-      return trimmed === "context-1m-2025-08-07" || trimmed.startsWith("context-1m-");
-    });
+    return clientRequestsContext1mHelper(this.headers);
   }
 
   /**
