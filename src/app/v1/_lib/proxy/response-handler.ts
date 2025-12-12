@@ -655,7 +655,7 @@ export class ProxyResponseHandler {
                 const openAIChunk = GeminiAdapter.transformResponse(geminiResponse, true);
                 const output = `data: ${JSON.stringify(openAIChunk)}\n\n`;
                 controller.enqueue(new TextEncoder().encode(output));
-              } catch {}
+              } catch { }
             }
           },
         });
@@ -1213,14 +1213,18 @@ function extractUsageMetrics(value: unknown): UsageMetrics | null {
     result.cache_read_input_tokens = usage.cachedContentTokenCount;
     hasAny = true;
   }
-  // Gemini 思考/推理 token：直接累加到 output_tokens（思考价格与输出价格相同）
-  if (typeof usage.thoughtsTokenCount === "number" && usage.thoughtsTokenCount > 0) {
-    result.output_tokens = (result.output_tokens ?? 0) + usage.thoughtsTokenCount;
-    hasAny = true;
-  }
 
   if (typeof usage.output_tokens === "number") {
     result.output_tokens = usage.output_tokens;
+    hasAny = true;
+  }
+
+  // Gemini 思考/推理 token：直接累加到 output_tokens（思考价格与输出价格相同）
+  // 注意：放在 output_tokens 赋值之后，避免被覆盖
+  // output_tokens 是转换的时候才存在的，gemini原生接口的没有该值
+  // 通常存在 output_tokens的时候，thoughtsTokenCount=0
+  if (typeof usage.thoughtsTokenCount === "number" && usage.thoughtsTokenCount > 0) {
+    result.output_tokens = (result.output_tokens ?? 0) + usage.thoughtsTokenCount;
     hasAny = true;
   }
 
