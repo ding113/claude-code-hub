@@ -1206,6 +1206,11 @@ function extractUsageMetrics(value: unknown): UsageMetrics | null {
     result.cache_read_input_tokens = usage.cachedContentTokenCount;
     hasAny = true;
   }
+  // Gemini 思考/推理 token：直接累加到 output_tokens（思考价格与输出价格相同）
+  if (typeof usage.thoughtsTokenCount === "number" && usage.thoughtsTokenCount > 0) {
+    result.output_tokens = (result.output_tokens ?? 0) + usage.thoughtsTokenCount;
+    hasAny = true;
+  }
 
   if (typeof usage.output_tokens === "number") {
     result.output_tokens = usage.output_tokens;
