@@ -773,63 +773,9 @@ export class ProxyProviderResolver {
       }
     }
 
-    // Step 2: Provider group filter (key > user priority)
-    // Note: keyGroupPick, userGroupPick, effectiveGroupPick already defined in Step 1 above
-    let candidateProviders = afterContext1mFilter;
-
-    if (effectiveGroupPick) {
-      context.userGroup = effectiveGroupPick;
-
-      // Support multiple groups (comma-separated, e.g. "fero,chen")
-      const groups = effectiveGroupPick
-        .split(",")
-        .map((g) => g.trim())
-        .filter(Boolean);
-
-      // Filter: provider's groupTag intersects with effective groups
-      // Fix #190: Support provider multi-tags (e.g. "cli,chat") matching user single-tag (e.g. "cli")
-      const groupFiltered = enabledProviders.filter((p) => {
-        if (!p.groupTag) return false;
-
-        // Split provider's groupTag into tag array
-        const providerTags = p.groupTag
-          .split(",")
-          .map((tag) => tag.trim())
-          .filter(Boolean);
-
-        // Check for intersection: any of user's groups in provider's tag list
-        return providerTags.some((tag) => groups.includes(tag));
-      });
-
-      if (groupFiltered.length > 0) {
-        candidateProviders = groupFiltered;
-        context.groupFilterApplied = true;
-        context.afterGroupFilter = groupFiltered.length;
-        logger.debug("ProviderSelector: Effective group filter applied", {
-          effectiveGroup: effectiveGroupPick,
-          keyGroupOverride: !!keyGroupPick,
-          groups,
-          count: groupFiltered.length,
-        });
-      } else {
-        // Strict group isolation: return error when no available providers instead of fallback
-        context.groupFilterApplied = false;
-        context.afterGroupFilter = 0;
-        logger.error("ProviderSelector: Effective groups have no available providers", {
-          effectiveGroup: effectiveGroupPick,
-          keyGroupOverride: !!keyGroupPick,
-          groups,
-          enabledProviders: enabledProviders.length,
-          message: "Strict group isolation: returning null instead of fallback",
-        });
-
-        // Return null to indicate no available provider
-        return {
-          provider: null,
-          context,
-        };
-      }
-    }
+    // Group filtering was already done earlier (visibleProviders at lines 597-646)
+    // Use afterContext1mFilter as candidates for health check
+    const candidateProviders = afterContext1mFilter;
 
     context.beforeHealthCheck = candidateProviders.length;
 
