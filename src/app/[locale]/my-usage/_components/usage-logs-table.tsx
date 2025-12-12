@@ -11,6 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { CurrencyCode } from "@/lib/utils";
 
 interface UsageLogsTableProps {
@@ -33,6 +34,11 @@ export function UsageLogsTable({
   const t = useTranslations("myUsage.logs");
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
+  const formatTokenAmount = (value: number | null | undefined): string => {
+    if (value == null || value === 0) return "-";
+    return value.toLocaleString();
+  };
+
   return (
     <div className="space-y-3">
       <div className="overflow-x-auto rounded-md border">
@@ -42,6 +48,8 @@ export function UsageLogsTable({
               <TableHead>{t("table.time")}</TableHead>
               <TableHead>{t("table.model")}</TableHead>
               <TableHead className="text-right">{t("table.tokens")}</TableHead>
+              <TableHead className="text-right">{t("table.cacheWrite")}</TableHead>
+              <TableHead className="text-right">{t("table.cacheRead")}</TableHead>
               <TableHead className="text-right">
                 {t("table.cost", { currency: currencyCode })}
               </TableHead>
@@ -52,7 +60,7 @@ export function UsageLogsTable({
           <TableBody>
             {logs.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground">
+                <TableCell colSpan={8} className="text-center text-muted-foreground">
                   {t("noLogs")}
                 </TableCell>
               </TableRow>
@@ -75,6 +83,31 @@ export function UsageLogsTable({
                   </TableCell>
                   <TableCell className="text-right text-sm font-mono">
                     {log.inputTokens}/{log.outputTokens}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-xs">
+                    <TooltipProvider>
+                      <Tooltip delayDuration={250}>
+                        <TooltipTrigger asChild>
+                          <div className="flex items-center justify-end gap-1 cursor-help">
+                            <span>{formatTokenAmount(log.cacheCreationInputTokens)}</span>
+                            {log.cacheCreationInputTokens &&
+                            log.cacheCreationInputTokens > 0 &&
+                            log.cacheTtlApplied ? (
+                              <Badge variant="outline" className="text-[10px] leading-tight px-1">
+                                {log.cacheTtlApplied}
+                              </Badge>
+                            ) : null}
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent align="end" className="text-xs space-y-1">
+                          <div>5m: {formatTokenAmount(log.cacheCreation5mInputTokens)}</div>
+                          <div>1h: {formatTokenAmount(log.cacheCreation1hInputTokens)}</div>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-xs">
+                    {formatTokenAmount(log.cacheReadInputTokens)}
                   </TableCell>
                   <TableCell className="text-right text-sm font-mono">
                     {currencyCode} {Number(log.cost ?? 0).toFixed(4)}

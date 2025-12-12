@@ -38,6 +38,7 @@
   },
   "logs": {
     "title": "Usage Logs",
+    "autoRefresh": "Auto refresh every {seconds}s",
     "filters": {
       "startDate": "Start date",
       "endDate": "End date",
@@ -53,6 +54,8 @@
       "time": "Time",
       "model": "Model",
       "tokens": "Tokens (in/out)",
+      "cacheWrite": "Cache Write",
+      "cacheRead": "Cache Read",
       "cost": "{currency} cost",
       "status": "Status",
       "endpoint": "Endpoint"

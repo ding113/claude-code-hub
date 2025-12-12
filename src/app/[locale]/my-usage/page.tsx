@@ -46,14 +46,22 @@ export default function MyUsagePage() {
     if (stats.ok) setTodayStats(stats);
   }, []);
 
+  const refreshLogs = useCallback(async () => {
+    const result = await getMyUsageLogs({ page: 1 });
+    if (result.ok && result.data) setLogsData(result.data);
+  }, []);
+
   useEffect(() => {
     loadAll();
   }, [loadAll]);
 
   useEffect(() => {
-    const id = setInterval(() => refreshToday(), 30000);
+    const id = setInterval(() => {
+      refreshToday();
+      refreshLogs();
+    }, 30000);
     return () => clearInterval(id);
-  }, [refreshToday]);
+  }, [refreshToday, refreshLogs]);
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -103,7 +111,7 @@ export default function MyUsagePage() {
         autoRefreshSeconds={30}
       />
 
-      <UsageLogsSection initialData={logsData} />
+      <UsageLogsSection initialData={logsData} onRefresh={refreshLogs} autoRefreshSeconds={30} />
     </div>
   );
 }

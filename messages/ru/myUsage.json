@@ -38,6 +38,7 @@
   },
   "logs": {
     "title": "Журнал использования",
+    "autoRefresh": "Автообновление каждые {seconds}с",
     "filters": {
       "startDate": "Дата начала",
       "endDate": "Дата окончания",
@@ -53,6 +54,8 @@
       "time": "Время",
       "model": "Модель",
       "tokens": "Токены (вх/вых)",
+      "cacheWrite": "Запись кэша",
+      "cacheRead": "Чтение кэша",
       "cost": "Стоимость {currency}",
       "status": "Статус",
       "endpoint": "API Endpoint"
