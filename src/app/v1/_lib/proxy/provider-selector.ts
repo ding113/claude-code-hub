@@ -774,10 +774,8 @@ export class ProxyProviderResolver {
     }
 
     // Step 2: Provider group filter (key > user priority)
+    // Note: keyGroupPick, userGroupPick, effectiveGroupPick already defined in Step 1 above
     let candidateProviders = afterContext1mFilter;
-    const keyGroupPick = session?.authState?.key?.providerGroup;
-    const userGroupPick = session?.authState?.user?.providerGroup;
-    const effectiveGroupPick = keyGroupPick || userGroupPick;
 
     if (effectiveGroupPick) {
       context.userGroup = effectiveGroupPick;
