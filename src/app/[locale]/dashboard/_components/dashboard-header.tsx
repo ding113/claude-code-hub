@@ -6,6 +6,7 @@ import { ThemeSwitcher } from "@/components/ui/theme-switcher";
 import { Link } from "@/i18n/routing";
 import type { AuthSession } from "@/lib/auth";
 import { DashboardNav, type DashboardNavItem } from "./dashboard-nav";
+import { MobileNav } from "./mobile-nav";
 import { UserMenu } from "./user-menu";
 
 interface DashboardHeaderProps {
@@ -21,6 +22,7 @@ export function DashboardHeader({ session }: DashboardHeaderProps) {
     { href: "/dashboard/logs", label: t("usageLogs") },
     { href: "/dashboard/leaderboard", label: t("leaderboard") },
     { href: "/dashboard/availability", label: t("availability"), adminOnly: true },
+    { href: "/dashboard/providers", label: t("providers"), adminOnly: true },
     { href: "/dashboard/quotas", label: t("quotasManagement") },
     { href: "/dashboard/users", label: t("userManagement") },
     { href: "/usage-doc", label: t("documentation") },
@@ -32,7 +34,10 @@ export function DashboardHeader({ session }: DashboardHeaderProps) {
   return (
     <header className="sticky top-0 z-40 border-b border-border/80 bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/60">
       <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-6">
-        <DashboardNav items={items} />
+        <div className="flex items-center gap-4">
+          <MobileNav items={items} />
+          <DashboardNav items={items} />
+        </div>
         <div className="flex items-center gap-3">
           <ThemeSwitcher />
           <LanguageSwitcher size="sm" />

@@ -345,10 +345,10 @@ export function AvailabilityView() {
         </div>
 
         {/* Controls */}
-        <div className="flex flex-wrap gap-4 items-center justify-between">
-          <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full sm:w-auto">
             <Select value={timeRange} onValueChange={(v) => setTimeRange(v as TimeRangeOption)}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-full sm:w-[180px]">
                 <SelectValue placeholder={t("timeRange.label")} />
               </SelectTrigger>
               <SelectContent>
@@ -360,7 +360,7 @@ export function AvailabilityView() {
               </SelectContent>
             </Select>
             <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
-              <SelectTrigger className="w-[160px]">
+              <SelectTrigger className="w-full sm:w-[160px]">
                 <SelectValue placeholder={t("sort.label")} />
               </SelectTrigger>
               <SelectContent>
@@ -375,7 +375,13 @@ export function AvailabilityView() {
               </span>
             )}
           </div>
-          <Button variant="outline" size="sm" onClick={fetchData} disabled={refreshing}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchData}
+            disabled={refreshing}
+            className="w-full sm:w-auto"
+          >
             <RefreshCw className={cn("h-4 w-4 mr-2", refreshing && "animate-spin")} />
             {refreshing ? t("actions.refreshing") : t("actions.refresh")}
           </Button>
@@ -396,23 +402,40 @@ export function AvailabilityView() {
               <div className="space-y-3">
                 {/* Provider rows with heatmap */}
                 {sortedProviders.map((provider) => (
-                  <div key={provider.providerId} className="flex items-center gap-3">
-                    {/* Provider name */}
-                    <div className="w-40 shrink-0 flex items-center gap-2">
-                      <span className="font-medium truncate text-sm" title={provider.providerName}>
-                        {provider.providerName}
-                      </span>
-                      {getStatusBadge(provider.currentStatus)}
+                  <div
+                    key={provider.providerId}
+                    className="flex flex-col sm:flex-row sm:items-center gap-3"
+                  >
+                    {/* Provider name and summary - on same row for mobile */}
+                    <div className="flex items-center justify-between sm:contents">
+                      <div className="w-auto sm:w-32 md:w-40 shrink-0 flex items-center gap-2">
+                        <span
+                          className="font-medium truncate text-sm"
+                          title={provider.providerName}
+                        >
+                          {provider.providerName}
+                        </span>
+                        {getStatusBadge(provider.currentStatus)}
+                      </div>
+
+                      {/* Summary stats - shown on right for mobile, at end for desktop */}
+                      <div className="w-auto sm:w-20 md:w-24 lg:w-28 shrink-0 text-right text-sm sm:order-last">
+                        <div className="font-mono">
+                          {provider.currentStatus === "unknown"
+                            ? t("heatmap.noData")
+                            : formatPercentage(provider.currentAvailability)}
+                        </div>
+                        <div className="text-muted-foreground text-xs">
+                          {provider.totalRequests > 0
+                            ? `${provider.totalRequests.toLocaleString()} ${t("heatmap.requests")}`
+                            : t("heatmap.noRequests")}
+                        </div>
+                      </div>
                     </div>
 
-                    {/* Heatmap cells - CSS grid for responsive width */}
-                    <div className="flex-1 min-w-0">
-                      <div
-                        className="grid gap-px"
-                        style={{
-                          gridTemplateColumns: `repeat(${unifiedBuckets.length}, 1fr)`,
-                        }}
-                      >
+                    {/* Heatmap cells - wrappable grid with auto-fill */}
+                    <div className="w-full sm:flex-1 sm:min-w-0">
+                      <div className="grid gap-1 grid-cols-[repeat(auto-fill,minmax(12px,1fr))] sm:gap-px">
                         {unifiedBuckets.map((bucketStart) => {
                           const bucket = getBucketData(provider, bucketStart);
                           const hasData = bucket !== null && bucket.totalRequests > 0;
@@ -423,7 +446,7 @@ export function AvailabilityView() {
                               <TooltipTrigger asChild>
                                 <div
                                   className={cn(
-                                    "h-6 rounded-[2px] cursor-pointer transition-opacity hover:opacity-80 min-w-[2px]",
+                                    "h-6 rounded-[2px] cursor-pointer transition-opacity hover:opacity-80",
                                     getAvailabilityColor(score, hasData)
                                   )}
                                 />
@@ -467,20 +490,6 @@ export function AvailabilityView() {
                         })}
                       </div>
                     </div>
-
-                    {/* Summary stats */}
-                    <div className="w-28 shrink-0 text-right text-sm">
-                      <div className="font-mono">
-                        {provider.currentStatus === "unknown"
-                          ? t("heatmap.noData")
-                          : formatPercentage(provider.currentAvailability)}
-                      </div>
-                      <div className="text-muted-foreground text-xs">
-                        {provider.totalRequests > 0
-                          ? `${provider.totalRequests.toLocaleString()} ${t("heatmap.requests")}`
-                          : t("heatmap.noRequests")}
-                      </div>
-                    </div>
                   </div>
                 ))}
               </div>
@@ -491,7 +500,7 @@ export function AvailabilityView() {
         {/* Legend */}
         <Card>
           <CardContent className="pt-6">
-            <div className="flex flex-wrap gap-6 text-sm">
+            <div className="flex flex-wrap gap-3 sm:gap-4 md:gap-6 text-sm">
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 rounded-sm bg-green-500" />
                 <span className="text-muted-foreground">{t("legend.green")}</span>
