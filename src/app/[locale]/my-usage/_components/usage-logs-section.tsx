@@ -24,6 +24,8 @@ import { UsageLogsTable } from "./usage-logs-table";
 
 interface UsageLogsSectionProps {
   initialData?: MyUsageLogsResult | null;
+  onRefresh?: () => void;
+  autoRefreshSeconds?: number;
 }
 
 interface Filters {
@@ -37,7 +39,11 @@ interface Filters {
   page?: number;
 }
 
-export function UsageLogsSection({ initialData = null }: UsageLogsSectionProps) {
+export function UsageLogsSection({
+  initialData = null,
+  onRefresh: _onRefresh,
+  autoRefreshSeconds,
+}: UsageLogsSectionProps) {
   const t = useTranslations("myUsage.logs");
   const tDashboard = useTranslations("dashboard");
   const [models, setModels] = useState<string[]>([]);
@@ -115,8 +121,13 @@ export function UsageLogsSection({ initialData = null }: UsageLogsSectionProps) 
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>{t("title")}</CardTitle>
+        {autoRefreshSeconds ? (
+          <span className="text-xs text-muted-foreground shrink-0 whitespace-nowrap">
+            {t("autoRefresh", { seconds: autoRefreshSeconds })}
+          </span>
+        ) : null}
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-12">
