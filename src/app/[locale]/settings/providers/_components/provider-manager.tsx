@@ -93,7 +93,7 @@ export function ProviderManager({
     <div className="space-y-4">
       {/* 筛选条件 */}
       <div className="flex flex-col gap-3">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
           <ProviderTypeFilter value={typeFilter} onChange={setTypeFilter} />
           <ProviderSortDropdown value={sortBy} onChange={setSortBy} />
           <div className="relative flex-1">

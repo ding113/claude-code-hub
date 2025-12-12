@@ -38,6 +38,7 @@
   },
   "logs": {
     "title": "使用日志",
+    "autoRefresh": "每 {seconds} 秒自动刷新",
     "filters": {
       "startDate": "开始日期",
       "endDate": "结束日期",
@@ -53,6 +54,8 @@
       "time": "时间",
       "model": "模型",
       "tokens": "Tokens (入/出)",
+      "cacheWrite": "缓存写入",
+      "cacheRead": "缓存读取",
       "cost": "{currency} 消耗",
       "status": "状态",
       "endpoint": "API 端点"

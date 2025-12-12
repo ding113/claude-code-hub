@@ -38,6 +38,7 @@
   },
   "logs": {
     "title": "使用紀錄",
+    "autoRefresh": "每 {seconds} 秒自動刷新",
     "filters": {
       "startDate": "開始日期",
       "endDate": "結束日期",
@@ -53,6 +54,8 @@
       "time": "時間",
       "model": "模型",
       "tokens": "Tokens (入/出)",
+      "cacheWrite": "快取寫入",
+      "cacheRead": "快取讀取",
       "cost": "{currency} 花費",
       "status": "狀態",
       "endpoint": "API 端點"

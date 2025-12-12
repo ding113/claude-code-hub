@@ -9,6 +9,7 @@ import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit/service";
 import { SessionTracker } from "@/lib/session-tracker";
 import type { CurrencyCode } from "@/lib/utils";
+import { sumUserCostToday } from "@/repository/statistics";
 import { getSystemSettings } from "@/repository/system-config";
 import {
   findUsageLogsWithDetails,
@@ -40,6 +41,7 @@ export interface MyUsageQuota {
   userLimitTotalUsd: number | null;
   userLimitConcurrentSessions: number | null;
   userCurrent5hUsd: number;
+  userCurrentDailyUsd: number;
   userCurrentWeeklyUsd: number;
   userCurrentMonthlyUsd: number;
   userCurrentTotalUsd: number;
@@ -89,6 +91,11 @@ export interface MyUsageLogEntry {
   statusCode: number | null;
   duration: number | null;
   endpoint: string | null;
+  cacheCreationInputTokens: number | null;
+  cacheReadInputTokens: number | null;
+  cacheCreation5mInputTokens: number | null;
+  cacheCreation1hInputTokens: number | null;
+  cacheTtlApplied: string | null;
 }
 
 export interface MyUsageLogsResult {
@@ -156,6 +163,7 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       keyTotalCost,
       keyConcurrent,
       userCost5h,
+      userCostDaily,
       userCostWeekly,
       userCostMonthly,
       userTotalCost,
@@ -174,6 +182,7 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       getTotalUsageForKey(key.key),
       SessionTracker.getKeySessionCount(key.id),
       sumUserCost(user.id, "5h"),
+      sumUserCostToday(user.id),
       sumUserCost(user.id, "weekly"),
       sumUserCost(user.id, "monthly"),
       sumUserCost(user.id, "total"),
@@ -200,6 +209,7 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       userLimitTotalUsd: user.limitTotalUsd ?? null,
       userLimitConcurrentSessions: user.limitConcurrentSessions ?? null,
       userCurrent5hUsd: userCost5h,
+      userCurrentDailyUsd: userCostDaily,
       userCurrentWeeklyUsd: userCostWeekly,
       userCurrentMonthlyUsd: userCostMonthly,
       userCurrentTotalUsd: userTotalCost,
@@ -366,6 +376,11 @@ export async function getMyUsageLogs(
         statusCode: log.statusCode,
         duration: log.durationMs,
         endpoint: log.endpoint,
+        cacheCreationInputTokens: log.cacheCreationInputTokens ?? null,
+        cacheReadInputTokens: log.cacheReadInputTokens ?? null,
+        cacheCreation5mInputTokens: log.cacheCreation5mInputTokens ?? null,
+        cacheCreation1hInputTokens: log.cacheCreation1hInputTokens ?? null,
+        cacheTtlApplied: log.cacheTtlApplied ?? null,
       };
     });
 

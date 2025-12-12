@@ -82,7 +82,7 @@ export function QuotaCards({
         title: t("daily"),
         keyCurrent: quota.keyCurrentDailyUsd,
         keyLimit: quota.keyLimitDailyUsd,
-        userCurrent: null,
+        userCurrent: quota.userCurrentDailyUsd,
         userLimit: quota.userLimitDailyUsd,
       },
       {
