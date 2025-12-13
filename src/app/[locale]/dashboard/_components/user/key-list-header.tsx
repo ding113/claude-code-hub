@@ -278,7 +278,9 @@ export function KeyListHeader({
                     : t("allowedClients.noRestrictions")}
                 </span>
                 {activeUser.allowedClients && activeUser.allowedClients.length > 0 && (
-                  <span className="text-foreground ml-1">{activeUser.allowedClients.join(", ")}</span>
+                  <span className="text-foreground ml-1">
+                    {activeUser.allowedClients.join(", ")}
+                  </span>
                 )}
               </div>
             )}
