@@ -433,6 +433,18 @@ export class ProxyError extends Error {
 
     return parts.join(" | ");
   }
+
+  /**
+   * 获取适合返回给客户端的安全错误信息
+   * 不包含供应商名称等敏感信息，仅返回从上游提取的错误消息
+   *
+   * 与 getDetailedErrorMessage() 的区别：
+   * - getDetailedErrorMessage(): 包含供应商名称，用于内部日志记录
+   * - getClientSafeMessage(): 不包含供应商名称，用于返回给客户端
+   */
+  getClientSafeMessage(): string {
+    return this.message;
+  }
 }
 
 /**
@@ -697,6 +709,19 @@ export class EmptyResponseError extends Error {
       reason: this.reason,
       message: this.message,
     };
+  }
+
+  /**
+   * 获取适合返回给客户端的安全错误信息
+   * 不包含供应商名称等敏感信息
+   */
+  getClientSafeMessage(): string {
+    const reasonMessages = {
+      empty_body: "Response body is empty",
+      no_output_tokens: "Response has no output tokens",
+      missing_content: "Response is missing content field",
+    };
+    return `Empty response: ${reasonMessages[this.reason]}`;
   }
 }
 

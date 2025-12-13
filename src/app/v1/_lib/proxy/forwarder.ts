@@ -1139,7 +1139,7 @@ export class ProxyForwarder {
               providerUrl: provider.url,
               error,
             });
-            throw new ProxyError(`Invalid provider URL configuration: ${provider.url}`, 500);
+            throw new ProxyError("Internal configuration error", 500);
           }
         }
       } else if (
@@ -1602,7 +1602,7 @@ export class ProxyForwarder {
             }
           } else {
             // 不降级，直接抛出代理错误
-            throw new ProxyError(`Proxy connection failed: ${err.message}`, 500);
+            throw new ProxyError("Service temporarily unavailable", 503);
           }
         } else {
           // 非代理相关错误，记录详细信息后抛出
