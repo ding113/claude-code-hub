@@ -16,6 +16,9 @@ export const USER_FIELD_PERMISSIONS = {
   limitWeeklyUsd: { requiredRole: "admin" },
   limitMonthlyUsd: { requiredRole: "admin" },
   limitConcurrentSessions: { requiredRole: "admin" },
+
+  // Admin-only field (client restrictions)
+  allowedClients: { requiredRole: "admin" },
 } as const;
 
 /**

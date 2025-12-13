@@ -269,6 +269,19 @@ export function KeyListHeader({
               )}
               {proxyStatusContent}
             </div>
+            {/* Allowed Clients Display - on separate line, visible to both admin and user */}
+            {activeUser && (
+              <div className="mt-2 px-2 py-1 text-xs text-muted-foreground border border-muted-foreground/30 rounded-md w-fit">
+                <span>
+                  {activeUser.allowedClients?.length
+                    ? `${t("allowedClients.label")} [${activeUser.allowedClients.length}]:`
+                    : t("allowedClients.noRestrictions")}
+                </span>
+                {activeUser.allowedClients && activeUser.allowedClients.length > 0 && (
+                  <span className="text-foreground ml-1">{activeUser.allowedClients.join(", ")}</span>
+                )}
+              </div>
+            )}
           </div>
         </div>
         {canAddKey && (

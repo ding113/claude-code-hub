@@ -22,6 +22,8 @@ export interface User {
   // User status and expiry management
   isEnabled: boolean; // 用户启用状态
   expiresAt?: Date | null; // 用户过期时间
+  // Allowed clients (CLI/IDE restrictions)
+  allowedClients?: string[]; // 允许的客户端模式（空数组=无限制）
 }
 
 /**
@@ -43,6 +45,8 @@ export interface CreateUserData {
   // User status and expiry management
   isEnabled?: boolean;
   expiresAt?: Date | null;
+  // Allowed clients (CLI/IDE restrictions)
+  allowedClients?: string[];
 }
 
 /**
@@ -64,6 +68,8 @@ export interface UpdateUserData {
   // User status and expiry management
   isEnabled?: boolean;
   expiresAt?: Date | null;
+  // Allowed clients (CLI/IDE restrictions)
+  allowedClients?: string[];
 }
 
 /**
@@ -125,6 +131,8 @@ export interface UserDisplay {
   // User status and expiry management
   isEnabled: boolean; // 用户启用状态
   expiresAt?: Date | null; // 用户过期时间
+  // Allowed clients (CLI/IDE restrictions)
+  allowedClients?: string[]; // 允许的客户端模式（空数组=无限制）
 }
 
 /**
