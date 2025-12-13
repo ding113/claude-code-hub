@@ -599,6 +599,10 @@
       "showTooltip": "顯示完整金鑰",
       "hideTooltip": "隱藏金鑰",
       "closeButton": "關閉"
+    },
+    "allowedClients": {
+      "label": "允許的用戶端",
+      "noRestrictions": "允許的用戶端：無限制"
     }
   },
   "keyLimitUsage": {
@@ -742,6 +746,21 @@
       "label": "並發 Session 上限",
       "placeholder": "0 表示無限制",
       "description": "同時執行的對話數量"
+    },
+    "isEnabled": {
+      "label": "啟用使用者",
+      "description": "停用後使用者將無法使用 API"
+    },
+    "expiresAt": {
+      "label": "到期時間",
+      "placeholder": "留空表示永不過期",
+      "description": "使用者過期後將自動停用"
+    },
+    "allowedClients": {
+      "label": "允許的用戶端",
+      "description": "限制哪些 CLI/IDE 用戶端可以使用此帳戶。留空表示無限制。",
+      "customLabel": "自訂用戶端模式",
+      "customPlaceholder": "輸入自訂模式（如：'xcode', 'my-ide'）"
     }
   },
   "deleteKeyConfirm": {
