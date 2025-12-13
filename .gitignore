@@ -75,3 +75,12 @@ TRANSLATIONS_CHECKLIST.md
 # docs-site submodule build artifacts
 docs-site/.next/
 docs-site/node_modules/
+
+# npm lock files (using bun)
+package-lock.json
+
+# cache files
+public/cache/
+
+# Claude workflow files
+.github/workflows/claude-*.yml
