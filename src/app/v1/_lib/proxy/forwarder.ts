@@ -26,6 +26,7 @@ import { GEMINI_PROTOCOL } from "../gemini/protocol";
 import { HeaderProcessor } from "../headers";
 import { buildProxyUrl } from "../url";
 import {
+  buildRequestDetails,
   categorizeErrorAsync,
   EmptyResponseError,
   ErrorCategory,
@@ -435,6 +436,7 @@ export class ProxyForwarder {
                   errorCode: "CLIENT_ABORT",
                   errorStack: lastError.stack?.split("\n").slice(0, 3).join("\n"),
                 },
+                request: buildRequestDetails(session),
               },
             });
 
@@ -476,6 +478,7 @@ export class ProxyForwarder {
                   upstreamParsed: proxyError.upstreamError?.parsed,
                 },
                 clientError: proxyError.getDetailedErrorMessage(),
+                request: buildRequestDetails(session),
               },
             });
 
@@ -515,6 +518,7 @@ export class ProxyForwarder {
                   errorSyscall: err.syscall,
                   errorStack: err.stack?.split("\n").slice(0, 3).join("\n"),
                 },
+                request: buildRequestDetails(session),
               },
             });
 
@@ -598,6 +602,7 @@ export class ProxyForwarder {
                   upstreamBody: proxyError.upstreamError?.body,
                   upstreamParsed: proxyError.upstreamError?.parsed,
                 },
+                request: buildRequestDetails(session),
               },
             });
 
@@ -643,6 +648,7 @@ export class ProxyForwarder {
                     statusCode: 520,
                     statusText: `Empty response: ${emptyError.reason}`,
                   },
+                  request: buildRequestDetails(session),
                 },
               });
 
@@ -766,6 +772,7 @@ export class ProxyForwarder {
                       upstreamParsed: proxyError.upstreamError?.parsed,
                     },
                     instructionsSource,
+                    request: buildRequestDetails(session),
                   },
                 });
 
@@ -798,6 +805,7 @@ export class ProxyForwarder {
                   upstreamBody: proxyError.upstreamError?.body,
                   upstreamParsed: proxyError.upstreamError?.parsed,
                 },
+                request: buildRequestDetails(session),
               },
             });
 

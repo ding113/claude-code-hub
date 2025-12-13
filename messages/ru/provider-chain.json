@@ -121,6 +121,12 @@
     "modelRedirectBilling": "  Модель для расчета: {model}",
     "http2Fallback": "Откат протокола HTTP/2",
     "http2ErrorType": "Тип ошибки HTTP/2: {type}",
-    "http2FallbackNote": "Прозрачный откат на HTTP/1.1, не учитывается в автомате защиты"
+    "http2FallbackNote": "Прозрачный откат на HTTP/1.1, не учитывается в автомате защиты",
+    "requestDetails": "Детали запроса (для отладки)",
+    "requestMethod": "Метод",
+    "requestUrl": "URL",
+    "requestHeaders": "Заголовки",
+    "requestBody": "Тело",
+    "requestBodyTruncated": "(обрезано)"
   }
 }

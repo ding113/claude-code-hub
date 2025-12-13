@@ -121,6 +121,12 @@
     "modelRedirectBilling": "  计费依据: {model}",
     "http2Fallback": "HTTP/2 协议回退",
     "http2ErrorType": "HTTP/2 错误类型: {type}",
-    "http2FallbackNote": "已透明回退到 HTTP/1.1，不计入熔断器"
+    "http2FallbackNote": "已透明回退到 HTTP/1.1，不计入熔断器",
+    "requestDetails": "请求详情（用于排查问题）",
+    "requestMethod": "请求方法",
+    "requestUrl": "请求 URL",
+    "requestHeaders": "请求头",
+    "requestBody": "请求体",
+    "requestBodyTruncated": "（已截断）"
   }
 }

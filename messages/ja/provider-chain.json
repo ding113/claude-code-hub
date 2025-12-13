@@ -121,6 +121,12 @@
     "modelRedirectBilling": "  課金モデル: {model}",
     "http2Fallback": "HTTP/2 プロトコルフォールバック",
     "http2ErrorType": "HTTP/2 エラータイプ: {type}",
-    "http2FallbackNote": "HTTP/1.1 に透過的にフォールバック、サーキットブレーカーにカウントされません"
+    "http2FallbackNote": "HTTP/1.1 に透過的にフォールバック、サーキットブレーカーにカウントされません",
+    "requestDetails": "リクエスト詳細（デバッグ用）",
+    "requestMethod": "メソッド",
+    "requestUrl": "URL",
+    "requestHeaders": "ヘッダー",
+    "requestBody": "ボディ",
+    "requestBodyTruncated": "（切り捨て）"
   }
 }

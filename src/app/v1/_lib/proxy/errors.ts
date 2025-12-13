@@ -8,6 +8,8 @@
  */
 import { type ErrorDetectionResult, errorRuleDetector } from "@/lib/error-rule-detector";
 import type { ErrorOverrideResponse } from "@/repository/error-rules";
+import type { ProviderChainItem } from "@/types/message";
+import type { ProxySession } from "./session";
 
 export class ProxyError extends Error {
   constructor(
@@ -856,4 +858,232 @@ export function isHttp2Error(error: Error): boolean {
     .toUpperCase();
 
   return HTTP2_ERROR_PATTERNS.some((pattern) => errorString.includes(pattern.toUpperCase()));
+}
+
+const SENSITIVE_HEADERS = new Set([
+  "authorization",
+  "proxy-authorization", // 代理认证
+  "x-api-key",
+  "api-key",
+  "anthropic-api-key",
+  "x-goog-api-key",
+  "x-auth-token", // 通用认证令牌
+  "cookie",
+  "set-cookie",
+]);
+
+const SENSITIVE_URL_PARAMS = new Set([
+  "key",
+  "api_key",
+  "api-key", // 连字符形式
+  "apikey",
+  "apiKey", // 驼峰形式
+  "token",
+  "access_token",
+  "auth_token", // 认证令牌
+  "secret",
+  "client_secret", // OAuth client secret
+  "password", // 密码参数
+]);
+
+const REQUEST_BODY_MAX_LENGTH = 2000;
+
+/** 敏感值遮罩：保留前缀长度 */
+const MASK_PREFIX_LENGTH = 4;
+/** 敏感值遮罩：保留后缀长度 */
+const MASK_SUFFIX_LENGTH = 4;
+/** 敏感值遮罩：最小长度阈值（低于此值完全遮罩） */
+const MASK_MIN_LENGTH = 8;
+
+/**
+ * 遮罩敏感值
+ *
+ * @param value - 原始敏感值
+ * @returns 遮罩后的值（短于 8 字符返回 [REDACTED]，否则保留前后 4 字符）
+ */
+function maskSensitiveValue(value: string): string {
+  const trimmed = value.trim();
+
+  if (trimmed.length <= MASK_MIN_LENGTH) {
+    return "[REDACTED]";
+  }
+
+  return `${trimmed.slice(0, MASK_PREFIX_LENGTH)}******${trimmed.slice(-MASK_SUFFIX_LENGTH)}`;
+}
+
+/**
+ * 遮罩 Authorization 头部值
+ *
+ * 特殊处理 Bearer token，保留 "Bearer " 前缀便于识别认证类型
+ *
+ * @param value - 原始 Authorization 值
+ * @returns 遮罩后的值
+ */
+function maskAuthorizationValue(value: string): string {
+  const trimmed = value.trim();
+
+  // Bearer token 保留前缀
+  const bearerMatch = trimmed.match(/^Bearer\s+(.+)$/i);
+  if (bearerMatch) {
+    const token = bearerMatch[1]?.trim() ?? "";
+    return `Bearer ${maskSensitiveValue(token)}`;
+  }
+
+  // Basic 认证完全隐藏（Base64 解码后包含用户名密码）
+  const basicMatch = trimmed.match(/^Basic\s+(.+)$/i);
+  if (basicMatch) {
+    return "Basic [REDACTED]";
+  }
+
+  return maskSensitiveValue(trimmed);
+}
+
+/**
+ * 脱敏请求头中的敏感信息
+ *
+ * 支持 Headers 对象或已序列化的字符串格式。
+ * 会遮罩 authorization、x-api-key 等敏感头部的值。
+ *
+ * @param headers - Web API Headers 对象或已格式化的请求头字符串
+ * @returns 脱敏后的请求头字符串（每行格式: "header-name: value"）
+ */
+export function sanitizeHeaders(headers: Headers | string): string {
+  if (headers instanceof Headers) {
+    const collected: string[] = [];
+    headers.forEach((value, key) => {
+      const lowerKey = key.toLowerCase();
+      if (SENSITIVE_HEADERS.has(lowerKey)) {
+        const maskedValue =
+          lowerKey === "authorization" ? maskAuthorizationValue(value) : maskSensitiveValue(value);
+        collected.push(`${key}: ${maskedValue}`);
+        return;
+      }
+
+      collected.push(`${key}: ${value}`);
+    });
+
+    return collected.length > 0 ? collected.join("\n") : "(empty)";
+  }
+
+  const trimmed = headers.trim();
+  if (!trimmed) return "(empty)";
+  if (trimmed === "(empty)") return "(empty)";
+
+  const lines = headers.split(/\r?\n/);
+  const sanitizedLines = lines.map((line) => {
+    const colonIndex = line.indexOf(":");
+    if (colonIndex === -1) return line;
+
+    const name = line.slice(0, colonIndex).trim();
+    const value = line.slice(colonIndex + 1).trim();
+    if (!name) return line;
+
+    const lowerName = name.toLowerCase();
+    if (!SENSITIVE_HEADERS.has(lowerName)) return line;
+
+    const maskedValue =
+      lowerName === "authorization" ? maskAuthorizationValue(value) : maskSensitiveValue(value);
+    return `${name}: ${maskedValue}`;
+  });
+
+  return sanitizedLines.join("\n");
+}
+
+/**
+ * 脱敏 URL 中的敏感查询参数
+ *
+ * 敏感参数（如 api_key、token 等）的值会被替换为 [REDACTED]
+ *
+ * @param url - URL 对象或字符串
+ * @returns 脱敏后的 URL 字符串
+ */
+export function sanitizeUrl(url: string | URL): string {
+  // 防御性处理空值
+  if (!url) {
+    return "(empty url)";
+  }
+
+  if (typeof url === "string" && !url.trim()) {
+    return "(empty url)";
+  }
+
+  let parsedUrl: URL;
+  let isRelative = false;
+
+  if (url instanceof URL) {
+    parsedUrl = new URL(url.href);
+  } else {
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      // 兼容相对路径（仅用于容错，正常情况下 ProxySession.requestUrl 是绝对 URL）
+      isRelative = true;
+      parsedUrl = new URL(url, "http://localhost");
+    }
+  }
+
+  const originalParams = new URLSearchParams(parsedUrl.search);
+  const queryParts: string[] = [];
+  for (const [key, value] of originalParams) {
+    const encodedKey = encodeURIComponent(key);
+    if (SENSITIVE_URL_PARAMS.has(key.toLowerCase())) {
+      queryParts.push(`${encodedKey}=[REDACTED]`);
+      continue;
+    }
+    queryParts.push(`${encodedKey}=${encodeURIComponent(value)}`);
+  }
+
+  const search = queryParts.length > 0 ? `?${queryParts.join("&")}` : "";
+
+  if (isRelative) {
+    return `${parsedUrl.pathname}${search}${parsedUrl.hash}`;
+  }
+
+  return `${parsedUrl.origin}${parsedUrl.pathname}${search}${parsedUrl.hash}`;
+}
+
+/**
+ * 截断请求体
+ *
+ * 限制请求体长度为 2000 字符，防止决策链数据过大
+ *
+ * @param body - 请求体字符串（建议使用 session.request.log 优化后的格式）
+ * @returns 截断结果对象，包含截断后的 body 和 truncated 标记
+ */
+export function truncateRequestBody(body: string | null | undefined): {
+  body: string;
+  truncated: boolean;
+} {
+  // 防御性处理空值
+  if (body === null || body === undefined || body === "") {
+    return { body: "(no body)", truncated: false };
+  }
+
+  if (body.length <= REQUEST_BODY_MAX_LENGTH) {
+    return { body, truncated: false };
+  }
+
+  return { body: body.slice(0, REQUEST_BODY_MAX_LENGTH), truncated: true };
+}
+
+/**
+ * 构建请求详情（用于 errorDetails.request）
+ *
+ * 从 ProxySession 提取请求信息，自动进行脱敏和截断处理
+ *
+ * @param session - 代理会话对象
+ * @returns 脱敏和截断后的请求详情
+ */
+export function buildRequestDetails(
+  session: ProxySession
+): NonNullable<ProviderChainItem["errorDetails"]>["request"] {
+  const { body, truncated } = truncateRequestBody(session.request.log);
+
+  return {
+    url: sanitizeUrl(session.requestUrl),
+    method: session.method,
+    headers: sanitizeHeaders(session.headerLog),
+    body,
+    bodyTruncated: truncated,
+  };
 }

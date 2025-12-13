@@ -88,6 +88,15 @@ export interface ProviderChainItem {
 
     // 客户端输入错误（不可重试）
     clientError?: string; // 详细的客户端错误消息（包含匹配的白名单模式）
+
+    // 新增：请求详情（用于问题排查）
+    request?: {
+      url: string; // 完整请求 URL（已脱敏查询参数中的 key）
+      method: string; // HTTP 方法
+      headers: string; // 请求头（已脱敏敏感信息）
+      body?: string; // 请求体（优化格式，已截断）
+      bodyTruncated?: boolean; // 标记请求体是否被截断
+    };
   };
 
   // === 决策上下文（完整记录） ===
