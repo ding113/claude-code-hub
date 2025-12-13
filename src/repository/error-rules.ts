@@ -395,6 +395,15 @@ const DEFAULT_ERROR_RULES = [
     priority: 87,
   },
   {
+    pattern: "model is required",
+    category: "model_error",
+    description: "Model parameter is required but missing",
+    matchType: "contains" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 86,
+  },
+  {
     pattern: "模型名称.*为空|模型名称不能为空|未指定模型",
     category: "model_error",
     description: "Model name is empty or not specified (Chinese)",
