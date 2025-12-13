@@ -40,6 +40,10 @@ export const users = pgTable('users', {
   isEnabled: boolean('is_enabled').notNull().default(true),
   expiresAt: timestamp('expires_at', { withTimezone: true }),
 
+  // Allowed clients (CLI/IDE restrictions)
+  // Empty array = no restrictions, non-empty = only listed patterns allowed
+  allowedClients: jsonb('allowed_clients').$type<string[]>().default([]),
+
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),

@@ -21,6 +21,7 @@ export async function createUser(userData: CreateUserData): Promise<User> {
     limitConcurrentSessions: userData.limitConcurrentSessions,
     isEnabled: userData.isEnabled ?? true,
     expiresAt: userData.expiresAt ?? null,
+    allowedClients: userData.allowedClients ?? [],
   };
 
   const [user] = await db.insert(users).values(dbData).returning({
@@ -42,6 +43,7 @@ export async function createUser(userData: CreateUserData): Promise<User> {
     limitConcurrentSessions: users.limitConcurrentSessions,
     isEnabled: users.isEnabled,
     expiresAt: users.expiresAt,
+    allowedClients: users.allowedClients,
   });
 
   return toUser(user);
@@ -68,6 +70,7 @@ export async function findUserList(limit: number = 50, offset: number = 0): Prom
       limitConcurrentSessions: users.limitConcurrentSessions,
       isEnabled: users.isEnabled,
       expiresAt: users.expiresAt,
+      allowedClients: users.allowedClients,
     })
     .from(users)
     .where(isNull(users.deletedAt))
@@ -99,6 +102,7 @@ export async function findUserById(id: number): Promise<User | null> {
       limitConcurrentSessions: users.limitConcurrentSessions,
       isEnabled: users.isEnabled,
       expiresAt: users.expiresAt,
+      allowedClients: users.allowedClients,
     })
     .from(users)
     .where(and(eq(users.id, id), isNull(users.deletedAt)));
@@ -128,6 +132,7 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
     limitConcurrentSessions?: number;
     isEnabled?: boolean;
     expiresAt?: Date | null;
+    allowedClients?: string[];
   }
 
   const dbData: UpdateDbData = {
@@ -151,6 +156,7 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
     dbData.limitConcurrentSessions = userData.limitConcurrentSessions;
   if (userData.isEnabled !== undefined) dbData.isEnabled = userData.isEnabled;
   if (userData.expiresAt !== undefined) dbData.expiresAt = userData.expiresAt;
+  if (userData.allowedClients !== undefined) dbData.allowedClients = userData.allowedClients;
 
   const [user] = await db
     .update(users)
@@ -175,6 +181,7 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
       limitConcurrentSessions: users.limitConcurrentSessions,
       isEnabled: users.isEnabled,
       expiresAt: users.expiresAt,
+      allowedClients: users.allowedClients,
     });
 
   if (!user) return null;

@@ -605,6 +605,10 @@
       "showTooltip": "Show full key",
       "hideTooltip": "Hide key",
       "closeButton": "Close"
+    },
+    "allowedClients": {
+      "label": "Clients allowed",
+      "noRestrictions": "Clients allowed: no restrictions"
     }
   },
   "keyLimitUsage": {
@@ -779,6 +783,12 @@
       "label": "Expiration Date",
       "placeholder": "Leave empty for never expires",
       "description": "User will be automatically disabled after expiration"
+    },
+    "allowedClients": {
+      "label": "Allowed Clients",
+      "description": "Restrict which CLI/IDE clients can use this account. Leave empty for no restrictions.",
+      "customLabel": "Custom Client Patterns",
+      "customPlaceholder": "Enter custom pattern (e.g., 'xcode', 'my-ide')"
     }
   },
   "deleteKeyConfirm": {

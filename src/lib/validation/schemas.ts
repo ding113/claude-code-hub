@@ -120,6 +120,12 @@ export const CreateUserSchema = z.object({
         }
       })
   ),
+  // Allowed clients (CLI/IDE restrictions)
+  allowedClients: z
+    .array(z.string().max(64, "客户端模式长度不能超过64个字符"))
+    .max(50, "客户端模式数量不能超过50个")
+    .optional()
+    .default([]),
 });
 
 /**
@@ -222,6 +228,11 @@ export const UpdateUserSchema = z.object({
         }
       })
   ),
+  // Allowed clients (CLI/IDE restrictions)
+  allowedClients: z
+    .array(z.string().max(64, "客户端模式长度不能超过64个字符"))
+    .max(50, "客户端模式数量不能超过50个")
+    .optional(),
 });
 
 /**
