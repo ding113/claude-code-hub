@@ -4,6 +4,46 @@
 
 ---
 
+## [v0.3.30](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.30) - 2025-12-13
+
+### 新增
+
+- 供应商支持 1M 上下文窗口配置，包含分层定价和代理管道集成 (#337)
+- 移动端响应式导航汉堡菜单，改进小屏幕设备体验 [@Hwwwww-dev](https://github.com/Hwwwww-dev)
+- 供应商独立管理页面 [@Hwwwww-dev](https://github.com/Hwwwww-dev)
+- 系统设置导航悬浮下拉菜单 [@Hwwwww-dev](https://github.com/Hwwwww-dev)
+- Session 请求列表支持排序选项 [@Hwwwww-dev](https://github.com/Hwwwww-dev)
+- 错误时间线支持查看请求详情，便于调试
+- Gemini 200K token 分层定价支持
+- Long Context 定价计划错误规则
+- 部署脚本增强：支持 CLI 参数和 Caddy HTTPS (#316)
+- my-usage 页面新增每日用户配额统计、缓存列和自动刷新功能 (#316)
+
+### 优化
+
+- 日志页面性能大幅优化：使用批量查询、缓存和可见性轮询 (#337)
+- 语言切换器简化为仅图标按钮 [@Hwwwww-dev](https://github.com/Hwwwww-dev)
+
+### 修复
+
+- 修复 Gemini 缓存 token 重复计费问题 (#338) [@sususu98](https://github.com/sususu98)
+- 支持 Gemini thoughtsTokenCount 计费 [@sususu98](https://github.com/sususu98)
+- 修复供应商分组过滤逻辑，隐藏无关分组的供应商 [@Hwwwww-dev](https://github.com/Hwwwww-dev)
+- 修复供应商页面和可用性页面的响应式布局问题 [@Hwwwww-dev](https://github.com/Hwwwww-dev)
+- 修复 PostgreSQL 返回字符串值时调用 toFixed 的 TypeError
+- 允许普通用户访问 getUsers API (#300)
+- 修复用户密钥详情中 React 渲染杂散 "0" 的问题
+- 日志翻页离开第 1 页时自动暂停刷新
+- 安全性改进：在客户端错误响应中隐藏供应商名称
+- 新增 "model is required" 预设错误规则
+
+### 其他
+
+- 更新使用文档：Codex 推荐模型更新为 gpt-5.2 with xhigh reasoning
+- 更新 LiteLLM 模型价格数据
+
+---
+
 ## [v0.3.29](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.29) - 2025-12-12
 
 ### 其他
