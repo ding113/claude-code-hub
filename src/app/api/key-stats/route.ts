@@ -33,23 +33,29 @@ export async function GET(request: NextRequest) {
     // Validate key and get user in one query
     const result = await validateApiKeyAndGetUser(apiKey);
     if (!result) {
-      return NextResponse.json(
-        { error: "Invalid or expired API key" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Invalid or expired API key" }, { status: 401 });
     }
 
     const { key, user } = result;
 
     // Get key statistics (model stats, usage counts, etc.)
     const allKeyStats = await findKeysWithStatistics(user.id);
-    const thisKeyStats = allKeyStats.find(stat => stat.keyId === key.id);
+    const thisKeyStats = allKeyStats.find((stat) => stat.keyId === key.id);
 
     // Get user's total cost today (across all keys)
     const userTotalCostToday = await sumUserCostToday(user.id);
 
     // Get key's current usage for different time windows and user usage
-    const [cost5h, costDaily, costWeekly, costMonthly, concurrentSessions, userCost5h, userCostWeekly, userCostMonthly] = await Promise.all([
+    const [
+      cost5h,
+      costDaily,
+      costWeekly,
+      costMonthly,
+      concurrentSessions,
+      userCost5h,
+      userCostWeekly,
+      userCostMonthly,
+    ] = await Promise.all([
       RateLimitService.getCurrentCost(key.id, "key", "5h"),
       RateLimitService.getCurrentCost(
         key.id,
@@ -164,9 +170,6 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     logger.error("Key stats API error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
