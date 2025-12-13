@@ -1200,8 +1200,13 @@ function extractUsageMetrics(value: unknown): UsageMetrics | null {
   }
 
   // Gemini support
+  // 注意：promptTokenCount 包含 cachedContentTokenCount，需要减去以避免重复计费
+  // 计费公式：input = (promptTokenCount - cachedContentTokenCount) × input_price
+  //          cache = cachedContentTokenCount × cache_price
   if (typeof usage.promptTokenCount === "number") {
-    result.input_tokens = usage.promptTokenCount;
+    const cachedTokens =
+      typeof usage.cachedContentTokenCount === "number" ? usage.cachedContentTokenCount : 0;
+    result.input_tokens = Math.max(usage.promptTokenCount - cachedTokens, 0);
     hasAny = true;
   }
   if (typeof usage.candidatesTokenCount === "number") {
