@@ -62,6 +62,40 @@ function calculateTieredCost(
 }
 
 /**
+ * 使用独立价格字段计算分层费用（适用于 Gemini 等模型）
+ * @param tokens - token 数量
+ * @param baseCostPerToken - 基础单价（<=200K 部分）
+ * @param premiumCostPerToken - 溢价单价（>200K 部分）
+ * @param threshold - 阈值（默认 200K）
+ * @returns 费用
+ */
+function calculateTieredCostWithSeparatePrices(
+  tokens: number,
+  baseCostPerToken: number,
+  premiumCostPerToken: number,
+  threshold: number = CONTEXT_1M_TOKEN_THRESHOLD
+): Decimal {
+  if (tokens <= 0) {
+    return new Decimal(0);
+  }
+
+  const baseCostDecimal = new Decimal(baseCostPerToken);
+  const premiumCostDecimal = new Decimal(premiumCostPerToken);
+
+  if (tokens <= threshold) {
+    return new Decimal(tokens).mul(baseCostDecimal);
+  }
+
+  // 阈值内的 token 按基础费率计算
+  const baseCost = new Decimal(threshold).mul(baseCostDecimal);
+  // 超出阈值的 token 按溢价费率计算
+  const premiumTokens = tokens - threshold;
+  const premiumCost = new Decimal(premiumTokens).mul(premiumCostDecimal);
+
+  return baseCost.add(premiumCost);
+}
+
+/**
  * 计算单次请求的费用
  * @param usage - token使用量
  * @param priceData - 模型价格数据
@@ -115,8 +149,13 @@ export function calculateRequestCost(
     }
   }
 
-  // 计算input和output费用，1M上下文时使用阶梯定价
+  // 检查是否有 200K 分层价格（Gemini 等模型）
+  const inputAbove200k = priceData.input_cost_per_token_above_200k_tokens;
+  const outputAbove200k = priceData.output_cost_per_token_above_200k_tokens;
+
+  // 计算 input 费用：优先级 context1mApplied > 200K分层 > 普通
   if (context1mApplied && inputCostPerToken != null && usage.input_tokens != null) {
+    // Claude 1M context: 使用倍数计算
     segments.push(
       calculateTieredCost(
         usage.input_tokens,
@@ -124,11 +163,19 @@ export function calculateRequestCost(
         CONTEXT_1M_INPUT_PREMIUM_MULTIPLIER
       )
     );
+  } else if (inputAbove200k != null && inputCostPerToken != null && usage.input_tokens != null) {
+    // Gemini 等: 使用独立价格字段
+    segments.push(
+      calculateTieredCostWithSeparatePrices(usage.input_tokens, inputCostPerToken, inputAbove200k)
+    );
   } else {
+    // 普通计算
     segments.push(multiplyCost(usage.input_tokens, inputCostPerToken));
   }
 
+  // 计算 output 费用：优先级 context1mApplied > 200K分层 > 普通
   if (context1mApplied && outputCostPerToken != null && usage.output_tokens != null) {
+    // Claude 1M context: 使用倍数计算
     segments.push(
       calculateTieredCost(
         usage.output_tokens,
@@ -136,14 +183,81 @@ export function calculateRequestCost(
         CONTEXT_1M_OUTPUT_PREMIUM_MULTIPLIER
       )
     );
+  } else if (outputAbove200k != null && outputCostPerToken != null && usage.output_tokens != null) {
+    // Gemini 等: 使用独立价格字段
+    segments.push(
+      calculateTieredCostWithSeparatePrices(
+        usage.output_tokens,
+        outputCostPerToken,
+        outputAbove200k
+      )
+    );
   } else {
+    // 普通计算
     segments.push(multiplyCost(usage.output_tokens, outputCostPerToken));
   }
 
-  // 缓存相关费用（不受1M上下文阶梯定价影响）
-  segments.push(multiplyCost(cache5mTokens, cacheCreation5mCost));
-  segments.push(multiplyCost(cache1hTokens, cacheCreation1hCost));
-  segments.push(multiplyCost(usage.cache_read_input_tokens, cacheReadCost));
+  // 缓存相关费用
+  // 检查是否有 200K 分层的缓存价格
+  // 注意：只有当价格表中的原始基础价格存在时才启用分层计费，避免派生价格与分层价格混用导致误计费
+  const cacheCreationAbove200k = priceData.cache_creation_input_token_cost_above_200k_tokens;
+  const cacheReadAbove200k = priceData.cache_read_input_token_cost_above_200k_tokens;
+  const hasRealCacheCreationBase = priceData.cache_creation_input_token_cost != null;
+  const hasRealCacheReadBase = priceData.cache_read_input_token_cost != null;
+
+  // 缓存创建费用（5分钟 TTL）
+  if (
+    hasRealCacheCreationBase &&
+    cacheCreationAbove200k != null &&
+    cacheCreation5mCost != null &&
+    cache5mTokens != null
+  ) {
+    segments.push(
+      calculateTieredCostWithSeparatePrices(
+        cache5mTokens,
+        cacheCreation5mCost,
+        cacheCreationAbove200k
+      )
+    );
+  } else {
+    segments.push(multiplyCost(cache5mTokens, cacheCreation5mCost));
+  }
+
+  // 缓存创建费用（1小时 TTL）
+  if (
+    hasRealCacheCreationBase &&
+    cacheCreationAbove200k != null &&
+    cacheCreation1hCost != null &&
+    cache1hTokens != null
+  ) {
+    segments.push(
+      calculateTieredCostWithSeparatePrices(
+        cache1hTokens,
+        cacheCreation1hCost,
+        cacheCreationAbove200k
+      )
+    );
+  } else {
+    segments.push(multiplyCost(cache1hTokens, cacheCreation1hCost));
+  }
+
+  // 缓存读取费用
+  if (
+    hasRealCacheReadBase &&
+    cacheReadAbove200k != null &&
+    cacheReadCost != null &&
+    usage.cache_read_input_tokens != null
+  ) {
+    segments.push(
+      calculateTieredCostWithSeparatePrices(
+        usage.cache_read_input_tokens,
+        cacheReadCost,
+        cacheReadAbove200k
+      )
+    );
+  } else {
+    segments.push(multiplyCost(usage.cache_read_input_tokens, cacheReadCost));
+  }
 
   const total = segments.reduce((acc, segment) => acc.plus(segment), new Decimal(0));
 
