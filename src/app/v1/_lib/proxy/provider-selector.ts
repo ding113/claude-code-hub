@@ -37,6 +37,29 @@ async function getVerboseProviderErrorCached(): Promise<boolean> {
 }
 
 /**
+ * 检查供应商分组是否匹配用户分组（支持多分组逗号分隔）
+ *
+ * @param providerGroupTag - 供应商的 groupTag 字段（可为 null 或逗号分隔的多标签）
+ * @param userGroups - 用户/密钥的分组配置（逗号分隔的多分组）
+ * @returns 是否存在交集（true = 匹配）
+ */
+function checkProviderGroupMatch(providerGroupTag: string | null, userGroups: string): boolean {
+  // 供应商无分组标签时不匹配（严格分组隔离）
+  if (!providerGroupTag) return false;
+
+  const groups = userGroups
+    .split(",")
+    .map((g) => g.trim())
+    .filter(Boolean);
+  const providerTags = providerGroupTag
+    .split(",")
+    .map((t) => t.trim())
+    .filter(Boolean);
+
+  return providerTags.some((tag) => groups.includes(tag));
+}
+
+/**
  * 检查供应商是否支持指定模型（用于调度器匹配）
  *
  * 核心逻辑：
@@ -423,8 +446,13 @@ export class ProxyProviderResolver {
       excludedCount: excludedProviders.length,
     };
 
-    if (session.getLastSelectionContext()?.filteredProviders) {
-      details.filteredProviders = session.getLastSelectionContext()?.filteredProviders;
+    const filteredProviders = session.getLastSelectionContext()?.filteredProviders;
+    if (filteredProviders) {
+      // C-001: 脱敏供应商名称，仅暴露 id 和 reason
+      details.filteredProviders = filteredProviders.map((p) => ({
+        id: p.id,
+        reason: p.reason,
+      }));
     }
 
     return ProxyResponses.buildError(status, message, errorType, details);
@@ -501,51 +529,35 @@ export class ProxyProviderResolver {
     const userGroup = session?.authState?.user?.providerGroup;
     const effectiveGroup = keyGroup || userGroup;
     if (effectiveGroup) {
-      // User/key has group restriction, support multiple groups (comma-separated)
-      const groups = effectiveGroup
-        .split(",")
-        .map((g) => g.trim())
-        .filter(Boolean);
-
-      // Check if provider's groupTag intersects with the effective groups
+      // Use helper function for core group matching logic
       // Fix #190: Support provider multi-tags (e.g. "cli,chat") matching user single-tag (e.g. "cli")
       // Fix #281: Reject providers without groupTag when user/key has group restrictions
-      if (!provider.groupTag) {
-        // Provider has no group tag but user/key requires group - reject reuse
-        logger.warn(
-          "ProviderSelector: Session provider has no group tag but user/key requires group",
-          {
+      if (!checkProviderGroupMatch(provider.groupTag, effectiveGroup)) {
+        // Detailed logging based on specific failure reason
+        if (!provider.groupTag) {
+          logger.warn(
+            "ProviderSelector: Session provider has no group tag but user/key requires group",
+            {
+              sessionId: session.sessionId,
+              providerId: provider.id,
+              providerName: provider.name,
+              effectiveGroups: effectiveGroup,
+              keyGroupOverride: !!keyGroup,
+              message:
+                "Strict group isolation: rejecting untagged provider for group-scoped user/key",
+            }
+          );
+        } else {
+          logger.warn("ProviderSelector: Session provider not in user groups", {
             sessionId: session.sessionId,
             providerId: provider.id,
             providerName: provider.name,
-            effectiveGroups: groups.join(","),
+            providerTags: provider.groupTag,
+            effectiveGroups: effectiveGroup,
             keyGroupOverride: !!keyGroup,
-            message:
-              "Strict group isolation: rejecting untagged provider for group-scoped user/key",
-          }
-        );
-        return null; // Reject reuse, re-select
-      }
-
-      // Split provider's groupTag into tag array
-      const providerTags = provider.groupTag
-        .split(",")
-        .map((tag) => tag.trim())
-        .filter(Boolean);
-
-      // Check for intersection
-      const hasIntersection = providerTags.some((tag) => groups.includes(tag));
-
-      if (!hasIntersection) {
-        logger.warn("ProviderSelector: Session provider not in user groups", {
-          sessionId: session.sessionId,
-          providerId: provider.id,
-          providerName: provider.name,
-          providerTags: providerTags.join(","),
-          effectiveGroups: groups.join(","),
-          keyGroupOverride: !!keyGroup,
-          message: "Strict group isolation: rejecting cross-group session reuse",
-        });
+            message: "Strict group isolation: rejecting cross-group session reuse",
+          });
+        }
         return null; // Reject reuse, re-select
       }
     }
@@ -595,26 +607,15 @@ export class ProxyProviderResolver {
     })();
 
     if (effectiveGroupPick) {
-      const groups = effectiveGroupPick
-        .split(",")
-        .map((g) => g.trim())
-        .filter(Boolean);
-
-      const groupFiltered = allProviders.filter((p) => {
-        if (!p.groupTag) return false;
-        const providerTags = p.groupTag
-          .split(",")
-          .map((tag) => tag.trim())
-          .filter(Boolean);
-        return providerTags.some((tag) => groups.includes(tag));
-      });
+      const groupFiltered = allProviders.filter((p) =>
+        checkProviderGroupMatch(p.groupTag, effectiveGroupPick)
+      );
 
       if (groupFiltered.length > 0) {
         visibleProviders = groupFiltered;
         logger.debug("ProviderSelector: Group pre-filter applied (silent)", {
           effectiveGroup: effectiveGroupPick,
           keyGroupOverride: !!keyGroupPick,
-          groups,
           originalCount: allProviders.length,
           filteredCount: groupFiltered.length,
         });
@@ -622,7 +623,6 @@ export class ProxyProviderResolver {
         // 严格分组隔离：用户分组内没有供应商
         logger.error("ProviderSelector: User group has no providers", {
           effectiveGroup: effectiveGroupPick,
-          groups,
         });
         return {
           provider: null,

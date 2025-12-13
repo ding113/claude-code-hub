@@ -21,6 +21,20 @@ import {
 import type { BillingModelSource } from "@/types/system-config";
 import type { ActionResult } from "./types";
 
+export interface MyUsageMetadata {
+  keyName: string;
+  keyProviderGroup: string | null;
+  keyExpiresAt: Date | null;
+  keyIsEnabled: boolean;
+  userName: string;
+  userProviderGroup: string | null;
+  userExpiresAt: Date | null;
+  userIsEnabled: boolean;
+  dailyResetMode: "fixed" | "rolling";
+  dailyResetTime: string;
+  currencyCode: CurrencyCode;
+}
+
 export interface MyUsageQuota {
   keyLimit5hUsd: number | null;
   keyLimitDailyUsd: number | null;
@@ -145,6 +159,36 @@ async function sumUserCost(userId: number, period: "5h" | "weekly" | "monthly" |
     .where(and(...conditions));
 
   return Number(row?.total ?? 0);
+}
+
+export async function getMyUsageMetadata(): Promise<ActionResult<MyUsageMetadata>> {
+  try {
+    const session = await getSession({ allowReadOnlyAccess: true });
+    if (!session) return { ok: false, error: "Unauthorized" };
+
+    const settings = await getSystemSettings();
+    const key = session.key;
+    const user = session.user;
+
+    const metadata: MyUsageMetadata = {
+      keyName: key.name,
+      keyProviderGroup: key.providerGroup ?? null,
+      keyExpiresAt: key.expiresAt ?? null,
+      keyIsEnabled: key.isEnabled ?? true,
+      userName: user.name,
+      userProviderGroup: user.providerGroup ?? null,
+      userExpiresAt: user.expiresAt ?? null,
+      userIsEnabled: user.isEnabled ?? true,
+      dailyResetMode: key.dailyResetMode ?? "fixed",
+      dailyResetTime: key.dailyResetTime ?? "00:00",
+      currencyCode: settings.currencyDisplay,
+    };
+
+    return { ok: true, data: metadata };
+  } catch (error) {
+    logger.error("[my-usage] getMyUsageMetadata failed", error);
+    return { ok: false, error: "Failed to get metadata" };
+  }
 }
 
 export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {

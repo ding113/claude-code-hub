@@ -447,6 +447,7 @@
   },
   "all": "Все",
   "nav": {
+    "mobileMenuTitle": "Меню навигации",
     "dashboard": "Панель",
     "usageLogs": "Журналы",
     "leaderboard": "Лидеры",

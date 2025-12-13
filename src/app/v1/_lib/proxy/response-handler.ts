@@ -318,11 +318,11 @@ export class ProxyResponseHandler {
           // 计算成本（复用相同逻辑）
           let costUsdStr: string | undefined;
           if (session.request.model) {
-            const priceData = await findLatestPriceByModel(session.request.model);
-            if (priceData?.priceData) {
+            const priceData = await session.getCachedPriceData();
+            if (priceData) {
               const cost = calculateRequestCost(
                 usageMetrics,
-                priceData.priceData,
+                priceData,
                 provider.costMultiplier,
                 session.getContext1mApplied()
               );
@@ -872,11 +872,11 @@ export class ProxyResponseHandler {
         if (session.sessionId && usageForCost) {
           let costUsdStr: string | undefined;
           if (session.request.model) {
-            const priceData = await findLatestPriceByModel(session.request.model);
-            if (priceData?.priceData) {
+            const priceData = await session.getCachedPriceData();
+            if (priceData) {
               const cost = calculateRequestCost(
                 usageForCost,
-                priceData.priceData,
+                priceData,
                 provider.costMultiplier,
                 session.getContext1mApplied()
               );
@@ -1675,11 +1675,11 @@ async function finalizeRequestStats(
   if (session.sessionId) {
     let costUsdStr: string | undefined;
     if (session.request.model) {
-      const priceData = await findLatestPriceByModel(session.request.model);
-      if (priceData?.priceData) {
+      const priceData = await session.getCachedPriceData();
+      if (priceData) {
         const cost = calculateRequestCost(
           normalizedUsage,
-          priceData.priceData,
+          priceData,
           provider.costMultiplier,
           session.getContext1mApplied()
         );
@@ -1735,13 +1735,13 @@ async function trackCostToRedis(session: ProxySession, usage: UsageMetrics | nul
   const modelName = session.request.model;
   if (!modelName) return;
 
-  // 计算成本（应用倍率）
-  const priceData = await findLatestPriceByModel(modelName);
-  if (!priceData?.priceData) return;
+  // 计算成本（应用倍率）- 使用 session 缓存避免重复查询
+  const priceData = await session.getCachedPriceData();
+  if (!priceData) return;
 
   const cost = calculateRequestCost(
     usage,
-    priceData.priceData,
+    priceData,
     provider.costMultiplier,
     session.getContext1mApplied()
   );

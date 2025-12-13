@@ -9,6 +9,14 @@
     "noProviderGroup": "默认",
     "inherited": "（继承）"
   },
+  "quotaDialog": {
+    "trigger": "查看配额",
+    "title": "配额使用详情",
+    "refresh": "刷新",
+    "lastUpdated": "更新于 {time}",
+    "loadFailed": "配额加载失败",
+    "close": "关闭"
+  },
   "quota": {
     "5h": "5小时额度",
     "daily": "日额度",

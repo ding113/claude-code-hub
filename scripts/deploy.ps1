@@ -511,6 +511,21 @@ LOG_LEVEL=info
     
     try {
         Set-Content -Path "$DEPLOY_DIR\.env" -Value $envContent -Encoding UTF8
+
+        # W-015: Restrict .env file permissions (equivalent to chmod 600)
+        # Remove inheritance and set owner-only access
+        $envFile = "$DEPLOY_DIR\.env"
+        $acl = Get-Acl $envFile
+        $acl.SetAccessRuleProtection($true, $false)  # Disable inheritance, don't copy existing rules
+        $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+        $accessRule = New-Object System.Security.AccessControl.FileSystemAccessRule(
+            $currentUser,
+            "FullControl",
+            "Allow"
+        )
+        $acl.SetAccessRule($accessRule)
+        Set-Acl -Path $envFile -AclObject $acl
+
         Write-ColorOutput ".env file created" -Type Success
     }
     catch {

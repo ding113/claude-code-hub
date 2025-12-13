@@ -448,6 +448,7 @@
   },
   "all": "全部",
   "nav": {
+    "mobileMenuTitle": "导航菜单",
     "dashboard": "仪表盘",
     "userManagement": "用户管理",
     "usageLogs": "使用记录",

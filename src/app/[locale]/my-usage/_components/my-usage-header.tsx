@@ -2,6 +2,7 @@
 
 import { LogOut } from "lucide-react";
 import { useTranslations } from "next-intl";
+import type { ReactNode } from "react";
 import { QuotaCountdownCompact } from "@/components/quota/quota-countdown";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ interface MyUsageHeaderProps {
   userProviderGroup?: string | null;
   keyExpiresAt?: Date | null;
   userExpiresAt?: Date | null;
+  quotaButton?: ReactNode;
 }
 
 export function MyUsageHeader({
@@ -27,6 +29,7 @@ export function MyUsageHeader({
   userProviderGroup,
   keyExpiresAt,
   userExpiresAt,
+  quotaButton,
 }: MyUsageHeaderProps) {
   const t = useTranslations("myUsage.header");
   const tExpiration = useTranslations("myUsage.expiration");
@@ -104,10 +107,13 @@ export function MyUsageHeader({
         </div>
         <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
       </div>
-      <Button variant="outline" size="sm" onClick={handleLogout} className="gap-2">
-        <LogOut className="h-4 w-4" />
-        {t("logout")}
-      </Button>
+      <div className="flex items-center gap-2">
+        {quotaButton}
+        <Button variant="outline" size="sm" onClick={handleLogout} className="gap-2">
+          <LogOut className="h-4 w-4" />
+          {t("logout")}
+        </Button>
+      </div>
     </div>
   );
 }

@@ -448,6 +448,7 @@
   },
   "all": "全部",
   "nav": {
+    "mobileMenuTitle": "導覽選單",
     "dashboard": "儀表板",
     "usageLogs": "使用記錄",
     "leaderboard": "排行榜",

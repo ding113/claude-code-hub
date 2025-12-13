@@ -448,6 +448,7 @@
   },
   "all": "All",
   "nav": {
+    "mobileMenuTitle": "Navigation Menu",
     "dashboard": "Dashboard",
     "usageLogs": "Usage Logs",
     "leaderboard": "Leaderboard",

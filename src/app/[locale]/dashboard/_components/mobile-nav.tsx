@@ -2,6 +2,7 @@
 
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { Menu } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -16,6 +17,7 @@ interface MobileNavProps {
 export function MobileNav({ items }: MobileNavProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const t = useTranslations("dashboard.nav");
 
   const getIsActive = (href: string) => {
     if (href === "/dashboard") {
@@ -38,7 +40,7 @@ export function MobileNav({ items }: MobileNavProps) {
       </SheetTrigger>
       <SheetContent side="left" className="w-72">
         <VisuallyHidden>
-          <SheetTitle>Navigation Menu</SheetTitle>
+          <SheetTitle>{t("mobileMenuTitle")}</SheetTitle>
         </VisuallyHidden>
         <nav className="flex flex-col gap-2 pt-12">
           {items.map((item) => {

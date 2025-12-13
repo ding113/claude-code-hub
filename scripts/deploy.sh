@@ -590,7 +590,10 @@ NODE_ENV=production
 TZ=Asia/Shanghai
 LOG_LEVEL=info
 EOF
-    
+
+    # W-015: 设置 .env 文件权限，防止敏感信息泄露
+    chmod 600 "$DEPLOY_DIR/.env"
+
     log_success ".env file created"
 }
 

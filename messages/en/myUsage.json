@@ -9,6 +9,14 @@
     "noProviderGroup": "Default",
     "inherited": "(inherited)"
   },
+  "quotaDialog": {
+    "trigger": "View Quota",
+    "title": "Quota Details",
+    "refresh": "Refresh",
+    "lastUpdated": "Updated at {time}",
+    "loadFailed": "Failed to load quota",
+    "close": "Close"
+  },
   "quota": {
     "5h": "5h Quota",
     "daily": "Daily Quota",

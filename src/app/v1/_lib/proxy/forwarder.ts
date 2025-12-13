@@ -893,11 +893,14 @@ export class ProxyForwarder {
     if (isAnthropicProvider) {
       const currentModel = session.getCurrentModel() || "";
       const clientRequests1m = session.clientRequestsContext1m();
-      const context1mApplied = shouldApplyContext1m(
-        provider.context1mPreference as "inherit" | "force_enable" | "disabled" | null,
-        currentModel,
-        clientRequests1m
-      );
+      // W-007: 添加类型验证，避免类型断言
+      const validPreferences = ["inherit", "force_enable", "disabled", null] as const;
+      type Context1mPref = (typeof validPreferences)[number];
+      const rawPref = provider.context1mPreference;
+      const context1mPref: Context1mPref = validPreferences.includes(rawPref as Context1mPref)
+        ? (rawPref as Context1mPref)
+        : null;
+      const context1mApplied = shouldApplyContext1m(context1mPref, currentModel, clientRequests1m);
       session.setContext1mApplied(context1mApplied);
     }
 
@@ -1509,6 +1512,8 @@ export class ProxyForwarder {
               errorCode: err.code || "HTTP2_FAILED",
               errorStack: err.stack?.split("\n").slice(0, 3).join("\n"),
             },
+            // W-011: 添加 request 字段以保持与其他错误处理一致
+            request: buildRequestDetails(session),
           },
         });
 

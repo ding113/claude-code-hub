@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import {
   getMyAvailableEndpoints,
   getMyAvailableModels,
@@ -24,7 +24,6 @@ import { UsageLogsTable } from "./usage-logs-table";
 
 interface UsageLogsSectionProps {
   initialData?: MyUsageLogsResult | null;
-  onRefresh?: () => void;
   autoRefreshSeconds?: number;
 }
 
@@ -41,7 +40,6 @@ interface Filters {
 
 export function UsageLogsSection({
   initialData = null,
-  onRefresh: _onRefresh,
   autoRefreshSeconds,
 }: UsageLogsSectionProps) {
   const t = useTranslations("myUsage.logs");
@@ -92,6 +90,57 @@ export function UsageLogsSection({
       loadLogs(true);
     }
   }, [initialData, loadLogs]);
+
+  // Auto-refresh polling (only when on page 1 to avoid disrupting history browsing)
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (!autoRefreshSeconds || autoRefreshSeconds <= 0) {
+      return;
+    }
+
+    const pollIntervalMs = autoRefreshSeconds * 1000;
+
+    const startPolling = () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+
+      intervalRef.current = setInterval(() => {
+        // Only auto-refresh when on page 1
+        if (filters.page === 1) {
+          loadLogs(false);
+        }
+      }, pollIntervalMs);
+    };
+
+    const stopPolling = () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        stopPolling();
+      } else {
+        // Refresh immediately when tab becomes visible (only if on page 1)
+        if (filters.page === 1) {
+          loadLogs(false);
+        }
+        startPolling();
+      }
+    };
+
+    startPolling();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      stopPolling();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [autoRefreshSeconds, filters.page, loadLogs]);
 
   const handleFilterChange = (changes: Partial<Filters>) => {
     setFilters((prev) => ({ ...prev, ...changes, page: 1 }));

@@ -205,13 +205,19 @@ export function calculateRequestCost(
   const hasRealCacheCreationBase = priceData.cache_creation_input_token_cost != null;
   const hasRealCacheReadBase = priceData.cache_read_input_token_cost != null;
 
-  // 缓存创建费用（5分钟 TTL）
-  if (
+  // 缓存创建费用（5分钟 TTL）：优先级 context1mApplied > 200K分层 > 普通
+  if (context1mApplied && cacheCreation5mCost != null && cache5mTokens != null) {
+    // Claude 1M context: 使用 input 倍数计算（cache creation 属于 input 类别）
+    segments.push(
+      calculateTieredCost(cache5mTokens, cacheCreation5mCost, CONTEXT_1M_INPUT_PREMIUM_MULTIPLIER)
+    );
+  } else if (
     hasRealCacheCreationBase &&
     cacheCreationAbove200k != null &&
     cacheCreation5mCost != null &&
     cache5mTokens != null
   ) {
+    // Gemini 等: 使用独立价格字段
     segments.push(
       calculateTieredCostWithSeparatePrices(
         cache5mTokens,
@@ -220,16 +226,23 @@ export function calculateRequestCost(
       )
     );
   } else {
+    // 普通计算
     segments.push(multiplyCost(cache5mTokens, cacheCreation5mCost));
   }
 
-  // 缓存创建费用（1小时 TTL）
-  if (
+  // 缓存创建费用（1小时 TTL）：优先级 context1mApplied > 200K分层 > 普通
+  if (context1mApplied && cacheCreation1hCost != null && cache1hTokens != null) {
+    // Claude 1M context: 使用 input 倍数计算（cache creation 属于 input 类别）
+    segments.push(
+      calculateTieredCost(cache1hTokens, cacheCreation1hCost, CONTEXT_1M_INPUT_PREMIUM_MULTIPLIER)
+    );
+  } else if (
     hasRealCacheCreationBase &&
     cacheCreationAbove200k != null &&
     cacheCreation1hCost != null &&
     cache1hTokens != null
   ) {
+    // Gemini 等: 使用独立价格字段
     segments.push(
       calculateTieredCostWithSeparatePrices(
         cache1hTokens,
@@ -238,6 +251,7 @@ export function calculateRequestCost(
       )
     );
   } else {
+    // 普通计算
     segments.push(multiplyCost(cache1hTokens, cacheCreation1hCost));
   }
 

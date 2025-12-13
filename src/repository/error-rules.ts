@@ -344,7 +344,7 @@ const DEFAULT_ERROR_RULES = [
     matchType: "regex" as const,
     isDefault: true,
     isEnabled: true,
-    priority: 91,
+    priority: 90,
   },
   {
     pattern: "pricing plan does not include Long Context",

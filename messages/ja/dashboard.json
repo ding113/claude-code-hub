@@ -447,6 +447,7 @@
   },
   "all": "すべて",
   "nav": {
+    "mobileMenuTitle": "ナビゲーションメニュー",
     "dashboard": "ホーム",
     "usageLogs": "使用ログ",
     "leaderboard": "ランキング",

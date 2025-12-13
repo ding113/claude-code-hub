@@ -9,6 +9,14 @@
     "noProviderGroup": "По умолчанию",
     "inherited": "(наследовано)"
   },
+  "quotaDialog": {
+    "trigger": "Лимиты",
+    "title": "Детали лимитов",
+    "refresh": "Обновить",
+    "lastUpdated": "Обновлено в {time}",
+    "loadFailed": "Не удалось загрузить лимиты",
+    "close": "Закрыть"
+  },
   "quota": {
     "5h": "Лимит 5 часов",
     "daily": "Дневной лимит",
