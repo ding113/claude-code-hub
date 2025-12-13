@@ -90,11 +90,13 @@ export function UsageLogsView({
   // 使用 ref 来存储最新的值,避免闭包陷阱
   const isPendingRef = useRef(isPending);
   const filtersRef = useRef(filters);
+  const isAutoRefreshRef = useRef(isAutoRefresh);
 
   isPendingRef.current = isPending;
 
   // 更新 filtersRef
   filtersRef.current = filters;
+  isAutoRefreshRef.current = isAutoRefresh;
 
   // 加载数据
   // shouldDetectNew: 是否检测新增记录（只在刷新时为 true，筛选/翻页时为 false）
@@ -141,6 +143,13 @@ export function UsageLogsView({
   // 监听 URL 参数变化（筛选/翻页时重置缓存）
   useEffect(() => {
     const currentParams = params.toString();
+
+    // 获取当前页码，如果页码 > 1 则自动暂停自动刷新
+    // 避免新数据进入导致用户漏掉中间记录 (Issue #332)
+    const currentPage = parseInt(params.get("page") || "1", 10);
+    if (currentPage > 1 && isAutoRefreshRef.current) {
+      setIsAutoRefresh(false);
+    }
 
     if (previousParamsRef.current && previousParamsRef.current !== currentParams) {
       // URL 变化 = 用户操作（筛选/翻页），重置缓存，不检测新增
