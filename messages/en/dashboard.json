@@ -99,6 +99,10 @@
       "status": "Status"
     },
     "stats": {
+      "title": "Statistics Summary",
+      "description": "Click to view aggregated statistics for the current filters",
+      "expand": "Expand",
+      "collapse": "Collapse",
       "totalRequests": "Total Requests",
       "totalAmount": "Total Consumption",
       "totalTokens": "Total Tokens",

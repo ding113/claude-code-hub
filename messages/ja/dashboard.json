@@ -99,6 +99,10 @@
       "status": "ステータス"
     },
     "stats": {
+      "title": "統計サマリー",
+      "description": "クリックして現在のフィルター条件の集計統計を表示",
+      "expand": "展開",
+      "collapse": "折りたたむ",
       "totalAmount": "総消費金額",
       "totalTokens": "総トークン数",
       "cacheTokens": "キャッシュトークン",

@@ -3,15 +3,29 @@
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 import {
+  findUsageLogsStats,
   findUsageLogsWithDetails,
   getUsedEndpoints,
   getUsedModels,
   getUsedStatusCodes,
   type UsageLogFilters,
   type UsageLogRow,
+  type UsageLogSummary,
   type UsageLogsResult,
 } from "@/repository/usage-logs";
 import type { ActionResult } from "./types";
+
+/**
+ * 筛选器选项缓存
+ * 5 分钟 TTL，避免每次筛选器组件挂载时执行 3 次 DISTINCT 全表扫描
+ */
+const FILTER_OPTIONS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 分钟
+let filterOptionsCache: {
+  models: string[];
+  statusCodes: number[];
+  endpoints: string[];
+  expiresAt: number;
+} | null = null;
 
 /**
  * 获取使用日志（根据权限过滤）
@@ -194,5 +208,100 @@ export async function getEndpointList(): Promise<ActionResult<string[]>> {
   } catch (error) {
     logger.error("获取 Endpoint 列表失败:", error);
     return { ok: false, error: "获取 Endpoint 列表失败" };
+  }
+}
+
+/**
+ * 筛选器选项数据类型
+ */
+export interface FilterOptions {
+  models: string[];
+  statusCodes: number[];
+  endpoints: string[];
+}
+
+/**
+ * 获取筛选器选项（带缓存）
+ * 合并获取 models、statusCodes、endpoints，使用内存缓存减少 DISTINCT 全表扫描
+ *
+ * 优化效果：
+ * - 首次加载：3 次 DISTINCT 查询
+ * - 5 分钟内再次加载：0 次查询（命中缓存）
+ */
+export async function getFilterOptions(): Promise<ActionResult<FilterOptions>> {
+  try {
+    const session = await getSession();
+    if (!session) {
+      return { ok: false, error: "未登录" };
+    }
+
+    const now = Date.now();
+
+    // 检查缓存是否有效
+    if (filterOptionsCache && filterOptionsCache.expiresAt > now) {
+      logger.debug("筛选器选项命中缓存");
+      return {
+        ok: true,
+        data: {
+          models: filterOptionsCache.models,
+          statusCodes: filterOptionsCache.statusCodes,
+          endpoints: filterOptionsCache.endpoints,
+        },
+      };
+    }
+
+    // 缓存过期或不存在，重新查询
+    logger.debug("筛选器选项缓存未命中，执行 DISTINCT 查询");
+    const [models, statusCodes, endpoints] = await Promise.all([
+      getUsedModels(),
+      getUsedStatusCodes(),
+      getUsedEndpoints(),
+    ]);
+
+    // 更新缓存
+    filterOptionsCache = {
+      models,
+      statusCodes,
+      endpoints,
+      expiresAt: now + FILTER_OPTIONS_CACHE_TTL_MS,
+    };
+
+    return {
+      ok: true,
+      data: { models, statusCodes, endpoints },
+    };
+  } catch (error) {
+    logger.error("获取筛选器选项失败:", error);
+    return { ok: false, error: "获取筛选器选项失败" };
+  }
+}
+
+/**
+ * 获取使用日志聚合统计（独立接口，用于可折叠面板按需加载）
+ *
+ * 优化效果：
+ * - 分页时不再执行聚合查询
+ * - 仅在用户展开统计面板时调用
+ */
+export async function getUsageLogsStats(
+  filters: Omit<UsageLogFilters, "userId" | "page" | "pageSize">
+): Promise<ActionResult<UsageLogSummary>> {
+  try {
+    const session = await getSession();
+    if (!session) {
+      return { ok: false, error: "未登录" };
+    }
+
+    // 如果不是 admin，强制过滤为当前用户
+    const finalFilters: Omit<UsageLogFilters, "page" | "pageSize"> =
+      session.user.role === "admin" ? filters : { ...filters, userId: session.user.id };
+
+    const stats = await findUsageLogsStats(finalFilters);
+
+    return { ok: true, data: stats };
+  } catch (error) {
+    logger.error("获取使用日志统计失败:", error);
+    const message = error instanceof Error ? error.message : "获取使用日志统计失败";
+    return { ok: false, error: message };
   }
 }

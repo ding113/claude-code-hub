@@ -99,6 +99,10 @@
       "status": "狀態"
     },
     "stats": {
+      "title": "統計匯總",
+      "description": "點擊展開查看當前篩選條件下的彙總統計",
+      "expand": "展開",
+      "collapse": "收起",
       "totalAmount": "總消耗金額",
       "totalTokens": "總 Token 數",
       "cacheTokens": "快取 Token",

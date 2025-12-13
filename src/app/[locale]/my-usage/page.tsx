@@ -2,25 +2,25 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import {
+  getMyQuota,
   getMyTodayStats,
   getMyUsageLogs,
-  getMyUsageMetadata,
   type MyTodayStats,
   type MyUsageLogsResult,
-  type MyUsageMetadata,
+  type MyUsageQuota,
 } from "@/actions/my-usage";
 import { useRouter } from "@/i18n/routing";
 import { ExpirationInfo } from "./_components/expiration-info";
 import { MyUsageHeader } from "./_components/my-usage-header";
 import { ProviderGroupInfo } from "./_components/provider-group-info";
-import { QuotaDialog } from "./_components/quota-dialog";
+import { QuotaCards } from "./_components/quota-cards";
 import { TodayUsageCard } from "./_components/today-usage-card";
 import { UsageLogsSection } from "./_components/usage-logs-section";
 
 export default function MyUsagePage() {
   const router = useRouter();
 
-  const [metadata, setMetadata] = useState<MyUsageMetadata | null>(null);
+  const [quota, setQuota] = useState<MyUsageQuota | null>(null);
   const [todayStats, setTodayStats] = useState<MyTodayStats | null>(null);
   const [logsData, setLogsData] = useState<MyUsageLogsResult | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -30,13 +30,13 @@ export default function MyUsagePage() {
 
   const loadInitial = useCallback(() => {
     startTransition(async () => {
-      const [metaResult, statsResult, logsResult] = await Promise.all([
-        getMyUsageMetadata(),
+      const [quotaResult, statsResult, logsResult] = await Promise.all([
+        getMyQuota(),
         getMyTodayStats(),
         getMyUsageLogs({ page: 1 }),
       ]);
 
-      if (metaResult.ok) setMetadata(metaResult.data);
+      if (quotaResult.ok) setQuota(quotaResult.data);
       if (statsResult.ok) setTodayStats(statsResult.data);
       if (logsResult.ok) setLogsData(logsResult.data ?? null);
       setHasLoaded(true);
@@ -98,35 +98,36 @@ export default function MyUsagePage() {
     router.refresh();
   };
 
-  const keyExpiresAt = metadata?.keyExpiresAt ?? null;
-  const userExpiresAt = metadata?.userExpiresAt ?? null;
-  const currencyCode = todayStats?.currencyCode ?? metadata?.currencyCode ?? "USD";
+  const keyExpiresAt = quota?.expiresAt ?? null;
+  const userExpiresAt = quota?.userExpiresAt ?? null;
+  const currencyCode = todayStats?.currencyCode ?? "USD";
 
   return (
     <div className="space-y-6">
       <MyUsageHeader
         onLogout={handleLogout}
-        keyName={metadata?.keyName}
-        userName={metadata?.userName}
-        keyProviderGroup={metadata?.keyProviderGroup ?? null}
-        userProviderGroup={metadata?.userProviderGroup ?? null}
+        keyName={quota?.keyName}
+        userName={quota?.userName}
+        keyProviderGroup={quota?.keyProviderGroup ?? null}
+        userProviderGroup={quota?.userProviderGroup ?? null}
         keyExpiresAt={keyExpiresAt}
         userExpiresAt={userExpiresAt}
-        quotaButton={
-          <QuotaDialog
-            currencyCode={currencyCode}
-            keyExpiresAt={keyExpiresAt}
-            userExpiresAt={userExpiresAt}
-          />
-        }
       />
 
-      {metadata ? (
+      <QuotaCards
+        quota={quota}
+        loading={!hasLoaded || isPending}
+        currencyCode={currencyCode}
+        keyExpiresAt={keyExpiresAt}
+        userExpiresAt={userExpiresAt}
+      />
+
+      {quota ? (
         <div className="space-y-3">
           <ExpirationInfo keyExpiresAt={keyExpiresAt} userExpiresAt={userExpiresAt} />
           <ProviderGroupInfo
-            keyProviderGroup={metadata.keyProviderGroup}
-            userProviderGroup={metadata.userProviderGroup}
+            keyProviderGroup={quota.keyProviderGroup}
+            userProviderGroup={quota.userProviderGroup}
           />
         </div>
       ) : null}

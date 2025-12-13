@@ -99,6 +99,10 @@
       "status": "状态"
     },
     "stats": {
+      "title": "统计汇总",
+      "description": "点击展开查看当前筛选条件下的聚合统计",
+      "expand": "展开",
+      "collapse": "收起",
       "totalRequests": "总请求数",
       "totalAmount": "总消耗金额",
       "totalTokens": "总 Token 数",

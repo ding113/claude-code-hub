@@ -14,8 +14,9 @@ import { CreateUserSchema, UpdateUserSchema } from "@/lib/validation/schemas";
 import {
   createKey,
   findKeyList,
-  findKeysWithStatistics,
-  findKeyUsageToday,
+  findKeyListBatch,
+  findKeysWithStatisticsBatch,
+  findKeyUsageTodayBatch,
   updateKey,
 } from "@/repository/key";
 import { createUser, deleteUser, findUserById, findUserList, updateUser } from "@/repository/user";
@@ -90,101 +91,106 @@ export async function getUsers(): Promise<UserDisplay[]> {
     // 管理员可以看到完整Key，普通用户只能看到掩码
     const isAdmin = session.user.role === "admin";
 
-    const userDisplays: UserDisplay[] = await Promise.all(
-      users.map(async (user) => {
-        try {
-          const [keys, usageRecords, keyStatistics] = await Promise.all([
-            findKeyList(user.id),
-            findKeyUsageToday(user.id),
-            findKeysWithStatistics(user.id),
-          ]);
+    // === Batch queries optimization ===
+    // Instead of N*3 queries (one per user for keys, usage, statistics),
+    // we now do 3 batch queries total
+    const userIds = users.map((u) => u.id);
+    const [keysMap, usageMap, statisticsMap] = await Promise.all([
+      findKeyListBatch(userIds),
+      findKeyUsageTodayBatch(userIds),
+      findKeysWithStatisticsBatch(userIds),
+    ]);
 
-          const usageMap = new Map(usageRecords.map((item) => [item.keyId, item.totalCost ?? 0]));
+    const userDisplays: UserDisplay[] = users.map((user) => {
+      try {
+        const keys = keysMap.get(user.id) || [];
+        const usageRecords = usageMap.get(user.id) || [];
+        const keyStatistics = statisticsMap.get(user.id) || [];
 
-          const statisticsMap = new Map(keyStatistics.map((stat) => [stat.keyId, stat]));
+        const usageLookup = new Map(usageRecords.map((item) => [item.keyId, item.totalCost ?? 0]));
+        const statisticsLookup = new Map(keyStatistics.map((stat) => [stat.keyId, stat]));
 
-          return {
-            id: user.id,
-            name: user.name,
-            note: user.description || undefined,
-            role: user.role,
-            rpm: user.rpm,
-            dailyQuota: user.dailyQuota,
-            providerGroup: user.providerGroup || undefined,
-            tags: user.tags || [],
-            limit5hUsd: user.limit5hUsd ?? null,
-            limitWeeklyUsd: user.limitWeeklyUsd ?? null,
-            limitMonthlyUsd: user.limitMonthlyUsd ?? null,
-            limitTotalUsd: user.limitTotalUsd ?? null,
-            limitConcurrentSessions: user.limitConcurrentSessions ?? null,
-            isEnabled: user.isEnabled,
-            expiresAt: user.expiresAt ?? null,
-            keys: keys.map((key) => {
-              const stats = statisticsMap.get(key.id);
-              // 用户可以查看和复制自己的密钥，管理员可以查看和复制所有密钥
-              const canUserManageKey = isAdmin || session.user.id === user.id;
-              return {
-                id: key.id,
-                name: key.name,
-                maskedKey: maskKey(key.key),
-                fullKey: canUserManageKey ? key.key : undefined,
-                canCopy: canUserManageKey,
-                expiresAt: key.expiresAt
-                  ? key.expiresAt.toISOString().split("T")[0]
-                  : t("neverExpires"),
-                status: key.isEnabled ? "enabled" : ("disabled" as const),
-                createdAt: key.createdAt,
-                createdAtFormatted: key.createdAt.toLocaleString(locale, {
-                  year: "numeric",
-                  month: "2-digit",
-                  day: "2-digit",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  second: "2-digit",
-                }),
-                todayUsage: usageMap.get(key.id) ?? 0,
-                todayCallCount: stats?.todayCallCount ?? 0,
-                lastUsedAt: stats?.lastUsedAt ?? null,
-                lastProviderName: stats?.lastProviderName ?? null,
-                modelStats: stats?.modelStats ?? [],
-                // Web UI 登录权限控制
-                canLoginWebUi: key.canLoginWebUi,
-                // 限额配置
-                limit5hUsd: key.limit5hUsd,
-                limitDailyUsd: key.limitDailyUsd,
-                dailyResetMode: key.dailyResetMode,
-                dailyResetTime: key.dailyResetTime,
-                limitWeeklyUsd: key.limitWeeklyUsd,
-                limitMonthlyUsd: key.limitMonthlyUsd,
-                limitTotalUsd: key.limitTotalUsd,
-                limitConcurrentSessions: key.limitConcurrentSessions || 0,
-                providerGroup: key.providerGroup,
-              };
-            }),
-          };
-        } catch (error) {
-          logger.error(`Failed to fetch keys for user ${user.id}:`, error);
-          return {
-            id: user.id,
-            name: user.name,
-            note: user.description || undefined,
-            role: user.role,
-            rpm: user.rpm,
-            dailyQuota: user.dailyQuota,
-            providerGroup: user.providerGroup || undefined,
-            tags: user.tags || [],
-            limit5hUsd: user.limit5hUsd ?? null,
-            limitWeeklyUsd: user.limitWeeklyUsd ?? null,
-            limitMonthlyUsd: user.limitMonthlyUsd ?? null,
-            limitTotalUsd: user.limitTotalUsd ?? null,
-            limitConcurrentSessions: user.limitConcurrentSessions ?? null,
-            isEnabled: user.isEnabled,
-            expiresAt: user.expiresAt ?? null,
-            keys: [],
-          };
-        }
-      })
-    );
+        return {
+          id: user.id,
+          name: user.name,
+          note: user.description || undefined,
+          role: user.role,
+          rpm: user.rpm,
+          dailyQuota: user.dailyQuota,
+          providerGroup: user.providerGroup || undefined,
+          tags: user.tags || [],
+          limit5hUsd: user.limit5hUsd ?? null,
+          limitWeeklyUsd: user.limitWeeklyUsd ?? null,
+          limitMonthlyUsd: user.limitMonthlyUsd ?? null,
+          limitTotalUsd: user.limitTotalUsd ?? null,
+          limitConcurrentSessions: user.limitConcurrentSessions ?? null,
+          isEnabled: user.isEnabled,
+          expiresAt: user.expiresAt ?? null,
+          keys: keys.map((key) => {
+            const stats = statisticsLookup.get(key.id);
+            // 用户可以查看和复制自己的密钥，管理员可以查看和复制所有密钥
+            const canUserManageKey = isAdmin || session.user.id === user.id;
+            return {
+              id: key.id,
+              name: key.name,
+              maskedKey: maskKey(key.key),
+              fullKey: canUserManageKey ? key.key : undefined,
+              canCopy: canUserManageKey,
+              expiresAt: key.expiresAt
+                ? key.expiresAt.toISOString().split("T")[0]
+                : t("neverExpires"),
+              status: key.isEnabled ? "enabled" : ("disabled" as const),
+              createdAt: key.createdAt,
+              createdAtFormatted: key.createdAt.toLocaleString(locale, {
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+              }),
+              todayUsage: usageLookup.get(key.id) ?? 0,
+              todayCallCount: stats?.todayCallCount ?? 0,
+              lastUsedAt: stats?.lastUsedAt ?? null,
+              lastProviderName: stats?.lastProviderName ?? null,
+              modelStats: stats?.modelStats ?? [],
+              // Web UI 登录权限控制
+              canLoginWebUi: key.canLoginWebUi,
+              // 限额配置
+              limit5hUsd: key.limit5hUsd,
+              limitDailyUsd: key.limitDailyUsd,
+              dailyResetMode: key.dailyResetMode,
+              dailyResetTime: key.dailyResetTime,
+              limitWeeklyUsd: key.limitWeeklyUsd,
+              limitMonthlyUsd: key.limitMonthlyUsd,
+              limitTotalUsd: key.limitTotalUsd,
+              limitConcurrentSessions: key.limitConcurrentSessions || 0,
+              providerGroup: key.providerGroup,
+            };
+          }),
+        };
+      } catch (error) {
+        logger.error(`Failed to process keys for user ${user.id}:`, error);
+        return {
+          id: user.id,
+          name: user.name,
+          note: user.description || undefined,
+          role: user.role,
+          rpm: user.rpm,
+          dailyQuota: user.dailyQuota,
+          providerGroup: user.providerGroup || undefined,
+          tags: user.tags || [],
+          limit5hUsd: user.limit5hUsd ?? null,
+          limitWeeklyUsd: user.limitWeeklyUsd ?? null,
+          limitMonthlyUsd: user.limitMonthlyUsd ?? null,
+          limitTotalUsd: user.limitTotalUsd ?? null,
+          limitConcurrentSessions: user.limitConcurrentSessions ?? null,
+          isEnabled: user.isEnabled,
+          expiresAt: user.expiresAt ?? null,
+          keys: [],
+        };
+      }
+    });
 
     return userDisplays;
   } catch (error) {

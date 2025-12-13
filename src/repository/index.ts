@@ -14,7 +14,10 @@ export {
   findActiveKeyByUserIdAndName,
   findKeyById,
   findKeyList,
+  findKeyListBatch,
+  findKeysWithStatisticsBatch,
   findKeyUsageToday,
+  findKeyUsageTodayBatch,
   updateKey,
   validateApiKeyAndGetUser,
 } from "./key";
