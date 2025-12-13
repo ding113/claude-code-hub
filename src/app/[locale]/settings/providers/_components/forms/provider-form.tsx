@@ -30,6 +30,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { TagInput } from "@/components/ui/tag-input";
 import { PROVIDER_DEFAULTS, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
+import type { Context1mPreference } from "@/lib/special-attributes";
 import { extractBaseUrl, isValidUrl, validateNumericField } from "@/lib/utils/validation";
 import type {
   CodexInstructionsStrategy,
@@ -124,6 +125,11 @@ export function ProviderForm({
   const [cacheTtlPreference, setCacheTtlPreference] = useState<"inherit" | "5m" | "1h">(
     sourceProvider?.cacheTtlPreference ?? "inherit"
   );
+
+  // 1M Context Window 偏好配置（仅对 Anthropic 类型供应商有效）
+  const [context1mPreference, setContext1mPreference] = useState<
+    "inherit" | "force_enable" | "disabled"
+  >((sourceProvider?.context1mPreference as "inherit" | "force_enable" | "disabled") ?? "inherit");
 
   // 熔断器配置（以分钟为单位显示，提交时转换为毫秒）
   // 允许 undefined，用户可以清空输入框，提交时使用默认值
@@ -309,6 +315,7 @@ export function ProviderForm({
             limit_monthly_usd?: number | null;
             limit_concurrent_sessions?: number | null;
             cache_ttl_preference?: "inherit" | "5m" | "1h";
+            context_1m_preference?: Context1mPreference | null;
             max_retry_attempts?: number | null;
             circuit_breaker_failure_threshold?: number;
             circuit_breaker_open_duration?: number;
@@ -345,8 +352,9 @@ export function ProviderForm({
             daily_reset_time: dailyResetTime,
             limit_weekly_usd: limitWeeklyUsd,
             limit_monthly_usd: limitMonthlyUsd,
-            limit_concurrent_sessions: limitConcurrentSessions,
+            limit_concurrent_sessions: limitConcurrentSessions ?? 0,
             cache_ttl_preference: cacheTtlPreference,
+            context_1m_preference: context1mPreference,
             max_retry_attempts: maxRetryAttempts,
             circuit_breaker_failure_threshold: failureThreshold ?? 5,
             circuit_breaker_open_duration: openDurationMinutes
@@ -407,6 +415,7 @@ export function ProviderForm({
             limit_monthly_usd: limitMonthlyUsd,
             limit_concurrent_sessions: limitConcurrentSessions ?? 0,
             cache_ttl_preference: cacheTtlPreference,
+            context_1m_preference: context1mPreference,
             max_retry_attempts: maxRetryAttempts,
             circuit_breaker_failure_threshold: failureThreshold ?? 5,
             circuit_breaker_open_duration: openDurationMinutes
@@ -481,6 +490,7 @@ export function ProviderForm({
           );
           setWebsiteUrl("");
           setCodexInstructionsStrategy("auto");
+          setContext1mPreference("inherit");
         }
         onSuccess?.();
       } catch (error) {
@@ -605,7 +615,9 @@ export function ProviderForm({
                   const parts = [];
                   if (allowedModels.length > 0)
                     parts.push(
-                      t("sections.routing.summary.models", { count: allowedModels.length })
+                      t("sections.routing.summary.models", {
+                        count: allowedModels.length,
+                      })
                     );
                   if (Object.keys(modelRedirects).length > 0)
                     parts.push(
@@ -908,6 +920,38 @@ export function ProviderForm({
                     强制设置 prompt cache TTL；仅影响包含 cache_control 的请求。
                   </p>
                 </div>
+
+                {/* 1M Context Window 配置 - 仅 Anthropic 类型供应商显示 */}
+                {(providerType === "claude" || providerType === "claude-auth") && (
+                  <div className="space-y-2">
+                    <Label>{t("sections.routing.context1m.label")}</Label>
+                    <Select
+                      value={context1mPreference}
+                      onValueChange={(val) =>
+                        setContext1mPreference(val as "inherit" | "force_enable" | "disabled")
+                      }
+                      disabled={isPending}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="inherit" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="inherit">
+                          {t("sections.routing.context1m.options.inherit")}
+                        </SelectItem>
+                        <SelectItem value="force_enable">
+                          {t("sections.routing.context1m.options.forceEnable")}
+                        </SelectItem>
+                        <SelectItem value="disabled">
+                          {t("sections.routing.context1m.options.disabled")}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      {t("sections.routing.context1m.desc")}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </CollapsibleContent>
@@ -933,7 +977,11 @@ export function ProviderForm({
                 {(() => {
                   const limits: string[] = [];
                   if (limit5hUsd)
-                    limits.push(t("sections.rateLimit.summary.fiveHour", { amount: limit5hUsd }));
+                    limits.push(
+                      t("sections.rateLimit.summary.fiveHour", {
+                        amount: limit5hUsd,
+                      })
+                    );
                   if (limitDailyUsd)
                     limits.push(
                       t("sections.rateLimit.summary.daily", {
@@ -942,14 +990,22 @@ export function ProviderForm({
                       })
                     );
                   if (limitWeeklyUsd)
-                    limits.push(t("sections.rateLimit.summary.weekly", { amount: limitWeeklyUsd }));
+                    limits.push(
+                      t("sections.rateLimit.summary.weekly", {
+                        amount: limitWeeklyUsd,
+                      })
+                    );
                   if (limitMonthlyUsd)
                     limits.push(
-                      t("sections.rateLimit.summary.monthly", { amount: limitMonthlyUsd })
+                      t("sections.rateLimit.summary.monthly", {
+                        amount: limitMonthlyUsd,
+                      })
                     );
                   if (limitConcurrentSessions)
                     limits.push(
-                      t("sections.rateLimit.summary.concurrent", { count: limitConcurrentSessions })
+                      t("sections.rateLimit.summary.concurrent", {
+                        count: limitConcurrentSessions,
+                      })
                     );
                   return limits.length > 0
                     ? limits.join(", ")
@@ -1725,7 +1781,7 @@ export function ProviderForm({
         </Collapsible>
 
         {isEdit ? (
-          <div className="flex items-center justify-between pt-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-4">
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button type="button" variant="destructive" disabled={isPending}>
@@ -1736,10 +1792,12 @@ export function ProviderForm({
                 <AlertHeader>
                   <AlertTitle>{t("deleteDialog.title")}</AlertTitle>
                   <AlertDialogDescription>
-                    {t("deleteDialog.description", { name: provider?.name ?? "" })}
+                    {t("deleteDialog.description", {
+                      name: provider?.name ?? "",
+                    })}
                   </AlertDialogDescription>
                 </AlertHeader>
-                <div className="flex gap-2 justify-end">
+                <div className="flex flex-col-reverse sm:flex-row gap-2 justify-end">
                   <AlertDialogCancel>{t("deleteDialog.cancel")}</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={() => {

@@ -52,6 +52,7 @@ interface ErrorDetailsDialogProps {
   cacheTtlApplied?: string | null;
   costUsd?: string | null;
   costMultiplier?: string | null;
+  context1mApplied?: boolean | null; // 1M上下文窗口是否已应用
   externalOpen?: boolean; // 外部控制弹窗开关
   onExternalOpenChange?: (open: boolean) => void; // 外部控制回调
   scrollToRedirect?: boolean; // 是否滚动到重定向部分
@@ -79,6 +80,7 @@ export function ErrorDetailsDialog({
   cacheTtlApplied,
   costUsd,
   costMultiplier,
+  context1mApplied,
   externalOpen,
   onExternalOpenChange,
   scrollToRedirect,
@@ -421,6 +423,24 @@ export function ErrorDetailsDialog({
                       <Badge variant="outline" className="text-xs">
                         {cacheTtlApplied}
                       </Badge>
+                    </div>
+                  )}
+                  {context1mApplied && (
+                    <div className="flex justify-between col-span-2">
+                      <span className="text-muted-foreground">
+                        {t("logs.billingDetails.context1m")}:
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant="outline"
+                          className="text-xs bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800"
+                        >
+                          1M Context
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          ({t("logs.billingDetails.context1mPricing")})
+                        </span>
+                      </div>
                     </div>
                   )}
                   {costMultiplier && parseFloat(String(costMultiplier)) !== 1.0 && (

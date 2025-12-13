@@ -82,6 +82,52 @@ function getErrorCodeMeaning(code: string, t: (key: string) => string): string |
 }
 
 /**
+ * 辅助函数：格式化请求详情
+ *
+ * 将 errorDetails.request 格式化为可读的文本
+ */
+function formatRequestDetails(
+  request: NonNullable<ProviderChainItem["errorDetails"]>["request"],
+  t: (key: string, values?: Record<string, string | number>) => string
+): string {
+  if (!request) return "";
+
+  let details = `\n${t("timeline.requestDetails")}:\n`;
+
+  // URL 和方法
+  details += `${t("timeline.requestMethod")}: ${request.method}\n`;
+  details += `${t("timeline.requestUrl")}: ${request.url}\n`;
+
+  // 请求头
+  if (request.headers && request.headers !== "(empty)") {
+    details += `${t("timeline.requestHeaders")}:\n`;
+    // 缩进每一行
+    const headerLines = request.headers.split("\n");
+    for (const line of headerLines) {
+      details += `  ${line}\n`;
+    }
+  }
+
+  // 请求体
+  if (request.body && request.body !== "(no body)") {
+    details += `${t("timeline.requestBody")}`;
+    if (request.bodyTruncated) {
+      details += ` ${t("timeline.requestBodyTruncated")}`;
+    }
+    details += `:\n`;
+    // 缩进请求体，限制显示长度
+    const bodyPreview =
+      request.body.length > 500 ? `${request.body.slice(0, 500)}...` : request.body;
+    const bodyLines = bodyPreview.split("\n");
+    for (const line of bodyLines) {
+      details += `  ${line}\n`;
+    }
+  }
+
+  return details;
+}
+
+/**
  * Level 1: 表格摘要（完整链路，不截断）
  *
  * 前端用 CSS max-w + truncate 处理超长，Tooltip 显示完整内容
@@ -369,6 +415,11 @@ export function formatProviderTimeline(
         } else if (p.upstreamBody) {
           timeline += `\n${t("timeline.errorDetails")}:\n${p.upstreamBody}`;
         }
+
+        // 请求详情（用于问题排查）
+        if (item.errorDetails?.request) {
+          timeline += formatRequestDetails(item.errorDetails.request, t);
+        }
       } else {
         // 降级：使用 errorMessage
         timeline += `${t("timeline.provider", { provider: item.name })}\n`;
@@ -376,6 +427,11 @@ export function formatProviderTimeline(
           timeline += `${t("timeline.statusCode", { code: item.statusCode })}\n`;
         }
         timeline += t("timeline.error", { error: item.errorMessage || t("timeline.unknown") });
+
+        // 请求详情（降级路径）
+        if (item.errorDetails?.request) {
+          timeline += formatRequestDetails(item.errorDetails.request, t);
+        }
       }
 
       continue;
@@ -426,11 +482,22 @@ export function formatProviderTimeline(
           }
         }
 
+        // 请求详情（用于问题排查）
+        if (item.errorDetails?.request) {
+          timeline += formatRequestDetails(item.errorDetails.request, t);
+        }
+
         timeline += `\n${t("timeline.systemErrorNote")}`;
       } else {
         // 降级
         timeline += `${t("timeline.provider", { provider: item.name })}\n`;
         timeline += `${t("timeline.error", { error: item.errorMessage || t("timeline.unknown") })}\n`;
+
+        // 请求详情（降级路径）
+        if (item.errorDetails?.request) {
+          timeline += formatRequestDetails(item.errorDetails.request, t);
+        }
+
         timeline += `\n${t("timeline.systemErrorNote")}`;
       }
 
@@ -454,6 +521,11 @@ export function formatProviderTimeline(
         }
       } else if (item.errorMessage) {
         timeline += `${t("timeline.error", { error: item.errorMessage })}\n`;
+      }
+
+      // 请求详情（用于问题排查）
+      if (item.errorDetails?.request) {
+        timeline += formatRequestDetails(item.errorDetails.request, t);
       }
 
       timeline += `\n${t("timeline.http2FallbackNote")}`;

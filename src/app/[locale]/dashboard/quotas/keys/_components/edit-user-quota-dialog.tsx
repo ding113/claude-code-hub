@@ -142,8 +142,8 @@ export function EditUserQuotaDialog({
                   <p className="text-xs text-muted-foreground">
                     {t("dailyQuota.current", {
                       currency: currencySymbol,
-                      current: currentQuota.dailyCost.current.toFixed(4),
-                      limit: currentQuota.dailyCost.limit.toFixed(2),
+                      current: Number(currentQuota.dailyCost.current).toFixed(4),
+                      limit: Number(currentQuota.dailyCost.limit).toFixed(2),
                     })}
                   </p>
                 )}

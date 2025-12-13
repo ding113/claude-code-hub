@@ -121,6 +121,12 @@
     "modelRedirectBilling": "  Billing Model: {model}",
     "http2Fallback": "HTTP/2 Protocol Fallback",
     "http2ErrorType": "HTTP/2 Error Type: {type}",
-    "http2FallbackNote": "Transparently fell back to HTTP/1.1, not counted in circuit breaker"
+    "http2FallbackNote": "Transparently fell back to HTTP/1.1, not counted in circuit breaker",
+    "requestDetails": "Request Details (for debugging)",
+    "requestMethod": "Method",
+    "requestUrl": "URL",
+    "requestHeaders": "Headers",
+    "requestBody": "Body",
+    "requestBodyTruncated": "(truncated)"
   }
 }

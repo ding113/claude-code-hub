@@ -198,6 +198,7 @@ export async function handleChatCompletions(c: Context): Promise<Response> {
           statusCode: providerUnavailable.status,
           errorMessage: JSON.stringify(errorBody?.error || { message: errorMessage }),
           model: session.getCurrentModel() ?? undefined,
+          context1mApplied: session.getContext1mApplied(),
         });
       }
 

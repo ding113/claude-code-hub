@@ -11,6 +11,12 @@ export interface ModelPriceData {
   cache_creation_input_token_cost_above_1hr?: number;
   cache_read_input_token_cost?: number;
 
+  // 200K 分层价格（Gemini 等模型使用）
+  input_cost_per_token_above_200k_tokens?: number;
+  output_cost_per_token_above_200k_tokens?: number;
+  cache_creation_input_token_cost_above_200k_tokens?: number;
+  cache_read_input_token_cost_above_200k_tokens?: number;
+
   // 图片生成价格
   output_cost_per_image?: number;
 

@@ -9,6 +9,14 @@
     "noProviderGroup": "По умолчанию",
     "inherited": "(наследовано)"
   },
+  "quotaDialog": {
+    "trigger": "Лимиты",
+    "title": "Детали лимитов",
+    "refresh": "Обновить",
+    "lastUpdated": "Обновлено в {time}",
+    "loadFailed": "Не удалось загрузить лимиты",
+    "close": "Закрыть"
+  },
   "quota": {
     "5h": "Лимит 5 часов",
     "daily": "Дневной лимит",
@@ -38,6 +46,7 @@
   },
   "logs": {
     "title": "Журнал использования",
+    "autoRefresh": "Автообновление каждые {seconds}с",
     "filters": {
       "startDate": "Дата начала",
       "endDate": "Дата окончания",
@@ -53,6 +62,8 @@
       "time": "Время",
       "model": "Модель",
       "tokens": "Токены (вх/вых)",
+      "cacheWrite": "Запись кэша",
+      "cacheRead": "Чтение кэша",
       "cost": "Стоимость {currency}",
       "status": "Статус",
       "endpoint": "API Endpoint"

@@ -1029,6 +1029,15 @@
               "placeholder": "例: premium, economy",
               "desc": "グループタグ。ユーザーの providerGroup が一致する場合のみ利用可能。例: \"premium\" に設定すると providerGroup=\"premium\" のユーザーのみ対象"
             }
+          },
+          "context1m": {
+            "label": "1M コンテキストウィンドウ",
+            "options": {
+              "inherit": "継承（クライアントに従う）",
+              "forceEnable": "強制有効化",
+              "disabled": "無効"
+            },
+            "desc": "1M コンテキストウィンドウのサポートを設定します。Sonnet モデル（claude-sonnet-4-5、claude-sonnet-4）にのみ適用されます。有効時は段階的料金が適用されます。"
           }
         },
         "rateLimit": {

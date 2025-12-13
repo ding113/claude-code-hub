@@ -3,16 +3,118 @@
 
 #Requires -Version 5.1
 
+[CmdletBinding()]
+param(
+    [Alias("b")]
+    [ValidateSet("main", "dev", "")]
+    [string]$Branch = "",
+    
+    [Alias("p")]
+    [ValidateRange(1, 65535)]
+    [int]$Port = 0,
+    
+    [Alias("t")]
+    [string]$AdminToken = "",
+    
+    [Alias("d")]
+    [string]$DeployDir = "",
+    
+    [string]$Domain = "",
+    
+    [switch]$EnableCaddy,
+    
+    [Alias("y")]
+    [switch]$Yes,
+    
+    [Alias("h")]
+    [switch]$Help
+)
+
 # Script version
-$VERSION = "1.0.0"
+$VERSION = "1.1.0"
 
 # Global variables
-$SUFFIX = ""
-$ADMIN_TOKEN = ""
-$DB_PASSWORD = ""
-$DEPLOY_DIR = "C:\ProgramData\claude-code-hub"
-$IMAGE_TAG = "latest"
-$BRANCH_NAME = "main"
+$script:SUFFIX = ""
+$script:ADMIN_TOKEN = ""
+$script:DB_PASSWORD = ""
+$script:DEPLOY_DIR = "C:\ProgramData\claude-code-hub"
+$script:IMAGE_TAG = "latest"
+$script:BRANCH_NAME = "main"
+$script:APP_PORT = "23000"
+$script:ENABLE_CADDY = $false
+$script:DOMAIN_ARG = ""
+
+function Show-Help {
+    $helpText = @"
+Claude Code Hub - One-Click Deployment Script v$VERSION
+
+Usage: .\deploy.ps1 [OPTIONS]
+
+Options:
+  -Branch, -b <name>         Branch to deploy: main (default) or dev
+  -Port, -p <port>           App external port (default: 23000)
+  -AdminToken, -t <token>    Custom admin token (default: auto-generated)
+  -DeployDir, -d <path>      Custom deployment directory
+  -Domain <domain>           Domain for Caddy HTTPS (enables Caddy automatically)
+  -EnableCaddy               Enable Caddy reverse proxy without HTTPS (HTTP only)
+  -Yes, -y                   Non-interactive mode (skip prompts, use defaults)
+  -Help, -h                  Show this help message
+
+Examples:
+  .\deploy.ps1                                    # Interactive deployment
+  .\deploy.ps1 -Yes                               # Non-interactive with defaults
+  .\deploy.ps1 -Branch dev -Port 8080 -Yes        # Deploy dev branch on port 8080
+  .\deploy.ps1 -AdminToken "my-secure-token" -Yes # Use custom admin token
+  .\deploy.ps1 -Domain hub.example.com -Yes       # Deploy with Caddy HTTPS
+  .\deploy.ps1 -EnableCaddy -Yes                  # Deploy with Caddy HTTP-only
+
+For more information, visit: https://github.com/ding113/claude-code-hub
+"@
+    Write-Host $helpText
+}
+
+function Initialize-Parameters {
+    # Apply CLI parameters
+    if ($Branch) {
+        if ($Branch -eq "main") {
+            $script:IMAGE_TAG = "latest"
+            $script:BRANCH_NAME = "main"
+        } elseif ($Branch -eq "dev") {
+            $script:IMAGE_TAG = "dev"
+            $script:BRANCH_NAME = "dev"
+        }
+    }
+    
+    if ($Port -gt 0) {
+        $script:APP_PORT = $Port.ToString()
+    }
+    
+    if ($AdminToken) {
+        if ($AdminToken.Length -lt 16) {
+            Write-ColorOutput "Admin token too short: minimum 16 characters required" -Type Error
+            exit 1
+        }
+        $script:ADMIN_TOKEN = $AdminToken
+    }
+    
+    if ($DeployDir) {
+        $script:DEPLOY_DIR = $DeployDir
+    }
+    
+    if ($Domain) {
+        # Validate domain format
+        if ($Domain -notmatch '^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$') {
+            Write-ColorOutput "Invalid domain format: $Domain" -Type Error
+            exit 1
+        }
+        $script:DOMAIN_ARG = $Domain
+        $script:ENABLE_CADDY = $true
+    }
+    
+    if ($EnableCaddy) {
+        $script:ENABLE_CADDY = $true
+    }
+}
 
 function Write-ColorOutput {
     param(
@@ -31,12 +133,12 @@ function Write-ColorOutput {
 }
 
 function Show-Header {
-    Write-ColorOutput "╔════════════════════════════════════════════════════════════════╗" -Type Header
-    Write-ColorOutput "║                                                                ║" -Type Header
-    Write-ColorOutput "║           Claude Code Hub - One-Click Deployment              ║" -Type Header
-    Write-ColorOutput "║                      Version $VERSION                            ║" -Type Header
-    Write-ColorOutput "║                                                                ║" -Type Header
-    Write-ColorOutput "╚════════════════════════════════════════════════════════════════╝" -Type Header
+    Write-ColorOutput "+=================================================================+" -Type Header
+    Write-ColorOutput "|                                                                 |" -Type Header
+    Write-ColorOutput "|           Claude Code Hub - One-Click Deployment               |" -Type Header
+    Write-ColorOutput "|                      Version $VERSION                             |" -Type Header
+    Write-ColorOutput "|                                                                 |" -Type Header
+    Write-ColorOutput "+=================================================================+" -Type Header
     Write-Host ""
 }
 
@@ -83,6 +185,17 @@ function Show-DockerInstallInstructions {
 }
 
 function Select-Branch {
+    # Skip if branch already set via CLI or non-interactive mode
+    if ($Branch) {
+        Write-ColorOutput "Using branch from CLI argument: $script:BRANCH_NAME" -Type Info
+        return
+    }
+    
+    if ($Yes) {
+        Write-ColorOutput "Non-interactive mode: using default branch (main)" -Type Info
+        return
+    }
+
     Write-Host ""
     Write-ColorOutput "Please select the branch to deploy:" -Type Info
     Write-Host "  1) main   (Stable release - recommended for production)" -ForegroundColor Green
@@ -124,20 +237,30 @@ function New-RandomSuffix {
 }
 
 function New-AdminToken {
-    $bytes = New-Object byte[] 24
+    # Skip if token already set via CLI
+    if ($script:ADMIN_TOKEN) {
+        Write-ColorOutput "Using admin token from CLI argument" -Type Info
+        return
+    }
+
+    # Generate more bytes to ensure we have enough after removing special chars
+    $bytes = New-Object byte[] 48
     $rng = [System.Security.Cryptography.RNGCryptoServiceProvider]::Create()
     $rng.GetBytes($bytes)
-    $script:ADMIN_TOKEN = [Convert]::ToBase64String($bytes) -replace '[/+=]', '' | Select-Object -First 32
-    $script:ADMIN_TOKEN = $script:ADMIN_TOKEN.Substring(0, 32)
+    $rng.Dispose()
+    $token = [Convert]::ToBase64String($bytes) -replace '[/+=]', ''
+    $script:ADMIN_TOKEN = $token.Substring(0, [Math]::Min(32, $token.Length))
     Write-ColorOutput "Generated secure admin token" -Type Info
 }
 
 function New-DbPassword {
-    $bytes = New-Object byte[] 18
+    # Generate more bytes to ensure we have enough after removing special chars
+    $bytes = New-Object byte[] 36
     $rng = [System.Security.Cryptography.RNGCryptoServiceProvider]::Create()
     $rng.GetBytes($bytes)
-    $script:DB_PASSWORD = [Convert]::ToBase64String($bytes) -replace '[/+=]', '' | Select-Object -First 24
-    $script:DB_PASSWORD = $script:DB_PASSWORD.Substring(0, 24)
+    $rng.Dispose()
+    $password = [Convert]::ToBase64String($bytes) -replace '[/+=]', ''
+    $script:DB_PASSWORD = $password.Substring(0, [Math]::Min(24, $password.Length))
     Write-ColorOutput "Generated secure database password" -Type Info
 }
 
@@ -163,6 +286,15 @@ function New-DeploymentDirectory {
 function Write-ComposeFile {
     Write-ColorOutput "Writing docker-compose.yaml..." -Type Info
     
+    # Build ports section for app (only if Caddy is not enabled)
+    $appPortsSection = ""
+    if (-not $script:ENABLE_CADDY) {
+        $appPortsSection = @"
+    ports:
+      - "`${APP_PORT:-$($script:APP_PORT)}:`${APP_PORT:-$($script:APP_PORT)}"
+"@
+    }
+
     $composeContent = @"
 services:
   postgres:
@@ -170,7 +302,7 @@ services:
     container_name: claude-code-hub-db-$SUFFIX
     restart: unless-stopped
     ports:
-      - "35432:5432"
+      - "127.0.0.1:35432:5432"
     env_file:
       - ./.env
     environment:
@@ -219,30 +351,65 @@ services:
       - ./.env
     environment:
       NODE_ENV: production
-      PORT: `${APP_PORT:-23000}
+      PORT: `${APP_PORT:-$($script:APP_PORT)}
       DSN: postgresql://`${DB_USER:-postgres}:`${DB_PASSWORD:-postgres}@claude-code-hub-db-${SUFFIX}:5432/`${DB_NAME:-claude_code_hub}
       REDIS_URL: redis://claude-code-hub-redis-${SUFFIX}:6379
       AUTO_MIGRATE: `${AUTO_MIGRATE:-true}
       ENABLE_RATE_LIMIT: `${ENABLE_RATE_LIMIT:-true}
       SESSION_TTL: `${SESSION_TTL:-300}
       TZ: Asia/Shanghai
-    ports:
-      - "`${APP_PORT:-23000}:`${APP_PORT:-23000}"
+$appPortsSection
     restart: unless-stopped
     networks:
       - claude-code-hub-net-$SUFFIX
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:`${APP_PORT:-23000}/api/actions/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:`${APP_PORT:-$($script:APP_PORT)}/api/actions/health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 30s
+"@
+
+    # Add Caddy service if enabled
+    if ($script:ENABLE_CADDY) {
+        $composeContent += @"
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: claude-code-hub-caddy-$SUFFIX
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - claude-code-hub-net-$SUFFIX
+"@
+    }
+
+    $composeContent += @"
 
 networks:
   claude-code-hub-net-${SUFFIX}:
     driver: bridge
     name: claude-code-hub-net-$SUFFIX
 "@
+
+    # Add Caddy volumes if enabled
+    if ($script:ENABLE_CADDY) {
+        $composeContent += @"
+
+volumes:
+  caddy_data:
+  caddy_config:
+"@
+    }
     
     try {
         Set-Content -Path "$DEPLOY_DIR\docker-compose.yaml" -Value $composeContent -Encoding UTF8
@@ -254,8 +421,58 @@ networks:
     }
 }
 
+function Write-Caddyfile {
+    if (-not $script:ENABLE_CADDY) {
+        return
+    }
+
+    Write-ColorOutput "Writing Caddyfile..." -Type Info
+
+    if ($script:DOMAIN_ARG) {
+        # HTTPS mode with domain (Let's Encrypt automatic)
+        $caddyContent = @"
+$($script:DOMAIN_ARG) {
+    reverse_proxy app:$($script:APP_PORT)
+    encode gzip
+}
+"@
+        Write-ColorOutput "Caddyfile created (HTTPS mode with domain: $($script:DOMAIN_ARG))" -Type Success
+    }
+    else {
+        # HTTP-only mode
+        $caddyContent = @"
+:80 {
+    reverse_proxy app:$($script:APP_PORT)
+    encode gzip
+}
+"@
+        Write-ColorOutput "Caddyfile created (HTTP-only mode)" -Type Success
+    }
+
+    try {
+        Set-Content -Path "$DEPLOY_DIR\Caddyfile" -Value $caddyContent -Encoding UTF8
+    }
+    catch {
+        Write-ColorOutput "Failed to write Caddyfile: $_" -Type Error
+        exit 1
+    }
+}
+
 function Write-EnvFile {
     Write-ColorOutput "Writing .env file..." -Type Info
+    
+    # Determine secure cookies setting based on Caddy and domain
+    $secureCookies = "true"
+    if ($script:ENABLE_CADDY -and -not $script:DOMAIN_ARG) {
+        # HTTP-only Caddy mode - disable secure cookies
+        $secureCookies = "false"
+    }
+
+    # If domain is set, APP_URL should use https
+    $appUrl = ""
+    if ($script:DOMAIN_ARG) {
+        $appUrl = "https://$($script:DOMAIN_ARG)"
+    }
     
     $envContent = @"
 # Admin Token (KEEP THIS SECRET!)
@@ -267,8 +484,8 @@ DB_PASSWORD=$DB_PASSWORD
 DB_NAME=claude_code_hub
 
 # Application Configuration
-APP_PORT=23000
-APP_URL=
+APP_PORT=$($script:APP_PORT)
+APP_URL=$appUrl
 
 # Auto Migration (enabled for first-time setup)
 AUTO_MIGRATE=true
@@ -281,7 +498,7 @@ SESSION_TTL=300
 STORE_SESSION_MESSAGES=false
 
 # Cookie Security
-ENABLE_SECURE_COOKIES=true
+ENABLE_SECURE_COOKIES=$secureCookies
 
 # Circuit Breaker Configuration
 ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS=false
@@ -294,6 +511,21 @@ LOG_LEVEL=info
     
     try {
         Set-Content -Path "$DEPLOY_DIR\.env" -Value $envContent -Encoding UTF8
+
+        # W-015: Restrict .env file permissions (equivalent to chmod 600)
+        # Remove inheritance and set owner-only access
+        $envFile = "$DEPLOY_DIR\.env"
+        $acl = Get-Acl $envFile
+        $acl.SetAccessRuleProtection($true, $false)  # Disable inheritance, don't copy existing rules
+        $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+        $accessRule = New-Object System.Security.AccessControl.FileSystemAccessRule(
+            $currentUser,
+            "FullControl",
+            "Allow"
+        )
+        $acl.SetAccessRule($accessRule)
+        Set-Acl -Path $envFile -AclObject $acl
+
         Write-ColorOutput ".env file created" -Type Success
     }
     catch {
@@ -398,44 +630,91 @@ function Show-SuccessMessage {
     $addresses = Get-NetworkAddresses
     
     Write-Host ""
-    Write-Host "╔════════════════════════════════════════════════════════════════╗" -ForegroundColor Green
-    Write-Host "║                                                                ║" -ForegroundColor Green
-    Write-Host "║          🎉 Claude Code Hub Deployed Successfully! 🎉         ║" -ForegroundColor Green
-    Write-Host "║                                                                ║" -ForegroundColor Green
-    Write-Host "╚════════════════════════════════════════════════════════════════╝" -ForegroundColor Green
+    Write-Host "+================================================================+" -ForegroundColor Green
+    Write-Host "|                                                                |" -ForegroundColor Green
+    Write-Host "|          Claude Code Hub Deployed Successfully!               |" -ForegroundColor Green
+    Write-Host "|                                                                |" -ForegroundColor Green
+    Write-Host "+================================================================+" -ForegroundColor Green
     Write-Host ""
     
-    Write-Host "📍 Deployment Directory:" -ForegroundColor Blue
+    Write-Host "Deployment Directory:" -ForegroundColor Blue
     Write-Host "   $DEPLOY_DIR"
     Write-Host ""
     
-    Write-Host "🌐 Access URLs:" -ForegroundColor Blue
-    foreach ($addr in $addresses) {
-        Write-Host "   http://${addr}:23000" -ForegroundColor Green
+    Write-Host "Access URLs:" -ForegroundColor Blue
+    if ($script:ENABLE_CADDY) {
+        if ($script:DOMAIN_ARG) {
+            # HTTPS mode with domain
+            Write-Host "   https://$($script:DOMAIN_ARG)" -ForegroundColor Green
+        }
+        else {
+            # HTTP-only Caddy mode
+            foreach ($addr in $addresses) {
+                Write-Host "   http://${addr}" -ForegroundColor Green
+            }
+        }
+    }
+    else {
+        # Direct app access
+        foreach ($addr in $addresses) {
+            Write-Host "   http://${addr}:$($script:APP_PORT)" -ForegroundColor Green
+        }
     }
     Write-Host ""
     
-    Write-Host "🔑 Admin Token (KEEP THIS SECRET!):" -ForegroundColor Blue
+    Write-Host "Admin Token (KEEP THIS SECRET!):" -ForegroundColor Blue
     Write-Host "   $ADMIN_TOKEN" -ForegroundColor Yellow
     Write-Host ""
     
-    Write-Host "📚 Usage Documentation:" -ForegroundColor Blue
-    $firstAddr = $addresses[0]
-    Write-Host "   Chinese: http://${firstAddr}:23000/zh-CN/usage-doc" -ForegroundColor Green
-    Write-Host "   English: http://${firstAddr}:23000/en-US/usage-doc" -ForegroundColor Green
+    Write-Host "Usage Documentation:" -ForegroundColor Blue
+    if ($script:ENABLE_CADDY -and $script:DOMAIN_ARG) {
+        Write-Host "   Chinese: https://$($script:DOMAIN_ARG)/zh-CN/usage-doc" -ForegroundColor Green
+        Write-Host "   English: https://$($script:DOMAIN_ARG)/en-US/usage-doc" -ForegroundColor Green
+    }
+    else {
+        $firstAddr = $addresses[0]
+        $portSuffix = ""
+        if (-not $script:ENABLE_CADDY) {
+            $portSuffix = ":$($script:APP_PORT)"
+        }
+        Write-Host "   Chinese: http://${firstAddr}${portSuffix}/zh-CN/usage-doc" -ForegroundColor Green
+        Write-Host "   English: http://${firstAddr}${portSuffix}/en-US/usage-doc" -ForegroundColor Green
+    }
     Write-Host ""
     
-    Write-Host "🔧 Useful Commands:" -ForegroundColor Blue
+    Write-Host "Useful Commands:" -ForegroundColor Blue
     Write-Host "   View logs:     cd $DEPLOY_DIR; docker compose logs -f" -ForegroundColor Yellow
     Write-Host "   Stop services: cd $DEPLOY_DIR; docker compose down" -ForegroundColor Yellow
     Write-Host "   Restart:       cd $DEPLOY_DIR; docker compose restart" -ForegroundColor Yellow
+
+    if ($script:ENABLE_CADDY) {
+        Write-Host ""
+        Write-Host "Caddy Configuration:" -ForegroundColor Blue
+        if ($script:DOMAIN_ARG) {
+            Write-Host "   Mode: HTTPS with Let's Encrypt (domain: $($script:DOMAIN_ARG))"
+            Write-Host "   Ports: 80 (HTTP redirect), 443 (HTTPS)"
+        }
+        else {
+            Write-Host "   Mode: HTTP-only reverse proxy"
+            Write-Host "   Port: 80"
+        }
+    }
+
     Write-Host ""
-    
-    Write-Host "⚠️  IMPORTANT: Please save the admin token in a secure location!" -ForegroundColor Red
+    Write-Host "IMPORTANT: Please save the admin token in a secure location!" -ForegroundColor Red
     Write-Host ""
 }
 
 function Main {
+    # Handle help flag first
+    if ($Help) {
+        Show-Help
+        exit 0
+    }
+
+    # Initialize parameters from CLI args
+    Initialize-Parameters
+
     Show-Header
     
     if (-not (Test-DockerInstalled)) {
@@ -451,6 +730,7 @@ function Main {
     
     New-DeploymentDirectory
     Write-ComposeFile
+    Write-Caddyfile
     Write-EnvFile
     
     Start-Services

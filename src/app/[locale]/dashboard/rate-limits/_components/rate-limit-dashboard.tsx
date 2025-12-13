@@ -96,7 +96,7 @@ export function RateLimitDashboard(_props: RateLimitDashboardProps) {
             </div>
             <div className="rounded-lg border bg-card p-4">
               <div className="text-sm text-muted-foreground">{t("avgUsage")}</div>
-              <div className="text-2xl font-bold">{stats.avg_current_usage.toFixed(1)}%</div>
+              <div className="text-2xl font-bold">{(stats.avg_current_usage ?? 0).toFixed(1)}%</div>
             </div>
             <div className="rounded-lg border bg-card p-4">
               <div className="text-sm text-muted-foreground">{t("affectedUsers")}</div>

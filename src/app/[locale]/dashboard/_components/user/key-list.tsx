@@ -86,12 +86,14 @@ export function KeyList({
     TableColumnTypes.text<UserKeyDisplay>("name", t("columns.name"), {
       render: (value, record) => {
         // 检查是否有限额配置
-        const hasLimitConfig =
+        // 使用 Boolean() 确保返回布尔值，避免 React 渲染数字 0
+        const hasLimitConfig = Boolean(
           (record.limit5hUsd && record.limit5hUsd > 0) ||
-          (record.limitDailyUsd && record.limitDailyUsd > 0) ||
-          (record.limitWeeklyUsd && record.limitWeeklyUsd > 0) ||
-          (record.limitMonthlyUsd && record.limitMonthlyUsd > 0) ||
-          (record.limitConcurrentSessions && record.limitConcurrentSessions > 0);
+            (record.limitDailyUsd && record.limitDailyUsd > 0) ||
+            (record.limitWeeklyUsd && record.limitWeeklyUsd > 0) ||
+            (record.limitMonthlyUsd && record.limitMonthlyUsd > 0) ||
+            (record.limitConcurrentSessions && record.limitConcurrentSessions > 0)
+        );
 
         const hasModelStats = record.modelStats.length > 0;
         const showDetails = hasModelStats || hasLimitConfig;

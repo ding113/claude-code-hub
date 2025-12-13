@@ -716,6 +716,15 @@
               "placeholder": "输入分组标签",
               "desc": "供应商分组标签（支持多个，逗号分隔）。只有用户的 providerGroup 与此值匹配时，该用户才能使用此供应商。留空=对所有用户开放"
             }
+          },
+          "context1m": {
+            "label": "1M 上下文窗口",
+            "options": {
+              "inherit": "跟随客户端",
+              "forceEnable": "强制启用",
+              "disabled": "禁用"
+            },
+            "desc": "配置 1M 上下文窗口支持。仅对 Sonnet 模型生效（claude-sonnet-4-5、claude-sonnet-4）。启用后将应用阶梯定价。"
           }
         },
         "rateLimit": {

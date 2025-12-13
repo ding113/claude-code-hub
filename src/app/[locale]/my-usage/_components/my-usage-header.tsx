@@ -104,10 +104,12 @@ export function MyUsageHeader({
         </div>
         <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
       </div>
-      <Button variant="outline" size="sm" onClick={handleLogout} className="gap-2">
-        <LogOut className="h-4 w-4" />
-        {t("logout")}
-      </Button>
+      <div className="flex items-center gap-2">
+        <Button variant="outline" size="sm" onClick={handleLogout} className="gap-2">
+          <LogOut className="h-4 w-4" />
+          {t("logout")}
+        </Button>
+      </div>
     </div>
   );
 }

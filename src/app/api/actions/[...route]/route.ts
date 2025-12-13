@@ -50,9 +50,8 @@ const { route: getUsersRoute, handler: getUsersHandler } = createActionRoute(
   "getUsers",
   userActions.getUsers,
   {
-    description: "获取所有用户列表 (管理员)",
+    description: "获取用户列表 (管理员获取所有用户，普通用户仅获取自己)",
     tags: ["用户管理"],
-    requiredRole: "admin",
   }
 );
 app.openapi(getUsersRoute, getUsersHandler);

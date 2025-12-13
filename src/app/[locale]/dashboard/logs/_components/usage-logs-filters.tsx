@@ -7,12 +7,7 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { getKeys } from "@/actions/keys";
-import {
-  exportUsageLogs,
-  getEndpointList,
-  getModelList,
-  getStatusCodeList,
-} from "@/actions/usage-logs";
+import { exportUsageLogs, getFilterOptions } from "@/actions/usage-logs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -77,29 +72,16 @@ export function UsageLogsFilters({
       setEndpointError(null);
 
       try {
-        const [modelsResult, codesResult, endpointsResult] = await Promise.all([
-          getModelList(),
-          getStatusCodeList(),
-          getEndpointList(),
-        ]);
+        // 使用带缓存的 getFilterOptions，避免每次挂载都执行 3 次 DISTINCT 全表扫描
+        const optionsResult = await getFilterOptions();
 
-        if (modelsResult.ok && modelsResult.data) {
-          setModels(modelsResult.data);
-        }
-
-        if (codesResult.ok && codesResult.data) {
-          setStatusCodes(codesResult.data);
-        }
-
-        if (endpointsResult.ok && endpointsResult.data) {
-          setEndpoints(endpointsResult.data);
+        if (optionsResult.ok && optionsResult.data) {
+          setModels(optionsResult.data.models);
+          setStatusCodes(optionsResult.data.statusCodes);
+          setEndpoints(optionsResult.data.endpoints);
         } else {
           setEndpoints([]);
-          setEndpointError(
-            !endpointsResult.ok && "error" in endpointsResult
-              ? endpointsResult.error
-              : t("logs.error.loadFailed")
-          );
+          setEndpointError(!optionsResult.ok ? optionsResult.error : t("logs.error.loadFailed"));
         }
       } catch (error) {
         console.error("Failed to load filter options:", error);

@@ -99,6 +99,10 @@
       "status": "Статус"
     },
     "stats": {
+      "title": "Сводка статистики",
+      "description": "Нажмите для просмотра агрегированной статистики по текущим фильтрам",
+      "expand": "Развернуть",
+      "collapse": "Свернуть",
       "totalAmount": "Общая сумма расходов",
       "totalTokens": "Общее количество токенов",
       "cacheTokens": "Токены кэша",
@@ -209,7 +213,9 @@
       "cacheRead": "Чтение кэша",
       "cacheTtl": "TTL кэша",
       "multiplier": "Множитель поставщика",
-      "totalCost": "Общая стоимость"
+      "totalCost": "Общая стоимость",
+      "context1m": "1M Контекст",
+      "context1mPricing": "Вход >200k 2x, Выход >200k 1.5x"
     }
   },
   "leaderboard": {
@@ -390,7 +396,9 @@
       "fetchFailed": "Не удалось получить список запросов",
       "unknownError": "Неизвестная ошибка",
       "prev": "Назад",
-      "next": "Вперед"
+      "next": "Вперед",
+      "orderAsc": "Переключить на прямой порядок (старые первыми)",
+      "orderDesc": "Переключить на обратный порядок (новые первыми)"
     },
     "back": "Назад",
     "loadingError": "Не удалось загрузить"
@@ -443,12 +451,14 @@
   },
   "all": "Все",
   "nav": {
+    "mobileMenuTitle": "Меню навигации",
     "dashboard": "Панель",
     "usageLogs": "Журналы",
     "leaderboard": "Лидеры",
     "availability": "Доступность",
     "quotasManagement": "Квоты",
     "userManagement": "Пользователи",
+    "providers": "Управление поставщиками",
     "documentation": "Доки",
     "systemSettings": "Настройки",
     "feedback": "Обратная связь",

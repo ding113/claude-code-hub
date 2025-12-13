@@ -1,8 +1,11 @@
 import crypto from "node:crypto";
 import type { Context } from "hono";
+import { clientRequestsContext1m as clientRequestsContext1mHelper } from "@/lib/special-attributes";
+import { findLatestPriceByModel } from "@/repository/model-price";
 import type { CacheTtlResolved } from "@/types/cache";
 import type { Key } from "@/types/key";
 import type { ProviderChainItem } from "@/types/message";
+import type { ModelPriceData } from "@/types/model-price";
 import type { Provider, ProviderType } from "@/types/provider";
 import type { User } from "@/types/user";
 import type { ClientFormat } from "./format-mapper";
@@ -75,6 +78,12 @@ export class ProxySession {
 
   // Cache TTL override (resolved)
   private cacheTtlResolved: CacheTtlResolved | null = null;
+
+  // 1M Context Window applied (resolved)
+  private context1mApplied: boolean = false;
+
+  // Cached price data (lazy loaded: undefined=not loaded, null=no data)
+  private cachedPriceData?: ModelPriceData | null;
 
   private constructor(init: {
     startTime: number;
@@ -175,6 +184,21 @@ export class ProxySession {
 
   getCacheTtlResolved(): CacheTtlResolved | null {
     return this.cacheTtlResolved;
+  }
+
+  setContext1mApplied(applied: boolean): void {
+    this.context1mApplied = applied;
+  }
+
+  getContext1mApplied(): boolean {
+    return this.context1mApplied;
+  }
+
+  /**
+   * Check if client requests 1M context (based on anthropic-beta header)
+   */
+  clientRequestsContext1m(): boolean {
+    return clientRequestsContext1mHelper(this.headers);
   }
 
   /**
@@ -478,6 +502,18 @@ export class ProxySession {
    */
   getLastSelectionContext(): ProviderChainItem["decisionContext"] | undefined {
     return this._lastSelectionContext;
+  }
+
+  /**
+   * Get cached price data with lazy loading
+   * Returns null if model not found or no pricing available
+   */
+  async getCachedPriceData(): Promise<ModelPriceData | null> {
+    if (this.cachedPriceData === undefined && this.request.model) {
+      const result = await findLatestPriceByModel(this.request.model);
+      this.cachedPriceData = result?.priceData ?? null;
+    }
+    return this.cachedPriceData ?? null;
   }
 }
 

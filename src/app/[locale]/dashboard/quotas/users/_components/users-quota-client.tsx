@@ -13,15 +13,17 @@ const COLLAPSIBLE_TRIGGER_CLASS =
   "flex w-full items-center justify-between rounded-lg border bg-card px-4 py-3 text-sm font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 transition-colors";
 
 function getUsageRate(user: UserQuotaWithUsage): number {
+  // W-014: 添加 NaN 防护
   const rpmRate =
     user.quota?.rpm && user.quota.rpm.limit > 0
-      ? (user.quota.rpm.current / user.quota.rpm.limit) * 100
+      ? ((user.quota.rpm.current ?? 0) / user.quota.rpm.limit) * 100
       : 0;
   const dailyRate =
     user.quota?.dailyCost && user.quota.dailyCost.limit > 0
-      ? (user.quota.dailyCost.current / user.quota.dailyCost.limit) * 100
+      ? ((user.quota.dailyCost.current ?? 0) / user.quota.dailyCost.limit) * 100
       : 0;
-  return Math.max(rpmRate, dailyRate);
+  const result = Math.max(rpmRate, dailyRate);
+  return Number.isFinite(result) ? result : 0;
 }
 
 function hasQuota(user: UserQuotaWithUsage): boolean {

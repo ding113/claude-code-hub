@@ -7,7 +7,13 @@ import {
 import { logger } from "@/lib/logger";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { updateMessageRequestDetails, updateMessageRequestDuration } from "@/repository/message";
-import { getErrorOverrideAsync, isRateLimitError, ProxyError, type RateLimitError } from "./errors";
+import {
+  getErrorOverrideAsync,
+  isEmptyResponseError,
+  isRateLimitError,
+  ProxyError,
+  type RateLimitError,
+} from "./errors";
 import { ProxyResponses } from "./responses";
 import type { ProxySession } from "./session";
 
@@ -18,13 +24,18 @@ const OVERRIDE_STATUS_CODE_MAX = 599;
 
 export class ProxyErrorHandler {
   static async handle(session: ProxySession, error: unknown): Promise<Response> {
-    let errorMessage: string;
+    // 分离两种消息：
+    // - clientErrorMessage: 返回给客户端的安全消息（不含供应商名称）
+    // - logErrorMessage: 记录到数据库的详细消息（包含供应商名称，便于排查）
+    let clientErrorMessage: string;
+    let logErrorMessage: string;
     let statusCode = 500;
     let rateLimitMetadata: Record<string, unknown> | null = null;
 
     // 优先处理 RateLimitError（新增）
     if (isRateLimitError(error)) {
-      errorMessage = error.message;
+      clientErrorMessage = error.message;
+      logErrorMessage = error.message;
       statusCode = 429;
       rateLimitMetadata = error.toJSON();
 
@@ -34,7 +45,7 @@ export class ProxyErrorHandler {
       // 记录错误到数据库（包含 rate_limit 元数据）
       await ProxyErrorHandler.logErrorToDatabase(
         session,
-        errorMessage,
+        logErrorMessage,
         statusCode,
         rateLimitMetadata
       );
@@ -44,12 +55,22 @@ export class ProxyErrorHandler {
 
     // 识别 ProxyError，提取详细信息（包含上游响应）
     if (error instanceof ProxyError) {
-      errorMessage = error.getDetailedErrorMessage();
+      // 客户端消息：不含供应商名称，保护敏感信息
+      clientErrorMessage = error.getClientSafeMessage();
+      // 日志消息：包含供应商名称，便于问题排查
+      logErrorMessage = error.getDetailedErrorMessage();
       statusCode = error.statusCode; // 使用实际状态码（不再统一 5xx 为 500）
+    } else if (isEmptyResponseError(error)) {
+      // EmptyResponseError: 客户端消息不含供应商名称
+      clientErrorMessage = error.getClientSafeMessage();
+      logErrorMessage = error.message; // 日志保留完整信息
+      statusCode = 502; // Bad Gateway
     } else if (error instanceof Error) {
-      errorMessage = error.message;
+      clientErrorMessage = error.message;
+      logErrorMessage = error.message;
     } else {
-      errorMessage = "代理请求发生未知错误";
+      clientErrorMessage = "代理请求发生未知错误";
+      logErrorMessage = "代理请求发生未知错误";
     }
 
     // 后备方案：如果状态码仍是 500，尝试从 provider chain 中提取最后一次实际请求的状态码
@@ -60,8 +81,8 @@ export class ProxyErrorHandler {
       }
     }
 
-    // 记录错误到数据库（始终记录原始错误消息）
-    await ProxyErrorHandler.logErrorToDatabase(session, errorMessage, statusCode, null);
+    // 记录错误到数据库（始终记录详细错误消息，包含供应商名称）
+    await ProxyErrorHandler.logErrorToDatabase(session, logErrorMessage, statusCode, null);
 
     // 检测是否有覆写配置（响应体或状态码）
     // 使用异步版本确保错误规则已加载
@@ -103,7 +124,7 @@ export class ProxyErrorHandler {
             if (override.statusCode !== null) {
               return ProxyResponses.buildError(
                 responseStatusCode,
-                errorMessage,
+                clientErrorMessage,
                 undefined,
                 undefined,
                 safeRequestId
@@ -112,20 +133,20 @@ export class ProxyErrorHandler {
             // 两者都无效，返回原始错误（但仍透传 request_id，因为有覆写意图）
             return ProxyResponses.buildError(
               statusCode,
-              errorMessage,
+              clientErrorMessage,
               undefined,
               undefined,
               safeRequestId
             );
           }
 
-          // 覆写消息为空时回退到原始错误消息
+          // 覆写消息为空时回退到客户端安全消息
           const overrideErrorObj = override.response.error as Record<string, unknown>;
           const overrideMessage =
             typeof overrideErrorObj?.message === "string" &&
             overrideErrorObj.message.trim().length > 0
               ? overrideErrorObj.message
-              : errorMessage;
+              : clientErrorMessage;
 
           // 构建覆写响应体
           // 设计原则：只输出用户配置的字段，不额外注入 request_id 等字段
@@ -139,7 +160,7 @@ export class ProxyErrorHandler {
           };
 
           logger.info("ProxyErrorHandler: Applied error override response", {
-            original: errorMessage.substring(0, 200),
+            original: logErrorMessage.substring(0, 200),
             format: isClaudeErrorFormat(override.response)
               ? "claude"
               : isGeminiErrorFormat(override.response)
@@ -151,7 +172,7 @@ export class ProxyErrorHandler {
           });
 
           logger.error("ProxyErrorHandler: Request failed (overridden)", {
-            error: errorMessage,
+            error: logErrorMessage,
             statusCode: responseStatusCode,
             overridden: true,
           });
@@ -162,23 +183,23 @@ export class ProxyErrorHandler {
           });
         }
 
-        // 情况 2: 仅状态码覆写 - 返回原始错误消息，但使用覆写的状态码
+        // 情况 2: 仅状态码覆写 - 返回客户端安全消息，但使用覆写的状态码
         logger.info("ProxyErrorHandler: Applied status code override only", {
-          original: errorMessage.substring(0, 200),
+          original: logErrorMessage.substring(0, 200),
           originalStatusCode: statusCode,
           overrideStatusCode: responseStatusCode,
           hasRequestId: !!safeRequestId,
         });
 
         logger.error("ProxyErrorHandler: Request failed (status overridden)", {
-          error: errorMessage,
+          error: logErrorMessage,
           statusCode: responseStatusCode,
           overridden: true,
         });
 
         return ProxyResponses.buildError(
           responseStatusCode,
-          errorMessage,
+          clientErrorMessage,
           undefined,
           undefined,
           safeRequestId
@@ -187,12 +208,12 @@ export class ProxyErrorHandler {
     }
 
     logger.error("ProxyErrorHandler: Request failed", {
-      error: errorMessage,
+      error: logErrorMessage,
       statusCode,
       overridden: false,
     });
 
-    return ProxyResponses.buildError(statusCode, errorMessage);
+    return ProxyResponses.buildError(statusCode, clientErrorMessage);
   }
 
   /**
@@ -295,6 +316,7 @@ export class ProxyErrorHandler {
       statusCode: statusCode,
       model: session.getCurrentModel() ?? undefined,
       providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
+      context1mApplied: session.getContext1mApplied(),
     });
 
     // 记录请求结束

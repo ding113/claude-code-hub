@@ -88,6 +88,15 @@ export interface ProviderChainItem {
 
     // 客户端输入错误（不可重试）
     clientError?: string; // 详细的客户端错误消息（包含匹配的白名单模式）
+
+    // 新增：请求详情（用于问题排查）
+    request?: {
+      url: string; // 完整请求 URL（已脱敏查询参数中的 key）
+      method: string; // HTTP 方法
+      headers: string; // 请求头（已脱敏敏感信息）
+      body?: string; // 请求体（优化格式，已截断）
+      bodyTruncated?: boolean; // 标记请求体是否被截断
+    };
   };
 
   // === 决策上下文（完整记录） ===
@@ -120,6 +129,7 @@ export interface ProviderChainItem {
         | "format_type_mismatch" // 请求格式与供应商类型不兼容
         | "type_mismatch"
         | "model_not_allowed"
+        | "context_1m_disabled" // 供应商禁用了 1M 上下文功能
         | "disabled";
       details?: string; // 额外信息（如费用：$15.2/$15）
     }>;
@@ -200,6 +210,9 @@ export interface MessageRequest {
 
   // Messages 数量（用于短请求检测和分析）
   messagesCount?: number;
+
+  // 1M 上下文窗口是否已应用
+  context1mApplied?: boolean;
 
   createdAt: Date;
   updatedAt: Date;

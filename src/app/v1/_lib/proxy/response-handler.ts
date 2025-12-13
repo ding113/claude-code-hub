@@ -213,6 +213,7 @@ export class ProxyResponseHandler {
             providerChain: session.getProviderChain(),
             model: session.getCurrentModel() ?? undefined, // ⭐ 更新重定向后的模型
             providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
+            context1mApplied: session.getContext1mApplied(),
           });
           const tracker = ProxyStatusTracker.getInstance();
           tracker.endRequest(messageContext.user.id, messageContext.id);
@@ -304,7 +305,8 @@ export class ProxyResponseHandler {
             session.getOriginalModel(),
             session.getCurrentModel(),
             usageMetrics,
-            provider.costMultiplier
+            provider.costMultiplier,
+            session.getContext1mApplied()
           );
 
           // 追踪消费到 Redis（用于限流）
@@ -316,12 +318,13 @@ export class ProxyResponseHandler {
           // 计算成本（复用相同逻辑）
           let costUsdStr: string | undefined;
           if (session.request.model) {
-            const priceData = await findLatestPriceByModel(session.request.model);
-            if (priceData?.priceData) {
+            const priceData = await session.getCachedPriceData();
+            if (priceData) {
               const cost = calculateRequestCost(
                 usageMetrics,
-                priceData.priceData,
-                provider.costMultiplier
+                priceData,
+                provider.costMultiplier,
+                session.getContext1mApplied()
               );
               if (cost.gt(0)) {
                 costUsdStr = cost.toString();
@@ -359,6 +362,7 @@ export class ProxyResponseHandler {
             providerChain: session.getProviderChain(),
             model: session.getCurrentModel() ?? undefined, // ⭐ 更新重定向后的模型
             providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
+            context1mApplied: session.getContext1mApplied(),
           });
 
           // 记录请求结束
@@ -857,7 +861,8 @@ export class ProxyResponseHandler {
           session.getOriginalModel(),
           session.getCurrentModel(),
           usageForCost,
-          provider.costMultiplier
+          provider.costMultiplier,
+          session.getContext1mApplied()
         );
 
         // 追踪消费到 Redis（用于限流）
@@ -867,12 +872,13 @@ export class ProxyResponseHandler {
         if (session.sessionId && usageForCost) {
           let costUsdStr: string | undefined;
           if (session.request.model) {
-            const priceData = await findLatestPriceByModel(session.request.model);
-            if (priceData?.priceData) {
+            const priceData = await session.getCachedPriceData();
+            if (priceData) {
               const cost = calculateRequestCost(
                 usageForCost,
-                priceData.priceData,
-                provider.costMultiplier
+                priceData,
+                provider.costMultiplier,
+                session.getContext1mApplied()
               );
               if (cost.gt(0)) {
                 costUsdStr = cost.toString();
@@ -906,6 +912,7 @@ export class ProxyResponseHandler {
           providerChain: session.getProviderChain(),
           model: session.getCurrentModel() ?? undefined, // ⭐ 更新重定向后的模型
           providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
+          context1mApplied: session.getContext1mApplied(),
         });
       };
 
@@ -1193,8 +1200,13 @@ function extractUsageMetrics(value: unknown): UsageMetrics | null {
   }
 
   // Gemini support
+  // 注意：promptTokenCount 包含 cachedContentTokenCount，需要减去以避免重复计费
+  // 计费公式：input = (promptTokenCount - cachedContentTokenCount) × input_price
+  //          cache = cachedContentTokenCount × cache_price
   if (typeof usage.promptTokenCount === "number") {
-    result.input_tokens = usage.promptTokenCount;
+    const cachedTokens =
+      typeof usage.cachedContentTokenCount === "number" ? usage.cachedContentTokenCount : 0;
+    result.input_tokens = Math.max(usage.promptTokenCount - cachedTokens, 0);
     hasAny = true;
   }
   if (typeof usage.candidatesTokenCount === "number") {
@@ -1209,6 +1221,15 @@ function extractUsageMetrics(value: unknown): UsageMetrics | null {
 
   if (typeof usage.output_tokens === "number") {
     result.output_tokens = usage.output_tokens;
+    hasAny = true;
+  }
+
+  // Gemini 思考/推理 token：直接累加到 output_tokens（思考价格与输出价格相同）
+  // 注意：放在 output_tokens 赋值之后，避免被覆盖
+  // output_tokens 是转换的时候才存在的，gemini原生接口的没有该值
+  // 通常存在 output_tokens的时候，thoughtsTokenCount=0
+  if (typeof usage.thoughtsTokenCount === "number" && usage.thoughtsTokenCount > 0) {
+    result.output_tokens = (result.output_tokens ?? 0) + usage.thoughtsTokenCount;
     hasAny = true;
   }
 
@@ -1478,7 +1499,8 @@ async function updateRequestCostFromUsage(
   originalModel: string | null,
   redirectedModel: string | null,
   usage: UsageMetrics | null,
-  costMultiplier: number = 1.0
+  costMultiplier: number = 1.0,
+  context1mApplied: boolean = false
 ): Promise<void> {
   if (!usage) {
     logger.warn("[CostCalculation] No usage data, skipping cost update", {
@@ -1561,7 +1583,7 @@ async function updateRequestCostFromUsage(
   }
 
   // 计算费用
-  const cost = calculateRequestCost(usage, priceData.priceData, costMultiplier);
+  const cost = calculateRequestCost(usage, priceData.priceData, costMultiplier, context1mApplied);
 
   logger.info("[CostCalculation] Cost calculated successfully", {
     messageId,
@@ -1618,6 +1640,7 @@ async function finalizeRequestStats(
       providerChain: session.getProviderChain(),
       model: session.getCurrentModel() ?? undefined,
       providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
+      context1mApplied: session.getContext1mApplied(),
     });
     return;
   }
@@ -1646,7 +1669,8 @@ async function finalizeRequestStats(
     session.getOriginalModel(),
     session.getCurrentModel(),
     normalizedUsage,
-    provider.costMultiplier
+    provider.costMultiplier,
+    session.getContext1mApplied()
   );
 
   // 5. 追踪消费到 Redis（用于限流）
@@ -1656,12 +1680,13 @@ async function finalizeRequestStats(
   if (session.sessionId) {
     let costUsdStr: string | undefined;
     if (session.request.model) {
-      const priceData = await findLatestPriceByModel(session.request.model);
-      if (priceData?.priceData) {
+      const priceData = await session.getCachedPriceData();
+      if (priceData) {
         const cost = calculateRequestCost(
           normalizedUsage,
-          priceData.priceData,
-          provider.costMultiplier
+          priceData,
+          provider.costMultiplier,
+          session.getContext1mApplied()
         );
         if (cost.gt(0)) {
           costUsdStr = cost.toString();
@@ -1695,6 +1720,7 @@ async function finalizeRequestStats(
     providerChain: session.getProviderChain(),
     model: session.getCurrentModel() ?? undefined,
     providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
+    context1mApplied: session.getContext1mApplied(),
   });
 }
 
@@ -1714,11 +1740,16 @@ async function trackCostToRedis(session: ProxySession, usage: UsageMetrics | nul
   const modelName = session.request.model;
   if (!modelName) return;
 
-  // 计算成本（应用倍率）
-  const priceData = await findLatestPriceByModel(modelName);
-  if (!priceData?.priceData) return;
+  // 计算成本（应用倍率）- 使用 session 缓存避免重复查询
+  const priceData = await session.getCachedPriceData();
+  if (!priceData) return;
 
-  const cost = calculateRequestCost(usage, priceData.priceData, provider.costMultiplier);
+  const cost = calculateRequestCost(
+    usage,
+    priceData,
+    provider.costMultiplier,
+    session.getContext1mApplied()
+  );
   if (cost.lte(0)) return;
 
   const costFloat = parseFloat(cost.toString());
@@ -1784,6 +1815,7 @@ async function persistRequestFailure(options: {
       providerChain: session.getProviderChain(),
       model: session.getCurrentModel() ?? undefined,
       providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
+      context1mApplied: session.getContext1mApplied(),
     });
 
     logger.info("ResponseHandler: Successfully persisted request failure", {

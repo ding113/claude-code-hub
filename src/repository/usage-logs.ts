@@ -53,6 +53,7 @@ export interface UsageLogRow {
   blockedReason: string | null; // 拦截原因（JSON 字符串）
   userAgent: string | null; // User-Agent（客户端信息）
   messagesCount: number | null; // Messages 数量
+  context1mApplied: boolean | null; // 是否应用了1M上下文窗口
 }
 
 export interface UsageLogSummary {
@@ -71,6 +72,14 @@ export interface UsageLogsResult {
   logs: UsageLogRow[];
   total: number;
   summary: UsageLogSummary;
+}
+
+/**
+ * 仅分页数据的返回类型（不含聚合统计）
+ */
+export interface UsageLogsPaginatedResult {
+  logs: UsageLogRow[];
+  total: number;
 }
 
 export async function getTotalUsageForKey(keyString: string): Promise<number> {
@@ -263,6 +272,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       blockedReason: messageRequest.blockedReason, // 拦截原因
       userAgent: messageRequest.userAgent, // User-Agent
       messagesCount: messageRequest.messagesCount, // Messages 数量
+      context1mApplied: messageRequest.context1mApplied, // 1M上下文窗口
     })
     .from(messageRequest)
     .innerJoin(users, eq(messageRequest.userId, users.id))
@@ -347,4 +357,131 @@ export async function getUsedEndpoints(): Promise<string[]> {
     .orderBy(messageRequest.endpoint);
 
   return results.map((r) => r.endpoint).filter((e): e is string => e !== null);
+}
+
+/**
+ * 独立获取使用日志聚合统计（用于可折叠面板按需加载）
+ *
+ * 优化效果：
+ * - 分页时不再执行聚合查询
+ * - 仅在用户展开统计面板时加载
+ * - 筛选条件变更时需重新加载
+ */
+export async function findUsageLogsStats(
+  filters: Omit<UsageLogFilters, "page" | "pageSize">
+): Promise<UsageLogSummary> {
+  const {
+    userId,
+    keyId,
+    providerId,
+    startTime,
+    endTime,
+    statusCode,
+    excludeStatusCode200,
+    model,
+    endpoint,
+    minRetryCount,
+  } = filters;
+
+  // 构建查询条件（与 findUsageLogsWithDetails 相同）
+  const conditions = [isNull(messageRequest.deletedAt)];
+
+  if (userId !== undefined) {
+    conditions.push(eq(messageRequest.userId, userId));
+  }
+
+  if (keyId !== undefined) {
+    const keyResult = await db
+      .select({ key: keysTable.key })
+      .from(keysTable)
+      .where(and(eq(keysTable.id, keyId), isNull(keysTable.deletedAt)))
+      .limit(1);
+
+    if (keyResult.length > 0) {
+      conditions.push(eq(messageRequest.key, keyResult[0].key));
+    } else {
+      return {
+        totalRequests: 0,
+        totalCost: 0,
+        totalTokens: 0,
+        totalInputTokens: 0,
+        totalOutputTokens: 0,
+        totalCacheCreationTokens: 0,
+        totalCacheReadTokens: 0,
+        totalCacheCreation5mTokens: 0,
+        totalCacheCreation1hTokens: 0,
+      };
+    }
+  }
+
+  if (providerId !== undefined) {
+    conditions.push(eq(messageRequest.providerId, providerId));
+  }
+
+  if (startTime !== undefined) {
+    const startDate = new Date(startTime);
+    conditions.push(sql`${messageRequest.createdAt} >= ${startDate.toISOString()}::timestamptz`);
+  }
+
+  if (endTime !== undefined) {
+    const endDate = new Date(endTime);
+    conditions.push(sql`${messageRequest.createdAt} < ${endDate.toISOString()}::timestamptz`);
+  }
+
+  if (statusCode !== undefined) {
+    conditions.push(eq(messageRequest.statusCode, statusCode));
+  } else if (excludeStatusCode200) {
+    conditions.push(
+      sql`(${messageRequest.statusCode} IS NULL OR ${messageRequest.statusCode} <> 200)`
+    );
+  }
+
+  if (model) {
+    conditions.push(eq(messageRequest.model, model));
+  }
+
+  if (endpoint) {
+    conditions.push(eq(messageRequest.endpoint, endpoint));
+  }
+
+  if (minRetryCount !== undefined) {
+    conditions.push(
+      sql`GREATEST(COALESCE(jsonb_array_length(${messageRequest.providerChain}) - 1, 0), 0) >= ${minRetryCount}`
+    );
+  }
+
+  // 执行聚合查询
+  const [summaryResult] = await db
+    .select({
+      totalRequests: sql<number>`count(*)::double precision`,
+      totalCost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
+      totalInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens})::double precision, 0::double precision)`,
+      totalOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens})::double precision, 0::double precision)`,
+      totalCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens})::double precision, 0::double precision)`,
+      totalCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens})::double precision, 0::double precision)`,
+      totalCacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens})::double precision, 0::double precision)`,
+      totalCacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens})::double precision, 0::double precision)`,
+    })
+    .from(messageRequest)
+    .where(and(...conditions));
+
+  const totalRequests = summaryResult?.totalRequests ?? 0;
+  const totalCost = parseFloat(summaryResult?.totalCost ?? "0");
+  const totalTokens =
+    (summaryResult?.totalInputTokens ?? 0) +
+    (summaryResult?.totalOutputTokens ?? 0) +
+    (summaryResult?.totalCacheCreationTokens ?? 0) +
+    (summaryResult?.totalCacheReadTokens ?? 0);
+
+  return {
+    totalRequests,
+    totalCost,
+    totalTokens,
+    totalInputTokens: summaryResult?.totalInputTokens ?? 0,
+    totalOutputTokens: summaryResult?.totalOutputTokens ?? 0,
+    totalCacheCreationTokens: summaryResult?.totalCacheCreationTokens ?? 0,
+    totalCacheReadTokens: summaryResult?.totalCacheReadTokens ?? 0,
+    totalCacheCreation5mTokens: summaryResult?.totalCacheCreation5mTokens ?? 0,
+    totalCacheCreation1hTokens: summaryResult?.totalCacheCreation1hTokens ?? 0,
+  };
 }

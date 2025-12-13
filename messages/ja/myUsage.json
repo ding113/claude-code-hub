@@ -9,6 +9,14 @@
     "noProviderGroup": "デフォルト",
     "inherited": "（継承）"
   },
+  "quotaDialog": {
+    "trigger": "クォータを表示",
+    "title": "クォータ詳細",
+    "refresh": "更新",
+    "lastUpdated": "更新: {time}",
+    "loadFailed": "クォータの読み込みに失敗しました",
+    "close": "閉じる"
+  },
   "quota": {
     "5h": "5時間クォータ",
     "daily": "日次クォータ",
@@ -38,6 +46,7 @@
   },
   "logs": {
     "title": "利用ログ",
+    "autoRefresh": "{seconds}秒ごとに自動更新",
     "filters": {
       "startDate": "開始日",
       "endDate": "終了日",
@@ -53,6 +62,8 @@
       "time": "時間",
       "model": "モデル",
       "tokens": "トークン (入/出)",
+      "cacheWrite": "キャッシュ書込",
+      "cacheRead": "キャッシュ読取",
       "cost": "{currency} コスト",
       "status": "ステータス",
       "endpoint": "エンドポイント"

@@ -9,6 +9,7 @@ import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit/service";
 import { SessionTracker } from "@/lib/session-tracker";
 import type { CurrencyCode } from "@/lib/utils";
+import { sumUserCostToday } from "@/repository/statistics";
 import { getSystemSettings } from "@/repository/system-config";
 import {
   findUsageLogsWithDetails,
@@ -19,6 +20,20 @@ import {
 } from "@/repository/usage-logs";
 import type { BillingModelSource } from "@/types/system-config";
 import type { ActionResult } from "./types";
+
+export interface MyUsageMetadata {
+  keyName: string;
+  keyProviderGroup: string | null;
+  keyExpiresAt: Date | null;
+  keyIsEnabled: boolean;
+  userName: string;
+  userProviderGroup: string | null;
+  userExpiresAt: Date | null;
+  userIsEnabled: boolean;
+  dailyResetMode: "fixed" | "rolling";
+  dailyResetTime: string;
+  currencyCode: CurrencyCode;
+}
 
 export interface MyUsageQuota {
   keyLimit5hUsd: number | null;
@@ -40,6 +55,7 @@ export interface MyUsageQuota {
   userLimitTotalUsd: number | null;
   userLimitConcurrentSessions: number | null;
   userCurrent5hUsd: number;
+  userCurrentDailyUsd: number;
   userCurrentWeeklyUsd: number;
   userCurrentMonthlyUsd: number;
   userCurrentTotalUsd: number;
@@ -89,6 +105,11 @@ export interface MyUsageLogEntry {
   statusCode: number | null;
   duration: number | null;
   endpoint: string | null;
+  cacheCreationInputTokens: number | null;
+  cacheReadInputTokens: number | null;
+  cacheCreation5mInputTokens: number | null;
+  cacheCreation1hInputTokens: number | null;
+  cacheTtlApplied: string | null;
 }
 
 export interface MyUsageLogsResult {
@@ -140,6 +161,36 @@ async function sumUserCost(userId: number, period: "5h" | "weekly" | "monthly" |
   return Number(row?.total ?? 0);
 }
 
+export async function getMyUsageMetadata(): Promise<ActionResult<MyUsageMetadata>> {
+  try {
+    const session = await getSession({ allowReadOnlyAccess: true });
+    if (!session) return { ok: false, error: "Unauthorized" };
+
+    const settings = await getSystemSettings();
+    const key = session.key;
+    const user = session.user;
+
+    const metadata: MyUsageMetadata = {
+      keyName: key.name,
+      keyProviderGroup: key.providerGroup ?? null,
+      keyExpiresAt: key.expiresAt ?? null,
+      keyIsEnabled: key.isEnabled ?? true,
+      userName: user.name,
+      userProviderGroup: user.providerGroup ?? null,
+      userExpiresAt: user.expiresAt ?? null,
+      userIsEnabled: user.isEnabled ?? true,
+      dailyResetMode: key.dailyResetMode ?? "fixed",
+      dailyResetTime: key.dailyResetTime ?? "00:00",
+      currencyCode: settings.currencyDisplay,
+    };
+
+    return { ok: true, data: metadata };
+  } catch (error) {
+    logger.error("[my-usage] getMyUsageMetadata failed", error);
+    return { ok: false, error: "Failed to get metadata" };
+  }
+}
+
 export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
   try {
     const session = await getSession({ allowReadOnlyAccess: true });
@@ -156,6 +207,7 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       keyTotalCost,
       keyConcurrent,
       userCost5h,
+      userCostDaily,
       userCostWeekly,
       userCostMonthly,
       userTotalCost,
@@ -174,6 +226,7 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       getTotalUsageForKey(key.key),
       SessionTracker.getKeySessionCount(key.id),
       sumUserCost(user.id, "5h"),
+      sumUserCostToday(user.id),
       sumUserCost(user.id, "weekly"),
       sumUserCost(user.id, "monthly"),
       sumUserCost(user.id, "total"),
@@ -200,6 +253,7 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       userLimitTotalUsd: user.limitTotalUsd ?? null,
       userLimitConcurrentSessions: user.limitConcurrentSessions ?? null,
       userCurrent5hUsd: userCost5h,
+      userCurrentDailyUsd: userCostDaily,
       userCurrentWeeklyUsd: userCostWeekly,
       userCurrentMonthlyUsd: userCostMonthly,
       userCurrentTotalUsd: userTotalCost,
@@ -366,6 +420,11 @@ export async function getMyUsageLogs(
         statusCode: log.statusCode,
         duration: log.durationMs,
         endpoint: log.endpoint,
+        cacheCreationInputTokens: log.cacheCreationInputTokens ?? null,
+        cacheReadInputTokens: log.cacheReadInputTokens ?? null,
+        cacheCreation5mInputTokens: log.cacheCreation5mInputTokens ?? null,
+        cacheCreation1hInputTokens: log.cacheCreation1hInputTokens ?? null,
+        cacheTtlApplied: log.cacheTtlApplied ?? null,
       };
     });
 

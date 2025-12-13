@@ -344,6 +344,15 @@ const DEFAULT_ERROR_RULES = [
     matchType: "regex" as const,
     isDefault: true,
     isEnabled: true,
+    priority: 90,
+  },
+  {
+    pattern: "pricing plan does not include Long Context",
+    category: "context_limit",
+    description: "Provider pricing plan does not support Long Context prompts",
+    matchType: "contains" as const,
+    isDefault: true,
+    isEnabled: true,
     priority: 91,
   },
   {
@@ -393,6 +402,15 @@ const DEFAULT_ERROR_RULES = [
     isDefault: true,
     isEnabled: true,
     priority: 87,
+  },
+  {
+    pattern: "model is required",
+    category: "model_error",
+    description: "Model parameter is required but missing",
+    matchType: "contains" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 86,
   },
   {
     pattern: "模型名称.*为空|模型名称不能为空|未指定模型",

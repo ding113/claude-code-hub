@@ -99,6 +99,10 @@
       "status": "状态"
     },
     "stats": {
+      "title": "统计汇总",
+      "description": "点击展开查看当前筛选条件下的聚合统计",
+      "expand": "展开",
+      "collapse": "收起",
       "totalRequests": "总请求数",
       "totalAmount": "总消耗金额",
       "totalTokens": "总 Token 数",
@@ -210,7 +214,9 @@
       "cacheRead": "缓存读取",
       "cacheTtl": "缓存 TTL",
       "multiplier": "供应商倍率",
-      "totalCost": "总费用"
+      "totalCost": "总费用",
+      "context1m": "1M 上下文",
+      "context1mPricing": "输入 >200k 2倍, 输出 >200k 1.5倍"
     }
   },
   "leaderboard": {
@@ -391,7 +397,9 @@
       "fetchFailed": "获取请求列表失败",
       "unknownError": "未知错误",
       "prev": "上一页",
-      "next": "下一页"
+      "next": "下一页",
+      "orderAsc": "切换为正序（最早的在前）",
+      "orderDesc": "切换为倒序（最新的在前）"
     },
     "back": "返回",
     "loadingError": "加载失败"
@@ -444,12 +452,14 @@
   },
   "all": "全部",
   "nav": {
+    "mobileMenuTitle": "导航菜单",
     "dashboard": "仪表盘",
     "userManagement": "用户管理",
     "usageLogs": "使用记录",
     "leaderboard": "排行榜",
     "availability": "可用性监控",
     "quotasManagement": "限额管理",
+    "providers": "供应商管理",
     "documentation": "文档",
     "systemSettings": "系统设置",
     "feedback": "反馈问题",

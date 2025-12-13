@@ -571,11 +571,13 @@ export async function getSessionDetails(
  * @param sessionId - Session ID
  * @param page - 页码（从 1 开始）
  * @param pageSize - 每页数量（默认 20）
+ * @param order - 排序方式：asc（正序）或 desc（倒序），默认 asc
  */
 export async function getSessionRequests(
   sessionId: string,
   page: number = 1,
-  pageSize: number = 20
+  pageSize: number = 20,
+  order: "asc" | "desc" = "asc"
 ): Promise<
   ActionResult<{
     requests: Array<{
@@ -633,6 +635,7 @@ export async function getSessionRequests(
     const { requests, total } = await findRequestsBySessionId(sessionId, {
       limit: pageSize,
       offset,
+      order,
     });
 
     return {

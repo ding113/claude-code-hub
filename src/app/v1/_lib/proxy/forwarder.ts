@@ -15,6 +15,7 @@ import { PROVIDER_DEFAULTS, PROVIDER_LIMITS } from "@/lib/constants/provider.con
 import { logger } from "@/lib/logger";
 import { createProxyAgentForProvider } from "@/lib/proxy-agent";
 import { SessionManager } from "@/lib/session-manager";
+import { CONTEXT_1M_BETA_HEADER, shouldApplyContext1m } from "@/lib/special-attributes";
 import type { CacheTtlPreference, CacheTtlResolved } from "@/types/cache";
 import { getDefaultInstructions } from "../codex/constants/codex-instructions";
 import { isOfficialCodexClient, sanitizeCodexRequest } from "../codex/utils/request-sanitizer";
@@ -25,6 +26,7 @@ import { GEMINI_PROTOCOL } from "../gemini/protocol";
 import { HeaderProcessor } from "../headers";
 import { buildProxyUrl } from "../url";
 import {
+  buildRequestDetails,
   categorizeErrorAsync,
   EmptyResponseError,
   ErrorCategory,
@@ -434,6 +436,7 @@ export class ProxyForwarder {
                   errorCode: "CLIENT_ABORT",
                   errorStack: lastError.stack?.split("\n").slice(0, 3).join("\n"),
                 },
+                request: buildRequestDetails(session),
               },
             });
 
@@ -475,6 +478,7 @@ export class ProxyForwarder {
                   upstreamParsed: proxyError.upstreamError?.parsed,
                 },
                 clientError: proxyError.getDetailedErrorMessage(),
+                request: buildRequestDetails(session),
               },
             });
 
@@ -514,6 +518,7 @@ export class ProxyForwarder {
                   errorSyscall: err.syscall,
                   errorStack: err.stack?.split("\n").slice(0, 3).join("\n"),
                 },
+                request: buildRequestDetails(session),
               },
             });
 
@@ -597,6 +602,7 @@ export class ProxyForwarder {
                   upstreamBody: proxyError.upstreamError?.body,
                   upstreamParsed: proxyError.upstreamError?.parsed,
                 },
+                request: buildRequestDetails(session),
               },
             });
 
@@ -642,6 +648,7 @@ export class ProxyForwarder {
                     statusCode: 520,
                     statusText: `Empty response: ${emptyError.reason}`,
                   },
+                  request: buildRequestDetails(session),
                 },
               });
 
@@ -765,6 +772,7 @@ export class ProxyForwarder {
                       upstreamParsed: proxyError.upstreamError?.parsed,
                     },
                     instructionsSource,
+                    request: buildRequestDetails(session),
                   },
                 });
 
@@ -797,6 +805,7 @@ export class ProxyForwarder {
                   upstreamBody: proxyError.upstreamError?.body,
                   upstreamParsed: proxyError.upstreamError?.parsed,
                 },
+                request: buildRequestDetails(session),
               },
             });
 
@@ -875,6 +884,25 @@ export class ProxyForwarder {
       provider.cacheTtlPreference
     );
     session.setCacheTtlResolved(resolvedCacheTtl);
+
+    // 解析 1M 上下文是否应用
+    // 注意：此时模型重定向尚未发生，getCurrentModel() 返回原始模型
+    // 1M 功能仅对 Anthropic 类型供应商有效
+    const isAnthropicProvider =
+      provider.providerType === "claude" || provider.providerType === "claude-auth";
+    if (isAnthropicProvider) {
+      const currentModel = session.getCurrentModel() || "";
+      const clientRequests1m = session.clientRequestsContext1m();
+      // W-007: 添加类型验证，避免类型断言
+      const validPreferences = ["inherit", "force_enable", "disabled", null] as const;
+      type Context1mPref = (typeof validPreferences)[number];
+      const rawPref = provider.context1mPreference;
+      const context1mPref: Context1mPref = validPreferences.includes(rawPref as Context1mPref)
+        ? (rawPref as Context1mPref)
+        : null;
+      const context1mApplied = shouldApplyContext1m(context1mPref, currentModel, clientRequests1m);
+      session.setContext1mApplied(context1mApplied);
+    }
 
     // 应用模型重定向（如果配置了）
     const wasRedirected = ModelRedirector.apply(session, provider);
@@ -1122,7 +1150,7 @@ export class ProxyForwarder {
               providerUrl: provider.url,
               error,
             });
-            throw new ProxyError(`Invalid provider URL configuration: ${provider.url}`, 500);
+            throw new ProxyError("Internal configuration error", 500);
           }
         }
       } else if (
@@ -1484,6 +1512,8 @@ export class ProxyForwarder {
               errorCode: err.code || "HTTP2_FAILED",
               errorStack: err.stack?.split("\n").slice(0, 3).join("\n"),
             },
+            // W-011: 添加 request 字段以保持与其他错误处理一致
+            request: buildRequestDetails(session),
           },
         });
 
@@ -1585,7 +1615,7 @@ export class ProxyForwarder {
             }
           } else {
             // 不降级，直接抛出代理错误
-            throw new ProxyError(`Proxy connection failed: ${err.message}`, 500);
+            throw new ProxyError("Service temporarily unavailable", 503);
           }
         } else {
           // 非代理相关错误，记录详细信息后抛出
@@ -1788,6 +1818,24 @@ export class ProxyForwarder {
       if (betaFlags.size === 1) {
         betaFlags.add("prompt-caching-2024-07-31");
       }
+      overrides["anthropic-beta"] = Array.from(betaFlags).join(", ");
+    }
+
+    // 针对 1M 上下文，补充 Anthropic beta header
+    // 逻辑：根据供应商 context1mPreference 决定是否应用 1M 上下文
+    // - 'disabled': 不应用（已在调度阶段被过滤）
+    // - 'force_enable': 强制应用（仅对支持的模型）
+    // - 'inherit' 或 null: 遵循客户端请求
+    if (session.getContext1mApplied?.()) {
+      const existingBeta =
+        overrides["anthropic-beta"] || session.headers.get("anthropic-beta") || "";
+      const betaFlags = new Set(
+        existingBeta
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+      );
+      betaFlags.add(CONTEXT_1M_BETA_HEADER);
       overrides["anthropic-beta"] = Array.from(betaFlags).join(", ");
     }
 

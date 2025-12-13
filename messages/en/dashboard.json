@@ -99,6 +99,10 @@
       "status": "Status"
     },
     "stats": {
+      "title": "Statistics Summary",
+      "description": "Click to view aggregated statistics for the current filters",
+      "expand": "Expand",
+      "collapse": "Collapse",
       "totalRequests": "Total Requests",
       "totalAmount": "Total Consumption",
       "totalTokens": "Total Tokens",
@@ -210,7 +214,9 @@
       "cacheRead": "Cache Read",
       "cacheTtl": "Cache TTL",
       "multiplier": "Provider Multiplier",
-      "totalCost": "Total Cost"
+      "totalCost": "Total Cost",
+      "context1m": "1M Context",
+      "context1mPricing": "Input 2x >200k, Output 1.5x >200k"
     }
   },
   "leaderboard": {
@@ -391,7 +397,9 @@
       "fetchFailed": "Failed to fetch requests",
       "unknownError": "Unknown error occurred",
       "prev": "Prev",
-      "next": "Next"
+      "next": "Next",
+      "orderAsc": "Switch to ascending order (oldest first)",
+      "orderDesc": "Switch to descending order (newest first)"
     },
     "back": "Back",
     "loadingError": "Loading failed"
@@ -444,12 +452,14 @@
   },
   "all": "All",
   "nav": {
+    "mobileMenuTitle": "Navigation Menu",
     "dashboard": "Dashboard",
     "usageLogs": "Usage Logs",
     "leaderboard": "Leaderboard",
     "availability": "Availability",
     "quotasManagement": "Quotas",
     "userManagement": "Users",
+    "providers": "Providers",
     "documentation": "Docs",
     "systemSettings": "Settings",
     "feedback": "Feedback",

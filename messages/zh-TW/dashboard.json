@@ -99,6 +99,10 @@
       "status": "狀態"
     },
     "stats": {
+      "title": "統計匯總",
+      "description": "點擊展開查看當前篩選條件下的彙總統計",
+      "expand": "展開",
+      "collapse": "收起",
       "totalAmount": "總消耗金額",
       "totalTokens": "總 Token 數",
       "cacheTokens": "快取 Token",
@@ -210,7 +214,9 @@
       "cacheRead": "快取讀取",
       "cacheTtl": "快取 TTL",
       "multiplier": "供應商倍率",
-      "totalCost": "總費用"
+      "totalCost": "總費用",
+      "context1m": "1M 上下文",
+      "context1mPricing": "輸入 >200k 2倍, 輸出 >200k 1.5倍"
     }
   },
   "leaderboard": {
@@ -391,7 +397,9 @@
       "fetchFailed": "取得請求列表失敗",
       "unknownError": "未知錯誤",
       "prev": "上一頁",
-      "next": "下一頁"
+      "next": "下一頁",
+      "orderAsc": "切換為正序（最早的在前）",
+      "orderDesc": "切換為倒序（最新的在前）"
     },
     "back": "返回",
     "loadingError": "載入失敗"
@@ -444,12 +452,14 @@
   },
   "all": "全部",
   "nav": {
+    "mobileMenuTitle": "導覽選單",
     "dashboard": "儀表板",
     "usageLogs": "使用記錄",
     "leaderboard": "排行榜",
     "availability": "可用性監控",
     "quotasManagement": "額度管理",
     "userManagement": "使用者管理",
+    "providers": "供應商管理",
     "documentation": "文件",
     "systemSettings": "系統設定",
     "feedback": "意見回饋",

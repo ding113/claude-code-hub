@@ -6,16 +6,16 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { getUsageLogs } from "@/actions/usage-logs";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatTokenAmount } from "@/lib/utils";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useVisibilityPolling } from "@/hooks/use-visibility-polling";
 import type { CurrencyCode } from "@/lib/utils/currency";
-import { formatCurrency } from "@/lib/utils/currency";
 import type { UsageLogsResult } from "@/repository/usage-logs";
 import type { Key } from "@/types/key";
 import type { ProviderDisplay } from "@/types/provider";
 import type { BillingModelSource } from "@/types/system-config";
 import type { UserDisplay } from "@/types/user";
 import { UsageLogsFilters } from "./usage-logs-filters";
+import { UsageLogsStatsPanel } from "./usage-logs-stats-panel";
 import { UsageLogsTable } from "./usage-logs-table";
 
 interface UsageLogsViewProps {
@@ -90,11 +90,13 @@ export function UsageLogsView({
   // 使用 ref 来存储最新的值,避免闭包陷阱
   const isPendingRef = useRef(isPending);
   const filtersRef = useRef(filters);
+  const isAutoRefreshRef = useRef(isAutoRefresh);
 
   isPendingRef.current = isPending;
 
   // 更新 filtersRef
   filtersRef.current = filters;
+  isAutoRefreshRef.current = isAutoRefresh;
 
   // 加载数据
   // shouldDetectNew: 是否检测新增记录（只在刷新时为 true，筛选/翻页时为 false）
@@ -142,6 +144,13 @@ export function UsageLogsView({
   useEffect(() => {
     const currentParams = params.toString();
 
+    // 获取当前页码，如果页码 > 1 则自动暂停自动刷新
+    // 避免新数据进入导致用户漏掉中间记录 (Issue #332)
+    const currentPage = parseInt(params.get("page") || "1", 10);
+    if (currentPage > 1 && isAutoRefreshRef.current) {
+      setIsAutoRefresh(false);
+    }
+
     if (previousParamsRef.current && previousParamsRef.current !== currentParams) {
       // URL 变化 = 用户操作（筛选/翻页），重置缓存，不检测新增
       previousLogsRef.current = new Map();
@@ -154,18 +163,19 @@ export function UsageLogsView({
     previousParamsRef.current = currentParams;
   }, [params, loadData]);
 
-  // 自动轮询（3秒间隔，检测新增）
-  useEffect(() => {
-    if (!isAutoRefresh) return;
+  // 自动轮询（5秒间隔，带 Page Visibility API 支持）
+  // 页面不可见时暂停轮询，重新可见时立即刷新并恢复轮询
+  const handlePolling = useCallback(() => {
+    // 如果正在加载，跳过本次轮询
+    if (isPendingRef.current) return;
+    loadData(true); // 自动刷新时检测新增
+  }, [loadData]);
 
-    const intervalId = setInterval(() => {
-      // 如果正在加载,跳过本次轮询
-      if (isPendingRef.current) return;
-      loadData(true); // 自动刷新时检测新增
-    }, 3000); // 3 秒间隔
-
-    return () => clearInterval(intervalId);
-  }, [isAutoRefresh, loadData]);
+  useVisibilityPolling(handlePolling, {
+    intervalMs: 5000, // 5 秒间隔（统一轮询周期）
+    enabled: isAutoRefresh,
+    executeOnVisible: true, // 页面重新可见时立即刷新
+  });
 
   // 处理筛选条件变更
   const handleFilterChange = (newFilters: Omit<typeof filters, "page">) => {
@@ -200,76 +210,22 @@ export function UsageLogsView({
 
   return (
     <div className="space-y-6">
-      {/* 统计卡片 */}
-      {data && (
-        <div className="grid gap-4 md:grid-cols-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardDescription>{t("logs.stats.totalRequests")}</CardDescription>
-              <CardTitle className="text-3xl font-mono">
-                {data.summary.totalRequests.toLocaleString()}
-              </CardTitle>
-            </CardHeader>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardDescription>{t("logs.stats.totalAmount")}</CardDescription>
-              <CardTitle className="text-3xl font-mono">
-                {formatCurrency(data.summary.totalCost, currencyCode)}
-              </CardTitle>
-            </CardHeader>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardDescription>{t("logs.stats.totalTokens")}</CardDescription>
-              <CardTitle className="text-3xl font-mono">
-                {formatTokenAmount(data.summary.totalTokens)}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-xs text-muted-foreground space-y-1">
-              <div className="flex justify-between">
-                <span>{t("logs.stats.input")}:</span>
-                <span className="font-mono">
-                  {formatTokenAmount(data.summary.totalInputTokens)}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span>{t("logs.stats.output")}:</span>
-                <span className="font-mono">
-                  {formatTokenAmount(data.summary.totalOutputTokens)}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardDescription>{t("logs.stats.cacheTokens")}</CardDescription>
-              <CardTitle className="text-3xl font-mono">
-                {formatTokenAmount(
-                  data.summary.totalCacheCreationTokens + data.summary.totalCacheReadTokens
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-xs text-muted-foreground space-y-1">
-              <div className="flex justify-between">
-                <span>{t("logs.stats.write")}:</span>
-                <span className="font-mono">
-                  {formatTokenAmount(data.summary.totalCacheCreationTokens)}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span>{t("logs.stats.read")}:</span>
-                <span className="font-mono">
-                  {formatTokenAmount(data.summary.totalCacheReadTokens)}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      {/* 可折叠统计面板 - 默认折叠，按需加载 */}
+      <UsageLogsStatsPanel
+        filters={{
+          userId: filters.userId,
+          keyId: filters.keyId,
+          providerId: filters.providerId,
+          startTime: filters.startTime,
+          endTime: filters.endTime,
+          statusCode: filters.statusCode,
+          excludeStatusCode200: filters.excludeStatusCode200,
+          model: filters.model,
+          endpoint: filters.endpoint,
+          minRetryCount: filters.minRetryCount,
+        }}
+        currencyCode={currencyCode}
+      />
 
       {/* 筛选器 */}
       <Card>

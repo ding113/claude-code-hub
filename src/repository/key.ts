@@ -1,6 +1,6 @@
 "use server";
 
-import { and, count, desc, eq, gt, gte, isNull, lt, or, sql, sum } from "drizzle-orm";
+import { and, count, desc, eq, gt, gte, inArray, isNull, lt, or, sql, sum } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys, messageRequest, providers, users } from "@/drizzle/schema";
 import { Decimal, toCostDecimal } from "@/lib/utils/currency";
@@ -68,6 +68,58 @@ export async function findKeyList(userId: number): Promise<Key[]> {
     .orderBy(keys.createdAt);
 
   return result.map(toKey);
+}
+
+/**
+ * Batch version of findKeyList - fetches keys for multiple users in a single query
+ * Returns a Map<userId, Key[]> for efficient lookup
+ */
+export async function findKeyListBatch(userIds: number[]): Promise<Map<number, Key[]>> {
+  if (userIds.length === 0) {
+    return new Map();
+  }
+
+  const result = await db
+    .select({
+      id: keys.id,
+      userId: keys.userId,
+      key: keys.key,
+      name: keys.name,
+      isEnabled: keys.isEnabled,
+      expiresAt: keys.expiresAt,
+      canLoginWebUi: keys.canLoginWebUi,
+      limit5hUsd: keys.limit5hUsd,
+      limitDailyUsd: keys.limitDailyUsd,
+      dailyResetMode: keys.dailyResetMode,
+      dailyResetTime: keys.dailyResetTime,
+      limitWeeklyUsd: keys.limitWeeklyUsd,
+      limitMonthlyUsd: keys.limitMonthlyUsd,
+      limitTotalUsd: keys.limitTotalUsd,
+      limitConcurrentSessions: keys.limitConcurrentSessions,
+      providerGroup: keys.providerGroup,
+      cacheTtlPreference: keys.cacheTtlPreference,
+      createdAt: keys.createdAt,
+      updatedAt: keys.updatedAt,
+      deletedAt: keys.deletedAt,
+    })
+    .from(keys)
+    .where(and(inArray(keys.userId, userIds), isNull(keys.deletedAt)))
+    .orderBy(keys.userId, keys.createdAt);
+
+  const keyMap = new Map<number, Key[]>();
+  for (const userId of userIds) {
+    keyMap.set(userId, []);
+  }
+
+  for (const row of result) {
+    const key = toKey(row);
+    const userKeys = keyMap.get(row.userId);
+    if (userKeys) {
+      userKeys.push(key);
+    }
+  }
+
+  return keyMap;
 }
 
 export async function createKey(keyData: CreateKeyData): Promise<Key> {
@@ -257,6 +309,62 @@ export async function findKeyUsageToday(
       return costDecimal.toDecimalPlaces(6).toNumber();
     })(),
   }));
+}
+
+/**
+ * Batch version of findKeyUsageToday - fetches today's usage for multiple users in a single query
+ * Returns a Map<userId, Array<{keyId, totalCost}>> for efficient lookup
+ */
+export async function findKeyUsageTodayBatch(
+  userIds: number[]
+): Promise<Map<number, Array<{ keyId: number; totalCost: number }>>> {
+  if (userIds.length === 0) {
+    return new Map();
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  const rows = await db
+    .select({
+      userId: keys.userId,
+      keyId: keys.id,
+      totalCost: sum(messageRequest.costUsd),
+    })
+    .from(keys)
+    .leftJoin(
+      messageRequest,
+      and(
+        eq(messageRequest.key, keys.key),
+        isNull(messageRequest.deletedAt),
+        gte(messageRequest.createdAt, today),
+        lt(messageRequest.createdAt, tomorrow)
+      )
+    )
+    .where(and(inArray(keys.userId, userIds), isNull(keys.deletedAt)))
+    .groupBy(keys.userId, keys.id);
+
+  const usageMap = new Map<number, Array<{ keyId: number; totalCost: number }>>();
+  for (const userId of userIds) {
+    usageMap.set(userId, []);
+  }
+
+  for (const row of rows) {
+    const userUsage = usageMap.get(row.userId);
+    if (userUsage) {
+      userUsage.push({
+        keyId: row.keyId,
+        totalCost: (() => {
+          const costDecimal = toCostDecimal(row.totalCost) ?? new Decimal(0);
+          return costDecimal.toDecimalPlaces(6).toNumber();
+        })(),
+      });
+    }
+  }
+
+  return usageMap;
 }
 
 export async function countActiveKeysByUser(userId: number): Promise<number> {
@@ -507,4 +615,165 @@ export async function findKeysWithStatistics(userId: number): Promise<KeyStatist
   }
 
   return stats;
+}
+
+/**
+ * Batch version of findKeysWithStatistics - fetches statistics for multiple users in optimized queries
+ * Returns a Map<userId, KeyStatistics[]> for efficient lookup
+ *
+ * Optimization: Instead of N*3 queries per user, this does:
+ * - 1 query for all keys (via findKeyListBatch)
+ * - 1 query for today's call counts
+ * - 1 query for last usage times
+ * - 1 query for model statistics
+ */
+export async function findKeysWithStatisticsBatch(
+  userIds: number[]
+): Promise<Map<number, KeyStatistics[]>> {
+  if (userIds.length === 0) {
+    return new Map();
+  }
+
+  // Step 1: Get all keys for all users
+  const keyMap = await findKeyListBatch(userIds);
+
+  // Collect all keys and create a keyString -> (userId, keyId) lookup
+  const allKeys: Key[] = [];
+  const keyStringToInfo = new Map<string, { userId: number; keyId: number }>();
+
+  for (const [userId, userKeys] of keyMap) {
+    for (const key of userKeys) {
+      allKeys.push(key);
+      keyStringToInfo.set(key.key, { userId, keyId: key.id });
+    }
+  }
+
+  if (allKeys.length === 0) {
+    const resultMap = new Map<number, KeyStatistics[]>();
+    for (const userId of userIds) {
+      resultMap.set(userId, []);
+    }
+    return resultMap;
+  }
+
+  const keyStrings = allKeys.map((k) => k.key);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  // Step 2: Query today's call counts for all keys at once
+  const todayCountRows = await db
+    .select({
+      key: messageRequest.key,
+      count: count(),
+    })
+    .from(messageRequest)
+    .where(
+      and(
+        inArray(messageRequest.key, keyStrings),
+        isNull(messageRequest.deletedAt),
+        gte(messageRequest.createdAt, today),
+        lt(messageRequest.createdAt, tomorrow)
+      )
+    )
+    .groupBy(messageRequest.key);
+
+  const todayCountMap = new Map<string, number>();
+  for (const row of todayCountRows) {
+    if (row.key) {
+      todayCountMap.set(row.key, Number(row.count));
+    }
+  }
+
+  // Step 3: Query last usage for all keys at once using DISTINCT ON
+  const lastUsageRows = await db
+    .selectDistinctOn([messageRequest.key], {
+      key: messageRequest.key,
+      createdAt: messageRequest.createdAt,
+      providerName: providers.name,
+    })
+    .from(messageRequest)
+    .innerJoin(providers, eq(messageRequest.providerId, providers.id))
+    .where(and(inArray(messageRequest.key, keyStrings), isNull(messageRequest.deletedAt)))
+    .orderBy(messageRequest.key, desc(messageRequest.createdAt));
+
+  const lastUsageMap = new Map<string, { createdAt: Date | null; providerName: string | null }>();
+  for (const row of lastUsageRows) {
+    if (row.key) {
+      lastUsageMap.set(row.key, {
+        createdAt: row.createdAt,
+        providerName: row.providerName,
+      });
+    }
+  }
+
+  // Step 4: Query model statistics for all keys at once
+  const modelStatsRows = await db
+    .select({
+      key: messageRequest.key,
+      model: messageRequest.model,
+      callCount: sql<number>`count(*)::int`,
+      totalCost: sum(messageRequest.costUsd),
+    })
+    .from(messageRequest)
+    .where(
+      and(
+        inArray(messageRequest.key, keyStrings),
+        isNull(messageRequest.deletedAt),
+        gte(messageRequest.createdAt, today),
+        lt(messageRequest.createdAt, tomorrow),
+        sql`${messageRequest.model} IS NOT NULL`
+      )
+    )
+    .groupBy(messageRequest.key, messageRequest.model)
+    .orderBy(messageRequest.key, desc(sql`count(*)`));
+
+  // Group model stats by key
+  const modelStatsMap = new Map<
+    string,
+    Array<{ model: string; callCount: number; totalCost: number }>
+  >();
+  for (const row of modelStatsRows) {
+    if (row.key) {
+      if (!modelStatsMap.has(row.key)) {
+        modelStatsMap.set(row.key, []);
+      }
+      modelStatsMap.get(row.key)!.push({
+        model: row.model || "unknown",
+        callCount: row.callCount,
+        totalCost: (() => {
+          const costDecimal = toCostDecimal(row.totalCost) ?? new Decimal(0);
+          return costDecimal.toDecimalPlaces(6).toNumber();
+        })(),
+      });
+    }
+  }
+
+  // Step 5: Assemble results by userId
+  const resultMap = new Map<number, KeyStatistics[]>();
+  for (const userId of userIds) {
+    resultMap.set(userId, []);
+  }
+
+  for (const key of allKeys) {
+    const info = keyStringToInfo.get(key.key);
+    if (!info) continue;
+
+    const lastUsage = lastUsageMap.get(key.key);
+    const stats: KeyStatistics = {
+      keyId: key.id,
+      todayCallCount: todayCountMap.get(key.key) || 0,
+      lastUsedAt: lastUsage?.createdAt || null,
+      lastProviderName: lastUsage?.providerName || null,
+      modelStats: modelStatsMap.get(key.key) || [],
+    };
+
+    const userStats = resultMap.get(info.userId);
+    if (userStats) {
+      userStats.push(stats);
+    }
+  }
+
+  return resultMap;
 }

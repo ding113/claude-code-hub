@@ -36,7 +36,7 @@ function formatDuration(durationMs: number | null): string {
 
   // 1000ms 以上转换为秒
   if (durationMs >= 1000) {
-    return `${(durationMs / 1000).toFixed(2)}s`;
+    return `${(Number(durationMs) / 1000).toFixed(2)}s`;
   }
 
   // 1000ms 以下显示毫秒
@@ -264,18 +264,43 @@ export function UsageLogsTable({
                         <TooltipProvider>
                           <Tooltip delayDuration={250}>
                             <TooltipTrigger asChild>
-                              <span className="cursor-help">
+                              <span className="cursor-help inline-flex items-center gap-1">
                                 {formatCurrency(log.costUsd, currencyCode, 6)}
+                                {log.context1mApplied && (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[10px] leading-tight px-1 bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800"
+                                  >
+                                    1M
+                                  </Badge>
+                                )}
                               </span>
                             </TooltipTrigger>
                             <TooltipContent align="end" className="text-xs space-y-1 max-w-[300px]">
+                              {log.context1mApplied && (
+                                <div className="text-purple-600 dark:text-purple-400 font-medium">
+                                  {t("logs.billingDetails.context1m")}
+                                </div>
+                              )}
                               <div>
                                 {t("logs.billingDetails.input")}:{" "}
                                 {formatTokenAmount(log.inputTokens)} tokens
+                                {log.context1mApplied && (log.inputTokens ?? 0) > 200000 && (
+                                  <span className="text-purple-600 dark:text-purple-400">
+                                    {" "}
+                                    (2x &gt;200k)
+                                  </span>
+                                )}
                               </div>
                               <div>
                                 {t("logs.billingDetails.output")}:{" "}
                                 {formatTokenAmount(log.outputTokens)} tokens
+                                {log.context1mApplied && (log.outputTokens ?? 0) > 200000 && (
+                                  <span className="text-purple-600 dark:text-purple-400">
+                                    {" "}
+                                    (1.5x &gt;200k)
+                                  </span>
+                                )}
                               </div>
                               {(log.cacheCreation5mInputTokens ?? 0) > 0 && (
                                 <div>
@@ -349,6 +374,7 @@ export function UsageLogsTable({
                         cacheTtlApplied={log.cacheTtlApplied}
                         costUsd={log.costUsd}
                         costMultiplier={log.costMultiplier}
+                        context1mApplied={log.context1mApplied}
                         externalOpen={dialogState.logId === log.id ? true : undefined}
                         onExternalOpenChange={(open) => {
                           if (!open) setDialogState({ logId: null, scrollToRedirect: false });

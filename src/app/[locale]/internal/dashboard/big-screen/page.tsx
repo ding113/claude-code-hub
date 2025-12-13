@@ -191,7 +191,7 @@ const CountUp = ({
   return (
     <span className={`font-mono ${className}`}>
       {prefix}
-      {displayValue.toFixed(decimals)}
+      {Number(displayValue).toFixed(decimals)}
       {suffix}
     </span>
   );
@@ -467,7 +467,7 @@ const UserRankings = ({
               <div className="flex justify-between items-center">
                 <span className={`text-xs font-bold truncate ${theme.text}`}>{user.userName}</span>
                 <span className="text-[10px] text-gray-500 font-mono">
-                  ${user.totalCost.toFixed(2)}
+                  ${Number(user.totalCost).toFixed(2)}
                 </span>
               </div>
               <div className="flex justify-between items-center mt-1">
@@ -522,7 +522,9 @@ const ProviderRanking = ({
               <span className={`text-xs font-semibold ${theme.text}`}>{p.providerName}</span>
             </div>
             <div className="text-right">
-              <div className={`text-xs font-mono ${theme.accent}`}>${p.totalCost.toFixed(2)}</div>
+              <div className={`text-xs font-mono ${theme.accent}`}>
+                ${Number(p.totalCost).toFixed(2)}
+              </div>
               <div className="text-[9px] text-gray-500">
                 {p.totalTokens.toLocaleString()} Tokens
               </div>
@@ -851,7 +853,7 @@ export default function BigScreenPage() {
           />
           <MetricCard
             title={t("metrics.errorRate")}
-            value={`${metrics.todayErrorRate.toFixed(2)}%`}
+            value={`${Number(metrics.todayErrorRate).toFixed(1)}%`}
             subValue={metrics.todayErrorRate > 2 ? "High" : "Normal"}
             type={metrics.todayErrorRate > 2 ? "negative" : "neutral"}
             icon={AlertTriangle}

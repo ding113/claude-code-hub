@@ -9,6 +9,14 @@
     "noProviderGroup": "預設",
     "inherited": "（繼承）"
   },
+  "quotaDialog": {
+    "trigger": "查看配額",
+    "title": "配額使用詳情",
+    "refresh": "刷新",
+    "lastUpdated": "更新於 {time}",
+    "loadFailed": "配額載入失敗",
+    "close": "關閉"
+  },
   "quota": {
     "5h": "5小時額度",
     "daily": "日額度",
@@ -38,6 +46,7 @@
   },
   "logs": {
     "title": "使用紀錄",
+    "autoRefresh": "每 {seconds} 秒自動刷新",
     "filters": {
       "startDate": "開始日期",
       "endDate": "結束日期",
@@ -53,6 +62,8 @@
       "time": "時間",
       "model": "模型",
       "tokens": "Tokens (入/出)",
+      "cacheWrite": "快取寫入",
+      "cacheRead": "快取讀取",
       "cost": "{currency} 花費",
       "status": "狀態",
       "endpoint": "API 端點"
