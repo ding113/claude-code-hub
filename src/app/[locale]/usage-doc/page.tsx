@@ -639,8 +639,8 @@ sk_xxxxxxxxxxxxxxxxxx`}
                 <CodeBlock
                   language="toml"
                   code={`model_provider = "cch"
-model = "gpt-5.1-codex"
-model_reasoning_effort = "high"
+model = "gpt-5.2"
+model_reasoning_effort = "xhigh"
 disable_response_storage = true
 sandbox_mode = "workspace-write"
 ${os === "windows" ? "windows_wsl_setup_acknowledged = true\n" : ""}
@@ -685,8 +685,8 @@ network_access = true`}
                 <CodeBlock
                   language="toml"
                   code={`model_provider = "cch"
-model = "gpt-5.1-codex"
-model_reasoning_effort = "high"
+model = "gpt-5.2"
+model_reasoning_effort = "xhigh"
 disable_response_storage = true
 sandbox_mode = "workspace-write"
 ${os === "windows" ? "windows_wsl_setup_acknowledged = true\n" : ""}
@@ -1008,8 +1008,8 @@ gemini`}
       "provider": "anthropic"
     },
     {
-      "model_display_name": "GPT-5-Codex [cch]",
-      "model": "gpt-5-codex",
+      "model_display_name": "GPT-5.2 [cch]",
+      "model": "gpt-5.2",
       "base_url": "${resolvedOrigin}/v1",
       "api_key": "your-api-key-here",
       "provider": "openai"
