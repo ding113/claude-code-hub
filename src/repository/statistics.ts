@@ -845,6 +845,30 @@ export async function sumKeyCostInTimeRange(
 }
 
 /**
+ * 查询 User 在指定时间范围内的消费总和
+ * 用于 User 层限额检查（Redis 降级）
+ */
+export async function sumUserCostInTimeRange(
+  userId: number,
+  startTime: Date,
+  endTime: Date
+): Promise<number> {
+  const result = await db
+    .select({ total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)` })
+    .from(messageRequest)
+    .where(
+      and(
+        eq(messageRequest.userId, userId),
+        gte(messageRequest.createdAt, startTime),
+        lt(messageRequest.createdAt, endTime),
+        isNull(messageRequest.deletedAt)
+      )
+    );
+
+  return Number(result[0]?.total || 0);
+}
+
+/**
  * 获取限流事件统计数据
  * 查询 message_request 表中包含 rate_limit_metadata 的错误记录
  *
