@@ -347,6 +347,15 @@ const DEFAULT_ERROR_RULES = [
     priority: 91,
   },
   {
+    pattern: "pricing plan does not include Long Context",
+    category: "context_limit",
+    description: "Provider pricing plan does not support Long Context prompts",
+    matchType: "contains" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 91,
+  },
+  {
     pattern: "blocked by.*content filter",
     category: "content_filter",
     description: "Content blocked by safety filters",
