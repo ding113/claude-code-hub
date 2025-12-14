@@ -126,6 +126,7 @@ export async function getUsers(): Promise<UserDisplay[]> {
           limitConcurrentSessions: user.limitConcurrentSessions ?? null,
           isEnabled: user.isEnabled,
           expiresAt: user.expiresAt ?? null,
+          allowedClients: user.allowedClients || [],
           keys: keys.map((key) => {
             const stats = statisticsLookup.get(key.id);
             // 用户可以查看和复制自己的密钥，管理员可以查看和复制所有密钥
@@ -187,6 +188,7 @@ export async function getUsers(): Promise<UserDisplay[]> {
           limitConcurrentSessions: user.limitConcurrentSessions ?? null,
           isEnabled: user.isEnabled,
           expiresAt: user.expiresAt ?? null,
+          allowedClients: user.allowedClients || [],
           keys: [],
         };
       }
@@ -214,6 +216,7 @@ export async function addUser(data: {
   limitConcurrentSessions?: number | null;
   isEnabled?: boolean;
   expiresAt?: Date | null;
+  allowedClients?: string[];
 }): Promise<
   ActionResult<{
     user: {
@@ -269,6 +272,7 @@ export async function addUser(data: {
       limitConcurrentSessions: data.limitConcurrentSessions,
       isEnabled: data.isEnabled,
       expiresAt: data.expiresAt,
+      allowedClients: data.allowedClients || [],
     });
 
     if (!validationResult.success) {
@@ -323,6 +327,7 @@ export async function addUser(data: {
       limitConcurrentSessions: validatedData.limitConcurrentSessions ?? undefined,
       isEnabled: validatedData.isEnabled,
       expiresAt: validatedData.expiresAt ?? null,
+      allowedClients: validatedData.allowedClients ?? [],
     });
 
     // 为新用户创建默认密钥
@@ -392,6 +397,7 @@ export async function editUser(
     limitConcurrentSessions?: number | null;
     isEnabled?: boolean;
     expiresAt?: Date | null;
+    allowedClients?: string[];
   }
 ): Promise<ActionResult> {
   try {
@@ -486,6 +492,7 @@ export async function editUser(
       limitConcurrentSessions: validatedData.limitConcurrentSessions ?? undefined,
       isEnabled: validatedData.isEnabled,
       expiresAt: validatedData.expiresAt,
+      allowedClients: validatedData.allowedClients,
     });
 
     // 级联更新 KEY 的 providerGroup（仅针对减少场景）

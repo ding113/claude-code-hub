@@ -598,6 +598,10 @@
       "showTooltip": "完全なキーを表示",
       "hideTooltip": "キーを非表示",
       "closeButton": "閉じる"
+    },
+    "allowedClients": {
+      "label": "許可されたクライアント",
+      "noRestrictions": "許可されたクライアント：制限なし"
     }
   },
   "keyLimitUsage": {
@@ -742,6 +746,21 @@
       "label": "同時セッション上限",
       "placeholder": "0は無制限を意味します",
       "description": "同時に実行される会話の数"
+    },
+    "isEnabled": {
+      "label": "ユーザーを有効化",
+      "description": "無効にするとユーザーはAPIにアクセスできなくなります"
+    },
+    "expiresAt": {
+      "label": "有効期限",
+      "placeholder": "空白の場合は無期限",
+      "description": "有効期限切れ後、ユーザーは自動的に無効化されます"
+    },
+    "allowedClients": {
+      "label": "許可されたクライアント",
+      "description": "このアカウントを使用できるCLI/IDEクライアントを制限します。空の場合は制限なし。",
+      "customLabel": "カスタムクライアントパターン",
+      "customPlaceholder": "カスタムパターンを入力（例：'xcode', 'my-ide'）"
     }
   },
   "deleteKeyConfirm": {

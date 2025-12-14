@@ -605,6 +605,10 @@
       "showTooltip": "显示完整密钥",
       "hideTooltip": "隐藏密钥",
       "closeButton": "关闭"
+    },
+    "allowedClients": {
+      "label": "允许的客户端",
+      "noRestrictions": "允许的客户端：无限制"
     }
   },
   "keyLimitUsage": {
@@ -780,6 +784,12 @@
       "label": "过期时间",
       "placeholder": "留空表示永不过期",
       "description": "用户过期后将自动禁用"
+    },
+    "allowedClients": {
+      "label": "允许的客户端",
+      "description": "限制哪些 CLI/IDE 客户端可以使用此账户。留空表示无限制。",
+      "customLabel": "自定义客户端模式",
+      "customPlaceholder": "输入自定义模式（如：'xcode', 'my-ide'）"
     }
   },
   "deleteKeyConfirm": {
