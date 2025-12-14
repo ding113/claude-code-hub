@@ -57,34 +57,52 @@ export function LeaderboardTable<T>({
   const getRankBadge = (rank: number) => {
     if (rank === 1) {
       return (
-        <div className="flex items-center gap-2">
-          <Trophy className="h-5 w-5 text-yellow-500" />
-          <Badge variant="default" className="bg-yellow-500 hover:bg-yellow-600">
+        <div className="flex items-center gap-1.5">
+          <Trophy className="h-4 w-4 text-yellow-500" />
+          <Badge
+            variant="default"
+            className="bg-yellow-500 hover:bg-yellow-600 min-w-[32px] justify-center"
+          >
             #{rank}
           </Badge>
         </div>
       );
-    } else if (rank === 2) {
+    }
+    if (rank === 2) {
       return (
-        <div className="flex items-center gap-2">
-          <Medal className="h-5 w-5 text-gray-400" />
-          <Badge variant="secondary" className="bg-gray-400 hover:bg-gray-500 text-white">
+        <div className="flex items-center gap-1.5">
+          <Medal className="h-4 w-4 text-gray-400" />
+          <Badge
+            variant="secondary"
+            className="bg-gray-400 hover:bg-gray-500 text-white min-w-[32px] justify-center"
+          >
             #{rank}
           </Badge>
         </div>
       );
-    } else if (rank === 3) {
+    }
+    if (rank === 3) {
       return (
-        <div className="flex items-center gap-2">
-          <Award className="h-5 w-5 text-orange-600" />
-          <Badge variant="secondary" className="bg-orange-600 hover:bg-orange-700 text-white">
+        <div className="flex items-center gap-1.5">
+          <Award className="h-4 w-4 text-orange-600" />
+          <Badge
+            variant="secondary"
+            className="bg-orange-600 hover:bg-orange-700 text-white min-w-[32px] justify-center"
+          >
             #{rank}
           </Badge>
         </div>
       );
     }
 
-    return <div className="text-muted-foreground font-medium">#{rank}</div>;
+    return (
+      <div className="flex items-center gap-1.5">
+        <div className="h-4 w-4" />
+        <Badge variant="outline" className="min-w-[32px] justify-center">
+          #{rank}
+        </Badge>
+      </div>
+    );
   };
 
   return (
