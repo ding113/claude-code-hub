@@ -720,6 +720,7 @@
     "dailyQuota": {
       "label": "1日あたりの割当量",
       "placeholder": "1日あたりの消費割当量制限",
+      "helperText": "0に設定すると無制限になります",
       "description": "デフォルト値: ${default}、範囲: $0.01-$1000"
     },
     "limit5hUsd": {

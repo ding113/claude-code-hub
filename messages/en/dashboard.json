@@ -744,6 +744,7 @@
     "dailyQuota": {
       "label": "Daily Quota",
       "placeholder": "Daily consumption quota limit",
+      "helperText": "Set to 0 for unlimited",
       "description": "Default: ${default}, Range: $0.01-$1000"
     },
     "limit5hUsd": {

@@ -73,7 +73,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
       name: user?.name || "",
       note: user?.note || "",
       rpm: user?.rpm || USER_DEFAULTS.RPM,
-      dailyQuota: user?.dailyQuota || USER_DEFAULTS.DAILY_QUOTA,
+      dailyQuota: user?.dailyQuota ?? USER_DEFAULTS.DAILY_QUOTA,
       providerGroup: user?.providerGroup || "",
       tags: user?.tags || [],
       limit5hUsd: user?.limit5hUsd ?? null,
@@ -238,11 +238,11 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
         <TextField
           label={tForm("dailyQuota.label")}
           type="number"
-          required
           min={USER_LIMITS.DAILY_QUOTA.MIN}
           max={USER_LIMITS.DAILY_QUOTA.MAX}
           step={0.01}
           placeholder={tForm("dailyQuota.placeholder")}
+          helperText={tForm("dailyQuota.helperText")}
           {...form.getFieldProps("dailyQuota")}
         />
       </FormGrid>

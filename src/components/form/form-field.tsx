@@ -38,6 +38,7 @@ export interface FormFieldProps extends Omit<ComponentProps<typeof Input>, "valu
   touched?: boolean;
   required?: boolean;
   description?: string;
+  helperText?: string;
 }
 
 export function FormField({
@@ -48,12 +49,14 @@ export function FormField({
   touched,
   required,
   description,
+  helperText,
   className,
   ...inputProps
 }: FormFieldProps) {
   const hasError = Boolean(touched && error);
   const autoId = useId();
   const fieldId = inputProps.id || `field-${autoId}`;
+  const fieldDescription = helperText ?? description;
 
   return (
     <div className="grid gap-2">
@@ -74,12 +77,12 @@ export function FormField({
         )}
         aria-invalid={hasError}
         aria-describedby={
-          hasError ? `${fieldId}-error` : description ? `${fieldId}-description` : undefined
+          hasError ? `${fieldId}-error` : fieldDescription ? `${fieldId}-description` : undefined
         }
       />
-      {description && !hasError && (
+      {fieldDescription && !hasError && (
         <div id={`${fieldId}-description`} className="text-xs text-muted-foreground">
-          {description}
+          {fieldDescription}
         </div>
       )}
       {hasError && (

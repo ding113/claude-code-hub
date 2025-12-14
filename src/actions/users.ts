@@ -261,7 +261,7 @@ export async function addUser(data: {
       providerGroup: data.providerGroup || "",
       tags: data.tags || [],
       rpm: data.rpm || USER_DEFAULTS.RPM,
-      dailyQuota: data.dailyQuota || USER_DEFAULTS.DAILY_QUOTA,
+      dailyQuota: data.dailyQuota ?? USER_DEFAULTS.DAILY_QUOTA,
       limit5hUsd: data.limit5hUsd,
       limitWeeklyUsd: data.limitWeeklyUsd,
       limitMonthlyUsd: data.limitMonthlyUsd,
@@ -659,7 +659,7 @@ export async function getUserLimitUsage(userId: number): Promise<
         },
         dailyCost: {
           current: dailyCost,
-          limit: user.dailyQuota || 100,
+          limit: user.dailyQuota ?? 100,
           resetAt: getDailyResetTime(),
         },
       },

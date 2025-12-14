@@ -744,6 +744,7 @@
     "dailyQuota": {
       "label": "每日额度",
       "placeholder": "每日消费额度限制",
+      "helperText": "设置为 0 表示无限制",
       "description": "默认值: ${default}，范围: $0.01-$100000"
     },
     "limit5hUsd": {
