@@ -48,6 +48,7 @@ export function EditKeyForm({ keyData, user, onSuccess }: EditKeyFormProps) {
   const router = useRouter();
   const t = useTranslations("quota.keys.editKeyForm");
   const tUI = useTranslations("ui.tagInput");
+  const tCommon = useTranslations("common");
 
   // Load provider group suggestions
   useEffect(() => {
@@ -147,6 +148,7 @@ export function EditKeyForm({ keyData, user, onSuccess }: EditKeyFormProps) {
         label={t("expiresAt.label")}
         placeholder={t("expiresAt.placeholder")}
         description={t("expiresAt.description")}
+        clearLabel={tCommon("clearDate")}
         value={String(form.values.expiresAt || "")}
         onChange={(val) => form.setValue("expiresAt", val)}
         error={form.getFieldProps("expiresAt").error}

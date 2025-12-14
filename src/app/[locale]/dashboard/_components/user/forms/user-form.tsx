@@ -55,6 +55,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
   const tErrors = useTranslations("errors");
   const tNotifications = useTranslations("notifications");
   const tUI = useTranslations("ui.tagInput");
+  const tCommon = useTranslations("common");
 
   // Set Zod error map for client-side validation
   useEffect(() => {
@@ -322,6 +323,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
             label={tForm("expiresAt.label")}
             placeholder={tForm("expiresAt.placeholder")}
             description={tForm("expiresAt.description")}
+            clearLabel={tCommon("clearDate")}
             value={String(form.values.expiresAt || "")}
             onChange={(val) => form.setValue("expiresAt", val)}
             error={form.getFieldProps("expiresAt").error}

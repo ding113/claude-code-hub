@@ -2,7 +2,8 @@
 
 import { format } from "date-fns";
 import { CalendarIcon } from "lucide-react";
-import { useId, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
+import { useCallback, useId, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Label } from "@/components/ui/label";
@@ -16,6 +17,7 @@ export interface DatePickerFieldProps {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  clearLabel?: string;
   error?: string;
   touched?: boolean;
   required?: boolean;
@@ -54,6 +56,7 @@ export function DatePickerField({
   label,
   value,
   onChange,
+  clearLabel,
   error,
   touched,
   required,
@@ -65,12 +68,18 @@ export function DatePickerField({
   className,
   id,
 }: DatePickerFieldProps) {
+  const tCommon = useTranslations("common");
   const [open, setOpen] = useState(false);
   const hasError = Boolean(touched && error);
   const autoId = useId();
   const fieldId = id || `datepicker-${autoId}`;
 
   const selectedDate = useMemo(() => parseDate(value), [value]);
+
+  const handleClear = useCallback(() => {
+    onChange("");
+    setOpen(false);
+  }, [onChange]);
 
   const handleSelect = (date: Date | undefined) => {
     if (date) {
@@ -131,6 +140,13 @@ export function DatePickerField({
             defaultMonth={selectedDate || new Date()}
             disabled={disabledMatcher}
           />
+          {value && (
+            <div className="border-t p-2">
+              <Button variant="ghost" size="sm" className="w-full" onClick={handleClear}>
+                {clearLabel || tCommon("clearDate")}
+              </Button>
+            </div>
+          )}
         </PopoverContent>
       </Popover>
       {description && !hasError && (

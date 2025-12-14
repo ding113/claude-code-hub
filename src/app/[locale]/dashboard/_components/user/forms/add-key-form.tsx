@@ -33,6 +33,7 @@ export function AddKeyForm({ userId, user, onSuccess }: AddKeyFormProps) {
   const router = useRouter();
   const t = useTranslations("dashboard.addKeyForm");
   const tUI = useTranslations("ui.tagInput");
+  const tCommon = useTranslations("common");
 
   // Load provider group suggestions
   useEffect(() => {
@@ -136,6 +137,7 @@ export function AddKeyForm({ userId, user, onSuccess }: AddKeyFormProps) {
         label={t("expiresAt.label")}
         placeholder={t("expiresAt.placeholder")}
         description={t("expiresAt.description")}
+        clearLabel={tCommon("clearDate")}
         value={String(form.values.expiresAt || "")}
         onChange={(val) => form.setValue("expiresAt", val)}
         error={form.getFieldProps("expiresAt").error}
