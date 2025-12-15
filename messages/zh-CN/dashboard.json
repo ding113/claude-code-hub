@@ -579,6 +579,11 @@
   },
   "keyListHeader": {
     "todayUsage": "今日用量",
+    "allowedModels": {
+      "label": "允许的模型",
+      "noRestrictions": "允许的模型：无限制"
+    },
+    "expiresAt": "过期时间",
     "proxyStatus": {
       "loading": "代理状态加载中",
       "fetchFailed": "代理状态获取失败",
@@ -790,6 +795,11 @@
       "description": "限制哪些 CLI/IDE 客户端可以使用此账户。留空表示无限制。",
       "customLabel": "自定义客户端模式",
       "customPlaceholder": "输入自定义模式（如：'xcode', 'my-ide'）"
+    },
+    "allowedModels": {
+      "label": "允许的模型",
+      "placeholder": "输入模型名称（回车添加）",
+      "description": "限制用户只能使用指定的AI模型。留空表示无限制（最多50个模型，每个最长64字符）"
     }
   },
   "deleteKeyConfirm": {

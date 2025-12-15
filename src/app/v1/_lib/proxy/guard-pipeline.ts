@@ -1,5 +1,6 @@
 import { ProxyAuthenticator } from "./auth-guard";
 import { ProxyClientGuard } from "./client-guard";
+import { ProxyModelGuard } from "./model-guard";
 import { ProxyMessageService } from "./message-service";
 import { ProxyProviderResolver } from "./provider-selector";
 import { ProxyRateLimitGuard } from "./rate-limit-guard";
@@ -25,6 +26,7 @@ export interface GuardStep {
 export type GuardStepKey =
   | "auth"
   | "client"
+  | "model"
   | "version"
   | "probe"
   | "session"
@@ -54,6 +56,12 @@ const Steps: Record<GuardStepKey, GuardStep> = {
     name: "client",
     async execute(session) {
       return ProxyClientGuard.ensure(session);
+    },
+  },
+  model: {
+    name: "model",
+    async execute(session) {
+      return ProxyModelGuard.ensure(session);
     },
   },
   version: {
@@ -149,6 +157,7 @@ export const CHAT_PIPELINE: GuardConfig = {
   steps: [
     "auth",
     "client",
+    "model",
     "version",
     "probe",
     "session",
@@ -162,5 +171,5 @@ export const CHAT_PIPELINE: GuardConfig = {
 
 export const COUNT_TOKENS_PIPELINE: GuardConfig = {
   // Minimal chain for count_tokens: no session, no sensitive, no rate limit, no message logging
-  steps: ["auth", "client", "version", "probe", "requestFilter", "provider"],
+  steps: ["auth", "client", "model", "version", "probe", "requestFilter", "provider"],
 };

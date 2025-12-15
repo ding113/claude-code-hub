@@ -22,6 +22,7 @@ export async function createUser(userData: CreateUserData): Promise<User> {
     isEnabled: userData.isEnabled ?? true,
     expiresAt: userData.expiresAt ?? null,
     allowedClients: userData.allowedClients ?? [],
+    allowedModels: userData.allowedModels ?? [],
   };
 
   const [user] = await db.insert(users).values(dbData).returning({
@@ -44,6 +45,7 @@ export async function createUser(userData: CreateUserData): Promise<User> {
     isEnabled: users.isEnabled,
     expiresAt: users.expiresAt,
     allowedClients: users.allowedClients,
+    allowedModels: users.allowedModels,
   });
 
   return toUser(user);
@@ -71,6 +73,7 @@ export async function findUserList(limit: number = 50, offset: number = 0): Prom
       isEnabled: users.isEnabled,
       expiresAt: users.expiresAt,
       allowedClients: users.allowedClients,
+      allowedModels: users.allowedModels,
     })
     .from(users)
     .where(isNull(users.deletedAt))
@@ -103,6 +106,7 @@ export async function findUserById(id: number): Promise<User | null> {
       isEnabled: users.isEnabled,
       expiresAt: users.expiresAt,
       allowedClients: users.allowedClients,
+      allowedModels: users.allowedModels,
     })
     .from(users)
     .where(and(eq(users.id, id), isNull(users.deletedAt)));
@@ -133,6 +137,7 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
     isEnabled?: boolean;
     expiresAt?: Date | null;
     allowedClients?: string[];
+    allowedModels?: string[];
   }
 
   const dbData: UpdateDbData = {
@@ -157,6 +162,7 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
   if (userData.isEnabled !== undefined) dbData.isEnabled = userData.isEnabled;
   if (userData.expiresAt !== undefined) dbData.expiresAt = userData.expiresAt;
   if (userData.allowedClients !== undefined) dbData.allowedClients = userData.allowedClients;
+  if (userData.allowedModels !== undefined) dbData.allowedModels = userData.allowedModels;
 
   const [user] = await db
     .update(users)
@@ -182,6 +188,7 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
       isEnabled: users.isEnabled,
       expiresAt: users.expiresAt,
       allowedClients: users.allowedClients,
+      allowedModels: users.allowedModels,
     });
 
   if (!user) return null;

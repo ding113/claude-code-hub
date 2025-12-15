@@ -572,6 +572,11 @@
   },
   "keyListHeader": {
     "todayUsage": "本日の使用量",
+    "allowedModels": {
+      "label": "許可モデル",
+      "noRestrictions": "許可モデル：制限なし"
+    },
+    "expiresAt": "有効期限",
     "proxyStatus": {
       "loading": "プロキシステータス読み込み中",
       "fetchFailed": "プロキシステータスの取得に失敗しました",
@@ -761,6 +766,11 @@
       "description": "このアカウントを使用できるCLI/IDEクライアントを制限します。空の場合は制限なし。",
       "customLabel": "カスタムクライアントパターン",
       "customPlaceholder": "カスタムパターンを入力（例：'xcode', 'my-ide'）"
+    },
+    "allowedModels": {
+      "label": "許可モデル",
+      "placeholder": "モデル名を入力（Enterで追加）",
+      "description": "ユーザーを特定のAIモデルに制限します。空白の場合は制限なし（最大50モデル、各64文字）"
     }
   },
   "deleteKeyConfirm": {

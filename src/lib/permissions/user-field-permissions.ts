@@ -19,6 +19,9 @@ export const USER_FIELD_PERMISSIONS = {
 
   // Admin-only field (client restrictions)
   allowedClients: { requiredRole: "admin" },
+
+  // Admin-only field (model restrictions)
+  allowedModels: { requiredRole: "admin" },
 } as const;
 
 /**

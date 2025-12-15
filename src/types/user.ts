@@ -24,6 +24,8 @@ export interface User {
   expiresAt?: Date | null; // 用户过期时间
   // Allowed clients (CLI/IDE restrictions)
   allowedClients?: string[]; // 允许的客户端模式（空数组=无限制）
+  // Allowed models (AI model restrictions)
+  allowedModels?: string[]; // 允许的AI模型（空数组=无限制）
 }
 
 /**
@@ -47,6 +49,8 @@ export interface CreateUserData {
   expiresAt?: Date | null;
   // Allowed clients (CLI/IDE restrictions)
   allowedClients?: string[];
+  // Allowed models (AI model restrictions)
+  allowedModels?: string[];
 }
 
 /**
@@ -70,6 +74,8 @@ export interface UpdateUserData {
   expiresAt?: Date | null;
   // Allowed clients (CLI/IDE restrictions)
   allowedClients?: string[];
+  // Allowed models (AI model restrictions)
+  allowedModels?: string[];
 }
 
 /**
@@ -133,6 +139,8 @@ export interface UserDisplay {
   expiresAt?: Date | null; // 用户过期时间
   // Allowed clients (CLI/IDE restrictions)
   allowedClients?: string[]; // 允许的客户端模式（空数组=无限制）
+  // Allowed models (AI model restrictions)
+  allowedModels?: string[]; // 允许的AI模型（空数组=无限制）
 }
 
 /**
