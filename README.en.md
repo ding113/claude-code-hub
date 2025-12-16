@@ -36,6 +36,20 @@ Cubence offers special discount coupons for users of CCH: when purchasing with t
 </tr>
 </table>
 
+<table>
+<tr>
+<td width="200">
+<a href="https://privnode.com/with-cch?utm_source=refLink">
+<img src="public/readme/privnode.png" alt="Privnode Logo" width="180"/>
+</a>
+</td>
+<td>
+<b>💎 Special Offer</b>: <a href="https://privnode.com/with-cch?utm_source=refLink">Privnode</a> is an affordable AI API aggregation platform providing one-stop relay services for mainstream models like Claude and Codex, serving developers and teams with reliable stability and competitive pricing.<br/>
+Use code <code>WITHCCH</code> for <b>15% off</b> → <a href="https://privnode.com/with-cch?utm_source=refLink">Visit Now</a>
+</td>
+</tr>
+</table>
+
 ## ✨ Core Highlights
 
 - 🤖 **Intelligent load balancing**: Weight + priority + grouping scheduler with built-in circuit breaker and up to three failover retries to keep requests stable.
