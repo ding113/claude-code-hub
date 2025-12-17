@@ -19,6 +19,8 @@
   "reset": "リセット",
   "view": "表示",
   "copy": "コピー",
+  "copySuccess": "コピーしました",
+  "copyFailed": "コピーに失敗しました",
   "download": "ダウンロード",
   "upload": "アップロード",
   "add": "追加",

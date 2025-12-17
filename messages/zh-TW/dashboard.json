@@ -806,6 +806,8 @@
       "allGroups": "所有群組",
       "tagFilter": "依標籤篩選",
       "allTags": "所有標籤",
+      "keyGroupFilter": "金鑰分組",
+      "allKeyGroups": "所有金鑰分組",
       "createUser": "建立使用者"
     }
   },
@@ -1150,6 +1152,10 @@
         "tags": {
           "label": "使用者標籤",
           "placeholder": "輸入標籤（按 Enter 新增）"
+        },
+        "providerGroup": {
+          "label": "供應商分組（舊版）",
+          "placeholder": "輸入供應商分組或留空"
         }
       }
     },
@@ -1170,8 +1176,8 @@
           "description": "停用後此金鑰將無法使用"
         },
         "balanceQueryPage": {
-          "label": "允許登入 Web UI",
-          "description": "關閉後，此 Key 僅可用於 API 呼叫，無法登入管理後台"
+          "label": "獨立個人用量頁面",
+          "description": "啟用後，此金鑰可使用獨立的個人用量查詢頁面"
         },
         "providerGroup": {
           "label": "供應商分組",
