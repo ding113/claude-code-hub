@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { KeyRound, Loader2, Plus, Trash2, UserCog, UserPlus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState, useTransition } from "react";
@@ -546,15 +546,22 @@ function UnifiedEditDialogInner({
   };
 
   return (
-    <DialogContent className="max-w-[70vw] max-h-[80vh] p-0 overflow-hidden">
-      <form onSubmit={form.handleSubmit} className="flex h-full flex-col">
-        <DialogHeader className="px-6 pt-6">
-          <DialogTitle>
-            {mode === "create" ? t("createDialog.title") : t("editDialog.title")}
-          </DialogTitle>
+    <DialogContent className="max-w-[70vw] max-h-[90dvh] p-0 flex flex-col overflow-hidden">
+      <form onSubmit={form.handleSubmit} className="flex flex-1 min-h-0 flex-col">
+        <DialogHeader className="px-6 pt-6 pb-4 border-b flex-shrink-0">
+          <div className="flex items-center gap-2">
+            {mode === "create" ? (
+              <UserPlus className="h-5 w-5 text-primary" aria-hidden="true" />
+            ) : (
+              <UserCog className="h-5 w-5 text-primary" aria-hidden="true" />
+            )}
+            <DialogTitle>
+              {mode === "create" ? t("createDialog.title") : t("editDialog.title")}
+            </DialogTitle>
+          </div>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-8">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 space-y-8">
           <UserEditSection
             user={{
               id: user?.id ?? 0,
@@ -577,21 +584,28 @@ function UnifiedEditDialogInner({
           <Separator />
 
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="text-sm font-semibold">{t("createDialog.keysSection")}</div>
+            <div className="flex items-center justify-between py-2">
+              <div className="flex items-center gap-2">
+                <KeyRound className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                <span className="text-sm font-semibold">{t("createDialog.keysSection")}</span>
+                <span className="text-xs text-muted-foreground">({keys.length})</span>
+              </div>
               <Button type="button" variant="outline" size="sm" onClick={handleAddKey}>
                 <Plus className="mr-1 h-4 w-4" />
                 {t("createDialog.addKey")}
               </Button>
             </div>
             <div className="space-y-8">
-              {keys.map((key) => (
-                <div key={key.id} className="relative rounded-lg border border-border bg-card p-4">
+              {keys.map((key, index) => (
+                <div key={key.id} className="relative rounded-xl border border-border bg-card p-4 pt-6 shadow-sm">
+                  <div className="absolute -top-3 left-4 z-10 px-2 py-0.5 bg-background border border-border rounded-md text-xs font-medium text-muted-foreground">
+                    Key #{index + 1}
+                  </div>
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="absolute right-2 top-2 h-8 w-8 text-muted-foreground hover:text-destructive"
+                    className="absolute right-2 top-2 h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                     onClick={() => handleRemoveKey(key.id, key.name)}
                     disabled={keys.length === 1}
                     title={
@@ -599,8 +613,13 @@ function UnifiedEditDialogInner({
                         ? t("createDialog.cannotDeleteLastKey")
                         : t("createDialog.removeKey")
                     }
+                    aria-label={
+                      keys.length === 1
+                        ? t("createDialog.cannotDeleteLastKey")
+                        : t("createDialog.removeKey")
+                    }
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
                   </Button>
                   <KeyEditSection
                     keyData={{
@@ -643,7 +662,7 @@ function UnifiedEditDialogInner({
 
         {errorMessage && <div className="px-6 pb-2 text-sm text-destructive">{errorMessage}</div>}
 
-        <DialogFooter className="px-6 pb-6">
+        <DialogFooter className="px-6 pb-6 flex-shrink-0">
           <Button
             type="button"
             variant="outline"
