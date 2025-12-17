@@ -1,11 +1,11 @@
 # syntax=docker/dockerfile:1
 
-FROM --platform=$BUILDPLATFORM oven/bun:slim AS build-base
+FROM --platform=$BUILDPLATFORM node:22-slim AS build-base
 WORKDIR /app
 
 FROM build-base AS deps
 COPY package.json ./
-RUN bun install
+RUN npm install --production=false
 
 FROM deps AS build
 COPY . .
@@ -24,7 +24,7 @@ ENV REDIS_URL="redis://localhost:6379"
 # 标记为 CI 环境，跳过 instrumentation.ts 中的数据库连接
 ENV CI=true
 
-RUN bun run build
+RUN npm run build
 
 FROM node:22-slim AS runner
 ENV NODE_ENV=production
