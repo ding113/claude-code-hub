@@ -282,8 +282,8 @@
         "description": "留空表示永不过期"
       },
       "canLoginWebUi": {
-        "label": "允许登录 Web UI",
-        "description": "关闭后,此 Key 仅可用于 API 调用,无法登录管理后台"
+        "label": "启用独立余额查询页",
+        "description": "允许用户通过专属页面查看余额"
       },
       "limit5hUsd": {
         "label": "5小时消费上限 (USD)",

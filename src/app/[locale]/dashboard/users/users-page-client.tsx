@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { User, UserDisplay } from "@/types/user";
-import { UserKeyManager } from "../_components/user/user-key-manager";
+import { UserManagementTable } from "../_components/user/user-management-table";
 
 interface UsersPageClientProps {
   users: UserDisplay[];
@@ -22,6 +22,7 @@ interface UsersPageClientProps {
 
 export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
   const t = useTranslations("dashboard.users");
+  const tUiTable = useTranslations("ui.table");
   const [searchTerm, setSearchTerm] = useState("");
   const [groupFilter, setGroupFilter] = useState("all");
   const [tagFilter, setTagFilter] = useState("all");
@@ -131,8 +132,67 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
         )}
       </div>
 
-      {/* User Key Manager with filtered users */}
-      <UserKeyManager users={filteredUsers} currentUser={currentUser} currencyCode="USD" />
+      <UserManagementTable
+        users={filteredUsers}
+        currentUser={currentUser}
+        currencyCode="USD"
+        translations={{
+          table: {
+            columns: {
+              username: "Username",
+              note: "Note",
+              expiresAt: "Expires",
+              limit5h: "5h Limit",
+              limitDaily: "Daily Limit",
+              limitWeekly: "Weekly Limit",
+              limitMonthly: "Monthly Limit",
+              limitTotal: "Total Limit",
+              limitSessions: "Sessions",
+            },
+            keyRow: {
+              fields: {
+                name: "Key Name",
+                key: "Key",
+                group: "Group",
+                todayUsage: "Today Calls",
+                todayCost: "Today Cost",
+                lastUsed: "Last Used",
+                actions: "Actions",
+              },
+              actions: {
+                details: "Details",
+                logs: "Logs",
+                edit: "Edit",
+                delete: "Delete",
+                copy: "Copy",
+                show: "Show",
+                hide: "Hide",
+              },
+              status: {
+                enabled: "Enabled",
+                disabled: "Disabled",
+              },
+            },
+            expand: "Expand all",
+            collapse: "Collapse all",
+            noKeys: "No keys",
+            defaultGroup: "Default",
+          },
+          editDialog: {},
+          actions: {
+            edit: "Edit",
+            details: "Details",
+            logs: "Logs",
+            delete: "Delete",
+          },
+          pagination: {
+            previous: tUiTable("previousPage"),
+            next: tUiTable("nextPage"),
+            page: "Page {page}",
+            of: "{totalPages}",
+          },
+        }}
+      />
     </div>
   );
 }

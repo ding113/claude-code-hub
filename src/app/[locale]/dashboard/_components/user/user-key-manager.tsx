@@ -56,6 +56,8 @@ export function UserKeyManager({ users, currentUser, currencyCode = "USD" }: Use
                     limitWeeklyUsd: activeUser.limitWeeklyUsd ?? undefined,
                     limitMonthlyUsd: activeUser.limitMonthlyUsd ?? undefined,
                     limitConcurrentSessions: activeUser.limitConcurrentSessions ?? undefined,
+                    dailyResetMode: activeUser.dailyResetMode ?? "fixed",
+                    dailyResetTime: activeUser.dailyResetTime ?? "00:00",
                     isEnabled: activeUser.isEnabled,
                     expiresAt: activeUser.expiresAt ?? undefined,
                   }
@@ -108,6 +110,8 @@ export function UserKeyManager({ users, currentUser, currencyCode = "USD" }: Use
                     limitWeeklyUsd: activeUser.limitWeeklyUsd ?? undefined,
                     limitMonthlyUsd: activeUser.limitMonthlyUsd ?? undefined,
                     limitConcurrentSessions: activeUser.limitConcurrentSessions ?? undefined,
+                    dailyResetMode: activeUser.dailyResetMode ?? "fixed",
+                    dailyResetTime: activeUser.dailyResetTime ?? "00:00",
                     isEnabled: activeUser.isEnabled,
                     expiresAt: activeUser.expiresAt ?? undefined,
                   }

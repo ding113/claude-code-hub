@@ -38,6 +38,8 @@ export async function validateKey(
       providerGroup: null,
       isEnabled: true,
       expiresAt: null,
+      dailyResetMode: "fixed",
+      dailyResetTime: "00:00",
       createdAt: now,
       updatedAt: now,
     };

@@ -279,6 +279,41 @@ export async function getAvailableProviderGroups(userId?: number): Promise<strin
   }
 }
 
+/**
+ * 获取所有分组及每个分组的供应商数量
+ * @returns 分组列表及每个分组的供应商数量
+ */
+export async function getProviderGroupsWithCount(): Promise<
+  ActionResult<Array<{ group: string; providerCount: number }>>
+> {
+  try {
+    const providers = await findAllProviders();
+    const groupCounts = new Map<string, number>();
+
+    for (const provider of providers) {
+      if (provider.groupTag) {
+        const groups = provider.groupTag
+          .split(",")
+          .map((g) => g.trim())
+          .filter(Boolean);
+
+        for (const group of groups) {
+          groupCounts.set(group, (groupCounts.get(group) || 0) + 1);
+        }
+      }
+    }
+
+    const result = Array.from(groupCounts.entries())
+      .map(([group, providerCount]) => ({ group, providerCount }))
+      .sort((a, b) => a.group.localeCompare(b.group));
+
+    return { ok: true, data: result };
+  } catch (error) {
+    logger.error("获取供应商分组统计失败:", error);
+    return { ok: false, error: "获取供应商分组统计失败" };
+  }
+}
+
 // 添加服务商
 export async function addProvider(data: {
   name: string;

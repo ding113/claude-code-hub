@@ -919,5 +919,110 @@
       "refreshSuccess": "可用性資料已重新整理",
       "refreshFailed": "重新整理失敗，請重試"
     }
+  },
+  "userManagement": {
+    "table": {
+      "columns": {
+        "username": "使用者名稱",
+        "note": "備註",
+        "expiresAt": "到期時間",
+        "limit5h": "5h 限額",
+        "limitDaily": "每日限額",
+        "limitWeekly": "週限額",
+        "limitMonthly": "月限額",
+        "limitTotal": "總限額",
+        "limitSessions": "並發"
+      },
+      "keyRow": {
+        "name": "金鑰名稱",
+        "key": "金鑰",
+        "group": "分組",
+        "todayUsage": "今日用量",
+        "todayCost": "今日消耗",
+        "lastUsed": "最後使用",
+        "actions": "操作"
+      },
+      "expand": "展開",
+      "collapse": "收起",
+      "noKeys": "無金鑰",
+      "defaultGroup": "default"
+    },
+    "editDialog": {
+      "title": "編輯使用者與金鑰",
+      "userSection": "使用者設定",
+      "keysSection": "金鑰設定",
+      "scrollToKey": "捲動到金鑰"
+    },
+    "limitRules": {
+      "addRule": "新增限額規則",
+      "ruleTypes": {
+        "limit5h": "5小時限額",
+        "limitDaily": "每日限額",
+        "limitWeekly": "週限額",
+        "limitMonthly": "月限額",
+        "limitTotal": "總限額",
+        "limitSessions": "並發 Session"
+      },
+      "dailyMode": {
+        "fixed": "固定時間重設",
+        "rolling": "滾動視窗（24h）"
+      },
+      "quickValues": {
+        "10": "$10",
+        "50": "$50",
+        "100": "$100",
+        "500": "$500"
+      },
+      "alreadySet": "已設定",
+      "confirmAdd": "新增",
+      "cancel": "取消"
+    },
+    "quickExpire": {
+      "oneWeek": "一週後",
+      "oneMonth": "一個月後",
+      "threeMonths": "三個月後",
+      "oneYear": "一年後"
+    },
+    "providerGroup": {
+      "label": "供應商分組",
+      "placeholder": "選擇供應商分組",
+      "noRestriction": "無限制（所有供應商）",
+      "providerCount": "{count} 個供應商"
+    },
+    "dangerZone": {
+      "title": "危險操作",
+      "disableUser": "停用使用者",
+      "disableUserDesc": "停用後使用者無法存取 API",
+      "deleteUser": "刪除使用者",
+      "deleteUserDesc": "此操作無法復原",
+      "confirmDisable": "確定要停用該使用者嗎？",
+      "confirmDelete": "確定要刪除該使用者嗎？所有關聯的金鑰和資料將被永久刪除。"
+    },
+    "limitIndicator": {
+      "notSet": "未設定",
+      "unlimited": "無限制"
+    },
+    "keySettings": {
+      "balanceQueryPage": {
+        "label": "啟用獨立餘額查詢頁",
+        "description": "允許使用者透過專屬頁面查看餘額"
+      },
+      "cacheTtlOverride": {
+        "label": "Cache TTL 覆寫",
+        "inherit": "不覆寫（跟隨供應商/客戶端）",
+        "5m": "5 分鐘",
+        "1h": "1 小時"
+      }
+    },
+    "pagination": {
+      "previous": "上一頁",
+      "next": "下一頁",
+      "page": "第 {current} 頁",
+      "of": "共 {total} 頁"
+    },
+    "toolbar": {
+      "expandAll": "全部展開",
+      "collapseAll": "全部收起"
+    }
   }
 }

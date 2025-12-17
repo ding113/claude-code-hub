@@ -1769,7 +1769,12 @@ async function trackCostToRedis(session: ProxySession, usage: UsageMetrics | nul
   );
 
   // 新增：追踪用户层每日消费
-  await RateLimitService.trackUserDailyCost(user.id, costFloat);
+  await RateLimitService.trackUserDailyCost(
+    user.id,
+    costFloat,
+    user.dailyResetTime,
+    user.dailyResetMode
+  );
 
   // 刷新 session 时间戳（滑动窗口）
   void SessionTracker.refreshSession(session.sessionId, key.id, provider.id).catch((error) => {

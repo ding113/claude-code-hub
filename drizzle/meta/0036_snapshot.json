@@ -1,5 +1,5 @@
 {
-  "id": "68c87bdf-499a-45dd-8765-ad9b7a0bf3f9",
+  "id": "d991037a-f11d-420f-b508-439064ed9b06",
   "prevId": "9be2ede5-422c-44a7-a144-3ef1ca483887",
   "version": "7",
   "dialect": "postgresql",
@@ -1754,6 +1754,21 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": false
+        },
+        "daily_reset_mode": {
+          "name": "daily_reset_mode",
+          "type": "daily_reset_mode",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'fixed'"
+        },
+        "daily_reset_time": {
+          "name": "daily_reset_time",
+          "type": "varchar(5)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'00:00'"
         },
         "is_enabled": {
           "name": "is_enabled",

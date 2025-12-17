@@ -257,8 +257,8 @@
         "description": "留空表示永不過期"
       },
       "canLoginWebUi": {
-        "label": "允許登入 Web UI",
-        "description": "關閉後，此金鑰僅可用於 API 呼叫，無法登入管理後台"
+        "label": "啟用獨立餘額查詢頁",
+        "description": "允許使用者透過專屬頁面查看餘額"
       },
       "limit5hUsd": {
         "label": "5小時消費上限 (USD)",
