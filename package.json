@@ -11,11 +11,11 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "format": "biome format --write .",
     "format:check": "biome format .",
-    "test": "bun test",
-    "test:unit": "bun test tests/error-rule-detector.test.ts tests/request-filter-engine.test.ts tests/proxy-errors.test.ts",
-    "test:actions": "bun test tests/e2e-*.test.ts tests/api-actions-*.test.ts",
-    "test:api": "bun test tests/api-*.test.ts",
-    "test:watch": "bun test --watch",
+    "test": "vitest run",
+    "test:ui": "vitest --ui --watch",
+    "test:e2e": "vitest run tests/e2e/ --reporter=verbose",
+    "test:coverage": "vitest run --coverage",
+    "test:ci": "vitest run --reporter=default --reporter=junit --outputFile.junit=reports/vitest-junit.xml",
     "cui": "npx cui-server --host 0.0.0.0 --port 30000 --token a7564bc8882aa9a2d25d8b4ea6ea1e2e",
     "db:generate": "drizzle-kit generate && node scripts/validate-migrations.js",
     "db:migrate": "drizzle-kit migrate",
@@ -91,9 +91,13 @@
     "@types/pg": "^8",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/coverage-v8": "^4.0.16",
+    "@vitest/ui": "^4.0.16",
     "bun-types": "^1",
     "drizzle-kit": "^0.31",
+    "happy-dom": "^20.0.11",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.0.16"
   }
 }

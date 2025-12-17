@@ -1,0 +1,234 @@
+name: 🧪 Test Suite
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+# 取消同一分支的进行中的工作流
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ==================== 代码质量检查 ====================
+  quality:
+    name: 📋 Code Quality
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run linting
+        run: bun run lint
+
+      - name: Run type checking
+        run: bun run typecheck
+
+      - name: Check formatting
+        run: bun run format:check
+
+  # ==================== 单元测试 ====================
+  unit-tests:
+    name: ⚡ Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run unit tests
+        run: bun run test -- tests/unit/ --passWithNoTests
+
+  # ==================== 集成测试（需要数据库）====================
+  integration-tests:
+    name: 🔗 Integration Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: claude_code_hub_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    env:
+      DSN: postgres://test_user:test_password@localhost:5432/claude_code_hub_test
+      REDIS_URL: redis://localhost:6379/1
+      ADMIN_TOKEN: test-admin-token-for-ci
+      AUTO_MIGRATE: true
+      ENABLE_RATE_LIMIT: true
+      SESSION_TTL: 300
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run database migrations
+        run: bun run db:migrate
+
+      - name: Run integration tests
+        run: bun run test -- tests/integration/ --passWithNoTests
+
+  # ==================== API 测试（需要运行服务）====================
+  api-tests:
+    name: 🌐 API Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: claude_code_hub_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    env:
+      DSN: postgres://test_user:test_password@localhost:5432/claude_code_hub_test
+      REDIS_URL: redis://localhost:6379/1
+      ADMIN_TOKEN: test-admin-token-for-ci
+      AUTO_MIGRATE: true
+      PORT: 13500
+      ENABLE_RATE_LIMIT: true
+      SESSION_TTL: 300
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build application
+        run: bun run build
+
+      - name: Run database migrations
+        run: bun run db:migrate
+
+      - name: Start server (background)
+        run: |
+          bun run start &
+          echo $! > server.pid
+          sleep 15  # 等待服务启动
+
+      - name: Wait for server ready
+        run: |
+          timeout 60 bash -c 'until curl -f http://localhost:13500/api/actions/health; do sleep 2; done'
+
+      - name: Run E2E API tests
+        run: bun run test:e2e
+        env:
+          API_BASE_URL: http://localhost:13500/api/actions
+          TEST_ADMIN_TOKEN: test-admin-token-for-ci
+          AUTO_CLEANUP_TEST_DATA: true
+
+      - name: Stop server
+        if: always()
+        run: |
+          if [ -f server.pid ]; then
+            kill $(cat server.pid) || true
+          fi
+
+  # ==================== 测试结果汇总 ====================
+  test-summary:
+    name: 📊 Test Summary
+    runs-on: ubuntu-latest
+    needs: [quality, unit-tests, integration-tests, api-tests]
+    if: always()
+
+    steps:
+      - name: Check test results
+        run: |
+          if [ "${{ needs.quality.result }}" != "success" ] || \
+             [ "${{ needs.unit-tests.result }}" != "success" ] || \
+             [ "${{ needs.integration-tests.result }}" != "success" ] || \
+             [ "${{ needs.api-tests.result }}" != "success" ]; then
+            echo "❌ 部分测试失败"
+            exit 1
+          else
+            echo "✅ 所有测试通过"
+          fi
+
+      - name: Create summary
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const summary = `## 🧪 测试结果
+
+            | 测试类型 | 状态 |
+            |---------|------|
+            | 代码质量 | ${{ needs.quality.result == 'success' && '✅' || '❌' }} |
+            | 单元测试 | ${{ needs.unit-tests.result == 'success' && '✅' || '❌' }} |
+            | 集成测试 | ${{ needs.integration-tests.result == 'success' && '✅' || '❌' }} |
+            | API 测试 | ${{ needs.api-tests.result == 'success' && '✅' || '❌' }} |
+
+            **总体结果**: ${{ (needs.quality.result == 'success' && needs.unit-tests.result == 'success' && needs.integration-tests.result == 'success' && needs.api-tests.result == 'success') && '✅ 所有测试通过' || '❌ 部分测试失败' }}
+            `;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: summary
+            });

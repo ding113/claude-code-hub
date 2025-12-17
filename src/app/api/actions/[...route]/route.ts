@@ -48,7 +48,8 @@ app.openAPIRegistry.registerComponent("securitySchemes", "cookieAuth", {
   type: "apiKey",
   in: "cookie",
   name: "auth-token",
-  description: "通过 Web UI 登录后获取的 session cookie",
+  description:
+    "HTTP Cookie 认证。请先通过 Web UI 登录获取 auth-token Cookie，或从浏览器开发者工具中复制 Cookie 值用于 API 调用。详见上方「认证方式」章节。",
 });
 
 // ==================== 用户管理 ====================
@@ -58,6 +59,7 @@ const { route: getUsersRoute, handler: getUsersHandler} = createActionRoute(
   "getUsers",
   userActions.getUsers,
   {
+    requestSchema: z.object({}).describe("无需请求参数"),
     responseSchema: z.array(
       z.object({
         id: z.number().describe("用户 ID"),
@@ -331,6 +333,7 @@ const { route: getProvidersRoute, handler: getProvidersHandler } = createActionR
   "getProviders",
   providerActions.getProviders,
   {
+    requestSchema: z.object({}).describe("无需请求参数"),
     responseSchema: z.array(
       z.object({
         id: z.number().describe("供应商 ID"),
@@ -417,6 +420,7 @@ const { route: getProvidersHealthStatusRoute, handler: getProvidersHealthStatusH
     "getProvidersHealthStatus",
     providerActions.getProvidersHealthStatus,
     {
+      requestSchema: z.object({}).describe("无需请求参数"),
       description: "获取所有供应商的熔断器健康状态 (管理员)",
       summary: "获取供应商健康状态",
       tags: ["供应商管理"],
@@ -456,6 +460,7 @@ const { route: getModelPricesRoute, handler: getModelPricesHandler } = createAct
   "getModelPrices",
   modelPriceActions.getModelPrices,
   {
+    requestSchema: z.object({}).describe("无需请求参数"),
     description: "获取所有模型价格 (管理员)",
     summary: "获取模型价格列表",
     tags: ["模型价格"],
@@ -485,6 +490,7 @@ const { route: syncLiteLLMPricesRoute, handler: syncLiteLLMPricesHandler } = cre
   "syncLiteLLMPrices",
   modelPriceActions.syncLiteLLMPrices,
   {
+    requestSchema: z.object({}).describe("无需请求参数"),
     description: "同步 LiteLLM 价格表 (管理员)",
     summary: "从 GitHub 拉取最新的 LiteLLM 价格表并导入",
     tags: ["模型价格"],
@@ -501,6 +507,7 @@ const {
   "getAvailableModelsByProviderType",
   modelPriceActions.getAvailableModelsByProviderType,
   {
+    requestSchema: z.object({}).describe("无需请求参数"),
     description: "获取可用模型列表 (按供应商类型分组)",
     summary: "获取可用模型列表",
     tags: ["模型价格"],
@@ -513,6 +520,7 @@ const { route: hasPriceTableRoute, handler: hasPriceTableHandler } = createActio
   "hasPriceTable",
   modelPriceActions.hasPriceTable,
   {
+    requestSchema: z.object({}).describe("无需请求参数"),
     responseSchema: z.boolean(),
     description: "检查是否有价格表",
     summary: "检查价格表状态",
@@ -573,6 +581,7 @@ const { route: getModelListRoute, handler: getModelListHandler } = createActionR
   "getModelList",
   usageLogActions.getModelList,
   {
+    requestSchema: z.object({}).describe("无需请求参数"),
     responseSchema: z.array(z.string()),
     description: "获取日志中的模型列表",
     summary: "获取日志中的模型列表",
@@ -586,6 +595,7 @@ const { route: getStatusCodeListRoute, handler: getStatusCodeListHandler } = cre
   "getStatusCodeList",
   usageLogActions.getStatusCodeList,
   {
+    requestSchema: z.object({}).describe("无需请求参数"),
     responseSchema: z.array(z.number()),
     description: "获取日志中的状态码列表",
     summary: "获取日志中的状态码列表",
@@ -601,6 +611,7 @@ const { route: getOverviewDataRoute, handler: getOverviewDataHandler } = createA
   "getOverviewData",
   overviewActions.getOverviewData,
   {
+    requestSchema: z.object({}).describe("无需请求参数"),
     description: "获取首页概览数据",
     summary: "包含并发数、今日统计、活跃用户等",
     tags: ["概览"],
@@ -615,6 +626,7 @@ const { route: listSensitiveWordsRoute, handler: listSensitiveWordsHandler } = c
   "listSensitiveWords",
   sensitiveWordActions.listSensitiveWords,
   {
+    requestSchema: z.object({}).describe("无需请求参数"),
     description: "获取敏感词列表 (管理员)",
     summary: "获取敏感词列表",
     tags: ["敏感词管理"],
@@ -687,6 +699,7 @@ const { route: refreshCacheRoute, handler: refreshCacheHandler } = createActionR
   "refreshCacheAction",
   sensitiveWordActions.refreshCacheAction,
   {
+    requestSchema: z.object({}).describe("无需请求参数"),
     description: "手动刷新敏感词缓存 (管理员)",
     summary: "刷新敏感词缓存",
     tags: ["敏感词管理"],
@@ -700,6 +713,7 @@ const { route: getCacheStatsRoute, handler: getCacheStatsHandler } = createActio
   "getCacheStats",
   sensitiveWordActions.getCacheStats,
   {
+    requestSchema: z.object({}).describe("无需请求参数"),
     description: "获取敏感词缓存统计信息 (管理员)",
     summary: "获取缓存统计信息",
     tags: ["敏感词管理"],
@@ -715,6 +729,7 @@ const { route: getActiveSessionsRoute, handler: getActiveSessionsHandler } = cre
   "getActiveSessions",
   activeSessionActions.getActiveSessions,
   {
+    requestSchema: z.object({}).describe("无需请求参数"),
     description: "获取活跃 Session 列表",
     summary: "获取活跃 Session 列表",
     tags: ["Session 管理"],
@@ -760,6 +775,7 @@ const { route: getNotificationSettingsRoute, handler: getNotificationSettingsHan
     "getNotificationSettingsAction",
     notificationActions.getNotificationSettingsAction,
     {
+      requestSchema: z.object({}).describe("无需请求参数"),
       description: "获取通知设置",
       summary: "获取通知设置",
       tags: ["通知管理"],
@@ -857,14 +873,102 @@ Claude Code Hub 是一个 Claude API 代理中转服务平台,提供以下功能
 - 🛡️ **敏感词过滤** - 内容审核和风险控制
 - ⚡ **Session 管理** - 并发控制和会话追踪
 
-## 认证
+## 认证方式
 
-所有 API 端点需要通过 Cookie 认证。请先通过 Web UI 登录获取 session。
+所有 API 端点通过 **HTTP Cookie** 进行认证，Cookie 名称为 \`auth-token\`。
+
+### 如何获取认证 Token
+
+#### 方法 1：通过 Web UI 登录（推荐）
+
+1. 访问 Claude Code Hub 登录页面
+2. 使用您的 API Key 或管理员令牌（ADMIN_TOKEN）登录
+3. 登录成功后，浏览器会自动设置 \`auth-token\` Cookie
+4. 在同一浏览器中访问 API 文档页面即可直接测试（Cookie 自动携带）
+
+#### 方法 2：手动获取 Cookie（用于脚本或编程调用）
+
+登录成功后，可以从浏览器开发者工具中获取 Cookie 值：
+
+1. 打开浏览器开发者工具（F12）
+2. 切换到 "Application" 或 "Storage" 标签
+3. 在 Cookies 中找到 \`auth-token\` 的值
+4. 复制该值用于 API 调用
+
+### 使用示例
+
+#### curl 示例
+
+\`\`\`bash
+# 使用 Cookie 认证调用 API
+curl -X POST 'http://localhost:23000/api/actions/users/getUsers' \\
+  -H 'Content-Type: application/json' \\
+  -H 'Cookie: auth-token=your-token-here' \\
+  -d '{}'
+\`\`\`
+
+#### JavaScript (fetch) 示例
+
+\`\`\`javascript
+// 浏览器环境（Cookie 自动携带）
+fetch('/api/actions/users/getUsers', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  credentials: 'include', // 重要：携带 Cookie
+  body: JSON.stringify({}),
+})
+  .then(res => res.json())
+  .then(data => console.log(data));
+
+// Node.js 环境（需要手动设置 Cookie）
+const fetch = require('node-fetch');
+
+fetch('http://localhost:23000/api/actions/users/getUsers', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Cookie': 'auth-token=your-token-here',
+  },
+  body: JSON.stringify({}),
+})
+  .then(res => res.json())
+  .then(data => console.log(data));
+\`\`\`
+
+#### Python 示例
+
+\`\`\`python
+import requests
+
+# 使用 Session 保持 Cookie
+session = requests.Session()
+
+# 方式 1：手动设置 Cookie
+session.cookies.set('auth-token', 'your-token-here')
+
+# 方式 2：或者在请求头中设置
+headers = {
+    'Content-Type': 'application/json',
+    'Cookie': 'auth-token=your-token-here'
+}
+
+response = session.post(
+    'http://localhost:23000/api/actions/users/getUsers',
+    json={},
+    headers=headers
+)
+
+print(response.json())
+\`\`\`
 
 ## 权限
 
 - 👤 **普通用户**: 可以查看自己的数据和使用统计
 - 👑 **管理员**: 拥有完整的系统管理权限
+
+标记为 \`[管理员]\` 的端点需要管理员权限。
 
 ## 错误处理
 
@@ -889,9 +993,17 @@ Claude Code Hub 是一个 Claude API 代理中转服务平台,提供以下功能
 HTTP 状态码:
 - \`200\`: 操作成功
 - \`400\`: 请求错误 (参数验证失败或业务逻辑错误)
-- \`401\`: 未认证 (需要登录)
+- \`401\`: 未认证 (需要登录或 Cookie 无效)
 - \`403\`: 权限不足
 - \`500\`: 服务器内部错误
+
+### 常见认证错误
+
+| HTTP 状态码 | 错误消息 | 原因 | 解决方法 |
+|-----------|---------|-----|---------|
+| 401 | "未认证" | 缺少 \`auth-token\` Cookie | 先通过 Web UI 登录 |
+| 401 | "认证无效或已过期" | Cookie 无效或已过期 | 重新登录获取新 Cookie |
+| 403 | "权限不足" | 普通用户访问管理员端点 | 使用管理员账号登录 |
     `,
     contact: {
       name: "项目维护团队",

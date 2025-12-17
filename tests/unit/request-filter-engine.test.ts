@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { requestFilterEngine } from "@/lib/request-filter-engine";
 import type { RequestFilter } from "@/repository/request-filters";
 
@@ -19,8 +19,8 @@ function createSession() {
   } as unknown as Parameters<typeof requestFilterEngine.apply>[0];
 }
 
-describe("RequestFilterEngine", () => {
-  test("applies header remove/set and body mutations", async () => {
+describe("请求过滤引擎", () => {
+  test("应该正确应用 Header 删除/设置和 Body 变更", async () => {
     const filters: RequestFilter[] = [
       {
         id: 1,
@@ -91,7 +91,7 @@ describe("RequestFilterEngine", () => {
     expect((session.request.message as any).text).toContain("[redacted]");
   });
 
-  test("ignores unsafe regex without throwing", async () => {
+  test("应该忽略不安全的正则表达式（不抛出错误）", async () => {
     requestFilterEngine.setFiltersForTest([
       {
         id: 1,

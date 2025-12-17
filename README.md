@@ -151,8 +151,11 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
 - **管理后台**：`http://localhost:23000`（使用 `.env` 中的 `ADMIN_TOKEN` 登录）
 - **API 文档（Scalar UI）**：`http://localhost:23000/api/actions/scalar`
 - **API 文档（Swagger UI）**：`http://localhost:23000/api/actions/docs`
+- **API 认证指南**：[docs/api-authentication-guide.md](docs/api-authentication-guide.md)
 
-> 💡 **提示**：如需修改端口，请编辑 `docker-compose.yml` 中的 `ports` 配置。
+> 💡 **提示**：
+> - 如需修改端口，请编辑 `docker-compose.yml` 中的 `ports` 配置。
+> - 如需通过脚本或编程调用 API，请参考 [API 认证指南](docs/api-authentication-guide.md)。
 
 ## 🖼️ 界面预览 Screenshots
 
