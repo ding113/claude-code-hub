@@ -21,11 +21,7 @@ export interface UserOnboardingTourProps {
 
 const TOTAL_STEPS = 4;
 
-export function UserOnboardingTour({
-  open,
-  onOpenChange,
-  onComplete,
-}: UserOnboardingTourProps) {
+export function UserOnboardingTour({ open, onOpenChange, onComplete }: UserOnboardingTourProps) {
   const t = useTranslations("dashboard.userManagement.onboarding");
   const [currentStep, setCurrentStep] = useState(0);
 

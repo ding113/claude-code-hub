@@ -286,7 +286,9 @@ function UnifiedEditDialogInner({
                   limitConcurrentSessions: key.limitConcurrentSessions,
                 });
                 if (!keyRes.ok) {
-                  toast.error(keyRes.error || t("createDialog.keyCreateFailed", { name: key.name }));
+                  toast.error(
+                    keyRes.error || t("createDialog.keyCreateFailed", { name: key.name })
+                  );
                   return;
                 }
               } else {
@@ -330,7 +332,9 @@ function UnifiedEditDialogInner({
           router.refresh();
         } catch (error) {
           console.error("[UnifiedEditDialog] submit failed", error);
-          toast.error(mode === "create" ? t("createDialog.saveFailed") : t("editDialog.saveFailed"));
+          toast.error(
+            mode === "create" ? t("createDialog.saveFailed") : t("editDialog.saveFailed")
+          );
         }
       });
     },
@@ -494,7 +498,10 @@ function UnifiedEditDialogInner({
     if (keyId < 0) {
       // New key (not yet saved) - remove directly without confirmation
       const prevKeys = (form.values.keys || defaultValues.keys) as UnifiedEditValues["keys"];
-      form.setValue("keys", prevKeys.filter((k) => k.id !== keyId));
+      form.setValue(
+        "keys",
+        prevKeys.filter((k) => k.id !== keyId)
+      );
     } else {
       // Existing key - show confirmation dialog
       setKeyToDelete({ id: keyId, name: keyName });
@@ -504,7 +511,10 @@ function UnifiedEditDialogInner({
   const confirmRemoveKey = () => {
     if (!keyToDelete) return;
     const prevKeys = (form.values.keys || defaultValues.keys) as UnifiedEditValues["keys"];
-    form.setValue("keys", prevKeys.filter((k) => k.id !== keyToDelete.id));
+    form.setValue(
+      "keys",
+      prevKeys.filter((k) => k.id !== keyToDelete.id)
+    );
     setDeletedKeyIds((prev) => [...prev, keyToDelete.id]);
     setKeyToDelete(null);
   };
@@ -569,12 +579,7 @@ function UnifiedEditDialogInner({
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="text-sm font-semibold">{t("createDialog.keysSection")}</div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleAddKey}
-              >
+              <Button type="button" variant="outline" size="sm" onClick={handleAddKey}>
                 <Plus className="mr-1 h-4 w-4" />
                 {t("createDialog.addKey")}
               </Button>
@@ -589,7 +594,11 @@ function UnifiedEditDialogInner({
                     className="absolute right-2 top-2 h-8 w-8 text-muted-foreground hover:text-destructive"
                     onClick={() => handleRemoveKey(key.id, key.name)}
                     disabled={keys.length === 1}
-                    title={keys.length === 1 ? t("createDialog.cannotDeleteLastKey") : t("createDialog.removeKey")}
+                    title={
+                      keys.length === 1
+                        ? t("createDialog.cannotDeleteLastKey")
+                        : t("createDialog.removeKey")
+                    }
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -646,8 +655,12 @@ function UnifiedEditDialogInner({
           <Button type="submit" disabled={isPending}>
             {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {isPending
-              ? (mode === "create" ? t("createDialog.creating") : t("editDialog.saving"))
-              : (mode === "create" ? t("createDialog.create") : tCommon("save"))}
+              ? mode === "create"
+                ? t("createDialog.creating")
+                : t("editDialog.saving")
+              : mode === "create"
+                ? t("createDialog.create")
+                : tCommon("save")}
           </Button>
         </DialogFooter>
       </form>
@@ -675,7 +688,10 @@ export function UnifiedEditDialog(props: UnifiedEditDialogProps) {
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       {props.open ? (
-        <UnifiedEditDialogInner key={props.mode === "edit" ? props.user?.id : "create"} {...props} />
+        <UnifiedEditDialogInner
+          key={props.mode === "edit" ? props.user?.id : "create"}
+          {...props}
+        />
       ) : null}
     </Dialog>
   );
