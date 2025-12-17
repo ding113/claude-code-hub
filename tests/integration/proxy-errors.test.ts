@@ -14,7 +14,7 @@
  * 4. Backward compatibility with hardcoded regex patterns
  */
 
-import { beforeAll, describe, expect, test } from "bun:test";
+import { beforeAll, describe, expect, test } from "vitest";
 import { isNonRetryableClientError, ProxyError } from "@/app/v1/_lib/proxy/errors";
 import { errorRuleDetector } from "@/lib/error-rule-detector";
 

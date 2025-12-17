@@ -43,6 +43,15 @@ export const runtime = "nodejs";
 // 创建 OpenAPIHono 实例
 const app = new OpenAPIHono().basePath("/api/actions");
 
+// 注册安全方案
+app.openAPIRegistry.registerComponent("securitySchemes", "cookieAuth", {
+  type: "apiKey",
+  in: "cookie",
+  name: "auth-token",
+  description:
+    "HTTP Cookie 认证。请先通过 Web UI 登录获取 auth-token Cookie，或从浏览器开发者工具中复制 Cookie 值用于 API 调用。详见上方「认证方式」章节。",
+});
+
 // ==================== 用户管理 ====================
 
 const { route: getUsersRoute, handler: getUsersHandler } = createActionRoute(
@@ -50,7 +59,29 @@ const { route: getUsersRoute, handler: getUsersHandler } = createActionRoute(
   "getUsers",
   userActions.getUsers,
   {
+    requestSchema: z.object({}).describe("无需请求参数"),
+    responseSchema: z.array(
+      z.object({
+        id: z.number().describe("用户 ID"),
+        name: z.string().describe("用户名"),
+        note: z.string().nullable().describe("备注"),
+        role: z.enum(["admin", "user"]).describe("用户角色"),
+        isEnabled: z.boolean().describe("是否启用"),
+        expiresAt: z.string().nullable().describe("过期时间"),
+        rpm: z.number().describe("每分钟请求数限制"),
+        dailyQuota: z.number().describe("每日消费额度（美元）"),
+        providerGroup: z.string().nullable().describe("供应商分组"),
+        tags: z.array(z.string()).describe("用户标签"),
+        limit5hUsd: z.number().nullable().describe("5小时消费上限"),
+        limitWeeklyUsd: z.number().nullable().describe("周消费上限"),
+        limitMonthlyUsd: z.number().nullable().describe("月消费上限"),
+        limitTotalUsd: z.number().nullable().describe("总消费上限"),
+        limitConcurrentSessions: z.number().nullable().describe("并发Session上限"),
+        createdAt: z.string().describe("创建时间"),
+      })
+    ),
     description: "获取用户列表 (管理员获取所有用户，普通用户仅获取自己)",
+    summary: "获取用户列表",
     tags: ["用户管理"],
   }
 );
@@ -148,8 +179,14 @@ const { route: editUserRoute, handler: editUserHandler } = createActionRoute(
       ...UpdateUserSchema.shape,
     }),
     description: "编辑用户信息 (管理员)",
+    summary: "编辑用户信息",
     tags: ["用户管理"],
     requiredRole: "admin",
+    // 修复：显式指定参数映射
+    argsMapper: (body) => {
+      const { userId, ...data } = body;
+      return [userId, data];
+    },
   }
 );
 app.openapi(editUserRoute, editUserHandler);
@@ -163,6 +200,7 @@ const { route: removeUserRoute, handler: removeUserHandler } = createActionRoute
       userId: z.number().int().positive(),
     }),
     description: "删除用户 (管理员)",
+    summary: "删除用户",
     tags: ["用户管理"],
     requiredRole: "admin",
   }
@@ -178,6 +216,7 @@ const { route: getUserLimitUsageRoute, handler: getUserLimitUsageHandler } = cre
       userId: z.number().int().positive(),
     }),
     description: "获取用户限额使用情况",
+    summary: "获取用户限额使用情况",
     tags: ["用户管理"],
   }
 );
@@ -194,6 +233,7 @@ const { route: getKeysRoute, handler: getKeysHandler } = createActionRoute(
       userId: z.number().int().positive(),
     }),
     description: "获取用户的密钥列表",
+    summary: "获取用户的密钥列表",
     tags: ["密钥管理"],
   }
 );
@@ -245,7 +285,13 @@ const { route: editKeyRoute, handler: editKeyHandler } = createActionRoute(
       limitConcurrentSessions: z.number().optional(),
     }),
     description: "编辑密钥信息",
+    summary: "编辑密钥信息",
     tags: ["密钥管理"],
+    // 修复：显式指定参数映射
+    argsMapper: (body) => {
+      const { keyId, ...data } = body;
+      return [keyId, data];
+    },
   }
 );
 app.openapi(editKeyRoute, editKeyHandler);
@@ -259,6 +305,7 @@ const { route: removeKeyRoute, handler: removeKeyHandler } = createActionRoute(
       keyId: z.number().int().positive(),
     }),
     description: "删除密钥",
+    summary: "删除密钥",
     tags: ["密钥管理"],
   }
 );
@@ -273,6 +320,7 @@ const { route: getKeyLimitUsageRoute, handler: getKeyLimitUsageHandler } = creat
       keyId: z.number().int().positive(),
     }),
     description: "获取密钥限额使用情况",
+    summary: "获取密钥限额使用情况",
     tags: ["密钥管理"],
   }
 );
@@ -285,7 +333,29 @@ const { route: getProvidersRoute, handler: getProvidersHandler } = createActionR
   "getProviders",
   providerActions.getProviders,
   {
+    requestSchema: z.object({}).describe("无需请求参数"),
+    responseSchema: z.array(
+      z.object({
+        id: z.number().describe("供应商 ID"),
+        name: z.string().describe("供应商名称"),
+        providerType: z.string().describe("供应商类型"),
+        url: z.string().describe("API 地址"),
+        apiKey: z.string().describe("API 密钥（脱敏）"),
+        isEnabled: z.boolean().describe("是否启用"),
+        weight: z.number().describe("权重"),
+        priority: z.number().describe("优先级"),
+        costMultiplier: z.number().describe("成本系数"),
+        modelRedirects: z.record(z.string(), z.string()).nullable().describe("模型重定向映射"),
+        proxyUrl: z.string().nullable().describe("代理地址"),
+        maxConcurrency: z.number().nullable().describe("最大并发数"),
+        rpmLimit: z.number().nullable().describe("RPM 限制"),
+        dailyCostLimit: z.number().nullable().describe("每日成本限制"),
+        groups: z.array(z.string()).describe("分组"),
+        createdAt: z.string().describe("创建时间"),
+      })
+    ),
     description: "获取所有供应商列表 (管理员)",
+    summary: "获取供应商列表",
     tags: ["供应商管理"],
     requiredRole: "admin",
   }
@@ -299,6 +369,7 @@ const { route: addProviderRoute, handler: addProviderHandler } = createActionRou
   {
     requestSchema: CreateProviderSchema,
     description: "创建新供应商 (管理员)",
+    summary: "创建新供应商",
     tags: ["供应商管理"],
     requiredRole: "admin",
   }
@@ -315,8 +386,14 @@ const { route: editProviderRoute, handler: editProviderHandler } = createActionR
       ...UpdateProviderSchema.shape,
     }),
     description: "编辑供应商信息 (管理员)",
+    summary: "编辑供应商信息",
     tags: ["供应商管理"],
     requiredRole: "admin",
+    // 修复：显式指定参数映射
+    argsMapper: (body) => {
+      const { providerId, ...data } = body;
+      return [providerId, data];
+    },
   }
 );
 app.openapi(editProviderRoute, editProviderHandler);
@@ -330,6 +407,7 @@ const { route: removeProviderRoute, handler: removeProviderHandler } = createAct
       providerId: z.number().int().positive(),
     }),
     description: "删除供应商 (管理员)",
+    summary: "删除供应商",
     tags: ["供应商管理"],
     requiredRole: "admin",
   }
@@ -342,7 +420,9 @@ const { route: getProvidersHealthStatusRoute, handler: getProvidersHealthStatusH
     "getProvidersHealthStatus",
     providerActions.getProvidersHealthStatus,
     {
+      requestSchema: z.object({}).describe("无需请求参数"),
       description: "获取所有供应商的熔断器健康状态 (管理员)",
+      summary: "获取供应商健康状态",
       tags: ["供应商管理"],
       requiredRole: "admin",
     }
@@ -355,6 +435,7 @@ const { route: resetProviderCircuitRoute, handler: resetProviderCircuitHandler }
       providerId: z.number().int().positive(),
     }),
     description: "重置供应商的熔断器状态 (管理员)",
+    summary: "重置供应商熔断器",
     tags: ["供应商管理"],
     requiredRole: "admin",
   });
@@ -366,6 +447,7 @@ const { route: getProviderLimitUsageRoute, handler: getProviderLimitUsageHandler
       providerId: z.number().int().positive(),
     }),
     description: "获取供应商限额使用情况 (管理员)",
+    summary: "获取供应商限额使用情况",
     tags: ["供应商管理"],
     requiredRole: "admin",
   });
@@ -378,7 +460,9 @@ const { route: getModelPricesRoute, handler: getModelPricesHandler } = createAct
   "getModelPrices",
   modelPriceActions.getModelPrices,
   {
+    requestSchema: z.object({}).describe("无需请求参数"),
     description: "获取所有模型价格 (管理员)",
+    summary: "获取模型价格列表",
     tags: ["模型价格"],
     requiredRole: "admin",
   }
@@ -394,6 +478,7 @@ const { route: uploadPriceTableRoute, handler: uploadPriceTableHandler } = creat
       jsonContent: z.string().describe("价格表 JSON 字符串"),
     }),
     description: "上传价格表 (管理员)",
+    summary: "上传模型价格表",
     tags: ["模型价格"],
     requiredRole: "admin",
   }
@@ -405,6 +490,7 @@ const { route: syncLiteLLMPricesRoute, handler: syncLiteLLMPricesHandler } = cre
   "syncLiteLLMPrices",
   modelPriceActions.syncLiteLLMPrices,
   {
+    requestSchema: z.object({}).describe("无需请求参数"),
     description: "同步 LiteLLM 价格表 (管理员)",
     summary: "从 GitHub 拉取最新的 LiteLLM 价格表并导入",
     tags: ["模型价格"],
@@ -421,7 +507,9 @@ const {
   "getAvailableModelsByProviderType",
   modelPriceActions.getAvailableModelsByProviderType,
   {
+    requestSchema: z.object({}).describe("无需请求参数"),
     description: "获取可用模型列表 (按供应商类型分组)",
+    summary: "获取可用模型列表",
     tags: ["模型价格"],
   }
 );
@@ -432,8 +520,10 @@ const { route: hasPriceTableRoute, handler: hasPriceTableHandler } = createActio
   "hasPriceTable",
   modelPriceActions.hasPriceTable,
   {
+    requestSchema: z.object({}).describe("无需请求参数"),
     responseSchema: z.boolean(),
     description: "检查是否有价格表",
+    summary: "检查价格表状态",
     tags: ["模型价格"],
   }
 );
@@ -491,8 +581,10 @@ const { route: getModelListRoute, handler: getModelListHandler } = createActionR
   "getModelList",
   usageLogActions.getModelList,
   {
+    requestSchema: z.object({}).describe("无需请求参数"),
     responseSchema: z.array(z.string()),
     description: "获取日志中的模型列表",
+    summary: "获取日志中的模型列表",
     tags: ["使用日志"],
   }
 );
@@ -503,8 +595,10 @@ const { route: getStatusCodeListRoute, handler: getStatusCodeListHandler } = cre
   "getStatusCodeList",
   usageLogActions.getStatusCodeList,
   {
+    requestSchema: z.object({}).describe("无需请求参数"),
     responseSchema: z.array(z.number()),
     description: "获取日志中的状态码列表",
+    summary: "获取日志中的状态码列表",
     tags: ["使用日志"],
   }
 );
@@ -517,6 +611,7 @@ const { route: getOverviewDataRoute, handler: getOverviewDataHandler } = createA
   "getOverviewData",
   overviewActions.getOverviewData,
   {
+    requestSchema: z.object({}).describe("无需请求参数"),
     description: "获取首页概览数据",
     summary: "包含并发数、今日统计、活跃用户等",
     tags: ["概览"],
@@ -531,7 +626,9 @@ const { route: listSensitiveWordsRoute, handler: listSensitiveWordsHandler } = c
   "listSensitiveWords",
   sensitiveWordActions.listSensitiveWords,
   {
+    requestSchema: z.object({}).describe("无需请求参数"),
     description: "获取敏感词列表 (管理员)",
+    summary: "获取敏感词列表",
     tags: ["敏感词管理"],
     requiredRole: "admin",
   }
@@ -549,6 +646,7 @@ const { route: createSensitiveWordRoute, handler: createSensitiveWordHandler } =
       description: z.string().optional(),
     }),
     description: "创建敏感词 (管理员)",
+    summary: "创建敏感词",
     tags: ["敏感词管理"],
     requiredRole: "admin",
   }
@@ -568,8 +666,14 @@ const { route: updateSensitiveWordRoute, handler: updateSensitiveWordHandler } =
       description: z.string().optional(),
     }),
     description: "更新敏感词 (管理员)",
+    summary: "更新敏感词",
     tags: ["敏感词管理"],
     requiredRole: "admin",
+    // 修复：显式指定参数映射
+    argsMapper: (body) => {
+      const { id, ...updates } = body;
+      return [id, updates];
+    },
   }
 );
 app.openapi(updateSensitiveWordRoute, updateSensitiveWordHandler);
@@ -583,6 +687,7 @@ const { route: deleteSensitiveWordRoute, handler: deleteSensitiveWordHandler } =
       id: z.number().int().positive(),
     }),
     description: "删除敏感词 (管理员)",
+    summary: "删除敏感词",
     tags: ["敏感词管理"],
     requiredRole: "admin",
   }
@@ -594,7 +699,9 @@ const { route: refreshCacheRoute, handler: refreshCacheHandler } = createActionR
   "refreshCacheAction",
   sensitiveWordActions.refreshCacheAction,
   {
+    requestSchema: z.object({}).describe("无需请求参数"),
     description: "手动刷新敏感词缓存 (管理员)",
+    summary: "刷新敏感词缓存",
     tags: ["敏感词管理"],
     requiredRole: "admin",
   }
@@ -606,7 +713,9 @@ const { route: getCacheStatsRoute, handler: getCacheStatsHandler } = createActio
   "getCacheStats",
   sensitiveWordActions.getCacheStats,
   {
+    requestSchema: z.object({}).describe("无需请求参数"),
     description: "获取敏感词缓存统计信息 (管理员)",
+    summary: "获取缓存统计信息",
     tags: ["敏感词管理"],
     requiredRole: "admin",
   }
@@ -620,7 +729,9 @@ const { route: getActiveSessionsRoute, handler: getActiveSessionsHandler } = cre
   "getActiveSessions",
   activeSessionActions.getActiveSessions,
   {
+    requestSchema: z.object({}).describe("无需请求参数"),
     description: "获取活跃 Session 列表",
+    summary: "获取活跃 Session 列表",
     tags: ["Session 管理"],
   }
 );
@@ -635,6 +746,7 @@ const { route: getSessionDetailsRoute, handler: getSessionDetailsHandler } = cre
       sessionId: z.string(),
     }),
     description: "获取 Session 详情",
+    summary: "获取 Session 详情",
     tags: ["Session 管理"],
   }
 );
@@ -649,6 +761,7 @@ const { route: getSessionMessagesRoute, handler: getSessionMessagesHandler } = c
       sessionId: z.string(),
     }),
     description: "获取 Session 的 messages 内容",
+    summary: "获取 Session 消息内容",
     tags: ["Session 管理"],
   }
 );
@@ -662,7 +775,9 @@ const { route: getNotificationSettingsRoute, handler: getNotificationSettingsHan
     "getNotificationSettingsAction",
     notificationActions.getNotificationSettingsAction,
     {
+      requestSchema: z.object({}).describe("无需请求参数"),
       description: "获取通知设置",
+      summary: "获取通知设置",
       tags: ["通知管理"],
       requiredRole: "admin",
     }
@@ -680,6 +795,7 @@ const { route: updateNotificationSettingsRoute, handler: updateNotificationSetti
         enabledEvents: z.array(z.string()).optional(),
       }),
       description: "更新通知设置",
+      summary: "更新通知设置",
       tags: ["通知管理"],
       requiredRole: "admin",
     }
@@ -695,6 +811,7 @@ const { route: testWebhookRoute, handler: testWebhookHandler } = createActionRou
       webhookUrl: z.string().url(),
     }),
     description: "测试 Webhook 配置",
+    summary: "测试 Webhook 配置",
     tags: ["通知管理"],
     requiredRole: "admin",
   }
@@ -714,7 +831,7 @@ function getOpenAPIServers() {
   if (appUrl) {
     servers.push({
       url: appUrl,
-      description: "应用地址 (配置)",
+      description: "生产环境 - 已通过 APP_URL 环境变量配置的应用地址",
     });
   }
 
@@ -722,7 +839,7 @@ function getOpenAPIServers() {
   if (process.env.NODE_ENV !== "production") {
     servers.push({
       url: "http://localhost:13500",
-      description: "本地开发环境",
+      description: "本地开发环境 - 默认端口 13500",
     });
   }
 
@@ -730,7 +847,7 @@ function getOpenAPIServers() {
   if (servers.length === 0) {
     servers.push({
       url: "https://your-domain.com",
-      description: "生产环境 (请配置 APP_URL 环境变量)",
+      description: "请配置 APP_URL 环境变量指定生产环境地址",
     });
   }
 
@@ -756,14 +873,102 @@ Claude Code Hub 是一个 Claude API 代理中转服务平台,提供以下功能
 - 🛡️ **敏感词过滤** - 内容审核和风险控制
 - ⚡ **Session 管理** - 并发控制和会话追踪
 
-## 认证
+## 认证方式
 
-所有 API 端点需要通过 Cookie 认证。请先通过 Web UI 登录获取 session。
+所有 API 端点通过 **HTTP Cookie** 进行认证，Cookie 名称为 \`auth-token\`。
+
+### 如何获取认证 Token
+
+#### 方法 1：通过 Web UI 登录（推荐）
+
+1. 访问 Claude Code Hub 登录页面
+2. 使用您的 API Key 或管理员令牌（ADMIN_TOKEN）登录
+3. 登录成功后，浏览器会自动设置 \`auth-token\` Cookie
+4. 在同一浏览器中访问 API 文档页面即可直接测试（Cookie 自动携带）
+
+#### 方法 2：手动获取 Cookie（用于脚本或编程调用）
+
+登录成功后，可以从浏览器开发者工具中获取 Cookie 值：
+
+1. 打开浏览器开发者工具（F12）
+2. 切换到 "Application" 或 "Storage" 标签
+3. 在 Cookies 中找到 \`auth-token\` 的值
+4. 复制该值用于 API 调用
+
+### 使用示例
+
+#### curl 示例
+
+\`\`\`bash
+# 使用 Cookie 认证调用 API
+curl -X POST 'http://localhost:23000/api/actions/users/getUsers' \\
+  -H 'Content-Type: application/json' \\
+  -H 'Cookie: auth-token=your-token-here' \\
+  -d '{}'
+\`\`\`
+
+#### JavaScript (fetch) 示例
+
+\`\`\`javascript
+// 浏览器环境（Cookie 自动携带）
+fetch('/api/actions/users/getUsers', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  credentials: 'include', // 重要：携带 Cookie
+  body: JSON.stringify({}),
+})
+  .then(res => res.json())
+  .then(data => console.log(data));
+
+// Node.js 环境（需要手动设置 Cookie）
+const fetch = require('node-fetch');
+
+fetch('http://localhost:23000/api/actions/users/getUsers', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Cookie': 'auth-token=your-token-here',
+  },
+  body: JSON.stringify({}),
+})
+  .then(res => res.json())
+  .then(data => console.log(data));
+\`\`\`
+
+#### Python 示例
+
+\`\`\`python
+import requests
+
+# 使用 Session 保持 Cookie
+session = requests.Session()
+
+# 方式 1：手动设置 Cookie
+session.cookies.set('auth-token', 'your-token-here')
+
+# 方式 2：或者在请求头中设置
+headers = {
+    'Content-Type': 'application/json',
+    'Cookie': 'auth-token=your-token-here'
+}
+
+response = session.post(
+    'http://localhost:23000/api/actions/users/getUsers',
+    json={},
+    headers=headers
+)
+
+print(response.json())
+\`\`\`
 
 ## 权限
 
 - 👤 **普通用户**: 可以查看自己的数据和使用统计
 - 👑 **管理员**: 拥有完整的系统管理权限
+
+标记为 \`[管理员]\` 的端点需要管理员权限。
 
 ## 错误处理
 
@@ -779,31 +984,83 @@ Claude Code Hub 是一个 Claude API 代理中转服务平台,提供以下功能
 // 失败
 {
   "ok": false,
-  "error": "错误消息"
+  "error": "错误消息",
+  "errorCode": "ERROR_CODE",  // 可选：错误码（用于国际化）
+  "errorParams": { ... }       // 可选：错误参数
 }
 \`\`\`
 
 HTTP 状态码:
 - \`200\`: 操作成功
 - \`400\`: 请求错误 (参数验证失败或业务逻辑错误)
-- \`401\`: 未认证 (需要登录)
+- \`401\`: 未认证 (需要登录或 Cookie 无效)
 - \`403\`: 权限不足
 - \`500\`: 服务器内部错误
+
+### 常见认证错误
+
+| HTTP 状态码 | 错误消息 | 原因 | 解决方法 |
+|-----------|---------|-----|---------|
+| 401 | "未认证" | 缺少 \`auth-token\` Cookie | 先通过 Web UI 登录 |
+| 401 | "认证无效或已过期" | Cookie 无效或已过期 | 重新登录获取新 Cookie |
+| 403 | "权限不足" | 普通用户访问管理员端点 | 使用管理员账号登录 |
     `,
+    contact: {
+      name: "项目维护团队",
+      url: "https://github.com/ding113/claude-code-hub/issues",
+    },
+    license: {
+      name: "MIT License",
+      url: "https://github.com/ding113/claude-code-hub/blob/main/LICENSE",
+    },
   },
   servers: getOpenAPIServers(),
   tags: [
-    { name: "用户管理", description: "用户的 CRUD 操作和限额管理" },
-    { name: "密钥管理", description: "API 密钥的生成、编辑和限额配置" },
-    { name: "供应商管理", description: "上游供应商配置、熔断器和健康检查" },
-    { name: "模型价格", description: "模型价格配置和 LiteLLM 价格同步" },
-    { name: "统计分析", description: "使用统计和数据分析" },
-    { name: "使用日志", description: "请求日志查询和审计" },
-    { name: "概览", description: "首页概览数据" },
-    { name: "敏感词管理", description: "敏感词过滤配置" },
-    { name: "Session 管理", description: "活跃 Session 和并发控制" },
-    { name: "通知管理", description: "系统通知" },
+    {
+      name: "用户管理",
+      description: "用户账号的创建、编辑、删除和限额配置,支持 RPM、金额限制和并发会话控制",
+    },
+    {
+      name: "密钥管理",
+      description: "为用户生成 API 密钥,支持独立的金额限制、过期时间和 Web UI 登录权限配置",
+    },
+    {
+      name: "供应商管理",
+      description: "配置上游 API 供应商,包括权重调度、熔断保护、代理设置和健康状态监控",
+    },
+    {
+      name: "模型价格",
+      description: "管理模型价格表,支持手动上传 JSON 或从 LiteLLM 官方仓库同步最新价格",
+    },
+    {
+      name: "统计分析",
+      description: "查看用户消费统计、请求量趋势和成本分析,支持多种时间维度的数据汇总",
+    },
+    {
+      name: "使用日志",
+      description: "查询 API 请求日志,支持按用户、模型、时间范围、状态码等多条件过滤",
+    },
+    {
+      name: "概览",
+      description: "展示系统运行状态概览,包括并发数、今日统计、活跃用户和时间分布图表",
+    },
+    {
+      name: "敏感词管理",
+      description: "配置内容审核规则,支持正则表达式匹配和缓存刷新,用于风险控制",
+    },
+    {
+      name: "Session 管理",
+      description: "查看活跃会话列表、会话详情和消息内容,用于并发控制和请求追踪",
+    },
+    {
+      name: "通知管理",
+      description: "配置 Webhook 通知,接收系统事件推送(如限额预警、熔断触发等)",
+    },
   ],
+  externalDocs: {
+    description: "GitHub 仓库 - 查看完整文档、功能介绍和部署指南",
+    url: "https://github.com/ding113/claude-code-hub",
+  },
 });
 
 // Swagger UI (传统风格)

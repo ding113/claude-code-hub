@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import {
   type AggregateSessionStatsEntry,
   summarizeTerminateSessionsBatch,
@@ -32,8 +32,8 @@ function buildSessionEntry(
   };
 }
 
-describe("summarizeTerminateSessionsBatch", () => {
-  test("should separate allowed, unauthorized, and missing sessions for regular users", () => {
+describe("Session 批量终止摘要", () => {
+  test("普通用户应该正确分类允许/未授权/缺失的 Session", () => {
     const requestedIds = ["sess-1", "sess-1", "sess-2", "sess-3"];
     const sessionsData = [
       buildSessionEntry({ sessionId: "sess-1", userId: 10 }),
@@ -48,7 +48,7 @@ describe("summarizeTerminateSessionsBatch", () => {
     expect(summary.missingSessionIds).toEqual(["sess-3"]);
   });
 
-  test("should treat admins as authorized for all found sessions while still tracking missing ones", () => {
+  test("管理员应该对所有找到的 Session 有权限（仍追踪缺失的）", () => {
     const requestedIds = ["sess-4", "sess-5"];
     const sessionsData = [buildSessionEntry({ sessionId: "sess-4", userId: 200 })];
 
