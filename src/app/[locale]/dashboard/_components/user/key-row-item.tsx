@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, Eye, EyeOff, FileText, Info, Pencil, Trash2 } from "lucide-react";
+import { Copy, Expand, Eye, EyeOff, FileText, Info, Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import {
@@ -18,6 +18,8 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { RelativeTime } from "@/components/ui/relative-time";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CURRENCY_CONFIG, type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
+import { KeyFullDisplayDialog } from "./key-full-display-dialog";
+import { KeyStatsDialog } from "./key-stats-dialog";
 
 export interface KeyRowItemProps {
   keyData: {
@@ -52,6 +54,8 @@ export interface KeyRowItemProps {
       todayCost: string;
       lastUsed: string;
       actions: string;
+      callsLabel?: string;
+      costLabel?: string;
     };
     actions: {
       details: string;
@@ -61,6 +65,7 @@ export interface KeyRowItemProps {
       copy: string;
       show: string;
       hide: string;
+      expand?: string;
     };
     status: {
       enabled: string;
@@ -81,6 +86,8 @@ export function KeyRowItem({
 }: KeyRowItemProps) {
   const [isKeyVisible, setIsKeyVisible] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [fullKeyDialogOpen, setFullKeyDialogOpen] = useState(false);
+  const [statsDialogOpen, setStatsDialogOpen] = useState(false);
 
   const resolvedCurrencyCode: CurrencyCode =
     currencyCode && currencyCode in CURRENCY_CONFIG ? (currencyCode as CurrencyCode) : "USD";
@@ -182,6 +189,27 @@ export function KeyRowItem({
                 </TooltipContent>
               </Tooltip>
             ) : null}
+
+            {keyData.fullKey ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="ghost"
+                    aria-label={translations.actions.expand}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setFullKeyDialogOpen(true);
+                    }}
+                    className="h-7 w-7"
+                  >
+                    <Expand className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{translations.actions.expand}</TooltipContent>
+              </Tooltip>
+            ) : null}
           </div>
         </div>
       </div>
@@ -194,16 +222,25 @@ export function KeyRowItem({
       </div>
 
       {/* 今日用量（调用次数） */}
-      <div className="col-span-1 text-right tabular-nums" title={translations.fields.todayUsage}>
-        {Number(keyData.todayCallCount || 0).toLocaleString()}
+      <div
+        className="col-span-1 text-right tabular-nums flex items-center justify-end gap-1"
+        title={translations.fields.todayUsage}
+      >
+        <span className="text-xs text-muted-foreground">
+          {translations.fields.callsLabel || "Calls"}:
+        </span>
+        <span>{Number(keyData.todayCallCount || 0).toLocaleString()}</span>
       </div>
 
       {/* 今日消耗（成本） */}
       <div
-        className="col-span-2 text-right font-mono tabular-nums"
+        className="col-span-2 text-right font-mono tabular-nums flex items-center justify-end gap-1"
         title={translations.fields.todayCost}
       >
-        {formatCurrency(keyData.todayUsage || 0, resolvedCurrencyCode)}
+        <span className="text-xs text-muted-foreground">
+          {translations.fields.costLabel || "Cost"}:
+        </span>
+        <span>{formatCurrency(keyData.todayUsage || 0, resolvedCurrencyCode)}</span>
       </div>
 
       {/* 最后使用 */}
@@ -229,7 +266,7 @@ export function KeyRowItem({
               aria-label={translations.actions.details}
               onClick={(e) => {
                 e.stopPropagation();
-                onViewDetails();
+                setStatsDialogOpen(true);
               }}
               className="h-7 w-7"
             >
@@ -320,6 +357,25 @@ export function KeyRowItem({
           </AlertDialogContent>
         </AlertDialog>
       </div>
+
+      {/* Full Key Display Dialog */}
+      {keyData.fullKey && (
+        <KeyFullDisplayDialog
+          open={fullKeyDialogOpen}
+          onOpenChange={setFullKeyDialogOpen}
+          keyName={keyData.name}
+          fullKey={keyData.fullKey}
+        />
+      )}
+
+      {/* Model Stats Dialog */}
+      <KeyStatsDialog
+        open={statsDialogOpen}
+        onOpenChange={setStatsDialogOpen}
+        keyName={keyData.name}
+        modelStats={keyData.modelStats}
+        currencyCode={currencyCode}
+      />
     </div>
   );
 }

@@ -940,3 +940,75 @@ export async function toggleUserEnabled(userId: number, enabled: boolean): Promi
     };
   }
 }
+
+/**
+ * 获取用户所有限额使用情况（用于限额百分比显示）
+ * 返回各时间周期的使用量和限额
+ */
+export async function getUserAllLimitUsage(userId: number): Promise<
+  ActionResult<{
+    limit5h: { usage: number; limit: number | null };
+    limitDaily: { usage: number; limit: number | null };
+    limitWeekly: { usage: number; limit: number | null };
+    limitMonthly: { usage: number; limit: number | null };
+    limitTotal: { usage: number; limit: number | null };
+  }>
+> {
+  try {
+    const tError = await getTranslations("errors");
+
+    const session = await getSession();
+    if (!session) {
+      return { ok: false, error: tError("UNAUTHORIZED"), errorCode: ERROR_CODES.UNAUTHORIZED };
+    }
+
+    const user = await findUserById(userId);
+    if (!user) {
+      return { ok: false, error: tError("USER_NOT_FOUND"), errorCode: ERROR_CODES.NOT_FOUND };
+    }
+
+    // 权限检查：用户只能查看自己，管理员可以查看所有人
+    if (session.user.role !== "admin" && session.user.id !== userId) {
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    // 动态导入
+    const { getTimeRangeForPeriod } = await import("@/lib/rate-limit/time-utils");
+    const { sumUserCostInTimeRange, sumUserTotalCost } = await import("@/repository/statistics");
+
+    // 获取各时间范围
+    const range5h = getTimeRangeForPeriod("5h");
+    const rangeDaily = getTimeRangeForPeriod("daily", user.dailyResetTime || "00:00");
+    const rangeWeekly = getTimeRangeForPeriod("weekly");
+    const rangeMonthly = getTimeRangeForPeriod("monthly");
+
+    // 并行查询各时间范围的消费
+    const [usage5h, usageDaily, usageWeekly, usageMonthly, usageTotal] = await Promise.all([
+      sumUserCostInTimeRange(userId, range5h.startTime, range5h.endTime),
+      sumUserCostInTimeRange(userId, rangeDaily.startTime, rangeDaily.endTime),
+      sumUserCostInTimeRange(userId, rangeWeekly.startTime, rangeWeekly.endTime),
+      sumUserCostInTimeRange(userId, rangeMonthly.startTime, rangeMonthly.endTime),
+      sumUserTotalCost(userId),
+    ]);
+
+    return {
+      ok: true,
+      data: {
+        limit5h: { usage: usage5h, limit: user.limit5hUsd ?? null },
+        limitDaily: { usage: usageDaily, limit: user.dailyQuota ?? null },
+        limitWeekly: { usage: usageWeekly, limit: user.limitWeeklyUsd ?? null },
+        limitMonthly: { usage: usageMonthly, limit: user.limitMonthlyUsd ?? null },
+        limitTotal: { usage: usageTotal, limit: user.limitTotalUsd ?? null },
+      },
+    };
+  } catch (error) {
+    logger.error("Failed to fetch user all limit usage:", error);
+    const tError = await getTranslations("errors");
+    const message = error instanceof Error ? error.message : tError("GET_USER_QUOTA_FAILED");
+    return { ok: false, error: message, errorCode: ERROR_CODES.OPERATION_FAILED };
+  }
+}

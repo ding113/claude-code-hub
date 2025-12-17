@@ -224,6 +224,7 @@ export async function editKey(
     name: string;
     expiresAt?: string;
     canLoginWebUi?: boolean;
+    isEnabled?: boolean;
     limit5hUsd?: number | null;
     limitDailyUsd?: number | null;
     dailyResetMode?: "fixed" | "rolling";
@@ -369,6 +370,7 @@ export async function editKey(
       name: validatedData.name,
       expires_at: expiresAt,
       can_login_web_ui: validatedData.canLoginWebUi,
+      ...(data.isEnabled !== undefined ? { is_enabled: data.isEnabled } : {}),
       limit_5h_usd: validatedData.limit5hUsd,
       limit_daily_usd: validatedData.limitDailyUsd,
       daily_reset_mode: validatedData.dailyResetMode,
@@ -578,5 +580,54 @@ export async function getKeyLimitUsage(keyId: number): Promise<
   } catch (error) {
     logger.error("获取密钥限额使用情况失败:", error);
     return { ok: false, error: "获取限额使用情况失败" };
+  }
+}
+
+/**
+ * 切换密钥启用/禁用状态
+ */
+export async function toggleKeyEnabled(keyId: number, enabled: boolean): Promise<ActionResult> {
+  try {
+    const tError = await getTranslations("errors");
+
+    const session = await getSession();
+    if (!session) {
+      return { ok: false, error: tError("UNAUTHORIZED"), errorCode: ERROR_CODES.UNAUTHORIZED };
+    }
+
+    const key = await findKeyById(keyId);
+    if (!key) {
+      return { ok: false, error: tError("KEY_NOT_FOUND"), errorCode: ERROR_CODES.NOT_FOUND };
+    }
+
+    // 权限检查：用户只能管理自己的Key，管理员可以管理所有Key
+    if (session.user.role !== "admin" && session.user.id !== key.userId) {
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    // 检查是否是最后一个启用的密钥（防止禁用最后一个）
+    if (!enabled) {
+      const activeKeyCount = await countActiveKeysByUser(key.userId);
+      if (activeKeyCount <= 1) {
+        return {
+          ok: false,
+          error: tError("CANNOT_DISABLE_LAST_KEY") || "无法禁用最后一个可用密钥",
+          errorCode: ERROR_CODES.OPERATION_FAILED,
+        };
+      }
+    }
+
+    await updateKey(keyId, { is_enabled: enabled });
+    revalidatePath("/dashboard");
+    return { ok: true };
+  } catch (error) {
+    logger.error("切换密钥状态失败:", error);
+    const tError = await getTranslations("errors");
+    const message = error instanceof Error ? error.message : tError("UPDATE_KEY_FAILED");
+    return { ok: false, error: message, errorCode: ERROR_CODES.UPDATE_FAILED };
   }
 }
