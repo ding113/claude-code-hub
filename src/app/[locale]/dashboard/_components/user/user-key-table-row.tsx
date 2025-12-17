@@ -23,6 +23,7 @@ export interface UserKeyTableRowProps {
   onEditUser: (scrollToKeyId?: number) => void;
   currentUser?: { role: string };
   currencyCode?: string;
+  highlightKeyIds?: Set<number>;
   translations: {
     columns: {
       username: string;
@@ -73,6 +74,7 @@ export function UserKeyTableRow({
   onToggle,
   onEditUser,
   currencyCode,
+  highlightKeyIds,
   translations,
 }: UserKeyTableRowProps) {
   const locale = useLocale();
@@ -267,6 +269,7 @@ export function UserKeyTableRow({
                         onViewDetails={() => onEditUser(key.id)}
                         currencyCode={currencyCode}
                         translations={keyRowTranslations}
+                        highlight={highlightKeyIds?.has(key.id)}
                       />
                     ))}
                   </div>

@@ -834,6 +834,8 @@
       "allGroups": "All Groups",
       "tagFilter": "Filter by Tag",
       "allTags": "All Tags",
+      "keyGroupFilter": "Key Group",
+      "allKeyGroups": "All Key Groups",
       "createUser": "Create User"
     }
   },
@@ -1178,6 +1180,10 @@
         "tags": {
           "label": "User Tags",
           "placeholder": "Enter tag (press Enter to add)"
+        },
+        "providerGroup": {
+          "label": "Provider Group (Legacy)",
+          "placeholder": "Enter provider group or leave empty"
         }
       }
     },
@@ -1198,8 +1204,8 @@
           "description": "Disabled keys cannot be used"
         },
         "balanceQueryPage": {
-          "label": "Allow Web UI Login",
-          "description": "When disabled, this key can only be used for API calls and cannot login to the admin panel"
+          "label": "Independent Personal Usage Page",
+          "description": "When enabled, this key can access an independent personal usage page"
         },
         "providerGroup": {
           "label": "Provider Group",

@@ -2,7 +2,7 @@
 
 import { Check, Copy, Eye, EyeOff } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,8 +30,16 @@ export function KeyFullDisplayDialog({
 }: KeyFullDisplayDialogProps) {
   const t = useTranslations("dashboard.userManagement.keyFullDisplay");
   const tCommon = useTranslations("common");
-  const [isVisible, setIsVisible] = useState(false);
+  const [isVisible, setIsVisible] = useState(true);
   const [copied, setCopied] = useState(false);
+
+  // Reset state when dialog opens
+  useEffect(() => {
+    if (open) {
+      setIsVisible(true);
+      setCopied(false);
+    }
+  }, [open]);
 
   const displayKey = isVisible ? fullKey : fullKey.replace(/./g, "*");
 

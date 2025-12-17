@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, Expand, Eye, EyeOff, FileText, Info, Pencil, Trash2 } from "lucide-react";
+import { Copy, Eye, FileText, Info, Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import {
@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { RelativeTime } from "@/components/ui/relative-time";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import { CURRENCY_CONFIG, type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
 import { KeyFullDisplayDialog } from "./key-full-display-dialog";
 import { KeyStatsDialog } from "./key-stats-dialog";
@@ -45,6 +46,7 @@ export interface KeyRowItemProps {
   onViewLogs: () => void;
   onViewDetails: () => void;
   currencyCode?: string;
+  highlight?: boolean;
   translations: {
     fields: {
       name: string;
@@ -54,8 +56,8 @@ export interface KeyRowItemProps {
       todayCost: string;
       lastUsed: string;
       actions: string;
-      callsLabel?: string;
-      costLabel?: string;
+      callsLabel: string;
+      costLabel: string;
     };
     actions: {
       details: string;
@@ -63,9 +65,10 @@ export interface KeyRowItemProps {
       edit: string;
       delete: string;
       copy: string;
+      copySuccess: string;
+      copyFailed: string;
       show: string;
       hide: string;
-      expand?: string;
     };
     status: {
       enabled: string;
@@ -80,11 +83,11 @@ export function KeyRowItem({
   onEdit,
   onDelete,
   onViewLogs,
-  onViewDetails,
+  onViewDetails: _onViewDetails,
   currencyCode,
+  highlight,
   translations,
 }: KeyRowItemProps) {
-  const [isKeyVisible, setIsKeyVisible] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [fullKeyDialogOpen, setFullKeyDialogOpen] = useState(false);
   const [statsDialogOpen, setStatsDialogOpen] = useState(false);
@@ -98,21 +101,26 @@ export function KeyRowItem({
 
   const canReveal = Boolean(keyData.fullKey);
   const canCopy = Boolean(keyData.canCopy && keyData.fullKey);
-  const displayKey = isKeyVisible && keyData.fullKey ? keyData.fullKey : keyData.maskedKey || "-";
+  const displayKey = keyData.maskedKey || "-";
 
   const handleCopy = async () => {
     if (!canCopy || !keyData.fullKey) return;
     try {
       await navigator.clipboard.writeText(keyData.fullKey);
-      toast.success(translations.actions.copy);
+      toast.success(translations.actions.copySuccess);
     } catch (error) {
       console.error("[KeyRowItem] copy failed", error);
-      toast.error(translations.actions.copy);
+      toast.error(translations.actions.copyFailed);
     }
   };
 
   return (
-    <div className="grid grid-cols-[repeat(14,minmax(0,1fr))] items-center gap-3 px-3 py-2 text-sm border-b last:border-b-0 hover:bg-muted/40 transition-colors">
+    <div
+      className={cn(
+        "grid grid-cols-[repeat(14,minmax(0,1fr))] items-center gap-3 px-3 py-2 text-sm border-b last:border-b-0 hover:bg-muted/40 transition-colors",
+        highlight && "bg-primary/10 ring-1 ring-primary/30"
+      )}
+    >
       {/* 名称 */}
       <div className="col-span-2 min-w-0">
         <div className="flex items-center gap-2 min-w-0">
@@ -132,9 +140,7 @@ export function KeyRowItem({
       <div className="col-span-3 min-w-0">
         <div className="flex items-center gap-2 min-w-0">
           <div
-            className={`min-w-0 flex-1 font-mono text-xs ${
-              isKeyVisible && keyData.fullKey ? "select-all" : "truncate"
-            }`}
+            className="min-w-0 flex-1 font-mono text-xs truncate"
             title={translations.fields.key}
           >
             {displayKey}
@@ -168,46 +174,17 @@ export function KeyRowItem({
                     type="button"
                     size="icon-sm"
                     variant="ghost"
-                    aria-label={
-                      isKeyVisible ? translations.actions.hide : translations.actions.show
-                    }
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setIsKeyVisible((prev) => !prev);
-                    }}
-                    className="h-7 w-7"
-                  >
-                    {isKeyVisible ? (
-                      <EyeOff className="h-3.5 w-3.5" />
-                    ) : (
-                      <Eye className="h-3.5 w-3.5" />
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {isKeyVisible ? translations.actions.hide : translations.actions.show}
-                </TooltipContent>
-              </Tooltip>
-            ) : null}
-
-            {keyData.fullKey ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="ghost"
-                    aria-label={translations.actions.expand}
+                    aria-label={translations.actions.show}
                     onClick={(e) => {
                       e.stopPropagation();
                       setFullKeyDialogOpen(true);
                     }}
                     className="h-7 w-7"
                   >
-                    <Expand className="h-3.5 w-3.5" />
+                    <Eye className="h-3.5 w-3.5" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>{translations.actions.expand}</TooltipContent>
+                <TooltipContent>{translations.actions.show}</TooltipContent>
               </Tooltip>
             ) : null}
           </div>
@@ -226,9 +203,7 @@ export function KeyRowItem({
         className="col-span-1 text-right tabular-nums flex items-center justify-end gap-1"
         title={translations.fields.todayUsage}
       >
-        <span className="text-xs text-muted-foreground">
-          {translations.fields.callsLabel || "Calls"}:
-        </span>
+        <span className="text-xs text-muted-foreground">{translations.fields.callsLabel}:</span>
         <span>{Number(keyData.todayCallCount || 0).toLocaleString()}</span>
       </div>
 
@@ -237,9 +212,7 @@ export function KeyRowItem({
         className="col-span-2 text-right font-mono tabular-nums flex items-center justify-end gap-1"
         title={translations.fields.todayCost}
       >
-        <span className="text-xs text-muted-foreground">
-          {translations.fields.costLabel || "Cost"}:
-        </span>
+        <span className="text-xs text-muted-foreground">{translations.fields.costLabel}:</span>
         <span>{formatCurrency(keyData.todayUsage || 0, resolvedCurrencyCode)}</span>
       </div>
 

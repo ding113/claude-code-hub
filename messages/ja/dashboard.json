@@ -805,6 +805,8 @@
       "allGroups": "すべてのグループ",
       "tagFilter": "タグでフィルター",
       "allTags": "すべてのタグ",
+      "keyGroupFilter": "キーグループ",
+      "allKeyGroups": "すべてのキーグループ",
       "createUser": "ユーザーを作成"
     }
   },
@@ -1149,6 +1151,10 @@
         "tags": {
           "label": "ユーザータグ",
           "placeholder": "タグを入力（Enterで追加）"
+        },
+        "providerGroup": {
+          "label": "プロバイダーグループ（レガシー）",
+          "placeholder": "プロバイダーグループを入力または空白のまま"
         }
       }
     },
@@ -1169,8 +1175,8 @@
           "description": "無効化されたキーは使用できません"
         },
         "balanceQueryPage": {
-          "label": "Web UIログインを許可",
-          "description": "無効にすると、このキーはAPI呼び出しにのみ使用でき、管理画面へのログインはできません"
+          "label": "独立した個人使用量ページ",
+          "description": "有効にすると、このキーで独立した個人使用量ページにアクセスできます"
         },
         "providerGroup": {
           "label": "プロバイダーグループ",

@@ -19,6 +19,8 @@
   "reset": "Reset",
   "view": "View",
   "copy": "Copy",
+  "copySuccess": "Copied",
+  "copyFailed": "Copy failed",
   "download": "Download",
   "upload": "Upload",
   "add": "Add",

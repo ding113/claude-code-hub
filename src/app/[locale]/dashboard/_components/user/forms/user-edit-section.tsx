@@ -16,6 +16,7 @@ export interface UserEditSectionProps {
     description?: string;
     tags?: string[];
     expiresAt?: Date | null;
+    providerGroup?: string | null;
     // 所有限额字段
     limit5hUsd?: number | null;
     limitWeeklyUsd?: number | null;
@@ -25,6 +26,7 @@ export interface UserEditSectionProps {
     dailyResetMode?: "fixed" | "rolling";
     dailyResetTime?: string;
   };
+  showProviderGroup?: boolean;
   onChange: (field: string, value: any) => void;
   translations: {
     sections: {
@@ -36,6 +38,10 @@ export interface UserEditSectionProps {
       username: { label: string; placeholder: string };
       description: { label: string; placeholder: string };
       tags: { label: string; placeholder: string };
+      providerGroup?: {
+        label: string;
+        placeholder: string;
+      };
     };
     limitRules: {
       addRule: string;
@@ -76,7 +82,12 @@ function toNumberOrNull(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-export function UserEditSection({ user, onChange, translations }: UserEditSectionProps) {
+export function UserEditSection({
+  user,
+  showProviderGroup,
+  onChange,
+  translations,
+}: UserEditSectionProps) {
   const [rulePickerOpen, setRulePickerOpen] = useState(false);
 
   const emitChange = (field: string, value: any) => {
@@ -174,13 +185,13 @@ export function UserEditSection({ user, onChange, translations }: UserEditSectio
   };
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-lg border border-border bg-card/50 p-4 space-y-4">
+    <div className="space-y-4">
+      <section className="rounded-lg border border-border bg-card/50 p-3 space-y-3">
         <div className="flex items-center gap-2">
           <User className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
           <h4 className="text-sm font-semibold">{translations.sections.basicInfo}</h4>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2">
           <TextField
             label={translations.fields.username.label}
             placeholder={translations.fields.username.placeholder}
@@ -189,7 +200,7 @@ export function UserEditSection({ user, onChange, translations }: UserEditSectio
             maxLength={64}
           />
 
-          <div className="space-y-4">
+          <div className="space-y-3">
             <TextField
               label={translations.fields.description.label}
               placeholder={translations.fields.description.placeholder}
@@ -206,16 +217,26 @@ export function UserEditSection({ user, onChange, translations }: UserEditSectio
               maxTagLength={32}
               maxTags={20}
             />
+
+            {showProviderGroup && translations.fields.providerGroup && (
+              <TextField
+                label={translations.fields.providerGroup.label}
+                placeholder={translations.fields.providerGroup.placeholder}
+                value={user.providerGroup || ""}
+                onChange={(val) => emitChange("providerGroup", val?.trim() || null)}
+                maxLength={50}
+              />
+            )}
           </div>
         </div>
       </section>
 
-      <section className="rounded-lg border border-border bg-card/50 p-4 space-y-4">
+      <section className="rounded-lg border border-border bg-card/50 p-3 space-y-3">
         <div className="flex items-center gap-2">
           <Calendar className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
           <h4 className="text-sm font-semibold">{translations.sections.expireTime}</h4>
         </div>
-        <div className="space-y-4">
+        <div className="space-y-3">
           <DatePickerField
             label={translations.sections.expireTime}
             value={expiresAtValue}
@@ -230,37 +251,30 @@ export function UserEditSection({ user, onChange, translations }: UserEditSectio
         </div>
       </section>
 
-      <section className="rounded-lg border border-border bg-card/50 p-4 space-y-4">
-        <div className="flex items-center gap-2">
-          <Gauge className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-          <h4 className="text-sm font-semibold">{translations.sections.limitRules}</h4>
-        </div>
-        <div className="space-y-4">
-          <LimitRulesDisplay
-            rules={rules}
-            onRemove={handleRemoveRule}
-            translations={limitRuleTranslations}
-          />
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="max-w-md"
-              onClick={() => setRulePickerOpen(true)}
-            >
-              {translations.limitRules.addRule}
-            </Button>
+      <section className="rounded-lg border border-border bg-card/50 p-3 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Gauge className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            <h4 className="text-sm font-semibold">{translations.sections.limitRules}</h4>
           </div>
-
-          <LimitRulePicker
-            open={rulePickerOpen}
-            onOpenChange={setRulePickerOpen}
-            onConfirm={handleAddRule}
-            existingTypes={existingTypes}
-            translations={limitRuleTranslations}
-          />
+          <Button type="button" variant="outline" size="sm" onClick={() => setRulePickerOpen(true)}>
+            {translations.limitRules.addRule}
+          </Button>
         </div>
+
+        <LimitRulesDisplay
+          rules={rules}
+          onRemove={handleRemoveRule}
+          translations={limitRuleTranslations}
+        />
+
+        <LimitRulePicker
+          open={rulePickerOpen}
+          onOpenChange={setRulePickerOpen}
+          onConfirm={handleAddRule}
+          existingTypes={existingTypes}
+          translations={limitRuleTranslations}
+        />
       </section>
     </div>
   );

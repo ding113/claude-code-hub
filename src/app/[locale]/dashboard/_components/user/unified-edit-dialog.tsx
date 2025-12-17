@@ -1,6 +1,15 @@
 "use client";
 
-import { KeyRound, Loader2, Plus, Trash2, UserCog, UserPlus } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  KeyRound,
+  Loader2,
+  Plus,
+  Trash2,
+  UserCog,
+  UserPlus,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
@@ -18,6 +27,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -47,6 +57,7 @@ export interface UnifiedEditDialogProps {
 
 const UnifiedUserSchema = UpdateUserSchema.extend({
   name: z.string().min(1).max(64),
+  providerGroup: z.string().max(50).nullable().optional(),
 });
 
 const UnifiedKeySchema = KeyFormSchema.extend({
@@ -107,7 +118,7 @@ function buildDefaultValues(mode: "create" | "edit", user?: UserDisplay): Unifie
           name: "default",
           isEnabled: true,
           expiresAt: undefined,
-          canLoginWebUi: true,
+          canLoginWebUi: false,
           providerGroup: "",
           cacheTtlPreference: "inherit" as const,
           limit5hUsd: null,
@@ -134,6 +145,7 @@ function buildDefaultValues(mode: "create" | "edit", user?: UserDisplay): Unifie
       note: user.note || "",
       tags: user.tags || [],
       expiresAt: user.expiresAt ?? undefined,
+      providerGroup: user.providerGroup ?? null,
       limit5hUsd: user.limit5hUsd ?? null,
       limitWeeklyUsd: user.limitWeeklyUsd ?? null,
       limitMonthlyUsd: user.limitMonthlyUsd ?? null,
@@ -147,7 +159,7 @@ function buildDefaultValues(mode: "create" | "edit", user?: UserDisplay): Unifie
       name: key.name || "",
       isEnabled: key.status === "enabled",
       expiresAt: getKeyExpiresAtIso(key.expiresAt),
-      canLoginWebUi: key.canLoginWebUi ?? true,
+      canLoginWebUi: key.canLoginWebUi ?? false,
       providerGroup: key.providerGroup || "",
       cacheTtlPreference: "inherit" as const,
       limit5hUsd: key.limit5hUsd ?? null,
@@ -185,6 +197,14 @@ function UnifiedEditDialogInner({
   const [deletedKeyIds, setDeletedKeyIds] = useState<number[]>([]);
   const [keyToDelete, setKeyToDelete] = useState<{ id: number; name: string } | null>(null);
   const [newlyAddedKeyId, setNewlyAddedKeyId] = useState<number | null>(null);
+  const [expandedKeyIds, setExpandedKeyIds] = useState<Set<number>>(() => {
+    // Create mode or single key: all expanded
+    if (mode === "create") return new Set([-1]); // placeholder for new keys
+    if (!user || user.keys.length <= 1) return new Set(user?.keys.map((k) => k.id) || []);
+    // Edit mode with multiple keys: only scrollToKeyId expanded
+    if (scrollToKeyId) return new Set([scrollToKeyId]);
+    return new Set(); // All collapsed
+  });
 
   // Auto-scroll to newly added key
   useEffect(() => {
@@ -199,6 +219,18 @@ function UnifiedEditDialogInner({
   }, [newlyAddedKeyId]);
 
   const defaultValues = useMemo(() => buildDefaultValues(mode, user), [mode, user]);
+
+  const toggleKeyExpanded = (keyId: number) => {
+    setExpandedKeyIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(keyId)) {
+        next.delete(keyId);
+      } else {
+        next.add(keyId);
+      }
+      return next;
+    });
+  };
 
   const form = useZodForm({
     schema: UnifiedEditSchema,
@@ -269,6 +301,7 @@ function UnifiedEditDialogInner({
               note: data.user.note,
               tags: data.user.tags,
               expiresAt: data.user.expiresAt ?? null,
+              providerGroup: data.user.providerGroup ?? null,
               limit5hUsd: data.user.limit5hUsd,
               limitWeeklyUsd: data.user.limitWeeklyUsd,
               limitMonthlyUsd: data.user.limitMonthlyUsd,
@@ -360,6 +393,10 @@ function UnifiedEditDialogInner({
 
   const errorMessage = useMemo(() => getFirstErrorMessage(form.errors), [form.errors]);
 
+  const keys = (form.values.keys || defaultValues.keys) as UnifiedEditValues["keys"];
+  const currentUserDraft = form.values.user || defaultValues.user;
+  const showUserProviderGroup = mode === "edit" && Boolean(user?.providerGroup?.trim());
+
   const userEditTranslations = useMemo(() => {
     return {
       sections: {
@@ -380,6 +417,12 @@ function UnifiedEditDialogInner({
           label: t("userEditSection.fields.tags.label"),
           placeholder: t("userEditSection.fields.tags.placeholder"),
         },
+        providerGroup: showUserProviderGroup
+          ? {
+              label: t("userEditSection.fields.providerGroup.label"),
+              placeholder: t("userEditSection.fields.providerGroup.placeholder"),
+            }
+          : undefined,
       },
       limitRules: {
         addRule: t("limitRules.addRule"),
@@ -405,7 +448,7 @@ function UnifiedEditDialogInner({
         year: t("quickExpire.oneYear"),
       },
     };
-  }, [t]);
+  }, [t, showUserProviderGroup]);
 
   const keyEditTranslations = useMemo(() => {
     return {
@@ -514,6 +557,8 @@ function UnifiedEditDialogInner({
     form.setValue("keys", [...prevKeys, newKey]);
     // Trigger auto-scroll to the newly added key
     setNewlyAddedKeyId(newKeyId);
+    // Auto-expand the newly added key
+    setExpandedKeyIds((prev) => new Set([...prev, newKeyId]));
   };
 
   const handleRemoveKey = (keyId: number, keyName: string) => {
@@ -540,9 +585,6 @@ function UnifiedEditDialogInner({
     setDeletedKeyIds((prev) => [...prev, keyToDelete.id]);
     setKeyToDelete(null);
   };
-
-  const keys = (form.values.keys || defaultValues.keys) as UnifiedEditValues["keys"];
-  const currentUserDraft = form.values.user || defaultValues.user;
 
   const handleDisableUser = async () => {
     if (!user) return;
@@ -605,6 +647,7 @@ function UnifiedEditDialogInner({
               description: currentUserDraft.note || "",
               tags: currentUserDraft.tags || [],
               expiresAt: currentUserDraft.expiresAt ?? null,
+              providerGroup: currentUserDraft.providerGroup ?? null,
               limit5hUsd: currentUserDraft.limit5hUsd ?? null,
               limitWeeklyUsd: currentUserDraft.limitWeeklyUsd ?? null,
               limitMonthlyUsd: currentUserDraft.limitMonthlyUsd ?? null,
@@ -613,6 +656,7 @@ function UnifiedEditDialogInner({
               dailyResetMode: currentUserDraft.dailyResetMode ?? "fixed",
               dailyResetTime: currentUserDraft.dailyResetTime ?? "00:00",
             }}
+            showProviderGroup={showUserProviderGroup}
             onChange={handleUserChange}
             translations={userEditTranslations}
           />
@@ -632,63 +676,112 @@ function UnifiedEditDialogInner({
               </Button>
             </div>
             <div className="space-y-8">
-              {keys.map((key, index) => (
-                <div
-                  key={key.id}
-                  className="relative rounded-xl border border-border bg-card p-4 pt-6 shadow-sm"
-                >
-                  <div className="absolute -top-3 left-4 z-10 px-2 py-0.5 bg-background border border-border rounded-md text-xs font-medium text-muted-foreground">
-                    Key #{index + 1}
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="absolute right-3 top-3 h-9 w-9 border-border text-muted-foreground hover:text-destructive hover:border-destructive hover:bg-destructive/10"
-                    onClick={() => handleRemoveKey(key.id, key.name)}
-                    disabled={keys.length === 1}
-                    title={
-                      keys.length === 1
-                        ? t("createDialog.cannotDeleteLastKey")
-                        : t("createDialog.removeKey")
-                    }
-                    aria-label={
-                      keys.length === 1
-                        ? t("createDialog.cannotDeleteLastKey")
-                        : t("createDialog.removeKey")
-                    }
+              {keys.map((key, index) => {
+                const isExpanded =
+                  mode === "create" || keys.length === 1 || expandedKeyIds.has(key.id);
+                const showCollapseButton = mode === "edit" && keys.length > 1;
+
+                return (
+                  <div
+                    key={key.id}
+                    className="relative rounded-xl border border-border bg-card p-4 pt-6 shadow-sm"
                   >
-                    <Trash2 className="h-5 w-5" aria-hidden="true" />
-                  </Button>
-                  <KeyEditSection
-                    keyData={{
-                      id: key.id,
-                      name: key.name,
-                      isEnabled: key.isEnabled ?? true,
-                      expiresAt: key.expiresAt ? new Date(key.expiresAt) : null,
-                      canLoginWebUi: key.canLoginWebUi ?? true,
-                      providerGroup: key.providerGroup || null,
-                      cacheTtlPreference: key.cacheTtlPreference ?? "inherit",
-                      limit5hUsd: key.limit5hUsd ?? null,
-                      limitDailyUsd: key.limitDailyUsd ?? null,
-                      dailyResetMode: key.dailyResetMode ?? "fixed",
-                      dailyResetTime: key.dailyResetTime ?? "00:00",
-                      limitWeeklyUsd: key.limitWeeklyUsd ?? null,
-                      limitMonthlyUsd: key.limitMonthlyUsd ?? null,
-                      limitTotalUsd: key.limitTotalUsd ?? null,
-                      limitConcurrentSessions: key.limitConcurrentSessions ?? 0,
-                    }}
-                    isAdmin={isAdmin}
-                    onChange={(field, value) => handleKeyChange(key.id, field, value)}
-                    scrollRef={
-                      scrollToKeyId === key.id || newlyAddedKeyId === key.id
-                        ? keyScrollRef
-                        : undefined
-                    }
-                    translations={keyEditTranslations}
-                  />
-                </div>
-              ))}
+                    <div className="absolute -top-3 left-4 z-10 px-2 py-0.5 bg-background border border-border rounded-md text-xs font-medium text-muted-foreground">
+                      Key #{index + 1}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="absolute right-3 top-3 h-9 w-9 border-border text-muted-foreground hover:text-destructive hover:border-destructive hover:bg-destructive/10"
+                      onClick={() => handleRemoveKey(key.id, key.name)}
+                      disabled={keys.length === 1}
+                      title={
+                        keys.length === 1
+                          ? t("createDialog.cannotDeleteLastKey")
+                          : t("createDialog.removeKey")
+                      }
+                      aria-label={
+                        keys.length === 1
+                          ? t("createDialog.cannotDeleteLastKey")
+                          : t("createDialog.removeKey")
+                      }
+                    >
+                      <Trash2 className="h-5 w-5" aria-hidden="true" />
+                    </Button>
+
+                    {/* Collapsed view */}
+                    {!isExpanded && (
+                      <div
+                        className="flex items-center justify-between gap-4 cursor-pointer pr-12"
+                        onClick={() => toggleKeyExpanded(key.id)}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="font-medium truncate">{key.name || "Unnamed Key"}</span>
+                          <Badge variant={key.isEnabled ? "default" : "secondary"}>
+                            {key.isEnabled ? t("keyStatus.enabled") : t("keyStatus.disabled")}
+                          </Badge>
+                          {key.providerGroup && (
+                            <span className="text-sm text-muted-foreground truncate">
+                              {key.providerGroup}
+                            </span>
+                          )}
+                        </div>
+                        {showCollapseButton && (
+                          <Button type="button" variant="ghost" size="sm">
+                            <ChevronDown className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Expanded view */}
+                    {isExpanded && (
+                      <>
+                        {showCollapseButton && (
+                          <div className="flex justify-end mb-2 pr-12">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => toggleKeyExpanded(key.id)}
+                            >
+                              <ChevronUp className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        )}
+                        <KeyEditSection
+                          keyData={{
+                            id: key.id,
+                            name: key.name,
+                            isEnabled: key.isEnabled ?? true,
+                            expiresAt: key.expiresAt ? new Date(key.expiresAt) : null,
+                            canLoginWebUi: key.canLoginWebUi ?? false,
+                            providerGroup: key.providerGroup || null,
+                            cacheTtlPreference: key.cacheTtlPreference ?? "inherit",
+                            limit5hUsd: key.limit5hUsd ?? null,
+                            limitDailyUsd: key.limitDailyUsd ?? null,
+                            dailyResetMode: key.dailyResetMode ?? "fixed",
+                            dailyResetTime: key.dailyResetTime ?? "00:00",
+                            limitWeeklyUsd: key.limitWeeklyUsd ?? null,
+                            limitMonthlyUsd: key.limitMonthlyUsd ?? null,
+                            limitTotalUsd: key.limitTotalUsd ?? null,
+                            limitConcurrentSessions: key.limitConcurrentSessions ?? 0,
+                          }}
+                          isAdmin={isAdmin}
+                          onChange={(field, value) => handleKeyChange(key.id, field, value)}
+                          scrollRef={
+                            scrollToKeyId === key.id || newlyAddedKeyId === key.id
+                              ? keyScrollRef
+                              : undefined
+                          }
+                          translations={keyEditTranslations}
+                        />
+                      </>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
 

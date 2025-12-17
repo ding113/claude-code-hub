@@ -34,6 +34,7 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
   const tCommon = useTranslations("common");
   const [searchTerm, setSearchTerm] = useState("");
   const [tagFilter, setTagFilter] = useState("all");
+  const [keyGroupFilter, setKeyGroupFilter] = useState("all");
 
   // Onboarding and create dialog state
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -83,9 +84,17 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
     return [...new Set(tags)].sort();
   }, [users]);
 
-  // Filter users based on search term and tag filter
-  const filteredUsers = useMemo(() => {
-    return users.filter((user) => {
+  // Extract unique key groups from users
+  const uniqueKeyGroups = useMemo(() => {
+    const groups = users.flatMap((u) => u.keys?.map((k) => k.providerGroup).filter(Boolean) || []);
+    return [...new Set(groups)].sort() as string[];
+  }, [users]);
+
+  // Filter users based on search term, tag filter, and key group filter
+  const { filteredUsers, matchingKeyIds } = useMemo(() => {
+    const matchingIds = new Set<number>();
+
+    const filtered = users.filter((user) => {
       // Search filter: match username or tag
       const matchesSearch =
         searchTerm === "" ||
@@ -95,9 +104,21 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
       // Tag filter
       const matchesTag = tagFilter === "all" || (user.tags || []).includes(tagFilter);
 
-      return matchesSearch && matchesTag;
+      // Key group filter
+      let matchesKeyGroup = keyGroupFilter === "all";
+      if (keyGroupFilter !== "all" && user.keys) {
+        const matchedKeys = user.keys.filter((k) => k.providerGroup === keyGroupFilter);
+        if (matchedKeys.length > 0) {
+          matchesKeyGroup = true;
+          matchedKeys.forEach((k) => matchingIds.add(k.id));
+        }
+      }
+
+      return matchesSearch && matchesTag && matchesKeyGroup;
     });
-  }, [users, searchTerm, tagFilter]);
+
+    return { filteredUsers: filtered, matchingKeyIds: matchingIds };
+  }, [users, searchTerm, tagFilter, keyGroupFilter]);
 
   return (
     <div className="space-y-4">
@@ -145,6 +166,25 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
             </SelectContent>
           </Select>
         )}
+
+        {/* Key group filter */}
+        {uniqueKeyGroups.length > 0 && (
+          <Select value={keyGroupFilter} onValueChange={setKeyGroupFilter}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder={t("toolbar.keyGroupFilter")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("toolbar.allKeyGroups")}</SelectItem>
+              {uniqueKeyGroups.map((group) => (
+                <SelectItem key={group} value={group}>
+                  <Badge variant="outline" className="mr-1 text-xs">
+                    {group}
+                  </Badge>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
       <UserManagementTable
@@ -152,6 +192,8 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
         currentUser={currentUser}
         currencyCode="USD"
         onCreateUser={handleCreateUser}
+        highlightKeyIds={keyGroupFilter !== "all" ? matchingKeyIds : undefined}
+        autoExpandOnFilter={keyGroupFilter !== "all"}
         translations={{
           table: {
             columns: {
@@ -174,6 +216,8 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
                 todayCost: tUserMgmt("table.keyRow.todayCost"),
                 lastUsed: tUserMgmt("table.keyRow.lastUsed"),
                 actions: tUserMgmt("table.keyRow.actions"),
+                callsLabel: tUserMgmt("table.keyRow.fields.callsLabel"),
+                costLabel: tUserMgmt("table.keyRow.fields.costLabel"),
               },
               actions: {
                 details: tKeyList("detailsButton"),
@@ -181,6 +225,8 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
                 edit: tCommon("edit"),
                 delete: tCommon("delete"),
                 copy: tCommon("copy"),
+                copySuccess: tCommon("copySuccess"),
+                copyFailed: tCommon("copyFailed"),
                 show: tKeyList("showKeyTooltip"),
                 hide: tKeyList("hideKeyTooltip"),
               },

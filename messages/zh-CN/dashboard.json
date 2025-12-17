@@ -899,6 +899,8 @@
       "allGroups": "所有分组",
       "tagFilter": "按标签筛选",
       "allTags": "所有标签",
+      "keyGroupFilter": "密钥分组",
+      "allKeyGroups": "所有密钥分组",
       "createUser": "创建用户"
     }
   },
@@ -1243,6 +1245,10 @@
         "tags": {
           "label": "用户标签",
           "placeholder": "输入标签（回车添加）"
+        },
+        "providerGroup": {
+          "label": "供应商分组（旧版）",
+          "placeholder": "输入供应商分组或留空"
         }
       }
     },
@@ -1263,8 +1269,8 @@
           "description": "禁用后此密钥将无法使用"
         },
         "balanceQueryPage": {
-          "label": "允许登录 Web UI",
-          "description": "关闭后，此 Key 仅可用于 API 调用，无法登录管理后台"
+          "label": "独立个人用量页面",
+          "description": "启用后，此密钥可使用独立的个人用量查询页面"
         },
         "providerGroup": {
           "label": "供应商分组",

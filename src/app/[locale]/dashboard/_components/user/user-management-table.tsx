@@ -22,6 +22,8 @@ export interface UserManagementTableProps {
   currentUser?: User;
   currencyCode?: string;
   onCreateUser?: () => void;
+  highlightKeyIds?: Set<number>;
+  autoExpandOnFilter?: boolean;
   translations: {
     table: {
       columns: {
@@ -76,6 +78,8 @@ export function UserManagementTable({
   currentUser,
   currencyCode,
   onCreateUser,
+  highlightKeyIds,
+  autoExpandOnFilter,
   translations,
 }: UserManagementTableProps) {
   const tUserList = useTranslations("dashboard.userList");
@@ -110,6 +114,13 @@ export function UserManagementTable({
       return prev;
     });
   }, [users]);
+
+  // Auto-expand all users when filter is active
+  useEffect(() => {
+    if (autoExpandOnFilter) {
+      setExpandedUsers(new Map(users.map((user) => [user.id, true])));
+    }
+  }, [autoExpandOnFilter, users]);
 
   const paginatedUsers = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE;
@@ -288,6 +299,7 @@ export function UserManagementTable({
                   currentUser={currentUser}
                   currencyCode={currencyCode}
                   translations={rowTranslations}
+                  highlightKeyIds={highlightKeyIds}
                 />
               ))
             )}
