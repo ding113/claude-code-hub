@@ -44,6 +44,10 @@ export const users = pgTable('users', {
   // Empty array = no restrictions, non-empty = only listed patterns allowed
   allowedClients: jsonb('allowed_clients').$type<string[]>().default([]),
 
+  // Allowed models (AI model restrictions)
+  // Empty array = no restrictions, non-empty = only listed models allowed
+  allowedModels: jsonb('allowed_models').$type<string[]>().default([]),
+
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),

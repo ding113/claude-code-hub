@@ -263,7 +263,7 @@ export function KeyListHeader({
               </div>
               {activeUser && userStatusInfo && (
                 <div className="flex items-center gap-1">
-                  <span>过期时间:</span>
+                  <span>{t("expiresAt")}:</span>
                   <span className="text-foreground">{userStatusInfo.expiryText}</span>
                 </div>
               )}
@@ -280,6 +280,21 @@ export function KeyListHeader({
                 {activeUser.allowedClients && activeUser.allowedClients.length > 0 && (
                   <span className="text-foreground ml-1">
                     {activeUser.allowedClients.join(", ")}
+                  </span>
+                )}
+              </div>
+            )}
+            {/* Allowed Models Display - on separate line, visible to both admin and user */}
+            {activeUser && (
+              <div className="mt-2 px-2 py-1 text-xs text-muted-foreground border border-muted-foreground/30 rounded-md w-fit">
+                <span>
+                  {activeUser.allowedModels?.length
+                    ? `${t("allowedModels.label")} [${activeUser.allowedModels.length}]:`
+                    : t("allowedModels.noRestrictions")}
+                </span>
+                {activeUser.allowedModels && activeUser.allowedModels.length > 0 && (
+                  <span className="text-foreground ml-1">
+                    {activeUser.allowedModels.join(", ")}
                   </span>
                 )}
               </div>

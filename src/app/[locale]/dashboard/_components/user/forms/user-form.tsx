@@ -48,6 +48,7 @@ interface UserFormProps {
     isEnabled?: boolean;
     expiresAt?: Date | null;
     allowedClients?: string[];
+    allowedModels?: string[];
   };
   onSuccess?: () => void;
   currentUser?: {
@@ -95,6 +96,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
       isEnabled: user?.isEnabled ?? true,
       expiresAt: user?.expiresAt ? user.expiresAt.toISOString().split("T")[0] : "",
       allowedClients: user?.allowedClients || [],
+      allowedModels: user?.allowedModels || [],
     },
     onSubmit: async (data) => {
       // 将纯日期转换为当天结束时间（本地时区 23:59:59.999），避免默认 UTC 零点导致提前过期
@@ -123,6 +125,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
               isEnabled: data.isEnabled,
               expiresAt: data.expiresAt ? toEndOfDay(data.expiresAt) : null,
               allowedClients: data.allowedClients,
+              allowedModels: data.allowedModels,
             });
           } else {
             res = await addUser({
@@ -140,6 +143,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
               isEnabled: data.isEnabled,
               expiresAt: data.expiresAt ? toEndOfDay(data.expiresAt) : null,
               allowedClients: data.allowedClients,
+              allowedModels: data.allowedModels,
             });
           }
 
@@ -411,6 +415,26 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
               }}
             />
           </div>
+
+          {/* Allowed Models (AI model restrictions) */}
+          <ArrayTagInputField
+            label={tForm("allowedModels.label")}
+            maxTagLength={64}
+            maxTags={50}
+            placeholder={tForm("allowedModels.placeholder")}
+            description={tForm("allowedModels.description")}
+            onInvalidTag={(_tag, reason) => {
+              const messages: Record<string, string> = {
+                empty: tUI("emptyTag"),
+                duplicate: tUI("duplicateTag"),
+                too_long: tUI("tooLong", { max: 64 }),
+                invalid_format: tUI("invalidFormat"),
+                max_tags: tUI("maxTags"),
+              };
+              toast.error(messages[reason] || reason);
+            }}
+            {...form.getArrayFieldProps("allowedModels")}
+          />
         </>
       )}
     </DialogFormLayout>

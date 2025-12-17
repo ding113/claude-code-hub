@@ -579,6 +579,11 @@
   },
   "keyListHeader": {
     "todayUsage": "Today's Usage",
+    "allowedModels": {
+      "label": "Allowed Models",
+      "noRestrictions": "Allowed Models: No restrictions"
+    },
+    "expiresAt": "Expires",
     "proxyStatus": {
       "loading": "Loading proxy status",
       "fetchFailed": "Failed to fetch proxy status",
@@ -790,6 +795,11 @@
       "description": "Restrict which CLI/IDE clients can use this account. Leave empty for no restrictions.",
       "customLabel": "Custom Client Patterns",
       "customPlaceholder": "Enter custom pattern (e.g., 'xcode', 'my-ide')"
+    },
+    "allowedModels": {
+      "label": "Allowed Models",
+      "placeholder": "Enter model name (press Enter to add)",
+      "description": "Restrict this user to specific AI models. Leave empty for no restrictions (max 50 models, 64 chars each)"
     }
   },
   "deleteKeyConfirm": {

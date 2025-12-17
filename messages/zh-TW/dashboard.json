@@ -573,6 +573,11 @@
   },
   "keyListHeader": {
     "todayUsage": "今日用量",
+    "allowedModels": {
+      "label": "允許的模型",
+      "noRestrictions": "允許的模型：無限制"
+    },
+    "expiresAt": "到期時間",
     "proxyStatus": {
       "loading": "代理狀態載入中",
       "fetchFailed": "代理狀態取得失敗",
@@ -762,6 +767,11 @@
       "description": "限制哪些 CLI/IDE 用戶端可以使用此帳戶。留空表示無限制。",
       "customLabel": "自訂用戶端模式",
       "customPlaceholder": "輸入自訂模式（如：'xcode', 'my-ide'）"
+    },
+    "allowedModels": {
+      "label": "允許的模型",
+      "placeholder": "輸入模型名稱（按 Enter 新增）",
+      "description": "限制使用者只能使用指定的 AI 模型。留空表示無限制（最多 50 個模型，每個最長 64 字元）"
     }
   },
   "deleteKeyConfirm": {
