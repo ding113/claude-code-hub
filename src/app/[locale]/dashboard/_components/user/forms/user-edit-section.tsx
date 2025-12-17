@@ -1,9 +1,9 @@
 "use client";
 
+import { Calendar, Gauge, User } from "lucide-react";
 import { useMemo, useState, useTransition } from "react";
 import { DatePickerField } from "@/components/form/date-picker-field";
 import { ArrayTagInputField, TextField } from "@/components/form/form-field";
-import { FormGroup } from "@/components/form/form-layout";
 import { Button } from "@/components/ui/button";
 import { type DailyResetMode, LimitRulePicker, type LimitType } from "./limit-rule-picker";
 import { type LimitRuleDisplayItem, LimitRulesDisplay } from "./limit-rules-display";
@@ -177,82 +177,100 @@ export function UserEditSection({ user, onChange, translations }: UserEditSectio
   };
 
   return (
-    <div className="space-y-8">
-      <FormGroup title={translations.sections.basicInfo}>
-        <TextField
-          label={translations.fields.username.label}
-          placeholder={translations.fields.username.placeholder}
-          value={user.name || ""}
-          onChange={(val) => emitChange("name", val)}
-          className="max-w-md"
-          maxLength={64}
-          disabled={isPending}
-        />
-
-        <TextField
-          label={translations.fields.description.label}
-          placeholder={translations.fields.description.placeholder}
-          value={user.description || ""}
-          onChange={(val) => emitChange("description", val)}
-          className="max-w-md"
-          maxLength={200}
-          disabled={isPending}
-        />
-
-        <ArrayTagInputField
-          label={translations.fields.tags.label}
-          placeholder={translations.fields.tags.placeholder}
-          value={user.tags || []}
-          onChange={(val) => emitChange("tags", val)}
-          className="max-w-md"
-          maxTagLength={32}
-          maxTags={20}
-          disabled={isPending}
-        />
-      </FormGroup>
-
-      <FormGroup title={translations.sections.expireTime}>
-        <DatePickerField
-          label={translations.sections.expireTime}
-          value={expiresAtValue}
-          onChange={(val) => emitChange("expiresAt", val ? parseYmdToEndOfDay(val) : null)}
-          className="max-w-md"
-          disabled={isPending}
-        />
-
-        <QuickExpirePicker
-          translations={translations.quickExpire}
-          onSelect={(date) => emitChange("expiresAt", toEndOfDay(date))}
-        />
-      </FormGroup>
-
-      <FormGroup title={translations.sections.limitRules}>
-        <LimitRulesDisplay
-          rules={rules}
-          onRemove={handleRemoveRule}
-          translations={limitRuleTranslations}
-        />
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            className="max-w-md"
-            onClick={() => setRulePickerOpen(true)}
-            disabled={isPending}
-          >
-            {translations.limitRules.addRule}
-          </Button>
+    <div className="space-y-6">
+      <section className="rounded-lg border border-border bg-card/50 p-4 space-y-4">
+        <div className="flex items-center gap-2">
+          <User className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <h4 className="text-sm font-semibold">{translations.sections.basicInfo}</h4>
         </div>
+        <div className="space-y-4">
+          <TextField
+            label={translations.fields.username.label}
+            placeholder={translations.fields.username.placeholder}
+            value={user.name || ""}
+            onChange={(val) => emitChange("name", val)}
+            className="max-w-md"
+            maxLength={64}
+            disabled={isPending}
+          />
 
-        <LimitRulePicker
-          open={rulePickerOpen}
-          onOpenChange={setRulePickerOpen}
-          onConfirm={handleAddRule}
-          existingTypes={existingTypes}
-          translations={limitRuleTranslations}
-        />
-      </FormGroup>
+          <TextField
+            label={translations.fields.description.label}
+            placeholder={translations.fields.description.placeholder}
+            value={user.description || ""}
+            onChange={(val) => emitChange("description", val)}
+            className="max-w-md"
+            maxLength={200}
+            disabled={isPending}
+          />
+
+          <ArrayTagInputField
+            label={translations.fields.tags.label}
+            placeholder={translations.fields.tags.placeholder}
+            value={user.tags || []}
+            onChange={(val) => emitChange("tags", val)}
+            className="max-w-md"
+            maxTagLength={32}
+            maxTags={20}
+            disabled={isPending}
+          />
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-border bg-card/50 p-4 space-y-4">
+        <div className="flex items-center gap-2">
+          <Calendar className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <h4 className="text-sm font-semibold">{translations.sections.expireTime}</h4>
+        </div>
+        <div className="space-y-4">
+          <DatePickerField
+            label={translations.sections.expireTime}
+            value={expiresAtValue}
+            onChange={(val) => emitChange("expiresAt", val ? parseYmdToEndOfDay(val) : null)}
+            className="max-w-md"
+            disabled={isPending}
+          />
+
+          <QuickExpirePicker
+            translations={translations.quickExpire}
+            onSelect={(date) => emitChange("expiresAt", toEndOfDay(date))}
+          />
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-border bg-card/50 p-4 space-y-4">
+        <div className="flex items-center gap-2">
+          <Gauge className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <h4 className="text-sm font-semibold">{translations.sections.limitRules}</h4>
+        </div>
+        <div className="space-y-4">
+          <LimitRulesDisplay
+            rules={rules}
+            onRemove={handleRemoveRule}
+            translations={limitRuleTranslations}
+          />
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="max-w-md"
+              onClick={() => setRulePickerOpen(true)}
+              disabled={isPending}
+            >
+              {translations.limitRules.addRule}
+            </Button>
+          </div>
+
+          <LimitRulePicker
+            open={rulePickerOpen}
+            onOpenChange={setRulePickerOpen}
+            onConfirm={handleAddRule}
+            existingTypes={existingTypes}
+            translations={limitRuleTranslations}
+          />
+        </div>
+      </section>
     </div>
   );
 }

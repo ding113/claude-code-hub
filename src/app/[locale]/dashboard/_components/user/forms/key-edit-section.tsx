@@ -1,7 +1,7 @@
 "use client";
 
 import { format } from "date-fns";
-import { Plus, Sparkles } from "lucide-react";
+import { Calendar, Gauge, Key, Plus, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { DatePickerField } from "@/components/form/date-picker-field";
 import { TextField } from "@/components/form/form-field";
@@ -235,10 +235,13 @@ export function KeyEditSection({
   );
 
   return (
-    <div ref={scrollRef} className="space-y-6 scroll-mt-24">
+    <div ref={scrollRef} className="space-y-4 scroll-mt-24">
       {/* 基本信息区域 */}
-      <section className="space-y-3">
-        <div className="text-sm font-semibold">{translations.sections.basicInfo}</div>
+      <section className="rounded-lg border border-border bg-card/50 p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Key className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <h4 className="text-sm font-semibold">{translations.sections.basicInfo}</h4>
+        </div>
         <TextField
           label={translations.fields.keyName.label}
           placeholder={translations.fields.keyName.placeholder}
@@ -250,7 +253,11 @@ export function KeyEditSection({
       </section>
 
       {/* 到期时间区域 */}
-      <section className="space-y-3">
+      <section className="rounded-lg border border-border bg-card/50 p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Calendar className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <h4 className="text-sm font-semibold">{translations.sections.expireTime}</h4>
+        </div>
         <DatePickerField
           label={translations.sections.expireTime}
           value={expiresAtValue}
@@ -263,9 +270,12 @@ export function KeyEditSection({
       </section>
 
       {/* 限额规则区域 */}
-      <section className="space-y-3">
+      <section className="rounded-lg border border-border bg-card/50 p-4 space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <div className="text-sm font-semibold">{translations.sections.limitRules}</div>
+          <div className="flex items-center gap-2">
+            <Gauge className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            <h4 className="text-sm font-semibold">{translations.sections.limitRules}</h4>
+          </div>
           <Button
             type="button"
             variant="outline"
@@ -295,13 +305,13 @@ export function KeyEditSection({
       {/* 特殊功能区域 */}
       <section
         className={cn(
-          "rounded-xl border border-border bg-muted/30 px-4 py-4 space-y-4",
+          "rounded-lg border border-border bg-muted/30 px-4 py-4 space-y-4",
           "shadow-none"
         )}
       >
         <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-muted-foreground" />
-          <div className="text-sm font-semibold">{translations.sections.specialFeatures}</div>
+          <Sparkles className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <h4 className="text-sm font-semibold">{translations.sections.specialFeatures}</h4>
         </div>
 
         <div className="flex items-start justify-between gap-4 rounded-lg border border-dashed border-border bg-background px-4 py-3">
