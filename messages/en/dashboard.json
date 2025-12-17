@@ -969,15 +969,43 @@
         "todayUsage": "Today's usage",
         "todayCost": "Today's cost",
         "lastUsed": "Last used",
-        "actions": "Actions"
+        "actions": "Actions",
+        "fields": {
+          "callsLabel": "Calls",
+          "costLabel": "Cost"
+        }
       },
       "expand": "Expand",
       "collapse": "Collapse",
       "noKeys": "No keys",
-      "defaultGroup": "default"
+      "defaultGroup": "default",
+      "userStatus": {
+        "disabled": "Disabled"
+      }
+    },
+    "keyFullDisplay": {
+      "title": "Full Key",
+      "copySuccess": "Key copied to clipboard",
+      "copyFailed": "Copy failed",
+      "show": "Show key",
+      "hide": "Hide key",
+      "copied": "Copied",
+      "copy": "Copy key"
+    },
+    "keyStatsDialog": {
+      "title": "Today's Model Statistics",
+      "columns": {
+        "model": "Model",
+        "calls": "Calls",
+        "cost": "Cost"
+      },
+      "noData": "No usage records today",
+      "totalCalls": "Total Calls",
+      "totalCost": "Total Cost"
     },
     "editDialog": {
       "title": "Edit user and keys",
+      "description": "Edit user information and API key settings",
       "userSection": "User settings",
       "keysSection": "Key settings",
       "scrollToKey": "Scroll to key",
@@ -987,12 +1015,14 @@
       "saveSuccess": "Changes saved successfully",
       "operationFailed": "Operation failed",
       "userDisabled": "User has been disabled",
+      "userEnabled": "User has been enabled",
       "deleteFailed": "Failed to delete user",
       "userDeleted": "User has been deleted",
       "saving": "Saving..."
     },
     "createDialog": {
       "title": "Create user",
+      "description": "Create a new user and configure API keys",
       "saveFailed": "Failed to create user",
       "keyCreateFailed": "Failed to create key",
       "createSuccess": "User created successfully",
@@ -1067,13 +1097,42 @@
       "providerCount": "{count} providers"
     },
     "dangerZone": {
-      "title": "Danger zone",
-      "disableUser": "Disable user",
-      "disableUserDesc": "Disabled users cannot access the API",
-      "deleteUser": "Delete user",
-      "deleteUserDesc": "This action cannot be undone",
-      "confirmDisable": "Are you sure you want to disable this user?",
-      "confirmDelete": "Are you sure you want to delete this user? All associated keys and data will be permanently removed."
+      "title": "Danger Zone",
+      "description": "The following actions are irreversible, proceed with caution",
+      "enable": {
+        "title": "Enable User",
+        "description": "After enabling, this user and their keys will resume normal operation",
+        "trigger": "Enable",
+        "confirm": "Confirm Enable",
+        "confirmDescription": "Are you sure you want to enable user \"{userName}\"?",
+        "loading": "Processing..."
+      },
+      "disable": {
+        "title": "Disable User",
+        "description": "After disabling, this user and their keys will no longer be usable",
+        "trigger": "Disable",
+        "confirm": "Confirm Disable",
+        "confirmDescription": "Are you sure you want to disable user \"{userName}\"?",
+        "loading": "Processing..."
+      },
+      "delete": {
+        "title": "Delete User",
+        "description": "This will delete all associated data for this user, this action cannot be undone",
+        "trigger": "Delete",
+        "confirm": "Confirm Delete",
+        "confirmDescription": "This action will delete all associated data for user \"{userName}\" and cannot be undone.",
+        "confirmLabel": "Secondary Confirmation",
+        "confirmHint": "Please type \"{userName}\" to confirm deletion",
+        "loading": "Deleting..."
+      },
+      "actions": {
+        "cancel": "Cancel"
+      },
+      "errors": {
+        "enableFailed": "Failed to enable user, please try again later",
+        "disableFailed": "Failed to disable user, please try again later",
+        "deleteFailed": "Failed to delete user, please try again later"
+      }
     },
     "limitIndicator": {
       "notSet": "Not set",
@@ -1133,6 +1192,10 @@
         "keyName": {
           "label": "Key Name",
           "placeholder": "Enter key name"
+        },
+        "enableStatus": {
+          "label": "Enable Status",
+          "description": "Disabled keys cannot be used"
         },
         "balanceQueryPage": {
           "label": "Allow Web UI Login",

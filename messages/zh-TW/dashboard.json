@@ -941,15 +941,43 @@
         "todayUsage": "今日用量",
         "todayCost": "今日消耗",
         "lastUsed": "最後使用",
-        "actions": "操作"
+        "actions": "操作",
+        "fields": {
+          "callsLabel": "呼叫次數",
+          "costLabel": "花費"
+        }
       },
       "expand": "展開",
       "collapse": "收起",
       "noKeys": "無金鑰",
-      "defaultGroup": "default"
+      "defaultGroup": "default",
+      "userStatus": {
+        "disabled": "已停用"
+      }
+    },
+    "keyFullDisplay": {
+      "title": "完整金鑰",
+      "copySuccess": "金鑰已複製到剪貼簿",
+      "copyFailed": "複製失敗",
+      "show": "顯示金鑰",
+      "hide": "隱藏金鑰",
+      "copied": "已複製",
+      "copy": "複製金鑰"
+    },
+    "keyStatsDialog": {
+      "title": "今日模型統計",
+      "columns": {
+        "model": "模型",
+        "calls": "呼叫次數",
+        "cost": "消費金額"
+      },
+      "noData": "今日暫無使用記錄",
+      "totalCalls": "總呼叫",
+      "totalCost": "總消費"
     },
     "editDialog": {
       "title": "編輯使用者與金鑰",
+      "description": "編輯使用者資訊和 API 金鑰設定",
       "userSection": "使用者設定",
       "keysSection": "金鑰設定",
       "scrollToKey": "捲動到金鑰",
@@ -959,12 +987,14 @@
       "saveSuccess": "儲存成功",
       "operationFailed": "操作失敗",
       "userDisabled": "使用者已停用",
+      "userEnabled": "使用者已啟用",
       "deleteFailed": "刪除使用者失敗",
       "userDeleted": "使用者已刪除",
       "saving": "儲存中..."
     },
     "createDialog": {
       "title": "建立使用者",
+      "description": "建立新使用者並設定 API 金鑰",
       "saveFailed": "建立使用者失敗",
       "keyCreateFailed": "建立金鑰失敗",
       "createSuccess": "使用者建立成功",
@@ -1040,12 +1070,41 @@
     },
     "dangerZone": {
       "title": "危險操作",
-      "disableUser": "停用使用者",
-      "disableUserDesc": "停用後使用者無法存取 API",
-      "deleteUser": "刪除使用者",
-      "deleteUserDesc": "此操作無法復原",
-      "confirmDisable": "確定要停用該使用者嗎？",
-      "confirmDelete": "確定要刪除該使用者嗎？所有關聯的金鑰和資料將被永久刪除。"
+      "description": "以下操作不可逆，請謹慎執行",
+      "enable": {
+        "title": "啟用使用者",
+        "description": "啟用後該使用者及其金鑰將恢復正常使用",
+        "trigger": "啟用",
+        "confirm": "確認啟用",
+        "confirmDescription": "確認要啟用使用者「{userName}」嗎？",
+        "loading": "處理中..."
+      },
+      "disable": {
+        "title": "停用使用者",
+        "description": "停用後該使用者及其金鑰將無法繼續使用",
+        "trigger": "停用",
+        "confirm": "確認停用",
+        "confirmDescription": "確認要停用使用者「{userName}」嗎？",
+        "loading": "處理中..."
+      },
+      "delete": {
+        "title": "刪除使用者",
+        "description": "將刪除該使用者的所有關聯資料，此操作無法撤銷",
+        "trigger": "刪除",
+        "confirm": "確認刪除",
+        "confirmDescription": "此操作將刪除使用者「{userName}」的所有關聯資料，且無法撤銷。",
+        "confirmLabel": "二次確認",
+        "confirmHint": "請輸入「{userName}」以確認刪除",
+        "loading": "刪除中..."
+      },
+      "actions": {
+        "cancel": "取消"
+      },
+      "errors": {
+        "enableFailed": "啟用使用者失敗，請稍後重試",
+        "disableFailed": "停用使用者失敗，請稍後重試",
+        "deleteFailed": "刪除使用者失敗，請稍後重試"
+      }
     },
     "limitIndicator": {
       "notSet": "未設定",
@@ -1105,6 +1164,10 @@
         "keyName": {
           "label": "金鑰名稱",
           "placeholder": "請輸入金鑰名稱"
+        },
+        "enableStatus": {
+          "label": "啟用狀態",
+          "description": "停用後此金鑰將無法使用"
         },
         "balanceQueryPage": {
           "label": "允許登入 Web UI",

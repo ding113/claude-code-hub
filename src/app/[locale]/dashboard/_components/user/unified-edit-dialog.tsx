@@ -3,7 +3,7 @@
 import { KeyRound, Loader2, Plus, Trash2, UserCog, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { addKey, editKey, removeKey } from "@/actions/keys";
@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -50,6 +51,7 @@ const UnifiedUserSchema = UpdateUserSchema.extend({
 
 const UnifiedKeySchema = KeyFormSchema.extend({
   id: z.number(), // Negative IDs indicate new keys to be created
+  isEnabled: z.boolean().optional(),
 });
 
 const UnifiedEditSchema = z.object({
@@ -103,6 +105,7 @@ function buildDefaultValues(mode: "create" | "edit", user?: UserDisplay): Unifie
         {
           id: getNextTempKeyId(),
           name: "default",
+          isEnabled: true,
           expiresAt: undefined,
           canLoginWebUi: true,
           providerGroup: "",
@@ -142,6 +145,7 @@ function buildDefaultValues(mode: "create" | "edit", user?: UserDisplay): Unifie
     keys: user.keys.map((key) => ({
       id: key.id,
       name: key.name || "",
+      isEnabled: key.status === "enabled",
       expiresAt: getKeyExpiresAtIso(key.expiresAt),
       canLoginWebUi: key.canLoginWebUi ?? true,
       providerGroup: key.providerGroup || "",
@@ -180,6 +184,19 @@ function UnifiedEditDialogInner({
   const isAdmin = currentUser?.role === "admin";
   const [deletedKeyIds, setDeletedKeyIds] = useState<number[]>([]);
   const [keyToDelete, setKeyToDelete] = useState<{ id: number; name: string } | null>(null);
+  const [newlyAddedKeyId, setNewlyAddedKeyId] = useState<number | null>(null);
+
+  // Auto-scroll to newly added key
+  useEffect(() => {
+    if (newlyAddedKeyId && keyScrollRef.current) {
+      // Small delay to ensure DOM is updated
+      const timer = setTimeout(() => {
+        keyScrollRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        setNewlyAddedKeyId(null);
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [newlyAddedKeyId]);
 
   const defaultValues = useMemo(() => buildDefaultValues(mode, user), [mode, user]);
 
@@ -297,6 +314,7 @@ function UnifiedEditDialogInner({
                   name: key.name,
                   expiresAt: key.expiresAt || undefined,
                   canLoginWebUi: key.canLoginWebUi,
+                  isEnabled: key.isEnabled,
                   providerGroup: key.providerGroup?.trim() ? key.providerGroup.trim() : null,
                   cacheTtlPreference: key.cacheTtlPreference,
                   limit5hUsd: key.limit5hUsd,
@@ -475,9 +493,11 @@ function UnifiedEditDialogInner({
 
   const handleAddKey = () => {
     const prevKeys = (form.values.keys || defaultValues.keys) as UnifiedEditValues["keys"];
+    const newKeyId = getNextTempKeyId();
     const newKey = {
-      id: getNextTempKeyId(),
+      id: newKeyId,
       name: "",
+      isEnabled: true,
       expiresAt: undefined,
       canLoginWebUi: true,
       providerGroup: "",
@@ -492,6 +512,8 @@ function UnifiedEditDialogInner({
       limitConcurrentSessions: 0,
     };
     form.setValue("keys", [...prevKeys, newKey]);
+    // Trigger auto-scroll to the newly added key
+    setNewlyAddedKeyId(newKeyId);
   };
 
   const handleRemoveKey = (keyId: number, keyName: string) => {
@@ -533,6 +555,17 @@ function UnifiedEditDialogInner({
     router.refresh();
   };
 
+  const handleEnableUser = async () => {
+    if (!user) return;
+    const res = await toggleUserEnabled(user.id, true);
+    if (!res.ok) {
+      throw new Error(res.error || t("editDialog.operationFailed"));
+    }
+    toast.success(t("editDialog.userEnabled"));
+    onSuccess?.();
+    router.refresh();
+  };
+
   const handleDeleteUser = async () => {
     if (!user) return;
     const res = await removeUser(user.id);
@@ -546,7 +579,7 @@ function UnifiedEditDialogInner({
   };
 
   return (
-    <DialogContent className="max-w-[70vw] max-h-[90dvh] p-0 flex flex-col overflow-hidden">
+    <DialogContent className="w-full max-w-[95vw] sm:max-w-[85vw] md:max-w-[70vw] lg:max-w-4xl max-h-[90vh] max-h-[90dvh] p-0 flex flex-col overflow-hidden">
       <form onSubmit={form.handleSubmit} className="flex flex-1 min-h-0 flex-col">
         <DialogHeader className="px-6 pt-6 pb-4 border-b flex-shrink-0">
           <div className="flex items-center gap-2">
@@ -559,6 +592,9 @@ function UnifiedEditDialogInner({
               {mode === "create" ? t("createDialog.title") : t("editDialog.title")}
             </DialogTitle>
           </div>
+          <DialogDescription className="sr-only">
+            {mode === "create" ? t("createDialog.description") : t("editDialog.description")}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 min-h-0 overflow-y-auto px-6 pt-6 pb-6 space-y-8">
@@ -628,6 +664,7 @@ function UnifiedEditDialogInner({
                     keyData={{
                       id: key.id,
                       name: key.name,
+                      isEnabled: key.isEnabled ?? true,
                       expiresAt: key.expiresAt ? new Date(key.expiresAt) : null,
                       canLoginWebUi: key.canLoginWebUi ?? true,
                       providerGroup: key.providerGroup || null,
@@ -643,7 +680,11 @@ function UnifiedEditDialogInner({
                     }}
                     isAdmin={isAdmin}
                     onChange={(field, value) => handleKeyChange(key.id, field, value)}
-                    scrollRef={scrollToKeyId === key.id ? keyScrollRef : undefined}
+                    scrollRef={
+                      scrollToKeyId === key.id || newlyAddedKeyId === key.id
+                        ? keyScrollRef
+                        : undefined
+                    }
                     translations={keyEditTranslations}
                   />
                 </div>
@@ -656,6 +697,7 @@ function UnifiedEditDialogInner({
               userId={user.id}
               userName={user.name}
               isEnabled={user.isEnabled}
+              onEnable={handleEnableUser}
               onDisable={handleDisableUser}
               onDelete={handleDeleteUser}
               translations={{}}

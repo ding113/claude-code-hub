@@ -5,6 +5,7 @@ import { useLocale } from "next-intl";
 import { useTransition } from "react";
 import { toast } from "sonner";
 import { removeKey } from "@/actions/keys";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { TableCell, TableRow } from "@/components/ui/table";
@@ -13,7 +14,7 @@ import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/utils/date-format";
 import type { UserDisplay } from "@/types/user";
 import { KeyRowItem } from "./key-row-item";
-import { LimitStatusIndicator } from "./limit-status-indicator";
+import { UserLimitBadge } from "./user-limit-badge";
 
 export interface UserKeyTableRowProps {
   user: UserDisplay; // 包含 keys 数组
@@ -44,6 +45,9 @@ export interface UserKeyTableRowProps {
       details: string;
       logs: string;
       delete: string;
+    };
+    userStatus?: {
+      disabled: string;
     };
   };
 }
@@ -127,6 +131,11 @@ export function UserKeyTableRow({
               {expanded ? translations.collapse : translations.expand}
             </span>
             <span className="font-medium truncate">{user.name}</span>
+            {!user.isEnabled && (
+              <Badge variant="secondary" className="text-[10px] shrink-0">
+                {translations.userStatus?.disabled || "Disabled"}
+              </Badge>
+            )}
             {user.note ? (
               <span className="text-xs text-muted-foreground truncate">{user.note}</span>
             ) : null}
@@ -139,10 +148,11 @@ export function UserKeyTableRow({
         {/* 5h 限额 */}
         <TableCell className="text-center">
           <div className="flex items-center justify-center">
-            <LimitStatusIndicator
-              value={limit5h}
+            <UserLimitBadge
+              userId={user.id}
+              limitType="5h"
+              limit={limit5h}
               label={translations.columns.limit5h}
-              variant="compact"
             />
           </div>
         </TableCell>
@@ -150,10 +160,11 @@ export function UserKeyTableRow({
         {/* 每日限额 */}
         <TableCell className="text-center">
           <div className="flex items-center justify-center">
-            <LimitStatusIndicator
-              value={limitDaily}
+            <UserLimitBadge
+              userId={user.id}
+              limitType="daily"
+              limit={limitDaily}
               label={translations.columns.limitDaily}
-              variant="compact"
             />
           </div>
         </TableCell>
@@ -161,10 +172,11 @@ export function UserKeyTableRow({
         {/* 周限额 */}
         <TableCell className="text-center">
           <div className="flex items-center justify-center">
-            <LimitStatusIndicator
-              value={limitWeekly}
+            <UserLimitBadge
+              userId={user.id}
+              limitType="weekly"
+              limit={limitWeekly}
               label={translations.columns.limitWeekly}
-              variant="compact"
             />
           </div>
         </TableCell>
@@ -172,10 +184,11 @@ export function UserKeyTableRow({
         {/* 月限额 */}
         <TableCell className="text-center">
           <div className="flex items-center justify-center">
-            <LimitStatusIndicator
-              value={limitMonthly}
+            <UserLimitBadge
+              userId={user.id}
+              limitType="monthly"
+              limit={limitMonthly}
               label={translations.columns.limitMonthly}
-              variant="compact"
             />
           </div>
         </TableCell>
@@ -183,10 +196,11 @@ export function UserKeyTableRow({
         {/* 总限额 */}
         <TableCell className="text-center">
           <div className="flex items-center justify-center">
-            <LimitStatusIndicator
-              value={limitTotal}
+            <UserLimitBadge
+              userId={user.id}
+              limitType="total"
+              limit={limitTotal}
               label={translations.columns.limitTotal}
-              variant="compact"
             />
           </div>
         </TableCell>
@@ -194,11 +208,14 @@ export function UserKeyTableRow({
         {/* 并发限额 */}
         <TableCell className="text-center">
           <div className="flex items-center justify-center">
-            <LimitStatusIndicator
-              value={limitSessions}
-              label={translations.columns.limitSessions}
-              variant="compact"
-            />
+            <Badge
+              variant={limitSessions ? "secondary" : "outline"}
+              className="px-2 py-0.5 tabular-nums text-xs"
+              title={`${translations.columns.limitSessions}: ${limitSessions ?? "-"}`}
+              aria-label={`${translations.columns.limitSessions}: ${limitSessions ?? "-"}`}
+            >
+              {limitSessions ?? "-"}
+            </Badge>
           </div>
         </TableCell>
 

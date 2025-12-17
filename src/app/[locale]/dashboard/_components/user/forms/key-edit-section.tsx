@@ -25,6 +25,7 @@ export interface KeyEditSectionProps {
   keyData: {
     id: number;
     name: string;
+    isEnabled?: boolean;
     expiresAt?: Date | null;
     canLoginWebUi?: boolean;
     providerGroup?: string | null;
@@ -55,6 +56,7 @@ export interface KeyEditSectionProps {
       balanceQueryPage: { label: string; description: string };
       providerGroup: { label: string; placeholder: string };
       cacheTtl: { label: string; options: Record<string, string> };
+      enableStatus?: { label: string; description: string };
     };
     limitRules: any;
     quickExpire: any;
@@ -250,6 +252,21 @@ export function KeyEditSection({
           value={keyData.name}
           onChange={(val) => onChange("name", val)}
         />
+        <div className="flex items-center justify-between gap-4 py-1">
+          <div className="space-y-0.5">
+            <Label htmlFor={`key-enable-${keyData.id}`} className="text-sm font-medium">
+              {translations.fields.enableStatus?.label || "Enable Status"}
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              {translations.fields.enableStatus?.description || "Disabled keys cannot be used"}
+            </p>
+          </div>
+          <Switch
+            id={`key-enable-${keyData.id}`}
+            checked={keyData.isEnabled ?? true}
+            onCheckedChange={(checked) => onChange("isEnabled", checked)}
+          />
+        </div>
       </section>
 
       {/* 到期时间区域 */}

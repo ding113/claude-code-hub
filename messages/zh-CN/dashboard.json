@@ -1034,15 +1034,43 @@
         "todayUsage": "今日用量",
         "todayCost": "今日消耗",
         "lastUsed": "最后使用",
-        "actions": "操作"
+        "actions": "操作",
+        "fields": {
+          "callsLabel": "调用",
+          "costLabel": "消耗"
+        }
       },
       "expand": "展开",
       "collapse": "折叠",
       "noKeys": "无密钥",
-      "defaultGroup": "default"
+      "defaultGroup": "default",
+      "userStatus": {
+        "disabled": "已禁用"
+      }
+    },
+    "keyFullDisplay": {
+      "title": "完整密钥",
+      "copySuccess": "密钥已复制到剪贴板",
+      "copyFailed": "复制失败",
+      "show": "显示密钥",
+      "hide": "隐藏密钥",
+      "copied": "已复制",
+      "copy": "复制密钥"
+    },
+    "keyStatsDialog": {
+      "title": "今日模型统计",
+      "columns": {
+        "model": "模型",
+        "calls": "调用次数",
+        "cost": "消费金额"
+      },
+      "noData": "今日暂无使用记录",
+      "totalCalls": "总调用",
+      "totalCost": "总消费"
     },
     "editDialog": {
       "title": "编辑用户与密钥",
+      "description": "编辑用户信息和 API 密钥设置",
       "userSection": "用户设置",
       "keysSection": "密钥设置",
       "scrollToKey": "滚动到密钥",
@@ -1052,12 +1080,14 @@
       "saveSuccess": "保存成功",
       "operationFailed": "操作失败",
       "userDisabled": "用户已禁用",
+      "userEnabled": "用户已启用",
       "deleteFailed": "删除用户失败",
       "userDeleted": "用户已删除",
       "saving": "保存中..."
     },
     "createDialog": {
       "title": "创建用户",
+      "description": "创建新用户并配置 API 密钥",
       "saveFailed": "创建用户失败",
       "keyCreateFailed": "创建密钥失败",
       "createSuccess": "用户创建成功",
@@ -1133,12 +1163,41 @@
     },
     "dangerZone": {
       "title": "危险操作",
-      "disableUser": "禁用用户",
-      "disableUserDesc": "禁用后用户无法访问 API",
-      "deleteUser": "删除用户",
-      "deleteUserDesc": "此操作不可撤销",
-      "confirmDisable": "确定要禁用该用户吗？",
-      "confirmDelete": "确定要删除该用户吗？所有关联的密钥和数据将被永久删除。"
+      "description": "以下操作不可逆，请谨慎执行",
+      "enable": {
+        "title": "启用用户",
+        "description": "启用后该用户及其密钥将恢复正常使用",
+        "trigger": "启用",
+        "confirm": "确认启用",
+        "confirmDescription": "确认要启用用户 \"{userName}\" 吗？",
+        "loading": "处理中..."
+      },
+      "disable": {
+        "title": "禁用用户",
+        "description": "禁用后该用户及其密钥将无法继续使用",
+        "trigger": "禁用",
+        "confirm": "确认禁用",
+        "confirmDescription": "确认要禁用用户 \"{userName}\" 吗？",
+        "loading": "处理中..."
+      },
+      "delete": {
+        "title": "删除用户",
+        "description": "将删除该用户的所有关联数据，此操作无法撤销",
+        "trigger": "删除",
+        "confirm": "确认删除",
+        "confirmDescription": "此操作将删除用户 \"{userName}\" 的所有关联数据，且无法撤销。",
+        "confirmLabel": "二次确认",
+        "confirmHint": "请输入 \"{userName}\" 以确认删除",
+        "loading": "删除中..."
+      },
+      "actions": {
+        "cancel": "取消"
+      },
+      "errors": {
+        "enableFailed": "启用用户失败，请稍后重试",
+        "disableFailed": "禁用用户失败，请稍后重试",
+        "deleteFailed": "删除用户失败，请稍后重试"
+      }
     },
     "limitIndicator": {
       "notSet": "未设置",
@@ -1198,6 +1257,10 @@
         "keyName": {
           "label": "密钥名称",
           "placeholder": "请输入密钥名称"
+        },
+        "enableStatus": {
+          "label": "启用状态",
+          "description": "禁用后此密钥将无法使用"
         },
         "balanceQueryPage": {
           "label": "允许登录 Web UI",

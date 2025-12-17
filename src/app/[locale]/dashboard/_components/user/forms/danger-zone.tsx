@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, ShieldOff, Trash2 } from "lucide-react";
+import { Loader2, ShieldCheck, ShieldOff, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
   AlertDialog,
@@ -22,17 +22,19 @@ export interface DangerZoneProps {
   userId: number;
   userName: string;
   isEnabled: boolean;
+  onEnable: () => Promise<void>;
   onDisable: () => Promise<void>;
   onDelete: () => Promise<void>;
   /**
    * i18n strings passed from parent.
    * Expected keys (optional):
    * - title, description
+   * - enable.title, enable.description, enable.trigger, enable.confirm
    * - disable.title, disable.description, disable.trigger, disable.confirm
    * - delete.title, delete.description, delete.trigger, delete.confirm
    * - delete.confirmHint (e.g. "Type {name} to confirm")
    * - actions.cancel
-   * - errors.disableFailed, errors.deleteFailed
+   * - errors.enableFailed, errors.disableFailed, errors.deleteFailed
    */
   translations: Record<string, unknown>;
 }
@@ -51,16 +53,20 @@ export function DangerZone({
   userId,
   userName,
   isEnabled,
+  onEnable,
   onDisable,
   onDelete,
   translations,
 }: DangerZoneProps) {
+  const [enableOpen, setEnableOpen] = useState(false);
   const [disableOpen, setDisableOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [isEnabling, setIsEnabling] = useState(false);
   const [isDisabling, setIsDisabling] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
 
+  const [enableError, setEnableError] = useState<string | null>(null);
   const [disableError, setDisableError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -68,6 +74,20 @@ export function DangerZone({
     () => deleteConfirmText.trim() === userName,
     [deleteConfirmText, userName]
   );
+
+  const handleEnable = async () => {
+    setEnableError(null);
+    setIsEnabling(true);
+    try {
+      await onEnable();
+      setEnableOpen(false);
+    } catch (err) {
+      console.error("启用用户失败:", { userId, err });
+      setEnableError(getTranslation(translations, "errors.enableFailed", "操作失败，请稍后重试"));
+    } finally {
+      setIsEnabling(false);
+    }
+  };
 
   const handleDisable = async () => {
     setDisableError(null);
@@ -109,75 +129,146 @@ export function DangerZone({
       </header>
 
       <div className="mt-4 grid gap-3">
-        {/* Disable user */}
-        <div className="flex flex-col gap-3 rounded-md border border-destructive/20 bg-background p-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-1">
-            <div className="text-sm font-medium">
-              {getTranslation(translations, "disable.title", "禁用用户")}
+        {/* Enable/Disable user - conditional rendering based on current state */}
+        {isEnabled ? (
+          /* Disable user (when currently enabled) */
+          <div className="flex flex-col gap-3 rounded-md border border-destructive/20 bg-background p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <div className="text-sm font-medium">
+                {getTranslation(translations, "disable.title", "禁用用户")}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {getTranslation(
+                  translations,
+                  "disable.description",
+                  "禁用后该用户及其密钥将无法继续使用"
+                )}
+              </div>
             </div>
-            <div className="text-xs text-muted-foreground">
-              {getTranslation(
-                translations,
-                "disable.description",
-                "禁用后该用户及其密钥将无法继续使用"
-              )}
-            </div>
-          </div>
 
-          <AlertDialog open={disableOpen} onOpenChange={setDisableOpen}>
-            <AlertDialogTrigger asChild>
-              <Button
-                type="button"
-                variant="outline"
-                className="border-destructive/40 text-destructive hover:bg-destructive/10"
-                disabled={!isEnabled}
-              >
-                <ShieldOff className="h-4 w-4" />
-                {getTranslation(translations, "disable.trigger", isEnabled ? "禁用" : "已禁用")}
-              </Button>
-            </AlertDialogTrigger>
-
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>
-                  {getTranslation(translations, "disable.title", "禁用用户")}
-                </AlertDialogTitle>
-                <AlertDialogDescription>
-                  {getTranslation(
-                    translations,
-                    "disable.confirmDescription",
-                    `确认要禁用用户 "${userName}" 吗？`
-                  )}
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-
-              {disableError && <p className="text-sm text-destructive">{disableError}</p>}
-
-              <AlertDialogFooter>
-                <AlertDialogCancel disabled={isDisabling}>
-                  {getTranslation(translations, "actions.cancel", "取消")}
-                </AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={(e) => {
-                    e.preventDefault();
-                    handleDisable();
-                  }}
-                  disabled={isDisabling}
-                  className={cn(buttonVariants({ variant: "destructive" }))}
+            <AlertDialog open={disableOpen} onOpenChange={setDisableOpen}>
+              <AlertDialogTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-destructive/40 text-destructive hover:bg-destructive/10"
                 >
-                  {isDisabling ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      {getTranslation(translations, "disable.loading", "处理中...")}
-                    </>
-                  ) : (
-                    getTranslation(translations, "disable.confirm", "确认禁用")
-                  )}
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
+                  <ShieldOff className="h-4 w-4" />
+                  {getTranslation(translations, "disable.trigger", "禁用")}
+                </Button>
+              </AlertDialogTrigger>
+
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>
+                    {getTranslation(translations, "disable.title", "禁用用户")}
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {getTranslation(
+                      translations,
+                      "disable.confirmDescription",
+                      `确认要禁用用户 "${userName}" 吗？`
+                    )}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+
+                {disableError && <p className="text-sm text-destructive">{disableError}</p>}
+
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={isDisabling}>
+                    {getTranslation(translations, "actions.cancel", "取消")}
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleDisable();
+                    }}
+                    disabled={isDisabling}
+                    className={cn(buttonVariants({ variant: "destructive" }))}
+                  >
+                    {isDisabling ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        {getTranslation(translations, "disable.loading", "处理中...")}
+                      </>
+                    ) : (
+                      getTranslation(translations, "disable.confirm", "确认禁用")
+                    )}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        ) : (
+          /* Enable user (when currently disabled) */
+          <div className="flex flex-col gap-3 rounded-md border border-green-500/20 bg-green-500/5 p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <div className="text-sm font-medium text-green-700 dark:text-green-400">
+                {getTranslation(translations, "enable.title", "启用用户")}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {getTranslation(
+                  translations,
+                  "enable.description",
+                  "启用后该用户及其密钥将恢复正常使用"
+                )}
+              </div>
+            </div>
+
+            <AlertDialog open={enableOpen} onOpenChange={setEnableOpen}>
+              <AlertDialogTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-green-500/40 text-green-700 hover:bg-green-500/10 dark:text-green-400"
+                >
+                  <ShieldCheck className="h-4 w-4" />
+                  {getTranslation(translations, "enable.trigger", "启用")}
+                </Button>
+              </AlertDialogTrigger>
+
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>
+                    {getTranslation(translations, "enable.title", "启用用户")}
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {getTranslation(
+                      translations,
+                      "enable.confirmDescription",
+                      `确认要启用用户 "${userName}" 吗？`
+                    )}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+
+                {enableError && <p className="text-sm text-destructive">{enableError}</p>}
+
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={isEnabling}>
+                    {getTranslation(translations, "actions.cancel", "取消")}
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleEnable();
+                    }}
+                    disabled={isEnabling}
+                    className="bg-green-600 text-white hover:bg-green-700"
+                  >
+                    {isEnabling ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        {getTranslation(translations, "enable.loading", "处理中...")}
+                      </>
+                    ) : (
+                      getTranslation(translations, "enable.confirm", "确认启用")
+                    )}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        )}
 
         {/* Delete user */}
         <div className="flex flex-col gap-3 rounded-md border border-destructive/20 bg-background p-3 sm:flex-row sm:items-center sm:justify-between">

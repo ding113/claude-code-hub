@@ -940,15 +940,43 @@
         "todayUsage": "本日の使用量",
         "todayCost": "本日の消費",
         "lastUsed": "最終使用",
-        "actions": "操作"
+        "actions": "操作",
+        "fields": {
+          "callsLabel": "呼び出し",
+          "costLabel": "消費"
+        }
       },
       "expand": "展開",
       "collapse": "折りたたむ",
       "noKeys": "キーなし",
-      "defaultGroup": "default"
+      "defaultGroup": "default",
+      "userStatus": {
+        "disabled": "無効"
+      }
+    },
+    "keyFullDisplay": {
+      "title": "完全なキー",
+      "copySuccess": "キーがクリップボードにコピーされました",
+      "copyFailed": "コピーに失敗しました",
+      "show": "キーを表示",
+      "hide": "キーを非表示",
+      "copied": "コピー済み",
+      "copy": "キーをコピー"
+    },
+    "keyStatsDialog": {
+      "title": "本日のモデル統計",
+      "columns": {
+        "model": "モデル",
+        "calls": "呼び出し回数",
+        "cost": "消費金額"
+      },
+      "noData": "本日の使用記録はありません",
+      "totalCalls": "総呼び出し数",
+      "totalCost": "総消費"
     },
     "editDialog": {
       "title": "ユーザーとキーを編集",
+      "description": "ユーザー情報とAPIキーの設定を編集",
       "userSection": "ユーザー設定",
       "keysSection": "キー設定",
       "scrollToKey": "キーへスクロール",
@@ -958,12 +986,14 @@
       "saveSuccess": "変更が保存されました",
       "operationFailed": "操作に失敗しました",
       "userDisabled": "ユーザーが無効化されました",
+      "userEnabled": "ユーザーが有効化されました",
       "deleteFailed": "ユーザーの削除に失敗しました",
       "userDeleted": "ユーザーが削除されました",
       "saving": "保存中..."
     },
     "createDialog": {
       "title": "ユーザーを作成",
+      "description": "新規ユーザーを作成し、APIキーを設定",
       "saveFailed": "ユーザーの作成に失敗しました",
       "keyCreateFailed": "キーの作成に失敗しました",
       "createSuccess": "ユーザーが作成されました",
@@ -1039,12 +1069,41 @@
     },
     "dangerZone": {
       "title": "危険な操作",
-      "disableUser": "ユーザーを無効化",
-      "disableUserDesc": "無効化するとユーザーは API にアクセスできません",
-      "deleteUser": "ユーザーを削除",
-      "deleteUserDesc": "この操作は元に戻せません",
-      "confirmDisable": "このユーザーを無効化しますか？",
-      "confirmDelete": "このユーザーを削除しますか？関連するキーとデータはすべて完全に削除されます。"
+      "description": "以下の操作は元に戻せません、慎重に実行してください",
+      "enable": {
+        "title": "ユーザーを有効化",
+        "description": "有効化すると、このユーザーとそのキーは正常に使用できるようになります",
+        "trigger": "有効化",
+        "confirm": "有効化を確認",
+        "confirmDescription": "ユーザー \"{userName}\" を有効化してもよろしいですか？",
+        "loading": "処理中..."
+      },
+      "disable": {
+        "title": "ユーザーを無効化",
+        "description": "無効化すると、このユーザーとそのキーは使用できなくなります",
+        "trigger": "無効化",
+        "confirm": "無効化を確認",
+        "confirmDescription": "ユーザー \"{userName}\" を無効化してもよろしいですか？",
+        "loading": "処理中..."
+      },
+      "delete": {
+        "title": "ユーザーを削除",
+        "description": "このユーザーに関連するすべてのデータが削除されます、この操作は元に戻せません",
+        "trigger": "削除",
+        "confirm": "削除を確認",
+        "confirmDescription": "この操作はユーザー \"{userName}\" のすべての関連データを削除し、元に戻せません。",
+        "confirmLabel": "二次確認",
+        "confirmHint": "削除を確認するには \"{userName}\" と入力してください",
+        "loading": "削除中..."
+      },
+      "actions": {
+        "cancel": "キャンセル"
+      },
+      "errors": {
+        "enableFailed": "ユーザーの有効化に失敗しました、後でもう一度お試しください",
+        "disableFailed": "ユーザーの無効化に失敗しました、後でもう一度お試しください",
+        "deleteFailed": "ユーザーの削除に失敗しました、後でもう一度お試しください"
+      }
     },
     "limitIndicator": {
       "notSet": "未設定",
@@ -1104,6 +1163,10 @@
         "keyName": {
           "label": "キー名",
           "placeholder": "キー名を入力してください"
+        },
+        "enableStatus": {
+          "label": "有効状態",
+          "description": "無効化されたキーは使用できません"
         },
         "balanceQueryPage": {
           "label": "Web UIログインを許可",
