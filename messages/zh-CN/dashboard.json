@@ -1012,5 +1012,110 @@
       "refreshSuccess": "可用性数据已刷新",
       "refreshFailed": "刷新失败，请重试"
     }
+  },
+  "userManagement": {
+    "table": {
+      "columns": {
+        "username": "用户名",
+        "note": "备注",
+        "expiresAt": "到期时间",
+        "limit5h": "5h 限额",
+        "limitDaily": "每日限额",
+        "limitWeekly": "周限额",
+        "limitMonthly": "月限额",
+        "limitTotal": "总限额",
+        "limitSessions": "并发"
+      },
+      "keyRow": {
+        "name": "密钥名称",
+        "key": "密钥",
+        "group": "分组",
+        "todayUsage": "今日用量",
+        "todayCost": "今日消耗",
+        "lastUsed": "最后使用",
+        "actions": "操作"
+      },
+      "expand": "展开",
+      "collapse": "折叠",
+      "noKeys": "无密钥",
+      "defaultGroup": "default"
+    },
+    "editDialog": {
+      "title": "编辑用户与密钥",
+      "userSection": "用户设置",
+      "keysSection": "密钥设置",
+      "scrollToKey": "滚动到密钥"
+    },
+    "limitRules": {
+      "addRule": "添加限额规则",
+      "ruleTypes": {
+        "limit5h": "5小时限额",
+        "limitDaily": "每日限额",
+        "limitWeekly": "周限额",
+        "limitMonthly": "月限额",
+        "limitTotal": "总限额",
+        "limitSessions": "并发 Session"
+      },
+      "dailyMode": {
+        "fixed": "固定时间重置",
+        "rolling": "滚动窗口（24h）"
+      },
+      "quickValues": {
+        "10": "$10",
+        "50": "$50",
+        "100": "$100",
+        "500": "$500"
+      },
+      "alreadySet": "已配置",
+      "confirmAdd": "添加",
+      "cancel": "取消"
+    },
+    "quickExpire": {
+      "oneWeek": "一周后",
+      "oneMonth": "一月后",
+      "threeMonths": "三月后",
+      "oneYear": "一年后"
+    },
+    "providerGroup": {
+      "label": "供应商分组",
+      "placeholder": "选择供应商分组",
+      "noRestriction": "无限制（所有供应商）",
+      "providerCount": "{count} 个供应商"
+    },
+    "dangerZone": {
+      "title": "危险操作",
+      "disableUser": "禁用用户",
+      "disableUserDesc": "禁用后用户无法访问 API",
+      "deleteUser": "删除用户",
+      "deleteUserDesc": "此操作不可撤销",
+      "confirmDisable": "确定要禁用该用户吗？",
+      "confirmDelete": "确定要删除该用户吗？所有关联的密钥和数据将被永久删除。"
+    },
+    "limitIndicator": {
+      "notSet": "未设置",
+      "unlimited": "无限制"
+    },
+    "keySettings": {
+      "balanceQueryPage": {
+        "label": "启用独立余额查询页",
+        "description": "允许用户通过专属页面查看余额"
+      },
+      "cacheTtlOverride": {
+        "label": "Cache TTL 覆写",
+        "inherit": "不覆写（跟随供应商/客户端）",
+        "5m": "5 分钟",
+        "1h": "1 小时"
+      }
+    },
+    "pagination": {
+      "previous": "上一页",
+      "next": "下一页",
+      "page": "第 {current} 页",
+      "of": "共 {total} 页"
+    },
+    "toolbar": {
+      "expandAll": "全部展开",
+      "collapseAll": "全部折叠"
+    }
   }
 }

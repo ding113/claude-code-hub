@@ -947,5 +947,110 @@
       "refreshSuccess": "Availability data refreshed",
       "refreshFailed": "Refresh failed, please retry"
     }
+  },
+  "userManagement": {
+    "table": {
+      "columns": {
+        "username": "Username",
+        "note": "Note",
+        "expiresAt": "Expires at",
+        "limit5h": "5h limit",
+        "limitDaily": "Daily limit",
+        "limitWeekly": "Weekly limit",
+        "limitMonthly": "Monthly limit",
+        "limitTotal": "Total limit",
+        "limitSessions": "Concurrent sessions"
+      },
+      "keyRow": {
+        "name": "Key name",
+        "key": "Key",
+        "group": "Group",
+        "todayUsage": "Today's usage",
+        "todayCost": "Today's cost",
+        "lastUsed": "Last used",
+        "actions": "Actions"
+      },
+      "expand": "Expand",
+      "collapse": "Collapse",
+      "noKeys": "No keys",
+      "defaultGroup": "default"
+    },
+    "editDialog": {
+      "title": "Edit user and keys",
+      "userSection": "User settings",
+      "keysSection": "Key settings",
+      "scrollToKey": "Scroll to key"
+    },
+    "limitRules": {
+      "addRule": "Add limit rule",
+      "ruleTypes": {
+        "limit5h": "5-hour limit",
+        "limitDaily": "Daily limit",
+        "limitWeekly": "Weekly limit",
+        "limitMonthly": "Monthly limit",
+        "limitTotal": "Total limit",
+        "limitSessions": "Concurrent sessions"
+      },
+      "dailyMode": {
+        "fixed": "Fixed reset time",
+        "rolling": "Rolling window (24h)"
+      },
+      "quickValues": {
+        "10": "$10",
+        "50": "$50",
+        "100": "$100",
+        "500": "$500"
+      },
+      "alreadySet": "Configured",
+      "confirmAdd": "Add",
+      "cancel": "Cancel"
+    },
+    "quickExpire": {
+      "oneWeek": "In 1 week",
+      "oneMonth": "In 1 month",
+      "threeMonths": "In 3 months",
+      "oneYear": "In 1 year"
+    },
+    "providerGroup": {
+      "label": "Provider group",
+      "placeholder": "Select provider group",
+      "noRestriction": "No restriction (all providers)",
+      "providerCount": "{count} providers"
+    },
+    "dangerZone": {
+      "title": "Danger zone",
+      "disableUser": "Disable user",
+      "disableUserDesc": "Disabled users cannot access the API",
+      "deleteUser": "Delete user",
+      "deleteUserDesc": "This action cannot be undone",
+      "confirmDisable": "Are you sure you want to disable this user?",
+      "confirmDelete": "Are you sure you want to delete this user? All associated keys and data will be permanently removed."
+    },
+    "limitIndicator": {
+      "notSet": "Not set",
+      "unlimited": "Unlimited"
+    },
+    "keySettings": {
+      "balanceQueryPage": {
+        "label": "Enable dedicated balance page",
+        "description": "Allow users to view their balance via a dedicated page"
+      },
+      "cacheTtlOverride": {
+        "label": "Cache TTL override",
+        "inherit": "No override (follow provider/client)",
+        "5m": "5 minutes",
+        "1h": "1 hour"
+      }
+    },
+    "pagination": {
+      "previous": "Previous",
+      "next": "Next",
+      "page": "Page {current}",
+      "of": "of {total}"
+    },
+    "toolbar": {
+      "expandAll": "Expand all",
+      "collapseAll": "Collapse all"
+    }
   }
 }

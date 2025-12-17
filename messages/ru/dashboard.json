@@ -918,5 +918,110 @@
       "refreshSuccess": "Данные о доступности обновлены",
       "refreshFailed": "Обновление не удалось, попробуйте снова"
     }
+  },
+  "userManagement": {
+    "table": {
+      "columns": {
+        "username": "Имя пользователя",
+        "note": "Примечание",
+        "expiresAt": "Дата истечения",
+        "limit5h": "Лимит 5 ч",
+        "limitDaily": "Дневной лимит",
+        "limitWeekly": "Недельный лимит",
+        "limitMonthly": "Месячный лимит",
+        "limitTotal": "Общий лимит",
+        "limitSessions": "Одновременные сессии"
+      },
+      "keyRow": {
+        "name": "Название ключа",
+        "key": "Ключ",
+        "group": "Группа",
+        "todayUsage": "Использование сегодня",
+        "todayCost": "Расход сегодня",
+        "lastUsed": "Последнее использование",
+        "actions": "Действия"
+      },
+      "expand": "Развернуть",
+      "collapse": "Свернуть",
+      "noKeys": "Нет ключей",
+      "defaultGroup": "default"
+    },
+    "editDialog": {
+      "title": "Редактировать пользователя и ключи",
+      "userSection": "Настройки пользователя",
+      "keysSection": "Настройки ключей",
+      "scrollToKey": "Прокрутить к ключу"
+    },
+    "limitRules": {
+      "addRule": "Добавить правило лимита",
+      "ruleTypes": {
+        "limit5h": "Лимит за 5 часов",
+        "limitDaily": "Дневной лимит",
+        "limitWeekly": "Недельный лимит",
+        "limitMonthly": "Месячный лимит",
+        "limitTotal": "Общий лимит",
+        "limitSessions": "Одновременные сессии"
+      },
+      "dailyMode": {
+        "fixed": "Сброс по фиксированному времени",
+        "rolling": "Скользящее окно (24ч)"
+      },
+      "quickValues": {
+        "10": "$10",
+        "50": "$50",
+        "100": "$100",
+        "500": "$500"
+      },
+      "alreadySet": "Уже настроено",
+      "confirmAdd": "Добавить",
+      "cancel": "Отмена"
+    },
+    "quickExpire": {
+      "oneWeek": "Через неделю",
+      "oneMonth": "Через месяц",
+      "threeMonths": "Через 3 месяца",
+      "oneYear": "Через год"
+    },
+    "providerGroup": {
+      "label": "Группа провайдеров",
+      "placeholder": "Выберите группу провайдеров",
+      "noRestriction": "Без ограничений (все провайдеры)",
+      "providerCount": "{count} провайдеров"
+    },
+    "dangerZone": {
+      "title": "Опасная зона",
+      "disableUser": "Отключить пользователя",
+      "disableUserDesc": "После отключения пользователь не сможет обращаться к API",
+      "deleteUser": "Удалить пользователя",
+      "deleteUserDesc": "Это действие нельзя отменить",
+      "confirmDisable": "Отключить этого пользователя?",
+      "confirmDelete": "Удалить этого пользователя? Все связанные ключи и данные будут удалены безвозвратно."
+    },
+    "limitIndicator": {
+      "notSet": "Не задано",
+      "unlimited": "Без ограничений"
+    },
+    "keySettings": {
+      "balanceQueryPage": {
+        "label": "Включить отдельную страницу проверки баланса",
+        "description": "Разрешить пользователю просматривать баланс на отдельной странице"
+      },
+      "cacheTtlOverride": {
+        "label": "Переопределение Cache TTL",
+        "inherit": "Не переопределять (следовать провайдеру/клиенту)",
+        "5m": "5 минут",
+        "1h": "1 час"
+      }
+    },
+    "pagination": {
+      "previous": "Предыдущая",
+      "next": "Следующая",
+      "page": "Страница {current}",
+      "of": "из {total}"
+    },
+    "toolbar": {
+      "expandAll": "Развернуть все",
+      "collapseAll": "Свернуть все"
+    }
   }
 }

@@ -36,6 +36,14 @@ export const users = pgTable('users', {
   limitTotalUsd: numeric('limit_total_usd', { precision: 10, scale: 2 }),
   limitConcurrentSessions: integer('limit_concurrent_sessions'),
 
+  // Daily quota reset mode (fixed: reset at specific time, rolling: 24h window)
+  dailyResetMode: dailyResetModeEnum('daily_reset_mode')
+    .default('fixed')
+    .notNull(),
+  dailyResetTime: varchar('daily_reset_time', { length: 5 })
+    .default('00:00')
+    .notNull(), // HH:mm format, only used in 'fixed' mode
+
   // User status and expiry management
   isEnabled: boolean('is_enabled').notNull().default(true),
   expiresAt: timestamp('expires_at', { withTimezone: true }),

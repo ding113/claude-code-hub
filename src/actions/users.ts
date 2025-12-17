@@ -17,7 +17,6 @@ import {
   findKeyListBatch,
   findKeysWithStatisticsBatch,
   findKeyUsageTodayBatch,
-  updateKey,
 } from "@/repository/key";
 import { createUser, deleteUser, findUserById, findUserList, updateUser } from "@/repository/user";
 import type { UserDisplay } from "@/types/user";
@@ -62,6 +61,38 @@ async function validateExpiresAt(
   }
 
   return null;
+}
+
+/**
+ * 根据用户名下所有 Key 的分组自动同步用户分组
+ * 用户分组 = Key 分组的并集
+ * 注意：该同步仅在 Key 变更（新增/编辑/删除）时由 Key Actions 触发。
+ * @param userId - 用户 ID
+ */
+export async function syncUserProviderGroupFromKeys(userId: number): Promise<void> {
+  try {
+    const keys = await findKeyList(userId);
+    const allGroups = new Set<string>();
+
+    for (const key of keys) {
+      if (key.providerGroup) {
+        const groups = key.providerGroup
+          .split(",")
+          .map((g) => g.trim())
+          .filter(Boolean);
+        groups.forEach((g) => allGroups.add(g));
+      }
+    }
+
+    const newProviderGroup = allGroups.size > 0 ? Array.from(allGroups).sort().join(",") : null;
+    await updateUser(userId, { providerGroup: newProviderGroup });
+    logger.info(
+      `[UserAction] Synced user provider group: userId=${userId}, groups=${newProviderGroup || "null"}`
+    );
+  } catch (error) {
+    logger.error(`[UserAction] Failed to sync user provider group for user ${userId}:`, error);
+    // 静默失败，不影响主流程
+  }
 }
 
 // 获取用户数据
@@ -124,6 +155,8 @@ export async function getUsers(): Promise<UserDisplay[]> {
           limitMonthlyUsd: user.limitMonthlyUsd ?? null,
           limitTotalUsd: user.limitTotalUsd ?? null,
           limitConcurrentSessions: user.limitConcurrentSessions ?? null,
+          dailyResetMode: user.dailyResetMode,
+          dailyResetTime: user.dailyResetTime,
           isEnabled: user.isEnabled,
           expiresAt: user.expiresAt ?? null,
           allowedClients: user.allowedClients || [],
@@ -187,6 +220,8 @@ export async function getUsers(): Promise<UserDisplay[]> {
           limitMonthlyUsd: user.limitMonthlyUsd ?? null,
           limitTotalUsd: user.limitTotalUsd ?? null,
           limitConcurrentSessions: user.limitConcurrentSessions ?? null,
+          dailyResetMode: user.dailyResetMode,
+          dailyResetTime: user.dailyResetTime,
           isEnabled: user.isEnabled,
           expiresAt: user.expiresAt ?? null,
           allowedClients: user.allowedClients || [],
@@ -216,6 +251,8 @@ export async function addUser(data: {
   limitMonthlyUsd?: number | null;
   limitTotalUsd?: number | null;
   limitConcurrentSessions?: number | null;
+  dailyResetMode?: "fixed" | "rolling";
+  dailyResetTime?: string;
   isEnabled?: boolean;
   expiresAt?: Date | null;
   allowedClients?: string[];
@@ -274,6 +311,8 @@ export async function addUser(data: {
       limitMonthlyUsd: data.limitMonthlyUsd,
       limitTotalUsd: data.limitTotalUsd,
       limitConcurrentSessions: data.limitConcurrentSessions,
+      dailyResetMode: data.dailyResetMode,
+      dailyResetTime: data.dailyResetTime,
       isEnabled: data.isEnabled,
       expiresAt: data.expiresAt,
       allowedClients: data.allowedClients || [],
@@ -330,6 +369,8 @@ export async function addUser(data: {
       limitMonthlyUsd: validatedData.limitMonthlyUsd ?? undefined,
       limitTotalUsd: validatedData.limitTotalUsd ?? undefined,
       limitConcurrentSessions: validatedData.limitConcurrentSessions ?? undefined,
+      dailyResetMode: validatedData.dailyResetMode,
+      dailyResetTime: validatedData.dailyResetTime,
       isEnabled: validatedData.isEnabled,
       expiresAt: validatedData.expiresAt ?? null,
       allowedClients: validatedData.allowedClients ?? [],
@@ -402,6 +443,8 @@ export async function editUser(
     limitMonthlyUsd?: number | null;
     limitTotalUsd?: number | null;
     limitConcurrentSessions?: number | null;
+    dailyResetMode?: "fixed" | "rolling";
+    dailyResetTime?: string;
     isEnabled?: boolean;
     expiresAt?: Date | null;
     allowedClients?: string[];
@@ -482,9 +525,6 @@ export async function editUser(
       };
     }
 
-    // 在更新前获取旧用户数据（用于级联更新判断）
-    const oldUserForCascade = data.providerGroup !== undefined ? await findUserById(userId) : null;
-
     // Update user with validated data
     await updateUser(userId, {
       name: validatedData.name,
@@ -498,88 +538,15 @@ export async function editUser(
       limitMonthlyUsd: validatedData.limitMonthlyUsd ?? undefined,
       limitTotalUsd: validatedData.limitTotalUsd ?? undefined,
       limitConcurrentSessions: validatedData.limitConcurrentSessions ?? undefined,
+      dailyResetMode: validatedData.dailyResetMode,
+      dailyResetTime: validatedData.dailyResetTime,
       isEnabled: validatedData.isEnabled,
       expiresAt: validatedData.expiresAt,
       allowedClients: validatedData.allowedClients,
       allowedModels: validatedData.allowedModels,
     });
 
-    // 级联更新 KEY 的 providerGroup（仅针对减少场景）
-    if (oldUserForCascade && data.providerGroup !== undefined) {
-      // 只有在 providerGroup 真正变化时才级联更新
-      if (oldUserForCascade.providerGroup !== data.providerGroup) {
-        const oldUserGroups = oldUserForCascade.providerGroup
-          ? oldUserForCascade.providerGroup
-              .split(",")
-              .map((g) => g.trim())
-              .filter(Boolean)
-          : [];
-
-        const newUserGroups = data.providerGroup
-          ? data.providerGroup
-              .split(",")
-              .map((g) => g.trim())
-              .filter(Boolean)
-          : [];
-
-        // 计算被移除的分组
-        const removedGroups = oldUserGroups.filter((g) => !newUserGroups.includes(g));
-
-        // 如果没有移除分组（只新增），直接跳过
-        if (removedGroups.length === 0) {
-          logger.debug(`用户 ${userId} 的 providerGroup 只新增分组，无需级联更新 KEY`);
-        } else {
-          // 有移除分组，需要级联更新 KEY
-          logger.info(
-            `用户 ${userId} 移除了供应商分组: ${removedGroups.join(",")}，开始级联更新 KEY`
-          );
-
-          // 获取该用户的所有 KEY
-          const userKeys = await findKeyList(userId);
-
-          for (const key of userKeys) {
-            if (!key.providerGroup) {
-              // KEY 未设置 providerGroup，继承用户配置，无需更新
-              continue;
-            }
-
-            // 解析 KEY 的分组列表
-            const keyGroups = key.providerGroup
-              .split(",")
-              .map((g) => g.trim())
-              .filter(Boolean);
-
-            // 检查 KEY 是否包含被移除的分组
-            const hasRemovedGroups = keyGroups.some((g) => removedGroups.includes(g));
-            if (!hasRemovedGroups) {
-              // KEY 不包含被移除的分组，无需更新
-              continue;
-            }
-
-            // 过滤：只保留在用户新范围内的分组
-            const filteredGroups = keyGroups.filter((g) => newUserGroups.includes(g));
-
-            // 计算新值
-            const newKeyProviderGroup = filteredGroups.length > 0 ? filteredGroups.join(",") : null;
-
-            // 如果值发生变化，更新 KEY
-            if (newKeyProviderGroup !== key.providerGroup) {
-              await updateKey(key.id, {
-                provider_group: newKeyProviderGroup,
-              });
-
-              logger.info(`级联更新 KEY ${key.id} 的 providerGroup`, {
-                keyName: key.name,
-                oldValue: key.providerGroup,
-                newValue: newKeyProviderGroup,
-                removedGroups: removedGroups.join(","),
-                reason: "用户 providerGroup 减少",
-              });
-            }
-          }
-        }
-      }
-    }
+    // 用户分组由 Key 分组自动计算，不再需要级联更新 Key 的 providerGroup
 
     revalidatePath("/dashboard");
     return { ok: true };

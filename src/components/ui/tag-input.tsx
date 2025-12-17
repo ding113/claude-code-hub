@@ -5,6 +5,17 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 import { Badge } from "./badge";
 
+export type TagInputSuggestion =
+  | string
+  | {
+      /** Tag value that will be added to `value[]` */
+      value: string;
+      /** Text shown in the suggestions dropdown */
+      label: string;
+      /** Optional extra keywords to improve search matching */
+      keywords?: string[];
+    };
+
 export interface TagInputProps extends Omit<React.ComponentProps<"input">, "value" | "onChange"> {
   value: string[];
   onChange: (tags: string[]) => void;
@@ -18,7 +29,7 @@ export interface TagInputProps extends Omit<React.ComponentProps<"input">, "valu
   validateTag?: (tag: string) => boolean;
   onInvalidTag?: (tag: string, reason: string) => void;
   /** 可选的建议列表，支持下拉搜索选择 */
-  suggestions?: string[];
+  suggestions?: TagInputSuggestion[];
 }
 
 const DEFAULT_SEPARATOR = /[,，\n]/; // 逗号、中文逗号、换行符
@@ -45,18 +56,25 @@ export function TagInput({
   const inputRef = React.useRef<HTMLInputElement>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
 
+  // Normalize suggestions so callers can provide either strings or { value, label } objects.
+  const normalizedSuggestions = React.useMemo(() => {
+    return suggestions.map((s) => (typeof s === "string" ? { value: s, label: s } : s));
+  }, [suggestions]);
+
   // 过滤建议列表：匹配输入值且未被选中
   const filteredSuggestions = React.useMemo(() => {
-    if (!suggestions.length) return [];
+    if (!normalizedSuggestions.length) return [];
     const search = inputValue.toLowerCase();
-    return suggestions.filter(
-      (s) => s.toLowerCase().includes(search) && (allowDuplicates || !value.includes(s))
-    );
-  }, [suggestions, inputValue, value, allowDuplicates]);
+    return normalizedSuggestions.filter((s) => {
+      const keywords = s.keywords?.join(" ") || "";
+      const haystack = `${s.label} ${s.value} ${keywords}`.toLowerCase();
+      return haystack.includes(search) && (allowDuplicates || !value.includes(s.value));
+    });
+  }, [normalizedSuggestions, inputValue, value, allowDuplicates]);
 
   // 默认验证函数
   const defaultValidateTag = React.useCallback(
-    (tag: string): boolean => {
+    (tag: string, currentTags: string[]): boolean => {
       if (!tag || tag.trim().length === 0) {
         onInvalidTag?.(tag, "empty");
         return false;
@@ -72,32 +90,63 @@ export function TagInput({
         return false;
       }
 
-      if (!allowDuplicates && value.includes(tag)) {
+      if (!allowDuplicates && currentTags.includes(tag)) {
         onInvalidTag?.(tag, "duplicate");
         return false;
       }
 
-      if (maxTags && value.length >= maxTags) {
+      if (maxTags && currentTags.length >= maxTags) {
         onInvalidTag?.(tag, "max_tags");
         return false;
       }
 
       return true;
     },
-    [value, maxTags, maxTagLength, allowDuplicates, onInvalidTag]
+    [maxTags, maxTagLength, allowDuplicates, onInvalidTag]
   );
 
-  const handleValidateTag = validateTag || defaultValidateTag;
+  const handleValidateTag = React.useCallback(
+    (tag: string, currentTags: string[]): boolean => {
+      if (validateTag) return validateTag(tag);
+      return defaultValidateTag(tag, currentTags);
+    },
+    [validateTag, defaultValidateTag]
+  );
 
   const addTag = React.useCallback(
     (tag: string) => {
       const trimmedTag = tag.trim();
-      if (handleValidateTag(trimmedTag)) {
+      if (handleValidateTag(trimmedTag, value)) {
         onChange([...value, trimmedTag]);
         setInputValue("");
         setShowSuggestions(false);
         setHighlightedIndex(-1);
       }
+    },
+    [value, onChange, handleValidateTag]
+  );
+
+  const addTagsBatch = React.useCallback(
+    (tags: string[]) => {
+      const nextTags = [...value];
+      let didChange = false;
+
+      for (const rawTag of tags) {
+        const trimmedTag = rawTag.trim();
+        if (!trimmedTag) continue;
+
+        if (handleValidateTag(trimmedTag, nextTags)) {
+          nextTags.push(trimmedTag);
+          didChange = true;
+        }
+      }
+
+      if (!didChange) return;
+
+      onChange(nextTags);
+      setInputValue("");
+      setShowSuggestions(false);
+      setHighlightedIndex(-1);
     },
     [value, onChange, handleValidateTag]
   );
@@ -125,7 +174,7 @@ export function TagInput({
         }
         if (e.key === "Enter" && highlightedIndex >= 0) {
           e.preventDefault();
-          addTag(filteredSuggestions[highlightedIndex]);
+          addTag(filteredSuggestions[highlightedIndex].value);
           return;
         }
         if (e.key === "Escape") {
@@ -155,11 +204,7 @@ export function TagInput({
       // 检测分隔符（逗号、换行符等）
       if (separator.test(newValue)) {
         const tags = newValue.split(separator).filter((t) => t.trim());
-        tags.forEach((tag) => {
-          if (tag.trim()) {
-            addTag(tag);
-          }
-        });
+        addTagsBatch(tags);
       } else {
         setInputValue(newValue);
         // 有建议列表时，输入触发显示
@@ -169,7 +214,7 @@ export function TagInput({
         }
       }
     },
-    [separator, addTag, suggestions.length]
+    [separator, addTagsBatch, suggestions.length]
   );
 
   const handlePaste = React.useCallback(
@@ -178,13 +223,9 @@ export function TagInput({
       const pastedText = e.clipboardData.getData("text");
       const tags = pastedText.split(separator).filter((t) => t.trim());
 
-      tags.forEach((tag) => {
-        if (tag.trim()) {
-          addTag(tag);
-        }
-      });
+      addTagsBatch(tags);
     },
-    [separator, addTag]
+    [separator, addTagsBatch]
   );
 
   // Commit pending input value on blur (e.g., when clicking save button)
@@ -212,8 +253,8 @@ export function TagInput({
   }, [suggestions.length]);
 
   const handleSuggestionClick = React.useCallback(
-    (suggestion: string) => {
-      addTag(suggestion);
+    (suggestionValue: string) => {
+      addTag(suggestionValue);
       inputRef.current?.focus();
     },
     [addTag]
@@ -276,7 +317,7 @@ export function TagInput({
         <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md max-h-48 overflow-auto">
           {filteredSuggestions.map((suggestion, index) => (
             <button
-              key={suggestion}
+              key={suggestion.value}
               type="button"
               className={cn(
                 "w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground",
@@ -284,11 +325,11 @@ export function TagInput({
               )}
               onMouseDown={(e) => {
                 e.preventDefault(); // 阻止 blur 事件
-                handleSuggestionClick(suggestion);
+                handleSuggestionClick(suggestion.value);
               }}
               onMouseEnter={() => setHighlightedIndex(index)}
             >
-              {suggestion}
+              {suggestion.label}
             </button>
           ))}
         </div>

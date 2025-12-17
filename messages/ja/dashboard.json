@@ -918,5 +918,110 @@
       "refreshSuccess": "可用性データを更新しました",
       "refreshFailed": "更新に失敗しました。再試行してください"
     }
+  },
+  "userManagement": {
+    "table": {
+      "columns": {
+        "username": "ユーザー名",
+        "note": "メモ",
+        "expiresAt": "有効期限",
+        "limit5h": "5時間上限",
+        "limitDaily": "日次上限",
+        "limitWeekly": "週次上限",
+        "limitMonthly": "月次上限",
+        "limitTotal": "総上限",
+        "limitSessions": "同時セッション"
+      },
+      "keyRow": {
+        "name": "キー名",
+        "key": "キー",
+        "group": "グループ",
+        "todayUsage": "本日の使用量",
+        "todayCost": "本日の消費",
+        "lastUsed": "最終使用",
+        "actions": "操作"
+      },
+      "expand": "展開",
+      "collapse": "折りたたむ",
+      "noKeys": "キーなし",
+      "defaultGroup": "default"
+    },
+    "editDialog": {
+      "title": "ユーザーとキーを編集",
+      "userSection": "ユーザー設定",
+      "keysSection": "キー設定",
+      "scrollToKey": "キーへスクロール"
+    },
+    "limitRules": {
+      "addRule": "上限ルールを追加",
+      "ruleTypes": {
+        "limit5h": "5時間上限",
+        "limitDaily": "日次上限",
+        "limitWeekly": "週次上限",
+        "limitMonthly": "月次上限",
+        "limitTotal": "総上限",
+        "limitSessions": "同時セッション"
+      },
+      "dailyMode": {
+        "fixed": "固定時刻でリセット",
+        "rolling": "ローリングウィンドウ（24h）"
+      },
+      "quickValues": {
+        "10": "$10",
+        "50": "$50",
+        "100": "$100",
+        "500": "$500"
+      },
+      "alreadySet": "設定済み",
+      "confirmAdd": "追加",
+      "cancel": "キャンセル"
+    },
+    "quickExpire": {
+      "oneWeek": "1週間後",
+      "oneMonth": "1か月後",
+      "threeMonths": "3か月後",
+      "oneYear": "1年後"
+    },
+    "providerGroup": {
+      "label": "プロバイダーグループ",
+      "placeholder": "プロバイダーグループを選択",
+      "noRestriction": "制限なし（すべてのプロバイダー）",
+      "providerCount": "{count} 件のプロバイダー"
+    },
+    "dangerZone": {
+      "title": "危険な操作",
+      "disableUser": "ユーザーを無効化",
+      "disableUserDesc": "無効化するとユーザーは API にアクセスできません",
+      "deleteUser": "ユーザーを削除",
+      "deleteUserDesc": "この操作は元に戻せません",
+      "confirmDisable": "このユーザーを無効化しますか？",
+      "confirmDelete": "このユーザーを削除しますか？関連するキーとデータはすべて完全に削除されます。"
+    },
+    "limitIndicator": {
+      "notSet": "未設定",
+      "unlimited": "無制限"
+    },
+    "keySettings": {
+      "balanceQueryPage": {
+        "label": "専用の残高確認ページを有効化",
+        "description": "専用ページから残高を確認できるようにします"
+      },
+      "cacheTtlOverride": {
+        "label": "Cache TTL の上書き",
+        "inherit": "上書きしない（プロバイダー/クライアントに従う）",
+        "5m": "5分",
+        "1h": "1時間"
+      }
+    },
+    "pagination": {
+      "previous": "前へ",
+      "next": "次へ",
+      "page": "第 {current} ページ",
+      "of": "全 {total} ページ"
+    },
+    "toolbar": {
+      "expandAll": "すべて展開",
+      "collapseAll": "すべて折りたたむ"
+    }
   }
 }
