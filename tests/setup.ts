@@ -34,9 +34,9 @@ beforeAll(async () => {
     if (process.env.ALLOW_NON_TEST_DB !== "true") {
       throw new Error(
         `❌ 安全检查失败: 数据库名称必须包含 'test' 字样\n` +
-        `   当前数据库: ${dbName}\n` +
-        `   建议使用测试专用数据库（如 claude_code_hub_test）\n` +
-        `   如需跳过检查，请设置环境变量: ALLOW_NON_TEST_DB=true`
+          `   当前数据库: ${dbName}\n` +
+          `   建议使用测试专用数据库（如 claude_code_hub_test）\n` +
+          `   如需跳过检查，请设置环境变量: ALLOW_NON_TEST_DB=true`
       );
     }
 
@@ -80,7 +80,10 @@ afterAll(async () => {
         console.log(`✅ 自动清理：删除 ${result.deletedUsers} 个测试用户\n`);
       }
     } catch (error) {
-      console.warn("⚠️  自动清理失败（不影响测试结果）:", error instanceof Error ? error.message : error);
+      console.warn(
+        "⚠️  自动清理失败（不影响测试结果）:",
+        error instanceof Error ? error.message : error
+      );
     }
   }
 

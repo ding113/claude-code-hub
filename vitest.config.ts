@@ -27,15 +27,7 @@ export default defineConfig({
       reportsDirectory: "./coverage",
 
       // 排除文件
-      exclude: [
-        "node_modules/",
-        "tests/",
-        "*.config.*",
-        "**/*.d.ts",
-        ".next/",
-        "dist/",
-        "build/",
-      ],
+      exclude: ["node_modules/", "tests/", "*.config.*", "**/*.d.ts", ".next/", "dist/", "build/"],
 
       // 覆盖率阈值（可选）
       thresholds: {
@@ -59,7 +51,7 @@ export default defineConfig({
 
     // ==================== 文件匹配 ====================
     include: [
-      "tests/**/*.test.ts",            // 所有测试文件
+      "tests/**/*.test.ts", // 所有测试文件
       "src/**/*.{test,spec}.{ts,tsx}", // 支持源码中的测试
     ],
     exclude: [

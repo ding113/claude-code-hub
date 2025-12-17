@@ -699,11 +699,7 @@ describe.skip("Key 管理 - 响应格式验证", () => {
   });
 
   test("所有错误响应应符合 ActionResult 格式", async () => {
-    const { response, data } = await callKeysApi(
-      "getKeys",
-      { userId: 1 },
-      USER_TOKEN
-    );
+    const { response, data } = await callKeysApi("getKeys", { userId: 1 }, USER_TOKEN);
 
     expect(response.ok).toBe(true);
     expect(data).toHaveProperty("ok");

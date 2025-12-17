@@ -31,10 +31,7 @@ export async function cleanupTestUsers(options?: {
       like(users.name, "Test%"),
     ];
 
-    const whereConditions = [
-      or(...testUserConditions),
-      isNull(users.deletedAt),
-    ];
+    const whereConditions = [or(...testUserConditions), isNull(users.deletedAt)];
 
     if (options?.onlyRecent) {
       // 将 Date 转换为 ISO 字符串，避免 postgres 库报错

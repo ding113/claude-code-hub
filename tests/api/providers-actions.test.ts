@@ -381,9 +381,7 @@ describe.skip("供应商管理 - 删除供应商 (removeProvider)", () => {
     });
 
     const providers = await callProvidersApi("getProviders");
-    const createdProvider = providers.data.find(
-      (p: any) => p.name.startsWith("待删除供应商_")
-    );
+    const createdProvider = providers.data.find((p: any) => p.name.startsWith("待删除供应商_"));
     testProviderId = createdProvider?.id;
   });
 
@@ -440,11 +438,7 @@ describe.skip("供应商管理 - 熔断器健康状态 (getProvidersHealthStatus
   });
 
   test("非管理员不能查看熔断器状态", async () => {
-    const { response, data } = await callProvidersApi(
-      "getProvidersHealthStatus",
-      {},
-      USER_TOKEN
-    );
+    const { response, data } = await callProvidersApi("getProvidersHealthStatus", {}, USER_TOKEN);
 
     expect(response.ok).toBe(true);
     expect(typeof data).toBe("object");
@@ -465,9 +459,7 @@ describe.skip("供应商管理 - 重置熔断器 (resetProviderCircuit)", () => 
     });
 
     const providers = await callProvidersApi("getProviders");
-    const createdProvider = providers.data.find((p: any) =>
-      p.name.startsWith("熔断器测试供应商_")
-    );
+    const createdProvider = providers.data.find((p: any) => p.name.startsWith("熔断器测试供应商_"));
     testProviderId = createdProvider?.id;
   });
 
@@ -522,9 +514,7 @@ describe.skip("供应商管理 - 获取供应商限额使用情况 (getProviderL
     });
 
     const providers = await callProvidersApi("getProviders");
-    const createdProvider = providers.data.find((p: any) =>
-      p.name.startsWith("限额测试供应商_")
-    );
+    const createdProvider = providers.data.find((p: any) => p.name.startsWith("限额测试供应商_"));
     testProviderId = createdProvider?.id;
   });
 
@@ -622,9 +612,7 @@ describe.skip("供应商管理 - 获取完整密钥 (getUnmaskedProviderKey)", (
     });
 
     const providers = await callProvidersApi("getProviders");
-    const createdProvider = providers.data.find((p: any) =>
-      p.name.startsWith("密钥测试供应商_")
-    );
+    const createdProvider = providers.data.find((p: any) => p.name.startsWith("密钥测试供应商_"));
     testProviderId = createdProvider?.id;
   });
 

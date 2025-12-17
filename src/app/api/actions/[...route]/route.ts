@@ -54,7 +54,7 @@ app.openAPIRegistry.registerComponent("securitySchemes", "cookieAuth", {
 
 // ==================== 用户管理 ====================
 
-const { route: getUsersRoute, handler: getUsersHandler} = createActionRoute(
+const { route: getUsersRoute, handler: getUsersHandler } = createActionRoute(
   "users",
   "getUsers",
   userActions.getUsers,
@@ -1018,43 +1018,43 @@ HTTP 状态码:
   tags: [
     {
       name: "用户管理",
-      description: "用户账号的创建、编辑、删除和限额配置,支持 RPM、金额限制和并发会话控制"
+      description: "用户账号的创建、编辑、删除和限额配置,支持 RPM、金额限制和并发会话控制",
     },
     {
       name: "密钥管理",
-      description: "为用户生成 API 密钥,支持独立的金额限制、过期时间和 Web UI 登录权限配置"
+      description: "为用户生成 API 密钥,支持独立的金额限制、过期时间和 Web UI 登录权限配置",
     },
     {
       name: "供应商管理",
-      description: "配置上游 API 供应商,包括权重调度、熔断保护、代理设置和健康状态监控"
+      description: "配置上游 API 供应商,包括权重调度、熔断保护、代理设置和健康状态监控",
     },
     {
       name: "模型价格",
-      description: "管理模型价格表,支持手动上传 JSON 或从 LiteLLM 官方仓库同步最新价格"
+      description: "管理模型价格表,支持手动上传 JSON 或从 LiteLLM 官方仓库同步最新价格",
     },
     {
       name: "统计分析",
-      description: "查看用户消费统计、请求量趋势和成本分析,支持多种时间维度的数据汇总"
+      description: "查看用户消费统计、请求量趋势和成本分析,支持多种时间维度的数据汇总",
     },
     {
       name: "使用日志",
-      description: "查询 API 请求日志,支持按用户、模型、时间范围、状态码等多条件过滤"
+      description: "查询 API 请求日志,支持按用户、模型、时间范围、状态码等多条件过滤",
     },
     {
       name: "概览",
-      description: "展示系统运行状态概览,包括并发数、今日统计、活跃用户和时间分布图表"
+      description: "展示系统运行状态概览,包括并发数、今日统计、活跃用户和时间分布图表",
     },
     {
       name: "敏感词管理",
-      description: "配置内容审核规则,支持正则表达式匹配和缓存刷新,用于风险控制"
+      description: "配置内容审核规则,支持正则表达式匹配和缓存刷新,用于风险控制",
     },
     {
       name: "Session 管理",
-      description: "查看活跃会话列表、会话详情和消息内容,用于并发控制和请求追踪"
+      description: "查看活跃会话列表、会话详情和消息内容,用于并发控制和请求追踪",
     },
     {
       name: "通知管理",
-      description: "配置 Webhook 通知,接收系统事件推送(如限额预警、熔断触发等)"
+      description: "配置 Webhook 通知,接收系统事件推送(如限额预警、熔断触发等)",
     },
   ],
   externalDocs: {

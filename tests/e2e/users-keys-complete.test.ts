@@ -95,11 +95,7 @@ async function callApi(
  * @example
  * const user = await expectSuccess("users", "addUser", { name: "测试" });
  */
-async function expectSuccess(
-  module: string,
-  action: string,
-  body: Record<string, unknown> = {}
-) {
+async function expectSuccess(module: string, action: string, body: Record<string, unknown> = {}) {
   const { response, data } = await callApi(module, action, body);
 
   // 验证 HTTP 状态码
@@ -127,11 +123,7 @@ async function expectSuccess(
  * const error = await expectError("users", "addUser", { name: "" });
  * expect(error).toContain("用户名");
  */
-async function expectError(
-  module: string,
-  action: string,
-  body: Record<string, unknown> = {}
-) {
+async function expectError(module: string, action: string, body: Record<string, unknown> = {}) {
   const { response, data } = await callApi(module, action, body);
 
   // API 返回 400/401/403 状态码，表示业务错误或权限问题

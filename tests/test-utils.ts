@@ -73,4 +73,3 @@ export async function callActionsRoute(options: ActionsRouteCallOptions): Promis
 
   return { response, text: await response.text() };
 }
-

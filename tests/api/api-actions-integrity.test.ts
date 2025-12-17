@@ -204,7 +204,9 @@ describe("OpenAPI 端点完整性检查", () => {
       )?.[1];
 
       if (expectedTag && !postOperation.tags.includes(expectedTag)) {
-        pathsWithWrongTags.push(`${path} (期望: ${expectedTag}, 实际: ${postOperation.tags.join(", ")})`);
+        pathsWithWrongTags.push(
+          `${path} (期望: ${expectedTag}, 实际: ${postOperation.tags.join(", ")})`
+        );
       }
     }
 

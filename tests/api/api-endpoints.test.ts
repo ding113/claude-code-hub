@@ -69,7 +69,12 @@ describe("API 认证测试", () => {
       console.log("⚠️  跳过无效 token 测试（需要 API_E2E_BASE_URL + 可用数据库）");
       return;
     }
-    const { response, data } = await callApi("users", "getUsers", {}, { authToken: "invalid-token" });
+    const { response, data } = await callApi(
+      "users",
+      "getUsers",
+      {},
+      { authToken: "invalid-token" }
+    );
 
     expect(response.status).toBe(401);
     expect(data.ok).toBe(false);
@@ -131,7 +136,12 @@ describe("API 响应格式测试", () => {
       return;
     }
 
-    const { response, data } = await callApi("overview", "getOverviewData", {}, { authToken: mockToken });
+    const { response, data } = await callApi(
+      "overview",
+      "getOverviewData",
+      {},
+      { authToken: mockToken }
+    );
 
     if (response.ok) {
       expect(data).toHaveProperty("ok");
@@ -236,7 +246,10 @@ describe("API 文档 UI 可访问性", () => {
   test("健康检查端点应该正常", async () => {
     if (!E2E_API_BASE_URL) {
       // 进程内调用模式
-      const { response, json } = await callActionsRoute({ method: "GET", pathname: "/api/actions/health" });
+      const { response, json } = await callActionsRoute({
+        method: "GET",
+        pathname: "/api/actions/health",
+      });
       expect(response.ok).toBe(true);
       expect(json).toBeDefined();
       expect((json as any).status).toBe("ok");
