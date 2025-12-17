@@ -1205,7 +1205,7 @@
         },
         "providerGroup": {
           "label": "供应商分组",
-          "placeholder": "留空=继承用户分组"
+          "placeholder": "留空则允许所有 default 分组供应商"
         },
         "cacheTtl": {
           "label": "Cache TTL 覆写",

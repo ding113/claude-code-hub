@@ -1,8 +1,8 @@
 "use client";
 
 import { KeyRound, Loader2, Plus, Trash2, UserCog, UserPlus } from "lucide-react";
-import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -561,7 +561,7 @@ function UnifiedEditDialogInner({
           </div>
         </DialogHeader>
 
-        <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 space-y-8">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 pt-6 pb-6 space-y-8">
           <UserEditSection
             user={{
               id: user?.id ?? 0,
@@ -606,9 +606,9 @@ function UnifiedEditDialogInner({
                   </div>
                   <Button
                     type="button"
-                    variant="ghost"
+                    variant="outline"
                     size="icon"
-                    className="absolute right-2 top-2 h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                    className="absolute right-3 top-3 h-9 w-9 border-border text-muted-foreground hover:text-destructive hover:border-destructive hover:bg-destructive/10"
                     onClick={() => handleRemoveKey(key.id, key.name)}
                     disabled={keys.length === 1}
                     title={
@@ -622,7 +622,7 @@ function UnifiedEditDialogInner({
                         : t("createDialog.removeKey")
                     }
                   >
-                    <Trash2 className="h-4 w-4" aria-hidden="true" />
+                    <Trash2 className="h-5 w-5" aria-hidden="true" />
                   </Button>
                   <KeyEditSection
                     keyData={{

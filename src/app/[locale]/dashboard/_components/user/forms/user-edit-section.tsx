@@ -1,7 +1,7 @@
 "use client";
 
 import { Calendar, Gauge, User } from "lucide-react";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState } from "react";
 import { DatePickerField } from "@/components/form/date-picker-field";
 import { ArrayTagInputField, TextField } from "@/components/form/form-field";
 import { Button } from "@/components/ui/button";
@@ -77,13 +77,10 @@ function toNumberOrNull(value: unknown): number | null {
 }
 
 export function UserEditSection({ user, onChange, translations }: UserEditSectionProps) {
-  const [isPending, startTransition] = useTransition();
   const [rulePickerOpen, setRulePickerOpen] = useState(false);
 
   const emitChange = (field: string, value: any) => {
-    startTransition(() => {
-      onChange(field, value);
-    });
+    onChange(field, value);
   };
 
   const expiresAtValue = useMemo(() => {
@@ -183,37 +180,33 @@ export function UserEditSection({ user, onChange, translations }: UserEditSectio
           <User className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
           <h4 className="text-sm font-semibold">{translations.sections.basicInfo}</h4>
         </div>
-        <div className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2">
           <TextField
             label={translations.fields.username.label}
             placeholder={translations.fields.username.placeholder}
             value={user.name || ""}
             onChange={(val) => emitChange("name", val)}
-            className="max-w-md"
             maxLength={64}
-            disabled={isPending}
           />
 
-          <TextField
-            label={translations.fields.description.label}
-            placeholder={translations.fields.description.placeholder}
-            value={user.description || ""}
-            onChange={(val) => emitChange("description", val)}
-            className="max-w-md"
-            maxLength={200}
-            disabled={isPending}
-          />
+          <div className="space-y-4">
+            <TextField
+              label={translations.fields.description.label}
+              placeholder={translations.fields.description.placeholder}
+              value={user.description || ""}
+              onChange={(val) => emitChange("description", val)}
+              maxLength={200}
+            />
 
-          <ArrayTagInputField
-            label={translations.fields.tags.label}
-            placeholder={translations.fields.tags.placeholder}
-            value={user.tags || []}
-            onChange={(val) => emitChange("tags", val)}
-            className="max-w-md"
-            maxTagLength={32}
-            maxTags={20}
-            disabled={isPending}
-          />
+            <ArrayTagInputField
+              label={translations.fields.tags.label}
+              placeholder={translations.fields.tags.placeholder}
+              value={user.tags || []}
+              onChange={(val) => emitChange("tags", val)}
+              maxTagLength={32}
+              maxTags={20}
+            />
+          </div>
         </div>
       </section>
 
@@ -228,7 +221,6 @@ export function UserEditSection({ user, onChange, translations }: UserEditSectio
             value={expiresAtValue}
             onChange={(val) => emitChange("expiresAt", val ? parseYmdToEndOfDay(val) : null)}
             className="max-w-md"
-            disabled={isPending}
           />
 
           <QuickExpirePicker
@@ -256,7 +248,6 @@ export function UserEditSection({ user, onChange, translations }: UserEditSectio
               variant="outline"
               className="max-w-md"
               onClick={() => setRulePickerOpen(true)}
-              disabled={isPending}
             >
               {translations.limitRules.addRule}
             </Button>

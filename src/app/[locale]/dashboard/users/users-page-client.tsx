@@ -33,7 +33,6 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
   const tUserList = useTranslations("dashboard.userList");
   const tCommon = useTranslations("common");
   const [searchTerm, setSearchTerm] = useState("");
-  const [groupFilter, setGroupFilter] = useState("all");
   const [tagFilter, setTagFilter] = useState("all");
 
   // Onboarding and create dialog state
@@ -78,27 +77,13 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
     setShowCreateDialog(open);
   }, []);
 
-  // Extract unique groups from users (split comma-separated values)
-  const uniqueGroups = useMemo(() => {
-    const allTags = users
-      .map((u) => u.providerGroup)
-      .filter((group): group is string => Boolean(group))
-      .flatMap((group) =>
-        group
-          .split(",")
-          .map((t) => t.trim())
-          .filter(Boolean)
-      );
-    return [...new Set(allTags)].sort();
-  }, [users]);
-
   // Extract unique tags from users
   const uniqueTags = useMemo(() => {
     const tags = users.flatMap((u) => u.tags || []);
     return [...new Set(tags)].sort();
   }, [users]);
 
-  // Filter users based on search term, group filter, and tag filter
+  // Filter users based on search term and tag filter
   const filteredUsers = useMemo(() => {
     return users.filter((user) => {
       // Search filter: match username or tag
@@ -107,22 +92,12 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
         user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (user.tags || []).some((tag) => tag.toLowerCase().includes(searchTerm.toLowerCase()));
 
-      // Group filter (supports comma-separated providerGroup values)
-      const matchesGroup =
-        groupFilter === "all" ||
-        (user.providerGroup
-          ?.split(",")
-          .map((t) => t.trim())
-          .filter(Boolean)
-          .includes(groupFilter) ??
-          false);
-
       // Tag filter
       const matchesTag = tagFilter === "all" || (user.tags || []).includes(tagFilter);
 
-      return matchesSearch && matchesGroup && matchesTag;
+      return matchesSearch && matchesTag;
     });
-  }, [users, searchTerm, groupFilter, tagFilter]);
+  }, [users, searchTerm, tagFilter]);
 
   return (
     <div className="space-y-4">
@@ -151,21 +126,6 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
             className="pl-9"
           />
         </div>
-
-        {/* Group filter */}
-        <Select value={groupFilter} onValueChange={setGroupFilter}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder={t("toolbar.groupFilter")} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t("toolbar.allGroups")}</SelectItem>
-            {uniqueGroups.map((group) => (
-              <SelectItem key={group} value={group}>
-                {group}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
 
         {/* Tag filter */}
         {uniqueTags.length > 0 && (

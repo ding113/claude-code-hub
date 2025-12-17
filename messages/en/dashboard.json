@@ -1140,7 +1140,7 @@
         },
         "providerGroup": {
           "label": "Provider Group",
-          "placeholder": "Leave empty = inherit from user"
+          "placeholder": "Leave empty to allow all default group providers"
         },
         "cacheTtl": {
           "label": "Cache TTL Override",
