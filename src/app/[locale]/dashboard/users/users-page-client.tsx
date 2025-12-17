@@ -1,9 +1,10 @@
 "use client";
 
-import { Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -13,7 +14,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { User, UserDisplay } from "@/types/user";
+import { UnifiedEditDialog } from "../_components/user/unified-edit-dialog";
 import { UserManagementTable } from "../_components/user/user-management-table";
+import { UserOnboardingTour } from "../_components/user/user-onboarding-tour";
+
+const ONBOARDING_KEY = "cch-users-onboarding-seen";
 
 interface UsersPageClientProps {
   users: UserDisplay[];
@@ -23,9 +28,55 @@ interface UsersPageClientProps {
 export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
   const t = useTranslations("dashboard.users");
   const tUiTable = useTranslations("ui.table");
+  const tUserMgmt = useTranslations("dashboard.userManagement");
+  const tKeyList = useTranslations("dashboard.keyList");
+  const tUserList = useTranslations("dashboard.userList");
+  const tCommon = useTranslations("common");
   const [searchTerm, setSearchTerm] = useState("");
   const [groupFilter, setGroupFilter] = useState("all");
   const [tagFilter, setTagFilter] = useState("all");
+
+  // Onboarding and create dialog state
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [hasSeenOnboarding, setHasSeenOnboarding] = useState(true);
+
+  // Check localStorage for onboarding status on mount
+  useEffect(() => {
+    try {
+      if (typeof window !== "undefined" && window.localStorage) {
+        const seen = localStorage.getItem(ONBOARDING_KEY);
+        setHasSeenOnboarding(seen === "true");
+      }
+    } catch {
+      // localStorage not available (e.g., privacy mode)
+      setHasSeenOnboarding(true);
+    }
+  }, []);
+
+  const handleCreateUser = useCallback(() => {
+    if (!hasSeenOnboarding) {
+      setShowOnboarding(true);
+    } else {
+      setShowCreateDialog(true);
+    }
+  }, [hasSeenOnboarding]);
+
+  const handleOnboardingComplete = useCallback(() => {
+    try {
+      if (typeof window !== "undefined" && window.localStorage) {
+        localStorage.setItem(ONBOARDING_KEY, "true");
+      }
+    } catch {
+      // localStorage not available
+    }
+    setHasSeenOnboarding(true);
+    setShowCreateDialog(true);
+  }, []);
+
+  const handleCreateDialogClose = useCallback((open: boolean) => {
+    setShowCreateDialog(open);
+  }, []);
 
   // Extract unique groups from users (split comma-separated values)
   const uniqueGroups = useMemo(() => {
@@ -82,6 +133,10 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
             {t("description", { count: filteredUsers.length })}
           </p>
         </div>
+        <Button onClick={handleCreateUser}>
+          <Plus className="mr-2 h-4 w-4" />
+          {t("toolbar.createUser")}
+        </Button>
       </div>
 
       {/* Toolbar with search and filters */}
@@ -136,54 +191,55 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
         users={filteredUsers}
         currentUser={currentUser}
         currencyCode="USD"
+        onCreateUser={handleCreateUser}
         translations={{
           table: {
             columns: {
-              username: "Username",
-              note: "Note",
-              expiresAt: "Expires",
-              limit5h: "5h Limit",
-              limitDaily: "Daily Limit",
-              limitWeekly: "Weekly Limit",
-              limitMonthly: "Monthly Limit",
-              limitTotal: "Total Limit",
-              limitSessions: "Sessions",
+              username: tUserMgmt("table.columns.username"),
+              note: tUserMgmt("table.columns.note"),
+              expiresAt: tUserMgmt("table.columns.expiresAt"),
+              limit5h: tUserMgmt("table.columns.limit5h"),
+              limitDaily: tUserMgmt("table.columns.limitDaily"),
+              limitWeekly: tUserMgmt("table.columns.limitWeekly"),
+              limitMonthly: tUserMgmt("table.columns.limitMonthly"),
+              limitTotal: tUserMgmt("table.columns.limitTotal"),
+              limitSessions: tUserMgmt("table.columns.limitSessions"),
             },
             keyRow: {
               fields: {
-                name: "Key Name",
-                key: "Key",
-                group: "Group",
-                todayUsage: "Today Calls",
-                todayCost: "Today Cost",
-                lastUsed: "Last Used",
-                actions: "Actions",
+                name: tUserMgmt("table.keyRow.name"),
+                key: tUserMgmt("table.keyRow.key"),
+                group: tUserMgmt("table.keyRow.group"),
+                todayUsage: tUserMgmt("table.keyRow.todayUsage"),
+                todayCost: tUserMgmt("table.keyRow.todayCost"),
+                lastUsed: tUserMgmt("table.keyRow.lastUsed"),
+                actions: tUserMgmt("table.keyRow.actions"),
               },
               actions: {
-                details: "Details",
-                logs: "Logs",
-                edit: "Edit",
-                delete: "Delete",
-                copy: "Copy",
-                show: "Show",
-                hide: "Hide",
+                details: tKeyList("detailsButton"),
+                logs: tKeyList("logsButton"),
+                edit: tCommon("edit"),
+                delete: tCommon("delete"),
+                copy: tCommon("copy"),
+                show: tKeyList("showKeyTooltip"),
+                hide: tKeyList("hideKeyTooltip"),
               },
               status: {
-                enabled: "Enabled",
-                disabled: "Disabled",
+                enabled: tUserList("status.active"),
+                disabled: tUserList("status.disabled"),
               },
             },
-            expand: "Expand all",
-            collapse: "Collapse all",
-            noKeys: "No keys",
-            defaultGroup: "Default",
+            expand: tUserMgmt("table.expand"),
+            collapse: tUserMgmt("table.collapse"),
+            noKeys: tUserMgmt("table.noKeys"),
+            defaultGroup: tUserMgmt("table.defaultGroup"),
           },
           editDialog: {},
           actions: {
-            edit: "Edit",
-            details: "Details",
-            logs: "Logs",
-            delete: "Delete",
+            edit: tCommon("edit"),
+            details: tKeyList("detailsButton"),
+            logs: tKeyList("logsButton"),
+            delete: tCommon("delete"),
           },
           pagination: {
             previous: tUiTable("previousPage"),
@@ -192,6 +248,21 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
             of: "{totalPages}",
           },
         }}
+      />
+
+      {/* Onboarding Tour */}
+      <UserOnboardingTour
+        open={showOnboarding}
+        onOpenChange={setShowOnboarding}
+        onComplete={handleOnboardingComplete}
+      />
+
+      {/* Create User Dialog */}
+      <UnifiedEditDialog
+        open={showCreateDialog}
+        onOpenChange={handleCreateDialogClose}
+        mode="create"
+        currentUser={currentUser}
       />
     </div>
   );

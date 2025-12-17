@@ -1,5 +1,7 @@
 "use client";
 
+import { Users } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +21,7 @@ export interface UserManagementTableProps {
   users: UserDisplay[];
   currentUser?: User;
   currencyCode?: string;
+  onCreateUser?: () => void;
   translations: {
     table: {
       columns: {
@@ -72,8 +75,10 @@ export function UserManagementTable({
   users,
   currentUser,
   currencyCode,
+  onCreateUser,
   translations,
 }: UserManagementTableProps) {
+  const tUserList = useTranslations("dashboard.userList");
   const [currentPage, setCurrentPage] = useState(1);
   const [expandedUsers, setExpandedUsers] = useState<Map<number, boolean>>(
     () => new Map(users.map((user) => [user.id, true]))
@@ -259,9 +264,24 @@ export function UserManagementTable({
               <TableRow>
                 <TableCell
                   colSpan={TOTAL_COLUMNS}
-                  className="py-10 text-center text-muted-foreground"
+                  className="py-16"
                 >
-                  暂无用户数据
+                  <div className="flex flex-col items-center justify-center text-center">
+                    <div className="mb-4 rounded-full bg-muted p-3">
+                      <Users className="h-6 w-6 text-muted-foreground" />
+                    </div>
+                    <h3 className="mb-2 text-lg font-medium">
+                      {tUserList("emptyState.title")}
+                    </h3>
+                    <p className="mb-4 max-w-sm text-sm text-muted-foreground">
+                      {tUserList("emptyState.description")}
+                    </p>
+                    {onCreateUser && (
+                      <Button onClick={onCreateUser}>
+                        {tUserList("emptyState.action")}
+                      </Button>
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
             ) : (
@@ -286,6 +306,7 @@ export function UserManagementTable({
         <UnifiedEditDialog
           open={editDialogOpen}
           onOpenChange={handleEditDialogOpenChange}
+          mode="edit"
           user={editingUser}
           scrollToKeyId={scrollToKeyId}
           currentUser={currentUser}

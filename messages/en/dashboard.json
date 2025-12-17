@@ -833,7 +833,8 @@
       "groupFilter": "Filter by Group",
       "allGroups": "All Groups",
       "tagFilter": "Filter by Tag",
-      "allTags": "All Tags"
+      "allTags": "All Tags",
+      "createUser": "Create User"
     }
   },
   "availability": {
@@ -979,7 +980,55 @@
       "title": "Edit user and keys",
       "userSection": "User settings",
       "keysSection": "Key settings",
-      "scrollToKey": "Scroll to key"
+      "scrollToKey": "Scroll to key",
+      "saveFailed": "Failed to save user",
+      "keySaveFailed": "Failed to save key",
+      "keyDeleteFailed": "Failed to delete key",
+      "saveSuccess": "Changes saved successfully",
+      "operationFailed": "Operation failed",
+      "userDisabled": "User has been disabled",
+      "deleteFailed": "Failed to delete user",
+      "userDeleted": "User has been deleted",
+      "saving": "Saving..."
+    },
+    "createDialog": {
+      "title": "Create user",
+      "saveFailed": "Failed to create user",
+      "keyCreateFailed": "Failed to create key",
+      "createSuccess": "User created successfully",
+      "keysSection": "Keys",
+      "addKey": "Add key",
+      "removeKey": "Remove key",
+      "cannotDeleteLastKey": "Cannot delete the last key",
+      "confirmRemoveKeyTitle": "Remove key",
+      "confirmRemoveKeyDescription": "Are you sure you want to remove the key \"{name}\"?",
+      "creating": "Creating...",
+      "create": "Create"
+    },
+    "onboarding": {
+      "skip": "Skip",
+      "next": "Next",
+      "prev": "Previous",
+      "finish": "Start Creating",
+      "stepIndicator": "Step {current} of {total}",
+      "steps": {
+        "welcome": {
+          "title": "Users & Keys",
+          "description": "Users are the main entities for API access. Each user can have multiple API Keys. User-level limits affect all keys, while key-level limits provide finer control."
+        },
+        "limits": {
+          "title": "Limit Management",
+          "description": "Six types of limits are supported: 5-hour, daily, weekly, monthly, total, and concurrent sessions. Add limit rules as needed to flexibly control usage."
+        },
+        "groups": {
+          "title": "Provider Groups",
+          "description": "Use the group feature to restrict users to specific providers. Key-level groups take priority over user-level groups."
+        },
+        "keyFeatures": {
+          "title": "Key Features",
+          "description": "Each key can be independently configured with Cache TTL override, Web UI login permission, and other advanced features."
+        }
+      }
     },
     "limitRules": {
       "addRule": "Add limit rule",
@@ -1051,6 +1100,70 @@
     "toolbar": {
       "expandAll": "Expand all",
       "collapseAll": "Collapse all"
+    },
+    "userEditSection": {
+      "sections": {
+        "basicInfo": "Basic Information",
+        "expireTime": "Expiration Time",
+        "limitRules": "Limit Rules"
+      },
+      "fields": {
+        "username": {
+          "label": "Username",
+          "placeholder": "Enter username"
+        },
+        "description": {
+          "label": "Note",
+          "placeholder": "Enter note (optional)"
+        },
+        "tags": {
+          "label": "User Tags",
+          "placeholder": "Enter tag (press Enter to add)"
+        }
+      }
+    },
+    "keyEditSection": {
+      "sections": {
+        "basicInfo": "Basic Information",
+        "expireTime": "Expiration Time",
+        "limitRules": "Limit Rules",
+        "specialFeatures": "Special Features"
+      },
+      "fields": {
+        "keyName": {
+          "label": "Key Name",
+          "placeholder": "Enter key name"
+        },
+        "balanceQueryPage": {
+          "label": "Allow Web UI Login",
+          "description": "When disabled, this key can only be used for API calls and cannot login to the admin panel"
+        },
+        "providerGroup": {
+          "label": "Provider Group",
+          "placeholder": "Leave empty = inherit from user"
+        },
+        "cacheTtl": {
+          "label": "Cache TTL Override",
+          "options": {
+            "inherit": "No override (follow provider/client)",
+            "5m": "5m",
+            "1h": "1h"
+          }
+        }
+      },
+      "limitRules": {
+        "title": "Add limit rule",
+        "actions": {
+          "add": "Add rule",
+          "remove": "Remove"
+        },
+        "daily": {
+          "mode": {
+            "fixed": "Fixed time reset",
+            "rolling": "Rolling window (24h)"
+          }
+        }
+      }
     }
   }
 }
