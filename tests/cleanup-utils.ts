@@ -4,9 +4,9 @@
  * 用途：在测试后自动清理创建的测试数据
  */
 
+import { and, isNull, like, or, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { users, keys } from "@/drizzle/schema";
-import { sql, and, like, or, isNull } from "drizzle-orm";
+import { users } from "@/drizzle/schema";
 
 /**
  * 清理所有测试用户及其关联数据
@@ -61,7 +61,7 @@ export async function cleanupTestUsers(options?: {
     `);
 
     // 3. 软删除测试用户
-    const deletedUsers = await db.execute(sql`
+    const _deletedUsers = await db.execute(sql`
       UPDATE users
       SET deleted_at = NOW(), updated_at = NOW()
       WHERE id = ANY(${testUserIds})

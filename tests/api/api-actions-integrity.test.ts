@@ -10,7 +10,7 @@
  *   bun run test:api
  */
 
-import { describe, expect, test, beforeAll } from "vitest";
+import { beforeAll, describe, expect, test } from "vitest";
 import { callActionsRoute } from "../test-utils";
 
 type OpenAPIDocument = {

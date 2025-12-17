@@ -22,7 +22,7 @@
  * - 错误处理
  */
 
-import { describe, expect, test, beforeEach } from "vitest";
+import { beforeEach, describe, expect, test } from "vitest";
 import { callActionsRoute } from "../test-utils";
 
 const ADMIN_TOKEN = process.env.TEST_ADMIN_TOKEN || "test-admin-token";
@@ -360,7 +360,7 @@ describe.skip("Key 管理 - 编辑 Key (editKey)", () => {
     }
 
     // 创建测试 Key
-    const { data: keyData } = await callKeysApi("addKey", {
+    const { data: _keyData } = await callKeysApi("addKey", {
       userId: testUserId,
       name: `待编辑Key_${Date.now()}`,
     });

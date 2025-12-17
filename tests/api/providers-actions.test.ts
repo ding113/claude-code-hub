@@ -24,7 +24,7 @@
  * - 熔断器状态管理
  */
 
-import { describe, expect, test, beforeEach } from "vitest";
+import { beforeEach, describe, expect, test } from "vitest";
 import { callActionsRoute } from "../test-utils";
 
 const ADMIN_TOKEN = process.env.TEST_ADMIN_TOKEN || "test-admin-token";
@@ -252,7 +252,7 @@ describe.skip("供应商管理 - 编辑供应商 (editProvider)", () => {
 
   beforeEach(async () => {
     // 创建测试供应商
-    const { data } = await callProvidersApi("addProvider", {
+    const { data: _data } = await callProvidersApi("addProvider", {
       name: `待编辑供应商_${Date.now()}`,
       url: "https://api.anthropic.com",
       key: "sk-test-key",
