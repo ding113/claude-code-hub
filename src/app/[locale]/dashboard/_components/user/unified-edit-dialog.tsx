@@ -1,12 +1,23 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
+import { Loader2, Plus, Trash2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import { useMemo, useRef, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
-import { editKey } from "@/actions/keys";
-import { editUser, removeUser, toggleUserEnabled } from "@/actions/users";
+import { addKey, editKey, removeKey } from "@/actions/keys";
+import { createUserOnly, editUser, removeUser, toggleUserEnabled } from "@/actions/users";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,18 +37,19 @@ import { UserEditSection } from "./forms/user-edit-section";
 export interface UnifiedEditDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  user: UserDisplay; // 包含 keys 数组
-  scrollToKeyId?: number; // 打开时自动滚动到该 Key
+  mode: "create" | "edit";
+  user?: UserDisplay; // Required in edit mode, optional in create mode
+  scrollToKeyId?: number;
   onSuccess?: () => void;
   currentUser?: { role: string };
 }
 
 const UnifiedUserSchema = UpdateUserSchema.extend({
-  name: z.string().min(1, "用户名不能为空").max(64, "用户名不能超过64个字符"),
+  name: z.string().min(1).max(64),
 });
 
 const UnifiedKeySchema = KeyFormSchema.extend({
-  id: z.number(),
+  id: z.number(), // Negative IDs indicate new keys to be created
 });
 
 const UnifiedEditSchema = z.object({
@@ -46,6 +58,11 @@ const UnifiedEditSchema = z.object({
 });
 
 type UnifiedEditValues = z.infer<typeof UnifiedEditSchema>;
+
+// Generate unique temporary negative IDs for new keys using timestamp + random
+function getNextTempKeyId() {
+  return -Math.floor(Date.now() + Math.random() * 1000);
+}
 
 function parseYmdToEndOfDayIso(value: string): string | undefined {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
@@ -66,7 +83,48 @@ function getKeyExpiresAtIso(expiresAt: string): string | undefined {
   return parsed.toISOString();
 }
 
-function buildDefaultValues(user: UserDisplay): UnifiedEditValues {
+function buildDefaultValues(mode: "create" | "edit", user?: UserDisplay): UnifiedEditValues {
+  if (mode === "create") {
+    return {
+      user: {
+        name: "",
+        note: "",
+        tags: [],
+        expiresAt: undefined,
+        limit5hUsd: null,
+        limitWeeklyUsd: null,
+        limitMonthlyUsd: null,
+        limitTotalUsd: null,
+        limitConcurrentSessions: null,
+        dailyResetMode: "fixed",
+        dailyResetTime: "00:00",
+      },
+      keys: [
+        {
+          id: getNextTempKeyId(),
+          name: "default",
+          expiresAt: undefined,
+          canLoginWebUi: true,
+          providerGroup: "",
+          cacheTtlPreference: "inherit" as const,
+          limit5hUsd: null,
+          limitDailyUsd: null,
+          dailyResetMode: "fixed",
+          dailyResetTime: "00:00",
+          limitWeeklyUsd: null,
+          limitMonthlyUsd: null,
+          limitTotalUsd: null,
+          limitConcurrentSessions: 0,
+        },
+      ],
+    };
+  }
+
+  // Edit mode - user must exist
+  if (!user) {
+    throw new Error("User is required in edit mode");
+  }
+
   return {
     user: {
       name: user.name || "",
@@ -108,17 +166,22 @@ function getFirstErrorMessage(errors: Record<string, string>) {
 
 function UnifiedEditDialogInner({
   onOpenChange,
+  mode,
   user,
   scrollToKeyId,
   onSuccess,
   currentUser,
 }: UnifiedEditDialogProps) {
   const router = useRouter();
+  const t = useTranslations("dashboard.userManagement");
+  const tCommon = useTranslations("common");
   const [isPending, startTransition] = useTransition();
   const keyScrollRef = useRef<HTMLDivElement>(null!);
   const isAdmin = currentUser?.role === "admin";
+  const [deletedKeyIds, setDeletedKeyIds] = useState<number[]>([]);
+  const [keyToDelete, setKeyToDelete] = useState<{ id: number; name: string } | null>(null);
 
-  const defaultValues = useMemo(() => buildDefaultValues(user), [user]);
+  const defaultValues = useMemo(() => buildDefaultValues(mode, user), [mode, user]);
 
   const form = useZodForm({
     schema: UnifiedEditSchema,
@@ -126,53 +189,148 @@ function UnifiedEditDialogInner({
     onSubmit: async (data) => {
       startTransition(async () => {
         try {
-          const userRes = await editUser(user.id, {
-            name: data.user.name,
-            note: data.user.note,
-            tags: data.user.tags,
-            expiresAt: data.user.expiresAt ?? null,
-            limit5hUsd: data.user.limit5hUsd,
-            limitWeeklyUsd: data.user.limitWeeklyUsd,
-            limitMonthlyUsd: data.user.limitMonthlyUsd,
-            limitTotalUsd: data.user.limitTotalUsd,
-            limitConcurrentSessions: data.user.limitConcurrentSessions,
-            dailyResetMode: data.user.dailyResetMode,
-            dailyResetTime: data.user.dailyResetTime,
-          });
-          if (!userRes.ok) {
-            toast.error(userRes.error || "保存失败");
-            return;
-          }
-
-          for (const key of data.keys) {
-            const keyRes = await editKey(key.id, {
-              name: key.name,
-              expiresAt: key.expiresAt || undefined,
-              canLoginWebUi: key.canLoginWebUi,
-              providerGroup: key.providerGroup?.trim() ? key.providerGroup.trim() : null,
-              cacheTtlPreference: key.cacheTtlPreference,
-              limit5hUsd: key.limit5hUsd,
-              limitDailyUsd: key.limitDailyUsd,
-              dailyResetMode: key.dailyResetMode,
-              dailyResetTime: key.dailyResetTime,
-              limitWeeklyUsd: key.limitWeeklyUsd,
-              limitMonthlyUsd: key.limitMonthlyUsd,
-              limitTotalUsd: key.limitTotalUsd,
-              limitConcurrentSessions: key.limitConcurrentSessions,
+          if (mode === "create") {
+            // Create user first
+            const userRes = await createUserOnly({
+              name: data.user.name,
+              note: data.user.note,
+              tags: data.user.tags,
+              expiresAt: data.user.expiresAt ?? null,
+              limit5hUsd: data.user.limit5hUsd,
+              limitWeeklyUsd: data.user.limitWeeklyUsd,
+              limitMonthlyUsd: data.user.limitMonthlyUsd,
+              limitTotalUsd: data.user.limitTotalUsd,
+              limitConcurrentSessions: data.user.limitConcurrentSessions,
+              dailyResetMode: data.user.dailyResetMode,
+              dailyResetTime: data.user.dailyResetTime,
             });
-            if (!keyRes.ok) {
-              toast.error(keyRes.error || `密钥 "${key.name}" 保存失败`);
+            if (!userRes.ok) {
+              toast.error(userRes.error || t("createDialog.saveFailed"));
               return;
             }
+
+            const newUserId = userRes.data.user.id;
+
+            // Create all keys for the new user
+            // If any key creation fails, rollback by deleting the user
+            for (const key of data.keys) {
+              const keyRes = await addKey({
+                userId: newUserId,
+                name: key.name,
+                expiresAt: key.expiresAt || undefined,
+                canLoginWebUi: key.canLoginWebUi,
+                providerGroup: key.providerGroup?.trim() ? key.providerGroup.trim() : null,
+                cacheTtlPreference: key.cacheTtlPreference,
+                limit5hUsd: key.limit5hUsd,
+                limitDailyUsd: key.limitDailyUsd,
+                dailyResetMode: key.dailyResetMode,
+                dailyResetTime: key.dailyResetTime,
+                limitWeeklyUsd: key.limitWeeklyUsd,
+                limitMonthlyUsd: key.limitMonthlyUsd,
+                limitTotalUsd: key.limitTotalUsd,
+                limitConcurrentSessions: key.limitConcurrentSessions,
+              });
+              if (!keyRes.ok) {
+                // Rollback: delete the user since key creation failed
+                try {
+                  await removeUser(newUserId);
+                } catch (rollbackError) {
+                  console.error("[UnifiedEditDialog] rollback failed", rollbackError);
+                }
+                toast.error(keyRes.error || t("createDialog.keyCreateFailed", { name: key.name }));
+                return;
+              }
+            }
+
+            toast.success(t("createDialog.createSuccess"));
+          } else {
+            // Edit mode - user must exist
+            if (!user) return;
+
+            const userRes = await editUser(user.id, {
+              name: data.user.name,
+              note: data.user.note,
+              tags: data.user.tags,
+              expiresAt: data.user.expiresAt ?? null,
+              limit5hUsd: data.user.limit5hUsd,
+              limitWeeklyUsd: data.user.limitWeeklyUsd,
+              limitMonthlyUsd: data.user.limitMonthlyUsd,
+              limitTotalUsd: data.user.limitTotalUsd,
+              limitConcurrentSessions: data.user.limitConcurrentSessions,
+              dailyResetMode: data.user.dailyResetMode,
+              dailyResetTime: data.user.dailyResetTime,
+            });
+            if (!userRes.ok) {
+              toast.error(userRes.error || t("editDialog.saveFailed"));
+              return;
+            }
+
+            // Handle keys: edit existing, create new (negative ID), delete removed
+            for (const key of data.keys) {
+              if (key.id < 0) {
+                // New key - create it
+                const keyRes = await addKey({
+                  userId: user.id,
+                  name: key.name,
+                  expiresAt: key.expiresAt || undefined,
+                  canLoginWebUi: key.canLoginWebUi,
+                  providerGroup: key.providerGroup?.trim() ? key.providerGroup.trim() : null,
+                  cacheTtlPreference: key.cacheTtlPreference,
+                  limit5hUsd: key.limit5hUsd,
+                  limitDailyUsd: key.limitDailyUsd,
+                  dailyResetMode: key.dailyResetMode,
+                  dailyResetTime: key.dailyResetTime,
+                  limitWeeklyUsd: key.limitWeeklyUsd,
+                  limitMonthlyUsd: key.limitMonthlyUsd,
+                  limitTotalUsd: key.limitTotalUsd,
+                  limitConcurrentSessions: key.limitConcurrentSessions,
+                });
+                if (!keyRes.ok) {
+                  toast.error(keyRes.error || t("createDialog.keyCreateFailed", { name: key.name }));
+                  return;
+                }
+              } else {
+                // Existing key - edit it
+                const keyRes = await editKey(key.id, {
+                  name: key.name,
+                  expiresAt: key.expiresAt || undefined,
+                  canLoginWebUi: key.canLoginWebUi,
+                  providerGroup: key.providerGroup?.trim() ? key.providerGroup.trim() : null,
+                  cacheTtlPreference: key.cacheTtlPreference,
+                  limit5hUsd: key.limit5hUsd,
+                  limitDailyUsd: key.limitDailyUsd,
+                  dailyResetMode: key.dailyResetMode,
+                  dailyResetTime: key.dailyResetTime,
+                  limitWeeklyUsd: key.limitWeeklyUsd,
+                  limitMonthlyUsd: key.limitMonthlyUsd,
+                  limitTotalUsd: key.limitTotalUsd,
+                  limitConcurrentSessions: key.limitConcurrentSessions,
+                });
+                if (!keyRes.ok) {
+                  toast.error(keyRes.error || t("editDialog.keySaveFailed", { name: key.name }));
+                  return;
+                }
+              }
+            }
+
+            // Delete removed keys
+            for (const deletedKeyId of deletedKeyIds) {
+              const deleteRes = await removeKey(deletedKeyId);
+              if (!deleteRes.ok) {
+                toast.error(deleteRes.error || t("editDialog.keyDeleteFailed"));
+                return;
+              }
+            }
+
+            toast.success(t("editDialog.saveSuccess"));
           }
 
-          toast.success("保存成功");
           onSuccess?.();
           onOpenChange(false);
           router.refresh();
         } catch (error) {
           console.error("[UnifiedEditDialog] submit failed", error);
-          toast.error("保存失败，请稍后重试");
+          toast.error(mode === "create" ? t("createDialog.saveFailed") : t("editDialog.saveFailed"));
         }
       });
     },
@@ -183,94 +341,109 @@ function UnifiedEditDialogInner({
   const userEditTranslations = useMemo(() => {
     return {
       sections: {
-        basicInfo: "基本信息",
-        expireTime: "过期时间",
-        limitRules: "限额规则",
+        basicInfo: t("userEditSection.sections.basicInfo"),
+        expireTime: t("userEditSection.sections.expireTime"),
+        limitRules: t("userEditSection.sections.limitRules"),
       },
       fields: {
-        username: { label: "用户名", placeholder: "请输入用户名" },
-        description: { label: "备注", placeholder: "请输入备注（可选）" },
-        tags: { label: "用户标签", placeholder: "输入标签（回车添加）" },
+        username: {
+          label: t("userEditSection.fields.username.label"),
+          placeholder: t("userEditSection.fields.username.placeholder"),
+        },
+        description: {
+          label: t("userEditSection.fields.description.label"),
+          placeholder: t("userEditSection.fields.description.placeholder"),
+        },
+        tags: {
+          label: t("userEditSection.fields.tags.label"),
+          placeholder: t("userEditSection.fields.tags.placeholder"),
+        },
       },
       limitRules: {
-        addRule: "添加规则",
+        addRule: t("limitRules.addRule"),
         ruleTypes: {
-          limit5h: "5小时限额",
-          limitDaily: "每日限额",
-          limitWeekly: "周限额",
-          limitMonthly: "月限额",
-          limitTotal: "总限额",
-          limitSessions: "并发 Session",
+          limit5h: t("limitRules.ruleTypes.limit5h"),
+          limitDaily: t("limitRules.ruleTypes.limitDaily"),
+          limitWeekly: t("limitRules.ruleTypes.limitWeekly"),
+          limitMonthly: t("limitRules.ruleTypes.limitMonthly"),
+          limitTotal: t("limitRules.ruleTypes.limitTotal"),
+          limitSessions: t("limitRules.ruleTypes.limitSessions"),
         },
         quickValues: {
-          "10": "$10",
-          "50": "$50",
-          "100": "$100",
-          "500": "$500",
+          "10": t("limitRules.quickValues.10"),
+          "50": t("limitRules.quickValues.50"),
+          "100": t("limitRules.quickValues.100"),
+          "500": t("limitRules.quickValues.500"),
         },
       },
       quickExpire: {
-        week: "一周后",
-        month: "一月后",
-        threeMonths: "三月后",
-        year: "一年后",
+        week: t("quickExpire.oneWeek"),
+        month: t("quickExpire.oneMonth"),
+        threeMonths: t("quickExpire.threeMonths"),
+        year: t("quickExpire.oneYear"),
       },
     };
-  }, []);
+  }, [t]);
 
   const keyEditTranslations = useMemo(() => {
     return {
       sections: {
-        basicInfo: "基本信息",
-        expireTime: "过期时间",
-        limitRules: "限额规则",
-        specialFeatures: "特殊功能",
+        basicInfo: t("keyEditSection.sections.basicInfo"),
+        expireTime: t("keyEditSection.sections.expireTime"),
+        limitRules: t("keyEditSection.sections.limitRules"),
+        specialFeatures: t("keyEditSection.sections.specialFeatures"),
       },
       fields: {
-        keyName: { label: "密钥名称", placeholder: "请输入密钥名称" },
-        balanceQueryPage: {
-          label: "允许登录 Web UI",
-          description: "关闭后，此 Key 仅可用于 API 调用，无法登录管理后台",
+        keyName: {
+          label: t("keyEditSection.fields.keyName.label"),
+          placeholder: t("keyEditSection.fields.keyName.placeholder"),
         },
-        providerGroup: { label: "供应商分组", placeholder: "留空=继承用户分组" },
+        balanceQueryPage: {
+          label: t("keyEditSection.fields.balanceQueryPage.label"),
+          description: t("keyEditSection.fields.balanceQueryPage.description"),
+        },
+        providerGroup: {
+          label: t("keyEditSection.fields.providerGroup.label"),
+          placeholder: t("keyEditSection.fields.providerGroup.placeholder"),
+        },
         cacheTtl: {
-          label: "Cache TTL 覆写",
+          label: t("keyEditSection.fields.cacheTtl.label"),
           options: {
-            inherit: "不覆写（跟随供应商/客户端）",
-            "5m": "5m",
-            "1h": "1h",
+            inherit: t("keyEditSection.fields.cacheTtl.options.inherit"),
+            "5m": t("keyEditSection.fields.cacheTtl.options.5m"),
+            "1h": t("keyEditSection.fields.cacheTtl.options.1h"),
           },
         },
       },
       limitRules: {
-        title: "添加限额规则",
+        title: t("keyEditSection.limitRules.title"),
         limitTypes: {
-          limit5h: "5小时限额",
-          limitDaily: "每日限额",
-          limitWeekly: "周限额",
-          limitMonthly: "月限额",
-          limitTotal: "总限额",
-          limitSessions: "并发 Session",
+          limit5h: t("limitRules.ruleTypes.limit5h"),
+          limitDaily: t("limitRules.ruleTypes.limitDaily"),
+          limitWeekly: t("limitRules.ruleTypes.limitWeekly"),
+          limitMonthly: t("limitRules.ruleTypes.limitMonthly"),
+          limitTotal: t("limitRules.ruleTypes.limitTotal"),
+          limitSessions: t("limitRules.ruleTypes.limitSessions"),
         },
         actions: {
-          add: "添加规则",
-          remove: "移除",
+          add: t("keyEditSection.limitRules.actions.add"),
+          remove: t("keyEditSection.limitRules.actions.remove"),
         },
         daily: {
           mode: {
-            fixed: "固定时间重置",
-            rolling: "滚动窗口（24小时）",
+            fixed: t("keyEditSection.limitRules.daily.mode.fixed"),
+            rolling: t("keyEditSection.limitRules.daily.mode.rolling"),
           },
         },
       },
       quickExpire: {
-        week: "一周后",
-        month: "一月后",
-        threeMonths: "三月后",
-        year: "一年后",
+        week: t("quickExpire.oneWeek"),
+        month: t("quickExpire.oneMonth"),
+        threeMonths: t("quickExpire.threeMonths"),
+        year: t("quickExpire.oneYear"),
       },
     };
-  }, []);
+  }, [t]);
 
   const handleUserChange = (field: string, value: any) => {
     const prev = form.values.user || (defaultValues.user as UnifiedEditValues["user"]);
@@ -296,25 +469,67 @@ function UnifiedEditDialogInner({
     form.setValue("keys", nextKeys);
   };
 
+  const handleAddKey = () => {
+    const prevKeys = (form.values.keys || defaultValues.keys) as UnifiedEditValues["keys"];
+    const newKey = {
+      id: getNextTempKeyId(),
+      name: "",
+      expiresAt: undefined,
+      canLoginWebUi: true,
+      providerGroup: "",
+      cacheTtlPreference: "inherit" as const,
+      limit5hUsd: null,
+      limitDailyUsd: null,
+      dailyResetMode: "fixed" as const,
+      dailyResetTime: "00:00",
+      limitWeeklyUsd: null,
+      limitMonthlyUsd: null,
+      limitTotalUsd: null,
+      limitConcurrentSessions: 0,
+    };
+    form.setValue("keys", [...prevKeys, newKey]);
+  };
+
+  const handleRemoveKey = (keyId: number, keyName: string) => {
+    if (keyId < 0) {
+      // New key (not yet saved) - remove directly without confirmation
+      const prevKeys = (form.values.keys || defaultValues.keys) as UnifiedEditValues["keys"];
+      form.setValue("keys", prevKeys.filter((k) => k.id !== keyId));
+    } else {
+      // Existing key - show confirmation dialog
+      setKeyToDelete({ id: keyId, name: keyName });
+    }
+  };
+
+  const confirmRemoveKey = () => {
+    if (!keyToDelete) return;
+    const prevKeys = (form.values.keys || defaultValues.keys) as UnifiedEditValues["keys"];
+    form.setValue("keys", prevKeys.filter((k) => k.id !== keyToDelete.id));
+    setDeletedKeyIds((prev) => [...prev, keyToDelete.id]);
+    setKeyToDelete(null);
+  };
+
   const keys = (form.values.keys || defaultValues.keys) as UnifiedEditValues["keys"];
   const currentUserDraft = form.values.user || defaultValues.user;
 
   const handleDisableUser = async () => {
+    if (!user) return;
     const res = await toggleUserEnabled(user.id, false);
     if (!res.ok) {
-      throw new Error(res.error || "操作失败，请稍后重试");
+      throw new Error(res.error || t("editDialog.operationFailed"));
     }
-    toast.success("用户已禁用");
+    toast.success(t("editDialog.userDisabled"));
     onSuccess?.();
     router.refresh();
   };
 
   const handleDeleteUser = async () => {
+    if (!user) return;
     const res = await removeUser(user.id);
     if (!res.ok) {
-      throw new Error(res.error || "删除失败，请稍后重试");
+      throw new Error(res.error || t("editDialog.deleteFailed"));
     }
-    toast.success("用户已删除");
+    toast.success(t("editDialog.userDeleted"));
     onSuccess?.();
     onOpenChange(false);
     router.refresh();
@@ -324,13 +539,15 @@ function UnifiedEditDialogInner({
     <DialogContent className="max-w-[70vw] max-h-[80vh] p-0 overflow-hidden">
       <form onSubmit={form.handleSubmit} className="flex h-full flex-col">
         <DialogHeader className="px-6 pt-6">
-          <DialogTitle>编辑用户与密钥</DialogTitle>
+          <DialogTitle>
+            {mode === "create" ? t("createDialog.title") : t("editDialog.title")}
+          </DialogTitle>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-8">
           <UserEditSection
             user={{
-              id: user.id,
+              id: user?.id ?? 0,
               name: currentUserDraft.name || "",
               description: currentUserDraft.note || "",
               tags: currentUserDraft.tags || [],
@@ -350,10 +567,32 @@ function UnifiedEditDialogInner({
           <Separator />
 
           <div className="space-y-4">
-            <div className="text-sm font-semibold">密钥编辑</div>
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-semibold">{t("createDialog.keysSection")}</div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleAddKey}
+              >
+                <Plus className="mr-1 h-4 w-4" />
+                {t("createDialog.addKey")}
+              </Button>
+            </div>
             <div className="space-y-8">
               {keys.map((key) => (
-                <div key={key.id} className="rounded-lg border border-border bg-card p-4">
+                <div key={key.id} className="relative rounded-lg border border-border bg-card p-4">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-2 top-2 h-8 w-8 text-muted-foreground hover:text-destructive"
+                    onClick={() => handleRemoveKey(key.id, key.name)}
+                    disabled={keys.length === 1}
+                    title={keys.length === 1 ? t("createDialog.cannotDeleteLastKey") : t("createDialog.removeKey")}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                   <KeyEditSection
                     keyData={{
                       id: key.id,
@@ -381,7 +620,7 @@ function UnifiedEditDialogInner({
             </div>
           </div>
 
-          {isAdmin && (
+          {mode === "edit" && isAdmin && user && (
             <DangerZone
               userId={user.id}
               userName={user.name}
@@ -402,14 +641,32 @@ function UnifiedEditDialogInner({
             onClick={() => onOpenChange(false)}
             disabled={isPending}
           >
-            取消
+            {tCommon("cancel")}
           </Button>
           <Button type="submit" disabled={isPending}>
             {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {isPending ? "保存中..." : "保存"}
+            {isPending
+              ? (mode === "create" ? t("createDialog.creating") : t("editDialog.saving"))
+              : (mode === "create" ? t("createDialog.create") : tCommon("save"))}
           </Button>
         </DialogFooter>
       </form>
+
+      {/* Delete key confirmation dialog */}
+      <AlertDialog open={!!keyToDelete} onOpenChange={(open) => !open && setKeyToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("createDialog.confirmRemoveKeyTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("createDialog.confirmRemoveKeyDescription", { name: keyToDelete?.name || "" })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{tCommon("cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmRemoveKey}>{tCommon("confirm")}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DialogContent>
   );
 }
@@ -417,7 +674,9 @@ function UnifiedEditDialogInner({
 export function UnifiedEditDialog(props: UnifiedEditDialogProps) {
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      {props.open ? <UnifiedEditDialogInner key={props.user.id} {...props} /> : null}
+      {props.open ? (
+        <UnifiedEditDialogInner key={props.mode === "edit" ? props.user?.id : "create"} {...props} />
+      ) : null}
     </Dialog>
   );
 }

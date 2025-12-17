@@ -428,6 +428,169 @@ export async function addUser(data: {
   }
 }
 
+// Create user without default key (for unified edit dialog create mode)
+export async function createUserOnly(data: {
+  name: string;
+  note?: string;
+  providerGroup?: string | null;
+  tags?: string[];
+  rpm?: number;
+  dailyQuota?: number;
+  limit5hUsd?: number | null;
+  limitWeeklyUsd?: number | null;
+  limitMonthlyUsd?: number | null;
+  limitTotalUsd?: number | null;
+  limitConcurrentSessions?: number | null;
+  dailyResetMode?: "fixed" | "rolling";
+  dailyResetTime?: string;
+  isEnabled?: boolean;
+  expiresAt?: Date | null;
+  allowedClients?: string[];
+}): Promise<
+  ActionResult<{
+    user: {
+      id: number;
+      name: string;
+      note?: string;
+      role: string;
+      isEnabled: boolean;
+      expiresAt: Date | null;
+      rpm: number;
+      dailyQuota: number;
+      providerGroup?: string;
+      tags: string[];
+      limit5hUsd: number | null;
+      limitWeeklyUsd: number | null;
+      limitMonthlyUsd: number | null;
+      limitTotalUsd: number | null;
+      limitConcurrentSessions: number | null;
+    };
+  }>
+> {
+  try {
+    const tError = await getTranslations("errors");
+
+    // Permission check: only admin can add users
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    // Validate data with Zod
+    const validationResult = CreateUserSchema.safeParse({
+      name: data.name,
+      note: data.note || "",
+      providerGroup: data.providerGroup || "",
+      tags: data.tags || [],
+      rpm: data.rpm || USER_DEFAULTS.RPM,
+      dailyQuota: data.dailyQuota ?? USER_DEFAULTS.DAILY_QUOTA,
+      limit5hUsd: data.limit5hUsd,
+      limitWeeklyUsd: data.limitWeeklyUsd,
+      limitMonthlyUsd: data.limitMonthlyUsd,
+      limitTotalUsd: data.limitTotalUsd,
+      limitConcurrentSessions: data.limitConcurrentSessions,
+      dailyResetMode: data.dailyResetMode,
+      dailyResetTime: data.dailyResetTime,
+      isEnabled: data.isEnabled,
+      expiresAt: data.expiresAt,
+      allowedClients: data.allowedClients || [],
+    });
+
+    if (!validationResult.success) {
+      const issue = validationResult.error.issues[0];
+      const { code, params } = await import("@/lib/utils/error-messages").then((m) =>
+        m.zodErrorToCode(issue.code, {
+          minimum: "minimum" in issue ? issue.minimum : undefined,
+          maximum: "maximum" in issue ? issue.maximum : undefined,
+          type: "expected" in issue ? issue.expected : undefined,
+          received: "received" in issue ? issue.received : undefined,
+          validation: "validation" in issue ? issue.validation : undefined,
+          path: issue.path,
+          message: "message" in issue ? issue.message : undefined,
+          params: "params" in issue ? issue.params : undefined,
+        })
+      );
+
+      let translatedParams = params;
+      if (issue.code === "custom" && params?.field && typeof params.field === "string") {
+        try {
+          translatedParams = {
+            ...params,
+            field: tError(params.field as string),
+          };
+        } catch {
+          // Keep original if translation fails
+        }
+      }
+
+      return {
+        ok: false,
+        error: formatZodError(validationResult.error),
+        errorCode: code,
+        errorParams: translatedParams,
+      };
+    }
+
+    const validatedData = validationResult.data;
+
+    const newUser = await createUser({
+      name: validatedData.name,
+      description: validatedData.note || "",
+      providerGroup: validatedData.providerGroup || null,
+      tags: validatedData.tags,
+      rpm: validatedData.rpm,
+      dailyQuota: validatedData.dailyQuota,
+      limit5hUsd: validatedData.limit5hUsd ?? undefined,
+      limitWeeklyUsd: validatedData.limitWeeklyUsd ?? undefined,
+      limitMonthlyUsd: validatedData.limitMonthlyUsd ?? undefined,
+      limitTotalUsd: validatedData.limitTotalUsd ?? undefined,
+      limitConcurrentSessions: validatedData.limitConcurrentSessions ?? undefined,
+      dailyResetMode: validatedData.dailyResetMode,
+      dailyResetTime: validatedData.dailyResetTime,
+      isEnabled: validatedData.isEnabled,
+      expiresAt: validatedData.expiresAt ?? null,
+      allowedClients: validatedData.allowedClients ?? [],
+    });
+
+    revalidatePath("/dashboard");
+    return {
+      ok: true,
+      data: {
+        user: {
+          id: newUser.id,
+          name: newUser.name,
+          note: newUser.description || undefined,
+          role: newUser.role,
+          isEnabled: newUser.isEnabled,
+          expiresAt: newUser.expiresAt ?? null,
+          rpm: newUser.rpm,
+          dailyQuota: newUser.dailyQuota,
+          providerGroup: newUser.providerGroup || undefined,
+          tags: newUser.tags || [],
+          limit5hUsd: newUser.limit5hUsd ?? null,
+          limitWeeklyUsd: newUser.limitWeeklyUsd ?? null,
+          limitMonthlyUsd: newUser.limitMonthlyUsd ?? null,
+          limitTotalUsd: newUser.limitTotalUsd ?? null,
+          limitConcurrentSessions: newUser.limitConcurrentSessions ?? null,
+        },
+      },
+    };
+  } catch (error) {
+    logger.error("Failed to create user:", error);
+    const tError = await getTranslations("errors");
+    const message = error instanceof Error ? error.message : tError("CREATE_USER_FAILED");
+    return {
+      ok: false,
+      error: message,
+      errorCode: ERROR_CODES.CREATE_FAILED,
+    };
+  }
+}
+
 // 更新用户
 export async function editUser(
   userId: number,

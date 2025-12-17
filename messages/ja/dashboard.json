@@ -804,7 +804,8 @@
       "groupFilter": "グループでフィルター",
       "allGroups": "すべてのグループ",
       "tagFilter": "タグでフィルター",
-      "allTags": "すべてのタグ"
+      "allTags": "すべてのタグ",
+      "createUser": "ユーザーを作成"
     }
   },
   "availability": {
@@ -950,7 +951,55 @@
       "title": "ユーザーとキーを編集",
       "userSection": "ユーザー設定",
       "keysSection": "キー設定",
-      "scrollToKey": "キーへスクロール"
+      "scrollToKey": "キーへスクロール",
+      "saveFailed": "ユーザーの保存に失敗しました",
+      "keySaveFailed": "キーの保存に失敗しました",
+      "keyDeleteFailed": "キーの削除に失敗しました",
+      "saveSuccess": "変更が保存されました",
+      "operationFailed": "操作に失敗しました",
+      "userDisabled": "ユーザーが無効化されました",
+      "deleteFailed": "ユーザーの削除に失敗しました",
+      "userDeleted": "ユーザーが削除されました",
+      "saving": "保存中..."
+    },
+    "createDialog": {
+      "title": "ユーザーを作成",
+      "saveFailed": "ユーザーの作成に失敗しました",
+      "keyCreateFailed": "キーの作成に失敗しました",
+      "createSuccess": "ユーザーが作成されました",
+      "keysSection": "キー",
+      "addKey": "キーを追加",
+      "removeKey": "キーを削除",
+      "cannotDeleteLastKey": "最後のキーは削除できません",
+      "confirmRemoveKeyTitle": "キーを削除",
+      "confirmRemoveKeyDescription": "キー \"{name}\" を削除してもよろしいですか?",
+      "creating": "作成中...",
+      "create": "作成"
+    },
+    "onboarding": {
+      "skip": "スキップ",
+      "next": "次へ",
+      "prev": "前へ",
+      "finish": "作成を開始",
+      "stepIndicator": "ステップ {current} / {total}",
+      "steps": {
+        "welcome": {
+          "title": "ユーザーとキー",
+          "description": "ユーザーは API アクセスの主体です。各ユーザーは複数の API キーを持つことができます。ユーザーレベルの上限はすべてのキーに影響し、キーレベルの上限でより細かく制御できます。"
+        },
+        "limits": {
+          "title": "上限管理",
+          "description": "6 種類の上限をサポート：5 時間、日次、週次、月次、総上限、同時セッション。上限ルールを必要に応じて追加し、柔軟に使用量を制御できます。"
+        },
+        "groups": {
+          "title": "プロバイダーグループ",
+          "description": "グループ機能を使用して、ユーザーが特定のプロバイダーのみを使用するよう制限できます。キーレベルのグループはユーザーレベルのグループより優先されます。"
+        },
+        "keyFeatures": {
+          "title": "キーの特殊機能",
+          "description": "各キーは、キャッシュ TTL の上書き、Web UI へのログイン許可など、高度な機能を個別に設定できます。"
+        }
+      }
     },
     "limitRules": {
       "addRule": "上限ルールを追加",
@@ -1022,6 +1071,70 @@
     "toolbar": {
       "expandAll": "すべて展開",
       "collapseAll": "すべて折りたたむ"
+    },
+    "userEditSection": {
+      "sections": {
+        "basicInfo": "基本情報",
+        "expireTime": "有効期限",
+        "limitRules": "制限ルール"
+      },
+      "fields": {
+        "username": {
+          "label": "ユーザー名",
+          "placeholder": "ユーザー名を入力してください"
+        },
+        "description": {
+          "label": "メモ",
+          "placeholder": "メモを入力（任意）"
+        },
+        "tags": {
+          "label": "ユーザータグ",
+          "placeholder": "タグを入力（Enterで追加）"
+        }
+      }
+    },
+    "keyEditSection": {
+      "sections": {
+        "basicInfo": "基本情報",
+        "expireTime": "有効期限",
+        "limitRules": "制限ルール",
+        "specialFeatures": "特殊機能"
+      },
+      "fields": {
+        "keyName": {
+          "label": "キー名",
+          "placeholder": "キー名を入力してください"
+        },
+        "balanceQueryPage": {
+          "label": "Web UIログインを許可",
+          "description": "無効にすると、このキーはAPI呼び出しにのみ使用でき、管理画面へのログインはできません"
+        },
+        "providerGroup": {
+          "label": "プロバイダーグループ",
+          "placeholder": "空欄=ユーザーから継承"
+        },
+        "cacheTtl": {
+          "label": "Cache TTL上書き",
+          "options": {
+            "inherit": "上書きしない（プロバイダー/クライアントに従う）",
+            "5m": "5m",
+            "1h": "1h"
+          }
+        }
+      },
+      "limitRules": {
+        "title": "制限ルールを追加",
+        "actions": {
+          "add": "ルールを追加",
+          "remove": "削除"
+        },
+        "daily": {
+          "mode": {
+            "fixed": "固定時間リセット",
+            "rolling": "ローリングウィンドウ（24時間）"
+          }
+        }
+      }
     }
   }
 }
