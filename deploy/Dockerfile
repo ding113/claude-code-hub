@@ -5,7 +5,7 @@ WORKDIR /app
 
 FROM build-base AS deps
 COPY package.json ./
-RUN npm install --production=false
+RUN npm install --production=false --legacy-peer-deps
 
 FROM deps AS build
 COPY . .
