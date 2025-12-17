@@ -1111,7 +1111,7 @@
         },
         "providerGroup": {
           "label": "プロバイダーグループ",
-          "placeholder": "空欄=ユーザーから継承"
+          "placeholder": "空欄の場合は全ての default グループのプロバイダーを許可"
         },
         "cacheTtl": {
           "label": "Cache TTL上書き",

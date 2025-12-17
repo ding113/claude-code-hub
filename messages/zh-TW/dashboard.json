@@ -1112,7 +1112,7 @@
         },
         "providerGroup": {
           "label": "供應商分組",
-          "placeholder": "留空=繼承使用者分組"
+          "placeholder": "留空則允許所有 default 分組供應商"
         },
         "cacheTtl": {
           "label": "Cache TTL 覆寫",

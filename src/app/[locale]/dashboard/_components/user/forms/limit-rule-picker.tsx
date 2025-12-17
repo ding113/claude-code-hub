@@ -61,6 +61,7 @@ const LIMIT_TYPE_OPTIONS: Array<{ type: LimitType; fallbackLabel: string }> = [
 ];
 
 const QUICK_VALUES = [10, 50, 100, 500] as const;
+const SESSION_QUICK_VALUES = [5, 10, 15, 20] as const;
 
 function getTranslation(translations: Record<string, unknown>, path: string, fallback: string) {
   const value = path.split(".").reduce<unknown>((acc, key) => {
@@ -209,7 +210,7 @@ export function LimitRulePicker({
               />
 
               <div className="flex flex-wrap gap-2">
-                {QUICK_VALUES.map((v) => (
+                {(type === "limitSessions" ? SESSION_QUICK_VALUES : QUICK_VALUES).map((v) => (
                   <Button
                     key={v}
                     type="button"
@@ -217,7 +218,7 @@ export function LimitRulePicker({
                     size="sm"
                     onClick={() => setRawValue(String(v))}
                   >
-                    ${v}
+                    {type === "limitSessions" ? v : `$${v}`}
                   </Button>
                 ))}
               </div>
