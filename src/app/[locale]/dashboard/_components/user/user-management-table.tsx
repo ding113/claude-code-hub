@@ -262,24 +262,17 @@ export function UserManagementTable({
           <TableBody>
             {paginatedUsers.length === 0 ? (
               <TableRow>
-                <TableCell
-                  colSpan={TOTAL_COLUMNS}
-                  className="py-16"
-                >
+                <TableCell colSpan={TOTAL_COLUMNS} className="py-16">
                   <div className="flex flex-col items-center justify-center text-center">
                     <div className="mb-4 rounded-full bg-muted p-3">
                       <Users className="h-6 w-6 text-muted-foreground" />
                     </div>
-                    <h3 className="mb-2 text-lg font-medium">
-                      {tUserList("emptyState.title")}
-                    </h3>
+                    <h3 className="mb-2 text-lg font-medium">{tUserList("emptyState.title")}</h3>
                     <p className="mb-4 max-w-sm text-sm text-muted-foreground">
                       {tUserList("emptyState.description")}
                     </p>
                     {onCreateUser && (
-                      <Button onClick={onCreateUser}>
-                        {tUserList("emptyState.action")}
-                      </Button>
+                      <Button onClick={onCreateUser}>{tUserList("emptyState.action")}</Button>
                     )}
                   </div>
                 </TableCell>
