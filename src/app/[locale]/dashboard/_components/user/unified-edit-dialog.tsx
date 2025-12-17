@@ -597,7 +597,10 @@ function UnifiedEditDialogInner({
             </div>
             <div className="space-y-8">
               {keys.map((key, index) => (
-                <div key={key.id} className="relative rounded-xl border border-border bg-card p-4 pt-6 shadow-sm">
+                <div
+                  key={key.id}
+                  className="relative rounded-xl border border-border bg-card p-4 pt-6 shadow-sm"
+                >
                   <div className="absolute -top-3 left-4 z-10 px-2 py-0.5 bg-background border border-border rounded-md text-xs font-medium text-muted-foreground">
                     Key #{index + 1}
                   </div>
