@@ -1,5 +1,5 @@
 {
-  "id": "1a16f7c5-53ad-4866-b9c6-0a2ed4a61ed2",
+  "id": "9be2ede5-422c-44a7-a144-3ef1ca483887",
   "prevId": "b883052c-550d-497c-9b62-6154c46132ea",
   "version": "7",
   "dialect": "postgresql",
@@ -1768,8 +1768,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "allowed_models": {
-          "name": "allowed_models",
+        "allowed_clients": {
+          "name": "allowed_clients",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false,
