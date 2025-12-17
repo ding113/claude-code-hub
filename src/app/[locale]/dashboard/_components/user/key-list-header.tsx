@@ -293,7 +293,9 @@ export function KeyListHeader({
                     : t("allowedModels.noRestrictions")}
                 </span>
                 {activeUser.allowedModels && activeUser.allowedModels.length > 0 && (
-                  <span className="text-foreground ml-1">{activeUser.allowedModels.join(", ")}</span>
+                  <span className="text-foreground ml-1">
+                    {activeUser.allowedModels.join(", ")}
+                  </span>
                 )}
               </div>
             )}
