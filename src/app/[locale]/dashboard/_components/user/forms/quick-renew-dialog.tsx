@@ -96,7 +96,11 @@ export function QuickRenewDialog({
         const newDate = addDays(new Date(), days);
         // Set to end of day
         newDate.setHours(23, 59, 59, 999);
-        const result = await onConfirm(user.id, newDate, !user.isEnabled && enableOnRenew ? true : undefined);
+        const result = await onConfirm(
+          user.id,
+          newDate,
+          !user.isEnabled && enableOnRenew ? true : undefined
+        );
         if (result.ok) {
           onOpenChange(false);
         }
@@ -119,7 +123,11 @@ export function QuickRenewDialog({
       }
       const newDate = new Date(year, month - 1, day);
       newDate.setHours(23, 59, 59, 999);
-      const result = await onConfirm(user.id, newDate, !user.isEnabled && enableOnRenew ? true : undefined);
+      const result = await onConfirm(
+        user.id,
+        newDate,
+        !user.isEnabled && enableOnRenew ? true : undefined
+      );
       if (result.ok) {
         onOpenChange(false);
       }
