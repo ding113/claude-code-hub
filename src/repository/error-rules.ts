@@ -441,7 +441,8 @@ const DEFAULT_ERROR_RULES = [
   {
     pattern: "Tool names must be unique",
     category: "validation_error",
-    description: "Duplicate tool names in request (client error, related to MCP server configuration)",
+    description:
+      "Duplicate tool names in request (client error, related to MCP server configuration)",
     matchType: "contains" as const,
     isDefault: true,
     isEnabled: true,
