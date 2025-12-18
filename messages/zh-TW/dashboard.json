@@ -945,8 +945,8 @@
         "lastUsed": "最後使用",
         "actions": "操作",
         "fields": {
-          "callsLabel": "呼叫次數",
-          "costLabel": "花費"
+          "callsLabel": "今日呼叫",
+          "costLabel": "今日消耗"
         }
       },
       "expand": "展開",
@@ -974,8 +974,8 @@
         "cost": "消費金額"
       },
       "noData": "今日暫無使用記錄",
-      "totalCalls": "總呼叫",
-      "totalCost": "總消費"
+      "totalCalls": "今日總呼叫",
+      "totalCost": "今日總消費"
     },
     "editDialog": {
       "title": "編輯使用者與金鑰",
@@ -1134,6 +1134,10 @@
       "expandAll": "全部展開",
       "collapseAll": "全部收起"
     },
+    "keyStatus": {
+      "enabled": "啟用",
+      "disabled": "停用"
+    },
     "userEditSection": {
       "sections": {
         "basicInfo": "基本資訊",
@@ -1191,11 +1195,13 @@
         },
         "enableStatus": {
           "label": "啟用狀態",
-          "description": "停用後此金鑰將無法使用"
+          "description": "停用後此金鑰將無法使用。停用後僅管理員可啟用。"
         },
         "balanceQueryPage": {
           "label": "獨立個人用量頁面",
-          "description": "啟用後，此金鑰可使用獨立的個人用量查詢頁面"
+          "description": "啟用後，此金鑰可使用獨立的個人用量查詢頁面",
+          "descriptionEnabled": "啟用後，此金鑰在登入時將進入獨立的個人用量頁面。但不可修改自己金鑰的供應商分組。",
+          "descriptionDisabled": "關閉後，使用者將無法進入個人獨立用量頁面 UI。但可在受限的 Web UI功能中修改自己金鑰的供應商分組。"
         },
         "providerGroup": {
           "label": "供應商分組",

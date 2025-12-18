@@ -507,9 +507,15 @@ function UnifiedEditDialogInner({
           label: t("keyEditSection.fields.keyName.label"),
           placeholder: t("keyEditSection.fields.keyName.placeholder"),
         },
+        enableStatus: {
+          label: t("keyEditSection.fields.enableStatus.label"),
+          description: t("keyEditSection.fields.enableStatus.description"),
+        },
         balanceQueryPage: {
           label: t("keyEditSection.fields.balanceQueryPage.label"),
           description: t("keyEditSection.fields.balanceQueryPage.description"),
+          descriptionEnabled: t("keyEditSection.fields.balanceQueryPage.descriptionEnabled"),
+          descriptionDisabled: t("keyEditSection.fields.balanceQueryPage.descriptionDisabled"),
         },
         providerGroup: {
           label: t("keyEditSection.fields.providerGroup.label"),
@@ -533,6 +539,12 @@ function UnifiedEditDialogInner({
           limitMonthly: t("limitRules.ruleTypes.limitMonthly"),
           limitTotal: t("limitRules.ruleTypes.limitTotal"),
           limitSessions: t("limitRules.ruleTypes.limitSessions"),
+        },
+        quickValues: {
+          "10": t("limitRules.quickValues.10"),
+          "50": t("limitRules.quickValues.50"),
+          "100": t("limitRules.quickValues.100"),
+          "500": t("limitRules.quickValues.500"),
         },
         actions: {
           add: t("keyEditSection.limitRules.actions.add"),
@@ -804,7 +816,7 @@ function UnifiedEditDialogInner({
                             isEnabled: key.isEnabled ?? true,
                             expiresAt: key.expiresAt ? new Date(key.expiresAt) : null,
                             canLoginWebUi: key.canLoginWebUi ?? false,
-                            providerGroup: key.providerGroup || null,
+                            providerGroup: key.providerGroup || "",
                             cacheTtlPreference: key.cacheTtlPreference ?? "inherit",
                             limit5hUsd: key.limit5hUsd ?? null,
                             limitDailyUsd: key.limitDailyUsd ?? null,
