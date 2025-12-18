@@ -93,7 +93,12 @@ export function QuickRenewDialog({
       if (!user) return;
       setIsSubmitting(true);
       try {
-        const newDate = addDays(new Date(), days);
+        // Base date: max(current time, original expiry time)
+        const baseDate =
+          user.expiresAt && new Date(user.expiresAt) > new Date()
+            ? new Date(user.expiresAt)
+            : new Date();
+        const newDate = addDays(baseDate, days);
         // Set to end of day
         newDate.setHours(23, 59, 59, 999);
         const result = await onConfirm(

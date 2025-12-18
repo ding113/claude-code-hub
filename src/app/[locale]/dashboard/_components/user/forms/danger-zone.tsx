@@ -129,7 +129,7 @@ export function DangerZone({ userId, userName, onDelete, translations }: DangerZ
                     translations,
                     "delete.confirmDescription",
                     `This will delete user "${userName}" and all associated data. This action cannot be undone.`
-                  )}
+                  ).replace("{userName}", userName)}
                 </AlertDialogDescription>
               </AlertDialogHeader>
 
@@ -145,7 +145,7 @@ export function DangerZone({ userId, userName, onDelete, translations }: DangerZ
                     translations,
                     "delete.confirmHint",
                     `Type "${userName}" to confirm deletion`
-                  )}
+                  ).replace("{userName}", userName)}
                   autoComplete="off"
                 />
               </div>

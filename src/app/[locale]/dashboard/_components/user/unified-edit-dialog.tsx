@@ -881,7 +881,7 @@ function UnifiedEditDialogInner({
               userId={user.id}
               userName={user.name}
               onDelete={handleDeleteUser}
-              translations={{}}
+              translations={t.raw("dangerZone") as Record<string, unknown>}
             />
           )}
         </div>
