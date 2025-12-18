@@ -172,8 +172,9 @@ export class ProxyRateLimitGuard {
     if (!key5hCheck.allowed) {
       logger.warn(`[RateLimit] Key 5h limit exceeded: key=${key.id}, ${key5hCheck.reason}`);
 
-      const { currentUsage, limitValue, resetTime } =
-        ProxyRateLimitGuard.parse5hLimitInfo(key5hCheck.reason!);
+      const { currentUsage, limitValue, resetTime } = ProxyRateLimitGuard.parse5hLimitInfo(
+        key5hCheck.reason!
+      );
 
       const { getLocale } = await import("next-intl/server");
       const locale = await getLocale();
@@ -205,8 +206,9 @@ export class ProxyRateLimitGuard {
     if (!user5hCheck.allowed) {
       logger.warn(`[RateLimit] User 5h limit exceeded: user=${user.id}, ${user5hCheck.reason}`);
 
-      const { currentUsage, limitValue, resetTime } =
-        ProxyRateLimitGuard.parse5hLimitInfo(user5hCheck.reason!);
+      const { currentUsage, limitValue, resetTime } = ProxyRateLimitGuard.parse5hLimitInfo(
+        user5hCheck.reason!
+      );
 
       const { getLocale } = await import("next-intl/server");
       const locale = await getLocale();
@@ -270,8 +272,9 @@ export class ProxyRateLimitGuard {
     if (!keyWeeklyCheck.allowed) {
       logger.warn(`[RateLimit] Key weekly limit exceeded: key=${key.id}, ${keyWeeklyCheck.reason}`);
 
-      const { currentUsage, limitValue, resetTime } =
-        ProxyRateLimitGuard.parseWeeklyLimitInfo(keyWeeklyCheck.reason!);
+      const { currentUsage, limitValue, resetTime } = ProxyRateLimitGuard.parseWeeklyLimitInfo(
+        keyWeeklyCheck.reason!
+      );
 
       const { getLocale } = await import("next-intl/server");
       const locale = await getLocale();
@@ -305,8 +308,9 @@ export class ProxyRateLimitGuard {
         `[RateLimit] User weekly limit exceeded: user=${user.id}, ${userWeeklyCheck.reason}`
       );
 
-      const { currentUsage, limitValue, resetTime } =
-        ProxyRateLimitGuard.parseWeeklyLimitInfo(userWeeklyCheck.reason!);
+      const { currentUsage, limitValue, resetTime } = ProxyRateLimitGuard.parseWeeklyLimitInfo(
+        userWeeklyCheck.reason!
+      );
 
       const { getLocale } = await import("next-intl/server");
       const locale = await getLocale();
@@ -340,8 +344,9 @@ export class ProxyRateLimitGuard {
         `[RateLimit] Key monthly limit exceeded: key=${key.id}, ${keyMonthlyCheck.reason}`
       );
 
-      const { currentUsage, limitValue, resetTime } =
-        ProxyRateLimitGuard.parseMonthlyLimitInfo(keyMonthlyCheck.reason!);
+      const { currentUsage, limitValue, resetTime } = ProxyRateLimitGuard.parseMonthlyLimitInfo(
+        keyMonthlyCheck.reason!
+      );
 
       const { getLocale } = await import("next-intl/server");
       const locale = await getLocale();
@@ -375,8 +380,9 @@ export class ProxyRateLimitGuard {
         `[RateLimit] User monthly limit exceeded: user=${user.id}, ${userMonthlyCheck.reason}`
       );
 
-      const { currentUsage, limitValue, resetTime } =
-        ProxyRateLimitGuard.parseMonthlyLimitInfo(userMonthlyCheck.reason!);
+      const { currentUsage, limitValue, resetTime } = ProxyRateLimitGuard.parseMonthlyLimitInfo(
+        userMonthlyCheck.reason!
+      );
 
       const { getLocale } = await import("next-intl/server");
       const locale = await getLocale();
