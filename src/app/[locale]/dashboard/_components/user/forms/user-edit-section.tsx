@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { DatePickerField } from "@/components/form/date-picker-field";
 import { ArrayTagInputField, TextField } from "@/components/form/form-field";
 import { Button } from "@/components/ui/button";
+import { AccessRestrictionsSection } from "./access-restrictions-section";
 import { type DailyResetMode, LimitRulePicker, type LimitType } from "./limit-rule-picker";
 import { type LimitRuleDisplayItem, LimitRulesDisplay } from "./limit-rules-display";
 import { QuickExpirePicker } from "./quick-expire-picker";
@@ -25,14 +26,19 @@ export interface UserEditSectionProps {
     limitConcurrentSessions?: number | null;
     dailyResetMode?: "fixed" | "rolling";
     dailyResetTime?: string;
+    // 访问限制字段
+    allowedClients?: string[];
+    allowedModels?: string[];
   };
   showProviderGroup?: boolean;
+  modelSuggestions?: string[];
   onChange: (field: string, value: any) => void;
   translations: {
     sections: {
       basicInfo: string;
       expireTime: string;
       limitRules: string;
+      accessRestrictions: string;
     };
     fields: {
       username: { label: string; placeholder: string };
@@ -42,7 +48,19 @@ export interface UserEditSectionProps {
         label: string;
         placeholder: string;
       };
+      allowedClients: {
+        label: string;
+        description: string;
+        customLabel: string;
+        customPlaceholder: string;
+      };
+      allowedModels: {
+        label: string;
+        placeholder: string;
+        description: string;
+      };
     };
+    presetClients: Record<string, string>;
     limitRules: {
       addRule: string;
       ruleTypes: Record<string, string>;
@@ -85,6 +103,7 @@ function toNumberOrNull(value: unknown): number | null {
 export function UserEditSection({
   user,
   showProviderGroup,
+  modelSuggestions = [],
   onChange,
   translations,
 }: UserEditSectionProps) {
@@ -276,6 +295,23 @@ export function UserEditSection({
           translations={limitRuleTranslations}
         />
       </section>
+
+      <AccessRestrictionsSection
+        allowedClients={user.allowedClients || []}
+        allowedModels={user.allowedModels || []}
+        modelSuggestions={modelSuggestions}
+        onChange={onChange}
+        translations={{
+          sections: {
+            accessRestrictions: translations.sections.accessRestrictions,
+          },
+          fields: {
+            allowedClients: translations.fields.allowedClients,
+            allowedModels: translations.fields.allowedModels,
+          },
+          presetClients: translations.presetClients,
+        }}
+      />
     </div>
   );
 }

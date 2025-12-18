@@ -1166,7 +1166,8 @@
       "sections": {
         "basicInfo": "Basic Information",
         "expireTime": "Expiration Time",
-        "limitRules": "Limit Rules"
+        "limitRules": "Limit Rules",
+        "accessRestrictions": "Access Restrictions"
       },
       "fields": {
         "username": {
@@ -1184,7 +1185,24 @@
         "providerGroup": {
           "label": "Provider Group (Legacy)",
           "placeholder": "Enter provider group or leave empty"
+        },
+        "allowedClients": {
+          "label": "Client Restrictions",
+          "description": "Restrict which CLI/IDE clients can use this account. Empty = no restriction.",
+          "customLabel": "Custom Client Pattern",
+          "customPlaceholder": "Enter pattern (e.g., 'xcode', 'my-ide')"
+        },
+        "allowedModels": {
+          "label": "Model Restrictions",
+          "placeholder": "Enter model name or select from dropdown",
+          "description": "Restrict which AI models this user can access. Empty = no restriction."
         }
+      },
+      "presetClients": {
+        "claude-cli": "Claude Code CLI",
+        "gemini-cli": "Gemini CLI",
+        "factory-cli": "Droid CLI",
+        "codex-cli": "Codex CLI"
       }
     },
     "keyEditSection": {

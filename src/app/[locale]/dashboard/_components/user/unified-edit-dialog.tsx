@@ -16,6 +16,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { addKey, editKey, removeKey } from "@/actions/keys";
+import { getFilterOptions } from "@/actions/usage-logs";
 import { createUserOnly, editUser, removeUser, toggleUserEnabled } from "@/actions/users";
 import {
   AlertDialog,
@@ -58,6 +59,8 @@ export interface UnifiedEditDialogProps {
 const UnifiedUserSchema = UpdateUserSchema.extend({
   name: z.string().min(1).max(64),
   providerGroup: z.string().max(50).nullable().optional(),
+  allowedClients: z.array(z.string().max(64)).max(50).optional().default([]),
+  allowedModels: z.array(z.string().max(64)).max(50).optional().default([]),
 });
 
 const UnifiedKeySchema = KeyFormSchema.extend({
@@ -111,6 +114,8 @@ function buildDefaultValues(mode: "create" | "edit", user?: UserDisplay): Unifie
         limitConcurrentSessions: null,
         dailyResetMode: "fixed",
         dailyResetTime: "00:00",
+        allowedClients: [],
+        allowedModels: [],
       },
       keys: [
         {
@@ -153,6 +158,8 @@ function buildDefaultValues(mode: "create" | "edit", user?: UserDisplay): Unifie
       limitConcurrentSessions: user.limitConcurrentSessions ?? null,
       dailyResetMode: user.dailyResetMode ?? "fixed",
       dailyResetTime: user.dailyResetTime ?? "00:00",
+      allowedClients: user.allowedClients || [],
+      allowedModels: user.allowedModels || [],
     },
     keys: user.keys.map((key) => ({
       id: key.id,
@@ -205,6 +212,21 @@ function UnifiedEditDialogInner({
     if (scrollToKeyId) return new Set([scrollToKeyId]);
     return new Set(); // All collapsed
   });
+  const [modelSuggestions, setModelSuggestions] = useState<string[]>([]);
+
+  // Fetch model suggestions for access restrictions
+  useEffect(() => {
+    getFilterOptions()
+      .then((res) => {
+        if (res.ok && res.data) {
+          setModelSuggestions(res.data.models);
+        }
+      })
+      .catch(() => {
+        // Silently fail - model suggestions are optional enhancement
+        // User can still manually type model names
+      });
+  }, []);
 
   // Auto-scroll to newly added key
   useEffect(() => {
@@ -252,6 +274,8 @@ function UnifiedEditDialogInner({
               limitConcurrentSessions: data.user.limitConcurrentSessions,
               dailyResetMode: data.user.dailyResetMode,
               dailyResetTime: data.user.dailyResetTime,
+              allowedClients: data.user.allowedClients,
+              allowedModels: data.user.allowedModels,
             });
             if (!userRes.ok) {
               toast.error(userRes.error || t("createDialog.saveFailed"));
@@ -309,6 +333,8 @@ function UnifiedEditDialogInner({
               limitConcurrentSessions: data.user.limitConcurrentSessions,
               dailyResetMode: data.user.dailyResetMode,
               dailyResetTime: data.user.dailyResetTime,
+              allowedClients: data.user.allowedClients,
+              allowedModels: data.user.allowedModels,
             });
             if (!userRes.ok) {
               toast.error(userRes.error || t("editDialog.saveFailed"));
@@ -403,6 +429,7 @@ function UnifiedEditDialogInner({
         basicInfo: t("userEditSection.sections.basicInfo"),
         expireTime: t("userEditSection.sections.expireTime"),
         limitRules: t("userEditSection.sections.limitRules"),
+        accessRestrictions: t("userEditSection.sections.accessRestrictions"),
       },
       fields: {
         username: {
@@ -423,6 +450,23 @@ function UnifiedEditDialogInner({
               placeholder: t("userEditSection.fields.providerGroup.placeholder"),
             }
           : undefined,
+        allowedClients: {
+          label: t("userEditSection.fields.allowedClients.label"),
+          description: t("userEditSection.fields.allowedClients.description"),
+          customLabel: t("userEditSection.fields.allowedClients.customLabel"),
+          customPlaceholder: t("userEditSection.fields.allowedClients.customPlaceholder"),
+        },
+        allowedModels: {
+          label: t("userEditSection.fields.allowedModels.label"),
+          placeholder: t("userEditSection.fields.allowedModels.placeholder"),
+          description: t("userEditSection.fields.allowedModels.description"),
+        },
+      },
+      presetClients: {
+        "claude-cli": t("userEditSection.presetClients.claude-cli"),
+        "gemini-cli": t("userEditSection.presetClients.gemini-cli"),
+        "factory-cli": t("userEditSection.presetClients.factory-cli"),
+        "codex-cli": t("userEditSection.presetClients.codex-cli"),
       },
       limitRules: {
         addRule: t("limitRules.addRule"),
@@ -655,10 +699,13 @@ function UnifiedEditDialogInner({
               limitConcurrentSessions: currentUserDraft.limitConcurrentSessions ?? null,
               dailyResetMode: currentUserDraft.dailyResetMode ?? "fixed",
               dailyResetTime: currentUserDraft.dailyResetTime ?? "00:00",
+              allowedClients: currentUserDraft.allowedClients || [],
+              allowedModels: currentUserDraft.allowedModels || [],
             }}
             showProviderGroup={showUserProviderGroup}
             onChange={handleUserChange}
             translations={userEditTranslations}
+            modelSuggestions={modelSuggestions}
           />
 
           <Separator />

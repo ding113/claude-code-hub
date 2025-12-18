@@ -1137,7 +1137,8 @@
       "sections": {
         "basicInfo": "Основная информация",
         "expireTime": "Срок действия",
-        "limitRules": "Правила лимитов"
+        "limitRules": "Правила лимитов",
+        "accessRestrictions": "Ограничения доступа"
       },
       "fields": {
         "username": {
@@ -1155,7 +1156,24 @@
         "providerGroup": {
           "label": "Группа провайдеров (устаревшее)",
           "placeholder": "Введите группу провайдеров или оставьте пустым"
+        },
+        "allowedClients": {
+          "label": "Ограничения клиентов",
+          "description": "Ограничить CLI/IDE клиенты для этой учетной записи. Пусто = без ограничений.",
+          "customLabel": "Пользовательский шаблон клиента",
+          "customPlaceholder": "Введите шаблон (например, 'xcode', 'my-ide')"
+        },
+        "allowedModels": {
+          "label": "Ограничения моделей",
+          "placeholder": "Введите название модели или выберите из списка",
+          "description": "Ограничить AI модели для пользователя. Пусто = без ограничений."
         }
+      },
+      "presetClients": {
+        "claude-cli": "Claude Code CLI",
+        "gemini-cli": "Gemini CLI",
+        "factory-cli": "Droid CLI",
+        "codex-cli": "Codex CLI"
       }
     },
     "keyEditSection": {
@@ -1186,7 +1204,10 @@
             "1h": "1h"
           }
         },
-        "enableStatus": "Статус"
+        "enableStatus": {
+          "label": "Статус включения",
+          "description": "Отключённые ключи не могут использоваться"
+        }
       },
       "limitRules": {
         "title": "Добавить правило лимита",

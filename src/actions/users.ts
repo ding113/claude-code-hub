@@ -446,6 +446,7 @@ export async function createUserOnly(data: {
   isEnabled?: boolean;
   expiresAt?: Date | null;
   allowedClients?: string[];
+  allowedModels?: string[];
 }): Promise<
   ActionResult<{
     user: {
@@ -498,6 +499,7 @@ export async function createUserOnly(data: {
       isEnabled: data.isEnabled,
       expiresAt: data.expiresAt,
       allowedClients: data.allowedClients || [],
+      allowedModels: data.allowedModels || [],
     });
 
     if (!validationResult.success) {
@@ -554,6 +556,7 @@ export async function createUserOnly(data: {
       isEnabled: validatedData.isEnabled,
       expiresAt: validatedData.expiresAt ?? null,
       allowedClients: validatedData.allowedClients ?? [],
+      allowedModels: validatedData.allowedModels ?? [],
     });
 
     revalidatePath("/dashboard");
