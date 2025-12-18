@@ -146,18 +146,23 @@ export function ApiTestButton({
     const currentProviderType = apiFormatToProviderType[apiFormat];
     if (!currentProviderType) return;
 
-    getProviderTestPresets(currentProviderType).then((result) => {
-      if (result.ok && result.data) {
-        setPresets(result.data);
-        // Auto-select first preset if available
-        if (result.data.length > 0 && !selectedPreset) {
-          setSelectedPreset(result.data[0].id);
-          setSuccessContains(result.data[0].defaultSuccessContains);
+    getProviderTestPresets(currentProviderType)
+      .then((result) => {
+        if (result.ok && result.data) {
+          setPresets(result.data);
+          // Auto-select first preset if available
+          if (result.data.length > 0 && !selectedPreset) {
+            setSelectedPreset(result.data[0].id);
+            setSuccessContains(result.data[0].defaultSuccessContains);
+          }
+        } else {
+          setPresets([]);
         }
-      } else {
+      })
+      .catch((err) => {
+        console.error("[ApiTestButton] Failed to load presets:", err);
         setPresets([]);
-      }
-    });
+      });
   }, [apiFormat, apiFormatToProviderType, selectedPreset]);
 
   useEffect(() => {

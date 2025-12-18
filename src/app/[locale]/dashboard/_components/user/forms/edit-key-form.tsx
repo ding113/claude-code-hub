@@ -52,11 +52,13 @@ export function EditKeyForm({ keyData, user, onSuccess }: EditKeyFormProps) {
 
   // Load provider group suggestions
   useEffect(() => {
-    if (user?.id) {
-      getAvailableProviderGroups(user.id).then(setProviderGroupSuggestions);
-    } else {
-      getAvailableProviderGroups().then(setProviderGroupSuggestions);
-    }
+    const loadGroups = user?.id
+      ? getAvailableProviderGroups(user.id)
+      : getAvailableProviderGroups();
+
+    loadGroups.then(setProviderGroupSuggestions).catch((err) => {
+      console.error("[EditKeyForm] Failed to load provider groups:", err);
+    });
   }, [user?.id]);
 
   const formatExpiresAt = (expiresAt: string) => {
