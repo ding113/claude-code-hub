@@ -7,10 +7,19 @@ import type { ProxySession } from "./session";
 
 export class ProxyRateLimitGuard {
   /**
-   * 检查限流（用户层 + Key 层）
+   * 检查限流（Key 层 + User 层）
    *
-   * 改进：不再返回 Response，而是抛出 RateLimitError
-   * 让统一的 ProxyErrorHandler 处理错误响应和数据库日志
+   * 检查顺序（基于 Codex 专业分析）：
+   * 1-2. 永久硬限制：Key 总限额 → User 总限额
+   * 3-4. 资源/频率保护：Key 并发 → User RPM
+   * 5-7. 短期周期限额：Key 5h → User 5h → User 每日
+   * 8-11. 中长期周期限额：Key 周 → User 周 → Key 月 → User 月
+   *
+   * 设计原则：
+   * - 硬上限优先于周期上限
+   * - 同一窗口内 Key → User 交替
+   * - 资源/频率保护足够靠前
+   * - 高触发概率窗口优先
    */
   static async ensure(session: ProxySession): Promise<void> {
     const user = session.authState?.user;
@@ -18,69 +27,40 @@ export class ProxyRateLimitGuard {
 
     if (!user || !key) return;
 
-    // ========== 用户层限流检查 ==========
+    // ========== 第一层：永久硬限制 ==========
 
-    // 1. 检查用户 RPM 限制
-    const rpmCheck = await RateLimitService.checkUserRPM(user.id, user.rpm);
-    if (!rpmCheck.allowed) {
-      logger.warn(`[RateLimit] User RPM exceeded: user=${user.id}, ${rpmCheck.reason}`);
+    // 1. Key 总限额（用户明确要求优先检查）
+    const keyTotalCheck = await RateLimitService.checkTotalCostLimit(
+      key.id,
+      "key",
+      key.limitTotalUsd ?? null,
+      key.key
+    );
 
-      // 计算重置时间（下一分钟开始）
-      const resetTime = new Date(Date.now() + 60 * 1000).toISOString();
+    if (!keyTotalCheck.allowed) {
+      logger.warn(`[RateLimit] Key total limit exceeded: key=${key.id}, ${keyTotalCheck.reason}`);
 
-      // 获取国际化错误消息
       const { getLocale } = await import("next-intl/server");
       const locale = await getLocale();
-      const message = await getErrorMessageServer(locale, ERROR_CODES.RATE_LIMIT_RPM_EXCEEDED, {
-        current: String(rpmCheck.current || 0),
-        limit: String(user.rpm),
-        resetTime,
+      const message = await getErrorMessageServer(locale, ERROR_CODES.RATE_LIMIT_TOTAL_EXCEEDED, {
+        current: (keyTotalCheck.current || 0).toFixed(4),
+        limit: (key.limitTotalUsd || 0).toFixed(4),
       });
 
-      throw new RateLimitError(
-        "rate_limit_error",
-        message,
-        "rpm",
-        rpmCheck.current || 0,
-        user.rpm,
-        resetTime,
-        null
-      );
-    }
-
-    // 2. 检查用户每日额度
-    const dailyCheck = await RateLimitService.checkUserDailyCost(user.id, user.dailyQuota);
-    if (!dailyCheck.allowed) {
-      logger.warn(`[RateLimit] User daily limit exceeded: user=${user.id}, ${dailyCheck.reason}`);
-
-      // 计算重置时间（明天 00:00）
-      const resetTime = getDailyResetTime().toISOString();
-
-      // 获取国际化错误消息
-      const { getLocale } = await import("next-intl/server");
-      const locale = await getLocale();
-      const message = await getErrorMessageServer(
-        locale,
-        ERROR_CODES.RATE_LIMIT_DAILY_QUOTA_EXCEEDED,
-        {
-          current: (dailyCheck.current || 0).toFixed(4),
-          limit: user.dailyQuota.toFixed(4),
-          resetTime,
-        }
-      );
+      const noReset = "9999-12-31T23:59:59.999Z";
 
       throw new RateLimitError(
         "rate_limit_error",
         message,
-        "daily_quota",
-        dailyCheck.current || 0,
-        user.dailyQuota,
-        resetTime,
+        "usd_total",
+        keyTotalCheck.current || 0,
+        key.limitTotalUsd || 0,
+        noReset,
         null
       );
     }
 
-    // 3. 检查用户总消费限额（无重置时间）
+    // 2. User 总限额（账号级永久预算）
     const userTotalCheck = await RateLimitService.checkTotalCostLimit(
       user.id,
       "user",
@@ -113,84 +93,9 @@ export class ProxyRateLimitGuard {
       );
     }
 
-    // ========== Key 层限流检查 ==========
+    // ========== 第二层：资源/频率保护 ==========
 
-    // 4. 检查 Key 金额限制
-    const costCheck = await RateLimitService.checkCostLimits(key.id, "key", {
-      limit_5h_usd: key.limit5hUsd,
-      limit_daily_usd: key.limitDailyUsd,
-      daily_reset_mode: key.dailyResetMode,
-      daily_reset_time: key.dailyResetTime,
-      limit_weekly_usd: key.limitWeeklyUsd,
-      limit_monthly_usd: key.limitMonthlyUsd,
-    });
-
-    if (!costCheck.allowed) {
-      logger.warn(`[RateLimit] Key cost limit exceeded: key=${key.id}, ${costCheck.reason}`);
-
-      // 解析限流类型、当前使用量、限制值和重置时间
-      const { limitType, currentUsage, limitValue, resetTime } =
-        ProxyRateLimitGuard.parseCostLimitInfo(costCheck.reason!);
-
-      // 获取国际化错误消息
-      const { getLocale } = await import("next-intl/server");
-      const locale = await getLocale();
-      const errorCode =
-        limitType === "usd_5h"
-          ? ERROR_CODES.RATE_LIMIT_5H_EXCEEDED
-          : limitType === "usd_weekly"
-            ? ERROR_CODES.RATE_LIMIT_WEEKLY_EXCEEDED
-            : ERROR_CODES.RATE_LIMIT_MONTHLY_EXCEEDED;
-
-      const message = await getErrorMessageServer(locale, errorCode, {
-        current: currentUsage.toFixed(4),
-        limit: limitValue.toFixed(4),
-        resetTime,
-      });
-
-      throw new RateLimitError(
-        "rate_limit_error",
-        message,
-        limitType,
-        currentUsage,
-        limitValue,
-        resetTime,
-        null
-      );
-    }
-
-    // 5. 检查 Key 总消费限额
-    const keyTotalCheck = await RateLimitService.checkTotalCostLimit(
-      key.id,
-      "key",
-      key.limitTotalUsd ?? null,
-      key.key
-    );
-
-    if (!keyTotalCheck.allowed) {
-      logger.warn(`[RateLimit] Key total limit exceeded: key=${key.id}, ${keyTotalCheck.reason}`);
-
-      const { getLocale } = await import("next-intl/server");
-      const locale = await getLocale();
-      const message = await getErrorMessageServer(locale, ERROR_CODES.RATE_LIMIT_TOTAL_EXCEEDED, {
-        current: (keyTotalCheck.current || 0).toFixed(4),
-        limit: (key.limitTotalUsd || 0).toFixed(4),
-      });
-
-      const noReset = "9999-12-31T23:59:59.999Z";
-
-      throw new RateLimitError(
-        "rate_limit_error",
-        message,
-        "usd_total",
-        keyTotalCheck.current || 0,
-        key.limitTotalUsd || 0,
-        noReset,
-        null
-      );
-    }
-
-    // 6. 检查 Key 并发 Session 限制
+    // 3. Key 并发 Session（避免创建上游连接）
     const sessionCheck = await RateLimitService.checkSessionLimit(
       key.id,
       "key",
@@ -200,15 +105,12 @@ export class ProxyRateLimitGuard {
     if (!sessionCheck.allowed) {
       logger.warn(`[RateLimit] Key session limit exceeded: key=${key.id}, ${sessionCheck.reason}`);
 
-      // 解析当前并发数和限制值
       const { currentUsage, limitValue } = ProxyRateLimitGuard.parseSessionLimitInfo(
         sessionCheck.reason!
       );
 
-      // 并发限制没有固定的重置时间，使用当前时间
       const resetTime = new Date().toISOString();
 
-      // 获取国际化错误消息
       const { getLocale } = await import("next-intl/server");
       const locale = await getLocale();
       const message = await getErrorMessageServer(
@@ -230,59 +132,329 @@ export class ProxyRateLimitGuard {
         null
       );
     }
-  }
 
-  /**
-   * 从 reason 字符串解析限流类型、使用量和重置时间
-   *
-   * 示例 reason:
-   * - "Key 5小时消费上限已达到（15.2000/15）"
-   * - "Key 周消费上限已达到（150.0000/150）"
-   * - "Key 月消费上限已达到（500.0000/500）"
-   */
-  private static parseCostLimitInfo(reason: string): {
-    limitType: "usd_5h" | "usd_weekly" | "usd_monthly";
-    currentUsage: number;
-    limitValue: number;
-    resetTime: string;
-  } {
-    // 解析格式：（current/limit）
-    const match = reason.match(/（([\d.]+)\/([\d.]+)）/);
-    const currentUsage = match ? parseFloat(match[1]) : 0;
-    const limitValue = match ? parseFloat(match[2]) : 0;
+    // 4. User RPM（频率闸门，挡住高频噪声）
+    const rpmCheck = await RateLimitService.checkUserRPM(user.id, user.rpm);
+    if (!rpmCheck.allowed) {
+      logger.warn(`[RateLimit] User RPM exceeded: user=${user.id}, ${rpmCheck.reason}`);
 
-    if (reason.includes("5小时")) {
-      // 5小时滚动窗口：重置时间是 5 小时后
-      const resetTime = new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString();
-      return { limitType: "usd_5h", currentUsage, limitValue, resetTime };
-    } else if (reason.includes("周")) {
-      // 自然周：重置时间是下周一 00:00
-      const resetInfo = getResetInfo("weekly");
-      const resetTime = resetInfo.resetAt?.toISOString() || new Date().toISOString();
-      return { limitType: "usd_weekly", currentUsage, limitValue, resetTime };
-    } else {
-      // 自然月：重置时间是下月 1 号 00:00
-      const resetInfo = getResetInfo("monthly");
-      const resetTime = resetInfo.resetAt?.toISOString() || new Date().toISOString();
-      return { limitType: "usd_monthly", currentUsage, limitValue, resetTime };
+      const resetTime = new Date(Date.now() + 60 * 1000).toISOString();
+
+      const { getLocale } = await import("next-intl/server");
+      const locale = await getLocale();
+      const message = await getErrorMessageServer(locale, ERROR_CODES.RATE_LIMIT_RPM_EXCEEDED, {
+        current: String(rpmCheck.current || 0),
+        limit: String(user.rpm),
+        resetTime,
+      });
+
+      throw new RateLimitError(
+        "rate_limit_error",
+        message,
+        "rpm",
+        rpmCheck.current || 0,
+        user.rpm,
+        resetTime,
+        null
+      );
+    }
+
+    // ========== 第三层：短期周期限额（混合检查）==========
+
+    // 5. Key 5h 限额（最短周期，最易触发）
+    const key5hCheck = await RateLimitService.checkCostLimits(key.id, "key", {
+      limit_5h_usd: key.limit5hUsd,
+      limit_daily_usd: null, // 仅检查 5h
+      limit_weekly_usd: null,
+      limit_monthly_usd: null,
+    });
+
+    if (!key5hCheck.allowed) {
+      logger.warn(`[RateLimit] Key 5h limit exceeded: key=${key.id}, ${key5hCheck.reason}`);
+
+      const { currentUsage, limitValue, resetTime } =
+        ProxyRateLimitGuard.parse5hLimitInfo(key5hCheck.reason!);
+
+      const { getLocale } = await import("next-intl/server");
+      const locale = await getLocale();
+      const message = await getErrorMessageServer(locale, ERROR_CODES.RATE_LIMIT_5H_EXCEEDED, {
+        current: currentUsage.toFixed(4),
+        limit: limitValue.toFixed(4),
+        resetTime,
+      });
+
+      throw new RateLimitError(
+        "rate_limit_error",
+        message,
+        "usd_5h",
+        currentUsage,
+        limitValue,
+        resetTime,
+        null
+      );
+    }
+
+    // 6. User 5h 限额（防止多 Key 合力在短窗口打爆用户）
+    const user5hCheck = await RateLimitService.checkCostLimits(user.id, "user", {
+      limit_5h_usd: user.limit5hUsd ?? null,
+      limit_daily_usd: null,
+      limit_weekly_usd: null,
+      limit_monthly_usd: null,
+    });
+
+    if (!user5hCheck.allowed) {
+      logger.warn(`[RateLimit] User 5h limit exceeded: user=${user.id}, ${user5hCheck.reason}`);
+
+      const { currentUsage, limitValue, resetTime } =
+        ProxyRateLimitGuard.parse5hLimitInfo(user5hCheck.reason!);
+
+      const { getLocale } = await import("next-intl/server");
+      const locale = await getLocale();
+      const message = await getErrorMessageServer(locale, ERROR_CODES.RATE_LIMIT_5H_EXCEEDED, {
+        current: currentUsage.toFixed(4),
+        limit: limitValue.toFixed(4),
+        resetTime,
+      });
+
+      throw new RateLimitError(
+        "rate_limit_error",
+        message,
+        "usd_5h",
+        currentUsage,
+        limitValue,
+        resetTime,
+        null
+      );
+    }
+
+    // 7. User 每日额度（User 独有的常用预算）
+    const dailyCheck = await RateLimitService.checkUserDailyCost(user.id, user.dailyQuota);
+    if (!dailyCheck.allowed) {
+      logger.warn(`[RateLimit] User daily limit exceeded: user=${user.id}, ${dailyCheck.reason}`);
+
+      const resetTime = getDailyResetTime().toISOString();
+
+      const { getLocale } = await import("next-intl/server");
+      const locale = await getLocale();
+      const message = await getErrorMessageServer(
+        locale,
+        ERROR_CODES.RATE_LIMIT_DAILY_QUOTA_EXCEEDED,
+        {
+          current: (dailyCheck.current || 0).toFixed(4),
+          limit: user.dailyQuota.toFixed(4),
+          resetTime,
+        }
+      );
+
+      throw new RateLimitError(
+        "rate_limit_error",
+        message,
+        "daily_quota",
+        dailyCheck.current || 0,
+        user.dailyQuota,
+        resetTime,
+        null
+      );
+    }
+
+    // ========== 第四层：中长期周期限额（混合检查）==========
+
+    // 8. Key 周限额
+    const keyWeeklyCheck = await RateLimitService.checkCostLimits(key.id, "key", {
+      limit_5h_usd: null,
+      limit_daily_usd: null,
+      limit_weekly_usd: key.limitWeeklyUsd,
+      limit_monthly_usd: null,
+    });
+
+    if (!keyWeeklyCheck.allowed) {
+      logger.warn(`[RateLimit] Key weekly limit exceeded: key=${key.id}, ${keyWeeklyCheck.reason}`);
+
+      const { currentUsage, limitValue, resetTime } =
+        ProxyRateLimitGuard.parseWeeklyLimitInfo(keyWeeklyCheck.reason!);
+
+      const { getLocale } = await import("next-intl/server");
+      const locale = await getLocale();
+      const message = await getErrorMessageServer(locale, ERROR_CODES.RATE_LIMIT_WEEKLY_EXCEEDED, {
+        current: currentUsage.toFixed(4),
+        limit: limitValue.toFixed(4),
+        resetTime,
+      });
+
+      throw new RateLimitError(
+        "rate_limit_error",
+        message,
+        "usd_weekly",
+        currentUsage,
+        limitValue,
+        resetTime,
+        null
+      );
+    }
+
+    // 9. User 周限额
+    const userWeeklyCheck = await RateLimitService.checkCostLimits(user.id, "user", {
+      limit_5h_usd: null,
+      limit_daily_usd: null,
+      limit_weekly_usd: user.limitWeeklyUsd ?? null,
+      limit_monthly_usd: null,
+    });
+
+    if (!userWeeklyCheck.allowed) {
+      logger.warn(
+        `[RateLimit] User weekly limit exceeded: user=${user.id}, ${userWeeklyCheck.reason}`
+      );
+
+      const { currentUsage, limitValue, resetTime } =
+        ProxyRateLimitGuard.parseWeeklyLimitInfo(userWeeklyCheck.reason!);
+
+      const { getLocale } = await import("next-intl/server");
+      const locale = await getLocale();
+      const message = await getErrorMessageServer(locale, ERROR_CODES.RATE_LIMIT_WEEKLY_EXCEEDED, {
+        current: currentUsage.toFixed(4),
+        limit: limitValue.toFixed(4),
+        resetTime,
+      });
+
+      throw new RateLimitError(
+        "rate_limit_error",
+        message,
+        "usd_weekly",
+        currentUsage,
+        limitValue,
+        resetTime,
+        null
+      );
+    }
+
+    // 10. Key 月限额
+    const keyMonthlyCheck = await RateLimitService.checkCostLimits(key.id, "key", {
+      limit_5h_usd: null,
+      limit_daily_usd: null,
+      limit_weekly_usd: null,
+      limit_monthly_usd: key.limitMonthlyUsd,
+    });
+
+    if (!keyMonthlyCheck.allowed) {
+      logger.warn(
+        `[RateLimit] Key monthly limit exceeded: key=${key.id}, ${keyMonthlyCheck.reason}`
+      );
+
+      const { currentUsage, limitValue, resetTime } =
+        ProxyRateLimitGuard.parseMonthlyLimitInfo(keyMonthlyCheck.reason!);
+
+      const { getLocale } = await import("next-intl/server");
+      const locale = await getLocale();
+      const message = await getErrorMessageServer(locale, ERROR_CODES.RATE_LIMIT_MONTHLY_EXCEEDED, {
+        current: currentUsage.toFixed(4),
+        limit: limitValue.toFixed(4),
+        resetTime,
+      });
+
+      throw new RateLimitError(
+        "rate_limit_error",
+        message,
+        "usd_monthly",
+        currentUsage,
+        limitValue,
+        resetTime,
+        null
+      );
+    }
+
+    // 11. User 月限额（最后一道长期预算闸门）
+    const userMonthlyCheck = await RateLimitService.checkCostLimits(user.id, "user", {
+      limit_5h_usd: null,
+      limit_daily_usd: null,
+      limit_weekly_usd: null,
+      limit_monthly_usd: user.limitMonthlyUsd ?? null,
+    });
+
+    if (!userMonthlyCheck.allowed) {
+      logger.warn(
+        `[RateLimit] User monthly limit exceeded: user=${user.id}, ${userMonthlyCheck.reason}`
+      );
+
+      const { currentUsage, limitValue, resetTime } =
+        ProxyRateLimitGuard.parseMonthlyLimitInfo(userMonthlyCheck.reason!);
+
+      const { getLocale } = await import("next-intl/server");
+      const locale = await getLocale();
+      const message = await getErrorMessageServer(locale, ERROR_CODES.RATE_LIMIT_MONTHLY_EXCEEDED, {
+        current: currentUsage.toFixed(4),
+        limit: limitValue.toFixed(4),
+        resetTime,
+      });
+
+      throw new RateLimitError(
+        "rate_limit_error",
+        message,
+        "usd_monthly",
+        currentUsage,
+        limitValue,
+        resetTime,
+        null
+      );
     }
   }
 
   /**
-   * 从 reason 字符串解析并发限制信息
-   *
-   * 示例 reason:
-   * - "Key并发 Session 上限已达到（5/5）"
+   * 解析 5h 限额信息
+   */
+  private static parse5hLimitInfo(reason: string): {
+    currentUsage: number;
+    limitValue: number;
+    resetTime: string;
+  } {
+    const match = reason.match(/（([\d.]+)\/([\d.]+)）/);
+    const currentUsage = match ? parseFloat(match[1]) : 0;
+    const limitValue = match ? parseFloat(match[2]) : 0;
+    const resetTime = new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString();
+    return { currentUsage, limitValue, resetTime };
+  }
+
+  /**
+   * 解析周限额信息
+   */
+  private static parseWeeklyLimitInfo(reason: string): {
+    currentUsage: number;
+    limitValue: number;
+    resetTime: string;
+  } {
+    const match = reason.match(/（([\d.]+)\/([\d.]+)）/);
+    const currentUsage = match ? parseFloat(match[1]) : 0;
+    const limitValue = match ? parseFloat(match[2]) : 0;
+    const resetInfo = getResetInfo("weekly");
+    const resetTime = resetInfo.resetAt?.toISOString() || new Date().toISOString();
+    return { currentUsage, limitValue, resetTime };
+  }
+
+  /**
+   * 解析月限额信息
+   */
+  private static parseMonthlyLimitInfo(reason: string): {
+    currentUsage: number;
+    limitValue: number;
+    resetTime: string;
+  } {
+    const match = reason.match(/（([\d.]+)\/([\d.]+)）/);
+    const currentUsage = match ? parseFloat(match[1]) : 0;
+    const limitValue = match ? parseFloat(match[2]) : 0;
+    const resetInfo = getResetInfo("monthly");
+    const resetTime = resetInfo.resetAt?.toISOString() || new Date().toISOString();
+    return { currentUsage, limitValue, resetTime };
+  }
+
+  /**
+   * 解析并发限制信息
    */
   private static parseSessionLimitInfo(reason: string): {
     currentUsage: number;
     limitValue: number;
   } {
-    // 解析格式：（current/limit）
     const match = reason.match(/（([\d.]+)\/([\d.]+)）/);
     const currentUsage = match ? parseFloat(match[1]) : 0;
     const limitValue = match ? parseFloat(match[2]) : 0;
-
     return { currentUsage, limitValue };
   }
 }

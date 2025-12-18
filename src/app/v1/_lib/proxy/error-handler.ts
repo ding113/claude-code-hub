@@ -36,10 +36,15 @@ export class ProxyErrorHandler {
     if (isRateLimitError(error)) {
       clientErrorMessage = error.message;
       logErrorMessage = error.message;
-      statusCode = 429;
+      // 区分状态码：RPM/并发用 429，消费限额用 402
+      if (error.limitType === "rpm" || error.limitType === "concurrent_sessions") {
+        statusCode = 429; // Too Many Requests（频率/并发控制）
+      } else {
+        statusCode = 402; // Payment Required（消费限额）
+      }
       rateLimitMetadata = error.toJSON();
 
-      // 构建详细的 429 响应
+      // 构建详细的 402 响应
       const response = ProxyErrorHandler.buildRateLimitResponse(error);
 
       // 记录错误到数据库（包含 rate_limit 元数据）
@@ -217,8 +222,10 @@ export class ProxyErrorHandler {
   }
 
   /**
-   * 构建 429 Rate Limit 响应
+   * 构建 Rate Limit 响应（402/429）
    *
+   * - RPM/并发用 429 Too Many Requests（可重试的频率控制）
+   * - 消费限额用 402 Payment Required（需充值/等待重置）
    * 返回包含所有 7 个限流字段的详细错误信息，并添加标准 rate limit 响应头
    *
    * 响应体字段（7个核心字段）：
@@ -236,6 +243,10 @@ export class ProxyErrorHandler {
    * - X-RateLimit-Reset: Unix 时间戳（秒）
    */
   private static buildRateLimitResponse(error: RateLimitError): Response {
+    // 区分状态码：RPM/并发用 429，消费限额用 402
+    const statusCode =
+      error.limitType === "rpm" || error.limitType === "concurrent_sessions" ? 429 : 402;
+
     // 计算剩余配额（不能为负数）
     const remaining = Math.max(0, error.limitValue - error.currentUsage);
 
@@ -268,7 +279,7 @@ export class ProxyErrorHandler {
         },
       }),
       {
-        status: 429,
+        status: statusCode, // 根据 limitType 动态选择 429 或 402
         headers,
       }
     );

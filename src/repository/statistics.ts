@@ -845,6 +845,29 @@ export async function sumKeyCostInTimeRange(
 }
 
 /**
+ * 按时间范围汇总用户消费（支持 5h/周/月窗口）
+ */
+export async function sumUserCostInTimeRange(
+  userId: number,
+  startTime: Date,
+  endTime: Date
+): Promise<number> {
+  const result = await db
+    .select({ total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)` })
+    .from(messageRequest)
+    .where(
+      and(
+        eq(messageRequest.userId, userId),
+        gte(messageRequest.createdAt, startTime),
+        lt(messageRequest.createdAt, endTime),
+        isNull(messageRequest.deletedAt)
+      )
+    );
+
+  return Number(result[0]?.total || 0);
+}
+
+/**
  * 获取限流事件统计数据
  * 查询 message_request 表中包含 rate_limit_metadata 的错误记录
  *
