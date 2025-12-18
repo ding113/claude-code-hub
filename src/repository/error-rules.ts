@@ -437,6 +437,23 @@ const DEFAULT_ERROR_RULES = [
       },
     },
   },
+  // Issue #366: Tool names must be unique (MCP server configuration error)
+  {
+    pattern: "Tool names must be unique",
+    category: "validation_error",
+    description: "Duplicate tool names in request (client error, related to MCP server configuration)",
+    matchType: "contains" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 89,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "validation_error",
+        message: "工具名称重复，请检查 MCP 服务器配置确保工具名称唯一",
+      },
+    },
+  },
   // Tool result validation errors (non-retryable)
   {
     pattern: "unexpected.*tool_use_id.*tool_result|tool_result.*must have.*corresponding.*tool_use",
