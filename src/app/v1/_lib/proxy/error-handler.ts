@@ -22,6 +22,15 @@ const OVERRIDE_STATUS_CODE_MIN = 400;
 /** 覆写状态码最大值 */
 const OVERRIDE_STATUS_CODE_MAX = 599;
 
+/**
+ * 根据限流类型计算 HTTP 状态码
+ * - RPM/并发用 429 Too Many Requests（可重试的频率控制）
+ * - 消费限额用 402 Payment Required（需充值/等待重置）
+ */
+function getRateLimitStatusCode(limitType: string): number {
+  return limitType === "rpm" || limitType === "concurrent_sessions" ? 429 : 402;
+}
+
 export class ProxyErrorHandler {
   static async handle(session: ProxySession, error: unknown): Promise<Response> {
     // 分离两种消息：
@@ -36,10 +45,11 @@ export class ProxyErrorHandler {
     if (isRateLimitError(error)) {
       clientErrorMessage = error.message;
       logErrorMessage = error.message;
-      statusCode = 429;
+      // 使用 helper 函数计算状态码
+      statusCode = getRateLimitStatusCode(error.limitType);
       rateLimitMetadata = error.toJSON();
 
-      // 构建详细的 429 响应
+      // 构建详细的 402 响应
       const response = ProxyErrorHandler.buildRateLimitResponse(error);
 
       // 记录错误到数据库（包含 rate_limit 元数据）
@@ -217,8 +227,10 @@ export class ProxyErrorHandler {
   }
 
   /**
-   * 构建 429 Rate Limit 响应
+   * 构建 Rate Limit 响应（402/429）
    *
+   * - RPM/并发用 429 Too Many Requests（可重试的频率控制）
+   * - 消费限额用 402 Payment Required（需充值/等待重置）
    * 返回包含所有 7 个限流字段的详细错误信息，并添加标准 rate limit 响应头
    *
    * 响应体字段（7个核心字段）：
@@ -236,6 +248,9 @@ export class ProxyErrorHandler {
    * - X-RateLimit-Reset: Unix 时间戳（秒）
    */
   private static buildRateLimitResponse(error: RateLimitError): Response {
+    // 使用 helper 函数计算状态码
+    const statusCode = getRateLimitStatusCode(error.limitType);
+
     // 计算剩余配额（不能为负数）
     const remaining = Math.max(0, error.limitValue - error.currentUsage);
 
@@ -268,7 +283,7 @@ export class ProxyErrorHandler {
         },
       }),
       {
-        status: 429,
+        status: statusCode, // 根据 limitType 动态选择 429 或 402
         headers,
       }
     );

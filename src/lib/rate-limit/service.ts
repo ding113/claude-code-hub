@@ -105,12 +105,12 @@ export class RateLimitService {
   }
 
   /**
-   * 检查金额限制（Key 或 Provider）
+   * 检查金额限制（Key、Provider 或 User）
    * 优先使用 Redis，失败时降级到数据库查询（防止 Redis 清空后超支）
    */
   static async checkCostLimits(
     id: number,
-    type: "key" | "provider",
+    type: "key" | "provider" | "user",
     limits: {
       limit_5h_usd: number | null;
       limit_daily_usd: number | null;
@@ -334,12 +334,11 @@ export class RateLimitService {
    */
   private static async checkCostLimitsFromDatabase(
     id: number,
-    type: "key" | "provider",
+    type: "key" | "provider" | "user",
     costLimits: CostLimit[]
   ): Promise<{ allowed: boolean; reason?: string }> {
-    const { sumKeyCostInTimeRange, sumProviderCostInTimeRange } = await import(
-      "@/repository/statistics"
-    );
+    const { sumKeyCostInTimeRange, sumProviderCostInTimeRange, sumUserCostInTimeRange } =
+      await import("@/repository/statistics");
 
     for (const limit of costLimits) {
       if (!limit.amount || limit.amount <= 0) continue;
@@ -352,10 +351,20 @@ export class RateLimitService {
       );
 
       // 查询数据库
-      const current =
-        type === "key"
-          ? await sumKeyCostInTimeRange(id, startTime, endTime)
-          : await sumProviderCostInTimeRange(id, startTime, endTime);
+      let current: number;
+      switch (type) {
+        case "key":
+          current = await sumKeyCostInTimeRange(id, startTime, endTime);
+          break;
+        case "provider":
+          current = await sumProviderCostInTimeRange(id, startTime, endTime);
+          break;
+        case "user":
+          current = await sumUserCostInTimeRange(id, startTime, endTime);
+          break;
+        default:
+          current = 0;
+      }
 
       // Cache Warming: 写回 Redis
       if (RateLimitService.redis && RateLimitService.redis.status === "ready") {
@@ -419,9 +428,10 @@ export class RateLimitService {
       }
 
       if (current >= limit.amount) {
+        const typeName = type === "key" ? "Key" : type === "provider" ? "供应商" : "User";
         return {
           allowed: false,
-          reason: `${type === "key" ? "Key" : "供应商"} ${limit.name}消费上限已达到（${current.toFixed(4)}/${limit.amount}）`,
+          reason: `${typeName} ${limit.name}消费上限已达到（${current.toFixed(4)}/${limit.amount}）`,
         };
       }
     }
@@ -749,10 +759,18 @@ export class RateLimitService {
         dailyResetInfo.normalized,
         resetMode
       );
-      const current =
-        type === "key"
-          ? await sumKeyCostInTimeRange(id, startTime, endTime)
-          : await sumProviderCostInTimeRange(id, startTime, endTime);
+
+      let current: number;
+      switch (type) {
+        case "key":
+          current = await sumKeyCostInTimeRange(id, startTime, endTime);
+          break;
+        case "provider":
+          current = await sumProviderCostInTimeRange(id, startTime, endTime);
+          break;
+        default:
+          current = 0;
+      }
 
       // Cache Warming: 写回 Redis
       if (RateLimitService.redis && RateLimitService.redis.status === "ready") {
