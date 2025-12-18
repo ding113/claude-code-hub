@@ -156,6 +156,9 @@ export function ApiTestButton({
             setSuccessContains(result.data[0].defaultSuccessContains);
           }
         } else {
+          if (!result.ok) {
+            console.error("[ApiTestButton] Failed to load presets:", result.error);
+          }
           setPresets([]);
         }
       })
