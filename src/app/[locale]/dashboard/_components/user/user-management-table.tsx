@@ -283,7 +283,11 @@ export function UserManagementTable({
     setQuickRenewOpen(true);
   };
 
-  const handleQuickRenewConfirm = async (userId: number, expiresAt: Date, enableUser?: boolean): Promise<{ ok: boolean }> => {
+  const handleQuickRenewConfirm = async (
+    userId: number,
+    expiresAt: Date,
+    enableUser?: boolean
+  ): Promise<{ ok: boolean }> => {
     try {
       const res = await renewUser(userId, { expiresAt: expiresAt.toISOString(), enableUser });
       if (!res.ok) {
