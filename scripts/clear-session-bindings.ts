@@ -277,7 +277,11 @@ async function createRedisClient(redisUrl: string): Promise<Redis> {
     const rejectUnauthorized = process.env.REDIS_TLS_REJECT_UNAUTHORIZED !== "false";
     try {
       const url = new URL(redisUrl);
-      options.tls = { host: url.hostname, rejectUnauthorized };
+      options.tls = {
+        host: url.hostname,
+        servername: url.hostname, // SNI support for cloud Redis providers
+        rejectUnauthorized,
+      };
     } catch {
       options.tls = { rejectUnauthorized };
     }

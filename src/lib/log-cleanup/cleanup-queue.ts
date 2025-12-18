@@ -54,6 +54,7 @@ function getCleanupQueue(): Queue.Queue {
       logger.info("[CleanupQueue] Using TLS connection (rediss://)", { rejectUnauthorized });
       redisQueueOptions.tls = {
         host: url.hostname,
+        servername: url.hostname, // SNI support for cloud Redis providers
         rejectUnauthorized,
       };
     }

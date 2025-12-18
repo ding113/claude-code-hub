@@ -18,6 +18,7 @@ function maskRedisUrl(redisUrl: string) {
 /**
  * Build TLS configuration for Redis connection.
  * Supports skipping certificate verification via REDIS_TLS_REJECT_UNAUTHORIZED env.
+ * Includes servername for SNI (Server Name Indication) support.
  */
 function buildTlsConfig(redisUrl: string): Record<string, unknown> {
   const rejectUnauthorized = process.env.REDIS_TLS_REJECT_UNAUTHORIZED !== "false";
@@ -26,6 +27,7 @@ function buildTlsConfig(redisUrl: string): Record<string, unknown> {
     const url = new URL(redisUrl);
     return {
       host: url.hostname,
+      servername: url.hostname, // SNI support for cloud Redis providers
       rejectUnauthorized,
     };
   } catch {

@@ -74,6 +74,7 @@ function getNotificationQueue(): Queue.Queue<NotificationJobData> {
       logger.info("[NotificationQueue] Using TLS connection (rediss://)", { rejectUnauthorized });
       redisQueueOptions.tls = {
         host: url.hostname,
+        servername: url.hostname, // SNI support for cloud Redis providers
         rejectUnauthorized,
       };
     }
