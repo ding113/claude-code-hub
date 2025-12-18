@@ -545,6 +545,7 @@
     "activeKeys": "活跃密钥",
     "totalKeys": "总密钥",
     "expiresAt": "过期时间",
+    "expiresAtHint": "用户过期后将自动禁用",
     "status": {
       "active": "已启用",
       "expiringSoon": "即将过期",
@@ -894,7 +895,7 @@
     "title": "用户管理",
     "description": "显示 {count} 个用户",
     "toolbar": {
-      "searchPlaceholder": "按用户名搜索...",
+      "searchPlaceholder": "搜索用户名、备注、标签、Key...",
       "groupFilter": "按分组筛选",
       "allGroups": "所有分组",
       "tagFilter": "按标签筛选",
@@ -1022,6 +1023,7 @@
         "username": "用户名",
         "note": "备注",
         "expiresAt": "到期时间",
+        "expiresAtHint": "点击快捷续期",
         "limit5h": "5h 限额",
         "limitDaily": "每日限额",
         "limitWeekly": "周限额",
@@ -1069,6 +1071,26 @@
       "noData": "今日暂无使用记录",
       "totalCalls": "总调用",
       "totalCost": "总消费"
+    },
+    "quickRenew": {
+      "title": "快捷续期",
+      "description": "为用户 {userName} 设置新的过期时间",
+      "currentExpiry": "当前到期时间",
+      "neverExpires": "永不过期",
+      "expired": "已过期",
+      "quickOptions": {
+        "7days": "7 天",
+        "30days": "30 天",
+        "90days": "90 天",
+        "1year": "1 年"
+      },
+      "customDate": "自定义日期",
+      "enableOnRenew": "同时启用用户",
+      "cancel": "取消",
+      "confirm": "确认续期",
+      "confirming": "续期中...",
+      "success": "续期成功",
+      "failed": "续期失败"
     },
     "editDialog": {
       "title": "编辑用户与密钥",
@@ -1265,6 +1287,13 @@
           "label": "模型限制",
           "placeholder": "输入模型名称或从下拉列表选择",
           "description": "限制用户只能使用指定的 AI 模型。留空表示无限制。"
+        },
+        "enableStatus": {
+          "label": "启用状态",
+          "enabledDescription": "当前已启用，禁用后该用户及其密钥将无法继续使用",
+          "disabledDescription": "当前已禁用，启用后该用户及其密钥将恢复正常使用",
+          "confirmDisable": "确认禁用",
+          "confirmEnable": "确认启用"
         }
       },
       "presetClients": {

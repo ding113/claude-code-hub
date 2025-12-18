@@ -20,6 +20,17 @@ import { UserOnboardingTour } from "../_components/user/user-onboarding-tour";
 
 const ONBOARDING_KEY = "cch-users-onboarding-seen";
 
+/**
+ * Split comma-separated tags into an array of trimmed, non-empty strings.
+ * This matches the server-side providerGroup handling in provider-selector.ts
+ */
+function splitTags(value?: string | null): string[] {
+  return (value ?? "")
+    .split(",")
+    .map((t) => t.trim())
+    .filter(Boolean);
+}
+
 interface UsersPageClientProps {
   users: UserDisplay[];
   currentUser: User;
@@ -30,7 +41,6 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
   const tUiTable = useTranslations("ui.table");
   const tUserMgmt = useTranslations("dashboard.userManagement");
   const tKeyList = useTranslations("dashboard.keyList");
-  const tUserList = useTranslations("dashboard.userList");
   const tCommon = useTranslations("common");
   const [searchTerm, setSearchTerm] = useState("");
   const [tagFilter, setTagFilter] = useState("all");
@@ -84,41 +94,97 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
     return [...new Set(tags)].sort();
   }, [users]);
 
-  // Extract unique key groups from users
+  // Extract unique key groups from users (split comma-separated tags)
   const uniqueKeyGroups = useMemo(() => {
-    const groups = users.flatMap((u) => u.keys?.map((k) => k.providerGroup).filter(Boolean) || []);
-    return [...new Set(groups)].sort() as string[];
+    const groups = users.flatMap((u) => u.keys?.flatMap((k) => splitTags(k.providerGroup)) || []);
+    return [...new Set(groups)].sort();
   }, [users]);
+
+  // Reset filter if selected value no longer exists in options
+  useEffect(() => {
+    if (tagFilter !== "all" && !uniqueTags.includes(tagFilter)) {
+      setTagFilter("all");
+    }
+  }, [uniqueTags, tagFilter]);
+
+  useEffect(() => {
+    if (keyGroupFilter !== "all" && !uniqueKeyGroups.includes(keyGroupFilter)) {
+      setKeyGroupFilter("all");
+    }
+  }, [uniqueKeyGroups, keyGroupFilter]);
 
   // Filter users based on search term, tag filter, and key group filter
   const { filteredUsers, matchingKeyIds } = useMemo(() => {
     const matchingIds = new Set<number>();
+    const normalizedTerm = searchTerm.trim().toLowerCase();
+    const hasSearch = normalizedTerm.length > 0;
 
-    const filtered = users.filter((user) => {
-      // Search filter: match username or tag
-      const matchesSearch =
-        searchTerm === "" ||
-        user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (user.tags || []).some((tag) => tag.toLowerCase().includes(searchTerm.toLowerCase()));
+    const filtered: UserDisplay[] = [];
+
+    for (const user of users) {
+      // Collect matching key IDs for this user (before filtering)
+      const userMatchingKeyIds: number[] = [];
+
+      // Search filter: match user-level fields or any key fields
+      let matchesSearch = !hasSearch;
+
+      if (hasSearch) {
+        // User-level fields: name, note, tags, providerGroup
+        const userMatches =
+          user.name.toLowerCase().includes(normalizedTerm) ||
+          (user.note || "").toLowerCase().includes(normalizedTerm) ||
+          (user.tags || []).some((tag) => tag.toLowerCase().includes(normalizedTerm)) ||
+          (user.providerGroup || "").toLowerCase().includes(normalizedTerm);
+
+        if (userMatches) {
+          matchesSearch = true;
+        } else if (user.keys) {
+          // Key-level fields: name, maskedKey, fullKey, providerGroup
+          for (const key of user.keys) {
+            const keyMatches =
+              key.name.toLowerCase().includes(normalizedTerm) ||
+              key.maskedKey.toLowerCase().includes(normalizedTerm) ||
+              (key.fullKey || "").toLowerCase().includes(normalizedTerm) ||
+              (key.providerGroup || "").toLowerCase().includes(normalizedTerm);
+
+            if (keyMatches) {
+              matchesSearch = true;
+              userMatchingKeyIds.push(key.id);
+              // Don't break - collect all matching keys
+            }
+          }
+        }
+      }
 
       // Tag filter
       const matchesTag = tagFilter === "all" || (user.tags || []).includes(tagFilter);
 
-      // Key group filter
+      // Key group filter (check if any split tag matches the filter)
       let matchesKeyGroup = keyGroupFilter === "all";
       if (keyGroupFilter !== "all" && user.keys) {
-        const matchedKeys = user.keys.filter((k) => k.providerGroup === keyGroupFilter);
-        if (matchedKeys.length > 0) {
-          matchesKeyGroup = true;
-          matchedKeys.forEach((k) => matchingIds.add(k.id));
+        for (const key of user.keys) {
+          if (splitTags(key.providerGroup).includes(keyGroupFilter)) {
+            matchesKeyGroup = true;
+            userMatchingKeyIds.push(key.id);
+          }
         }
       }
 
-      return matchesSearch && matchesTag && matchesKeyGroup;
-    });
+      // Only add to results and matchingIds if user passes ALL filters
+      if (matchesSearch && matchesTag && matchesKeyGroup) {
+        filtered.push(user);
+        // Add matching key IDs only for users that pass the filter
+        for (const keyId of userMatchingKeyIds) {
+          matchingIds.add(keyId);
+        }
+      }
+    }
 
     return { filteredUsers: filtered, matchingKeyIds: matchingIds };
   }, [users, searchTerm, tagFilter, keyGroupFilter]);
+
+  // Determine if we should highlight keys (either search or keyGroup filter is active)
+  const shouldHighlightKeys = searchTerm.trim().length > 0 || keyGroupFilter !== "all";
 
   return (
     <div className="space-y-4">
@@ -192,8 +258,8 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
         currentUser={currentUser}
         currencyCode="USD"
         onCreateUser={handleCreateUser}
-        highlightKeyIds={keyGroupFilter !== "all" ? matchingKeyIds : undefined}
-        autoExpandOnFilter={keyGroupFilter !== "all"}
+        highlightKeyIds={shouldHighlightKeys ? matchingKeyIds : undefined}
+        autoExpandOnFilter={shouldHighlightKeys}
         translations={{
           table: {
             columns: {

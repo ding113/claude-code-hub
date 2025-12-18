@@ -1,10 +1,23 @@
 "use client";
 
-import { Calendar, Gauge, User } from "lucide-react";
+import { Calendar, Gauge, Loader2, ShieldCheck, ShieldOff, User } from "lucide-react";
 import { useMemo, useState } from "react";
 import { DatePickerField } from "@/components/form/date-picker-field";
 import { ArrayTagInputField, TextField } from "@/components/form/form-field";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
 import { AccessRestrictionsSection } from "./access-restrictions-section";
 import { type DailyResetMode, LimitRulePicker, type LimitType } from "./limit-rule-picker";
 import { type LimitRuleDisplayItem, LimitRulesDisplay } from "./limit-rules-display";
@@ -30,6 +43,8 @@ export interface UserEditSectionProps {
     allowedClients?: string[];
     allowedModels?: string[];
   };
+  isEnabled?: boolean;
+  onToggleEnabled?: () => Promise<void>;
   showProviderGroup?: boolean;
   modelSuggestions?: string[];
   onChange: (field: string, value: any) => void;
@@ -47,6 +62,19 @@ export interface UserEditSectionProps {
       providerGroup?: {
         label: string;
         placeholder: string;
+      };
+      enableStatus?: {
+        label: string;
+        enabledDescription: string;
+        disabledDescription: string;
+        confirmEnable: string;
+        confirmDisable: string;
+        confirmEnableTitle: string;
+        confirmDisableTitle: string;
+        confirmEnableDescription: string;
+        confirmDisableDescription: string;
+        cancel: string;
+        processing: string;
       };
       allowedClients: {
         label: string;
@@ -102,15 +130,30 @@ function toNumberOrNull(value: unknown): number | null {
 
 export function UserEditSection({
   user,
+  isEnabled,
+  onToggleEnabled,
   showProviderGroup,
   modelSuggestions = [],
   onChange,
   translations,
 }: UserEditSectionProps) {
   const [rulePickerOpen, setRulePickerOpen] = useState(false);
+  const [toggleConfirmOpen, setToggleConfirmOpen] = useState(false);
+  const [isToggling, setIsToggling] = useState(false);
 
   const emitChange = (field: string, value: any) => {
     onChange(field, value);
+  };
+
+  const handleToggleEnabled = async () => {
+    if (!onToggleEnabled) return;
+    setIsToggling(true);
+    try {
+      await onToggleEnabled();
+      setToggleConfirmOpen(false);
+    } finally {
+      setIsToggling(false);
+    }
   };
 
   const expiresAtValue = useMemo(() => {
@@ -203,6 +246,8 @@ export function UserEditSection({
     }
   };
 
+  const enableStatusTranslations = translations.fields.enableStatus;
+
   return (
     <div className="space-y-4">
       <section className="rounded-lg border border-border bg-card/50 p-3 space-y-3">
@@ -248,6 +293,87 @@ export function UserEditSection({
             )}
           </div>
         </div>
+
+        {/* Enable/Disable toggle - only show if onToggleEnabled is provided */}
+        {onToggleEnabled && enableStatusTranslations && (
+          <div
+            className={cn(
+              "flex items-center justify-between rounded-md border p-3 mt-3",
+              isEnabled ? "border-border bg-background" : "border-amber-500/30 bg-amber-500/5"
+            )}
+          >
+            <div className="space-y-0.5">
+              <Label
+                htmlFor="user-enabled-toggle"
+                className="text-sm font-medium flex items-center gap-2 cursor-pointer"
+              >
+                {isEnabled ? (
+                  <ShieldCheck className="h-4 w-4 text-green-600" />
+                ) : (
+                  <ShieldOff className="h-4 w-4 text-amber-600" />
+                )}
+                {enableStatusTranslations.label || "Enable Status"}
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                {isEnabled
+                  ? enableStatusTranslations.enabledDescription || "Currently enabled"
+                  : enableStatusTranslations.disabledDescription || "Currently disabled"}
+              </p>
+            </div>
+            <Switch
+              id="user-enabled-toggle"
+              checked={isEnabled}
+              onCheckedChange={() => setToggleConfirmOpen(true)}
+            />
+
+            <AlertDialog open={toggleConfirmOpen} onOpenChange={setToggleConfirmOpen}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>
+                    {isEnabled
+                      ? enableStatusTranslations.confirmDisableTitle || "Disable User"
+                      : enableStatusTranslations.confirmEnableTitle || "Enable User"}
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {isEnabled
+                      ? enableStatusTranslations.confirmDisableDescription ||
+                        `Are you sure you want to disable user "${user.name}"?`
+                      : enableStatusTranslations.confirmEnableDescription ||
+                        `Are you sure you want to enable user "${user.name}"?`}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={isToggling}>
+                    {enableStatusTranslations.cancel || "Cancel"}
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleToggleEnabled();
+                    }}
+                    disabled={isToggling}
+                    className={cn(
+                      isEnabled
+                        ? "bg-amber-600 hover:bg-amber-700"
+                        : "bg-green-600 hover:bg-green-700"
+                    )}
+                  >
+                    {isToggling ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        {enableStatusTranslations.processing || "Processing..."}
+                      </>
+                    ) : isEnabled ? (
+                      enableStatusTranslations.confirmDisable || "Disable"
+                    ) : (
+                      enableStatusTranslations.confirmEnable || "Enable"
+                    )}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        )}
       </section>
 
       <section className="rounded-lg border border-border bg-card/50 p-3 space-y-3">

@@ -21,6 +21,7 @@ export interface UserKeyTableRowProps {
   expanded: boolean;
   onToggle: () => void;
   onEditUser: (scrollToKeyId?: number) => void;
+  onQuickRenew?: (user: UserDisplay) => void;
   currentUser?: { role: string };
   currencyCode?: string;
   highlightKeyIds?: Set<number>;
@@ -29,6 +30,7 @@ export interface UserKeyTableRowProps {
       username: string;
       note: string;
       expiresAt: string;
+      expiresAtHint?: string;
       limit5h: string;
       limitDaily: string;
       limitWeekly: string;
@@ -73,6 +75,7 @@ export function UserKeyTableRow({
   expanded,
   onToggle,
   onEditUser,
+  onQuickRenew,
   currencyCode,
   highlightKeyIds,
   translations,
@@ -144,8 +147,22 @@ export function UserKeyTableRow({
           </div>
         </TableCell>
 
-        {/* 到期时间 */}
-        <TableCell className="text-sm text-muted-foreground">{expiresText}</TableCell>
+        {/* 到期时间 - clickable for quick renew */}
+        <TableCell
+          className={cn(
+            "text-sm text-muted-foreground",
+            onQuickRenew && "cursor-pointer hover:text-primary hover:underline"
+          )}
+          onClick={(e) => {
+            if (onQuickRenew) {
+              e.stopPropagation();
+              onQuickRenew(user);
+            }
+          }}
+          title={onQuickRenew ? translations.columns.expiresAtHint : undefined}
+        >
+          {expiresText}
+        </TableCell>
 
         {/* 5h 限额 */}
         <TableCell className="text-center">

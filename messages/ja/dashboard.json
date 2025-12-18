@@ -422,10 +422,7 @@
     },
     "labels": {
       "byName": "名前順",
-      "byUsageRate": "使用率順",
-      "all": "すべて",
-      "warning": "制限に近い (>60%)",
-      "exceeded": "超過 (≥100%)"
+      "byUsageRate": "使用率順"
     },
     "users": {
       "title": "ユーザー クォータ統計",
@@ -574,13 +571,13 @@
     "todayUsage": "本日の使用量",
     "allowedModels": {
       "label": "許可モデル",
-      "noRestrictions": "許可モデル：制限なし"
+      "noRestrictions": "許可されたクライアント：制限なし"
     },
     "expiresAt": "有効期限",
     "proxyStatus": {
-      "loading": "プロキシステータス読み込み中",
-      "fetchFailed": "プロキシステータスの取得に失敗しました",
-      "noStatus": "プロキシステータスなし",
+      "loading": "プロキシー ステータス読み込み中",
+      "fetchFailed": "プロキシー ステータスの取得に失敗しました",
+      "noStatus": "プロキシー ステータスなし",
       "activeRequests": "アクティブリクエスト",
       "lastRequest": "最新リクエスト",
       "noRecord": "記録なし",
@@ -676,7 +673,7 @@
     },
     "limitConcurrentSessions": {
       "label": "同時セッション上限",
-      "placeholder": "0 は無制限を意味します",
+      "placeholder": "0は無制限を意味します",
       "description": "同時に実行される会話の数"
     },
     "errors": {
@@ -800,7 +797,7 @@
     "title": "ユーザー管理",
     "description": "{count} 人のユーザーを表示中",
     "toolbar": {
-      "searchPlaceholder": "ユーザー名で検索...",
+      "searchPlaceholder": "名前、メモ、タグ、キーで検索...",
       "groupFilter": "グループでフィルター",
       "allGroups": "すべてのグループ",
       "tagFilter": "タグでフィルター",
@@ -928,6 +925,7 @@
         "username": "ユーザー名",
         "note": "メモ",
         "expiresAt": "有効期限",
+        "expiresAtHint": "クリックで期限を延長",
         "limit5h": "5時間上限",
         "limitDaily": "日次上限",
         "limitWeekly": "週次上限",
@@ -975,6 +973,26 @@
       "noData": "本日の使用記録はありません",
       "totalCalls": "総呼び出し数",
       "totalCost": "総消費"
+    },
+    "quickRenew": {
+      "title": "クイック更新",
+      "description": "ユーザー {userName} の新しい有効期限を設定",
+      "currentExpiry": "現在の有効期限",
+      "neverExpires": "無期限",
+      "expired": "期限切れ",
+      "quickOptions": {
+        "7days": "7 日",
+        "30days": "30 日",
+        "90days": "90 日",
+        "1year": "1 年"
+      },
+      "customDate": "カスタム日付",
+      "enableOnRenew": "同時にユーザーを有効化",
+      "cancel": "キャンセル",
+      "confirm": "更新を確認",
+      "confirming": "更新中...",
+      "success": "更新に成功しました",
+      "failed": "更新に失敗しました"
     },
     "editDialog": {
       "title": "ユーザーとキーを編集",
@@ -1171,6 +1189,13 @@
           "label": "モデル制限",
           "placeholder": "モデル名を入力またはドロップダウンから選択",
           "description": "ユーザーがアクセスできるAIモデルを制限します。空欄は制限なし。"
+        },
+        "enableStatus": {
+          "label": "有効状態",
+          "enabledDescription": "現在有効です。無効にすると、このユーザーとそのキーは使用できなくなります。",
+          "disabledDescription": "現在無効です。有効にすると、このユーザーとそのキーが通常通り使用できるようになります。",
+          "confirmDisable": "無効化を確認",
+          "confirmEnable": "有効化を確認"
         }
       },
       "presetClients": {
