@@ -53,7 +53,12 @@ export interface KeyEditSectionProps {
     };
     fields: {
       keyName: { label: string; placeholder: string };
-      balanceQueryPage: { label: string; description: string };
+      balanceQueryPage: {
+        label: string;
+        description: string;
+        descriptionEnabled: string;
+        descriptionDisabled: string;
+      };
       providerGroup: { label: string; placeholder: string };
       cacheTtl: { label: string; options: Record<string, string> };
       enableStatus?: { label: string; description: string };
@@ -337,7 +342,9 @@ export function KeyEditSection({
               {translations.fields.balanceQueryPage.label}
             </Label>
             <p className="text-xs text-muted-foreground mt-1">
-              {translations.fields.balanceQueryPage.description}
+              {keyData.canLoginWebUi
+                ? translations.fields.balanceQueryPage.descriptionEnabled
+                : translations.fields.balanceQueryPage.descriptionDisabled}
             </p>
           </div>
           <Switch

@@ -1133,6 +1133,10 @@
       "expandAll": "すべて展開",
       "collapseAll": "すべて折りたたむ"
     },
+    "keyStatus": {
+      "enabled": "有効",
+      "disabled": "無効"
+    },
     "userEditSection": {
       "sections": {
         "basicInfo": "基本情報",
@@ -1194,7 +1198,9 @@
         },
         "balanceQueryPage": {
           "label": "独立した個人使用量ページ",
-          "description": "有効にすると、このキーで独立した個人使用量ページにアクセスできます"
+          "description": "有効にすると、このキーで独立した個人使用量ページにアクセスできます",
+          "descriptionEnabled": "有効にすると、このキーはログイン時に独立した個人使用量ページにアクセスします。ただし、自分のキーのプロバイダーグループは変更できません。",
+          "descriptionDisabled": "無効にすると、ユーザーは個人使用量ページUIにアクセスできません。ただし、制限されたWeb UIで自分のキーのプロバイダーグループを変更できます。"
         },
         "providerGroup": {
           "label": "プロバイダーグループ",

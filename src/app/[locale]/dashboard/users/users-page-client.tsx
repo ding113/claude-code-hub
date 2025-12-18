@@ -231,8 +231,8 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
                 hide: tKeyList("hideKeyTooltip"),
               },
               status: {
-                enabled: tUserList("status.active"),
-                disabled: tUserList("status.disabled"),
+                enabled: tUserMgmt("keyStatus.enabled"),
+                disabled: tUserMgmt("keyStatus.disabled"),
               },
             },
             expand: tUserMgmt("table.expand"),

@@ -450,7 +450,6 @@
     "byName": "By Name",
     "byUsageRate": "By Usage Rate"
   },
-  "all": "All",
   "nav": {
     "mobileMenuTitle": "Navigation Menu",
     "dashboard": "Dashboard",
@@ -1143,7 +1142,9 @@
     "keySettings": {
       "balanceQueryPage": {
         "label": "Enable dedicated balance page",
-        "description": "Allow users to view their balance via a dedicated page"
+        "description": "Allow users to view their balance via a dedicated page",
+        "descriptionEnabled": "When enabled, this key will access an independent personal usage page upon login. However, it cannot modify its own key's provider group.",
+        "descriptionDisabled": "When disabled, the user cannot access the personal usage page UI. However, they can modify their own key's provider group in the restricted Web UI."
       },
       "cacheTtlOverride": {
         "label": "Cache TTL override",
@@ -1161,6 +1162,10 @@
     "toolbar": {
       "expandAll": "Expand all",
       "collapseAll": "Collapse all"
+    },
+    "keyStatus": {
+      "enabled": "Enabled",
+      "disabled": "Disabled"
     },
     "userEditSection": {
       "sections": {
@@ -1223,7 +1228,9 @@
         },
         "balanceQueryPage": {
           "label": "Independent Personal Usage Page",
-          "description": "When enabled, this key can access an independent personal usage page"
+          "description": "When enabled, this key can access an independent personal usage page",
+          "descriptionEnabled": "When enabled, this key will access an independent personal usage page upon login. However, it cannot modify its own key's provider group.",
+          "descriptionDisabled": "When disabled, the user cannot access the personal usage page UI. However, they can modify their own key's provider group in the restricted Web UI."
         },
         "providerGroup": {
           "label": "Provider Group",

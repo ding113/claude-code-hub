@@ -1227,6 +1227,10 @@
       "expandAll": "全部展开",
       "collapseAll": "全部折叠"
     },
+    "keyStatus": {
+      "enabled": "启用",
+      "disabled": "禁用"
+    },
     "userEditSection": {
       "sections": {
         "basicInfo": "基本信息",
@@ -1284,11 +1288,13 @@
         },
         "enableStatus": {
           "label": "启用状态",
-          "description": "禁用后此密钥将无法使用"
+          "description": "禁用后此密钥将无法使用。禁用后仅管理员可启用。"
         },
         "balanceQueryPage": {
           "label": "独立个人用量页面",
-          "description": "启用后，此密钥可使用独立的个人用量查询页面"
+          "description": "启用后，此密钥可使用独立的个人用量查询页面",
+          "descriptionEnabled": "启用后，此密钥在登录时将进入独立的个人用量页面。但不可修改自己密钥的供应商分组。",
+          "descriptionDisabled": "关闭后，用户将无法进入个人独立用量页面 UI。但可在受限的 Web UI功能中修改自己密钥的供应商分组。"
         },
         "providerGroup": {
           "label": "供应商分组",

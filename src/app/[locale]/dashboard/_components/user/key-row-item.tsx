@@ -1,6 +1,7 @@
 "use client";
 
 import { Copy, Eye, FileText, Info, Pencil, Trash2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
 import {
@@ -91,6 +92,7 @@ export function KeyRowItem({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [fullKeyDialogOpen, setFullKeyDialogOpen] = useState(false);
   const [statsDialogOpen, setStatsDialogOpen] = useState(false);
+  const tCommon = useTranslations("common");
 
   const resolvedCurrencyCode: CurrencyCode =
     currencyCode && currencyCode in CURRENCY_CONFIG ? (currencyCode as CurrencyCode) : "USD";
@@ -193,8 +195,11 @@ export function KeyRowItem({
 
       {/* 分组 */}
       <div className="col-span-2 min-w-0">
-        <div className="truncate text-muted-foreground" title={translations.fields.group}>
-          {providerGroup}
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-muted-foreground">{translations.fields.group}:</span>
+          <Badge variant="outline" className="text-xs font-mono">
+            {providerGroup}
+          </Badge>
         </div>
       </div>
 
@@ -315,7 +320,7 @@ export function KeyRowItem({
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogCancel>{tCommon("cancel")}</AlertDialogCancel>
               <AlertDialogAction
                 onClick={(e) => {
                   e.preventDefault();
