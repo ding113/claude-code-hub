@@ -801,7 +801,7 @@
     "title": "使用者管理",
     "description": "顯示 {count} 位使用者",
     "toolbar": {
-      "searchPlaceholder": "依使用者名稱搜尋...",
+      "searchPlaceholder": "搜尋使用者名稱、備註、標籤、Key...",
       "groupFilter": "依群組篩選",
       "allGroups": "所有群組",
       "tagFilter": "依標籤篩選",
@@ -929,6 +929,7 @@
         "username": "使用者名稱",
         "note": "備註",
         "expiresAt": "到期時間",
+        "expiresAtHint": "點擊快速續期",
         "limit5h": "5h 限額",
         "limitDaily": "每日限額",
         "limitWeekly": "週限額",
@@ -976,6 +977,26 @@
       "noData": "今日暫無使用記錄",
       "totalCalls": "今日總呼叫",
       "totalCost": "今日總消費"
+    },
+    "quickRenew": {
+      "title": "快速續期",
+      "description": "為使用者 {userName} 設定新的過期時間",
+      "currentExpiry": "目前到期時間",
+      "neverExpires": "永不過期",
+      "expired": "已過期",
+      "quickOptions": {
+        "7days": "7 天",
+        "30days": "30 天",
+        "90days": "90 天",
+        "1year": "1 年"
+      },
+      "customDate": "自訂日期",
+      "enableOnRenew": "同時啟用使用者",
+      "cancel": "取消",
+      "confirm": "確認續期",
+      "confirming": "續期中...",
+      "success": "續期成功",
+      "failed": "續期失敗"
     },
     "editDialog": {
       "title": "編輯使用者與金鑰",
@@ -1172,6 +1193,13 @@
           "label": "模型限制",
           "placeholder": "輸入模型名稱或從下拉選單選擇",
           "description": "限制使用者只能使用指定的 AI 模型。留空表示無限制。"
+        },
+        "enableStatus": {
+          "label": "啟用狀態",
+          "enabledDescription": "目前已啟用，停用後該使用者及其金鑰將無法繼續使用",
+          "disabledDescription": "目前已停用，啟用後該使用者及其金鑰將恢復正常使用",
+          "confirmDisable": "確認停用",
+          "confirmEnable": "確認啟用"
         }
       },
       "presetClients": {

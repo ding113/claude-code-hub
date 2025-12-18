@@ -828,7 +828,7 @@
     "title": "User Management",
     "description": "Showing {count} users",
     "toolbar": {
-      "searchPlaceholder": "Search by username...",
+      "searchPlaceholder": "Search name, note, tags, keys...",
       "groupFilter": "Filter by Group",
       "allGroups": "All Groups",
       "tagFilter": "Filter by Tag",
@@ -956,6 +956,7 @@
         "username": "Username",
         "note": "Note",
         "expiresAt": "Expires at",
+        "expiresAtHint": "Click to quick renew",
         "limit5h": "5h limit",
         "limitDaily": "Daily limit",
         "limitWeekly": "Weekly limit",
@@ -1003,6 +1004,26 @@
       "noData": "No usage records today",
       "totalCalls": "Total Calls",
       "totalCost": "Total Cost"
+    },
+    "quickRenew": {
+      "title": "Quick Renew",
+      "description": "Set a new expiration date for user {userName}",
+      "currentExpiry": "Current Expiration",
+      "neverExpires": "Never expires",
+      "expired": "Expired",
+      "quickOptions": {
+        "7days": "7 Days",
+        "30days": "30 Days",
+        "90days": "90 Days",
+        "1year": "1 Year"
+      },
+      "customDate": "Custom Date",
+      "enableOnRenew": "Also enable user",
+      "cancel": "Cancel",
+      "confirm": "Confirm Renewal",
+      "confirming": "Renewing...",
+      "success": "Renewal successful",
+      "failed": "Renewal failed"
     },
     "editDialog": {
       "title": "Edit user and keys",
@@ -1201,6 +1222,13 @@
           "label": "Model Restrictions",
           "placeholder": "Enter model name or select from dropdown",
           "description": "Restrict which AI models this user can access. Empty = no restriction."
+        },
+        "enableStatus": {
+          "label": "Enable Status",
+          "enabledDescription": "Currently enabled. Disabling will prevent this user and their keys from being used.",
+          "disabledDescription": "Currently disabled. Enabling will restore normal access for this user and their keys.",
+          "confirmDisable": "Confirm Disable",
+          "confirmEnable": "Confirm Enable"
         }
       },
       "presetClients": {

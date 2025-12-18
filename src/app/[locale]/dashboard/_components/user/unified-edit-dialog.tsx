@@ -450,6 +450,26 @@ function UnifiedEditDialogInner({
               placeholder: t("userEditSection.fields.providerGroup.placeholder"),
             }
           : undefined,
+        enableStatus:
+          mode === "edit" && isAdmin
+            ? {
+                label: t("userEditSection.fields.enableStatus.label"),
+                enabledDescription: t("userEditSection.fields.enableStatus.enabledDescription"),
+                disabledDescription: t("userEditSection.fields.enableStatus.disabledDescription"),
+                confirmEnable: t("userEditSection.fields.enableStatus.confirmEnable"),
+                confirmDisable: t("userEditSection.fields.enableStatus.confirmDisable"),
+                confirmEnableTitle: t("userEditSection.fields.enableStatus.confirmEnableTitle"),
+                confirmDisableTitle: t("userEditSection.fields.enableStatus.confirmDisableTitle"),
+                confirmEnableDescription: t(
+                  "userEditSection.fields.enableStatus.confirmEnableDescription"
+                ),
+                confirmDisableDescription: t(
+                  "userEditSection.fields.enableStatus.confirmDisableDescription"
+                ),
+                cancel: t("userEditSection.fields.enableStatus.cancel"),
+                processing: t("userEditSection.fields.enableStatus.processing"),
+              }
+            : undefined,
         allowedClients: {
           label: t("userEditSection.fields.allowedClients.label"),
           description: t("userEditSection.fields.allowedClients.description"),
@@ -492,7 +512,7 @@ function UnifiedEditDialogInner({
         year: t("quickExpire.oneYear"),
       },
     };
-  }, [t, showUserProviderGroup]);
+  }, [t, showUserProviderGroup, mode, isAdmin]);
 
   const keyEditTranslations = useMemo(() => {
     return {
@@ -714,6 +734,18 @@ function UnifiedEditDialogInner({
               allowedClients: currentUserDraft.allowedClients || [],
               allowedModels: currentUserDraft.allowedModels || [],
             }}
+            isEnabled={mode === "edit" ? user?.isEnabled : undefined}
+            onToggleEnabled={
+              mode === "edit" && isAdmin && user
+                ? async () => {
+                    if (user.isEnabled) {
+                      await handleDisableUser();
+                    } else {
+                      await handleEnableUser();
+                    }
+                  }
+                : undefined
+            }
             showProviderGroup={showUserProviderGroup}
             onChange={handleUserChange}
             translations={userEditTranslations}
@@ -848,9 +880,6 @@ function UnifiedEditDialogInner({
             <DangerZone
               userId={user.id}
               userName={user.name}
-              isEnabled={user.isEnabled}
-              onEnable={handleEnableUser}
-              onDisable={handleDisableUser}
               onDelete={handleDeleteUser}
               translations={{}}
             />
