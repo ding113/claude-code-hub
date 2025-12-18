@@ -22,6 +22,15 @@ const OVERRIDE_STATUS_CODE_MIN = 400;
 /** 覆写状态码最大值 */
 const OVERRIDE_STATUS_CODE_MAX = 599;
 
+/**
+ * 根据限流类型计算 HTTP 状态码
+ * - RPM/并发用 429 Too Many Requests（可重试的频率控制）
+ * - 消费限额用 402 Payment Required（需充值/等待重置）
+ */
+function getRateLimitStatusCode(limitType: string): number {
+  return limitType === "rpm" || limitType === "concurrent_sessions" ? 429 : 402;
+}
+
 export class ProxyErrorHandler {
   static async handle(session: ProxySession, error: unknown): Promise<Response> {
     // 分离两种消息：
@@ -36,12 +45,8 @@ export class ProxyErrorHandler {
     if (isRateLimitError(error)) {
       clientErrorMessage = error.message;
       logErrorMessage = error.message;
-      // 区分状态码：RPM/并发用 429，消费限额用 402
-      if (error.limitType === "rpm" || error.limitType === "concurrent_sessions") {
-        statusCode = 429; // Too Many Requests（频率/并发控制）
-      } else {
-        statusCode = 402; // Payment Required（消费限额）
-      }
+      // 使用 helper 函数计算状态码
+      statusCode = getRateLimitStatusCode(error.limitType);
       rateLimitMetadata = error.toJSON();
 
       // 构建详细的 402 响应
@@ -243,9 +248,8 @@ export class ProxyErrorHandler {
    * - X-RateLimit-Reset: Unix 时间戳（秒）
    */
   private static buildRateLimitResponse(error: RateLimitError): Response {
-    // 区分状态码：RPM/并发用 429，消费限额用 402
-    const statusCode =
-      error.limitType === "rpm" || error.limitType === "concurrent_sessions" ? 429 : 402;
+    // 使用 helper 函数计算状态码
+    const statusCode = getRateLimitStatusCode(error.limitType);
 
     // 计算剩余配额（不能为负数）
     const remaining = Math.max(0, error.limitValue - error.currentUsage);

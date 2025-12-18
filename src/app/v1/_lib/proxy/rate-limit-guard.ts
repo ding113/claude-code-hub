@@ -5,6 +5,18 @@ import { ERROR_CODES, getErrorMessageServer } from "@/lib/utils/error-messages";
 import { RateLimitError } from "./errors";
 import type { ProxySession } from "./session";
 
+/**
+ * 通用的限额信息解析函数
+ * 从错误原因字符串中提取当前使用量和限制值
+ * 格式：（current/limit）
+ */
+function parseLimitInfo(reason: string): { currentUsage: number; limitValue: number } {
+  const match = reason.match(/（([\d.]+)\/([\d.]+)）/);
+  const currentUsage = match ? parseFloat(match[1]) : 0;
+  const limitValue = match ? parseFloat(match[2]) : 0;
+  return { currentUsage, limitValue };
+}
+
 export class ProxyRateLimitGuard {
   /**
    * 检查限流（Key 层 + User 层）
@@ -105,9 +117,7 @@ export class ProxyRateLimitGuard {
     if (!sessionCheck.allowed) {
       logger.warn(`[RateLimit] Key session limit exceeded: key=${key.id}, ${sessionCheck.reason}`);
 
-      const { currentUsage, limitValue } = ProxyRateLimitGuard.parseSessionLimitInfo(
-        sessionCheck.reason!
-      );
+      const { currentUsage, limitValue } = parseLimitInfo(sessionCheck.reason!);
 
       const resetTime = new Date().toISOString();
 
@@ -172,9 +182,8 @@ export class ProxyRateLimitGuard {
     if (!key5hCheck.allowed) {
       logger.warn(`[RateLimit] Key 5h limit exceeded: key=${key.id}, ${key5hCheck.reason}`);
 
-      const { currentUsage, limitValue, resetTime } = ProxyRateLimitGuard.parse5hLimitInfo(
-        key5hCheck.reason!
-      );
+      const { currentUsage, limitValue } = parseLimitInfo(key5hCheck.reason!);
+      const resetTime = new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString();
 
       const { getLocale } = await import("next-intl/server");
       const locale = await getLocale();
@@ -206,9 +215,8 @@ export class ProxyRateLimitGuard {
     if (!user5hCheck.allowed) {
       logger.warn(`[RateLimit] User 5h limit exceeded: user=${user.id}, ${user5hCheck.reason}`);
 
-      const { currentUsage, limitValue, resetTime } = ProxyRateLimitGuard.parse5hLimitInfo(
-        user5hCheck.reason!
-      );
+      const { currentUsage, limitValue } = parseLimitInfo(user5hCheck.reason!);
+      const resetTime = new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString();
 
       const { getLocale } = await import("next-intl/server");
       const locale = await getLocale();
@@ -272,9 +280,9 @@ export class ProxyRateLimitGuard {
     if (!keyWeeklyCheck.allowed) {
       logger.warn(`[RateLimit] Key weekly limit exceeded: key=${key.id}, ${keyWeeklyCheck.reason}`);
 
-      const { currentUsage, limitValue, resetTime } = ProxyRateLimitGuard.parseWeeklyLimitInfo(
-        keyWeeklyCheck.reason!
-      );
+      const { currentUsage, limitValue } = parseLimitInfo(keyWeeklyCheck.reason!);
+      const resetInfo = getResetInfo("weekly");
+      const resetTime = resetInfo.resetAt?.toISOString() || new Date().toISOString();
 
       const { getLocale } = await import("next-intl/server");
       const locale = await getLocale();
@@ -308,9 +316,9 @@ export class ProxyRateLimitGuard {
         `[RateLimit] User weekly limit exceeded: user=${user.id}, ${userWeeklyCheck.reason}`
       );
 
-      const { currentUsage, limitValue, resetTime } = ProxyRateLimitGuard.parseWeeklyLimitInfo(
-        userWeeklyCheck.reason!
-      );
+      const { currentUsage, limitValue } = parseLimitInfo(userWeeklyCheck.reason!);
+      const resetInfo = getResetInfo("weekly");
+      const resetTime = resetInfo.resetAt?.toISOString() || new Date().toISOString();
 
       const { getLocale } = await import("next-intl/server");
       const locale = await getLocale();
@@ -344,9 +352,9 @@ export class ProxyRateLimitGuard {
         `[RateLimit] Key monthly limit exceeded: key=${key.id}, ${keyMonthlyCheck.reason}`
       );
 
-      const { currentUsage, limitValue, resetTime } = ProxyRateLimitGuard.parseMonthlyLimitInfo(
-        keyMonthlyCheck.reason!
-      );
+      const { currentUsage, limitValue } = parseLimitInfo(keyMonthlyCheck.reason!);
+      const resetInfo = getResetInfo("monthly");
+      const resetTime = resetInfo.resetAt?.toISOString() || new Date().toISOString();
 
       const { getLocale } = await import("next-intl/server");
       const locale = await getLocale();
@@ -380,9 +388,9 @@ export class ProxyRateLimitGuard {
         `[RateLimit] User monthly limit exceeded: user=${user.id}, ${userMonthlyCheck.reason}`
       );
 
-      const { currentUsage, limitValue, resetTime } = ProxyRateLimitGuard.parseMonthlyLimitInfo(
-        userMonthlyCheck.reason!
-      );
+      const { currentUsage, limitValue } = parseLimitInfo(userMonthlyCheck.reason!);
+      const resetInfo = getResetInfo("monthly");
+      const resetTime = resetInfo.resetAt?.toISOString() || new Date().toISOString();
 
       const { getLocale } = await import("next-intl/server");
       const locale = await getLocale();
@@ -402,65 +410,5 @@ export class ProxyRateLimitGuard {
         null
       );
     }
-  }
-
-  /**
-   * 解析 5h 限额信息
-   */
-  private static parse5hLimitInfo(reason: string): {
-    currentUsage: number;
-    limitValue: number;
-    resetTime: string;
-  } {
-    const match = reason.match(/（([\d.]+)\/([\d.]+)）/);
-    const currentUsage = match ? parseFloat(match[1]) : 0;
-    const limitValue = match ? parseFloat(match[2]) : 0;
-    const resetTime = new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString();
-    return { currentUsage, limitValue, resetTime };
-  }
-
-  /**
-   * 解析周限额信息
-   */
-  private static parseWeeklyLimitInfo(reason: string): {
-    currentUsage: number;
-    limitValue: number;
-    resetTime: string;
-  } {
-    const match = reason.match(/（([\d.]+)\/([\d.]+)）/);
-    const currentUsage = match ? parseFloat(match[1]) : 0;
-    const limitValue = match ? parseFloat(match[2]) : 0;
-    const resetInfo = getResetInfo("weekly");
-    const resetTime = resetInfo.resetAt?.toISOString() || new Date().toISOString();
-    return { currentUsage, limitValue, resetTime };
-  }
-
-  /**
-   * 解析月限额信息
-   */
-  private static parseMonthlyLimitInfo(reason: string): {
-    currentUsage: number;
-    limitValue: number;
-    resetTime: string;
-  } {
-    const match = reason.match(/（([\d.]+)\/([\d.]+)）/);
-    const currentUsage = match ? parseFloat(match[1]) : 0;
-    const limitValue = match ? parseFloat(match[2]) : 0;
-    const resetInfo = getResetInfo("monthly");
-    const resetTime = resetInfo.resetAt?.toISOString() || new Date().toISOString();
-    return { currentUsage, limitValue, resetTime };
-  }
-
-  /**
-   * 解析并发限制信息
-   */
-  private static parseSessionLimitInfo(reason: string): {
-    currentUsage: number;
-    limitValue: number;
-  } {
-    const match = reason.match(/（([\d.]+)\/([\d.]+)）/);
-    const currentUsage = match ? parseFloat(match[1]) : 0;
-    const limitValue = match ? parseFloat(match[2]) : 0;
-    return { currentUsage, limitValue };
   }
 }

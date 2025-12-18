@@ -351,12 +351,20 @@ export class RateLimitService {
       );
 
       // 查询数据库
-      const current =
-        type === "key"
-          ? await sumKeyCostInTimeRange(id, startTime, endTime)
-          : type === "provider"
-            ? await sumProviderCostInTimeRange(id, startTime, endTime)
-            : await sumUserCostInTimeRange(id, startTime, endTime);
+      let current: number;
+      switch (type) {
+        case "key":
+          current = await sumKeyCostInTimeRange(id, startTime, endTime);
+          break;
+        case "provider":
+          current = await sumProviderCostInTimeRange(id, startTime, endTime);
+          break;
+        case "user":
+          current = await sumUserCostInTimeRange(id, startTime, endTime);
+          break;
+        default:
+          current = 0;
+      }
 
       // Cache Warming: 写回 Redis
       if (RateLimitService.redis && RateLimitService.redis.status === "ready") {
@@ -751,10 +759,18 @@ export class RateLimitService {
         dailyResetInfo.normalized,
         resetMode
       );
-      const current =
-        type === "key"
-          ? await sumKeyCostInTimeRange(id, startTime, endTime)
-          : await sumProviderCostInTimeRange(id, startTime, endTime);
+
+      let current: number;
+      switch (type) {
+        case "key":
+          current = await sumKeyCostInTimeRange(id, startTime, endTime);
+          break;
+        case "provider":
+          current = await sumProviderCostInTimeRange(id, startTime, endTime);
+          break;
+        default:
+          current = 0;
+      }
 
       // Cache Warming: 写回 Redis
       if (RateLimitService.redis && RateLimitService.redis.status === "ready") {
