@@ -246,6 +246,7 @@ Docker Compose is the **preferred deployment method** — it automatically provi
 | `DSN`                                      | -                        | PostgreSQL connection string, e.g., `postgres://user:pass@host:5432/db`.                             |
 | `AUTO_MIGRATE`                             | `true`                   | Executes Drizzle migrations on startup; consider disabling in production for manual control.         |
 | `REDIS_URL`                                | `redis://localhost:6379` | Redis endpoint, supports `rediss://` for TLS providers.                                              |
+| `REDIS_TLS_REJECT_UNAUTHORIZED`            | `true`                   | Validate Redis TLS certificates; set `false` to skip (for self-signed/shared certs).                 |
 | `ENABLE_RATE_LIMIT`                        | `true`                   | Toggles multi-dimensional rate limiting; Fail-Open handles Redis outages gracefully.                 |
 | `SESSION_TTL`                              | `300`                    | Session cache window (seconds) that drives vendor reuse.                                             |
 | `ENABLE_SECURE_COOKIES`                    | `true`                   | Browsers require HTTPS for Secure cookies; set to `false` when serving plain HTTP outside localhost. |
