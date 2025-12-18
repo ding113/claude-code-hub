@@ -113,7 +113,7 @@ export function UserManagementTable({
   const isAdmin = currentUser?.role === "admin";
   const [currentPage, setCurrentPage] = useState(1);
   const [expandedUsers, setExpandedUsers] = useState<Map<number, boolean>>(
-    () => new Map(users.map((user) => [user.id, true]))
+    () => new Map(users.map((user) => [user.id, false]))
   );
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
@@ -136,7 +136,7 @@ export function UserManagementTable({
     setExpandedUsers((prev) => {
       const next = new Map<number, boolean>();
       for (const user of users) {
-        next.set(user.id, prev.get(user.id) ?? true);
+        next.set(user.id, prev.get(user.id) ?? false);
       }
 
       if (next.size !== prev.size) return next;
@@ -159,8 +159,8 @@ export function UserManagementTable({
   }, [users, currentPage]);
 
   const allExpanded = useMemo(() => {
-    if (users.length === 0) return true;
-    return users.every((user) => expandedUsers.get(user.id) ?? true);
+    if (users.length === 0) return false;
+    return users.every((user) => expandedUsers.get(user.id) ?? false);
   }, [users, expandedUsers]);
 
   const paginationText = useMemo(() => {
@@ -249,7 +249,7 @@ export function UserManagementTable({
   const handleToggleUser = (userId: number) => {
     setExpandedUsers((prev) => {
       const next = new Map(prev);
-      next.set(userId, !(prev.get(userId) ?? true));
+      next.set(userId, !(prev.get(userId) ?? false));
       return next;
     });
   };
@@ -306,7 +306,7 @@ export function UserManagementTable({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-2 flex-wrap">
+      <div className="flex items-center justify-start">
         <Button
           type="button"
           variant="outline"
@@ -316,28 +316,6 @@ export function UserManagementTable({
         >
           {allExpanded ? translations.table.collapse : translations.table.expand}
         </Button>
-
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">{paginationText}</span>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-            disabled={users.length === 0 || currentPage <= 1}
-          >
-            {translations.pagination.previous}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-            disabled={users.length === 0 || currentPage >= totalPages}
-          >
-            {translations.pagination.next}
-          </Button>
-        </div>
       </div>
 
       <div className={cn("border border-border rounded-lg", "overflow-hidden")}>
@@ -387,7 +365,7 @@ export function UserManagementTable({
                 <UserKeyTableRow
                   key={user.id}
                   user={user}
-                  expanded={expandedUsers.get(user.id) ?? true}
+                  expanded={expandedUsers.get(user.id) ?? false}
                   onToggle={() => handleToggleUser(user.id)}
                   onEditUser={(keyId) => openEditDialog(user.id, keyId)}
                   onQuickRenew={isAdmin ? handleOpenQuickRenew : undefined}
@@ -400,6 +378,29 @@ export function UserManagementTable({
             )}
           </TableBody>
         </Table>
+      </div>
+
+      {/* Pagination moved to bottom */}
+      <div className="flex items-center justify-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+          disabled={users.length === 0 || currentPage <= 1}
+        >
+          {translations.pagination.previous}
+        </Button>
+        <span className="text-sm text-muted-foreground">{paginationText}</span>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+          disabled={users.length === 0 || currentPage >= totalPages}
+        >
+          {translations.pagination.next}
+        </Button>
       </div>
 
       {editingUser ? (
