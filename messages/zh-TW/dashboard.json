@@ -1138,7 +1138,8 @@
       "sections": {
         "basicInfo": "基本資訊",
         "expireTime": "過期時間",
-        "limitRules": "限額規則"
+        "limitRules": "限額規則",
+        "accessRestrictions": "存取限制"
       },
       "fields": {
         "username": {
@@ -1156,7 +1157,24 @@
         "providerGroup": {
           "label": "供應商分組（舊版）",
           "placeholder": "輸入供應商分組或留空"
+        },
+        "allowedClients": {
+          "label": "用戶端限制",
+          "description": "限制哪些 CLI/IDE 用戶端可以使用此帳戶。留空表示無限制。",
+          "customLabel": "自訂用戶端模式",
+          "customPlaceholder": "輸入自訂模式（如：'xcode', 'my-ide'）"
+        },
+        "allowedModels": {
+          "label": "模型限制",
+          "placeholder": "輸入模型名稱或從下拉選單選擇",
+          "description": "限制使用者只能使用指定的 AI 模型。留空表示無限制。"
         }
+      },
+      "presetClients": {
+        "claude-cli": "Claude Code CLI",
+        "gemini-cli": "Gemini CLI",
+        "factory-cli": "Droid CLI",
+        "codex-cli": "Codex CLI"
       }
     },
     "keyEditSection": {

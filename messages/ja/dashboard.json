@@ -1137,7 +1137,8 @@
       "sections": {
         "basicInfo": "基本情報",
         "expireTime": "有効期限",
-        "limitRules": "制限ルール"
+        "limitRules": "制限ルール",
+        "accessRestrictions": "アクセス制限"
       },
       "fields": {
         "username": {
@@ -1155,7 +1156,24 @@
         "providerGroup": {
           "label": "プロバイダーグループ（レガシー）",
           "placeholder": "プロバイダーグループを入力または空白のまま"
+        },
+        "allowedClients": {
+          "label": "クライアント制限",
+          "description": "このアカウントを使用できるCLI/IDEクライアントを制限します。空欄は制限なし。",
+          "customLabel": "カスタムクライアントパターン",
+          "customPlaceholder": "パターンを入力（例：'xcode', 'my-ide'）"
+        },
+        "allowedModels": {
+          "label": "モデル制限",
+          "placeholder": "モデル名を入力またはドロップダウンから選択",
+          "description": "ユーザーがアクセスできるAIモデルを制限します。空欄は制限なし。"
         }
+      },
+      "presetClients": {
+        "claude-cli": "Claude Code CLI",
+        "gemini-cli": "Gemini CLI",
+        "factory-cli": "Droid CLI",
+        "codex-cli": "Codex CLI"
       }
     },
     "keyEditSection": {
