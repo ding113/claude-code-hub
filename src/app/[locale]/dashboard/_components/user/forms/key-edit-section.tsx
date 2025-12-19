@@ -171,7 +171,12 @@ export function KeyEditSection({
         onChange("limit5hUsd", null);
         return;
       case "limitDaily":
-        onChange("limitDailyUsd", null);
+        // Batch update to avoid race condition
+        onChange({
+          limitDailyUsd: null,
+          dailyResetMode: "fixed",
+          dailyResetTime: "00:00",
+        });
         return;
       case "limitWeekly":
         onChange("limitWeeklyUsd", null);
@@ -207,11 +212,12 @@ export function KeyEditSection({
         return;
       case "limitDaily": {
         const nextMode: DailyResetMode = mode ?? keyData.dailyResetMode ?? "fixed";
-        onChange("limitDailyUsd", value);
-        onChange("dailyResetMode", nextMode);
-        if (nextMode === "fixed") {
-          onChange("dailyResetTime", time ?? keyData.dailyResetTime ?? "00:00");
-        }
+        // Batch update to avoid race condition
+        onChange({
+          limitDailyUsd: value,
+          dailyResetMode: nextMode,
+          dailyResetTime: nextMode === "fixed" ? (time ?? keyData.dailyResetTime ?? "00:00") : keyData.dailyResetTime,
+        });
         return;
       }
       case "limitWeekly":

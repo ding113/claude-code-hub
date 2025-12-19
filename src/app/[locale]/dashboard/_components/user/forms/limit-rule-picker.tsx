@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -35,7 +36,7 @@ export interface LimitRulePickerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: (type: LimitType, value: number, mode?: DailyResetMode, time?: string) => void;
-  /** Types that are already configured (will be hidden from the type selector). */
+  /** Types that are already configured (used for showing overwrite hint). */
   existingTypes: string[];
   /**
    * i18n strings passed from parent.
@@ -47,6 +48,7 @@ export interface LimitRulePickerProps {
    * - daily.time.label, daily.time.placeholder
    * - limitTypes.{limit5h|limitDaily|limitWeekly|limitMonthly|limitTotal|limitSessions}
    * - errors.missingType, errors.invalidValue, errors.invalidTime
+   * - overwriteHint
    */
   translations: Record<string, unknown>;
 }
@@ -84,11 +86,10 @@ export function LimitRulePicker({
   existingTypes,
   translations,
 }: LimitRulePickerProps) {
+  // Keep existingTypeSet for showing overwrite hint, but no longer filter availableTypes
   const existingTypeSet = useMemo(() => new Set(existingTypes), [existingTypes]);
-  const availableTypes = useMemo(
-    () => LIMIT_TYPE_OPTIONS.filter((opt) => !existingTypeSet.has(opt.type)),
-    [existingTypeSet]
-  );
+  // All types are always available - selecting an existing type will overwrite it
+  const availableTypes = LIMIT_TYPE_OPTIONS;
 
   const [type, setType] = useState<LimitType | "">("");
   const [rawValue, setRawValue] = useState("");
@@ -96,16 +97,16 @@ export function LimitRulePicker({
   const [dailyTime, setDailyTime] = useState("00:00");
   const [error, setError] = useState<string | null>(null);
 
-  // Reset state when dialog opens, and ensure the current type is still available.
+  // Reset state when dialog opens
   useEffect(() => {
     if (!open) return;
     const first = availableTypes[0]?.type ?? "";
-    setType((prev) => (prev && !existingTypeSet.has(prev) ? prev : first));
+    setType((prev) => (prev ? prev : first));
     setRawValue("");
     setDailyMode("fixed");
     setDailyTime("00:00");
     setError(null);
-  }, [open, availableTypes, existingTypeSet]);
+  }, [open, availableTypes]);
 
   const numericValue = useMemo(() => {
     const trimmed = rawValue.trim();
@@ -173,7 +174,6 @@ export function LimitRulePicker({
               <Select
                 value={type}
                 onValueChange={(val) => setType(val as LimitType)}
-                disabled={availableTypes.length === 0}
               >
                 <SelectTrigger>
                   <SelectValue
@@ -188,10 +188,11 @@ export function LimitRulePicker({
                   ))}
                 </SelectContent>
               </Select>
-              {availableTypes.length === 0 && (
-                <p className="text-xs text-muted-foreground">
-                  {getTranslation(translations, "emptyState", "所有限额类型均已设置")}
-                </p>
+              {type && existingTypeSet.has(type) && (
+                <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <span>{getTranslation(translations, "overwriteHint", "此类型已存在，保存将覆盖原有值")}</span>
+                </div>
               )}
             </div>
 

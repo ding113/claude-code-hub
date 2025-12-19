@@ -27,11 +27,10 @@ export function useZodForm<T extends z.ZodSchema>({
   const setValue = useCallback(
     (field: keyof Values, value: unknown) => {
       setValues((prev) => ({ ...prev, [field]: value as Values[keyof Values] }));
-      if (errors[field as string]) {
-        setErrors((prev) => ({ ...prev, [field as string]: "" }));
-      }
+      // Use functional update to avoid dependency on errors
+      setErrors((prev) => (prev[field as string] ? { ...prev, [field as string]: "" } : prev));
     },
-    [errors]
+    []
   );
 
   const handleSubmit = useCallback(

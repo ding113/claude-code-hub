@@ -1302,7 +1302,8 @@
             "fixed": "Fixed time reset",
             "rolling": "Rolling window (24h)"
           }
-        }
+        },
+        "overwriteHint": "This type already exists, saving will overwrite the existing value"
       }
     }
   }

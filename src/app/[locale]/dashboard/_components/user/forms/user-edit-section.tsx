@@ -212,9 +212,12 @@ export function UserEditSection({
         emitChange("limit5hUsd", null);
         return;
       case "limitDaily":
-        emitChange("dailyQuota", null);
-        emitChange("dailyResetMode", "fixed");
-        emitChange("dailyResetTime", "00:00");
+        // Batch update to avoid race condition
+        emitChange({
+          dailyQuota: null,
+          dailyResetMode: "fixed",
+          dailyResetTime: "00:00",
+        });
         return;
       case "limitWeekly":
         emitChange("limitWeeklyUsd", null);
@@ -239,9 +242,12 @@ export function UserEditSection({
         emitChange("limit5hUsd", value);
         return;
       case "limitDaily":
-        emitChange("dailyQuota", value);
-        if (mode) emitChange("dailyResetMode", mode);
-        if (time) emitChange("dailyResetTime", time);
+        // Batch update to avoid race condition
+        emitChange({
+          dailyQuota: value,
+          dailyResetMode: mode || "fixed",
+          dailyResetTime: time || "00:00",
+        });
         return;
       case "limitWeekly":
         emitChange("limitWeeklyUsd", value);

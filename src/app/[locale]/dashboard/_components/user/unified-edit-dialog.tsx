@@ -591,22 +591,47 @@ function UnifiedEditDialogInner({
     };
   }, [t]);
 
-  const handleUserChange = (field: string, value: any) => {
+  const handleUserChange = (field: string | Record<string, any>, value?: any) => {
     const prev = form.values.user || (defaultValues.user as UnifiedEditValues["user"]);
     const next = { ...prev } as UnifiedEditValues["user"];
-    const mappedField = field === "description" ? "note" : field;
-    if (mappedField === "expiresAt") {
-      (next as any)[mappedField] = value ?? undefined;
+
+    if (typeof field === "object") {
+      // Batch update: apply multiple fields at once
+      Object.entries(field).forEach(([key, val]) => {
+        const mappedField = key === "description" ? "note" : key;
+        (next as any)[mappedField] = mappedField === "expiresAt" ? val ?? undefined : val;
+      });
     } else {
-      (next as any)[mappedField] = value;
+      // Single field update (backward compatible)
+      const mappedField = field === "description" ? "note" : field;
+      if (mappedField === "expiresAt") {
+        (next as any)[mappedField] = value ?? undefined;
+      } else {
+        (next as any)[mappedField] = value;
+      }
     }
     form.setValue("user", next);
   };
 
-  const handleKeyChange = (keyId: number, field: string, value: any) => {
+  const handleKeyChange = (keyId: number, field: string | Record<string, any>, value?: any) => {
     const prevKeys = (form.values.keys || defaultValues.keys) as UnifiedEditValues["keys"];
     const nextKeys = prevKeys.map((k) => {
       if (k.id !== keyId) return k;
+
+      if (typeof field === "object") {
+        // Batch update
+        const updates: Record<string, any> = {};
+        Object.entries(field).forEach(([key, val]) => {
+          if (key === "expiresAt") {
+            updates[key] = val ? (val as Date).toISOString() : undefined;
+          } else {
+            updates[key] = val;
+          }
+        });
+        return { ...k, ...updates };
+      }
+
+      // Single field update (backward compatible)
       if (field === "expiresAt") {
         return { ...k, expiresAt: value ? (value as Date).toISOString() : undefined };
       }
