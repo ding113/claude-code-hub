@@ -38,15 +38,15 @@ RUN apt-get update && \
     apt-get install -y curl ca-certificates postgresql-client && \
     rm -rf /var/lib/apt/lists/*
 
-COPY --from=build --chown=node:node /app/public ./public
-COPY --from=build --chown=node:node /app/drizzle ./drizzle
-COPY --from=build --chown=node:node /app/messages ./messages
-COPY --from=build --chown=node:node /app/.next/standalone ./
+COPY --from=build --chown=bun:bun /app/public ./public
+COPY --from=build --chown=bun:bun /app/drizzle ./drizzle
+COPY --from=build --chown=bun:bun /app/messages ./messages
+COPY --from=build --chown=bun:bun /app/.next/standalone ./
 # Server Actions live inside .next/server; copy it or Next.js cannot resolve action IDs.
-COPY --from=build --chown=node:node /app/.next/server ./.next/server
-COPY --from=build --chown=node:node /app/.next/static ./.next/static
+COPY --from=build --chown=bun:bun /app/.next/server ./.next/server
+COPY --from=build --chown=bun:bun /app/.next/static ./.next/static
 
-USER node
+USER bun
 EXPOSE 3000
 
 CMD ["bun", "run", "server.js"]
