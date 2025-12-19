@@ -176,19 +176,29 @@ export function VirtualizedLogsTable({
       <div className="rounded-md border overflow-hidden">
         {/* Fixed header */}
         <div className="bg-muted/50 border-b">
-          <div className="flex items-center h-10 px-4 text-sm font-medium text-muted-foreground">
-            <div className="w-[90px] shrink-0">{t("logs.columns.time")}</div>
-            <div className="w-[100px] shrink-0">{t("logs.columns.user")}</div>
-            <div className="w-[100px] shrink-0">{t("logs.columns.key")}</div>
-            <div className="w-[200px] shrink-0">{t("logs.columns.provider")}</div>
-            <div className="w-[180px] shrink-0">{t("logs.columns.model")}</div>
-            <div className="w-[80px] shrink-0 text-right">{t("logs.columns.inputTokens")}</div>
-            <div className="w-[80px] shrink-0 text-right">{t("logs.columns.outputTokens")}</div>
-            <div className="w-[100px] shrink-0 text-right">{t("logs.columns.cacheWrite")}</div>
-            <div className="w-[80px] shrink-0 text-right">{t("logs.columns.cacheRead")}</div>
-            <div className="w-[100px] shrink-0 text-right">{t("logs.columns.cost")}</div>
-            <div className="w-[80px] shrink-0 text-right">{t("logs.columns.duration")}</div>
-            <div className="w-[80px] shrink-0">{t("logs.columns.status")}</div>
+          <div className="flex items-center h-10 text-sm font-medium text-muted-foreground">
+            <div className="w-[70px] min-w-[70px] shrink-0 pl-2">{t("logs.columns.time")}</div>
+            <div className="flex-1 min-w-[60px] px-1">{t("logs.columns.user")}</div>
+            <div className="flex-1 min-w-[60px] px-1">{t("logs.columns.key")}</div>
+            <div className="flex-[2] min-w-[100px] px-1">{t("logs.columns.provider")}</div>
+            <div className="flex-[1.5] min-w-[80px] px-1">{t("logs.columns.model")}</div>
+            <div className="w-[55px] min-w-[55px] shrink-0 text-right px-1">
+              {t("logs.columns.inputTokens")}
+            </div>
+            <div className="w-[55px] min-w-[55px] shrink-0 text-right px-1">
+              {t("logs.columns.outputTokens")}
+            </div>
+            <div className="flex-1 min-w-[70px] text-right px-1">
+              {t("logs.columns.cacheWrite")}
+            </div>
+            <div className="w-[55px] min-w-[55px] shrink-0 text-right px-1">
+              {t("logs.columns.cacheRead")}
+            </div>
+            <div className="flex-1 min-w-[70px] text-right px-1">{t("logs.columns.cost")}</div>
+            <div className="w-[55px] min-w-[55px] shrink-0 text-right px-1">
+              {t("logs.columns.duration")}
+            </div>
+            <div className="w-[65px] min-w-[65px] shrink-0 pr-2">{t("logs.columns.status")}</div>
           </div>
         </div>
 
@@ -238,30 +248,30 @@ export function VirtualizedLogsTable({
                     transform: `translateY(${virtualRow.start}px)`,
                   }}
                   className={cn(
-                    "flex items-center px-4 text-sm border-b hover:bg-muted/50",
+                    "flex items-center text-sm border-b hover:bg-muted/50",
                     isNonBilling ? "bg-muted/60 text-muted-foreground dark:bg-muted/20" : ""
                   )}
                 >
                   {/* Time */}
-                  <div className="w-[90px] shrink-0 font-mono text-xs truncate">
+                  <div className="w-[70px] min-w-[70px] shrink-0 font-mono text-xs truncate pl-2">
                     <RelativeTime date={log.createdAt} fallback="-" />
                   </div>
 
                   {/* User */}
-                  <div className="w-[100px] shrink-0 truncate" title={log.userName}>
+                  <div className="flex-1 min-w-[60px] truncate px-1" title={log.userName}>
                     {log.userName}
                   </div>
 
                   {/* Key */}
                   <div
-                    className="w-[100px] shrink-0 font-mono text-xs truncate"
+                    className="flex-1 min-w-[60px] font-mono text-xs truncate px-1"
                     title={log.keyName}
                   >
                     {log.keyName}
                   </div>
 
                   {/* Provider */}
-                  <div className="w-[200px] shrink-0">
+                  <div className="flex-[2] min-w-[100px] px-1">
                     {log.blockedBy ? (
                       <span className="inline-flex items-center gap-1 rounded-md bg-orange-100 dark:bg-orange-950 px-2 py-1 text-xs font-medium text-orange-700 dark:text-orange-300">
                         <span className="h-1.5 w-1.5 rounded-full bg-orange-600 dark:bg-orange-400" />
@@ -338,7 +348,7 @@ export function VirtualizedLogsTable({
                   </div>
 
                   {/* Model */}
-                  <div className="w-[180px] shrink-0 font-mono text-xs">
+                  <div className="flex-[1.5] min-w-[80px] font-mono text-xs px-1">
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -361,17 +371,17 @@ export function VirtualizedLogsTable({
                   </div>
 
                   {/* Input Tokens */}
-                  <div className="w-[80px] shrink-0 text-right font-mono text-xs">
+                  <div className="w-[55px] min-w-[55px] shrink-0 text-right font-mono text-xs px-1">
                     {formatTokenAmount(log.inputTokens)}
                   </div>
 
                   {/* Output Tokens */}
-                  <div className="w-[80px] shrink-0 text-right font-mono text-xs">
+                  <div className="w-[55px] min-w-[55px] shrink-0 text-right font-mono text-xs px-1">
                     {formatTokenAmount(log.outputTokens)}
                   </div>
 
                   {/* Cache Write */}
-                  <div className="w-[100px] shrink-0 text-right font-mono text-xs">
+                  <div className="flex-1 min-w-[70px] text-right font-mono text-xs px-1">
                     <TooltipProvider>
                       <Tooltip delayDuration={250}>
                         <TooltipTrigger asChild>
@@ -393,12 +403,12 @@ export function VirtualizedLogsTable({
                   </div>
 
                   {/* Cache Read */}
-                  <div className="w-[80px] shrink-0 text-right font-mono text-xs">
+                  <div className="w-[55px] min-w-[55px] shrink-0 text-right font-mono text-xs px-1">
                     {formatTokenAmount(log.cacheReadInputTokens)}
                   </div>
 
                   {/* Cost */}
-                  <div className="w-[100px] shrink-0 text-right font-mono text-xs">
+                  <div className="flex-1 min-w-[70px] text-right font-mono text-xs px-1">
                     {isNonBilling ? (
                       "-"
                     ) : log.costUsd ? (
@@ -440,12 +450,12 @@ export function VirtualizedLogsTable({
                   </div>
 
                   {/* Duration */}
-                  <div className="w-[80px] shrink-0 text-right font-mono text-xs">
+                  <div className="w-[55px] min-w-[55px] shrink-0 text-right font-mono text-xs px-1">
                     {formatDuration(log.durationMs)}
                   </div>
 
                   {/* Status */}
-                  <div className="w-[80px] shrink-0">
+                  <div className="w-[65px] min-w-[65px] shrink-0 pr-2">
                     <ErrorDetailsDialog
                       statusCode={log.statusCode}
                       errorMessage={log.errorMessage}

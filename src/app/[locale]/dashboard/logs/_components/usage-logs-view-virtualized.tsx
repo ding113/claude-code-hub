@@ -207,7 +207,7 @@ function UsageLogsViewContent({
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-0">
           <VirtualizedLogsTable
             filters={filters}
             currencyCode={currencyCode}
