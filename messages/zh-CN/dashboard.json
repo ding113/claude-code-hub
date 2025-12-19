@@ -120,7 +120,11 @@
       "nextPage": "下一页",
       "blocked": "被拦截",
       "nonBilling": "非计费",
-      "times": "次"
+      "times": "次",
+      "loadedCount": "已加载 {count} 条记录",
+      "loadingMore": "加载更多中...",
+      "noMoreData": "已加载全部记录",
+      "scrollToTop": "回到顶部"
     },
     "actions": {
       "refresh": "刷新",

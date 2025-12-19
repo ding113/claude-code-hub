@@ -120,7 +120,11 @@
       "nextPage": "Следующая",
       "blocked": "Заблокировано",
       "nonBilling": "Не тарифицируется",
-      "times": "раз"
+      "times": "раз",
+      "loadedCount": "Загружено {count} записей",
+      "loadingMore": "Загрузка...",
+      "noMoreData": "Все записи загружены",
+      "scrollToTop": "Наверх"
     },
     "actions": {
       "refresh": "Обновить",
