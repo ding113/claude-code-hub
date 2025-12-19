@@ -112,9 +112,14 @@ export function UsageLogsFilters({
 
     // 加载该用户的 keys
     if (newUserId) {
-      const keysResult = await getKeys(newUserId);
-      if (keysResult.ok && keysResult.data) {
-        setKeys(keysResult.data);
+      try {
+        const keysResult = await getKeys(newUserId);
+        if (keysResult.ok && keysResult.data) {
+          setKeys(keysResult.data);
+        }
+      } catch (error) {
+        console.error("Failed to load keys:", error);
+        toast.error(t("logs.error.loadKeysFailed"));
       }
     } else {
       setKeys([]);
