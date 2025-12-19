@@ -214,7 +214,7 @@ export function UserManagementTable({
     // Fallback to translation keys
     return {
       title: tUserMgmt("quickRenew.title"),
-      description: tUserMgmt("quickRenew.description"),
+      description: tUserMgmt("quickRenew.description", { userName: "{userName}" }),
       currentExpiry: tUserMgmt("quickRenew.currentExpiry"),
       neverExpires: tUserMgmt("quickRenew.neverExpires"),
       expired: tUserMgmt("quickRenew.expired"),
