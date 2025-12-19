@@ -178,8 +178,8 @@ export function VirtualizedLogsTable({
         <div className="bg-muted/50 border-b">
           <div className="flex items-center h-10 text-sm font-medium text-muted-foreground">
             <div className="w-[70px] min-w-[70px] shrink-0 pl-2">{t("logs.columns.time")}</div>
-            <div className="flex-1 min-w-[60px] px-1">{t("logs.columns.user")}</div>
-            <div className="flex-1 min-w-[60px] px-1">{t("logs.columns.key")}</div>
+            <div className="flex-[0.5] min-w-[60px] px-1">{t("logs.columns.user")}</div>
+            <div className="flex-[0.5] min-w-[60px] px-1">{t("logs.columns.key")}</div>
             <div className="flex-[2] min-w-[100px] px-1">{t("logs.columns.provider")}</div>
             <div className="flex-[1.5] min-w-[80px] px-1">{t("logs.columns.model")}</div>
             <div className="w-[55px] min-w-[55px] shrink-0 text-right px-1">
@@ -191,7 +191,7 @@ export function VirtualizedLogsTable({
             <div className="flex-1 min-w-[70px] text-right px-1">
               {t("logs.columns.cacheWrite")}
             </div>
-            <div className="w-[55px] min-w-[55px] shrink-0 text-right px-1">
+            <div className="flex-[0.8] min-w-[55px] text-right px-1">
               {t("logs.columns.cacheRead")}
             </div>
             <div className="flex-1 min-w-[70px] text-right px-1">{t("logs.columns.cost")}</div>
@@ -258,13 +258,13 @@ export function VirtualizedLogsTable({
                   </div>
 
                   {/* User */}
-                  <div className="flex-1 min-w-[60px] truncate px-1" title={log.userName}>
+                  <div className="flex-[0.5] min-w-[60px] truncate px-1" title={log.userName}>
                     {log.userName}
                   </div>
 
                   {/* Key */}
                   <div
-                    className="flex-1 min-w-[60px] font-mono text-xs truncate px-1"
+                    className="flex-[0.5] min-w-[60px] font-mono text-xs truncate px-1"
                     title={log.keyName}
                   >
                     {log.keyName}
@@ -403,7 +403,7 @@ export function VirtualizedLogsTable({
                   </div>
 
                   {/* Cache Read */}
-                  <div className="w-[55px] min-w-[55px] shrink-0 text-right font-mono text-xs px-1">
+                  <div className="flex-[0.8] min-w-[55px] text-right font-mono text-xs px-1">
                     {formatTokenAmount(log.cacheReadInputTokens)}
                   </div>
 
