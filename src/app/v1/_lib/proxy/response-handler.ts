@@ -32,6 +32,28 @@ export type UsageMetrics = {
   cache_read_input_tokens?: number;
 };
 
+/**
+ * 清理 Response headers 中的传输相关 header
+ *
+ * 原因：Bun 的 Response API 在接收 ReadableStream 或修改后的 body 时，
+ * 会自动添加 Transfer-Encoding: chunked 和 Content-Length，
+ * 如果不清理原始 headers 中的这些字段，会导致重复 header 错误。
+ *
+ * Node.js 运行时会智能去重，但 Bun 不会，所以需要手动清理。
+ *
+ * @param headers - 原始响应 headers
+ * @returns 清理后的 headers
+ */
+function cleanResponseHeaders(headers: Headers): Headers {
+  const cleaned = new Headers(headers);
+
+  // 删除传输相关 headers，让 Response API 自动管理
+  cleaned.delete("transfer-encoding"); // Bun 会根据 body 类型自动添加
+  cleaned.delete("content-length"); // body 改变后长度无效，Response API 会重新计算
+
+  return cleaned;
+}
+
 export class ProxyResponseHandler {
   static async dispatch(session: ProxySession, response: Response): Promise<Response> {
     const contentType = response.headers.get("content-type") || "";
@@ -152,10 +174,11 @@ export class ProxyResponseHandler {
             }
           );
 
+          // ⭐ 清理传输 headers（body 已从流转为 JSON 字符串）
           finalResponse = new Response(JSON.stringify(transformed), {
             status: response.status,
             statusText: response.statusText,
-            headers: new Headers(response.headers),
+            headers: cleanResponseHeaders(response.headers),
           });
         } catch (error) {
           logger.error("[ResponseHandler] Failed to transform Gemini non-stream response:", error);
@@ -186,11 +209,12 @@ export class ProxyResponseHandler {
           model: session.request.model,
         });
 
+        // ⭐ 清理传输 headers（body 已修改，原始传输信息无效）
         // 构建新的响应
         finalResponse = new Response(JSON.stringify(transformed), {
           status: response.status,
           statusText: response.statusText,
-          headers: new Headers(response.headers),
+          headers: cleanResponseHeaders(response.headers),
         });
       } catch (error) {
         logger.error("[ResponseHandler] Failed to transform response:", error);
@@ -1177,10 +1201,12 @@ export class ProxyResponseHandler {
       });
     }
 
+    // ⭐ 修复 Bun 运行时的 Transfer-Encoding 重复问题
+    // 清理上游的传输 headers，让 Response API 自动管理
     return new Response(clientStream, {
       status: response.status,
       statusText: response.statusText,
-      headers: new Headers(response.headers),
+      headers: cleanResponseHeaders(response.headers),
     });
   }
 }
