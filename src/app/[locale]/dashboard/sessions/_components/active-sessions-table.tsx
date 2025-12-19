@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/table";
 import { Link } from "@/i18n/routing";
 import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
 import type { ActiveSessionInfo } from "@/types/session";
@@ -190,6 +191,7 @@ export function ActiveSessionsTable({
   };
 
   const totalColumns = showSelection ? 12 : 11;
+  const showLoadingRows = isLoading && sessions.length === 0;
   const allSelected =
     showSelection &&
     selectedSessionIds.length > 0 &&
@@ -280,7 +282,17 @@ export function ActiveSessionsTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sortedSessions.length === 0 ? (
+            {showLoadingRows ? (
+              Array.from({ length: 6 }).map((_, rowIndex) => (
+                <TableRow key={`loading-row-${rowIndex}`}>
+                  {Array.from({ length: totalColumns }).map((_, colIndex) => (
+                    <TableCell key={`loading-cell-${rowIndex}-${colIndex}`}>
+                      <Skeleton className="h-4 w-full" />
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : sortedSessions.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={totalColumns} className="text-center text-muted-foreground">
                   {t("table.noActiveSessions")}

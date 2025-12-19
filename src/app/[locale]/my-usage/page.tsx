@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getMyQuota,
   getMyTodayStats,
@@ -23,29 +23,42 @@ export default function MyUsagePage() {
   const [quota, setQuota] = useState<MyUsageQuota | null>(null);
   const [todayStats, setTodayStats] = useState<MyTodayStats | null>(null);
   const [logsData, setLogsData] = useState<MyUsageLogsResult | null>(null);
-  const [isPending, startTransition] = useTransition();
-  const [hasLoaded, setHasLoaded] = useState(false);
+  const [isQuotaLoading, setIsQuotaLoading] = useState(true);
+  const [isStatsLoading, setIsStatsLoading] = useState(true);
+  const [isLogsLoading, setIsLogsLoading] = useState(true);
+  const [isStatsRefreshing, setIsStatsRefreshing] = useState(false);
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const loadInitial = useCallback(() => {
-    startTransition(async () => {
-      const [quotaResult, statsResult, logsResult] = await Promise.all([
-        getMyQuota(),
-        getMyTodayStats(),
-        getMyUsageLogs({ page: 1 }),
-      ]);
+    setIsQuotaLoading(true);
+    setIsStatsLoading(true);
+    setIsLogsLoading(true);
 
-      if (quotaResult.ok) setQuota(quotaResult.data);
-      if (statsResult.ok) setTodayStats(statsResult.data);
-      if (logsResult.ok) setLogsData(logsResult.data ?? null);
-      setHasLoaded(true);
-    });
+    void getMyQuota()
+      .then((quotaResult) => {
+        if (quotaResult.ok) setQuota(quotaResult.data);
+      })
+      .finally(() => setIsQuotaLoading(false));
+
+    void getMyTodayStats()
+      .then((statsResult) => {
+        if (statsResult.ok) setTodayStats(statsResult.data);
+      })
+      .finally(() => setIsStatsLoading(false));
+
+    void getMyUsageLogs({ page: 1 })
+      .then((logsResult) => {
+        if (logsResult.ok) setLogsData(logsResult.data ?? null);
+      })
+      .finally(() => setIsLogsLoading(false));
   }, []);
 
   const refreshToday = useCallback(async () => {
+    setIsStatsRefreshing(true);
     const stats = await getMyTodayStats();
     if (stats.ok) setTodayStats(stats.data);
+    setIsStatsRefreshing(false);
   }, []);
 
   useEffect(() => {
@@ -116,7 +129,7 @@ export default function MyUsagePage() {
 
       <QuotaCards
         quota={quota}
-        loading={!hasLoaded || isPending}
+        loading={isQuotaLoading}
         currencyCode={currencyCode}
         keyExpiresAt={keyExpiresAt}
         userExpiresAt={userExpiresAt}
@@ -134,12 +147,13 @@ export default function MyUsagePage() {
 
       <TodayUsageCard
         stats={todayStats}
-        loading={!hasLoaded || isPending}
+        loading={isStatsLoading}
+        refreshing={isStatsRefreshing}
         onRefresh={refreshToday}
         autoRefreshSeconds={30}
       />
 
-      <UsageLogsSection initialData={logsData} autoRefreshSeconds={30} />
+      <UsageLogsSection initialData={logsData} loading={isLogsLoading} autoRefreshSeconds={30} />
     </div>
   );
 }

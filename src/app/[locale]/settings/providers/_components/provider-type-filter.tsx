@@ -18,17 +18,18 @@ import type { ProviderType } from "@/types/provider";
 interface ProviderTypeFilterProps {
   value: ProviderType | "all";
   onChange: (value: ProviderType | "all") => void;
+  disabled?: boolean;
 }
 
-export function ProviderTypeFilter({ value, onChange }: ProviderTypeFilterProps) {
+export function ProviderTypeFilter({ value, onChange, disabled = false }: ProviderTypeFilterProps) {
   const tTypes = useTranslations("settings.providers.types");
   const tForm = useTranslations("settings.providers.form");
 
   return (
     <div className="flex items-center gap-2">
       <Filter className="h-4 w-4 text-muted-foreground" />
-      <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="w-[200px]">
+      <Select value={value} onValueChange={onChange} disabled={disabled}>
+        <SelectTrigger className="w-[200px]" disabled={disabled}>
           <SelectValue placeholder={tForm("filterByType")} />
         </SelectTrigger>
         <SelectContent>

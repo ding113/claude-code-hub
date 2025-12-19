@@ -1,8 +1,9 @@
 "use client";
-import { Search, X } from "lucide-react";
+import { Loader2, Search, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import type { ProviderDisplay, ProviderType } from "@/types/provider";
@@ -26,6 +27,8 @@ interface ProviderManagerProps {
   >;
   currencyCode?: CurrencyCode;
   enableMultiProviderTypes: boolean;
+  loading?: boolean;
+  refreshing?: boolean;
 }
 
 export function ProviderManager({
@@ -34,8 +37,11 @@ export function ProviderManager({
   healthStatus,
   currencyCode = "USD",
   enableMultiProviderTypes,
+  loading = false,
+  refreshing = false,
 }: ProviderManagerProps) {
   const t = useTranslations("settings.providers.search");
+  const tCommon = useTranslations("settings.common");
   const [typeFilter, setTypeFilter] = useState<ProviderType | "all">("all");
   const [sortBy, setSortBy] = useState<SortKey>("priority");
   const [searchTerm, setSearchTerm] = useState("");
@@ -94,8 +100,8 @@ export function ProviderManager({
       {/* 筛选条件 */}
       <div className="flex flex-col gap-3">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-          <ProviderTypeFilter value={typeFilter} onChange={setTypeFilter} />
-          <ProviderSortDropdown value={sortBy} onChange={setSortBy} />
+          <ProviderTypeFilter value={typeFilter} onChange={setTypeFilter} disabled={loading} />
+          <ProviderSortDropdown value={sortBy} onChange={setSortBy} disabled={loading} />
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -104,12 +110,14 @@ export function ProviderManager({
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-9 pr-9"
+              disabled={loading}
             />
             {searchTerm && (
               <button
                 onClick={() => setSearchTerm("")}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                 aria-label={t("clear")}
+                disabled={loading}
               >
                 <X className="h-4 w-4" />
               </button>
@@ -117,30 +125,71 @@ export function ProviderManager({
           </div>
         </div>
         {/* 搜索结果提示 */}
-        {debouncedSearchTerm && (
+        {debouncedSearchTerm ? (
           <p className="text-sm text-muted-foreground">
-            {filteredProviders.length > 0
-              ? t("found", { count: filteredProviders.length })
-              : t("notFound")}
+            {loading
+              ? tCommon("loading")
+              : filteredProviders.length > 0
+                ? t("found", { count: filteredProviders.length })
+                : t("notFound")}
           </p>
-        )}
-        {!debouncedSearchTerm && (
+        ) : (
           <div className="text-sm text-muted-foreground">
-            {t("showing", { filtered: filteredProviders.length, total: providers.length })}
+            {loading
+              ? tCommon("loading")
+              : t("showing", { filtered: filteredProviders.length, total: providers.length })}
           </div>
         )}
       </div>
 
       {/* 供应商列表 */}
-      <ProviderList
-        providers={filteredProviders}
-        currentUser={currentUser}
-        healthStatus={healthStatus}
-        currencyCode={currencyCode}
-        enableMultiProviderTypes={enableMultiProviderTypes}
-      />
+      {loading && providers.length === 0 ? (
+        <ProviderListSkeleton label={tCommon("loading")} />
+      ) : (
+        <div className="space-y-3">
+          {refreshing ? <InlineLoading label={tCommon("loading")} /> : null}
+          <ProviderList
+            providers={filteredProviders}
+            currentUser={currentUser}
+            healthStatus={healthStatus}
+            currencyCode={currencyCode}
+            enableMultiProviderTypes={enableMultiProviderTypes}
+          />
+        </div>
+      )}
     </div>
   );
 }
 
 export type { ProviderDisplay } from "@/types/provider";
+
+function InlineLoading({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-2 text-xs text-muted-foreground" aria-live="polite">
+      <Loader2 className="h-3 w-3 animate-spin" />
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function ProviderListSkeleton({ label }: { label: string }) {
+  return (
+    <div className="space-y-3" aria-busy="true">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div key={index} className="rounded-lg border bg-card p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-5 w-20" />
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-full" />
+          </div>
+          <Skeleton className="h-8 w-full" />
+        </div>
+      ))}
+      <InlineLoading label={label} />
+    </div>
+  );
+}
