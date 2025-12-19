@@ -639,7 +639,7 @@ sk_xxxxxxxxxxxxxxxxxx`}
                 <CodeBlock
                   language="toml"
                   code={`model_provider = "cch"
-model = "gpt-5.2"
+model = "gpt-5.2-codex"
 model_reasoning_effort = "xhigh"
 disable_response_storage = true
 sandbox_mode = "workspace-write"
@@ -685,7 +685,7 @@ network_access = true`}
                 <CodeBlock
                   language="toml"
                   code={`model_provider = "cch"
-model = "gpt-5.2"
+model = "gpt-5.2-codex"
 model_reasoning_effort = "xhigh"
 disable_response_storage = true
 sandbox_mode = "workspace-write"
