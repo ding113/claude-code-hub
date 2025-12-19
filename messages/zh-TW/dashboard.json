@@ -120,7 +120,11 @@
       "nextPage": "下一頁",
       "blocked": "已攔截",
       "nonBilling": "非計費",
-      "times": "次"
+      "times": "次",
+      "loadedCount": "已載入 {count} 筆記錄",
+      "loadingMore": "載入更多中...",
+      "noMoreData": "已載入全部記錄",
+      "scrollToTop": "回到頂端"
     },
     "actions": {
       "refresh": "重新整理",

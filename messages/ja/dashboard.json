@@ -120,7 +120,11 @@
       "nextPage": "次へ",
       "blocked": "ブロック済み",
       "nonBilling": "非課金",
-      "times": "回"
+      "times": "回",
+      "loadedCount": "{count} 件のレコードを読み込みました",
+      "loadingMore": "読み込み中...",
+      "noMoreData": "すべてのレコードを読み込みました",
+      "scrollToTop": "トップへ戻る"
     },
     "actions": {
       "refresh": "更新",

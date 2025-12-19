@@ -47,6 +47,7 @@
     "@radix-ui/react-tooltip": "^1",
     "@scalar/hono-api-reference": "^0.9",
     "@tanstack/react-query": "^5",
+    "@tanstack/react-virtual": "^3",
     "antd": "^6",
     "bull": "^4",
     "class-variance-authority": "^0.7",

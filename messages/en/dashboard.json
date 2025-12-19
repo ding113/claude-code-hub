@@ -120,7 +120,11 @@
       "nextPage": "Next Page",
       "blocked": "Blocked",
       "nonBilling": "Non-Billing",
-      "times": "times"
+      "times": "times",
+      "loadedCount": "Loaded {count} records",
+      "loadingMore": "Loading more...",
+      "noMoreData": "All records loaded",
+      "scrollToTop": "Back to top"
     },
     "actions": {
       "refresh": "Refresh",
