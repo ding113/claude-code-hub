@@ -8,6 +8,7 @@ import { deleteErrorRuleAction, updateErrorRuleAction } from "@/actions/error-ru
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { ErrorRule } from "@/repository/error-rules";
 import { EditRuleDialog } from "./edit-rule-dialog";
 
@@ -65,25 +66,25 @@ export function RuleListTable({ rules }: RuleListTableProps) {
   return (
     <>
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse">
+        <table className="w-full border-collapse table-fixed">
           <thead>
             <tr className="border-b bg-muted/50">
-              <th className="px-4 py-3 text-left text-sm font-medium">
+              <th className="w-[280px] px-4 py-3 text-left text-sm font-medium">
                 {t("errorRules.table.pattern")}
               </th>
-              <th className="px-4 py-3 text-left text-sm font-medium">
+              <th className="w-24 px-4 py-3 text-left text-sm font-medium">
                 {t("errorRules.table.category")}
               </th>
-              <th className="px-4 py-3 text-left text-sm font-medium">
+              <th className="w-48 px-4 py-3 text-left text-sm font-medium">
                 {t("errorRules.table.description")}
               </th>
-              <th className="px-4 py-3 text-left text-sm font-medium">
+              <th className="w-20 px-4 py-3 text-left text-sm font-medium">
                 {t("errorRules.table.status")}
               </th>
-              <th className="px-4 py-3 text-left text-sm font-medium">
+              <th className="w-36 px-4 py-3 text-left text-sm font-medium">
                 {t("errorRules.table.createdAt")}
               </th>
-              <th className="px-4 py-3 text-right text-sm font-medium">
+              <th className="w-24 px-4 py-3 text-right text-sm font-medium">
                 {t("errorRules.table.actions")}
               </th>
             </tr>
@@ -93,9 +94,24 @@ export function RuleListTable({ rules }: RuleListTableProps) {
               <tr key={rule.id} className="border-b hover:bg-muted/30">
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <code className="rounded bg-muted px-2 py-1 text-sm">{rule.pattern}</code>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <code
+                          className="block max-w-[200px] truncate rounded bg-muted px-2 py-1 text-sm cursor-help"
+                          tabIndex={0}
+                        >
+                          {rule.pattern}
+                        </code>
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side="bottom"
+                        className="max-w-md break-all font-mono text-xs"
+                      >
+                        {rule.pattern}
+                      </TooltipContent>
+                    </Tooltip>
                     {rule.isDefault && (
-                      <Badge variant="secondary" className="text-xs">
+                      <Badge variant="secondary" className="text-xs shrink-0">
                         {t("errorRules.table.default")}
                       </Badge>
                     )}
@@ -108,7 +124,10 @@ export function RuleListTable({ rules }: RuleListTableProps) {
                     <span className="text-sm text-muted-foreground">-</span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-sm text-muted-foreground">
+                <td
+                  className="px-4 py-3 text-sm text-muted-foreground truncate"
+                  title={rule.description || undefined}
+                >
                   {rule.description || "-"}
                 </td>
                 <td className="px-4 py-3">

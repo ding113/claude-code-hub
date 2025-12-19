@@ -298,6 +298,13 @@ const DEFAULT_ERROR_RULES = [
     isDefault: true,
     isEnabled: true,
     priority: 100,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "prompt_limit",
+        message: "输入内容过长，请减少 Prompt 中的 token 数量后重试",
+      },
+    },
   },
   // Issue #288: Add patterns for input length errors that should not trigger retry
   {
@@ -308,6 +315,13 @@ const DEFAULT_ERROR_RULES = [
     isDefault: true,
     isEnabled: true,
     priority: 95,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "input_limit",
+        message: "输入内容超过供应商限制，请减少输入长度后重试",
+      },
+    },
   },
   {
     pattern: "CONTENT_LENGTH_EXCEEDS_THRESHOLD",
@@ -317,6 +331,13 @@ const DEFAULT_ERROR_RULES = [
     isDefault: true,
     isEnabled: true,
     priority: 94,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "input_limit",
+        message: "内容长度超过阈值限制，请减少输入内容后重试",
+      },
+    },
   },
   {
     pattern: "ValidationException",
@@ -326,6 +347,13 @@ const DEFAULT_ERROR_RULES = [
     isDefault: true,
     isEnabled: true,
     priority: 93,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "validation_error",
+        message: "请求参数验证失败，请检查请求格式是否正确",
+      },
+    },
   },
   {
     pattern:
@@ -336,6 +364,13 @@ const DEFAULT_ERROR_RULES = [
     isDefault: true,
     isEnabled: true,
     priority: 92,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "context_limit",
+        message: "上下文长度超过模型限制，请减少对话历史或输入内容",
+      },
+    },
   },
   {
     pattern: "max_tokens.*exceed|exceed.*max_tokens|maximum.*tokens.*allowed",
@@ -345,6 +380,13 @@ const DEFAULT_ERROR_RULES = [
     isDefault: true,
     isEnabled: true,
     priority: 90,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "token_limit",
+        message: "max_tokens 参数超过模型允许的最大值，请降低该参数",
+      },
+    },
   },
   {
     pattern: "pricing plan does not include Long Context",
@@ -354,6 +396,13 @@ const DEFAULT_ERROR_RULES = [
     isDefault: true,
     isEnabled: true,
     priority: 91,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "context_limit",
+        message: "当前供应商套餐不支持长上下文，请切换供应商或减少输入",
+      },
+    },
   },
   {
     pattern: "blocked by.*content filter",
@@ -363,6 +412,13 @@ const DEFAULT_ERROR_RULES = [
     isDefault: true,
     isEnabled: true,
     priority: 90,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "content_filter",
+        message: "内容被安全过滤器拦截，请修改输入内容后重试",
+      },
+    },
   },
   // Tool use validation errors (non-retryable)
   {
@@ -373,6 +429,31 @@ const DEFAULT_ERROR_RULES = [
     isDefault: true,
     isEnabled: true,
     priority: 89,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "validation_error",
+        message: "tool_use ID 重复，请确保每个工具调用使用唯一 ID",
+      },
+    },
+  },
+  // Issue #366: Tool names must be unique (MCP server configuration error)
+  {
+    pattern: "Tool names must be unique",
+    category: "validation_error",
+    description:
+      "Duplicate tool names in request (client error, related to MCP server configuration)",
+    matchType: "contains" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 89,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "validation_error",
+        message: "工具名称重复，请检查 MCP 服务器配置确保工具名称唯一",
+      },
+    },
   },
   // Tool result validation errors (non-retryable)
   {
@@ -383,6 +464,13 @@ const DEFAULT_ERROR_RULES = [
     isDefault: true,
     isEnabled: true,
     priority: 88,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "validation_error",
+        message: "tool_result 缺少对应的 tool_use，请检查工具调用链",
+      },
+    },
   },
   // Model-related errors (non-retryable)
   {
@@ -393,6 +481,13 @@ const DEFAULT_ERROR_RULES = [
     isDefault: true,
     isEnabled: true,
     priority: 88,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "model_error",
+        message: "模型参数为空，请检查请求中的 model 字段",
+      },
+    },
   },
   {
     pattern: "unknown model|model.*not.*found|model.*does.*not.*exist",
@@ -402,6 +497,13 @@ const DEFAULT_ERROR_RULES = [
     isDefault: true,
     isEnabled: true,
     priority: 87,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "model_error",
+        message: "未知模型，请检查模型名称是否正确",
+      },
+    },
   },
   {
     pattern: "model is required",
@@ -411,6 +513,13 @@ const DEFAULT_ERROR_RULES = [
     isDefault: true,
     isEnabled: true,
     priority: 86,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "model_error",
+        message: "缺少必需的 model 参数，请在请求中指定模型名称",
+      },
+    },
   },
   {
     pattern: "模型名称.*为空|模型名称不能为空|未指定模型",
@@ -420,6 +529,13 @@ const DEFAULT_ERROR_RULES = [
     isDefault: true,
     isEnabled: true,
     priority: 86,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "model_error",
+        message: "模型名称不能为空，请指定有效的模型名称",
+      },
+    },
   },
   {
     pattern: "PDF has too many pages|maximum of.*PDF pages",
@@ -429,6 +545,13 @@ const DEFAULT_ERROR_RULES = [
     isDefault: true,
     isEnabled: true,
     priority: 80,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "pdf_limit",
+        message: "PDF 页数超过限制（通常为 100 页），请减少页数后重试",
+      },
+    },
   },
   {
     pattern:
@@ -439,6 +562,13 @@ const DEFAULT_ERROR_RULES = [
     isDefault: true,
     isEnabled: true,
     priority: 70,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "thinking_error",
+        message: "thinking 块格式无效，请检查配置或请求参数",
+      },
+    },
   },
   {
     pattern: "Missing required parameter|Extra inputs.*not permitted",
@@ -448,6 +578,13 @@ const DEFAULT_ERROR_RULES = [
     isDefault: true,
     isEnabled: true,
     priority: 60,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "parameter_error",
+        message: "缺少必需参数或包含不允许的参数，请检查请求格式",
+      },
+    },
   },
   {
     pattern: "非法请求|illegal request|invalid request",
@@ -457,6 +594,13 @@ const DEFAULT_ERROR_RULES = [
     isDefault: true,
     isEnabled: true,
     priority: 50,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "invalid_request",
+        message: "请求格式非法，请检查请求结构是否符合 API 规范",
+      },
+    },
   },
   {
     pattern: "(cache_control.*(limit|maximum).*blocks|(maximum|limit).*blocks.*cache_control)",
@@ -466,6 +610,13 @@ const DEFAULT_ERROR_RULES = [
     isDefault: true,
     isEnabled: true,
     priority: 40,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "cache_limit",
+        message: "cache_control 块数量超过限制，请减少缓存块数量",
+      },
+    },
   },
   {
     pattern: "image exceeds.*maximum.*bytes",
@@ -475,6 +626,13 @@ const DEFAULT_ERROR_RULES = [
     isDefault: true,
     isEnabled: true,
     priority: 35,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "invalid_request",
+        message: "图片大小超过最大限制，请压缩图片后重试",
+      },
+    },
   },
 ];
 

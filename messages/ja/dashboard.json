@@ -120,7 +120,11 @@
       "nextPage": "次へ",
       "blocked": "ブロック済み",
       "nonBilling": "非課金",
-      "times": "回"
+      "times": "回",
+      "loadedCount": "{count} 件のレコードを読み込みました",
+      "loadingMore": "読み込み中...",
+      "noMoreData": "すべてのレコードを読み込みました",
+      "scrollToTop": "トップへ戻る"
     },
     "actions": {
       "refresh": "更新",
@@ -130,7 +134,8 @@
       "view": "表示"
     },
     "error": {
-      "loadFailed": "読み込み失敗"
+      "loadFailed": "読み込み失敗",
+      "loadKeysFailed": "キーリストの読み込みに失敗しました"
     },
     "details": {
       "title": "リクエスト詳細",
@@ -422,10 +427,7 @@
     },
     "labels": {
       "byName": "名前順",
-      "byUsageRate": "使用率順",
-      "all": "すべて",
-      "warning": "制限に近い (>60%)",
-      "exceeded": "超過 (≥100%)"
+      "byUsageRate": "使用率順"
     },
     "users": {
       "title": "ユーザー クォータ統計",
@@ -572,10 +574,15 @@
   },
   "keyListHeader": {
     "todayUsage": "本日の使用量",
+    "allowedModels": {
+      "label": "許可モデル",
+      "noRestrictions": "許可されたクライアント：制限なし"
+    },
+    "expiresAt": "有効期限",
     "proxyStatus": {
-      "loading": "プロキシステータス読み込み中",
-      "fetchFailed": "プロキシステータスの取得に失敗しました",
-      "noStatus": "プロキシステータスなし",
+      "loading": "プロキシー ステータス読み込み中",
+      "fetchFailed": "プロキシー ステータスの取得に失敗しました",
+      "noStatus": "プロキシー ステータスなし",
       "activeRequests": "アクティブリクエスト",
       "lastRequest": "最新リクエスト",
       "noRecord": "記録なし",
@@ -598,6 +605,10 @@
       "showTooltip": "完全なキーを表示",
       "hideTooltip": "キーを非表示",
       "closeButton": "閉じる"
+    },
+    "allowedClients": {
+      "label": "許可されたクライアント",
+      "noRestrictions": "許可されたクライアント：制限なし"
     }
   },
   "keyLimitUsage": {
@@ -667,7 +678,7 @@
     },
     "limitConcurrentSessions": {
       "label": "同時セッション上限",
-      "placeholder": "0 は無制限を意味します",
+      "placeholder": "0は無制限を意味します",
       "description": "同時に実行される会話の数"
     },
     "errors": {
@@ -720,6 +731,7 @@
     "dailyQuota": {
       "label": "1日あたりの割当量",
       "placeholder": "1日あたりの消費割当量制限",
+      "helperText": "0に設定すると無制限になります",
       "description": "デフォルト値: ${default}、範囲: $0.01-$1000"
     },
     "limit5hUsd": {
@@ -741,6 +753,26 @@
       "label": "同時セッション上限",
       "placeholder": "0は無制限を意味します",
       "description": "同時に実行される会話の数"
+    },
+    "isEnabled": {
+      "label": "ユーザーを有効化",
+      "description": "無効にするとユーザーはAPIにアクセスできなくなります"
+    },
+    "expiresAt": {
+      "label": "有効期限",
+      "placeholder": "空白の場合は無期限",
+      "description": "有効期限切れ後、ユーザーは自動的に無効化されます"
+    },
+    "allowedClients": {
+      "label": "許可されたクライアント",
+      "description": "このアカウントを使用できるCLI/IDEクライアントを制限します。空の場合は制限なし。",
+      "customLabel": "カスタムクライアントパターン",
+      "customPlaceholder": "カスタムパターンを入力（例：'xcode', 'my-ide'）"
+    },
+    "allowedModels": {
+      "label": "許可モデル",
+      "placeholder": "モデル名を入力（Enterで追加）",
+      "description": "ユーザーを特定のAIモデルに制限します。空白の場合は制限なし（最大50モデル、各64文字）"
     }
   },
   "deleteKeyConfirm": {
@@ -770,11 +802,14 @@
     "title": "ユーザー管理",
     "description": "{count} 人のユーザーを表示中",
     "toolbar": {
-      "searchPlaceholder": "ユーザー名で検索...",
+      "searchPlaceholder": "名前、メモ、タグ、キーで検索...",
       "groupFilter": "グループでフィルター",
       "allGroups": "すべてのグループ",
       "tagFilter": "タグでフィルター",
-      "allTags": "すべてのタグ"
+      "allTags": "すべてのタグ",
+      "keyGroupFilter": "キーグループ",
+      "allKeyGroups": "すべてのキーグループ",
+      "createUser": "ユーザーを作成"
     }
   },
   "availability": {
@@ -887,6 +922,360 @@
     "toast": {
       "refreshSuccess": "可用性データを更新しました",
       "refreshFailed": "更新に失敗しました。再試行してください"
+    }
+  },
+  "userManagement": {
+    "table": {
+      "columns": {
+        "username": "ユーザー名",
+        "note": "メモ",
+        "expiresAt": "有効期限",
+        "expiresAtHint": "クリックで期限を延長",
+        "limit5h": "5時間上限",
+        "limitDaily": "日次上限",
+        "limitWeekly": "週次上限",
+        "limitMonthly": "月次上限",
+        "limitTotal": "総上限",
+        "limitSessions": "同時セッション"
+      },
+      "keyRow": {
+        "name": "キー名",
+        "key": "キー",
+        "group": "グループ",
+        "todayUsage": "本日の使用量",
+        "todayCost": "本日の消費",
+        "lastUsed": "最終使用",
+        "actions": "操作",
+        "quotaButton": "クォータ使用状況を表示",
+        "fields": {
+          "callsLabel": "呼び出し",
+          "costLabel": "消費"
+        }
+      },
+      "expand": "展開",
+      "collapse": "折りたたむ",
+      "noKeys": "キーなし",
+      "defaultGroup": "default",
+      "userStatus": {
+        "disabled": "無効"
+      }
+    },
+    "keyFullDisplay": {
+      "title": "完全なキー",
+      "copySuccess": "キーがクリップボードにコピーされました",
+      "copyFailed": "コピーに失敗しました",
+      "show": "キーを表示",
+      "hide": "キーを非表示",
+      "copied": "コピー済み",
+      "copy": "キーをコピー"
+    },
+    "keyStatsDialog": {
+      "title": "本日のモデル統計",
+      "columns": {
+        "model": "モデル",
+        "calls": "呼び出し回数",
+        "cost": "消費金額"
+      },
+      "noData": "本日の使用記録はありません",
+      "totalCalls": "総呼び出し数",
+      "totalCost": "総消費"
+    },
+    "keyQuotaUsageDialog": {
+      "title": "Key クォータ使用状況",
+      "fetchFailed": "クォータ使用状況の取得に失敗しました",
+      "noLimit": "制限なし",
+      "modeFixed": "固定時間",
+      "modeRolling": "ローリング24h",
+      "retry": "再試行",
+      "labels": {
+        "limit5h": "5 時間",
+        "limitDaily": "日次",
+        "limitWeekly": "週次",
+        "limitMonthly": "月次",
+        "limitTotal": "合計",
+        "limitSessions": "同時接続"
+      }
+    },
+    "quickRenew": {
+      "title": "クイック更新",
+      "description": "ユーザー {userName} の新しい有効期限を設定",
+      "currentExpiry": "現在の有効期限",
+      "neverExpires": "無期限",
+      "expired": "期限切れ",
+      "quickOptions": {
+        "7days": "7 日",
+        "30days": "30 日",
+        "90days": "90 日",
+        "1year": "1 年"
+      },
+      "customDate": "カスタム日付",
+      "enableOnRenew": "同時にユーザーを有効化",
+      "cancel": "キャンセル",
+      "confirm": "更新を確認",
+      "confirming": "更新中...",
+      "success": "更新に成功しました",
+      "failed": "更新に失敗しました"
+    },
+    "editDialog": {
+      "title": "ユーザーとキーを編集",
+      "description": "ユーザー情報とAPIキーの設定を編集",
+      "userSection": "ユーザー設定",
+      "keysSection": "キー設定",
+      "scrollToKey": "キーへスクロール",
+      "saveFailed": "ユーザーの保存に失敗しました",
+      "keySaveFailed": "キーの保存に失敗しました",
+      "keyDeleteFailed": "キーの削除に失敗しました",
+      "saveSuccess": "変更が保存されました",
+      "operationFailed": "操作に失敗しました",
+      "userDisabled": "ユーザーが無効化されました",
+      "userEnabled": "ユーザーが有効化されました",
+      "deleteFailed": "ユーザーの削除に失敗しました",
+      "userDeleted": "ユーザーが削除されました",
+      "saving": "保存中..."
+    },
+    "createDialog": {
+      "title": "ユーザーを作成",
+      "description": "新規ユーザーを作成し、APIキーを設定",
+      "saveFailed": "ユーザーの作成に失敗しました",
+      "keyCreateFailed": "キーの作成に失敗しました",
+      "createSuccess": "ユーザーが作成されました",
+      "keysSection": "キー",
+      "addKey": "キーを追加",
+      "removeKey": "キーを削除",
+      "cannotDeleteLastKey": "最後のキーは削除できません",
+      "confirmRemoveKeyTitle": "キーを削除",
+      "confirmRemoveKeyDescription": "キー \"{name}\" を削除してもよろしいですか?",
+      "creating": "作成中...",
+      "create": "作成"
+    },
+    "onboarding": {
+      "skip": "スキップ",
+      "next": "次へ",
+      "prev": "前へ",
+      "finish": "作成を開始",
+      "stepIndicator": "ステップ {current} / {total}",
+      "steps": {
+        "welcome": {
+          "title": "ユーザーとキー",
+          "description": "ユーザーは API アクセスの主体です。各ユーザーは複数の API キーを持つことができます。ユーザーレベルの上限はすべてのキーに影響し、キーレベルの上限でより細かく制御できます。"
+        },
+        "limits": {
+          "title": "上限管理",
+          "description": "6 種類の上限をサポート：5 時間、日次、週次、月次、総上限、同時セッション。上限ルールを必要に応じて追加し、柔軟に使用量を制御できます。"
+        },
+        "groups": {
+          "title": "プロバイダーグループ",
+          "description": "グループ機能を使用して、ユーザーが特定のプロバイダーのみを使用するよう制限できます。キーレベルのグループはユーザーレベルのグループより優先されます。"
+        },
+        "keyFeatures": {
+          "title": "キーの特殊機能",
+          "description": "各キーは、キャッシュ TTL の上書き、Web UI へのログイン許可など、高度な機能を個別に設定できます。"
+        }
+      }
+    },
+    "limitRules": {
+      "addRule": "上限ルールを追加",
+      "ruleTypes": {
+        "limit5h": "5時間上限",
+        "limitDaily": "日次上限",
+        "limitWeekly": "週次上限",
+        "limitMonthly": "月次上限",
+        "limitTotal": "総上限",
+        "limitSessions": "同時セッション"
+      },
+      "dailyMode": {
+        "fixed": "固定時刻でリセット",
+        "rolling": "ローリングウィンドウ（24h）"
+      },
+      "quickValues": {
+        "10": "$10",
+        "50": "$50",
+        "100": "$100",
+        "500": "$500"
+      },
+      "alreadySet": "設定済み",
+      "confirmAdd": "追加",
+      "cancel": "キャンセル"
+    },
+    "quickExpire": {
+      "oneWeek": "1週間後",
+      "oneMonth": "1か月後",
+      "threeMonths": "3か月後",
+      "oneYear": "1年後"
+    },
+    "providerGroup": {
+      "label": "プロバイダーグループ",
+      "placeholder": "プロバイダーグループを選択",
+      "noRestriction": "制限なし（すべてのプロバイダー）",
+      "providerCount": "{count} 件のプロバイダー"
+    },
+    "dangerZone": {
+      "title": "危険な操作",
+      "description": "以下の操作は元に戻せません、慎重に実行してください",
+      "enable": {
+        "title": "ユーザーを有効化",
+        "description": "有効化すると、このユーザーとそのキーは正常に使用できるようになります",
+        "trigger": "有効化",
+        "confirm": "有効化を確認",
+        "confirmDescription": "ユーザー \"{userName}\" を有効化してもよろしいですか？",
+        "loading": "処理中..."
+      },
+      "disable": {
+        "title": "ユーザーを無効化",
+        "description": "無効化すると、このユーザーとそのキーは使用できなくなります",
+        "trigger": "無効化",
+        "confirm": "無効化を確認",
+        "confirmDescription": "ユーザー \"{userName}\" を無効化してもよろしいですか？",
+        "loading": "処理中..."
+      },
+      "delete": {
+        "title": "ユーザーを削除",
+        "description": "このユーザーに関連するすべてのデータが削除されます、この操作は元に戻せません",
+        "trigger": "削除",
+        "confirm": "削除を確認",
+        "confirmDescription": "この操作はユーザー \"{userName}\" のすべての関連データを削除し、元に戻せません。",
+        "confirmLabel": "二次確認",
+        "confirmHint": "削除を確認するには \"{userName}\" と入力してください",
+        "loading": "削除中..."
+      },
+      "actions": {
+        "cancel": "キャンセル"
+      },
+      "errors": {
+        "enableFailed": "ユーザーの有効化に失敗しました、後でもう一度お試しください",
+        "disableFailed": "ユーザーの無効化に失敗しました、後でもう一度お試しください",
+        "deleteFailed": "ユーザーの削除に失敗しました、後でもう一度お試しください"
+      }
+    },
+    "limitIndicator": {
+      "notSet": "未設定",
+      "unlimited": "無制限"
+    },
+    "keySettings": {
+      "balanceQueryPage": {
+        "label": "専用の残高確認ページを有効化",
+        "description": "専用ページから残高を確認できるようにします"
+      },
+      "cacheTtlOverride": {
+        "label": "Cache TTL の上書き",
+        "inherit": "上書きしない（プロバイダー/クライアントに従う）",
+        "5m": "5分",
+        "1h": "1時間"
+      }
+    },
+    "pagination": {
+      "previous": "前へ",
+      "next": "次へ",
+      "page": "第 {current} ページ",
+      "of": "全 {total} ページ"
+    },
+    "toolbar": {
+      "expandAll": "すべて展開",
+      "collapseAll": "すべて折りたたむ"
+    },
+    "keyStatus": {
+      "enabled": "有効",
+      "disabled": "無効"
+    },
+    "userEditSection": {
+      "sections": {
+        "basicInfo": "基本情報",
+        "expireTime": "有効期限",
+        "limitRules": "制限ルール",
+        "accessRestrictions": "アクセス制限"
+      },
+      "fields": {
+        "username": {
+          "label": "ユーザー名",
+          "placeholder": "ユーザー名を入力してください"
+        },
+        "description": {
+          "label": "メモ",
+          "placeholder": "メモを入力（任意）"
+        },
+        "tags": {
+          "label": "ユーザータグ",
+          "placeholder": "タグを入力（Enterで追加）"
+        },
+        "providerGroup": {
+          "label": "プロバイダーグループ（レガシー）",
+          "placeholder": "プロバイダーグループを入力または空白のまま"
+        },
+        "allowedClients": {
+          "label": "クライアント制限",
+          "description": "このアカウントを使用できるCLI/IDEクライアントを制限します。空欄は制限なし。",
+          "customLabel": "カスタムクライアントパターン",
+          "customPlaceholder": "パターンを入力（例：'xcode', 'my-ide'）"
+        },
+        "allowedModels": {
+          "label": "モデル制限",
+          "placeholder": "モデル名を入力またはドロップダウンから選択",
+          "description": "ユーザーがアクセスできるAIモデルを制限します。空欄は制限なし。"
+        },
+        "enableStatus": {
+          "label": "有効状態",
+          "enabledDescription": "現在有効です。無効にすると、このユーザーとそのキーは使用できなくなります。",
+          "disabledDescription": "現在無効です。有効にすると、このユーザーとそのキーが通常通り使用できるようになります。",
+          "confirmDisable": "無効化を確認",
+          "confirmEnable": "有効化を確認"
+        }
+      },
+      "presetClients": {
+        "claude-cli": "Claude Code CLI",
+        "gemini-cli": "Gemini CLI",
+        "factory-cli": "Droid CLI",
+        "codex-cli": "Codex CLI"
+      }
+    },
+    "keyEditSection": {
+      "sections": {
+        "basicInfo": "基本情報",
+        "expireTime": "有効期限",
+        "limitRules": "制限ルール",
+        "specialFeatures": "特殊機能"
+      },
+      "fields": {
+        "keyName": {
+          "label": "キー名",
+          "placeholder": "キー名を入力してください"
+        },
+        "enableStatus": {
+          "label": "有効状態",
+          "description": "無効化されたキーは使用できません"
+        },
+        "balanceQueryPage": {
+          "label": "独立した個人使用量ページ",
+          "description": "有効にすると、このキーで独立した個人使用量ページにアクセスできます",
+          "descriptionEnabled": "有効にすると、このキーはログイン時に独立した個人使用量ページにアクセスします。ただし、自分のキーのプロバイダーグループは変更できません。",
+          "descriptionDisabled": "無効にすると、ユーザーは個人使用量ページUIにアクセスできません。ただし、制限されたWeb UIで自分のキーのプロバイダーグループを変更できます。"
+        },
+        "providerGroup": {
+          "label": "プロバイダーグループ",
+          "placeholder": "空欄の場合は全ての default グループのプロバイダーを許可"
+        },
+        "cacheTtl": {
+          "label": "Cache TTL上書き",
+          "options": {
+            "inherit": "上書きしない（プロバイダー/クライアントに従う）",
+            "5m": "5m",
+            "1h": "1h"
+          }
+        }
+      },
+      "limitRules": {
+        "title": "制限ルールを追加",
+        "actions": {
+          "add": "ルールを追加",
+          "remove": "削除"
+        },
+        "daily": {
+          "mode": {
+            "fixed": "固定時間リセット",
+            "rolling": "ローリングウィンドウ（24時間）"
+          }
+        },
+        "overwriteHint": "このタイプは既に存在します。保存すると既存の値が上書きされます"
+      }
     }
   }
 }

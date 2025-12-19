@@ -16,9 +16,30 @@ function maskRedisUrl(redisUrl: string) {
 }
 
 /**
+ * Build TLS configuration for Redis connection.
+ * Supports skipping certificate verification via REDIS_TLS_REJECT_UNAUTHORIZED env.
+ * Includes servername for SNI (Server Name Indication) support.
+ */
+function buildTlsConfig(redisUrl: string): Record<string, unknown> {
+  const rejectUnauthorized = process.env.REDIS_TLS_REJECT_UNAUTHORIZED !== "false";
+
+  try {
+    const url = new URL(redisUrl);
+    return {
+      host: url.hostname,
+      servername: url.hostname, // SNI support for cloud Redis providers
+      rejectUnauthorized,
+    };
+  } catch {
+    return { rejectUnauthorized };
+  }
+}
+
+/**
  * Build ioredis connection options with protocol-based TLS detection.
  * - When `rediss://` is used, explicitly enable TLS via `tls: {}`
  * - When `redis://` is used, keep plaintext TCP (no TLS option)
+ * - Supports REDIS_TLS_REJECT_UNAUTHORIZED env to skip certificate verification
  */
 export function buildRedisOptionsForUrl(redisUrl: string) {
   const isTLS = (() => {
@@ -46,7 +67,7 @@ export function buildRedisOptionsForUrl(redisUrl: string) {
   } as const;
 
   // Explicit TLS config for Upstash and other managed Redis providers
-  const tlsOptions = isTLS ? { tls: {} as Record<string, unknown> } : {};
+  const tlsOptions = isTLS ? { tls: buildTlsConfig(redisUrl) } : {};
 
   return { isTLS, options: { ...baseOptions, ...tlsOptions } };
 }
@@ -89,20 +110,14 @@ export function getRedisClient(): Redis | null {
       },
     };
 
-    // 2. 如果使用 rediss://，则添加显式的 TLS 和 SNI (host) 配置
+    // 2. 如果使用 rediss://，则添加显式的 TLS 配置（支持跳过证书验证）
     if (useTls) {
-      logger.info("[Redis] Using TLS connection (rediss://)", { redisUrl: safeRedisUrl });
-      try {
-        // 从 URL 中解析 hostname，用于 SNI
-        const url = new URL(redisUrl);
-        redisOptions.tls = {
-          host: url.hostname,
-        };
-      } catch (e) {
-        logger.error("[Redis] Failed to parse REDIS_URL for TLS host:", e);
-        // 如果 URL 解析失败，回退
-        redisOptions.tls = {};
-      }
+      const rejectUnauthorized = process.env.REDIS_TLS_REJECT_UNAUTHORIZED !== "false";
+      logger.info("[Redis] Using TLS connection (rediss://)", {
+        redisUrl: safeRedisUrl,
+        rejectUnauthorized,
+      });
+      redisOptions.tls = buildTlsConfig(redisUrl);
     }
 
     // 3. 使用组合后的配置创建客户端

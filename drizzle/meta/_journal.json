@@ -246,6 +246,27 @@
       "when": 1765385500819,
       "tag": "0034_add-context-1m-support",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1765719837757,
+      "tag": "0035_blushing_fabian_cortez",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1765993084329,
+      "tag": "0036_stale_iron_fist",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1766150400000,
+      "tag": "0037_cursor_pagination_index",
+      "breakpoints": true
     }
   ]
 }

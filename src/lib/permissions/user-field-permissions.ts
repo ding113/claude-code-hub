@@ -6,16 +6,31 @@
  */
 
 export const USER_FIELD_PERMISSIONS = {
-  // Admin-only fields (existing sensitive fields)
-  rpmLimit: { requiredRole: "admin" },
-  dailyLimitUsd: { requiredRole: "admin" },
+  // Admin-only fields (UpdateUserSchema sensitive fields)
+  rpm: { requiredRole: "admin" },
+  dailyQuota: { requiredRole: "admin" },
   providerGroup: { requiredRole: "admin" },
 
-  // Admin-only fields (new user-level quota fields)
+  // Admin-only fields (user-level quota fields)
   limit5hUsd: { requiredRole: "admin" },
   limitWeeklyUsd: { requiredRole: "admin" },
   limitMonthlyUsd: { requiredRole: "admin" },
+  limitTotalUsd: { requiredRole: "admin" },
   limitConcurrentSessions: { requiredRole: "admin" },
+
+  // Admin-only fields (daily reset configuration)
+  dailyResetMode: { requiredRole: "admin" },
+  dailyResetTime: { requiredRole: "admin" },
+
+  // Admin-only fields (status and expiry)
+  isEnabled: { requiredRole: "admin" },
+  expiresAt: { requiredRole: "admin" },
+
+  // Admin-only field (client restrictions)
+  allowedClients: { requiredRole: "admin" },
+
+  // Admin-only field (model restrictions)
+  allowedModels: { requiredRole: "admin" },
 } as const;
 
 /**

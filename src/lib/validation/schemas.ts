@@ -33,8 +33,8 @@ export const CreateUserSchema = z.object({
     .number()
     .min(USER_LIMITS.DAILY_QUOTA.MIN, `每日额度不能低于${USER_LIMITS.DAILY_QUOTA.MIN}美元`)
     .max(USER_LIMITS.DAILY_QUOTA.MAX, `每日额度不能超过${USER_LIMITS.DAILY_QUOTA.MAX}美元`)
-    .optional()
-    .default(USER_DEFAULTS.DAILY_QUOTA),
+    .nullable()
+    .optional(),
   limit5hUsd: z.coerce
     .number()
     .min(0, "5小时消费上限不能为负数")
@@ -120,6 +120,25 @@ export const CreateUserSchema = z.object({
         }
       })
   ),
+  // Daily quota reset mode
+  dailyResetMode: z.enum(["fixed", "rolling"]).optional().default("fixed"),
+  dailyResetTime: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "重置时间格式必须为 HH:mm")
+    .optional()
+    .default("00:00"),
+  // Allowed clients (CLI/IDE restrictions)
+  allowedClients: z
+    .array(z.string().max(64, "客户端模式长度不能超过64个字符"))
+    .max(50, "客户端模式数量不能超过50个")
+    .optional()
+    .default([]),
+  // Allowed models (AI model restrictions)
+  allowedModels: z
+    .array(z.string().max(64, "模型名称长度不能超过64个字符"))
+    .max(50, "模型数量不能超过50个")
+    .optional()
+    .default([]),
 });
 
 /**
@@ -143,6 +162,7 @@ export const UpdateUserSchema = z.object({
     .number()
     .min(USER_LIMITS.DAILY_QUOTA.MIN, `每日额度不能低于${USER_LIMITS.DAILY_QUOTA.MIN}美元`)
     .max(USER_LIMITS.DAILY_QUOTA.MAX, `每日额度不能超过${USER_LIMITS.DAILY_QUOTA.MAX}美元`)
+    .nullable()
     .optional(),
   limit5hUsd: z.coerce
     .number()
@@ -222,6 +242,22 @@ export const UpdateUserSchema = z.object({
         }
       })
   ),
+  // Daily quota reset mode
+  dailyResetMode: z.enum(["fixed", "rolling"]).optional(),
+  dailyResetTime: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "重置时间格式必须为 HH:mm")
+    .optional(),
+  // Allowed clients (CLI/IDE restrictions)
+  allowedClients: z
+    .array(z.string().max(64, "客户端模式长度不能超过64个字符"))
+    .max(50, "客户端模式数量不能超过50个")
+    .optional(),
+  // Allowed models (AI model restrictions)
+  allowedModels: z
+    .array(z.string().max(64, "模型名称长度不能超过64个字符"))
+    .max(50, "模型数量不能超过50个")
+    .optional(),
 });
 
 /**

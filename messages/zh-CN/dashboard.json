@@ -120,7 +120,11 @@
       "nextPage": "下一页",
       "blocked": "被拦截",
       "nonBilling": "非计费",
-      "times": "次"
+      "times": "次",
+      "loadedCount": "已加载 {count} 条记录",
+      "loadingMore": "加载更多中...",
+      "noMoreData": "已加载全部记录",
+      "scrollToTop": "回到顶部"
     },
     "actions": {
       "refresh": "刷新",
@@ -130,7 +134,8 @@
       "view": "查看"
     },
     "error": {
-      "loadFailed": "加载失败"
+      "loadFailed": "加载失败",
+      "loadKeysFailed": "加载密钥列表失败"
     },
     "details": {
       "title": "请求详情",
@@ -450,7 +455,6 @@
     "byName": "按名称",
     "byUsageRate": "按使用率"
   },
-  "all": "全部",
   "nav": {
     "mobileMenuTitle": "导航菜单",
     "dashboard": "仪表盘",
@@ -545,6 +549,7 @@
     "activeKeys": "活跃密钥",
     "totalKeys": "总密钥",
     "expiresAt": "过期时间",
+    "expiresAtHint": "用户过期后将自动禁用",
     "status": {
       "active": "已启用",
       "expiringSoon": "即将过期",
@@ -579,6 +584,11 @@
   },
   "keyListHeader": {
     "todayUsage": "今日用量",
+    "allowedModels": {
+      "label": "允许的模型",
+      "noRestrictions": "允许的模型：无限制"
+    },
+    "expiresAt": "过期时间",
     "proxyStatus": {
       "loading": "代理状态加载中",
       "fetchFailed": "代理状态获取失败",
@@ -605,6 +615,10 @@
       "showTooltip": "显示完整密钥",
       "hideTooltip": "隐藏密钥",
       "closeButton": "关闭"
+    },
+    "allowedClients": {
+      "label": "允许的客户端",
+      "noRestrictions": "允许的客户端：无限制"
     }
   },
   "keyLimitUsage": {
@@ -744,6 +758,7 @@
     "dailyQuota": {
       "label": "每日额度",
       "placeholder": "每日消费额度限制",
+      "helperText": "设置为 0 表示无限制",
       "description": "默认值: ${default}，范围: $0.01-$100000"
     },
     "limit5hUsd": {
@@ -779,6 +794,17 @@
       "label": "过期时间",
       "placeholder": "留空表示永不过期",
       "description": "用户过期后将自动禁用"
+    },
+    "allowedClients": {
+      "label": "允许的客户端",
+      "description": "限制哪些 CLI/IDE 客户端可以使用此账户。留空表示无限制。",
+      "customLabel": "自定义客户端模式",
+      "customPlaceholder": "输入自定义模式（如：'xcode', 'my-ide'）"
+    },
+    "allowedModels": {
+      "label": "允许的模型",
+      "placeholder": "输入模型名称（回车添加）",
+      "description": "限制用户只能使用指定的AI模型。留空表示无限制（最多50个模型，每个最长64字符）"
     }
   },
   "deleteKeyConfirm": {
@@ -873,11 +899,14 @@
     "title": "用户管理",
     "description": "显示 {count} 个用户",
     "toolbar": {
-      "searchPlaceholder": "按用户名搜索...",
+      "searchPlaceholder": "搜索用户名、备注、标签、Key...",
       "groupFilter": "按分组筛选",
       "allGroups": "所有分组",
       "tagFilter": "按标签筛选",
-      "allTags": "所有标签"
+      "allTags": "所有标签",
+      "keyGroupFilter": "密钥分组",
+      "allKeyGroups": "所有密钥分组",
+      "createUser": "创建用户"
     }
   },
   "availability": {
@@ -990,6 +1019,360 @@
     "toast": {
       "refreshSuccess": "可用性数据已刷新",
       "refreshFailed": "刷新失败，请重试"
+    }
+  },
+  "userManagement": {
+    "table": {
+      "columns": {
+        "username": "用户名",
+        "note": "备注",
+        "expiresAt": "到期时间",
+        "expiresAtHint": "点击快捷续期",
+        "limit5h": "5h 限额",
+        "limitDaily": "每日限额",
+        "limitWeekly": "周限额",
+        "limitMonthly": "月限额",
+        "limitTotal": "总限额",
+        "limitSessions": "并发"
+      },
+      "keyRow": {
+        "name": "密钥名称",
+        "key": "密钥",
+        "group": "分组",
+        "todayUsage": "今日用量",
+        "todayCost": "今日消耗",
+        "lastUsed": "最后使用",
+        "actions": "操作",
+        "quotaButton": "查看限额用量",
+        "fields": {
+          "callsLabel": "调用",
+          "costLabel": "消耗"
+        }
+      },
+      "expand": "展开",
+      "collapse": "收起",
+      "noKeys": "无密钥",
+      "defaultGroup": "default",
+      "userStatus": {
+        "disabled": "已禁用"
+      }
+    },
+    "keyFullDisplay": {
+      "title": "完整密钥",
+      "copySuccess": "密钥已复制到剪贴板",
+      "copyFailed": "复制失败",
+      "show": "显示密钥",
+      "hide": "隐藏密钥",
+      "copied": "已复制",
+      "copy": "复制密钥"
+    },
+    "keyStatsDialog": {
+      "title": "今日模型统计",
+      "columns": {
+        "model": "模型",
+        "calls": "调用次数",
+        "cost": "消费金额"
+      },
+      "noData": "今日暂无使用记录",
+      "totalCalls": "总调用",
+      "totalCost": "总消费"
+    },
+    "keyQuotaUsageDialog": {
+      "title": "Key 限额使用情况",
+      "fetchFailed": "获取限额使用情况失败",
+      "noLimit": "无限制",
+      "modeFixed": "固定时间",
+      "modeRolling": "滚动 24h",
+      "retry": "重试",
+      "labels": {
+        "limit5h": "5 小时",
+        "limitDaily": "每日",
+        "limitWeekly": "每周",
+        "limitMonthly": "每月",
+        "limitTotal": "总计",
+        "limitSessions": "并发"
+      }
+    },
+    "quickRenew": {
+      "title": "快捷续期",
+      "description": "为用户 {userName} 设置新的过期时间",
+      "currentExpiry": "当前到期时间",
+      "neverExpires": "永不过期",
+      "expired": "已过期",
+      "quickOptions": {
+        "7days": "7 天",
+        "30days": "30 天",
+        "90days": "90 天",
+        "1year": "1 年"
+      },
+      "customDate": "自定义日期",
+      "enableOnRenew": "同时启用用户",
+      "cancel": "取消",
+      "confirm": "确认续期",
+      "confirming": "续期中...",
+      "success": "续期成功",
+      "failed": "续期失败"
+    },
+    "editDialog": {
+      "title": "编辑用户与密钥",
+      "description": "编辑用户信息和 API 密钥设置",
+      "userSection": "用户设置",
+      "keysSection": "密钥设置",
+      "scrollToKey": "滚动到密钥",
+      "saveFailed": "保存用户失败",
+      "keySaveFailed": "保存密钥失败",
+      "keyDeleteFailed": "删除密钥失败",
+      "saveSuccess": "保存成功",
+      "operationFailed": "操作失败",
+      "userDisabled": "用户已禁用",
+      "userEnabled": "用户已启用",
+      "deleteFailed": "删除用户失败",
+      "userDeleted": "用户已删除",
+      "saving": "保存中..."
+    },
+    "createDialog": {
+      "title": "创建用户",
+      "description": "创建新用户并配置 API 密钥",
+      "saveFailed": "创建用户失败",
+      "keyCreateFailed": "创建密钥失败",
+      "createSuccess": "用户创建成功",
+      "keysSection": "密钥",
+      "addKey": "添加密钥",
+      "removeKey": "删除密钥",
+      "cannotDeleteLastKey": "无法删除最后一个密钥",
+      "confirmRemoveKeyTitle": "删除密钥",
+      "confirmRemoveKeyDescription": "确定要删除密钥 \"{name}\" 吗?",
+      "creating": "创建中...",
+      "create": "创建"
+    },
+    "onboarding": {
+      "skip": "跳过",
+      "next": "下一步",
+      "prev": "上一步",
+      "finish": "开始创建",
+      "stepIndicator": "第 {current} 步，共 {total} 步",
+      "steps": {
+        "welcome": {
+          "title": "用户与密钥",
+          "description": "用户是 API 访问的主体，每个用户可以拥有多个 API Key。用户级限额影响所有 Key，Key 级限额可进一步细化控制。"
+        },
+        "limits": {
+          "title": "限额管理",
+          "description": "支持 6 种限额类型：5 小时、每日、每周、每月、总限额和并发 Session。限额规则按需添加，灵活控制使用量。"
+        },
+        "groups": {
+          "title": "供应商分组",
+          "description": "通过分组功能，可以限制用户只能使用特定供应商。Key 级分组优先于用户级分组。"
+        },
+        "keyFeatures": {
+          "title": "Key 特殊功能",
+          "description": "每个 Key 可独立配置 Cache TTL 覆写、是否允许登录 Web UI 等高级功能。"
+        }
+      }
+    },
+    "limitRules": {
+      "addRule": "添加限额规则",
+      "ruleTypes": {
+        "limit5h": "5小时限额",
+        "limitDaily": "每日限额",
+        "limitWeekly": "周限额",
+        "limitMonthly": "月限额",
+        "limitTotal": "总限额",
+        "limitSessions": "并发 Session"
+      },
+      "dailyMode": {
+        "fixed": "固定时间重置",
+        "rolling": "滚动窗口（24h）"
+      },
+      "quickValues": {
+        "10": "$10",
+        "50": "$50",
+        "100": "$100",
+        "500": "$500"
+      },
+      "alreadySet": "已配置",
+      "confirmAdd": "添加",
+      "cancel": "取消"
+    },
+    "quickExpire": {
+      "oneWeek": "一周后",
+      "oneMonth": "一月后",
+      "threeMonths": "三月后",
+      "oneYear": "一年后"
+    },
+    "providerGroup": {
+      "label": "供应商分组",
+      "placeholder": "选择供应商分组",
+      "noRestriction": "无限制（所有供应商）",
+      "providerCount": "{count} 个供应商"
+    },
+    "dangerZone": {
+      "title": "危险操作",
+      "description": "以下操作不可逆，请谨慎执行",
+      "enable": {
+        "title": "启用用户",
+        "description": "启用后该用户及其密钥将恢复正常使用",
+        "trigger": "启用",
+        "confirm": "确认启用",
+        "confirmDescription": "确认要启用用户 \"{userName}\" 吗？",
+        "loading": "处理中..."
+      },
+      "disable": {
+        "title": "禁用用户",
+        "description": "禁用后该用户及其密钥将无法继续使用",
+        "trigger": "禁用",
+        "confirm": "确认禁用",
+        "confirmDescription": "确认要禁用用户 \"{userName}\" 吗？",
+        "loading": "处理中..."
+      },
+      "delete": {
+        "title": "删除用户",
+        "description": "将删除该用户的所有关联数据，此操作无法撤销",
+        "trigger": "删除",
+        "confirm": "确认删除",
+        "confirmDescription": "此操作将删除用户 \"{userName}\" 的所有关联数据，且无法撤销。",
+        "confirmLabel": "二次确认",
+        "confirmHint": "请输入 \"{userName}\" 以确认删除",
+        "loading": "删除中..."
+      },
+      "actions": {
+        "cancel": "取消"
+      },
+      "errors": {
+        "enableFailed": "启用用户失败，请稍后重试",
+        "disableFailed": "禁用用户失败，请稍后重试",
+        "deleteFailed": "删除用户失败，请稍后重试"
+      }
+    },
+    "limitIndicator": {
+      "notSet": "未设置",
+      "unlimited": "无限制"
+    },
+    "keySettings": {
+      "balanceQueryPage": {
+        "label": "启用独立余额查询页",
+        "description": "允许用户通过专属页面查看余额"
+      },
+      "cacheTtlOverride": {
+        "label": "Cache TTL 覆写",
+        "inherit": "不覆写（跟随供应商/客户端）",
+        "5m": "5 分钟",
+        "1h": "1 小时"
+      }
+    },
+    "pagination": {
+      "previous": "上一页",
+      "next": "下一页",
+      "page": "第 {current} 页",
+      "of": "共 {total} 页"
+    },
+    "toolbar": {
+      "expandAll": "全部展开",
+      "collapseAll": "全部折叠"
+    },
+    "keyStatus": {
+      "enabled": "启用",
+      "disabled": "禁用"
+    },
+    "userEditSection": {
+      "sections": {
+        "basicInfo": "基本信息",
+        "expireTime": "过期时间",
+        "limitRules": "限额规则",
+        "accessRestrictions": "访问限制"
+      },
+      "fields": {
+        "username": {
+          "label": "用户名",
+          "placeholder": "请输入用户名"
+        },
+        "description": {
+          "label": "备注",
+          "placeholder": "请输入备注（可选）"
+        },
+        "tags": {
+          "label": "用户标签",
+          "placeholder": "输入标签（回车添加）"
+        },
+        "providerGroup": {
+          "label": "供应商分组（旧版）",
+          "placeholder": "输入供应商分组或留空"
+        },
+        "allowedClients": {
+          "label": "客户端限制",
+          "description": "限制哪些 CLI/IDE 客户端可以使用此账户。留空表示无限制。",
+          "customLabel": "自定义客户端模式",
+          "customPlaceholder": "输入自定义模式（如：'xcode', 'my-ide'）"
+        },
+        "allowedModels": {
+          "label": "模型限制",
+          "placeholder": "输入模型名称或从下拉列表选择",
+          "description": "限制用户只能使用指定的 AI 模型。留空表示无限制。"
+        },
+        "enableStatus": {
+          "label": "启用状态",
+          "enabledDescription": "当前已启用，禁用后该用户及其密钥将无法继续使用",
+          "disabledDescription": "当前已禁用，启用后该用户及其密钥将恢复正常使用",
+          "confirmDisable": "确认禁用",
+          "confirmEnable": "确认启用"
+        }
+      },
+      "presetClients": {
+        "claude-cli": "Claude Code CLI",
+        "gemini-cli": "Gemini CLI",
+        "factory-cli": "Droid CLI",
+        "codex-cli": "Codex CLI"
+      }
+    },
+    "keyEditSection": {
+      "sections": {
+        "basicInfo": "基本信息",
+        "expireTime": "过期时间",
+        "limitRules": "限额规则",
+        "specialFeatures": "特殊功能"
+      },
+      "fields": {
+        "keyName": {
+          "label": "密钥名称",
+          "placeholder": "请输入密钥名称"
+        },
+        "enableStatus": {
+          "label": "启用状态",
+          "description": "禁用后此密钥将无法使用。禁用后仅管理员可启用。"
+        },
+        "balanceQueryPage": {
+          "label": "独立个人用量页面",
+          "description": "启用后，此密钥可使用独立的个人用量查询页面",
+          "descriptionEnabled": "启用后，此密钥在登录时将进入独立的个人用量页面。但不可修改自己密钥的供应商分组。",
+          "descriptionDisabled": "关闭后，用户将无法进入个人独立用量页面 UI。但可在受限的 Web UI功能中修改自己密钥的供应商分组。"
+        },
+        "providerGroup": {
+          "label": "供应商分组",
+          "placeholder": "留空则允许所有 default 分组供应商"
+        },
+        "cacheTtl": {
+          "label": "Cache TTL 覆写",
+          "options": {
+            "inherit": "不覆写（跟随供应商/客户端）",
+            "5m": "5m",
+            "1h": "1h"
+          }
+        }
+      },
+      "limitRules": {
+        "title": "添加限额规则",
+        "actions": {
+          "add": "添加规则",
+          "remove": "移除"
+        },
+        "daily": {
+          "mode": {
+            "fixed": "固定时间重置",
+            "rolling": "滚动窗口（24小时）"
+          }
+        },
+        "overwriteHint": "此类型已存在，保存将覆盖原有值"
+      }
     }
   }
 }

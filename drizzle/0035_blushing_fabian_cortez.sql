@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "allowed_clients" jsonb DEFAULT '[]'::jsonb;

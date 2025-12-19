@@ -16,7 +16,7 @@
  * 5. Performance benchmarking
  */
 
-import { beforeAll, describe, expect, test } from "bun:test";
+import { beforeAll, describe, expect, test } from "vitest";
 import { errorRuleDetector } from "@/lib/error-rule-detector";
 import { eventEmitter } from "@/lib/event-emitter";
 

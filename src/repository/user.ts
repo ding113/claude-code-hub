@@ -19,8 +19,12 @@ export async function createUser(userData: CreateUserData): Promise<User> {
     limitMonthlyUsd: userData.limitMonthlyUsd?.toString(),
     limitTotalUsd: userData.limitTotalUsd?.toString(),
     limitConcurrentSessions: userData.limitConcurrentSessions,
+    dailyResetMode: userData.dailyResetMode ?? "fixed",
+    dailyResetTime: userData.dailyResetTime ?? "00:00",
     isEnabled: userData.isEnabled ?? true,
     expiresAt: userData.expiresAt ?? null,
+    allowedClients: userData.allowedClients ?? [],
+    allowedModels: userData.allowedModels ?? [],
   };
 
   const [user] = await db.insert(users).values(dbData).returning({
@@ -40,8 +44,12 @@ export async function createUser(userData: CreateUserData): Promise<User> {
     limitMonthlyUsd: users.limitMonthlyUsd,
     limitTotalUsd: users.limitTotalUsd,
     limitConcurrentSessions: users.limitConcurrentSessions,
+    dailyResetMode: users.dailyResetMode,
+    dailyResetTime: users.dailyResetTime,
     isEnabled: users.isEnabled,
     expiresAt: users.expiresAt,
+    allowedClients: users.allowedClients,
+    allowedModels: users.allowedModels,
   });
 
   return toUser(user);
@@ -66,8 +74,12 @@ export async function findUserList(limit: number = 50, offset: number = 0): Prom
       limitMonthlyUsd: users.limitMonthlyUsd,
       limitTotalUsd: users.limitTotalUsd,
       limitConcurrentSessions: users.limitConcurrentSessions,
+      dailyResetMode: users.dailyResetMode,
+      dailyResetTime: users.dailyResetTime,
       isEnabled: users.isEnabled,
       expiresAt: users.expiresAt,
+      allowedClients: users.allowedClients,
+      allowedModels: users.allowedModels,
     })
     .from(users)
     .where(isNull(users.deletedAt))
@@ -97,8 +109,12 @@ export async function findUserById(id: number): Promise<User | null> {
       limitMonthlyUsd: users.limitMonthlyUsd,
       limitTotalUsd: users.limitTotalUsd,
       limitConcurrentSessions: users.limitConcurrentSessions,
+      dailyResetMode: users.dailyResetMode,
+      dailyResetTime: users.dailyResetTime,
       isEnabled: users.isEnabled,
       expiresAt: users.expiresAt,
+      allowedClients: users.allowedClients,
+      allowedModels: users.allowedModels,
     })
     .from(users)
     .where(and(eq(users.id, id), isNull(users.deletedAt)));
@@ -117,17 +133,21 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
     name?: string;
     description?: string;
     rpmLimit?: number;
-    dailyLimitUsd?: string;
+    dailyLimitUsd?: string | null;
     providerGroup?: string | null;
     tags?: string[];
     updatedAt?: Date;
-    limit5hUsd?: string;
-    limitWeeklyUsd?: string;
-    limitMonthlyUsd?: string;
+    limit5hUsd?: string | null;
+    limitWeeklyUsd?: string | null;
+    limitMonthlyUsd?: string | null;
     limitTotalUsd?: string | null;
-    limitConcurrentSessions?: number;
+    limitConcurrentSessions?: number | null;
+    dailyResetMode?: "fixed" | "rolling";
+    dailyResetTime?: string;
     isEnabled?: boolean;
     expiresAt?: Date | null;
+    allowedClients?: string[];
+    allowedModels?: string[];
   }
 
   const dbData: UpdateDbData = {
@@ -136,21 +156,29 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
   if (userData.name !== undefined) dbData.name = userData.name;
   if (userData.description !== undefined) dbData.description = userData.description;
   if (userData.rpm !== undefined) dbData.rpmLimit = userData.rpm;
-  if (userData.dailyQuota !== undefined) dbData.dailyLimitUsd = userData.dailyQuota.toString();
+  if (userData.dailyQuota !== undefined)
+    dbData.dailyLimitUsd = userData.dailyQuota === null ? null : userData.dailyQuota.toString();
   if (userData.providerGroup !== undefined) dbData.providerGroup = userData.providerGroup;
   if (userData.tags !== undefined) dbData.tags = userData.tags;
-  if (userData.limit5hUsd !== undefined) dbData.limit5hUsd = userData.limit5hUsd.toString();
+  if (userData.limit5hUsd !== undefined)
+    dbData.limit5hUsd = userData.limit5hUsd === null ? null : userData.limit5hUsd.toString();
   if (userData.limitWeeklyUsd !== undefined)
-    dbData.limitWeeklyUsd = userData.limitWeeklyUsd.toString();
+    dbData.limitWeeklyUsd =
+      userData.limitWeeklyUsd === null ? null : userData.limitWeeklyUsd.toString();
   if (userData.limitMonthlyUsd !== undefined)
-    dbData.limitMonthlyUsd = userData.limitMonthlyUsd.toString();
+    dbData.limitMonthlyUsd =
+      userData.limitMonthlyUsd === null ? null : userData.limitMonthlyUsd.toString();
   if (userData.limitTotalUsd !== undefined)
     dbData.limitTotalUsd =
       userData.limitTotalUsd === null ? null : userData.limitTotalUsd.toString();
   if (userData.limitConcurrentSessions !== undefined)
     dbData.limitConcurrentSessions = userData.limitConcurrentSessions;
+  if (userData.dailyResetMode !== undefined) dbData.dailyResetMode = userData.dailyResetMode;
+  if (userData.dailyResetTime !== undefined) dbData.dailyResetTime = userData.dailyResetTime;
   if (userData.isEnabled !== undefined) dbData.isEnabled = userData.isEnabled;
   if (userData.expiresAt !== undefined) dbData.expiresAt = userData.expiresAt;
+  if (userData.allowedClients !== undefined) dbData.allowedClients = userData.allowedClients;
+  if (userData.allowedModels !== undefined) dbData.allowedModels = userData.allowedModels;
 
   const [user] = await db
     .update(users)
@@ -173,8 +201,12 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
       limitMonthlyUsd: users.limitMonthlyUsd,
       limitTotalUsd: users.limitTotalUsd,
       limitConcurrentSessions: users.limitConcurrentSessions,
+      dailyResetMode: users.dailyResetMode,
+      dailyResetTime: users.dailyResetTime,
       isEnabled: users.isEnabled,
       expiresAt: users.expiresAt,
+      allowedClients: users.allowedClients,
+      allowedModels: users.allowedModels,
     });
 
   if (!user) return null;

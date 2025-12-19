@@ -263,12 +263,42 @@ export function KeyListHeader({
               </div>
               {activeUser && userStatusInfo && (
                 <div className="flex items-center gap-1">
-                  <span>过期时间:</span>
+                  <span>{t("expiresAt")}:</span>
                   <span className="text-foreground">{userStatusInfo.expiryText}</span>
                 </div>
               )}
               {proxyStatusContent}
             </div>
+            {/* Allowed Clients Display - on separate line, visible to both admin and user */}
+            {activeUser && (
+              <div className="mt-2 px-2 py-1 text-xs text-muted-foreground border border-muted-foreground/30 rounded-md w-fit">
+                <span>
+                  {activeUser.allowedClients?.length
+                    ? `${t("allowedClients.label")} [${activeUser.allowedClients.length}]:`
+                    : t("allowedClients.noRestrictions")}
+                </span>
+                {activeUser.allowedClients && activeUser.allowedClients.length > 0 && (
+                  <span className="text-foreground ml-1">
+                    {activeUser.allowedClients.join(", ")}
+                  </span>
+                )}
+              </div>
+            )}
+            {/* Allowed Models Display - on separate line, visible to both admin and user */}
+            {activeUser && (
+              <div className="mt-2 px-2 py-1 text-xs text-muted-foreground border border-muted-foreground/30 rounded-md w-fit">
+                <span>
+                  {activeUser.allowedModels?.length
+                    ? `${t("allowedModels.label")} [${activeUser.allowedModels.length}]:`
+                    : t("allowedModels.noRestrictions")}
+                </span>
+                {activeUser.allowedModels && activeUser.allowedModels.length > 0 && (
+                  <span className="text-foreground ml-1">
+                    {activeUser.allowedModels.join(", ")}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
         {canAddKey && (
@@ -287,6 +317,7 @@ export function KeyListHeader({
               <FormErrorBoundary>
                 <AddKeyForm
                   userId={activeUser?.id}
+                  isAdmin={currentUser?.role === "admin"}
                   user={
                     activeUser
                       ? {
@@ -303,6 +334,8 @@ export function KeyListHeader({
                           limitWeeklyUsd: activeUser.limitWeeklyUsd ?? undefined,
                           limitMonthlyUsd: activeUser.limitMonthlyUsd ?? undefined,
                           limitConcurrentSessions: activeUser.limitConcurrentSessions ?? undefined,
+                          dailyResetMode: activeUser.dailyResetMode ?? "fixed",
+                          dailyResetTime: activeUser.dailyResetTime ?? "00:00",
                           isEnabled: activeUser.isEnabled,
                           expiresAt: activeUser.expiresAt ?? undefined,
                         }

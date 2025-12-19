@@ -9,12 +9,22 @@ import { addUser, editUser } from "@/actions/users";
 import { DatePickerField } from "@/components/form/date-picker-field";
 import { ArrayTagInputField, TagInputField, TextField } from "@/components/form/form-field";
 import { DialogFormLayout, FormGrid } from "@/components/form/form-layout";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { USER_DEFAULTS, USER_LIMITS } from "@/lib/constants/user.constants";
 import { useZodForm } from "@/lib/hooks/use-zod-form";
 import { getErrorMessage } from "@/lib/utils/error-messages";
 import { setZodErrorMap } from "@/lib/utils/zod-i18n";
 import { CreateUserSchema } from "@/lib/validation/schemas";
+
+// Preset client patterns
+const PRESET_CLIENTS = [
+  { value: "claude-cli", label: "Claude Code CLI" },
+  { value: "gemini-cli", label: "Gemini CLI" },
+  { value: "factory-cli", label: "Droid CLI" },
+  { value: "codex-cli", label: "Codex CLI" },
+];
 
 // 前端表单使用的 schema（接受字符串日期）
 const UserFormSchema = CreateUserSchema.extend({
@@ -37,6 +47,8 @@ interface UserFormProps {
     limitConcurrentSessions?: number | null;
     isEnabled?: boolean;
     expiresAt?: Date | null;
+    allowedClients?: string[];
+    allowedModels?: string[];
   };
   onSuccess?: () => void;
   currentUser?: {
@@ -55,6 +67,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
   const tErrors = useTranslations("errors");
   const tNotifications = useTranslations("notifications");
   const tUI = useTranslations("ui.tagInput");
+  const tCommon = useTranslations("common");
 
   // Set Zod error map for client-side validation
   useEffect(() => {
@@ -63,7 +76,11 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
 
   // 加载供应商分组建议
   useEffect(() => {
-    getAvailableProviderGroups().then(setProviderGroupSuggestions);
+    getAvailableProviderGroups()
+      .then(setProviderGroupSuggestions)
+      .catch((err) => {
+        console.error("[UserForm] Failed to load provider groups:", err);
+      });
   }, []);
 
   const form = useZodForm({
@@ -72,7 +89,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
       name: user?.name || "",
       note: user?.note || "",
       rpm: user?.rpm || USER_DEFAULTS.RPM,
-      dailyQuota: user?.dailyQuota || USER_DEFAULTS.DAILY_QUOTA,
+      dailyQuota: user?.dailyQuota ?? USER_DEFAULTS.DAILY_QUOTA,
       providerGroup: user?.providerGroup || "",
       tags: user?.tags || [],
       limit5hUsd: user?.limit5hUsd ?? null,
@@ -82,6 +99,8 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
       limitConcurrentSessions: user?.limitConcurrentSessions ?? null,
       isEnabled: user?.isEnabled ?? true,
       expiresAt: user?.expiresAt ? user.expiresAt.toISOString().split("T")[0] : "",
+      allowedClients: user?.allowedClients || [],
+      allowedModels: user?.allowedModels || [],
     },
     onSubmit: async (data) => {
       // 将纯日期转换为当天结束时间（本地时区 23:59:59.999），避免默认 UTC 零点导致提前过期
@@ -109,6 +128,8 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
               limitConcurrentSessions: data.limitConcurrentSessions,
               isEnabled: data.isEnabled,
               expiresAt: data.expiresAt ? toEndOfDay(data.expiresAt) : null,
+              allowedClients: data.allowedClients,
+              allowedModels: data.allowedModels,
             });
           } else {
             res = await addUser({
@@ -125,6 +146,8 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
               limitConcurrentSessions: data.limitConcurrentSessions,
               isEnabled: data.isEnabled,
               expiresAt: data.expiresAt ? toEndOfDay(data.expiresAt) : null,
+              allowedClients: data.allowedClients,
+              allowedModels: data.allowedModels,
             });
           }
 
@@ -237,11 +260,11 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
         <TextField
           label={tForm("dailyQuota.label")}
           type="number"
-          required
           min={USER_LIMITS.DAILY_QUOTA.MIN}
           max={USER_LIMITS.DAILY_QUOTA.MAX}
           step={0.01}
           placeholder={tForm("dailyQuota.placeholder")}
+          helperText={tForm("dailyQuota.helperText")}
           {...form.getFieldProps("dailyQuota")}
         />
       </FormGrid>
@@ -322,10 +345,99 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
             label={tForm("expiresAt.label")}
             placeholder={tForm("expiresAt.placeholder")}
             description={tForm("expiresAt.description")}
+            clearLabel={tCommon("clearDate")}
             value={String(form.values.expiresAt || "")}
             onChange={(val) => form.setValue("expiresAt", val)}
             error={form.getFieldProps("expiresAt").error}
             touched={form.getFieldProps("expiresAt").touched}
+          />
+
+          {/* Allowed Clients (CLI/IDE restrictions) */}
+          <div className="space-y-3">
+            <div className="space-y-0.5">
+              <Label className="text-sm font-medium">{tForm("allowedClients.label")}</Label>
+              <p className="text-xs text-muted-foreground">{tForm("allowedClients.description")}</p>
+            </div>
+
+            {/* Preset client checkboxes */}
+            <div className="grid grid-cols-2 gap-2">
+              {PRESET_CLIENTS.map((client) => {
+                const isChecked = (form.values.allowedClients || []).includes(client.value);
+                return (
+                  <div key={client.value} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`client-${client.value}`}
+                      checked={isChecked}
+                      onCheckedChange={(checked) => {
+                        const currentClients = form.values.allowedClients || [];
+                        if (checked) {
+                          form.setValue("allowedClients", [...currentClients, client.value]);
+                        } else {
+                          form.setValue(
+                            "allowedClients",
+                            currentClients.filter((c: string) => c !== client.value)
+                          );
+                        }
+                      }}
+                    />
+                    <Label
+                      htmlFor={`client-${client.value}`}
+                      className="text-sm font-normal cursor-pointer"
+                    >
+                      {client.label}
+                    </Label>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Custom client patterns */}
+            <ArrayTagInputField
+              label={tForm("allowedClients.customLabel")}
+              maxTagLength={64}
+              maxTags={50}
+              placeholder={tForm("allowedClients.customPlaceholder")}
+              onInvalidTag={(_tag, reason) => {
+                const messages: Record<string, string> = {
+                  empty: tUI("emptyTag"),
+                  duplicate: tUI("duplicateTag"),
+                  too_long: tUI("tooLong", { max: 64 }),
+                  invalid_format: tUI("invalidFormat"),
+                  max_tags: tUI("maxTags"),
+                };
+                toast.error(messages[reason] || reason);
+              }}
+              value={(form.values.allowedClients || []).filter(
+                (c: string) => !PRESET_CLIENTS.some((p) => p.value === c)
+              )}
+              onChange={(customClients: string[]) => {
+                // Merge preset clients with custom clients
+                const presetClients = (form.values.allowedClients || []).filter((c: string) =>
+                  PRESET_CLIENTS.some((p) => p.value === c)
+                );
+                form.setValue("allowedClients", [...presetClients, ...customClients]);
+              }}
+            />
+          </div>
+
+          {/* Allowed Models (AI model restrictions) */}
+          <ArrayTagInputField
+            label={tForm("allowedModels.label")}
+            maxTagLength={64}
+            maxTags={50}
+            placeholder={tForm("allowedModels.placeholder")}
+            description={tForm("allowedModels.description")}
+            onInvalidTag={(_tag, reason) => {
+              const messages: Record<string, string> = {
+                empty: tUI("emptyTag"),
+                duplicate: tUI("duplicateTag"),
+                too_long: tUI("tooLong", { max: 64 }),
+                invalid_format: tUI("invalidFormat"),
+                max_tags: tUI("maxTags"),
+              };
+              toast.error(messages[reason] || reason);
+            }}
+            {...form.getArrayFieldProps("allowedModels")}
           />
         </>
       )}

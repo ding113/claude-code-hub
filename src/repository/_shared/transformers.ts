@@ -20,8 +20,12 @@ export function toUser(dbUser: any): User {
       dbUser?.limitTotalUsd !== null && dbUser?.limitTotalUsd !== undefined
         ? parseFloat(dbUser.limitTotalUsd)
         : null,
+    dailyResetMode: dbUser?.dailyResetMode ?? "fixed",
+    dailyResetTime: dbUser?.dailyResetTime ?? "00:00",
     isEnabled: dbUser?.isEnabled ?? true,
     expiresAt: dbUser?.expiresAt ? new Date(dbUser.expiresAt) : null,
+    allowedClients: dbUser?.allowedClients ?? [],
+    allowedModels: dbUser?.allowedModels ?? [],
     createdAt: dbUser?.createdAt ? new Date(dbUser.createdAt) : new Date(),
     updatedAt: dbUser?.updatedAt ? new Date(dbUser.updatedAt) : new Date(),
   };

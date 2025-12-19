@@ -80,15 +80,38 @@
           }
         }
       }
+    },
+    {
+      "includes": ["**/tests/**", "**/*.test.ts", "**/*.test.tsx"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noUnusedVariables": "off",
+            "noUnusedImports": "off"
+          }
+        }
+      },
+      "assist": {
+        "actions": {
+          "source": {
+            "organizeImports": "off"
+          }
+        }
+      }
     }
   ],
   "files": {
     "includes": [
-      "**",
+      "src/**",
+      "tests/**",
+      "*.ts",
+      "*.tsx",
+      "*.json",
+      "*.mjs",
+      "*.cjs",
       "!**/node_modules",
       "!**/.next",
       "!**/dist",
-      "!**/*.d.ts",
       "!**/drizzle",
       "!**/docs-site"
     ]

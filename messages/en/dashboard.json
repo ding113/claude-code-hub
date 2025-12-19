@@ -120,7 +120,11 @@
       "nextPage": "Next Page",
       "blocked": "Blocked",
       "nonBilling": "Non-Billing",
-      "times": "times"
+      "times": "times",
+      "loadedCount": "Loaded {count} records",
+      "loadingMore": "Loading more...",
+      "noMoreData": "All records loaded",
+      "scrollToTop": "Back to top"
     },
     "actions": {
       "refresh": "Refresh",
@@ -130,7 +134,8 @@
       "view": "View"
     },
     "error": {
-      "loadFailed": "Load Failed"
+      "loadFailed": "Load Failed",
+      "loadKeysFailed": "Failed to load keys"
     },
     "details": {
       "title": "Request Details",
@@ -450,7 +455,6 @@
     "byName": "By Name",
     "byUsageRate": "By Usage Rate"
   },
-  "all": "All",
   "nav": {
     "mobileMenuTitle": "Navigation Menu",
     "dashboard": "Dashboard",
@@ -579,6 +583,11 @@
   },
   "keyListHeader": {
     "todayUsage": "Today's Usage",
+    "allowedModels": {
+      "label": "Allowed Models",
+      "noRestrictions": "Allowed Models: No restrictions"
+    },
+    "expiresAt": "Expires",
     "proxyStatus": {
       "loading": "Loading proxy status",
       "fetchFailed": "Failed to fetch proxy status",
@@ -605,6 +614,10 @@
       "showTooltip": "Show full key",
       "hideTooltip": "Hide key",
       "closeButton": "Close"
+    },
+    "allowedClients": {
+      "label": "Clients allowed",
+      "noRestrictions": "Clients allowed: no restrictions"
     }
   },
   "keyLimitUsage": {
@@ -744,6 +757,7 @@
     "dailyQuota": {
       "label": "Daily Quota",
       "placeholder": "Daily consumption quota limit",
+      "helperText": "Set to 0 for unlimited",
       "description": "Default: ${default}, Range: $0.01-$1000"
     },
     "limit5hUsd": {
@@ -779,6 +793,17 @@
       "label": "Expiration Date",
       "placeholder": "Leave empty for never expires",
       "description": "User will be automatically disabled after expiration"
+    },
+    "allowedClients": {
+      "label": "Allowed Clients",
+      "description": "Restrict which CLI/IDE clients can use this account. Leave empty for no restrictions.",
+      "customLabel": "Custom Client Patterns",
+      "customPlaceholder": "Enter custom pattern (e.g., 'xcode', 'my-ide')"
+    },
+    "allowedModels": {
+      "label": "Allowed Models",
+      "placeholder": "Enter model name (press Enter to add)",
+      "description": "Restrict this user to specific AI models. Leave empty for no restrictions (max 50 models, 64 chars each)"
     }
   },
   "deleteKeyConfirm": {
@@ -808,11 +833,14 @@
     "title": "User Management",
     "description": "Showing {count} users",
     "toolbar": {
-      "searchPlaceholder": "Search by username...",
+      "searchPlaceholder": "Search name, note, tags, keys...",
       "groupFilter": "Filter by Group",
       "allGroups": "All Groups",
       "tagFilter": "Filter by Tag",
-      "allTags": "All Tags"
+      "allTags": "All Tags",
+      "keyGroupFilter": "Key Group",
+      "allKeyGroups": "All Key Groups",
+      "createUser": "Create User"
     }
   },
   "availability": {
@@ -925,6 +953,362 @@
     "toast": {
       "refreshSuccess": "Availability data refreshed",
       "refreshFailed": "Refresh failed, please retry"
+    }
+  },
+  "userManagement": {
+    "table": {
+      "columns": {
+        "username": "Username",
+        "note": "Note",
+        "expiresAt": "Expires at",
+        "expiresAtHint": "Click to quick renew",
+        "limit5h": "5h limit",
+        "limitDaily": "Daily limit",
+        "limitWeekly": "Weekly limit",
+        "limitMonthly": "Monthly limit",
+        "limitTotal": "Total limit",
+        "limitSessions": "Concurrent sessions"
+      },
+      "keyRow": {
+        "name": "Key name",
+        "key": "Key",
+        "group": "Group",
+        "todayUsage": "Today's usage",
+        "todayCost": "Today's cost",
+        "lastUsed": "Last used",
+        "actions": "Actions",
+        "quotaButton": "View Quota Usage",
+        "fields": {
+          "callsLabel": "Calls",
+          "costLabel": "Cost"
+        }
+      },
+      "expand": "Expand",
+      "collapse": "Collapse",
+      "noKeys": "No keys",
+      "defaultGroup": "default",
+      "userStatus": {
+        "disabled": "Disabled"
+      }
+    },
+    "keyFullDisplay": {
+      "title": "Full Key",
+      "copySuccess": "Key copied to clipboard",
+      "copyFailed": "Copy failed",
+      "show": "Show key",
+      "hide": "Hide key",
+      "copied": "Copied",
+      "copy": "Copy key"
+    },
+    "keyStatsDialog": {
+      "title": "Today's Model Statistics",
+      "columns": {
+        "model": "Model",
+        "calls": "Calls",
+        "cost": "Cost"
+      },
+      "noData": "No usage records today",
+      "totalCalls": "Total Calls",
+      "totalCost": "Total Cost"
+    },
+    "keyQuotaUsageDialog": {
+      "title": "Key Quota Usage",
+      "fetchFailed": "Failed to fetch quota usage",
+      "noLimit": "No limit",
+      "modeFixed": "Fixed time",
+      "modeRolling": "Rolling 24h",
+      "retry": "Retry",
+      "labels": {
+        "limit5h": "5 Hours",
+        "limitDaily": "Daily",
+        "limitWeekly": "Weekly",
+        "limitMonthly": "Monthly",
+        "limitTotal": "Total",
+        "limitSessions": "Concurrent"
+      }
+    },
+    "quickRenew": {
+      "title": "Quick Renew",
+      "description": "Set a new expiration date for user {userName}",
+      "currentExpiry": "Current Expiration",
+      "neverExpires": "Never expires",
+      "expired": "Expired",
+      "quickOptions": {
+        "7days": "7 Days",
+        "30days": "30 Days",
+        "90days": "90 Days",
+        "1year": "1 Year"
+      },
+      "customDate": "Custom Date",
+      "enableOnRenew": "Also enable user",
+      "cancel": "Cancel",
+      "confirm": "Confirm Renewal",
+      "confirming": "Renewing...",
+      "success": "Renewal successful",
+      "failed": "Renewal failed"
+    },
+    "editDialog": {
+      "title": "Edit user and keys",
+      "description": "Edit user information and API key settings",
+      "userSection": "User settings",
+      "keysSection": "Key settings",
+      "scrollToKey": "Scroll to key",
+      "saveFailed": "Failed to save user",
+      "keySaveFailed": "Failed to save key",
+      "keyDeleteFailed": "Failed to delete key",
+      "saveSuccess": "Changes saved successfully",
+      "operationFailed": "Operation failed",
+      "userDisabled": "User has been disabled",
+      "userEnabled": "User has been enabled",
+      "deleteFailed": "Failed to delete user",
+      "userDeleted": "User has been deleted",
+      "saving": "Saving..."
+    },
+    "createDialog": {
+      "title": "Create user",
+      "description": "Create a new user and configure API keys",
+      "saveFailed": "Failed to create user",
+      "keyCreateFailed": "Failed to create key",
+      "createSuccess": "User created successfully",
+      "keysSection": "Keys",
+      "addKey": "Add key",
+      "removeKey": "Remove key",
+      "cannotDeleteLastKey": "Cannot delete the last key",
+      "confirmRemoveKeyTitle": "Remove key",
+      "confirmRemoveKeyDescription": "Are you sure you want to remove the key \"{name}\"?",
+      "creating": "Creating...",
+      "create": "Create"
+    },
+    "onboarding": {
+      "skip": "Skip",
+      "next": "Next",
+      "prev": "Previous",
+      "finish": "Start Creating",
+      "stepIndicator": "Step {current} of {total}",
+      "steps": {
+        "welcome": {
+          "title": "Users & Keys",
+          "description": "Users are the main entities for API access. Each user can have multiple API Keys. User-level limits affect all keys, while key-level limits provide finer control."
+        },
+        "limits": {
+          "title": "Limit Management",
+          "description": "Six types of limits are supported: 5-hour, daily, weekly, monthly, total, and concurrent sessions. Add limit rules as needed to flexibly control usage."
+        },
+        "groups": {
+          "title": "Provider Groups",
+          "description": "Use the group feature to restrict users to specific providers. Key-level groups take priority over user-level groups."
+        },
+        "keyFeatures": {
+          "title": "Key Features",
+          "description": "Each key can be independently configured with Cache TTL override, Web UI login permission, and other advanced features."
+        }
+      }
+    },
+    "limitRules": {
+      "addRule": "Add limit rule",
+      "ruleTypes": {
+        "limit5h": "5-hour limit",
+        "limitDaily": "Daily limit",
+        "limitWeekly": "Weekly limit",
+        "limitMonthly": "Monthly limit",
+        "limitTotal": "Total limit",
+        "limitSessions": "Concurrent sessions"
+      },
+      "dailyMode": {
+        "fixed": "Fixed reset time",
+        "rolling": "Rolling window (24h)"
+      },
+      "quickValues": {
+        "10": "$10",
+        "50": "$50",
+        "100": "$100",
+        "500": "$500"
+      },
+      "alreadySet": "Configured",
+      "confirmAdd": "Add",
+      "cancel": "Cancel"
+    },
+    "quickExpire": {
+      "oneWeek": "In 1 week",
+      "oneMonth": "In 1 month",
+      "threeMonths": "In 3 months",
+      "oneYear": "In 1 year"
+    },
+    "providerGroup": {
+      "label": "Provider group",
+      "placeholder": "Select provider group",
+      "noRestriction": "No restriction (all providers)",
+      "providerCount": "{count} providers"
+    },
+    "dangerZone": {
+      "title": "Danger Zone",
+      "description": "The following actions are irreversible, proceed with caution",
+      "enable": {
+        "title": "Enable User",
+        "description": "After enabling, this user and their keys will resume normal operation",
+        "trigger": "Enable",
+        "confirm": "Confirm Enable",
+        "confirmDescription": "Are you sure you want to enable user \"{userName}\"?",
+        "loading": "Processing..."
+      },
+      "disable": {
+        "title": "Disable User",
+        "description": "After disabling, this user and their keys will no longer be usable",
+        "trigger": "Disable",
+        "confirm": "Confirm Disable",
+        "confirmDescription": "Are you sure you want to disable user \"{userName}\"?",
+        "loading": "Processing..."
+      },
+      "delete": {
+        "title": "Delete User",
+        "description": "This will delete all associated data for this user, this action cannot be undone",
+        "trigger": "Delete",
+        "confirm": "Confirm Delete",
+        "confirmDescription": "This action will delete all associated data for user \"{userName}\" and cannot be undone.",
+        "confirmLabel": "Secondary Confirmation",
+        "confirmHint": "Please type \"{userName}\" to confirm deletion",
+        "loading": "Deleting..."
+      },
+      "actions": {
+        "cancel": "Cancel"
+      },
+      "errors": {
+        "enableFailed": "Failed to enable user, please try again later",
+        "disableFailed": "Failed to disable user, please try again later",
+        "deleteFailed": "Failed to delete user, please try again later"
+      }
+    },
+    "limitIndicator": {
+      "notSet": "Not set",
+      "unlimited": "Unlimited"
+    },
+    "keySettings": {
+      "balanceQueryPage": {
+        "label": "Enable dedicated balance page",
+        "description": "Allow users to view their balance via a dedicated page",
+        "descriptionEnabled": "When enabled, this key will access an independent personal usage page upon login. However, it cannot modify its own key's provider group.",
+        "descriptionDisabled": "When disabled, the user cannot access the personal usage page UI. However, they can modify their own key's provider group in the restricted Web UI."
+      },
+      "cacheTtlOverride": {
+        "label": "Cache TTL override",
+        "inherit": "No override (follow provider/client)",
+        "5m": "5 minutes",
+        "1h": "1 hour"
+      }
+    },
+    "pagination": {
+      "previous": "Previous",
+      "next": "Next",
+      "page": "Page {current}",
+      "of": "of {total}"
+    },
+    "toolbar": {
+      "expandAll": "Expand all",
+      "collapseAll": "Collapse all"
+    },
+    "keyStatus": {
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    },
+    "userEditSection": {
+      "sections": {
+        "basicInfo": "Basic Information",
+        "expireTime": "Expiration Time",
+        "limitRules": "Limit Rules",
+        "accessRestrictions": "Access Restrictions"
+      },
+      "fields": {
+        "username": {
+          "label": "Username",
+          "placeholder": "Enter username"
+        },
+        "description": {
+          "label": "Note",
+          "placeholder": "Enter note (optional)"
+        },
+        "tags": {
+          "label": "User Tags",
+          "placeholder": "Enter tag (press Enter to add)"
+        },
+        "providerGroup": {
+          "label": "Provider Group (Legacy)",
+          "placeholder": "Enter provider group or leave empty"
+        },
+        "allowedClients": {
+          "label": "Client Restrictions",
+          "description": "Restrict which CLI/IDE clients can use this account. Empty = no restriction.",
+          "customLabel": "Custom Client Pattern",
+          "customPlaceholder": "Enter pattern (e.g., 'xcode', 'my-ide')"
+        },
+        "allowedModels": {
+          "label": "Model Restrictions",
+          "placeholder": "Enter model name or select from dropdown",
+          "description": "Restrict which AI models this user can access. Empty = no restriction."
+        },
+        "enableStatus": {
+          "label": "Enable Status",
+          "enabledDescription": "Currently enabled. Disabling will prevent this user and their keys from being used.",
+          "disabledDescription": "Currently disabled. Enabling will restore normal access for this user and their keys.",
+          "confirmDisable": "Confirm Disable",
+          "confirmEnable": "Confirm Enable"
+        }
+      },
+      "presetClients": {
+        "claude-cli": "Claude Code CLI",
+        "gemini-cli": "Gemini CLI",
+        "factory-cli": "Droid CLI",
+        "codex-cli": "Codex CLI"
+      }
+    },
+    "keyEditSection": {
+      "sections": {
+        "basicInfo": "Basic Information",
+        "expireTime": "Expiration Time",
+        "limitRules": "Limit Rules",
+        "specialFeatures": "Special Features"
+      },
+      "fields": {
+        "keyName": {
+          "label": "Key Name",
+          "placeholder": "Enter key name"
+        },
+        "enableStatus": {
+          "label": "Enable Status",
+          "description": "Disabled keys cannot be used"
+        },
+        "balanceQueryPage": {
+          "label": "Independent Personal Usage Page",
+          "description": "When enabled, this key can access an independent personal usage page",
+          "descriptionEnabled": "When enabled, this key will access an independent personal usage page upon login. However, it cannot modify its own key's provider group.",
+          "descriptionDisabled": "When disabled, the user cannot access the personal usage page UI. However, they can modify their own key's provider group in the restricted Web UI."
+        },
+        "providerGroup": {
+          "label": "Provider Group",
+          "placeholder": "Leave empty to allow all default group providers"
+        },
+        "cacheTtl": {
+          "label": "Cache TTL Override",
+          "options": {
+            "inherit": "No override (follow provider/client)",
+            "5m": "5m",
+            "1h": "1h"
+          }
+        }
+      },
+      "limitRules": {
+        "title": "Add limit rule",
+        "actions": {
+          "add": "Add rule",
+          "remove": "Remove"
+        },
+        "daily": {
+          "mode": {
+            "fixed": "Fixed time reset",
+            "rolling": "Rolling window (24h)"
+          }
+        },
+        "overwriteHint": "This type already exists, saving will overwrite the existing value"
+      }
     }
   }
 }

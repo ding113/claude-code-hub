@@ -12,7 +12,7 @@ export const USER_LIMITS = {
     MAX: 1_000_000, // 提升到 100 万
   },
   DAILY_QUOTA: {
-    MIN: 0.01,
+    MIN: 0,
     MAX: 100_000, // 提升到 10 万美元
   },
 } as const;

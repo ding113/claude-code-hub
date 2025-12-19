@@ -810,6 +810,30 @@ export async function sumUserTotalCost(userId: number, maxAgeDays: number = 365)
 }
 
 /**
+ * 查询用户在指定时间范围内的消费总和
+ * 用于用户层限额百分比显示
+ */
+export async function sumUserCostInTimeRange(
+  userId: number,
+  startTime: Date,
+  endTime: Date
+): Promise<number> {
+  const result = await db
+    .select({ total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)` })
+    .from(messageRequest)
+    .where(
+      and(
+        eq(messageRequest.userId, userId),
+        gte(messageRequest.createdAt, startTime),
+        lt(messageRequest.createdAt, endTime),
+        isNull(messageRequest.deletedAt)
+      )
+    );
+
+  return Number(result[0]?.total || 0);
+}
+
+/**
  * 查询 Key 在指定时间范围内的消费总和
  * 用于 Key 层限额检查（Redis 降级）
  */

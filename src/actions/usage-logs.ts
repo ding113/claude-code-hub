@@ -3,14 +3,17 @@
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 import {
+  findUsageLogsBatch,
   findUsageLogsStats,
   findUsageLogsWithDetails,
   getUsedEndpoints,
   getUsedModels,
   getUsedStatusCodes,
+  type UsageLogBatchFilters,
   type UsageLogFilters,
   type UsageLogRow,
   type UsageLogSummary,
+  type UsageLogsBatchResult,
   type UsageLogsResult,
 } from "@/repository/usage-logs";
 import type { ActionResult } from "./types";
@@ -302,6 +305,37 @@ export async function getUsageLogsStats(
   } catch (error) {
     logger.error("获取使用日志统计失败:", error);
     const message = error instanceof Error ? error.message : "获取使用日志统计失败";
+    return { ok: false, error: message };
+  }
+}
+
+/**
+ * 获取使用日志批量数据（游标分页，用于无限滚动）
+ *
+ * 优化效果：
+ * - 无 COUNT 查询，大数据集下性能恒定
+ * - 使用 keyset pagination，避免 OFFSET 扫描
+ * - 支持无限滚动/虚拟滚动场景
+ */
+export async function getUsageLogsBatch(
+  filters: Omit<UsageLogBatchFilters, "userId">
+): Promise<ActionResult<UsageLogsBatchResult>> {
+  try {
+    const session = await getSession();
+    if (!session) {
+      return { ok: false, error: "未登录" };
+    }
+
+    // 如果不是 admin，强制过滤为当前用户
+    const finalFilters: UsageLogBatchFilters =
+      session.user.role === "admin" ? filters : { ...filters, userId: session.user.id };
+
+    const result = await findUsageLogsBatch(finalFilters);
+
+    return { ok: true, data: result };
+  } catch (error) {
+    logger.error("获取使用日志批量数据失败:", error);
+    const message = error instanceof Error ? error.message : "获取使用日志批量数据失败";
     return { ok: false, error: message };
   }
 }

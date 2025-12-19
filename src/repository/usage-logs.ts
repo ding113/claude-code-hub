@@ -82,6 +82,177 @@ export interface UsageLogsPaginatedResult {
   total: number;
 }
 
+/**
+ * Cursor-based pagination result (no total count, optimized for large datasets)
+ */
+export interface UsageLogsBatchResult {
+  logs: UsageLogRow[];
+  nextCursor: { createdAt: string; id: number } | null;
+  hasMore: boolean;
+}
+
+/**
+ * Cursor-based pagination filters
+ */
+export interface UsageLogBatchFilters extends Omit<UsageLogFilters, "page" | "pageSize"> {
+  cursor?: { createdAt: string; id: number };
+  limit?: number;
+}
+
+/**
+ * Query usage logs with cursor-based pagination (keyset pagination)
+ * Optimized for infinite scroll - no COUNT query, constant performance regardless of data size
+ */
+export async function findUsageLogsBatch(
+  filters: UsageLogBatchFilters
+): Promise<UsageLogsBatchResult> {
+  const {
+    userId,
+    keyId,
+    providerId,
+    startTime,
+    endTime,
+    statusCode,
+    excludeStatusCode200,
+    model,
+    endpoint,
+    minRetryCount,
+    cursor,
+    limit = 50,
+  } = filters;
+
+  // Build query conditions
+  const conditions = [isNull(messageRequest.deletedAt)];
+
+  if (userId !== undefined) {
+    conditions.push(eq(messageRequest.userId, userId));
+  }
+
+  if (keyId !== undefined) {
+    conditions.push(eq(keysTable.id, keyId));
+  }
+
+  if (providerId !== undefined) {
+    conditions.push(eq(messageRequest.providerId, providerId));
+  }
+
+  if (startTime !== undefined) {
+    const startDate = new Date(startTime);
+    conditions.push(sql`${messageRequest.createdAt} >= ${startDate.toISOString()}::timestamptz`);
+  }
+
+  if (endTime !== undefined) {
+    const endDate = new Date(endTime);
+    conditions.push(sql`${messageRequest.createdAt} < ${endDate.toISOString()}::timestamptz`);
+  }
+
+  if (statusCode !== undefined) {
+    conditions.push(eq(messageRequest.statusCode, statusCode));
+  } else if (excludeStatusCode200) {
+    conditions.push(
+      sql`(${messageRequest.statusCode} IS NULL OR ${messageRequest.statusCode} <> 200)`
+    );
+  }
+
+  if (model) {
+    conditions.push(eq(messageRequest.model, model));
+  }
+
+  if (endpoint) {
+    conditions.push(eq(messageRequest.endpoint, endpoint));
+  }
+
+  if (minRetryCount !== undefined) {
+    conditions.push(
+      sql`GREATEST(COALESCE(jsonb_array_length(${messageRequest.providerChain}) - 1, 0), 0) >= ${minRetryCount}`
+    );
+  }
+
+  // Cursor-based pagination: WHERE (created_at, id) < (cursor_created_at, cursor_id)
+  // Using row value comparison for efficient keyset pagination
+  if (cursor) {
+    const cursorDate = new Date(cursor.createdAt);
+    conditions.push(
+      sql`(${messageRequest.createdAt}, ${messageRequest.id}) < (${cursorDate.toISOString()}::timestamptz, ${cursor.id})`
+    );
+  }
+
+  // Fetch limit + 1 to determine if there are more records
+  const fetchLimit = limit + 1;
+
+  const results = await db
+    .select({
+      id: messageRequest.id,
+      createdAt: messageRequest.createdAt,
+      sessionId: messageRequest.sessionId,
+      requestSequence: messageRequest.requestSequence,
+      userName: users.name,
+      keyName: keysTable.name,
+      providerName: providers.name,
+      model: messageRequest.model,
+      originalModel: messageRequest.originalModel,
+      endpoint: messageRequest.endpoint,
+      statusCode: messageRequest.statusCode,
+      inputTokens: messageRequest.inputTokens,
+      outputTokens: messageRequest.outputTokens,
+      cacheCreationInputTokens: messageRequest.cacheCreationInputTokens,
+      cacheReadInputTokens: messageRequest.cacheReadInputTokens,
+      cacheCreation5mInputTokens: messageRequest.cacheCreation5mInputTokens,
+      cacheCreation1hInputTokens: messageRequest.cacheCreation1hInputTokens,
+      cacheTtlApplied: messageRequest.cacheTtlApplied,
+      costUsd: messageRequest.costUsd,
+      costMultiplier: messageRequest.costMultiplier,
+      durationMs: messageRequest.durationMs,
+      errorMessage: messageRequest.errorMessage,
+      providerChain: messageRequest.providerChain,
+      blockedBy: messageRequest.blockedBy,
+      blockedReason: messageRequest.blockedReason,
+      userAgent: messageRequest.userAgent,
+      messagesCount: messageRequest.messagesCount,
+      context1mApplied: messageRequest.context1mApplied,
+    })
+    .from(messageRequest)
+    .innerJoin(users, eq(messageRequest.userId, users.id))
+    .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
+    .leftJoin(providers, eq(messageRequest.providerId, providers.id))
+    .where(and(...conditions))
+    .orderBy(desc(messageRequest.createdAt), desc(messageRequest.id))
+    .limit(fetchLimit);
+
+  // Determine if there are more records
+  const hasMore = results.length > limit;
+  const logsToReturn = hasMore ? results.slice(0, limit) : results;
+
+  // Calculate next cursor from the last record
+  const lastLog = logsToReturn[logsToReturn.length - 1];
+  const nextCursor =
+    hasMore && lastLog?.createdAt
+      ? { createdAt: lastLog.createdAt.toISOString(), id: lastLog.id }
+      : null;
+
+  const logs: UsageLogRow[] = logsToReturn.map((row) => {
+    const totalRowTokens =
+      (row.inputTokens ?? 0) +
+      (row.outputTokens ?? 0) +
+      (row.cacheCreationInputTokens ?? 0) +
+      (row.cacheReadInputTokens ?? 0);
+
+    return {
+      ...row,
+      requestSequence: row.requestSequence ?? null,
+      totalTokens: totalRowTokens,
+      cacheCreation5mInputTokens: row.cacheCreation5mInputTokens,
+      cacheCreation1hInputTokens: row.cacheCreation1hInputTokens,
+      cacheTtlApplied: row.cacheTtlApplied,
+      costUsd: row.costUsd?.toString() ?? null,
+      providerChain: row.providerChain as ProviderChainItem[] | null,
+      endpoint: row.endpoint,
+    };
+  });
+
+  return { logs, nextCursor, hasMore };
+}
+
 export async function getTotalUsageForKey(keyString: string): Promise<number> {
   const [row] = await db
     .select({ total: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)` })
@@ -148,33 +319,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
   }
 
   if (keyId !== undefined) {
-    // 通过 key ID 查找对应的 key 值
-    const keyResult = await db
-      .select({ key: keysTable.key })
-      .from(keysTable)
-      .where(and(eq(keysTable.id, keyId), isNull(keysTable.deletedAt)))
-      .limit(1);
-
-    if (keyResult.length > 0) {
-      conditions.push(eq(messageRequest.key, keyResult[0].key));
-    } else {
-      // key 不存在，返回空结果
-      return {
-        logs: [],
-        total: 0,
-        summary: {
-          totalRequests: 0,
-          totalCost: 0,
-          totalTokens: 0,
-          totalInputTokens: 0,
-          totalOutputTokens: 0,
-          totalCacheCreationTokens: 0,
-          totalCacheReadTokens: 0,
-          totalCacheCreation5mTokens: 0,
-          totalCacheCreation1hTokens: 0,
-        },
-      };
-    }
+    conditions.push(eq(keysTable.id, keyId));
   }
 
   if (providerId !== undefined) {
@@ -218,7 +363,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
     );
   }
 
-  // 查询总数和统计数据
+  // 查询总数和统计数据（添加 innerJoin keysTable 以支持 keyId 过滤）
   const [summaryResult] = await db
     .select({
       totalRequests: sql<number>`count(*)::double precision`,
@@ -231,6 +376,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       totalCacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens})::double precision, 0::double precision)`,
     })
     .from(messageRequest)
+    .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
     .where(and(...conditions));
 
   const total = summaryResult?.totalRequests ?? 0;
@@ -391,27 +537,7 @@ export async function findUsageLogsStats(
   }
 
   if (keyId !== undefined) {
-    const keyResult = await db
-      .select({ key: keysTable.key })
-      .from(keysTable)
-      .where(and(eq(keysTable.id, keyId), isNull(keysTable.deletedAt)))
-      .limit(1);
-
-    if (keyResult.length > 0) {
-      conditions.push(eq(messageRequest.key, keyResult[0].key));
-    } else {
-      return {
-        totalRequests: 0,
-        totalCost: 0,
-        totalTokens: 0,
-        totalInputTokens: 0,
-        totalOutputTokens: 0,
-        totalCacheCreationTokens: 0,
-        totalCacheReadTokens: 0,
-        totalCacheCreation5mTokens: 0,
-        totalCacheCreation1hTokens: 0,
-      };
-    }
+    conditions.push(eq(keysTable.id, keyId));
   }
 
   if (providerId !== undefined) {
@@ -450,7 +576,7 @@ export async function findUsageLogsStats(
     );
   }
 
-  // 执行聚合查询
+  // 执行聚合查询（添加 innerJoin keysTable 以支持 keyId 过滤）
   const [summaryResult] = await db
     .select({
       totalRequests: sql<number>`count(*)::double precision`,
@@ -463,6 +589,7 @@ export async function findUsageLogsStats(
       totalCacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens})::double precision, 0::double precision)`,
     })
     .from(messageRequest)
+    .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
     .where(and(...conditions));
 
   const totalRequests = summaryResult?.totalRequests ?? 0;

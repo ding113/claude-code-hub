@@ -11,7 +11,7 @@
  *   bun run tests/e2e-error-rules.test.ts
  */
 
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import {
   createErrorRuleAction,
   deleteErrorRuleAction,

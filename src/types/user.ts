@@ -19,9 +19,16 @@ export interface User {
   limitMonthlyUsd?: number; // 月消费上限（美元）
   limitTotalUsd?: number | null; // 总消费上限（美元）
   limitConcurrentSessions?: number; // 并发 Session 上限
+  // Daily quota reset mode
+  dailyResetMode: "fixed" | "rolling"; // 每日限额重置模式
+  dailyResetTime: string; // 每日重置时间 (HH:mm)
   // User status and expiry management
   isEnabled: boolean; // 用户启用状态
   expiresAt?: Date | null; // 用户过期时间
+  // Allowed clients (CLI/IDE restrictions)
+  allowedClients?: string[]; // 允许的客户端模式（空数组=无限制）
+  // Allowed models (AI model restrictions)
+  allowedModels?: string[]; // 允许的AI模型（空数组=无限制）
 }
 
 /**
@@ -40,9 +47,16 @@ export interface CreateUserData {
   limitMonthlyUsd?: number;
   limitTotalUsd?: number | null;
   limitConcurrentSessions?: number;
+  // Daily quota reset mode
+  dailyResetMode?: "fixed" | "rolling";
+  dailyResetTime?: string;
   // User status and expiry management
   isEnabled?: boolean;
   expiresAt?: Date | null;
+  // Allowed clients (CLI/IDE restrictions)
+  allowedClients?: string[];
+  // Allowed models (AI model restrictions)
+  allowedModels?: string[];
 }
 
 /**
@@ -52,18 +66,25 @@ export interface UpdateUserData {
   name?: string;
   description?: string;
   rpm?: number;
-  dailyQuota?: number;
+  dailyQuota?: number | null;
   providerGroup?: string | null; // 可选，供应商分组
   tags?: string[]; // 可选，用户标签
   // User-level quota fields
-  limit5hUsd?: number;
-  limitWeeklyUsd?: number;
-  limitMonthlyUsd?: number;
+  limit5hUsd?: number | null;
+  limitWeeklyUsd?: number | null;
+  limitMonthlyUsd?: number | null;
   limitTotalUsd?: number | null;
-  limitConcurrentSessions?: number;
+  limitConcurrentSessions?: number | null;
+  // Daily quota reset mode
+  dailyResetMode?: "fixed" | "rolling";
+  dailyResetTime?: string;
   // User status and expiry management
   isEnabled?: boolean;
   expiresAt?: Date | null;
+  // Allowed clients (CLI/IDE restrictions)
+  allowedClients?: string[];
+  // Allowed models (AI model restrictions)
+  allowedModels?: string[];
 }
 
 /**
@@ -122,9 +143,16 @@ export interface UserDisplay {
   limitMonthlyUsd?: number | null;
   limitTotalUsd?: number | null;
   limitConcurrentSessions?: number | null;
+  // Daily quota reset mode
+  dailyResetMode?: "fixed" | "rolling";
+  dailyResetTime?: string;
   // User status and expiry management
   isEnabled: boolean; // 用户启用状态
   expiresAt?: Date | null; // 用户过期时间
+  // Allowed clients (CLI/IDE restrictions)
+  allowedClients?: string[]; // 允许的客户端模式（空数组=无限制）
+  // Allowed models (AI model restrictions)
+  allowedModels?: string[]; // 允许的AI模型（空数组=无限制）
 }
 
 /**

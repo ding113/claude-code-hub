@@ -73,68 +73,136 @@ export interface ActionRouteOptions {
       value: unknown;
     }
   >;
+
+  /**
+   * 参数映射函数（用于多参数 action）
+   * 将请求体转换为 action 函数的参数数组
+   *
+   * @example
+   * // 对于 editUser(userId: number, data: UpdateUserData)
+   * argsMapper: (body) => [body.userId, body.data]
+   */
+  argsMapper?: (body: any) => unknown[];
 }
 
 /**
  * 统一的响应 schemas
  */
-const createResponseSchemas = (dataSchema?: z.ZodSchema) => ({
-  200: {
-    description: "操作成功",
-    content: {
-      "application/json": {
-        schema: z.object({
-          ok: z.literal(true),
-          data: dataSchema || z.any().optional(),
-        }),
+const createResponseSchemas = (dataSchema?: z.ZodSchema) => {
+  // 错误响应的完整 schema（包含 errorCode 和 errorParams）
+  const errorSchema = z.object({
+    ok: z.literal(false),
+    error: z.string().describe("错误消息（向后兼容）"),
+    errorCode: z.string().optional().describe("错误码（推荐用于国际化）"),
+    errorParams: z
+      .record(z.string(), z.union([z.string(), z.number()]))
+      .optional()
+      .describe("错误消息插值参数"),
+  });
+
+  return {
+    200: {
+      description: "操作成功",
+      content: {
+        "application/json": {
+          schema: z.object({
+            ok: z.literal(true),
+            data: dataSchema || z.any().optional(),
+          }),
+        },
       },
     },
-  },
-  400: {
-    description: "请求错误 (参数验证失败或业务逻辑错误)",
-    content: {
-      "application/json": {
-        schema: z.object({
-          ok: z.literal(false),
-          error: z.string().describe("错误消息"),
-        }),
+    400: {
+      description: "请求错误 (参数验证失败或业务逻辑错误)",
+      content: {
+        "application/json": {
+          schema: errorSchema,
+          examples: {
+            validation: {
+              summary: "参数验证失败",
+              value: {
+                ok: false,
+                error: "用户名不能为空",
+                errorCode: "VALIDATION_ERROR",
+                errorParams: { field: "name" },
+              },
+            },
+            business: {
+              summary: "业务逻辑错误",
+              value: {
+                ok: false,
+                error: "用户名已存在",
+                errorCode: "USER_ALREADY_EXISTS",
+              },
+            },
+          },
+        },
       },
     },
-  },
-  401: {
-    description: "未认证 (需要登录)",
-    content: {
-      "application/json": {
-        schema: z.object({
-          ok: z.literal(false),
-          error: z.string().describe("错误消息"),
-        }),
+    401: {
+      description: "未认证 (需要登录)",
+      content: {
+        "application/json": {
+          schema: errorSchema,
+          examples: {
+            missing: {
+              summary: "缺少认证信息",
+              value: {
+                ok: false,
+                error: "未认证",
+                errorCode: "AUTH_MISSING",
+              },
+            },
+            invalid: {
+              summary: "认证信息无效",
+              value: {
+                ok: false,
+                error: "认证无效或已过期",
+                errorCode: "AUTH_INVALID",
+              },
+            },
+          },
+        },
       },
     },
-  },
-  403: {
-    description: "权限不足",
-    content: {
-      "application/json": {
-        schema: z.object({
-          ok: z.literal(false),
-          error: z.string().describe("错误消息"),
-        }),
+    403: {
+      description: "权限不足",
+      content: {
+        "application/json": {
+          schema: errorSchema,
+          examples: {
+            permission: {
+              summary: "权限不足",
+              value: {
+                ok: false,
+                error: "权限不足",
+                errorCode: "PERMISSION_DENIED",
+              },
+            },
+          },
+        },
       },
     },
-  },
-  500: {
-    description: "服务器内部错误",
-    content: {
-      "application/json": {
-        schema: z.object({
-          ok: z.literal(false),
-          error: z.string().describe("错误消息"),
-        }),
+    500: {
+      description: "服务器内部错误",
+      content: {
+        "application/json": {
+          schema: errorSchema,
+          examples: {
+            internal: {
+              summary: "服务器内部错误",
+              value: {
+                ok: false,
+                error: "服务器内部错误",
+                errorCode: "INTERNAL_ERROR",
+              },
+            },
+          },
+        },
       },
     },
-  },
-});
+  };
+};
 
 /**
  * 为 Server Action 创建 OpenAPI 路由定义
@@ -177,6 +245,7 @@ export function createActionRoute(
     requiresAuth = true,
     requiredRole,
     requestExamples,
+    argsMapper, // 新增：参数映射函数
   } = options;
 
   // 创建 OpenAPI 路由定义
@@ -238,13 +307,17 @@ export function createActionRoute(
       const body = await c.req.json().catch(() => ({}));
 
       // 2. 调用 Server Action
-      // 提取 schema 中定义的参数并按顺序传递给 action
-      // 这样可以兼容 action(arg1, arg2, ...) 和 action({ arg1, arg2, ... }) 两种签名
+      // 如果提供了 argsMapper，使用它来映射参数
+      // 否则使用默认的参数推断逻辑
       logger.debug(`[ActionAPI] Calling ${fullPath}`, { body });
 
-      // 如果 requestSchema 是对象类型，提取 keys 作为参数顺序
       let args: unknown[];
-      if (requestSchema instanceof z.ZodObject) {
+
+      if (argsMapper) {
+        // 显式参数映射（推荐方式）
+        args = argsMapper(body);
+      } else if (requestSchema instanceof z.ZodObject) {
+        // 默认推断逻辑（保持向后兼容）
         const schemaShape = requestSchema.shape;
         const keys = Object.keys(schemaShape);
         if (keys.length === 0) {
@@ -254,8 +327,8 @@ export function createActionRoute(
           // 单个参数，直接传递值
           args = [body[keys[0] as keyof typeof body]];
         } else {
-          // 多个参数场景 - 保持原有行为传递整个 body 对象
-          // 因为存在 editUser(userId, data) 这类签名，无法从 schema 区分
+          // 多个参数场景 - 传递整个 body 对象
+          // 注意：这可能与多参数函数签名不兼容，建议使用 argsMapper
           args = [body];
         }
       } else {
@@ -283,7 +356,16 @@ export function createActionRoute(
         return c.json({ ok: true, data: result.data }, 200);
       } else {
         logger.warn(`[ActionAPI] ${fullPath} failed:`, { error: result.error });
-        return c.json({ ok: false, error: result.error }, 400);
+        // 透传完整的错误信息（包括 errorCode 和 errorParams）
+        return c.json(
+          {
+            ok: false,
+            error: result.error,
+            ...(result.errorCode && { errorCode: result.errorCode }),
+            ...(result.errorParams && { errorParams: result.errorParams }),
+          },
+          400
+        );
       }
     } catch (error) {
       // 5. 错误处理

@@ -70,9 +70,12 @@ function getNotificationQueue(): Queue.Queue<NotificationJobData> {
     redisQueueOptions.username = url.username; // 传递用户名
 
     if (useTls) {
-      logger.info("[NotificationQueue] Using TLS connection (rediss://)");
+      const rejectUnauthorized = process.env.REDIS_TLS_REJECT_UNAUTHORIZED !== "false";
+      logger.info("[NotificationQueue] Using TLS connection (rediss://)", { rejectUnauthorized });
       redisQueueOptions.tls = {
-        host: url.hostname, // 显式 SNI 修复
+        host: url.hostname,
+        servername: url.hostname, // SNI support for cloud Redis providers
+        rejectUnauthorized,
       };
     }
   } catch (e) {

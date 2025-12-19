@@ -8,7 +8,7 @@ import { Section } from "@/components/section";
 import { redirect } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
 import { getSystemSettings } from "@/repository/system-config";
-import { UsageLogsView } from "./_components/usage-logs-view";
+import { UsageLogsViewVirtualized } from "./_components/usage-logs-view-virtualized";
 
 export const dynamic = "force-dynamic";
 
@@ -59,7 +59,7 @@ export default async function UsageLogsPage({
             <div className="text-center py-8 text-muted-foreground">{t("logs.stats.loading")}</div>
           }
         >
-          <UsageLogsView
+          <UsageLogsViewVirtualized
             isAdmin={isAdmin}
             users={users}
             providers={providers}

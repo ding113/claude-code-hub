@@ -599,7 +599,7 @@ const TrafficTrend = ({
               }}
               itemStyle={{ color: "#fff" }}
               labelFormatter={(value) => `${value}:00`}
-              formatter={(value: number) => [`${value} 请求`, "数量"]}
+              formatter={(value) => [`${value ?? 0} 请求`, "数量"]}
             />
             <Area
               type="monotone"

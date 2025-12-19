@@ -120,7 +120,11 @@
       "nextPage": "下一頁",
       "blocked": "已攔截",
       "nonBilling": "非計費",
-      "times": "次"
+      "times": "次",
+      "loadedCount": "已載入 {count} 筆記錄",
+      "loadingMore": "載入更多中...",
+      "noMoreData": "已載入全部記錄",
+      "scrollToTop": "回到頂端"
     },
     "actions": {
       "refresh": "重新整理",
@@ -130,7 +134,8 @@
       "view": "檢視"
     },
     "error": {
-      "loadFailed": "載入失敗"
+      "loadFailed": "載入失敗",
+      "loadKeysFailed": "載入密鑰列表失敗"
     },
     "details": {
       "title": "請求詳情",
@@ -573,6 +578,11 @@
   },
   "keyListHeader": {
     "todayUsage": "今日用量",
+    "allowedModels": {
+      "label": "允許的模型",
+      "noRestrictions": "允許的模型：無限制"
+    },
+    "expiresAt": "到期時間",
     "proxyStatus": {
       "loading": "代理狀態載入中",
       "fetchFailed": "代理狀態取得失敗",
@@ -599,6 +609,10 @@
       "showTooltip": "顯示完整金鑰",
       "hideTooltip": "隱藏金鑰",
       "closeButton": "關閉"
+    },
+    "allowedClients": {
+      "label": "允許的用戶端",
+      "noRestrictions": "允許的用戶端：無限制"
     }
   },
   "keyLimitUsage": {
@@ -721,6 +735,7 @@
     "dailyQuota": {
       "label": "每日額度",
       "placeholder": "每日消費額度限制",
+      "helperText": "設置為 0 表示無限制",
       "description": "預設值：${default}，範圍：$0.01-$1000"
     },
     "limit5hUsd": {
@@ -742,6 +757,26 @@
       "label": "並發 Session 上限",
       "placeholder": "0 表示無限制",
       "description": "同時執行的對話數量"
+    },
+    "isEnabled": {
+      "label": "啟用使用者",
+      "description": "停用後使用者將無法使用 API"
+    },
+    "expiresAt": {
+      "label": "到期時間",
+      "placeholder": "留空表示永不過期",
+      "description": "使用者過期後將自動停用"
+    },
+    "allowedClients": {
+      "label": "允許的用戶端",
+      "description": "限制哪些 CLI/IDE 用戶端可以使用此帳戶。留空表示無限制。",
+      "customLabel": "自訂用戶端模式",
+      "customPlaceholder": "輸入自訂模式（如：'xcode', 'my-ide'）"
+    },
+    "allowedModels": {
+      "label": "允許的模型",
+      "placeholder": "輸入模型名稱（按 Enter 新增）",
+      "description": "限制使用者只能使用指定的 AI 模型。留空表示無限制（最多 50 個模型，每個最長 64 字元）"
     }
   },
   "deleteKeyConfirm": {
@@ -771,11 +806,14 @@
     "title": "使用者管理",
     "description": "顯示 {count} 位使用者",
     "toolbar": {
-      "searchPlaceholder": "依使用者名稱搜尋...",
+      "searchPlaceholder": "搜尋使用者名稱、備註、標籤、Key...",
       "groupFilter": "依群組篩選",
       "allGroups": "所有群組",
       "tagFilter": "依標籤篩選",
-      "allTags": "所有標籤"
+      "allTags": "所有標籤",
+      "keyGroupFilter": "金鑰分組",
+      "allKeyGroups": "所有金鑰分組",
+      "createUser": "建立使用者"
     }
   },
   "availability": {
@@ -888,6 +926,360 @@
     "toast": {
       "refreshSuccess": "可用性資料已重新整理",
       "refreshFailed": "重新整理失敗，請重試"
+    }
+  },
+  "userManagement": {
+    "table": {
+      "columns": {
+        "username": "使用者名稱",
+        "note": "備註",
+        "expiresAt": "到期時間",
+        "expiresAtHint": "點擊快速續期",
+        "limit5h": "5h 限額",
+        "limitDaily": "每日限額",
+        "limitWeekly": "週限額",
+        "limitMonthly": "月限額",
+        "limitTotal": "總限額",
+        "limitSessions": "並發"
+      },
+      "keyRow": {
+        "name": "金鑰名稱",
+        "key": "金鑰",
+        "group": "分組",
+        "todayUsage": "今日用量",
+        "todayCost": "今日消耗",
+        "lastUsed": "最後使用",
+        "actions": "操作",
+        "quotaButton": "查看限額用量",
+        "fields": {
+          "callsLabel": "今日呼叫",
+          "costLabel": "今日消耗"
+        }
+      },
+      "expand": "展開",
+      "collapse": "收起",
+      "noKeys": "無金鑰",
+      "defaultGroup": "default",
+      "userStatus": {
+        "disabled": "已停用"
+      }
+    },
+    "keyFullDisplay": {
+      "title": "完整金鑰",
+      "copySuccess": "金鑰已複製到剪貼簿",
+      "copyFailed": "複製失敗",
+      "show": "顯示金鑰",
+      "hide": "隱藏金鑰",
+      "copied": "已複製",
+      "copy": "複製金鑰"
+    },
+    "keyStatsDialog": {
+      "title": "今日模型統計",
+      "columns": {
+        "model": "模型",
+        "calls": "呼叫次數",
+        "cost": "消費金額"
+      },
+      "noData": "今日暫無使用記錄",
+      "totalCalls": "今日總呼叫",
+      "totalCost": "今日總消費"
+    },
+    "keyQuotaUsageDialog": {
+      "title": "Key 限額使用情況",
+      "fetchFailed": "取得限額使用情況失敗",
+      "noLimit": "無限制",
+      "modeFixed": "固定時間",
+      "modeRolling": "滾動 24h",
+      "retry": "重試",
+      "labels": {
+        "limit5h": "5 小時",
+        "limitDaily": "每日",
+        "limitWeekly": "每週",
+        "limitMonthly": "每月",
+        "limitTotal": "總計",
+        "limitSessions": "並發"
+      }
+    },
+    "quickRenew": {
+      "title": "快速續期",
+      "description": "為使用者 {userName} 設定新的過期時間",
+      "currentExpiry": "目前到期時間",
+      "neverExpires": "永不過期",
+      "expired": "已過期",
+      "quickOptions": {
+        "7days": "7 天",
+        "30days": "30 天",
+        "90days": "90 天",
+        "1year": "1 年"
+      },
+      "customDate": "自訂日期",
+      "enableOnRenew": "同時啟用使用者",
+      "cancel": "取消",
+      "confirm": "確認續期",
+      "confirming": "續期中...",
+      "success": "續期成功",
+      "failed": "續期失敗"
+    },
+    "editDialog": {
+      "title": "編輯使用者與金鑰",
+      "description": "編輯使用者資訊和 API 金鑰設定",
+      "userSection": "使用者設定",
+      "keysSection": "金鑰設定",
+      "scrollToKey": "捲動到金鑰",
+      "saveFailed": "儲存使用者失敗",
+      "keySaveFailed": "儲存金鑰失敗",
+      "keyDeleteFailed": "刪除金鑰失敗",
+      "saveSuccess": "儲存成功",
+      "operationFailed": "操作失敗",
+      "userDisabled": "使用者已停用",
+      "userEnabled": "使用者已啟用",
+      "deleteFailed": "刪除使用者失敗",
+      "userDeleted": "使用者已刪除",
+      "saving": "儲存中..."
+    },
+    "createDialog": {
+      "title": "建立使用者",
+      "description": "建立新使用者並設定 API 金鑰",
+      "saveFailed": "建立使用者失敗",
+      "keyCreateFailed": "建立金鑰失敗",
+      "createSuccess": "使用者建立成功",
+      "keysSection": "金鑰",
+      "addKey": "新增金鑰",
+      "removeKey": "刪除金鑰",
+      "cannotDeleteLastKey": "無法刪除最後一個金鑰",
+      "confirmRemoveKeyTitle": "刪除金鑰",
+      "confirmRemoveKeyDescription": "確定要刪除金鑰 \"{name}\" 嗎?",
+      "creating": "建立中...",
+      "create": "建立"
+    },
+    "onboarding": {
+      "skip": "跳過",
+      "next": "下一步",
+      "prev": "上一步",
+      "finish": "開始建立",
+      "stepIndicator": "第 {current} 步，共 {total} 步",
+      "steps": {
+        "welcome": {
+          "title": "使用者與金鑰",
+          "description": "使用者是 API 存取的主體，每個使用者可以擁有多個 API Key。使用者級限額影響所有 Key，Key 級限額可進一步細化控制。"
+        },
+        "limits": {
+          "title": "限額管理",
+          "description": "支援 6 種限額類型：5 小時、每日、每週、每月、總限額和並發 Session。限額規則按需新增，靈活控制使用量。"
+        },
+        "groups": {
+          "title": "供應商分組",
+          "description": "透過分組功能，可以限制使用者只能使用特定供應商。Key 級分組優先於使用者級分組。"
+        },
+        "keyFeatures": {
+          "title": "Key 特殊功能",
+          "description": "每個 Key 可獨立配置 Cache TTL 覆寫、是否允許登入 Web UI 等進階功能。"
+        }
+      }
+    },
+    "limitRules": {
+      "addRule": "新增限額規則",
+      "ruleTypes": {
+        "limit5h": "5小時限額",
+        "limitDaily": "每日限額",
+        "limitWeekly": "週限額",
+        "limitMonthly": "月限額",
+        "limitTotal": "總限額",
+        "limitSessions": "並發 Session"
+      },
+      "dailyMode": {
+        "fixed": "固定時間重設",
+        "rolling": "滾動視窗（24h）"
+      },
+      "quickValues": {
+        "10": "$10",
+        "50": "$50",
+        "100": "$100",
+        "500": "$500"
+      },
+      "alreadySet": "已設定",
+      "confirmAdd": "新增",
+      "cancel": "取消"
+    },
+    "quickExpire": {
+      "oneWeek": "一週後",
+      "oneMonth": "一個月後",
+      "threeMonths": "三個月後",
+      "oneYear": "一年後"
+    },
+    "providerGroup": {
+      "label": "供應商分組",
+      "placeholder": "選擇供應商分組",
+      "noRestriction": "無限制（所有供應商）",
+      "providerCount": "{count} 個供應商"
+    },
+    "dangerZone": {
+      "title": "危險操作",
+      "description": "以下操作不可逆，請謹慎執行",
+      "enable": {
+        "title": "啟用使用者",
+        "description": "啟用後該使用者及其金鑰將恢復正常使用",
+        "trigger": "啟用",
+        "confirm": "確認啟用",
+        "confirmDescription": "確認要啟用使用者「{userName}」嗎？",
+        "loading": "處理中..."
+      },
+      "disable": {
+        "title": "停用使用者",
+        "description": "停用後該使用者及其金鑰將無法繼續使用",
+        "trigger": "停用",
+        "confirm": "確認停用",
+        "confirmDescription": "確認要停用使用者「{userName}」嗎？",
+        "loading": "處理中..."
+      },
+      "delete": {
+        "title": "刪除使用者",
+        "description": "將刪除該使用者的所有關聯資料，此操作無法撤銷",
+        "trigger": "刪除",
+        "confirm": "確認刪除",
+        "confirmDescription": "此操作將刪除使用者「{userName}」的所有關聯資料，且無法撤銷。",
+        "confirmLabel": "二次確認",
+        "confirmHint": "請輸入「{userName}」以確認刪除",
+        "loading": "刪除中..."
+      },
+      "actions": {
+        "cancel": "取消"
+      },
+      "errors": {
+        "enableFailed": "啟用使用者失敗，請稍後重試",
+        "disableFailed": "停用使用者失敗，請稍後重試",
+        "deleteFailed": "刪除使用者失敗，請稍後重試"
+      }
+    },
+    "limitIndicator": {
+      "notSet": "未設定",
+      "unlimited": "無限制"
+    },
+    "keySettings": {
+      "balanceQueryPage": {
+        "label": "啟用獨立餘額查詢頁",
+        "description": "允許使用者透過專屬頁面查看餘額"
+      },
+      "cacheTtlOverride": {
+        "label": "Cache TTL 覆寫",
+        "inherit": "不覆寫（跟隨供應商/客戶端）",
+        "5m": "5 分鐘",
+        "1h": "1 小時"
+      }
+    },
+    "pagination": {
+      "previous": "上一頁",
+      "next": "下一頁",
+      "page": "第 {current} 頁",
+      "of": "共 {total} 頁"
+    },
+    "toolbar": {
+      "expandAll": "全部展開",
+      "collapseAll": "全部收起"
+    },
+    "keyStatus": {
+      "enabled": "啟用",
+      "disabled": "停用"
+    },
+    "userEditSection": {
+      "sections": {
+        "basicInfo": "基本資訊",
+        "expireTime": "過期時間",
+        "limitRules": "限額規則",
+        "accessRestrictions": "存取限制"
+      },
+      "fields": {
+        "username": {
+          "label": "使用者名稱",
+          "placeholder": "請輸入使用者名稱"
+        },
+        "description": {
+          "label": "備註",
+          "placeholder": "請輸入備註（選填）"
+        },
+        "tags": {
+          "label": "使用者標籤",
+          "placeholder": "輸入標籤（按 Enter 新增）"
+        },
+        "providerGroup": {
+          "label": "供應商分組（舊版）",
+          "placeholder": "輸入供應商分組或留空"
+        },
+        "allowedClients": {
+          "label": "用戶端限制",
+          "description": "限制哪些 CLI/IDE 用戶端可以使用此帳戶。留空表示無限制。",
+          "customLabel": "自訂用戶端模式",
+          "customPlaceholder": "輸入自訂模式（如：'xcode', 'my-ide'）"
+        },
+        "allowedModels": {
+          "label": "模型限制",
+          "placeholder": "輸入模型名稱或從下拉選單選擇",
+          "description": "限制使用者只能使用指定的 AI 模型。留空表示無限制。"
+        },
+        "enableStatus": {
+          "label": "啟用狀態",
+          "enabledDescription": "目前已啟用，停用後該使用者及其金鑰將無法繼續使用",
+          "disabledDescription": "目前已停用，啟用後該使用者及其金鑰將恢復正常使用",
+          "confirmDisable": "確認停用",
+          "confirmEnable": "確認啟用"
+        }
+      },
+      "presetClients": {
+        "claude-cli": "Claude Code CLI",
+        "gemini-cli": "Gemini CLI",
+        "factory-cli": "Droid CLI",
+        "codex-cli": "Codex CLI"
+      }
+    },
+    "keyEditSection": {
+      "sections": {
+        "basicInfo": "基本資訊",
+        "expireTime": "過期時間",
+        "limitRules": "限額規則",
+        "specialFeatures": "特殊功能"
+      },
+      "fields": {
+        "keyName": {
+          "label": "金鑰名稱",
+          "placeholder": "請輸入金鑰名稱"
+        },
+        "enableStatus": {
+          "label": "啟用狀態",
+          "description": "停用後此金鑰將無法使用。停用後僅管理員可啟用。"
+        },
+        "balanceQueryPage": {
+          "label": "獨立個人用量頁面",
+          "description": "啟用後，此金鑰可使用獨立的個人用量查詢頁面",
+          "descriptionEnabled": "啟用後，此金鑰在登入時將進入獨立的個人用量頁面。但不可修改自己金鑰的供應商分組。",
+          "descriptionDisabled": "關閉後，使用者將無法進入個人獨立用量頁面 UI。但可在受限的 Web UI功能中修改自己金鑰的供應商分組。"
+        },
+        "providerGroup": {
+          "label": "供應商分組",
+          "placeholder": "留空則允許所有 default 分組供應商"
+        },
+        "cacheTtl": {
+          "label": "Cache TTL 覆寫",
+          "options": {
+            "inherit": "不覆寫（跟隨供應商/客戶端）",
+            "5m": "5m",
+            "1h": "1h"
+          }
+        }
+      },
+      "limitRules": {
+        "title": "新增限額規則",
+        "actions": {
+          "add": "新增規則",
+          "remove": "移除"
+        },
+        "daily": {
+          "mode": {
+            "fixed": "固定時間重置",
+            "rolling": "滾動視窗（24小時）"
+          }
+        },
+        "overwriteHint": "此類型已存在，儲存將覆蓋原有值"
+      }
     }
   }
 }

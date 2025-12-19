@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useZodForm } from "@/lib/hooks/use-zod-form";
+import { getErrorMessage } from "@/lib/utils/error-messages";
 import { KeyFormSchema } from "@/lib/validation/schemas";
 import type { User } from "@/types/user";
 
@@ -39,24 +40,29 @@ interface EditKeyFormProps {
     limitConcurrentSessions?: number;
   };
   user?: User;
+  isAdmin?: boolean;
   onSuccess?: () => void;
 }
 
-export function EditKeyForm({ keyData, user, onSuccess }: EditKeyFormProps) {
+export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditKeyFormProps) {
   const [isPending, startTransition] = useTransition();
   const [providerGroupSuggestions, setProviderGroupSuggestions] = useState<string[]>([]);
   const router = useRouter();
   const t = useTranslations("quota.keys.editKeyForm");
   const tUI = useTranslations("ui.tagInput");
+  const tCommon = useTranslations("common");
+  const tErrors = useTranslations("errors");
 
   // Load provider group suggestions
   useEffect(() => {
+    // providerGroup 为 admin-only 字段：仅管理员允许编辑 Key.providerGroup
+    if (!isAdmin) return;
     if (user?.id) {
       getAvailableProviderGroups(user.id).then(setProviderGroupSuggestions);
     } else {
       getAvailableProviderGroups().then(setProviderGroupSuggestions);
     }
-  }, [user?.id]);
+  }, [isAdmin, user?.id]);
 
   const formatExpiresAt = (expiresAt: string) => {
     if (!expiresAt || expiresAt === "永不过期") return "";
@@ -95,7 +101,6 @@ export function EditKeyForm({ keyData, user, onSuccess }: EditKeyFormProps) {
             name: data.name,
             expiresAt: data.expiresAt || undefined,
             canLoginWebUi: data.canLoginWebUi,
-            providerGroup: data.providerGroup || null,
             cacheTtlPreference: data.cacheTtlPreference,
             limit5hUsd: data.limit5hUsd,
             limitDailyUsd: data.limitDailyUsd,
@@ -105,9 +110,13 @@ export function EditKeyForm({ keyData, user, onSuccess }: EditKeyFormProps) {
             limitMonthlyUsd: data.limitMonthlyUsd,
             limitTotalUsd: data.limitTotalUsd,
             limitConcurrentSessions: data.limitConcurrentSessions,
+            ...(isAdmin ? { providerGroup: data.providerGroup || null } : {}),
           });
           if (!res.ok) {
-            toast.error(res.error || t("error"));
+            const msg = res.errorCode
+              ? getErrorMessage(tErrors, res.errorCode, res.errorParams)
+              : res.error || t("error");
+            toast.error(msg);
             return;
           }
           toast.success(t("success"));
@@ -147,6 +156,7 @@ export function EditKeyForm({ keyData, user, onSuccess }: EditKeyFormProps) {
         label={t("expiresAt.label")}
         placeholder={t("expiresAt.placeholder")}
         description={t("expiresAt.description")}
+        clearLabel={tCommon("clearDate")}
         value={String(form.values.expiresAt || "")}
         onChange={(val) => form.setValue("expiresAt", val)}
         error={form.getFieldProps("expiresAt").error}
@@ -193,6 +203,7 @@ export function EditKeyForm({ keyData, user, onSuccess }: EditKeyFormProps) {
         onChange={form.getFieldProps("providerGroup").onChange}
         error={form.getFieldProps("providerGroup").error}
         touched={form.getFieldProps("providerGroup").touched}
+        disabled={!isAdmin}
       />
 
       <div className="space-y-2">

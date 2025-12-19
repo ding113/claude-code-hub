@@ -165,8 +165,11 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
 - **管理后台**：`http://localhost:23000`（使用 `.env` 中的 `ADMIN_TOKEN` 登录）
 - **API 文档（Scalar UI）**：`http://localhost:23000/api/actions/scalar`
 - **API 文档（Swagger UI）**：`http://localhost:23000/api/actions/docs`
+- **API 认证指南**：[docs/api-authentication-guide.md](docs/api-authentication-guide.md)
 
-> 💡 **提示**：如需修改端口，请编辑 `docker-compose.yml` 中的 `ports` 配置。
+> 💡 **提示**：
+> - 如需修改端口，请编辑 `docker-compose.yml` 中的 `ports` 配置。
+> - 如需通过脚本或编程调用 API，请参考 [API 认证指南](docs/api-authentication-guide.md)。
 
 ## 🖼️ 界面预览 Screenshots
 
@@ -260,6 +263,7 @@ Docker Compose 是**首选部署方式**，自动配置数据库、Redis 和应�
 | `DSN`                                      | -                        | PostgreSQL 连接串，如 `postgres://user:pass@host:5432/db`.                   |
 | `AUTO_MIGRATE`                             | `true`                   | 启动时自动执行 Drizzle 迁移；生产环境可关闭以人工控制。                      |
 | `REDIS_URL`                                | `redis://localhost:6379` | Redis 地址，支持 `rediss://` 用于 TLS。                                      |
+| `REDIS_TLS_REJECT_UNAUTHORIZED`            | `true`                   | 是否验证 Redis TLS 证书；设为 `false` 可跳过验证（用于自签/共享证书）。      |
 | `ENABLE_RATE_LIMIT`                        | `true`                   | 控制多维限流开关；Fail-Open 策略在 Redis 不可用时自动降级。                  |
 | `SESSION_TTL`                              | `300`                    | Session 缓存时间（秒），影响供应商复用策略。                                 |
 | `ENABLE_SECURE_COOKIES`                    | `true`                   | 仅 HTTPS 场景能设置 Secure Cookie；HTTP 访问（非 localhost）需改为 `false`。 |
