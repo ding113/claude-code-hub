@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getEndpointList, getModelList, getStatusCodeList } from "@/actions/usage-logs";
 import type { ActionResult } from "@/actions/types";
+import { getEndpointList, getModelList, getStatusCodeList } from "@/actions/usage-logs";
 
 /**
  * 惰性加载 Hook 返回类型
@@ -47,6 +47,7 @@ function createLazyFilterHook<T>(
       };
     }, []);
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: fetcher 是工厂函数的闭包参数，在 hook 生命周期内永不改变
     const load = useCallback(async () => {
       // 如果已加载或有进行中的请求，跳过
       if (isLoaded || inFlightRef.current) return;
