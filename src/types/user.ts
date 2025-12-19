@@ -66,15 +66,15 @@ export interface UpdateUserData {
   name?: string;
   description?: string;
   rpm?: number;
-  dailyQuota?: number;
+  dailyQuota?: number | null;
   providerGroup?: string | null; // 可选，供应商分组
   tags?: string[]; // 可选，用户标签
   // User-level quota fields
-  limit5hUsd?: number;
-  limitWeeklyUsd?: number;
-  limitMonthlyUsd?: number;
+  limit5hUsd?: number | null;
+  limitWeeklyUsd?: number | null;
+  limitMonthlyUsd?: number | null;
   limitTotalUsd?: number | null;
-  limitConcurrentSessions?: number;
+  limitConcurrentSessions?: number | null;
   // Daily quota reset mode
   dailyResetMode?: "fixed" | "rolling";
   dailyResetTime?: string;
