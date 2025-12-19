@@ -17,3 +17,21 @@ export function ClientVersionsSkeleton() {
     </div>
   );
 }
+
+export function ClientVersionsSettingsSkeleton() {
+  return (
+    <div className="space-y-3" aria-busy="true">
+      <Skeleton className="h-10 w-32" />
+      <LoadingState />
+    </div>
+  );
+}
+
+export function ClientVersionsTableSkeleton() {
+  return (
+    <div className="space-y-4" aria-busy="true">
+      <TableSkeleton rows={6} columns={4} />
+      <LoadingState />
+    </div>
+  );
+}

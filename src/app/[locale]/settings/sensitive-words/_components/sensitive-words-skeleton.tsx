@@ -22,3 +22,12 @@ export function SensitiveWordsSkeleton() {
     </div>
   );
 }
+
+export function SensitiveWordsTableSkeleton() {
+  return (
+    <div className="rounded-xl border bg-card p-5 space-y-4" aria-busy="true">
+      <TableSkeleton rows={6} columns={3} />
+      <LoadingState />
+    </div>
+  );
+}
