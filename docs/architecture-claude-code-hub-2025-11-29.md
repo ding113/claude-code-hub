@@ -439,7 +439,7 @@ const COUNT_TOKENS_PIPELINE = ["auth", "version", "probe", "provider"];
 ```
 1. Filter enabled providers
 2. Filter by circuit breaker state (exclude OPEN)
-3. Filter by user's provider group (if set)
+3. Filter by effective provider group (key.providerGroup overrides user.providerGroup; key.providerGroup is admin-only; user.providerGroup is derived from Key groups on Key changes)
 4. Check session cache for sticky provider
 5. If no sticky: weighted random selection by weight
 6. Return selected provider or null (all unavailable)

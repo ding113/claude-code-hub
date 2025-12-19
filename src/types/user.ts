@@ -19,6 +19,9 @@ export interface User {
   limitMonthlyUsd?: number; // 月消费上限（美元）
   limitTotalUsd?: number | null; // 总消费上限（美元）
   limitConcurrentSessions?: number; // 并发 Session 上限
+  // Daily quota reset mode
+  dailyResetMode: "fixed" | "rolling"; // 每日限额重置模式
+  dailyResetTime: string; // 每日重置时间 (HH:mm)
   // User status and expiry management
   isEnabled: boolean; // 用户启用状态
   expiresAt?: Date | null; // 用户过期时间
@@ -44,6 +47,9 @@ export interface CreateUserData {
   limitMonthlyUsd?: number;
   limitTotalUsd?: number | null;
   limitConcurrentSessions?: number;
+  // Daily quota reset mode
+  dailyResetMode?: "fixed" | "rolling";
+  dailyResetTime?: string;
   // User status and expiry management
   isEnabled?: boolean;
   expiresAt?: Date | null;
@@ -69,6 +75,9 @@ export interface UpdateUserData {
   limitMonthlyUsd?: number;
   limitTotalUsd?: number | null;
   limitConcurrentSessions?: number;
+  // Daily quota reset mode
+  dailyResetMode?: "fixed" | "rolling";
+  dailyResetTime?: string;
   // User status and expiry management
   isEnabled?: boolean;
   expiresAt?: Date | null;
@@ -134,6 +143,9 @@ export interface UserDisplay {
   limitMonthlyUsd?: number | null;
   limitTotalUsd?: number | null;
   limitConcurrentSessions?: number | null;
+  // Daily quota reset mode
+  dailyResetMode?: "fixed" | "rolling";
+  dailyResetTime?: string;
   // User status and expiry management
   isEnabled: boolean; // 用户启用状态
   expiresAt?: Date | null; // 用户过期时间

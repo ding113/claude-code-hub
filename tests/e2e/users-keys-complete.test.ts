@@ -22,7 +22,7 @@
  * - 使用 afterAll 钩子确保清理执行
  */
 
-import { describe, expect, test, beforeAll, afterAll } from "vitest";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
 // ==================== 配置 ====================
 
@@ -168,7 +168,7 @@ afterAll(async () => {
   for (const userId of testData.userIds) {
     try {
       await callApi("users", "removeUser", { userId });
-    } catch (error) {
+    } catch (_error) {
       console.warn(`⚠️  清理用户 ${userId} 失败`);
     }
   }
@@ -260,7 +260,7 @@ describe("用户和 Key 管理 - 完整 E2E 测试", () => {
 
   describe("【用户管理】编辑和状态管理", () => {
     test("2.1 应该成功编辑用户信息", async () => {
-      const result = await expectSuccess("users", "editUser", {
+      const _result = await expectSuccess("users", "editUser", {
         userId: testUser1Id,
         name: `E2E用户1_已编辑_${Date.now()}`,
         note: "已修改",
@@ -383,7 +383,7 @@ describe("用户和 Key 管理 - 完整 E2E 测试", () => {
       testData.userIds.push(tempUserId);
 
       // 创建额外的 Key
-      const keyResult = await expectSuccess("keys", "addKey", {
+      const _keyResult = await expectSuccess("keys", "addKey", {
         userId: tempUserId,
         name: `临时Key_${Date.now()}`,
       });
@@ -561,7 +561,7 @@ describe("用户和 Key 管理 - 完整 E2E 测试", () => {
       const createdKeys = [];
 
       for (let i = 1; i <= 3; i++) {
-        const keyResult = await expectSuccess("keys", "addKey", {
+        const _keyResult = await expectSuccess("keys", "addKey", {
           userId,
           name: `测试Key${i}_${Date.now()}`,
         });

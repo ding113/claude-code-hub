@@ -317,6 +317,7 @@ export function KeyListHeader({
               <FormErrorBoundary>
                 <AddKeyForm
                   userId={activeUser?.id}
+                  isAdmin={currentUser?.role === "admin"}
                   user={
                     activeUser
                       ? {
@@ -333,6 +334,8 @@ export function KeyListHeader({
                           limitWeeklyUsd: activeUser.limitWeeklyUsd ?? undefined,
                           limitMonthlyUsd: activeUser.limitMonthlyUsd ?? undefined,
                           limitConcurrentSessions: activeUser.limitConcurrentSessions ?? undefined,
+                          dailyResetMode: activeUser.dailyResetMode ?? "fixed",
+                          dailyResetTime: activeUser.dailyResetTime ?? "00:00",
                           isEnabled: activeUser.isEnabled,
                           expiresAt: activeUser.expiresAt ?? undefined,
                         }

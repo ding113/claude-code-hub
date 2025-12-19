@@ -55,6 +55,7 @@ export function KeyActions({
             <EditKeyForm
               keyData={keyData}
               user={keyOwnerUser}
+              isAdmin={currentUser?.role === "admin"}
               onSuccess={() => setOpenEdit(false)}
             />
           </FormErrorBoundary>

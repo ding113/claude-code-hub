@@ -4,8 +4,8 @@
  * 在所有测试运行前执行的全局配置
  */
 
-import { beforeAll, afterAll } from "vitest";
 import { config } from "dotenv";
+import { afterAll, beforeAll } from "vitest";
 
 // ==================== 加载环境变量 ====================
 

@@ -120,6 +120,13 @@ export const CreateUserSchema = z.object({
         }
       })
   ),
+  // Daily quota reset mode
+  dailyResetMode: z.enum(["fixed", "rolling"]).optional().default("fixed"),
+  dailyResetTime: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "重置时间格式必须为 HH:mm")
+    .optional()
+    .default("00:00"),
   // Allowed clients (CLI/IDE restrictions)
   allowedClients: z
     .array(z.string().max(64, "客户端模式长度不能超过64个字符"))
@@ -234,6 +241,12 @@ export const UpdateUserSchema = z.object({
         }
       })
   ),
+  // Daily quota reset mode
+  dailyResetMode: z.enum(["fixed", "rolling"]).optional(),
+  dailyResetTime: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "重置时间格式必须为 HH:mm")
+    .optional(),
   // Allowed clients (CLI/IDE restrictions)
   allowedClients: z
     .array(z.string().max(64, "客户端模式长度不能超过64个字符"))

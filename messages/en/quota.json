@@ -282,8 +282,8 @@
         "description": "Leave blank for never expires"
       },
       "canLoginWebUi": {
-        "label": "Allow Web UI Login",
-        "description": "When disabled, this key can only be used for API calls and cannot login to the admin panel"
+        "label": "Enable dedicated balance page",
+        "description": "Allow users to view their balance via a dedicated page"
       },
       "limit5hUsd": {
         "label": "5-Hour Cost Limit (USD)",

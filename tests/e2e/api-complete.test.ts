@@ -13,7 +13,7 @@
  * 🧹 清理：测试完成后自动清理数据
  */
 
-import { describe, expect, test, beforeAll, afterAll } from "vitest";
+import { afterAll, describe, expect, test } from "vitest";
 
 // ==================== 配置 ====================
 
@@ -60,7 +60,7 @@ afterAll(async () => {
   for (const userId of testData.userIds) {
     try {
       await callApi("users", "removeUser", { userId });
-    } catch (e) {
+    } catch (_e) {
       // 忽略清理错误
     }
   }

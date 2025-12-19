@@ -259,8 +259,8 @@
         "description": "空欄の場合は無期限"
       },
       "canLoginWebUi": {
-        "label": "Web UI へのログインを許可",
-        "description": "無効にすると、このキーは API 呼び出しにのみ使用でき、管理画面にはログインできません"
+        "label": "専用の残高確認ページを有効化",
+        "description": "専用ページから残高を確認できるようにします"
       },
       "limit5hUsd": {
         "label": "5時間消費上限 (USD)",

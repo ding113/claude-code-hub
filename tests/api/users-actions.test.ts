@@ -32,7 +32,7 @@
  * - 错误处理
  */
 
-import { describe, expect, test, beforeEach } from "vitest";
+import { beforeEach, describe, expect, test } from "vitest";
 import { callActionsRoute } from "../test-utils";
 
 // 测试用管理员 Token（实际使用时需要有效的 token）
