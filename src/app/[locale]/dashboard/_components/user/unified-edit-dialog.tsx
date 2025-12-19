@@ -599,7 +599,7 @@ function UnifiedEditDialogInner({
       // Batch update: apply multiple fields at once
       Object.entries(field).forEach(([key, val]) => {
         const mappedField = key === "description" ? "note" : key;
-        (next as any)[mappedField] = mappedField === "expiresAt" ? val ?? undefined : val;
+        (next as any)[mappedField] = mappedField === "expiresAt" ? (val ?? undefined) : val;
       });
     } else {
       // Single field update (backward compatible)

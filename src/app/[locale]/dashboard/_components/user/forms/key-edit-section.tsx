@@ -216,7 +216,10 @@ export function KeyEditSection({
         onChange({
           limitDailyUsd: value,
           dailyResetMode: nextMode,
-          dailyResetTime: nextMode === "fixed" ? (time ?? keyData.dailyResetTime ?? "00:00") : keyData.dailyResetTime,
+          dailyResetTime:
+            nextMode === "fixed"
+              ? (time ?? keyData.dailyResetTime ?? "00:00")
+              : keyData.dailyResetTime,
         });
         return;
       }

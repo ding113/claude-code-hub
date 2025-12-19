@@ -171,10 +171,7 @@ export function LimitRulePicker({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label>{getTranslation(translations, "fields.type.label", "限额类型")}</Label>
-              <Select
-                value={type}
-                onValueChange={(val) => setType(val as LimitType)}
-              >
+              <Select value={type} onValueChange={(val) => setType(val as LimitType)}>
                 <SelectTrigger>
                   <SelectValue
                     placeholder={getTranslation(translations, "fields.type.placeholder", "请选择")}
@@ -191,7 +188,13 @@ export function LimitRulePicker({
               {type && existingTypeSet.has(type) && (
                 <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
                   <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                  <span>{getTranslation(translations, "overwriteHint", "此类型已存在，保存将覆盖原有值")}</span>
+                  <span>
+                    {getTranslation(
+                      translations,
+                      "overwriteHint",
+                      "此类型已存在，保存将覆盖原有值"
+                    )}
+                  </span>
                 </div>
               )}
             </div>
