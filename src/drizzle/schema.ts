@@ -299,6 +299,8 @@ export const messageRequest = pgTable('message_request', {
 
   // 错误信息
   errorMessage: text('error_message'),
+  errorStack: text('error_stack'),  // 完整堆栈信息，用于排查 TypeError: terminated 等流错误
+  errorCause: text('error_cause'),  // 嵌套错误原因（JSON 格式），如 NGHTTP2_INTERNAL_ERROR
 
   // 拦截原因（用于记录被敏感词等规则拦截的请求）
   blockedBy: varchar('blocked_by', { length: 50 }),
