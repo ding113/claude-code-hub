@@ -32,6 +32,7 @@ export const EnvSchema = z.object({
   AUTO_MIGRATE: z.string().default("true").transform(booleanTransform),
   PORT: z.coerce.number().default(23000),
   REDIS_URL: z.string().optional(),
+  REDIS_TLS_REJECT_UNAUTHORIZED: z.string().default("true").transform(booleanTransform),
   ENABLE_RATE_LIMIT: z.string().default("true").transform(booleanTransform),
   ENABLE_SECURE_COOKIES: z.string().default("true").transform(booleanTransform),
   SESSION_TTL: z.coerce.number().default(300),

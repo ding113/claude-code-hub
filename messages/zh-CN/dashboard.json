@@ -130,7 +130,8 @@
       "view": "查看"
     },
     "error": {
-      "loadFailed": "加载失败"
+      "loadFailed": "加载失败",
+      "loadKeysFailed": "加载密钥列表失败"
     },
     "details": {
       "title": "请求详情",

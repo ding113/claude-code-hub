@@ -76,7 +76,11 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
 
   // 加载供应商分组建议
   useEffect(() => {
-    getAvailableProviderGroups().then(setProviderGroupSuggestions);
+    getAvailableProviderGroups()
+      .then(setProviderGroupSuggestions)
+      .catch((err) => {
+        console.error("[UserForm] Failed to load provider groups:", err);
+      });
   }, []);
 
   const form = useZodForm({

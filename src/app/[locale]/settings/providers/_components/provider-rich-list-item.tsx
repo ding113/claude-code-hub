@@ -152,12 +152,20 @@ export function ProviderRichListItem({
   // 处理查看密钥
   const handleShowKey = async () => {
     setShowKeyDialog(true);
-    const result = await getUnmaskedProviderKey(provider.id);
-    if (result.ok) {
-      setUnmaskedKey(result.data.key);
-    } else {
+    try {
+      const result = await getUnmaskedProviderKey(provider.id);
+      if (result.ok) {
+        setUnmaskedKey(result.data.key);
+      } else {
+        toast.error(tList("getKeyFailed"), {
+          description: result.error || tList("unknownError"),
+        });
+        setShowKeyDialog(false);
+      }
+    } catch (error) {
+      console.error("Failed to get provider key:", error);
       toast.error(tList("getKeyFailed"), {
-        description: result.error || tList("unknownError"),
+        description: tList("unknownError"),
       });
       setShowKeyDialog(false);
     }

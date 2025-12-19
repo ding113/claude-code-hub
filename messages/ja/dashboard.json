@@ -130,7 +130,8 @@
       "view": "表示"
     },
     "error": {
-      "loadFailed": "読み込み失敗"
+      "loadFailed": "読み込み失敗",
+      "loadKeysFailed": "キーリストの読み込みに失敗しました"
     },
     "details": {
       "title": "リクエスト詳細",

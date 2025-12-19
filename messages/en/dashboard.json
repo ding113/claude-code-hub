@@ -130,7 +130,8 @@
       "view": "View"
     },
     "error": {
-      "loadFailed": "Load Failed"
+      "loadFailed": "Load Failed",
+      "loadKeysFailed": "Failed to load keys"
     },
     "details": {
       "title": "Request Details",

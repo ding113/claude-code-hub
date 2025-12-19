@@ -130,7 +130,8 @@
       "view": "檢視"
     },
     "error": {
-      "loadFailed": "載入失敗"
+      "loadFailed": "載入失敗",
+      "loadKeysFailed": "載入密鑰列表失敗"
     },
     "details": {
       "title": "請求詳情",
