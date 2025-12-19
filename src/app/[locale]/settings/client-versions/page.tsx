@@ -6,7 +6,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { redirect } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
 import { SettingsPageHeader } from "../_components/settings-page-header";
-import { ClientVersionsSkeleton } from "./_components/client-versions-skeleton";
+import {
+  ClientVersionsSettingsSkeleton,
+  ClientVersionsTableSkeleton,
+} from "./_components/client-versions-skeleton";
 import { ClientVersionStatsTable } from "./_components/client-version-stats-table";
 import { ClientVersionToggle } from "./_components/client-version-toggle";
 
@@ -31,27 +34,6 @@ export default async function ClientVersionsPage({
         title={t("clientVersions.title")}
         description={t("clientVersions.description")}
       />
-      <Suspense fallback={<ClientVersionsSkeleton />}>
-        <ClientVersionsContent />
-      </Suspense>
-    </div>
-  );
-}
-
-async function ClientVersionsContent() {
-  const t = await getTranslations("settings");
-  const [statsResult, settingsResult] = await Promise.all([
-    fetchClientVersionStats(),
-    fetchSystemSettings(),
-  ]);
-
-  const stats = statsResult.ok ? statsResult.data : [];
-  const enableClientVersionCheck = settingsResult.ok
-    ? settingsResult.data.enableClientVersionCheck
-    : false;
-
-  return (
-    <>
       {/* 功能开关和说明 */}
       <Card>
         <CardHeader>
@@ -59,7 +41,9 @@ async function ClientVersionsContent() {
           <CardDescription>{t("clientVersions.section.settings.description")}</CardDescription>
         </CardHeader>
         <CardContent>
-          <ClientVersionToggle enabled={enableClientVersionCheck} />
+          <Suspense fallback={<ClientVersionsSettingsSkeleton />}>
+            <ClientVersionsSettingsContent />
+          </Suspense>
         </CardContent>
       </Card>
 
@@ -70,18 +54,39 @@ async function ClientVersionsContent() {
           <CardDescription>{t("clientVersions.section.distribution.description")}</CardDescription>
         </CardHeader>
         <CardContent>
-          {stats && stats.length > 0 ? (
-            <ClientVersionStatsTable data={stats} />
-          ) : (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <p className="text-muted-foreground">{t("clientVersions.empty.title")}</p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                {t("clientVersions.empty.description")}
-              </p>
-            </div>
-          )}
+          <Suspense fallback={<ClientVersionsTableSkeleton />}>
+            <ClientVersionsStatsContent />
+          </Suspense>
         </CardContent>
       </Card>
-    </>
+    </div>
   );
+}
+
+async function ClientVersionsSettingsContent() {
+  const settingsResult = await fetchSystemSettings();
+  const enableClientVersionCheck = settingsResult.ok
+    ? settingsResult.data.enableClientVersionCheck
+    : false;
+
+  return <ClientVersionToggle enabled={enableClientVersionCheck} />;
+}
+
+async function ClientVersionsStatsContent() {
+  const t = await getTranslations("settings");
+  const statsResult = await fetchClientVersionStats();
+  const stats = statsResult.ok ? statsResult.data : [];
+
+  if (!stats || stats.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <p className="text-muted-foreground">{t("clientVersions.empty.title")}</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {t("clientVersions.empty.description")}
+        </p>
+      </div>
+    );
+  }
+
+  return <ClientVersionStatsTable data={stats} />;
 }
