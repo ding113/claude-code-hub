@@ -331,7 +331,7 @@ function UnifiedEditDialogInner({
               expiresAt: data.user.expiresAt ?? null,
               providerGroup: data.user.providerGroup ?? null,
               limit5hUsd: data.user.limit5hUsd,
-              dailyQuota: data.user.dailyQuota ?? undefined,
+              dailyQuota: data.user.dailyQuota,
               limitWeeklyUsd: data.user.limitWeeklyUsd,
               limitMonthlyUsd: data.user.limitMonthlyUsd,
               limitTotalUsd: data.user.limitTotalUsd,
