@@ -245,7 +245,7 @@ export async function addUser(data: {
   providerGroup?: string | null;
   tags?: string[];
   rpm?: number;
-  dailyQuota?: number;
+  dailyQuota?: number | null;
   limit5hUsd?: number | null;
   limitWeeklyUsd?: number | null;
   limitMonthlyUsd?: number | null;
@@ -435,7 +435,7 @@ export async function createUserOnly(data: {
   providerGroup?: string | null;
   tags?: string[];
   rpm?: number;
-  dailyQuota?: number;
+  dailyQuota?: number | null;
   limit5hUsd?: number | null;
   limitWeeklyUsd?: number | null;
   limitMonthlyUsd?: number | null;
@@ -603,7 +603,7 @@ export async function editUser(
     providerGroup?: string | null;
     tags?: string[];
     rpm?: number;
-    dailyQuota?: number;
+    dailyQuota?: number | null;
     limit5hUsd?: number | null;
     limitWeeklyUsd?: number | null;
     limitMonthlyUsd?: number | null;

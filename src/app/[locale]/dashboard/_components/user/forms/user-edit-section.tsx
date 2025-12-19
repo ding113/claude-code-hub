@@ -142,8 +142,15 @@ export function UserEditSection({
   const [toggleConfirmOpen, setToggleConfirmOpen] = useState(false);
   const [isToggling, setIsToggling] = useState(false);
 
-  const emitChange = (field: string, value: any) => {
-    onChange(field, value);
+  const emitChange = (fieldOrFields: string | Record<string, any>, value?: any) => {
+    if (typeof fieldOrFields === "string") {
+      onChange(fieldOrFields, value);
+    } else {
+      // Batch update: call onChange for each field
+      for (const [field, val] of Object.entries(fieldOrFields)) {
+        onChange(field, val);
+      }
+    }
   };
 
   const handleToggleEnabled = async () => {
