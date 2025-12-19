@@ -1,4 +1,5 @@
 import { BarChart3 } from "lucide-react";
+import { Suspense } from "react";
 import { getTranslations } from "next-intl/server";
 import { getProviders, getProvidersHealthStatus } from "@/actions/providers";
 import { AddProviderDialog } from "@/app/[locale]/settings/providers/_components/add-provider-dialog";
@@ -10,6 +11,8 @@ import { Link, redirect } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { getSystemSettings } from "@/repository/system-config";
+import type { User } from "@/types/user";
+import { ProvidersSectionSkeleton } from "./_components/providers-skeleton";
 
 export const dynamic = "force-dynamic";
 
@@ -31,11 +34,6 @@ export default async function DashboardProvidersPage({
   const currentUser = session!.user;
 
   const t = await getTranslations("settings");
-  const [providers, healthStatus, systemSettings] = await Promise.all([
-    getProviders(),
-    getProvidersHealthStatus(),
-    getSystemSettings(),
-  ]);
 
   // 读取多供应商类型支持配置
   const enableMultiProviderTypes = getEnvConfig().ENABLE_MULTI_PROVIDER_TYPES;
@@ -63,14 +61,37 @@ export default async function DashboardProvidersPage({
           </>
         }
       >
-        <ProviderManager
-          providers={providers}
-          currentUser={currentUser}
-          healthStatus={healthStatus}
-          currencyCode={systemSettings.currencyDisplay}
-          enableMultiProviderTypes={enableMultiProviderTypes}
-        />
+        <Suspense fallback={<ProvidersSectionSkeleton />}>
+          <ProvidersPageContent
+            currentUser={currentUser}
+            enableMultiProviderTypes={enableMultiProviderTypes}
+          />
+        </Suspense>
       </Section>
     </div>
+  );
+}
+
+async function ProvidersPageContent({
+  currentUser,
+  enableMultiProviderTypes,
+}: {
+  currentUser: User;
+  enableMultiProviderTypes: boolean;
+}) {
+  const [providers, healthStatus, systemSettings] = await Promise.all([
+    getProviders(),
+    getProvidersHealthStatus(),
+    getSystemSettings(),
+  ]);
+
+  return (
+    <ProviderManager
+      providers={providers}
+      currentUser={currentUser}
+      healthStatus={healthStatus}
+      currencyCode={systemSettings.currencyDisplay}
+      enableMultiProviderTypes={enableMultiProviderTypes}
+    />
   );
 }

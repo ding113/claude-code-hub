@@ -1,16 +1,19 @@
 "use client";
 
-import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pause, Play, RefreshCw } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getKeys } from "@/actions/keys";
+import { getProviders } from "@/actions/providers";
+import { getUsers } from "@/actions/users";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import type { Key } from "@/types/key";
 import type { ProviderDisplay } from "@/types/provider";
-import type { BillingModelSource } from "@/types/system-config";
+import type { BillingModelSource, SystemSettings } from "@/types/system-config";
 import type { UserDisplay } from "@/types/user";
 import { UsageLogsFilters } from "./usage-logs-filters";
 import { UsageLogsStatsPanel } from "./usage-logs-stats-panel";
@@ -28,16 +31,26 @@ const queryClient = new QueryClient({
 
 interface UsageLogsViewVirtualizedProps {
   isAdmin: boolean;
-  users: UserDisplay[];
-  providers: ProviderDisplay[];
-  initialKeys: Key[];
+  userId: number;
+  users?: UserDisplay[];
+  providers?: ProviderDisplay[];
+  initialKeys?: Key[];
   searchParams: { [key: string]: string | string[] | undefined };
   currencyCode?: CurrencyCode;
   billingModelSource?: BillingModelSource;
 }
 
+async function fetchSystemSettings(): Promise<SystemSettings> {
+  const response = await fetch("/api/system-settings");
+  if (!response.ok) {
+    throw new Error("FETCH_SETTINGS_FAILED");
+  }
+  return response.json() as Promise<SystemSettings>;
+}
+
 function UsageLogsViewContent({
   isAdmin,
+  userId,
   users,
   providers,
   initialKeys,
@@ -53,6 +66,42 @@ function UsageLogsViewContent({
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const paramsKey = _params.toString();
+
+  const shouldFetchSettings = !currencyCode || !billingModelSource;
+  const { data: systemSettings } = useQuery<SystemSettings>({
+    queryKey: ["system-settings"],
+    queryFn: fetchSystemSettings,
+    enabled: shouldFetchSettings,
+  });
+
+  const resolvedCurrencyCode = currencyCode ?? systemSettings?.currencyDisplay ?? "USD";
+  const resolvedBillingModelSource =
+    billingModelSource ?? systemSettings?.billingModelSource ?? "original";
+
+  const { data: usersData = [], isLoading: isUsersLoading } = useQuery<UserDisplay[]>({
+    queryKey: ["usage-log-users"],
+    queryFn: getUsers,
+    enabled: isAdmin && users === undefined,
+    initialData: users ?? [],
+  });
+
+  const { data: providersData = [], isLoading: isProvidersLoading } = useQuery<ProviderDisplay[]>({
+    queryKey: ["usage-log-providers"],
+    queryFn: getProviders,
+    enabled: isAdmin && providers === undefined,
+    initialData: providers ?? [],
+  });
+
+  const { data: keysResult, isLoading: isKeysLoading } = useQuery({
+    queryKey: ["usage-log-keys", userId],
+    queryFn: () => getKeys(userId),
+    enabled: !isAdmin && initialKeys === undefined,
+  });
+
+  const resolvedUsers = users ?? usersData;
+  const resolvedProviders = providers ?? providersData;
+  const resolvedKeys =
+    initialKeys ?? (keysResult?.ok && keysResult.data ? keysResult.data : []);
 
   // Parse filters from URL with stable reference
   const filters = useMemo<VirtualizedLogsTableFilters & { page?: number }>(
@@ -152,7 +201,7 @@ function UsageLogsViewContent({
           endpoint: filters.endpoint,
           minRetryCount: filters.minRetryCount,
         }}
-        currencyCode={currencyCode}
+        currencyCode={resolvedCurrencyCode}
       />
 
       {/* Filters */}
@@ -163,12 +212,15 @@ function UsageLogsViewContent({
         <CardContent>
           <UsageLogsFilters
             isAdmin={isAdmin}
-            users={users}
-            providers={providers}
-            initialKeys={initialKeys}
+            users={resolvedUsers}
+            providers={resolvedProviders}
+            initialKeys={resolvedKeys}
             filters={filters}
             onChange={handleFilterChange}
             onReset={() => router.push("/dashboard/logs")}
+            isUsersLoading={isUsersLoading}
+            isProvidersLoading={isProvidersLoading}
+            isKeysLoading={isKeysLoading}
           />
         </CardContent>
       </Card>
@@ -210,8 +262,8 @@ function UsageLogsViewContent({
         <CardContent className="px-0">
           <VirtualizedLogsTable
             filters={filters}
-            currencyCode={currencyCode}
-            billingModelSource={billingModelSource}
+            currencyCode={resolvedCurrencyCode}
+            billingModelSource={resolvedBillingModelSource}
             autoRefreshEnabled={isAutoRefresh}
             autoRefreshIntervalMs={5000}
           />

@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { getTranslations } from "next-intl/server";
 import { fetchClientVersionStats } from "@/actions/client-versions";
 import { fetchSystemSettings } from "@/actions/system-config";
@@ -5,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { redirect } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
 import { SettingsPageHeader } from "../_components/settings-page-header";
+import { ClientVersionsSkeleton } from "./_components/client-versions-skeleton";
 import { ClientVersionStatsTable } from "./_components/client-version-stats-table";
 import { ClientVersionToggle } from "./_components/client-version-toggle";
 
@@ -23,6 +25,21 @@ export default async function ClientVersionsPage({
     return redirect({ href: "/login", locale });
   }
 
+  return (
+    <div className="space-y-6">
+      <SettingsPageHeader
+        title={t("clientVersions.title")}
+        description={t("clientVersions.description")}
+      />
+      <Suspense fallback={<ClientVersionsSkeleton />}>
+        <ClientVersionsContent />
+      </Suspense>
+    </div>
+  );
+}
+
+async function ClientVersionsContent() {
+  const t = await getTranslations("settings");
   const [statsResult, settingsResult] = await Promise.all([
     fetchClientVersionStats(),
     fetchSystemSettings(),
@@ -34,12 +51,7 @@ export default async function ClientVersionsPage({
     : false;
 
   return (
-    <div className="space-y-6">
-      <SettingsPageHeader
-        title={t("clientVersions.title")}
-        description={t("clientVersions.description")}
-      />
-
+    <>
       {/* 功能开关和说明 */}
       <Card>
         <CardHeader>
@@ -70,6 +82,6 @@ export default async function ClientVersionsPage({
           )}
         </CardContent>
       </Card>
-    </div>
+    </>
   );
 }

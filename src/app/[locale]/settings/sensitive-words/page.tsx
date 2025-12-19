@@ -1,16 +1,17 @@
+import { Suspense } from "react";
 import { getTranslations } from "next-intl/server";
 import { getCacheStats, listSensitiveWords } from "@/actions/sensitive-words";
 import { Section } from "@/components/section";
 import { SettingsPageHeader } from "../_components/settings-page-header";
 import { AddWordDialog } from "./_components/add-word-dialog";
 import { RefreshCacheButton } from "./_components/refresh-cache-button";
+import { SensitiveWordsSkeleton } from "./_components/sensitive-words-skeleton";
 import { WordListTable } from "./_components/word-list-table";
 
 export const dynamic = "force-dynamic";
 
 export default async function SensitiveWordsPage() {
   const t = await getTranslations("settings");
-  const [words, cacheStats] = await Promise.all([listSensitiveWords(), getCacheStats()]);
 
   return (
     <>
@@ -18,7 +19,19 @@ export default async function SensitiveWordsPage() {
         title={t("sensitiveWords.title")}
         description={t("sensitiveWords.description")}
       />
+      <Suspense fallback={<SensitiveWordsSkeleton />}>
+        <SensitiveWordsContent />
+      </Suspense>
+    </>
+  );
+}
 
+async function SensitiveWordsContent() {
+  const t = await getTranslations("settings");
+  const [words, cacheStats] = await Promise.all([listSensitiveWords(), getCacheStats()]);
+
+  return (
+    <>
       <Section
         title={t("sensitiveWords.section.title")}
         description={t("sensitiveWords.section.description")}
