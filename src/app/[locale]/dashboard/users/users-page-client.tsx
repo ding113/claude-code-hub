@@ -227,7 +227,9 @@ function UsersPageContent({ initialUsers, currentUser }: UsersPageClientProps) {
         <div>
           <h3 className="text-lg font-medium">{t("title")}</h3>
           <p className="text-sm text-muted-foreground">
-            {isInitialLoading ? tCommon("loading") : t("description", { count: filteredUsers.length })}
+            {isInitialLoading
+              ? tCommon("loading")
+              : t("description", { count: filteredUsers.length })}
           </p>
         </div>
         <Button onClick={handleCreateUser}>

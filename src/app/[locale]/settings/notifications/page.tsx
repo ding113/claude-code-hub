@@ -221,9 +221,7 @@ export default function NotificationsPage() {
                       disabled={!enabled}
                     />
                     {errors.circuitBreakerWebhook && (
-                      <p className="text-sm text-red-500">
-                        {errors.circuitBreakerWebhook.message}
-                      </p>
+                      <p className="text-sm text-red-500">{errors.circuitBreakerWebhook.message}</p>
                     )}
                   </div>
 
@@ -373,9 +371,7 @@ export default function NotificationsPage() {
                 <div className="space-y-4 pt-4">
                   <Separator />
                   <div className="space-y-2">
-                    <Label htmlFor="costAlertWebhook">
-                      {t("notifications.costAlert.webhook")}
-                    </Label>
+                    <Label htmlFor="costAlertWebhook">{t("notifications.costAlert.webhook")}</Label>
                     <Input
                       id="costAlertWebhook"
                       {...register("costAlertWebhook")}

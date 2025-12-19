@@ -123,10 +123,7 @@ export function LogLevelForm() {
       )}
 
       <div className="flex justify-end">
-        <Button
-          type="submit"
-          disabled={isPending || isLoading || selectedLevel === currentLevel}
-        >
+        <Button type="submit" disabled={isPending || isLoading || selectedLevel === currentLevel}>
           {isPending ? t("form.saving") : t("form.save")}
         </Button>
       </div>

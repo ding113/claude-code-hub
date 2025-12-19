@@ -311,12 +311,7 @@ export function UsageLogsSection({
           <Button size="sm" onClick={handleApply} disabled={isPending || loading}>
             {t("filters.apply")}
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleReset}
-            disabled={isPending || loading}
-          >
+          <Button size="sm" variant="outline" onClick={handleReset} disabled={isPending || loading}>
             {t("filters.reset")}
           </Button>
         </div>

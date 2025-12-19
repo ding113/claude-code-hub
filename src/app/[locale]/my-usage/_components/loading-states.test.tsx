@@ -33,12 +33,12 @@ describe("my-usage loading states", () => {
   test("QuotaCards renders skeletons and loading label when loading", () => {
     const html = renderWithIntl(<QuotaCards quota={null} loading />);
     expect(html).toContain("Loading...");
-    expect(html).toContain("data-slot=\"skeleton\"");
+    expect(html).toContain('data-slot="skeleton"');
   });
 
   test("TodayUsageCard renders skeletons and loading label when loading", () => {
     const html = renderWithIntl(<TodayUsageCard stats={null} loading autoRefreshSeconds={30} />);
     expect(html).toContain("Loading...");
-    expect(html).toContain("data-slot=\"skeleton\"");
+    expect(html).toContain('data-slot="skeleton"');
   });
 });

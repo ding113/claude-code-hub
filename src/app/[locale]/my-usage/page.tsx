@@ -153,11 +153,7 @@ export default function MyUsagePage() {
         autoRefreshSeconds={30}
       />
 
-      <UsageLogsSection
-        initialData={logsData}
-        loading={isLogsLoading}
-        autoRefreshSeconds={30}
-      />
+      <UsageLogsSection initialData={logsData} loading={isLogsLoading} autoRefreshSeconds={30} />
     </div>
   );
 }
