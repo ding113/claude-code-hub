@@ -225,9 +225,9 @@ export async function sanitizeCodexRequest(
 
   // 步骤 3: 确保必需字段
   // Codex API 的默认行为
-  if (output.stream === undefined) {
-    output.stream = true; // Codex 默认流式
-  }
+  // 注意：不再强制设置 stream = true，因为 /v1/responses/compact 端点不支持 stream 参数
+  // 如果客户端未指定 stream，则保持 undefined，由上游 API 决定默认行为
+  // 参考：https://github.com/ding113/claude-code-hub/issues/368
   output.store = false; // Codex 不存储对话历史
   output.parallel_tool_calls = true; // Codex 支持并行工具调用
 
