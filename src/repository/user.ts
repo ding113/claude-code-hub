@@ -157,17 +157,18 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
   if (userData.description !== undefined) dbData.description = userData.description;
   if (userData.rpm !== undefined) dbData.rpmLimit = userData.rpm;
   if (userData.dailyQuota !== undefined)
-    dbData.dailyLimitUsd = userData.dailyQuota === null ? null : userData.dailyQuota.toString();
+    dbData.dailyLimitUsd =
+      userData.dailyQuota === null ? undefined : userData.dailyQuota.toString();
   if (userData.providerGroup !== undefined) dbData.providerGroup = userData.providerGroup;
   if (userData.tags !== undefined) dbData.tags = userData.tags;
   if (userData.limit5hUsd !== undefined)
-    dbData.limit5hUsd = userData.limit5hUsd === null ? null : userData.limit5hUsd.toString();
+    dbData.limit5hUsd = userData.limit5hUsd === null ? undefined : userData.limit5hUsd.toString();
   if (userData.limitWeeklyUsd !== undefined)
     dbData.limitWeeklyUsd =
-      userData.limitWeeklyUsd === null ? null : userData.limitWeeklyUsd.toString();
+      userData.limitWeeklyUsd === null ? undefined : userData.limitWeeklyUsd.toString();
   if (userData.limitMonthlyUsd !== undefined)
     dbData.limitMonthlyUsd =
-      userData.limitMonthlyUsd === null ? null : userData.limitMonthlyUsd.toString();
+      userData.limitMonthlyUsd === null ? undefined : userData.limitMonthlyUsd.toString();
   if (userData.limitTotalUsd !== undefined)
     dbData.limitTotalUsd =
       userData.limitTotalUsd === null ? null : userData.limitTotalUsd.toString();

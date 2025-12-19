@@ -48,7 +48,10 @@ export interface UserEditSectionProps {
   onToggleEnabled?: () => Promise<void>;
   showProviderGroup?: boolean;
   modelSuggestions?: string[];
-  onChange: (field: string, value: any) => void;
+  onChange: {
+    (field: string, value: any): void;
+    (updates: Record<string, any>): void;
+  };
   translations: {
     sections: {
       basicInfo: string;
@@ -142,8 +145,15 @@ export function UserEditSection({
   const [toggleConfirmOpen, setToggleConfirmOpen] = useState(false);
   const [isToggling, setIsToggling] = useState(false);
 
-  const emitChange = (field: string, value: any) => {
-    onChange(field, value);
+  const emitChange = (field: string | Record<string, any>, value?: any) => {
+    if (typeof field === "object") {
+      // Batch update - call onChange for each field
+      Object.entries(field).forEach(([key, val]) => {
+        (onChange as (f: string, v: any) => void)(key, val);
+      });
+    } else {
+      (onChange as (f: string, v: any) => void)(field, value);
+    }
   };
 
   const handleToggleEnabled = async () => {
