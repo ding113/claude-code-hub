@@ -106,25 +106,16 @@ export function VirtualizedLogsTable({
     overscan: 10,
   });
 
+  const virtualItems = rowVirtualizer.getVirtualItems();
+  const lastItemIndex = virtualItems[virtualItems.length - 1]?.index ?? -1;
+
   // Auto-fetch next page when scrolling near the bottom
   useEffect(() => {
-    const virtualItems = rowVirtualizer.getVirtualItems();
-    if (virtualItems.length === 0) return;
-
-    const lastItem = virtualItems[virtualItems.length - 1];
-    if (!lastItem) return;
-
     // If the last visible item is a loading row or near the end, fetch more
-    if (lastItem.index >= allLogs.length - 5 && hasNextPage && !isFetchingNextPage) {
+    if (lastItemIndex >= allLogs.length - 5 && hasNextPage && !isFetchingNextPage) {
       fetchNextPage();
     }
-  }, [
-    hasNextPage,
-    isFetchingNextPage,
-    allLogs.length,
-    fetchNextPage,
-    rowVirtualizer.getVirtualItems,
-  ]);
+  }, [lastItemIndex, hasNextPage, isFetchingNextPage, allLogs.length, fetchNextPage]);
 
   // Track scroll position for "scroll to top" button
   const handleScroll = useCallback(() => {
@@ -139,11 +130,12 @@ export function VirtualizedLogsTable({
   }, []);
 
   // Reset scroll when filters change
+  // biome-ignore lint/correctness/useExhaustiveDependencies: filters is intentionally used to trigger scroll reset on filter change
   useEffect(() => {
     if (parentRef.current) {
       parentRef.current.scrollTop = 0;
     }
-  }, []);
+  }, [filters]);
 
   if (isLoading) {
     return (
@@ -165,8 +157,6 @@ export function VirtualizedLogsTable({
   if (allLogs.length === 0) {
     return <div className="text-center py-8 text-muted-foreground">{t("logs.table.noData")}</div>;
   }
-
-  const virtualItems = rowVirtualizer.getVirtualItems();
 
   return (
     <div className="space-y-4">

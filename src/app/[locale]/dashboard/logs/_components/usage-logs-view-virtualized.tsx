@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/reac
 import { Pause, Play, RefreshCw } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { CurrencyCode } from "@/lib/utils/currency";
@@ -51,33 +51,53 @@ function UsageLogsViewContent({
   const queryClientInstance = useQueryClient();
   const [isAutoRefresh, setIsAutoRefresh] = useState(true);
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+  const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const paramsKey = _params.toString();
 
-  // Parse filters from URL
-  const filters: VirtualizedLogsTableFilters & { page?: number } = {
-    userId: searchParams.userId ? parseInt(searchParams.userId as string, 10) : undefined,
-    keyId: searchParams.keyId ? parseInt(searchParams.keyId as string, 10) : undefined,
-    providerId: searchParams.providerId
-      ? parseInt(searchParams.providerId as string, 10)
-      : undefined,
-    startTime: searchParams.startTime ? parseInt(searchParams.startTime as string, 10) : undefined,
-    endTime: searchParams.endTime ? parseInt(searchParams.endTime as string, 10) : undefined,
-    statusCode:
-      searchParams.statusCode && searchParams.statusCode !== "!200"
-        ? parseInt(searchParams.statusCode as string, 10)
+  // Parse filters from URL with stable reference
+  const filters = useMemo<VirtualizedLogsTableFilters & { page?: number }>(
+    () => ({
+      userId: searchParams.userId ? parseInt(searchParams.userId as string, 10) : undefined,
+      keyId: searchParams.keyId ? parseInt(searchParams.keyId as string, 10) : undefined,
+      providerId: searchParams.providerId
+        ? parseInt(searchParams.providerId as string, 10)
         : undefined,
-    excludeStatusCode200: searchParams.statusCode === "!200",
-    model: searchParams.model as string | undefined,
-    endpoint: searchParams.endpoint as string | undefined,
-    minRetryCount: searchParams.minRetry
-      ? parseInt(searchParams.minRetry as string, 10)
-      : undefined,
-  };
+      startTime: searchParams.startTime
+        ? parseInt(searchParams.startTime as string, 10)
+        : undefined,
+      endTime: searchParams.endTime ? parseInt(searchParams.endTime as string, 10) : undefined,
+      statusCode:
+        searchParams.statusCode && searchParams.statusCode !== "!200"
+          ? parseInt(searchParams.statusCode as string, 10)
+          : undefined,
+      excludeStatusCode200: searchParams.statusCode === "!200",
+      model: searchParams.model as string | undefined,
+      endpoint: searchParams.endpoint as string | undefined,
+      minRetryCount: searchParams.minRetry
+        ? parseInt(searchParams.minRetry as string, 10)
+        : undefined,
+    }),
+    [
+      searchParams.userId,
+      searchParams.keyId,
+      searchParams.providerId,
+      searchParams.startTime,
+      searchParams.endTime,
+      searchParams.statusCode,
+      searchParams.model,
+      searchParams.endpoint,
+      searchParams.minRetry,
+    ]
+  );
 
   // Manual refresh handler
   const handleManualRefresh = useCallback(async () => {
     setIsManualRefreshing(true);
     await queryClientInstance.invalidateQueries({ queryKey: ["usage-logs-batch"] });
-    setTimeout(() => setIsManualRefreshing(false), 500);
+    if (refreshTimeoutRef.current) {
+      clearTimeout(refreshTimeoutRef.current);
+    }
+    refreshTimeoutRef.current = setTimeout(() => setIsManualRefreshing(false), 500);
   }, [queryClientInstance]);
 
   // Handle filter changes
@@ -103,10 +123,18 @@ function UsageLogsViewContent({
     router.push(`/dashboard/logs?${query.toString()}`);
   };
 
-  // Invalidate query when URL changes
+  // Invalidate query when URL changes (e.g., browser back/forward navigation)
   useEffect(() => {
     queryClientInstance.invalidateQueries({ queryKey: ["usage-logs-batch"] });
-  }, [queryClientInstance]);
+  }, [paramsKey, queryClientInstance]);
+
+  useEffect(() => {
+    return () => {
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className="space-y-6">

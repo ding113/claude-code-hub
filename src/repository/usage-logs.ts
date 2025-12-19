@@ -129,17 +129,7 @@ export async function findUsageLogsBatch(
   }
 
   if (keyId !== undefined) {
-    const keyResult = await db
-      .select({ key: keysTable.key })
-      .from(keysTable)
-      .where(and(eq(keysTable.id, keyId), isNull(keysTable.deletedAt)))
-      .limit(1);
-
-    if (keyResult.length > 0) {
-      conditions.push(eq(messageRequest.key, keyResult[0].key));
-    } else {
-      return { logs: [], nextCursor: null, hasMore: false };
-    }
+    conditions.push(eq(keysTable.id, keyId));
   }
 
   if (providerId !== undefined) {
@@ -329,33 +319,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
   }
 
   if (keyId !== undefined) {
-    // 通过 key ID 查找对应的 key 值
-    const keyResult = await db
-      .select({ key: keysTable.key })
-      .from(keysTable)
-      .where(and(eq(keysTable.id, keyId), isNull(keysTable.deletedAt)))
-      .limit(1);
-
-    if (keyResult.length > 0) {
-      conditions.push(eq(messageRequest.key, keyResult[0].key));
-    } else {
-      // key 不存在，返回空结果
-      return {
-        logs: [],
-        total: 0,
-        summary: {
-          totalRequests: 0,
-          totalCost: 0,
-          totalTokens: 0,
-          totalInputTokens: 0,
-          totalOutputTokens: 0,
-          totalCacheCreationTokens: 0,
-          totalCacheReadTokens: 0,
-          totalCacheCreation5mTokens: 0,
-          totalCacheCreation1hTokens: 0,
-        },
-      };
-    }
+    conditions.push(eq(keysTable.id, keyId));
   }
 
   if (providerId !== undefined) {
@@ -399,7 +363,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
     );
   }
 
-  // 查询总数和统计数据
+  // 查询总数和统计数据（添加 innerJoin keysTable 以支持 keyId 过滤）
   const [summaryResult] = await db
     .select({
       totalRequests: sql<number>`count(*)::double precision`,
@@ -412,6 +376,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       totalCacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens})::double precision, 0::double precision)`,
     })
     .from(messageRequest)
+    .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
     .where(and(...conditions));
 
   const total = summaryResult?.totalRequests ?? 0;
@@ -572,27 +537,7 @@ export async function findUsageLogsStats(
   }
 
   if (keyId !== undefined) {
-    const keyResult = await db
-      .select({ key: keysTable.key })
-      .from(keysTable)
-      .where(and(eq(keysTable.id, keyId), isNull(keysTable.deletedAt)))
-      .limit(1);
-
-    if (keyResult.length > 0) {
-      conditions.push(eq(messageRequest.key, keyResult[0].key));
-    } else {
-      return {
-        totalRequests: 0,
-        totalCost: 0,
-        totalTokens: 0,
-        totalInputTokens: 0,
-        totalOutputTokens: 0,
-        totalCacheCreationTokens: 0,
-        totalCacheReadTokens: 0,
-        totalCacheCreation5mTokens: 0,
-        totalCacheCreation1hTokens: 0,
-      };
-    }
+    conditions.push(eq(keysTable.id, keyId));
   }
 
   if (providerId !== undefined) {
@@ -631,7 +576,7 @@ export async function findUsageLogsStats(
     );
   }
 
-  // 执行聚合查询
+  // 执行聚合查询（添加 innerJoin keysTable 以支持 keyId 过滤）
   const [summaryResult] = await db
     .select({
       totalRequests: sql<number>`count(*)::double precision`,
@@ -644,6 +589,7 @@ export async function findUsageLogsStats(
       totalCacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens})::double precision, 0::double precision)`,
     })
     .from(messageRequest)
+    .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
     .where(and(...conditions));
 
   const totalRequests = summaryResult?.totalRequests ?? 0;
