@@ -4,6 +4,51 @@
 
 ---
 
+## [v0.3.31](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.31) - 2025-12-19
+
+### 新增
+
+- 用户客户端（CLI/IDE）限制功能，支持限制用户使用特定客户端 (#341) [@miraserver](https://github.com/miraserver)
+- 用户模型限制功能，支持限制用户可使用的模型列表 (#347) [@miraserver](https://github.com/miraserver)
+- 使用日志游标分页查询，提升大数据量下的查询性能 (#371)
+- 用户面板功能增强：配额使用详情、快速续期对话框、新用户引导教程 (#362)
+- API 文档增强：Vitest 测试框架集成和参数映射支持 (#355)
+- 限制规则覆写提示，编辑时显示已存在类型的提示 [@NightYu](https://github.com/NightYuYyy)
+- "Tool names must be unique" 错误规则，改进 Claude Code 工具名称冲突处理 (#366)
+- Redis TLS 证书跳过验证支持 (`REDIS_TLS_REJECT_UNAUTHORIZED`) (#360) [@Silentely](https://github.com/Silentely)
+- 日期选择器清除按钮，支持快速清空日期字段 (#345)
+- 响应头清理功能，提升 Bun 运行时兼容性 [@NightYu](https://github.com/NightYuYyy)
+
+### 优化
+
+- 限额管理系统检查顺序优化，改进错误响应格式 (#359) [@NightYu](https://github.com/NightYuYyy)
+- 使用日志筛选器懒加载，减少初始页面加载时间
+- 虚拟化日志表格列宽和布局调整，提升大数据量展示体验
+- Dockerfile 改用 Bun 和 Debian 基础镜像，减少镜像体积
+- 排行榜排名徽章对齐统一 (#344)
+- 限额规则表格添加工具提示，改进信息展示
+
+### 修复
+
+- 修复 dailyQuota 处理问题 (#370)
+- 修复限制规则表单提交事件传播问题
+- 修复 TypeScript 类型错误（null vs undefined）(#376)
+- 修复 Codex 请求强制 stream=true 问题 (#369)
+- 修复 Recharts Tooltip formatter 参数类型错误
+- 修复用户管理表描述本地化问题 [@NightYu](https://github.com/NightYuYyy)
+- 修复用户每日配额允许为 0（无限制）(#346)
+- 修复 API Key 加载失败错误处理和本地化
+
+### 其他
+
+- 测试框架从 Jest 迁移到 Vitest，新增 API 完整性测试 (#355)
+- 更新使用文档模型名称配置
+- 数据库迁移文件优化（游标分页索引）
+- 多语言翻译更新（中英日俄）
+- 代码质量改进
+
+---
+
 ## [v0.3.30](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.30) - 2025-12-13
 
 ### 新增
