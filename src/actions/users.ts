@@ -245,7 +245,7 @@ export async function addUser(data: {
   providerGroup?: string | null;
   tags?: string[];
   rpm?: number;
-  dailyQuota?: number;
+  dailyQuota?: number | null;
   limit5hUsd?: number | null;
   limitWeeklyUsd?: number | null;
   limitMonthlyUsd?: number | null;
@@ -363,7 +363,7 @@ export async function addUser(data: {
       providerGroup: validatedData.providerGroup || null,
       tags: validatedData.tags,
       rpm: validatedData.rpm,
-      dailyQuota: validatedData.dailyQuota,
+      dailyQuota: validatedData.dailyQuota ?? undefined,
       limit5hUsd: validatedData.limit5hUsd ?? undefined,
       limitWeeklyUsd: validatedData.limitWeeklyUsd ?? undefined,
       limitMonthlyUsd: validatedData.limitMonthlyUsd ?? undefined,
@@ -545,7 +545,7 @@ export async function createUserOnly(data: {
       providerGroup: validatedData.providerGroup || null,
       tags: validatedData.tags,
       rpm: validatedData.rpm,
-      dailyQuota: validatedData.dailyQuota,
+      dailyQuota: validatedData.dailyQuota ?? undefined,
       limit5hUsd: validatedData.limit5hUsd ?? undefined,
       limitWeeklyUsd: validatedData.limitWeeklyUsd ?? undefined,
       limitMonthlyUsd: validatedData.limitMonthlyUsd ?? undefined,
@@ -603,7 +603,7 @@ export async function editUser(
     providerGroup?: string | null;
     tags?: string[];
     rpm?: number;
-    dailyQuota?: number;
+    dailyQuota?: number | null;
     limit5hUsd?: number | null;
     limitWeeklyUsd?: number | null;
     limitMonthlyUsd?: number | null;

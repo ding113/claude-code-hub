@@ -42,7 +42,10 @@ export interface KeyEditSectionProps {
   };
   /** providerGroup 为 admin-only 字段：非管理员仅可查看不可编辑 */
   isAdmin?: boolean;
-  onChange: (field: string, value: any) => void;
+  onChange: {
+    (field: string, value: any): void;
+    (batch: Record<string, any>): void;
+  };
   scrollRef?: React.RefObject<HTMLDivElement>;
   translations: {
     sections: {

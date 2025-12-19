@@ -891,7 +891,13 @@ function UnifiedEditDialogInner({
                             limitConcurrentSessions: key.limitConcurrentSessions ?? 0,
                           }}
                           isAdmin={isAdmin}
-                          onChange={(field, value) => handleKeyChange(key.id, field, value)}
+                          onChange={
+                            ((fieldOrBatch: string | Record<string, any>, value?: any) =>
+                              handleKeyChange(key.id, fieldOrBatch, value)) as {
+                              (field: string, value: any): void;
+                              (batch: Record<string, any>): void;
+                            }
+                          }
                           scrollRef={
                             scrollToKeyId === key.id || newlyAddedKeyId === key.id
                               ? keyScrollRef
