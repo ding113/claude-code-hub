@@ -1,18 +1,13 @@
 import { BarChart3 } from "lucide-react";
-import { Suspense } from "react";
 import { getTranslations } from "next-intl/server";
-import { getProviders, getProvidersHealthStatus } from "@/actions/providers";
 import { AddProviderDialog } from "@/app/[locale]/settings/providers/_components/add-provider-dialog";
-import { ProviderManager } from "@/app/[locale]/settings/providers/_components/provider-manager";
+import { ProviderManagerLoader } from "@/app/[locale]/settings/providers/_components/provider-manager-loader";
 import { SchedulingRulesDialog } from "@/app/[locale]/settings/providers/_components/scheduling-rules-dialog";
 import { Section } from "@/components/section";
 import { Button } from "@/components/ui/button";
 import { Link, redirect } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
 import { getEnvConfig } from "@/lib/config/env.schema";
-import { getSystemSettings } from "@/repository/system-config";
-import type { User } from "@/types/user";
-import { ProvidersSectionSkeleton } from "./_components/providers-skeleton";
 
 export const dynamic = "force-dynamic";
 
@@ -61,37 +56,11 @@ export default async function DashboardProvidersPage({
           </>
         }
       >
-        <Suspense fallback={<ProvidersSectionSkeleton />}>
-          <ProvidersPageContent
-            currentUser={currentUser}
-            enableMultiProviderTypes={enableMultiProviderTypes}
-          />
-        </Suspense>
+        <ProviderManagerLoader
+          currentUser={currentUser}
+          enableMultiProviderTypes={enableMultiProviderTypes}
+        />
       </Section>
     </div>
-  );
-}
-
-async function ProvidersPageContent({
-  currentUser,
-  enableMultiProviderTypes,
-}: {
-  currentUser: User;
-  enableMultiProviderTypes: boolean;
-}) {
-  const [providers, healthStatus, systemSettings] = await Promise.all([
-    getProviders(),
-    getProvidersHealthStatus(),
-    getSystemSettings(),
-  ]);
-
-  return (
-    <ProviderManager
-      providers={providers}
-      currentUser={currentUser}
-      healthStatus={healthStatus}
-      currencyCode={systemSettings.currencyDisplay}
-      enableMultiProviderTypes={enableMultiProviderTypes}
-    />
   );
 }

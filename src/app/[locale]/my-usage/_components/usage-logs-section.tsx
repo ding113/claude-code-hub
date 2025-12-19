@@ -1,5 +1,6 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import {
@@ -24,6 +25,7 @@ import { UsageLogsTable } from "./usage-logs-table";
 
 interface UsageLogsSectionProps {
   initialData?: MyUsageLogsResult | null;
+  loading?: boolean;
   autoRefreshSeconds?: number;
 }
 
@@ -40,31 +42,40 @@ interface Filters {
 
 export function UsageLogsSection({
   initialData = null,
+  loading = false,
   autoRefreshSeconds,
 }: UsageLogsSectionProps) {
   const t = useTranslations("myUsage.logs");
   const tDashboard = useTranslations("dashboard");
+  const tCommon = useTranslations("common");
   const [models, setModels] = useState<string[]>([]);
   const [endpoints, setEndpoints] = useState<string[]>([]);
+  const [isModelsLoading, setIsModelsLoading] = useState(true);
+  const [isEndpointsLoading, setIsEndpointsLoading] = useState(true);
   const [filters, setFilters] = useState<Filters>({ page: 1 });
   const [data, setData] = useState<MyUsageLogsResult | null>(initialData);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const loadOptions = async () => {
-      const [modelsResult, endpointsResult] = await Promise.all([
-        getMyAvailableModels(),
-        getMyAvailableEndpoints(),
-      ]);
-      if (modelsResult.ok && modelsResult.data) {
-        setModels(modelsResult.data);
-      }
-      if (endpointsResult.ok && endpointsResult.data) {
-        setEndpoints(endpointsResult.data);
-      }
-    };
-    loadOptions();
+    setIsModelsLoading(true);
+    setIsEndpointsLoading(true);
+
+    void getMyAvailableModels()
+      .then((modelsResult) => {
+        if (modelsResult.ok && modelsResult.data) {
+          setModels(modelsResult.data);
+        }
+      })
+      .finally(() => setIsModelsLoading(false));
+
+    void getMyAvailableEndpoints()
+      .then((endpointsResult) => {
+        if (endpointsResult.ok && endpointsResult.data) {
+          setEndpoints(endpointsResult.data);
+        }
+      })
+      .finally(() => setIsEndpointsLoading(false));
   }, []);
 
   const loadLogs = useCallback(
@@ -86,10 +97,10 @@ export function UsageLogsSection({
 
   useEffect(() => {
     // initial load if not provided
-    if (!initialData) {
+    if (!initialData && !loading) {
       loadLogs(true);
     }
-  }, [initialData, loadLogs]);
+  }, [initialData, loading, loadLogs]);
 
   // Auto-refresh polling (only when on page 1 to avoid disrupting history browsing)
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -168,6 +179,9 @@ export function UsageLogsSection({
     });
   };
 
+  const isInitialLoading = loading || (!data && isPending);
+  const isRefreshing = isPending && Boolean(data);
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
@@ -199,9 +213,12 @@ export function UsageLogsSection({
                   model: value === "__all__" ? undefined : value,
                 })
               }
+              disabled={isModelsLoading}
             >
               <SelectTrigger>
-                <SelectValue placeholder={t("filters.allModels")} />
+                <SelectValue
+                  placeholder={isModelsLoading ? tCommon("loading") : t("filters.allModels")}
+                />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">{t("filters.allModels")}</SelectItem>
@@ -222,9 +239,16 @@ export function UsageLogsSection({
                   endpoint: value === "__all__" ? undefined : value,
                 })
               }
+              disabled={isEndpointsLoading}
             >
               <SelectTrigger>
-                <SelectValue placeholder={tDashboard("logs.filters.allEndpoints")} />
+                <SelectValue
+                  placeholder={
+                    isEndpointsLoading
+                      ? tCommon("loading")
+                      : tDashboard("logs.filters.allEndpoints")
+                  }
+                />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">{tDashboard("logs.filters.allEndpoints")}</SelectItem>
@@ -284,15 +308,27 @@ export function UsageLogsSection({
         </div>
 
         <div className="flex items-center gap-2">
-          <Button size="sm" onClick={handleApply} disabled={isPending}>
+          <Button size="sm" onClick={handleApply} disabled={isPending || loading}>
             {t("filters.apply")}
           </Button>
-          <Button size="sm" variant="outline" onClick={handleReset} disabled={isPending}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleReset}
+            disabled={isPending || loading}
+          >
             {t("filters.reset")}
           </Button>
         </div>
 
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
+
+        {isRefreshing ? (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            <span>{tCommon("loading")}</span>
+          </div>
+        ) : null}
 
         <UsageLogsTable
           logs={data?.logs ?? []}
@@ -301,6 +337,8 @@ export function UsageLogsSection({
           pageSize={data?.pageSize ?? 20}
           onPageChange={handlePageChange}
           currencyCode={data?.currencyCode}
+          loading={isInitialLoading}
+          loadingLabel={tCommon("loading")}
         />
       </CardContent>
     </Card>

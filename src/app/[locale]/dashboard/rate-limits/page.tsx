@@ -3,7 +3,6 @@ import { Suspense } from "react";
 import { Section } from "@/components/section";
 import { redirect } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
-import { getSystemSettings } from "@/repository/system-config";
 import { RateLimitsContentSkeleton } from "./_components/rate-limits-skeleton";
 import { RateLimitDashboard } from "./_components/rate-limit-dashboard";
 
@@ -19,13 +18,12 @@ export default async function RateLimitsPage({ params }: { params: Promise<{ loc
   }
 
   const t = await getTranslations("dashboard.rateLimits");
-  const systemSettings = await getSystemSettings();
 
   return (
     <div className="space-y-6">
       <Section title={t("title")} description={t("description")}>
         <Suspense fallback={<RateLimitsContentSkeleton />}>
-          <RateLimitDashboard currencyCode={systemSettings.currencyDisplay} />
+          <RateLimitDashboard />
         </Suspense>
       </Section>
     </div>
