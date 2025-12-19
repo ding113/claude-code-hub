@@ -65,7 +65,9 @@ async function ProvidersQuotaContent() {
 
   return (
     <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">{t("totalCount", { count: providers.length })}</p>
+      <p className="text-sm text-muted-foreground">
+        {t("totalCount", { count: providers.length })}
+      </p>
       <ProvidersQuotaManager providers={providers} currencyCode={systemSettings.currencyDisplay} />
     </div>
   );

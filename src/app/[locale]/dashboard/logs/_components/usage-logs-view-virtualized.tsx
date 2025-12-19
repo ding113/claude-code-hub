@@ -100,8 +100,7 @@ function UsageLogsViewContent({
 
   const resolvedUsers = users ?? usersData;
   const resolvedProviders = providers ?? providersData;
-  const resolvedKeys =
-    initialKeys ?? (keysResult?.ok && keysResult.data ? keysResult.data : []);
+  const resolvedKeys = initialKeys ?? (keysResult?.ok && keysResult.data ? keysResult.data : []);
 
   // Parse filters from URL with stable reference
   const filters = useMemo<VirtualizedLogsTableFilters & { page?: number }>(

@@ -1,4 +1,8 @@
-import { LoadingState, PageHeaderSkeleton, SectionSkeleton } from "@/components/loading/page-skeletons";
+import {
+  LoadingState,
+  PageHeaderSkeleton,
+  SectionSkeleton,
+} from "@/components/loading/page-skeletons";
 
 export default function SettingsLoading() {
   return (

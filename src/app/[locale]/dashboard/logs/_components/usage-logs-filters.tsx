@@ -297,9 +297,7 @@ export function UsageLogsFilters({
                 keyId: value ? parseInt(value, 10) : undefined,
               })
             }
-            disabled={
-              isKeysLoading || (isAdmin && !localFilters.userId && keys.length === 0)
-            }
+            disabled={isKeysLoading || (isAdmin && !localFilters.userId && keys.length === 0)}
           >
             <SelectTrigger>
               <SelectValue
@@ -307,8 +305,8 @@ export function UsageLogsFilters({
                   isKeysLoading
                     ? t("logs.stats.loading")
                     : isAdmin && !localFilters.userId && keys.length === 0
-                    ? t("logs.filters.selectUserFirst")
-                    : t("logs.filters.allKeys")
+                      ? t("logs.filters.selectUserFirst")
+                      : t("logs.filters.allKeys")
                 }
               />
             </SelectTrigger>

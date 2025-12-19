@@ -15,9 +15,7 @@ const getCachedSystemSettings = cache(getSystemSettings);
 export async function DashboardOverviewSection({ isAdmin }: { isAdmin: boolean }) {
   const systemSettings = await getCachedSystemSettings();
 
-  return (
-    <OverviewPanel currencyCode={systemSettings.currencyDisplay} isAdmin={isAdmin} />
-  );
+  return <OverviewPanel currencyCode={systemSettings.currencyDisplay} isAdmin={isAdmin} />;
 }
 
 export async function DashboardStatisticsSection() {

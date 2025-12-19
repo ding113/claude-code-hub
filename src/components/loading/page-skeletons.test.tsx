@@ -10,12 +10,12 @@ describe("page-skeletons", () => {
   test("LoadingState renders label and aria-busy", () => {
     const html = renderToStaticMarkup(<LoadingState label="加载中" />);
     expect(html).toContain("加载中");
-    expect(html).toContain("aria-busy=\"true\"");
+    expect(html).toContain('aria-busy="true"');
   });
 
   test("PageHeaderSkeleton renders skeleton elements", () => {
     const html = renderToStaticMarkup(<PageHeaderSkeleton />);
-    expect(html).toContain("data-slot=\"skeleton\"");
+    expect(html).toContain('data-slot="skeleton"');
   });
 
   test("TableSkeleton renders expected skeleton count", () => {

@@ -137,10 +137,7 @@ export function CardGridSkeleton({ cards = 4, className }: CardGridSkeletonProps
   return (
     <div className={cn("grid grid-cols-2 gap-3", className)}>
       {Array.from({ length: cards }).map((_, index) => (
-        <div
-          key={`card-skeleton-${index}`}
-          className="rounded-lg border bg-card p-4 space-y-3"
-        >
+        <div key={`card-skeleton-${index}`} className="rounded-lg border bg-card p-4 space-y-3">
           <Skeleton className="h-4 w-24" />
           <Skeleton className="h-8 w-20" />
           <Skeleton className="h-3 w-16" />
