@@ -972,6 +972,7 @@
         "todayCost": "Today's cost",
         "lastUsed": "Last used",
         "actions": "Actions",
+        "quotaButton": "View Quota Usage",
         "fields": {
           "callsLabel": "Calls",
           "costLabel": "Cost"
@@ -1004,6 +1005,22 @@
       "noData": "No usage records today",
       "totalCalls": "Total Calls",
       "totalCost": "Total Cost"
+    },
+    "keyQuotaUsageDialog": {
+      "title": "Key Quota Usage",
+      "fetchFailed": "Failed to fetch quota usage",
+      "noLimit": "No limit",
+      "modeFixed": "Fixed time",
+      "modeRolling": "Rolling 24h",
+      "retry": "Retry",
+      "labels": {
+        "limit5h": "5 Hours",
+        "limitDaily": "Daily",
+        "limitWeekly": "Weekly",
+        "limitMonthly": "Monthly",
+        "limitTotal": "Total",
+        "limitSessions": "Concurrent"
+      }
     },
     "quickRenew": {
       "title": "Quick Renew",

@@ -295,6 +295,7 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
                 copyFailed: tCommon("copyFailed"),
                 show: tKeyList("showKeyTooltip"),
                 hide: tKeyList("hideKeyTooltip"),
+                quota: tUserMgmt("table.keyRow.quotaButton"),
               },
               status: {
                 enabled: tUserMgmt("keyStatus.enabled"),

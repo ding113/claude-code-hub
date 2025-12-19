@@ -944,6 +944,7 @@
         "todayCost": "Расход сегодня",
         "lastUsed": "Последнее использование",
         "actions": "Действия",
+        "quotaButton": "Просмотр использования квоты",
         "fields": {
           "callsLabel": "Вызовы",
           "costLabel": "Расход"
@@ -976,6 +977,22 @@
       "noData": "Нет записей использования за сегодня",
       "totalCalls": "Всего вызовов",
       "totalCost": "Общий расход"
+    },
+    "keyQuotaUsageDialog": {
+      "title": "Использование квоты ключа",
+      "fetchFailed": "Не удалось получить данные квоты",
+      "noLimit": "Без лимита",
+      "modeFixed": "Фиксированное время",
+      "modeRolling": "Скользящие 24ч",
+      "retry": "Повторить",
+      "labels": {
+        "limit5h": "5 часов",
+        "limitDaily": "Ежедневно",
+        "limitWeekly": "Еженедельно",
+        "limitMonthly": "Ежемесячно",
+        "limitTotal": "Всего",
+        "limitSessions": "Одновременно"
+      }
     },
     "quickRenew": {
       "title": "Быстрое продление",

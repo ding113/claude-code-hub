@@ -33,6 +33,7 @@ export interface UserEditSectionProps {
     providerGroup?: string | null;
     // 所有限额字段
     limit5hUsd?: number | null;
+    dailyQuota?: number | null; // 新增：用户每日限额
     limitWeeklyUsd?: number | null;
     limitMonthlyUsd?: number | null;
     limitTotalUsd?: number | null;
@@ -171,6 +172,11 @@ export function UserEditSection({
     };
 
     add("limit5h", user.limit5hUsd);
+    // 新增：添加每日限额到 rules
+    add("limitDaily", user.dailyQuota, {
+      mode: user.dailyResetMode ?? "fixed",
+      time: user.dailyResetTime ?? "00:00",
+    });
     add("limitWeekly", user.limitWeeklyUsd);
     add("limitMonthly", user.limitMonthlyUsd);
     add("limitTotal", user.limitTotalUsd);
@@ -179,6 +185,9 @@ export function UserEditSection({
     return items;
   }, [
     user.limit5hUsd,
+    user.dailyQuota,
+    user.dailyResetMode,
+    user.dailyResetTime,
     user.limitWeeklyUsd,
     user.limitMonthlyUsd,
     user.limitTotalUsd,
@@ -186,8 +195,8 @@ export function UserEditSection({
   ]);
 
   const existingTypes = useMemo(() => {
-    // User-level rules in this section do not manage the daily limit value.
-    return [...rules.map((r) => r.type), "limitDaily"];
+    // 现在允许用户设置每日限额，不再排除 limitDaily
+    return rules.map((r) => r.type);
   }, [rules]);
 
   const limitRuleTranslations = useMemo(() => {
@@ -201,6 +210,11 @@ export function UserEditSection({
     switch (type) {
       case "limit5h":
         emitChange("limit5hUsd", null);
+        return;
+      case "limitDaily":
+        emitChange("dailyQuota", null);
+        emitChange("dailyResetMode", "fixed");
+        emitChange("dailyResetTime", "00:00");
         return;
       case "limitWeekly":
         emitChange("limitWeeklyUsd", null);
@@ -224,6 +238,11 @@ export function UserEditSection({
       case "limit5h":
         emitChange("limit5hUsd", value);
         return;
+      case "limitDaily":
+        emitChange("dailyQuota", value);
+        if (mode) emitChange("dailyResetMode", mode);
+        if (time) emitChange("dailyResetTime", time);
+        return;
       case "limitWeekly":
         emitChange("limitWeeklyUsd", value);
         return;
@@ -235,11 +254,6 @@ export function UserEditSection({
         return;
       case "limitSessions":
         emitChange("limitConcurrentSessions", value);
-        return;
-      case "limitDaily":
-        // User-level daily limit value is handled outside this section.
-        if (mode) emitChange("dailyResetMode", mode);
-        if (time) emitChange("dailyResetTime", time);
         return;
       default:
         return;

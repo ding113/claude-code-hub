@@ -450,7 +450,6 @@
     "byName": "按名称",
     "byUsageRate": "按使用率"
   },
-  "all": "全部",
   "nav": {
     "mobileMenuTitle": "导航菜单",
     "dashboard": "仪表盘",
@@ -1039,13 +1038,14 @@
         "todayCost": "今日消耗",
         "lastUsed": "最后使用",
         "actions": "操作",
+        "quotaButton": "查看限额用量",
         "fields": {
           "callsLabel": "调用",
           "costLabel": "消耗"
         }
       },
       "expand": "展开",
-      "collapse": "折叠",
+      "collapse": "收起",
       "noKeys": "无密钥",
       "defaultGroup": "default",
       "userStatus": {
@@ -1071,6 +1071,22 @@
       "noData": "今日暂无使用记录",
       "totalCalls": "总调用",
       "totalCost": "总消费"
+    },
+    "keyQuotaUsageDialog": {
+      "title": "Key 限额使用情况",
+      "fetchFailed": "获取限额使用情况失败",
+      "noLimit": "无限制",
+      "modeFixed": "固定时间",
+      "modeRolling": "滚动 24h",
+      "retry": "重试",
+      "labels": {
+        "limit5h": "5 小时",
+        "limitDaily": "每日",
+        "limitWeekly": "每周",
+        "limitMonthly": "每月",
+        "limitTotal": "总计",
+        "limitSessions": "并发"
+      }
     },
     "quickRenew": {
       "title": "快捷续期",

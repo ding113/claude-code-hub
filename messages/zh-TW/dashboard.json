@@ -945,6 +945,7 @@
         "todayCost": "今日消耗",
         "lastUsed": "最後使用",
         "actions": "操作",
+        "quotaButton": "查看限額用量",
         "fields": {
           "callsLabel": "今日呼叫",
           "costLabel": "今日消耗"
@@ -977,6 +978,22 @@
       "noData": "今日暫無使用記錄",
       "totalCalls": "今日總呼叫",
       "totalCost": "今日總消費"
+    },
+    "keyQuotaUsageDialog": {
+      "title": "Key 限額使用情況",
+      "fetchFailed": "取得限額使用情況失敗",
+      "noLimit": "無限制",
+      "modeFixed": "固定時間",
+      "modeRolling": "滾動 24h",
+      "retry": "重試",
+      "labels": {
+        "limit5h": "5 小時",
+        "limitDaily": "每日",
+        "limitWeekly": "每週",
+        "limitMonthly": "每月",
+        "limitTotal": "總計",
+        "limitSessions": "並發"
+      }
     },
     "quickRenew": {
       "title": "快速續期",

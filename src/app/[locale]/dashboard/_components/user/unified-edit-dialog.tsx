@@ -61,6 +61,7 @@ const UnifiedUserSchema = UpdateUserSchema.extend({
   providerGroup: z.string().max(50).nullable().optional(),
   allowedClients: z.array(z.string().max(64)).max(50).optional().default([]),
   allowedModels: z.array(z.string().max(64)).max(50).optional().default([]),
+  dailyQuota: z.number().nullable().optional(),
 });
 
 const UnifiedKeySchema = KeyFormSchema.extend({
@@ -108,6 +109,7 @@ function buildDefaultValues(mode: "create" | "edit", user?: UserDisplay): Unifie
         tags: [],
         expiresAt: undefined,
         limit5hUsd: null,
+        dailyQuota: null,
         limitWeeklyUsd: null,
         limitMonthlyUsd: null,
         limitTotalUsd: null,
@@ -152,6 +154,7 @@ function buildDefaultValues(mode: "create" | "edit", user?: UserDisplay): Unifie
       expiresAt: user.expiresAt ?? undefined,
       providerGroup: user.providerGroup ?? null,
       limit5hUsd: user.limit5hUsd ?? null,
+      dailyQuota: user.dailyQuota ?? null,
       limitWeeklyUsd: user.limitWeeklyUsd ?? null,
       limitMonthlyUsd: user.limitMonthlyUsd ?? null,
       limitTotalUsd: user.limitTotalUsd ?? null,
@@ -268,6 +271,7 @@ function UnifiedEditDialogInner({
               tags: data.user.tags,
               expiresAt: data.user.expiresAt ?? null,
               limit5hUsd: data.user.limit5hUsd,
+              dailyQuota: data.user.dailyQuota ?? undefined,
               limitWeeklyUsd: data.user.limitWeeklyUsd,
               limitMonthlyUsd: data.user.limitMonthlyUsd,
               limitTotalUsd: data.user.limitTotalUsd,
@@ -327,6 +331,7 @@ function UnifiedEditDialogInner({
               expiresAt: data.user.expiresAt ?? null,
               providerGroup: data.user.providerGroup ?? null,
               limit5hUsd: data.user.limit5hUsd,
+              dailyQuota: data.user.dailyQuota ?? undefined,
               limitWeeklyUsd: data.user.limitWeeklyUsd,
               limitMonthlyUsd: data.user.limitMonthlyUsd,
               limitTotalUsd: data.user.limitTotalUsd,
@@ -725,6 +730,7 @@ function UnifiedEditDialogInner({
               expiresAt: currentUserDraft.expiresAt ?? null,
               providerGroup: currentUserDraft.providerGroup ?? null,
               limit5hUsd: currentUserDraft.limit5hUsd ?? null,
+              dailyQuota: currentUserDraft.dailyQuota ?? null,
               limitWeeklyUsd: currentUserDraft.limitWeeklyUsd ?? null,
               limitMonthlyUsd: currentUserDraft.limitMonthlyUsd ?? null,
               limitTotalUsd: currentUserDraft.limitTotalUsd ?? null,

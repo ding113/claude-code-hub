@@ -941,6 +941,7 @@
         "todayCost": "本日の消費",
         "lastUsed": "最終使用",
         "actions": "操作",
+        "quotaButton": "クォータ使用状況を表示",
         "fields": {
           "callsLabel": "呼び出し",
           "costLabel": "消費"
@@ -973,6 +974,22 @@
       "noData": "本日の使用記録はありません",
       "totalCalls": "総呼び出し数",
       "totalCost": "総消費"
+    },
+    "keyQuotaUsageDialog": {
+      "title": "Key クォータ使用状況",
+      "fetchFailed": "クォータ使用状況の取得に失敗しました",
+      "noLimit": "制限なし",
+      "modeFixed": "固定時間",
+      "modeRolling": "ローリング24h",
+      "retry": "再試行",
+      "labels": {
+        "limit5h": "5 時間",
+        "limitDaily": "日次",
+        "limitWeekly": "週次",
+        "limitMonthly": "月次",
+        "limitTotal": "合計",
+        "limitSessions": "同時接続"
+      }
     },
     "quickRenew": {
       "title": "クイック更新",

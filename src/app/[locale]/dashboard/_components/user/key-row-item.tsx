@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, Eye, FileText, Info, Pencil, Trash2 } from "lucide-react";
+import { BarChart3, Copy, Eye, FileText, Info, Pencil, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -21,6 +21,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 import { CURRENCY_CONFIG, type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
 import { KeyFullDisplayDialog } from "./key-full-display-dialog";
+import { KeyQuotaUsageDialog } from "./key-quota-usage-dialog";
 import { KeyStatsDialog } from "./key-stats-dialog";
 
 export interface KeyRowItemProps {
@@ -70,6 +71,7 @@ export interface KeyRowItemProps {
       copyFailed: string;
       show: string;
       hide: string;
+      quota: string;
     };
     status: {
       enabled: string;
@@ -92,6 +94,7 @@ export function KeyRowItem({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [fullKeyDialogOpen, setFullKeyDialogOpen] = useState(false);
   const [statsDialogOpen, setStatsDialogOpen] = useState(false);
+  const [quotaDialogOpen, setQuotaDialogOpen] = useState(false);
   const tCommon = useTranslations("common");
 
   const resolvedCurrencyCode: CurrencyCode =
@@ -260,6 +263,25 @@ export function KeyRowItem({
               type="button"
               size="icon-sm"
               variant="ghost"
+              aria-label={translations.actions.quota}
+              onClick={(e) => {
+                e.stopPropagation();
+                setQuotaDialogOpen(true);
+              }}
+              className="h-7 w-7"
+            >
+              <BarChart3 className="h-3.5 w-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{translations.actions.quota}</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
               aria-label={translations.actions.logs}
               onClick={(e) => {
                 e.stopPropagation();
@@ -353,6 +375,15 @@ export function KeyRowItem({
         keyName={keyData.name}
         modelStats={keyData.modelStats}
         currencyCode={currencyCode}
+      />
+
+      {/* Key Quota Usage Dialog */}
+      <KeyQuotaUsageDialog
+        open={quotaDialogOpen}
+        onOpenChange={setQuotaDialogOpen}
+        keyId={keyData.id}
+        keyName={keyData.name}
+        currencyCode={resolvedCurrencyCode}
       />
     </div>
   );
