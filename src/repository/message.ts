@@ -113,6 +113,8 @@ export async function updateMessageRequestDetails(
     cacheTtlApplied?: string | null;
     providerChain?: CreateMessageRequestData["provider_chain"];
     errorMessage?: string;
+    errorStack?: string; // 完整堆栈信息
+    errorCause?: string; // 嵌套错误原因（JSON 格式）
     model?: string; // ⭐ 新增：支持更新重定向后的模型名称
     providerId?: number; // ⭐ 新增：支持更新最终供应商ID（重试切换后）
     context1mApplied?: boolean; // 是否应用了1M上下文窗口
@@ -151,6 +153,12 @@ export async function updateMessageRequestDetails(
   }
   if (details.errorMessage !== undefined) {
     updateData.errorMessage = details.errorMessage;
+  }
+  if (details.errorStack !== undefined) {
+    updateData.errorStack = details.errorStack;
+  }
+  if (details.errorCause !== undefined) {
+    updateData.errorCause = details.errorCause;
   }
   if (details.model !== undefined) {
     updateData.model = details.model;

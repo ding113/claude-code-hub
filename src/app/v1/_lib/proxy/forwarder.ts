@@ -1340,17 +1340,20 @@ export class ProxyForwarder {
 
     (init as Record<string, unknown>).verbose = true;
 
-    // ⭐ 检测是否为 Gemini 供应商（需要特殊处理以绕过 undici 自动解压）
-    const isGeminiProvider =
-      provider.providerType === "gemini" || provider.providerType === "gemini-cli";
+    // ⭐ 始终使用容错流处理以减少 "TypeError: terminated" 错误
+    // 背景：undici fetch 的自动解压在流被提前终止时会抛出 "TypeError: terminated"
+    // 这个问题不仅影响 Gemini，也影响 Codex 和其他所有供应商
+    // 使用 fetchWithoutAutoDecode 绕过 undici 的自动解压，手动处理 gzip
+    // 并通过 nodeStreamToWebStreamSafe 实现容错流转换（捕获错误并优雅关闭）
+    const useErrorTolerantFetch = true;
 
     let response: Response;
     const fetchStartTime = Date.now();
     try {
-      // ⭐ Gemini 使用 undici.request 绕过 fetch 的自动解压
+      // ⭐ 所有供应商使用 undici.request 绕过 fetch 的自动解压
       // 原因：undici fetch 无法关闭自动解压，上游可能无视 accept-encoding: identity 返回 gzip
       // 当 gzip 流被提前终止时（如连接关闭），undici Gunzip 会抛出 "TypeError: terminated"
-      response = isGeminiProvider
+      response = useErrorTolerantFetch
         ? await ProxyForwarder.fetchWithoutAutoDecode(proxyUrl, init, provider.id, provider.name)
         : await fetch(proxyUrl, init);
       // ⭐ fetch 成功：收到 HTTP 响应头，保留响应超时继续监控
@@ -1509,7 +1512,7 @@ export class ProxyForwarder {
               errorType: "Http2Error",
               errorName: err.name,
               errorMessage: err.message || err.name || "HTTP/2 protocol error",
-              errorCode: err.code || "HTTP2_FAILED",
+              errorCode: err.code,
               errorStack: err.stack?.split("\n").slice(0, 3).join("\n"),
             },
             // W-011: 添加 request 字段以保持与其他错误处理一致
@@ -1531,7 +1534,7 @@ export class ProxyForwarder {
 
         try {
           // 使用 HTTP/1.1 重试
-          response = isGeminiProvider
+          response = useErrorTolerantFetch
             ? await ProxyForwarder.fetchWithoutAutoDecode(
                 proxyUrl,
                 http1FallbackInit,
@@ -1631,7 +1634,7 @@ export class ProxyForwarder {
             errorSyscall: err.syscall, // ⭐ 如 'getaddrinfo'（DNS查询）、'connect'（TCP连接）
             errorErrno: err.errno,
             errorCause: err.cause,
-
+            // ⭐ 增强诊断：undici 参数验证错误的具体说明
             errorCauseMessage: (err.cause as Error | undefined)?.message,
             errorCauseStack: (err.cause as Error | undefined)?.stack
               ?.split("\n")
@@ -1894,7 +1897,7 @@ export class ProxyForwarder {
       providerName,
       url: new URL(url).origin, // 只记录域名，隐藏路径和参数
       method: init.method,
-      reason: "Gemini provider requires manual gzip handling to avoid terminated error",
+      reason: "Using manual gzip handling to avoid terminated error",
     });
 
     // 将 Headers 对象转换为 Record<string, string>
@@ -1947,7 +1950,7 @@ export class ProxyForwarder {
     let bodyStream: ReadableStream<Uint8Array>;
 
     if (encoding.includes("gzip")) {
-      logger.debug("ProxyForwarder: Gemini response is gzip encoded, decompressing manually", {
+      logger.debug("ProxyForwarder: Response is gzip encoded, decompressing manually", {
         providerId,
         providerName,
         contentEncoding: encoding,
@@ -1961,7 +1964,7 @@ export class ProxyForwarder {
 
       // 捕获 Gunzip 错误但不抛出（容错处理）
       gunzip.on("error", (err) => {
-        logger.warn("ProxyForwarder: Gemini gunzip decompression error (ignored)", {
+        logger.warn("ProxyForwarder: Gunzip decompression error (ignored)", {
           providerId,
           providerName,
           error: err.message,
