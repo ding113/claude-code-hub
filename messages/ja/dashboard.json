@@ -619,6 +619,7 @@
     "costDaily": "日次消費",
     "costWeekly": "週間消費",
     "costMonthly": "月間消費",
+    "costTotal": "総消費",
     "concurrentSessions": "同時セッション数",
     "noLimit": "制限なし"
   },
