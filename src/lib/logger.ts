@@ -157,10 +157,9 @@ async function initializePinoLogger(): Promise<void> {
 
     activeLogger = createLoggerWrapper(pinoInstance);
   } catch (error) {
-    activeLogger.warn(
-      "[Logger] Failed to initialize pino, falling back to console logging",
-      { error }
-    );
+    activeLogger.warn("[Logger] Failed to initialize pino, falling back to console logging", {
+      error,
+    });
   }
 }
 
