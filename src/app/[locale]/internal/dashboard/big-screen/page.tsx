@@ -569,7 +569,7 @@ const TrafficTrend = ({
         <Activity size={12} className="text-orange-400" />
         {t("sections.requestTrend")}
       </div>
-      <div className="flex-1 min-h-0">
+      <div className="h-[200px]">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={filteredData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
             <defs>
@@ -660,7 +660,7 @@ const ModelDistribution = ({
         <PieIcon size={12} className="text-indigo-400" />
         {t("sections.modelDist")}
       </div>
-      <div className="flex-1 min-h-0 flex items-center">
+      <div className="h-[140px] flex items-center">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
