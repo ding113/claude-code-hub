@@ -1,6 +1,6 @@
 "use server";
 
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, users } from "@/drizzle/schema";
 import type { CreateUserData, UpdateUserData, User } from "@/types/user";
@@ -165,11 +165,11 @@ export async function findUserListBatch(
     );
   }
 
-  // Cursor-based pagination: WHERE (created_at, id) < (cursor_created_at, cursor_id)
+  // Cursor-based pagination: WHERE (created_at, id) > (cursor_created_at, cursor_id)
   if (cursor) {
     const cursorDate = new Date(cursor.createdAt);
     conditions.push(
-      sql`(${users.createdAt}, ${users.id}) < (${cursorDate.toISOString()}::timestamptz, ${cursor.id})`
+      sql`(${users.createdAt}, ${users.id}) > (${cursorDate.toISOString()}::timestamptz, ${cursor.id})`
     );
   }
 
@@ -203,7 +203,7 @@ export async function findUserListBatch(
     })
     .from(users)
     .where(and(...conditions))
-    .orderBy(desc(users.createdAt), desc(users.id))
+    .orderBy(asc(users.createdAt), asc(users.id))
     .limit(fetchLimit);
 
   const hasMore = results.length > limit;
