@@ -118,6 +118,10 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
   });
 
   const allUsers = useMemo(() => data?.pages.flatMap((page) => page.users) ?? [], [data]);
+  const visibleUsers = useMemo(() => {
+    if (isAdmin) return allUsers;
+    return allUsers.filter((user) => user.id === currentUser.id);
+  }, [isAdmin, allUsers, currentUser.id]);
 
   const isInitialLoading = isLoading && allUsers.length === 0;
   const isRefreshing = isFetching && !isInitialLoading && !isFetchingNextPage;
@@ -176,24 +180,24 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
 
   // Extract unique tags from users
   const uniqueTags = useMemo(() => {
-    const tags = allUsers.flatMap((u) => u.tags || []);
+    const tags = visibleUsers.flatMap((u) => u.tags || []);
     return [...new Set(tags)].sort();
-  }, [allUsers]);
+  }, [visibleUsers]);
 
   // Extract unique key groups from users (split comma-separated tags)
   const uniqueKeyGroups = useMemo(() => {
-    const groups = allUsers.flatMap(
+    const groups = visibleUsers.flatMap(
       (u) => u.keys?.flatMap((k) => splitTags(k.providerGroup)) || []
     );
     return [...new Set(groups)].sort();
-  }, [allUsers]);
+  }, [visibleUsers]);
 
   const matchingKeyIds = useMemo(() => {
     const matchingIds = new Set<number>();
     const normalizedTerm = searchTerm.trim().toLowerCase();
     const hasSearch = normalizedTerm.length > 0;
 
-    for (const user of allUsers) {
+    for (const user of visibleUsers) {
       if (user.keys.length === 0) continue;
 
       for (const key of user.keys) {
@@ -214,19 +218,16 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
     }
 
     return matchingIds;
-  }, [allUsers, searchTerm, keyGroupFilter]);
+  }, [visibleUsers, searchTerm, keyGroupFilter]);
 
   // Determine if we should highlight keys (either search or keyGroup filter is active)
   const shouldHighlightKeys = searchTerm.trim().length > 0 || keyGroupFilter !== "all";
-  const selfUser = useMemo(
-    () => (isAdmin ? undefined : allUsers.find((user) => user.id === currentUser.id)),
-    [isAdmin, allUsers, currentUser.id]
-  );
+  const selfUser = useMemo(() => (isAdmin ? undefined : visibleUsers[0]), [isAdmin, visibleUsers]);
 
-  const allVisibleUserIds = useMemo(() => allUsers.map((user) => user.id), [allUsers]);
+  const allVisibleUserIds = useMemo(() => visibleUsers.map((user) => user.id), [visibleUsers]);
   const allVisibleKeyIds = useMemo(
-    () => allUsers.flatMap((user) => user.keys?.map((key) => key.id) ?? []),
-    [allUsers]
+    () => visibleUsers.flatMap((user) => user.keys?.map((key) => key.id) ?? []),
+    [visibleUsers]
   );
 
   // Keep selection consistent with current filtered list while in multi-select mode.
@@ -385,7 +386,9 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
         <div>
           <h3 className="text-lg font-medium">{t("title")}</h3>
           <p className="text-sm text-muted-foreground">
-            {isInitialLoading ? tCommon("loading") : t("description", { count: allUsers.length })}
+            {isInitialLoading
+              ? tCommon("loading")
+              : t("description", { count: visibleUsers.length })}
           </p>
         </div>
         {isAdmin ? (
@@ -414,51 +417,55 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
           />
         </div>
 
-        {/* Tag filter */}
-        {isInitialLoading ? (
-          <Skeleton className="h-9 w-[180px]" />
-        ) : (
-          uniqueTags.length > 0 && (
-            <Select value={tagFilter} onValueChange={setTagFilter}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder={t("toolbar.tagFilter")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("toolbar.allTags")}</SelectItem>
-                {uniqueTags.map((tag) => (
-                  <SelectItem key={tag} value={tag}>
-                    <Badge variant="secondary" className="mr-1 text-xs">
-                      {tag}
-                    </Badge>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )
-        )}
+        {isAdmin ? (
+          <>
+            {/* Tag filter */}
+            {isInitialLoading ? (
+              <Skeleton className="h-9 w-[180px]" />
+            ) : (
+              uniqueTags.length > 0 && (
+                <Select value={tagFilter} onValueChange={setTagFilter}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder={t("toolbar.tagFilter")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t("toolbar.allTags")}</SelectItem>
+                    {uniqueTags.map((tag) => (
+                      <SelectItem key={tag} value={tag}>
+                        <Badge variant="secondary" className="mr-1 text-xs">
+                          {tag}
+                        </Badge>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )
+            )}
 
-        {/* Key group filter */}
-        {isInitialLoading ? (
-          <Skeleton className="h-9 w-[180px]" />
-        ) : (
-          uniqueKeyGroups.length > 0 && (
-            <Select value={keyGroupFilter} onValueChange={setKeyGroupFilter}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder={t("toolbar.keyGroupFilter")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("toolbar.allKeyGroups")}</SelectItem>
-                {uniqueKeyGroups.map((group) => (
-                  <SelectItem key={group} value={group}>
-                    <Badge variant="outline" className="mr-1 text-xs">
-                      {group}
-                    </Badge>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )
-        )}
+            {/* Key group filter */}
+            {isInitialLoading ? (
+              <Skeleton className="h-9 w-[180px]" />
+            ) : (
+              uniqueKeyGroups.length > 0 && (
+                <Select value={keyGroupFilter} onValueChange={setKeyGroupFilter}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder={t("toolbar.keyGroupFilter")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t("toolbar.allKeyGroups")}</SelectItem>
+                    {uniqueKeyGroups.map((group) => (
+                      <SelectItem key={group} value={group}>
+                        <Badge variant="outline" className="mr-1 text-xs">
+                          {group}
+                        </Badge>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )
+            )}
+          </>
+        ) : null}
       </div>
 
       {isInitialLoading ? (
@@ -471,7 +478,7 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
         <div className="space-y-3">
           {isRefreshing ? <InlineLoading label={tCommon("loading")} /> : null}
           <UserManagementTable
-            users={allUsers}
+            users={visibleUsers}
             hasNextPage={hasNextPage}
             isFetchingNextPage={isFetchingNextPage}
             onLoadMore={fetchNextPage}

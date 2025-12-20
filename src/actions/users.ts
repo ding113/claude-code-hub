@@ -29,7 +29,7 @@ import {
   findUserListBatch,
   updateUser,
 } from "@/repository/user";
-import type { UserDisplay } from "@/types/user";
+import type { User, UserDisplay } from "@/types/user";
 import type { ActionResult } from "./types";
 
 export interface GetUsersBatchParams {
@@ -158,20 +158,23 @@ export async function getUsers(): Promise<UserDisplay[]> {
     const locale = await getLocale();
     const t = await getTranslations("users");
 
-    // 普通用户只能看到自己的数据
-    let users;
-    if (session.user.role === "user") {
-      users = [session.user]; // 只返回当前用户
-    } else {
+    // Treat any non-admin role as non-admin for safety.
+    const isAdmin = session.user.role === "admin";
+
+    // 非 admin 用户只能看到自己的数据（从 DB 获取完整用户信息）
+    let users: User[] = [];
+    if (isAdmin) {
       users = await findUserList(); // 管理员可以看到所有用户
+    } else {
+      const selfUser = await findUserById(session.user.id);
+      users = selfUser ? [selfUser] : [];
     }
 
     if (users.length === 0) {
       return [];
     }
 
-    // 管理员可以看到完整Key，普通用户只能看到掩码
-    const isAdmin = session.user.role === "admin";
+    // 管理员可以看到完整Key，普通用户只能看到自己的 Key
 
     // === Batch queries optimization ===
     // Instead of N*3 queries (one per user for keys, usage, statistics),
