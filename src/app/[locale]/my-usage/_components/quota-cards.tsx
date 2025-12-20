@@ -30,15 +30,19 @@ export function QuotaCards({
   const tExpiration = useTranslations("myUsage.expiration");
   const tCommon = useTranslations("common");
 
-  if (loading && !quota) {
-    return <QuotaCardsSkeleton label={tCommon("loading")} />;
-  }
-
   const resolvedKeyExpires = keyExpiresAt ?? quota?.expiresAt ?? null;
   const resolvedUserExpires = userExpiresAt ?? quota?.userExpiresAt ?? null;
 
-  const keyCountdown = useCountdown(resolvedKeyExpires, Boolean(resolvedKeyExpires));
-  const userCountdown = useCountdown(resolvedUserExpires, Boolean(resolvedUserExpires));
+  const shouldEnableCountdown = !(loading && !quota);
+
+  const keyCountdown = useCountdown(
+    resolvedKeyExpires,
+    shouldEnableCountdown && Boolean(resolvedKeyExpires)
+  );
+  const userCountdown = useCountdown(
+    resolvedUserExpires,
+    shouldEnableCountdown && Boolean(resolvedUserExpires)
+  );
 
   const isExpiring = (countdown: ReturnType<typeof useCountdown>) =>
     countdown.totalSeconds > 0 && countdown.totalSeconds <= 7 * 24 * 60 * 60;
@@ -125,6 +129,10 @@ export function QuotaCards({
       },
     ];
   }, [quota, t]);
+
+  if (loading && !quota) {
+    return <QuotaCardsSkeleton label={tCommon("loading")} />;
+  }
 
   return (
     <div className="space-y-3">
