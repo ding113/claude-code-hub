@@ -4,7 +4,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { Loader2, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { renewUser } from "@/actions/users";
 import { Button } from "@/components/ui/button";
@@ -118,8 +118,10 @@ export function UserManagementTable({
   const tUserMgmt = useTranslations("dashboard.userManagement");
   const isAdmin = currentUser?.role === "admin";
   const showMultiSelect = Boolean(isAdmin && isMultiSelectMode);
-  const selectedUserIdSet = selectedUserIds ?? new Set<number>();
-  const selectedKeyIdSet = selectedKeyIds ?? new Set<number>();
+  // Use useMemo to create stable empty Set references for fallback
+  const emptySet = useMemo(() => new Set<number>(), []);
+  const selectedUserIdSet = selectedUserIds ?? emptySet;
+  const selectedKeyIdSet = selectedKeyIds ?? emptySet;
   const [expandedUsers, setExpandedUsers] = useState<Map<number, boolean>>(
     () => new Map(users.map((user) => [user.id, false]))
   );
@@ -194,18 +196,31 @@ export function UserManagementTable({
     };
   }, [translations, isAdmin, tUserMgmt]);
 
-  const rowVirtualizer = useVirtualizer({
-    count: hasNextPage ? users.length + 1 : users.length,
-    getScrollElement: () => parentRef.current,
-    // Stable key function to prevent measurement cache mismatches during filtering/reordering
-    getItemKey: (index) => users[index]?.id ?? `loader-${index}`,
-    estimateSize: (index) => {
+  // Memoize estimateSize to prevent virtualizer re-computation
+  const estimateSize = useCallback(
+    (index: number) => {
       const user = users[index];
       if (!user) return USER_ROW_HEIGHT;
       const expanded = showMultiSelect ? true : (expandedUsers.get(user.id) ?? false);
       if (!expanded) return USER_ROW_HEIGHT;
       return USER_ROW_HEIGHT + (user.keys?.length ?? 0) * KEY_ROW_HEIGHT;
     },
+    [users, showMultiSelect, expandedUsers]
+  );
+
+  const getScrollElement = useCallback(() => parentRef.current, []);
+
+  const getItemKey = useCallback(
+    (index: number) => users[index]?.id ?? `loader-${index}`,
+    [users]
+  );
+
+  const rowVirtualizer = useVirtualizer({
+    count: hasNextPage ? users.length + 1 : users.length,
+    getScrollElement,
+    // Stable key function to prevent measurement cache mismatches during filtering/reordering
+    getItemKey,
+    estimateSize,
     overscan: 5,
   });
 
