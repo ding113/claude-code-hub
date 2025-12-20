@@ -1841,7 +1841,7 @@ async function persistRequestFailure(options: {
 
   let errorStack = error instanceof Error ? error.stack : undefined;
   if (errorStack && errorStack.length > MAX_ERROR_STACK_LENGTH) {
-    errorStack = errorStack.substring(0, MAX_ERROR_STACK_LENGTH) + "\n...[truncated]";
+    errorStack = `${errorStack.substring(0, MAX_ERROR_STACK_LENGTH)}\n...[truncated]`;
   }
 
   let errorCause: string | undefined;
@@ -1856,7 +1856,7 @@ async function persistRequestFailure(options: {
     }
     // 截断过长的错误原因
     if (errorCause && errorCause.length > MAX_ERROR_CAUSE_LENGTH) {
-      errorCause = errorCause.substring(0, MAX_ERROR_CAUSE_LENGTH) + "...[truncated]";
+      errorCause = `${errorCause.substring(0, MAX_ERROR_CAUSE_LENGTH)}...[truncated]`;
     }
   }
 

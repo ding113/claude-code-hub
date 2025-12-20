@@ -371,7 +371,7 @@ export async function countActiveKeysByUser(userId: number): Promise<number> {
   const [row] = await db
     .select({ count: count() })
     .from(keys)
-    .where(and(eq(keys.userId, userId), isNull(keys.deletedAt)));
+    .where(and(eq(keys.userId, userId), eq(keys.isEnabled, true), isNull(keys.deletedAt)));
 
   return Number(row?.count || 0);
 }

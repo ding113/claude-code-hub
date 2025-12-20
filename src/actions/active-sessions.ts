@@ -424,6 +424,8 @@ export async function getSessionMessages(sessionId: string): Promise<ActionResul
  * 检查指定 session 是否有 messages 数据
  * 用于判断是否显示"查看详情"按钮
  *
+ * 权限：管理员可查看所有 Session，普通用户只能查看自己的 Session
+ *
  * @param sessionId - Session ID
  * @param requestSequence - 可选，请求序号。提供时检查特定请求的消息
  */
@@ -432,6 +434,40 @@ export async function hasSessionMessages(
   requestSequence?: number
 ): Promise<ActionResult<boolean>> {
   try {
+    // 验证用户权限
+    const authSession = await getSession();
+    if (!authSession) {
+      return {
+        ok: false,
+        error: "未登录",
+      };
+    }
+
+    const isAdmin = authSession.user.role === "admin";
+    const currentUserId = authSession.user.id;
+
+    // 检查 Session 所有权（需要从数据库获取 userId）
+    const { aggregateSessionStats } = await import("@/repository/message");
+    const sessionStats = await aggregateSessionStats(sessionId);
+
+    if (!sessionStats) {
+      return {
+        ok: true,
+        data: false, // Session 不存在
+      };
+    }
+
+    // 权限检查：管理员可查看所有，普通用户只能查看自己的
+    if (!isAdmin && sessionStats.userId !== currentUserId) {
+      logger.warn(
+        `[Security] User ${currentUserId} attempted to check messages for session ${sessionId} owned by user ${sessionStats.userId}`
+      );
+      return {
+        ok: false,
+        error: "无权访问该 Session",
+      };
+    }
+
     const { SessionManager } = await import("@/lib/session-manager");
 
     // 如果指定了序号，检查特定请求

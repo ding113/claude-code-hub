@@ -7,6 +7,75 @@ import { logger } from "@/lib/logger";
 export const runtime = "nodejs";
 
 /**
+ * 创建监控包装流，确保在所有场景下都释放锁
+ *
+ * 关键场景：
+ * - 成功完成：通过 pull() 中的 done === true 释放锁
+ * - 流错误：通过 pull() 中的 catch 释放锁
+ * - 请求取消：通过 cancel() 释放锁
+ *
+ * @param stream - 原始流（来自 pg_dump）
+ * @param lockId - 备份锁 ID
+ * @returns 包装后的流
+ */
+function createMonitoredStream(
+  stream: ReadableStream<Uint8Array>,
+  lockId: string
+): ReadableStream<Uint8Array> {
+  const reader = stream.getReader();
+  let released = false;
+  let cancelled = false;
+
+  const releaseLock = async (reason?: string) => {
+    if (released || !lockId) return;
+    released = true; // 同步设置，在任何 await 之前
+    await releaseBackupLock(lockId, "export").catch((err) => {
+      logger.error({
+        action: "database_export_lock_release_error",
+        lockId,
+        reason,
+        error: err.message,
+      });
+    });
+  };
+
+  return new ReadableStream({
+    async pull(controller) {
+      // 如果已取消，不再读取
+      if (cancelled) {
+        controller.close();
+        return;
+      }
+
+      try {
+        const { done, value } = await reader.read();
+        if (done) {
+          controller.close();
+          await releaseLock("stream_done");
+        } else {
+          controller.enqueue(value);
+        }
+      } catch (error) {
+        await releaseLock("stream_error");
+        reader.releaseLock();
+        controller.error(error);
+      }
+    },
+    async cancel() {
+      cancelled = true;
+      await releaseLock("request_cancelled");
+      await reader.cancel().catch((err) => {
+        logger.error({
+          action: "database_export_reader_cancel_error",
+          lockId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+    },
+  });
+}
+
+/**
  * 导出数据库备份
  *
  * GET /api/admin/database/export?excludeLogs=true
@@ -49,6 +118,17 @@ export async function GET(request: Request) {
       logger.error({
         action: "database_export_connection_unavailable",
       });
+      // 数据库不可用时释放锁
+      if (lockId) {
+        await releaseBackupLock(lockId, "export").catch((err) => {
+          logger.error({
+            action: "database_export_lock_release_error",
+            lockId,
+            reason: "connection_unavailable",
+            error: err.message,
+          });
+        });
+      }
       return Response.json({ error: "数据库连接不可用，请检查数据库服务状态" }, { status: 503 });
     }
 
@@ -71,42 +151,8 @@ export async function GET(request: Request) {
       user: session.user.name,
     });
 
-    // 7. 监听请求取消（用户关闭浏览器）
-    request.signal.addEventListener("abort", () => {
-      if (lockId) {
-        releaseBackupLock(lockId, "export").catch((err) => {
-          logger.error({
-            action: "database_export_lock_release_error",
-            lockId,
-            reason: "request_aborted",
-            error: err.message,
-          });
-        });
-      }
-    });
-
-    // 8. 包装流以确保锁的释放
-    const cleanupStream = new TransformStream({
-      transform(chunk, controller) {
-        controller.enqueue(chunk);
-      },
-      flush() {
-        // 流正常结束时释放锁
-        if (lockId) {
-          releaseBackupLock(lockId, "export").catch((err) => {
-            logger.error({
-              action: "database_export_lock_release_error",
-              lockId,
-              reason: "stream_completed",
-              error: err.message,
-            });
-          });
-        }
-      },
-    });
-
-    // 9. 返回流式响应
-    return new Response(stream.pipeThrough(cleanupStream), {
+    // 7. 返回流式响应（使用监控包装器确保锁的释放）
+    return new Response(createMonitoredStream(stream, lockId), {
       status: 200,
       headers: {
         "Content-Type": "application/octet-stream",

@@ -619,6 +619,7 @@
     "costDaily": "日次消費",
     "costWeekly": "週間消費",
     "costMonthly": "月間消費",
+    "costTotal": "総消費",
     "concurrentSessions": "同時セッション数",
     "noLimit": "制限なし"
   },
@@ -1033,6 +1034,81 @@
       "userDeleted": "ユーザーが削除されました",
       "saving": "保存中..."
     },
+    "batchEdit": {
+      "enterMode": "一括編集",
+      "exitMode": "終了",
+      "selectAll": "すべて選択",
+      "selectedCount": "選択済み {users} ユーザー、{keys} キー",
+      "editSelected": "選択項目を編集",
+      "dialog": {
+        "title": "一括編集",
+        "description": "{users} ユーザー、{keys} キーに影響します",
+        "cancel": "キャンセル",
+        "next": "次へ",
+        "noFieldEnabled": "上書きするフィールドを1つ以上有効にしてください",
+        "noUpdate": "実行する更新がありません",
+        "noSelection": "一括編集するユーザーまたはキーを先に選択してください。"
+      },
+      "confirm": {
+        "title": "一括更新を確認",
+        "description": "{users} ユーザーと {keys} キーを更新します。この操作は元に戻せません。",
+        "userFields": "ユーザーフィールド",
+        "keyFields": "キーフィールド",
+        "goBack": "戻って修正",
+        "update": "更新を確定",
+        "updating": "更新中..."
+      },
+      "toast": {
+        "usersUpdated": "{count} ユーザーを更新しました",
+        "keysUpdated": "{count} キーを更新しました",
+        "usersFailed": "ユーザーの更新に失敗しました: {error}",
+        "keysFailed": "キーの更新に失敗しました: {error}",
+        "batchFailed": "一括更新に失敗しました"
+      },
+      "validation": {
+        "invalidNumber": "有効な数値を入力してください",
+        "negativeNumber": "値は負の数にできません"
+      },
+      "aria": {
+        "selectUser": "ユーザーを選択",
+        "selectKey": "キーを選択"
+      },
+      "user": {
+        "title": "ユーザー設定",
+        "affected": "{count} ユーザーに影響します",
+        "enableFieldAria": "フィールドを有効化: {title}",
+        "fields": {
+          "note": "メモ",
+          "tags": "タグ",
+          "limit5h": "5時間上限 (USD)",
+          "limitWeekly": "週間上限 (USD)",
+          "limitMonthly": "月間上限 (USD)"
+        },
+        "placeholders": {
+          "emptyToClear": "空欄でクリア",
+          "tagsPlaceholder": "Enterで追加、カンマ区切り対応",
+          "emptyNoLimit": "空欄で制限なし"
+        }
+      },
+      "key": {
+        "title": "キー設定",
+        "affected": "{count} キーに影響します",
+        "fields": {
+          "providerGroup": "グループ (providerGroup)",
+          "limit5h": "5時間上限 (USD)",
+          "limitDaily": "日次上限 (USD)",
+          "limitWeekly": "週次上限 (USD)",
+          "limitMonthly": "月次上限 (USD)",
+          "canLoginWebUi": "Web UI へのログインを許可",
+          "keyEnabled": "キー有効状態"
+        },
+        "placeholders": {
+          "groupPlaceholder": "空欄でクリア、複数はカンマ区切り",
+          "emptyNoLimit": "空欄で制限なし"
+        },
+        "targetValue": "目標値"
+      }
+    },
     "createDialog": {
       "title": "ユーザーを作成",
       "description": "新規ユーザーを作成し、APIキーを設定",
@@ -1085,7 +1161,7 @@
       },
       "dailyMode": {
         "fixed": "固定時刻でリセット",
-        "rolling": "ローリングウィンドウ（24h）"
+        "rolling": "ローリングウィンドウ（24時間）"
       },
       "quickValues": {
         "10": "$10",

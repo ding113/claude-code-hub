@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useCountdown } from "@/hooks/useCountdown";
 import type { CurrencyCode } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import { calculateUsagePercent, isUnlimited } from "@/lib/utils/limit-helpers";
 
 interface QuotaCardsProps {
   quota: MyUsageQuota | null;
@@ -30,15 +31,19 @@ export function QuotaCards({
   const tExpiration = useTranslations("myUsage.expiration");
   const tCommon = useTranslations("common");
 
-  if (loading && !quota) {
-    return <QuotaCardsSkeleton label={tCommon("loading")} />;
-  }
-
   const resolvedKeyExpires = keyExpiresAt ?? quota?.expiresAt ?? null;
   const resolvedUserExpires = userExpiresAt ?? quota?.userExpiresAt ?? null;
 
-  const keyCountdown = useCountdown(resolvedKeyExpires, Boolean(resolvedKeyExpires));
-  const userCountdown = useCountdown(resolvedUserExpires, Boolean(resolvedUserExpires));
+  const shouldEnableCountdown = !(loading && !quota);
+
+  const keyCountdown = useCountdown(
+    resolvedKeyExpires,
+    shouldEnableCountdown && Boolean(resolvedKeyExpires)
+  );
+  const userCountdown = useCountdown(
+    resolvedUserExpires,
+    shouldEnableCountdown && Boolean(resolvedUserExpires)
+  );
 
   const isExpiring = (countdown: ReturnType<typeof useCountdown>) =>
     countdown.totalSeconds > 0 && countdown.totalSeconds <= 7 * 24 * 60 * 60;
@@ -121,10 +126,14 @@ export function QuotaCards({
         keyCurrent: quota.keyCurrentConcurrentSessions,
         keyLimit: quota.keyLimitConcurrentSessions,
         userCurrent: quota.userCurrentConcurrentSessions,
-        userLimit: quota.userLimitConcurrentSessions ?? null,
+        userLimit: quota.userLimitConcurrentSessions,
       },
     ];
   }, [quota, t]);
+
+  if (loading && !quota) {
+    return <QuotaCardsSkeleton label={tCommon("loading")} />;
+  }
 
   return (
     <div className="space-y-3">
@@ -144,12 +153,8 @@ export function QuotaCards({
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {items.map((item) => {
-          const keyPct = item.keyLimit
-            ? Math.min((item.keyCurrent / item.keyLimit) * 100, 999)
-            : null;
-          const userPct = item.userLimit
-            ? Math.min(((item.userCurrent ?? 0) / item.userLimit) * 100, 999)
-            : null;
+          const keyPct = calculateUsagePercent(item.keyCurrent, item.keyLimit);
+          const userPct = calculateUsagePercent(item.userCurrent ?? 0, item.userLimit);
 
           const keyTone = getTone(keyPct);
           const userTone = getTone(userPct);
@@ -242,6 +247,7 @@ function QuotaColumn({
   muted?: boolean;
 }) {
   const t = useTranslations("myUsage.quota");
+
   const formatValue = (value: number) => {
     const num = Number(value);
     if (!Number.isFinite(num)) {
@@ -250,26 +256,38 @@ function QuotaColumn({
     return currency ? `${currency} ${num.toFixed(2)}` : String(num);
   };
 
-  const progressClass = `h-2 ${
-    tone === "danger"
-      ? "bg-destructive/10 [&>div]:bg-destructive"
-      : tone === "warn"
-        ? "bg-amber-500/10 [&>div]:bg-amber-500"
-        : ""
-  }`;
+  const unlimited = isUnlimited(limit);
 
-  const ariaLabel = `${label}: ${formatValue(current)}${limit !== null ? ` / ${formatValue(limit)}` : ""}`;
+  const progressClass = cn("h-2", {
+    "bg-destructive/10 [&>div]:bg-destructive": tone === "danger",
+    "bg-amber-500/10 [&>div]:bg-amber-500": tone === "warn",
+  });
+
+  const limitDisplay = unlimited ? t("unlimited") : formatValue(limit as number);
+  const ariaLabel = `${label}: ${formatValue(current)}${!unlimited ? ` / ${limitDisplay}` : ""}`;
 
   return (
-    <div className={cn("space-y-1.5 rounded-md border bg-card/50 p-3", muted && "opacity-60")}>
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>{label}</span>
-        <span className="font-mono text-foreground">
-          {formatValue(current)}
-          {limit !== null ? ` / ${formatValue(limit)}` : ` / ${t("unlimited")}`}
-        </span>
+    <div className={cn("space-y-2 rounded-md border bg-card/50 p-3", muted && "opacity-70")}>
+      {/* Label */}
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
+
+      {/* Values - split into two lines to avoid overlap */}
+      <div className="space-y-0.5">
+        <div className="text-sm font-mono font-medium text-foreground">{formatValue(current)}</div>
+        <div className="text-xs text-muted-foreground">/ {limitDisplay}</div>
       </div>
-      <Progress value={percent ?? 0} className={progressClass.trim()} aria-label={ariaLabel} />
+
+      {/* Progress bar or placeholder */}
+      {!unlimited ? (
+        <Progress value={percent ?? 0} className={progressClass} aria-label={ariaLabel} />
+      ) : (
+        <div
+          className="h-2 rounded-full bg-muted/50"
+          role="progressbar"
+          aria-label={`${label}: ${t("unlimited")}`}
+          aria-valuetext={t("unlimited")}
+        />
+      )}
     </div>
   );
 }

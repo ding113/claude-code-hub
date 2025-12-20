@@ -906,7 +906,12 @@
       "allTags": "所有标签",
       "keyGroupFilter": "密钥分组",
       "allKeyGroups": "所有密钥分组",
-      "createUser": "创建用户"
+      "createUser": "创建用户",
+      "createKey": "创建 Key"
+    },
+    "dialog": {
+      "userProviderGroup": "您的供应商分组",
+      "userProviderGroupHint": "新创建的 Key 只能使用您已有的分组"
     }
   },
   "availability": {
@@ -1113,6 +1118,10 @@
       "success": "续期成功",
       "failed": "续期失败"
     },
+    "dialog": {
+      "createKeyTitle": "创建 Key",
+      "editKeyTitle": "编辑 Key"
+    },
     "editDialog": {
       "title": "编辑用户与密钥",
       "description": "编辑用户信息和 API 密钥设置",
@@ -1129,6 +1138,81 @@
       "deleteFailed": "删除用户失败",
       "userDeleted": "用户已删除",
       "saving": "保存中..."
+    },
+    "batchEdit": {
+      "enterMode": "批量编辑",
+      "exitMode": "退出",
+      "selectAll": "全选",
+      "selectedCount": "已选 {users} 个用户，{keys} 个密钥",
+      "editSelected": "编辑选中项",
+      "dialog": {
+        "title": "批量编辑",
+        "description": "将影响 {users} 个用户，{keys} 个密钥",
+        "cancel": "取消",
+        "next": "下一步",
+        "noFieldEnabled": "请先启用至少一个要覆盖的字段",
+        "noUpdate": "没有可执行的更新",
+        "noSelection": "请先选择要批量编辑的用户或密钥。"
+      },
+      "confirm": {
+        "title": "确认批量更新",
+        "description": "此操作将更新 {users} 个用户和 {keys} 个密钥，操作不可撤销。",
+        "userFields": "用户字段",
+        "keyFields": "密钥字段",
+        "goBack": "返回修改",
+        "update": "确认更新",
+        "updating": "更新中..."
+      },
+      "toast": {
+        "usersUpdated": "已更新 {count} 个用户",
+        "keysUpdated": "已更新 {count} 个密钥",
+        "usersFailed": "用户更新失败：{error}",
+        "keysFailed": "密钥更新失败：{error}",
+        "batchFailed": "批量更新失败"
+      },
+      "validation": {
+        "invalidNumber": "请输入有效数字",
+        "negativeNumber": "数值不能为负数"
+      },
+      "aria": {
+        "selectUser": "选择用户",
+        "selectKey": "选择密钥"
+      },
+      "user": {
+        "title": "用户设置",
+        "affected": "将影响 {count} 个用户",
+        "enableFieldAria": "启用字段：{title}",
+        "fields": {
+          "note": "备注",
+          "tags": "标签",
+          "limit5h": "5h 限额 (USD)",
+          "limitWeekly": "周限额 (USD)",
+          "limitMonthly": "月限额 (USD)"
+        },
+        "placeholders": {
+          "emptyToClear": "留空表示清空",
+          "tagsPlaceholder": "输入后回车添加，支持逗号分隔",
+          "emptyNoLimit": "留空表示不限额"
+        }
+      },
+      "key": {
+        "title": "密钥设置",
+        "affected": "将影响 {count} 个密钥",
+        "fields": {
+          "providerGroup": "分组 (providerGroup)",
+          "limit5h": "5h 限额 (USD)",
+          "limitDaily": "每日限额 (USD)",
+          "limitWeekly": "周限额 (USD)",
+          "limitMonthly": "月限额 (USD)",
+          "canLoginWebUi": "允许登录 Web UI",
+          "keyEnabled": "Key 启用状态"
+        },
+        "placeholders": {
+          "groupPlaceholder": "留空表示清空分组，多个用逗号分隔",
+          "emptyNoLimit": "留空表示不限额"
+        },
+        "targetValue": "目标值"
+      }
     },
     "createDialog": {
       "title": "创建用户",
@@ -1346,10 +1430,14 @@
           "descriptionEnabled": "启用后，此密钥在登录时将进入独立的个人用量页面。但不可修改自己密钥的供应商分组。",
           "descriptionDisabled": "关闭后，用户将无法进入个人独立用量页面 UI。但可在受限的 Web UI功能中修改自己密钥的供应商分组。"
         },
-        "providerGroup": {
-          "label": "供应商分组",
-          "placeholder": "留空则允许所有 default 分组供应商"
-        },
+      "providerGroup": {
+        "label": "供应商分组",
+        "placeholder": "留空则允许所有 default 分组供应商",
+        "selectHint": "选择此 Key 可使用的供应商分组",
+        "editHint": "已有密钥的分组不可修改",
+        "allGroups": "使用全部分组",
+        "noGroupHint": "您没有分组限制，可以访问所有供应商"
+      },
         "cacheTtl": {
           "label": "Cache TTL 覆写",
           "options": {

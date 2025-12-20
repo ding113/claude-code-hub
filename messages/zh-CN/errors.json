@@ -44,6 +44,7 @@
   "NETWORK_ERROR": "网络错误",
 
   "QUOTA_EXCEEDED": "配额已用尽",
+  "BATCH_SIZE_EXCEEDED": "批量操作不能超过 {max} 个项目",
   "RATE_LIMIT_EXCEEDED": "请求过于频繁，请稍后重试",
   "RATE_LIMIT_RPM_EXCEEDED": "请求频率超限：当前 {current} 次/分钟（限制：{limit} 次/分钟）。将于 {resetTime} 重置",
   "RATE_LIMIT_DAILY_QUOTA_EXCEEDED": "每日额度超限：当前 ${current} USD（限制：${limit} USD）。将于 {resetTime} 重置",

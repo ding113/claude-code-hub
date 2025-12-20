@@ -82,14 +82,14 @@ function UsageLogsViewContent({
     queryKey: ["usage-log-users"],
     queryFn: getUsers,
     enabled: isAdmin && users === undefined,
-    initialData: users ?? [],
+    placeholderData: [],
   });
 
   const { data: providersData = [], isLoading: isProvidersLoading } = useQuery<ProviderDisplay[]>({
     queryKey: ["usage-log-providers"],
     queryFn: getProviders,
     enabled: isAdmin && providers === undefined,
-    initialData: providers ?? [],
+    placeholderData: [],
   });
 
   const { data: keysResult, isLoading: isKeysLoading } = useQuery({
@@ -173,6 +173,7 @@ function UsageLogsViewContent({
 
   // Invalidate query when URL changes (e.g., browser back/forward navigation)
   useEffect(() => {
+    void paramsKey;
     queryClientInstance.invalidateQueries({ queryKey: ["usage-logs-batch"] });
   }, [paramsKey, queryClientInstance]);
 

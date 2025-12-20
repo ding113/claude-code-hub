@@ -1,14 +1,13 @@
 "use client";
 
 import { ChevronDown, ChevronRight, SquarePen } from "lucide-react";
-import { useLocale } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useTransition } from "react";
 import { toast } from "sonner";
 import { removeKey } from "@/actions/keys";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
-import { TableCell, TableRow } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useRouter } from "@/i18n/routing";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/utils/date-format";
@@ -18,8 +17,15 @@ import { UserLimitBadge } from "./user-limit-badge";
 
 export interface UserKeyTableRowProps {
   user: UserDisplay; // 包含 keys 数组
+  isAdmin: boolean;
   expanded: boolean;
   onToggle: () => void;
+  gridColumnsClass?: string;
+  isMultiSelectMode?: boolean;
+  isSelected?: boolean;
+  onSelect?: (checked: boolean) => void;
+  selectedKeyIds?: Set<number>;
+  onSelectKey?: (keyId: number, checked: boolean) => void;
   onEditUser: (scrollToKeyId?: number) => void;
   onQuickRenew?: (user: UserDisplay) => void;
   currentUser?: { role: string };
@@ -55,7 +61,7 @@ export interface UserKeyTableRowProps {
   };
 }
 
-const TOTAL_COLUMNS = 9;
+const DEFAULT_GRID_COLUMNS_CLASS = "grid-cols-[minmax(260px,1fr)_120px_repeat(6,90px)_60px]";
 
 function normalizeLimitValue(value: unknown): number | null {
   const raw = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
@@ -72,8 +78,15 @@ function formatExpiry(expiresAt: UserDisplay["expiresAt"], locale: string): stri
 
 export function UserKeyTableRow({
   user,
+  isAdmin,
   expanded,
   onToggle,
+  gridColumnsClass,
+  isMultiSelectMode,
+  isSelected,
+  onSelect,
+  selectedKeyIds,
+  onSelectKey,
   onEditUser,
   onQuickRenew,
   currencyCode,
@@ -81,8 +94,11 @@ export function UserKeyTableRow({
   translations,
 }: UserKeyTableRowProps) {
   const locale = useLocale();
+  const tBatchEdit = useTranslations("dashboard.userManagement.batchEdit");
   const router = useRouter();
   const [, startTransition] = useTransition();
+  const isExpanded = isMultiSelectMode ? true : expanded;
+  const resolvedGridColumnsClass = gridColumnsClass ?? DEFAULT_GRID_COLUMNS_CLASS;
 
   const keyRowTranslations = {
     ...(translations.keyRow ?? {}),
@@ -111,29 +127,50 @@ export function UserKeyTableRow({
   };
 
   return (
-    <>
-      <TableRow
-        className={cn("cursor-pointer", expanded && "border-0")}
-        onClick={onToggle}
+    <div className="border-b">
+      <div
+        className={cn(
+          "grid items-center h-[52px] text-sm",
+          resolvedGridColumnsClass,
+          !isMultiSelectMode && "cursor-pointer hover:bg-muted/50"
+        )}
+        onClick={() => {
+          if (isMultiSelectMode) return;
+          onToggle();
+        }}
         role="button"
         tabIndex={0}
-        aria-expanded={expanded}
+        aria-expanded={isExpanded}
         onKeyDown={(e) => {
           if (e.key !== "Enter" && e.key !== " ") return;
+          if (isMultiSelectMode) return;
           e.preventDefault();
           onToggle();
         }}
       >
         {/* 用户名 / 备注 */}
-        <TableCell className="min-w-[260px]">
+        <div className="px-2 min-w-0">
           <div className="flex items-center gap-2 min-w-0">
-            {expanded ? (
+            {isMultiSelectMode ? (
+              <div
+                className="flex items-center"
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+              >
+                <Checkbox
+                  aria-label={tBatchEdit("aria.selectUser")}
+                  checked={Boolean(isSelected)}
+                  onCheckedChange={(checked) => onSelect?.(Boolean(checked))}
+                />
+              </div>
+            ) : null}
+            {isExpanded ? (
               <ChevronDown className="h-4 w-4 text-muted-foreground" />
             ) : (
               <ChevronRight className="h-4 w-4 text-muted-foreground" />
             )}
             <span className="sr-only">
-              {expanded ? translations.collapse : translations.expand}
+              {isExpanded ? translations.collapse : translations.expand}
             </span>
             <span className="font-medium truncate">{user.name}</span>
             {!user.isEnabled && (
@@ -145,12 +182,12 @@ export function UserKeyTableRow({
               <span className="text-xs text-muted-foreground truncate">{user.note}</span>
             ) : null}
           </div>
-        </TableCell>
+        </div>
 
         {/* 到期时间 - clickable for quick renew */}
-        <TableCell
+        <div
           className={cn(
-            "text-sm text-muted-foreground",
+            "px-2 text-sm text-muted-foreground",
             onQuickRenew && "cursor-pointer hover:text-primary hover:underline"
           )}
           onClick={(e) => {
@@ -162,144 +199,131 @@ export function UserKeyTableRow({
           title={onQuickRenew ? translations.columns.expiresAtHint : undefined}
         >
           {expiresText}
-        </TableCell>
+        </div>
 
         {/* 5h 限额 */}
-        <TableCell className="text-center">
-          <div className="flex items-center justify-center">
-            <UserLimitBadge
-              userId={user.id}
-              limitType="5h"
-              limit={limit5h}
-              label={translations.columns.limit5h}
-            />
-          </div>
-        </TableCell>
+        <div className="px-2 flex items-center justify-center">
+          <UserLimitBadge
+            userId={user.id}
+            limitType="5h"
+            limit={limit5h}
+            label={translations.columns.limit5h}
+          />
+        </div>
 
         {/* 每日限额 */}
-        <TableCell className="text-center">
-          <div className="flex items-center justify-center">
-            <UserLimitBadge
-              userId={user.id}
-              limitType="daily"
-              limit={limitDaily}
-              label={translations.columns.limitDaily}
-            />
-          </div>
-        </TableCell>
+        <div className="px-2 flex items-center justify-center">
+          <UserLimitBadge
+            userId={user.id}
+            limitType="daily"
+            limit={limitDaily}
+            label={translations.columns.limitDaily}
+          />
+        </div>
 
         {/* 周限额 */}
-        <TableCell className="text-center">
-          <div className="flex items-center justify-center">
-            <UserLimitBadge
-              userId={user.id}
-              limitType="weekly"
-              limit={limitWeekly}
-              label={translations.columns.limitWeekly}
-            />
-          </div>
-        </TableCell>
+        <div className="px-2 flex items-center justify-center">
+          <UserLimitBadge
+            userId={user.id}
+            limitType="weekly"
+            limit={limitWeekly}
+            label={translations.columns.limitWeekly}
+          />
+        </div>
 
         {/* 月限额 */}
-        <TableCell className="text-center">
-          <div className="flex items-center justify-center">
-            <UserLimitBadge
-              userId={user.id}
-              limitType="monthly"
-              limit={limitMonthly}
-              label={translations.columns.limitMonthly}
-            />
-          </div>
-        </TableCell>
+        <div className="px-2 flex items-center justify-center">
+          <UserLimitBadge
+            userId={user.id}
+            limitType="monthly"
+            limit={limitMonthly}
+            label={translations.columns.limitMonthly}
+          />
+        </div>
 
         {/* 总限额 */}
-        <TableCell className="text-center">
-          <div className="flex items-center justify-center">
-            <UserLimitBadge
-              userId={user.id}
-              limitType="total"
-              limit={limitTotal}
-              label={translations.columns.limitTotal}
-            />
-          </div>
-        </TableCell>
+        <div className="px-2 flex items-center justify-center">
+          <UserLimitBadge
+            userId={user.id}
+            limitType="total"
+            limit={limitTotal}
+            label={translations.columns.limitTotal}
+          />
+        </div>
 
         {/* 并发限额 */}
-        <TableCell className="text-center">
-          <div className="flex items-center justify-center">
-            <Badge
-              variant={limitSessions ? "secondary" : "outline"}
-              className="px-2 py-0.5 tabular-nums text-xs"
-              title={`${translations.columns.limitSessions}: ${limitSessions ?? "-"}`}
-              aria-label={`${translations.columns.limitSessions}: ${limitSessions ?? "-"}`}
-            >
-              {limitSessions ?? "-"}
-            </Badge>
-          </div>
-        </TableCell>
+        <div className="px-2 flex items-center justify-center">
+          <Badge
+            variant={limitSessions ? "secondary" : "outline"}
+            className="px-2 py-0.5 tabular-nums text-xs"
+            title={`${translations.columns.limitSessions}: ${limitSessions ?? "-"}`}
+            aria-label={`${translations.columns.limitSessions}: ${limitSessions ?? "-"}`}
+          >
+            {limitSessions ?? "-"}
+          </Badge>
+        </div>
 
         {/* 操作 */}
-        <TableCell className="text-center">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={translations.actions.edit}
-            title={translations.actions.edit}
-            onClick={(e) => {
-              e.stopPropagation();
-              onEditUser();
-            }}
-          >
-            <SquarePen className="h-4 w-4" />
-          </Button>
-        </TableCell>
-      </TableRow>
+        <div className="px-2 flex items-center justify-center">
+          {isAdmin ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={translations.actions.edit}
+              title={translations.actions.edit}
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditUser();
+              }}
+            >
+              <SquarePen className="h-4 w-4" />
+            </Button>
+          ) : null}
+        </div>
+      </div>
 
-      <TableRow className={cn("hover:bg-transparent", !expanded && "border-0")}>
-        <TableCell colSpan={TOTAL_COLUMNS} className="p-0">
-          <Collapsible open={expanded}>
-            <CollapsibleContent>
-              <div className="bg-muted px-3 py-3">
-                {user.keys.length > 0 ? (
-                  <div className="overflow-hidden rounded-md border bg-background">
-                    {user.keys.map((key) => (
-                      <KeyRowItem
-                        key={key.id}
-                        keyData={{
-                          id: key.id,
-                          name: key.name,
-                          maskedKey: key.maskedKey,
-                          fullKey: key.fullKey,
-                          canCopy: key.canCopy,
-                          providerGroup: key.providerGroup,
-                          todayUsage: key.todayUsage,
-                          todayCallCount: key.todayCallCount,
-                          lastUsedAt: key.lastUsedAt,
-                          expiresAt: key.expiresAt,
-                          status: key.status,
-                          modelStats: key.modelStats,
-                        }}
-                        onEdit={() => onEditUser(key.id)}
-                        onDelete={() => handleDeleteKey(key.id)}
-                        onViewLogs={() => router.push(`/dashboard/logs?keyId=${key.id}`)}
-                        onViewDetails={() => onEditUser(key.id)}
-                        currencyCode={currencyCode}
-                        translations={keyRowTranslations}
-                        highlight={highlightKeyIds?.has(key.id)}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="py-6 text-center text-sm text-muted-foreground">
-                    {translations.noKeys}
-                  </div>
-                )}
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
-        </TableCell>
-      </TableRow>
-    </>
+      {isExpanded ? (
+        <div className="bg-muted px-3 py-3">
+          {user.keys.length > 0 ? (
+            <div className="overflow-hidden rounded-md border bg-background">
+              {user.keys.map((key) => (
+                <KeyRowItem
+                  key={key.id}
+                  keyData={{
+                    id: key.id,
+                    name: key.name,
+                    maskedKey: key.maskedKey,
+                    fullKey: key.fullKey,
+                    canCopy: key.canCopy,
+                    providerGroup: key.providerGroup,
+                    todayUsage: key.todayUsage,
+                    todayCallCount: key.todayCallCount,
+                    lastUsedAt: key.lastUsedAt,
+                    expiresAt: key.expiresAt,
+                    status: key.status,
+                    modelStats: key.modelStats,
+                  }}
+                  isMultiSelectMode={isMultiSelectMode}
+                  isSelected={selectedKeyIds?.has(key.id) ?? false}
+                  onSelect={(checked) => onSelectKey?.(key.id, checked)}
+                  onEdit={() => onEditUser(key.id)}
+                  onDelete={() => handleDeleteKey(key.id)}
+                  onViewLogs={() => router.push(`/dashboard/logs?keyId=${key.id}`)}
+                  onViewDetails={() => onEditUser(key.id)}
+                  currencyCode={currencyCode}
+                  translations={keyRowTranslations}
+                  highlight={highlightKeyIds?.has(key.id)}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="py-6 text-center text-sm text-muted-foreground">
+              {translations.noKeys}
+            </div>
+          )}
+        </div>
+      ) : null}
+    </div>
   );
 }

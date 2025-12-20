@@ -24,7 +24,7 @@
     "quotas": "查看和管理所有層級的額度使用情況",
     "clientInfo": "User-Agent 請求頭",
     "requestMessagesDescription": "用戶端傳送的訊息內容",
-    "responseBodyDescription": "伺服器傳回的完整回應（5分鐘 TTL）"
+    "responseBodyDescription": "伺服器傳回的完整回覆（5分鐘 TTL）"
   },
   "overview": {
     "title": "概覽",
@@ -35,7 +35,7 @@
     "activeUsers": "活躍用戶",
     "activeSessions": "活躍工作階段",
     "errorRate": "錯誤率",
-    "avgResponseTime": "平均回應時間"
+    "avgResponseTime": "平均回覆時間"
   },
   "stats": {
     "title": "統計",
@@ -182,7 +182,7 @@
         "totalDuration": "總耗時: {duration} 毫秒"
       },
       "noError": {
-        "processing": "請求正在處理中，等待回應...",
+        "processing": "請求正在處理中，等待回覆...",
         "success": "請求成功，無錯誤訊息",
         "default": "暫無詳細錯誤訊息"
       },
@@ -267,7 +267,7 @@
       "model": "模型",
       "cost": "成本",
       "successRate": "成功率",
-      "avgResponseTime": "平均回應時間"
+      "avgResponseTime": "平均回覆時間"
     },
     "states": {
       "loading": "載入中...",
@@ -351,8 +351,8 @@
       "clientInfo": "用戶端資訊",
       "requestMessages": "請求訊息",
       "requestMessagesDescription": "用戶端傳送的訊息內容",
-      "responseBody": "回應主體內容",
-      "responseBodyDescription": "伺服器傳回的完整回應（5分鐘 TTL）",
+      "responseBody": "回覆主體內容",
+      "responseBodyDescription": "伺服器傳回的完整回覆（5分鐘 TTL）",
       "noData": "暫無資料"
     },
     "actions": {
@@ -361,7 +361,7 @@
       "copyMessages": "複製 Messages",
       "downloadMessages": "下載 Messages",
       "copied": "已複製",
-      "copyResponse": "複製回應主體",
+      "copyResponse": "複製回覆主體",
       "terminate": "終止",
       "terminateTitle": "終止會話",
       "terminateDescription": "確定要終止此會話嗎？終止後會清除供應商綁定，下一次請求將重新選擇供應商。",
@@ -813,7 +813,12 @@
       "allTags": "所有標籤",
       "keyGroupFilter": "金鑰分組",
       "allKeyGroups": "所有金鑰分組",
-      "createUser": "建立使用者"
+      "createUser": "建立使用者",
+      "createKey": "建立 Key"
+    },
+    "dialog": {
+      "userProviderGroup": "您的供應商分組",
+      "userProviderGroupHint": "新建立的 Key 只能使用您既有的分組"
     }
   },
   "availability": {
@@ -1020,6 +1025,10 @@
       "success": "續期成功",
       "failed": "續期失敗"
     },
+    "dialog": {
+      "createKeyTitle": "建立 Key",
+      "editKeyTitle": "編輯 Key"
+    },
     "editDialog": {
       "title": "編輯使用者與金鑰",
       "description": "編輯使用者資訊和 API 金鑰設定",
@@ -1036,6 +1045,81 @@
       "deleteFailed": "刪除使用者失敗",
       "userDeleted": "使用者已刪除",
       "saving": "儲存中..."
+    },
+    "batchEdit": {
+      "enterMode": "批量編輯",
+      "exitMode": "退出",
+      "selectAll": "全選",
+      "selectedCount": "已選 {users} 位使用者，{keys} 個金鑰",
+      "editSelected": "編輯選取項目",
+      "dialog": {
+        "title": "批量編輯",
+        "description": "將影響 {users} 位使用者，{keys} 個金鑰",
+        "cancel": "取消",
+        "next": "下一步",
+        "noFieldEnabled": "請先啟用至少一個要覆蓋的欄位",
+        "noUpdate": "沒有可執行的更新",
+        "noSelection": "請先選擇要批量編輯的使用者或金鑰。"
+      },
+      "confirm": {
+        "title": "確認批量更新",
+        "description": "此操作將更新 {users} 位使用者和 {keys} 個金鑰，操作不可撤銷。",
+        "userFields": "使用者欄位",
+        "keyFields": "金鑰欄位",
+        "goBack": "返回修改",
+        "update": "確認更新",
+        "updating": "更新中..."
+      },
+      "toast": {
+        "usersUpdated": "已更新 {count} 位使用者",
+        "keysUpdated": "已更新 {count} 個金鑰",
+        "usersFailed": "使用者更新失敗：{error}",
+        "keysFailed": "金鑰更新失敗：{error}",
+        "batchFailed": "批量更新失敗"
+      },
+      "validation": {
+        "invalidNumber": "請輸入有效數字",
+        "negativeNumber": "數值不能為負數"
+      },
+      "aria": {
+        "selectUser": "選擇使用者",
+        "selectKey": "選擇金鑰"
+      },
+      "user": {
+        "title": "使用者設定",
+        "affected": "將影響 {count} 位使用者",
+        "enableFieldAria": "啟用欄位：{title}",
+        "fields": {
+          "note": "備註",
+          "tags": "標籤",
+          "limit5h": "5h 限額 (USD)",
+          "limitWeekly": "週限額 (USD)",
+          "limitMonthly": "月限額 (USD)"
+        },
+        "placeholders": {
+          "emptyToClear": "留空表示清空",
+          "tagsPlaceholder": "輸入後按 Enter 新增，支援逗號分隔",
+          "emptyNoLimit": "留空表示不限額"
+        }
+      },
+      "key": {
+        "title": "金鑰設定",
+        "affected": "將影響 {count} 個金鑰",
+        "fields": {
+          "providerGroup": "分組 (providerGroup)",
+          "limit5h": "5h 限額 (USD)",
+          "limitDaily": "每日限額 (USD)",
+          "limitWeekly": "週限額 (USD)",
+          "limitMonthly": "月限額 (USD)",
+          "canLoginWebUi": "允許登入 Web UI",
+          "keyEnabled": "Key 啟用狀態"
+        },
+        "placeholders": {
+          "groupPlaceholder": "留空表示清空分組，多個以逗號分隔",
+          "emptyNoLimit": "留空表示不限額"
+        },
+        "targetValue": "目標值"
+      }
     },
     "createDialog": {
       "title": "建立使用者",
@@ -1253,10 +1337,14 @@
           "descriptionEnabled": "啟用後，此金鑰在登入時將進入獨立的個人用量頁面。但不可修改自己金鑰的供應商分組。",
           "descriptionDisabled": "關閉後，使用者將無法進入個人獨立用量頁面 UI。但可在受限的 Web UI功能中修改自己金鑰的供應商分組。"
         },
-        "providerGroup": {
-          "label": "供應商分組",
-          "placeholder": "留空則允許所有 default 分組供應商"
-        },
+      "providerGroup": {
+        "label": "供應商分組",
+        "placeholder": "留空則允許所有 default 分組供應商",
+        "selectHint": "選擇此 Key 可使用的供應商分組",
+        "editHint": "已有密鑰的分組不可修改",
+        "allGroups": "使用全部群組",
+        "noGroupHint": "您沒有分組限制，可以存取所有供應商"
+      },
         "cacheTtl": {
           "label": "Cache TTL 覆寫",
           "options": {

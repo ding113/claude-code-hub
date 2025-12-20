@@ -1,10 +1,10 @@
 "use client";
 
-import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
-import { Loader2, Plus, Search } from "lucide-react";
+import { QueryClient, QueryClientProvider, useInfiniteQuery } from "@tanstack/react-query";
+import { Key, Loader2, Plus, Search } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getUsers } from "@/actions/users";
+import { getUsers, getUsersBatch } from "@/actions/users";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,7 +16,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useDebounce } from "@/lib/hooks/use-debounce";
 import type { User, UserDisplay } from "@/types/user";
+import { BatchEditDialog } from "../_components/user/batch-edit/batch-edit-dialog";
 import { UnifiedEditDialog } from "../_components/user/unified-edit-dialog";
 import { UserManagementTable } from "../_components/user/user-management-table";
 import { UserOnboardingTour } from "../_components/user/user-onboarding-tour";
@@ -55,29 +57,80 @@ export function UsersPageClient(props: UsersPageClientProps) {
   );
 }
 
-function UsersPageContent({ initialUsers, currentUser }: UsersPageClientProps) {
+function UsersPageContent({ currentUser }: UsersPageClientProps) {
   const t = useTranslations("dashboard.users");
-  const tUiTable = useTranslations("ui.table");
   const tUserMgmt = useTranslations("dashboard.userManagement");
   const tKeyList = useTranslations("dashboard.keyList");
   const tCommon = useTranslations("common");
-  const hasInitialUsers = initialUsers !== undefined;
-  const {
-    data: usersData = initialUsers ?? [],
-    isLoading,
-    isFetching,
-  } = useQuery<UserDisplay[]>({
-    queryKey: ["users"],
-    queryFn: getUsers,
-    initialData: hasInitialUsers ? initialUsers : undefined,
-  });
-
-  const resolvedUsers = usersData ?? [];
-  const isInitialLoading = isLoading && resolvedUsers.length === 0;
-  const isRefreshing = isFetching && !isInitialLoading;
+  const isAdmin = currentUser.role === "admin";
   const [searchTerm, setSearchTerm] = useState("");
   const [tagFilter, setTagFilter] = useState("all");
   const [keyGroupFilter, setKeyGroupFilter] = useState("all");
+
+  // Debounce search term to avoid frequent API requests
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
+
+  // Use debounced value for API queries, raw value for UI highlighting
+  const resolvedSearchTerm = debouncedSearchTerm.trim() ? debouncedSearchTerm.trim() : undefined;
+  const resolvedTagFilter = tagFilter === "all" ? undefined : tagFilter;
+  const resolvedKeyGroupFilter = keyGroupFilter === "all" ? undefined : keyGroupFilter;
+
+  // Stable queryKey for non-admin users to avoid unnecessary cache entries
+  const queryKey = useMemo(
+    () =>
+      isAdmin
+        ? ["users", resolvedSearchTerm, resolvedTagFilter, resolvedKeyGroupFilter]
+        : ["users", "self"],
+    [isAdmin, resolvedSearchTerm, resolvedTagFilter, resolvedKeyGroupFilter]
+  );
+
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading,
+    isFetching,
+    isError,
+    error,
+  } = useInfiniteQuery({
+    queryKey,
+    queryFn: async ({ pageParam }) => {
+      if (!isAdmin) {
+        const users = await getUsers();
+        return { users, nextCursor: null, hasMore: false };
+      }
+
+      const result = await getUsersBatch({
+        cursor: pageParam,
+        limit: 50,
+        searchTerm: resolvedSearchTerm,
+        tagFilter: resolvedTagFilter,
+        keyGroupFilter: resolvedKeyGroupFilter,
+      });
+      if (!result.ok) {
+        throw new Error(result.error);
+      }
+      return result.data;
+    },
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    initialPageParam: undefined as { id: number; createdAt: string } | undefined,
+  });
+
+  const allUsers = useMemo(() => data?.pages.flatMap((page) => page.users) ?? [], [data]);
+  const visibleUsers = useMemo(() => {
+    if (isAdmin) return allUsers;
+    return allUsers.filter((user) => user.id === currentUser.id);
+  }, [isAdmin, allUsers, currentUser.id]);
+
+  const isInitialLoading = isLoading && allUsers.length === 0;
+  const isRefreshing = isFetching && !isInitialLoading && !isFetchingNextPage;
+
+  // Batch edit / multi-select state
+  const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
+  const [selectedUserIds, setSelectedUserIds] = useState<Set<number>>(() => new Set());
+  const [selectedKeyIds, setSelectedKeyIds] = useState<Set<number>>(() => new Set());
+  const [batchEditDialogOpen, setBatchEditDialogOpen] = useState(false);
 
   // Onboarding and create dialog state
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -105,6 +158,10 @@ function UsersPageContent({ initialUsers, currentUser }: UsersPageClientProps) {
     }
   }, [hasSeenOnboarding]);
 
+  const handleCreateKey = useCallback(() => {
+    setShowCreateDialog(true);
+  }, []);
+
   const handleOnboardingComplete = useCallback(() => {
     try {
       if (typeof window !== "undefined" && window.localStorage) {
@@ -123,103 +180,205 @@ function UsersPageContent({ initialUsers, currentUser }: UsersPageClientProps) {
 
   // Extract unique tags from users
   const uniqueTags = useMemo(() => {
-    const tags = resolvedUsers.flatMap((u) => u.tags || []);
+    const tags = visibleUsers.flatMap((u) => u.tags || []);
     return [...new Set(tags)].sort();
-  }, [resolvedUsers]);
+  }, [visibleUsers]);
 
   // Extract unique key groups from users (split comma-separated tags)
   const uniqueKeyGroups = useMemo(() => {
-    const groups = resolvedUsers.flatMap(
+    const groups = visibleUsers.flatMap(
       (u) => u.keys?.flatMap((k) => splitTags(k.providerGroup)) || []
     );
     return [...new Set(groups)].sort();
-  }, [resolvedUsers]);
+  }, [visibleUsers]);
 
-  // Reset filter if selected value no longer exists in options
-  useEffect(() => {
-    if (tagFilter !== "all" && !uniqueTags.includes(tagFilter)) {
-      setTagFilter("all");
-    }
-  }, [uniqueTags, tagFilter]);
-
-  useEffect(() => {
-    if (keyGroupFilter !== "all" && !uniqueKeyGroups.includes(keyGroupFilter)) {
-      setKeyGroupFilter("all");
-    }
-  }, [uniqueKeyGroups, keyGroupFilter]);
-
-  // Filter users based on search term, tag filter, and key group filter
-  const { filteredUsers, matchingKeyIds } = useMemo(() => {
+  const matchingKeyIds = useMemo(() => {
     const matchingIds = new Set<number>();
     const normalizedTerm = searchTerm.trim().toLowerCase();
     const hasSearch = normalizedTerm.length > 0;
 
-    const filtered: UserDisplay[] = [];
+    for (const user of visibleUsers) {
+      if (user.keys.length === 0) continue;
 
-    for (const user of resolvedUsers) {
-      // Collect matching key IDs for this user (before filtering)
-      const userMatchingKeyIds: number[] = [];
+      for (const key of user.keys) {
+        const matchesSearch =
+          hasSearch &&
+          (key.name.toLowerCase().includes(normalizedTerm) ||
+            key.maskedKey.toLowerCase().includes(normalizedTerm) ||
+            (key.fullKey || "").toLowerCase().includes(normalizedTerm) ||
+            (key.providerGroup || "").toLowerCase().includes(normalizedTerm));
 
-      // Search filter: match user-level fields or any key fields
-      let matchesSearch = !hasSearch;
+        const matchesKeyGroup =
+          keyGroupFilter !== "all" && splitTags(key.providerGroup).includes(keyGroupFilter);
 
-      if (hasSearch) {
-        // User-level fields: name, note, tags, providerGroup
-        const userMatches =
-          user.name.toLowerCase().includes(normalizedTerm) ||
-          (user.note || "").toLowerCase().includes(normalizedTerm) ||
-          (user.tags || []).some((tag) => tag.toLowerCase().includes(normalizedTerm)) ||
-          (user.providerGroup || "").toLowerCase().includes(normalizedTerm);
-
-        if (userMatches) {
-          matchesSearch = true;
-        } else if (user.keys) {
-          // Key-level fields: name, maskedKey, fullKey, providerGroup
-          for (const key of user.keys) {
-            const keyMatches =
-              key.name.toLowerCase().includes(normalizedTerm) ||
-              key.maskedKey.toLowerCase().includes(normalizedTerm) ||
-              (key.fullKey || "").toLowerCase().includes(normalizedTerm) ||
-              (key.providerGroup || "").toLowerCase().includes(normalizedTerm);
-
-            if (keyMatches) {
-              matchesSearch = true;
-              userMatchingKeyIds.push(key.id);
-              // Don't break - collect all matching keys
-            }
-          }
-        }
-      }
-
-      // Tag filter
-      const matchesTag = tagFilter === "all" || (user.tags || []).includes(tagFilter);
-
-      // Key group filter (check if any split tag matches the filter)
-      let matchesKeyGroup = keyGroupFilter === "all";
-      if (keyGroupFilter !== "all" && user.keys) {
-        for (const key of user.keys) {
-          if (splitTags(key.providerGroup).includes(keyGroupFilter)) {
-            matchesKeyGroup = true;
-            userMatchingKeyIds.push(key.id);
-          }
-        }
-      }
-
-      // Only add to results and matchingIds if user passes ALL filters
-      if (matchesSearch && matchesTag && matchesKeyGroup) {
-        filtered.push(user);
-        // Add matching key IDs only for users that pass the filter
-        for (const keyId of userMatchingKeyIds) {
-          matchingIds.add(keyId);
+        if (matchesSearch || matchesKeyGroup) {
+          matchingIds.add(key.id);
         }
       }
     }
 
-    return { filteredUsers: filtered, matchingKeyIds: matchingIds };
-  }, [resolvedUsers, searchTerm, tagFilter, keyGroupFilter]);
+    return matchingIds;
+  }, [visibleUsers, searchTerm, keyGroupFilter]);
 
   // Determine if we should highlight keys (either search or keyGroup filter is active)
   const shouldHighlightKeys = searchTerm.trim().length > 0 || keyGroupFilter !== "all";
+  const selfUser = useMemo(() => (isAdmin ? undefined : visibleUsers[0]), [isAdmin, visibleUsers]);
+
+  const allVisibleUserIds = useMemo(() => visibleUsers.map((user) => user.id), [visibleUsers]);
+  const allVisibleKeyIds = useMemo(
+    () => visibleUsers.flatMap((user) => user.keys?.map((key) => key.id) ?? []),
+    [visibleUsers]
+  );
+
+  // Keep selection consistent with current filtered list while in multi-select mode.
+  useEffect(() => {
+    if (!isMultiSelectMode) return;
+    const validUserIds = new Set(allVisibleUserIds);
+    const validKeyIds = new Set(allVisibleKeyIds);
+
+    setSelectedUserIds((prev) => {
+      const next = new Set<number>();
+      for (const id of prev) {
+        if (validUserIds.has(id)) next.add(id);
+      }
+      return next.size === prev.size ? prev : next;
+    });
+
+    setSelectedKeyIds((prev) => {
+      const next = new Set<number>();
+      for (const id of prev) {
+        if (validKeyIds.has(id)) next.add(id);
+      }
+      return next.size === prev.size ? prev : next;
+    });
+  }, [isMultiSelectMode, allVisibleUserIds, allVisibleKeyIds]);
+
+  const enterMultiSelectMode = useCallback(() => {
+    setIsMultiSelectMode(true);
+  }, []);
+
+  const exitMultiSelectMode = useCallback(() => {
+    setIsMultiSelectMode(false);
+    setSelectedUserIds(new Set());
+    setSelectedKeyIds(new Set());
+    setBatchEditDialogOpen(false);
+  }, []);
+
+  const handleSelectAll = useCallback(
+    (checked: boolean) => {
+      if (!checked) {
+        setSelectedUserIds(new Set());
+        setSelectedKeyIds(new Set());
+        return;
+      }
+      setSelectedUserIds(new Set(allVisibleUserIds));
+      setSelectedKeyIds(new Set(allVisibleKeyIds));
+    },
+    [allVisibleUserIds, allVisibleKeyIds]
+  );
+
+  const handleSelectUser = useCallback((user: UserDisplay, checked: boolean) => {
+    setSelectedUserIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(user.id);
+      else next.delete(user.id);
+      return next;
+    });
+
+    setSelectedKeyIds((prev) => {
+      const next = new Set(prev);
+      for (const key of user.keys ?? []) {
+        if (checked) next.add(key.id);
+        else next.delete(key.id);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleSelectKey = useCallback((keyId: number, checked: boolean) => {
+    setSelectedKeyIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(keyId);
+      else next.delete(keyId);
+      return next;
+    });
+  }, []);
+
+  const handleBatchEditSuccess = useCallback(() => {
+    setSelectedUserIds(new Set());
+    setSelectedKeyIds(new Set());
+    setBatchEditDialogOpen(false);
+  }, []);
+
+  const handleOpenBatchEdit = useCallback(() => {
+    setBatchEditDialogOpen(true);
+  }, []);
+
+  // Memoize translations object to prevent unnecessary re-renders
+  const tableTranslations = useMemo(
+    () => ({
+      table: {
+        columns: {
+          username: tUserMgmt("table.columns.username"),
+          note: tUserMgmt("table.columns.note"),
+          expiresAt: tUserMgmt("table.columns.expiresAt"),
+          limit5h: tUserMgmt("table.columns.limit5h"),
+          limitDaily: tUserMgmt("table.columns.limitDaily"),
+          limitWeekly: tUserMgmt("table.columns.limitWeekly"),
+          limitMonthly: tUserMgmt("table.columns.limitMonthly"),
+          limitTotal: tUserMgmt("table.columns.limitTotal"),
+          limitSessions: tUserMgmt("table.columns.limitSessions"),
+        },
+        keyRow: {
+          fields: {
+            name: tUserMgmt("table.keyRow.name"),
+            key: tUserMgmt("table.keyRow.key"),
+            group: tUserMgmt("table.keyRow.group"),
+            todayUsage: tUserMgmt("table.keyRow.todayUsage"),
+            todayCost: tUserMgmt("table.keyRow.todayCost"),
+            lastUsed: tUserMgmt("table.keyRow.lastUsed"),
+            actions: tUserMgmt("table.keyRow.actions"),
+            callsLabel: tUserMgmt("table.keyRow.fields.callsLabel"),
+            costLabel: tUserMgmt("table.keyRow.fields.costLabel"),
+          },
+          actions: {
+            details: tKeyList("detailsButton"),
+            logs: tKeyList("logsButton"),
+            edit: tCommon("edit"),
+            delete: tCommon("delete"),
+            copy: tCommon("copy"),
+            copySuccess: tCommon("copySuccess"),
+            copyFailed: tCommon("copyFailed"),
+            show: tKeyList("showKeyTooltip"),
+            hide: tKeyList("hideKeyTooltip"),
+            quota: tUserMgmt("table.keyRow.quotaButton"),
+          },
+          status: {
+            enabled: tUserMgmt("keyStatus.enabled"),
+            disabled: tUserMgmt("keyStatus.disabled"),
+          },
+        },
+        expand: tUserMgmt("table.expand"),
+        collapse: tUserMgmt("table.collapse"),
+        noKeys: tUserMgmt("table.noKeys"),
+        defaultGroup: tUserMgmt("table.defaultGroup"),
+      },
+      editDialog: {},
+      actions: {
+        edit: tCommon("edit"),
+        details: tKeyList("detailsButton"),
+        logs: tKeyList("logsButton"),
+        delete: tCommon("delete"),
+      },
+    }),
+    [tUserMgmt, tKeyList, tCommon]
+  );
+
+  const scrollResetKey = useMemo(
+    () =>
+      `${resolvedSearchTerm ?? ""}|${resolvedTagFilter ?? "all"}|${resolvedKeyGroupFilter ?? "all"}`,
+    [resolvedSearchTerm, resolvedTagFilter, resolvedKeyGroupFilter]
+  );
 
   return (
     <div className="space-y-4">
@@ -229,13 +388,20 @@ function UsersPageContent({ initialUsers, currentUser }: UsersPageClientProps) {
           <p className="text-sm text-muted-foreground">
             {isInitialLoading
               ? tCommon("loading")
-              : t("description", { count: filteredUsers.length })}
+              : t("description", { count: visibleUsers.length })}
           </p>
         </div>
-        <Button onClick={handleCreateUser}>
-          <Plus className="mr-2 h-4 w-4" />
-          {t("toolbar.createUser")}
-        </Button>
+        {isAdmin ? (
+          <Button onClick={handleCreateUser}>
+            <Plus className="mr-2 h-4 w-4" />
+            {t("toolbar.createUser")}
+          </Button>
+        ) : (
+          <Button onClick={handleCreateKey}>
+            <Key className="mr-2 h-4 w-4" />
+            {t("toolbar.createKey")}
+          </Button>
+        )}
       </div>
 
       {/* Toolbar with search and filters */}
@@ -251,129 +417,100 @@ function UsersPageContent({ initialUsers, currentUser }: UsersPageClientProps) {
           />
         </div>
 
-        {/* Tag filter */}
-        {isInitialLoading ? (
-          <Skeleton className="h-9 w-[180px]" />
-        ) : (
-          uniqueTags.length > 0 && (
-            <Select value={tagFilter} onValueChange={setTagFilter}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder={t("toolbar.tagFilter")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("toolbar.allTags")}</SelectItem>
-                {uniqueTags.map((tag) => (
-                  <SelectItem key={tag} value={tag}>
-                    <Badge variant="secondary" className="mr-1 text-xs">
-                      {tag}
-                    </Badge>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )
-        )}
+        {isAdmin ? (
+          <>
+            {/* Tag filter */}
+            {isInitialLoading ? (
+              <Skeleton className="h-9 w-[180px]" />
+            ) : (
+              uniqueTags.length > 0 && (
+                <Select value={tagFilter} onValueChange={setTagFilter}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder={t("toolbar.tagFilter")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t("toolbar.allTags")}</SelectItem>
+                    {uniqueTags.map((tag) => (
+                      <SelectItem key={tag} value={tag}>
+                        <Badge variant="secondary" className="mr-1 text-xs">
+                          {tag}
+                        </Badge>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )
+            )}
 
-        {/* Key group filter */}
-        {isInitialLoading ? (
-          <Skeleton className="h-9 w-[180px]" />
-        ) : (
-          uniqueKeyGroups.length > 0 && (
-            <Select value={keyGroupFilter} onValueChange={setKeyGroupFilter}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder={t("toolbar.keyGroupFilter")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("toolbar.allKeyGroups")}</SelectItem>
-                {uniqueKeyGroups.map((group) => (
-                  <SelectItem key={group} value={group}>
-                    <Badge variant="outline" className="mr-1 text-xs">
-                      {group}
-                    </Badge>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )
-        )}
+            {/* Key group filter */}
+            {isInitialLoading ? (
+              <Skeleton className="h-9 w-[180px]" />
+            ) : (
+              uniqueKeyGroups.length > 0 && (
+                <Select value={keyGroupFilter} onValueChange={setKeyGroupFilter}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder={t("toolbar.keyGroupFilter")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t("toolbar.allKeyGroups")}</SelectItem>
+                    {uniqueKeyGroups.map((group) => (
+                      <SelectItem key={group} value={group}>
+                        <Badge variant="outline" className="mr-1 text-xs">
+                          {group}
+                        </Badge>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )
+            )}
+          </>
+        ) : null}
       </div>
 
       {isInitialLoading ? (
         <UsersTableSkeleton label={tCommon("loading")} />
+      ) : isError ? (
+        <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-4 text-sm text-destructive">
+          {error instanceof Error ? error.message : tCommon("error")}
+        </div>
       ) : (
         <div className="space-y-3">
           {isRefreshing ? <InlineLoading label={tCommon("loading")} /> : null}
           <UserManagementTable
-            users={filteredUsers}
+            users={visibleUsers}
+            hasNextPage={hasNextPage}
+            isFetchingNextPage={isFetchingNextPage}
+            onLoadMore={fetchNextPage}
+            scrollResetKey={scrollResetKey}
             currentUser={currentUser}
             currencyCode="USD"
-            onCreateUser={handleCreateUser}
+            onCreateUser={isAdmin ? handleCreateUser : handleCreateKey}
             highlightKeyIds={shouldHighlightKeys ? matchingKeyIds : undefined}
             autoExpandOnFilter={shouldHighlightKeys}
-            translations={{
-              table: {
-                columns: {
-                  username: tUserMgmt("table.columns.username"),
-                  note: tUserMgmt("table.columns.note"),
-                  expiresAt: tUserMgmt("table.columns.expiresAt"),
-                  limit5h: tUserMgmt("table.columns.limit5h"),
-                  limitDaily: tUserMgmt("table.columns.limitDaily"),
-                  limitWeekly: tUserMgmt("table.columns.limitWeekly"),
-                  limitMonthly: tUserMgmt("table.columns.limitMonthly"),
-                  limitTotal: tUserMgmt("table.columns.limitTotal"),
-                  limitSessions: tUserMgmt("table.columns.limitSessions"),
-                },
-                keyRow: {
-                  fields: {
-                    name: tUserMgmt("table.keyRow.name"),
-                    key: tUserMgmt("table.keyRow.key"),
-                    group: tUserMgmt("table.keyRow.group"),
-                    todayUsage: tUserMgmt("table.keyRow.todayUsage"),
-                    todayCost: tUserMgmt("table.keyRow.todayCost"),
-                    lastUsed: tUserMgmt("table.keyRow.lastUsed"),
-                    actions: tUserMgmt("table.keyRow.actions"),
-                    callsLabel: tUserMgmt("table.keyRow.fields.callsLabel"),
-                    costLabel: tUserMgmt("table.keyRow.fields.costLabel"),
-                  },
-                  actions: {
-                    details: tKeyList("detailsButton"),
-                    logs: tKeyList("logsButton"),
-                    edit: tCommon("edit"),
-                    delete: tCommon("delete"),
-                    copy: tCommon("copy"),
-                    copySuccess: tCommon("copySuccess"),
-                    copyFailed: tCommon("copyFailed"),
-                    show: tKeyList("showKeyTooltip"),
-                    hide: tKeyList("hideKeyTooltip"),
-                    quota: tUserMgmt("table.keyRow.quotaButton"),
-                  },
-                  status: {
-                    enabled: tUserMgmt("keyStatus.enabled"),
-                    disabled: tUserMgmt("keyStatus.disabled"),
-                  },
-                },
-                expand: tUserMgmt("table.expand"),
-                collapse: tUserMgmt("table.collapse"),
-                noKeys: tUserMgmt("table.noKeys"),
-                defaultGroup: tUserMgmt("table.defaultGroup"),
-              },
-              editDialog: {},
-              actions: {
-                edit: tCommon("edit"),
-                details: tKeyList("detailsButton"),
-                logs: tKeyList("logsButton"),
-                delete: tCommon("delete"),
-              },
-              pagination: {
-                previous: tUiTable("previousPage"),
-                next: tUiTable("nextPage"),
-                page: "Page {page}",
-                of: "{totalPages}",
-              },
-            }}
+            isMultiSelectMode={isAdmin && isMultiSelectMode}
+            selectedUserIds={selectedUserIds}
+            selectedKeyIds={selectedKeyIds}
+            onEnterMultiSelectMode={enterMultiSelectMode}
+            onExitMultiSelectMode={exitMultiSelectMode}
+            onSelectAll={handleSelectAll}
+            onSelectUser={handleSelectUser}
+            onSelectKey={handleSelectKey}
+            onOpenBatchEdit={handleOpenBatchEdit}
+            translations={tableTranslations}
           />
         </div>
       )}
+
+      {isAdmin ? (
+        <BatchEditDialog
+          open={batchEditDialogOpen}
+          onOpenChange={setBatchEditDialogOpen}
+          selectedUserIds={selectedUserIds}
+          selectedKeyIds={selectedKeyIds}
+          onSuccess={handleBatchEditSuccess}
+        />
+      ) : null}
 
       {/* Onboarding Tour */}
       <UserOnboardingTour
@@ -387,6 +524,8 @@ function UsersPageContent({ initialUsers, currentUser }: UsersPageClientProps) {
         open={showCreateDialog}
         onOpenChange={handleCreateDialogClose}
         mode="create"
+        user={selfUser}
+        keyOnlyMode={!isAdmin}
         currentUser={currentUser}
       />
     </div>

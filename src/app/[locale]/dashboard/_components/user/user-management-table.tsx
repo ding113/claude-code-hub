@@ -1,33 +1,41 @@
 "use client";
 
-import { Users } from "lucide-react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { Loader2, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { renewUser } from "@/actions/users";
 import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import type { User, UserDisplay } from "@/types/user";
+import { BatchEditToolbar } from "./batch-edit/batch-edit-toolbar";
 import { QuickRenewDialog, type QuickRenewUser } from "./forms/quick-renew-dialog";
 import { UnifiedEditDialog } from "./unified-edit-dialog";
 import { UserKeyTableRow } from "./user-key-table-row";
 
 export interface UserManagementTableProps {
   users: UserDisplay[];
+  hasNextPage?: boolean;
+  isFetchingNextPage?: boolean;
+  onLoadMore?: () => void;
+  /** Used to reset virtual scroll position when filters change. */
+  scrollResetKey?: string;
   currentUser?: User;
   currencyCode?: string;
   onCreateUser?: () => void;
   highlightKeyIds?: Set<number>;
   autoExpandOnFilter?: boolean;
+  isMultiSelectMode?: boolean;
+  selectedUserIds?: Set<number>;
+  selectedKeyIds?: Set<number>;
+  onEnterMultiSelectMode?: () => void;
+  onExitMultiSelectMode?: () => void;
+  onSelectAll?: (checked: boolean) => void;
+  onSelectUser?: (user: UserDisplay, checked: boolean) => void;
+  onSelectKey?: (keyId: number, checked: boolean) => void;
+  onOpenBatchEdit?: () => void;
   translations: {
     table: {
       columns: {
@@ -55,12 +63,6 @@ export interface UserManagementTableProps {
       logs: string;
       delete: string;
     };
-    pagination: {
-      previous: string;
-      next: string;
-      page: string;
-      of: string;
-    };
     quickRenew?: {
       title: string;
       description: string;
@@ -84,37 +86,47 @@ export interface UserManagementTableProps {
   };
 }
 
-const PAGE_SIZE = 20;
-const TOTAL_COLUMNS = 9;
-
-function hasTemplateTokens(text: string) {
-  return /\{[a-zA-Z0-9_]+\}/.test(text);
-}
-
-function formatTemplate(text: string, values: Record<string, string | number>) {
-  return text.replace(/\{([a-zA-Z0-9_]+)\}/g, (match, key) => {
-    if (key in values) return String(values[key]);
-    return match;
-  });
-}
+const USER_ROW_HEIGHT = 52;
+const KEY_ROW_HEIGHT = 40;
+const MIN_TABLE_WIDTH_CLASS = "min-w-[980px]";
+const GRID_COLUMNS_CLASS = "grid-cols-[minmax(260px,1fr)_120px_repeat(6,90px)_60px]";
 
 export function UserManagementTable({
   users,
+  hasNextPage,
+  isFetchingNextPage,
+  onLoadMore,
+  scrollResetKey,
   currentUser,
   currencyCode,
   onCreateUser,
   highlightKeyIds,
   autoExpandOnFilter,
+  isMultiSelectMode,
+  selectedUserIds,
+  selectedKeyIds,
+  onEnterMultiSelectMode,
+  onExitMultiSelectMode,
+  onSelectAll,
+  onSelectUser,
+  onSelectKey,
+  onOpenBatchEdit,
   translations,
 }: UserManagementTableProps) {
   const router = useRouter();
   const tUserList = useTranslations("dashboard.userList");
   const tUserMgmt = useTranslations("dashboard.userManagement");
   const isAdmin = currentUser?.role === "admin";
-  const [currentPage, setCurrentPage] = useState(1);
+  const showMultiSelect = Boolean(isAdmin && isMultiSelectMode);
+  // Use useMemo to create stable empty Set references for fallback
+  const emptySet = useMemo(() => new Set<number>(), []);
+  const selectedUserIdSet = selectedUserIds ?? emptySet;
+  const selectedKeyIdSet = selectedKeyIds ?? emptySet;
   const [expandedUsers, setExpandedUsers] = useState<Map<number, boolean>>(
     () => new Map(users.map((user) => [user.id, false]))
   );
+  const parentRef = useRef<HTMLDivElement>(null);
+  const prevAutoExpandRef = useRef(autoExpandOnFilter);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [scrollToKeyId, setScrollToKeyId] = useState<number | undefined>(undefined);
@@ -122,15 +134,6 @@ export function UserManagementTable({
   // Quick renew dialog state
   const [quickRenewOpen, setQuickRenewOpen] = useState(false);
   const [quickRenewUser, setQuickRenewUser] = useState<QuickRenewUser | null>(null);
-
-  const totalPages = useMemo(
-    () => Math.max(1, Math.ceil(users.length / PAGE_SIZE)),
-    [users.length]
-  );
-
-  useEffect(() => {
-    setCurrentPage((prev) => Math.min(Math.max(prev, 1), totalPages));
-  }, [totalPages]);
 
   useEffect(() => {
     setExpandedUsers((prev) => {
@@ -148,46 +151,30 @@ export function UserManagementTable({
   }, [users]);
 
   useEffect(() => {
-    if (autoExpandOnFilter) {
+    if (autoExpandOnFilter && !prevAutoExpandRef.current) {
       setExpandedUsers(new Map(users.map((user) => [user.id, true])));
     }
+    prevAutoExpandRef.current = autoExpandOnFilter;
   }, [autoExpandOnFilter, users]);
-
-  const paginatedUsers = useMemo(() => {
-    const start = (currentPage - 1) * PAGE_SIZE;
-    return users.slice(start, start + PAGE_SIZE);
-  }, [users, currentPage]);
 
   const allExpanded = useMemo(() => {
     if (users.length === 0) return false;
     return users.every((user) => expandedUsers.get(user.id) ?? false);
   }, [users, expandedUsers]);
 
-  const paginationText = useMemo(() => {
-    const templateMode =
-      hasTemplateTokens(translations.pagination.page) ||
-      hasTemplateTokens(translations.pagination.of);
-
-    if (templateMode) {
-      const pageText = formatTemplate(translations.pagination.page, {
-        page: currentPage,
-        current: currentPage,
-        currentPage,
-        totalPages,
-        total: totalPages,
-      });
-      const ofText = formatTemplate(translations.pagination.of, {
-        page: currentPage,
-        current: currentPage,
-        currentPage,
-        totalPages,
-        total: totalPages,
-      });
-      return `${pageText} / ${ofText}`;
+  const totalKeyCount = useMemo(() => {
+    let total = 0;
+    for (const user of users) {
+      total += user.keys?.length ?? 0;
     }
+    return total;
+  }, [users]);
 
-    return `${translations.pagination.page} ${currentPage} / ${translations.pagination.of} ${totalPages}`;
-  }, [currentPage, totalPages, translations.pagination]);
+  const allSelected =
+    showMultiSelect &&
+    users.length > 0 &&
+    selectedUserIdSet.size === users.length &&
+    selectedKeyIdSet.size === totalKeyCount;
 
   const rowTranslations = useMemo(() => {
     return {
@@ -208,6 +195,48 @@ export function UserManagementTable({
       },
     };
   }, [translations, isAdmin, tUserMgmt]);
+
+  // Memoize estimateSize to prevent virtualizer re-computation
+  const estimateSize = useCallback(
+    (index: number) => {
+      const user = users[index];
+      if (!user) return USER_ROW_HEIGHT;
+      const expanded = showMultiSelect ? true : (expandedUsers.get(user.id) ?? false);
+      if (!expanded) return USER_ROW_HEIGHT;
+      return USER_ROW_HEIGHT + (user.keys?.length ?? 0) * KEY_ROW_HEIGHT;
+    },
+    [users, showMultiSelect, expandedUsers]
+  );
+
+  const getScrollElement = useCallback(() => parentRef.current, []);
+
+  const getItemKey = useCallback((index: number) => users[index]?.id ?? `loader-${index}`, [users]);
+
+  const rowVirtualizer = useVirtualizer({
+    count: hasNextPage ? users.length + 1 : users.length,
+    getScrollElement,
+    // Stable key function to prevent measurement cache mismatches during filtering/reordering
+    getItemKey,
+    estimateSize,
+    overscan: 5,
+  });
+
+  const virtualItems = rowVirtualizer.getVirtualItems();
+  const lastItemIndex = virtualItems[virtualItems.length - 1]?.index ?? -1;
+
+  useEffect(() => {
+    if (!onLoadMore) return;
+    if (!hasNextPage) return;
+    if (isFetchingNextPage) return;
+    if (lastItemIndex >= users.length - 5) {
+      onLoadMore();
+    }
+  }, [lastItemIndex, users.length, hasNextPage, isFetchingNextPage, onLoadMore]);
+
+  useEffect(() => {
+    if (!scrollResetKey) return;
+    parentRef.current?.scrollTo({ top: 0 });
+  }, [scrollResetKey]);
 
   const quickRenewTranslations = useMemo(() => {
     if (translations.quickRenew) return translations.quickRenew;
@@ -306,102 +335,162 @@ export function UserManagementTable({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-start">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={handleToggleAll}
-          disabled={users.length === 0}
-        >
-          {allExpanded ? translations.table.collapse : translations.table.expand}
-        </Button>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {!showMultiSelect ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleToggleAll}
+              disabled={users.length === 0}
+            >
+              {allExpanded ? translations.table.collapse : translations.table.expand}
+            </Button>
+          ) : null}
+
+          {isAdmin &&
+          onEnterMultiSelectMode &&
+          onExitMultiSelectMode &&
+          onSelectAll &&
+          onOpenBatchEdit &&
+          onSelectUser &&
+          onSelectKey ? (
+            <BatchEditToolbar
+              isMultiSelectMode={showMultiSelect}
+              allSelected={allSelected}
+              selectedUsersCount={selectedUserIdSet.size}
+              selectedKeysCount={selectedKeyIdSet.size}
+              totalUsersCount={users.length}
+              onEnterMode={onEnterMultiSelectMode}
+              onExitMode={onExitMultiSelectMode}
+              onSelectAll={onSelectAll}
+              onEditSelected={onOpenBatchEdit}
+            />
+          ) : null}
+        </div>
       </div>
 
       <div className={cn("border border-border rounded-lg", "overflow-hidden")}>
-        <Table className="min-w-[980px]">
-          <TableHeader>
-            <TableRow>
-              <TableHead className="min-w-[260px]">
-                {translations.table.columns.username} / {translations.table.columns.note}
-              </TableHead>
-              <TableHead>{translations.table.columns.expiresAt}</TableHead>
-              <TableHead className="text-center">{translations.table.columns.limit5h}</TableHead>
-              <TableHead className="text-center">{translations.table.columns.limitDaily}</TableHead>
-              <TableHead className="text-center">
-                {translations.table.columns.limitWeekly}
-              </TableHead>
-              <TableHead className="text-center">
-                {translations.table.columns.limitMonthly}
-              </TableHead>
-              <TableHead className="text-center">{translations.table.columns.limitTotal}</TableHead>
-              <TableHead className="text-center">
-                {translations.table.columns.limitSessions}
-              </TableHead>
-              <TableHead className="text-center">{translations.actions.edit}</TableHead>
-            </TableRow>
-          </TableHeader>
+        <div className="relative w-full overflow-x-auto">
+          <div className={MIN_TABLE_WIDTH_CLASS}>
+            <div className="bg-muted/50 border-b">
+              <div
+                className={cn(
+                  "grid items-center h-10 text-sm font-medium text-muted-foreground",
+                  GRID_COLUMNS_CLASS
+                )}
+              >
+                <div className="px-2">
+                  {translations.table.columns.username} / {translations.table.columns.note}
+                </div>
+                <div className="px-2">{translations.table.columns.expiresAt}</div>
+                <div className="px-2 text-center">{translations.table.columns.limit5h}</div>
+                <div className="px-2 text-center">{translations.table.columns.limitDaily}</div>
+                <div className="px-2 text-center">{translations.table.columns.limitWeekly}</div>
+                <div className="px-2 text-center">{translations.table.columns.limitMonthly}</div>
+                <div className="px-2 text-center">{translations.table.columns.limitTotal}</div>
+                <div className="px-2 text-center">{translations.table.columns.limitSessions}</div>
+                <div className="px-2 text-center">{translations.actions.edit}</div>
+              </div>
+            </div>
 
-          <TableBody>
-            {paginatedUsers.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={TOTAL_COLUMNS} className="py-16">
-                  <div className="flex flex-col items-center justify-center text-center">
-                    <div className="mb-4 rounded-full bg-muted p-3">
-                      <Users className="h-6 w-6 text-muted-foreground" />
-                    </div>
-                    <h3 className="mb-2 text-lg font-medium">{tUserList("emptyState.title")}</h3>
-                    <p className="mb-4 max-w-sm text-sm text-muted-foreground">
-                      {tUserList("emptyState.description")}
-                    </p>
-                    {onCreateUser && (
-                      <Button onClick={onCreateUser}>{tUserList("emptyState.action")}</Button>
-                    )}
+            {users.length === 0 ? (
+              <div className="py-16">
+                <div className="flex flex-col items-center justify-center text-center">
+                  <div className="mb-4 rounded-full bg-muted p-3">
+                    <Users className="h-6 w-6 text-muted-foreground" />
                   </div>
-                </TableCell>
-              </TableRow>
+                  <h3 className="mb-2 text-lg font-medium">{tUserList("emptyState.title")}</h3>
+                  <p className="mb-4 max-w-sm text-sm text-muted-foreground">
+                    {tUserList("emptyState.description")}
+                  </p>
+                  {onCreateUser && (
+                    <Button onClick={onCreateUser}>{tUserList("emptyState.action")}</Button>
+                  )}
+                </div>
+              </div>
             ) : (
-              paginatedUsers.map((user) => (
-                <UserKeyTableRow
-                  key={user.id}
-                  user={user}
-                  expanded={expandedUsers.get(user.id) ?? false}
-                  onToggle={() => handleToggleUser(user.id)}
-                  onEditUser={(keyId) => openEditDialog(user.id, keyId)}
-                  onQuickRenew={isAdmin ? handleOpenQuickRenew : undefined}
-                  currentUser={currentUser}
-                  currencyCode={currencyCode}
-                  translations={rowTranslations}
-                  highlightKeyIds={highlightKeyIds}
-                />
-              ))
+              <div ref={parentRef} className="h-[600px] overflow-y-auto">
+                <div
+                  style={{
+                    height: `${rowVirtualizer.getTotalSize()}px`,
+                    width: "100%",
+                    position: "relative",
+                  }}
+                >
+                  {virtualItems.map((virtualRow) => {
+                    const isLoaderRow = virtualRow.index >= users.length;
+                    const user = users[virtualRow.index];
+
+                    if (isLoaderRow) {
+                      return (
+                        <div
+                          key="loader"
+                          style={{
+                            position: "absolute",
+                            top: 0,
+                            left: 0,
+                            width: "100%",
+                            height: `${virtualRow.size}px`,
+                            transform: `translateY(${virtualRow.start}px)`,
+                          }}
+                        />
+                      );
+                    }
+
+                    if (!user) return null;
+
+                    return (
+                      <div
+                        key={user.id}
+                        ref={rowVirtualizer.measureElement}
+                        data-index={virtualRow.index}
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          left: 0,
+                          width: "100%",
+                          transform: `translateY(${virtualRow.start}px)`,
+                        }}
+                      >
+                        <UserKeyTableRow
+                          user={user}
+                          isAdmin={isAdmin}
+                          expanded={expandedUsers.get(user.id) ?? false}
+                          onToggle={() => handleToggleUser(user.id)}
+                          gridColumnsClass={GRID_COLUMNS_CLASS}
+                          isMultiSelectMode={showMultiSelect}
+                          isSelected={selectedUserIdSet.has(user.id)}
+                          onSelect={
+                            showMultiSelect && onSelectUser
+                              ? (checked) => onSelectUser(user, checked)
+                              : undefined
+                          }
+                          selectedKeyIds={selectedKeyIdSet}
+                          onSelectKey={showMultiSelect ? onSelectKey : undefined}
+                          onEditUser={(keyId) => openEditDialog(user.id, keyId)}
+                          onQuickRenew={isAdmin ? handleOpenQuickRenew : undefined}
+                          currentUser={currentUser}
+                          currencyCode={currencyCode}
+                          translations={rowTranslations}
+                          highlightKeyIds={highlightKeyIds}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             )}
-          </TableBody>
-        </Table>
+          </div>
+        </div>
       </div>
 
-      {/* Pagination moved to bottom */}
-      <div className="flex items-center justify-center gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-          disabled={users.length === 0 || currentPage <= 1}
-        >
-          {translations.pagination.previous}
-        </Button>
-        <span className="text-sm text-muted-foreground">{paginationText}</span>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-          disabled={users.length === 0 || currentPage >= totalPages}
-        >
-          {translations.pagination.next}
-        </Button>
-      </div>
+      {isFetchingNextPage ? (
+        <div className="flex justify-center py-4">
+          <Loader2 className="h-6 w-6 animate-spin" />
+        </div>
+      ) : null}
 
       {editingUser ? (
         <UnifiedEditDialog
@@ -410,6 +499,7 @@ export function UserManagementTable({
           mode="edit"
           user={editingUser}
           scrollToKeyId={scrollToKeyId}
+          keyOnlyMode={!isAdmin}
           currentUser={currentUser}
         />
       ) : null}

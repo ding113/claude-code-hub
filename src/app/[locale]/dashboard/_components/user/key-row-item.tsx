@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { RelativeTime } from "@/components/ui/relative-time";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -43,6 +44,9 @@ export interface KeyRowItemProps {
       totalCost: number;
     }>;
   };
+  isMultiSelectMode?: boolean;
+  isSelected?: boolean;
+  onSelect?: (checked: boolean) => void;
   onEdit: () => void;
   onDelete: () => void;
   onViewLogs: () => void;
@@ -83,6 +87,9 @@ export interface KeyRowItemProps {
 
 export function KeyRowItem({
   keyData,
+  isMultiSelectMode,
+  isSelected,
+  onSelect,
   onEdit,
   onDelete,
   onViewLogs,
@@ -96,6 +103,7 @@ export function KeyRowItem({
   const [statsDialogOpen, setStatsDialogOpen] = useState(false);
   const [quotaDialogOpen, setQuotaDialogOpen] = useState(false);
   const tCommon = useTranslations("common");
+  const tBatchEdit = useTranslations("dashboard.userManagement.batchEdit");
 
   const resolvedCurrencyCode: CurrencyCode =
     currencyCode && currencyCode in CURRENCY_CONFIG ? (currencyCode as CurrencyCode) : "USD";
@@ -122,10 +130,23 @@ export function KeyRowItem({
   return (
     <div
       className={cn(
-        "grid grid-cols-[repeat(14,minmax(0,1fr))] items-center gap-3 px-3 py-2 text-sm border-b last:border-b-0 hover:bg-muted/40 transition-colors",
+        "grid items-center gap-3 px-3 py-2 text-sm border-b last:border-b-0 hover:bg-muted/40 transition-colors",
+        isMultiSelectMode
+          ? "grid-cols-[24px_repeat(14,minmax(0,1fr))]"
+          : "grid-cols-[repeat(14,minmax(0,1fr))]",
         highlight && "bg-primary/10 ring-1 ring-primary/30"
       )}
     >
+      {isMultiSelectMode ? (
+        <div className="col-span-1 flex items-center justify-center">
+          <Checkbox
+            aria-label={tBatchEdit("aria.selectKey")}
+            checked={Boolean(isSelected)}
+            onCheckedChange={(checked) => onSelect?.(Boolean(checked))}
+          />
+        </div>
+      ) : null}
+
       {/* 名称 */}
       <div className="col-span-2 min-w-0">
         <div className="flex items-center gap-2 min-w-0">

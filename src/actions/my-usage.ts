@@ -41,7 +41,7 @@ export interface MyUsageQuota {
   keyLimitWeeklyUsd: number | null;
   keyLimitMonthlyUsd: number | null;
   keyLimitTotalUsd: number | null;
-  keyLimitConcurrentSessions: number;
+  keyLimitConcurrentSessions: number | null;
   keyCurrent5hUsd: number;
   keyCurrentDailyUsd: number;
   keyCurrentWeeklyUsd: number;
@@ -239,7 +239,7 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       keyLimitWeeklyUsd: key.limitWeeklyUsd ?? null,
       keyLimitMonthlyUsd: key.limitMonthlyUsd ?? null,
       keyLimitTotalUsd: key.limitTotalUsd ?? null,
-      keyLimitConcurrentSessions: key.limitConcurrentSessions || 0,
+      keyLimitConcurrentSessions: key.limitConcurrentSessions ?? null,
       keyCurrent5hUsd: keyCost5h,
       keyCurrentDailyUsd: keyCostDaily,
       keyCurrentWeeklyUsd: keyCostWeekly,

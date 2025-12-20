@@ -840,7 +840,12 @@
       "allTags": "All Tags",
       "keyGroupFilter": "Key Group",
       "allKeyGroups": "All Key Groups",
-      "createUser": "Create User"
+      "createUser": "Create User",
+      "createKey": "Create Key"
+    },
+    "dialog": {
+      "userProviderGroup": "Your Provider Groups",
+      "userProviderGroupHint": "New keys can only use your existing provider groups."
     }
   },
   "availability": {
@@ -1047,6 +1052,10 @@
       "success": "Renewal successful",
       "failed": "Renewal failed"
     },
+    "dialog": {
+      "createKeyTitle": "Create Key",
+      "editKeyTitle": "Edit Key"
+    },
     "editDialog": {
       "title": "Edit user and keys",
       "description": "Edit user information and API key settings",
@@ -1063,6 +1072,81 @@
       "deleteFailed": "Failed to delete user",
       "userDeleted": "User has been deleted",
       "saving": "Saving..."
+    },
+    "batchEdit": {
+      "enterMode": "Batch Edit",
+      "exitMode": "Exit",
+      "selectAll": "Select All",
+      "selectedCount": "Selected {users} users, {keys} keys",
+      "editSelected": "Edit Selected",
+      "dialog": {
+        "title": "Batch Edit",
+        "description": "Will affect {users} users and {keys} keys",
+        "cancel": "Cancel",
+        "next": "Next",
+        "noFieldEnabled": "Please enable at least one field to override",
+        "noUpdate": "No updates to execute",
+        "noSelection": "Please select users or keys to batch edit first."
+      },
+      "confirm": {
+        "title": "Confirm Batch Update",
+        "description": "This will update {users} users and {keys} keys. This action cannot be undone.",
+        "userFields": "User Fields",
+        "keyFields": "Key Fields",
+        "goBack": "Go Back",
+        "update": "Confirm Update",
+        "updating": "Updating..."
+      },
+      "toast": {
+        "usersUpdated": "Updated {count} users",
+        "keysUpdated": "Updated {count} keys",
+        "usersFailed": "User update failed: {error}",
+        "keysFailed": "Key update failed: {error}",
+        "batchFailed": "Batch update failed"
+      },
+      "validation": {
+        "invalidNumber": "Please enter a valid number",
+        "negativeNumber": "Value cannot be negative"
+      },
+      "aria": {
+        "selectUser": "Select user",
+        "selectKey": "Select key"
+      },
+      "user": {
+        "title": "User Settings",
+        "affected": "Will affect {count} users",
+        "enableFieldAria": "Enable field: {title}",
+        "fields": {
+          "note": "Note",
+          "tags": "Tags",
+          "limit5h": "5h Limit (USD)",
+          "limitWeekly": "Weekly Limit (USD)",
+          "limitMonthly": "Monthly Limit (USD)"
+        },
+        "placeholders": {
+          "emptyToClear": "Leave empty to clear",
+          "tagsPlaceholder": "Press enter to add, comma-separated",
+          "emptyNoLimit": "Leave empty for no limit"
+        }
+      },
+      "key": {
+        "title": "Key Settings",
+        "affected": "Will affect {count} keys",
+        "fields": {
+          "providerGroup": "Group (providerGroup)",
+          "limit5h": "5h Limit (USD)",
+          "limitDaily": "Daily Limit (USD)",
+          "limitWeekly": "Weekly Limit (USD)",
+          "limitMonthly": "Monthly Limit (USD)",
+          "canLoginWebUi": "Allow Web UI Login",
+          "keyEnabled": "Key Enabled Status"
+        },
+        "placeholders": {
+          "groupPlaceholder": "Leave empty to clear, comma-separated for multiple",
+          "emptyNoLimit": "Leave empty for no limit"
+        },
+        "targetValue": "Target Value"
+      }
     },
     "createDialog": {
       "title": "Create user",
@@ -1282,10 +1366,14 @@
           "descriptionEnabled": "When enabled, this key will access an independent personal usage page upon login. However, it cannot modify its own key's provider group.",
           "descriptionDisabled": "When disabled, the user cannot access the personal usage page UI. However, they can modify their own key's provider group in the restricted Web UI."
         },
-        "providerGroup": {
-          "label": "Provider Group",
-          "placeholder": "Leave empty to allow all default group providers"
-        },
+      "providerGroup": {
+        "label": "Provider Group",
+        "placeholder": "Leave empty to allow all default group providers",
+        "selectHint": "Select the provider group(s) this key can use.",
+        "editHint": "Provider group cannot be changed for existing keys.",
+        "allGroups": "Use all groups",
+        "noGroupHint": "You have no group restrictions and can access all providers."
+      },
         "cacheTtl": {
           "label": "Cache TTL Override",
           "options": {

@@ -13,6 +13,11 @@ export async function getProxyStatus(): Promise<ActionResult<ProxyStatusResponse
       return { ok: false, error: "未授权，请先登录" };
     }
 
+    // 权限检查：仅 admin 用户可访问
+    if (session.user.role !== "admin") {
+      return { ok: false, error: "权限不足" };
+    }
+
     const tracker = ProxyStatusTracker.getInstance();
     const status = await tracker.getAllUsersStatus();
     return { ok: true, data: status };
