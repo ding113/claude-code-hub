@@ -35,13 +35,13 @@ export default async function SettingsProvidersPage() {
               </Link>
             </Button>
             <SchedulingRulesDialog />
-            <AddProviderDialog enableMultiProviderTypes={enableMultiProviderTypes} />
           </>
         }
       >
         <ProviderManagerLoader
           currentUser={session?.user}
           enableMultiProviderTypes={enableMultiProviderTypes}
+          addDialogSlot={<AddProviderDialog enableMultiProviderTypes={enableMultiProviderTypes} />}
         />
       </Section>
     </>

@@ -1,7 +1,7 @@
 "use client";
 import { Loader2, Search, X } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDebounce } from "@/lib/hooks/use-debounce";
@@ -29,6 +29,7 @@ interface ProviderManagerProps {
   enableMultiProviderTypes: boolean;
   loading?: boolean;
   refreshing?: boolean;
+  addDialogSlot?: ReactNode;
 }
 
 export function ProviderManager({
@@ -39,6 +40,7 @@ export function ProviderManager({
   enableMultiProviderTypes,
   loading = false,
   refreshing = false,
+  addDialogSlot,
 }: ProviderManagerProps) {
   const t = useTranslations("settings.providers.search");
   const tCommon = useTranslations("settings.common");
@@ -97,6 +99,7 @@ export function ProviderManager({
 
   return (
     <div className="space-y-4">
+      {addDialogSlot ? <div className="flex justify-end">{addDialogSlot}</div> : null}
       {/* 筛选条件 */}
       <div className="flex flex-col gap-3">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">

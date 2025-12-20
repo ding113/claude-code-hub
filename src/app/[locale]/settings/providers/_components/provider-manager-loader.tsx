@@ -1,6 +1,7 @@
 "use client";
 
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
+import type { ReactNode } from "react";
 import { getProviders, getProvidersHealthStatus } from "@/actions/providers";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import type { ProviderDisplay } from "@/types/provider";
@@ -38,11 +39,13 @@ async function fetchSystemSettings(): Promise<{ currencyDisplay: CurrencyCode }>
 interface ProviderManagerLoaderProps {
   currentUser?: User;
   enableMultiProviderTypes: boolean;
+  addDialogSlot?: ReactNode;
 }
 
 function ProviderManagerLoaderContent({
   currentUser,
   enableMultiProviderTypes,
+  addDialogSlot,
 }: ProviderManagerLoaderProps) {
   const {
     data: providers = [],
@@ -84,6 +87,7 @@ function ProviderManagerLoaderContent({
       enableMultiProviderTypes={enableMultiProviderTypes}
       loading={loading}
       refreshing={refreshing}
+      addDialogSlot={addDialogSlot}
     />
   );
 }
