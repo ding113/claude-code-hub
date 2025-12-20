@@ -24,38 +24,53 @@ function createMonitoredStream(
 ): ReadableStream<Uint8Array> {
   const reader = stream.getReader();
   let released = false;
+  let cancelled = false;
 
-  const releaseLock = async () => {
-    if (!released && lockId) {
-      released = true;
-      await releaseBackupLock(lockId, "export").catch((err) => {
-        logger.error({
-          action: "database_export_lock_release_error",
-          lockId,
-          error: err.message,
-        });
+  const releaseLock = async (reason?: string) => {
+    if (released || !lockId) return;
+    released = true; // 同步设置，在任何 await 之前
+    await releaseBackupLock(lockId, "export").catch((err) => {
+      logger.error({
+        action: "database_export_lock_release_error",
+        lockId,
+        reason,
+        error: err.message,
       });
-    }
+    });
   };
 
   return new ReadableStream({
     async pull(controller) {
+      // 如果已取消，不再读取
+      if (cancelled) {
+        controller.close();
+        return;
+      }
+
       try {
         const { done, value } = await reader.read();
         if (done) {
           controller.close();
-          await releaseLock();
+          await releaseLock("stream_done");
         } else {
           controller.enqueue(value);
         }
       } catch (error) {
-        await releaseLock();
+        await releaseLock("stream_error");
+        reader.releaseLock();
         controller.error(error);
       }
     },
     async cancel() {
-      await releaseLock();
-      reader.cancel();
+      cancelled = true;
+      await releaseLock("request_cancelled");
+      await reader.cancel().catch((err) => {
+        logger.error({
+          action: "database_export_reader_cancel_error",
+          lockId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
     },
   });
 }
@@ -103,6 +118,17 @@ export async function GET(request: Request) {
       logger.error({
         action: "database_export_connection_unavailable",
       });
+      // 数据库不可用时释放锁
+      if (lockId) {
+        await releaseBackupLock(lockId, "export").catch((err) => {
+          logger.error({
+            action: "database_export_lock_release_error",
+            lockId,
+            reason: "connection_unavailable",
+            error: err.message,
+          });
+        });
+      }
       return Response.json({ error: "数据库连接不可用，请检查数据库服务状态" }, { status: 503 });
     }
 

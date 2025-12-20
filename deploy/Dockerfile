@@ -38,12 +38,13 @@ WORKDIR /app
 # node:trixie-slim 基于 Debian Trixie，默认只有 PostgreSQL 17.x
 # 使用 PostgreSQL 官方仓库安装 18.x 以匹配 docker-compose 中的 postgres:18
 RUN apt-get update && \
-    apt-get install -y curl ca-certificates gnupg && \
+    apt-get install -y --no-install-recommends curl ca-certificates gnupg && \
     curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /etc/apt/keyrings/pgdg.gpg && \
-    echo "deb [signed-by=/etc/apt/keyrings/pgdg.gpg] http://apt.postgresql.org/pub/repos/apt trixie-pgdg main" > /etc/apt/sources.list.d/pgdg.list && \
+    echo "deb [signed-by=/etc/apt/keyrings/pgdg.gpg] https://apt.postgresql.org/pub/repos/apt trixie-pgdg main" > /etc/apt/sources.list.d/pgdg.list && \
     apt-get update && \
-    apt-get install -y postgresql-client-18 && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends postgresql-client-18 && \
+    apt-get purge -y --auto-remove gnupg && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 COPY --from=build --chown=node:node /app/public ./public
 COPY --from=build --chown=node:node /app/drizzle ./drizzle
