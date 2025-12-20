@@ -34,10 +34,15 @@ ENV PORT=3000
 ENV HOST=0.0.0.0
 WORKDIR /app
 
-# 安装 PostgreSQL 客户端工具（用于数据库备份/恢复功能）和 curl（用于健康检查）
-# node:trixie-slim 基于 Debian Trixie，需手动安装 postgresql-client
+# 安装 PostgreSQL 18 客户端工具（用于数据库备份/恢复功能）和 curl（用于健康检查）
+# node:trixie-slim 基于 Debian Trixie，默认只有 PostgreSQL 17.x
+# 使用 PostgreSQL 官方仓库安装 18.x 以匹配 docker-compose 中的 postgres:18
 RUN apt-get update && \
-    apt-get install -y curl ca-certificates postgresql-client && \
+    apt-get install -y curl ca-certificates gnupg && \
+    curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /etc/apt/keyrings/pgdg.gpg && \
+    echo "deb [signed-by=/etc/apt/keyrings/pgdg.gpg] http://apt.postgresql.org/pub/repos/apt trixie-pgdg main" > /etc/apt/sources.list.d/pgdg.list && \
+    apt-get update && \
+    apt-get install -y postgresql-client-18 && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=build --chown=node:node /app/public ./public
