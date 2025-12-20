@@ -6,9 +6,9 @@ export default async function UsersPage({ params }: { params: Promise<{ locale: 
   const { locale } = await params;
   const session = await getSession();
 
-  // 权限检查：仅 admin 用户可访问
-  if (!session || session.user.role !== "admin") {
-    return redirect({ href: session ? "/dashboard" : "/login", locale });
+  // 权限检查：允许所有登录用户访问
+  if (!session) {
+    return redirect({ href: "/login", locale });
   }
 
   // TypeScript: session is guaranteed to be non-null after the redirect check

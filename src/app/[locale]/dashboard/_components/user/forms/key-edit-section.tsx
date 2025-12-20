@@ -5,6 +5,7 @@ import { Calendar, Gauge, Key, Plus, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { DatePickerField } from "@/components/form/date-picker-field";
 import { TextField } from "@/components/form/form-field";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -40,13 +41,14 @@ export interface KeyEditSectionProps {
     limitTotalUsd?: number | null;
     limitConcurrentSessions?: number;
   };
-  /** providerGroup 为 admin-only 字段：非管理员仅可查看不可编辑 */
+  /** Admin 可自由编辑 providerGroup */
   isAdmin?: boolean;
+  userProviderGroup?: string;
   onChange: {
     (field: string, value: any): void;
     (batch: Record<string, any>): void;
   };
-  scrollRef?: React.RefObject<HTMLDivElement>;
+  scrollRef?: React.RefObject<HTMLDivElement | null>;
   translations: {
     sections: {
       basicInfo: string;
@@ -62,7 +64,14 @@ export interface KeyEditSectionProps {
         descriptionEnabled: string;
         descriptionDisabled: string;
       };
-      providerGroup: { label: string; placeholder: string };
+      providerGroup: {
+        label: string;
+        placeholder: string;
+        selectHint?: string;
+        editHint?: string;
+        allGroups?: string;
+        noGroupHint?: string;
+      };
       cacheTtl: { label: string; options: Record<string, string> };
       enableStatus?: { label: string; description: string };
     };
@@ -103,11 +112,21 @@ function formatDateInput(date?: Date | null): string {
   }
 }
 
+function normalizeGroupList(value?: string | null): string {
+  const groups = (value ?? "")
+    .split(",")
+    .map((g) => g.trim())
+    .filter(Boolean);
+  if (groups.length === 0) return "";
+  return Array.from(new Set(groups)).sort().join(",");
+}
+
 const TTL_ORDER = ["inherit", "5m", "1h"] as const;
 
 export function KeyEditSection({
   keyData,
   isAdmin = false,
+  userProviderGroup,
   onChange,
   scrollRef,
   translations,
@@ -253,6 +272,19 @@ export function KeyEditSection({
     [translations.limitRules]
   );
 
+  const normalizedUserProviderGroup = useMemo(
+    () => normalizeGroupList(userProviderGroup),
+    [userProviderGroup]
+  );
+  const userGroups = useMemo(
+    () => (normalizedUserProviderGroup ? normalizedUserProviderGroup.split(",") : []),
+    [normalizedUserProviderGroup]
+  );
+  const normalizedKeyProviderGroup = useMemo(
+    () => normalizeGroupList(keyData.providerGroup),
+    [keyData.providerGroup]
+  );
+
   return (
     <div ref={scrollRef} className="space-y-3 scroll-mt-24">
       {/* 基本信息区域 */}
@@ -366,15 +398,53 @@ export function KeyEditSection({
           />
         </div>
 
-        <ProviderGroupSelect
-          value={keyData.providerGroup || ""}
-          onChange={(val) => onChange("providerGroup", val)}
-          disabled={!isAdmin}
-          translations={{
-            label: translations.fields.providerGroup.label,
-            placeholder: translations.fields.providerGroup.placeholder,
-          }}
-        />
+        {isAdmin ? (
+          <ProviderGroupSelect
+            value={keyData.providerGroup || ""}
+            onChange={(val) => onChange("providerGroup", val)}
+            disabled={false}
+            translations={{
+              label: translations.fields.providerGroup.label,
+              placeholder: translations.fields.providerGroup.placeholder,
+            }}
+          />
+        ) : userGroups.length > 0 ? (
+          <div className="space-y-2">
+            <Label>{translations.fields.providerGroup.label}</Label>
+            <Select
+              value={normalizedKeyProviderGroup || normalizedUserProviderGroup}
+              onValueChange={(val) => onChange("providerGroup", val)}
+              disabled={keyData.id > 0}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder={translations.fields.providerGroup.placeholder} />
+              </SelectTrigger>
+              <SelectContent>
+                {userGroups.map((group) => (
+                  <SelectItem key={group} value={group}>
+                    <Badge variant="outline" className="text-xs">
+                      {group}
+                    </Badge>
+                  </SelectItem>
+                ))}
+                {userGroups.length > 1 && (
+                  <SelectItem value={normalizedUserProviderGroup}>
+                    {translations.fields.providerGroup.allGroups || "全部分组"}
+                  </SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {keyData.id > 0
+                ? translations.fields.providerGroup.editHint || "已有密钥的分组不可修改"
+                : translations.fields.providerGroup.selectHint || "选择此 Key 可使用的供应商分组"}
+            </p>
+          </div>
+        ) : (
+          <div className="text-sm text-muted-foreground">
+            {translations.fields.providerGroup.noGroupHint || "您没有分组限制，可以访问所有供应商"}
+          </div>
+        )}
 
         <div className="space-y-2">
           <Label>{translations.fields.cacheTtl.label}</Label>

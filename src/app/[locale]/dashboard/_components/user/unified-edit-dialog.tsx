@@ -52,9 +52,10 @@ export interface UnifiedEditDialogProps {
   onOpenChange: (open: boolean) => void;
   mode: "create" | "edit";
   user?: UserDisplay; // Required in edit mode, optional in create mode
+  keyOnlyMode?: boolean;
   scrollToKeyId?: number;
   onSuccess?: () => void;
-  currentUser?: { role: string };
+  currentUser?: { id: number; role: string };
 }
 
 const UnifiedUserSchema = UpdateUserSchema.extend({
@@ -101,11 +102,15 @@ function getKeyExpiresAtIso(expiresAt: string): string | undefined {
   return parsed.toISOString();
 }
 
-function buildDefaultValues(mode: "create" | "edit", user?: UserDisplay): UnifiedEditValues {
+function buildDefaultValues(
+  mode: "create" | "edit",
+  user?: UserDisplay,
+  keyOnlyMode?: boolean
+): UnifiedEditValues {
   if (mode === "create") {
     return {
       user: {
-        name: "",
+        name: keyOnlyMode ? (user?.name ?? "self") : "",
         note: "",
         tags: [],
         expiresAt: undefined,
@@ -127,7 +132,7 @@ function buildDefaultValues(mode: "create" | "edit", user?: UserDisplay): Unifie
           isEnabled: true,
           expiresAt: undefined,
           canLoginWebUi: false,
-          providerGroup: "",
+          providerGroup: keyOnlyMode ? user?.providerGroup || "" : "",
           cacheTtlPreference: "inherit" as const,
           limit5hUsd: null,
           limitDailyUsd: null,
@@ -195,6 +200,7 @@ function UnifiedEditDialogInner({
   onOpenChange,
   mode,
   user,
+  keyOnlyMode,
   scrollToKeyId,
   onSuccess,
   currentUser,
@@ -202,10 +208,12 @@ function UnifiedEditDialogInner({
   const router = useRouter();
   const queryClient = useQueryClient();
   const t = useTranslations("dashboard.userManagement");
+  const tUsers = useTranslations("dashboard.users");
   const tCommon = useTranslations("common");
   const [isPending, startTransition] = useTransition();
-  const keyScrollRef = useRef<HTMLDivElement>(null!);
+  const keyScrollRef = useRef<HTMLDivElement>(null);
   const isAdmin = currentUser?.role === "admin";
+  const isKeyOnlyMode = Boolean(keyOnlyMode);
   const [deletedKeyIds, setDeletedKeyIds] = useState<number[]>([]);
   const [keyToDelete, setKeyToDelete] = useState<{ id: number; name: string } | null>(null);
   const [newlyAddedKeyId, setNewlyAddedKeyId] = useState<number | null>(null);
@@ -245,7 +253,17 @@ function UnifiedEditDialogInner({
     }
   }, [newlyAddedKeyId]);
 
-  const defaultValues = useMemo(() => buildDefaultValues(mode, user), [mode, user]);
+  const defaultValues = useMemo(
+    () => buildDefaultValues(mode, user, keyOnlyMode),
+    [mode, user, keyOnlyMode]
+  );
+
+  const userProviderGroups = useMemo(() => {
+    return (user?.providerGroup ?? "")
+      .split(",")
+      .map((g) => g.trim())
+      .filter(Boolean);
+  }, [user?.providerGroup]);
 
   const toggleKeyExpanded = (keyId: number) => {
     setExpandedKeyIds((prev) => {
@@ -266,86 +284,125 @@ function UnifiedEditDialogInner({
       startTransition(async () => {
         try {
           if (mode === "create") {
-            // Create user first
-            const userRes = await createUserOnly({
-              name: data.user.name,
-              note: data.user.note,
-              tags: data.user.tags,
-              expiresAt: data.user.expiresAt ?? null,
-              limit5hUsd: data.user.limit5hUsd,
-              dailyQuota: data.user.dailyQuota ?? undefined,
-              limitWeeklyUsd: data.user.limitWeeklyUsd,
-              limitMonthlyUsd: data.user.limitMonthlyUsd,
-              limitTotalUsd: data.user.limitTotalUsd,
-              limitConcurrentSessions: data.user.limitConcurrentSessions,
-              dailyResetMode: data.user.dailyResetMode,
-              dailyResetTime: data.user.dailyResetTime,
-              allowedClients: data.user.allowedClients,
-              allowedModels: data.user.allowedModels,
-            });
-            if (!userRes.ok) {
-              toast.error(userRes.error || t("createDialog.saveFailed"));
-              return;
-            }
-
-            const newUserId = userRes.data.user.id;
-
-            // Create all keys for the new user
-            // If any key creation fails, rollback by deleting the user
-            for (const key of data.keys) {
-              const keyRes = await addKey({
-                userId: newUserId,
-                name: key.name,
-                expiresAt: key.expiresAt || undefined,
-                canLoginWebUi: key.canLoginWebUi,
-                providerGroup: key.providerGroup?.trim() ? key.providerGroup.trim() : null,
-                cacheTtlPreference: key.cacheTtlPreference,
-                limit5hUsd: key.limit5hUsd,
-                limitDailyUsd: key.limitDailyUsd,
-                dailyResetMode: key.dailyResetMode,
-                dailyResetTime: key.dailyResetTime,
-                limitWeeklyUsd: key.limitWeeklyUsd,
-                limitMonthlyUsd: key.limitMonthlyUsd,
-                limitTotalUsd: key.limitTotalUsd,
-                limitConcurrentSessions: key.limitConcurrentSessions,
-              });
-              if (!keyRes.ok) {
-                // Rollback: delete the user since key creation failed
-                try {
-                  await removeUser(newUserId);
-                } catch (rollbackError) {
-                  console.error("[UnifiedEditDialog] rollback failed", rollbackError);
-                }
-                toast.error(keyRes.error || t("createDialog.keyCreateFailed", { name: key.name }));
+            if (isKeyOnlyMode) {
+              const targetUserId = user?.id ?? currentUser?.id;
+              if (!targetUserId) {
+                toast.error(t("editDialog.operationFailed"));
                 return;
               }
-            }
 
-            toast.success(t("createDialog.createSuccess"));
+              for (const key of data.keys) {
+                const keyRes = await addKey({
+                  userId: targetUserId,
+                  name: key.name,
+                  expiresAt: key.expiresAt || undefined,
+                  canLoginWebUi: key.canLoginWebUi,
+                  providerGroup: key.providerGroup?.trim() ? key.providerGroup.trim() : null,
+                  cacheTtlPreference: key.cacheTtlPreference,
+                  limit5hUsd: key.limit5hUsd,
+                  limitDailyUsd: key.limitDailyUsd,
+                  dailyResetMode: key.dailyResetMode,
+                  dailyResetTime: key.dailyResetTime,
+                  limitWeeklyUsd: key.limitWeeklyUsd,
+                  limitMonthlyUsd: key.limitMonthlyUsd,
+                  limitTotalUsd: key.limitTotalUsd,
+                  limitConcurrentSessions: key.limitConcurrentSessions,
+                });
+                if (!keyRes.ok) {
+                  toast.error(
+                    keyRes.error || t("createDialog.keyCreateFailed", { name: key.name })
+                  );
+                  return;
+                }
+              }
+
+              toast.success(t("editDialog.saveSuccess"));
+            } else {
+              // Create user first
+              const userRes = await createUserOnly({
+                name: data.user.name,
+                note: data.user.note,
+                tags: data.user.tags,
+                expiresAt: data.user.expiresAt ?? null,
+                limit5hUsd: data.user.limit5hUsd,
+                dailyQuota: data.user.dailyQuota ?? undefined,
+                limitWeeklyUsd: data.user.limitWeeklyUsd,
+                limitMonthlyUsd: data.user.limitMonthlyUsd,
+                limitTotalUsd: data.user.limitTotalUsd,
+                limitConcurrentSessions: data.user.limitConcurrentSessions,
+                dailyResetMode: data.user.dailyResetMode,
+                dailyResetTime: data.user.dailyResetTime,
+                allowedClients: data.user.allowedClients,
+                allowedModels: data.user.allowedModels,
+              });
+              if (!userRes.ok) {
+                toast.error(userRes.error || t("createDialog.saveFailed"));
+                return;
+              }
+
+              const newUserId = userRes.data.user.id;
+
+              // Create all keys for the new user
+              // If any key creation fails, rollback by deleting the user
+              for (const key of data.keys) {
+                const keyRes = await addKey({
+                  userId: newUserId,
+                  name: key.name,
+                  expiresAt: key.expiresAt || undefined,
+                  canLoginWebUi: key.canLoginWebUi,
+                  providerGroup: key.providerGroup?.trim() ? key.providerGroup.trim() : null,
+                  cacheTtlPreference: key.cacheTtlPreference,
+                  limit5hUsd: key.limit5hUsd,
+                  limitDailyUsd: key.limitDailyUsd,
+                  dailyResetMode: key.dailyResetMode,
+                  dailyResetTime: key.dailyResetTime,
+                  limitWeeklyUsd: key.limitWeeklyUsd,
+                  limitMonthlyUsd: key.limitMonthlyUsd,
+                  limitTotalUsd: key.limitTotalUsd,
+                  limitConcurrentSessions: key.limitConcurrentSessions,
+                });
+                if (!keyRes.ok) {
+                  // Rollback: delete the user since key creation failed
+                  try {
+                    await removeUser(newUserId);
+                  } catch (rollbackError) {
+                    console.error("[UnifiedEditDialog] rollback failed", rollbackError);
+                  }
+                  toast.error(
+                    keyRes.error || t("createDialog.keyCreateFailed", { name: key.name })
+                  );
+                  return;
+                }
+              }
+
+              toast.success(t("createDialog.createSuccess"));
+            }
           } else {
             // Edit mode - user must exist
             if (!user) return;
 
-            const userRes = await editUser(user.id, {
-              name: data.user.name,
-              note: data.user.note,
-              tags: data.user.tags,
-              expiresAt: data.user.expiresAt ?? null,
-              providerGroup: data.user.providerGroup ?? null,
-              limit5hUsd: data.user.limit5hUsd,
-              dailyQuota: data.user.dailyQuota,
-              limitWeeklyUsd: data.user.limitWeeklyUsd,
-              limitMonthlyUsd: data.user.limitMonthlyUsd,
-              limitTotalUsd: data.user.limitTotalUsd,
-              limitConcurrentSessions: data.user.limitConcurrentSessions,
-              dailyResetMode: data.user.dailyResetMode,
-              dailyResetTime: data.user.dailyResetTime,
-              allowedClients: data.user.allowedClients,
-              allowedModels: data.user.allowedModels,
-            });
-            if (!userRes.ok) {
-              toast.error(userRes.error || t("editDialog.saveFailed"));
-              return;
+            if (!isKeyOnlyMode) {
+              const userRes = await editUser(user.id, {
+                name: data.user.name,
+                note: data.user.note,
+                tags: data.user.tags,
+                expiresAt: data.user.expiresAt ?? null,
+                providerGroup: data.user.providerGroup ?? null,
+                limit5hUsd: data.user.limit5hUsd,
+                dailyQuota: data.user.dailyQuota,
+                limitWeeklyUsd: data.user.limitWeeklyUsd,
+                limitMonthlyUsd: data.user.limitMonthlyUsd,
+                limitTotalUsd: data.user.limitTotalUsd,
+                limitConcurrentSessions: data.user.limitConcurrentSessions,
+                dailyResetMode: data.user.dailyResetMode,
+                dailyResetTime: data.user.dailyResetTime,
+                allowedClients: data.user.allowedClients,
+                allowedModels: data.user.allowedModels,
+              });
+              if (!userRes.ok) {
+                toast.error(userRes.error || t("editDialog.saveFailed"));
+                return;
+              }
             }
 
             // Handle keys: edit existing, create new (negative ID), delete removed
@@ -418,7 +475,11 @@ function UnifiedEditDialogInner({
         } catch (error) {
           console.error("[UnifiedEditDialog] submit failed", error);
           toast.error(
-            mode === "create" ? t("createDialog.saveFailed") : t("editDialog.saveFailed")
+            mode === "create"
+              ? isKeyOnlyMode
+                ? t("editDialog.operationFailed")
+                : t("createDialog.saveFailed")
+              : t("editDialog.saveFailed")
           );
         }
       });
@@ -548,6 +609,9 @@ function UnifiedEditDialogInner({
         providerGroup: {
           label: t("keyEditSection.fields.providerGroup.label"),
           placeholder: t("keyEditSection.fields.providerGroup.placeholder"),
+          selectHint: t("keyEditSection.fields.providerGroup.selectHint"),
+          allGroups: t("keyEditSection.fields.providerGroup.allGroups"),
+          noGroupHint: t("keyEditSection.fields.providerGroup.noGroupHint"),
         },
         cacheTtl: {
           label: t("keyEditSection.fields.cacheTtl.label"),
@@ -737,13 +801,21 @@ function UnifiedEditDialogInner({
       <form onSubmit={form.handleSubmit} className="flex flex-1 min-h-0 flex-col">
         <DialogHeader className="px-6 pt-6 pb-4 border-b flex-shrink-0">
           <div className="flex items-center gap-2">
-            {mode === "create" ? (
+            {isKeyOnlyMode ? (
+              <KeyRound className="h-5 w-5 text-primary" aria-hidden="true" />
+            ) : mode === "create" ? (
               <UserPlus className="h-5 w-5 text-primary" aria-hidden="true" />
             ) : (
               <UserCog className="h-5 w-5 text-primary" aria-hidden="true" />
             )}
             <DialogTitle>
-              {mode === "create" ? t("createDialog.title") : t("editDialog.title")}
+              {isKeyOnlyMode
+                ? mode === "create"
+                  ? t("dialog.createKeyTitle")
+                  : t("dialog.editKeyTitle")
+                : mode === "create"
+                  ? t("createDialog.title")
+                  : t("editDialog.title")}
             </DialogTitle>
           </div>
           <DialogDescription className="sr-only">
@@ -752,44 +824,64 @@ function UnifiedEditDialogInner({
         </DialogHeader>
 
         <div className="flex-1 min-h-0 overflow-y-auto px-6 pt-6 pb-6 space-y-8">
-          <UserEditSection
-            user={{
-              id: user?.id ?? 0,
-              name: currentUserDraft.name || "",
-              description: currentUserDraft.note || "",
-              tags: currentUserDraft.tags || [],
-              expiresAt: currentUserDraft.expiresAt ?? null,
-              providerGroup: currentUserDraft.providerGroup ?? null,
-              limit5hUsd: currentUserDraft.limit5hUsd ?? null,
-              dailyQuota: currentUserDraft.dailyQuota ?? null,
-              limitWeeklyUsd: currentUserDraft.limitWeeklyUsd ?? null,
-              limitMonthlyUsd: currentUserDraft.limitMonthlyUsd ?? null,
-              limitTotalUsd: currentUserDraft.limitTotalUsd ?? null,
-              limitConcurrentSessions: currentUserDraft.limitConcurrentSessions ?? null,
-              dailyResetMode: currentUserDraft.dailyResetMode ?? "fixed",
-              dailyResetTime: currentUserDraft.dailyResetTime ?? "00:00",
-              allowedClients: currentUserDraft.allowedClients || [],
-              allowedModels: currentUserDraft.allowedModels || [],
-            }}
-            isEnabled={mode === "edit" ? user?.isEnabled : undefined}
-            onToggleEnabled={
-              mode === "edit" && isAdmin && user
-                ? async () => {
-                    if (user.isEnabled) {
-                      await handleDisableUser();
-                    } else {
-                      await handleEnableUser();
-                    }
-                  }
-                : undefined
-            }
-            showProviderGroup={showUserProviderGroup}
-            onChange={handleUserChange}
-            translations={userEditTranslations}
-            modelSuggestions={modelSuggestions}
-          />
+          {isKeyOnlyMode && userProviderGroups.length > 0 && (
+            <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
+              <div className="text-sm font-medium">{tUsers("dialog.userProviderGroup")}</div>
+              <div className="flex flex-wrap gap-2">
+                {userProviderGroups.map((group) => (
+                  <Badge key={group} variant="secondary" className="text-xs">
+                    {group}
+                  </Badge>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {tUsers("dialog.userProviderGroupHint")}
+              </p>
+            </div>
+          )}
 
-          <Separator />
+          {isKeyOnlyMode ? null : (
+            <>
+              <UserEditSection
+                user={{
+                  id: user?.id ?? 0,
+                  name: currentUserDraft.name || "",
+                  description: currentUserDraft.note || "",
+                  tags: currentUserDraft.tags || [],
+                  expiresAt: currentUserDraft.expiresAt ?? null,
+                  providerGroup: currentUserDraft.providerGroup ?? null,
+                  limit5hUsd: currentUserDraft.limit5hUsd ?? null,
+                  dailyQuota: currentUserDraft.dailyQuota ?? null,
+                  limitWeeklyUsd: currentUserDraft.limitWeeklyUsd ?? null,
+                  limitMonthlyUsd: currentUserDraft.limitMonthlyUsd ?? null,
+                  limitTotalUsd: currentUserDraft.limitTotalUsd ?? null,
+                  limitConcurrentSessions: currentUserDraft.limitConcurrentSessions ?? null,
+                  dailyResetMode: currentUserDraft.dailyResetMode ?? "fixed",
+                  dailyResetTime: currentUserDraft.dailyResetTime ?? "00:00",
+                  allowedClients: currentUserDraft.allowedClients || [],
+                  allowedModels: currentUserDraft.allowedModels || [],
+                }}
+                isEnabled={mode === "edit" ? user?.isEnabled : undefined}
+                onToggleEnabled={
+                  mode === "edit" && isAdmin && user
+                    ? async () => {
+                        if (user.isEnabled) {
+                          await handleDisableUser();
+                        } else {
+                          await handleEnableUser();
+                        }
+                      }
+                    : undefined
+                }
+                showProviderGroup={showUserProviderGroup}
+                onChange={handleUserChange}
+                translations={userEditTranslations}
+                modelSuggestions={modelSuggestions}
+              />
+
+              <Separator />
+            </>
+          )}
 
           <div className="space-y-4">
             <div className="flex items-center justify-between py-2">
@@ -897,6 +989,7 @@ function UnifiedEditDialogInner({
                             limitConcurrentSessions: key.limitConcurrentSessions ?? 0,
                           }}
                           isAdmin={isAdmin}
+                          userProviderGroup={user?.providerGroup ?? undefined}
                           onChange={
                             ((fieldOrBatch: string | Record<string, any>, value?: any) =>
                               handleKeyChange(key.id, fieldOrBatch, value)) as {

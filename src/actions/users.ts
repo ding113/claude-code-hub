@@ -1,8 +1,11 @@
 "use server";
 
 import { randomBytes } from "node:crypto";
+import { and, inArray, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getLocale, getTranslations } from "next-intl/server";
+import { db } from "@/drizzle/db";
+import { users as usersTable } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
 import { USER_DEFAULTS } from "@/lib/constants/user.constants";
 import { logger } from "@/lib/logger";
@@ -18,9 +21,57 @@ import {
   findKeysWithStatisticsBatch,
   findKeyUsageTodayBatch,
 } from "@/repository/key";
-import { createUser, deleteUser, findUserById, findUserList, updateUser } from "@/repository/user";
+import {
+  createUser,
+  deleteUser,
+  findUserById,
+  findUserList,
+  findUserListBatch,
+  updateUser,
+} from "@/repository/user";
 import type { UserDisplay } from "@/types/user";
 import type { ActionResult } from "./types";
+
+export interface GetUsersBatchParams {
+  cursor?: { id: number; createdAt: string };
+  limit?: number;
+  searchTerm?: string;
+  tagFilter?: string;
+  keyGroupFilter?: string;
+}
+
+export interface GetUsersBatchResult {
+  users: UserDisplay[];
+  nextCursor: { id: number; createdAt: string } | null;
+  hasMore: boolean;
+}
+
+export interface BatchUpdateResult {
+  requestedCount: number;
+  updatedCount: number;
+  updatedIds: number[];
+}
+
+export interface BatchUpdateUsersParams {
+  userIds: number[];
+  updates: {
+    note?: string;
+    tags?: string[];
+    limit5hUsd?: number | null;
+    limitWeeklyUsd?: number | null;
+    limitMonthlyUsd?: number | null;
+  };
+}
+
+class BatchUpdateError extends Error {
+  readonly errorCode: string;
+
+  constructor(message: string, errorCode: string) {
+    super(message);
+    this.name = "BatchUpdateError";
+    this.errorCode = errorCode;
+  }
+}
 
 /**
  * 验证过期时间的公共函数
@@ -235,6 +286,277 @@ export async function getUsers(): Promise<UserDisplay[]> {
   } catch (error) {
     logger.error("Failed to fetch user data:", error);
     return [];
+  }
+}
+
+/**
+ * 游标分页获取用户列表（用于无限滚动）
+ *
+ * 注意：仅管理员可用。
+ */
+export async function getUsersBatch(
+  params: GetUsersBatchParams
+): Promise<ActionResult<GetUsersBatchResult>> {
+  try {
+    const tError = await getTranslations("errors");
+
+    const session = await getSession();
+    if (!session) {
+      return {
+        ok: false,
+        error: tError("UNAUTHORIZED"),
+        errorCode: ERROR_CODES.UNAUTHORIZED,
+      };
+    }
+    if (session.user.role !== "admin") {
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    const locale = await getLocale();
+    const t = await getTranslations("users");
+
+    const { users, nextCursor, hasMore } = await findUserListBatch({
+      cursor: params.cursor,
+      limit: params.limit,
+      searchTerm: params.searchTerm,
+      tagFilter: params.tagFilter,
+      keyGroupFilter: params.keyGroupFilter,
+    });
+
+    if (users.length === 0) {
+      return { ok: true, data: { users: [], nextCursor, hasMore } };
+    }
+
+    const userIds = users.map((u) => u.id);
+    const [keysMap, usageMap, statisticsMap] = await Promise.all([
+      findKeyListBatch(userIds),
+      findKeyUsageTodayBatch(userIds),
+      findKeysWithStatisticsBatch(userIds),
+    ]);
+
+    const userDisplays: UserDisplay[] = users.map((user) => {
+      try {
+        const keys = keysMap.get(user.id) || [];
+        const usageRecords = usageMap.get(user.id) || [];
+        const keyStatistics = statisticsMap.get(user.id) || [];
+
+        const usageLookup = new Map(usageRecords.map((item) => [item.keyId, item.totalCost ?? 0]));
+        const statisticsLookup = new Map(keyStatistics.map((stat) => [stat.keyId, stat]));
+
+        return {
+          id: user.id,
+          name: user.name,
+          note: user.description || undefined,
+          role: user.role,
+          rpm: user.rpm,
+          dailyQuota: user.dailyQuota,
+          providerGroup: user.providerGroup || undefined,
+          tags: user.tags || [],
+          limit5hUsd: user.limit5hUsd ?? null,
+          limitWeeklyUsd: user.limitWeeklyUsd ?? null,
+          limitMonthlyUsd: user.limitMonthlyUsd ?? null,
+          limitTotalUsd: user.limitTotalUsd ?? null,
+          limitConcurrentSessions: user.limitConcurrentSessions ?? null,
+          dailyResetMode: user.dailyResetMode,
+          dailyResetTime: user.dailyResetTime,
+          isEnabled: user.isEnabled,
+          expiresAt: user.expiresAt ?? null,
+          allowedClients: user.allowedClients || [],
+          allowedModels: user.allowedModels ?? [],
+          keys: keys.map((key) => {
+            const stats = statisticsLookup.get(key.id);
+            return {
+              id: key.id,
+              name: key.name,
+              maskedKey: maskKey(key.key),
+              fullKey: key.key,
+              canCopy: true,
+              expiresAt: key.expiresAt
+                ? key.expiresAt.toISOString().split("T")[0]
+                : t("neverExpires"),
+              status: key.isEnabled ? "enabled" : ("disabled" as const),
+              createdAt: key.createdAt,
+              createdAtFormatted: key.createdAt.toLocaleString(locale, {
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+              }),
+              todayUsage: usageLookup.get(key.id) ?? 0,
+              todayCallCount: stats?.todayCallCount ?? 0,
+              lastUsedAt: stats?.lastUsedAt ?? null,
+              lastProviderName: stats?.lastProviderName ?? null,
+              modelStats: stats?.modelStats ?? [],
+              canLoginWebUi: key.canLoginWebUi,
+              limit5hUsd: key.limit5hUsd,
+              limitDailyUsd: key.limitDailyUsd,
+              dailyResetMode: key.dailyResetMode,
+              dailyResetTime: key.dailyResetTime,
+              limitWeeklyUsd: key.limitWeeklyUsd,
+              limitMonthlyUsd: key.limitMonthlyUsd,
+              limitTotalUsd: key.limitTotalUsd,
+              limitConcurrentSessions: key.limitConcurrentSessions || 0,
+              providerGroup: key.providerGroup,
+            };
+          }),
+        };
+      } catch (error) {
+        logger.error(`Failed to process keys for user ${user.id}:`, error);
+        return {
+          id: user.id,
+          name: user.name,
+          note: user.description || undefined,
+          role: user.role,
+          rpm: user.rpm,
+          dailyQuota: user.dailyQuota,
+          providerGroup: user.providerGroup || undefined,
+          tags: user.tags || [],
+          limit5hUsd: user.limit5hUsd ?? null,
+          limitWeeklyUsd: user.limitWeeklyUsd ?? null,
+          limitMonthlyUsd: user.limitMonthlyUsd ?? null,
+          limitTotalUsd: user.limitTotalUsd ?? null,
+          limitConcurrentSessions: user.limitConcurrentSessions ?? null,
+          dailyResetMode: user.dailyResetMode,
+          dailyResetTime: user.dailyResetTime,
+          isEnabled: user.isEnabled,
+          expiresAt: user.expiresAt ?? null,
+          allowedClients: user.allowedClients || [],
+          allowedModels: user.allowedModels ?? [],
+          keys: [],
+        };
+      }
+    });
+
+    return { ok: true, data: { users: userDisplays, nextCursor, hasMore } };
+  } catch (error) {
+    logger.error("Failed to fetch user batch data:", error);
+    const message = error instanceof Error ? error.message : "Failed to fetch user batch data";
+    return { ok: false, error: message, errorCode: ERROR_CODES.INTERNAL_ERROR };
+  }
+}
+
+/**
+ * 批量更新用户（事务保证原子性）
+ *
+ * 注意：仅管理员可用。
+ */
+export async function batchUpdateUsers(
+  params: BatchUpdateUsersParams
+): Promise<ActionResult<BatchUpdateResult>> {
+  try {
+    const tError = await getTranslations("errors");
+
+    const session = await getSession();
+    if (!session) {
+      return {
+        ok: false,
+        error: tError("UNAUTHORIZED"),
+        errorCode: ERROR_CODES.UNAUTHORIZED,
+      };
+    }
+    if (session.user.role !== "admin") {
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    const requestedIds = Array.from(new Set(params.userIds)).filter((id) => Number.isInteger(id));
+    if (requestedIds.length === 0) {
+      return { ok: false, error: "userIds 不能为空", errorCode: ERROR_CODES.REQUIRED_FIELD };
+    }
+
+    const updatesSchema = UpdateUserSchema.pick({
+      note: true,
+      tags: true,
+      limit5hUsd: true,
+      limitWeeklyUsd: true,
+      limitMonthlyUsd: true,
+    });
+
+    const validationResult = updatesSchema.safeParse(params.updates ?? {});
+    if (!validationResult.success) {
+      return {
+        ok: false,
+        error: formatZodError(validationResult.error),
+        errorCode: ERROR_CODES.INVALID_FORMAT,
+      };
+    }
+
+    const updates = validationResult.data;
+    const hasAnyUpdate = Object.values(updates).some((v) => v !== undefined);
+    if (!hasAnyUpdate) {
+      return { ok: false, error: tError("EMPTY_UPDATE"), errorCode: ERROR_CODES.EMPTY_UPDATE };
+    }
+
+    let updatedIds: number[] = [];
+
+    await db.transaction(async (tx) => {
+      const existingRows = await tx
+        .select({ id: usersTable.id })
+        .from(usersTable)
+        .where(and(inArray(usersTable.id, requestedIds), isNull(usersTable.deletedAt)));
+
+      const existingSet = new Set(existingRows.map((r) => r.id));
+      const missingIds = requestedIds.filter((id) => !existingSet.has(id));
+      if (missingIds.length > 0) {
+        throw new BatchUpdateError(
+          `部分用户不存在: ${missingIds.join(", ")}`,
+          ERROR_CODES.NOT_FOUND
+        );
+      }
+
+      const dbUpdates: Record<string, unknown> = { updatedAt: new Date() };
+
+      if (updates.note !== undefined) dbUpdates.description = updates.note;
+      if (updates.tags !== undefined) dbUpdates.tags = updates.tags;
+      if (updates.limit5hUsd !== undefined)
+        dbUpdates.limit5hUsd = updates.limit5hUsd === null ? null : updates.limit5hUsd.toString();
+      if (updates.limitWeeklyUsd !== undefined)
+        dbUpdates.limitWeeklyUsd =
+          updates.limitWeeklyUsd === null ? null : updates.limitWeeklyUsd.toString();
+      if (updates.limitMonthlyUsd !== undefined)
+        dbUpdates.limitMonthlyUsd =
+          updates.limitMonthlyUsd === null ? null : updates.limitMonthlyUsd.toString();
+
+      const updatedRows = await tx
+        .update(usersTable)
+        .set(dbUpdates)
+        .where(and(inArray(usersTable.id, requestedIds), isNull(usersTable.deletedAt)))
+        .returning({ id: usersTable.id });
+
+      updatedIds = updatedRows.map((r) => r.id);
+
+      if (updatedIds.length !== requestedIds.length) {
+        throw new BatchUpdateError("批量更新失败：更新行数不匹配", ERROR_CODES.UPDATE_FAILED);
+      }
+    });
+
+    revalidatePath("/dashboard");
+
+    return {
+      ok: true,
+      data: {
+        requestedCount: requestedIds.length,
+        updatedCount: updatedIds.length,
+        updatedIds,
+      },
+    };
+  } catch (error) {
+    if (error instanceof BatchUpdateError) {
+      return { ok: false, error: error.message, errorCode: error.errorCode };
+    }
+
+    logger.error("批量更新用户失败:", error);
+    const message = error instanceof Error ? error.message : "批量更新用户失败";
+    return { ok: false, error: message, errorCode: ERROR_CODES.UPDATE_FAILED };
   }
 }
 

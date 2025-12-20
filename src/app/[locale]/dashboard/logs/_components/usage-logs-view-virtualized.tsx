@@ -173,6 +173,7 @@ function UsageLogsViewContent({
 
   // Invalidate query when URL changes (e.g., browser back/forward navigation)
   useEffect(() => {
+    void paramsKey;
     queryClientInstance.invalidateQueries({ queryKey: ["usage-logs-batch"] });
   }, [paramsKey, queryClientInstance]);
 
