@@ -1,4 +1,4 @@
-import { LoadingState, ListSkeleton } from "@/components/loading/page-skeletons";
+import { ListSkeleton, LoadingState } from "@/components/loading/page-skeletons";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function ActiveSessionsSkeleton() {

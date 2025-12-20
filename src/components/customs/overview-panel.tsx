@@ -6,11 +6,11 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import type { OverviewData } from "@/actions/overview";
 import { getOverviewData } from "@/actions/overview";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { CurrencyCode } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/currency";
 import { ActiveSessionsList } from "./active-sessions-list";
 import { MetricCard } from "./metric-card";
-import { Skeleton } from "@/components/ui/skeleton";
 
 const REFRESH_INTERVAL = 5000; // 5秒刷新一次
 

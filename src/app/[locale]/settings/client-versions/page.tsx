@@ -1,17 +1,17 @@
-import { Suspense } from "react";
 import { getTranslations } from "next-intl/server";
+import { Suspense } from "react";
 import { fetchClientVersionStats } from "@/actions/client-versions";
 import { fetchSystemSettings } from "@/actions/system-config";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { redirect } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
 import { SettingsPageHeader } from "../_components/settings-page-header";
+import { ClientVersionStatsTable } from "./_components/client-version-stats-table";
+import { ClientVersionToggle } from "./_components/client-version-toggle";
 import {
   ClientVersionsSettingsSkeleton,
   ClientVersionsTableSkeleton,
 } from "./_components/client-versions-skeleton";
-import { ClientVersionStatsTable } from "./_components/client-version-stats-table";
-import { ClientVersionToggle } from "./_components/client-version-toggle";
 
 export default async function ClientVersionsPage({
   params,

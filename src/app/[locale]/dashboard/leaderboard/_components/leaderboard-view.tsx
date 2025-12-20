@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatTokenAmount } from "@/lib/utils";
 import type {
@@ -15,7 +16,6 @@ import type {
 } from "@/repository/leaderboard";
 import { DateRangePicker } from "./date-range-picker";
 import { type ColumnDef, LeaderboardTable } from "./leaderboard-table";
-import { Skeleton } from "@/components/ui/skeleton";
 
 interface LeaderboardViewProps {
   isAdmin: boolean;

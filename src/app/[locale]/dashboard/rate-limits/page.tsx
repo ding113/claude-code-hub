@@ -3,8 +3,8 @@ import { Suspense } from "react";
 import { Section } from "@/components/section";
 import { redirect } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
-import { RateLimitsContentSkeleton } from "./_components/rate-limits-skeleton";
 import { RateLimitDashboard } from "./_components/rate-limit-dashboard";
+import { RateLimitsContentSkeleton } from "./_components/rate-limits-skeleton";
 
 export const dynamic = "force-dynamic";
 

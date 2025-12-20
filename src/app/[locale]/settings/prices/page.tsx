@@ -1,5 +1,5 @@
-import { Suspense } from "react";
 import { getTranslations } from "next-intl/server";
+import { Suspense } from "react";
 import { getModelPrices, getModelPricesPaginated } from "@/actions/model-prices";
 import { Section } from "@/components/section";
 import { SettingsPageHeader } from "../_components/settings-page-header";

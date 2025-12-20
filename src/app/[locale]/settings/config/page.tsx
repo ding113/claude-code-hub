@@ -1,5 +1,5 @@
-import { Suspense } from "react";
 import { getTranslations } from "next-intl/server";
+import { Suspense } from "react";
 import { Section } from "@/components/section";
 import { getSystemSettings } from "@/repository/system-config";
 import { SettingsPageHeader } from "../_components/settings-page-header";

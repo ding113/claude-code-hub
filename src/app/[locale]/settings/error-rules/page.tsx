@@ -1,5 +1,5 @@
-import { Suspense } from "react";
 import { getTranslations } from "next-intl/server";
+import { Suspense } from "react";
 import { getCacheStats, listErrorRules } from "@/actions/error-rules";
 import { Section } from "@/components/section";
 import { Skeleton } from "@/components/ui/skeleton";

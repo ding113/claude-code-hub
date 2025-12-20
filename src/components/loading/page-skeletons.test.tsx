@@ -20,7 +20,7 @@ describe("page-skeletons", () => {
 
   test("TableSkeleton renders expected skeleton count", () => {
     const html = renderToStaticMarkup(<TableSkeleton rows={2} columns={3} />);
-    const skeletonCount = (html.match(/data-slot=\"skeleton\"/g) || []).length;
+    const skeletonCount = (html.match(/data-slot="skeleton"/g) || []).length;
     expect(skeletonCount).toBe(3 + 2 * 3);
   });
 });

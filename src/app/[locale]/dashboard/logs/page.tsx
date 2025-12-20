@@ -3,12 +3,12 @@ import { Suspense } from "react";
 import { Section } from "@/components/section";
 import { redirect } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
-import { UsageLogsSkeleton } from "./_components/usage-logs-skeleton";
 import { ActiveSessionsSkeleton } from "./_components/active-sessions-skeleton";
 import {
   UsageLogsActiveSessionsSection,
   UsageLogsDataSection,
 } from "./_components/usage-logs-sections";
+import { UsageLogsSkeleton } from "./_components/usage-logs-skeleton";
 
 export const dynamic = "force-dynamic";
 

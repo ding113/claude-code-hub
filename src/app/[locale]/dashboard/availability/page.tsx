@@ -1,12 +1,12 @@
 import { AlertCircle } from "lucide-react";
 import { getTranslations } from "next-intl/server";
+import { Suspense } from "react";
 import { Section } from "@/components/section";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSession } from "@/lib/auth";
 import { AvailabilityViewSkeleton } from "./_components/availability-skeleton";
 import { AvailabilityView } from "./_components/availability-view";
-import { Suspense } from "react";
 
 export const dynamic = "force-dynamic";
 

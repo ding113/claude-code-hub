@@ -1,4 +1,4 @@
-import { LoadingState, CardGridSkeleton, ListSkeleton } from "@/components/loading/page-skeletons";
+import { CardGridSkeleton, ListSkeleton, LoadingState } from "@/components/loading/page-skeletons";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function DashboardOverviewSkeleton() {

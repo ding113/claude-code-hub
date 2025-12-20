@@ -126,7 +126,7 @@ async function initializePinoLogger(): Promise<void> {
   if (process.env.NEXT_RUNTIME && process.env.NEXT_RUNTIME !== "nodejs") return;
 
   try {
-    const pinoModule = (await import("pino")) as typeof import("pino");
+    const pinoModule = await import("pino");
     const pino = pinoModule.default;
     const stdTimeFunctions = pinoModule.stdTimeFunctions ?? pino.stdTimeFunctions;
     const enablePrettyTransport = isDevelopment() && !process.env.TURBOPACK;
