@@ -263,8 +263,10 @@ function BatchEditDialogInner({
 
   const handlePrepareConfirm = () => {
     try {
-      const { updates: userUpdates, enabledFields: enabledUserFields } =
-        buildUserUpdates(userState, { validationMessages, fieldLabels: userFieldLabels });
+      const { updates: userUpdates, enabledFields: enabledUserFields } = buildUserUpdates(
+        userState,
+        { validationMessages, fieldLabels: userFieldLabels }
+      );
       const { updates: keyUpdates, enabledFields: enabledKeyFields } = buildKeyUpdates(keyState, {
         validationMessages,
         fieldLabels: keyFieldLabels,
@@ -382,7 +384,9 @@ function BatchEditDialogInner({
         {willUpdateUsers ? (
           <div className="text-sm">
             <div className="font-medium">{t("confirm.userFields")}</div>
-            <div className="text-muted-foreground">{pendingUpdate.enabledUserFields.join(", ")}</div>
+            <div className="text-muted-foreground">
+              {pendingUpdate.enabledUserFields.join(", ")}
+            </div>
           </div>
         ) : null}
         {willUpdateKeys ? (
