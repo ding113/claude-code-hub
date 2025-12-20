@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ChevronDown,
   ChevronUp,
@@ -199,6 +200,7 @@ function UnifiedEditDialogInner({
   currentUser,
 }: UnifiedEditDialogProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const t = useTranslations("dashboard.userManagement");
   const tCommon = useTranslations("common");
   const [isPending, startTransition] = useTransition();
@@ -411,6 +413,7 @@ function UnifiedEditDialogInner({
 
           onSuccess?.();
           onOpenChange(false);
+          queryClient.invalidateQueries({ queryKey: ["users"] });
           router.refresh();
         } catch (error) {
           console.error("[UnifiedEditDialog] submit failed", error);
@@ -700,6 +703,7 @@ function UnifiedEditDialogInner({
     }
     toast.success(t("editDialog.userDisabled"));
     onSuccess?.();
+    queryClient.invalidateQueries({ queryKey: ["users"] });
     router.refresh();
   };
 
@@ -711,6 +715,7 @@ function UnifiedEditDialogInner({
     }
     toast.success(t("editDialog.userEnabled"));
     onSuccess?.();
+    queryClient.invalidateQueries({ queryKey: ["users"] });
     router.refresh();
   };
 
@@ -723,6 +728,7 @@ function UnifiedEditDialogInner({
     toast.success(t("editDialog.userDeleted"));
     onSuccess?.();
     onOpenChange(false);
+    queryClient.invalidateQueries({ queryKey: ["users"] });
     router.refresh();
   };
 

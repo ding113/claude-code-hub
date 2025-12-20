@@ -83,6 +83,7 @@ function UsageLogsViewContent({
     queryFn: getUsers,
     enabled: isAdmin && users === undefined,
     initialData: users ?? [],
+    initialDataUpdatedAt: 0,
   });
 
   const { data: providersData = [], isLoading: isProvidersLoading } = useQuery<ProviderDisplay[]>({
@@ -90,6 +91,7 @@ function UsageLogsViewContent({
     queryFn: getProviders,
     enabled: isAdmin && providers === undefined,
     initialData: providers ?? [],
+    initialDataUpdatedAt: 0,
   });
 
   const { data: keysResult, isLoading: isKeysLoading } = useQuery({
