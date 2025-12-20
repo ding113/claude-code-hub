@@ -124,6 +124,7 @@ export function UserManagementTable({
     () => new Map(users.map((user) => [user.id, false]))
   );
   const parentRef = useRef<HTMLDivElement>(null);
+  const prevAutoExpandRef = useRef(autoExpandOnFilter);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [scrollToKeyId, setScrollToKeyId] = useState<number | undefined>(undefined);
@@ -148,9 +149,10 @@ export function UserManagementTable({
   }, [users]);
 
   useEffect(() => {
-    if (autoExpandOnFilter) {
+    if (autoExpandOnFilter && !prevAutoExpandRef.current) {
       setExpandedUsers(new Map(users.map((user) => [user.id, true])));
     }
+    prevAutoExpandRef.current = autoExpandOnFilter;
   }, [autoExpandOnFilter, users]);
 
   const allExpanded = useMemo(() => {
