@@ -210,10 +210,7 @@ export function UserManagementTable({
 
   const getScrollElement = useCallback(() => parentRef.current, []);
 
-  const getItemKey = useCallback(
-    (index: number) => users[index]?.id ?? `loader-${index}`,
-    [users]
-  );
+  const getItemKey = useCallback((index: number) => users[index]?.id ?? `loader-${index}`, [users]);
 
   const rowVirtualizer = useVirtualizer({
     count: hasNextPage ? users.length + 1 : users.length,
