@@ -47,6 +47,7 @@ type UserFieldLabels = {
   note: string;
   tags: string;
   limit5h: string;
+  limitDaily: string;
   limitWeekly: string;
   limitMonthly: string;
 };
@@ -68,6 +69,8 @@ const INITIAL_USER_STATE: BatchUserSectionState = {
   tags: [],
   limit5hUsdEnabled: false,
   limit5hUsd: "",
+  dailyQuotaEnabled: false,
+  dailyQuota: "",
   limitWeeklyUsdEnabled: false,
   limitWeeklyUsd: "",
   limitMonthlyUsdEnabled: false,
@@ -125,6 +128,10 @@ function buildUserUpdates(
   if (state.limit5hUsdEnabled) {
     updates.limit5hUsd = parseNumberOrNull(state.limit5hUsd, args.validationMessages);
     enabledFields.push(args.fieldLabels.limit5h);
+  }
+  if (state.dailyQuotaEnabled) {
+    updates.dailyQuota = parseNumberOrNull(state.dailyQuota, args.validationMessages);
+    enabledFields.push(args.fieldLabels.limitDaily);
   }
   if (state.limitWeeklyUsdEnabled) {
     updates.limitWeeklyUsd = parseNumberOrNull(state.limitWeeklyUsd, args.validationMessages);
@@ -223,6 +230,7 @@ function BatchEditDialogInner({
       note: t("user.fields.note"),
       tags: t("user.fields.tags"),
       limit5h: t("user.fields.limit5h"),
+      limitDaily: t("user.fields.limitDaily"),
       limitWeekly: t("user.fields.limitWeekly"),
       limitMonthly: t("user.fields.limitMonthly"),
     }),

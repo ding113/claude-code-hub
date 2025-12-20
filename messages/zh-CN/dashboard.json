@@ -1186,6 +1186,7 @@
           "note": "备注",
           "tags": "标签",
           "limit5h": "5h 限额 (USD)",
+          "limitDaily": "每日限额 (USD)",
           "limitWeekly": "周限额 (USD)",
           "limitMonthly": "月限额 (USD)"
         },

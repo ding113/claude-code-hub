@@ -1120,6 +1120,7 @@
           "note": "Note",
           "tags": "Tags",
           "limit5h": "5h Limit (USD)",
+          "limitDaily": "Daily Limit (USD)",
           "limitWeekly": "Weekly Limit (USD)",
           "limitMonthly": "Monthly Limit (USD)"
         },
