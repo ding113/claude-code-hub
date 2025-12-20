@@ -3,6 +3,7 @@
 import { useTranslations } from "next-intl";
 import type { MyUsageLogEntry } from "@/actions/my-usage";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -21,6 +22,8 @@ interface UsageLogsTableProps {
   pageSize: number;
   onPageChange: (page: number) => void;
   currencyCode?: CurrencyCode;
+  loading?: boolean;
+  loadingLabel?: string;
 }
 
 export function UsageLogsTable({
@@ -30,6 +33,8 @@ export function UsageLogsTable({
   pageSize,
   onPageChange,
   currencyCode = "USD",
+  loading = false,
+  loadingLabel,
 }: UsageLogsTableProps) {
   const t = useTranslations("myUsage.logs");
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -58,7 +63,17 @@ export function UsageLogsTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {logs.length === 0 ? (
+            {loading ? (
+              Array.from({ length: 6 }).map((_, rowIndex) => (
+                <TableRow key={`skeleton-${rowIndex}`}>
+                  {Array.from({ length: 8 }).map((_, cellIndex) => (
+                    <TableCell key={`skeleton-${rowIndex}-${cellIndex}`}>
+                      <Skeleton className="h-4 w-full" />
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : logs.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={8} className="text-center text-muted-foreground">
                   {t("noLogs")}
@@ -131,17 +146,19 @@ export function UsageLogsTable({
 
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <span>
-          {t("pagination", {
-            from: (page - 1) * pageSize + 1,
-            to: Math.min(page * pageSize, total),
-            total,
-          })}
+          {loading && loadingLabel
+            ? loadingLabel
+            : t("pagination", {
+                from: (page - 1) * pageSize + 1,
+                to: Math.min(page * pageSize, total),
+                total,
+              })}
         </span>
         <div className="flex items-center gap-2">
           <button
             className="rounded-md border px-3 py-1 text-xs disabled:opacity-50"
             onClick={() => onPageChange(Math.max(1, page - 1))}
-            disabled={page <= 1}
+            disabled={page <= 1 || loading}
           >
             {t("prev")}
           </button>
@@ -151,7 +168,7 @@ export function UsageLogsTable({
           <button
             className="rounded-md border px-3 py-1 text-xs disabled:opacity-50"
             onClick={() => onPageChange(Math.min(totalPages, page + 1))}
-            disabled={page >= totalPages}
+            disabled={page >= totalPages || loading}
           >
             {t("next")}
           </button>

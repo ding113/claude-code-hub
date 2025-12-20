@@ -1,14 +1,14 @@
 import { getTranslations } from "next-intl/server";
 import { Suspense } from "react";
-import { getKeys } from "@/actions/keys";
-import { getProviders } from "@/actions/providers";
-import { getUsers } from "@/actions/users";
-import { ActiveSessionsPanel } from "@/components/customs/active-sessions-panel";
 import { Section } from "@/components/section";
 import { redirect } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
-import { getSystemSettings } from "@/repository/system-config";
-import { UsageLogsViewVirtualized } from "./_components/usage-logs-view-virtualized";
+import { ActiveSessionsSkeleton } from "./_components/active-sessions-skeleton";
+import {
+  UsageLogsActiveSessionsSection,
+  UsageLogsDataSection,
+} from "./_components/usage-logs-sections";
+import { UsageLogsSkeleton } from "./_components/usage-logs-skeleton";
 
 export const dynamic = "force-dynamic";
 
@@ -31,42 +31,18 @@ export default async function UsageLogsPage({
 
   const t = await getTranslations("dashboard");
 
-  // 管理员：获取用户和供应商列表
-  // 非管理员：获取当前用户的 Keys 列表
-  const [users, providers, initialKeys, resolvedSearchParams, systemSettings] = isAdmin
-    ? await Promise.all([
-        getUsers(),
-        getProviders(),
-        Promise.resolve({ ok: true, data: [] }),
-        searchParams,
-        getSystemSettings(),
-      ])
-    : await Promise.all([
-        Promise.resolve([]),
-        Promise.resolve([]),
-        getKeys(session.user.id),
-        searchParams,
-        getSystemSettings(),
-      ]);
-
   return (
     <div className="space-y-6">
-      <ActiveSessionsPanel currencyCode={systemSettings.currencyDisplay} />
+      <Suspense fallback={<ActiveSessionsSkeleton />}>
+        <UsageLogsActiveSessionsSection />
+      </Suspense>
 
       <Section title={t("title.usageLogs")} description={t("title.usageLogsDescription")}>
-        <Suspense
-          fallback={
-            <div className="text-center py-8 text-muted-foreground">{t("logs.stats.loading")}</div>
-          }
-        >
-          <UsageLogsViewVirtualized
+        <Suspense fallback={<UsageLogsSkeleton />}>
+          <UsageLogsDataSection
             isAdmin={isAdmin}
-            users={users}
-            providers={providers}
-            initialKeys={initialKeys.ok ? initialKeys.data : []}
-            searchParams={resolvedSearchParams}
-            currencyCode={systemSettings.currencyDisplay}
-            billingModelSource={systemSettings.billingModelSource}
+            userId={session.user.id}
+            searchParams={searchParams}
           />
         </Suspense>
       </Section>

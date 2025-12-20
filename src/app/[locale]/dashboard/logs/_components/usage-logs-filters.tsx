@@ -36,6 +36,9 @@ interface UsageLogsFiltersProps {
   users: UserDisplay[];
   providers: ProviderDisplay[];
   initialKeys: Key[];
+  isUsersLoading?: boolean;
+  isProvidersLoading?: boolean;
+  isKeysLoading?: boolean;
   filters: {
     userId?: number;
     keyId?: number;
@@ -59,6 +62,9 @@ export function UsageLogsFilters({
   users,
   providers,
   initialKeys,
+  isUsersLoading = false,
+  isProvidersLoading = false,
+  isKeysLoading = false,
   filters,
   onChange,
   onReset,
@@ -93,6 +99,12 @@ export function UsageLogsFilters({
   const [keys, setKeys] = useState<Key[]>(initialKeys);
   const [localFilters, setLocalFilters] = useState(filters);
   const [isExporting, setIsExporting] = useState(false);
+
+  useEffect(() => {
+    if (initialKeys.length > 0) {
+      setKeys(initialKeys);
+    }
+  }, [initialKeys]);
 
   // 管理员用户首次加载时，如果 URL 中有 userId 参数，需要加载该用户的 keys
   // biome-ignore lint/correctness/useExhaustiveDependencies: 故意仅在组件挂载时执行一次
@@ -251,9 +263,17 @@ export function UsageLogsFilters({
         {isAdmin && (
           <div className="space-y-2 lg:col-span-4">
             <Label>{t("logs.filters.user")}</Label>
-            <Select value={localFilters.userId?.toString() || ""} onValueChange={handleUserChange}>
+            <Select
+              value={localFilters.userId?.toString() || ""}
+              onValueChange={handleUserChange}
+              disabled={isUsersLoading}
+            >
               <SelectTrigger>
-                <SelectValue placeholder={t("logs.filters.allUsers")} />
+                <SelectValue
+                  placeholder={
+                    isUsersLoading ? t("logs.stats.loading") : t("logs.filters.allUsers")
+                  }
+                />
               </SelectTrigger>
               <SelectContent>
                 {users.map((user) => (
@@ -277,14 +297,16 @@ export function UsageLogsFilters({
                 keyId: value ? parseInt(value, 10) : undefined,
               })
             }
-            disabled={isAdmin && !localFilters.userId && keys.length === 0}
+            disabled={isKeysLoading || (isAdmin && !localFilters.userId && keys.length === 0)}
           >
             <SelectTrigger>
               <SelectValue
                 placeholder={
-                  isAdmin && !localFilters.userId && keys.length === 0
-                    ? t("logs.filters.selectUserFirst")
-                    : t("logs.filters.allKeys")
+                  isKeysLoading
+                    ? t("logs.stats.loading")
+                    : isAdmin && !localFilters.userId && keys.length === 0
+                      ? t("logs.filters.selectUserFirst")
+                      : t("logs.filters.allKeys")
                 }
               />
             </SelectTrigger>
@@ -310,9 +332,14 @@ export function UsageLogsFilters({
                   providerId: value ? parseInt(value, 10) : undefined,
                 })
               }
+              disabled={isProvidersLoading}
             >
               <SelectTrigger>
-                <SelectValue placeholder={t("logs.filters.allProviders")} />
+                <SelectValue
+                  placeholder={
+                    isProvidersLoading ? t("logs.stats.loading") : t("logs.filters.allProviders")
+                  }
+                />
               </SelectTrigger>
               <SelectContent>
                 {providers.map((provider) => (

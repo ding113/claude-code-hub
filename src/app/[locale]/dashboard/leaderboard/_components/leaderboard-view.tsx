@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatTokenAmount } from "@/lib/utils";
 import type {
@@ -112,25 +113,9 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     []
   );
 
-  if (loading) {
-    return (
-      <Card>
-        <CardContent className="py-8">
-          <div className="text-center text-muted-foreground">{t("states.loading")}</div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (error) {
-    return (
-      <Card>
-        <CardContent className="py-8">
-          <div className="text-center text-destructive">{error}</div>
-        </CardContent>
-      </Card>
-    );
-  }
+  const skeletonColumns =
+    scope === "user" ? 5 : scope === "provider" ? 7 : scope === "model" ? 6 : 5;
+  const skeletonGridStyle = { gridTemplateColumns: `repeat(${skeletonColumns}, minmax(0, 1fr))` };
 
   // 列定义（根据 scope 动态切换）
   const userColumns: ColumnDef<UserEntry>[] = [
@@ -280,7 +265,44 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
 
       {/* 数据表格 */}
       <div>
-        <LeaderboardTable data={data} period={period} columns={columns} getRowKey={rowKey} />
+        {loading ? (
+          <Card>
+            <CardContent className="py-6 space-y-4">
+              <div className="space-y-3">
+                <div className="grid gap-4" style={skeletonGridStyle}>
+                  {Array.from({ length: skeletonColumns }).map((_, index) => (
+                    <Skeleton key={`leaderboard-head-${index}`} className="h-4 w-full" />
+                  ))}
+                </div>
+                <div className="space-y-2">
+                  {Array.from({ length: 6 }).map((_, rowIndex) => (
+                    <div
+                      key={`leaderboard-row-${rowIndex}`}
+                      className="grid gap-4"
+                      style={skeletonGridStyle}
+                    >
+                      {Array.from({ length: skeletonColumns }).map((_, colIndex) => (
+                        <Skeleton
+                          key={`leaderboard-cell-${rowIndex}-${colIndex}`}
+                          className="h-4 w-full"
+                        />
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="text-center text-xs text-muted-foreground">{t("states.loading")}</div>
+            </CardContent>
+          </Card>
+        ) : error ? (
+          <Card>
+            <CardContent className="py-8">
+              <div className="text-center text-destructive">{error}</div>
+            </CardContent>
+          </Card>
+        ) : (
+          <LeaderboardTable data={data} period={period} columns={columns} getRowKey={rowKey} />
+        )}
       </div>
     </div>
   );

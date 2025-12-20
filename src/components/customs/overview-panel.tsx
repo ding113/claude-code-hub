@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import type { OverviewData } from "@/actions/overview";
 import { getOverviewData } from "@/actions/overview";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { CurrencyCode } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/currency";
 import { ActiveSessionsList } from "./active-sessions-list";
@@ -34,8 +35,9 @@ interface OverviewPanelProps {
 export function OverviewPanel({ currencyCode = "USD", isAdmin = false }: OverviewPanelProps) {
   const router = useRouter();
   const tc = useTranslations("customs");
+  const tu = useTranslations("ui");
 
-  const { data } = useQuery<OverviewData, Error>({
+  const { data, isLoading } = useQuery<OverviewData, Error>({
     queryKey: ["overview-data"],
     queryFn: fetchOverviewData,
     refetchInterval: REFRESH_INTERVAL,
@@ -58,6 +60,39 @@ export function OverviewPanel({ currencyCode = "USD", isAdmin = false }: Overvie
   // 对于非 admin 用户，不显示概览面板
   if (!isAdmin) {
     return null;
+  }
+
+  if (isLoading && !data) {
+    return (
+      <div className="space-y-2">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 w-full">
+          <div className="lg:col-span-3 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <div key={`metric-skeleton-${index}`} className="rounded-lg border bg-card p-4">
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-8 w-16 mt-2" />
+                </div>
+              ))}
+            </div>
+            <Skeleton className="h-8 w-full" />
+          </div>
+          <div className="lg:col-span-9">
+            <div className="rounded-lg border bg-card">
+              <div className="border-b px-4 py-3">
+                <Skeleton className="h-4 w-24" />
+              </div>
+              <div className="p-4 space-y-3">
+                {Array.from({ length: 5 }).map((_, index) => (
+                  <Skeleton key={`session-skeleton-${index}`} className="h-5 w-full" />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="text-xs text-muted-foreground">{tu("common.loading")}</div>
+      </div>
+    );
   }
 
   return (

@@ -1,8 +1,10 @@
 import { getTranslations } from "next-intl/server";
+import { Suspense } from "react";
 import { getModelPrices, getModelPricesPaginated } from "@/actions/model-prices";
 import { Section } from "@/components/section";
 import { SettingsPageHeader } from "../_components/settings-page-header";
 import { PriceList } from "./_components/price-list";
+import { PricesSkeleton } from "./_components/prices-skeleton";
 import { SyncLiteLLMButton } from "./_components/sync-litellm-button";
 import { UploadPriceDialog } from "./_components/upload-price-dialog";
 
@@ -19,6 +21,19 @@ interface SettingsPricesPageProps {
 }
 
 export default async function SettingsPricesPage({ searchParams }: SettingsPricesPageProps) {
+  const t = await getTranslations("settings");
+
+  return (
+    <>
+      <SettingsPageHeader title={t("prices.title")} description={t("prices.description")} />
+      <Suspense fallback={<PricesSkeleton />}>
+        <SettingsPricesContent searchParams={searchParams} />
+      </Suspense>
+    </>
+  );
+}
+
+async function SettingsPricesContent({ searchParams }: SettingsPricesPageProps) {
   const t = await getTranslations("settings");
   const params = await searchParams;
 
@@ -53,26 +68,22 @@ export default async function SettingsPricesPage({ searchParams }: SettingsPrice
   const isEmpty = initialTotal === 0;
 
   return (
-    <>
-      <SettingsPageHeader title={t("prices.title")} description={t("prices.description")} />
-
-      <Section
-        title={t("prices.section.title")}
-        description={t("prices.section.description")}
-        actions={
-          <div className="flex gap-2">
-            <SyncLiteLLMButton />
-            <UploadPriceDialog defaultOpen={isRequired && isEmpty} isRequired={isRequired} />
-          </div>
-        }
-      >
-        <PriceList
-          initialPrices={initialPrices}
-          initialTotal={initialTotal}
-          initialPage={initialPage}
-          initialPageSize={initialPageSize}
-        />
-      </Section>
-    </>
+    <Section
+      title={t("prices.section.title")}
+      description={t("prices.section.description")}
+      actions={
+        <div className="flex gap-2">
+          <SyncLiteLLMButton />
+          <UploadPriceDialog defaultOpen={isRequired && isEmpty} isRequired={isRequired} />
+        </div>
+      }
+    >
+      <PriceList
+        initialPrices={initialPrices}
+        initialTotal={initialTotal}
+        initialPage={initialPage}
+        initialPageSize={initialPageSize}
+      />
+    </Section>
   );
 }

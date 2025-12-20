@@ -1,9 +1,11 @@
 import { AlertCircle } from "lucide-react";
 import { getTranslations } from "next-intl/server";
+import { Suspense } from "react";
 import { Section } from "@/components/section";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSession } from "@/lib/auth";
+import { AvailabilityViewSkeleton } from "./_components/availability-skeleton";
 import { AvailabilityView } from "./_components/availability-view";
 
 export const dynamic = "force-dynamic";
@@ -42,7 +44,9 @@ export default async function AvailabilityPage() {
   return (
     <div className="space-y-6">
       <Section title={t("availability.title")} description={t("availability.description")}>
-        <AvailabilityView />
+        <Suspense fallback={<AvailabilityViewSkeleton />}>
+          <AvailabilityView />
+        </Suspense>
       </Section>
     </div>
   );

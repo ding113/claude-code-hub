@@ -1,4 +1,5 @@
 "use client";
+import { useQueryClient } from "@tanstack/react-query";
 import { ServerCog } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -13,6 +14,7 @@ interface AddProviderDialogProps {
 
 export function AddProviderDialog({ enableMultiProviderTypes }: AddProviderDialogProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -28,6 +30,8 @@ export function AddProviderDialog({ enableMultiProviderTypes }: AddProviderDialo
             enableMultiProviderTypes={enableMultiProviderTypes}
             onSuccess={() => {
               setOpen(false);
+              queryClient.invalidateQueries({ queryKey: ["providers"] });
+              queryClient.invalidateQueries({ queryKey: ["providers-health"] });
               // 刷新页面数据以显示新添加的服务商
               router.refresh();
             }}

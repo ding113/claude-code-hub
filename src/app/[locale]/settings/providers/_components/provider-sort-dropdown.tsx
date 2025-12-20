@@ -15,9 +15,14 @@ export type SortKey = "name" | "priority" | "weight" | "createdAt";
 interface ProviderSortDropdownProps {
   value: SortKey;
   onChange: (value: SortKey) => void;
+  disabled?: boolean;
 }
 
-export function ProviderSortDropdown({ value, onChange }: ProviderSortDropdownProps) {
+export function ProviderSortDropdown({
+  value,
+  onChange,
+  disabled = false,
+}: ProviderSortDropdownProps) {
   const t = useTranslations("settings.providers.sort");
   const selectedValue = value ?? "priority";
 
@@ -31,8 +36,12 @@ export function ProviderSortDropdown({ value, onChange }: ProviderSortDropdownPr
   return (
     <div className="flex items-center gap-2">
       <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
-      <Select value={selectedValue} onValueChange={(nextValue) => onChange(nextValue as SortKey)}>
-        <SelectTrigger className="w-[200px]">
+      <Select
+        value={selectedValue}
+        onValueChange={(nextValue) => onChange(nextValue as SortKey)}
+        disabled={disabled}
+      >
+        <SelectTrigger className="w-[200px]" disabled={disabled}>
           <SelectValue placeholder={t("placeholder")} />
         </SelectTrigger>
         <SelectContent>

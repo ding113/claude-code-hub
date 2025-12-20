@@ -17,8 +17,10 @@ type LogLevel = "fatal" | "error" | "warn" | "info" | "debug" | "trace";
 
 export function LogLevelForm() {
   const t = useTranslations("settings.logs");
+  const tCommon = useTranslations("settings.common");
   const [currentLevel, setCurrentLevel] = useState<LogLevel>("info");
   const [selectedLevel, setSelectedLevel] = useState<LogLevel>("info");
+  const [isLoading, setIsLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
 
   const LOG_LEVELS: { value: LogLevel; label: string; description: string }[] = [
@@ -31,6 +33,7 @@ export function LogLevelForm() {
   ];
 
   useEffect(() => {
+    setIsLoading(true);
     fetch("/api/admin/log-level")
       .then((res) => res.json())
       .then((data) => {
@@ -39,6 +42,9 @@ export function LogLevelForm() {
       })
       .catch(() => {
         toast.error(t("form.fetchFailed"));
+      })
+      .finally(() => {
+        setIsLoading(false);
       });
   }, [t]);
 
@@ -76,8 +82,8 @@ export function LogLevelForm() {
           value={selectedLevel}
           onValueChange={(value) => setSelectedLevel(value as LogLevel)}
         >
-          <SelectTrigger id="log-level" disabled={isPending}>
-            <SelectValue />
+          <SelectTrigger id="log-level" disabled={isPending || isLoading}>
+            <SelectValue placeholder={isLoading ? tCommon("loading") : t("form.selectLevel")} />
           </SelectTrigger>
           <SelectContent>
             {LOG_LEVELS.map((level) => (
@@ -90,6 +96,7 @@ export function LogLevelForm() {
             ))}
           </SelectContent>
         </Select>
+        {isLoading ? <p className="text-xs text-muted-foreground">{tCommon("loading")}</p> : null}
         <p className="text-xs text-muted-foreground">{t("form.effectiveImmediately")}</p>
       </div>
 
@@ -116,7 +123,7 @@ export function LogLevelForm() {
       )}
 
       <div className="flex justify-end">
-        <Button type="submit" disabled={isPending || selectedLevel === currentLevel}>
+        <Button type="submit" disabled={isPending || isLoading || selectedLevel === currentLevel}>
           {isPending ? t("form.saving") : t("form.save")}
         </Button>
       </div>

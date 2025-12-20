@@ -1835,6 +1835,31 @@ async function persistRequestFailure(options: {
   const errorMessage = formatProcessingError(error);
   const duration = Date.now() - session.startTime;
 
+  // 提取完整错误信息用于排查（限制长度防止异常大的错误信息）
+  const MAX_ERROR_STACK_LENGTH = 8192; // 8KB，足够容纳大多数堆栈信息
+  const MAX_ERROR_CAUSE_LENGTH = 4096; // 4KB，足够容纳 JSON 序列化的错误原因
+
+  let errorStack = error instanceof Error ? error.stack : undefined;
+  if (errorStack && errorStack.length > MAX_ERROR_STACK_LENGTH) {
+    errorStack = errorStack.substring(0, MAX_ERROR_STACK_LENGTH) + "\n...[truncated]";
+  }
+
+  let errorCause: string | undefined;
+  if (error instanceof Error && (error as NodeJS.ErrnoException).cause) {
+    try {
+      // 序列化错误原因链，保留所有属性
+      const cause = (error as NodeJS.ErrnoException).cause;
+      errorCause = JSON.stringify(cause, Object.getOwnPropertyNames(cause as object));
+    } catch {
+      // 如果序列化失败，使用简单字符串
+      errorCause = String((error as NodeJS.ErrnoException).cause);
+    }
+    // 截断过长的错误原因
+    if (errorCause && errorCause.length > MAX_ERROR_CAUSE_LENGTH) {
+      errorCause = errorCause.substring(0, MAX_ERROR_CAUSE_LENGTH) + "...[truncated]";
+    }
+  }
+
   try {
     // 更新请求持续时间
     await updateMessageRequestDuration(messageContext.id, duration);
@@ -1843,6 +1868,8 @@ async function persistRequestFailure(options: {
     await updateMessageRequestDetails(messageContext.id, {
       statusCode,
       errorMessage,
+      errorStack,
+      errorCause,
       providerChain: session.getProviderChain(),
       model: session.getCurrentModel() ?? undefined,
       providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）

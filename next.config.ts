@@ -21,9 +21,6 @@ const nextConfig: NextConfig = {
     "ioredis",
     "postgres",
     "drizzle-orm",
-    "pino",
-    "pino-pretty",
-    "thread-stream",
   ],
 
   // 强制包含 undici 到 standalone 输出

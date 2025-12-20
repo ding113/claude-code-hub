@@ -1,8 +1,10 @@
 "use client";
 
-import { Plus, Search } from "lucide-react";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { Loader2, Plus, Search } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { getUsers } from "@/actions/users";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,12 +15,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { User, UserDisplay } from "@/types/user";
 import { UnifiedEditDialog } from "../_components/user/unified-edit-dialog";
 import { UserManagementTable } from "../_components/user/user-management-table";
 import { UserOnboardingTour } from "../_components/user/user-onboarding-tour";
 
 const ONBOARDING_KEY = "cch-users-onboarding-seen";
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      staleTime: 30000,
+    },
+  },
+});
 
 /**
  * Split comma-separated tags into an array of trimmed, non-empty strings.
@@ -32,16 +43,38 @@ function splitTags(value?: string | null): string[] {
 }
 
 interface UsersPageClientProps {
-  users: UserDisplay[];
+  initialUsers?: UserDisplay[];
   currentUser: User;
 }
 
-export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
+export function UsersPageClient(props: UsersPageClientProps) {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <UsersPageContent {...props} />
+    </QueryClientProvider>
+  );
+}
+
+function UsersPageContent({ initialUsers, currentUser }: UsersPageClientProps) {
   const t = useTranslations("dashboard.users");
   const tUiTable = useTranslations("ui.table");
   const tUserMgmt = useTranslations("dashboard.userManagement");
   const tKeyList = useTranslations("dashboard.keyList");
   const tCommon = useTranslations("common");
+  const hasInitialUsers = initialUsers !== undefined;
+  const {
+    data: usersData = initialUsers ?? [],
+    isLoading,
+    isFetching,
+  } = useQuery<UserDisplay[]>({
+    queryKey: ["users"],
+    queryFn: getUsers,
+    initialData: hasInitialUsers ? initialUsers : undefined,
+  });
+
+  const resolvedUsers = usersData ?? [];
+  const isInitialLoading = isLoading && resolvedUsers.length === 0;
+  const isRefreshing = isFetching && !isInitialLoading;
   const [searchTerm, setSearchTerm] = useState("");
   const [tagFilter, setTagFilter] = useState("all");
   const [keyGroupFilter, setKeyGroupFilter] = useState("all");
@@ -90,15 +123,17 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
 
   // Extract unique tags from users
   const uniqueTags = useMemo(() => {
-    const tags = users.flatMap((u) => u.tags || []);
+    const tags = resolvedUsers.flatMap((u) => u.tags || []);
     return [...new Set(tags)].sort();
-  }, [users]);
+  }, [resolvedUsers]);
 
   // Extract unique key groups from users (split comma-separated tags)
   const uniqueKeyGroups = useMemo(() => {
-    const groups = users.flatMap((u) => u.keys?.flatMap((k) => splitTags(k.providerGroup)) || []);
+    const groups = resolvedUsers.flatMap(
+      (u) => u.keys?.flatMap((k) => splitTags(k.providerGroup)) || []
+    );
     return [...new Set(groups)].sort();
-  }, [users]);
+  }, [resolvedUsers]);
 
   // Reset filter if selected value no longer exists in options
   useEffect(() => {
@@ -121,7 +156,7 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
 
     const filtered: UserDisplay[] = [];
 
-    for (const user of users) {
+    for (const user of resolvedUsers) {
       // Collect matching key IDs for this user (before filtering)
       const userMatchingKeyIds: number[] = [];
 
@@ -181,7 +216,7 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
     }
 
     return { filteredUsers: filtered, matchingKeyIds: matchingIds };
-  }, [users, searchTerm, tagFilter, keyGroupFilter]);
+  }, [resolvedUsers, searchTerm, tagFilter, keyGroupFilter]);
 
   // Determine if we should highlight keys (either search or keyGroup filter is active)
   const shouldHighlightKeys = searchTerm.trim().length > 0 || keyGroupFilter !== "all";
@@ -192,7 +227,9 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
         <div>
           <h3 className="text-lg font-medium">{t("title")}</h3>
           <p className="text-sm text-muted-foreground">
-            {t("description", { count: filteredUsers.length })}
+            {isInitialLoading
+              ? tCommon("loading")
+              : t("description", { count: filteredUsers.length })}
           </p>
         </div>
         <Button onClick={handleCreateUser}>
@@ -215,113 +252,128 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
         </div>
 
         {/* Tag filter */}
-        {uniqueTags.length > 0 && (
-          <Select value={tagFilter} onValueChange={setTagFilter}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder={t("toolbar.tagFilter")} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("toolbar.allTags")}</SelectItem>
-              {uniqueTags.map((tag) => (
-                <SelectItem key={tag} value={tag}>
-                  <Badge variant="secondary" className="mr-1 text-xs">
-                    {tag}
-                  </Badge>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {isInitialLoading ? (
+          <Skeleton className="h-9 w-[180px]" />
+        ) : (
+          uniqueTags.length > 0 && (
+            <Select value={tagFilter} onValueChange={setTagFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder={t("toolbar.tagFilter")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("toolbar.allTags")}</SelectItem>
+                {uniqueTags.map((tag) => (
+                  <SelectItem key={tag} value={tag}>
+                    <Badge variant="secondary" className="mr-1 text-xs">
+                      {tag}
+                    </Badge>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )
         )}
 
         {/* Key group filter */}
-        {uniqueKeyGroups.length > 0 && (
-          <Select value={keyGroupFilter} onValueChange={setKeyGroupFilter}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder={t("toolbar.keyGroupFilter")} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("toolbar.allKeyGroups")}</SelectItem>
-              {uniqueKeyGroups.map((group) => (
-                <SelectItem key={group} value={group}>
-                  <Badge variant="outline" className="mr-1 text-xs">
-                    {group}
-                  </Badge>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {isInitialLoading ? (
+          <Skeleton className="h-9 w-[180px]" />
+        ) : (
+          uniqueKeyGroups.length > 0 && (
+            <Select value={keyGroupFilter} onValueChange={setKeyGroupFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder={t("toolbar.keyGroupFilter")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("toolbar.allKeyGroups")}</SelectItem>
+                {uniqueKeyGroups.map((group) => (
+                  <SelectItem key={group} value={group}>
+                    <Badge variant="outline" className="mr-1 text-xs">
+                      {group}
+                    </Badge>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )
         )}
       </div>
 
-      <UserManagementTable
-        users={filteredUsers}
-        currentUser={currentUser}
-        currencyCode="USD"
-        onCreateUser={handleCreateUser}
-        highlightKeyIds={shouldHighlightKeys ? matchingKeyIds : undefined}
-        autoExpandOnFilter={shouldHighlightKeys}
-        translations={{
-          table: {
-            columns: {
-              username: tUserMgmt("table.columns.username"),
-              note: tUserMgmt("table.columns.note"),
-              expiresAt: tUserMgmt("table.columns.expiresAt"),
-              limit5h: tUserMgmt("table.columns.limit5h"),
-              limitDaily: tUserMgmt("table.columns.limitDaily"),
-              limitWeekly: tUserMgmt("table.columns.limitWeekly"),
-              limitMonthly: tUserMgmt("table.columns.limitMonthly"),
-              limitTotal: tUserMgmt("table.columns.limitTotal"),
-              limitSessions: tUserMgmt("table.columns.limitSessions"),
-            },
-            keyRow: {
-              fields: {
-                name: tUserMgmt("table.keyRow.name"),
-                key: tUserMgmt("table.keyRow.key"),
-                group: tUserMgmt("table.keyRow.group"),
-                todayUsage: tUserMgmt("table.keyRow.todayUsage"),
-                todayCost: tUserMgmt("table.keyRow.todayCost"),
-                lastUsed: tUserMgmt("table.keyRow.lastUsed"),
-                actions: tUserMgmt("table.keyRow.actions"),
-                callsLabel: tUserMgmt("table.keyRow.fields.callsLabel"),
-                costLabel: tUserMgmt("table.keyRow.fields.costLabel"),
+      {isInitialLoading ? (
+        <UsersTableSkeleton label={tCommon("loading")} />
+      ) : (
+        <div className="space-y-3">
+          {isRefreshing ? <InlineLoading label={tCommon("loading")} /> : null}
+          <UserManagementTable
+            users={filteredUsers}
+            currentUser={currentUser}
+            currencyCode="USD"
+            onCreateUser={handleCreateUser}
+            highlightKeyIds={shouldHighlightKeys ? matchingKeyIds : undefined}
+            autoExpandOnFilter={shouldHighlightKeys}
+            translations={{
+              table: {
+                columns: {
+                  username: tUserMgmt("table.columns.username"),
+                  note: tUserMgmt("table.columns.note"),
+                  expiresAt: tUserMgmt("table.columns.expiresAt"),
+                  limit5h: tUserMgmt("table.columns.limit5h"),
+                  limitDaily: tUserMgmt("table.columns.limitDaily"),
+                  limitWeekly: tUserMgmt("table.columns.limitWeekly"),
+                  limitMonthly: tUserMgmt("table.columns.limitMonthly"),
+                  limitTotal: tUserMgmt("table.columns.limitTotal"),
+                  limitSessions: tUserMgmt("table.columns.limitSessions"),
+                },
+                keyRow: {
+                  fields: {
+                    name: tUserMgmt("table.keyRow.name"),
+                    key: tUserMgmt("table.keyRow.key"),
+                    group: tUserMgmt("table.keyRow.group"),
+                    todayUsage: tUserMgmt("table.keyRow.todayUsage"),
+                    todayCost: tUserMgmt("table.keyRow.todayCost"),
+                    lastUsed: tUserMgmt("table.keyRow.lastUsed"),
+                    actions: tUserMgmt("table.keyRow.actions"),
+                    callsLabel: tUserMgmt("table.keyRow.fields.callsLabel"),
+                    costLabel: tUserMgmt("table.keyRow.fields.costLabel"),
+                  },
+                  actions: {
+                    details: tKeyList("detailsButton"),
+                    logs: tKeyList("logsButton"),
+                    edit: tCommon("edit"),
+                    delete: tCommon("delete"),
+                    copy: tCommon("copy"),
+                    copySuccess: tCommon("copySuccess"),
+                    copyFailed: tCommon("copyFailed"),
+                    show: tKeyList("showKeyTooltip"),
+                    hide: tKeyList("hideKeyTooltip"),
+                    quota: tUserMgmt("table.keyRow.quotaButton"),
+                  },
+                  status: {
+                    enabled: tUserMgmt("keyStatus.enabled"),
+                    disabled: tUserMgmt("keyStatus.disabled"),
+                  },
+                },
+                expand: tUserMgmt("table.expand"),
+                collapse: tUserMgmt("table.collapse"),
+                noKeys: tUserMgmt("table.noKeys"),
+                defaultGroup: tUserMgmt("table.defaultGroup"),
               },
+              editDialog: {},
               actions: {
+                edit: tCommon("edit"),
                 details: tKeyList("detailsButton"),
                 logs: tKeyList("logsButton"),
-                edit: tCommon("edit"),
                 delete: tCommon("delete"),
-                copy: tCommon("copy"),
-                copySuccess: tCommon("copySuccess"),
-                copyFailed: tCommon("copyFailed"),
-                show: tKeyList("showKeyTooltip"),
-                hide: tKeyList("hideKeyTooltip"),
-                quota: tUserMgmt("table.keyRow.quotaButton"),
               },
-              status: {
-                enabled: tUserMgmt("keyStatus.enabled"),
-                disabled: tUserMgmt("keyStatus.disabled"),
+              pagination: {
+                previous: tUiTable("previousPage"),
+                next: tUiTable("nextPage"),
+                page: "Page {page}",
+                of: "{totalPages}",
               },
-            },
-            expand: tUserMgmt("table.expand"),
-            collapse: tUserMgmt("table.collapse"),
-            noKeys: tUserMgmt("table.noKeys"),
-            defaultGroup: tUserMgmt("table.defaultGroup"),
-          },
-          editDialog: {},
-          actions: {
-            edit: tCommon("edit"),
-            details: tKeyList("detailsButton"),
-            logs: tKeyList("logsButton"),
-            delete: tCommon("delete"),
-          },
-          pagination: {
-            previous: tUiTable("previousPage"),
-            next: tUiTable("nextPage"),
-            page: "Page {page}",
-            of: "{totalPages}",
-          },
-        }}
-      />
+            }}
+          />
+        </div>
+      )}
 
       {/* Onboarding Tour */}
       <UserOnboardingTour
@@ -337,6 +389,33 @@ export function UsersPageClient({ users, currentUser }: UsersPageClientProps) {
         mode="create"
         currentUser={currentUser}
       />
+    </div>
+  );
+}
+
+function InlineLoading({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-2 text-xs text-muted-foreground" aria-live="polite">
+      <Loader2 className="h-3 w-3 animate-spin" />
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function UsersTableSkeleton({ label }: { label: string }) {
+  return (
+    <div className="rounded-xl border bg-card p-4 space-y-4" aria-busy="true">
+      <div className="grid grid-cols-5 gap-3">
+        {Array.from({ length: 5 }).map((_, index) => (
+          <Skeleton key={index} className="h-4 w-full" />
+        ))}
+      </div>
+      <div className="space-y-3">
+        {Array.from({ length: 6 }).map((_, index) => (
+          <Skeleton key={index} className="h-10 w-full" />
+        ))}
+      </div>
+      <InlineLoading label={label} />
     </div>
   );
 }

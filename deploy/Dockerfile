@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1
 
+# 构建阶段：使用 Bun（快速包管理和构建）
 FROM --platform=$BUILDPLATFORM oven/bun:debian AS build-base
 WORKDIR /app
 
@@ -26,27 +27,28 @@ ENV CI=true
 
 RUN bun run build
 
-FROM oven/bun:debian AS runner
+# 运行阶段：使用 Node.js（避免 Bun 流式响应内存泄漏 Issue #18488）
+FROM node:trixie-slim AS runner
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOST=0.0.0.0
 WORKDIR /app
 
 # 安装 PostgreSQL 客户端工具（用于数据库备份/恢复功能）和 curl（用于健康检查）
-# Debian Trixie 自带 PostgreSQL 17，无需外部 APT 仓库
+# node:trixie-slim 基于 Debian Trixie，需手动安装 postgresql-client
 RUN apt-get update && \
     apt-get install -y curl ca-certificates postgresql-client && \
     rm -rf /var/lib/apt/lists/*
 
-COPY --from=build --chown=bun:bun /app/public ./public
-COPY --from=build --chown=bun:bun /app/drizzle ./drizzle
-COPY --from=build --chown=bun:bun /app/messages ./messages
-COPY --from=build --chown=bun:bun /app/.next/standalone ./
+COPY --from=build --chown=node:node /app/public ./public
+COPY --from=build --chown=node:node /app/drizzle ./drizzle
+COPY --from=build --chown=node:node /app/messages ./messages
+COPY --from=build --chown=node:node /app/.next/standalone ./
 # Server Actions live inside .next/server; copy it or Next.js cannot resolve action IDs.
-COPY --from=build --chown=bun:bun /app/.next/server ./.next/server
-COPY --from=build --chown=bun:bun /app/.next/static ./.next/static
+COPY --from=build --chown=node:node /app/.next/server ./.next/server
+COPY --from=build --chown=node:node /app/.next/static ./.next/static
 
-USER bun
+USER node
 EXPOSE 3000
 
-CMD ["bun", "run", "server.js"]
+CMD ["node", "server.js"]

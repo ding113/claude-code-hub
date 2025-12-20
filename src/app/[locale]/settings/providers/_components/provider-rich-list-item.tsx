@@ -1,4 +1,5 @@
 "use client";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   CheckCircle,
@@ -77,6 +78,7 @@ export function ProviderRichListItem({
   onDelete: onDeleteProp,
 }: ProviderRichListItemProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [openEdit, setOpenEdit] = useState(false);
   const [openClone, setOpenClone] = useState(false);
   const [showKeyDialog, setShowKeyDialog] = useState(false);
@@ -133,6 +135,8 @@ export function ProviderRichListItem({
             toast.success(tList("deleteSuccess"), {
               description: tList("deleteSuccessDesc", { name: provider.name }),
             });
+            queryClient.invalidateQueries({ queryKey: ["providers"] });
+            queryClient.invalidateQueries({ queryKey: ["providers-health"] });
             router.refresh();
           } else {
             toast.error(tList("deleteFailed"), {
@@ -202,6 +206,8 @@ export function ProviderRichListItem({
           toast.success(tList("resetCircuitSuccess"), {
             description: tList("resetCircuitSuccessDesc", { name: provider.name }),
           });
+          queryClient.invalidateQueries({ queryKey: ["providers"] });
+          queryClient.invalidateQueries({ queryKey: ["providers-health"] });
           router.refresh();
         } else {
           toast.error(tList("resetCircuitFailed"), {
@@ -229,6 +235,8 @@ export function ProviderRichListItem({
           toast.success(tList("toggleSuccess", { status }), {
             description: tList("toggleSuccessDesc", { name: provider.name }),
           });
+          queryClient.invalidateQueries({ queryKey: ["providers"] });
+          queryClient.invalidateQueries({ queryKey: ["providers-health"] });
           router.refresh();
         } else {
           toast.error(tList("toggleFailed"), {
@@ -489,6 +497,8 @@ export function ProviderRichListItem({
               provider={provider}
               onSuccess={() => {
                 setOpenEdit(false);
+                queryClient.invalidateQueries({ queryKey: ["providers"] });
+                queryClient.invalidateQueries({ queryKey: ["providers-health"] });
                 router.refresh();
               }}
               enableMultiProviderTypes={enableMultiProviderTypes}
@@ -506,6 +516,8 @@ export function ProviderRichListItem({
               cloneProvider={provider}
               onSuccess={() => {
                 setOpenClone(false);
+                queryClient.invalidateQueries({ queryKey: ["providers"] });
+                queryClient.invalidateQueries({ queryKey: ["providers-health"] });
                 router.refresh();
               }}
               enableMultiProviderTypes={enableMultiProviderTypes}

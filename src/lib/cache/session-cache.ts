@@ -134,6 +134,11 @@ const sessionDetailsCache = new SessionCache<{
   cacheTtlApplied: string | null;
 }>(1);
 
+// 使用 globalThis 存储 interval ID，支持热重载场景
+const cacheCleanupState = globalThis as unknown as {
+  __CCH_CACHE_CLEANUP_INTERVAL_ID__?: ReturnType<typeof setInterval> | null;
+};
+
 /**
  * 获取活跃 Sessions 的缓存
  */
@@ -201,10 +206,26 @@ export function clearAllSessionCache() {
  * 定期清理过期缓存（可选，用于内存优化）
  */
 export function startCacheCleanup(intervalSeconds: number = 60) {
-  setInterval(() => {
+  if (cacheCleanupState.__CCH_CACHE_CLEANUP_INTERVAL_ID__) {
+    return;
+  }
+
+  cacheCleanupState.__CCH_CACHE_CLEANUP_INTERVAL_ID__ = setInterval(() => {
     activeSessionsCache.cleanup();
     sessionDetailsCache.cleanup();
   }, intervalSeconds * 1000);
+}
+
+/**
+ * 停止定期清理任务
+ */
+export function stopCacheCleanup() {
+  if (!cacheCleanupState.__CCH_CACHE_CLEANUP_INTERVAL_ID__) {
+    return;
+  }
+
+  clearInterval(cacheCleanupState.__CCH_CACHE_CLEANUP_INTERVAL_ID__);
+  cacheCleanupState.__CCH_CACHE_CLEANUP_INTERVAL_ID__ = null;
 }
 
 /**

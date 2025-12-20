@@ -17,6 +17,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 
@@ -152,14 +153,6 @@ export default function NotificationsPage() {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       <div>
@@ -167,308 +160,316 @@ export default function NotificationsPage() {
         <p className="text-muted-foreground mt-2">{t("notifications.description")}</p>
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-        {/* 全局开关 */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Bell className="w-5 h-5" />
-              {t("notifications.global.title")}
-            </CardTitle>
-            <CardDescription>{t("notifications.global.description")}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between">
-              <Label htmlFor="enabled">{t("notifications.global.enable")}</Label>
-              <Switch
-                id="enabled"
-                checked={enabled}
-                onCheckedChange={(checked) => setValue("enabled", checked)}
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* 熔断器告警配置 */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-red-500" />
-              {t("notifications.circuitBreaker.title")}
-            </CardTitle>
-            <CardDescription>{t("notifications.circuitBreaker.description")}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="circuitBreakerEnabled">
-                {t("notifications.circuitBreaker.enable")}
-              </Label>
-              <Switch
-                id="circuitBreakerEnabled"
-                checked={circuitBreakerEnabled}
-                disabled={!enabled}
-                onCheckedChange={(checked) => setValue("circuitBreakerEnabled", checked)}
-              />
-            </div>
-
-            {circuitBreakerEnabled && (
-              <div className="space-y-4 pt-4">
-                <Separator />
-                <div className="space-y-2">
-                  <Label htmlFor="circuitBreakerWebhook">
-                    {t("notifications.circuitBreaker.webhook")}
-                  </Label>
-                  <Input
-                    id="circuitBreakerWebhook"
-                    {...register("circuitBreakerWebhook")}
-                    placeholder={t("notifications.circuitBreaker.webhookPlaceholder")}
-                    disabled={!enabled}
-                  />
-                  {errors.circuitBreakerWebhook && (
-                    <p className="text-sm text-red-500">{errors.circuitBreakerWebhook.message}</p>
-                  )}
-                </div>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={!enabled || testingWebhook === "circuitBreaker"}
-                  onClick={() =>
-                    handleTestWebhook(watch("circuitBreakerWebhook") || "", "circuitBreaker")
-                  }
-                >
-                  {testingWebhook === "circuitBreaker" ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      {t("common.testing")}
-                    </>
-                  ) : (
-                    <>
-                      <TestTube className="w-4 h-4 mr-2" />
-                      {t("notifications.circuitBreaker.test")}
-                    </>
-                  )}
-                </Button>
+      {isLoading ? (
+        <NotificationsSkeleton label={t("common.loading")} />
+      ) : (
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          {/* 全局开关 */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Bell className="w-5 h-5" />
+                {t("notifications.global.title")}
+              </CardTitle>
+              <CardDescription>{t("notifications.global.description")}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="enabled">{t("notifications.global.enable")}</Label>
+                <Switch
+                  id="enabled"
+                  checked={enabled}
+                  onCheckedChange={(checked) => setValue("enabled", checked)}
+                />
               </div>
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        {/* 每日排行榜配置 */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-blue-500" />
-              {t("notifications.dailyLeaderboard.title")}
-            </CardTitle>
-            <CardDescription>{t("notifications.dailyLeaderboard.description")}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="dailyLeaderboardEnabled">
-                {t("notifications.dailyLeaderboard.enable")}
-              </Label>
-              <Switch
-                id="dailyLeaderboardEnabled"
-                checked={dailyLeaderboardEnabled}
-                disabled={!enabled}
-                onCheckedChange={(checked) => setValue("dailyLeaderboardEnabled", checked)}
-              />
-            </div>
+          {/* 熔断器告警配置 */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-red-500" />
+                {t("notifications.circuitBreaker.title")}
+              </CardTitle>
+              <CardDescription>{t("notifications.circuitBreaker.description")}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="circuitBreakerEnabled">
+                  {t("notifications.circuitBreaker.enable")}
+                </Label>
+                <Switch
+                  id="circuitBreakerEnabled"
+                  checked={circuitBreakerEnabled}
+                  disabled={!enabled}
+                  onCheckedChange={(checked) => setValue("circuitBreakerEnabled", checked)}
+                />
+              </div>
 
-            {dailyLeaderboardEnabled && (
-              <div className="space-y-4 pt-4">
-                <Separator />
-                <div className="space-y-2">
-                  <Label htmlFor="dailyLeaderboardWebhook">
-                    {t("notifications.dailyLeaderboard.webhook")}
-                  </Label>
-                  <Input
-                    id="dailyLeaderboardWebhook"
-                    {...register("dailyLeaderboardWebhook")}
-                    placeholder={t("notifications.dailyLeaderboard.webhookPlaceholder")}
-                    disabled={!enabled}
-                  />
-                  {errors.dailyLeaderboardWebhook && (
-                    <p className="text-sm text-red-500">{errors.dailyLeaderboardWebhook.message}</p>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
+              {circuitBreakerEnabled && (
+                <div className="space-y-4 pt-4">
+                  <Separator />
                   <div className="space-y-2">
-                    <Label htmlFor="dailyLeaderboardTime">
-                      {t("notifications.dailyLeaderboard.time")}
+                    <Label htmlFor="circuitBreakerWebhook">
+                      {t("notifications.circuitBreaker.webhook")}
                     </Label>
                     <Input
-                      id="dailyLeaderboardTime"
-                      {...register("dailyLeaderboardTime")}
-                      placeholder={t("notifications.dailyLeaderboard.timePlaceholder")}
+                      id="circuitBreakerWebhook"
+                      {...register("circuitBreakerWebhook")}
+                      placeholder={t("notifications.circuitBreaker.webhookPlaceholder")}
                       disabled={!enabled}
                     />
-                    {errors.dailyLeaderboardTime && (
-                      <p className="text-sm text-red-500">{errors.dailyLeaderboardTime.message}</p>
+                    {errors.circuitBreakerWebhook && (
+                      <p className="text-sm text-red-500">{errors.circuitBreakerWebhook.message}</p>
+                    )}
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={!enabled || testingWebhook === "circuitBreaker"}
+                    onClick={() =>
+                      handleTestWebhook(watch("circuitBreakerWebhook") || "", "circuitBreaker")
+                    }
+                  >
+                    {testingWebhook === "circuitBreaker" ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        {t("common.testing")}
+                      </>
+                    ) : (
+                      <>
+                        <TestTube className="w-4 h-4 mr-2" />
+                        {t("notifications.circuitBreaker.test")}
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* 每日排行榜配置 */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-green-600" />
+                {t("notifications.dailyLeaderboard.title")}
+              </CardTitle>
+              <CardDescription>{t("notifications.dailyLeaderboard.description")}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="dailyLeaderboardEnabled">
+                  {t("notifications.dailyLeaderboard.enable")}
+                </Label>
+                <Switch
+                  id="dailyLeaderboardEnabled"
+                  checked={dailyLeaderboardEnabled}
+                  disabled={!enabled}
+                  onCheckedChange={(checked) => setValue("dailyLeaderboardEnabled", checked)}
+                />
+              </div>
+
+              {dailyLeaderboardEnabled && (
+                <div className="space-y-4 pt-4">
+                  <Separator />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="dailyLeaderboardWebhook">
+                        {t("notifications.dailyLeaderboard.webhook")}
+                      </Label>
+                      <Input
+                        id="dailyLeaderboardWebhook"
+                        {...register("dailyLeaderboardWebhook")}
+                        placeholder={t("notifications.dailyLeaderboard.webhookPlaceholder")}
+                        disabled={!enabled}
+                      />
+                      {errors.dailyLeaderboardWebhook && (
+                        <p className="text-sm text-red-500">
+                          {errors.dailyLeaderboardWebhook.message}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="dailyLeaderboardTime">
+                        {t("notifications.dailyLeaderboard.time")}
+                      </Label>
+                      <Input
+                        id="dailyLeaderboardTime"
+                        type="time"
+                        {...register("dailyLeaderboardTime")}
+                        disabled={!enabled}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="dailyLeaderboardTopN">
+                        {t("notifications.dailyLeaderboard.topN")}
+                      </Label>
+                      <Input
+                        id="dailyLeaderboardTopN"
+                        type="number"
+                        min={1}
+                        max={20}
+                        {...register("dailyLeaderboardTopN", { valueAsNumber: true })}
+                        disabled={!enabled}
+                      />
+                    </div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={!enabled || testingWebhook === "dailyLeaderboard"}
+                    onClick={() =>
+                      handleTestWebhook(watch("dailyLeaderboardWebhook") || "", "dailyLeaderboard")
+                    }
+                  >
+                    {testingWebhook === "dailyLeaderboard" ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        {t("common.testing")}
+                      </>
+                    ) : (
+                      <>
+                        <TestTube className="w-4 h-4 mr-2" />
+                        {t("notifications.dailyLeaderboard.test")}
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* 成本预警配置 */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-orange-500" />
+                {t("notifications.costAlert.title")}
+              </CardTitle>
+              <CardDescription>{t("notifications.costAlert.description")}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="costAlertEnabled">{t("notifications.costAlert.enable")}</Label>
+                <Switch
+                  id="costAlertEnabled"
+                  checked={costAlertEnabled}
+                  disabled={!enabled}
+                  onCheckedChange={(checked) => setValue("costAlertEnabled", checked)}
+                />
+              </div>
+
+              {costAlertEnabled && (
+                <div className="space-y-4 pt-4">
+                  <Separator />
+                  <div className="space-y-2">
+                    <Label htmlFor="costAlertWebhook">{t("notifications.costAlert.webhook")}</Label>
+                    <Input
+                      id="costAlertWebhook"
+                      {...register("costAlertWebhook")}
+                      placeholder={t("notifications.costAlert.webhookPlaceholder")}
+                      disabled={!enabled}
+                    />
+                    {errors.costAlertWebhook && (
+                      <p className="text-sm text-red-500">{errors.costAlertWebhook.message}</p>
                     )}
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="dailyLeaderboardTopN">
-                      {t("notifications.dailyLeaderboard.topN")}
+                    <Label>{t("notifications.costAlert.threshold")}</Label>
+                    <div className="flex items-center gap-4">
+                      <Slider
+                        value={[costAlertThreshold]}
+                        min={0.5}
+                        max={1}
+                        step={0.05}
+                        onValueChange={([value]) => setValue("costAlertThreshold", value)}
+                        disabled={!enabled}
+                        className="flex-1"
+                      />
+                      <span className="w-12 text-right text-sm font-medium">
+                        {(costAlertThreshold * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="costAlertCheckInterval">
+                      {t("notifications.costAlert.checkInterval")}
                     </Label>
                     <Input
-                      id="dailyLeaderboardTopN"
+                      id="costAlertCheckInterval"
                       type="number"
-                      {...register("dailyLeaderboardTopN", { valueAsNumber: true })}
-                      min={1}
-                      max={20}
+                      min={10}
+                      max={1440}
+                      {...register("costAlertCheckInterval", { valueAsNumber: true })}
                       disabled={!enabled}
                     />
-                    {errors.dailyLeaderboardTopN && (
-                      <p className="text-sm text-red-500">{errors.dailyLeaderboardTopN.message}</p>
-                    )}
                   </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={!enabled || testingWebhook === "costAlert"}
+                    onClick={() => handleTestWebhook(watch("costAlertWebhook") || "", "costAlert")}
+                  >
+                    {testingWebhook === "costAlert" ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        {t("common.testing")}
+                      </>
+                    ) : (
+                      <>
+                        <TestTube className="w-4 h-4 mr-2" />
+                        {t("notifications.costAlert.test")}
+                      </>
+                    )}
+                  </Button>
                 </div>
+              )}
+            </CardContent>
+          </Card>
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={!enabled || testingWebhook === "leaderboard"}
-                  onClick={() =>
-                    handleTestWebhook(watch("dailyLeaderboardWebhook") || "", "leaderboard")
-                  }
-                >
-                  {testingWebhook === "leaderboard" ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      {t("common.testing")}
-                    </>
-                  ) : (
-                    <>
-                      <TestTube className="w-4 h-4 mr-2" />
-                      {t("notifications.dailyLeaderboard.test")}
-                    </>
-                  )}
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+          <div className="flex justify-end">
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? t("notifications.form.saving") : t("notifications.form.save")}
+            </Button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
 
-        {/* 成本预警配置 */}
-        <Card>
+function NotificationsSkeleton({ label }: { label: string }) {
+  return (
+    <div className="space-y-6" aria-busy="true">
+      {Array.from({ length: 3 }).map((_, index) => (
+        <Card key={index}>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-yellow-500" />
-              {t("notifications.costAlert.title")}
-            </CardTitle>
-            <CardDescription>{t("notifications.costAlert.description")}</CardDescription>
+            <Skeleton className="h-5 w-48" />
+            <Skeleton className="h-4 w-64" />
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="costAlertEnabled">{t("notifications.costAlert.enable")}</Label>
-              <Switch
-                id="costAlertEnabled"
-                checked={costAlertEnabled}
-                disabled={!enabled}
-                onCheckedChange={(checked) => setValue("costAlertEnabled", checked)}
-              />
-            </div>
-
-            {costAlertEnabled && (
-              <div className="space-y-4 pt-4">
-                <Separator />
-                <div className="space-y-2">
-                  <Label htmlFor="costAlertWebhook">{t("notifications.costAlert.webhook")}</Label>
-                  <Input
-                    id="costAlertWebhook"
-                    {...register("costAlertWebhook")}
-                    placeholder={t("notifications.costAlert.webhookPlaceholder")}
-                    disabled={!enabled}
-                  />
-                  {errors.costAlertWebhook && (
-                    <p className="text-sm text-red-500">{errors.costAlertWebhook.message}</p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="costAlertThreshold">
-                    {t("notifications.costAlert.thresholdLabel", {
-                      percent: ((costAlertThreshold || 0.8) * 100).toFixed(0),
-                    })}
-                  </Label>
-                  <Slider
-                    id="costAlertThreshold"
-                    min={0.5}
-                    max={1.0}
-                    step={0.05}
-                    value={[costAlertThreshold || 0.8]}
-                    onValueChange={([value]) => setValue("costAlertThreshold", value)}
-                    disabled={!enabled}
-                    className="w-full"
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    {t("notifications.costAlert.thresholdHelp", {
-                      percent: ((costAlertThreshold || 0.8) * 100).toFixed(0),
-                    })}
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="costAlertCheckInterval">
-                    {t("notifications.costAlert.interval")}
-                  </Label>
-                  <Input
-                    id="costAlertCheckInterval"
-                    type="number"
-                    {...register("costAlertCheckInterval", { valueAsNumber: true })}
-                    min={10}
-                    max={1440}
-                    disabled={!enabled}
-                  />
-                  {errors.costAlertCheckInterval && (
-                    <p className="text-sm text-red-500">{errors.costAlertCheckInterval.message}</p>
-                  )}
-                </div>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={!enabled || testingWebhook === "cost"}
-                  onClick={() => handleTestWebhook(watch("costAlertWebhook") || "", "cost")}
-                >
-                  {testingWebhook === "cost" ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      {t("common.testing")}
-                    </>
-                  ) : (
-                    <>
-                      <TestTube className="w-4 h-4 mr-2" />
-                      {t("notifications.costAlert.test")}
-                    </>
-                  )}
-                </Button>
-              </div>
-            )}
+          <CardContent className="space-y-3">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-9 w-full" />
+            <Skeleton className="h-9 w-40" />
           </CardContent>
         </Card>
-
-        {/* 保存按钮 */}
-        <div className="flex justify-end">
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                {t("notifications.form.saving")}
-              </>
-            ) : (
-              t("notifications.form.save")
-            )}
-          </Button>
-        </div>
-      </form>
+      ))}
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        <span>{label}</span>
+      </div>
     </div>
   );
 }

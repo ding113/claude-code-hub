@@ -6,6 +6,7 @@ import type { MyUsageQuota } from "@/actions/my-usage";
 import { QuotaCountdownCompact } from "@/components/quota/quota-countdown";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useCountdown } from "@/hooks/useCountdown";
 import type { CurrencyCode } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -27,6 +28,11 @@ export function QuotaCards({
 }: QuotaCardsProps) {
   const t = useTranslations("myUsage.quota");
   const tExpiration = useTranslations("myUsage.expiration");
+  const tCommon = useTranslations("common");
+
+  if (loading && !quota) {
+    return <QuotaCardsSkeleton label={tCommon("loading")} />;
+  }
 
   const resolvedKeyExpires = keyExpiresAt ?? quota?.expiresAt ?? null;
   const resolvedUserExpires = userExpiresAt ?? quota?.userExpiresAt ?? null;
@@ -187,6 +193,32 @@ export function QuotaCards({
             </CardContent>
           </Card>
         ) : null}
+      </div>
+    </div>
+  );
+}
+
+function QuotaCardsSkeleton({ label }: { label: string }) {
+  return (
+    <div className="space-y-3" aria-busy="true">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {Array.from({ length: 6 }).map((_, index) => (
+          <Card key={index} className="border-border/70">
+            <CardHeader className="pb-3">
+              <Skeleton className="h-4 w-20" />
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-16 w-full" />
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <Skeleton className="h-3 w-3 rounded-full" />
+        <span>{label}</span>
       </div>
     </div>
   );
