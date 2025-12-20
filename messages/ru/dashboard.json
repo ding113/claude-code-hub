@@ -1092,6 +1092,7 @@
           "note": "Заметка",
           "tags": "Теги",
           "limit5h": "Лимит за 5 часов (USD)",
+          "limitDaily": "Дневной лимит (USD)",
           "limitWeekly": "Недельный лимит (USD)",
           "limitMonthly": "Месячный лимит (USD)"
         },

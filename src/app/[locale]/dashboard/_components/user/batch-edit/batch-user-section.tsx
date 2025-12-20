@@ -12,6 +12,8 @@ export interface BatchUserSectionState {
   tags: string[];
   limit5hUsdEnabled: boolean;
   limit5hUsd: string;
+  dailyQuotaEnabled: boolean;
+  dailyQuota: string;
   limitWeeklyUsdEnabled: boolean;
   limitWeeklyUsd: string;
   limitMonthlyUsdEnabled: boolean;
@@ -30,6 +32,7 @@ export interface BatchUserSectionProps {
       note: string;
       tags: string;
       limit5h: string;
+      limitDaily: string;
       limitWeekly: string;
       limitMonthly: string;
     };
@@ -97,6 +100,22 @@ export function BatchUserSection({
             value={state.limit5hUsd}
             onChange={(e) => onChange({ limit5hUsd: e.target.value })}
             disabled={!state.limit5hUsdEnabled}
+            placeholder={translations.placeholders.emptyNoLimit}
+          />
+        </FieldCard>
+
+        <FieldCard
+          title={translations.fields.limitDaily}
+          enabled={state.dailyQuotaEnabled}
+          onEnabledChange={(enabled) => onChange({ dailyQuotaEnabled: enabled })}
+          enableFieldAria={translations.enableFieldAria}
+        >
+          <Input
+            type="number"
+            inputMode="decimal"
+            value={state.dailyQuota}
+            onChange={(e) => onChange({ dailyQuota: e.target.value })}
+            disabled={!state.dailyQuotaEnabled}
             placeholder={translations.placeholders.emptyNoLimit}
           />
         </FieldCard>

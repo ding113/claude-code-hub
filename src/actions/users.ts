@@ -57,6 +57,7 @@ export interface BatchUpdateUsersParams {
   updates: {
     note?: string;
     tags?: string[];
+    dailyQuota?: number | null;
     limit5hUsd?: number | null;
     limitWeeklyUsd?: number | null;
     limitMonthlyUsd?: number | null;
@@ -485,6 +486,7 @@ export async function batchUpdateUsers(
     const updatesSchema = UpdateUserSchema.pick({
       note: true,
       tags: true,
+      dailyQuota: true,
       limit5hUsd: true,
       limitWeeklyUsd: true,
       limitMonthlyUsd: true,
@@ -526,6 +528,9 @@ export async function batchUpdateUsers(
 
       if (updates.note !== undefined) dbUpdates.description = updates.note;
       if (updates.tags !== undefined) dbUpdates.tags = updates.tags;
+      if (updates.dailyQuota !== undefined)
+        dbUpdates.dailyLimitUsd =
+          updates.dailyQuota === null ? null : updates.dailyQuota.toString();
       if (updates.limit5hUsd !== undefined)
         dbUpdates.limit5hUsd = updates.limit5hUsd === null ? null : updates.limit5hUsd.toString();
       if (updates.limitWeeklyUsd !== undefined)

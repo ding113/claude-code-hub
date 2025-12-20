@@ -1093,6 +1093,7 @@
           "note": "備註",
           "tags": "標籤",
           "limit5h": "5h 限額 (USD)",
+          "limitDaily": "每日限額 (USD)",
           "limitWeekly": "週限額 (USD)",
           "limitMonthly": "月限額 (USD)"
         },

@@ -1081,6 +1081,7 @@
           "note": "メモ",
           "tags": "タグ",
           "limit5h": "5時間上限 (USD)",
+          "limitDaily": "日次上限 (USD)",
           "limitWeekly": "週間上限 (USD)",
           "limitMonthly": "月間上限 (USD)"
         },
