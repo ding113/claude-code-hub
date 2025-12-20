@@ -3,7 +3,15 @@
  * 在服务器启动时自动执行数据库迁移
  */
 
+import { startCacheCleanup, stopCacheCleanup } from "@/lib/cache/session-cache";
 import { logger } from "@/lib/logger";
+import { closeRedis } from "@/lib/redis";
+
+const instrumentationState = globalThis as unknown as {
+  __CCH_CACHE_CLEANUP_STARTED__?: boolean;
+  __CCH_SHUTDOWN_HOOKS_REGISTERED__?: boolean;
+  __CCH_SHUTDOWN_IN_PROGRESS__?: boolean;
+};
 
 /**
  * 同步错误规则并初始化检测器
@@ -39,6 +47,52 @@ export async function register() {
         "[Instrumentation] CI environment detected: skipping DB migrations, price seeding and queue scheduling"
       );
       return;
+    }
+
+    if (!instrumentationState.__CCH_CACHE_CLEANUP_STARTED__) {
+      startCacheCleanup(60);
+      instrumentationState.__CCH_CACHE_CLEANUP_STARTED__ = true;
+      logger.info("[Instrumentation] Session cache cleanup started", {
+        intervalSeconds: 60,
+      });
+    }
+
+    if (!instrumentationState.__CCH_SHUTDOWN_HOOKS_REGISTERED__) {
+      instrumentationState.__CCH_SHUTDOWN_HOOKS_REGISTERED__ = true;
+
+      const shutdownHandler = async (signal: string) => {
+        if (instrumentationState.__CCH_SHUTDOWN_IN_PROGRESS__) {
+          return;
+        }
+        instrumentationState.__CCH_SHUTDOWN_IN_PROGRESS__ = true;
+
+        logger.info(`[Instrumentation] Received ${signal}, cleaning up...`);
+
+        try {
+          stopCacheCleanup();
+          instrumentationState.__CCH_CACHE_CLEANUP_STARTED__ = false;
+        } catch (error) {
+          logger.warn("[Instrumentation] Failed to stop cache cleanup", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+
+        try {
+          await closeRedis();
+        } catch (error) {
+          logger.warn("[Instrumentation] Failed to close Redis connection", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      };
+
+      process.once("SIGTERM", () => {
+        void shutdownHandler("SIGTERM");
+      });
+
+      process.once("SIGINT", () => {
+        void shutdownHandler("SIGINT");
+      });
     }
 
     // 生产环境: 执行完整初始化(迁移 + 价格表 + 清理任务 + 通知任务)

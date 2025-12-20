@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { GeminiAuth } from "@/app/v1/_lib/gemini/auth";
 import { isClientAbortError } from "@/app/v1/_lib/proxy/errors";
 import { getSession } from "@/lib/auth";
-import { clearConfigCache, getAllHealthStatusAsync, resetCircuit } from "@/lib/circuit-breaker";
+import { clearConfigCache, clearProviderState, getAllHealthStatusAsync, resetCircuit } from "@/lib/circuit-breaker";
 import { CodexInstructionsCache } from "@/lib/codex-instructions-cache";
 import { PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
@@ -620,14 +620,16 @@ export async function removeProvider(providerId: number): Promise<ActionResult> 
 
     await deleteProvider(providerId);
 
-    // 删除 Redis 缓存
+    // 清除内存缓存（无论 Redis 是否成功都要执行）
+    clearConfigCache(providerId);
+    await clearProviderState(providerId);
+
+    // 删除 Redis 缓存（非关键路径，失败时记录警告）
     try {
       await deleteProviderCircuitConfig(providerId);
-      // 清除内存缓存
-      clearConfigCache(providerId);
       logger.debug("removeProvider:cache_cleared", { providerId });
     } catch (error) {
-      logger.warn("removeProvider:cache_clear_failed", {
+      logger.warn("removeProvider:redis_cache_clear_failed", {
         providerId,
         error: error instanceof Error ? error.message : String(error),
       });
