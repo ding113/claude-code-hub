@@ -77,6 +77,9 @@ export function UserLimitBadge({
     // Check cache first
     const cached = usageCache.get(userId);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      // Reset error/loading state when using cached data
+      setError(false);
+      setIsLoading(false);
       setUsageData((prev) => (prev === cached.data ? prev : cached.data));
       return;
     }
