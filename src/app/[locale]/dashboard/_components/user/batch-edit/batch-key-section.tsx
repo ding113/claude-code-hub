@@ -22,21 +22,48 @@ export interface BatchKeySectionState {
   isEnabled: boolean;
 }
 
+function formatMessage(template: string, values: Record<string, string | number>) {
+  return template.replace(/\{(\w+)\}/g, (_match, key: string) =>
+    Object.hasOwn(values, key) ? String(values[key]) : `{${key}}`
+  );
+}
+
 export interface BatchKeySectionProps {
   affectedKeysCount: number;
   state: BatchKeySectionState;
   onChange: (patch: Partial<BatchKeySectionState>) => void;
+  translations: {
+    title: string;
+    affected: string;
+    enableFieldAria: string;
+    fields: {
+      providerGroup: string;
+      limit5h: string;
+      limitDaily: string;
+      limitWeekly: string;
+      limitMonthly: string;
+      canLoginWebUi: string;
+      keyEnabled: string;
+    };
+    placeholders: {
+      groupPlaceholder: string;
+      emptyNoLimit: string;
+    };
+    targetValue: string;
+  };
 }
 
 function FieldCard({
   title,
   enabled,
   onEnabledChange,
+  enableFieldAria,
   children,
 }: {
   title: string;
   enabled: boolean;
   onEnabledChange: (enabled: boolean) => void;
+  enableFieldAria: string;
   children: ReactNode;
 }) {
   return (
@@ -46,7 +73,7 @@ function FieldCard({
         <Switch
           checked={enabled}
           onCheckedChange={onEnabledChange}
-          aria-label={`启用字段：${title}`}
+          aria-label={formatMessage(enableFieldAria, { title })}
         />
       </div>
       {children}
@@ -54,32 +81,41 @@ function FieldCard({
   );
 }
 
-export function BatchKeySection({ affectedKeysCount, state, onChange }: BatchKeySectionProps) {
+export function BatchKeySection({
+  affectedKeysCount,
+  state,
+  onChange,
+  translations,
+}: BatchKeySectionProps) {
   return (
     <div className="space-y-4">
       <div>
-        <div className="text-sm font-semibold">密钥设置</div>
-        <div className="text-xs text-muted-foreground">将影响 {affectedKeysCount} 个密钥</div>
+        <div className="text-sm font-semibold">{translations.title}</div>
+        <div className="text-xs text-muted-foreground">
+          {formatMessage(translations.affected, { count: affectedKeysCount })}
+        </div>
       </div>
 
       <div className="space-y-3">
         <FieldCard
-          title="分组 (providerGroup)"
+          title={translations.fields.providerGroup}
           enabled={state.providerGroupEnabled}
           onEnabledChange={(enabled) => onChange({ providerGroupEnabled: enabled })}
+          enableFieldAria={translations.enableFieldAria}
         >
           <Input
             value={state.providerGroup}
             onChange={(e) => onChange({ providerGroup: e.target.value })}
             disabled={!state.providerGroupEnabled}
-            placeholder="留空表示清空分组，多个用逗号分隔"
+            placeholder={translations.placeholders.groupPlaceholder}
           />
         </FieldCard>
 
         <FieldCard
-          title="5h 限额 (USD)"
+          title={translations.fields.limit5h}
           enabled={state.limit5hUsdEnabled}
           onEnabledChange={(enabled) => onChange({ limit5hUsdEnabled: enabled })}
+          enableFieldAria={translations.enableFieldAria}
         >
           <Input
             type="number"
@@ -87,14 +123,15 @@ export function BatchKeySection({ affectedKeysCount, state, onChange }: BatchKey
             value={state.limit5hUsd}
             onChange={(e) => onChange({ limit5hUsd: e.target.value })}
             disabled={!state.limit5hUsdEnabled}
-            placeholder="留空表示不限额"
+            placeholder={translations.placeholders.emptyNoLimit}
           />
         </FieldCard>
 
         <FieldCard
-          title="每日限额 (USD)"
+          title={translations.fields.limitDaily}
           enabled={state.limitDailyUsdEnabled}
           onEnabledChange={(enabled) => onChange({ limitDailyUsdEnabled: enabled })}
+          enableFieldAria={translations.enableFieldAria}
         >
           <Input
             type="number"
@@ -102,14 +139,15 @@ export function BatchKeySection({ affectedKeysCount, state, onChange }: BatchKey
             value={state.limitDailyUsd}
             onChange={(e) => onChange({ limitDailyUsd: e.target.value })}
             disabled={!state.limitDailyUsdEnabled}
-            placeholder="留空表示不限额"
+            placeholder={translations.placeholders.emptyNoLimit}
           />
         </FieldCard>
 
         <FieldCard
-          title="周限额 (USD)"
+          title={translations.fields.limitWeekly}
           enabled={state.limitWeeklyUsdEnabled}
           onEnabledChange={(enabled) => onChange({ limitWeeklyUsdEnabled: enabled })}
+          enableFieldAria={translations.enableFieldAria}
         >
           <Input
             type="number"
@@ -117,14 +155,15 @@ export function BatchKeySection({ affectedKeysCount, state, onChange }: BatchKey
             value={state.limitWeeklyUsd}
             onChange={(e) => onChange({ limitWeeklyUsd: e.target.value })}
             disabled={!state.limitWeeklyUsdEnabled}
-            placeholder="留空表示不限额"
+            placeholder={translations.placeholders.emptyNoLimit}
           />
         </FieldCard>
 
         <FieldCard
-          title="月限额 (USD)"
+          title={translations.fields.limitMonthly}
           enabled={state.limitMonthlyUsdEnabled}
           onEnabledChange={(enabled) => onChange({ limitMonthlyUsdEnabled: enabled })}
+          enableFieldAria={translations.enableFieldAria}
         >
           <Input
             type="number"
@@ -132,38 +171,40 @@ export function BatchKeySection({ affectedKeysCount, state, onChange }: BatchKey
             value={state.limitMonthlyUsd}
             onChange={(e) => onChange({ limitMonthlyUsd: e.target.value })}
             disabled={!state.limitMonthlyUsdEnabled}
-            placeholder="留空表示不限额"
+            placeholder={translations.placeholders.emptyNoLimit}
           />
         </FieldCard>
 
         <FieldCard
-          title="允许登录 Web UI"
+          title={translations.fields.canLoginWebUi}
           enabled={state.canLoginWebUiEnabled}
           onEnabledChange={(enabled) => onChange({ canLoginWebUiEnabled: enabled })}
+          enableFieldAria={translations.enableFieldAria}
         >
           <div className="flex items-center justify-between gap-3">
-            <span className="text-sm text-muted-foreground">目标值</span>
+            <span className="text-sm text-muted-foreground">{translations.targetValue}</span>
             <Switch
               checked={state.canLoginWebUi}
               onCheckedChange={(checked) => onChange({ canLoginWebUi: checked })}
               disabled={!state.canLoginWebUiEnabled}
-              aria-label="目标值：允许登录 Web UI"
+              aria-label={`${translations.targetValue}: ${translations.fields.canLoginWebUi}`}
             />
           </div>
         </FieldCard>
 
         <FieldCard
-          title="Key 启用状态"
+          title={translations.fields.keyEnabled}
           enabled={state.isEnabledEnabled}
           onEnabledChange={(enabled) => onChange({ isEnabledEnabled: enabled })}
+          enableFieldAria={translations.enableFieldAria}
         >
           <div className="flex items-center justify-between gap-3">
-            <span className="text-sm text-muted-foreground">目标值</span>
+            <span className="text-sm text-muted-foreground">{translations.targetValue}</span>
             <Switch
               checked={state.isEnabled}
               onCheckedChange={(checked) => onChange({ isEnabled: checked })}
               disabled={!state.isEnabledEnabled}
-              aria-label="目标值：Key 启用状态"
+              aria-label={`${translations.targetValue}: ${translations.fields.keyEnabled}`}
             />
           </div>
         </FieldCard>

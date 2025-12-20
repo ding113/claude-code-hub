@@ -392,7 +392,9 @@ function BatchEditDialogInner({
         {willUpdateKeys ? (
           <div className="text-sm">
             <div className="font-medium">{t("confirm.keyFields")}</div>
-            <div className="text-muted-foreground">{pendingUpdate.enabledKeyFields.join(", ")}</div>
+            <div className="text-muted-foreground">
+              {pendingUpdate.enabledKeyFields.join(", ")}
+            </div>
           </div>
         ) : null}
       </div>
@@ -424,6 +426,17 @@ function BatchEditDialogInner({
               affectedUsersCount={selectedUsersCount}
               state={userState}
               onChange={(patch) => setUserState((prev) => ({ ...prev, ...patch }))}
+              translations={{
+                title: t("user.title"),
+                affected: t.raw("user.affected") as string,
+                enableFieldAria: t.raw("user.enableFieldAria") as string,
+                fields: userFieldLabels,
+                placeholders: {
+                  emptyToClear: t("user.placeholders.emptyToClear"),
+                  tagsPlaceholder: t("user.placeholders.tagsPlaceholder"),
+                  emptyNoLimit: t("user.placeholders.emptyNoLimit"),
+                },
+              }}
             />
           ) : null}
 
@@ -434,6 +447,17 @@ function BatchEditDialogInner({
               affectedKeysCount={selectedKeysCount}
               state={keyState}
               onChange={(patch) => setKeyState((prev) => ({ ...prev, ...patch }))}
+              translations={{
+                title: t("key.title"),
+                affected: t.raw("key.affected") as string,
+                enableFieldAria: t.raw("user.enableFieldAria") as string,
+                fields: keyFieldLabels,
+                placeholders: {
+                  groupPlaceholder: t("key.placeholders.groupPlaceholder"),
+                  emptyNoLimit: t("key.placeholders.emptyNoLimit"),
+                },
+                targetValue: t("key.targetValue"),
+              }}
             />
           ) : null}
 
