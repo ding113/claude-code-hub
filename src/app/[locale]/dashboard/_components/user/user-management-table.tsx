@@ -195,6 +195,8 @@ export function UserManagementTable({
   const rowVirtualizer = useVirtualizer({
     count: hasNextPage ? users.length + 1 : users.length,
     getScrollElement: () => parentRef.current,
+    // Stable key function to prevent measurement cache mismatches during filtering/reordering
+    getItemKey: (index) => users[index]?.id ?? `loader-${index}`,
     estimateSize: (index) => {
       const user = users[index];
       if (!user) return USER_ROW_HEIGHT;

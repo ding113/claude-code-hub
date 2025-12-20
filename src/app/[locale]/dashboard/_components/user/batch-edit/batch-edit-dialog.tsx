@@ -359,9 +359,15 @@ function BatchEditDialogInner({
 
       if (anySuccess) {
         await queryClient.invalidateQueries({ queryKey: ["users"] });
+      }
+
+      // Only close dialog and clear selection when fully successful
+      // On partial success (some failed), keep dialog open to let user see results
+      if (anySuccess && !anyFailed) {
         onSuccess?.();
         handleRequestClose(false);
-      } else if (anyFailed) {
+      } else {
+        // Close confirm dialog, but keep main dialog open for retry/review
         setConfirmOpen(false);
       }
     } finally {

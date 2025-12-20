@@ -1069,6 +1069,10 @@
         "invalidNumber": "有効な数値を入力してください",
         "negativeNumber": "値は負の数にできません"
       },
+      "aria": {
+        "selectUser": "ユーザーを選択",
+        "selectKey": "キーを選択"
+      },
       "user": {
         "title": "ユーザー設定",
         "affected": "{count} ユーザーに影響します",
@@ -1157,7 +1161,7 @@
       },
       "dailyMode": {
         "fixed": "固定時刻でリセット",
-        "rolling": "ローリングウィンドウ（24h）"
+        "rolling": "ローリングウィンドウ（24時間）"
       },
       "quickValues": {
         "10": "$10",

@@ -103,6 +103,7 @@ export function KeyRowItem({
   const [statsDialogOpen, setStatsDialogOpen] = useState(false);
   const [quotaDialogOpen, setQuotaDialogOpen] = useState(false);
   const tCommon = useTranslations("common");
+  const tBatchEdit = useTranslations("dashboard.userManagement.batchEdit");
 
   const resolvedCurrencyCode: CurrencyCode =
     currencyCode && currencyCode in CURRENCY_CONFIG ? (currencyCode as CurrencyCode) : "USD";
@@ -139,7 +140,7 @@ export function KeyRowItem({
       {isMultiSelectMode ? (
         <div className="col-span-1 flex items-center justify-center">
           <Checkbox
-            aria-label="选择 Key"
+            aria-label={tBatchEdit("aria.selectKey")}
             checked={Boolean(isSelected)}
             onCheckedChange={(checked) => onSelect?.(Boolean(checked))}
           />

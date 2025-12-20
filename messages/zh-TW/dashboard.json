@@ -24,7 +24,7 @@
     "quotas": "查看和管理所有層級的額度使用情況",
     "clientInfo": "User-Agent 請求頭",
     "requestMessagesDescription": "用戶端傳送的訊息內容",
-    "responseBodyDescription": "伺服器傳回的完整回應（5分鐘 TTL）"
+    "responseBodyDescription": "伺服器傳回的完整回覆（5分鐘 TTL）"
   },
   "overview": {
     "title": "概覽",
@@ -35,7 +35,7 @@
     "activeUsers": "活躍用戶",
     "activeSessions": "活躍工作階段",
     "errorRate": "錯誤率",
-    "avgResponseTime": "平均回應時間"
+    "avgResponseTime": "平均回覆時間"
   },
   "stats": {
     "title": "統計",
@@ -182,7 +182,7 @@
         "totalDuration": "總耗時: {duration} 毫秒"
       },
       "noError": {
-        "processing": "請求正在處理中，等待回應...",
+        "processing": "請求正在處理中，等待回覆...",
         "success": "請求成功，無錯誤訊息",
         "default": "暫無詳細錯誤訊息"
       },
@@ -267,7 +267,7 @@
       "model": "模型",
       "cost": "成本",
       "successRate": "成功率",
-      "avgResponseTime": "平均回應時間"
+      "avgResponseTime": "平均回覆時間"
     },
     "states": {
       "loading": "載入中...",
@@ -351,8 +351,8 @@
       "clientInfo": "用戶端資訊",
       "requestMessages": "請求訊息",
       "requestMessagesDescription": "用戶端傳送的訊息內容",
-      "responseBody": "回應主體內容",
-      "responseBodyDescription": "伺服器傳回的完整回應（5分鐘 TTL）",
+      "responseBody": "回覆主體內容",
+      "responseBodyDescription": "伺服器傳回的完整回覆（5分鐘 TTL）",
       "noData": "暫無資料"
     },
     "actions": {
@@ -361,7 +361,7 @@
       "copyMessages": "複製 Messages",
       "downloadMessages": "下載 Messages",
       "copied": "已複製",
-      "copyResponse": "複製回應主體",
+      "copyResponse": "複製回覆主體",
       "terminate": "終止",
       "terminateTitle": "終止會話",
       "terminateDescription": "確定要終止此會話嗎？終止後會清除供應商綁定，下一次請求將重新選擇供應商。",
@@ -1080,6 +1080,10 @@
       "validation": {
         "invalidNumber": "請輸入有效數字",
         "negativeNumber": "數值不能為負數"
+      },
+      "aria": {
+        "selectUser": "選擇使用者",
+        "selectKey": "選擇金鑰"
       },
       "user": {
         "title": "使用者設定",

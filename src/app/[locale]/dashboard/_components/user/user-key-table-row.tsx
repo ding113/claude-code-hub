@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown, ChevronRight, SquarePen } from "lucide-react";
-import { useLocale } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useTransition } from "react";
 import { toast } from "sonner";
 import { removeKey } from "@/actions/keys";
@@ -94,6 +94,7 @@ export function UserKeyTableRow({
   translations,
 }: UserKeyTableRowProps) {
   const locale = useLocale();
+  const tBatchEdit = useTranslations("dashboard.userManagement.batchEdit");
   const router = useRouter();
   const [, startTransition] = useTransition();
   const isExpanded = isMultiSelectMode ? true : expanded;
@@ -157,7 +158,7 @@ export function UserKeyTableRow({
                 onKeyDown={(e) => e.stopPropagation()}
               >
                 <Checkbox
-                  aria-label="选择用户"
+                  aria-label={tBatchEdit("aria.selectUser")}
                   checked={Boolean(isSelected)}
                   onCheckedChange={(checked) => onSelect?.(Boolean(checked))}
                 />

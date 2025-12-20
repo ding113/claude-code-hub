@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useDebounce } from "@/lib/hooks/use-debounce";
 import type { User, UserDisplay } from "@/types/user";
 import { BatchEditDialog } from "../_components/user/batch-edit/batch-edit-dialog";
 import { UnifiedEditDialog } from "../_components/user/unified-edit-dialog";
@@ -66,9 +67,22 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
   const [tagFilter, setTagFilter] = useState("all");
   const [keyGroupFilter, setKeyGroupFilter] = useState("all");
 
-  const resolvedSearchTerm = searchTerm.trim() ? searchTerm.trim() : undefined;
+  // Debounce search term to avoid frequent API requests
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
+
+  // Use debounced value for API queries, raw value for UI highlighting
+  const resolvedSearchTerm = debouncedSearchTerm.trim() ? debouncedSearchTerm.trim() : undefined;
   const resolvedTagFilter = tagFilter === "all" ? undefined : tagFilter;
   const resolvedKeyGroupFilter = keyGroupFilter === "all" ? undefined : keyGroupFilter;
+
+  // Stable queryKey for non-admin users to avoid unnecessary cache entries
+  const queryKey = useMemo(
+    () =>
+      isAdmin
+        ? ["users", resolvedSearchTerm, resolvedTagFilter, resolvedKeyGroupFilter]
+        : ["users", "self"],
+    [isAdmin, resolvedSearchTerm, resolvedTagFilter, resolvedKeyGroupFilter]
+  );
 
   const {
     data,
@@ -80,7 +94,7 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
     isError,
     error,
   } = useInfiniteQuery({
-    queryKey: ["users", resolvedSearchTerm, resolvedTagFilter, resolvedKeyGroupFilter],
+    queryKey,
     queryFn: async ({ pageParam }) => {
       if (!isAdmin) {
         const users = await getUsers();
@@ -295,6 +309,70 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
     setBatchEditDialogOpen(false);
   }, []);
 
+  const handleOpenBatchEdit = useCallback(() => {
+    setBatchEditDialogOpen(true);
+  }, []);
+
+  // Memoize translations object to prevent unnecessary re-renders
+  const tableTranslations = useMemo(
+    () => ({
+      table: {
+        columns: {
+          username: tUserMgmt("table.columns.username"),
+          note: tUserMgmt("table.columns.note"),
+          expiresAt: tUserMgmt("table.columns.expiresAt"),
+          limit5h: tUserMgmt("table.columns.limit5h"),
+          limitDaily: tUserMgmt("table.columns.limitDaily"),
+          limitWeekly: tUserMgmt("table.columns.limitWeekly"),
+          limitMonthly: tUserMgmt("table.columns.limitMonthly"),
+          limitTotal: tUserMgmt("table.columns.limitTotal"),
+          limitSessions: tUserMgmt("table.columns.limitSessions"),
+        },
+        keyRow: {
+          fields: {
+            name: tUserMgmt("table.keyRow.name"),
+            key: tUserMgmt("table.keyRow.key"),
+            group: tUserMgmt("table.keyRow.group"),
+            todayUsage: tUserMgmt("table.keyRow.todayUsage"),
+            todayCost: tUserMgmt("table.keyRow.todayCost"),
+            lastUsed: tUserMgmt("table.keyRow.lastUsed"),
+            actions: tUserMgmt("table.keyRow.actions"),
+            callsLabel: tUserMgmt("table.keyRow.fields.callsLabel"),
+            costLabel: tUserMgmt("table.keyRow.fields.costLabel"),
+          },
+          actions: {
+            details: tKeyList("detailsButton"),
+            logs: tKeyList("logsButton"),
+            edit: tCommon("edit"),
+            delete: tCommon("delete"),
+            copy: tCommon("copy"),
+            copySuccess: tCommon("copySuccess"),
+            copyFailed: tCommon("copyFailed"),
+            show: tKeyList("showKeyTooltip"),
+            hide: tKeyList("hideKeyTooltip"),
+            quota: tUserMgmt("table.keyRow.quotaButton"),
+          },
+          status: {
+            enabled: tUserMgmt("keyStatus.enabled"),
+            disabled: tUserMgmt("keyStatus.disabled"),
+          },
+        },
+        expand: tUserMgmt("table.expand"),
+        collapse: tUserMgmt("table.collapse"),
+        noKeys: tUserMgmt("table.noKeys"),
+        defaultGroup: tUserMgmt("table.defaultGroup"),
+      },
+      editDialog: {},
+      actions: {
+        edit: tCommon("edit"),
+        details: tKeyList("detailsButton"),
+        logs: tKeyList("logsButton"),
+        delete: tCommon("delete"),
+      },
+    }),
+    [tUserMgmt, tKeyList, tCommon]
+  );
+
   const scrollResetKey = useMemo(
     () =>
       `${resolvedSearchTerm ?? ""}|${resolvedTagFilter ?? "all"}|${resolvedKeyGroupFilter ?? "all"}`,
@@ -411,62 +489,8 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
             onSelectAll={handleSelectAll}
             onSelectUser={handleSelectUser}
             onSelectKey={handleSelectKey}
-            onOpenBatchEdit={() => setBatchEditDialogOpen(true)}
-            translations={{
-              table: {
-                columns: {
-                  username: tUserMgmt("table.columns.username"),
-                  note: tUserMgmt("table.columns.note"),
-                  expiresAt: tUserMgmt("table.columns.expiresAt"),
-                  limit5h: tUserMgmt("table.columns.limit5h"),
-                  limitDaily: tUserMgmt("table.columns.limitDaily"),
-                  limitWeekly: tUserMgmt("table.columns.limitWeekly"),
-                  limitMonthly: tUserMgmt("table.columns.limitMonthly"),
-                  limitTotal: tUserMgmt("table.columns.limitTotal"),
-                  limitSessions: tUserMgmt("table.columns.limitSessions"),
-                },
-                keyRow: {
-                  fields: {
-                    name: tUserMgmt("table.keyRow.name"),
-                    key: tUserMgmt("table.keyRow.key"),
-                    group: tUserMgmt("table.keyRow.group"),
-                    todayUsage: tUserMgmt("table.keyRow.todayUsage"),
-                    todayCost: tUserMgmt("table.keyRow.todayCost"),
-                    lastUsed: tUserMgmt("table.keyRow.lastUsed"),
-                    actions: tUserMgmt("table.keyRow.actions"),
-                    callsLabel: tUserMgmt("table.keyRow.fields.callsLabel"),
-                    costLabel: tUserMgmt("table.keyRow.fields.costLabel"),
-                  },
-                  actions: {
-                    details: tKeyList("detailsButton"),
-                    logs: tKeyList("logsButton"),
-                    edit: tCommon("edit"),
-                    delete: tCommon("delete"),
-                    copy: tCommon("copy"),
-                    copySuccess: tCommon("copySuccess"),
-                    copyFailed: tCommon("copyFailed"),
-                    show: tKeyList("showKeyTooltip"),
-                    hide: tKeyList("hideKeyTooltip"),
-                    quota: tUserMgmt("table.keyRow.quotaButton"),
-                  },
-                  status: {
-                    enabled: tUserMgmt("keyStatus.enabled"),
-                    disabled: tUserMgmt("keyStatus.disabled"),
-                  },
-                },
-                expand: tUserMgmt("table.expand"),
-                collapse: tUserMgmt("table.collapse"),
-                noKeys: tUserMgmt("table.noKeys"),
-                defaultGroup: tUserMgmt("table.defaultGroup"),
-              },
-              editDialog: {},
-              actions: {
-                edit: tCommon("edit"),
-                details: tKeyList("detailsButton"),
-                logs: tKeyList("logsButton"),
-                delete: tCommon("delete"),
-              },
-            }}
+            onOpenBatchEdit={handleOpenBatchEdit}
+            translations={tableTranslations}
           />
         </div>
       )}

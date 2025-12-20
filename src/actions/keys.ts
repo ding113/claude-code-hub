@@ -1,7 +1,7 @@
 "use server";
 
 import { randomBytes } from "node:crypto";
-import { and, inArray, isNull } from "drizzle-orm";
+import { and, count, eq, inArray, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import { db } from "@/drizzle/db";
@@ -773,6 +773,62 @@ export async function batchUpdateKeys(
           `部分 Key 不存在: ${missingIds.join(", ")}`,
           ERROR_CODES.NOT_FOUND
         );
+      }
+
+      // 禁用 Key 时，确保每个用户至少保留一个启用的 Key
+      if (updates.isEnabled === false) {
+        // 获取当前启用状态
+        const currentKeyStates = await tx
+          .select({
+            id: keysTable.id,
+            userId: keysTable.userId,
+            isEnabled: keysTable.isEnabled,
+          })
+          .from(keysTable)
+          .where(and(inArray(keysTable.id, requestedIds), isNull(keysTable.deletedAt)));
+
+        // 按用户分组，统计每个用户将被禁用的已启用 Key 数量
+        const userDisableCounts = new Map<number, number>();
+        for (const key of currentKeyStates) {
+          if (key.isEnabled) {
+            userDisableCounts.set(key.userId, (userDisableCounts.get(key.userId) ?? 0) + 1);
+          }
+        }
+
+        // 获取所有受影响用户当前的启用 Key 数量
+        const affectedUserIdsList = Array.from(userDisableCounts.keys());
+        if (affectedUserIdsList.length > 0) {
+          const enabledCountRows = await tx
+            .select({
+              userId: keysTable.userId,
+              count: count(),
+            })
+            .from(keysTable)
+            .where(
+              and(
+                inArray(keysTable.userId, affectedUserIdsList),
+                eq(keysTable.isEnabled, true),
+                isNull(keysTable.deletedAt)
+              )
+            )
+            .groupBy(keysTable.userId);
+
+          const userEnabledCounts = new Map<number, number>();
+          for (const row of enabledCountRows) {
+            userEnabledCounts.set(row.userId, Number(row.count));
+          }
+
+          // 检查每个用户禁用后是否还有至少一个启用的 Key
+          for (const [userId, disableCount] of userDisableCounts) {
+            const currentEnabledCount = userEnabledCounts.get(userId) ?? 0;
+            if (currentEnabledCount - disableCount < 1) {
+              throw new BatchUpdateError(
+                tError("CANNOT_DISABLE_LAST_KEY") || "无法禁用最后一个可用密钥",
+                ERROR_CODES.OPERATION_FAILED
+              );
+            }
+          }
+        }
       }
 
       affectedUserIds = Array.from(new Set(existingRows.map((r) => r.userId)));

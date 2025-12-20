@@ -1174,6 +1174,10 @@
         "invalidNumber": "请输入有效数字",
         "negativeNumber": "数值不能为负数"
       },
+      "aria": {
+        "selectUser": "选择用户",
+        "selectKey": "选择密钥"
+      },
       "user": {
         "title": "用户设置",
         "affected": "将影响 {count} 个用户",

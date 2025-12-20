@@ -999,7 +999,7 @@
         "limit5h": "5 часов",
         "limitDaily": "Ежедневно",
         "limitWeekly": "Еженедельно",
-        "limitMonthly": "Ежемесячно",
+        "limitMonthly": "Месячный лимит",
         "limitTotal": "Всего",
         "limitSessions": "Одновременно"
       }
@@ -1079,6 +1079,10 @@
       "validation": {
         "invalidNumber": "Введите корректное число",
         "negativeNumber": "Значение не может быть отрицательным"
+      },
+      "aria": {
+        "selectUser": "Выбрать пользователя",
+        "selectKey": "Выбрать ключ"
       },
       "user": {
         "title": "Настройки пользователя",
