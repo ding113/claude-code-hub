@@ -126,7 +126,7 @@ export function QuotaCards({
         keyCurrent: quota.keyCurrentConcurrentSessions,
         keyLimit: quota.keyLimitConcurrentSessions,
         userCurrent: quota.userCurrentConcurrentSessions,
-        userLimit: quota.userLimitConcurrentSessions ?? null,
+        userLimit: quota.userLimitConcurrentSessions,
       },
     ];
   }, [quota, t]);
@@ -258,34 +258,35 @@ function QuotaColumn({
 
   const unlimited = isUnlimited(limit);
 
-  const progressClass = `h-2 ${
-    tone === "danger"
-      ? "bg-destructive/10 [&>div]:bg-destructive"
-      : tone === "warn"
-        ? "bg-amber-500/10 [&>div]:bg-amber-500"
-        : ""
-  }`;
+  const progressClass = cn("h-2", {
+    "bg-destructive/10 [&>div]:bg-destructive": tone === "danger",
+    "bg-amber-500/10 [&>div]:bg-amber-500": tone === "warn",
+  });
 
-  const ariaLabel = `${label}: ${formatValue(current)}${!unlimited ? ` / ${formatValue(limit!)}` : ""}`;
+  const limitDisplay = unlimited ? t("unlimited") : formatValue(limit as number);
+  const ariaLabel = `${label}: ${formatValue(current)}${!unlimited ? ` / ${limitDisplay}` : ""}`;
 
   return (
-    <div className={cn("space-y-2 rounded-md border bg-card/50 p-3", muted && "opacity-60")}>
+    <div className={cn("space-y-2 rounded-md border bg-card/50 p-3", muted && "opacity-70")}>
       {/* Label */}
       <div className="text-xs font-medium text-muted-foreground">{label}</div>
 
       {/* Values - split into two lines to avoid overlap */}
       <div className="space-y-0.5">
         <div className="text-sm font-mono font-medium text-foreground">{formatValue(current)}</div>
-        <div className="text-xs text-muted-foreground">
-          / {unlimited ? t("unlimited") : formatValue(limit!)}
-        </div>
+        <div className="text-xs text-muted-foreground">/ {limitDisplay}</div>
       </div>
 
       {/* Progress bar or placeholder */}
       {!unlimited ? (
-        <Progress value={percent ?? 0} className={progressClass.trim()} aria-label={ariaLabel} />
+        <Progress value={percent ?? 0} className={progressClass} aria-label={ariaLabel} />
       ) : (
-        <div className="h-2 rounded-full bg-muted/50" />
+        <div
+          className="h-2 rounded-full bg-muted/50"
+          role="progressbar"
+          aria-label={`${label}: ${t("unlimited")}`}
+          aria-valuetext={t("unlimited")}
+        />
       )}
     </div>
   );
