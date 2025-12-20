@@ -392,9 +392,7 @@ function BatchEditDialogInner({
         {willUpdateKeys ? (
           <div className="text-sm">
             <div className="font-medium">{t("confirm.keyFields")}</div>
-            <div className="text-muted-foreground">
-              {pendingUpdate.enabledKeyFields.join(", ")}
-            </div>
+            <div className="text-muted-foreground">{pendingUpdate.enabledKeyFields.join(", ")}</div>
           </div>
         ) : null}
       </div>
