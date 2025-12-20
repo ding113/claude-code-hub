@@ -355,14 +355,14 @@ export function KeyEditSection({
             </Label>
             <p className="text-xs text-muted-foreground mt-1">
               {keyData.canLoginWebUi
-                ? translations.fields.balanceQueryPage.descriptionEnabled
-                : translations.fields.balanceQueryPage.descriptionDisabled}
+                ? translations.fields.balanceQueryPage.descriptionDisabled
+                : translations.fields.balanceQueryPage.descriptionEnabled}
             </p>
           </div>
           <Switch
             id={`key-${keyData.id}-balance-page`}
-            checked={keyData.canLoginWebUi ?? false}
-            onCheckedChange={(checked) => onChange("canLoginWebUi", checked)}
+            checked={!(keyData.canLoginWebUi ?? false)}
+            onCheckedChange={(checked) => onChange("canLoginWebUi", !checked)}
           />
         </div>
 
