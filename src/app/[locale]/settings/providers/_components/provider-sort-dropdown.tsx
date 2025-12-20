@@ -10,7 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-export type SortKey = "name" | "priority" | "weight" | "createdAt";
+export type SortKey = "name" | "priority" | "weight" | "createdAt" | "actualPriority";
 
 interface ProviderSortDropdownProps {
   value: SortKey;
@@ -30,6 +30,7 @@ export function ProviderSortDropdown({
     { value: "name", labelKey: "byName" },
     { value: "priority", labelKey: "byPriority" },
     { value: "weight", labelKey: "byWeight" },
+    { value: "actualPriority", labelKey: "byActualPriority" },
     { value: "createdAt", labelKey: "byCreatedAt" },
   ];
 
