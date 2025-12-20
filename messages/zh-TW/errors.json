@@ -44,6 +44,7 @@
   "NETWORK_ERROR": "網路錯誤",
 
   "QUOTA_EXCEEDED": "配額已用盡",
+  "BATCH_SIZE_EXCEEDED": "批次操作不能超過 {max} 個項目",
   "RATE_LIMIT_EXCEEDED": "請求過於頻繁，請稍後重試",
   "RESOURCE_BUSY": "資源正在使用中",
   "INVALID_STATE": "當前狀態不允許此操作",

@@ -733,9 +733,17 @@ export async function batchUpdateKeys(
       };
     }
 
+    const MAX_BATCH_SIZE = 500;
     const requestedIds = Array.from(new Set(params.keyIds)).filter((id) => Number.isInteger(id));
     if (requestedIds.length === 0) {
-      return { ok: false, error: "keyIds 不能为空", errorCode: ERROR_CODES.REQUIRED_FIELD };
+      return { ok: false, error: tError("REQUIRED_FIELD"), errorCode: ERROR_CODES.REQUIRED_FIELD };
+    }
+    if (requestedIds.length > MAX_BATCH_SIZE) {
+      return {
+        ok: false,
+        error: tError("BATCH_SIZE_EXCEEDED", { max: MAX_BATCH_SIZE }),
+        errorCode: ERROR_CODES.INVALID_FORMAT,
+      };
     }
 
     const updates = params.updates ?? {};

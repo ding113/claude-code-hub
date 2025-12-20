@@ -1,10 +1,9 @@
 "use client";
 
-import type { ReactNode } from "react";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { TagInput } from "@/components/ui/tag-input";
-import { cn } from "@/lib/utils";
+import { FieldCard } from "./field-card";
+import { formatMessage } from "./utils";
 
 export interface BatchUserSectionState {
   noteEnabled: boolean;
@@ -17,12 +16,6 @@ export interface BatchUserSectionState {
   limitWeeklyUsd: string;
   limitMonthlyUsdEnabled: boolean;
   limitMonthlyUsd: string;
-}
-
-function formatMessage(template: string, values: Record<string, string | number>) {
-  return template.replace(/\{(\w+)\}/g, (_match, key: string) =>
-    Object.hasOwn(values, key) ? String(values[key]) : `{${key}}`
-  );
 }
 
 export interface BatchUserSectionProps {
@@ -46,34 +39,6 @@ export interface BatchUserSectionProps {
       emptyNoLimit: string;
     };
   };
-}
-
-function FieldCard({
-  title,
-  enabled,
-  onEnabledChange,
-  enableFieldAria,
-  children,
-}: {
-  title: string;
-  enabled: boolean;
-  onEnabledChange: (enabled: boolean) => void;
-  enableFieldAria: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className={cn("rounded-md border p-3 space-y-3", !enabled && "opacity-80")}>
-      <div className="flex items-center justify-between gap-3">
-        <div className="text-sm font-medium">{title}</div>
-        <Switch
-          checked={enabled}
-          onCheckedChange={onEnabledChange}
-          aria-label={formatMessage(enableFieldAria, { title })}
-        />
-      </div>
-      {children}
-    </div>
-  );
 }
 
 export function BatchUserSection({

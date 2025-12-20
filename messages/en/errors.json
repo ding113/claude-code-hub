@@ -44,6 +44,7 @@
   "NETWORK_ERROR": "Network error",
 
   "QUOTA_EXCEEDED": "Quota exceeded",
+  "BATCH_SIZE_EXCEEDED": "Batch operation cannot exceed {max} items",
   "RATE_LIMIT_EXCEEDED": "Too many requests, please try again later",
   "RESOURCE_BUSY": "Resource is currently in use",
   "INVALID_STATE": "Operation not allowed in current state",

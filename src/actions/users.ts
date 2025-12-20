@@ -468,9 +468,17 @@ export async function batchUpdateUsers(
       };
     }
 
+    const MAX_BATCH_SIZE = 500;
     const requestedIds = Array.from(new Set(params.userIds)).filter((id) => Number.isInteger(id));
     if (requestedIds.length === 0) {
-      return { ok: false, error: "userIds 不能为空", errorCode: ERROR_CODES.REQUIRED_FIELD };
+      return { ok: false, error: tError("REQUIRED_FIELD"), errorCode: ERROR_CODES.REQUIRED_FIELD };
+    }
+    if (requestedIds.length > MAX_BATCH_SIZE) {
+      return {
+        ok: false,
+        error: tError("BATCH_SIZE_EXCEEDED", { max: MAX_BATCH_SIZE }),
+        errorCode: ERROR_CODES.INVALID_FORMAT,
+      };
     }
 
     const updatesSchema = UpdateUserSchema.pick({
