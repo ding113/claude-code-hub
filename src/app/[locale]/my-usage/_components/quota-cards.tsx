@@ -152,12 +152,14 @@ export function QuotaCards({
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {items.map((item) => {
-          const keyPct = item.keyLimit
-            ? Math.min((item.keyCurrent / item.keyLimit) * 100, 999)
-            : null;
-          const userPct = item.userLimit
-            ? Math.min(((item.userCurrent ?? 0) / item.userLimit) * 100, 999)
-            : null;
+          const keyPct =
+            item.keyLimit != null && item.keyLimit > 0
+              ? Math.min((item.keyCurrent / item.keyLimit) * 100, 100)
+              : null;
+          const userPct =
+            item.userLimit != null && item.userLimit > 0
+              ? Math.min(((item.userCurrent ?? 0) / item.userLimit) * 100, 100)
+              : null;
 
           const keyTone = getTone(keyPct);
           const userTone = getTone(userPct);
