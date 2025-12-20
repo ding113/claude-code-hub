@@ -33,6 +33,11 @@ export async function GET() {
       return NextResponse.json({ error: "未授权，请先登录" }, { status: 401 });
     }
 
+    // 权限检查：仅 admin 用户可访问
+    if (session.user.role !== "admin") {
+      return NextResponse.json({ error: "权限不足" }, { status: 403 });
+    }
+
     // 获取代理状态
     const tracker = ProxyStatusTracker.getInstance();
     const status = await tracker.getAllUsersStatus();

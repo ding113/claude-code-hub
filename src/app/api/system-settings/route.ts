@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getSession } from "@/lib/auth";
 import { getSystemSettings } from "@/repository/system-config";
 
 // 需要数据库连接
@@ -11,6 +12,11 @@ export const dynamic = "force-dynamic";
  */
 export async function GET() {
   try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: "未授权，请先登录" }, { status: 401 });
+    }
+
     const settings = await getSystemSettings();
     return NextResponse.json(settings);
   } catch (error) {
