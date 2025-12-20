@@ -83,6 +83,12 @@ export function ProviderManager({
         case "weight":
           // 权重：数值越大越优先，降序排列
           return b.weight - a.weight;
+        case "actualPriority":
+          // 实际选取顺序：先按优先级升序，再按权重降序
+          if (a.priority !== b.priority) {
+            return a.priority - b.priority;
+          }
+          return b.weight - a.weight;
         case "createdAt": {
           const timeA = new Date(a.createdAt).getTime();
           const timeB = new Date(b.createdAt).getTime();

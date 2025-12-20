@@ -1419,6 +1419,7 @@
       "byName": "按名稱 (A-Z)",
       "byPriority": "按優先級 (高-低)",
       "byWeight": "按權重 (高-低)",
+      "byActualPriority": "按實際選取順序",
       "byCreatedAt": "按建立時間 (新-舊)",
       "placeholder": "排序供應商"
     },
