@@ -861,6 +861,31 @@ export async function batchUpdateKeys(
       if (updatedIds.length !== requestedIds.length) {
         throw new BatchUpdateError("批量更新失败：更新行数不匹配", ERROR_CODES.UPDATE_FAILED);
       }
+
+      // CRITICAL: Post-update validation to prevent race conditions
+      // Re-validate after update within the same transaction to ensure atomicity
+      // If another concurrent transaction disabled keys, this check will fail and rollback
+      if (updates.isEnabled === false) {
+        for (const userId of affectedUserIds) {
+          const [remainingEnabled] = await tx
+            .select({ count: count() })
+            .from(keysTable)
+            .where(
+              and(
+                eq(keysTable.userId, userId),
+                eq(keysTable.isEnabled, true),
+                isNull(keysTable.deletedAt)
+              )
+            );
+
+          if (Number(remainingEnabled?.count ?? 0) < 1) {
+            throw new BatchUpdateError(
+              tError("CANNOT_DISABLE_LAST_KEY") || "无法禁用最后一个可用密钥",
+              ERROR_CODES.OPERATION_FAILED
+            );
+          }
+        }
+      }
     });
 
     // 同步用户分组（用户分组 = Key 分组并集）

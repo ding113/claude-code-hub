@@ -380,6 +380,10 @@ export function KeyEditSection({
           <h4 className="text-sm font-semibold">{translations.sections.specialFeatures}</h4>
         </div>
 
+        {/* Balance Query Page toggle uses inverted logic by design:
+            - canLoginWebUi=true means user accesses full WebUI (switch OFF)
+            - canLoginWebUi=false means user uses independent balance page (switch ON)
+            The switch represents "enable independent page" which is !canLoginWebUi */}
         <div className="flex items-start justify-between gap-4 rounded-lg border border-dashed border-border bg-background px-4 py-3">
           <div>
             <Label htmlFor={`key-${keyData.id}-balance-page`} className="text-sm font-medium">

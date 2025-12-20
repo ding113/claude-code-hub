@@ -121,29 +121,27 @@ async function validateExpiresAt(
  * @param userId - 用户 ID
  */
 export async function syncUserProviderGroupFromKeys(userId: number): Promise<void> {
-  try {
-    const keys = await findKeyList(userId);
-    const allGroups = new Set<string>();
+  // Note: This function intentionally does NOT catch errors.
+  // Callers (addKey, editKey, removeKey, batchUpdateKeys) have their own error handling
+  // and should fail explicitly if provider group sync fails to maintain data consistency.
+  const keys = await findKeyList(userId);
+  const allGroups = new Set<string>();
 
-    for (const key of keys) {
-      if (key.providerGroup) {
-        const groups = key.providerGroup
-          .split(",")
-          .map((g) => g.trim())
-          .filter(Boolean);
-        groups.forEach((g) => allGroups.add(g));
-      }
+  for (const key of keys) {
+    if (key.providerGroup) {
+      const groups = key.providerGroup
+        .split(",")
+        .map((g) => g.trim())
+        .filter(Boolean);
+      groups.forEach((g) => allGroups.add(g));
     }
-
-    const newProviderGroup = allGroups.size > 0 ? Array.from(allGroups).sort().join(",") : null;
-    await updateUser(userId, { providerGroup: newProviderGroup });
-    logger.info(
-      `[UserAction] Synced user provider group: userId=${userId}, groups=${newProviderGroup || "null"}`
-    );
-  } catch (error) {
-    logger.error(`[UserAction] Failed to sync user provider group for user ${userId}:`, error);
-    // 静默失败，不影响主流程
   }
+
+  const newProviderGroup = allGroups.size > 0 ? Array.from(allGroups).sort().join(",") : null;
+  await updateUser(userId, { providerGroup: newProviderGroup });
+  logger.info(
+    `[UserAction] Synced user provider group: userId=${userId}, groups=${newProviderGroup || "null"}`
+  );
 }
 
 // 获取用户数据
