@@ -13,7 +13,6 @@ jobs:
       (github.event.review.state == 'changes_requested' ||
        contains(github.event.review.body, '@claude'))
     runs-on: ubuntu-latest
-    timeout-minutes: 15
     concurrency:
       group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
       cancel-in-progress: false

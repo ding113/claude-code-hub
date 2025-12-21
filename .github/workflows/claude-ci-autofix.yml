@@ -36,7 +36,6 @@ jobs:
   sync-dev:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.task_type == 'sync-dev'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
     permissions:
       contents: write
       pull-requests: write
@@ -227,7 +226,6 @@ jobs:
        !startsWith(github.event.workflow_run.head_branch, 'claude-fix-')) ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.task_type == 'ci-fix')
     runs-on: ubuntu-latest
-    timeout-minutes: 15
     permissions:
       contents: write
       pull-requests: write

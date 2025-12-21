@@ -9,7 +9,6 @@ on:
 jobs:
   stale-cleanup:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
     permissions:
       contents: read
       issues: write
