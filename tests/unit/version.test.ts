@@ -31,4 +31,3 @@ describe("版本比较", () => {
     expect(isVersionEqual("dev", "v1.0.0")).toBe(true);
   });
 });
-

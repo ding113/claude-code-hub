@@ -15,9 +15,7 @@ export const GITHUB_REPO = {
   repo: "claude-code-hub",
 };
 
-type SemverPrereleaseId =
-  | { kind: "num"; value: number }
-  | { kind: "str"; value: string };
+type SemverPrereleaseId = { kind: "num"; value: number } | { kind: "str"; value: string };
 
 function parseSemverLike(
   raw: string
