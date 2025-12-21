@@ -240,6 +240,7 @@
       "keys": "Key Rankings",
       "userRanking": "User Rankings",
       "providerRanking": "Provider Rankings",
+      "providerCacheHitRateRanking": "Provider Cache Hit Rate",
       "modelRanking": "Model Rankings",
       "dailyRanking": "Today",
       "weeklyRanking": "This Week",
@@ -266,6 +267,7 @@
       "provider": "Provider",
       "model": "Model",
       "cost": "Cost",
+      "cacheHitRate": "Cache Hit Rate",
       "successRate": "Success Rate",
       "avgResponseTime": "Avg Response Time"
     },

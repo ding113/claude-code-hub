@@ -5,30 +5,40 @@ import {
   type DateRangeParams,
   findAllTimeLeaderboard,
   findAllTimeModelLeaderboard,
+  findAllTimeProviderCacheHitRateLeaderboard,
   findAllTimeProviderLeaderboard,
   findCustomRangeLeaderboard,
   findCustomRangeModelLeaderboard,
+  findCustomRangeProviderCacheHitRateLeaderboard,
   findCustomRangeProviderLeaderboard,
   findDailyLeaderboard,
   findDailyModelLeaderboard,
+  findDailyProviderCacheHitRateLeaderboard,
   findDailyProviderLeaderboard,
   findMonthlyLeaderboard,
   findMonthlyModelLeaderboard,
+  findMonthlyProviderCacheHitRateLeaderboard,
   findMonthlyProviderLeaderboard,
   findWeeklyLeaderboard,
   findWeeklyModelLeaderboard,
+  findWeeklyProviderCacheHitRateLeaderboard,
   findWeeklyProviderLeaderboard,
   type LeaderboardEntry,
   type LeaderboardPeriod,
   type ModelLeaderboardEntry,
+  type ProviderCacheHitRateLeaderboardEntry,
   type ProviderLeaderboardEntry,
 } from "@/repository/leaderboard";
 import { getRedisClient } from "./client";
 
 export type { LeaderboardPeriod, DateRangeParams };
-export type LeaderboardScope = "user" | "provider" | "model";
+export type LeaderboardScope = "user" | "provider" | "providerCacheHitRate" | "model";
 
-type LeaderboardData = LeaderboardEntry[] | ProviderLeaderboardEntry[] | ModelLeaderboardEntry[];
+type LeaderboardData =
+  | LeaderboardEntry[]
+  | ProviderLeaderboardEntry[]
+  | ProviderCacheHitRateLeaderboardEntry[]
+  | ModelLeaderboardEntry[];
 
 /**
  * 构建缓存键
@@ -79,6 +89,9 @@ async function queryDatabase(
     if (scope === "provider") {
       return await findCustomRangeProviderLeaderboard(dateRange);
     }
+    if (scope === "providerCacheHitRate") {
+      return await findCustomRangeProviderCacheHitRateLeaderboard(dateRange);
+    }
     return await findCustomRangeModelLeaderboard(dateRange);
   }
 
@@ -108,6 +121,20 @@ async function queryDatabase(
         return await findAllTimeProviderLeaderboard();
       default:
         return await findDailyProviderLeaderboard();
+    }
+  }
+  if (scope === "providerCacheHitRate") {
+    switch (period) {
+      case "daily":
+        return await findDailyProviderCacheHitRateLeaderboard();
+      case "weekly":
+        return await findWeeklyProviderCacheHitRateLeaderboard();
+      case "monthly":
+        return await findMonthlyProviderCacheHitRateLeaderboard();
+      case "allTime":
+        return await findAllTimeProviderCacheHitRateLeaderboard();
+      default:
+        return await findDailyProviderCacheHitRateLeaderboard();
     }
   }
   // model scope

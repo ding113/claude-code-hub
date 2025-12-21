@@ -240,6 +240,7 @@
       "keys": "密鑰排名",
       "userRanking": "使用者排名",
       "providerRanking": "供應商排名",
+      "providerCacheHitRateRanking": "供應商快取命中率排行",
       "modelRanking": "模型排名",
       "dailyRanking": "今日",
       "weeklyRanking": "本週",
@@ -266,6 +267,7 @@
       "provider": "供應商",
       "model": "模型",
       "cost": "成本",
+      "cacheHitRate": "快取命中率",
       "successRate": "成功率",
       "avgResponseTime": "平均回覆時間"
     },
