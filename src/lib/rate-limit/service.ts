@@ -988,8 +988,22 @@ export class RateLimitService {
               logger.info(
                 `[RateLimit] Cache miss for user:${userId}:cost_daily_rolling, querying database`
               );
-              currentCost = await sumUserCostToday(userId);
-              // Note: Cache Warming 在 rolling 模式下由 trackUserDailyCost 处理
+
+              // 导入明细查询函数
+              const { findUserCostEntriesInTimeRange } = await import("@/repository/statistics");
+
+              // 计算滚动窗口的时间范围
+              const startTime = new Date(now - window24h);
+              const endTime = new Date(now);
+
+              // 查询明细并计算总和
+              const costEntries = await findUserCostEntriesInTimeRange(userId, startTime, endTime);
+              currentCost = costEntries.reduce((sum, row) => sum + row.costUsd, 0);
+
+              // Cache Warming: 重建 ZSET
+              if (costEntries.length > 0) {
+                await RateLimitService.warmRollingCostZset(key, costEntries, 90000); // 25 hours TTL
+              }
             }
           }
         } else {
@@ -1035,12 +1049,14 @@ export class RateLimitService {
    * 累加用户今日消费（在 trackCost 后调用）
    * @param resetTime - 重置时间 (HH:mm)，仅 fixed 模式使用
    * @param resetMode - 重置模式：fixed 或 rolling
+   * @param options - 可选参数：requestId 和 createdAtMs 用于与 DB 时间轴保持一致
    */
   static async trackUserDailyCost(
     userId: number,
     cost: number,
     resetTime?: string,
-    resetMode?: DailyResetMode
+    resetMode?: DailyResetMode,
+    options?: { requestId?: number; createdAtMs?: number }
   ): Promise<void> {
     if (!RateLimitService.redis || cost <= 0) return;
 
@@ -1051,8 +1067,9 @@ export class RateLimitService {
       if (mode === "rolling") {
         // Rolling 模式：使用 ZSET + Lua 脚本
         const key = `user:${userId}:cost_daily_rolling`;
-        const now = Date.now();
+        const now = options?.createdAtMs ?? Date.now();
         const window24h = 24 * 60 * 60 * 1000;
+        const requestId = options?.requestId != null ? String(options.requestId) : "";
 
         await RateLimitService.redis.eval(
           TRACK_COST_DAILY_ROLLING_WINDOW,
@@ -1060,7 +1077,8 @@ export class RateLimitService {
           key,
           cost.toString(),
           now.toString(),
-          window24h.toString()
+          window24h.toString(),
+          requestId
         );
 
         logger.debug(`[RateLimit] Tracked user daily cost (rolling): user=${userId}, cost=${cost}`);

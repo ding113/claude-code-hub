@@ -57,6 +57,14 @@ export function UsageLogsSection({
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
+  // Sync initialData from parent when it becomes available
+  // (useState only uses initialData on first mount, not on subsequent updates)
+  useEffect(() => {
+    if (initialData) {
+      setData(initialData);
+    }
+  }, [initialData]);
+
   useEffect(() => {
     setIsModelsLoading(true);
     setIsEndpointsLoading(true);

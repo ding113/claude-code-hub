@@ -1801,7 +1801,11 @@ async function trackCostToRedis(session: ProxySession, usage: UsageMetrics | nul
     user.id,
     costFloat,
     user.dailyResetTime,
-    user.dailyResetMode
+    user.dailyResetMode,
+    {
+      requestId: messageContext.id,
+      createdAtMs: messageContext.createdAt.getTime(),
+    }
   );
 
   // 刷新 session 时间戳（滑动窗口）
