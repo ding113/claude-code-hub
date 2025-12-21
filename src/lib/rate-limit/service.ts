@@ -379,13 +379,11 @@ export class RateLimitService {
 
       // 查询数据库
       let current = 0;
-      let costEntries:
-        | Array<{
-            id: number;
-            createdAt: Date;
-            costUsd: number;
-          }>
-        | null = null;
+      let costEntries: Array<{
+        id: number;
+        createdAt: Date;
+        costUsd: number;
+      }> | null = null;
 
       const isRollingWindow =
         limit.period === "5h" || (limit.period === "daily" && limit.resetMode === "rolling");
@@ -807,13 +805,11 @@ export class RateLimitService {
       );
 
       let current = 0;
-      let costEntries:
-        | Array<{
-            id: number;
-            createdAt: Date;
-            costUsd: number;
-          }>
-        | null = null;
+      let costEntries: Array<{
+        id: number;
+        createdAt: Date;
+        costUsd: number;
+      }> | null = null;
 
       const isRollingWindow = period === "5h" || (period === "daily" && resetMode === "rolling");
 
