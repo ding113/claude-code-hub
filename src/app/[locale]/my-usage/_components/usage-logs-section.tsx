@@ -52,7 +52,8 @@ export function UsageLogsSection({
   const [endpoints, setEndpoints] = useState<string[]>([]);
   const [isModelsLoading, setIsModelsLoading] = useState(true);
   const [isEndpointsLoading, setIsEndpointsLoading] = useState(true);
-  const [filters, setFilters] = useState<Filters>({ page: 1 });
+  const [draftFilters, setDraftFilters] = useState<Filters>({ page: 1 });
+  const [appliedFilters, setAppliedFilters] = useState<Filters>({ page: 1 });
   const [data, setData] = useState<MyUsageLogsResult | null>(initialData);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -60,10 +61,10 @@ export function UsageLogsSection({
   // Sync initialData from parent when it becomes available
   // (useState only uses initialData on first mount, not on subsequent updates)
   useEffect(() => {
-    if (initialData) {
+    if (initialData && !data) {
       setData(initialData);
     }
-  }, [initialData]);
+  }, [initialData, data]);
 
   useEffect(() => {
     setIsModelsLoading(true);
@@ -87,28 +88,28 @@ export function UsageLogsSection({
   }, []);
 
   const loadLogs = useCallback(
-    (resetPage = false) => {
+    (nextFilters: Filters) => {
       startTransition(async () => {
-        const nextFilters = resetPage ? { ...filters, page: 1 } : filters;
         const result = await getMyUsageLogs(nextFilters);
         if (result.ok && result.data) {
           setData(result.data);
-          setFilters(nextFilters);
+          setAppliedFilters(nextFilters);
           setError(null);
         } else {
           setError(!result.ok && "error" in result ? result.error : t("loadFailed"));
         }
       });
     },
-    [filters, t]
+    [t]
   );
 
   useEffect(() => {
     // initial load if not provided
+    if (data) return;
     if (!initialData && !loading) {
-      loadLogs(true);
+      loadLogs({ page: 1 });
     }
-  }, [initialData, loading, loadLogs]);
+  }, [data, initialData, loading, loadLogs]);
 
   // Auto-refresh polling (only when on page 1 to avoid disrupting history browsing)
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -127,8 +128,8 @@ export function UsageLogsSection({
 
       intervalRef.current = setInterval(() => {
         // Only auto-refresh when on page 1
-        if (filters.page === 1) {
-          loadLogs(false);
+        if ((appliedFilters.page ?? 1) === 1) {
+          loadLogs(appliedFilters);
         }
       }, pollIntervalMs);
     };
@@ -145,8 +146,8 @@ export function UsageLogsSection({
         stopPolling();
       } else {
         // Refresh immediately when tab becomes visible (only if on page 1)
-        if (filters.page === 1) {
-          loadLogs(false);
+        if ((appliedFilters.page ?? 1) === 1) {
+          loadLogs(appliedFilters);
         }
         startPolling();
       }
@@ -159,17 +160,19 @@ export function UsageLogsSection({
       stopPolling();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [autoRefreshSeconds, filters.page, loadLogs]);
+  }, [autoRefreshSeconds, appliedFilters, loadLogs]);
 
   const handleFilterChange = (changes: Partial<Filters>) => {
-    setFilters((prev) => ({ ...prev, ...changes, page: 1 }));
+    setDraftFilters((prev) => ({ ...prev, ...changes, page: 1 }));
   };
 
-  const handleApply = () => loadLogs(true);
+  const handleApply = () => {
+    loadLogs({ ...draftFilters, page: 1 });
+  };
 
   const handleReset = () => {
-    setFilters({ page: 1 });
-    loadLogs(true);
+    setDraftFilters({ page: 1 });
+    loadLogs({ page: 1 });
   };
 
   const handleDateRangeChange = (range: { startDate?: string; endDate?: string }) => {
@@ -177,14 +180,7 @@ export function UsageLogsSection({
   };
 
   const handlePageChange = (page: number) => {
-    setFilters((prev) => ({ ...prev, page }));
-    startTransition(async () => {
-      const result = await getMyUsageLogs({ ...filters, page });
-      if (result.ok && result.data) {
-        setData(result.data);
-        setError(null);
-      }
-    });
+    loadLogs({ ...appliedFilters, page });
   };
 
   const isInitialLoading = loading || (!data && isPending);
@@ -207,15 +203,15 @@ export function UsageLogsSection({
               {t("filters.startDate")} / {t("filters.endDate")}
             </Label>
             <LogsDateRangePicker
-              startDate={filters.startDate}
-              endDate={filters.endDate}
+              startDate={draftFilters.startDate}
+              endDate={draftFilters.endDate}
               onDateRangeChange={handleDateRangeChange}
             />
           </div>
           <div className="space-y-1.5 lg:col-span-4">
             <Label>{t("filters.model")}</Label>
             <Select
-              value={filters.model ?? "__all__"}
+              value={draftFilters.model ?? "__all__"}
               onValueChange={(value) =>
                 handleFilterChange({
                   model: value === "__all__" ? undefined : value,
@@ -241,7 +237,7 @@ export function UsageLogsSection({
           <div className="space-y-1.5 lg:col-span-4">
             <Label>{tDashboard("logs.filters.endpoint")}</Label>
             <Select
-              value={filters.endpoint ?? "__all__"}
+              value={draftFilters.endpoint ?? "__all__"}
               onValueChange={(value) =>
                 handleFilterChange({
                   endpoint: value === "__all__" ? undefined : value,
@@ -272,9 +268,9 @@ export function UsageLogsSection({
             <Label>{t("filters.status")}</Label>
             <Select
               value={
-                filters.excludeStatusCode200
+                draftFilters.excludeStatusCode200
                   ? "!200"
-                  : (filters.statusCode?.toString() ?? "__all__")
+                  : (draftFilters.statusCode?.toString() ?? "__all__")
               }
               onValueChange={(value) =>
                 handleFilterChange({
@@ -304,7 +300,7 @@ export function UsageLogsSection({
               type="number"
               min={0}
               inputMode="numeric"
-              value={filters.minRetryCount?.toString() ?? ""}
+              value={draftFilters.minRetryCount?.toString() ?? ""}
               placeholder={tDashboard("logs.filters.minRetryCountPlaceholder")}
               onChange={(e) =>
                 handleFilterChange({
@@ -315,7 +311,7 @@ export function UsageLogsSection({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button size="sm" onClick={handleApply} disabled={isPending || loading}>
             {t("filters.apply")}
           </Button>
@@ -336,7 +332,7 @@ export function UsageLogsSection({
         <UsageLogsTable
           logs={data?.logs ?? []}
           total={data?.total ?? 0}
-          page={filters.page ?? 1}
+          page={appliedFilters.page ?? 1}
           pageSize={data?.pageSize ?? 20}
           onPageChange={handlePageChange}
           currencyCode={data?.currencyCode}

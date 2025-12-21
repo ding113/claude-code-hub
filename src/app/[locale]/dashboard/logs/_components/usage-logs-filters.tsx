@@ -478,7 +478,7 @@ export function UsageLogsFilters({
       </div>
 
       {/* 操作按钮 */}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Button onClick={handleApply}>{t("logs.filters.apply")}</Button>
         <Button variant="outline" onClick={handleReset}>
           {t("logs.filters.reset")}

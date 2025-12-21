@@ -381,17 +381,54 @@ export function UserManagementTable({
                   GRID_COLUMNS_CLASS
                 )}
               >
-                <div className="px-2">
-                  {translations.table.columns.username} / {translations.table.columns.note}
+                <div className="px-2 min-w-0">
+                  <span
+                    className="block truncate"
+                    title={`${translations.table.columns.username} / ${translations.table.columns.note}`}
+                  >
+                    {translations.table.columns.username} / {translations.table.columns.note}
+                  </span>
                 </div>
-                <div className="px-2">{translations.table.columns.expiresAt}</div>
-                <div className="px-2 text-center">{translations.table.columns.limit5h}</div>
-                <div className="px-2 text-center">{translations.table.columns.limitDaily}</div>
-                <div className="px-2 text-center">{translations.table.columns.limitWeekly}</div>
-                <div className="px-2 text-center">{translations.table.columns.limitMonthly}</div>
-                <div className="px-2 text-center">{translations.table.columns.limitTotal}</div>
-                <div className="px-2 text-center">{translations.table.columns.limitSessions}</div>
-                <div className="px-2 text-center">{translations.actions.edit}</div>
+                <div className="px-2 min-w-0">
+                  <span className="block truncate" title={translations.table.columns.expiresAt}>
+                    {translations.table.columns.expiresAt}
+                  </span>
+                </div>
+                <div className="px-2 text-center min-w-0">
+                  <span className="block truncate" title={translations.table.columns.limit5h}>
+                    {translations.table.columns.limit5h}
+                  </span>
+                </div>
+                <div className="px-2 text-center min-w-0">
+                  <span className="block truncate" title={translations.table.columns.limitDaily}>
+                    {translations.table.columns.limitDaily}
+                  </span>
+                </div>
+                <div className="px-2 text-center min-w-0">
+                  <span className="block truncate" title={translations.table.columns.limitWeekly}>
+                    {translations.table.columns.limitWeekly}
+                  </span>
+                </div>
+                <div className="px-2 text-center min-w-0">
+                  <span className="block truncate" title={translations.table.columns.limitMonthly}>
+                    {translations.table.columns.limitMonthly}
+                  </span>
+                </div>
+                <div className="px-2 text-center min-w-0">
+                  <span className="block truncate" title={translations.table.columns.limitTotal}>
+                    {translations.table.columns.limitTotal}
+                  </span>
+                </div>
+                <div className="px-2 text-center min-w-0">
+                  <span className="block truncate" title={translations.table.columns.limitSessions}>
+                    {translations.table.columns.limitSessions}
+                  </span>
+                </div>
+                <div className="px-2 text-center min-w-0">
+                  <span className="block truncate" title={translations.actions.edit}>
+                    {translations.actions.edit}
+                  </span>
+                </div>
               </div>
             </div>
 
