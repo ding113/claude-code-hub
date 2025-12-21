@@ -1,0 +1,34 @@
+name: Codex Issue Auto Response
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  auto-response:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Run Codex for Issue Auto Response
+        id: run_codex
+        uses: openai/codex-action@v1
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          responses-api-endpoint: ${{ secrets.OPENAI_BASE_URL }}
+          model: ${{ vars.OPENAI_MODEL || 'gpt-5.2' }}
+          effort: ${{ vars.OPENAI_EFFORT || 'xhigh' }}
+          sandbox: danger-full-access
+          safety-strategy: drop-sudo
+          prompt-file: .github/prompts/codex-issue-auto-response.md
