@@ -31,6 +31,18 @@ export interface ProviderLeaderboardEntry {
 }
 
 /**
+ * 供应商缓存命中率排行榜条目类型
+ */
+export interface ProviderCacheHitRateLeaderboardEntry {
+  providerId: number;
+  providerName: string;
+  totalRequests: number;
+  totalCost: number;
+  totalTokens: number;
+  cacheHitRate: number; // 0-1 之间的小数，UI 层负责格式化为百分比
+}
+
+/**
  * 模型排行榜条目类型
  */
 export interface ModelLeaderboardEntry {
@@ -212,6 +224,46 @@ export async function findAllTimeProviderLeaderboard(): Promise<ProviderLeaderbo
 }
 
 /**
+ * 查询今日供应商缓存命中率排行榜（不限制数量）
+ */
+export async function findDailyProviderCacheHitRateLeaderboard(): Promise<
+  ProviderCacheHitRateLeaderboardEntry[]
+> {
+  const timezone = getEnvConfig().TZ;
+  return findProviderCacheHitRateLeaderboardWithTimezone("daily", timezone);
+}
+
+/**
+ * 查询本月供应商缓存命中率排行榜（不限制数量）
+ */
+export async function findMonthlyProviderCacheHitRateLeaderboard(): Promise<
+  ProviderCacheHitRateLeaderboardEntry[]
+> {
+  const timezone = getEnvConfig().TZ;
+  return findProviderCacheHitRateLeaderboardWithTimezone("monthly", timezone);
+}
+
+/**
+ * 查询本周供应商缓存命中率排行榜（不限制数量）
+ */
+export async function findWeeklyProviderCacheHitRateLeaderboard(): Promise<
+  ProviderCacheHitRateLeaderboardEntry[]
+> {
+  const timezone = getEnvConfig().TZ;
+  return findProviderCacheHitRateLeaderboardWithTimezone("weekly", timezone);
+}
+
+/**
+ * 查询全部时间供应商缓存命中率排行榜（不限制数量）
+ */
+export async function findAllTimeProviderCacheHitRateLeaderboard(): Promise<
+  ProviderCacheHitRateLeaderboardEntry[]
+> {
+  const timezone = getEnvConfig().TZ;
+  return findProviderCacheHitRateLeaderboardWithTimezone("allTime", timezone);
+}
+
+/**
  * 通用供应商排行榜查询函数（使用 SQL AT TIME ZONE 确保时区正确）
  */
 async function findProviderLeaderboardWithTimezone(
@@ -262,6 +314,72 @@ async function findProviderLeaderboardWithTimezone(
 }
 
 /**
+ * 通用供应商缓存命中率排行榜查询函数
+ *
+ * 计算规则：
+ * - 仅统计需要缓存的请求（cache_creation_input_tokens 与 cache_read_input_tokens 不同时为 0/null）
+ * - 命中率 = cache_read / (input + output + cache_creation + cache_read)
+ */
+async function findProviderCacheHitRateLeaderboardWithTimezone(
+  period: LeaderboardPeriod,
+  timezone: string,
+  dateRange?: DateRangeParams
+): Promise<ProviderCacheHitRateLeaderboardEntry[]> {
+  const totalTokensExpr = sql<number>`(
+    COALESCE(${messageRequest.inputTokens}, 0) +
+    COALESCE(${messageRequest.outputTokens}, 0) +
+    COALESCE(${messageRequest.cacheCreationInputTokens}, 0) +
+    COALESCE(${messageRequest.cacheReadInputTokens}, 0)
+  )`;
+
+  const cacheRequiredCondition = sql`(
+    COALESCE(${messageRequest.cacheCreationInputTokens}, 0) > 0
+    OR COALESCE(${messageRequest.cacheReadInputTokens}, 0) > 0
+  )`;
+
+  const sumTotalTokens = sql<number>`COALESCE(sum(${totalTokensExpr})::double precision, 0::double precision)`;
+  const sumCacheReadTokens = sql<number>`COALESCE(sum(COALESCE(${messageRequest.cacheReadInputTokens}, 0))::double precision, 0::double precision)`;
+
+  const cacheHitRateExpr = sql<number>`COALESCE(
+    ${sumCacheReadTokens} / NULLIF(${sumTotalTokens}, 0::double precision),
+    0::double precision
+  )`;
+
+  const rankings = await db
+    .select({
+      providerId: messageRequest.providerId,
+      providerName: providers.name,
+      totalRequests: sql<number>`count(*)::double precision`,
+      totalCost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
+      totalTokens: sumTotalTokens,
+      cacheHitRate: cacheHitRateExpr,
+    })
+    .from(messageRequest)
+    .innerJoin(
+      providers,
+      and(sql`${messageRequest.providerId} = ${providers.id}`, isNull(providers.deletedAt))
+    )
+    .where(
+      and(
+        isNull(messageRequest.deletedAt),
+        buildDateCondition(period, timezone, dateRange),
+        cacheRequiredCondition
+      )
+    )
+    .groupBy(messageRequest.providerId, providers.name)
+    .orderBy(desc(cacheHitRateExpr), desc(sql`count(*)`));
+
+  return rankings.map((entry) => ({
+    providerId: entry.providerId,
+    providerName: entry.providerName,
+    totalRequests: entry.totalRequests,
+    totalCost: parseFloat(entry.totalCost),
+    totalTokens: entry.totalTokens,
+    cacheHitRate: Math.min(Math.max(entry.cacheHitRate ?? 0, 0), 1),
+  }));
+}
+
+/**
  * 查询自定义日期范围供应商消耗排行榜
  */
 export async function findCustomRangeProviderLeaderboard(
@@ -269,6 +387,16 @@ export async function findCustomRangeProviderLeaderboard(
 ): Promise<ProviderLeaderboardEntry[]> {
   const timezone = getEnvConfig().TZ;
   return findProviderLeaderboardWithTimezone("custom", timezone, dateRange);
+}
+
+/**
+ * 查询自定义日期范围供应商缓存命中率排行榜
+ */
+export async function findCustomRangeProviderCacheHitRateLeaderboard(
+  dateRange: DateRangeParams
+): Promise<ProviderCacheHitRateLeaderboardEntry[]> {
+  const timezone = getEnvConfig().TZ;
+  return findProviderCacheHitRateLeaderboardWithTimezone("custom", timezone, dateRange);
 }
 
 /**

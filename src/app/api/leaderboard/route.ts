@@ -20,7 +20,7 @@ export const runtime = "nodejs";
 
 /**
  * 获取排行榜数据
- * GET /api/leaderboard?period=daily|weekly|monthly|allTime|custom&scope=user|provider|model
+ * GET /api/leaderboard?period=daily|weekly|monthly|allTime|custom&scope=user|provider|providerCacheHitRate|model
  * 当 period=custom 时，需要提供 startDate 和 endDate 参数 (YYYY-MM-DD 格式)
  *
  * 需要认证，普通用户需要 allowGlobalUsageView 权限
@@ -69,9 +69,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (scope !== "user" && scope !== "provider" && scope !== "model") {
+    if (
+      scope !== "user" &&
+      scope !== "provider" &&
+      scope !== "providerCacheHitRate" &&
+      scope !== "model"
+    ) {
       return NextResponse.json(
-        { error: "参数 scope 必须是 'user'、'provider' 或 'model'" },
+        { error: "参数 scope 必须是 'user'、'provider'、'providerCacheHitRate' 或 'model'" },
         { status: 400 }
       );
     }

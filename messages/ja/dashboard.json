@@ -239,6 +239,7 @@
       "keys": "キー ランキング",
       "userRanking": "ユーザーランキング",
       "providerRanking": "プロバイダーランキング",
+      "providerCacheHitRateRanking": "プロバイダーキャッシュ命中率",
       "modelRanking": "モデルランキング",
       "dailyRanking": "今日",
       "weeklyRanking": "今週",
@@ -265,6 +266,7 @@
       "provider": "プロバイダー",
       "model": "モデル",
       "cost": "コスト",
+      "cacheHitRate": "キャッシュ命中率",
       "successRate": "成功率",
       "avgResponseTime": "平均応答時間"
     },
