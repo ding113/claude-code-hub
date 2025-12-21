@@ -238,7 +238,13 @@ export class ProxyRateLimitGuard {
     }
 
     // 7. User 每日额度（User 独有的常用预算）
-    const dailyCheck = await RateLimitService.checkUserDailyCost(user.id, user.dailyQuota);
+    const dailyCheck = await RateLimitService.checkUserDailyCost(
+      user.id,
+      user.dailyQuota,
+      user.dailyResetTime,
+      user.dailyResetMode
+    );
+
     if (!dailyCheck.allowed) {
       logger.warn(`[RateLimit] User daily limit exceeded: user=${user.id}, ${dailyCheck.reason}`);
 

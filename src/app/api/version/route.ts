@@ -17,6 +17,19 @@ interface GitHubRelease {
   published_at: string;
 }
 
+interface GitHubCommit {
+  sha: string;
+  html_url: string;
+  commit?: {
+    author?: {
+      date?: string;
+    };
+    committer?: {
+      date?: string;
+    };
+  };
+}
+
 interface LatestVersionInfo {
   latest: string;
   releaseUrl?: string;
@@ -38,6 +51,16 @@ function normalizeVersionForDisplay(version: string): string {
   }
 
   return trimmed;
+}
+
+function isDevBuild(version: string): boolean {
+  return /^dev(?:-|$)/i.test(version.trim());
+}
+
+function parseDevBuildShortSha(version: string): string | null {
+  const match = version.trim().match(/^dev-([0-9a-f]{7,40})$/i);
+  if (!match) return null;
+  return match[1].slice(0, 7).toLowerCase();
 }
 
 async function readLocalVersionFile(): Promise<string | null> {
@@ -101,6 +124,36 @@ async function fetchLatestRelease(): Promise<GitHubRelease | null> {
   return (await response.json()) as GitHubRelease;
 }
 
+async function fetchBranchHeadCommit(branch: string): Promise<{
+  shortSha: string;
+  commitUrl: string;
+  publishedAt?: string;
+}> {
+  const response = await fetch(
+    `https://api.github.com/repos/${GITHUB_REPO.owner}/${GITHUB_REPO.repo}/commits/${encodeURIComponent(branch)}`,
+    {
+      headers: buildGitHubHeaders(),
+      next: {
+        revalidate: REVALIDATE_SECONDS,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`GitHub API 错误: ${response.status}`);
+  }
+
+  const commit = (await response.json()) as GitHubCommit;
+  const shortSha = commit.sha.slice(0, 7).toLowerCase();
+  const publishedAt = commit.commit?.committer?.date || commit.commit?.author?.date;
+
+  return {
+    shortSha,
+    commitUrl: commit.html_url,
+    publishedAt,
+  };
+}
+
 async function fetchLatestVersionFromVersionFile(): Promise<string | null> {
   const response = await fetch(
     `https://raw.githubusercontent.com/${GITHUB_REPO.owner}/${GITHUB_REPO.repo}/main/VERSION`,
@@ -161,6 +214,30 @@ async function getLatestVersionInfo(): Promise<LatestVersionInfo | null> {
 export async function GET() {
   try {
     const current = await getCurrentVersion();
+
+    if (isDevBuild(current)) {
+      const currentShortSha = parseDevBuildShortSha(current);
+      const latestCommit = await fetchBranchHeadCommit("dev");
+      const latest = `dev-${latestCommit.shortSha}`;
+
+      const hasUpdate = currentShortSha
+        ? currentShortSha !== latestCommit.shortSha
+        : current.trim().toLowerCase() !== latest.toLowerCase();
+
+      const compareUrl =
+        currentShortSha && hasUpdate
+          ? `https://github.com/${GITHUB_REPO.owner}/${GITHUB_REPO.repo}/compare/${currentShortSha}...${latestCommit.shortSha}`
+          : latestCommit.commitUrl;
+
+      return NextResponse.json({
+        current,
+        latest,
+        hasUpdate,
+        releaseUrl: compareUrl,
+        publishedAt: latestCommit.publishedAt,
+      });
+    }
+
     const latestInfo = await getLatestVersionInfo();
 
     if (!latestInfo) {
