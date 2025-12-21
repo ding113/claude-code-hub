@@ -1,4 +1,5 @@
 import { getCircuitState, isCircuitOpen } from "@/lib/circuit-breaker";
+import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit";
 import { SessionManager } from "@/lib/session-manager";
@@ -37,6 +38,39 @@ async function getVerboseProviderErrorCached(): Promise<boolean> {
 }
 
 /**
+ * 解析逗号分隔的分组字符串为数组
+ *
+ * @param groupString - 逗号分隔的分组字符串
+ * @returns 清理后的分组数组（去空格、去空项）
+ */
+function parseGroupString(groupString: string): string[] {
+  return groupString
+    .split(",")
+    .map((g) => g.trim())
+    .filter(Boolean);
+}
+
+/**
+ * 获取有效的供应商分组（优先级：key.providerGroup > user.providerGroup）
+ *
+ * @param session - 代理会话对象
+ * @returns 有效分组字符串，或 null（无认证信息时）
+ */
+function getEffectiveProviderGroup(session?: ProxySession): string | null {
+  if (!session?.authState) {
+    return null;
+  }
+  const { key, user } = session.authState;
+  if (key) {
+    return key.providerGroup || PROVIDER_GROUP.DEFAULT;
+  }
+  if (user) {
+    return user.providerGroup || PROVIDER_GROUP.DEFAULT;
+  }
+  return null;
+}
+
+/**
  * 检查供应商分组是否匹配用户分组（支持多分组逗号分隔）
  *
  * @param providerGroupTag - 供应商的 groupTag 字段（可为 null 或逗号分隔的多标签）
@@ -44,17 +78,15 @@ async function getVerboseProviderErrorCached(): Promise<boolean> {
  * @returns 是否存在交集（true = 匹配）
  */
 function checkProviderGroupMatch(providerGroupTag: string | null, userGroups: string): boolean {
-  // 供应商无分组标签时不匹配（严格分组隔离）
-  if (!providerGroupTag) return false;
+  const groups = parseGroupString(userGroups);
 
-  const groups = userGroups
-    .split(",")
-    .map((g) => g.trim())
-    .filter(Boolean);
+  if (groups.includes(PROVIDER_GROUP.ALL)) {
+    return true;
+  }
+
   const providerTags = providerGroupTag
-    .split(",")
-    .map((t) => t.trim())
-    .filter(Boolean);
+    ? parseGroupString(providerGroupTag)
+    : [PROVIDER_GROUP.DEFAULT];
 
   return providerTags.some((tag) => groups.includes(tag));
 }
@@ -525,9 +557,8 @@ export class ProxyProviderResolver {
     // 修复：检查用户分组权限（严格分组隔离 + 支持多分组）
     // Check if session provider matches user's group
     // Priority: key.providerGroup > user.providerGroup
+    const effectiveGroup = getEffectiveProviderGroup(session);
     const keyGroup = session?.authState?.key?.providerGroup;
-    const userGroup = session?.authState?.user?.providerGroup;
-    const effectiveGroup = keyGroup || userGroup;
     if (effectiveGroup) {
       // Use helper function for core group matching logic
       // Fix #190: Support provider multi-tags (e.g. "cli,chat") matching user single-tag (e.g. "cli")
@@ -561,7 +592,7 @@ export class ProxyProviderResolver {
         return null; // Reject reuse, re-select
       }
     }
-    // Global user/key (effectiveGroup is empty) can reuse any provider
+    // No auth group info (effectiveGroup is null) can reuse any provider
 
     logger.info("ProviderSelector: Reusing provider", {
       providerName: provider.name,
@@ -582,9 +613,8 @@ export class ProxyProviderResolver {
     const requestedModel = session?.getCurrentModel() || "";
 
     // === Step 1: 分组预过滤（静默，用户只能看到自己分组内的供应商）===
+    const effectiveGroupPick = getEffectiveProviderGroup(session);
     const keyGroupPick = session?.authState?.key?.providerGroup;
-    const userGroupPick = session?.authState?.user?.providerGroup;
-    const effectiveGroupPick = keyGroupPick || userGroupPick;
 
     let visibleProviders = allProviders;
 
@@ -964,3 +994,6 @@ export class ProxyProviderResolver {
     return providers[providers.length - 1];
   }
 }
+
+// Export for testing
+export { checkProviderGroupMatch };
