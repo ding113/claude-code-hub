@@ -121,8 +121,6 @@ export default function MyUsagePage() {
         onLogout={handleLogout}
         keyName={quota?.keyName}
         userName={quota?.userName}
-        keyProviderGroup={quota?.keyProviderGroup ?? null}
-        userProviderGroup={quota?.userProviderGroup ?? null}
         keyExpiresAt={keyExpiresAt}
         userExpiresAt={userExpiresAt}
       />

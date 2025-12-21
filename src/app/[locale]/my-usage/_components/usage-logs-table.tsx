@@ -59,14 +59,13 @@ export function UsageLogsTable({
                 {t("table.cost", { currency: currencyCode })}
               </TableHead>
               <TableHead>{t("table.status")}</TableHead>
-              <TableHead>{t("table.endpoint")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               Array.from({ length: 6 }).map((_, rowIndex) => (
                 <TableRow key={`skeleton-${rowIndex}`}>
-                  {Array.from({ length: 8 }).map((_, cellIndex) => (
+                  {Array.from({ length: 7 }).map((_, cellIndex) => (
                     <TableCell key={`skeleton-${rowIndex}-${cellIndex}`}>
                       <Skeleton className="h-4 w-full" />
                     </TableCell>
@@ -75,7 +74,7 @@ export function UsageLogsTable({
               ))
             ) : logs.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center text-muted-foreground">
+                <TableCell colSpan={7} className="text-center text-muted-foreground">
                   {t("noLogs")}
                 </TableCell>
               </TableRow>
@@ -133,9 +132,6 @@ export function UsageLogsTable({
                     >
                       {log.statusCode ?? "-"}
                     </Badge>
-                  </TableCell>
-                  <TableCell className="max-w-[200px] truncate text-xs text-muted-foreground">
-                    {log.endpoint || "-"}
                   </TableCell>
                 </TableRow>
               ))
