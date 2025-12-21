@@ -1,4 +1,5 @@
 import { getCircuitState, isCircuitOpen } from "@/lib/circuit-breaker";
+import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit";
 import { SessionManager } from "@/lib/session-manager";
@@ -44,17 +45,21 @@ async function getVerboseProviderErrorCached(): Promise<boolean> {
  * @returns 是否存在交集（true = 匹配）
  */
 function checkProviderGroupMatch(providerGroupTag: string | null, userGroups: string): boolean {
-  // 供应商无分组标签时不匹配（严格分组隔离）
-  if (!providerGroupTag) return false;
-
   const groups = userGroups
     .split(",")
     .map((g) => g.trim())
     .filter(Boolean);
+
+  if (groups.includes(PROVIDER_GROUP.ALL)) {
+    return true;
+  }
+
   const providerTags = providerGroupTag
-    .split(",")
-    .map((t) => t.trim())
-    .filter(Boolean);
+    ? providerGroupTag
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean)
+    : [PROVIDER_GROUP.DEFAULT];
 
   return providerTags.some((tag) => groups.includes(tag));
 }
@@ -527,7 +532,11 @@ export class ProxyProviderResolver {
     // Priority: key.providerGroup > user.providerGroup
     const keyGroup = session?.authState?.key?.providerGroup;
     const userGroup = session?.authState?.user?.providerGroup;
-    const effectiveGroup = keyGroup || userGroup;
+    const effectiveGroup = session?.authState?.key
+      ? keyGroup || PROVIDER_GROUP.DEFAULT
+      : session?.authState?.user
+        ? userGroup || PROVIDER_GROUP.DEFAULT
+        : null;
     if (effectiveGroup) {
       // Use helper function for core group matching logic
       // Fix #190: Support provider multi-tags (e.g. "cli,chat") matching user single-tag (e.g. "cli")
@@ -561,7 +570,7 @@ export class ProxyProviderResolver {
         return null; // Reject reuse, re-select
       }
     }
-    // Global user/key (effectiveGroup is empty) can reuse any provider
+    // No auth group info (effectiveGroup is null) can reuse any provider
 
     logger.info("ProviderSelector: Reusing provider", {
       providerName: provider.name,
@@ -584,7 +593,11 @@ export class ProxyProviderResolver {
     // === Step 1: 分组预过滤（静默，用户只能看到自己分组内的供应商）===
     const keyGroupPick = session?.authState?.key?.providerGroup;
     const userGroupPick = session?.authState?.user?.providerGroup;
-    const effectiveGroupPick = keyGroupPick || userGroupPick;
+    const effectiveGroupPick = session?.authState?.key
+      ? keyGroupPick || PROVIDER_GROUP.DEFAULT
+      : session?.authState?.user
+        ? userGroupPick || PROVIDER_GROUP.DEFAULT
+        : null;
 
     let visibleProviders = allProviders;
 
