@@ -3,6 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
+import { ProviderTypeFilter } from "@/app/[locale]/settings/providers/_components/provider-type-filter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -15,6 +16,7 @@ import type {
   ProviderCacheHitRateLeaderboardEntry,
   ProviderLeaderboardEntry,
 } from "@/repository/leaderboard";
+import type { ProviderType } from "@/types/provider";
 import { DateRangePicker } from "./date-range-picker";
 import { type ColumnDef, LeaderboardTable } from "./leaderboard-table";
 
@@ -27,6 +29,7 @@ type UserEntry = LeaderboardEntry & { totalCostFormatted?: string };
 type ProviderEntry = ProviderLeaderboardEntry & { totalCostFormatted?: string };
 type ProviderCacheHitRateEntry = ProviderCacheHitRateLeaderboardEntry & {
   totalCostFormatted?: string;
+  cacheCreationCostFormatted?: string;
 };
 type ModelEntry = ModelLeaderboardEntry & { totalCostFormatted?: string };
 type AnyEntry = UserEntry | ProviderEntry | ProviderCacheHitRateEntry | ModelEntry;
@@ -50,6 +53,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
   const [scope, setScope] = useState<LeaderboardScope>(initialScope);
   const [period, setPeriod] = useState<LeaderboardPeriod>(initialPeriod);
   const [dateRange, setDateRange] = useState<DateRangeParams | undefined>(undefined);
+  const [providerTypeFilter, setProviderTypeFilter] = useState<ProviderType | "all">("all");
   const [data, setData] = useState<AnyEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -89,6 +93,9 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
         if (period === "custom" && dateRange) {
           url += `&startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`;
         }
+        if (scope === "providerCacheHitRate" && providerTypeFilter !== "all") {
+          url += `&providerType=${encodeURIComponent(providerTypeFilter)}`;
+        }
         const res = await fetch(url);
 
         if (!res.ok) {
@@ -113,7 +120,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     return () => {
       cancelled = true;
     };
-  }, [scope, period, dateRange, t]);
+  }, [scope, period, dateRange, providerTypeFilter, t]);
 
   const handlePeriodChange = useCallback(
     (newPeriod: LeaderboardPeriod, newDateRange?: DateRangeParams) => {
@@ -129,7 +136,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
       : scope === "provider"
         ? 7
         : scope === "providerCacheHitRate"
-          ? 5
+          ? 8
           : scope === "model"
             ? 6
             : 5;
@@ -213,7 +220,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
       ),
     },
     {
-      header: t("columns.requests"),
+      header: t("columns.cacheHitRequests"),
       className: "text-right",
       cell: (row) => (row as ProviderCacheHitRateEntry).totalRequests.toLocaleString(),
     },
@@ -224,9 +231,30 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
         `${(Number((row as ProviderCacheHitRateEntry).cacheHitRate || 0) * 100).toFixed(1)}%`,
     },
     {
-      header: t("columns.tokens"),
+      header: t("columns.cacheReadTokens"),
+      className: "text-right",
+      cell: (row) => formatTokenAmount((row as ProviderCacheHitRateEntry).cacheReadTokens),
+    },
+    {
+      header: t("columns.totalTokens"),
       className: "text-right",
       cell: (row) => formatTokenAmount((row as ProviderCacheHitRateEntry).totalTokens),
+    },
+    {
+      header: t("columns.cacheCreationConsumedAmount"),
+      className: "text-right font-mono font-semibold",
+      cell: (row) => {
+        const r = row as ProviderCacheHitRateEntry;
+        return r.cacheCreationCostFormatted ?? r.cacheCreationCost;
+      },
+    },
+    {
+      header: t("columns.totalConsumedAmount"),
+      className: "text-right font-mono font-semibold",
+      cell: (row) => {
+        const r = row as ProviderCacheHitRateEntry;
+        return r.totalCostFormatted ?? r.totalCost;
+      },
     },
   ];
 
@@ -306,6 +334,14 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
             {isAdmin && <TabsTrigger value="model">{t("tabs.modelRanking")}</TabsTrigger>}
           </TabsList>
         </Tabs>
+
+        {scope === "providerCacheHitRate" ? (
+          <ProviderTypeFilter
+            value={providerTypeFilter}
+            onChange={setProviderTypeFilter}
+            disabled={loading}
+          />
+        ) : null}
       </div>
 
       {/* Date range picker with quick period buttons */}

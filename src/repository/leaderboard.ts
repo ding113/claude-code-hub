@@ -1,9 +1,10 @@
 "use server";
 
-import { and, desc, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { messageRequest, providers, users } from "@/drizzle/schema";
 import { getEnvConfig } from "@/lib/config";
+import type { ProviderType } from "@/types/provider";
 import { getSystemSettings } from "./system-config";
 
 /**
@@ -37,7 +38,9 @@ export interface ProviderCacheHitRateLeaderboardEntry {
   providerId: number;
   providerName: string;
   totalRequests: number;
+  cacheReadTokens: number;
   totalCost: number;
+  cacheCreationCost: number;
   totalTokens: number;
   cacheHitRate: number; // 0-1 之间的小数，UI 层负责格式化为百分比
 }
@@ -226,41 +229,61 @@ export async function findAllTimeProviderLeaderboard(): Promise<ProviderLeaderbo
 /**
  * 查询今日供应商缓存命中率排行榜（不限制数量）
  */
-export async function findDailyProviderCacheHitRateLeaderboard(): Promise<
-  ProviderCacheHitRateLeaderboardEntry[]
-> {
+export async function findDailyProviderCacheHitRateLeaderboard(
+  providerType?: ProviderType
+): Promise<ProviderCacheHitRateLeaderboardEntry[]> {
   const timezone = getEnvConfig().TZ;
-  return findProviderCacheHitRateLeaderboardWithTimezone("daily", timezone);
+  return findProviderCacheHitRateLeaderboardWithTimezone(
+    "daily",
+    timezone,
+    undefined,
+    providerType
+  );
 }
 
 /**
  * 查询本月供应商缓存命中率排行榜（不限制数量）
  */
-export async function findMonthlyProviderCacheHitRateLeaderboard(): Promise<
-  ProviderCacheHitRateLeaderboardEntry[]
-> {
+export async function findMonthlyProviderCacheHitRateLeaderboard(
+  providerType?: ProviderType
+): Promise<ProviderCacheHitRateLeaderboardEntry[]> {
   const timezone = getEnvConfig().TZ;
-  return findProviderCacheHitRateLeaderboardWithTimezone("monthly", timezone);
+  return findProviderCacheHitRateLeaderboardWithTimezone(
+    "monthly",
+    timezone,
+    undefined,
+    providerType
+  );
 }
 
 /**
  * 查询本周供应商缓存命中率排行榜（不限制数量）
  */
-export async function findWeeklyProviderCacheHitRateLeaderboard(): Promise<
-  ProviderCacheHitRateLeaderboardEntry[]
-> {
+export async function findWeeklyProviderCacheHitRateLeaderboard(
+  providerType?: ProviderType
+): Promise<ProviderCacheHitRateLeaderboardEntry[]> {
   const timezone = getEnvConfig().TZ;
-  return findProviderCacheHitRateLeaderboardWithTimezone("weekly", timezone);
+  return findProviderCacheHitRateLeaderboardWithTimezone(
+    "weekly",
+    timezone,
+    undefined,
+    providerType
+  );
 }
 
 /**
  * 查询全部时间供应商缓存命中率排行榜（不限制数量）
  */
-export async function findAllTimeProviderCacheHitRateLeaderboard(): Promise<
-  ProviderCacheHitRateLeaderboardEntry[]
-> {
+export async function findAllTimeProviderCacheHitRateLeaderboard(
+  providerType?: ProviderType
+): Promise<ProviderCacheHitRateLeaderboardEntry[]> {
   const timezone = getEnvConfig().TZ;
-  return findProviderCacheHitRateLeaderboardWithTimezone("allTime", timezone);
+  return findProviderCacheHitRateLeaderboardWithTimezone(
+    "allTime",
+    timezone,
+    undefined,
+    providerType
+  );
 }
 
 /**
@@ -323,7 +346,8 @@ async function findProviderLeaderboardWithTimezone(
 async function findProviderCacheHitRateLeaderboardWithTimezone(
   period: LeaderboardPeriod,
   timezone: string,
-  dateRange?: DateRangeParams
+  dateRange?: DateRangeParams,
+  providerType?: ProviderType
 ): Promise<ProviderCacheHitRateLeaderboardEntry[]> {
   const totalTokensExpr = sql<number>`(
     COALESCE(${messageRequest.inputTokens}, 0) +
@@ -339,11 +363,19 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
 
   const sumTotalTokens = sql<number>`COALESCE(sum(${totalTokensExpr})::double precision, 0::double precision)`;
   const sumCacheReadTokens = sql<number>`COALESCE(sum(COALESCE(${messageRequest.cacheReadInputTokens}, 0))::double precision, 0::double precision)`;
+  const sumCacheCreationCost = sql<string>`COALESCE(sum(CASE WHEN COALESCE(${messageRequest.cacheCreationInputTokens}, 0) > 0 THEN ${messageRequest.costUsd} ELSE 0 END), 0)`;
 
   const cacheHitRateExpr = sql<number>`COALESCE(
     ${sumCacheReadTokens} / NULLIF(${sumTotalTokens}, 0::double precision),
     0::double precision
   )`;
+
+  const whereConditions = [
+    isNull(messageRequest.deletedAt),
+    buildDateCondition(period, timezone, dateRange),
+    cacheRequiredCondition,
+    providerType ? eq(providers.providerType, providerType) : undefined,
+  ];
 
   const rankings = await db
     .select({
@@ -351,6 +383,8 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
       providerName: providers.name,
       totalRequests: sql<number>`count(*)::double precision`,
       totalCost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
+      cacheReadTokens: sumCacheReadTokens,
+      cacheCreationCost: sumCacheCreationCost,
       totalTokens: sumTotalTokens,
       cacheHitRate: cacheHitRateExpr,
     })
@@ -360,11 +394,7 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
       and(sql`${messageRequest.providerId} = ${providers.id}`, isNull(providers.deletedAt))
     )
     .where(
-      and(
-        isNull(messageRequest.deletedAt),
-        buildDateCondition(period, timezone, dateRange),
-        cacheRequiredCondition
-      )
+      and(...whereConditions.filter((c): c is NonNullable<(typeof whereConditions)[number]> => !!c))
     )
     .groupBy(messageRequest.providerId, providers.name)
     .orderBy(desc(cacheHitRateExpr), desc(sql`count(*)`));
@@ -374,6 +404,8 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
     providerName: entry.providerName,
     totalRequests: entry.totalRequests,
     totalCost: parseFloat(entry.totalCost),
+    cacheReadTokens: entry.cacheReadTokens,
+    cacheCreationCost: parseFloat(entry.cacheCreationCost),
     totalTokens: entry.totalTokens,
     cacheHitRate: Math.min(Math.max(entry.cacheHitRate ?? 0, 0), 1),
   }));
@@ -393,10 +425,16 @@ export async function findCustomRangeProviderLeaderboard(
  * 查询自定义日期范围供应商缓存命中率排行榜
  */
 export async function findCustomRangeProviderCacheHitRateLeaderboard(
-  dateRange: DateRangeParams
+  dateRange: DateRangeParams,
+  providerType?: ProviderType
 ): Promise<ProviderCacheHitRateLeaderboardEntry[]> {
   const timezone = getEnvConfig().TZ;
-  return findProviderCacheHitRateLeaderboardWithTimezone("custom", timezone, dateRange);
+  return findProviderCacheHitRateLeaderboardWithTimezone(
+    "custom",
+    timezone,
+    dateRange,
+    providerType
+  );
 }
 
 /**

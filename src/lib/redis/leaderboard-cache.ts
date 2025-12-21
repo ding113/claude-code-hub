@@ -29,6 +29,7 @@ import {
   type ProviderCacheHitRateLeaderboardEntry,
   type ProviderLeaderboardEntry,
 } from "@/repository/leaderboard";
+import type { ProviderType } from "@/types/provider";
 import { getRedisClient } from "./client";
 
 export type { LeaderboardPeriod, DateRangeParams };
@@ -40,6 +41,10 @@ type LeaderboardData =
   | ProviderCacheHitRateLeaderboardEntry[]
   | ModelLeaderboardEntry[];
 
+export interface LeaderboardFilters {
+  providerType?: ProviderType;
+}
+
 /**
  * 构建缓存键
  */
@@ -47,29 +52,31 @@ function buildCacheKey(
   period: LeaderboardPeriod,
   currencyDisplay: string,
   scope: LeaderboardScope = "user",
-  dateRange?: DateRangeParams
+  dateRange?: DateRangeParams,
+  filters?: LeaderboardFilters
 ): string {
   const now = new Date();
   const tz = getEnvConfig().TZ; // ensure date formatting aligns with configured timezone
+  const providerTypeSuffix = filters?.providerType ? `:providerType:${filters.providerType}` : "";
 
   if (period === "custom" && dateRange) {
     // leaderboard:{scope}:custom:2025-01-01_2025-01-15:USD
-    return `leaderboard:${scope}:custom:${dateRange.startDate}_${dateRange.endDate}:${currencyDisplay}`;
+    return `leaderboard:${scope}:custom:${dateRange.startDate}_${dateRange.endDate}:${currencyDisplay}${providerTypeSuffix}`;
   } else if (period === "daily") {
     // leaderboard:{scope}:daily:2025-01-15:USD
     const dateStr = formatInTimeZone(now, tz, "yyyy-MM-dd");
-    return `leaderboard:${scope}:daily:${dateStr}:${currencyDisplay}`;
+    return `leaderboard:${scope}:daily:${dateStr}:${currencyDisplay}${providerTypeSuffix}`;
   } else if (period === "weekly") {
     // leaderboard:{scope}:weekly:2025-W03:USD (ISO week)
     const weekStr = formatInTimeZone(now, tz, "yyyy-'W'ww");
-    return `leaderboard:${scope}:weekly:${weekStr}:${currencyDisplay}`;
+    return `leaderboard:${scope}:weekly:${weekStr}:${currencyDisplay}${providerTypeSuffix}`;
   } else if (period === "monthly") {
     // leaderboard:{scope}:monthly:2025-01:USD
     const monthStr = formatInTimeZone(now, tz, "yyyy-MM");
-    return `leaderboard:${scope}:monthly:${monthStr}:${currencyDisplay}`;
+    return `leaderboard:${scope}:monthly:${monthStr}:${currencyDisplay}${providerTypeSuffix}`;
   } else {
     // allTime: leaderboard:{scope}:allTime:USD (no date component)
-    return `leaderboard:${scope}:allTime:${currencyDisplay}`;
+    return `leaderboard:${scope}:allTime:${currencyDisplay}${providerTypeSuffix}`;
   }
 }
 
@@ -79,7 +86,8 @@ function buildCacheKey(
 async function queryDatabase(
   period: LeaderboardPeriod,
   scope: LeaderboardScope,
-  dateRange?: DateRangeParams
+  dateRange?: DateRangeParams,
+  filters?: LeaderboardFilters
 ): Promise<LeaderboardData> {
   // 处理自定义日期范围
   if (period === "custom" && dateRange) {
@@ -90,7 +98,7 @@ async function queryDatabase(
       return await findCustomRangeProviderLeaderboard(dateRange);
     }
     if (scope === "providerCacheHitRate") {
-      return await findCustomRangeProviderCacheHitRateLeaderboard(dateRange);
+      return await findCustomRangeProviderCacheHitRateLeaderboard(dateRange, filters?.providerType);
     }
     return await findCustomRangeModelLeaderboard(dateRange);
   }
@@ -126,15 +134,15 @@ async function queryDatabase(
   if (scope === "providerCacheHitRate") {
     switch (period) {
       case "daily":
-        return await findDailyProviderCacheHitRateLeaderboard();
+        return await findDailyProviderCacheHitRateLeaderboard(filters?.providerType);
       case "weekly":
-        return await findWeeklyProviderCacheHitRateLeaderboard();
+        return await findWeeklyProviderCacheHitRateLeaderboard(filters?.providerType);
       case "monthly":
-        return await findMonthlyProviderCacheHitRateLeaderboard();
+        return await findMonthlyProviderCacheHitRateLeaderboard(filters?.providerType);
       case "allTime":
-        return await findAllTimeProviderCacheHitRateLeaderboard();
+        return await findAllTimeProviderCacheHitRateLeaderboard(filters?.providerType);
       default:
-        return await findDailyProviderCacheHitRateLeaderboard();
+        return await findDailyProviderCacheHitRateLeaderboard(filters?.providerType);
     }
   }
   // model scope
@@ -178,7 +186,8 @@ export async function getLeaderboardWithCache(
   period: LeaderboardPeriod,
   currencyDisplay: string,
   scope: LeaderboardScope = "user",
-  dateRange?: DateRangeParams
+  dateRange?: DateRangeParams,
+  filters?: LeaderboardFilters
 ): Promise<LeaderboardData> {
   const redis = getRedisClient();
 
@@ -188,11 +197,12 @@ export async function getLeaderboardWithCache(
       period,
       scope,
       dateRange,
+      filters,
     });
-    return await queryDatabase(period, scope, dateRange);
+    return await queryDatabase(period, scope, dateRange, filters);
   }
 
-  const cacheKey = buildCacheKey(period, currencyDisplay, scope, dateRange);
+  const cacheKey = buildCacheKey(period, currencyDisplay, scope, dateRange, filters);
   const lockKey = `${cacheKey}:lock`;
 
   try {
@@ -210,7 +220,7 @@ export async function getLeaderboardWithCache(
       // 获得锁，查询数据库
       logger.debug("[LeaderboardCache] Acquired lock, computing", { period, scope, lockKey });
 
-      const data = await queryDatabase(period, scope, dateRange);
+      const data = await queryDatabase(period, scope, dateRange, filters);
 
       // 写入缓存（60 秒 TTL）
       await redis.setex(cacheKey, 60, JSON.stringify(data));
@@ -222,6 +232,7 @@ export async function getLeaderboardWithCache(
         period,
         scope,
         dateRange,
+        filters,
         recordCount: data.length,
         cacheKey,
         ttl: 60,
@@ -247,7 +258,7 @@ export async function getLeaderboardWithCache(
 
       // 超时降级：直接查数据库
       logger.warn("[LeaderboardCache] Retry timeout, fallback to direct query", { period, scope });
-      return await queryDatabase(period, scope, dateRange);
+      return await queryDatabase(period, scope, dateRange, filters);
     }
   } catch (error) {
     // Redis 异常，降级到直接查询
@@ -256,7 +267,7 @@ export async function getLeaderboardWithCache(
       scope,
       error,
     });
-    return await queryDatabase(period, scope, dateRange);
+    return await queryDatabase(period, scope, dateRange, filters);
   }
 }
 

@@ -266,7 +266,12 @@
       "provider": "Поставщик",
       "model": "Модель",
       "cost": "Стоимость",
+      "cacheHitRequests": "Запросы (учтены в hit rate)",
       "cacheHitRate": "Попадания в кэш",
+      "cacheReadTokens": "Токены чтения из кэша",
+      "totalTokens": "Всего токенов",
+      "cacheCreationConsumedAmount": "Расход на создание кэша",
+      "totalConsumedAmount": "Общие расходы",
       "successRate": "Процент успеха",
       "avgResponseTime": "Среднее время ответа"
     },

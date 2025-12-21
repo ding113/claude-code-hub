@@ -267,7 +267,12 @@
     "provider": "供应商",
     "model": "模型",
     "cost": "成本",
+    "cacheHitRequests": "缓存命中请求数（被算入缓存命中率的请求总数）",
     "cacheHitRate": "缓存命中率",
+    "cacheReadTokens": "缓存读取 Token 数",
+    "totalTokens": "总 Token 数",
+    "cacheCreationConsumedAmount": "缓存创建消耗金额",
+    "totalConsumedAmount": "总消耗金额",
     "successRate": "成功率",
     "avgResponseTime": "平均响应时间"
   },

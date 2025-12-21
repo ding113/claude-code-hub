@@ -267,7 +267,12 @@
       "provider": "Provider",
       "model": "Model",
       "cost": "Cost",
+      "cacheHitRequests": "Cache-eligible Requests",
       "cacheHitRate": "Cache Hit Rate",
+      "cacheReadTokens": "Cache Read Tokens",
+      "totalTokens": "Total Tokens",
+      "cacheCreationConsumedAmount": "Cache Creation Spend",
+      "totalConsumedAmount": "Total Spend",
       "successRate": "Success Rate",
       "avgResponseTime": "Avg Response Time"
     },
