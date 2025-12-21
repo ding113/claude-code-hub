@@ -1791,6 +1791,8 @@ async function trackCostToRedis(session: ProxySession, usage: UsageMetrics | nul
       keyResetMode: key.dailyResetMode,
       providerResetTime: provider.dailyResetTime,
       providerResetMode: provider.dailyResetMode,
+      requestId: messageContext.id,
+      createdAtMs: messageContext.createdAt.getTime(),
     }
   );
 
