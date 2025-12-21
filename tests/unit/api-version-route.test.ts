@@ -78,4 +78,3 @@ describe("/api/version (dev)", () => {
     expect(data.releaseUrl).toBe("https://github.com/ding113/claude-code-hub/commit/bbbbbbb");
   });
 });
-
