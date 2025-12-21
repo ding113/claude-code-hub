@@ -114,6 +114,7 @@ return results
  * ARGV[1]: cost（本次消费金额）
  * ARGV[2]: now（当前时间戳，毫秒）
  * ARGV[3]: window（窗口时长，毫秒，默认 18000000 = 5小时）
+ * ARGV[4]: request_id（可选，用于 member 去重）
  *
  * 返回值：string - 当前窗口内的总消费
  */
@@ -122,20 +123,26 @@ local key = KEYS[1]
 local cost = tonumber(ARGV[1])
 local now_ms = tonumber(ARGV[2])
 local window_ms = tonumber(ARGV[3])  -- 5 hours = 18000000 ms
+local request_id = ARGV[4]
 
 -- 1. 清理过期记录（5 小时前的数据）
 redis.call('ZREMRANGEBYSCORE', key, '-inf', now_ms - window_ms)
 
--- 2. 添加当前消费记录（member = timestamp:cost，便于调试和追踪）
-local member = now_ms .. ':' .. cost
+-- 2. 添加当前消费记录（member = timestamp:cost 或 timestamp:requestId:cost，便于调试和追踪）
+local member
+if request_id and request_id ~= '' then
+  member = now_ms .. ':' .. request_id .. ':' .. cost
+else
+  member = now_ms .. ':' .. cost
+end
 redis.call('ZADD', key, now_ms, member)
 
 -- 3. 计算窗口内总消费
 local records = redis.call('ZRANGE', key, 0, -1)
 local total = 0
 for _, record in ipairs(records) do
-  -- 解析 member 格式："timestamp:cost"
-  local cost_str = string.match(record, ':(.+)')
+  -- 解析 member 格式："timestamp:cost" 或 "timestamp:id:cost"
+  local cost_str = string.match(record, '.*:(.+)')
   if cost_str then
     total = total + tonumber(cost_str)
   end
@@ -172,7 +179,7 @@ redis.call('ZREMRANGEBYSCORE', key, '-inf', now_ms - window_ms)
 local records = redis.call('ZRANGE', key, 0, -1)
 local total = 0
 for _, record in ipairs(records) do
-  local cost_str = string.match(record, ':(.+)')
+  local cost_str = string.match(record, '.*:(.+)')
   if cost_str then
     total = total + tonumber(cost_str)
   end
@@ -194,6 +201,7 @@ return tostring(total)
  * ARGV[1]: cost（本次消费金额）
  * ARGV[2]: now（当前时间戳，毫秒）
  * ARGV[3]: window（窗口时长，毫秒，默认 86400000 = 24小时）
+ * ARGV[4]: request_id（可选，用于 member 去重）
  *
  * 返回值：string - 当前窗口内的总消费
  */
@@ -202,20 +210,26 @@ local key = KEYS[1]
 local cost = tonumber(ARGV[1])
 local now_ms = tonumber(ARGV[2])
 local window_ms = tonumber(ARGV[3])  -- 24 hours = 86400000 ms
+local request_id = ARGV[4]
 
 -- 1. 清理过期记录（24 小时前的数据）
 redis.call('ZREMRANGEBYSCORE', key, '-inf', now_ms - window_ms)
 
--- 2. 添加当前消费记录（member = timestamp:cost，便于调试和追踪）
-local member = now_ms .. ':' .. cost
+-- 2. 添加当前消费记录（member = timestamp:cost 或 timestamp:requestId:cost，便于调试和追踪）
+local member
+if request_id and request_id ~= '' then
+  member = now_ms .. ':' .. request_id .. ':' .. cost
+else
+  member = now_ms .. ':' .. cost
+end
 redis.call('ZADD', key, now_ms, member)
 
 -- 3. 计算窗口内总消费
 local records = redis.call('ZRANGE', key, 0, -1)
 local total = 0
 for _, record in ipairs(records) do
-  -- 解析 member 格式："timestamp:cost"
-  local cost_str = string.match(record, ':(.+)')
+  -- 解析 member 格式："timestamp:cost" 或 "timestamp:id:cost"
+  local cost_str = string.match(record, '.*:(.+)')
   if cost_str then
     total = total + tonumber(cost_str)
   end
@@ -252,7 +266,7 @@ redis.call('ZREMRANGEBYSCORE', key, '-inf', now_ms - window_ms)
 local records = redis.call('ZRANGE', key, 0, -1)
 local total = 0
 for _, record in ipairs(records) do
-  local cost_str = string.match(record, ':(.+)')
+  local cost_str = string.match(record, '.*:(.+)')
   if cost_str then
     total = total + tonumber(cost_str)
   end

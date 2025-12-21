@@ -19,6 +19,7 @@ export interface AuthState {
 
 export interface MessageContext {
   id: number;
+  createdAt: Date;
   user: User;
   key: Key;
   apiKey: string;
