@@ -47,6 +47,7 @@ export class ProxyMessageService {
 
     session.setMessageContext({
       id: messageRequest.id,
+      createdAt: messageRequest.createdAt,
       user: authState.user,
       key: authState.key,
       apiKey: authState.apiKey,

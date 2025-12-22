@@ -240,6 +240,7 @@
       "keys": "密鑰排名",
       "userRanking": "使用者排名",
       "providerRanking": "供應商排名",
+      "providerCacheHitRateRanking": "供應商快取命中率排行",
       "modelRanking": "模型排名",
       "dailyRanking": "今日",
       "weeklyRanking": "本週",
@@ -266,6 +267,12 @@
       "provider": "供應商",
       "model": "模型",
       "cost": "成本",
+      "cacheHitRequests": "快取命中請求數（納入快取命中率計算的請求總數）",
+      "cacheHitRate": "快取命中率",
+      "cacheReadTokens": "快取讀取 Token 數",
+      "totalTokens": "總 Token 數",
+      "cacheCreationConsumedAmount": "快取建立消耗金額",
+      "totalConsumedAmount": "總消耗金額",
       "successRate": "成功率",
       "avgResponseTime": "平均回覆時間"
     },
@@ -1093,6 +1100,7 @@
           "note": "備註",
           "tags": "標籤",
           "limit5h": "5h 限額 (USD)",
+          "limitDaily": "每日限額 (USD)",
           "limitWeekly": "週限額 (USD)",
           "limitMonthly": "月限額 (USD)"
         },

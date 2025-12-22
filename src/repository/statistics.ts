@@ -868,6 +868,125 @@ export async function sumKeyCostInTimeRange(
   return Number(result[0]?.total || 0);
 }
 
+export interface CostEntryInTimeRange {
+  id: number;
+  createdAt: Date;
+  costUsd: number;
+}
+
+/**
+ * 查询用户在指定时间范围内的消费明细（用于滚动窗口 Redis 恢复）
+ */
+export async function findUserCostEntriesInTimeRange(
+  userId: number,
+  startTime: Date,
+  endTime: Date
+): Promise<CostEntryInTimeRange[]> {
+  const rows = await db
+    .select({
+      id: messageRequest.id,
+      createdAt: messageRequest.createdAt,
+      costUsd: messageRequest.costUsd,
+    })
+    .from(messageRequest)
+    .where(
+      and(
+        eq(messageRequest.userId, userId),
+        gte(messageRequest.createdAt, startTime),
+        lt(messageRequest.createdAt, endTime),
+        isNull(messageRequest.deletedAt)
+      )
+    );
+
+  return rows
+    .map((row) => {
+      if (!row.createdAt) return null;
+      const costUsd = Number(row.costUsd || 0);
+      if (!Number.isFinite(costUsd) || costUsd <= 0) return null;
+      return { id: row.id, createdAt: row.createdAt, costUsd };
+    })
+    .filter((row): row is CostEntryInTimeRange => row !== null);
+}
+
+/**
+ * 查询供应商在指定时间范围内的消费明细（用于滚动窗口 Redis 恢复）
+ */
+export async function findProviderCostEntriesInTimeRange(
+  providerId: number,
+  startTime: Date,
+  endTime: Date
+): Promise<CostEntryInTimeRange[]> {
+  const rows = await db
+    .select({
+      id: messageRequest.id,
+      createdAt: messageRequest.createdAt,
+      costUsd: messageRequest.costUsd,
+    })
+    .from(messageRequest)
+    .where(
+      and(
+        eq(messageRequest.providerId, providerId),
+        gte(messageRequest.createdAt, startTime),
+        lt(messageRequest.createdAt, endTime),
+        isNull(messageRequest.deletedAt)
+      )
+    );
+
+  return rows
+    .map((row) => {
+      if (!row.createdAt) return null;
+      const costUsd = Number(row.costUsd || 0);
+      if (!Number.isFinite(costUsd) || costUsd <= 0) return null;
+      return { id: row.id, createdAt: row.createdAt, costUsd };
+    })
+    .filter((row): row is CostEntryInTimeRange => row !== null);
+}
+
+/**
+ * 查询 Key 在指定时间范围内的消费明细（用于滚动窗口 Redis 恢复）
+ */
+export async function findKeyCostEntriesInTimeRange(
+  keyId: number,
+  startTime: Date,
+  endTime: Date
+): Promise<CostEntryInTimeRange[]> {
+  // 注意：message_request.key 存储的是 API key 字符串，需要先查询 keys 表获取 key 值
+  const keyRecord = await db
+    .select({ key: keys.key })
+    .from(keys)
+    .where(eq(keys.id, keyId))
+    .limit(1);
+
+  if (!keyRecord || keyRecord.length === 0) return [];
+
+  const keyString = keyRecord[0].key;
+
+  const rows = await db
+    .select({
+      id: messageRequest.id,
+      createdAt: messageRequest.createdAt,
+      costUsd: messageRequest.costUsd,
+    })
+    .from(messageRequest)
+    .where(
+      and(
+        eq(messageRequest.key, keyString), // 使用 key 字符串而非 ID
+        gte(messageRequest.createdAt, startTime),
+        lt(messageRequest.createdAt, endTime),
+        isNull(messageRequest.deletedAt)
+      )
+    );
+
+  return rows
+    .map((row) => {
+      if (!row.createdAt) return null;
+      const costUsd = Number(row.costUsd || 0);
+      if (!Number.isFinite(costUsd) || costUsd <= 0) return null;
+      return { id: row.id, createdAt: row.createdAt, costUsd };
+    })
+    .filter((row): row is CostEntryInTimeRange => row !== null);
+}
+
 /**
  * 获取限流事件统计数据
  * 查询 message_request 表中包含 rate_limit_metadata 的错误记录

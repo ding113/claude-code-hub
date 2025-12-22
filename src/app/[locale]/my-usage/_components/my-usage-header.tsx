@@ -3,7 +3,6 @@
 import { LogOut } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { QuotaCountdownCompact } from "@/components/quota/quota-countdown";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useCountdown } from "@/hooks/useCountdown";
 import { useRouter } from "@/i18n/routing";
@@ -13,8 +12,6 @@ interface MyUsageHeaderProps {
   onLogout?: () => Promise<void> | void;
   keyName?: string;
   userName?: string;
-  keyProviderGroup?: string | null;
-  userProviderGroup?: string | null;
   keyExpiresAt?: Date | null;
   userExpiresAt?: Date | null;
 }
@@ -23,8 +20,6 @@ export function MyUsageHeader({
   onLogout,
   keyName,
   userName,
-  keyProviderGroup,
-  userProviderGroup,
   keyExpiresAt,
   userExpiresAt,
 }: MyUsageHeaderProps) {
@@ -34,14 +29,6 @@ export function MyUsageHeader({
 
   const keyCountdown = useCountdown(keyExpiresAt ?? null, Boolean(keyExpiresAt));
   const userCountdown = useCountdown(userExpiresAt ?? null, Boolean(userExpiresAt));
-
-  const groupLabel = (group: string | null | undefined, inherited = false) => (
-    <Badge variant="outline" className="gap-1 rounded-full bg-muted/50 text-xs font-medium">
-      <span className="text-muted-foreground">{t("providerGroup")}:</span>
-      <span className="text-foreground">{group || t("noProviderGroup")}</span>
-      {inherited ? <span className="text-muted-foreground">{t("inherited")}</span> : null}
-    </Badge>
-  );
 
   const renderCountdownChip = (
     label: string,
@@ -97,10 +84,6 @@ export function MyUsageHeader({
             <span className="text-foreground font-medium">{t("userLabel")}:</span>
             <span>{userName ?? "—"}</span>
           </span>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {groupLabel(keyProviderGroup, !keyProviderGroup && !!userProviderGroup)}
-          {groupLabel(userProviderGroup, false)}
         </div>
         <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
       </div>

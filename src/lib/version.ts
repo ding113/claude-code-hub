@@ -15,6 +15,45 @@ export const GITHUB_REPO = {
   repo: "claude-code-hub",
 };
 
+type SemverPrereleaseId = { kind: "num"; value: number } | { kind: "str"; value: string };
+
+function parseSemverLike(
+  raw: string
+): { numbers: number[]; prerelease: SemverPrereleaseId[] | null } | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  const withoutPrefix = trimmed.replace(/^v/i, "");
+
+  // Ignore build metadata.
+  const withoutBuild = withoutPrefix.split("+")[0] ?? "";
+  if (!withoutBuild) return null;
+
+  const [core, prereleaseRaw] = withoutBuild.split("-", 2);
+  if (!core) return null;
+
+  const numberParts = core.split(".").map((part) => {
+    const match = part.match(/^\d+/);
+    if (!match) return Number.NaN;
+    return Number.parseInt(match[0], 10);
+  });
+
+  if (numberParts.some((n) => Number.isNaN(n))) {
+    return null;
+  }
+
+  const prerelease = prereleaseRaw
+    ? prereleaseRaw.split(".").map((id) => {
+        if (/^\d+$/.test(id)) {
+          return { kind: "num" as const, value: Number.parseInt(id, 10) };
+        }
+        return { kind: "str" as const, value: id };
+      })
+    : null;
+
+  return { numbers: numberParts, prerelease };
+}
+
 /**
  * 比较两个语义化版本号
  * @param current 当前版本 (如 "v1.2.3")
@@ -31,19 +70,54 @@ export const GITHUB_REPO = {
  * - isVersionEqual(a, b) - 检查 a 和 b 是否相等
  */
 export function compareVersions(current: string, latest: string): number {
-  // 移除 'v' 前缀
-  const cleanCurrent = current.replace(/^v/, "");
-  const cleanLatest = latest.replace(/^v/, "");
+  const currentParsed = parseSemverLike(current);
+  const latestParsed = parseSemverLike(latest);
 
-  const currentParts = cleanCurrent.split(".").map(Number);
-  const latestParts = cleanLatest.split(".").map(Number);
+  // Fail open: 任何无法解析的版本都视为相等，避免误判导致拦截/提示异常
+  if (!currentParsed || !latestParsed) {
+    return 0;
+  }
 
-  for (let i = 0; i < Math.max(currentParts.length, latestParts.length); i++) {
-    const curr = currentParts[i] || 0;
-    const lat = latestParts[i] || 0;
+  // 1) Compare core numbers.
+  for (let i = 0; i < Math.max(currentParsed.numbers.length, latestParsed.numbers.length); i++) {
+    const curr = currentParsed.numbers[i] ?? 0;
+    const lat = latestParsed.numbers[i] ?? 0;
 
     if (lat > curr) return 1;
     if (lat < curr) return -1;
+  }
+
+  const currPre = currentParsed.prerelease;
+  const latPre = latestParsed.prerelease;
+
+  // 2) Core equal: stable > prerelease.
+  if (!currPre && !latPre) return 0;
+  if (!currPre && latPre) return -1;
+  if (currPre && !latPre) return 1;
+
+  // 3) Both prerelease: compare identifiers (SemVer rules).
+  for (let i = 0; i < Math.max(currPre!.length, latPre!.length); i++) {
+    const currId = currPre![i];
+    const latId = latPre![i];
+
+    if (!currId && latId) return 1;
+    if (currId && !latId) return -1;
+    if (!currId || !latId) return 0;
+
+    if (currId.kind === "num" && latId.kind === "num") {
+      if (latId.value > currId.value) return 1;
+      if (latId.value < currId.value) return -1;
+      continue;
+    }
+
+    // Numeric identifiers have lower precedence than non-numeric identifiers.
+    if (currId.kind === "num" && latId.kind === "str") return 1;
+    if (currId.kind === "str" && latId.kind === "num") return -1;
+
+    if (currId.kind === "str" && latId.kind === "str") {
+      if (latId.value > currId.value) return 1;
+      if (latId.value < currId.value) return -1;
+    }
   }
 
   return 0;

@@ -7,6 +7,7 @@ import { getLocale, getTranslations } from "next-intl/server";
 import { db } from "@/drizzle/db";
 import { users as usersTable } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
+import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { USER_DEFAULTS } from "@/lib/constants/user.constants";
 import { logger } from "@/lib/logger";
 import { getUnauthorizedFields } from "@/lib/permissions/user-field-permissions";
@@ -57,6 +58,7 @@ export interface BatchUpdateUsersParams {
   updates: {
     note?: string;
     tags?: string[];
+    dailyQuota?: number | null;
     limit5hUsd?: number | null;
     limitWeeklyUsd?: number | null;
     limitMonthlyUsd?: number | null;
@@ -126,6 +128,7 @@ export async function syncUserProviderGroupFromKeys(userId: number): Promise<voi
   // and should fail explicitly if provider group sync fails to maintain data consistency.
   const keys = await findKeyList(userId);
   const allGroups = new Set<string>();
+  let hasEmptyGroup = false;
 
   for (const key of keys) {
     if (key.providerGroup) {
@@ -134,7 +137,13 @@ export async function syncUserProviderGroupFromKeys(userId: number): Promise<voi
         .map((g) => g.trim())
         .filter(Boolean);
       groups.forEach((g) => allGroups.add(g));
+    } else {
+      hasEmptyGroup = true;
     }
+  }
+
+  if (hasEmptyGroup) {
+    allGroups.add(PROVIDER_GROUP.DEFAULT);
   }
 
   const newProviderGroup = allGroups.size > 0 ? Array.from(allGroups).sort().join(",") : null;
@@ -485,6 +494,7 @@ export async function batchUpdateUsers(
     const updatesSchema = UpdateUserSchema.pick({
       note: true,
       tags: true,
+      dailyQuota: true,
       limit5hUsd: true,
       limitWeeklyUsd: true,
       limitMonthlyUsd: true,
@@ -526,6 +536,9 @@ export async function batchUpdateUsers(
 
       if (updates.note !== undefined) dbUpdates.description = updates.note;
       if (updates.tags !== undefined) dbUpdates.tags = updates.tags;
+      if (updates.dailyQuota !== undefined)
+        dbUpdates.dailyLimitUsd =
+          updates.dailyQuota === null ? null : updates.dailyQuota.toString();
       if (updates.limit5hUsd !== undefined)
         dbUpdates.limit5hUsd = updates.limit5hUsd === null ? null : updates.limit5hUsd.toString();
       if (updates.limitWeeklyUsd !== undefined)

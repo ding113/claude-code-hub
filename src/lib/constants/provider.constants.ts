@@ -22,6 +22,13 @@ export const PROVIDER_DEFAULTS = {
   MAX_RETRY_ATTEMPTS: 2,
 } as const;
 
+export const PROVIDER_GROUP = {
+  /** 默认分组标识符 - 用于表示未设置分组的 key/供应商 */
+  DEFAULT: "default",
+  /** 全局访问标识符 - 可访问所有供应商（管理员专用） */
+  ALL: "*",
+} as const;
+
 /**
  * 供应商超时配置常量（毫秒）
  *

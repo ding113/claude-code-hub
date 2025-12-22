@@ -44,6 +44,8 @@ export interface KeyRowItemProps {
       totalCost: number;
     }>;
   };
+  /** User-level provider groups (used when key inherits providerGroup). */
+  userProviderGroup?: string | null;
   isMultiSelectMode?: boolean;
   isSelected?: boolean;
   onSelect?: (checked: boolean) => void;
@@ -85,8 +87,16 @@ export interface KeyRowItemProps {
   };
 }
 
+function splitGroups(value?: string | null): string[] {
+  return (value ?? "")
+    .split(",")
+    .map((g) => g.trim())
+    .filter(Boolean);
+}
+
 export function KeyRowItem({
   keyData,
+  userProviderGroup,
   isMultiSelectMode,
   isSelected,
   onSelect,
@@ -108,9 +118,14 @@ export function KeyRowItem({
   const resolvedCurrencyCode: CurrencyCode =
     currencyCode && currencyCode in CURRENCY_CONFIG ? (currencyCode as CurrencyCode) : "USD";
 
-  const providerGroup = keyData.providerGroup?.trim()
-    ? keyData.providerGroup
-    : translations.defaultGroup;
+  const keyGroups = splitGroups(keyData.providerGroup);
+  const inheritedGroups = splitGroups(userProviderGroup);
+  const isInherited = keyGroups.length === 0;
+  const effectiveGroups = isInherited ? inheritedGroups : keyGroups;
+  const visibleGroups = effectiveGroups.slice(0, 2);
+  const remainingGroups = Math.max(0, effectiveGroups.length - visibleGroups.length);
+  const effectiveGroupText =
+    effectiveGroups.length > 0 ? effectiveGroups.join(", ") : translations.defaultGroup;
 
   const canReveal = Boolean(keyData.fullKey);
   const canCopy = Boolean(keyData.canCopy && keyData.fullKey);
@@ -219,11 +234,48 @@ export function KeyRowItem({
 
       {/* 分组 */}
       <div className="col-span-2 min-w-0">
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-muted-foreground">{translations.fields.group}:</span>
-          <Badge variant="outline" className="text-xs font-mono">
-            {providerGroup}
-          </Badge>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="text-xs text-muted-foreground shrink-0">
+            {translations.fields.group}:
+          </span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center gap-1 min-w-0 overflow-hidden cursor-help">
+                {visibleGroups.length > 0 ? (
+                  <>
+                    {visibleGroups.map((group) => (
+                      <Badge
+                        key={group}
+                        variant={isInherited ? "secondary" : "outline"}
+                        className="text-xs font-mono max-w-[120px] truncate"
+                        title={group}
+                      >
+                        {group}
+                      </Badge>
+                    ))}
+                    {remainingGroups > 0 ? (
+                      <Badge
+                        variant="outline"
+                        className="text-xs font-mono shrink-0"
+                        title={effectiveGroupText}
+                      >
+                        +{remainingGroups}
+                      </Badge>
+                    ) : null}
+                  </>
+                ) : (
+                  <Badge variant="outline" className="text-xs font-mono max-w-[160px] truncate">
+                    {translations.defaultGroup}
+                  </Badge>
+                )}
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" align="start" className="max-w-[420px]">
+              <p className="text-xs whitespace-normal break-words font-mono">
+                {effectiveGroupText}
+              </p>
+            </TooltipContent>
+          </Tooltip>
         </div>
       </div>
 

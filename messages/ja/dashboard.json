@@ -239,6 +239,7 @@
       "keys": "キー ランキング",
       "userRanking": "ユーザーランキング",
       "providerRanking": "プロバイダーランキング",
+      "providerCacheHitRateRanking": "プロバイダーキャッシュ命中率",
       "modelRanking": "モデルランキング",
       "dailyRanking": "今日",
       "weeklyRanking": "今週",
@@ -265,6 +266,12 @@
       "provider": "プロバイダー",
       "model": "モデル",
       "cost": "コスト",
+      "cacheHitRequests": "キャッシュ対象リクエスト数（命中率計算対象）",
+      "cacheHitRate": "キャッシュ命中率",
+      "cacheReadTokens": "キャッシュ読取トークン数",
+      "totalTokens": "総トークン数",
+      "cacheCreationConsumedAmount": "キャッシュ作成消費額",
+      "totalConsumedAmount": "総消費額",
       "successRate": "成功率",
       "avgResponseTime": "平均応答時間"
     },
@@ -1081,6 +1088,7 @@
           "note": "メモ",
           "tags": "タグ",
           "limit5h": "5時間上限 (USD)",
+          "limitDaily": "日次上限 (USD)",
           "limitWeekly": "週間上限 (USD)",
           "limitMonthly": "月間上限 (USD)"
         },

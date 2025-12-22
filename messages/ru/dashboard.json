@@ -239,6 +239,7 @@
       "keys": "Рейтинг ключей",
       "userRanking": "Рейтинг пользователей",
       "providerRanking": "Рейтинг поставщиков",
+      "providerCacheHitRateRanking": "Рейтинг по попаданиям в кэш",
       "modelRanking": "Рейтинг моделей",
       "dailyRanking": "Сегодня",
       "weeklyRanking": "Эта неделя",
@@ -265,6 +266,12 @@
       "provider": "Поставщик",
       "model": "Модель",
       "cost": "Стоимость",
+      "cacheHitRequests": "Запросы (учтены в hit rate)",
+      "cacheHitRate": "Попадания в кэш",
+      "cacheReadTokens": "Токены чтения из кэша",
+      "totalTokens": "Всего токенов",
+      "cacheCreationConsumedAmount": "Расход на создание кэша",
+      "totalConsumedAmount": "Общие расходы",
       "successRate": "Процент успеха",
       "avgResponseTime": "Среднее время ответа"
     },
@@ -1092,6 +1099,7 @@
           "note": "Заметка",
           "tags": "Теги",
           "limit5h": "Лимит за 5 часов (USD)",
+          "limitDaily": "Дневной лимит (USD)",
           "limitWeekly": "Недельный лимит (USD)",
           "limitMonthly": "Месячный лимит (USD)"
         },

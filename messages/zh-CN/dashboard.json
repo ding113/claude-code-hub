@@ -239,12 +239,13 @@
       "users": "用户排行",
       "keys": "密钥排行",
       "userRanking": "用户排行",
-      "providerRanking": "供应商排行",
-      "modelRanking": "模型排行",
-      "dailyRanking": "今日",
-      "weeklyRanking": "本周",
-      "monthlyRanking": "本月",
-      "allTimeRanking": "全部"
+    "providerRanking": "供应商排行",
+    "providerCacheHitRateRanking": "供应商缓存命中率排行",
+    "modelRanking": "模型排行",
+    "dailyRanking": "今日",
+    "weeklyRanking": "本周",
+    "monthlyRanking": "本月",
+    "allTimeRanking": "全部"
     },
     "dateRange": {
       "to": "至",
@@ -263,12 +264,18 @@
       "requests": "请求数",
       "tokens": "Token 数",
       "consumedAmount": "消耗金额",
-      "provider": "供应商",
-      "model": "模型",
-      "cost": "成本",
-      "successRate": "成功率",
-      "avgResponseTime": "平均响应时间"
-    },
+    "provider": "供应商",
+    "model": "模型",
+    "cost": "成本",
+    "cacheHitRequests": "缓存触发请求数",
+    "cacheHitRate": "缓存命中率",
+    "cacheReadTokens": "缓存读取 Token 数",
+    "totalTokens": "总 Token 数",
+    "cacheCreationConsumedAmount": "缓存创建消耗金额",
+    "totalConsumedAmount": "总消耗金额",
+    "successRate": "成功率",
+    "avgResponseTime": "平均响应时间"
+  },
     "states": {
       "loading": "加载中...",
       "noData": "暂无数据",
@@ -1186,6 +1193,7 @@
           "note": "备注",
           "tags": "标签",
           "limit5h": "5h 限额 (USD)",
+          "limitDaily": "每日限额 (USD)",
           "limitWeekly": "周限额 (USD)",
           "limitMonthly": "月限额 (USD)"
         },

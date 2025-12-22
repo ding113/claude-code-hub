@@ -284,6 +284,16 @@ export function KeyEditSection({
     () => normalizeGroupList(keyData.providerGroup),
     [keyData.providerGroup]
   );
+  const keyGroupOptions = useMemo(() => {
+    if (!normalizedKeyProviderGroup) return [];
+    return normalizedKeyProviderGroup.split(",").filter(Boolean);
+  }, [normalizedKeyProviderGroup]);
+  const extraKeyGroupOption = useMemo(() => {
+    if (!normalizedKeyProviderGroup) return null;
+    if (normalizedKeyProviderGroup === normalizedUserProviderGroup) return null;
+    if (userGroups.includes(normalizedKeyProviderGroup)) return null;
+    return normalizedKeyProviderGroup;
+  }, [normalizedKeyProviderGroup, normalizedUserProviderGroup, userGroups]);
 
   return (
     <div ref={scrollRef} className="space-y-3 scroll-mt-24">
@@ -424,6 +434,17 @@ export function KeyEditSection({
                 <SelectValue placeholder={translations.fields.providerGroup.placeholder} />
               </SelectTrigger>
               <SelectContent>
+                {extraKeyGroupOption ? (
+                  <SelectItem value={extraKeyGroupOption}>
+                    <Badge
+                      variant="secondary"
+                      className="text-xs font-mono max-w-[280px] truncate"
+                      title={extraKeyGroupOption}
+                    >
+                      {extraKeyGroupOption}
+                    </Badge>
+                  </SelectItem>
+                ) : null}
                 {userGroups.map((group) => (
                   <SelectItem key={group} value={group}>
                     <Badge variant="outline" className="text-xs">
@@ -442,6 +463,25 @@ export function KeyEditSection({
               {keyData.id > 0
                 ? translations.fields.providerGroup.editHint || "已有密钥的分组不可修改"
                 : translations.fields.providerGroup.selectHint || "选择此 Key 可使用的供应商分组"}
+            </p>
+          </div>
+        ) : keyGroupOptions.length > 0 ? (
+          <div className="space-y-2">
+            <Label>{translations.fields.providerGroup.label}</Label>
+            <div className="flex flex-wrap gap-2">
+              {keyGroupOptions.map((group) => (
+                <Badge
+                  key={group}
+                  variant="secondary"
+                  className="text-xs font-mono max-w-[280px] truncate"
+                  title={group}
+                >
+                  {group}
+                </Badge>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {translations.fields.providerGroup.editHint || "已有密钥的分组不可修改"}
             </p>
           </div>
         ) : (

@@ -9,19 +9,32 @@ import type {
 } from "@/lib/redis/leaderboard-cache";
 import { formatCurrency } from "@/lib/utils";
 import { getSystemSettings } from "@/repository/system-config";
+import type { ProviderType } from "@/types/provider";
 
 const VALID_PERIODS: LeaderboardPeriod[] = ["daily", "weekly", "monthly", "allTime", "custom"];
 
 // 日期格式校验正则 (YYYY-MM-DD)
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
+function isProviderType(value: string): value is ProviderType {
+  return (
+    value === "claude" ||
+    value === "claude-auth" ||
+    value === "codex" ||
+    value === "gemini" ||
+    value === "gemini-cli" ||
+    value === "openai-compatible"
+  );
+}
+
 // 需要数据库连接
 export const runtime = "nodejs";
 
 /**
  * 获取排行榜数据
- * GET /api/leaderboard?period=daily|weekly|monthly|allTime|custom&scope=user|provider|model
+ * GET /api/leaderboard?period=daily|weekly|monthly|allTime|custom&scope=user|provider|providerCacheHitRate|model
  * 当 period=custom 时，需要提供 startDate 和 endDate 参数 (YYYY-MM-DD 格式)
+ * 当 scope=providerCacheHitRate 时，可选 providerType=claude|claude-auth|codex|gemini|gemini-cli|openai-compatible
  *
  * 需要认证，普通用户需要 allowGlobalUsageView 权限
  * 实时计算 + Redis 乐观缓存（60 秒 TTL）
@@ -61,6 +74,7 @@ export async function GET(request: NextRequest) {
     const scope = (searchParams.get("scope") as LeaderboardScope) || "user"; // 向后兼容：默认 user
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
+    const providerTypeParam = searchParams.get("providerType");
 
     if (!VALID_PERIODS.includes(period)) {
       return NextResponse.json(
@@ -69,9 +83,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (scope !== "user" && scope !== "provider" && scope !== "model") {
+    if (
+      scope !== "user" &&
+      scope !== "provider" &&
+      scope !== "providerCacheHitRate" &&
+      scope !== "model"
+    ) {
       return NextResponse.json(
-        { error: "参数 scope 必须是 'user'、'provider' 或 'model'" },
+        { error: "参数 scope 必须是 'user'、'provider'、'providerCacheHitRate' 或 'model'" },
         { status: 400 }
       );
     }
@@ -94,19 +113,42 @@ export async function GET(request: NextRequest) {
       dateRange = { startDate, endDate };
     }
 
+    let providerType: ProviderType | undefined;
+    if (scope === "providerCacheHitRate" && providerTypeParam && providerTypeParam !== "all") {
+      if (!isProviderType(providerTypeParam)) {
+        return NextResponse.json({ error: "参数 providerType 不合法" }, { status: 400 });
+      }
+      providerType = providerTypeParam;
+    }
+
     // 使用 Redis 乐观缓存获取数据
     const rawData = await getLeaderboardWithCache(
       period,
       systemSettings.currencyDisplay,
       scope,
-      dateRange
+      dateRange,
+      providerType ? { providerType } : undefined
     );
 
     // 格式化金额字段
-    const data = rawData.map((entry) => ({
-      ...entry,
-      totalCostFormatted: formatCurrency(entry.totalCost, systemSettings.currencyDisplay),
-    }));
+    const data = rawData.map((entry) => {
+      const base = {
+        ...entry,
+        totalCostFormatted: formatCurrency(entry.totalCost, systemSettings.currencyDisplay),
+      };
+
+      if (typeof (entry as { cacheCreationCost?: unknown }).cacheCreationCost === "number") {
+        return {
+          ...base,
+          cacheCreationCostFormatted: formatCurrency(
+            (entry as { cacheCreationCost: number }).cacheCreationCost,
+            systemSettings.currencyDisplay
+          ),
+        };
+      }
+
+      return base;
+    });
 
     logger.info("Leaderboard API: Access granted", {
       userId: session.user.id,
@@ -115,6 +157,7 @@ export async function GET(request: NextRequest) {
       period,
       scope,
       dateRange,
+      providerType,
       entriesCount: data.length,
     });
 

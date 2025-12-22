@@ -304,6 +304,7 @@ export function UserKeyTableRow({
                     status: key.status,
                     modelStats: key.modelStats,
                   }}
+                  userProviderGroup={user.providerGroup ?? null}
                   isMultiSelectMode={isMultiSelectMode}
                   isSelected={selectedKeyIds?.has(key.id) ?? false}
                   onSelect={(checked) => onSelectKey?.(key.id, checked)}
