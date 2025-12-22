@@ -1,6 +1,6 @@
 import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit";
-import { getDailyResetTime, getResetInfo } from "@/lib/rate-limit/time-utils";
+import { getResetInfo, getResetInfoWithMode } from "@/lib/rate-limit/time-utils";
 import { ERROR_CODES, getErrorMessageServer } from "@/lib/utils/error-messages";
 import { RateLimitError } from "./errors";
 import type { ProxySession } from "./session";
@@ -248,7 +248,12 @@ export class ProxyRateLimitGuard {
     if (!dailyCheck.allowed) {
       logger.warn(`[RateLimit] User daily limit exceeded: user=${user.id}, ${dailyCheck.reason}`);
 
-      const resetTime = getDailyResetTime().toISOString();
+      // 使用用户配置的重置时间和模式计算正确的 resetTime
+      const resetInfo = getResetInfoWithMode("daily", user.dailyResetTime, user.dailyResetMode);
+      // rolling 模式没有 resetAt，使用 24 小时后作为 fallback
+      const resetTime =
+        resetInfo.resetAt?.toISOString() ??
+        new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
       const { getLocale } = await import("next-intl/server");
       const locale = await getLocale();

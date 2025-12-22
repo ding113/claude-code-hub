@@ -68,7 +68,15 @@ async function readLocalVersionFile(): Promise<string | null> {
     const content = await readFile(join(process.cwd(), "VERSION"), "utf8");
     const trimmed = content.trim();
     return trimmed ? normalizeVersionForDisplay(trimmed) : null;
-  } catch {
+  } catch (error) {
+    const err = error as NodeJS.ErrnoException;
+    // 文件不存在是预期情况，静默处理
+    if (err.code !== "ENOENT") {
+      logger.warn("[Version] Failed to read VERSION file", {
+        error: err.message,
+        code: err.code,
+      });
+    }
     return null;
   }
 }
@@ -184,7 +192,8 @@ async function getLatestVersionInfo(): Promise<LatestVersionInfo | null> {
 
       return {
         latest,
-        releaseUrl: `https://github.com/${GITHUB_REPO.owner}/${GITHUB_REPO.repo}/releases/tag/${latest}`,
+        // 使用通用 releases 页面避免 tag 不存在导致 404
+        releaseUrl: `https://github.com/${GITHUB_REPO.owner}/${GITHUB_REPO.repo}/releases`,
       };
     }
 
