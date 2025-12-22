@@ -211,7 +211,8 @@ async function getLatestVersionInfo(): Promise<LatestVersionInfo | null> {
 
     return {
       latest,
-      releaseUrl: `https://github.com/${GITHUB_REPO.owner}/${GITHUB_REPO.repo}/releases/tag/${latest}`,
+      // 使用通用 releases 页面避免 tag 不存在导致 404
+      releaseUrl: `https://github.com/${GITHUB_REPO.owner}/${GITHUB_REPO.repo}/releases`,
     };
   }
 }
