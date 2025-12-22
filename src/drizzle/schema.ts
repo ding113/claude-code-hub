@@ -232,6 +232,9 @@ export const providers = pgTable('providers', {
   // - 'disabled': 禁用 1M 上下文，即使客户端请求也不启用
   context1mPreference: varchar('context_1m_preference', { length: 20 }),
 
+  // 自定义 User-Agent
+  userAgent: varchar('user_agent', { length: 512 }),
+
   // 废弃（保留向后兼容，但不再使用）
   tpm: integer('tpm').default(0),
   rpm: integer('rpm').default(0),

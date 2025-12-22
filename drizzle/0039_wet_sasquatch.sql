@@ -1,0 +1,1 @@
+ALTER TABLE "providers" ADD COLUMN "user_agent" varchar(512);

@@ -210,6 +210,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         circuitBreakerHalfOpenSuccessThreshold: provider.circuitBreakerHalfOpenSuccessThreshold,
         proxyUrl: provider.proxyUrl,
         proxyFallbackToDirect: provider.proxyFallbackToDirect,
+        userAgent: provider.userAgent,
         firstByteTimeoutStreamingMs: provider.firstByteTimeoutStreamingMs,
         streamingIdleTimeoutMs: provider.streamingIdleTimeoutMs,
         requestTimeoutNonStreamingMs: provider.requestTimeoutNonStreamingMs,

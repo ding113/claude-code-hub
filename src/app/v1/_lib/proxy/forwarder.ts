@@ -16,6 +16,7 @@ import { logger } from "@/lib/logger";
 import { createProxyAgentForProvider } from "@/lib/proxy-agent";
 import { SessionManager } from "@/lib/session-manager";
 import { CONTEXT_1M_BETA_HEADER, shouldApplyContext1m } from "@/lib/special-attributes";
+import { APP_VERSION } from "@/lib/version";
 import type { CacheTtlPreference, CacheTtlResolved } from "@/types/cache";
 import { getDefaultInstructions } from "../codex/constants/codex-instructions";
 import { isOfficialCodexClient, sanitizeCodexRequest } from "../codex/utils/request-sanitizer";
@@ -181,6 +182,9 @@ function filterPrivateParameters(obj: unknown): unknown {
 }
 
 export class ProxyForwarder {
+  // 当 provider.userAgent 未配置且客户端未提供 UA 时使用
+  static readonly DEFAULT_USER_AGENT = `claude-code-hub/${APP_VERSION.replace(/^v/, "")}`;
+
   static async send(session: ProxySession): Promise<Response> {
     if (!session.provider || !session.authState?.success) {
       throw new Error("代理上下文缺少供应商或鉴权信息");
@@ -1788,14 +1792,17 @@ export class ProxyForwarder {
       delete overrides["x-api-key"];
     }
 
-    // Codex 特殊处理：若存在原始 User-Agent 则透传，否则兜底设置
-    if (provider.providerType === "codex") {
-      const originalUA = session.userAgent;
-      overrides["user-agent"] =
-        originalUA || "codex_cli_rs/0.55.0 (Mac OS 26.1.0; arm64) vscode/2.0.64";
-      logger.debug("ProxyForwarder: Codex provider detected, setting User-Agent", {
-        originalUA: session.userAgent ? "provided" : "fallback",
+    // 自定义 User-Agent 处理
+    // 优先级：provider.userAgent > 客户端原始 UA > 默认UA
+    if (provider.userAgent) {
+      overrides["user-agent"] = provider.userAgent;
+      logger.debug("ProxyForwarder: Using custom User-Agent from provider config", {
+        providerId: provider.id,
       });
+    } else if (!session.userAgent) {
+      // 客户端未提供 UA 时使用默认UA
+      overrides["user-agent"] = ProxyForwarder.DEFAULT_USER_AGENT;
+      logger.debug("ProxyForwarder: Using default User-Agent (client provided none)");
     }
 
     if (preserveClientIp) {

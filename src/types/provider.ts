@@ -97,6 +97,9 @@ export interface Provider {
   // 1M Context Window 偏好配置（仅对 Anthropic 类型供应商有效）
   context1mPreference: Context1mPreference | null;
 
+  // 自定义 User-Agent
+  userAgent: string | null;
+
   // 废弃（保留向后兼容，但不再使用）
   // TPM (Tokens Per Minute): 每分钟可处理的文本总量
   tpm: number | null;
@@ -164,6 +167,7 @@ export interface ProviderDisplay {
   faviconUrl: string | null;
   cacheTtlPreference: CacheTtlPreference | null;
   context1mPreference: Context1mPreference | null;
+  userAgent: string | null;
   // 废弃字段（保留向后兼容）
   tpm: number | null;
   rpm: number | null;
@@ -231,6 +235,7 @@ export interface CreateProviderData {
   favicon_url?: string | null;
   cache_ttl_preference?: CacheTtlPreference | null;
   context_1m_preference?: Context1mPreference | null;
+  user_agent?: string | null;
 
   // 废弃字段（保留向后兼容）
   // TPM (Tokens Per Minute): 每分钟可处理的文本总量
@@ -296,6 +301,7 @@ export interface UpdateProviderData {
   favicon_url?: string | null;
   cache_ttl_preference?: CacheTtlPreference | null;
   context_1m_preference?: Context1mPreference | null;
+  user_agent?: string | null;
 
   // 废弃字段（保留向后兼容）
   // TPM (Tokens Per Minute): 每分钟可处理的文本总量

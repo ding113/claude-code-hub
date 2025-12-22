@@ -91,6 +91,7 @@ export function toProvider(dbProvider: any): Provider {
     faviconUrl: dbProvider?.faviconUrl ?? null,
     cacheTtlPreference: dbProvider?.cacheTtlPreference ?? null,
     context1mPreference: dbProvider?.context1mPreference ?? null,
+    userAgent: dbProvider?.userAgent ?? null,
     tpm: dbProvider?.tpm ?? null,
     rpm: dbProvider?.rpm ?? null,
     rpd: dbProvider?.rpd ?? null,

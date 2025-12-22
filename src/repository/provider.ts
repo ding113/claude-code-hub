@@ -51,6 +51,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     faviconUrl: providerData.favicon_url ?? null,
     cacheTtlPreference: providerData.cache_ttl_preference ?? null,
     context1mPreference: providerData.context_1m_preference ?? null,
+    userAgent: providerData.user_agent ?? null,
     tpm: providerData.tpm,
     rpm: providerData.rpm,
     rpd: providerData.rpd,
@@ -95,6 +96,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     faviconUrl: providers.faviconUrl,
     cacheTtlPreference: providers.cacheTtlPreference,
     context1mPreference: providers.context1mPreference,
+    userAgent: providers.userAgent,
     tpm: providers.tpm,
     rpm: providers.rpm,
     rpd: providers.rpd,
@@ -143,6 +145,7 @@ export async function findProviderList(
       circuitBreakerHalfOpenSuccessThreshold: providers.circuitBreakerHalfOpenSuccessThreshold,
       proxyUrl: providers.proxyUrl,
       proxyFallbackToDirect: providers.proxyFallbackToDirect,
+      userAgent: providers.userAgent,
       firstByteTimeoutStreamingMs: providers.firstByteTimeoutStreamingMs,
       streamingIdleTimeoutMs: providers.streamingIdleTimeoutMs,
       requestTimeoutNonStreamingMs: providers.requestTimeoutNonStreamingMs,
@@ -209,6 +212,7 @@ export async function findAllProviders(): Promise<Provider[]> {
       circuitBreakerHalfOpenSuccessThreshold: providers.circuitBreakerHalfOpenSuccessThreshold,
       proxyUrl: providers.proxyUrl,
       proxyFallbackToDirect: providers.proxyFallbackToDirect,
+      userAgent: providers.userAgent,
       firstByteTimeoutStreamingMs: providers.firstByteTimeoutStreamingMs,
       streamingIdleTimeoutMs: providers.streamingIdleTimeoutMs,
       requestTimeoutNonStreamingMs: providers.requestTimeoutNonStreamingMs,
@@ -269,6 +273,7 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       circuitBreakerHalfOpenSuccessThreshold: providers.circuitBreakerHalfOpenSuccessThreshold,
       proxyUrl: providers.proxyUrl,
       proxyFallbackToDirect: providers.proxyFallbackToDirect,
+      userAgent: providers.userAgent,
       firstByteTimeoutStreamingMs: providers.firstByteTimeoutStreamingMs,
       streamingIdleTimeoutMs: providers.streamingIdleTimeoutMs,
       requestTimeoutNonStreamingMs: providers.requestTimeoutNonStreamingMs,
@@ -369,6 +374,7 @@ export async function updateProvider(
     dbData.cacheTtlPreference = providerData.cache_ttl_preference ?? null;
   if (providerData.context_1m_preference !== undefined)
     dbData.context1mPreference = providerData.context_1m_preference ?? null;
+  if (providerData.user_agent !== undefined) dbData.userAgent = providerData.user_agent;
   if (providerData.tpm !== undefined) dbData.tpm = providerData.tpm;
   if (providerData.rpm !== undefined) dbData.rpm = providerData.rpm;
   if (providerData.rpd !== undefined) dbData.rpd = providerData.rpd;
@@ -409,6 +415,7 @@ export async function updateProvider(
       circuitBreakerHalfOpenSuccessThreshold: providers.circuitBreakerHalfOpenSuccessThreshold,
       proxyUrl: providers.proxyUrl,
       proxyFallbackToDirect: providers.proxyFallbackToDirect,
+      userAgent: providers.userAgent,
       firstByteTimeoutStreamingMs: providers.firstByteTimeoutStreamingMs,
       streamingIdleTimeoutMs: providers.streamingIdleTimeoutMs,
       requestTimeoutNonStreamingMs: providers.requestTimeoutNonStreamingMs,

@@ -274,6 +274,13 @@
       "when": 1766151566924,
       "tag": "0038_aberrant_bucky",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1766387608948,
+      "tag": "0039_wet_sasquatch",
+      "breakpoints": true
     }
   ]
 }

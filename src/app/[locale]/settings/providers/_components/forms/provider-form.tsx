@@ -153,6 +153,7 @@ export function ProviderForm({
   const [proxyFallbackToDirect, setProxyFallbackToDirect] = useState<boolean>(
     sourceProvider?.proxyFallbackToDirect ?? false
   );
+  const [userAgent, setUserAgent] = useState<string>(sourceProvider?.userAgent ?? "");
 
   // 超时配置（以秒为单位显示，提交时转换为毫秒）
   // ⚠️ 严格检查 null/undefined 并验证数值有效性，避免产生 NaN
@@ -322,6 +323,7 @@ export function ProviderForm({
             circuit_breaker_half_open_success_threshold?: number;
             proxy_url?: string | null;
             proxy_fallback_to_direct?: boolean;
+            user_agent?: string | null;
             first_byte_timeout_streaming_ms?: number;
             streaming_idle_timeout_ms?: number;
             request_timeout_non_streaming_ms?: number;
@@ -363,6 +365,7 @@ export function ProviderForm({
             circuit_breaker_half_open_success_threshold: halfOpenSuccessThreshold ?? 2,
             proxy_url: proxyUrl.trim() || null,
             proxy_fallback_to_direct: proxyFallbackToDirect,
+            user_agent: userAgent.trim() || null,
             // ⭐ 编辑模式：undefined 代表不更新(沿用数据库旧值),不能回退到默认值
             first_byte_timeout_streaming_ms:
               firstByteTimeoutStreamingSeconds != null
@@ -392,7 +395,7 @@ export function ProviderForm({
             return;
           }
         } else {
-          const res = await addProvider({
+          const createPayload = {
             name: name.trim(),
             url: url.trim(),
             key: key.trim(),
@@ -424,6 +427,7 @@ export function ProviderForm({
             circuit_breaker_half_open_success_threshold: halfOpenSuccessThreshold ?? 2,
             proxy_url: proxyUrl.trim() || null,
             proxy_fallback_to_direct: proxyFallbackToDirect,
+            user_agent: userAgent.trim() || null,
             first_byte_timeout_streaming_ms:
               firstByteTimeoutStreamingSeconds != null
                 ? firstByteTimeoutStreamingSeconds * 1000
@@ -444,7 +448,8 @@ export function ProviderForm({
             rpm: null,
             rpd: null,
             cc: null,
-          });
+          };
+          const res = await addProvider(createPayload);
           if (!res.ok) {
             toast.error(res.error || t("errors.addFailed"));
             return;
@@ -478,6 +483,7 @@ export function ProviderForm({
           setHalfOpenSuccessThreshold(2);
           setProxyUrl("");
           setProxyFallbackToDirect(false);
+          setUserAgent("");
           setFirstByteTimeoutStreamingSeconds(
             PROVIDER_TIMEOUT_DEFAULTS.FIRST_BYTE_TIMEOUT_STREAMING_MS / 1000
           );
@@ -952,6 +958,26 @@ export function ProviderForm({
                     </p>
                   </div>
                 )}
+
+                {/* 自定义 User-Agent */}
+                <div className="space-y-2">
+                  <Label htmlFor={isEdit ? "edit-user-agent" : "user-agent"}>
+                    {t("sections.routing.userAgent.label")}
+                    <span className="text-xs text-muted-foreground ml-1">
+                      {t("sections.routing.userAgent.optional")}
+                    </span>
+                  </Label>
+                  <Input
+                    id={isEdit ? "edit-user-agent" : "user-agent"}
+                    value={userAgent}
+                    onChange={(e) => setUserAgent(e.target.value)}
+                    placeholder={t("sections.routing.userAgent.placeholder")}
+                    disabled={isPending}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t("sections.routing.userAgent.desc")}
+                  </p>
+                </div>
               </div>
             </div>
           </CollapsibleContent>

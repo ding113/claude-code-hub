@@ -1038,6 +1038,12 @@
               "disabled": "無効"
             },
             "desc": "1M コンテキストウィンドウのサポートを設定します。Sonnet モデル（claude-sonnet-4-5、claude-sonnet-4）にのみ適用されます。有効時は段階的料金が適用されます。"
+          },
+          "userAgent": {
+            "label": "カスタム User-Agent",
+            "optional": "(任意)",
+            "placeholder": "例: codex_cli_rs/0.55.0 (Mac OS 26.1.0; arm64)",
+            "desc": "上流に送信する User-Agent ヘッダーを上書きします。空欄の場合はクライアントの元の User-Agent をそのまま転送します。"
           }
         },
         "rateLimit": {

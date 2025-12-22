@@ -1038,6 +1038,12 @@
               "disabled": "停用"
             },
             "desc": "設定 1M 上下文視窗支援。僅對 Sonnet 模型生效（claude-sonnet-4-5、claude-sonnet-4）。啟用後將套用階梯定價。"
+          },
+          "userAgent": {
+            "label": "自訂 User-Agent",
+            "optional": "(可選)",
+            "placeholder": "例如: codex_cli_rs/0.55.0 (Mac OS 26.1.0; arm64)",
+            "desc": "覆蓋傳送至上游的 User-Agent 標頭。留空則透傳客戶端原始 User-Agent。"
           }
         },
         "rateLimit": {

@@ -1131,6 +1131,12 @@
               "disabled": "Disabled"
             },
             "desc": "Configure 1M context window support. Only affects Sonnet models (claude-sonnet-4-5, claude-sonnet-4). Tiered pricing applies when enabled."
+          },
+          "userAgent": {
+            "label": "Custom User-Agent",
+            "optional": "(optional)",
+            "placeholder": "e.g. codex_cli_rs/0.55.0 (Mac OS 26.1.0; arm64)",
+            "desc": "Override the User-Agent header sent to upstream. Leave empty to passthrough client's original User-Agent."
           }
         },
         "rateLimit": {

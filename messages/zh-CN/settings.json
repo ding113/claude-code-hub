@@ -725,6 +725,12 @@
               "disabled": "禁用"
             },
             "desc": "配置 1M 上下文窗口支持。仅对 Sonnet 模型生效（claude-sonnet-4-5、claude-sonnet-4）。启用后将应用阶梯定价。"
+          },
+          "userAgent": {
+            "label": "自定义 User-Agent",
+            "optional": "(可选)",
+            "placeholder": "例如: codex_cli_rs/0.55.0 (Mac OS 26.1.0; arm64)",
+            "desc": "覆盖发送到上游的 User-Agent 头。留空则透传客户端原始 User-Agent。"
           }
         },
         "rateLimit": {
