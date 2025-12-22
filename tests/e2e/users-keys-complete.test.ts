@@ -566,7 +566,7 @@ describe("用户和 Key 管理 - 完整 E2E 测试", () => {
           name: `测试Key${i}_${Date.now()}`,
         });
 
-        createdKeys.push(keyResult);
+        createdKeys.push(_keyResult);
         console.log(`   Step 2.${i}: 创建Key${i} ✅`);
       }
 

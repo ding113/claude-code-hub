@@ -692,8 +692,16 @@ export async function syncDefaultErrorRules(): Promise<{
 
       if (existingIsDefault === undefined) {
         // pattern 不存在，直接插入
-        await tx.insert(errorRules).values(rule);
-        counters.inserted += 1;
+        const inserted = await tx
+          .insert(errorRules)
+          .values(rule)
+          .onConflictDoNothing({ target: errorRules.pattern })
+          .returning({ id: errorRules.id });
+        if (inserted.length > 0) {
+          counters.inserted += 1;
+        } else {
+          counters.skipped += 1;
+        }
         continue;
       }
 
