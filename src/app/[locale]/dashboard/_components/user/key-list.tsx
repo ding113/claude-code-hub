@@ -106,7 +106,7 @@ export function KeyList({
                 <CollapsibleTrigger asChild>
                   <button
                     onClick={() => toggleExpanded(record.id)}
-                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                   >
                     {expandedKeys.has(record.id) ? (
                       <ChevronDown className="h-3 w-3" />

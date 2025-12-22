@@ -73,7 +73,7 @@ export function ActiveSessionsList({
           </div>
           <button
             onClick={() => router.push("/dashboard/sessions")}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
           >
             {tc("activeSessions.viewAll")} →
           </button>

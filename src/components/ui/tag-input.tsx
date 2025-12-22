@@ -282,7 +282,7 @@ export function TagInput({
             {!disabled && (
               <button
                 type="button"
-                className="ml-1 rounded-full outline-none hover:bg-muted-foreground/20 focus:ring-2 focus:ring-ring/50"
+                className="ml-1 rounded-full outline-none hover:bg-muted-foreground/20 focus:ring-2 focus:ring-ring/50 cursor-pointer"
                 onClick={(e) => {
                   e.stopPropagation();
                   removeTag(index);
@@ -320,7 +320,7 @@ export function TagInput({
               key={suggestion.value}
               type="button"
               className={cn(
-                "w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground",
+                "w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground cursor-pointer",
                 index === highlightedIndex && "bg-accent text-accent-foreground"
               )}
               onMouseDown={(e) => {

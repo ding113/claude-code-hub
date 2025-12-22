@@ -180,7 +180,7 @@ export function ProvidersQuotaClient({
       {/* 无限额的供应商（折叠区域） */}
       {providersWithoutQuota.length > 0 && (
         <Collapsible open={isUnlimitedOpen} onOpenChange={setIsUnlimitedOpen}>
-          <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg border bg-card p-4 text-sm font-medium hover:bg-accent transition-colors">
+          <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg border bg-card p-4 text-sm font-medium hover:bg-accent transition-colors cursor-pointer">
             <span className="text-muted-foreground">
               {t("unlimitedSection", { count: providersWithoutQuota.length })}
             </span>
