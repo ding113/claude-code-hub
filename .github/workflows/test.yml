@@ -69,7 +69,7 @@ jobs:
           POSTGRES_PASSWORD: test_password
           POSTGRES_DB: claude_code_hub_test
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U test_user -d claude_code_hub_test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -123,7 +123,7 @@ jobs:
           POSTGRES_PASSWORD: test_password
           POSTGRES_DB: claude_code_hub_test
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U test_user -d claude_code_hub_test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -159,11 +159,11 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Build application
-        run: bun run build
-
       - name: Run database migrations
         run: bun run db:migrate
+
+      - name: Build application
+        run: bun run build
 
       - name: Start server (background)
         run: |
