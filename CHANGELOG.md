@@ -4,6 +4,22 @@
 
 ---
 
+## [v0.3.34](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.34) - 2025-12-22
+
+### 新增
+
+- Dashboard 和排行榜新增供应商缓存命中率统计，支持查看各供应商的缓存利用情况 (#399) [@ding113](https://github.com/ding113)
+
+### 优化
+
+- 简化 ProviderCacheHitRateEntry 数据结构，提升排行榜视图性能
+
+### 修复
+
+- 修复 Dashboard 缓存命中请求的本地化显示问题
+
+---
+
 ## [v0.3.33](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.33) - 2025-12-20
 
 ### 新增
