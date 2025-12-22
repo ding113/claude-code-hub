@@ -27,10 +27,7 @@ interface LeaderboardViewProps {
 type LeaderboardScope = "user" | "provider" | "providerCacheHitRate" | "model";
 type UserEntry = LeaderboardEntry & { totalCostFormatted?: string };
 type ProviderEntry = ProviderLeaderboardEntry & { totalCostFormatted?: string };
-type ProviderCacheHitRateEntry = ProviderCacheHitRateLeaderboardEntry & {
-  totalCostFormatted?: string;
-  cacheCreationCostFormatted?: string;
-};
+type ProviderCacheHitRateEntry = ProviderCacheHitRateLeaderboardEntry;
 type ModelEntry = ModelLeaderboardEntry & { totalCostFormatted?: string };
 type AnyEntry = UserEntry | ProviderEntry | ProviderCacheHitRateEntry | ModelEntry;
 
@@ -239,22 +236,6 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
       header: t("columns.totalTokens"),
       className: "text-right",
       cell: (row) => formatTokenAmount((row as ProviderCacheHitRateEntry).totalTokens),
-    },
-    {
-      header: t("columns.cacheCreationConsumedAmount"),
-      className: "text-right font-mono font-semibold",
-      cell: (row) => {
-        const r = row as ProviderCacheHitRateEntry;
-        return r.cacheCreationCostFormatted ?? r.cacheCreationCost;
-      },
-    },
-    {
-      header: t("columns.totalConsumedAmount"),
-      className: "text-right font-mono font-semibold",
-      cell: (row) => {
-        const r = row as ProviderCacheHitRateEntry;
-        return r.totalCostFormatted ?? r.totalCost;
-      },
     },
   ];
 
