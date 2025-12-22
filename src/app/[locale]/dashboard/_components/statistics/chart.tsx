@@ -313,7 +313,7 @@ export function UserStatisticsChart({
           <div className="flex">
             <button
               data-active={activeChart === "cost"}
-              className="data-[active=true]:bg-muted/50 relative z-30 flex flex-1 flex-col justify-center gap-1 border-t px-6 py-4 text-left even:border-l lg:border-t-0 lg:border-l lg:px-8 lg:py-6"
+              className="data-[active=true]:bg-muted/50 relative z-30 flex flex-1 flex-col justify-center gap-1 border-t px-6 py-4 text-left even:border-l lg:border-t-0 lg:border-l lg:px-8 lg:py-6 cursor-pointer"
               onClick={() => setActiveChart("cost")}
             >
               <span className="text-muted-foreground text-xs">{t("totalCost")}</span>
@@ -323,7 +323,7 @@ export function UserStatisticsChart({
             </button>
             <button
               data-active={activeChart === "calls"}
-              className="data-[active=true]:bg-muted/50 relative z-30 flex flex-1 flex-col justify-center gap-1 border-t px-6 py-4 text-left even:border-l lg:border-t-0 lg:border-l lg:px-8 lg:py-6"
+              className="data-[active=true]:bg-muted/50 relative z-30 flex flex-1 flex-col justify-center gap-1 border-t px-6 py-4 text-left even:border-l lg:border-t-0 lg:border-l lg:px-8 lg:py-6 cursor-pointer"
               onClick={() => setActiveChart("calls")}
             >
               <span className="text-muted-foreground text-xs">{t("totalCalls")}</span>
@@ -339,7 +339,7 @@ export function UserStatisticsChart({
         <div className="flex border-b">
           <button
             data-active={activeChart === "cost"}
-            className="data-[active=true]:bg-muted/50 relative z-30 flex flex-1 flex-col justify-center gap-1 px-6 py-3 text-left even:border-l transition-colors hover:bg-muted/30"
+            className="data-[active=true]:bg-muted/50 relative z-30 flex flex-1 flex-col justify-center gap-1 px-6 py-3 text-left even:border-l transition-colors hover:bg-muted/30 cursor-pointer"
             onClick={() => setActiveChart("cost")}
           >
             <span className="text-muted-foreground text-xs">{t("totalCost")}</span>
@@ -349,7 +349,7 @@ export function UserStatisticsChart({
           </button>
           <button
             data-active={activeChart === "calls"}
-            className="data-[active=true]:bg-muted/50 relative z-30 flex flex-1 flex-col justify-center gap-1 px-6 py-3 text-left even:border-l transition-colors hover:bg-muted/30"
+            className="data-[active=true]:bg-muted/50 relative z-30 flex flex-1 flex-col justify-center gap-1 px-6 py-3 text-left even:border-l transition-colors hover:bg-muted/30 cursor-pointer"
             onClick={() => setActiveChart("calls")}
           >
             <span className="text-muted-foreground text-xs">{t("totalCalls")}</span>
@@ -367,14 +367,14 @@ export function UserStatisticsChart({
               <button
                 data-active={chartMode === "overlay"}
                 onClick={() => setChartMode("overlay")}
-                className="data-[active=true]:bg-muted data-[active=true]:text-foreground text-[10px] text-muted-foreground px-1.5 py-0.5 rounded transition-colors hover:bg-muted/70"
+                className="data-[active=true]:bg-muted data-[active=true]:text-foreground text-[10px] text-muted-foreground px-1.5 py-0.5 rounded transition-colors hover:bg-muted/70 cursor-pointer"
               >
                 {t("chartMode.overlay")}
               </button>
               <button
                 data-active={chartMode === "stacked"}
                 onClick={() => setChartMode("stacked")}
-                className="data-[active=true]:bg-muted data-[active=true]:text-foreground text-[10px] text-muted-foreground px-1.5 py-0.5 rounded transition-colors hover:bg-muted/70"
+                className="data-[active=true]:bg-muted data-[active=true]:text-foreground text-[10px] text-muted-foreground px-1.5 py-0.5 rounded transition-colors hover:bg-muted/70 cursor-pointer"
               >
                 {t("chartMode.stacked")}
               </button>
