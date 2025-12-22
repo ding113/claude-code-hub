@@ -10,7 +10,7 @@ import { UserQuotaListItem } from "./user-quota-list-item";
 import { UserUnlimitedItem } from "./user-unlimited-item";
 
 const COLLAPSIBLE_TRIGGER_CLASS =
-  "flex w-full items-center justify-between rounded-lg border bg-card px-4 py-3 text-sm font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 transition-colors";
+  "flex w-full items-center justify-between rounded-lg border bg-card px-4 py-3 text-sm font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 transition-colors cursor-pointer";
 
 function getUsageRate(user: UserQuotaWithUsage): number {
   // W-014: 添加 NaN 防护

@@ -125,7 +125,7 @@ export function OverviewPanel({ currencyCode = "USD", isAdmin = false }: Overvie
         <div className="mt-3">
           <button
             onClick={() => router.push("/dashboard/sessions")}
-            className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors text-center py-1.5 hover:bg-muted rounded-md"
+            className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors text-center py-1.5 hover:bg-muted rounded-md cursor-pointer"
           >
             {tc("metrics.viewDetails")} →
           </button>

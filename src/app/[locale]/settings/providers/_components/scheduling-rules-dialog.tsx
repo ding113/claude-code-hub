@@ -166,7 +166,7 @@ function ScenarioCard({ title, emoji, description, steps }: ScenarioCardProps) {
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen} className="border rounded-lg">
       <CollapsibleTrigger asChild>
-        <button className="flex items-center justify-between w-full p-4 hover:bg-muted/50 transition-colors">
+        <button className="flex items-center justify-between w-full p-4 hover:bg-muted/50 transition-colors cursor-pointer">
           <div className="flex items-center gap-3">
             <span className="text-2xl">{emoji}</span>
             <div className="text-left">
