@@ -301,6 +301,13 @@
         "placeholder": "0 表示無限制",
         "description": "同時運行的對話數量"
       },
+      "providerGroup": {
+        "label": "供應商分組",
+        "placeholder": "輸入供應商分組標籤，按 Enter 新增",
+        "description": "供應商分組（預設：default）",
+        "defaultDescription": "default 分組包含所有未設定 groupTag 的供應商",
+        "descriptionWithUserGroup": "供應商分組（預設：default；使用者分組：{group}）"
+      },
       "submitText": "儲存修改",
       "loadingText": "儲存中...",
       "success": "金鑰更新成功",

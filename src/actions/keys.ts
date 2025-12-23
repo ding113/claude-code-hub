@@ -7,8 +7,10 @@ import { getTranslations } from "next-intl/server";
 import { db } from "@/drizzle/db";
 import { keys as keysTable } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
+import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
+import { normalizeProviderGroup, parseProviderGroups } from "@/lib/utils/provider-group";
 import { KeyFormSchema } from "@/lib/validation/schemas";
 import type { KeyStatistics } from "@/repository/key";
 import {
@@ -25,15 +27,33 @@ import type { Key } from "@/types/key";
 import type { ActionResult } from "./types";
 import { type BatchUpdateResult, syncUserProviderGroupFromKeys } from "./users";
 
-function normalizeProviderGroup(value: unknown): string | null {
-  if (value === null || value === undefined) return null;
-  if (typeof value !== "string") return null;
-  const groups = value
-    .split(",")
-    .map((g) => g.trim())
-    .filter(Boolean);
-  if (groups.length === 0) return null;
-  return Array.from(new Set(groups)).sort().join(",");
+type TranslationFunction = (key: string, values?: Record<string, string>) => string;
+
+function validateNonAdminProviderGroup(
+  userProviderGroup: string,
+  requestedProviderGroup: string,
+  options: { hasDefaultKey: boolean },
+  tError: TranslationFunction
+): string {
+  const userGroups = parseProviderGroups(userProviderGroup);
+  const requestedGroups = parseProviderGroups(requestedProviderGroup);
+
+  if (userGroups.includes(PROVIDER_GROUP.ALL)) {
+    return requestedProviderGroup;
+  }
+
+  const userGroupSet = new Set(userGroups);
+
+  if (requestedGroups.includes(PROVIDER_GROUP.DEFAULT) && !options.hasDefaultKey) {
+    throw new Error(tError("NO_DEFAULT_GROUP_PERMISSION"));
+  }
+
+  const invalidGroups = requestedGroups.filter((g) => !userGroupSet.has(g));
+  if (invalidGroups.length > 0) {
+    throw new Error(tError("NO_GROUP_PERMISSION", { groups: invalidGroups.join(", ") }));
+  }
+
+  return requestedProviderGroup;
 }
 
 export interface BatchUpdateKeysParams {
@@ -78,10 +98,10 @@ export async function addKey(data: {
   cacheTtlPreference?: "inherit" | "5m" | "1h";
 }): Promise<ActionResult<{ generatedKey: string; name: string }>> {
   try {
-    // providerGroup 安全模型：
-    // - 非管理员创建 Key 时，providerGroup 必须是用户现有分组的子集（防止绕过分组隔离）
-    // - 若用户有分组限制但未指定 providerGroup，则新 Key 继承用户的全部分组
-    // - 若用户无分组限制，则新 Key 的 providerGroup 为空（可访问所有）
+    // NOTE(#400): providerGroup 安全模型（废弃 null 语义）：
+    // - Key.providerGroup 必须显式存储（默认 "default"），不再允许 null
+    // - 非管理员创建 Key 时，requested providerGroup 必须是用户现有分组的子集
+    // - 非管理员若要创建包含 default 的 Key，必须已拥有 default 分组的 Key
 
     const tError = await getTranslations("errors");
 
@@ -113,30 +133,26 @@ export async function addKey(data: {
 
     const userProviderGroup = normalizeProviderGroup(user.providerGroup);
     const requestedProviderGroup = normalizeProviderGroup(data.providerGroup);
-    let providerGroupForKey = isAdmin ? requestedProviderGroup : null;
 
-    if (!isAdmin) {
-      const userGroups = userProviderGroup ? userProviderGroup.split(",") : [];
-
-      if (userGroups.length > 0) {
-        // 如果未指定分组，继承用户的全部分组
-        if (!requestedProviderGroup) {
-          providerGroupForKey = userProviderGroup;
-        } else {
-          // 验证请求的分组是用户分组的子集
-          const userGroupSet = new Set(userGroups);
-          const requestedGroups = requestedProviderGroup.split(",");
-          const invalidGroups = requestedGroups.filter((g) => !userGroupSet.has(g));
-          if (invalidGroups.length > 0) {
-            return {
-              ok: false,
-              error: `无权使用以下分组: ${invalidGroups.join(", ")}`,
-              errorCode: ERROR_CODES.PERMISSION_DENIED,
-            };
-          }
-          providerGroupForKey = requestedProviderGroup;
-        }
-      }
+    let providerGroupForKey: string;
+    if (isAdmin) {
+      providerGroupForKey = requestedProviderGroup;
+    } else {
+      // NOTE(#400): Security - require an existing default-group key before allowing default
+      const userKeys = await findKeyList(data.userId);
+      const hasDefaultKey = userKeys.some((k) =>
+        parseProviderGroups(normalizeProviderGroup(k.providerGroup)).includes(
+          PROVIDER_GROUP.DEFAULT
+        )
+      );
+      providerGroupForKey = validateNonAdminProviderGroup(
+        userProviderGroup,
+        requestedProviderGroup,
+        {
+          hasDefaultKey,
+        },
+        tError
+      );
     }
 
     const validatedData = KeyFormSchema.parse({
@@ -240,12 +256,12 @@ export async function addKey(data: {
       limit_monthly_usd: validatedData.limitMonthlyUsd,
       limit_total_usd: validatedData.limitTotalUsd,
       limit_concurrent_sessions: validatedData.limitConcurrentSessions,
-      provider_group: validatedData.providerGroup || null,
+      provider_group: validatedData.providerGroup,
       cache_ttl_preference: validatedData.cacheTtlPreference,
     });
 
     // 自动同步用户分组（用户分组 = Key 分组并集）
-    if (session.user.role === "admin" && validatedData.providerGroup) {
+    if (session.user.role === "admin") {
       await syncUserProviderGroupFromKeys(data.userId);
     }
 
@@ -405,8 +421,8 @@ export async function editKey(
       validatedData.expiresAt === undefined ? null : new Date(validatedData.expiresAt);
 
     const isAdmin = session.user.role === "admin";
-    const nextProviderGroup = isAdmin ? normalizeProviderGroup(validatedData.providerGroup) : null;
     const prevProviderGroup = normalizeProviderGroup(key.providerGroup);
+    const nextProviderGroup = isAdmin ? normalizeProviderGroup(validatedData.providerGroup) : null;
     const providerGroupChanged = isAdmin && nextProviderGroup !== prevProviderGroup;
 
     await updateKey(keyId, {
@@ -423,7 +439,7 @@ export async function editKey(
       limit_total_usd: validatedData.limitTotalUsd,
       limit_concurrent_sessions: validatedData.limitConcurrentSessions,
       // providerGroup 为 admin-only 字段：非管理员不允许更新该字段
-      ...(isAdmin ? { provider_group: validatedData.providerGroup || null } : {}),
+      ...(isAdmin ? { provider_group: normalizeProviderGroup(validatedData.providerGroup) } : {}),
       cache_ttl_preference: validatedData.cacheTtlPreference,
     });
 
@@ -474,8 +490,8 @@ export async function removeKey(keyId: number): Promise<ActionResult> {
       const remainingGroups = new Set<string>();
       for (const k of userKeys) {
         if (k.id === keyId) continue;
-        if (!k.providerGroup) continue;
-        k.providerGroup
+        const group = k.providerGroup || PROVIDER_GROUP.DEFAULT;
+        group
           .split(",")
           .map((g) => g.trim())
           .filter(Boolean)
@@ -484,10 +500,7 @@ export async function removeKey(keyId: number): Promise<ActionResult> {
 
       const { findUserById } = await import("@/repository/user");
       const user = await findUserById(key.userId);
-      const currentGroups = (user?.providerGroup || "")
-        .split(",")
-        .map((g) => g.trim())
-        .filter(Boolean);
+      const currentGroups = parseProviderGroups(normalizeProviderGroup(user?.providerGroup));
 
       if (currentGroups.length > 0 && remainingGroups.size === 0) {
         return {
@@ -683,19 +696,20 @@ export async function toggleKeyEnabled(keyId: number, enabled: boolean): Promise
       };
     }
 
-    // 检查是否是最后一个启用的密钥（防止禁用最后一个）
+    // 禁用时检查是否是最后一个启用的密钥
     if (!enabled) {
       const activeKeyCount = await countActiveKeysByUser(key.userId);
       if (activeKeyCount <= 1) {
         return {
           ok: false,
-          error: tError("CANNOT_DISABLE_LAST_KEY") || "无法禁用最后一个可用密钥",
+          error: tError("CANNOT_DISABLE_LAST_KEY"),
           errorCode: ERROR_CODES.OPERATION_FAILED,
         };
       }
     }
 
     await updateKey(keyId, { is_enabled: enabled });
+    revalidatePath("/dashboard/users");
     revalidatePath("/dashboard");
     return { ok: true };
   } catch (error) {
@@ -909,6 +923,59 @@ export async function batchUpdateKeys(
 
     logger.error("批量更新 Key 失败:", error);
     const message = error instanceof Error ? error.message : "批量更新 Key 失败";
+    return { ok: false, error: message, errorCode: ERROR_CODES.UPDATE_FAILED };
+  }
+}
+
+/**
+ * 快捷续期密钥（仅更新过期时间和可选的启用状态）
+ *
+ * 与 editKey 不同，此函数仅更新 expires_at 和 is_enabled 字段，
+ * 不会覆盖其他密钥设置（如 canLoginWebUi, dailyResetMode, limitConcurrentSessions 等）。
+ */
+export async function renewKeyExpiresAt(
+  keyId: number,
+  data: { expiresAt: string; enableKey?: boolean }
+): Promise<ActionResult> {
+  try {
+    const tError = await getTranslations("errors");
+
+    const session = await getSession();
+    if (!session) {
+      return { ok: false, error: tError("UNAUTHORIZED"), errorCode: ERROR_CODES.UNAUTHORIZED };
+    }
+
+    const key = await findKeyById(keyId);
+    if (!key) {
+      return { ok: false, error: tError("KEY_NOT_FOUND"), errorCode: ERROR_CODES.NOT_FOUND };
+    }
+
+    // 权限检查：用户只能续期自己的Key，管理员可以续期所有Key
+    if (session.user.role !== "admin" && session.user.id !== key.userId) {
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    const expiresAt = new Date(data.expiresAt);
+    if (Number.isNaN(expiresAt.getTime())) {
+      return { ok: false, error: tError("INVALID_FORMAT"), errorCode: ERROR_CODES.INVALID_FORMAT };
+    }
+
+    await updateKey(keyId, {
+      expires_at: expiresAt,
+      ...(data.enableKey === true ? { is_enabled: true } : {}),
+    });
+
+    revalidatePath("/dashboard/users");
+    revalidatePath("/dashboard");
+    return { ok: true };
+  } catch (error) {
+    logger.error("快捷续期密钥失败:", error);
+    const tError = await getTranslations("errors");
+    const message = error instanceof Error ? error.message : tError("UPDATE_KEY_FAILED");
     return { ok: false, error: message, errorCode: ERROR_CODES.UPDATE_FAILED };
   }
 }

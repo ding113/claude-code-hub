@@ -301,6 +301,13 @@
         "placeholder": "0 = без ограничений",
         "description": "Количество одновременных диалогов"
       },
+      "providerGroup": {
+        "label": "Группа провайдеров",
+        "placeholder": "Введите теги групп провайдеров и нажмите Enter",
+        "description": "Группы провайдеров для этого ключа (по умолчанию: default).",
+        "defaultDescription": "default включает провайдеров без groupTag.",
+        "descriptionWithUserGroup": "Группы провайдеров для этого ключа (группы пользователя: {group}; по умолчанию: default)."
+      },
       "submitText": "Сохранить изменения",
       "loadingText": "Сохранение...",
       "success": "Ключ успешно обновлен",

@@ -66,5 +66,13 @@
   "EXPIRES_AT_FIELD": "过期时间",
   "EXPIRES_AT_MUST_BE_FUTURE": "过期时间必须是未来时间",
   "EXPIRES_AT_TOO_FAR": "过期时间不能超过10年",
-  "CANNOT_DISABLE_SELF": "不能禁用自己的账户"
+  "CANNOT_DISABLE_SELF": "不能禁用自己的账户",
+
+  "KEY_NOT_FOUND": "密钥不存在",
+  "CREATE_KEY_FAILED": "创建密钥失败，请稍后重试",
+  "UPDATE_KEY_FAILED": "更新密钥失败，请稍后重试",
+  "DELETE_KEY_FAILED": "删除密钥失败，请稍后重试",
+  "CANNOT_DISABLE_LAST_KEY": "无法禁用最后一个可用密钥，用户至少需要保留一个启用的密钥",
+  "NO_DEFAULT_GROUP_PERMISSION": "无权使用 default 分组，您当前没有 default 分组的 Key",
+  "NO_GROUP_PERMISSION": "无权使用以下分组: {groups}"
 }

@@ -43,7 +43,7 @@ export function TocNav({ tocItems, activeId, tocReady, onItemClick }: TocNavProp
             key={item.id}
             onClick={() => onItemClick(item.id)}
             className={cn(
-              "block w-full text-left text-sm px-3 py-1.5 rounded-md transition-colors",
+              "block w-full text-left text-sm px-3 py-1.5 rounded-md transition-colors cursor-pointer",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
               item.level === 3 && "pl-6 text-xs",
               activeId === item.id

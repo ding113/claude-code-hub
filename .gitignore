@@ -35,6 +35,7 @@ yarn-error.log*
 # Bun lock files
 bun.lock
 bun.lockb
+.bun-cache/
 
 # env files (can opt-in for committing if needed)
 .env*

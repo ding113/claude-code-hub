@@ -303,6 +303,13 @@
         "placeholder": "0 = 無制限",
         "description": "同時実行可能な会話数"
       },
+      "providerGroup": {
+        "label": "プロバイダーグループ",
+        "placeholder": "プロバイダーグループタグを入力し、Enterで追加",
+        "description": "このキーのプロバイダーグループ（既定: default）",
+        "defaultDescription": "default は groupTag 未設定のプロバイダーを含みます",
+        "descriptionWithUserGroup": "このキーのプロバイダーグループ（ユーザーのグループ: {group}、既定: default）"
+      },
       "submitText": "変更を保存",
       "loadingText": "保存中...",
       "success": "キーが正常に更新されました",

@@ -339,8 +339,9 @@
       "providerGroup": {
         "label": "供应商分组",
         "placeholder": "输入供应商分组标签，按回车添加",
-        "description": "限制可使用的供应商分组（留空继承用户设置）",
-        "descriptionWithUserGroup": "限制可使用的供应商分组（用户分组: {group}）"
+        "description": "供应商分组（默认：default）",
+        "defaultDescription": "default 分组包含所有未设置 groupTag 的供应商",
+        "descriptionWithUserGroup": "供应商分组（默认：default；用户分组：{group}）"
       },
       "submitText": "保存修改",
       "loadingText": "保存中...",

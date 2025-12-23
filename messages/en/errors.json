@@ -67,5 +67,13 @@
   "EXPIRES_AT_FIELD": "Expiration date",
   "EXPIRES_AT_MUST_BE_FUTURE": "Expiration date must be in the future",
   "EXPIRES_AT_TOO_FAR": "Expiration date cannot exceed 10 years",
-  "CANNOT_DISABLE_SELF": "Cannot disable your own account"
+  "CANNOT_DISABLE_SELF": "Cannot disable your own account",
+
+  "KEY_NOT_FOUND": "Key not found",
+  "CREATE_KEY_FAILED": "Failed to create key, please try again later",
+  "UPDATE_KEY_FAILED": "Failed to update key, please try again later",
+  "DELETE_KEY_FAILED": "Failed to delete key, please try again later",
+  "CANNOT_DISABLE_LAST_KEY": "Cannot disable the last active key. Users must have at least one enabled key",
+  "NO_DEFAULT_GROUP_PERMISSION": "No permission to use default group. You don't have a Key with default group",
+  "NO_GROUP_PERMISSION": "No permission to use the following groups: {groups}"
 }

@@ -712,8 +712,9 @@
     "providerGroup": {
       "label": "供应商分组",
       "placeholder": "输入供应商分组标签，按回车添加",
-      "description": "限制可使用的供应商分组（留空继承用户设置）",
-      "descriptionWithUserGroup": "限制可使用的供应商分组（用户分组: {group}）"
+      "description": "供应商分组（默认：default）",
+      "defaultDescription": "default 分组包含所有未设置 groupTag 的供应商",
+      "descriptionWithUserGroup": "供应商分组（默认：default；用户分组：{group}）"
     },
     "errors": {
       "userIdMissing": "用户ID不存在",
@@ -749,8 +750,8 @@
     },
     "providerGroup": {
       "label": "供应商分组",
-      "placeholder": "输入分组标签",
-      "description": "指定用户专属的供应商分组（支持多个，逗号分隔）。系统将只从 groupTag 匹配的供应商中选择。留空=使用所有供应商"
+      "placeholder": "例如：default 或 premium,economy",
+      "description": "用户供应商分组（默认：default）。default 分组包含所有未设置 groupTag 的供应商。"
     },
     "tags": {
       "label": "用户标签",
@@ -1111,6 +1112,10 @@
       "currentExpiry": "当前到期时间",
       "neverExpires": "永不过期",
       "expired": "已过期",
+      "quickExtensionLabel": "快捷延期",
+      "quickExtensionHint": "在当前过期时间基础上延长（如已过期则从现在开始计算）",
+      "customDateLabel": "设置到期日期",
+      "customDateHint": "直接指定具体的到期日期",
       "quickOptions": {
         "7days": "7 天",
         "30days": "30 天",
@@ -1119,6 +1124,7 @@
       },
       "customDate": "自定义日期",
       "enableOnRenew": "同时启用用户",
+      "enableKeyOnRenew": "同时启用密钥",
       "cancel": "取消",
       "confirm": "确认续期",
       "confirming": "续期中...",
@@ -1364,7 +1370,26 @@
     },
     "keyStatus": {
       "enabled": "启用",
-      "disabled": "禁用"
+      "disabled": "禁用",
+      "keyEnabled": "密钥已启用",
+      "keyDisabled": "密钥已禁用",
+      "toggleKeyStatus": "切换密钥启用状态",
+      "clickToDisableKey": "点击禁用密钥",
+      "clickToEnableKey": "点击启用密钥",
+      "operationFailed": "操作失败",
+      "clickToQuickRenew": "点击快捷续期"
+    },
+    "userStatus": {
+      "enabled": "启用",
+      "disabled": "禁用",
+      "userEnabled": "用户已启用",
+      "userDisabled": "用户已禁用",
+      "toggleUserStatus": "切换用户启用状态",
+      "clickToDisableUser": "点击禁用用户",
+      "clickToEnableUser": "点击启用用户",
+      "operationFailed": "操作失败",
+      "deleteFailed": "删除失败",
+      "deleteSuccess": "删除成功"
     },
     "userEditSection": {
       "sections": {
@@ -1387,8 +1412,8 @@
           "placeholder": "输入标签（回车添加）"
         },
         "providerGroup": {
-          "label": "供应商分组（旧版）",
-          "placeholder": "输入供应商分组或留空"
+          "label": "供应商分组",
+          "placeholder": "default"
         },
         "allowedClients": {
           "label": "客户端限制",
@@ -1406,7 +1431,13 @@
           "enabledDescription": "当前已启用，禁用后该用户及其密钥将无法继续使用",
           "disabledDescription": "当前已禁用，启用后该用户及其密钥将恢复正常使用",
           "confirmDisable": "确认禁用",
-          "confirmEnable": "确认启用"
+          "confirmEnable": "确认启用",
+          "confirmEnableTitle": "确认启用用户",
+          "confirmDisableTitle": "确认禁用用户",
+          "confirmEnableDescription": "启用后该用户及其密钥将恢复正常使用",
+          "confirmDisableDescription": "禁用后该用户及其密钥将无法继续使用",
+          "cancel": "取消",
+          "processing": "处理中..."
         }
       },
       "presetClients": {
@@ -1440,14 +1471,15 @@
         },
       "providerGroup": {
         "label": "供应商分组",
-        "placeholder": "留空则允许所有 default 分组供应商",
+        "placeholder": "默认：default",
         "selectHint": "选择此 Key 可使用的供应商分组",
         "editHint": "已有密钥的分组不可修改",
         "allGroups": "使用全部分组",
-        "noGroupHint": "您没有分组限制，可以访问所有供应商"
+        "noGroupHint": "default 分组包含所有未设置 groupTag 的供应商"
       },
         "cacheTtl": {
           "label": "Cache TTL 覆写",
+          "description": "强制为包含 cache_control 的请求设置 Anthropic prompt cache TTL。",
           "options": {
             "inherit": "不覆写（跟随供应商/客户端）",
             "5m": "5m",

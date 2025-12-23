@@ -55,5 +55,17 @@
   "CREATE_USER_FAILED": "創建使用者失敗，請稍後重試",
   "UPDATE_USER_FAILED": "更新使用者失敗，請稍後重試",
   "DELETE_USER_FAILED": "刪除使用者失敗，請稍後重試",
-  "GET_USER_QUOTA_FAILED": "獲取使用者額度使用情況失敗"
+  "GET_USER_QUOTA_FAILED": "獲取使用者額度使用情況失敗",
+
+  "KEY_NOT_FOUND": "金鑰不存在",
+  "CREATE_KEY_FAILED": "創建金鑰失敗，請稍後重試",
+  "UPDATE_KEY_FAILED": "更新金鑰失敗，請稍後重試",
+  "DELETE_KEY_FAILED": "刪除金鑰失敗，請稍後重試",
+  "CANNOT_DISABLE_LAST_KEY": "無法禁用最後一個可用金鑰，使用者至少需要保留一個啟用的金鑰",
+  "EXPIRES_AT_FIELD": "過期時間",
+  "EXPIRES_AT_MUST_BE_FUTURE": "過期時間必須是未來時間",
+  "EXPIRES_AT_TOO_FAR": "過期時間不能超過10年",
+  "CANNOT_DISABLE_SELF": "不能禁用自己的帳戶",
+  "NO_DEFAULT_GROUP_PERMISSION": "無權使用 default 分組，您當前沒有 default 分組的 Key",
+  "NO_GROUP_PERMISSION": "無權使用以下分組: {groups}"
 }

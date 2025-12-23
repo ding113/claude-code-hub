@@ -30,7 +30,7 @@ export function TimeRangeSelector({
           key={option.key}
           data-active={value === option.key}
           disabled={disabled}
-          className="data-[active=true]:bg-muted/50 disabled:opacity-50 disabled:cursor-not-allowed relative z-30 flex flex-none flex-col items-start justify-center gap-1 border-t px-6 py-4 text-left lg:border-t-0 lg:px-8 lg:py-6 lg:[&:not(:first-child)]:border-l transition-all duration-200 hover:bg-muted/30 disabled:hover:bg-transparent"
+          className="data-[active=true]:bg-muted/50 disabled:opacity-50 disabled:cursor-not-allowed relative z-30 flex flex-none flex-col items-start justify-center gap-1 border-t px-6 py-4 text-left lg:border-t-0 lg:px-8 lg:py-6 lg:[&:not(:first-child)]:border-l transition-all duration-200 hover:bg-muted/30 disabled:hover:bg-transparent cursor-pointer"
           onClick={() => !disabled && onChange(option.key)}
           title={option.description ? t(option.description) : undefined}
         >

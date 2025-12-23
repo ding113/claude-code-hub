@@ -55,5 +55,17 @@
   "CREATE_USER_FAILED": "ユーザーの作成に失敗しました。後でもう一度お試しください",
   "UPDATE_USER_FAILED": "ユーザーの更新に失敗しました。後でもう一度お試しください",
   "DELETE_USER_FAILED": "ユーザーの削除に失敗しました。後でもう一度お試しください",
-  "GET_USER_QUOTA_FAILED": "ユーザークォータ情報の取得に失敗しました"
+  "GET_USER_QUOTA_FAILED": "ユーザークォータ情報の取得に失敗しました",
+
+  "KEY_NOT_FOUND": "キーが見つかりません",
+  "CREATE_KEY_FAILED": "キーの作成に失敗しました。後でもう一度お試しください",
+  "UPDATE_KEY_FAILED": "キーの更新に失敗しました。後でもう一度お試しください",
+  "DELETE_KEY_FAILED": "キーの削除に失敗しました。後でもう一度お試しください",
+  "CANNOT_DISABLE_LAST_KEY": "最後のアクティブなキーを無効にすることはできません。ユーザーには少なくとも1つの有効なキーが必要です",
+  "EXPIRES_AT_FIELD": "有効期限",
+  "EXPIRES_AT_MUST_BE_FUTURE": "有効期限は将来の日付である必要があります",
+  "EXPIRES_AT_TOO_FAR": "有効期限は10年を超えることはできません",
+  "CANNOT_DISABLE_SELF": "自分のアカウントを無効にすることはできません",
+  "NO_DEFAULT_GROUP_PERMISSION": "defaultグループを使用する権限がありません。defaultグループのキーを持っていません",
+  "NO_GROUP_PERMISSION": "以下のグループを使用する権限がありません: {groups}"
 }

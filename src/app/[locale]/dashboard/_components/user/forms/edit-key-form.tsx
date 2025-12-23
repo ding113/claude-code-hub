@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { useZodForm } from "@/lib/hooks/use-zod-form";
 import { getErrorMessage } from "@/lib/utils/error-messages";
 import { KeyFormSchema } from "@/lib/validation/schemas";
@@ -49,6 +50,7 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
   const [providerGroupSuggestions, setProviderGroupSuggestions] = useState<string[]>([]);
   const router = useRouter();
   const t = useTranslations("quota.keys.editKeyForm");
+  const tKeyEdit = useTranslations("userManagement.keyEditSection.fields");
   const tUI = useTranslations("ui.tagInput");
   const tCommon = useTranslations("common");
   const tErrors = useTranslations("errors");
@@ -65,9 +67,11 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
   }, [isAdmin, user?.id]);
 
   const formatExpiresAt = (expiresAt: string) => {
-    if (!expiresAt || expiresAt === "永不过期") return "";
+    if (!expiresAt) return "";
     try {
-      return new Date(expiresAt).toISOString().split("T")[0];
+      const date = new Date(expiresAt);
+      if (Number.isNaN(date.getTime())) return "";
+      return date.toISOString().split("T")[0];
     } catch {
       return "";
     }
@@ -79,7 +83,7 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
       name: keyData?.name || "",
       expiresAt: formatExpiresAt(keyData?.expiresAt || ""),
       canLoginWebUi: keyData?.canLoginWebUi ?? true,
-      providerGroup: keyData?.providerGroup || "",
+      providerGroup: keyData?.providerGroup || PROVIDER_GROUP.DEFAULT,
       cacheTtlPreference: keyData?.cacheTtlPreference ?? "inherit",
       limit5hUsd: keyData?.limit5hUsd ?? null,
       limitDailyUsd: keyData?.limitDailyUsd ?? null,
@@ -110,7 +114,7 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
             limitMonthlyUsd: data.limitMonthlyUsd,
             limitTotalUsd: data.limitTotalUsd,
             limitConcurrentSessions: data.limitConcurrentSessions,
-            ...(isAdmin ? { providerGroup: data.providerGroup || null } : {}),
+            ...(isAdmin ? { providerGroup: data.providerGroup || PROVIDER_GROUP.DEFAULT } : {}),
           });
           if (!res.ok) {
             const msg = res.errorCode
@@ -207,7 +211,7 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
       />
 
       <div className="space-y-2">
-        <Label>Cache TTL 覆写</Label>
+        <Label>{tKeyEdit("cacheTtl.label")}</Label>
         <Select
           value={form.values.cacheTtlPreference}
           onValueChange={(val) =>
@@ -218,14 +222,12 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
             <SelectValue placeholder="inherit" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="inherit">不覆写（跟随供应商/客户端）</SelectItem>
-            <SelectItem value="5m">5m</SelectItem>
-            <SelectItem value="1h">1h</SelectItem>
+            <SelectItem value="inherit">{tKeyEdit("cacheTtl.options.inherit")}</SelectItem>
+            <SelectItem value="5m">{tKeyEdit("cacheTtl.options.5m")}</SelectItem>
+            <SelectItem value="1h">{tKeyEdit("cacheTtl.options.1h")}</SelectItem>
           </SelectContent>
         </Select>
-        <p className="text-xs text-muted-foreground">
-          强制为包含 cache_control 的请求设置 Anthropic prompt cache TTL。
-        </p>
+        <p className="text-xs text-muted-foreground">{tKeyEdit("cacheTtl.description")}</p>
       </div>
 
       <FormGrid columns={2}>

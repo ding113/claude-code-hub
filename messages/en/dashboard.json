@@ -711,8 +711,9 @@
     "providerGroup": {
       "label": "Provider Group",
       "placeholder": "Enter provider group tags, press Enter to add",
-      "description": "Limit to specific provider groups (empty = inherit from user)",
-      "descriptionWithUserGroup": "Limit to specific provider groups (User group: {group})"
+      "description": "Provider groups for this key (default: default).",
+      "defaultDescription": "default includes providers without groupTag.",
+      "descriptionWithUserGroup": "Provider groups for this key (user groups: {group}; default: default)."
     },
     "errors": {
       "userIdMissing": "User ID does not exist",
@@ -748,8 +749,8 @@
     },
     "providerGroup": {
       "label": "Provider Group",
-      "placeholder": "e.g., premium or premium,economy (optional)",
-      "description": "Specify user-specific provider groups (supports multiple, comma-separated). The system will only select from providers matching the groupTag. Leave blank = use all providers"
+      "placeholder": "e.g., default or premium,economy",
+      "description": "User provider groups (default: default). Providers without groupTag belong to default."
     },
     "tags": {
       "label": "User Tags",
@@ -1045,6 +1046,10 @@
       "currentExpiry": "Current Expiration",
       "neverExpires": "Never expires",
       "expired": "Expired",
+      "quickExtensionLabel": "Quick Extension",
+      "quickExtensionHint": "Extend from current expiry (or from now if expired)",
+      "customDateLabel": "Set Expiry Date",
+      "customDateHint": "Directly specify an expiry date",
       "quickOptions": {
         "7days": "7 Days",
         "30days": "30 Days",
@@ -1053,6 +1058,7 @@
       },
       "customDate": "Custom Date",
       "enableOnRenew": "Also enable user",
+      "enableKeyOnRenew": "Also enable key",
       "cancel": "Cancel",
       "confirm": "Confirm Renewal",
       "confirming": "Renewing...",
@@ -1300,7 +1306,26 @@
     },
     "keyStatus": {
       "enabled": "Enabled",
-      "disabled": "Disabled"
+      "disabled": "Disabled",
+      "keyEnabled": "Key enabled",
+      "keyDisabled": "Key disabled",
+      "toggleKeyStatus": "Toggle key status",
+      "clickToDisableKey": "Click to disable key",
+      "clickToEnableKey": "Click to enable key",
+      "operationFailed": "Operation failed",
+      "clickToQuickRenew": "Click to quick renew"
+    },
+    "userStatus": {
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "userEnabled": "User enabled",
+      "userDisabled": "User disabled",
+      "toggleUserStatus": "Toggle user status",
+      "clickToDisableUser": "Click to disable user",
+      "clickToEnableUser": "Click to enable user",
+      "operationFailed": "Operation failed",
+      "deleteFailed": "Delete failed",
+      "deleteSuccess": "Delete successful"
     },
     "userEditSection": {
       "sections": {
@@ -1323,8 +1348,8 @@
           "placeholder": "Enter tag (press Enter to add)"
         },
         "providerGroup": {
-          "label": "Provider Group (Legacy)",
-          "placeholder": "Enter provider group or leave empty"
+          "label": "Provider Group",
+          "placeholder": "default"
         },
         "allowedClients": {
           "label": "Client Restrictions",
@@ -1342,7 +1367,13 @@
           "enabledDescription": "Currently enabled. Disabling will prevent this user and their keys from being used.",
           "disabledDescription": "Currently disabled. Enabling will restore normal access for this user and their keys.",
           "confirmDisable": "Confirm Disable",
-          "confirmEnable": "Confirm Enable"
+          "confirmEnable": "Confirm Enable",
+          "confirmEnableTitle": "Confirm Enable User",
+          "confirmDisableTitle": "Confirm Disable User",
+          "confirmEnableDescription": "Enabling will restore normal access for this user and their keys.",
+          "confirmDisableDescription": "Disabling will prevent this user and their keys from being used.",
+          "cancel": "Cancel",
+          "processing": "Processing..."
         }
       },
       "presetClients": {
@@ -1376,14 +1407,15 @@
         },
       "providerGroup": {
         "label": "Provider Group",
-        "placeholder": "Leave empty to allow all default group providers",
-        "selectHint": "Select the provider group(s) this key can use.",
+        "placeholder": "Default: default",
+        "selectHint": "Select the provider group(s) this key can use (default: default).",
         "editHint": "Provider group cannot be changed for existing keys.",
         "allGroups": "Use all groups",
-        "noGroupHint": "You have no group restrictions and can access all providers."
+        "noGroupHint": "default includes providers without groupTag."
       },
         "cacheTtl": {
           "label": "Cache TTL Override",
+          "description": "Force Anthropic prompt cache TTL for requests containing cache_control.",
           "options": {
             "inherit": "No override (follow provider/client)",
             "5m": "5m",

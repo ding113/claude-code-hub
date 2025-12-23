@@ -335,8 +335,9 @@
       "providerGroup": {
         "label": "Provider Group",
         "placeholder": "Enter provider group tags, press Enter to add",
-        "description": "Limit to specific provider groups (empty = inherit from user)",
-        "descriptionWithUserGroup": "Limit to specific provider groups (User group: {group})"
+        "description": "Provider groups for this key (default: default).",
+        "defaultDescription": "default includes providers without groupTag.",
+        "descriptionWithUserGroup": "Provider groups for this key (user groups: {group}; default: default)."
       },
       "submitText": "Save Changes",
       "loadingText": "Saving...",

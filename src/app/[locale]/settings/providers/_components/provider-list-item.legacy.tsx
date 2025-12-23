@@ -511,7 +511,7 @@ export function ProviderListItem({
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className="w-full text-center font-medium truncate text-foreground cursor-help">
-                  <span>{item.groupTag || "-"}</span>
+                  <span>{item.groupTag || "default"}</span>
                 </div>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="max-w-xs">
