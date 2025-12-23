@@ -122,6 +122,7 @@ export interface UserKeyDisplay {
   limitConcurrentSessions: number; // 并发 Session 上限
   // Provider group override (null = inherit from user)
   providerGroup?: string | null;
+  cacheTtlPreference?: "inherit" | "5m" | "1h";
 }
 
 /**

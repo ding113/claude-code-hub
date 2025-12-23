@@ -32,7 +32,7 @@ export interface UserKeyTableRowProps {
   onEditUser: (scrollToKeyId?: number) => void;
   onQuickRenew?: (user: UserDisplay) => void;
   optimisticExpiresAt?: Date;
-  currentUser?: { role: string };
+  currentUser?: { id?: number; role: string };
   currencyCode?: string;
   highlightKeyIds?: Set<number>;
   translations: {
@@ -94,6 +94,7 @@ export function UserKeyTableRow({
   onEditUser,
   onQuickRenew,
   optimisticExpiresAt,
+  currentUser,
   currencyCode,
   highlightKeyIds,
   translations,
@@ -377,6 +378,9 @@ export function UserKeyTableRow({
                     status: key.status,
                     modelStats: key.modelStats,
                   }}
+                  fullKeyData={key}
+                  keyOwnerUser={user}
+                  currentUser={currentUser}
                   userProviderGroup={user.providerGroup ?? null}
                   isMultiSelectMode={isMultiSelectMode}
                   isSelected={selectedKeyIds?.has(key.id) ?? false}

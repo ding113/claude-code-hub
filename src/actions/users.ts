@@ -249,6 +249,7 @@ export async function getUsers(): Promise<UserDisplay[]> {
               // Web UI 登录权限控制
               canLoginWebUi: key.canLoginWebUi,
               // 限额配置
+              cacheTtlPreference: key.cacheTtlPreference ?? "inherit",
               limit5hUsd: key.limit5hUsd,
               limitDailyUsd: key.limitDailyUsd,
               dailyResetMode: key.dailyResetMode,
@@ -400,6 +401,7 @@ export async function getUsersBatch(
               lastProviderName: stats?.lastProviderName ?? null,
               modelStats: stats?.modelStats ?? [],
               canLoginWebUi: key.canLoginWebUi,
+              cacheTtlPreference: key.cacheTtlPreference ?? "inherit",
               limit5hUsd: key.limit5hUsd,
               limitDailyUsd: key.limitDailyUsd,
               dailyResetMode: key.dailyResetMode,

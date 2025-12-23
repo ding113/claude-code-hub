@@ -19,12 +19,15 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { RelativeTime } from "@/components/ui/relative-time";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { CURRENCY_CONFIG, type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
 import { formatDate } from "@/lib/utils/date-format";
+import type { User, UserDisplay, UserKeyDisplay } from "@/types/user";
+import { EditKeyForm } from "./forms/edit-key-form";
 import { type QuickRenewKey, QuickRenewKeyDialog } from "./forms/quick-renew-key-dialog";
 import { KeyFullDisplayDialog } from "./key-full-display-dialog";
 import { KeyQuotaUsageDialog } from "./key-quota-usage-dialog";
@@ -54,7 +57,10 @@ export interface KeyRowItemProps {
   isMultiSelectMode?: boolean;
   isSelected?: boolean;
   onSelect?: (checked: boolean) => void;
-  onEdit: () => void;
+  fullKeyData?: UserKeyDisplay;
+  keyOwnerUser?: UserDisplay;
+  currentUser?: { id?: number; role: string };
+  onEdit?: () => void;
   onDelete: () => void;
   onViewLogs: () => void;
   onViewDetails: () => void;
@@ -109,6 +115,9 @@ export function KeyRowItem({
   onDelete,
   onViewLogs,
   onViewDetails: _onViewDetails,
+  fullKeyData,
+  keyOwnerUser,
+  currentUser,
   currencyCode,
   highlight,
   translations,
@@ -120,6 +129,7 @@ export function KeyRowItem({
   const [statsDialogOpen, setStatsDialogOpen] = useState(false);
   const [quotaDialogOpen, setQuotaDialogOpen] = useState(false);
   const [quickRenewOpen, setQuickRenewOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [isTogglingEnabled, setIsTogglingEnabled] = useState(false);
   // 乐观更新：本地状态跟踪启用状态
   const [localStatus, setLocalStatus] = useState<"enabled" | "disabled">(keyData.status);
@@ -131,6 +141,30 @@ export function KeyRowItem({
   const tBatchEdit = useTranslations("dashboard.userManagement.batchEdit");
   const tKeyRenew = useTranslations("dashboard.userManagement.quickRenew");
   const tKeyStatus = useTranslations("dashboard.userManagement.keyStatus");
+
+  const isAdmin = currentUser?.role === "admin";
+
+  const editFormUser: User | undefined = keyOwnerUser
+    ? {
+        id: keyOwnerUser.id,
+        name: keyOwnerUser.name,
+        description: keyOwnerUser.note ?? "",
+        role: keyOwnerUser.role,
+        rpm: keyOwnerUser.rpm,
+        dailyQuota: keyOwnerUser.dailyQuota,
+        providerGroup: keyOwnerUser.providerGroup ?? null,
+        limit5hUsd: keyOwnerUser.limit5hUsd ?? undefined,
+        limitWeeklyUsd: keyOwnerUser.limitWeeklyUsd ?? undefined,
+        limitMonthlyUsd: keyOwnerUser.limitMonthlyUsd ?? undefined,
+        limitTotalUsd: keyOwnerUser.limitTotalUsd ?? undefined,
+        limitConcurrentSessions: keyOwnerUser.limitConcurrentSessions ?? undefined,
+        dailyResetMode: keyOwnerUser.dailyResetMode ?? "fixed",
+        dailyResetTime: keyOwnerUser.dailyResetTime ?? "00:00",
+        isEnabled: keyOwnerUser.isEnabled ?? true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }
+    : undefined;
 
   // 当props更新时同步本地状态
   useEffect(() => {
@@ -533,7 +567,11 @@ export function KeyRowItem({
               aria-label={translations.actions.edit}
               onClick={(e) => {
                 e.stopPropagation();
-                onEdit();
+                if (fullKeyData && keyOwnerUser) {
+                  setEditDialogOpen(true);
+                } else if (onEdit) {
+                  onEdit();
+                }
               }}
               className="h-7 w-7"
             >
@@ -623,6 +661,37 @@ export function KeyRowItem({
         onConfirm={handleQuickRenewConfirm}
         translations={quickRenewTranslations}
       />
+
+      {fullKeyData && editFormUser && (
+        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+          <DialogContent className="max-h-[80vh] flex flex-col overflow-hidden">
+            <EditKeyForm
+              keyData={{
+                id: fullKeyData.id,
+                name: fullKeyData.name,
+                expiresAt: fullKeyData.expiresAt,
+                canLoginWebUi: fullKeyData.canLoginWebUi,
+                providerGroup: fullKeyData.providerGroup,
+                cacheTtlPreference: fullKeyData.cacheTtlPreference ?? "inherit",
+                limit5hUsd: fullKeyData.limit5hUsd,
+                limitDailyUsd: fullKeyData.limitDailyUsd,
+                dailyResetMode: fullKeyData.dailyResetMode,
+                dailyResetTime: fullKeyData.dailyResetTime,
+                limitWeeklyUsd: fullKeyData.limitWeeklyUsd,
+                limitMonthlyUsd: fullKeyData.limitMonthlyUsd,
+                limitTotalUsd: fullKeyData.limitTotalUsd,
+                limitConcurrentSessions: fullKeyData.limitConcurrentSessions,
+              }}
+              user={editFormUser}
+              isAdmin={isAdmin}
+              onSuccess={() => {
+                setEditDialogOpen(false);
+                router.refresh();
+              }}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
