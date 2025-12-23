@@ -233,9 +233,7 @@ export function QuickRenewKeyDialog({
             <Label htmlFor="custom-date" className="text-sm font-medium">
               {translations.customDateLabel}
             </Label>
-            <div className="text-xs text-muted-foreground mb-2">
-              {translations.customDateHint}
-            </div>
+            <div className="text-xs text-muted-foreground mb-2">{translations.customDateHint}</div>
             <DatePickerField
               id="custom-date"
               label=""

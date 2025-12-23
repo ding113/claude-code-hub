@@ -229,9 +229,7 @@ export function QuickRenewDialog({
             <Label htmlFor="quick-renew-date" className="text-sm font-medium">
               {translations.customDateLabel}
             </Label>
-            <div className="text-xs text-muted-foreground mb-2">
-              {translations.customDateHint}
-            </div>
+            <div className="text-xs text-muted-foreground mb-2">{translations.customDateHint}</div>
             <DatePickerField
               id="quick-renew-date"
               label=""
