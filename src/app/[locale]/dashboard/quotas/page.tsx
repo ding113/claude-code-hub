@@ -11,7 +11,7 @@ export default async function QuotasPage({ params }: { params: Promise<{ locale:
   }
 
   if (session.user.role !== "admin") {
-    return redirect({ href: "/my-usage", locale });
+    return redirect({ href: "/dashboard/my-quota", locale });
   }
 
   return redirect({ href: "/dashboard/quotas/users", locale });
