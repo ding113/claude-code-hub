@@ -36,7 +36,8 @@
     "requestChain": "Request Chain:",
     "systemError": "System Error",
     "concurrentLimit": "Concurrent Limit",
-    "http2Fallback": "HTTP/2 Fallback"
+    "http2Fallback": "HTTP/2 Fallback",
+    "clientError": "Client Error"
   },
   "timeline": {
     "sessionReuse": "Session Reuse",
@@ -127,6 +128,15 @@
     "requestUrl": "URL",
     "requestHeaders": "Headers",
     "requestBody": "Body",
-    "requestBodyTruncated": "(truncated)"
+    "requestBodyTruncated": "(truncated)",
+    "clientErrorNonRetryable": "Client Error (Attempt {attempt}, non-retryable)",
+    "matchedRule": "Matched Error Rule",
+    "ruleId": "Rule ID: {id}",
+    "ruleCategory": "Rule Category: {category}",
+    "rulePattern": "Rule Pattern: {pattern}",
+    "ruleMatchType": "Match Type: {matchType}",
+    "ruleDescription": "Description: {description}",
+    "ruleHasOverride": "Overrides: response={response}, statusCode={statusCode}",
+    "clientErrorNote": "This error is caused by client input and is not retried or counted in the circuit breaker."
   }
 }

@@ -36,7 +36,8 @@
     "requestChain": "リクエストチェーン:",
     "systemError": "システムエラー",
     "concurrentLimit": "同時実行制限",
-    "http2Fallback": "HTTP/2 フォールバック"
+    "http2Fallback": "HTTP/2 フォールバック",
+    "clientError": "クライアントエラー"
   },
   "timeline": {
     "sessionReuse": "セッション再利用",
@@ -127,6 +128,15 @@
     "requestUrl": "URL",
     "requestHeaders": "ヘッダー",
     "requestBody": "ボディ",
-    "requestBodyTruncated": "（切り捨て）"
+    "requestBodyTruncated": "（切り捨て）",
+    "clientErrorNonRetryable": "クライアントエラー（試行{attempt}、再試行不可）",
+    "matchedRule": "一致したエラールール",
+    "ruleId": "ルールID: {id}",
+    "ruleCategory": "カテゴリ: {category}",
+    "rulePattern": "パターン: {pattern}",
+    "ruleMatchType": "一致タイプ: {matchType}",
+    "ruleDescription": "説明: {description}",
+    "ruleHasOverride": "上書き: 応答={response} ステータスコード={statusCode}",
+    "clientErrorNote": "このエラーはクライアント入力が原因のため再試行せず、サーキットブレーカーにもカウントされません。"
   }
 }

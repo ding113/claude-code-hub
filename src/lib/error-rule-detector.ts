@@ -21,9 +21,11 @@ import { type ErrorOverrideResponse, getActiveErrorRules } from "@/repository/er
  */
 export interface ErrorDetectionResult {
   matched: boolean;
+  ruleId?: number; // 规则 ID
   category?: string; // 触发的错误分类
   pattern?: string; // 匹配的规则模式
   matchType?: string; // 匹配类型（regex/contains/exact）
+  description?: string; // 规则描述
   /** 覆写响应体：如果配置了则用此响应替换原始错误响应 */
   overrideResponse?: ErrorOverrideResponse;
   /** 覆写状态码：如果配置了则用此状态码替换原始状态码 */
@@ -34,6 +36,8 @@ export interface ErrorDetectionResult {
  * 缓存的正则规则
  */
 interface RegexPattern {
+  ruleId: number;
+  rawPattern: string;
   pattern: RegExp;
   category: string;
   description?: string;
@@ -45,6 +49,8 @@ interface RegexPattern {
  * 缓存的包含规则
  */
 interface ContainsPattern {
+  ruleId: number;
+  pattern: string;
   text: string;
   category: string;
   description?: string;
@@ -56,6 +62,8 @@ interface ContainsPattern {
  * 缓存的精确规则
  */
 interface ExactPattern {
+  ruleId: number;
+  pattern: string;
   text: string;
   category: string;
   description?: string;
@@ -197,6 +205,8 @@ class ErrorRuleDetector {
           case "contains": {
             const lowerText = rule.pattern.toLowerCase();
             newContainsPatterns.push({
+              ruleId: rule.id,
+              pattern: rule.pattern,
               text: lowerText,
               category: rule.category,
               description: rule.description ?? undefined,
@@ -209,6 +219,8 @@ class ErrorRuleDetector {
           case "exact": {
             const lowerText = rule.pattern.toLowerCase();
             newExactPatterns.set(lowerText, {
+              ruleId: rule.id,
+              pattern: rule.pattern,
               text: lowerText,
               category: rule.category,
               description: rule.description ?? undefined,
@@ -231,6 +243,8 @@ class ErrorRuleDetector {
 
               const pattern = new RegExp(rule.pattern, "i");
               newRegexPatterns.push({
+                ruleId: rule.id,
+                rawPattern: rule.pattern,
                 pattern,
                 category: rule.category,
                 description: rule.description ?? undefined,
@@ -323,9 +337,11 @@ class ErrorRuleDetector {
       if (lowerMessage.includes(pattern.text)) {
         return {
           matched: true,
+          ruleId: pattern.ruleId,
           category: pattern.category,
-          pattern: pattern.text,
+          pattern: pattern.pattern,
           matchType: "contains",
+          description: pattern.description,
           overrideResponse: pattern.overrideResponse,
           overrideStatusCode: pattern.overrideStatusCode,
         };
@@ -337,22 +353,34 @@ class ErrorRuleDetector {
     if (exactMatch) {
       return {
         matched: true,
+        ruleId: exactMatch.ruleId,
         category: exactMatch.category,
-        pattern: exactMatch.text,
+        pattern: exactMatch.pattern,
         matchType: "exact",
+        description: exactMatch.description,
         overrideResponse: exactMatch.overrideResponse,
         overrideStatusCode: exactMatch.overrideStatusCode,
       };
     }
 
     // 3. 正则匹配（最慢，但最灵活）
-    for (const { pattern, category, overrideResponse, overrideStatusCode } of this.regexPatterns) {
+    for (const {
+      ruleId,
+      rawPattern,
+      pattern,
+      category,
+      description,
+      overrideResponse,
+      overrideStatusCode,
+    } of this.regexPatterns) {
       if (pattern.test(errorMessage)) {
         return {
           matched: true,
+          ruleId,
           category,
-          pattern: pattern.source,
+          pattern: rawPattern,
           matchType: "regex",
+          description,
           overrideResponse,
           overrideStatusCode,
         };

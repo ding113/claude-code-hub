@@ -13,7 +13,11 @@ function getProviderStatus(item: ProviderChainItem): "✓" | "✗" | "⚡" | "�
     return "✓";
   }
   // 失败标记
-  if (item.reason === "retry_failed" || item.reason === "system_error") {
+  if (
+    item.reason === "retry_failed" ||
+    item.reason === "system_error" ||
+    item.reason === "client_error_non_retryable"
+  ) {
     return "✗";
   }
   // 并发限制失败
@@ -36,7 +40,13 @@ function isActualRequest(item: ProviderChainItem): boolean {
   if (item.reason === "concurrent_limit_failed") return true;
 
   // 失败记录
-  if (item.reason === "retry_failed" || item.reason === "system_error") return true;
+  if (
+    item.reason === "retry_failed" ||
+    item.reason === "system_error" ||
+    item.reason === "client_error_non_retryable"
+  ) {
+    return true;
+  }
 
   // HTTP/2 回退：算作一次中间事件（显示但不计入失败）
   if (item.reason === "http2_fallback") return true;
@@ -250,6 +260,8 @@ export function formatProviderDescription(
         desc += ` ${t("description.concurrentLimit")}`;
       } else if (item.reason === "http2_fallback") {
         desc += ` ${t("description.http2Fallback")}`;
+      } else if (item.reason === "client_error_non_retryable") {
+        desc += ` ${t("description.clientError")}`;
       }
 
       desc += "\n";
@@ -501,6 +513,48 @@ export function formatProviderTimeline(
         timeline += `\n${t("timeline.systemErrorNote")}`;
       }
 
+      continue;
+    }
+
+    // === 不可重试的客户端错误 ===
+    if (item.reason === "client_error_non_retryable") {
+      const attempt = item.attemptNumber ?? actualAttemptNumber ?? 0;
+      timeline += `${t("timeline.clientErrorNonRetryable", { attempt })}\n\n`;
+
+      if (item.errorDetails?.provider) {
+        const p = item.errorDetails.provider;
+        timeline += `${t("timeline.provider", { provider: p.name })}\n`;
+        timeline += `${t("timeline.statusCode", { code: p.statusCode })}\n`;
+        timeline += `${t("timeline.error", { error: p.statusText })}\n`;
+      } else {
+        timeline += `${t("timeline.provider", { provider: item.name })}\n`;
+        if (item.statusCode) {
+          timeline += `${t("timeline.statusCode", { code: item.statusCode })}\n`;
+        }
+        timeline += `${t("timeline.error", { error: item.errorMessage || t("timeline.unknown") })}\n`;
+      }
+
+      if (item.errorDetails?.matchedRule) {
+        const rule = item.errorDetails.matchedRule;
+        timeline += `\n${t("timeline.matchedRule")}:\n`;
+        timeline += `${t("timeline.ruleId", { id: rule.ruleId })}\n`;
+        timeline += `${t("timeline.ruleCategory", { category: rule.category })}\n`;
+        timeline += `${t("timeline.rulePattern", { pattern: rule.pattern })}\n`;
+        timeline += `${t("timeline.ruleMatchType", { matchType: rule.matchType })}\n`;
+        if (rule.description) {
+          timeline += `${t("timeline.ruleDescription", { description: rule.description })}\n`;
+        }
+        timeline += `${t("timeline.ruleHasOverride", {
+          response: rule.hasOverrideResponse ? "true" : "false",
+          statusCode: rule.hasOverrideStatusCode ? "true" : "false",
+        })}\n`;
+      }
+
+      if (item.errorDetails?.request) {
+        timeline += formatRequestDetails(item.errorDetails.request, t);
+      }
+
+      timeline += `\n${t("timeline.clientErrorNote")}`;
       continue;
     }
 
