@@ -985,6 +985,14 @@ export class ProxyForwarder {
       proxyUrl = buildProxyUrl(baseUrl, session.requestUrl);
       processedHeaders = headers;
 
+      if (session.sessionId) {
+        void SessionManager.storeSessionRequestHeaders(
+          session.sessionId,
+          processedHeaders,
+          session.requestSequence
+        ).catch((err) => logger.error("Failed to store request headers:", err));
+      }
+
       logger.debug("ProxyForwarder: Gemini request passthrough", {
         providerId: provider.id,
         type: provider.providerType,
@@ -1117,6 +1125,14 @@ export class ProxyForwarder {
       }
 
       processedHeaders = ProxyForwarder.buildHeaders(session, provider);
+
+      if (session.sessionId) {
+        void SessionManager.storeSessionRequestHeaders(
+          session.sessionId,
+          processedHeaders,
+          session.requestSequence
+        ).catch((err) => logger.error("Failed to store request headers:", err));
+      }
 
       if (process.env.NODE_ENV === "development") {
         logger.trace("ProxyForwarder: Final request headers", {
@@ -1371,7 +1387,13 @@ export class ProxyForwarder {
       // 原因：undici fetch 无法关闭自动解压，上游可能无视 accept-encoding: identity 返回 gzip
       // 当 gzip 流被提前终止时（如连接关闭），undici Gunzip 会抛出 "TypeError: terminated"
       response = useErrorTolerantFetch
-        ? await ProxyForwarder.fetchWithoutAutoDecode(proxyUrl, init, provider.id, provider.name)
+        ? await ProxyForwarder.fetchWithoutAutoDecode(
+            proxyUrl,
+            init,
+            provider.id,
+            provider.name,
+            session
+          )
         : await fetch(proxyUrl, init);
       // ⭐ fetch 成功：收到 HTTP 响应头，保留响应超时继续监控
       // 注意：undici 的 fetch 在收到 HTTP 响应头后就 resolve，但实际数据（SSE 首字节 / 完整 JSON）
@@ -1556,7 +1578,8 @@ export class ProxyForwarder {
                 proxyUrl,
                 http1FallbackInit,
                 provider.id,
-                provider.name
+                provider.name,
+                session
               )
             : await fetch(proxyUrl, http1FallbackInit);
 
@@ -1907,7 +1930,8 @@ export class ProxyForwarder {
     url: string,
     init: RequestInit & { dispatcher?: Dispatcher },
     providerId: number,
-    providerName: string
+    providerName: string,
+    session?: ProxySession
   ): Promise<Response> {
     logger.debug("ProxyForwarder: Using undici.request to bypass auto-decompression", {
       providerId,
@@ -1960,6 +1984,14 @@ export class ProxyForwarder {
       } else {
         responseHeaders.append(key, value);
       }
+    }
+
+    if (session?.sessionId) {
+      void SessionManager.storeSessionResponseHeaders(
+        session.sessionId,
+        responseHeaders,
+        session.requestSequence
+      ).catch((err) => logger.error("Failed to store response headers:", err));
     }
 
     // 检测响应是否为 gzip 压缩

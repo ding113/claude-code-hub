@@ -356,10 +356,14 @@
       "noDetailedData": "暫無詳細資料",
       "storageTip": "提示：請設定環境變數 STORE_SESSION_MESSAGES=true 以啟用 messages 和 response 儲存",
       "clientInfo": "用戶端資訊",
+      "requestHeaders": "請求頭",
+      "requestBody": "請求體",
       "requestMessages": "請求訊息",
       "requestMessagesDescription": "用戶端傳送的訊息內容",
-      "responseBody": "回覆主體內容",
+      "responseHeaders": "響應頭",
+      "responseBody": "響應體",
       "responseBodyDescription": "伺服器傳回的完整回覆（5分鐘 TTL）",
+      "noHeaders": "無資料",
       "noData": "暫無資料"
     },
     "actions": {

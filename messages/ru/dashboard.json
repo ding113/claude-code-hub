@@ -355,10 +355,14 @@
       "noDetailedData": "Подробные данные отсутствуют",
       "storageTip": "Подсказка: установите переменную окружения STORE_SESSION_MESSAGES=true, чтобы включить сохранение сообщений и ответов",
       "clientInfo": "Информация о клиенте",
+      "requestHeaders": "Заголовки запроса",
+      "requestBody": "Тело запроса",
       "requestMessages": "Сообщения запроса",
       "requestMessagesDescription": "Содержимое сообщения, отправленного клиентом",
-      "responseBody": "Содержимое тела ответа",
+      "responseHeaders": "Заголовки ответа",
+      "responseBody": "Тело ответа",
       "responseBodyDescription": "Полный ответ сервера (TTL 5 минут)",
+      "noHeaders": "Нет данных",
       "noData": "Нет данных"
     },
     "actions": {

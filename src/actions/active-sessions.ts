@@ -12,6 +12,14 @@ import type { ActiveSessionInfo } from "@/types/session";
 import { summarizeTerminateSessionsBatch } from "./active-sessions-utils";
 import type { ActionResult } from "./types";
 
+function normalizeRequestSequence(requestSequence?: number): number | undefined {
+  if (typeof requestSequence !== "number") return undefined;
+  if (!Number.isFinite(requestSequence)) return undefined;
+  if (!Number.isInteger(requestSequence)) return undefined;
+  if (requestSequence <= 0) return undefined;
+  return requestSequence;
+}
+
 /**
  * 获取所有活跃 session 的详细信息（使用聚合数据 + 批量查询 + 缓存）
  * 用于实时监控页面
@@ -512,6 +520,8 @@ export async function getSessionDetails(
   ActionResult<{
     messages: unknown | null;
     response: string | null;
+    requestHeaders: Record<string, string> | null;
+    responseHeaders: Record<string, string> | null;
     sessionStats: Awaited<
       ReturnType<typeof import("@/repository/message").aggregateSessionStats>
     > | null;
@@ -572,12 +582,18 @@ export async function getSessionDetails(
       };
     }
 
-    // 5. 并行获取 messages 和 response（不缓存，因为这些数据较大）
+    // 5. 解析 requestSequence：未指定时默认取当前最新请求序号
     const { SessionManager } = await import("@/lib/session-manager");
-    const [messages, response, requestCount] = await Promise.all([
-      SessionManager.getSessionMessages(sessionId, requestSequence),
-      SessionManager.getSessionResponse(sessionId, requestSequence),
-      SessionManager.getSessionRequestCount(sessionId),
+    const requestCount = await SessionManager.getSessionRequestCount(sessionId);
+    const normalizedSequence = normalizeRequestSequence(requestSequence);
+    const effectiveSequence = normalizedSequence ?? (requestCount > 0 ? requestCount : undefined);
+
+    // 6. 并行获取 messages 和 response（不缓存，因为这些数据较大）
+    const [messages, response, requestHeaders, responseHeaders] = await Promise.all([
+      SessionManager.getSessionMessages(sessionId, effectiveSequence),
+      SessionManager.getSessionResponse(sessionId, effectiveSequence),
+      SessionManager.getSessionRequestHeaders(sessionId, effectiveSequence),
+      SessionManager.getSessionResponseHeaders(sessionId, effectiveSequence),
     ]);
 
     return {
@@ -585,8 +601,10 @@ export async function getSessionDetails(
       data: {
         messages,
         response,
+        requestHeaders,
+        responseHeaders,
         sessionStats,
-        currentSequence: requestSequence ?? (requestCount > 0 ? requestCount : null),
+        currentSequence: effectiveSequence ?? null,
       },
     };
   } catch (error) {

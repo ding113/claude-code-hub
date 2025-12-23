@@ -356,10 +356,14 @@
       "noDetailedData": "No detailed data available",
       "storageTip": "Tip: Set environment variable STORE_SESSION_MESSAGES=true to enable messages and response storage",
       "clientInfo": "Client Info",
+      "requestHeaders": "Request Headers",
+      "requestBody": "Request Body",
       "requestMessages": "Request Messages",
       "requestMessagesDescription": "Message content sent by the client",
-      "responseBody": "Response Body Content",
+      "responseHeaders": "Response Headers",
+      "responseBody": "Response Body",
       "responseBodyDescription": "Complete server response (5-minute TTL)",
+      "noHeaders": "No data",
       "noData": "No Data"
     },
     "actions": {

@@ -356,10 +356,14 @@
       "noDetailedData": "暂无详细数据",
       "storageTip": "提示：请设置环境变量 STORE_SESSION_MESSAGES=true 以启用 messages 和 response 存储",
       "clientInfo": "客户端信息",
+      "requestHeaders": "请求头",
+      "requestBody": "请求体",
       "requestMessages": "请求 Messages",
       "requestMessagesDescription": "客户端发送的消息内容",
-      "responseBody": "响应体内容",
+      "responseHeaders": "响应头",
+      "responseBody": "响应体",
       "responseBodyDescription": "服务器返回的完整响应（5分钟 TTL）",
+      "noHeaders": "无数据",
       "noData": "暂无数据"
     },
     "actions": {
