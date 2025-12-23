@@ -10,6 +10,7 @@ import { getSession } from "@/lib/auth";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
+import { normalizeProviderGroup, parseProviderGroups } from "@/lib/utils/provider-group";
 import { KeyFormSchema } from "@/lib/validation/schemas";
 import type { KeyStatistics } from "@/repository/key";
 import {
@@ -26,32 +27,13 @@ import type { Key } from "@/types/key";
 import type { ActionResult } from "./types";
 import { type BatchUpdateResult, syncUserProviderGroupFromKeys } from "./users";
 
-function normalizeProviderGroup(value: unknown): string {
-  if (value === null || value === undefined) return PROVIDER_GROUP.DEFAULT;
-  if (typeof value !== "string") return PROVIDER_GROUP.DEFAULT;
-  const trimmed = value.trim();
-  if (trimmed === "") return PROVIDER_GROUP.DEFAULT;
-
-  const groups = trimmed
-    .split(",")
-    .map((g) => g.trim())
-    .filter(Boolean);
-  if (groups.length === 0) return PROVIDER_GROUP.DEFAULT;
-
-  return Array.from(new Set(groups)).sort().join(",");
-}
-
-function parseProviderGroups(value: string): string[] {
-  return value
-    .split(",")
-    .map((g) => g.trim())
-    .filter(Boolean);
-}
+type TranslationFunction = (key: string, values?: Record<string, string>) => string;
 
 function validateNonAdminProviderGroup(
   userProviderGroup: string,
   requestedProviderGroup: string,
-  options: { hasDefaultKey: boolean }
+  options: { hasDefaultKey: boolean },
+  tError: TranslationFunction
 ): string {
   const userGroups = parseProviderGroups(userProviderGroup);
   const requestedGroups = parseProviderGroups(requestedProviderGroup);
@@ -63,12 +45,12 @@ function validateNonAdminProviderGroup(
   const userGroupSet = new Set(userGroups);
 
   if (requestedGroups.includes(PROVIDER_GROUP.DEFAULT) && !options.hasDefaultKey) {
-    throw new Error("无权使用 default 分组，您当前没有 default 分组的 Key");
+    throw new Error(tError("NO_DEFAULT_GROUP_PERMISSION"));
   }
 
   const invalidGroups = requestedGroups.filter((g) => !userGroupSet.has(g));
   if (invalidGroups.length > 0) {
-    throw new Error(`无权使用以下分组: ${invalidGroups.join(", ")}`);
+    throw new Error(tError("NO_GROUP_PERMISSION", { groups: invalidGroups.join(", ") }));
   }
 
   return requestedProviderGroup;
@@ -168,7 +150,8 @@ export async function addKey(data: {
         requestedProviderGroup,
         {
           hasDefaultKey,
-        }
+        },
+        tError
       );
     }
 

@@ -12,6 +12,7 @@ import { USER_DEFAULTS } from "@/lib/constants/user.constants";
 import { logger } from "@/lib/logger";
 import { getUnauthorizedFields } from "@/lib/permissions/user-field-permissions";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
+import { normalizeProviderGroup } from "@/lib/utils/provider-group";
 import { maskKey } from "@/lib/utils/validation";
 import { formatZodError } from "@/lib/utils/zod-i18n";
 import { CreateUserSchema, UpdateUserSchema } from "@/lib/validation/schemas";
@@ -73,21 +74,6 @@ class BatchUpdateError extends Error {
     this.name = "BatchUpdateError";
     this.errorCode = errorCode;
   }
-}
-
-function normalizeProviderGroup(value: unknown): string {
-  if (value === null || value === undefined) return PROVIDER_GROUP.DEFAULT;
-  if (typeof value !== "string") return PROVIDER_GROUP.DEFAULT;
-  const trimmed = value.trim();
-  if (trimmed === "") return PROVIDER_GROUP.DEFAULT;
-
-  const groups = trimmed
-    .split(",")
-    .map((g) => g.trim())
-    .filter(Boolean);
-  if (groups.length === 0) return PROVIDER_GROUP.DEFAULT;
-
-  return Array.from(new Set(groups)).sort().join(",");
 }
 
 /**

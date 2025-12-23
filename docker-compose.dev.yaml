@@ -39,5 +39,3 @@ services:
 
 volumes:
   db_dev_data:
-    external: true
-    name: bdfda8f623068194e970cb2f8a15c83ea2cec18de02778a970474eb5c53ed146
