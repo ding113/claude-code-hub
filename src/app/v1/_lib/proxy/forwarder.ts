@@ -567,24 +567,20 @@ export class ProxyForwarder {
             break; // ⭐ 跳出内层循环，进入供应商切换逻辑
           }
 
-          // ⭐ 5. 上游 404 错误处理（不计入熔断器，直接切换供应商）
+          // ⭐ 5. 上游 404 错误处理（不计入熔断器，先重试当前供应商，重试耗尽后切换）
           if (errorCategory === ErrorCategory.RESOURCE_NOT_FOUND) {
             const proxyError = lastError as ProxyError;
+            const willRetry = attemptCount < maxAttemptsPerProvider;
 
-            logger.warn(
-              "ProxyForwarder: Upstream 404 error, switching provider without circuit breaker",
-              {
-                providerId: currentProvider.id,
-                providerName: currentProvider.name,
-                statusCode: 404,
-                error: errorMessage,
-                attemptNumber: attemptCount,
-                totalProvidersAttempted,
-              }
-            );
-
-            // 记录到失败列表（避免重新选择）
-            failedProviderIds.push(currentProvider.id);
+            logger.warn("ProxyForwarder: Upstream 404 error", {
+              providerId: currentProvider.id,
+              providerName: currentProvider.name,
+              statusCode: 404,
+              error: errorMessage,
+              attemptNumber: attemptCount,
+              totalProvidersAttempted,
+              willRetry,
+            });
 
             // 记录到决策链（标记为 resource_not_found，不计入熔断）
             session.addProviderToChain(currentProvider, {
@@ -608,26 +604,33 @@ export class ProxyForwarder {
 
             // 不调用 recordFailure()，不计入熔断器
 
+            // 未耗尽重试次数：等待 100ms 后继续重试当前供应商
+            if (willRetry) {
+              await new Promise((resolve) => setTimeout(resolve, 100));
+              continue;
+            }
+
+            // 重试耗尽：加入失败列表并切换供应商
+            failedProviderIds.push(currentProvider.id);
             break; // ⭐ 跳出内层循环，进入供应商切换逻辑
           }
 
-          // ⭐ 6. 供应商错误处理（所有 4xx/5xx HTTP 错误 + 空响应错误，计入熔断器，直接切换）
+          // ⭐ 6. 供应商错误处理（所有 4xx/5xx HTTP 错误 + 空响应错误，计入熔断器，重试耗尽后切换）
           if (errorCategory === ErrorCategory.PROVIDER_ERROR) {
             // 🆕 空响应错误特殊处理（EmptyResponseError 不是 ProxyError）
             if (isEmptyResponseError(lastError)) {
               const emptyError = lastError as EmptyResponseError;
+              const willRetry = attemptCount < maxAttemptsPerProvider;
 
-              logger.warn("ProxyForwarder: Empty response detected, will switch provider", {
+              logger.warn("ProxyForwarder: Empty response detected", {
                 providerId: currentProvider.id,
                 providerName: currentProvider.name,
                 reason: emptyError.reason,
                 error: emptyError.message,
                 attemptNumber: attemptCount,
                 totalProvidersAttempted,
+                willRetry,
               });
-
-              // 记录到失败列表
-              failedProviderIds.push(currentProvider.id);
 
               // 获取熔断器健康信息
               const { health, config } = await getProviderHealthInfo(currentProvider.id);
@@ -652,17 +655,25 @@ export class ProxyForwarder {
                 },
               });
 
-              // 计入熔断器
+              // 未耗尽重试次数：等待 100ms 后继续重试当前供应商
+              if (willRetry) {
+                await new Promise((resolve) => setTimeout(resolve, 100));
+                continue;
+              }
+
+              // 重试耗尽：计入熔断器并切换供应商
               if (!session.isProbeRequest()) {
                 await recordFailure(currentProvider.id, lastError);
               }
 
+              failedProviderIds.push(currentProvider.id);
               break; // 跳出内层循环，进入供应商切换逻辑
             }
 
             // 常规 ProxyError 处理
             const proxyError = lastError as ProxyError;
             const statusCode = proxyError.statusCode;
+            const willRetry = attemptCount < maxAttemptsPerProvider;
 
             // 🆕 count_tokens 请求特殊处理：不计入熔断，不触发供应商切换
             if (session.isCountTokensRequest()) {
@@ -679,13 +690,14 @@ export class ProxyForwarder {
               throw lastError;
             }
 
-            logger.warn("ProxyForwarder: Provider error, will switch immediately", {
+            logger.warn("ProxyForwarder: Provider error occurred", {
               providerId: currentProvider.id,
               providerName: currentProvider.name,
               statusCode: statusCode,
               error: errorMessage,
               attemptNumber: attemptCount,
               totalProvidersAttempted,
+              willRetry,
             });
 
             // 🆕 特殊处理：400 + "Instructions are not valid" 错误智能重试
@@ -781,9 +793,6 @@ export class ProxyForwarder {
               }
             }
 
-            // 记录到失败列表（避免重新选择）
-            failedProviderIds.push(currentProvider.id);
-
             // 获取熔断器健康信息（用于决策链显示）
             const { health, config } = await getProviderHealthInfo(currentProvider.id);
 
@@ -809,7 +818,13 @@ export class ProxyForwarder {
               },
             });
 
-            // ⭐ 只有非探测请求才计入熔断器
+            // 未耗尽重试次数：等待 100ms 后继续重试当前供应商
+            if (willRetry) {
+              await new Promise((resolve) => setTimeout(resolve, 100));
+              continue;
+            }
+
+            // ⭐ 重试耗尽：只有非探测请求才计入熔断器
             if (session.isProbeRequest()) {
               logger.debug("ProxyForwarder: Probe request error, skipping circuit breaker", {
                 providerId: currentProvider.id,
@@ -820,6 +835,8 @@ export class ProxyForwarder {
               await recordFailure(currentProvider.id, lastError);
             }
 
+            // 加入失败列表并切换供应商
+            failedProviderIds.push(currentProvider.id);
             break; // ⭐ 跳出内层循环，进入供应商切换逻辑
           }
         }
