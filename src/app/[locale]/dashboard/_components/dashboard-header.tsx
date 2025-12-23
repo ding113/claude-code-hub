@@ -23,7 +23,9 @@ export function DashboardHeader({ session }: DashboardHeaderProps) {
     { href: "/dashboard/leaderboard", label: t("leaderboard") },
     { href: "/dashboard/availability", label: t("availability"), adminOnly: true },
     { href: "/dashboard/providers", label: t("providers"), adminOnly: true },
-    { href: "/dashboard/quotas", label: t("quotasManagement") },
+    ...(isAdmin
+      ? [{ href: "/dashboard/quotas", label: t("quotasManagement") }]
+      : [{ href: "/dashboard/my-quota", label: t("myQuota") }]),
     { href: "/dashboard/users", label: t("userManagement") },
     { href: "/usage-doc", label: t("documentation") },
     { href: "/settings", label: t("systemSettings"), adminOnly: true },
