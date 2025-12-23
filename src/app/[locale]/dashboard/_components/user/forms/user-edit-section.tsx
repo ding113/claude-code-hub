@@ -15,6 +15,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
@@ -395,15 +396,20 @@ export function UserEditSection({
             />
 
             {showProviderGroup && translations.fields.providerGroup && (
-              <TextField
-                label={translations.fields.providerGroup.label}
-                placeholder={translations.fields.providerGroup.placeholder}
-                value={user.providerGroup || PROVIDER_GROUP.DEFAULT}
-                onChange={(val) =>
-                  emitChange("providerGroup", val?.trim() || PROVIDER_GROUP.DEFAULT)
-                }
-                maxLength={50}
-              />
+              <div className="space-y-2">
+                <Label>{translations.fields.providerGroup.label}</Label>
+                <div className="flex flex-wrap gap-1 p-2 border rounded-md bg-muted/50">
+                  {(user.providerGroup || PROVIDER_GROUP.DEFAULT)
+                    .split(",")
+                    .map((g) => g.trim())
+                    .filter(Boolean)
+                    .map((group) => (
+                      <Badge key={group} variant="secondary" className="text-xs">
+                        {group}
+                      </Badge>
+                    ))}
+                </div>
+              </div>
             )}
           </div>
         </div>

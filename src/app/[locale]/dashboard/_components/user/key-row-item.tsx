@@ -147,7 +147,7 @@ export function KeyRowItem({
 
   const keyGroups = splitGroups(keyData.providerGroup);
   const effectiveGroups = keyGroups.length > 0 ? keyGroups : [translations.defaultGroup];
-  const visibleGroups = effectiveGroups.slice(0, 2);
+  const visibleGroups = effectiveGroups.slice(0, 1);
   const remainingGroups = Math.max(0, effectiveGroups.length - visibleGroups.length);
   const effectiveGroupText = effectiveGroups.join(", ");
 
@@ -278,8 +278,8 @@ export function KeyRowItem({
       className={cn(
         "grid items-center gap-3 px-3 py-2 text-sm border-b last:border-b-0 hover:bg-muted/40 transition-colors",
         isMultiSelectMode
-          ? "grid-cols-[24px_2fr_3fr_2fr_1fr_2fr_2fr_2fr_1fr]"
-          : "grid-cols-[2fr_3fr_2fr_1fr_2fr_2fr_2fr_1fr]",
+          ? "grid-cols-[24px_2fr_3fr_3fr_1fr_2fr_1.5fr_1.5fr_1.5fr]"
+          : "grid-cols-[2fr_3fr_2.5fr_1fr_2fr_1.5fr_1.5fr_1.5fr]",
         highlight && "bg-primary/10 ring-1 ring-primary/30"
       )}
     >

@@ -2,9 +2,9 @@
 
 import { format } from "date-fns";
 import { Calendar, Gauge, Key, Plus, Sparkles } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { DatePickerField } from "@/components/form/date-picker-field";
-import { TextField } from "@/components/form/form-field";
+import { TagInputField, TextField } from "@/components/form/form-field";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -296,6 +296,24 @@ export function KeyEditSection({
     return normalizedKeyProviderGroup;
   }, [normalizedKeyProviderGroup, normalizedUserProviderGroup, userGroups]);
 
+  // 普通用户选择分组时，自动移除 default
+  const handleUserProviderGroupChange = useCallback(
+    (newValue: string) => {
+      const groups = newValue
+        .split(",")
+        .map((g) => g.trim())
+        .filter(Boolean);
+      // 如果有多个分组且包含 default，移除 default
+      if (groups.length > 1 && groups.includes(PROVIDER_GROUP.DEFAULT)) {
+        const withoutDefault = groups.filter((g) => g !== PROVIDER_GROUP.DEFAULT);
+        onChange("providerGroup", withoutDefault.join(","));
+      } else {
+        onChange("providerGroup", newValue);
+      }
+    },
+    [onChange]
+  );
+
   return (
     <div ref={scrollRef} className="space-y-3 scroll-mt-24">
       {/* 基本信息区域 */}
@@ -425,46 +443,40 @@ export function KeyEditSection({
           />
         ) : userGroups.length > 0 ? (
           <div className="space-y-2">
-            <Label>{translations.fields.providerGroup.label}</Label>
-            <Select
-              value={normalizedKeyProviderGroup || normalizedUserProviderGroup}
-              onValueChange={(val) => onChange("providerGroup", val)}
-              disabled={keyData.id > 0}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder={translations.fields.providerGroup.placeholder} />
-              </SelectTrigger>
-              <SelectContent>
-                {extraKeyGroupOption ? (
-                  <SelectItem value={extraKeyGroupOption}>
-                    <Badge
-                      variant="secondary"
-                      className="text-xs font-mono max-w-[280px] truncate"
-                      title={extraKeyGroupOption}
-                    >
-                      {extraKeyGroupOption}
-                    </Badge>
-                  </SelectItem>
-                ) : null}
-                {userGroups.map((group) => (
-                  <SelectItem key={group} value={group}>
+            {keyData.id > 0 ? (
+              // 编辑模式：只读显示
+              <>
+                <Label>{translations.fields.providerGroup.label}</Label>
+                <div className="flex flex-wrap gap-1 p-2 border rounded-md bg-muted/50">
+                  {keyGroupOptions.length > 0 ? (
+                    keyGroupOptions.map((group) => (
+                      <Badge key={group} variant="secondary" className="text-xs">
+                        {group}
+                      </Badge>
+                    ))
+                  ) : (
                     <Badge variant="outline" className="text-xs">
-                      {group}
+                      {PROVIDER_GROUP.DEFAULT}
                     </Badge>
-                  </SelectItem>
-                ))}
-                {userGroups.length > 1 && (
-                  <SelectItem value={normalizedUserProviderGroup}>
-                    {translations.fields.providerGroup.allGroups || "全部分组"}
-                  </SelectItem>
-                )}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              {keyData.id > 0
-                ? translations.fields.providerGroup.editHint || "已有密钥的分组不可修改"
-                : translations.fields.providerGroup.selectHint || "选择此 Key 可使用的供应商分组"}
-            </p>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {translations.fields.providerGroup.editHint || "已有密钥的分组不可修改"}
+                </p>
+              </>
+            ) : (
+              // 创建模式：多选
+              <TagInputField
+                label={translations.fields.providerGroup.label}
+                placeholder={translations.fields.providerGroup.placeholder || "选择分组"}
+                value={keyData.providerGroup || PROVIDER_GROUP.DEFAULT}
+                onChange={handleUserProviderGroupChange}
+                suggestions={userGroups}
+                maxTags={userGroups.length + 1}
+                maxTagLength={50}
+                description={translations.fields.providerGroup.selectHint || "选择此 Key 可使用的供应商分组"}
+              />
+            )}
           </div>
         ) : keyGroupOptions.length > 0 ? (
           <div className="space-y-2">

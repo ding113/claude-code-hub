@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { getProviderGroupsWithCount } from "@/actions/providers";
 import { TagInputField } from "@/components/form/form-field";
 import type { TagInputSuggestion } from "@/components/ui/tag-input";
+import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 
 export interface ProviderGroupSelectProps {
   /** Comma-separated group tags. */
@@ -103,6 +104,24 @@ export function ProviderGroupSelect({
     return base;
   }, [translations, isLoading]);
 
+  // 选择新分组后自动移除 "default"
+  const handleChange = useCallback(
+    (newValue: string) => {
+      const groupList = newValue
+        .split(",")
+        .map((g) => g.trim())
+        .filter(Boolean);
+      // 如果有多个分组且包含 default，移除 default
+      if (groupList.length > 1 && groupList.includes(PROVIDER_GROUP.DEFAULT)) {
+        const withoutDefault = groupList.filter((g) => g !== PROVIDER_GROUP.DEFAULT);
+        onChange(withoutDefault.join(","));
+      } else {
+        onChange(newValue);
+      }
+    },
+    [onChange]
+  );
+
   return (
     <TagInputField
       label={getTranslation(translations, "label", "供应商分组")}
@@ -116,7 +135,7 @@ export function ProviderGroupSelect({
         toast.error(getTranslation(translations, `tagInputErrors.${reason}`, reason));
       }}
       value={value}
-      onChange={onChange}
+      onChange={handleChange}
     />
   );
 }
