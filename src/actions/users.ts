@@ -1292,6 +1292,7 @@ export async function toggleUserEnabled(userId: number, enabled: boolean): Promi
 
     await updateUser(userId, { isEnabled: enabled });
 
+    revalidatePath("/dashboard/users");
     revalidatePath("/dashboard");
     return { ok: true };
   } catch (error) {

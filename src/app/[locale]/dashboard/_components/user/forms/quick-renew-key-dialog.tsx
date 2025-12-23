@@ -18,18 +18,18 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { formatDate, formatDateDistance } from "@/lib/utils/date-format";
 
-export interface QuickRenewUser {
+export interface QuickRenewKey {
   id: number;
   name: string;
-  expiresAt?: Date | null;
-  isEnabled: boolean;
+  expiresAt?: string | null;
+  status: "enabled" | "disabled";
 }
 
-export interface QuickRenewDialogProps {
+export interface QuickRenewKeyDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  user: QuickRenewUser | null;
-  onConfirm: (userId: number, expiresAt: Date, enableUser?: boolean) => Promise<{ ok: boolean }>;
+  keyData: QuickRenewKey | null;
+  onConfirm: (keyId: number, expiresAt: Date, enableKey?: boolean) => Promise<{ ok: boolean }>;
   translations: {
     title: string;
     description: string;
@@ -60,13 +60,13 @@ function getTranslation(translations: Record<string, unknown>, path: string, fal
   return typeof value === "string" && value.trim() ? value : fallback;
 }
 
-export function QuickRenewDialog({
+export function QuickRenewKeyDialog({
   open,
   onOpenChange,
-  user,
+  keyData,
   onConfirm,
   translations,
-}: QuickRenewDialogProps) {
+}: QuickRenewKeyDialogProps) {
   const locale = useLocale();
   const [customDate, setCustomDate] = useState("");
   const [enableOnRenew, setEnableOnRenew] = useState(false);
@@ -74,10 +74,14 @@ export function QuickRenewDialog({
 
   // Format current expiry for display
   const currentExpiryText = useMemo(() => {
-    if (!user?.expiresAt) {
+    if (!keyData?.expiresAt) {
       return getTranslation(translations, "neverExpires", "Never expires");
     }
-    const expiresAt = user.expiresAt instanceof Date ? user.expiresAt : new Date(user.expiresAt);
+    const expiresAt = new Date(keyData.expiresAt);
+    // 检查日期是否有效
+    if (Number.isNaN(expiresAt.getTime())) {
+      return getTranslation(translations, "neverExpires", "Never expires");
+    }
     const now = new Date();
     if (expiresAt <= now) {
       return getTranslation(translations, "expired", "Expired");
@@ -85,27 +89,27 @@ export function QuickRenewDialog({
     const relative = formatDateDistance(expiresAt, now, locale, { addSuffix: true });
     const absolute = formatDate(expiresAt, "yyyy-MM-dd", locale);
     return `${relative} (${absolute})`;
-  }, [user?.expiresAt, locale, translations]);
+  }, [keyData?.expiresAt, locale, translations]);
 
   // Handle quick selection
   const handleQuickSelect = useCallback(
     async (days: number) => {
-      if (!user) return;
+      if (!keyData) return;
       setIsSubmitting(true);
       try {
         // Base date: max(current time, original expiry time)
-        const baseDate =
-          user.expiresAt && new Date(user.expiresAt) > new Date()
-            ? new Date(user.expiresAt)
-            : new Date();
+        let baseDate = new Date();
+        if (keyData.expiresAt) {
+          const expiresAtDate = new Date(keyData.expiresAt);
+          // 只有当日期有效且在未来时才使用
+          if (!Number.isNaN(expiresAtDate.getTime()) && expiresAtDate > baseDate) {
+            baseDate = expiresAtDate;
+          }
+        }
         const newDate = addDays(baseDate, days);
-        // Set to end of day
-        newDate.setHours(23, 59, 59, 999);
-        const result = await onConfirm(
-          user.id,
-          newDate,
-          !user.isEnabled && enableOnRenew ? true : undefined
-        );
+        const shouldEnable =
+          !keyData.status || keyData.status === "disabled" ? enableOnRenew : undefined;
+        const result = await onConfirm(keyData.id, newDate, shouldEnable);
         if (result.ok) {
           onOpenChange(false);
         }
@@ -113,79 +117,67 @@ export function QuickRenewDialog({
         setIsSubmitting(false);
       }
     },
-    [user, enableOnRenew, onConfirm, onOpenChange]
+    [keyData, enableOnRenew, onConfirm, onOpenChange]
   );
 
-  // Handle custom date confirm
-  const handleCustomConfirm = useCallback(async () => {
-    if (!user || !customDate) return;
+  // Handle custom date submission
+  const handleCustomDateSubmit = useCallback(async () => {
+    if (!keyData || !customDate) return;
     setIsSubmitting(true);
     try {
-      const [year, month, day] = customDate.split("-").map(Number);
-      if (Number.isNaN(year) || Number.isNaN(month) || Number.isNaN(day)) {
-        setIsSubmitting(false);
-        return;
-      }
-      const newDate = new Date(year, month - 1, day);
-      newDate.setHours(23, 59, 59, 999);
-      const result = await onConfirm(
-        user.id,
-        newDate,
-        !user.isEnabled && enableOnRenew ? true : undefined
-      );
+      const newDate = new Date(customDate);
+      const shouldEnable =
+        !keyData.status || keyData.status === "disabled" ? enableOnRenew : undefined;
+      const result = await onConfirm(keyData.id, newDate, shouldEnable);
       if (result.ok) {
         onOpenChange(false);
       }
     } finally {
       setIsSubmitting(false);
     }
-  }, [user, customDate, enableOnRenew, onConfirm, onOpenChange]);
+  }, [keyData, customDate, enableOnRenew, onConfirm, onOpenChange]);
 
-  // Reset state when dialog closes
+  // Reset state when dialog opens/closes
   const handleOpenChange = useCallback(
-    (nextOpen: boolean) => {
-      if (!nextOpen) {
+    (newOpen: boolean) => {
+      if (!newOpen) {
         setCustomDate("");
         setEnableOnRenew(false);
+        setIsSubmitting(false);
       }
-      onOpenChange(nextOpen);
+      onOpenChange(newOpen);
     },
     [onOpenChange]
   );
 
-  if (!user) return null;
+  if (!keyData) return null;
+
+  const isDisabled = keyData.status === "disabled";
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{getTranslation(translations, "title", "Quick Renew")}</DialogTitle>
-          <DialogDescription>
-            {getTranslation(
-              translations,
-              "description",
-              "Set new expiration date for user {userName}"
-            ).replace("{userName}", user.name)}
-          </DialogDescription>
+          <DialogTitle>{translations.title}</DialogTitle>
+          <DialogDescription>{translations.description}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           {/* Current expiry display */}
           <div className="space-y-2">
-            <Label className="text-sm font-medium">
-              {getTranslation(translations, "currentExpiry", "Current Expiration")}
-            </Label>
+            <Label className="text-sm font-medium">{translations.currentExpiry}</Label>
             <div className="text-sm text-muted-foreground">{currentExpiryText}</div>
           </div>
 
-          {/* Quick select buttons */}
+          {/* Quick options */}
           <div className="space-y-2">
             <Label className="text-sm font-medium">快捷延期</Label>
             <div className="text-xs text-muted-foreground mb-2">
               在当前过期时间基础上延长（如已过期则从现在开始计算）
             </div>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <Button
+                type="button"
                 variant="outline"
                 size="sm"
                 onClick={() => handleQuickSelect(7)}
@@ -194,10 +186,11 @@ export function QuickRenewDialog({
                 {isSubmitting ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  getTranslation(translations, "quickOptions.7days", "7 Days")
+                  translations.quickOptions["7days"]
                 )}
               </Button>
               <Button
+                type="button"
                 variant="outline"
                 size="sm"
                 onClick={() => handleQuickSelect(30)}
@@ -206,10 +199,11 @@ export function QuickRenewDialog({
                 {isSubmitting ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  getTranslation(translations, "quickOptions.30days", "30 Days")
+                  translations.quickOptions["30days"]
                 )}
               </Button>
               <Button
+                type="button"
                 variant="outline"
                 size="sm"
                 onClick={() => handleQuickSelect(90)}
@@ -218,10 +212,11 @@ export function QuickRenewDialog({
                 {isSubmitting ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  getTranslation(translations, "quickOptions.90days", "90 Days")
+                  translations.quickOptions["90days"]
                 )}
               </Button>
               <Button
+                type="button"
                 variant="outline"
                 size="sm"
                 onClick={() => handleQuickSelect(365)}
@@ -230,7 +225,7 @@ export function QuickRenewDialog({
                 {isSubmitting ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  getTranslation(translations, "quickOptions.1year", "1 Year")
+                  translations.quickOptions["1year"]
                 )}
               </Button>
             </div>
@@ -238,46 +233,57 @@ export function QuickRenewDialog({
 
           {/* Custom date picker */}
           <div className="space-y-2">
-            <Label htmlFor="quick-renew-date" className="text-sm font-medium">
+            <Label htmlFor="custom-date" className="text-sm font-medium">
               设置到期日期
             </Label>
             <div className="text-xs text-muted-foreground mb-2">直接指定具体的到期日期</div>
             <DatePickerField
-              id="quick-renew-date"
+              id="custom-date"
               label=""
               value={customDate}
               onChange={setCustomDate}
+              disabled={isSubmitting}
               minDate={new Date()}
             />
           </div>
 
-          {/* Enable on renew switch (only show if user is disabled) */}
-          {!user.isEnabled && (
-            <div className="flex items-center space-x-2">
+          {/* Enable on renew option (only show if key is disabled) */}
+          {isDisabled && (
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <Label htmlFor="enable-on-renew" className="text-sm font-medium cursor-pointer">
+                {translations.enableOnRenew}
+              </Label>
               <Switch
                 id="enable-on-renew"
                 checked={enableOnRenew}
                 onCheckedChange={setEnableOnRenew}
+                disabled={isSubmitting}
               />
-              <Label htmlFor="enable-on-renew" className="text-sm font-normal cursor-pointer">
-                {getTranslation(translations, "enableOnRenew", "Also enable user")}
-              </Label>
             </div>
           )}
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={isSubmitting}>
-            {getTranslation(translations, "cancel", "Cancel")}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => handleOpenChange(false)}
+            disabled={isSubmitting}
+          >
+            {translations.cancel}
           </Button>
-          <Button onClick={handleCustomConfirm} disabled={!customDate || isSubmitting}>
+          <Button
+            type="button"
+            onClick={handleCustomDateSubmit}
+            disabled={isSubmitting || !customDate}
+          >
             {isSubmitting ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                {getTranslation(translations, "confirming", "Renewing...")}
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                {translations.confirming}
               </>
             ) : (
-              getTranslation(translations, "confirm", "Confirm")
+              translations.confirm
             )}
           </Button>
         </DialogFooter>

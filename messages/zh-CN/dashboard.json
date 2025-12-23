@@ -1407,7 +1407,13 @@
           "enabledDescription": "当前已启用，禁用后该用户及其密钥将无法继续使用",
           "disabledDescription": "当前已禁用，启用后该用户及其密钥将恢复正常使用",
           "confirmDisable": "确认禁用",
-          "confirmEnable": "确认启用"
+          "confirmEnable": "确认启用",
+          "confirmEnableTitle": "确认启用用户",
+          "confirmDisableTitle": "确认禁用用户",
+          "confirmEnableDescription": "启用后该用户及其密钥将恢复正常使用",
+          "confirmDisableDescription": "禁用后该用户及其密钥将无法继续使用",
+          "cancel": "取消",
+          "processing": "处理中..."
         }
       },
       "presetClients": {
