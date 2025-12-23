@@ -3,16 +3,19 @@ import { logger } from "@/lib/logger";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { SessionTracker } from "@/lib/session-tracker";
 import { ProxyErrorHandler } from "./proxy/error-handler";
+import { ProxyError } from "./proxy/errors";
 import { detectClientFormat, detectFormatByEndpoint } from "./proxy/format-mapper";
 import { ProxyForwarder } from "./proxy/forwarder";
 import { GuardPipelineBuilder, RequestType } from "./proxy/guard-pipeline";
 import { ProxyResponseHandler } from "./proxy/response-handler";
+import { ProxyResponses } from "./proxy/responses";
 import { ProxySession } from "./proxy/session";
 
 export async function handleProxyRequest(c: Context): Promise<Response> {
-  const session = await ProxySession.fromContext(c);
-
+  let session: ProxySession | null = null;
   try {
+    session = await ProxySession.fromContext(c);
+
     // 自动检测请求格式（端点优先，请求体补充）
     if (session.originalFormat === "claude") {
       // 第一步：尝试端点检测（优先级最高，最准确）
@@ -76,10 +79,18 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
     return await ProxyResponseHandler.dispatch(session, response);
   } catch (error) {
     logger.error("Proxy handler error:", error);
-    return await ProxyErrorHandler.handle(session, error);
+    if (session) {
+      return await ProxyErrorHandler.handle(session, error);
+    }
+
+    if (error instanceof ProxyError) {
+      return ProxyResponses.buildError(error.statusCode, error.getClientSafeMessage());
+    }
+
+    return ProxyResponses.buildError(500, "代理请求发生未知错误");
   } finally {
     // 11. 减少并发计数（确保无论成功失败都执行）- 跳过 count_tokens
-    if (session.sessionId && !session.isCountTokensRequest()) {
+    if (session?.sessionId && !session.isCountTokensRequest()) {
       await SessionTracker.decrementConcurrentCount(session.sessionId);
     }
   }

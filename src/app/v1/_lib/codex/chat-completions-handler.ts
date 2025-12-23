@@ -11,11 +11,13 @@ import { logger } from "@/lib/logger";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { ProxyAuthenticator } from "../proxy/auth-guard";
 import { ProxyErrorHandler } from "../proxy/error-handler";
+import { ProxyError } from "../proxy/errors";
 import { ProxyForwarder } from "../proxy/forwarder";
 import { ProxyMessageService } from "../proxy/message-service";
 import { ProxyProviderResolver } from "../proxy/provider-selector";
 import { ProxyRateLimitGuard } from "../proxy/rate-limit-guard";
 import { ProxyResponseHandler } from "../proxy/response-handler";
+import { ProxyResponses } from "../proxy/responses";
 import { ProxySensitiveWordGuard } from "../proxy/sensitive-word-guard";
 import { ProxySession } from "../proxy/session";
 import { ProxySessionGuard } from "../proxy/session-guard";
@@ -34,9 +36,11 @@ import type { ChatCompletionRequest } from "./types/compatible";
 export async function handleChatCompletions(c: Context): Promise<Response> {
   logger.info("[ChatCompletions] Received OpenAI Compatible API request");
 
-  const session = await ProxySession.fromContext(c);
+  let session: ProxySession | null = null;
 
   try {
+    session = await ProxySession.fromContext(c);
+
     const request = session.request.message;
 
     // 格式检测
@@ -228,6 +232,14 @@ export async function handleChatCompletions(c: Context): Promise<Response> {
     return await ProxyResponseHandler.dispatch(session, response);
   } catch (error) {
     logger.error("[ChatCompletions] Handler error:", error);
-    return await ProxyErrorHandler.handle(session, error);
+    if (session) {
+      return await ProxyErrorHandler.handle(session, error);
+    }
+
+    if (error instanceof ProxyError) {
+      return ProxyResponses.buildError(error.statusCode, error.getClientSafeMessage());
+    }
+
+    return ProxyResponses.buildError(500, "代理请求发生未知错误");
   }
 }
