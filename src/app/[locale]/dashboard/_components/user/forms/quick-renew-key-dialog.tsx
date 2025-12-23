@@ -36,6 +36,10 @@ export interface QuickRenewKeyDialogProps {
     currentExpiry: string;
     neverExpires: string;
     expired: string;
+    quickExtensionLabel: string;
+    quickExtensionHint: string;
+    customDateLabel: string;
+    customDateHint: string;
     quickOptions: {
       "7days": string;
       "30days": string;
@@ -48,16 +52,6 @@ export interface QuickRenewKeyDialogProps {
     confirm: string;
     confirming: string;
   };
-}
-
-function getTranslation(translations: Record<string, unknown>, path: string, fallback: string) {
-  const value = path.split(".").reduce<unknown>((acc, key) => {
-    if (acc && typeof acc === "object" && key in (acc as Record<string, unknown>)) {
-      return (acc as Record<string, unknown>)[key];
-    }
-    return undefined;
-  }, translations);
-  return typeof value === "string" && value.trim() ? value : fallback;
 }
 
 export function QuickRenewKeyDialog({
@@ -75,16 +69,16 @@ export function QuickRenewKeyDialog({
   // Format current expiry for display
   const currentExpiryText = useMemo(() => {
     if (!keyData?.expiresAt) {
-      return getTranslation(translations, "neverExpires", "Never expires");
+      return translations.neverExpires;
     }
     const expiresAt = new Date(keyData.expiresAt);
     // 检查日期是否有效
     if (Number.isNaN(expiresAt.getTime())) {
-      return getTranslation(translations, "neverExpires", "Never expires");
+      return translations.neverExpires;
     }
     const now = new Date();
     if (expiresAt <= now) {
-      return getTranslation(translations, "expired", "Expired");
+      return translations.expired;
     }
     const relative = formatDateDistance(expiresAt, now, locale, { addSuffix: true });
     const absolute = formatDate(expiresAt, "yyyy-MM-dd", locale);
@@ -125,7 +119,10 @@ export function QuickRenewKeyDialog({
     if (!keyData || !customDate) return;
     setIsSubmitting(true);
     try {
-      const newDate = new Date(customDate);
+      // 解析为本地时间并设置为当天 23:59:59.999，确保用户选择的那一天整天都有效
+      // 注意：new Date("YYYY-MM-DD") 会解析为 UTC 00:00:00，导致时区偏移问题
+      const [year, month, day] = customDate.split("-").map(Number);
+      const newDate = new Date(year, month - 1, day, 23, 59, 59, 999);
       const shouldEnable =
         !keyData.status || keyData.status === "disabled" ? enableOnRenew : undefined;
       const result = await onConfirm(keyData.id, newDate, shouldEnable);
@@ -171,9 +168,9 @@ export function QuickRenewKeyDialog({
 
           {/* Quick options */}
           <div className="space-y-2">
-            <Label className="text-sm font-medium">快捷延期</Label>
+            <Label className="text-sm font-medium">{translations.quickExtensionLabel}</Label>
             <div className="text-xs text-muted-foreground mb-2">
-              在当前过期时间基础上延长（如已过期则从现在开始计算）
+              {translations.quickExtensionHint}
             </div>
             <div className="grid grid-cols-2 gap-2">
               <Button
@@ -234,9 +231,11 @@ export function QuickRenewKeyDialog({
           {/* Custom date picker */}
           <div className="space-y-2">
             <Label htmlFor="custom-date" className="text-sm font-medium">
-              设置到期日期
+              {translations.customDateLabel}
             </Label>
-            <div className="text-xs text-muted-foreground mb-2">直接指定具体的到期日期</div>
+            <div className="text-xs text-muted-foreground mb-2">
+              {translations.customDateHint}
+            </div>
             <DatePickerField
               id="custom-date"
               label=""

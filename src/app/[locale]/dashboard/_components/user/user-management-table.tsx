@@ -69,6 +69,10 @@ export interface UserManagementTableProps {
       currentExpiry: string;
       neverExpires: string;
       expired: string;
+      quickExtensionLabel: string;
+      quickExtensionHint: string;
+      customDateLabel: string;
+      customDateHint: string;
       quickOptions: {
         "7days": string;
         "30days": string;
@@ -251,6 +255,10 @@ export function UserManagementTable({
       currentExpiry: tUserMgmt("quickRenew.currentExpiry"),
       neverExpires: tUserMgmt("quickRenew.neverExpires"),
       expired: tUserMgmt("quickRenew.expired"),
+      quickExtensionLabel: tUserMgmt("quickRenew.quickExtensionLabel"),
+      quickExtensionHint: tUserMgmt("quickRenew.quickExtensionHint"),
+      customDateLabel: tUserMgmt("quickRenew.customDateLabel"),
+      customDateHint: tUserMgmt("quickRenew.customDateHint"),
       quickOptions: {
         "7days": tUserMgmt("quickRenew.quickOptions.7days"),
         "30days": tUserMgmt("quickRenew.quickOptions.30days"),

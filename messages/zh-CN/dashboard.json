@@ -1112,6 +1112,10 @@
       "currentExpiry": "当前到期时间",
       "neverExpires": "永不过期",
       "expired": "已过期",
+      "quickExtensionLabel": "快捷延期",
+      "quickExtensionHint": "在当前过期时间基础上延长（如已过期则从现在开始计算）",
+      "customDateLabel": "设置到期日期",
+      "customDateHint": "直接指定具体的到期日期",
       "quickOptions": {
         "7days": "7 天",
         "30days": "30 天",
@@ -1120,6 +1124,7 @@
       },
       "customDate": "自定义日期",
       "enableOnRenew": "同时启用用户",
+      "enableKeyOnRenew": "同时启用密钥",
       "cancel": "取消",
       "confirm": "确认续期",
       "confirming": "续期中...",
@@ -1365,7 +1370,26 @@
     },
     "keyStatus": {
       "enabled": "启用",
-      "disabled": "禁用"
+      "disabled": "禁用",
+      "keyEnabled": "密钥已启用",
+      "keyDisabled": "密钥已禁用",
+      "toggleKeyStatus": "切换密钥启用状态",
+      "clickToDisableKey": "点击禁用密钥",
+      "clickToEnableKey": "点击启用密钥",
+      "operationFailed": "操作失败",
+      "clickToQuickRenew": "点击快捷续期"
+    },
+    "userStatus": {
+      "enabled": "启用",
+      "disabled": "禁用",
+      "userEnabled": "用户已启用",
+      "userDisabled": "用户已禁用",
+      "toggleUserStatus": "切换用户启用状态",
+      "clickToDisableUser": "点击禁用用户",
+      "clickToEnableUser": "点击启用用户",
+      "operationFailed": "操作失败",
+      "deleteFailed": "删除失败",
+      "deleteSuccess": "删除成功"
     },
     "userEditSection": {
       "sections": {

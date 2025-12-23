@@ -1046,6 +1046,10 @@
       "currentExpiry": "Current Expiration",
       "neverExpires": "Never expires",
       "expired": "Expired",
+      "quickExtensionLabel": "Quick Extension",
+      "quickExtensionHint": "Extend from current expiry (or from now if expired)",
+      "customDateLabel": "Set Expiry Date",
+      "customDateHint": "Directly specify an expiry date",
       "quickOptions": {
         "7days": "7 Days",
         "30days": "30 Days",
@@ -1054,6 +1058,7 @@
       },
       "customDate": "Custom Date",
       "enableOnRenew": "Also enable user",
+      "enableKeyOnRenew": "Also enable key",
       "cancel": "Cancel",
       "confirm": "Confirm Renewal",
       "confirming": "Renewing...",
@@ -1301,7 +1306,26 @@
     },
     "keyStatus": {
       "enabled": "Enabled",
-      "disabled": "Disabled"
+      "disabled": "Disabled",
+      "keyEnabled": "Key enabled",
+      "keyDisabled": "Key disabled",
+      "toggleKeyStatus": "Toggle key status",
+      "clickToDisableKey": "Click to disable key",
+      "clickToEnableKey": "Click to enable key",
+      "operationFailed": "Operation failed",
+      "clickToQuickRenew": "Click to quick renew"
+    },
+    "userStatus": {
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "userEnabled": "User enabled",
+      "userDisabled": "User disabled",
+      "toggleUserStatus": "Toggle user status",
+      "clickToDisableUser": "Click to disable user",
+      "clickToEnableUser": "Click to enable user",
+      "operationFailed": "Operation failed",
+      "deleteFailed": "Delete failed",
+      "deleteSuccess": "Delete successful"
     },
     "userEditSection": {
       "sections": {

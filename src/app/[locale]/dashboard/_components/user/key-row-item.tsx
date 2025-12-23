@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { editKey, toggleKeyEnabled } from "@/actions/keys";
+import { renewKeyExpiresAt, toggleKeyEnabled } from "@/actions/keys";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -130,6 +130,7 @@ export function KeyRowItem({
   const tCommon = useTranslations("common");
   const tBatchEdit = useTranslations("dashboard.userManagement.batchEdit");
   const tKeyRenew = useTranslations("dashboard.userManagement.quickRenew");
+  const tKeyStatus = useTranslations("dashboard.userManagement.keyStatus");
 
   // 当props更新时同步本地状态
   useEffect(() => {
@@ -176,18 +177,18 @@ export function KeyRowItem({
       if (!res.ok) {
         // 失败时回滚UI状态
         setLocalStatus(checked ? "disabled" : "enabled");
-        toast.error(res.error || "操作失败");
+        toast.error(res.error || tKeyStatus("operationFailed"));
         setIsTogglingEnabled(false);
         return;
       }
-      toast.success(checked ? "密钥已启用" : "密钥已禁用");
+      toast.success(checked ? tKeyStatus("keyEnabled") : tKeyStatus("keyDisabled"));
       // 刷新服务端数据
       router.refresh();
     } catch (error) {
       // 失败时回滚UI状态
       setLocalStatus(checked ? "disabled" : "enabled");
       console.error("[KeyRowItem] toggle key enabled failed", error);
-      toast.error("操作失败");
+      toast.error(tKeyStatus("operationFailed"));
     } finally {
       setIsTogglingEnabled(false);
     }
@@ -213,30 +214,21 @@ export function KeyRowItem({
     }
 
     try {
-      const updateData: {
-        name: string;
-        expiresAt: string;
-        isEnabled?: boolean;
-      } = {
-        name: keyData.name,
+      // 使用专用的续期 action，避免 editKey 覆盖其他字段
+      const res = await renewKeyExpiresAt(keyData.id, {
         expiresAt: newExpiresAt,
-      };
-
-      if (enableKey !== undefined) {
-        updateData.isEnabled = enableKey;
-      }
-
-      const res = await editKey(keyData.id, updateData);
+        enableKey,
+      });
       if (!res.ok) {
         // 失败时回滚UI状态
         setLocalExpiresAt(keyData.expiresAt);
         if (enableKey !== undefined) {
           setLocalStatus(keyData.status);
         }
-        toast.error(res.error || "续期失败");
+        toast.error(res.error || tKeyRenew("failed"));
         return { ok: false };
       }
-      toast.success("续期成功");
+      toast.success(tKeyRenew("success"));
       router.refresh();
       return { ok: true };
     } catch (error) {
@@ -246,7 +238,7 @@ export function KeyRowItem({
         setLocalStatus(keyData.status);
       }
       console.error("[KeyRowItem] quick renew failed", error);
-      toast.error("续期失败");
+      toast.error(tKeyRenew("failed"));
       return { ok: false };
     }
   };
@@ -264,6 +256,10 @@ export function KeyRowItem({
     currentExpiry: tKeyRenew("currentExpiry"),
     neverExpires: tKeyRenew("neverExpires"),
     expired: tKeyRenew("expired"),
+    quickExtensionLabel: tKeyRenew("quickExtensionLabel"),
+    quickExtensionHint: tKeyRenew("quickExtensionHint"),
+    customDateLabel: tKeyRenew("customDateLabel"),
+    customDateHint: tKeyRenew("customDateHint"),
     quickOptions: {
       "7days": tKeyRenew("quickOptions.7days"),
       "30days": tKeyRenew("quickOptions.30days"),
@@ -271,7 +267,7 @@ export function KeyRowItem({
       "1year": tKeyRenew("quickOptions.1year"),
     },
     customDate: tKeyRenew("customDate"),
-    enableOnRenew: "同时启用密钥", // 直接硬编码，因为原文案是"同时启用用户"
+    enableOnRenew: tKeyRenew("enableKeyOnRenew"),
     cancel: tKeyRenew("cancel"),
     confirm: tKeyRenew("confirm"),
     confirming: tKeyRenew("confirming"),
@@ -442,7 +438,7 @@ export function KeyRowItem({
       {/* 过期时间 - clickable for quick renew */}
       <div
         className="min-w-0 text-sm text-muted-foreground cursor-pointer hover:text-primary hover:underline"
-        title="点击快捷续期"
+        title={tKeyStatus("clickToQuickRenew")}
         onClick={(e) => {
           e.stopPropagation();
           setQuickRenewOpen(true);
@@ -460,13 +456,15 @@ export function KeyRowItem({
                 checked={localStatus === "enabled"}
                 onCheckedChange={handleToggleEnabled}
                 disabled={isTogglingEnabled}
-                aria-label="切换密钥启用状态"
+                aria-label={tKeyStatus("toggleKeyStatus")}
                 className="scale-75"
               />
             </div>
           </TooltipTrigger>
           <TooltipContent>
-            {localStatus === "enabled" ? "点击禁用密钥" : "点击启用密钥"}
+            {localStatus === "enabled"
+              ? tKeyStatus("clickToDisableKey")
+              : tKeyStatus("clickToEnableKey")}
           </TooltipContent>
         </Tooltip>
         <Tooltip>

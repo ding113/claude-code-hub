@@ -943,3 +943,56 @@ export async function batchUpdateKeys(
     return { ok: false, error: message, errorCode: ERROR_CODES.UPDATE_FAILED };
   }
 }
+
+/**
+ * 快捷续期密钥（仅更新过期时间和可选的启用状态）
+ *
+ * 与 editKey 不同，此函数仅更新 expires_at 和 is_enabled 字段，
+ * 不会覆盖其他密钥设置（如 canLoginWebUi, dailyResetMode, limitConcurrentSessions 等）。
+ */
+export async function renewKeyExpiresAt(
+  keyId: number,
+  data: { expiresAt: string; enableKey?: boolean }
+): Promise<ActionResult> {
+  try {
+    const tError = await getTranslations("errors");
+
+    const session = await getSession();
+    if (!session) {
+      return { ok: false, error: tError("UNAUTHORIZED"), errorCode: ERROR_CODES.UNAUTHORIZED };
+    }
+
+    const key = await findKeyById(keyId);
+    if (!key) {
+      return { ok: false, error: tError("KEY_NOT_FOUND"), errorCode: ERROR_CODES.NOT_FOUND };
+    }
+
+    // 权限检查：用户只能续期自己的Key，管理员可以续期所有Key
+    if (session.user.role !== "admin" && session.user.id !== key.userId) {
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    const expiresAt = new Date(data.expiresAt);
+    if (Number.isNaN(expiresAt.getTime())) {
+      return { ok: false, error: tError("INVALID_FORMAT"), errorCode: ERROR_CODES.INVALID_FORMAT };
+    }
+
+    await updateKey(keyId, {
+      expires_at: expiresAt,
+      ...(data.enableKey === true ? { is_enabled: true } : {}),
+    });
+
+    revalidatePath("/dashboard/users");
+    revalidatePath("/dashboard");
+    return { ok: true };
+  } catch (error) {
+    logger.error("快捷续期密钥失败:", error);
+    const tError = await getTranslations("errors");
+    const message = error instanceof Error ? error.message : tError("UPDATE_KEY_FAILED");
+    return { ok: false, error: message, errorCode: ERROR_CODES.UPDATE_FAILED };
+  }
+}

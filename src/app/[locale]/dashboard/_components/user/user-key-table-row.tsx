@@ -100,6 +100,7 @@ export function UserKeyTableRow({
 }: UserKeyTableRowProps) {
   const locale = useLocale();
   const tBatchEdit = useTranslations("dashboard.userManagement.batchEdit");
+  const tUserStatus = useTranslations("dashboard.userManagement.userStatus");
   const router = useRouter();
   const [_isPending, startTransition] = useTransition();
   const [isTogglingEnabled, setIsTogglingEnabled] = useState(false);
@@ -115,17 +116,11 @@ export function UserKeyTableRow({
     setLocalIsEnabled(user.isEnabled);
   }, [user.isEnabled]);
 
-  // 当props更新时同步过期时间（添加user.id确保用户变化时也更新）
+  // 同步过期时间状态：优先使用乐观更新值，否则使用服务端数据
+  // 修复：当 optimisticExpiresAt 变为 undefined 时也能正确回滚到 user.expiresAt
   useEffect(() => {
-    setLocalExpiresAt(user.expiresAt);
-  }, [user.expiresAt, user.id]);
-
-  // 当父组件传入乐观更新的过期时间时，立即更新本地状态
-  useEffect(() => {
-    if (optimisticExpiresAt !== undefined) {
-      setLocalExpiresAt(optimisticExpiresAt);
-    }
-  }, [optimisticExpiresAt]);
+    setLocalExpiresAt(optimisticExpiresAt ?? user.expiresAt);
+  }, [optimisticExpiresAt, user.expiresAt, user.id]);
 
   const keyRowTranslations = {
     ...(translations.keyRow ?? {}),
@@ -145,10 +140,10 @@ export function UserKeyTableRow({
     startTransition(async () => {
       const res = await removeKey(keyId);
       if (!res.ok) {
-        toast.error(res.error || "删除失败");
+        toast.error(res.error || tUserStatus("deleteFailed"));
         return;
       }
-      toast.success("删除成功");
+      toast.success(tUserStatus("deleteSuccess"));
       router.refresh();
     });
   };
@@ -163,18 +158,18 @@ export function UserKeyTableRow({
       if (!res.ok) {
         // 失败时回滚UI状态
         setLocalIsEnabled(!checked);
-        toast.error(res.error || "操作失败");
+        toast.error(res.error || tUserStatus("operationFailed"));
         setIsTogglingEnabled(false);
         return;
       }
-      toast.success(checked ? "用户已启用" : "用户已禁用");
+      toast.success(checked ? tUserStatus("userEnabled") : tUserStatus("userDisabled"));
       // 刷新服务端数据
       router.refresh();
     } catch (error) {
       // 失败时回滚UI状态
       setLocalIsEnabled(!checked);
       console.error("[UserKeyTableRow] toggle user enabled failed", error);
-      toast.error("操作失败");
+      toast.error(tUserStatus("operationFailed"));
     } finally {
       setIsTogglingEnabled(false);
     }
@@ -332,12 +327,16 @@ export function UserKeyTableRow({
                       checked={localIsEnabled}
                       onCheckedChange={handleToggleUserEnabled}
                       disabled={isTogglingEnabled}
-                      aria-label="切换用户启用状态"
+                      aria-label={tUserStatus("toggleUserStatus")}
                       className="scale-90"
                     />
                   </div>
                 </TooltipTrigger>
-                <TooltipContent>{localIsEnabled ? "点击禁用用户" : "点击启用用户"}</TooltipContent>
+                <TooltipContent>
+                  {localIsEnabled
+                    ? tUserStatus("clickToDisableUser")
+                    : tUserStatus("clickToEnableUser")}
+                </TooltipContent>
               </Tooltip>
               <Button
                 type="button"
