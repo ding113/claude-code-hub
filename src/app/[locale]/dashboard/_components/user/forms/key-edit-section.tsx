@@ -474,7 +474,9 @@ export function KeyEditSection({
                 suggestions={userGroups}
                 maxTags={userGroups.length + 1}
                 maxTagLength={50}
-                description={translations.fields.providerGroup.selectHint || "选择此 Key 可使用的供应商分组"}
+                description={
+                  translations.fields.providerGroup.selectHint || "选择此 Key 可使用的供应商分组"
+                }
               />
             )}
           </div>
