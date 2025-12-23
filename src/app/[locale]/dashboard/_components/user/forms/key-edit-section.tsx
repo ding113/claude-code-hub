@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { cn } from "@/lib/utils";
 import { type DailyResetMode, LimitRulePicker, type LimitType } from "./limit-rule-picker";
 import { type LimitRuleDisplayItem, LimitRulesDisplay } from "./limit-rules-display";
@@ -117,7 +118,7 @@ function normalizeGroupList(value?: string | null): string {
     .split(",")
     .map((g) => g.trim())
     .filter(Boolean);
-  if (groups.length === 0) return "";
+  if (groups.length === 0) return PROVIDER_GROUP.DEFAULT;
   return Array.from(new Set(groups)).sort().join(",");
 }
 
@@ -414,7 +415,7 @@ export function KeyEditSection({
 
         {isAdmin ? (
           <ProviderGroupSelect
-            value={keyData.providerGroup || ""}
+            value={keyData.providerGroup || PROVIDER_GROUP.DEFAULT}
             onChange={(val) => onChange("providerGroup", val)}
             disabled={false}
             translations={{

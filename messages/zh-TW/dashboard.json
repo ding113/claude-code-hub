@@ -692,6 +692,13 @@
       "placeholder": "0 表示無限制",
       "description": "同時執行的對話數量"
     },
+    "providerGroup": {
+      "label": "供應商分組",
+      "placeholder": "輸入供應商分組標籤，按 Enter 新增",
+      "description": "供應商分組（預設：default）",
+      "defaultDescription": "default 分組包含所有未設定 groupTag 的供應商",
+      "descriptionWithUserGroup": "供應商分組（預設：default；使用者分組：{group}）"
+    },
     "errors": {
       "userIdMissing": "使用者 ID 不存在",
       "createFailed": "建立失敗，請稍後重試",
@@ -726,8 +733,8 @@
     },
     "providerGroup": {
       "label": "供應商分組",
-      "placeholder": "例如：premium 或 premium,economy（可選）",
-      "description": "指定使用者專屬的供應商分組（支援多個，逗號分隔）。系統將只從 groupTag 符合的供應商中選擇。留空=使用所有供應商"
+      "placeholder": "例如：default 或 premium,economy",
+      "description": "使用者供應商分組（預設：default）。default 分組包含所有未設定 groupTag 的供應商。"
     },
     "tags": {
       "label": "使用者標籤",
@@ -1294,8 +1301,8 @@
           "placeholder": "輸入標籤（按 Enter 新增）"
         },
         "providerGroup": {
-          "label": "供應商分組（舊版）",
-          "placeholder": "輸入供應商分組或留空"
+          "label": "供應商分組",
+          "placeholder": "default"
         },
         "allowedClients": {
           "label": "用戶端限制",
@@ -1347,14 +1354,15 @@
         },
       "providerGroup": {
         "label": "供應商分組",
-        "placeholder": "留空則允許所有 default 分組供應商",
+        "placeholder": "預設：default",
         "selectHint": "選擇此 Key 可使用的供應商分組",
         "editHint": "已有密鑰的分組不可修改",
         "allGroups": "使用全部群組",
-        "noGroupHint": "您沒有分組限制，可以存取所有供應商"
+        "noGroupHint": "default 分組包含所有未設定 groupTag 的供應商"
       },
         "cacheTtl": {
           "label": "Cache TTL 覆寫",
+          "description": "強制為包含 cache_control 的請求設定 Anthropic prompt cache TTL。",
           "options": {
             "inherit": "不覆寫（跟隨供應商/客戶端）",
             "5m": "5m",

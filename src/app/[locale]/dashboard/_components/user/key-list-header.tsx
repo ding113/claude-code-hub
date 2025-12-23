@@ -327,7 +327,7 @@ export function KeyListHeader({
                           role: activeUser.role,
                           rpm: activeUser.rpm,
                           dailyQuota: activeUser.dailyQuota,
-                          providerGroup: activeUser.providerGroup || null,
+                          providerGroup: activeUser.providerGroup || "default",
                           createdAt: new Date(),
                           updatedAt: new Date(),
                           limit5hUsd: activeUser.limit5hUsd ?? undefined,

@@ -711,8 +711,9 @@
     "providerGroup": {
       "label": "Provider Group",
       "placeholder": "Enter provider group tags, press Enter to add",
-      "description": "Limit to specific provider groups (empty = inherit from user)",
-      "descriptionWithUserGroup": "Limit to specific provider groups (User group: {group})"
+      "description": "Provider groups for this key (default: default).",
+      "defaultDescription": "default includes providers without groupTag.",
+      "descriptionWithUserGroup": "Provider groups for this key (user groups: {group}; default: default)."
     },
     "errors": {
       "userIdMissing": "User ID does not exist",
@@ -748,8 +749,8 @@
     },
     "providerGroup": {
       "label": "Provider Group",
-      "placeholder": "e.g., premium or premium,economy (optional)",
-      "description": "Specify user-specific provider groups (supports multiple, comma-separated). The system will only select from providers matching the groupTag. Leave blank = use all providers"
+      "placeholder": "e.g., default or premium,economy",
+      "description": "User provider groups (default: default). Providers without groupTag belong to default."
     },
     "tags": {
       "label": "User Tags",
@@ -1323,8 +1324,8 @@
           "placeholder": "Enter tag (press Enter to add)"
         },
         "providerGroup": {
-          "label": "Provider Group (Legacy)",
-          "placeholder": "Enter provider group or leave empty"
+          "label": "Provider Group",
+          "placeholder": "default"
         },
         "allowedClients": {
           "label": "Client Restrictions",
@@ -1376,14 +1377,15 @@
         },
       "providerGroup": {
         "label": "Provider Group",
-        "placeholder": "Leave empty to allow all default group providers",
-        "selectHint": "Select the provider group(s) this key can use.",
+        "placeholder": "Default: default",
+        "selectHint": "Select the provider group(s) this key can use (default: default).",
         "editHint": "Provider group cannot be changed for existing keys.",
         "allGroups": "Use all groups",
-        "noGroupHint": "You have no group restrictions and can access all providers."
+        "noGroupHint": "default includes providers without groupTag."
       },
         "cacheTtl": {
           "label": "Cache TTL Override",
+          "description": "Force Anthropic prompt cache TTL for requests containing cache_control.",
           "options": {
             "inherit": "No override (follow provider/client)",
             "5m": "5m",

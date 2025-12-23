@@ -12,6 +12,7 @@ import { DialogFormLayout, FormGrid } from "@/components/form/form-layout";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { USER_DEFAULTS, USER_LIMITS } from "@/lib/constants/user.constants";
 import { useZodForm } from "@/lib/hooks/use-zod-form";
 import { getErrorMessage } from "@/lib/utils/error-messages";
@@ -90,7 +91,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
       note: user?.note || "",
       rpm: user?.rpm || USER_DEFAULTS.RPM,
       dailyQuota: user?.dailyQuota ?? USER_DEFAULTS.DAILY_QUOTA,
-      providerGroup: user?.providerGroup || "",
+      providerGroup: user?.providerGroup || PROVIDER_GROUP.DEFAULT,
       tags: user?.tags || [],
       limit5hUsd: user?.limit5hUsd ?? null,
       limitWeeklyUsd: user?.limitWeeklyUsd ?? null,
@@ -119,7 +120,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
               note: data.note,
               rpm: data.rpm,
               dailyQuota: data.dailyQuota,
-              providerGroup: data.providerGroup || null,
+              providerGroup: data.providerGroup || PROVIDER_GROUP.DEFAULT,
               tags: data.tags,
               limit5hUsd: data.limit5hUsd,
               limitWeeklyUsd: data.limitWeeklyUsd,
@@ -137,7 +138,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
               note: data.note,
               rpm: data.rpm,
               dailyQuota: data.dailyQuota,
-              providerGroup: data.providerGroup || null,
+              providerGroup: data.providerGroup || PROVIDER_GROUP.DEFAULT,
               tags: data.tags,
               limit5hUsd: data.limit5hUsd,
               limitWeeklyUsd: data.limitWeeklyUsd,

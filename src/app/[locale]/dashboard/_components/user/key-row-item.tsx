@@ -96,7 +96,7 @@ function splitGroups(value?: string | null): string[] {
 
 export function KeyRowItem({
   keyData,
-  userProviderGroup,
+  userProviderGroup: _userProviderGroup,
   isMultiSelectMode,
   isSelected,
   onSelect,
@@ -119,13 +119,10 @@ export function KeyRowItem({
     currencyCode && currencyCode in CURRENCY_CONFIG ? (currencyCode as CurrencyCode) : "USD";
 
   const keyGroups = splitGroups(keyData.providerGroup);
-  const inheritedGroups = splitGroups(userProviderGroup);
-  const isInherited = keyGroups.length === 0;
-  const effectiveGroups = isInherited ? inheritedGroups : keyGroups;
+  const effectiveGroups = keyGroups.length > 0 ? keyGroups : [translations.defaultGroup];
   const visibleGroups = effectiveGroups.slice(0, 2);
   const remainingGroups = Math.max(0, effectiveGroups.length - visibleGroups.length);
-  const effectiveGroupText =
-    effectiveGroups.length > 0 ? effectiveGroups.join(", ") : translations.defaultGroup;
+  const effectiveGroupText = effectiveGroups.join(", ");
 
   const canReveal = Boolean(keyData.fullKey);
   const canCopy = Boolean(keyData.canCopy && keyData.fullKey);
@@ -246,7 +243,7 @@ export function KeyRowItem({
                     {visibleGroups.map((group) => (
                       <Badge
                         key={group}
-                        variant={isInherited ? "secondary" : "outline"}
+                        variant="outline"
                         className="text-xs font-mono max-w-[120px] truncate"
                         title={group}
                       >

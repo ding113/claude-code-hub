@@ -75,6 +75,21 @@ class BatchUpdateError extends Error {
   }
 }
 
+function normalizeProviderGroup(value: unknown): string {
+  if (value === null || value === undefined) return PROVIDER_GROUP.DEFAULT;
+  if (typeof value !== "string") return PROVIDER_GROUP.DEFAULT;
+  const trimmed = value.trim();
+  if (trimmed === "") return PROVIDER_GROUP.DEFAULT;
+
+  const groups = trimmed
+    .split(",")
+    .map((g) => g.trim())
+    .filter(Boolean);
+  if (groups.length === 0) return PROVIDER_GROUP.DEFAULT;
+
+  return Array.from(new Set(groups)).sort().join(",");
+}
+
 /**
  * 验证过期时间的公共函数
  * @param expiresAt - 过期时间
@@ -128,28 +143,23 @@ export async function syncUserProviderGroupFromKeys(userId: number): Promise<voi
   // and should fail explicitly if provider group sync fails to maintain data consistency.
   const keys = await findKeyList(userId);
   const allGroups = new Set<string>();
-  let hasEmptyGroup = false;
 
   for (const key of keys) {
-    if (key.providerGroup) {
-      const groups = key.providerGroup
-        .split(",")
-        .map((g) => g.trim())
-        .filter(Boolean);
-      groups.forEach((g) => allGroups.add(g));
-    } else {
-      hasEmptyGroup = true;
-    }
+    // NOTE(#400): Key.providerGroup is now required (no more null semantics).
+    // For backward compatibility, treat null/empty as "default".
+    const group = key.providerGroup || PROVIDER_GROUP.DEFAULT;
+    group
+      .split(",")
+      .map((g) => g.trim())
+      .filter(Boolean)
+      .forEach((g) => allGroups.add(g));
   }
 
-  if (hasEmptyGroup) {
-    allGroups.add(PROVIDER_GROUP.DEFAULT);
-  }
-
-  const newProviderGroup = allGroups.size > 0 ? Array.from(allGroups).sort().join(",") : null;
+  const newProviderGroup =
+    allGroups.size > 0 ? Array.from(allGroups).sort().join(",") : PROVIDER_GROUP.DEFAULT;
   await updateUser(userId, { providerGroup: newProviderGroup });
   logger.info(
-    `[UserAction] Synced user provider group: userId=${userId}, groups=${newProviderGroup || "null"}`
+    `[UserAction] Synced user provider group: userId=${userId}, groups=${newProviderGroup}`
   );
 }
 
@@ -700,11 +710,12 @@ export async function addUser(data: {
     }
 
     const validatedData = validationResult.data;
+    const providerGroup = normalizeProviderGroup(validatedData.providerGroup);
 
     const newUser = await createUser({
       name: validatedData.name,
       description: validatedData.note || "",
-      providerGroup: validatedData.providerGroup || null,
+      providerGroup,
       tags: validatedData.tags,
       rpm: validatedData.rpm,
       dailyQuota: validatedData.dailyQuota ?? undefined,
@@ -729,6 +740,7 @@ export async function addUser(data: {
       key: generatedKey,
       is_enabled: true,
       expires_at: undefined,
+      provider_group: providerGroup,
     });
 
     revalidatePath("/dashboard");
@@ -882,11 +894,12 @@ export async function createUserOnly(data: {
     }
 
     const validatedData = validationResult.data;
+    const providerGroup = normalizeProviderGroup(validatedData.providerGroup);
 
     const newUser = await createUser({
       name: validatedData.name,
       description: validatedData.note || "",
-      providerGroup: validatedData.providerGroup || null,
+      providerGroup,
       tags: validatedData.tags,
       rpm: validatedData.rpm,
       dailyQuota: validatedData.dailyQuota ?? undefined,
@@ -1035,11 +1048,16 @@ export async function editUser(
       };
     }
 
+    const nextProviderGroup =
+      validatedData.providerGroup === undefined
+        ? undefined
+        : normalizeProviderGroup(validatedData.providerGroup);
+
     // Update user with validated data
     await updateUser(userId, {
       name: validatedData.name,
       description: validatedData.note,
-      providerGroup: validatedData.providerGroup,
+      ...(nextProviderGroup !== undefined ? { providerGroup: nextProviderGroup } : {}),
       tags: validatedData.tags,
       rpm: validatedData.rpm,
       dailyQuota: validatedData.dailyQuota,

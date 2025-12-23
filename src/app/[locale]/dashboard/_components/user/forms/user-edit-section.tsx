@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { cn } from "@/lib/utils";
 import { AccessRestrictionsSection } from "./access-restrictions-section";
 import { type DailyResetMode, LimitRulePicker, type LimitType } from "./limit-rule-picker";
@@ -397,8 +398,10 @@ export function UserEditSection({
               <TextField
                 label={translations.fields.providerGroup.label}
                 placeholder={translations.fields.providerGroup.placeholder}
-                value={user.providerGroup || ""}
-                onChange={(val) => emitChange("providerGroup", val?.trim() || null)}
+                value={user.providerGroup || PROVIDER_GROUP.DEFAULT}
+                onChange={(val) =>
+                  emitChange("providerGroup", val?.trim() || PROVIDER_GROUP.DEFAULT)
+                }
                 maxLength={50}
               />
             )}

@@ -67,7 +67,7 @@ function getEffectiveProviderGroup(session?: ProxySession): string | null {
   if (user) {
     return user.providerGroup || PROVIDER_GROUP.DEFAULT;
   }
-  return null;
+  return PROVIDER_GROUP.DEFAULT;
 }
 
 /**

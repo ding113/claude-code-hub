@@ -42,6 +42,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
+import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
 import { copyToClipboard, isClipboardSupported } from "@/lib/utils/clipboard";
 import type { CurrencyCode } from "@/lib/utils/currency";
@@ -294,15 +295,27 @@ export function ProviderRichListItem({
             <span className="font-semibold truncate">{provider.name}</span>
 
             {/* Group Tags (supports comma-separated values) */}
-            {provider.groupTag
-              ?.split(",")
-              .map((t) => t.trim())
-              .filter(Boolean)
-              .map((tag, index) => (
-                <Badge key={`${tag}-${index}`} variant="outline" className="flex-shrink-0">
-                  {tag}
-                </Badge>
-              ))}
+            {(provider.groupTag
+              ? provider.groupTag
+                  .split(",")
+                  .map((t) => t.trim())
+                  .filter(Boolean)
+              : []
+            ).length > 0 ? (
+              provider.groupTag
+                ?.split(",")
+                .map((t) => t.trim())
+                .filter(Boolean)
+                .map((tag, index) => (
+                  <Badge key={`${tag}-${index}`} variant="outline" className="flex-shrink-0">
+                    {tag}
+                  </Badge>
+                ))
+            ) : (
+              <Badge variant="outline" className="flex-shrink-0">
+                {PROVIDER_GROUP.DEFAULT}
+              </Badge>
+            )}
 
             {/* 熔断器警告 */}
             {healthStatus && healthStatus.circuitState === "open" && (

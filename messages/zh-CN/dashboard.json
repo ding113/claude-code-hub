@@ -712,8 +712,9 @@
     "providerGroup": {
       "label": "供应商分组",
       "placeholder": "输入供应商分组标签，按回车添加",
-      "description": "限制可使用的供应商分组（留空继承用户设置）",
-      "descriptionWithUserGroup": "限制可使用的供应商分组（用户分组: {group}）"
+      "description": "供应商分组（默认：default）",
+      "defaultDescription": "default 分组包含所有未设置 groupTag 的供应商",
+      "descriptionWithUserGroup": "供应商分组（默认：default；用户分组：{group}）"
     },
     "errors": {
       "userIdMissing": "用户ID不存在",
@@ -749,8 +750,8 @@
     },
     "providerGroup": {
       "label": "供应商分组",
-      "placeholder": "输入分组标签",
-      "description": "指定用户专属的供应商分组（支持多个，逗号分隔）。系统将只从 groupTag 匹配的供应商中选择。留空=使用所有供应商"
+      "placeholder": "例如：default 或 premium,economy",
+      "description": "用户供应商分组（默认：default）。default 分组包含所有未设置 groupTag 的供应商。"
     },
     "tags": {
       "label": "用户标签",
@@ -1387,8 +1388,8 @@
           "placeholder": "输入标签（回车添加）"
         },
         "providerGroup": {
-          "label": "供应商分组（旧版）",
-          "placeholder": "输入供应商分组或留空"
+          "label": "供应商分组",
+          "placeholder": "default"
         },
         "allowedClients": {
           "label": "客户端限制",
@@ -1440,14 +1441,15 @@
         },
       "providerGroup": {
         "label": "供应商分组",
-        "placeholder": "留空则允许所有 default 分组供应商",
+        "placeholder": "默认：default",
         "selectHint": "选择此 Key 可使用的供应商分组",
         "editHint": "已有密钥的分组不可修改",
         "allGroups": "使用全部分组",
-        "noGroupHint": "您没有分组限制，可以访问所有供应商"
+        "noGroupHint": "default 分组包含所有未设置 groupTag 的供应商"
       },
         "cacheTtl": {
           "label": "Cache TTL 覆写",
+          "description": "强制为包含 cache_control 的请求设置 Anthropic prompt cache TTL。",
           "options": {
             "inherit": "不覆写（跟随供应商/客户端）",
             "5m": "5m",

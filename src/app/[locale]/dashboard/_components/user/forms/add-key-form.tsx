@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { useZodForm } from "@/lib/hooks/use-zod-form";
 import { getErrorMessage } from "@/lib/utils/error-messages";
 import { KeyFormSchema } from "@/lib/validation/schemas";
@@ -40,9 +41,7 @@ export function AddKeyForm({ userId, user, isAdmin = false, onSuccess }: AddKeyF
 
   // Load provider group suggestions
   useEffect(() => {
-    // providerGroup 为 admin-only 字段：仅管理员允许编辑 Key.providerGroup
-    if (!isAdmin) return;
-    if (user?.id) {
+    if (user?.id && !isAdmin) {
       getAvailableProviderGroups(user.id).then(setProviderGroupSuggestions);
     } else {
       getAvailableProviderGroups().then(setProviderGroupSuggestions);
@@ -55,7 +54,7 @@ export function AddKeyForm({ userId, user, isAdmin = false, onSuccess }: AddKeyF
       name: "",
       expiresAt: "",
       canLoginWebUi: true,
-      providerGroup: "",
+      providerGroup: PROVIDER_GROUP.DEFAULT,
       cacheTtlPreference: "inherit",
       limit5hUsd: null,
       limitDailyUsd: null,
@@ -86,7 +85,7 @@ export function AddKeyForm({ userId, user, isAdmin = false, onSuccess }: AddKeyF
           limitTotalUsd: data.limitTotalUsd,
           limitConcurrentSessions: data.limitConcurrentSessions,
           cacheTtlPreference: data.cacheTtlPreference,
-          ...(isAdmin ? { providerGroup: data.providerGroup || null } : {}),
+          providerGroup: data.providerGroup || PROVIDER_GROUP.DEFAULT,
         });
 
         if (!result.ok) {
@@ -192,7 +191,6 @@ export function AddKeyForm({ userId, user, isAdmin = false, onSuccess }: AddKeyF
         onChange={form.getFieldProps("providerGroup").onChange}
         error={form.getFieldProps("providerGroup").error}
         touched={form.getFieldProps("providerGroup").touched}
-        disabled={!isAdmin}
       />
 
       <div className="space-y-2">

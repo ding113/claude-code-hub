@@ -689,6 +689,13 @@
       "placeholder": "0は無制限を意味します",
       "description": "同時に実行される会話の数"
     },
+    "providerGroup": {
+      "label": "プロバイダーグループ",
+      "placeholder": "プロバイダーグループタグを入力し、Enterで追加",
+      "description": "このキーのプロバイダーグループ（既定: default）",
+      "defaultDescription": "default は groupTag 未設定のプロバイダーを含みます",
+      "descriptionWithUserGroup": "このキーのプロバイダーグループ（ユーザーのグループ: {group}、既定: default）"
+    },
     "errors": {
       "userIdMissing": "ユーザーIDが存在しません",
       "createFailed": "作成に失敗しました。後でもう一度お試しください",
@@ -723,8 +730,8 @@
     },
     "providerGroup": {
       "label": "プロバイダーグループ",
-      "placeholder": "例: premium または premium,economy（オプション）",
-      "description": "ユーザー専用のプロバイダーグループを指定します（複数可、カンマ区切り）。システムはgroupTagが一致するプロバイダーのみから選択します。空白=すべてのプロバイダーを使用"
+      "placeholder": "例: default または premium,economy",
+      "description": "ユーザーのプロバイダーグループ（既定: default）。groupTag が未設定のプロバイダーは default に属します。"
     },
     "tags": {
       "label": "ユーザータグ",
@@ -1282,8 +1289,8 @@
           "placeholder": "タグを入力（Enterで追加）"
         },
         "providerGroup": {
-          "label": "プロバイダーグループ（レガシー）",
-          "placeholder": "プロバイダーグループを入力または空白のまま"
+          "label": "プロバイダーグループ",
+          "placeholder": "default"
         },
         "allowedClients": {
           "label": "クライアント制限",
@@ -1335,10 +1342,15 @@
         },
         "providerGroup": {
           "label": "プロバイダーグループ",
-          "placeholder": "空欄の場合は全ての default グループのプロバイダーを許可"
+          "placeholder": "既定: default",
+          "selectHint": "このキーで使用できるプロバイダーグループを選択します。",
+          "editHint": "既存のキーのグループは変更できません。",
+          "allGroups": "すべてのグループを使用",
+          "noGroupHint": "default は groupTag 未設定のプロバイダーを含みます"
         },
         "cacheTtl": {
           "label": "Cache TTL上書き",
+          "description": "cache_controlを含むリクエストに対してAnthropic prompt cache TTLを強制します。",
           "options": {
             "inherit": "上書きしない（プロバイダー/クライアントに従う）",
             "5m": "5m",
