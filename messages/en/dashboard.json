@@ -1343,7 +1343,13 @@
           "enabledDescription": "Currently enabled. Disabling will prevent this user and their keys from being used.",
           "disabledDescription": "Currently disabled. Enabling will restore normal access for this user and their keys.",
           "confirmDisable": "Confirm Disable",
-          "confirmEnable": "Confirm Enable"
+          "confirmEnable": "Confirm Enable",
+          "confirmEnableTitle": "Confirm Enable User",
+          "confirmDisableTitle": "Confirm Disable User",
+          "confirmEnableDescription": "Enabling will restore normal access for this user and their keys.",
+          "confirmDisableDescription": "Disabling will prevent this user and their keys from being used.",
+          "cancel": "Cancel",
+          "processing": "Processing..."
         }
       },
       "presetClients": {

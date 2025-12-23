@@ -713,19 +713,20 @@ export async function toggleKeyEnabled(keyId: number, enabled: boolean): Promise
       };
     }
 
-    // 检查是否是最后一个启用的密钥（防止禁用最后一个）
+    // 禁用时检查是否是最后一个启用的密钥
     if (!enabled) {
       const activeKeyCount = await countActiveKeysByUser(key.userId);
       if (activeKeyCount <= 1) {
         return {
           ok: false,
-          error: tError("CANNOT_DISABLE_LAST_KEY") || "无法禁用最后一个可用密钥",
+          error: tError("CANNOT_DISABLE_LAST_KEY"),
           errorCode: ERROR_CODES.OPERATION_FAILED,
         };
       }
     }
 
     await updateKey(keyId, { is_enabled: enabled });
+    revalidatePath("/dashboard/users");
     revalidatePath("/dashboard");
     return { ok: true };
   } catch (error) {

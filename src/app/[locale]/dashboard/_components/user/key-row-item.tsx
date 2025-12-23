@@ -1,9 +1,11 @@
 "use client";
 
 import { BarChart3, Copy, Eye, FileText, Info, Pencil, Trash2 } from "lucide-react";
-import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { editKey, toggleKeyEnabled } from "@/actions/keys";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,9 +20,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RelativeTime } from "@/components/ui/relative-time";
+import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { CURRENCY_CONFIG, type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
+import { formatDate } from "@/lib/utils/date-format";
+import { type QuickRenewKey, QuickRenewKeyDialog } from "./forms/quick-renew-key-dialog";
 import { KeyFullDisplayDialog } from "./key-full-display-dialog";
 import { KeyQuotaUsageDialog } from "./key-quota-usage-dialog";
 import { KeyStatsDialog } from "./key-stats-dialog";
@@ -108,12 +113,33 @@ export function KeyRowItem({
   highlight,
   translations,
 }: KeyRowItemProps) {
+  const locale = useLocale();
+  const router = useRouter();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [fullKeyDialogOpen, setFullKeyDialogOpen] = useState(false);
   const [statsDialogOpen, setStatsDialogOpen] = useState(false);
   const [quotaDialogOpen, setQuotaDialogOpen] = useState(false);
+  const [quickRenewOpen, setQuickRenewOpen] = useState(false);
+  const [isTogglingEnabled, setIsTogglingEnabled] = useState(false);
+  // 乐观更新：本地状态跟踪启用状态
+  const [localStatus, setLocalStatus] = useState<"enabled" | "disabled">(keyData.status);
+  // 乐观更新：本地状态跟踪过期时间
+  const [localExpiresAt, setLocalExpiresAt] = useState<string | null | undefined>(
+    keyData.expiresAt
+  );
   const tCommon = useTranslations("common");
   const tBatchEdit = useTranslations("dashboard.userManagement.batchEdit");
+  const tKeyRenew = useTranslations("dashboard.userManagement.quickRenew");
+
+  // 当props更新时同步本地状态
+  useEffect(() => {
+    setLocalStatus(keyData.status);
+  }, [keyData.status]);
+
+  // 当props更新时同步过期时间
+  useEffect(() => {
+    setLocalExpiresAt(keyData.expiresAt);
+  }, [keyData.expiresAt]);
 
   const resolvedCurrencyCode: CurrencyCode =
     currencyCode && currencyCode in CURRENCY_CONFIG ? (currencyCode as CurrencyCode) : "USD";
@@ -139,18 +165,130 @@ export function KeyRowItem({
     }
   };
 
+  const handleToggleEnabled = async (checked: boolean) => {
+    // 乐观更新：立即更新UI
+    const newStatus: "enabled" | "disabled" = checked ? "enabled" : "disabled";
+    setLocalStatus(newStatus);
+    setIsTogglingEnabled(true);
+
+    try {
+      const res = await toggleKeyEnabled(keyData.id, checked);
+      if (!res.ok) {
+        // 失败时回滚UI状态
+        setLocalStatus(checked ? "disabled" : "enabled");
+        toast.error(res.error || "操作失败");
+        setIsTogglingEnabled(false);
+        return;
+      }
+      toast.success(checked ? "密钥已启用" : "密钥已禁用");
+      // 刷新服务端数据
+      router.refresh();
+    } catch (error) {
+      // 失败时回滚UI状态
+      setLocalStatus(checked ? "disabled" : "enabled");
+      console.error("[KeyRowItem] toggle key enabled failed", error);
+      toast.error("操作失败");
+    } finally {
+      setIsTogglingEnabled(false);
+    }
+  };
+
+  const formatExpiry = (expiresAt: string | null | undefined): string => {
+    if (!expiresAt) return "-";
+    const date = new Date(expiresAt);
+    if (Number.isNaN(date.getTime())) return "-";
+    return formatDate(date, "yyyy-MM-dd", locale);
+  };
+
+  const handleQuickRenewConfirm = async (
+    _keyId: number,
+    expiresAt: Date,
+    enableKey?: boolean
+  ): Promise<{ ok: boolean }> => {
+    // 乐观更新：立即更新UI
+    const newExpiresAt = expiresAt.toISOString();
+    setLocalExpiresAt(newExpiresAt);
+    if (enableKey !== undefined) {
+      setLocalStatus(enableKey ? "enabled" : "disabled");
+    }
+
+    try {
+      const updateData: {
+        name: string;
+        expiresAt: string;
+        isEnabled?: boolean;
+      } = {
+        name: keyData.name,
+        expiresAt: newExpiresAt,
+      };
+
+      if (enableKey !== undefined) {
+        updateData.isEnabled = enableKey;
+      }
+
+      const res = await editKey(keyData.id, updateData);
+      if (!res.ok) {
+        // 失败时回滚UI状态
+        setLocalExpiresAt(keyData.expiresAt);
+        if (enableKey !== undefined) {
+          setLocalStatus(keyData.status);
+        }
+        toast.error(res.error || "续期失败");
+        return { ok: false };
+      }
+      toast.success("续期成功");
+      router.refresh();
+      return { ok: true };
+    } catch (error) {
+      // 失败时回滚UI状态
+      setLocalExpiresAt(keyData.expiresAt);
+      if (enableKey !== undefined) {
+        setLocalStatus(keyData.status);
+      }
+      console.error("[KeyRowItem] quick renew failed", error);
+      toast.error("续期失败");
+      return { ok: false };
+    }
+  };
+
+  const quickRenewKeyData: QuickRenewKey = {
+    id: keyData.id,
+    name: keyData.name,
+    expiresAt: localExpiresAt, // 使用本地状态
+    status: localStatus,
+  };
+
+  const quickRenewTranslations = {
+    title: tKeyRenew("title"),
+    description: tKeyRenew("description", { userName: keyData.name }),
+    currentExpiry: tKeyRenew("currentExpiry"),
+    neverExpires: tKeyRenew("neverExpires"),
+    expired: tKeyRenew("expired"),
+    quickOptions: {
+      "7days": tKeyRenew("quickOptions.7days"),
+      "30days": tKeyRenew("quickOptions.30days"),
+      "90days": tKeyRenew("quickOptions.90days"),
+      "1year": tKeyRenew("quickOptions.1year"),
+    },
+    customDate: tKeyRenew("customDate"),
+    enableOnRenew: "同时启用密钥", // 直接硬编码，因为原文案是"同时启用用户"
+    cancel: tKeyRenew("cancel"),
+    confirm: tKeyRenew("confirm"),
+    confirming: tKeyRenew("confirming"),
+  };
+
   return (
     <div
       className={cn(
         "grid items-center gap-3 px-3 py-2 text-sm border-b last:border-b-0 hover:bg-muted/40 transition-colors",
         isMultiSelectMode
-          ? "grid-cols-[24px_repeat(14,minmax(0,1fr))]"
-          : "grid-cols-[repeat(14,minmax(0,1fr))]",
+          ? "grid-cols-[24px_2fr_3fr_2fr_1fr_2fr_2fr_2fr_1fr]"
+          : "grid-cols-[2fr_3fr_2fr_1fr_2fr_2fr_2fr_1fr]",
         highlight && "bg-primary/10 ring-1 ring-primary/30"
       )}
     >
       {isMultiSelectMode ? (
-        <div className="col-span-1 flex items-center justify-center">
+        <div className="flex items-center justify-center">
           <Checkbox
             aria-label={tBatchEdit("aria.selectKey")}
             checked={Boolean(isSelected)}
@@ -160,22 +298,20 @@ export function KeyRowItem({
       ) : null}
 
       {/* 名称 */}
-      <div className="col-span-2 min-w-0">
+      <div className="min-w-0">
         <div className="flex items-center gap-2 min-w-0">
           <div className="truncate font-medium">{keyData.name}</div>
           <Badge
-            variant={keyData.status === "enabled" ? "default" : "secondary"}
+            variant={localStatus === "enabled" ? "default" : "secondary"}
             className="text-[10px]"
           >
-            {keyData.status === "enabled"
-              ? translations.status.enabled
-              : translations.status.disabled}
+            {localStatus === "enabled" ? translations.status.enabled : translations.status.disabled}
           </Badge>
         </div>
       </div>
 
       {/* 密钥 */}
-      <div className="col-span-3 min-w-0">
+      <div className="min-w-0">
         <div className="flex items-center gap-2 min-w-0">
           <div
             className="min-w-0 flex-1 font-mono text-xs truncate"
@@ -230,7 +366,7 @@ export function KeyRowItem({
       </div>
 
       {/* 分组 */}
-      <div className="col-span-2 min-w-0">
+      <div className="min-w-0">
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="text-xs text-muted-foreground shrink-0">
             {translations.fields.group}:
@@ -278,7 +414,7 @@ export function KeyRowItem({
 
       {/* 今日用量（调用次数） */}
       <div
-        className="col-span-1 text-right tabular-nums flex items-center justify-end gap-1"
+        className="text-right tabular-nums flex items-center justify-end gap-1"
         title={translations.fields.todayUsage}
       >
         <span className="text-xs text-muted-foreground">{translations.fields.callsLabel}:</span>
@@ -287,7 +423,7 @@ export function KeyRowItem({
 
       {/* 今日消耗（成本） */}
       <div
-        className="col-span-2 text-right font-mono tabular-nums flex items-center justify-end gap-1"
+        className="text-right font-mono tabular-nums flex items-center justify-end gap-1"
         title={translations.fields.todayCost}
       >
         <span className="text-xs text-muted-foreground">{translations.fields.costLabel}:</span>
@@ -295,7 +431,7 @@ export function KeyRowItem({
       </div>
 
       {/* 最后使用 */}
-      <div className="col-span-2 min-w-0" title={translations.fields.lastUsed}>
+      <div className="min-w-0" title={translations.fields.lastUsed}>
         {keyData.lastUsedAt ? (
           <RelativeTime date={keyData.lastUsedAt} autoUpdate={false} />
         ) : (
@@ -303,11 +439,36 @@ export function KeyRowItem({
         )}
       </div>
 
-      {/* 操作 */}
+      {/* 过期时间 - clickable for quick renew */}
       <div
-        className="col-span-2 flex items-center justify-end gap-1"
-        title={translations.fields.actions}
+        className="min-w-0 text-sm text-muted-foreground cursor-pointer hover:text-primary hover:underline"
+        title="点击快捷续期"
+        onClick={(e) => {
+          e.stopPropagation();
+          setQuickRenewOpen(true);
+        }}
       >
+        {formatExpiry(localExpiresAt)}
+      </div>
+
+      {/* 操作 */}
+      <div className="flex items-center justify-end gap-1" title={translations.fields.actions}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="flex items-center">
+              <Switch
+                checked={localStatus === "enabled"}
+                onCheckedChange={handleToggleEnabled}
+                disabled={isTogglingEnabled}
+                aria-label="切换密钥启用状态"
+                className="scale-75"
+              />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent>
+            {localStatus === "enabled" ? "点击禁用密钥" : "点击启用密钥"}
+          </TooltipContent>
+        </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -454,6 +615,15 @@ export function KeyRowItem({
         keyId={keyData.id}
         keyName={keyData.name}
         currencyCode={resolvedCurrencyCode}
+      />
+
+      {/* Quick Renew Key Dialog */}
+      <QuickRenewKeyDialog
+        open={quickRenewOpen}
+        onOpenChange={setQuickRenewOpen}
+        keyData={quickRenewKeyData}
+        onConfirm={handleQuickRenewConfirm}
+        translations={quickRenewTranslations}
       />
     </div>
   );
