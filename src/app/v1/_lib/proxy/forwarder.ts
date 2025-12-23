@@ -453,9 +453,9 @@ export class ProxyForwarder {
             const matchedRule =
               detectionResult.matched &&
               detectionResult.ruleId !== undefined &&
-              detectionResult.pattern &&
-              detectionResult.matchType &&
-              detectionResult.category
+              detectionResult.pattern !== undefined &&
+              detectionResult.matchType !== undefined &&
+              detectionResult.category !== undefined
                 ? {
                     ruleId: detectionResult.ruleId,
                     pattern: detectionResult.pattern,
