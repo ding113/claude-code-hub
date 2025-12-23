@@ -227,9 +227,7 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
             <SelectItem value="1h">{tKeyEdit("cacheTtl.options.1h")}</SelectItem>
           </SelectContent>
         </Select>
-        <p className="text-xs text-muted-foreground">
-          {tKeyEdit("cacheTtl.description")}
-        </p>
+        <p className="text-xs text-muted-foreground">{tKeyEdit("cacheTtl.description")}</p>
       </div>
 
       <FormGrid columns={2}>
