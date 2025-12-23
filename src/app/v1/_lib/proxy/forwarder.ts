@@ -30,6 +30,7 @@ import {
   categorizeErrorAsync,
   EmptyResponseError,
   ErrorCategory,
+  getErrorDetectionResultAsync,
   isClientAbortError,
   isEmptyResponseError,
   isHttp2Error,
@@ -448,6 +449,23 @@ export class ProxyForwarder {
           if (errorCategory === ErrorCategory.NON_RETRYABLE_CLIENT_ERROR) {
             const proxyError = lastError as ProxyError;
             const statusCode = proxyError.statusCode;
+            const detectionResult = await getErrorDetectionResultAsync(lastError);
+            const matchedRule =
+              detectionResult.matched &&
+              detectionResult.ruleId !== undefined &&
+              detectionResult.pattern !== undefined &&
+              detectionResult.matchType !== undefined &&
+              detectionResult.category !== undefined
+                ? {
+                    ruleId: detectionResult.ruleId,
+                    pattern: detectionResult.pattern,
+                    matchType: detectionResult.matchType,
+                    category: detectionResult.category,
+                    description: detectionResult.description,
+                    hasOverrideResponse: detectionResult.overrideResponse !== undefined,
+                    hasOverrideStatusCode: detectionResult.overrideStatusCode !== undefined,
+                  }
+                : undefined;
 
             logger.warn("ProxyForwarder: Non-retryable client error, stopping immediately", {
               providerId: currentProvider.id,
@@ -478,6 +496,7 @@ export class ProxyForwarder {
                   upstreamParsed: proxyError.upstreamError?.parsed,
                 },
                 clientError: proxyError.getDetailedErrorMessage(),
+                matchedRule,
                 request: buildRequestDetails(session),
               },
             });

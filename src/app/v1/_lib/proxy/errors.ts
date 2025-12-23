@@ -505,6 +505,16 @@ async function detectErrorRuleOnceAsync(error: Error): Promise<ErrorDetectionRes
 }
 
 /**
+ * 获取错误规则检测结果（异步版本，带缓存）
+ *
+ * 用于在 forwarder/handler 中复用 detectErrorRuleOnceAsync 的 WeakMap 缓存，
+ * 避免对同一个 Error 对象重复执行规则匹配。
+ */
+export async function getErrorDetectionResultAsync(error: Error): Promise<ErrorDetectionResult> {
+  return detectErrorRuleOnceAsync(error);
+}
+
+/**
  * 向后兼容的同步检测入口，供尚未迁移的调用方/测试使用
  *
  * 若缓存已命中，直接返回结果；

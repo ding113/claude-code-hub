@@ -89,6 +89,17 @@ export interface ProviderChainItem {
     // 客户端输入错误（不可重试）
     clientError?: string; // 详细的客户端错误消息（包含匹配的白名单模式）
 
+    // 匹配到的错误规则（用于排查不可重试的客户端错误）
+    matchedRule?: {
+      ruleId: number;
+      pattern: string;
+      matchType: "regex" | "contains" | "exact" | string;
+      category: string;
+      description?: string;
+      hasOverrideResponse: boolean;
+      hasOverrideStatusCode: boolean;
+    };
+
     // 新增：请求详情（用于问题排查）
     request?: {
       url: string; // 完整请求 URL（已脱敏查询参数中的 key）
