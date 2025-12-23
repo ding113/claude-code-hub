@@ -23,9 +23,7 @@ export default async function MyQuotaPage({ params }: { params: Promise<{ locale
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-medium">{tNav("myQuota")}</h3>
-          </div>
+          <h3 className="text-lg font-medium">{tNav("myQuota")}</h3>
         </div>
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
@@ -39,9 +37,7 @@ export default async function MyQuotaPage({ params }: { params: Promise<{ locale
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-medium">{tNav("myQuota")}</h3>
-        </div>
+        <h3 className="text-lg font-medium">{tNav("myQuota")}</h3>
       </div>
 
       <QuotaCards quota={quotaResult.data} currencyCode={systemSettings.currencyDisplay} />
