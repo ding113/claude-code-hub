@@ -120,7 +120,7 @@ export function UserKeyTableRow({
   // 修复：当 optimisticExpiresAt 变为 undefined 时也能正确回滚到 user.expiresAt
   useEffect(() => {
     setLocalExpiresAt(optimisticExpiresAt ?? user.expiresAt);
-  }, [optimisticExpiresAt, user.expiresAt, user.id]);
+  }, [optimisticExpiresAt, user.expiresAt]);
 
   const keyRowTranslations = {
     ...(translations.keyRow ?? {}),
