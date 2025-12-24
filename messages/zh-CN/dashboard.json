@@ -194,6 +194,12 @@
       },
       "billingDetails": {
         "title": "计费详情"
+      },
+      "performance": {
+        "title": "性能数据",
+        "ttfb": "首字节时间（TTFB）",
+        "duration": "总耗时",
+        "outputRate": "输出速率"
       }
     },
     "providerChain": {
@@ -274,7 +280,9 @@
     "cacheCreationConsumedAmount": "缓存创建消耗金额",
     "totalConsumedAmount": "总消耗金额",
     "successRate": "成功率",
-    "avgResponseTime": "平均响应时间"
+    "avgResponseTime": "平均响应时间",
+    "avgTtfbMs": "平均 TTFB",
+    "avgTokensPerSecond": "平均输出速率"
   },
     "states": {
       "loading": "加载中...",

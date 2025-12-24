@@ -520,6 +520,8 @@ export function VirtualizedLogsTable({
                       costUsd={log.costUsd}
                       costMultiplier={log.costMultiplier}
                       context1mApplied={log.context1mApplied}
+                      durationMs={log.durationMs}
+                      ttfbMs={log.ttfbMs}
                       externalOpen={dialogState.logId === log.id ? true : undefined}
                       onExternalOpenChange={(open) => {
                         if (!open) setDialogState({ logId: null, scrollToRedirect: false });

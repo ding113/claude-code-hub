@@ -6,6 +6,7 @@ import {
   CheckCircle,
   DollarSign,
   ExternalLink,
+  Gauge,
   Loader2,
   Monitor,
 } from "lucide-react";
@@ -53,6 +54,8 @@ interface ErrorDetailsDialogProps {
   costUsd?: string | null;
   costMultiplier?: string | null;
   context1mApplied?: boolean | null; // 1M上下文窗口是否已应用
+  durationMs?: number | null;
+  ttfbMs?: number | null;
   externalOpen?: boolean; // 外部控制弹窗开关
   onExternalOpenChange?: (open: boolean) => void; // 外部控制回调
   scrollToRedirect?: boolean; // 是否滚动到重定向部分
@@ -81,6 +84,8 @@ export function ErrorDetailsDialog({
   costUsd,
   costMultiplier,
   context1mApplied,
+  durationMs,
+  ttfbMs,
   externalOpen,
   onExternalOpenChange,
   scrollToRedirect,
@@ -105,6 +110,24 @@ export function ErrorDetailsDialog({
   const isSuccess = statusCode && statusCode >= 200 && statusCode < 300;
   const isInProgress = !statusCode; // 没有状态码表示请求进行中
   const isBlocked = !!blockedBy; // 是否被拦截
+
+  const outputTokensPerSecond = (() => {
+    if (
+      outputTokens === null ||
+      outputTokens === undefined ||
+      outputTokens <= 0 ||
+      durationMs === null ||
+      durationMs === undefined ||
+      ttfbMs === null ||
+      ttfbMs === undefined ||
+      ttfbMs >= durationMs
+    ) {
+      return null;
+    }
+    const seconds = (durationMs - ttfbMs) / 1000;
+    if (seconds <= 0) return null;
+    return outputTokens / seconds;
+  })();
 
   // 解析 blockedReason JSON
   let parsedBlockedReason: { word?: string; matchType?: string; matchedText?: string } | null =
@@ -459,6 +482,46 @@ export function ErrorDetailsDialog({
                   <span className="font-mono text-lg font-semibold text-green-600">
                     {formatCurrency(costUsd, "USD", 6)}
                   </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 性能数据 */}
+          {(durationMs != null || ttfbMs != null || (outputTokens ?? 0) > 0) && (
+            <div className="space-y-2">
+              <h4 className="font-semibold text-sm flex items-center gap-2">
+                <Gauge className="h-4 w-4 text-purple-600" />
+                {t("logs.details.performance.title")}
+              </h4>
+              <div className="rounded-md border bg-muted/50 p-4">
+                <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">
+                      {t("logs.details.performance.ttfb")}:
+                    </span>
+                    <span className="font-mono">
+                      {ttfbMs != null ? `${Math.round(ttfbMs).toLocaleString()} ms` : "-"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">
+                      {t("logs.details.performance.duration")}:
+                    </span>
+                    <span className="font-mono">
+                      {durationMs != null ? `${Math.round(durationMs).toLocaleString()} ms` : "-"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between col-span-2">
+                    <span className="text-muted-foreground">
+                      {t("logs.details.performance.outputRate")}:
+                    </span>
+                    <span className="font-mono">
+                      {outputTokensPerSecond !== null
+                        ? `${outputTokensPerSecond.toFixed(1)} tok/s`
+                        : "-"}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>

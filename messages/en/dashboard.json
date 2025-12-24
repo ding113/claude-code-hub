@@ -194,6 +194,12 @@
       },
       "billingDetails": {
         "title": "Billing Details"
+      },
+      "performance": {
+        "title": "Performance",
+        "ttfb": "TTFB",
+        "duration": "Total Duration",
+        "outputRate": "Output Rate"
       }
     },
     "providerChain": {
@@ -274,7 +280,9 @@
       "cacheCreationConsumedAmount": "Cache Creation Spend",
       "totalConsumedAmount": "Total Spend",
       "successRate": "Success Rate",
-      "avgResponseTime": "Avg Response Time"
+      "avgResponseTime": "Avg Response Time",
+      "avgTtfbMs": "Avg TTFB",
+      "avgTokensPerSecond": "Avg tok/s"
     },
     "states": {
       "loading": "Loading...",

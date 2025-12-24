@@ -28,7 +28,8 @@ export interface ProviderLeaderboardEntry {
   totalCost: number;
   totalTokens: number;
   successRate: number; // 0-1 之间的小数，UI 层负责格式化为百分比
-  avgResponseTime: number; // 毫秒
+  avgTtfbMs: number; // 毫秒
+  avgTokensPerSecond: number; // tok/s（仅统计流式且可计算的请求）
 }
 
 /**
@@ -314,7 +315,20 @@ async function findProviderLeaderboardWithTimezone(
         / NULLIF(count(*)::double precision, 0),
         0::double precision
       )`,
-      avgResponseTime: sql<number>`COALESCE(avg(${messageRequest.durationMs})::double precision, 0::double precision)`,
+      avgTtfbMs: sql<number>`COALESCE(avg(${messageRequest.ttfbMs})::double precision, 0::double precision)`,
+      avgTokensPerSecond: sql<number>`COALESCE(
+        avg(
+          CASE
+            WHEN ${messageRequest.outputTokens} > 0
+              AND ${messageRequest.durationMs} IS NOT NULL
+              AND ${messageRequest.ttfbMs} IS NOT NULL
+              AND ${messageRequest.ttfbMs} < ${messageRequest.durationMs}
+            THEN (${messageRequest.outputTokens}::double precision)
+              / NULLIF((${messageRequest.durationMs} - ${messageRequest.ttfbMs}) / 1000.0, 0)
+          END
+        )::double precision,
+        0::double precision
+      )`,
     })
     .from(messageRequest)
     .innerJoin(
@@ -332,7 +346,8 @@ async function findProviderLeaderboardWithTimezone(
     totalCost: parseFloat(entry.totalCost),
     totalTokens: entry.totalTokens,
     successRate: entry.successRate ?? 0,
-    avgResponseTime: entry.avgResponseTime ?? 0,
+    avgTtfbMs: entry.avgTtfbMs ?? 0,
+    avgTokensPerSecond: entry.avgTokensPerSecond ?? 0,
   }));
 }
 

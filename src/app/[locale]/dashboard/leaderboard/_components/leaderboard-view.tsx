@@ -131,7 +131,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     scope === "user"
       ? 5
       : scope === "provider"
-        ? 7
+        ? 8
         : scope === "providerCacheHitRate"
           ? 8
           : scope === "model"
@@ -200,10 +200,20 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
       cell: (row) => `${(Number((row as ProviderEntry).successRate || 0) * 100).toFixed(1)}%`,
     },
     {
-      header: t("columns.avgResponseTime"),
+      header: t("columns.avgTtfbMs"),
       className: "text-right",
-      cell: (row) =>
-        `${Math.round((row as ProviderEntry).avgResponseTime || 0).toLocaleString()} ms`,
+      cell: (row) => {
+        const val = (row as ProviderEntry).avgTtfbMs;
+        return val && val > 0 ? `${Math.round(val).toLocaleString()} ms` : "-";
+      },
+    },
+    {
+      header: t("columns.avgTokensPerSecond"),
+      className: "text-right",
+      cell: (row) => {
+        const val = (row as ProviderEntry).avgTokensPerSecond;
+        return val && val > 0 ? `${val.toFixed(1)} tok/s` : "-";
+      },
     },
   ];
 

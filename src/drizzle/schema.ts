@@ -288,6 +288,7 @@ export const messageRequest = pgTable('message_request', {
   // Token 使用信息
   inputTokens: integer('input_tokens'),
   outputTokens: integer('output_tokens'),
+  ttfbMs: integer('ttfb_ms'),
   cacheCreationInputTokens: integer('cache_creation_input_tokens'),
   cacheReadInputTokens: integer('cache_read_input_tokens'),
   cacheCreation5mInputTokens: integer('cache_creation_5m_input_tokens'),

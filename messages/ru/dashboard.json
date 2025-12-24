@@ -193,6 +193,12 @@
       },
       "billingDetails": {
         "title": "Детали биллинга"
+      },
+      "performance": {
+        "title": "Производительность",
+        "ttfb": "TTFB",
+        "duration": "Общее время",
+        "outputRate": "Скорость вывода"
       }
     },
     "providerChain": {
@@ -273,7 +279,9 @@
       "cacheCreationConsumedAmount": "Расход на создание кэша",
       "totalConsumedAmount": "Общие расходы",
       "successRate": "Процент успеха",
-      "avgResponseTime": "Среднее время ответа"
+      "avgResponseTime": "Среднее время ответа",
+      "avgTtfbMs": "Средний TTFB",
+      "avgTokensPerSecond": "Средн. ток/с"
     },
     "states": {
       "loading": "Загрузка...",
