@@ -186,7 +186,7 @@ export async function findUserListBatch(
       providerGroup: users.providerGroup,
       tags: users.tags,
       createdAt: users.createdAt,
-      createdAtRaw: sql<string>`to_char(${users.createdAt}, 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+      createdAtRaw: sql<string>`to_char(${users.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
       updatedAt: users.updatedAt,
       deletedAt: users.deletedAt,
       limit5hUsd: users.limit5hUsd,
