@@ -1119,6 +1119,7 @@
       "keySaveFailed": "キーの保存に失敗しました",
       "keyDeleteFailed": "キーの削除に失敗しました",
       "saveSuccess": "変更が保存されました",
+      "atLeastOneKeyEnabled": "少なくとも1つのキーを有効にする必要があります",
       "operationFailed": "操作に失敗しました",
       "userDisabled": "ユーザーが無効化されました",
       "userEnabled": "ユーザーが有効化されました",
@@ -1428,7 +1429,8 @@
         },
         "enableStatus": {
           "label": "有効状態",
-          "description": "無効化されたキーは使用できません"
+          "description": "無効化されたキーは使用できません",
+          "cannotDisableTooltip": "最後の有効なキーを無効にできません"
         },
         "balanceQueryPage": {
           "label": "独立した個人使用量ページ",

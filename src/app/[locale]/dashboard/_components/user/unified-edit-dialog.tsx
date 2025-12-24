@@ -299,6 +299,15 @@ function UnifiedEditDialogInner({
     onSubmit: async (data) => {
       startTransition(async () => {
         try {
+          // 验证: 编辑模式下,至少需要一个启用的 key(防止用户禁用所有 key)
+          if (mode === "edit") {
+            const enabledKeyCount = data.keys.filter((k) => k.isEnabled).length;
+            if (enabledKeyCount === 0) {
+              toast.error(t("editDialog.atLeastOneKeyEnabled"));
+              return;
+            }
+          }
+
           if (mode === "create") {
             if (isKeyOnlyMode) {
               const targetUserId = user?.id ?? currentUser?.id;
@@ -916,6 +925,9 @@ function UnifiedEditDialogInner({
                 const isExpanded =
                   mode === "create" || keys.length === 1 || expandedKeyIds.has(key.id);
                 const showCollapseButton = mode === "edit" && keys.length > 1;
+                // 计算当前是否是最后一个启用的 key
+                const enabledKeysCount = keys.filter((k) => k.isEnabled).length;
+                const isLastEnabledKey = key.isEnabled && enabledKeysCount === 1;
 
                 return (
                   <div
@@ -1003,6 +1015,7 @@ function UnifiedEditDialogInner({
                             limitConcurrentSessions: key.limitConcurrentSessions ?? 0,
                           }}
                           isAdmin={isAdmin}
+                          isLastEnabledKey={isLastEnabledKey}
                           userProviderGroup={user?.providerGroup ?? undefined}
                           onChange={
                             ((fieldOrBatch: string | Record<string, any>, value?: any) =>

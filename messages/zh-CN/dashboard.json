@@ -1158,6 +1158,7 @@
       "keySaveFailed": "保存密钥失败",
       "keyDeleteFailed": "删除密钥失败",
       "saveSuccess": "保存成功",
+      "atLeastOneKeyEnabled": "至少需要保留一个启用的密钥",
       "operationFailed": "操作失败",
       "userDisabled": "用户已禁用",
       "userEnabled": "用户已启用",
@@ -1474,7 +1475,8 @@
         },
         "enableStatus": {
           "label": "启用状态",
-          "description": "禁用后此密钥将无法使用。禁用后仅管理员可启用。"
+          "description": "禁用后此密钥将无法使用。禁用后仅管理员可启用。",
+          "cannotDisableTooltip": "无法禁用最后一个启用的密钥"
         },
         "balanceQueryPage": {
           "label": "独立个人用量页面",
