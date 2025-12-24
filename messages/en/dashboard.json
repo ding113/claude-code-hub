@@ -1164,6 +1164,7 @@
       "keySaveFailed": "Failed to save key",
       "keyDeleteFailed": "Failed to delete key",
       "saveSuccess": "Changes saved successfully",
+      "atLeastOneKeyEnabled": "At least one key must be enabled",
       "operationFailed": "Operation failed",
       "userDisabled": "User has been disabled",
       "userEnabled": "User has been enabled",
@@ -1488,7 +1489,8 @@
         },
         "enableStatus": {
           "label": "Enable Status",
-          "description": "Disabled keys cannot be used"
+          "description": "Disabled keys cannot be used",
+          "cannotDisableTooltip": "Cannot disable the last enabled key"
         },
         "balanceQueryPage": {
           "label": "Independent Personal Usage Page",

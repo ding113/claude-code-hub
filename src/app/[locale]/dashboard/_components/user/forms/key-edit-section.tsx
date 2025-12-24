@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { cn } from "@/lib/utils";
 import { type DailyResetMode, LimitRulePicker, type LimitType } from "./limit-rule-picker";
@@ -44,6 +45,8 @@ export interface KeyEditSectionProps {
   };
   /** Admin 可自由编辑 providerGroup */
   isAdmin?: boolean;
+  /** 是否是最后一个启用的 key (用于禁用 Switch 防止全部禁用) */
+  isLastEnabledKey?: boolean;
   userProviderGroup?: string;
   onChange: {
     (field: string, value: any): void;
@@ -74,7 +77,11 @@ export interface KeyEditSectionProps {
         noGroupHint?: string;
       };
       cacheTtl: { label: string; options: Record<string, string> };
-      enableStatus?: { label: string; description: string };
+      enableStatus?: {
+        label: string;
+        description: string;
+        cannotDisableTooltip?: string;
+      };
     };
     limitRules: any;
     quickExpire: any;
@@ -127,6 +134,7 @@ const TTL_ORDER = ["inherit", "5m", "1h"] as const;
 export function KeyEditSection({
   keyData,
   isAdmin = false,
+  isLastEnabledKey = false,
   userProviderGroup,
   onChange,
   scrollRef,
@@ -339,11 +347,26 @@ export function KeyEditSection({
               {translations.fields.enableStatus?.description || "Disabled keys cannot be used"}
             </p>
           </div>
-          <Switch
-            id={`key-enable-${keyData.id}`}
-            checked={keyData.isEnabled ?? true}
-            onCheckedChange={(checked) => onChange("isEnabled", checked)}
-          />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center">
+                <Switch
+                  id={`key-enable-${keyData.id}`}
+                  checked={keyData.isEnabled ?? true}
+                  disabled={isLastEnabledKey}
+                  onCheckedChange={(checked) => onChange("isEnabled", checked)}
+                />
+              </div>
+            </TooltipTrigger>
+            {isLastEnabledKey && (
+              <TooltipContent>
+                <p className="text-xs">
+                  {translations.fields.enableStatus?.cannotDisableTooltip ||
+                    "Cannot disable the last enabled key"}
+                </p>
+              </TooltipContent>
+            )}
+          </Tooltip>
         </div>
       </section>
 
