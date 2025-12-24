@@ -55,6 +55,10 @@
     "filters": {
       "user": "Пользователь",
       "provider": "Поставщик",
+      "searchUser": "Поиск пользователей...",
+      "searchProvider": "Поиск провайдеров...",
+      "noUserFound": "Пользователи не найдены",
+      "noProviderFound": "Провайдеры не найдены",
       "model": "Модель",
       "endpoint": "Эндпоинт",
       "status": "Статус",
