@@ -1,6 +1,7 @@
 import "server-only";
 
 import crypto from "node:crypto";
+import { extractCodexSessionId } from "@/app/v1/_lib/codex/session-extractor";
 import { sanitizeHeaders } from "@/app/v1/_lib/proxy/errors";
 import { logger } from "@/lib/logger";
 import { normalizeRequestSequence } from "@/lib/utils/request-sequence";
@@ -82,7 +83,26 @@ export class SessionManager {
    * 1. metadata.user_id (Claude Code 主要方式，格式: "{user}_session_{sessionId}")
    * 2. metadata.session_id (备选方式)
    */
-  static extractClientSessionId(requestMessage: Record<string, unknown>): string | null {
+  static extractClientSessionId(
+    requestMessage: Record<string, unknown>,
+    headers?: Headers | null,
+    userAgent?: string | null
+  ): string | null {
+    // Codex 请求：优先尝试从 headers/body 提取稳定的 session_id
+    if (headers && Array.isArray(requestMessage.input)) {
+      const result = extractCodexSessionId(headers, requestMessage, userAgent ?? null);
+      if (result.sessionId) {
+        logger.trace("SessionManager: Extracted session from Codex request", {
+          sessionId: result.sessionId,
+          source: result.source,
+          isCodexClient: result.isCodexClient,
+        });
+        return result.sessionId;
+      }
+
+      return null;
+    }
+
     const metadata = requestMessage.metadata;
     if (!metadata || typeof metadata !== "object") {
       return null;
