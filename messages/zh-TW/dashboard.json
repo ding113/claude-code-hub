@@ -829,25 +829,6 @@
     "editAriaLabel": "編輯使用者",
     "deleteAriaLabel": "刪除使用者"
   },
-  "users": {
-    "title": "使用者管理",
-    "description": "顯示 {count} 位使用者",
-    "toolbar": {
-      "searchPlaceholder": "搜尋使用者名稱、備註、標籤、Key...",
-      "groupFilter": "依群組篩選",
-      "allGroups": "所有群組",
-      "tagFilter": "依標籤篩選",
-      "allTags": "所有標籤",
-      "keyGroupFilter": "金鑰分組",
-      "allKeyGroups": "所有金鑰分組",
-      "createUser": "建立使用者",
-      "createKey": "建立 Key"
-    },
-    "dialog": {
-      "userProviderGroup": "您的供應商分組",
-      "userProviderGroupHint": "新建立的 Key 只能使用您既有的分組"
-    }
-  },
   "availability": {
     "title": "供應商可用性監控",
     "description": "即時監控供應商的可用性狀態和效能指標",
@@ -958,6 +939,90 @@
     "toast": {
       "refreshSuccess": "可用性資料已重新整理",
       "refreshFailed": "重新整理失敗，請重試"
+    }
+  },
+  "rateLimits": {
+    "title": "限流事件統計",
+    "description": "查看與分析限流事件的統計資料",
+    "loading": "載入中...",
+    "error": "載入失敗",
+    "totalEvents": "總事件數",
+    "avgUsage": "平均使用率",
+    "affectedUsers": "受影響使用者數",
+    "noData": "無資料",
+    "noDataHint": "在選定的時間範圍內沒有限流事件",
+    "filters": {
+      "startTime": "開始時間",
+      "endTime": "結束時間",
+      "user": "使用者",
+      "provider": "供應商",
+      "limitType": "限流類型",
+      "allUsers": "全部使用者",
+      "allProviders": "全部供應商",
+      "allLimitTypes": "全部類型",
+      "apply": "套用篩選",
+      "reset": "重設",
+      "loading": "載入中...",
+      "limitTypes": {
+        "rpm": "RPM 限流",
+        "usd_5h": "5 小時消費限流",
+        "usd_weekly": "週消費限流",
+        "usd_monthly": "月消費限流",
+        "concurrent_sessions": "並發 Session 限流",
+        "daily_quota": "每日額度限流"
+      }
+    },
+    "chart": {
+      "title": "限流事件時間軸",
+      "description": "依小時統計的限流事件趨勢",
+      "total": "總計",
+      "events": "事件數"
+    },
+    "breakdown": {
+      "title": "限流類型分佈",
+      "description": "不同限流類型的事件占比",
+      "total": "總計",
+      "count": "事件數",
+      "percentage": "占比",
+      "noData": "無資料",
+      "types": {
+        "rpm": "RPM 限流",
+        "usd_5h": "5 小時消費",
+        "usd_weekly": "週消費",
+        "usd_monthly": "月消費",
+        "concurrent_sessions": "並發 Session",
+        "daily_quota": "每日額度"
+      }
+    },
+    "topUsers": {
+      "title": "受影響使用者排行",
+      "description": "觸發限流最多的使用者列表",
+      "total": "總計",
+      "rank": "排名",
+      "username": "使用者名稱",
+      "eventCount": "事件數",
+      "percentage": "占比",
+      "loading": "載入中...",
+      "noData": "無資料"
+    }
+  },
+  "users": {
+    "title": "使用者管理",
+    "description": "顯示 {count} 位使用者",
+    "toolbar": {
+      "searchPlaceholder": "搜尋使用者名稱、備註、標籤、Key...",
+      "groupFilter": "依群組篩選",
+      "allGroups": "所有群組",
+      "tagFilter": "依標籤篩選",
+      "allTags": "所有標籤",
+      "keyGroupFilter": "金鑰分組",
+      "allKeyGroups": "所有金鑰分組",
+      "createUser": "建立使用者",
+      "createKey": "建立 Key"
+    },
+    "dialog": {
+      "userProviderGroup": "您的供應商分組",
+      "userProviderGroupHint": "新建立的 Key 只能使用您既有的分組"
     }
   },
   "userManagement": {
@@ -1292,6 +1357,18 @@
     "keyStatus": {
       "enabled": "啟用",
       "disabled": "停用"
+    },
+    "userStatus": {
+      "enabled": "啟用",
+      "disabled": "停用",
+      "userEnabled": "使用者已啟用",
+      "userDisabled": "使用者已停用",
+      "toggleUserStatus": "切換使用者狀態",
+      "clickToDisableUser": "點擊停用使用者",
+      "clickToEnableUser": "點擊啟用使用者",
+      "operationFailed": "操作失敗",
+      "deleteFailed": "刪除失敗",
+      "deleteSuccess": "刪除成功"
     },
     "userEditSection": {
       "sections": {

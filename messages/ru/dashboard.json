@@ -828,25 +828,6 @@
     "editAriaLabel": "Редактировать пользователя",
     "deleteAriaLabel": "Удалить пользователя"
   },
-  "users": {
-    "title": "Управление пользователями",
-    "description": "Показано {count} пользователей",
-    "toolbar": {
-      "searchPlaceholder": "Поиск по имени, заметкам, тегам, ключам...",
-      "groupFilter": "Фильтр по группе",
-      "allGroups": "Все группы",
-      "tagFilter": "Фильтр по тегу",
-      "allTags": "Все теги",
-      "keyGroupFilter": "Группа ключей",
-      "allKeyGroups": "Все группы ключей",
-      "createUser": "Создать пользователя",
-      "createKey": "Создать ключ"
-    },
-    "dialog": {
-      "userProviderGroup": "Ваши группы провайдеров",
-      "userProviderGroupHint": "Новые ключи могут использовать только ваши существующие группы провайдеров"
-    }
-  },
   "availability": {
     "title": "Мониторинг доступности провайдеров",
     "description": "Мониторинг доступности и показателей производительности провайдеров в реальном времени",
@@ -957,6 +938,90 @@
     "toast": {
       "refreshSuccess": "Данные о доступности обновлены",
       "refreshFailed": "Обновление не удалось, попробуйте снова"
+    }
+  },
+  "rateLimits": {
+    "title": "Статистика событий лимитов",
+    "description": "Просмотр и анализ статистики событий лимитов",
+    "loading": "Загрузка...",
+    "error": "Ошибка загрузки",
+    "totalEvents": "Всего событий",
+    "avgUsage": "Среднее использование",
+    "affectedUsers": "Затронутые пользователи",
+    "noData": "Нет данных",
+    "noDataHint": "Нет событий лимитов в выбранном диапазоне времени",
+    "filters": {
+      "startTime": "Начало",
+      "endTime": "Конец",
+      "user": "Пользователь",
+      "provider": "Провайдер",
+      "limitType": "Тип лимита",
+      "allUsers": "Все пользователи",
+      "allProviders": "Все провайдеры",
+      "allLimitTypes": "Все типы",
+      "apply": "Применить фильтры",
+      "reset": "Сбросить",
+      "loading": "Загрузка...",
+      "limitTypes": {
+        "rpm": "Лимит RPM",
+        "usd_5h": "Лимит расходов за 5ч",
+        "usd_weekly": "Недельный лимит расходов",
+        "usd_monthly": "Месячный лимит расходов",
+        "concurrent_sessions": "Лимит одновременных сессий",
+        "daily_quota": "Дневной лимит квоты"
+      }
+    },
+    "chart": {
+      "title": "Хронология событий лимитов",
+      "description": "Почасовой тренд событий лимитов",
+      "total": "Всего",
+      "events": "Событий"
+    },
+    "breakdown": {
+      "title": "Распределение по типам лимитов",
+      "description": "Доля событий по типам лимитов",
+      "total": "Всего",
+      "count": "Событий",
+      "percentage": "Доля",
+      "noData": "Нет данных",
+      "types": {
+        "rpm": "RPM",
+        "usd_5h": "Расходы 5ч",
+        "usd_weekly": "Недельные расходы",
+        "usd_monthly": "Месячные расходы",
+        "concurrent_sessions": "Одновременные сессии",
+        "daily_quota": "Дневная квота"
+      }
+    },
+    "topUsers": {
+      "title": "Топ затронутых пользователей",
+      "description": "Пользователи, чаще всего попадавшие под лимиты",
+      "total": "Всего",
+      "rank": "Место",
+      "username": "Имя пользователя",
+      "eventCount": "Событий",
+      "percentage": "Доля",
+      "loading": "Загрузка...",
+      "noData": "Нет данных"
+    }
+  },
+  "users": {
+    "title": "Управление пользователями",
+    "description": "Показано {count} пользователей",
+    "toolbar": {
+      "searchPlaceholder": "Поиск по имени, заметкам, тегам, ключам...",
+      "groupFilter": "Фильтр по группе",
+      "allGroups": "Все группы",
+      "tagFilter": "Фильтр по тегу",
+      "allTags": "Все теги",
+      "keyGroupFilter": "Группа ключей",
+      "allKeyGroups": "Все группы ключей",
+      "createUser": "Создать пользователя",
+      "createKey": "Создать ключ"
+    },
+    "dialog": {
+      "userProviderGroup": "Ваши группы провайдеров",
+      "userProviderGroupHint": "Новые ключи могут использовать только ваши существующие группы провайдеров"
     }
   },
   "userManagement": {
@@ -1293,6 +1358,18 @@
     "keyStatus": {
       "enabled": "Включён",
       "disabled": "Отключён"
+    },
+    "userStatus": {
+      "enabled": "Включён",
+      "disabled": "Отключён",
+      "userEnabled": "Пользователь включён",
+      "userDisabled": "Пользователь отключён",
+      "toggleUserStatus": "Переключить статус пользователя",
+      "clickToDisableUser": "Нажмите, чтобы отключить пользователя",
+      "clickToEnableUser": "Нажмите, чтобы включить пользователя",
+      "operationFailed": "Операция не удалась",
+      "deleteFailed": "Не удалось удалить",
+      "deleteSuccess": "Удаление успешно"
     },
     "userEditSection": {
       "sections": {

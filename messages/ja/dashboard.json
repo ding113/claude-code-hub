@@ -826,20 +826,6 @@
     "editAriaLabel": "ユーザーを編集",
     "deleteAriaLabel": "ユーザーを削除"
   },
-  "users": {
-    "title": "ユーザー管理",
-    "description": "{count} 人のユーザーを表示中",
-    "toolbar": {
-      "searchPlaceholder": "名前、メモ、タグ、キーで検索...",
-      "groupFilter": "グループでフィルター",
-      "allGroups": "すべてのグループ",
-      "tagFilter": "タグでフィルター",
-      "allTags": "すべてのタグ",
-      "keyGroupFilter": "キーグループ",
-      "allKeyGroups": "すべてのキーグループ",
-      "createUser": "ユーザーを作成"
-    }
-  },
   "availability": {
     "title": "プロバイダー可用性モニター",
     "description": "プロバイダーの可用性とパフォーマンス指標をリアルタイムで監視",
@@ -950,6 +936,85 @@
     "toast": {
       "refreshSuccess": "可用性データを更新しました",
       "refreshFailed": "更新に失敗しました。再試行してください"
+    }
+  },
+  "rateLimits": {
+    "title": "レート制限イベント統計",
+    "description": "レート制限イベントの統計データを表示・分析",
+    "loading": "読み込み中...",
+    "error": "読み込み失敗",
+    "totalEvents": "総イベント数",
+    "avgUsage": "平均使用率",
+    "affectedUsers": "影響を受けたユーザー数",
+    "noData": "データなし",
+    "noDataHint": "選択した時間範囲にはレート制限イベントがありません",
+    "filters": {
+      "startTime": "開始時間",
+      "endTime": "終了時間",
+      "user": "ユーザー",
+      "provider": "プロバイダー",
+      "limitType": "制限タイプ",
+      "allUsers": "すべてのユーザー",
+      "allProviders": "すべてのプロバイダー",
+      "allLimitTypes": "すべてのタイプ",
+      "apply": "フィルターを適用",
+      "reset": "リセット",
+      "loading": "読み込み中...",
+      "limitTypes": {
+        "rpm": "RPM レート制限",
+        "usd_5h": "5時間の支出制限",
+        "usd_weekly": "週次支出制限",
+        "usd_monthly": "月次支出制限",
+        "concurrent_sessions": "同時セッション制限",
+        "daily_quota": "日次クォータ制限"
+      }
+    },
+    "chart": {
+      "title": "レート制限イベントのタイムライン",
+      "description": "時間ごとのレート制限イベント推移",
+      "total": "合計",
+      "events": "イベント数"
+    },
+    "breakdown": {
+      "title": "制限タイプ分布",
+      "description": "制限タイプ別イベント比率",
+      "total": "合計",
+      "count": "イベント数",
+      "percentage": "割合",
+      "noData": "データなし",
+      "types": {
+        "rpm": "RPM",
+        "usd_5h": "5時間の支出",
+        "usd_weekly": "週次支出",
+        "usd_monthly": "月次支出",
+        "concurrent_sessions": "同時セッション",
+        "daily_quota": "日次クォータ"
+      }
+    },
+    "topUsers": {
+      "title": "影響ユーザーランキング",
+      "description": "レート制限を最も多く発生させたユーザー",
+      "total": "合計",
+      "rank": "順位",
+      "username": "ユーザー名",
+      "eventCount": "イベント数",
+      "percentage": "割合",
+      "loading": "読み込み中...",
+      "noData": "データなし"
+    }
+  },
+  "users": {
+    "title": "ユーザー管理",
+    "description": "{count} 人のユーザーを表示中",
+    "toolbar": {
+      "searchPlaceholder": "名前、メモ、タグ、キーで検索...",
+      "groupFilter": "グループでフィルター",
+      "allGroups": "すべてのグループ",
+      "tagFilter": "タグでフィルター",
+      "allTags": "すべてのタグ",
+      "keyGroupFilter": "キーグループ",
+      "allKeyGroups": "すべてのキーグループ",
+      "createUser": "ユーザーを作成"
     }
   },
   "userManagement": {
@@ -1280,6 +1345,18 @@
     "keyStatus": {
       "enabled": "有効",
       "disabled": "無効"
+    },
+    "userStatus": {
+      "enabled": "有効",
+      "disabled": "無効",
+      "userEnabled": "ユーザーが有効になりました",
+      "userDisabled": "ユーザーが無効になりました",
+      "toggleUserStatus": "ユーザー状態を切り替える",
+      "clickToDisableUser": "クリックしてユーザーを無効化",
+      "clickToEnableUser": "クリックしてユーザーを有効化",
+      "operationFailed": "操作に失敗しました",
+      "deleteFailed": "削除に失敗しました",
+      "deleteSuccess": "削除しました"
     },
     "userEditSection": {
       "sections": {

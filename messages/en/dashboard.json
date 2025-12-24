@@ -850,25 +850,6 @@
     "editAriaLabel": "Edit user",
     "deleteAriaLabel": "Delete user"
   },
-  "users": {
-    "title": "User Management",
-    "description": "Showing {count} users",
-    "toolbar": {
-      "searchPlaceholder": "Search name, note, tags, keys...",
-      "groupFilter": "Filter by Group",
-      "allGroups": "All Groups",
-      "tagFilter": "Filter by Tag",
-      "allTags": "All Tags",
-      "keyGroupFilter": "Key Group",
-      "allKeyGroups": "All Key Groups",
-      "createUser": "Create User",
-      "createKey": "Create Key"
-    },
-    "dialog": {
-      "userProviderGroup": "Your Provider Groups",
-      "userProviderGroupHint": "New keys can only use your existing provider groups."
-    }
-  },
   "availability": {
     "title": "Provider Availability Monitor",
     "description": "Real-time monitoring of provider availability and performance metrics",
@@ -979,6 +960,90 @@
     "toast": {
       "refreshSuccess": "Availability data refreshed",
       "refreshFailed": "Refresh failed, please retry"
+    }
+  },
+  "rateLimits": {
+    "title": "Rate Limit Event Statistics",
+    "description": "View and analyze statistics for rate limit events",
+    "loading": "Loading...",
+    "error": "Load Failed",
+    "totalEvents": "Total Events",
+    "avgUsage": "Avg Usage",
+    "affectedUsers": "Affected Users",
+    "noData": "No Data",
+    "noDataHint": "No rate limit events in the selected time range",
+    "filters": {
+      "startTime": "Start Time",
+      "endTime": "End Time",
+      "user": "User",
+      "provider": "Provider",
+      "limitType": "Limit Type",
+      "allUsers": "All Users",
+      "allProviders": "All Providers",
+      "allLimitTypes": "All Types",
+      "apply": "Apply Filters",
+      "reset": "Reset",
+      "loading": "Loading...",
+      "limitTypes": {
+        "rpm": "RPM Limit",
+        "usd_5h": "5h Spend Limit",
+        "usd_weekly": "Weekly Spend Limit",
+        "usd_monthly": "Monthly Spend Limit",
+        "concurrent_sessions": "Concurrent Session Limit",
+        "daily_quota": "Daily Quota Limit"
+      }
+    },
+    "chart": {
+      "title": "Rate Limit Timeline",
+      "description": "Hourly trend of rate limit events",
+      "total": "Total",
+      "events": "Events"
+    },
+    "breakdown": {
+      "title": "Rate Limit Type Breakdown",
+      "description": "Share of events by rate limit type",
+      "total": "Total",
+      "count": "Events",
+      "percentage": "Percentage",
+      "noData": "No Data",
+      "types": {
+        "rpm": "RPM",
+        "usd_5h": "5h Spend",
+        "usd_weekly": "Weekly Spend",
+        "usd_monthly": "Monthly Spend",
+        "concurrent_sessions": "Concurrent Sessions",
+        "daily_quota": "Daily Quota"
+      }
+    },
+    "topUsers": {
+      "title": "Top Affected Users",
+      "description": "Users who triggered rate limits most frequently",
+      "total": "Total",
+      "rank": "Rank",
+      "username": "Username",
+      "eventCount": "Events",
+      "percentage": "Percentage",
+      "loading": "Loading...",
+      "noData": "No Data"
+    }
+  },
+  "users": {
+    "title": "User Management",
+    "description": "Showing {count} users",
+    "toolbar": {
+      "searchPlaceholder": "Search name, note, tags, keys...",
+      "groupFilter": "Filter by Group",
+      "allGroups": "All Groups",
+      "tagFilter": "Filter by Tag",
+      "allTags": "All Tags",
+      "keyGroupFilter": "Key Group",
+      "allKeyGroups": "All Key Groups",
+      "createUser": "Create User",
+      "createKey": "Create Key"
+    },
+    "dialog": {
+      "userProviderGroup": "Your Provider Groups",
+      "userProviderGroupHint": "New keys can only use your existing provider groups."
     }
   },
   "userManagement": {
