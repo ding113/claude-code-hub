@@ -438,6 +438,7 @@ function UnifiedEditDialogInner({
                   userId: user.id,
                   name: key.name,
                   expiresAt: key.expiresAt || undefined,
+                  isEnabled: key.isEnabled,
                   canLoginWebUi: key.canLoginWebUi,
                   providerGroup: normalizeProviderGroup(key.providerGroup),
                   cacheTtlPreference: key.cacheTtlPreference,

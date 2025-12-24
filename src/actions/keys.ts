@@ -85,6 +85,7 @@ export async function addKey(data: {
   userId: number;
   name: string;
   expiresAt?: string;
+  isEnabled?: boolean;
   canLoginWebUi?: boolean;
   limit5hUsd?: number | null;
   limitDailyUsd?: number | null;
@@ -245,7 +246,7 @@ export async function addKey(data: {
       user_id: data.userId,
       name: validatedData.name,
       key: generatedKey,
-      is_enabled: true,
+      is_enabled: data.isEnabled ?? true,
       expires_at: expiresAt,
       can_login_web_ui: validatedData.canLoginWebUi,
       limit_5h_usd: validatedData.limit5hUsd,
