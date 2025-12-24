@@ -234,6 +234,7 @@ export class ProxyResponseHandler {
           await updateMessageRequestDuration(messageContext.id, duration);
           await updateMessageRequestDetails(messageContext.id, {
             statusCode: statusCode,
+            ttfbMs: session.ttfbMs ?? duration,
             providerChain: session.getProviderChain(),
             model: session.getCurrentModel() ?? undefined, // ⭐ 更新重定向后的模型
             providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
@@ -378,6 +379,7 @@ export class ProxyResponseHandler {
             statusCode: statusCode,
             inputTokens: usageMetrics?.input_tokens,
             outputTokens: usageMetrics?.output_tokens,
+            ttfbMs: session.ttfbMs ?? duration,
             cacheCreationInputTokens: usageMetrics?.cache_creation_input_tokens,
             cacheReadInputTokens: usageMetrics?.cache_read_input_tokens,
             cacheCreation5mInputTokens: usageMetrics?.cache_creation_5m_input_tokens,
@@ -572,6 +574,8 @@ export class ProxyResponseHandler {
         };
         if (sessionWithCleanup.clearResponseTimeout) {
           sessionWithCleanup.clearResponseTimeout();
+          // ⭐ 同步记录 TTFB，与首字节超时口径一致
+          session.recordTtfb();
           logger.debug(
             "[ResponseHandler] Gemini passthrough: First byte timeout cleared on response received",
             {
@@ -592,6 +596,7 @@ export class ProxyResponseHandler {
 
             const chunks: string[] = [];
             const decoder = new TextDecoder();
+            let isFirstChunk = true;
 
             while (true) {
               if (session.clientAbortSignal?.aborted) break;
@@ -599,6 +604,10 @@ export class ProxyResponseHandler {
               const { done, value } = await reader.read();
               if (done) break;
               if (value) {
+                if (isFirstChunk) {
+                  isFirstChunk = false;
+                  session.recordTtfb();
+                }
                 chunks.push(decoder.decode(value, { stream: true }));
               }
             }
@@ -928,6 +937,7 @@ export class ProxyResponseHandler {
           statusCode: statusCode,
           inputTokens: usageForCost?.input_tokens,
           outputTokens: usageForCost?.output_tokens,
+          ttfbMs: session.ttfbMs,
           cacheCreationInputTokens: usageForCost?.cache_creation_input_tokens,
           cacheReadInputTokens: usageForCost?.cache_read_input_tokens,
           cacheCreation5mInputTokens: usageForCost?.cache_creation_5m_input_tokens,
@@ -972,6 +982,7 @@ export class ProxyResponseHandler {
 
             // ⭐ 流式：读到第一块数据后立即清除响应超时定时器
             if (isFirstChunk) {
+              session.recordTtfb();
               isFirstChunk = false;
               const sessionWithCleanup = session as typeof session & {
                 clearResponseTimeout?: () => void;
@@ -1714,6 +1725,7 @@ async function finalizeRequestStats(
     // 即使没有 usageMetrics，也需要更新状态码和 provider chain
     await updateMessageRequestDetails(messageContext.id, {
       statusCode: statusCode,
+      ttfbMs: session.ttfbMs ?? duration,
       providerChain: session.getProviderChain(),
       model: session.getCurrentModel() ?? undefined,
       providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
@@ -1789,6 +1801,7 @@ async function finalizeRequestStats(
     statusCode: statusCode,
     inputTokens: normalizedUsage.input_tokens,
     outputTokens: normalizedUsage.output_tokens,
+    ttfbMs: session.ttfbMs ?? duration,
     cacheCreationInputTokens: normalizedUsage.cache_creation_input_tokens,
     cacheReadInputTokens: normalizedUsage.cache_read_input_tokens,
     cacheCreation5mInputTokens: normalizedUsage.cache_creation_5m_input_tokens,
@@ -1927,6 +1940,7 @@ async function persistRequestFailure(options: {
       errorMessage,
       errorStack,
       errorCause,
+      ttfbMs: phase === "non-stream" ? (session.ttfbMs ?? duration) : session.ttfbMs,
       providerChain: session.getProviderChain(),
       model: session.getCurrentModel() ?? undefined,
       providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）

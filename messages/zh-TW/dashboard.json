@@ -194,6 +194,12 @@
       },
       "billingDetails": {
         "title": "計費詳情"
+      },
+      "performance": {
+        "title": "效能資料",
+        "ttfb": "首字節時間（TTFB）",
+        "duration": "總耗時",
+        "outputRate": "輸出速率"
       }
     },
     "providerChain": {
@@ -274,7 +280,9 @@
       "cacheCreationConsumedAmount": "快取建立消耗金額",
       "totalConsumedAmount": "總消耗金額",
       "successRate": "成功率",
-      "avgResponseTime": "平均回覆時間"
+      "avgResponseTime": "平均回覆時間",
+      "avgTtfbMs": "平均 TTFB",
+      "avgTokensPerSecond": "平均輸出速率"
     },
     "states": {
       "loading": "載入中...",

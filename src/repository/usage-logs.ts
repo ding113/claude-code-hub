@@ -47,6 +47,7 @@ export interface UsageLogRow {
   costUsd: string | null;
   costMultiplier: string | null; // 供应商倍率
   durationMs: number | null;
+  ttfbMs: number | null;
   errorMessage: string | null;
   providerChain: ProviderChainItem[] | null;
   blockedBy: string | null; // 拦截类型（如 'sensitive_word'）
@@ -203,6 +204,7 @@ export async function findUsageLogsBatch(
       costUsd: messageRequest.costUsd,
       costMultiplier: messageRequest.costMultiplier,
       durationMs: messageRequest.durationMs,
+      ttfbMs: messageRequest.ttfbMs,
       errorMessage: messageRequest.errorMessage,
       providerChain: messageRequest.providerChain,
       blockedBy: messageRequest.blockedBy,
@@ -412,6 +414,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       costUsd: messageRequest.costUsd,
       costMultiplier: messageRequest.costMultiplier, // 供应商倍率
       durationMs: messageRequest.durationMs,
+      ttfbMs: messageRequest.ttfbMs,
       errorMessage: messageRequest.errorMessage,
       providerChain: messageRequest.providerChain,
       blockedBy: messageRequest.blockedBy, // 拦截类型

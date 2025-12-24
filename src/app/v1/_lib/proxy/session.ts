@@ -59,6 +59,9 @@ export class ProxySession {
   provider: Provider | null;
   messageContext: MessageContext | null;
 
+  // Time To First Byte (ms). Streaming: first chunk. Non-stream: equals durationMs.
+  ttfbMs: number | null = null;
+
   // Session ID（用于会话粘性和并发限流）
   sessionId: string | null;
 
@@ -238,6 +241,22 @@ export class ProxySession {
     if (context?.user) {
       this.userName = context.user.name;
     }
+  }
+
+  /**
+   * Record Time To First Byte (TTFB) for streaming responses.
+   *
+   * Definition: first body chunk received.
+   * Non-stream responses should persist TTFB as `durationMs` at finalize time.
+   */
+  recordTtfb(): number {
+    if (this.ttfbMs !== null) {
+      return this.ttfbMs;
+    }
+
+    const value = Math.max(0, Date.now() - this.startTime);
+    this.ttfbMs = value;
+    return value;
   }
 
   /**

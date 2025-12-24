@@ -193,6 +193,12 @@
       },
       "billingDetails": {
         "title": "課金詳細"
+      },
+      "performance": {
+        "title": "パフォーマンス",
+        "ttfb": "TTFB",
+        "duration": "総所要時間",
+        "outputRate": "出力速度"
       }
     },
     "providerChain": {
@@ -273,7 +279,9 @@
       "cacheCreationConsumedAmount": "キャッシュ作成消費額",
       "totalConsumedAmount": "総消費額",
       "successRate": "成功率",
-      "avgResponseTime": "平均応答時間"
+      "avgResponseTime": "平均応答時間",
+      "avgTtfbMs": "平均TTFB",
+      "avgTokensPerSecond": "平均トークン/秒"
     },
     "states": {
       "loading": "読み込み中...",
