@@ -87,7 +87,8 @@ function getExpiryStatus(
 
   if (!isEnabled) return { label: "disabled", variant: "secondary" };
   if (hasExpiry && expTs <= now) return { label: "expired", variant: "destructive" };
-  if (hasExpiry && expTs - now <= EXPIRING_SOON_MS) return { label: "expiringSoon", variant: "outline" };
+  if (hasExpiry && expTs - now <= EXPIRING_SOON_MS)
+    return { label: "expiringSoon", variant: "outline" };
   return { label: "active", variant: "default" };
 }
 
