@@ -101,6 +101,8 @@ export function QuickRenewKeyDialog({
           }
         }
         const newDate = addDays(baseDate, days);
+        // Set to end of day to ensure full day validity
+        newDate.setHours(23, 59, 59, 999);
         const shouldEnable =
           !keyData.status || keyData.status === "disabled" ? enableOnRenew : undefined;
         const result = await onConfirm(keyData.id, newDate, shouldEnable);

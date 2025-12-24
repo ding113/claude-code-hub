@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Loader2, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -118,6 +119,7 @@ export function UserManagementTable({
   translations,
 }: UserManagementTableProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const tUserList = useTranslations("dashboard.userList");
   const tUserMgmt = useTranslations("dashboard.userManagement");
   const isAdmin = currentUser?.role === "admin";
@@ -350,6 +352,8 @@ export function UserManagementTable({
       }
       toast.success(tUserMgmt("quickRenew.success"));
       // 刷新服务端数据（成功后乐观更新状态会在useEffect中被props覆盖）
+      // 使 React Query 缓存失效，确保数据刷新
+      queryClient.invalidateQueries({ queryKey: ["users"] });
       router.refresh();
       return { ok: true };
     } catch (error) {
