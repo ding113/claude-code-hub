@@ -520,15 +520,15 @@ export async function testErrorRuleAction(input: { message: string }): Promise<
 
           // 3. 处理 message 为空的情况（运行时会回退到原始错误消息）
           const overrideErrorObj = detection.overrideResponse.error as Record<string, unknown>;
-          const overrideMessage =
-            typeof overrideErrorObj?.message === "string" &&
-            overrideErrorObj.message.trim().length > 0
-              ? overrideErrorObj.message
-              : rawMessage;
+          const isMessageEmpty =
+            typeof overrideErrorObj?.message !== "string" ||
+            overrideErrorObj.message.trim().length === 0;
 
-          if (overrideMessage === rawMessage) {
+          if (isMessageEmpty) {
             warnings.push("覆写响应的 message 为空，运行时将回退到原始错误消息");
           }
+
+          const overrideMessage = isMessageEmpty ? rawMessage : overrideErrorObj.message;
 
           // 构建最终响应（与 error-handler.ts 构建逻辑一致）
           finalResponse = {

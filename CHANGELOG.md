@@ -4,6 +4,32 @@
 
 ---
 
+## [v0.3.36](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.36) - 2025-12-23
+
+### 新增
+
+- 用户和密钥快速续期功能，支持快速选择 7天/30天/90天/1年 或自定义日期续期 (#414) [@NightYu](https://github.com/NightYuYyy)
+- 用户和密钥状态翻译支持（多语言）(#414) [@NightYu](https://github.com/NightYuYyy)
+- 供应商分组新增默认值处理，优化数据库和 UI 逻辑 (#411)
+
+### 优化
+
+- 更新错误消息描述，提升用户体验 (#411)
+- 移除 docker-compose 中的外部卷配置，简化部署流程 (#411)
+- 增强代理请求处理和错误管理机制 (#411)
+- 恢复 Claude 工作流作为 Codex 的备用选项
+
+### 修复
+
+- 修复用户本地过期状态更新时的 user.id 依赖问题 (#414) [@NightYu](https://github.com/NightYuYyy)
+- 修复 maxAttemptsPerProvider 配置在供应商重试逻辑中未生效的问题 (#403, #415)
+- 修复统计组件中按钮元素缺少 cursor pointer 的问题，改善用户体验 (#401) [@Hwwwww](https://github.com/Hwwwww-dev)
+- 修复健康检查命令和错误规则插入逻辑 (#411) [@NightYu](https://github.com/NightYuYyy)
+- 修复 readLocalVersionFile 中的错误处理 (#411) [@NightYu](https://github.com/NightYuYyy)
+- 修复 releaseUrl 使用通用 releases 页面 (#411)
+
+---
+
 ## [v0.3.34](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.34) - 2025-12-22
 
 ### 新增
