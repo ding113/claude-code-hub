@@ -1694,3 +1694,5 @@ export class SessionManager {
     }
   }
 }
+
+export { headersToSanitizedObject, parseHeaderRecord };
