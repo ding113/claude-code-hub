@@ -179,7 +179,10 @@ export function VirtualizedLogsTable({
             <div className="flex-[0.6] min-w-[50px] px-1 truncate" title={t("logs.columns.key")}>
               {t("logs.columns.key")}
             </div>
-            <div className="flex-[1] min-w-[80px] px-1 truncate" title={t("logs.columns.provider")}>
+            <div
+              className="flex-[1.5] min-w-[100px] px-1 truncate"
+              title={t("logs.columns.provider")}
+            >
               {t("logs.columns.provider")}
             </div>
             <div className="flex-[1] min-w-[80px] px-1 truncate" title={t("logs.columns.model")}>
@@ -284,7 +287,7 @@ export function VirtualizedLogsTable({
                   </div>
 
                   {/* Provider */}
-                  <div className="flex-[1] min-w-[80px] px-1">
+                  <div className="flex-[1.5] min-w-[100px] px-1">
                     {log.blockedBy ? (
                       <span className="inline-flex items-center gap-1 rounded-md bg-orange-100 dark:bg-orange-950 px-2 py-1 text-xs font-medium text-orange-700 dark:text-orange-300">
                         <span className="h-1.5 w-1.5 rounded-full bg-orange-600 dark:bg-orange-400" />
