@@ -1333,7 +1333,13 @@
           "enabledDescription": "目前已啟用，停用後該使用者及其金鑰將無法繼續使用",
           "disabledDescription": "目前已停用，啟用後該使用者及其金鑰將恢復正常使用",
           "confirmDisable": "確認停用",
-          "confirmEnable": "確認啟用"
+          "confirmEnable": "確認啟用",
+          "confirmEnableTitle": "確認啟用使用者",
+          "confirmDisableTitle": "確認停用使用者",
+          "confirmEnableDescription": "啟用後該使用者及其金鑰將恢復正常使用",
+          "confirmDisableDescription": "停用後該使用者及其金鑰將無法繼續使用",
+          "cancel": "取消",
+          "processing": "處理中..."
         }
       },
       "presetClients": {

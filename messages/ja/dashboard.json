@@ -1321,7 +1321,13 @@
           "enabledDescription": "現在有効です。無効にすると、このユーザーとそのキーは使用できなくなります。",
           "disabledDescription": "現在無効です。有効にすると、このユーザーとそのキーが通常通り使用できるようになります。",
           "confirmDisable": "無効化を確認",
-          "confirmEnable": "有効化を確認"
+          "confirmEnable": "有効化を確認",
+          "confirmEnableTitle": "ユーザー有効化の確認",
+          "confirmDisableTitle": "ユーザー無効化の確認",
+          "confirmEnableDescription": "有効化すると、このユーザーとそのキーが通常通り使用できるようになります。",
+          "confirmDisableDescription": "無効化すると、このユーザーとそのキーは使用できなくなります。",
+          "cancel": "キャンセル",
+          "processing": "処理中..."
         }
       },
       "presetClients": {
