@@ -842,7 +842,7 @@ export async function batchUpdateKeys(
             const currentEnabledCount = userEnabledCounts.get(userId) ?? 0;
             if (currentEnabledCount - disableCount < 1) {
               throw new BatchUpdateError(
-                tError("CANNOT_DISABLE_LAST_KEY") || "无法禁用最后一个可用密钥",
+                tError("CANNOT_DISABLE_LAST_KEY"),
                 ERROR_CODES.OPERATION_FAILED
               );
             }
@@ -899,7 +899,7 @@ export async function batchUpdateKeys(
 
           if (Number(remainingEnabled?.count ?? 0) < 1) {
             throw new BatchUpdateError(
-              tError("CANNOT_DISABLE_LAST_KEY") || "无法禁用最后一个可用密钥",
+              tError("CANNOT_DISABLE_LAST_KEY"),
               ERROR_CODES.OPERATION_FAILED
             );
           }
