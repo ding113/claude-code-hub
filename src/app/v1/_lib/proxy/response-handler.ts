@@ -1291,8 +1291,28 @@ function extractUsageMetrics(value: unknown): UsageMetrics | null {
     }
   }
 
+  // 兼容顶层扁平格式：cache_creation_5m_input_tokens / cache_creation_1h_input_tokens
+  // 部分供应商/relay 直接在顶层返回细分字段，而非嵌套在 cache_creation 对象中
+  // 优先级：嵌套格式 > 顶层扁平格式 > 旧 relay 格式
+  if (
+    result.cache_creation_5m_input_tokens === undefined &&
+    typeof usage.cache_creation_5m_input_tokens === "number"
+  ) {
+    result.cache_creation_5m_input_tokens = usage.cache_creation_5m_input_tokens;
+    cacheCreationDetailedTotal += usage.cache_creation_5m_input_tokens;
+    hasAny = true;
+  }
+  if (
+    result.cache_creation_1h_input_tokens === undefined &&
+    typeof usage.cache_creation_1h_input_tokens === "number"
+  ) {
+    result.cache_creation_1h_input_tokens = usage.cache_creation_1h_input_tokens;
+    cacheCreationDetailedTotal += usage.cache_creation_1h_input_tokens;
+    hasAny = true;
+  }
+
   // 兼容部分 relay / 旧字段命名：claude_cache_creation_5_m_tokens / claude_cache_creation_1_h_tokens
-  // 仅在标准字段缺失时使用，避免重复统计
+  // 仅在标准字段缺失时使用，避免重复统计（优先级最低）
   if (
     result.cache_creation_5m_input_tokens === undefined &&
     typeof usage.claude_cache_creation_5_m_tokens === "number"
