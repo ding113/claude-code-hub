@@ -112,9 +112,7 @@ export function ProviderManager({
 
     // Filter by status
     if (statusFilter !== "all") {
-      result = result.filter((p) =>
-        statusFilter === "active" ? p.isEnabled : !p.isEnabled
-      );
+      result = result.filter((p) => (statusFilter === "active" ? p.isEnabled : !p.isEnabled));
     }
 
     // Filter by groups
@@ -234,9 +232,7 @@ export function ProviderManager({
                 size="sm"
                 onClick={() => {
                   setGroupFilter((prev) =>
-                    prev.includes(group)
-                      ? prev.filter((g) => g !== group)
-                      : [...prev, group]
+                    prev.includes(group) ? prev.filter((g) => g !== group) : [...prev, group]
                   );
                 }}
                 disabled={loading}
