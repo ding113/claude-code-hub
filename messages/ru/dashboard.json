@@ -96,10 +96,13 @@
       "endpoint": "Эндпоинт",
       "inputTokens": "Вход",
       "outputTokens": "Выход",
+      "tokens": "Tokens",
       "cacheWrite": "Запись в кэш",
       "cacheRead": "Чтение из кэша",
+      "cache": "Cache",
       "cost": "Стоимость",
       "duration": "Продолжительность",
+      "performance": "Perf",
       "status": "Статус"
     },
     "stats": {

@@ -96,10 +96,13 @@
       "endpoint": "端點",
       "inputTokens": "輸入",
       "outputTokens": "輸出",
+      "tokens": "Tokens",
       "cacheWrite": "快取寫入",
       "cacheRead": "快取讀取",
+      "cache": "快取",
       "cost": "成本",
       "duration": "耗時",
+      "performance": "效能",
       "status": "狀態"
     },
     "stats": {

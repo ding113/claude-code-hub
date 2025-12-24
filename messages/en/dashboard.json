@@ -96,10 +96,13 @@
       "endpoint": "Endpoint",
       "inputTokens": "Input",
       "outputTokens": "Output",
+      "tokens": "Tokens",
       "cacheWrite": "Cache Write",
       "cacheRead": "Cache Read",
+      "cache": "Cache",
       "cost": "Cost",
       "duration": "Duration",
+      "performance": "Perf",
       "status": "Status"
     },
     "stats": {
