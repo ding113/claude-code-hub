@@ -36,7 +36,8 @@
     "requestChain": "请求链路:",
     "systemError": "系统错误",
     "concurrentLimit": "并发限制",
-    "http2Fallback": "HTTP/2 回退"
+    "http2Fallback": "HTTP/2 回退",
+    "clientError": "客户端错误"
   },
   "timeline": {
     "sessionReuse": "会话复用",
@@ -127,6 +128,15 @@
     "requestUrl": "请求 URL",
     "requestHeaders": "请求头",
     "requestBody": "请求体",
-    "requestBodyTruncated": "（已截断）"
+    "requestBodyTruncated": "（已截断）",
+    "clientErrorNonRetryable": "客户端错误（第 {attempt} 次尝试，不可重试）",
+    "matchedRule": "匹配的错误规则",
+    "ruleId": "规则 ID: {id}",
+    "ruleCategory": "规则类别: {category}",
+    "rulePattern": "匹配模式: {pattern}",
+    "ruleMatchType": "匹配类型: {matchType}",
+    "ruleDescription": "规则描述: {description}",
+    "ruleHasOverride": "覆写配置: 响应体={response}, 状态码={statusCode}",
+    "clientErrorNote": "此错误由用户输入导致，不会重试，不计入熔断器。"
   }
 }

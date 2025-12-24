@@ -2,9 +2,9 @@
 
 import { format } from "date-fns";
 import { Calendar, Gauge, Key, Plus, Sparkles } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { DatePickerField } from "@/components/form/date-picker-field";
-import { TextField } from "@/components/form/form-field";
+import { TagInputField, TextField } from "@/components/form/form-field";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { cn } from "@/lib/utils";
 import { type DailyResetMode, LimitRulePicker, type LimitType } from "./limit-rule-picker";
@@ -44,6 +45,8 @@ export interface KeyEditSectionProps {
   };
   /** Admin 可自由编辑 providerGroup */
   isAdmin?: boolean;
+  /** 是否是最后一个启用的 key (用于禁用 Switch 防止全部禁用) */
+  isLastEnabledKey?: boolean;
   userProviderGroup?: string;
   onChange: {
     (field: string, value: any): void;
@@ -74,7 +77,11 @@ export interface KeyEditSectionProps {
         noGroupHint?: string;
       };
       cacheTtl: { label: string; options: Record<string, string> };
-      enableStatus?: { label: string; description: string };
+      enableStatus?: {
+        label: string;
+        description: string;
+        cannotDisableTooltip?: string;
+      };
     };
     limitRules: any;
     quickExpire: any;
@@ -127,6 +134,7 @@ const TTL_ORDER = ["inherit", "5m", "1h"] as const;
 export function KeyEditSection({
   keyData,
   isAdmin = false,
+  isLastEnabledKey = false,
   userProviderGroup,
   onChange,
   scrollRef,
@@ -289,12 +297,30 @@ export function KeyEditSection({
     if (!normalizedKeyProviderGroup) return [];
     return normalizedKeyProviderGroup.split(",").filter(Boolean);
   }, [normalizedKeyProviderGroup]);
-  const extraKeyGroupOption = useMemo(() => {
+  const _extraKeyGroupOption = useMemo(() => {
     if (!normalizedKeyProviderGroup) return null;
     if (normalizedKeyProviderGroup === normalizedUserProviderGroup) return null;
     if (userGroups.includes(normalizedKeyProviderGroup)) return null;
     return normalizedKeyProviderGroup;
   }, [normalizedKeyProviderGroup, normalizedUserProviderGroup, userGroups]);
+
+  // 普通用户选择分组时，自动移除 default
+  const handleUserProviderGroupChange = useCallback(
+    (newValue: string) => {
+      const groups = newValue
+        .split(",")
+        .map((g) => g.trim())
+        .filter(Boolean);
+      // 如果有多个分组且包含 default，移除 default
+      if (groups.length > 1 && groups.includes(PROVIDER_GROUP.DEFAULT)) {
+        const withoutDefault = groups.filter((g) => g !== PROVIDER_GROUP.DEFAULT);
+        onChange("providerGroup", withoutDefault.join(","));
+      } else {
+        onChange("providerGroup", newValue);
+      }
+    },
+    [onChange]
+  );
 
   return (
     <div ref={scrollRef} className="space-y-3 scroll-mt-24">
@@ -321,11 +347,26 @@ export function KeyEditSection({
               {translations.fields.enableStatus?.description || "Disabled keys cannot be used"}
             </p>
           </div>
-          <Switch
-            id={`key-enable-${keyData.id}`}
-            checked={keyData.isEnabled ?? true}
-            onCheckedChange={(checked) => onChange("isEnabled", checked)}
-          />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center">
+                <Switch
+                  id={`key-enable-${keyData.id}`}
+                  checked={keyData.isEnabled ?? true}
+                  disabled={isLastEnabledKey}
+                  onCheckedChange={(checked) => onChange("isEnabled", checked)}
+                />
+              </div>
+            </TooltipTrigger>
+            {isLastEnabledKey && (
+              <TooltipContent>
+                <p className="text-xs">
+                  {translations.fields.enableStatus?.cannotDisableTooltip ||
+                    "Cannot disable the last enabled key"}
+                </p>
+              </TooltipContent>
+            )}
+          </Tooltip>
         </div>
       </section>
 
@@ -425,46 +466,42 @@ export function KeyEditSection({
           />
         ) : userGroups.length > 0 ? (
           <div className="space-y-2">
-            <Label>{translations.fields.providerGroup.label}</Label>
-            <Select
-              value={normalizedKeyProviderGroup || normalizedUserProviderGroup}
-              onValueChange={(val) => onChange("providerGroup", val)}
-              disabled={keyData.id > 0}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder={translations.fields.providerGroup.placeholder} />
-              </SelectTrigger>
-              <SelectContent>
-                {extraKeyGroupOption ? (
-                  <SelectItem value={extraKeyGroupOption}>
-                    <Badge
-                      variant="secondary"
-                      className="text-xs font-mono max-w-[280px] truncate"
-                      title={extraKeyGroupOption}
-                    >
-                      {extraKeyGroupOption}
-                    </Badge>
-                  </SelectItem>
-                ) : null}
-                {userGroups.map((group) => (
-                  <SelectItem key={group} value={group}>
+            {keyData.id > 0 ? (
+              // 编辑模式：只读显示
+              <>
+                <Label>{translations.fields.providerGroup.label}</Label>
+                <div className="flex flex-wrap gap-1 p-2 border rounded-md bg-muted/50">
+                  {keyGroupOptions.length > 0 ? (
+                    keyGroupOptions.map((group) => (
+                      <Badge key={group} variant="secondary" className="text-xs">
+                        {group}
+                      </Badge>
+                    ))
+                  ) : (
                     <Badge variant="outline" className="text-xs">
-                      {group}
+                      {PROVIDER_GROUP.DEFAULT}
                     </Badge>
-                  </SelectItem>
-                ))}
-                {userGroups.length > 1 && (
-                  <SelectItem value={normalizedUserProviderGroup}>
-                    {translations.fields.providerGroup.allGroups || "全部分组"}
-                  </SelectItem>
-                )}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              {keyData.id > 0
-                ? translations.fields.providerGroup.editHint || "已有密钥的分组不可修改"
-                : translations.fields.providerGroup.selectHint || "选择此 Key 可使用的供应商分组"}
-            </p>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {translations.fields.providerGroup.editHint || "已有密钥的分组不可修改"}
+                </p>
+              </>
+            ) : (
+              // 创建模式：多选
+              <TagInputField
+                label={translations.fields.providerGroup.label}
+                placeholder={translations.fields.providerGroup.placeholder || "选择分组"}
+                value={keyData.providerGroup || PROVIDER_GROUP.DEFAULT}
+                onChange={handleUserProviderGroupChange}
+                suggestions={userGroups}
+                maxTags={userGroups.length + 1}
+                maxTagLength={50}
+                description={
+                  translations.fields.providerGroup.selectHint || "选择此 Key 可使用的供应商分组"
+                }
+              />
+            )}
           </div>
         ) : keyGroupOptions.length > 0 ? (
           <div className="space-y-2">

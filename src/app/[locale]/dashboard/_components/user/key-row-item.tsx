@@ -92,11 +92,39 @@ export interface KeyRowItemProps {
   };
 }
 
+const EXPIRING_SOON_MS = 72 * 60 * 60 * 1000; // 72小时
+
 function splitGroups(value?: string | null): string[] {
   return (value ?? "")
     .split(",")
     .map((g) => g.trim())
     .filter(Boolean);
+}
+
+function formatExpiry(expiresAt: string | null | undefined, locale: string): string {
+  if (!expiresAt) return "-";
+  const date = new Date(expiresAt);
+  // 如果解析失败（如"永不过期"等翻译文本），直接返回原文本
+  if (Number.isNaN(date.getTime())) return expiresAt;
+  return formatDate(date, "yyyy-MM-dd", locale);
+}
+
+function getKeyExpiryStatus(
+  status: "enabled" | "disabled",
+  expiresAt: string | null | undefined
+): { label: string; variant: "default" | "secondary" | "destructive" | "outline" } {
+  if (status === "disabled") return { label: "disabled", variant: "secondary" };
+  if (!expiresAt) return { label: "active", variant: "default" };
+
+  const date = new Date(expiresAt);
+  if (Number.isNaN(date.getTime())) return { label: "active", variant: "default" };
+
+  const now = Date.now();
+  const expTs = date.getTime();
+
+  if (expTs <= now) return { label: "expired", variant: "destructive" };
+  if (expTs - now <= EXPIRING_SOON_MS) return { label: "expiringSoon", variant: "outline" };
+  return { label: "active", variant: "default" };
 }
 
 export function KeyRowItem({
@@ -147,7 +175,10 @@ export function KeyRowItem({
 
   const keyGroups = splitGroups(keyData.providerGroup);
   const effectiveGroups = keyGroups.length > 0 ? keyGroups : [translations.defaultGroup];
-  const visibleGroups = effectiveGroups.slice(0, 2);
+  const visibleGroups = effectiveGroups.slice(0, 1);
+
+  // 计算 key 过期状态
+  const keyExpiryStatus = getKeyExpiryStatus(localStatus, localExpiresAt);
   const remainingGroups = Math.max(0, effectiveGroups.length - visibleGroups.length);
   const effectiveGroupText = effectiveGroups.join(", ");
 
@@ -192,13 +223,6 @@ export function KeyRowItem({
     } finally {
       setIsTogglingEnabled(false);
     }
-  };
-
-  const formatExpiry = (expiresAt: string | null | undefined): string => {
-    if (!expiresAt) return "-";
-    const date = new Date(expiresAt);
-    if (Number.isNaN(date.getTime())) return "-";
-    return formatDate(date, "yyyy-MM-dd", locale);
   };
 
   const handleQuickRenewConfirm = async (
@@ -278,8 +302,8 @@ export function KeyRowItem({
       className={cn(
         "grid items-center gap-3 px-3 py-2 text-sm border-b last:border-b-0 hover:bg-muted/40 transition-colors",
         isMultiSelectMode
-          ? "grid-cols-[24px_2fr_3fr_2fr_1fr_2fr_2fr_2fr_1fr]"
-          : "grid-cols-[2fr_3fr_2fr_1fr_2fr_2fr_2fr_1fr]",
+          ? "grid-cols-[24px_2fr_3fr_3fr_1fr_2fr_1.5fr_1.5fr_1.5fr]"
+          : "grid-cols-[2fr_3fr_2.5fr_1fr_2fr_1.5fr_1.5fr_1.5fr]",
         highlight && "bg-primary/10 ring-1 ring-primary/30"
       )}
     >
@@ -297,11 +321,8 @@ export function KeyRowItem({
       <div className="min-w-0">
         <div className="flex items-center gap-2 min-w-0">
           <div className="truncate font-medium">{keyData.name}</div>
-          <Badge
-            variant={localStatus === "enabled" ? "default" : "secondary"}
-            className="text-[10px]"
-          >
-            {localStatus === "enabled" ? translations.status.enabled : translations.status.disabled}
+          <Badge variant={keyExpiryStatus.variant} className="text-[10px] shrink-0">
+            {tKeyStatus(keyExpiryStatus.label)}
           </Badge>
         </div>
       </div>
@@ -444,7 +465,7 @@ export function KeyRowItem({
           setQuickRenewOpen(true);
         }}
       >
-        {formatExpiry(localExpiresAt)}
+        {formatExpiry(localExpiresAt, locale)}
       </div>
 
       {/* 操作 */}

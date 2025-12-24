@@ -55,6 +55,10 @@
     "filters": {
       "user": "用户",
       "provider": "供应商",
+      "searchUser": "搜索用户...",
+      "searchProvider": "搜索供应商...",
+      "noUserFound": "未找到匹配的用户",
+      "noProviderFound": "未找到匹配的供应商",
       "model": "模型",
       "endpoint": "端点",
       "status": "状态",
@@ -92,10 +96,13 @@
       "endpoint": "端点",
       "inputTokens": "输入",
       "outputTokens": "输出",
+      "tokens": "Tokens",
       "cacheWrite": "缓存写入",
       "cacheRead": "缓存读取",
+      "cache": "缓存",
       "cost": "成本",
       "duration": "耗时",
+      "performance": "性能",
       "status": "状态"
     },
     "stats": {
@@ -194,6 +201,12 @@
       },
       "billingDetails": {
         "title": "计费详情"
+      },
+      "performance": {
+        "title": "性能数据",
+        "ttfb": "首字节时间（TTFB）",
+        "duration": "总耗时",
+        "outputRate": "输出速率"
       }
     },
     "providerChain": {
@@ -274,7 +287,9 @@
     "cacheCreationConsumedAmount": "缓存创建消耗金额",
     "totalConsumedAmount": "总消耗金额",
     "successRate": "成功率",
-    "avgResponseTime": "平均响应时间"
+    "avgResponseTime": "平均响应时间",
+    "avgTtfbMs": "平均 TTFB",
+    "avgTokensPerSecond": "平均输出速率"
   },
     "states": {
       "loading": "加载中...",
@@ -356,10 +371,14 @@
       "noDetailedData": "暂无详细数据",
       "storageTip": "提示：请设置环境变量 STORE_SESSION_MESSAGES=true 以启用 messages 和 response 存储",
       "clientInfo": "客户端信息",
+      "requestHeaders": "请求头",
+      "requestBody": "请求体",
       "requestMessages": "请求 Messages",
       "requestMessagesDescription": "客户端发送的消息内容",
-      "responseBody": "响应体内容",
+      "responseHeaders": "响应头",
+      "responseBody": "响应体",
       "responseBodyDescription": "服务器返回的完整响应（5分钟 TTL）",
+      "noHeaders": "无数据",
       "noData": "暂无数据"
     },
     "actions": {
@@ -469,6 +488,7 @@
     "usageLogs": "使用记录",
     "leaderboard": "排行榜",
     "availability": "可用性监控",
+    "myQuota": "我的配额",
     "quotasManagement": "限额管理",
     "providers": "供应商管理",
     "documentation": "文档",
@@ -1145,6 +1165,7 @@
       "keySaveFailed": "保存密钥失败",
       "keyDeleteFailed": "删除密钥失败",
       "saveSuccess": "保存成功",
+      "atLeastOneKeyEnabled": "至少需要保留一个启用的密钥",
       "operationFailed": "操作失败",
       "userDisabled": "用户已禁用",
       "userEnabled": "用户已启用",
@@ -1371,6 +1392,9 @@
     "keyStatus": {
       "enabled": "启用",
       "disabled": "禁用",
+      "active": "正常",
+      "expired": "已过期",
+      "expiringSoon": "即将过期",
       "keyEnabled": "密钥已启用",
       "keyDisabled": "密钥已禁用",
       "toggleKeyStatus": "切换密钥启用状态",
@@ -1382,6 +1406,9 @@
     "userStatus": {
       "enabled": "启用",
       "disabled": "禁用",
+      "active": "正常",
+      "expired": "已过期",
+      "expiringSoon": "即将过期",
       "userEnabled": "用户已启用",
       "userDisabled": "用户已禁用",
       "toggleUserStatus": "切换用户启用状态",
@@ -1461,7 +1488,8 @@
         },
         "enableStatus": {
           "label": "启用状态",
-          "description": "禁用后此密钥将无法使用。禁用后仅管理员可启用。"
+          "description": "禁用后此密钥将无法使用。禁用后仅管理员可启用。",
+          "cannotDisableTooltip": "无法禁用最后一个启用的密钥"
         },
         "balanceQueryPage": {
           "label": "独立个人用量页面",

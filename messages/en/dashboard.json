@@ -55,6 +55,10 @@
     "filters": {
       "user": "User",
       "provider": "Provider",
+      "searchUser": "Search users...",
+      "searchProvider": "Search providers...",
+      "noUserFound": "No matching users found",
+      "noProviderFound": "No matching providers found",
       "model": "Model",
       "endpoint": "Endpoint",
       "status": "Status",
@@ -92,10 +96,13 @@
       "endpoint": "Endpoint",
       "inputTokens": "Input",
       "outputTokens": "Output",
+      "tokens": "Tokens",
       "cacheWrite": "Cache Write",
       "cacheRead": "Cache Read",
+      "cache": "Cache",
       "cost": "Cost",
       "duration": "Duration",
+      "performance": "Perf",
       "status": "Status"
     },
     "stats": {
@@ -194,6 +201,12 @@
       },
       "billingDetails": {
         "title": "Billing Details"
+      },
+      "performance": {
+        "title": "Performance",
+        "ttfb": "TTFB",
+        "duration": "Total Duration",
+        "outputRate": "Output Rate"
       }
     },
     "providerChain": {
@@ -274,7 +287,9 @@
       "cacheCreationConsumedAmount": "Cache Creation Spend",
       "totalConsumedAmount": "Total Spend",
       "successRate": "Success Rate",
-      "avgResponseTime": "Avg Response Time"
+      "avgResponseTime": "Avg Response Time",
+      "avgTtfbMs": "Avg TTFB",
+      "avgTokensPerSecond": "Avg tok/s"
     },
     "states": {
       "loading": "Loading...",
@@ -356,10 +371,14 @@
       "noDetailedData": "No detailed data available",
       "storageTip": "Tip: Set environment variable STORE_SESSION_MESSAGES=true to enable messages and response storage",
       "clientInfo": "Client Info",
+      "requestHeaders": "Request Headers",
+      "requestBody": "Request Body",
       "requestMessages": "Request Messages",
       "requestMessagesDescription": "Message content sent by the client",
-      "responseBody": "Response Body Content",
+      "responseHeaders": "Response Headers",
+      "responseBody": "Response Body",
       "responseBodyDescription": "Complete server response (5-minute TTL)",
+      "noHeaders": "No data",
       "noData": "No Data"
     },
     "actions": {
@@ -468,6 +487,7 @@
     "usageLogs": "Usage Logs",
     "leaderboard": "Leaderboard",
     "availability": "Availability",
+    "myQuota": "My Quota",
     "quotasManagement": "Quotas",
     "userManagement": "Users",
     "providers": "Providers",
@@ -837,25 +857,6 @@
     "editAriaLabel": "Edit user",
     "deleteAriaLabel": "Delete user"
   },
-  "users": {
-    "title": "User Management",
-    "description": "Showing {count} users",
-    "toolbar": {
-      "searchPlaceholder": "Search name, note, tags, keys...",
-      "groupFilter": "Filter by Group",
-      "allGroups": "All Groups",
-      "tagFilter": "Filter by Tag",
-      "allTags": "All Tags",
-      "keyGroupFilter": "Key Group",
-      "allKeyGroups": "All Key Groups",
-      "createUser": "Create User",
-      "createKey": "Create Key"
-    },
-    "dialog": {
-      "userProviderGroup": "Your Provider Groups",
-      "userProviderGroupHint": "New keys can only use your existing provider groups."
-    }
-  },
   "availability": {
     "title": "Provider Availability Monitor",
     "description": "Real-time monitoring of provider availability and performance metrics",
@@ -966,6 +967,90 @@
     "toast": {
       "refreshSuccess": "Availability data refreshed",
       "refreshFailed": "Refresh failed, please retry"
+    }
+  },
+  "rateLimits": {
+    "title": "Rate Limit Event Statistics",
+    "description": "View and analyze statistics for rate limit events",
+    "loading": "Loading...",
+    "error": "Load Failed",
+    "totalEvents": "Total Events",
+    "avgUsage": "Avg Usage",
+    "affectedUsers": "Affected Users",
+    "noData": "No Data",
+    "noDataHint": "No rate limit events in the selected time range",
+    "filters": {
+      "startTime": "Start Time",
+      "endTime": "End Time",
+      "user": "User",
+      "provider": "Provider",
+      "limitType": "Limit Type",
+      "allUsers": "All Users",
+      "allProviders": "All Providers",
+      "allLimitTypes": "All Types",
+      "apply": "Apply Filters",
+      "reset": "Reset",
+      "loading": "Loading...",
+      "limitTypes": {
+        "rpm": "RPM Limit",
+        "usd_5h": "5h Spend Limit",
+        "usd_weekly": "Weekly Spend Limit",
+        "usd_monthly": "Monthly Spend Limit",
+        "concurrent_sessions": "Concurrent Session Limit",
+        "daily_quota": "Daily Quota Limit"
+      }
+    },
+    "chart": {
+      "title": "Rate Limit Timeline",
+      "description": "Hourly trend of rate limit events",
+      "total": "Total",
+      "events": "Events"
+    },
+    "breakdown": {
+      "title": "Rate Limit Type Breakdown",
+      "description": "Share of events by rate limit type",
+      "total": "Total",
+      "count": "Events",
+      "percentage": "Percentage",
+      "noData": "No Data",
+      "types": {
+        "rpm": "RPM",
+        "usd_5h": "5h Spend",
+        "usd_weekly": "Weekly Spend",
+        "usd_monthly": "Monthly Spend",
+        "concurrent_sessions": "Concurrent Sessions",
+        "daily_quota": "Daily Quota"
+      }
+    },
+    "topUsers": {
+      "title": "Top Affected Users",
+      "description": "Users who triggered rate limits most frequently",
+      "total": "Total",
+      "rank": "Rank",
+      "username": "Username",
+      "eventCount": "Events",
+      "percentage": "Percentage",
+      "loading": "Loading...",
+      "noData": "No Data"
+    }
+  },
+  "users": {
+    "title": "User Management",
+    "description": "Showing {count} users",
+    "toolbar": {
+      "searchPlaceholder": "Search name, note, tags, keys...",
+      "groupFilter": "Filter by Group",
+      "allGroups": "All Groups",
+      "tagFilter": "Filter by Tag",
+      "allTags": "All Tags",
+      "keyGroupFilter": "Key Group",
+      "allKeyGroups": "All Key Groups",
+      "createUser": "Create User",
+      "createKey": "Create Key"
+    },
+    "dialog": {
+      "userProviderGroup": "Your Provider Groups",
+      "userProviderGroupHint": "New keys can only use your existing provider groups."
     }
   },
   "userManagement": {
@@ -1079,6 +1164,7 @@
       "keySaveFailed": "Failed to save key",
       "keyDeleteFailed": "Failed to delete key",
       "saveSuccess": "Changes saved successfully",
+      "atLeastOneKeyEnabled": "At least one key must be enabled",
       "operationFailed": "Operation failed",
       "userDisabled": "User has been disabled",
       "userEnabled": "User has been enabled",
@@ -1307,6 +1393,9 @@
     "keyStatus": {
       "enabled": "Enabled",
       "disabled": "Disabled",
+      "active": "Active",
+      "expired": "Expired",
+      "expiringSoon": "Expiring Soon",
       "keyEnabled": "Key enabled",
       "keyDisabled": "Key disabled",
       "toggleKeyStatus": "Toggle key status",
@@ -1318,6 +1407,9 @@
     "userStatus": {
       "enabled": "Enabled",
       "disabled": "Disabled",
+      "active": "Active",
+      "expired": "Expired",
+      "expiringSoon": "Expiring Soon",
       "userEnabled": "User enabled",
       "userDisabled": "User disabled",
       "toggleUserStatus": "Toggle user status",
@@ -1397,7 +1489,8 @@
         },
         "enableStatus": {
           "label": "Enable Status",
-          "description": "Disabled keys cannot be used"
+          "description": "Disabled keys cannot be used",
+          "cannotDisableTooltip": "Cannot disable the last enabled key"
         },
         "balanceQueryPage": {
           "label": "Independent Personal Usage Page",

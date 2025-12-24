@@ -1,7 +1,7 @@
 "use client";
 
 import { addDays, format, parse } from "date-fns";
-import { Download } from "lucide-react";
+import { Check, ChevronsUpDown, Download } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -9,8 +9,17 @@ import { toast } from "sonner";
 import { getKeys } from "@/actions/keys";
 import { exportUsageLogs } from "@/actions/usage-logs";
 import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -96,9 +105,18 @@ export function UsageLogsFilters({
     return dynamicOnly;
   }, [dynamicStatusCodes]);
 
+  const userMap = useMemo(() => new Map(users.map((user) => [user.id, user.name])), [users]);
+
+  const providerMap = useMemo(
+    () => new Map(providers.map((provider) => [provider.id, provider.name])),
+    [providers]
+  );
+
   const [keys, setKeys] = useState<Key[]>(initialKeys);
   const [localFilters, setLocalFilters] = useState(filters);
   const [isExporting, setIsExporting] = useState(false);
+  const [userPopoverOpen, setUserPopoverOpen] = useState(false);
+  const [providerPopoverOpen, setProviderPopoverOpen] = useState(false);
 
   useEffect(() => {
     if (initialKeys.length > 0) {
@@ -263,26 +281,71 @@ export function UsageLogsFilters({
         {isAdmin && (
           <div className="space-y-2 lg:col-span-4">
             <Label>{t("logs.filters.user")}</Label>
-            <Select
-              value={localFilters.userId?.toString() || ""}
-              onValueChange={handleUserChange}
-              disabled={isUsersLoading}
-            >
-              <SelectTrigger>
-                <SelectValue
-                  placeholder={
-                    isUsersLoading ? t("logs.stats.loading") : t("logs.filters.allUsers")
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                {users.map((user) => (
-                  <SelectItem key={user.id} value={user.id.toString()}>
-                    {user.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Popover open={userPopoverOpen} onOpenChange={setUserPopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={userPopoverOpen}
+                  disabled={isUsersLoading}
+                  type="button"
+                  className="w-full justify-between"
+                >
+                  {localFilters.userId ? (
+                    (userMap.get(localFilters.userId) ?? localFilters.userId.toString())
+                  ) : (
+                    <span className="text-muted-foreground">
+                      {isUsersLoading ? t("logs.stats.loading") : t("logs.filters.allUsers")}
+                    </span>
+                  )}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                className="w-[320px] p-0"
+                align="start"
+                onWheel={(e) => e.stopPropagation()}
+                onTouchMove={(e) => e.stopPropagation()}
+              >
+                <Command shouldFilter={true}>
+                  <CommandInput placeholder={t("logs.filters.searchUser")} />
+                  <CommandList className="max-h-[250px] overflow-y-auto">
+                    <CommandEmpty>
+                      {isUsersLoading ? t("logs.stats.loading") : t("logs.filters.noUserFound")}
+                    </CommandEmpty>
+                    <CommandGroup>
+                      <CommandItem
+                        value={t("logs.filters.allUsers")}
+                        onSelect={() => {
+                          void handleUserChange("");
+                          setUserPopoverOpen(false);
+                        }}
+                        className="cursor-pointer"
+                      >
+                        <span className="flex-1">{t("logs.filters.allUsers")}</span>
+                        {!localFilters.userId && <Check className="h-4 w-4 text-primary" />}
+                      </CommandItem>
+                      {users.map((user) => (
+                        <CommandItem
+                          key={user.id}
+                          value={user.name}
+                          onSelect={() => {
+                            void handleUserChange(user.id.toString());
+                            setUserPopoverOpen(false);
+                          }}
+                          className="cursor-pointer"
+                        >
+                          <span className="flex-1">{user.name}</span>
+                          {localFilters.userId === user.id && (
+                            <Check className="h-4 w-4 text-primary" />
+                          )}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
         )}
 
@@ -324,31 +387,81 @@ export function UsageLogsFilters({
         {isAdmin && (
           <div className="space-y-2 lg:col-span-4">
             <Label>{t("logs.filters.provider")}</Label>
-            <Select
-              value={localFilters.providerId?.toString() || ""}
-              onValueChange={(value: string) =>
-                setLocalFilters({
-                  ...localFilters,
-                  providerId: value ? parseInt(value, 10) : undefined,
-                })
-              }
-              disabled={isProvidersLoading}
-            >
-              <SelectTrigger>
-                <SelectValue
-                  placeholder={
-                    isProvidersLoading ? t("logs.stats.loading") : t("logs.filters.allProviders")
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                {providers.map((provider) => (
-                  <SelectItem key={provider.id} value={provider.id.toString()}>
-                    {provider.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Popover open={providerPopoverOpen} onOpenChange={setProviderPopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={providerPopoverOpen}
+                  disabled={isProvidersLoading}
+                  type="button"
+                  className="w-full justify-between"
+                >
+                  {localFilters.providerId ? (
+                    (providerMap.get(localFilters.providerId) ?? localFilters.providerId.toString())
+                  ) : (
+                    <span className="text-muted-foreground">
+                      {isProvidersLoading
+                        ? t("logs.stats.loading")
+                        : t("logs.filters.allProviders")}
+                    </span>
+                  )}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                className="w-[320px] p-0"
+                align="start"
+                onWheel={(e) => e.stopPropagation()}
+                onTouchMove={(e) => e.stopPropagation()}
+              >
+                <Command shouldFilter={true}>
+                  <CommandInput placeholder={t("logs.filters.searchProvider")} />
+                  <CommandList className="max-h-[250px] overflow-y-auto">
+                    <CommandEmpty>
+                      {isProvidersLoading
+                        ? t("logs.stats.loading")
+                        : t("logs.filters.noProviderFound")}
+                    </CommandEmpty>
+                    <CommandGroup>
+                      <CommandItem
+                        value={t("logs.filters.allProviders")}
+                        onSelect={() => {
+                          setLocalFilters({
+                            ...localFilters,
+                            providerId: undefined,
+                          });
+                          setProviderPopoverOpen(false);
+                        }}
+                        className="cursor-pointer"
+                      >
+                        <span className="flex-1">{t("logs.filters.allProviders")}</span>
+                        {!localFilters.providerId && <Check className="h-4 w-4 text-primary" />}
+                      </CommandItem>
+                      {providers.map((provider) => (
+                        <CommandItem
+                          key={provider.id}
+                          value={provider.name}
+                          onSelect={() => {
+                            setLocalFilters({
+                              ...localFilters,
+                              providerId: provider.id,
+                            });
+                            setProviderPopoverOpen(false);
+                          }}
+                          className="cursor-pointer"
+                        >
+                          <span className="flex-1">{provider.name}</span>
+                          {localFilters.providerId === provider.id && (
+                            <Check className="h-4 w-4 text-primary" />
+                          )}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
         )}
 

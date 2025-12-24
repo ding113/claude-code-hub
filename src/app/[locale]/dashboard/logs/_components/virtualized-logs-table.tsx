@@ -13,26 +13,19 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { cn, formatTokenAmount } from "@/lib/utils";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
+import {
+  calculateOutputRate,
+  formatDuration,
+  NON_BILLING_ENDPOINT,
+} from "@/lib/utils/performance-formatter";
 import { formatProviderSummary } from "@/lib/utils/provider-chain-formatter";
 import type { BillingModelSource } from "@/types/system-config";
 import { ErrorDetailsDialog } from "./error-details-dialog";
 import { ModelDisplayWithRedirect } from "./model-display-with-redirect";
 import { ProviderChainPopover } from "./provider-chain-popover";
 
-const NON_BILLING_ENDPOINT = "/v1/messages/count_tokens";
 const BATCH_SIZE = 50;
 const ROW_HEIGHT = 52; // Estimated row height in pixels
-
-/**
- * Format duration
- */
-function formatDuration(durationMs: number | null): string {
-  if (!durationMs) return "-";
-  if (durationMs >= 1000) {
-    return `${(Number(durationMs) / 1000).toFixed(2)}s`;
-  }
-  return `${durationMs}ms`;
-}
 
 export interface VirtualizedLogsTableFilters {
   userId?: number;
@@ -177,67 +170,49 @@ export function VirtualizedLogsTable({
         {/* Fixed header */}
         <div className="bg-muted/50 border-b">
           <div className="flex items-center h-10 text-sm font-medium text-muted-foreground">
-            <div
-              className="w-[70px] min-w-[70px] shrink-0 pl-2 truncate"
-              title={t("logs.columns.time")}
-            >
+            <div className="flex-[0.8] min-w-[80px] pl-2 truncate" title={t("logs.columns.time")}>
               {t("logs.columns.time")}
             </div>
-            <div className="flex-[0.5] min-w-[60px] px-1 truncate" title={t("logs.columns.user")}>
+            <div className="flex-[0.6] min-w-[50px] px-1 truncate" title={t("logs.columns.user")}>
               {t("logs.columns.user")}
             </div>
-            <div className="flex-[0.5] min-w-[60px] px-1 truncate" title={t("logs.columns.key")}>
+            <div className="flex-[0.6] min-w-[50px] px-1 truncate" title={t("logs.columns.key")}>
               {t("logs.columns.key")}
             </div>
             <div
-              className="flex-[2] min-w-[100px] px-1 truncate"
+              className="flex-[1.5] min-w-[100px] px-1 truncate"
               title={t("logs.columns.provider")}
             >
               {t("logs.columns.provider")}
             </div>
-            <div className="flex-[1.5] min-w-[80px] px-1 truncate" title={t("logs.columns.model")}>
+            <div className="flex-[1] min-w-[80px] px-1 truncate" title={t("logs.columns.model")}>
               {t("logs.columns.model")}
             </div>
             <div
-              className="w-[55px] min-w-[55px] shrink-0 text-right px-1 truncate"
-              title={t("logs.columns.inputTokens")}
+              className="flex-[0.7] min-w-[70px] text-right px-1 truncate"
+              title={t("logs.columns.tokens")}
             >
-              {t("logs.columns.inputTokens")}
+              {t("logs.columns.tokens")}
             </div>
             <div
-              className="w-[55px] min-w-[55px] shrink-0 text-right px-1 truncate"
-              title={t("logs.columns.outputTokens")}
+              className="flex-[0.8] min-w-[70px] text-right px-1 truncate"
+              title={t("logs.columns.cache")}
             >
-              {t("logs.columns.outputTokens")}
+              {t("logs.columns.cache")}
             </div>
             <div
-              className="flex-1 min-w-[70px] text-right px-1 truncate"
-              title={t("logs.columns.cacheWrite")}
-            >
-              {t("logs.columns.cacheWrite")}
-            </div>
-            <div
-              className="flex-[0.8] min-w-[55px] text-right px-1 truncate"
-              title={t("logs.columns.cacheRead")}
-            >
-              {t("logs.columns.cacheRead")}
-            </div>
-            <div
-              className="flex-1 min-w-[70px] text-right px-1 truncate"
+              className="flex-[0.7] min-w-[60px] text-right px-1 truncate"
               title={t("logs.columns.cost")}
             >
               {t("logs.columns.cost")}
             </div>
             <div
-              className="w-[55px] min-w-[55px] shrink-0 text-right px-1 truncate"
-              title={t("logs.columns.duration")}
+              className="flex-[0.8] min-w-[80px] text-right px-1 truncate"
+              title={t("logs.columns.performance")}
             >
-              {t("logs.columns.duration")}
+              {t("logs.columns.performance")}
             </div>
-            <div
-              className="w-[65px] min-w-[65px] shrink-0 pr-2 truncate"
-              title={t("logs.columns.status")}
-            >
+            <div className="flex-[0.7] min-w-[70px] pr-2 truncate" title={t("logs.columns.status")}>
               {t("logs.columns.status")}
             </div>
           </div>
@@ -294,102 +269,102 @@ export function VirtualizedLogsTable({
                   )}
                 >
                   {/* Time */}
-                  <div className="w-[70px] min-w-[70px] shrink-0 font-mono text-xs truncate pl-2">
+                  <div className="flex-[0.8] min-w-[80px] font-mono text-xs truncate pl-2">
                     <RelativeTime date={log.createdAt} fallback="-" />
                   </div>
 
                   {/* User */}
-                  <div className="flex-[0.5] min-w-[60px] truncate px-1" title={log.userName}>
+                  <div className="flex-[0.6] min-w-[50px] truncate px-1" title={log.userName}>
                     {log.userName}
                   </div>
 
                   {/* Key */}
                   <div
-                    className="flex-[0.5] min-w-[60px] font-mono text-xs truncate px-1"
+                    className="flex-[0.6] min-w-[50px] font-mono text-xs truncate px-1"
                     title={log.keyName}
                   >
                     {log.keyName}
                   </div>
 
                   {/* Provider */}
-                  <div className="flex-[2] min-w-[100px] px-1">
+                  <div className="flex-[1.5] min-w-[100px] px-1">
                     {log.blockedBy ? (
                       <span className="inline-flex items-center gap-1 rounded-md bg-orange-100 dark:bg-orange-950 px-2 py-1 text-xs font-medium text-orange-700 dark:text-orange-300">
                         <span className="h-1.5 w-1.5 rounded-full bg-orange-600 dark:bg-orange-400" />
                         {t("logs.table.blocked")}
                       </span>
                     ) : (
-                      <div className="flex items-start gap-2">
-                        <div className="flex flex-col items-start gap-0.5 min-w-0 flex-1">
+                      <div className="flex flex-col items-start gap-0.5 min-w-0">
+                        <div className="flex items-center gap-1 min-w-0">
                           {log.providerChain && log.providerChain.length > 0 ? (
-                            <>
-                              <ProviderChainPopover
-                                chain={log.providerChain}
-                                finalProvider={
-                                  log.providerChain[log.providerChain.length - 1].name ||
-                                  log.providerName ||
-                                  tChain("circuit.unknown")
-                                }
-                              />
-                              {formatProviderSummary(log.providerChain, tChain) && (
-                                <TooltipProvider>
-                                  <Tooltip delayDuration={300}>
-                                    <TooltipTrigger asChild>
-                                      <span className="text-xs text-muted-foreground cursor-help truncate max-w-[180px] block text-left">
-                                        {formatProviderSummary(log.providerChain, tChain)}
-                                      </span>
-                                    </TooltipTrigger>
-                                    <TooltipContent
-                                      side="bottom"
-                                      align="start"
-                                      className="max-w-[500px]"
-                                    >
-                                      <p className="text-xs whitespace-normal break-words font-mono">
-                                        {formatProviderSummary(log.providerChain, tChain)}
-                                      </p>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                              )}
-                            </>
+                            <ProviderChainPopover
+                              chain={log.providerChain}
+                              finalProvider={
+                                log.providerChain[log.providerChain.length - 1].name ||
+                                log.providerName ||
+                                tChain("circuit.unknown")
+                              }
+                            />
                           ) : (
                             <span className="truncate">{log.providerName || "-"}</span>
                           )}
+                          {/* Cost multiplier badge */}
+                          {(() => {
+                            const successfulProvider =
+                              log.providerChain && log.providerChain.length > 0
+                                ? [...log.providerChain]
+                                    .reverse()
+                                    .find(
+                                      (item) =>
+                                        item.reason === "request_success" ||
+                                        item.reason === "retry_success"
+                                    )
+                                : null;
+                            const actualCostMultiplier =
+                              successfulProvider?.costMultiplier ?? log.costMultiplier;
+                            return actualCostMultiplier &&
+                              parseFloat(String(actualCostMultiplier)) !== 1.0 ? (
+                              <Badge
+                                variant="outline"
+                                className={
+                                  parseFloat(String(actualCostMultiplier)) > 1.0
+                                    ? "text-xs bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800 shrink-0"
+                                    : "text-xs bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-300 dark:border-green-800 shrink-0"
+                                }
+                              >
+                                x{parseFloat(String(actualCostMultiplier)).toFixed(2)}
+                              </Badge>
+                            ) : null;
+                          })()}
                         </div>
-                        {/* Cost multiplier badge */}
-                        {(() => {
-                          const successfulProvider =
-                            log.providerChain && log.providerChain.length > 0
-                              ? [...log.providerChain]
-                                  .reverse()
-                                  .find(
-                                    (item) =>
-                                      item.reason === "request_success" ||
-                                      item.reason === "retry_success"
-                                  )
-                              : null;
-                          const actualCostMultiplier =
-                            successfulProvider?.costMultiplier ?? log.costMultiplier;
-                          return actualCostMultiplier &&
-                            parseFloat(String(actualCostMultiplier)) !== 1.0 ? (
-                            <Badge
-                              variant="outline"
-                              className={
-                                parseFloat(String(actualCostMultiplier)) > 1.0
-                                  ? "text-xs bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800 shrink-0"
-                                  : "text-xs bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-300 dark:border-green-800 shrink-0"
-                              }
-                            >
-                              x{parseFloat(String(actualCostMultiplier)).toFixed(2)}
-                            </Badge>
-                          ) : null;
-                        })()}
+                        {log.providerChain &&
+                          log.providerChain.length > 0 &&
+                          formatProviderSummary(log.providerChain, tChain) && (
+                            <TooltipProvider>
+                              <Tooltip delayDuration={300}>
+                                <TooltipTrigger asChild>
+                                  <span className="text-xs text-muted-foreground cursor-help truncate max-w-[180px] block text-left">
+                                    {formatProviderSummary(log.providerChain, tChain)}
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent
+                                  side="bottom"
+                                  align="start"
+                                  className="max-w-[500px]"
+                                >
+                                  <p className="text-xs whitespace-normal break-words font-mono">
+                                    {formatProviderSummary(log.providerChain, tChain)}
+                                  </p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
                       </div>
                     )}
                   </div>
 
                   {/* Model */}
-                  <div className="flex-[1.5] min-w-[80px] font-mono text-xs px-1">
+                  <div className="flex-[1] min-w-[80px] font-mono text-xs px-1">
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -411,23 +386,38 @@ export function VirtualizedLogsTable({
                     </TooltipProvider>
                   </div>
 
-                  {/* Input Tokens */}
-                  <div className="w-[55px] min-w-[55px] shrink-0 text-right font-mono text-xs px-1">
-                    {formatTokenAmount(log.inputTokens)}
+                  {/* Tokens */}
+                  <div className="flex-[0.7] min-w-[70px] text-right font-mono text-xs px-1">
+                    <TooltipProvider>
+                      <Tooltip delayDuration={250}>
+                        <TooltipTrigger asChild>
+                          <span className="cursor-help">
+                            {formatTokenAmount(log.inputTokens)} /{" "}
+                            {formatTokenAmount(log.outputTokens)}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent align="end" className="text-xs space-y-1">
+                          <div>
+                            {t("logs.billingDetails.input")}: {formatTokenAmount(log.inputTokens)}
+                          </div>
+                          <div>
+                            {t("logs.billingDetails.output")}: {formatTokenAmount(log.outputTokens)}
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </div>
 
-                  {/* Output Tokens */}
-                  <div className="w-[55px] min-w-[55px] shrink-0 text-right font-mono text-xs px-1">
-                    {formatTokenAmount(log.outputTokens)}
-                  </div>
-
-                  {/* Cache Write */}
-                  <div className="flex-1 min-w-[70px] text-right font-mono text-xs px-1">
+                  {/* Cache */}
+                  <div className="flex-[0.8] min-w-[70px] text-right font-mono text-xs px-1">
                     <TooltipProvider>
                       <Tooltip delayDuration={250}>
                         <TooltipTrigger asChild>
                           <div className="flex items-center justify-end gap-1 cursor-help">
-                            <span>{formatTokenAmount(log.cacheCreationInputTokens)}</span>
+                            <span>
+                              {formatTokenAmount(log.cacheCreationInputTokens)} /{" "}
+                              {formatTokenAmount(log.cacheReadInputTokens)}
+                            </span>
                             {log.cacheTtlApplied ? (
                               <Badge variant="outline" className="text-[10px] leading-tight px-1">
                                 {log.cacheTtlApplied}
@@ -436,20 +426,22 @@ export function VirtualizedLogsTable({
                           </div>
                         </TooltipTrigger>
                         <TooltipContent align="end" className="text-xs space-y-1">
-                          <div>5m: {formatTokenAmount(log.cacheCreation5mInputTokens)}</div>
-                          <div>1h: {formatTokenAmount(log.cacheCreation1hInputTokens)}</div>
+                          <div className="font-medium">{t("logs.columns.cacheWrite")}</div>
+                          <div className="pl-2">
+                            5m: {formatTokenAmount(log.cacheCreation5mInputTokens)}
+                          </div>
+                          <div className="pl-2">
+                            1h: {formatTokenAmount(log.cacheCreation1hInputTokens)}
+                          </div>
+                          <div className="font-medium mt-1">{t("logs.columns.cacheRead")}</div>
+                          <div className="pl-2">{formatTokenAmount(log.cacheReadInputTokens)}</div>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
                   </div>
 
-                  {/* Cache Read */}
-                  <div className="flex-[0.8] min-w-[55px] text-right font-mono text-xs px-1">
-                    {formatTokenAmount(log.cacheReadInputTokens)}
-                  </div>
-
                   {/* Cost */}
-                  <div className="flex-1 min-w-[70px] text-right font-mono text-xs px-1">
+                  <div className="flex-[0.7] min-w-[60px] text-right font-mono text-xs px-1">
                     {isNonBilling ? (
                       "-"
                     ) : log.costUsd ? (
@@ -490,13 +482,63 @@ export function VirtualizedLogsTable({
                     )}
                   </div>
 
-                  {/* Duration */}
-                  <div className="w-[55px] min-w-[55px] shrink-0 text-right font-mono text-xs px-1">
-                    {formatDuration(log.durationMs)}
+                  {/* Performance */}
+                  <div className="flex-[0.8] min-w-[80px] text-right font-mono text-xs px-1">
+                    {(() => {
+                      const rate = calculateOutputRate(
+                        log.outputTokens,
+                        log.durationMs,
+                        log.ttfbMs
+                      );
+                      const ttfbLine =
+                        log.ttfbMs != null && log.ttfbMs > 0
+                          ? `TTFB ${formatDuration(log.ttfbMs)}`
+                          : null;
+                      const rateLine = rate !== null ? `${rate.toFixed(0)} tok/s` : null;
+
+                      return (
+                        <TooltipProvider>
+                          <Tooltip delayDuration={250}>
+                            <TooltipTrigger asChild>
+                              <div className="flex flex-col items-end cursor-help">
+                                <span>{formatDuration(log.durationMs)}</span>
+                                {ttfbLine && (
+                                  <span className="text-muted-foreground text-[10px]">
+                                    {ttfbLine}
+                                  </span>
+                                )}
+                                {rateLine && (
+                                  <span className="text-muted-foreground text-[10px]">
+                                    {rateLine}
+                                  </span>
+                                )}
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent align="end" className="text-xs space-y-1">
+                              <div>
+                                {t("logs.details.performance.duration")}:{" "}
+                                {formatDuration(log.durationMs)}
+                              </div>
+                              {log.ttfbMs != null && (
+                                <div>
+                                  {t("logs.details.performance.ttfb")}: {formatDuration(log.ttfbMs)}
+                                </div>
+                              )}
+                              {rate !== null && (
+                                <div>
+                                  {t("logs.details.performance.outputRate")}: {rate.toFixed(1)}{" "}
+                                  tok/s
+                                </div>
+                              )}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      );
+                    })()}
                   </div>
 
                   {/* Status */}
-                  <div className="w-[65px] min-w-[65px] shrink-0 pr-2">
+                  <div className="flex-[0.7] min-w-[70px] pr-2">
                     <ErrorDetailsDialog
                       statusCode={log.statusCode}
                       errorMessage={log.errorMessage}
@@ -520,6 +562,8 @@ export function VirtualizedLogsTable({
                       costUsd={log.costUsd}
                       costMultiplier={log.costMultiplier}
                       context1mApplied={log.context1mApplied}
+                      durationMs={log.durationMs}
+                      ttfbMs={log.ttfbMs}
                       externalOpen={dialogState.logId === log.id ? true : undefined}
                       onExternalOpenChange={(open) => {
                         if (!open) setDialogState({ logId: null, scrollToRedirect: false });

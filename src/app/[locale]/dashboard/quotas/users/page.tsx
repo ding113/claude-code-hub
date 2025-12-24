@@ -81,7 +81,7 @@ export default async function UsersQuotaPage({ params }: { params: Promise<{ loc
 
   // 权限检查：仅 admin 用户可访问
   if (!session || session.user.role !== "admin") {
-    return redirect({ href: session ? "/dashboard" : "/login", locale });
+    return redirect({ href: session ? "/dashboard/my-quota" : "/login", locale });
   }
 
   const t = await getTranslations("quota.users");

@@ -47,6 +47,7 @@ export interface UsageLogRow {
   costUsd: string | null;
   costMultiplier: string | null; // 供应商倍率
   durationMs: number | null;
+  ttfbMs: number | null;
   errorMessage: string | null;
   providerChain: ProviderChainItem[] | null;
   blockedBy: string | null; // 拦截类型（如 'sensitive_word'）
@@ -171,9 +172,8 @@ export async function findUsageLogsBatch(
   // Cursor-based pagination: WHERE (created_at, id) < (cursor_created_at, cursor_id)
   // Using row value comparison for efficient keyset pagination
   if (cursor) {
-    const cursorDate = new Date(cursor.createdAt);
     conditions.push(
-      sql`(${messageRequest.createdAt}, ${messageRequest.id}) < (${cursorDate.toISOString()}::timestamptz, ${cursor.id})`
+      sql`(${messageRequest.createdAt}, ${messageRequest.id}) < (${cursor.createdAt}::timestamptz, ${cursor.id})`
     );
   }
 
@@ -184,6 +184,7 @@ export async function findUsageLogsBatch(
     .select({
       id: messageRequest.id,
       createdAt: messageRequest.createdAt,
+      createdAtRaw: sql<string>`to_char(${messageRequest.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
       sessionId: messageRequest.sessionId,
       requestSequence: messageRequest.requestSequence,
       userName: users.name,
@@ -203,6 +204,7 @@ export async function findUsageLogsBatch(
       costUsd: messageRequest.costUsd,
       costMultiplier: messageRequest.costMultiplier,
       durationMs: messageRequest.durationMs,
+      ttfbMs: messageRequest.ttfbMs,
       errorMessage: messageRequest.errorMessage,
       providerChain: messageRequest.providerChain,
       blockedBy: messageRequest.blockedBy,
@@ -226,9 +228,7 @@ export async function findUsageLogsBatch(
   // Calculate next cursor from the last record
   const lastLog = logsToReturn[logsToReturn.length - 1];
   const nextCursor =
-    hasMore && lastLog?.createdAt
-      ? { createdAt: lastLog.createdAt.toISOString(), id: lastLog.id }
-      : null;
+    hasMore && lastLog?.createdAtRaw ? { createdAt: lastLog.createdAtRaw, id: lastLog.id } : null;
 
   const logs: UsageLogRow[] = logsToReturn.map((row) => {
     const totalRowTokens =
@@ -412,6 +412,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       costUsd: messageRequest.costUsd,
       costMultiplier: messageRequest.costMultiplier, // 供应商倍率
       durationMs: messageRequest.durationMs,
+      ttfbMs: messageRequest.ttfbMs,
       errorMessage: messageRequest.errorMessage,
       providerChain: messageRequest.providerChain,
       blockedBy: messageRequest.blockedBy, // 拦截类型

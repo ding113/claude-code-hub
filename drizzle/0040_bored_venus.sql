@@ -1,0 +1,1 @@
+ALTER TABLE "message_request" ADD COLUMN "ttfb_ms" integer;

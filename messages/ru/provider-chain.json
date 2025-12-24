@@ -36,7 +36,8 @@
     "requestChain": "Цепочка запросов:",
     "systemError": "Системная ошибка",
     "concurrentLimit": "Лимит параллельных запросов",
-    "http2Fallback": "Откат HTTP/2"
+    "http2Fallback": "Откат HTTP/2",
+    "clientError": "Ошибка клиента"
   },
   "timeline": {
     "sessionReuse": "Повторное использование сессии",
@@ -127,6 +128,15 @@
     "requestUrl": "URL",
     "requestHeaders": "Заголовки",
     "requestBody": "Тело",
-    "requestBodyTruncated": "(обрезано)"
+    "requestBodyTruncated": "(обрезано)",
+    "clientErrorNonRetryable": "Ошибка клиента (попытка {attempt}, без повторов)",
+    "matchedRule": "Совпавшее правило ошибки",
+    "ruleId": "ID правила: {id}",
+    "ruleCategory": "Категория: {category}",
+    "rulePattern": "Шаблон: {pattern}",
+    "ruleMatchType": "Тип совпадения: {matchType}",
+    "ruleDescription": "Описание: {description}",
+    "ruleHasOverride": "Переопределения: response={response}, statusCode={statusCode}",
+    "clientErrorNote": "Эта ошибка вызвана вводом клиента, не повторяется и не учитывается в автомате защиты."
   }
 }

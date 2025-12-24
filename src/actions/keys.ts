@@ -85,6 +85,7 @@ export async function addKey(data: {
   userId: number;
   name: string;
   expiresAt?: string;
+  isEnabled?: boolean;
   canLoginWebUi?: boolean;
   limit5hUsd?: number | null;
   limitDailyUsd?: number | null;
@@ -245,7 +246,7 @@ export async function addKey(data: {
       user_id: data.userId,
       name: validatedData.name,
       key: generatedKey,
-      is_enabled: true,
+      is_enabled: data.isEnabled ?? true,
       expires_at: expiresAt,
       can_login_web_ui: validatedData.canLoginWebUi,
       limit_5h_usd: validatedData.limit5hUsd,
@@ -475,12 +476,16 @@ export async function removeKey(keyId: number): Promise<ActionResult> {
       return { ok: false, error: "无权限执行此操作" };
     }
 
-    const activeKeyCount = await countActiveKeysByUser(key.userId);
-    if (activeKeyCount <= 1) {
-      return {
-        ok: false,
-        error: "该用户至少需要保留一个可用的密钥，无法删除最后一个密钥",
-      };
+    // 只有删除启用的密钥时，才需要检查是否是最后一个启用的密钥
+    // 删除禁用的密钥不会影响用户的可用密钥数量
+    if (key.isEnabled) {
+      const activeKeyCount = await countActiveKeysByUser(key.userId);
+      if (activeKeyCount <= 1) {
+        return {
+          ok: false,
+          error: "该用户至少需要保留一个可用的密钥，无法删除最后一个密钥",
+        };
+      }
     }
 
     // 非 admin 删除时的额外检查：确保删除后用户仍有分组（防止分组被清空从而绕过限制）
@@ -837,7 +842,7 @@ export async function batchUpdateKeys(
             const currentEnabledCount = userEnabledCounts.get(userId) ?? 0;
             if (currentEnabledCount - disableCount < 1) {
               throw new BatchUpdateError(
-                tError("CANNOT_DISABLE_LAST_KEY") || "无法禁用最后一个可用密钥",
+                tError("CANNOT_DISABLE_LAST_KEY"),
                 ERROR_CODES.OPERATION_FAILED
               );
             }
@@ -894,7 +899,7 @@ export async function batchUpdateKeys(
 
           if (Number(remainingEnabled?.count ?? 0) < 1) {
             throw new BatchUpdateError(
-              tError("CANNOT_DISABLE_LAST_KEY") || "无法禁用最后一个可用密钥",
+              tError("CANNOT_DISABLE_LAST_KEY"),
               ERROR_CODES.OPERATION_FAILED
             );
           }

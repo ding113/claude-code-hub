@@ -381,7 +381,10 @@ export function UserStatisticsChart({
             </div>
           </div>
         )}
-        <ChartContainer config={chartConfig} className="aspect-auto h-[280px] min-h-[280px] w-full">
+        <ChartContainer
+          config={chartConfig}
+          className="aspect-auto h-[320px] min-h-[320px] w-full sm:h-[400px] sm:min-h-[400px]"
+        >
           <AreaChart
             data={numericChartData}
             margin={{
@@ -542,7 +545,7 @@ export function UserStatisticsChart({
                       </span>
                     </div>
                   )}
-                  <div className="flex flex-wrap justify-center gap-1">
+                  <div className="flex flex-wrap justify-center gap-1 max-h-[150px] overflow-y-auto p-1">
                     {sortedLegendUsers.map(({ user, index }) => {
                       const color = getUserColor(index);
                       const userTotal = userTotals[user.dataKey] ?? {
@@ -552,12 +555,14 @@ export function UserStatisticsChart({
                       const isSelected = selectedUserIds.has(user.id);
 
                       return (
-                        <div
+                        <button
+                          type="button"
                           key={user.dataKey}
-                          onClick={() => enableUserFilter && toggleUserSelection(user.id)}
+                          onClick={() => toggleUserSelection(user.id)}
+                          disabled={!enableUserFilter}
+                          aria-pressed={isSelected}
                           className={cn(
-                            "rounded-md px-3 py-2 text-center transition-all min-w-16",
-                            enableUserFilter && "cursor-pointer",
+                            "rounded-md px-3 py-2 text-center transition-all min-w-16 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-default",
                             isSelected
                               ? "bg-muted/50 hover:bg-muted/70 ring-1 ring-border"
                               : "bg-muted/10 hover:bg-muted/30 opacity-50"
@@ -568,6 +573,7 @@ export function UserStatisticsChart({
                             <div
                               className="h-2 w-2 rounded-full flex-shrink-0"
                               style={{ backgroundColor: color }}
+                              aria-hidden="true"
                             />
                             <span className="text-xs font-medium text-foreground truncate max-w-12">
                               {user.name}
@@ -580,7 +586,7 @@ export function UserStatisticsChart({
                               ? formatCurrency(userTotal.cost, currencyCode)
                               : userTotal.calls.toLocaleString()}
                           </div>
-                        </div>
+                        </button>
                       );
                     })}
                   </div>

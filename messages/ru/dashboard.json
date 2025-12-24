@@ -55,6 +55,10 @@
     "filters": {
       "user": "Пользователь",
       "provider": "Поставщик",
+      "searchUser": "Поиск пользователей...",
+      "searchProvider": "Поиск провайдеров...",
+      "noUserFound": "Пользователи не найдены",
+      "noProviderFound": "Провайдеры не найдены",
       "model": "Модель",
       "endpoint": "Эндпоинт",
       "status": "Статус",
@@ -92,10 +96,13 @@
       "endpoint": "Эндпоинт",
       "inputTokens": "Вход",
       "outputTokens": "Выход",
+      "tokens": "Tokens",
       "cacheWrite": "Запись в кэш",
       "cacheRead": "Чтение из кэша",
+      "cache": "Cache",
       "cost": "Стоимость",
       "duration": "Продолжительность",
+      "performance": "Perf",
       "status": "Статус"
     },
     "stats": {
@@ -193,6 +200,12 @@
       },
       "billingDetails": {
         "title": "Детали биллинга"
+      },
+      "performance": {
+        "title": "Производительность",
+        "ttfb": "TTFB",
+        "duration": "Общее время",
+        "outputRate": "Скорость вывода"
       }
     },
     "providerChain": {
@@ -273,7 +286,9 @@
       "cacheCreationConsumedAmount": "Расход на создание кэша",
       "totalConsumedAmount": "Общие расходы",
       "successRate": "Процент успеха",
-      "avgResponseTime": "Среднее время ответа"
+      "avgResponseTime": "Среднее время ответа",
+      "avgTtfbMs": "Средний TTFB",
+      "avgTokensPerSecond": "Средн. ток/с"
     },
     "states": {
       "loading": "Загрузка...",
@@ -355,10 +370,14 @@
       "noDetailedData": "Подробные данные отсутствуют",
       "storageTip": "Подсказка: установите переменную окружения STORE_SESSION_MESSAGES=true, чтобы включить сохранение сообщений и ответов",
       "clientInfo": "Информация о клиенте",
+      "requestHeaders": "Заголовки запроса",
+      "requestBody": "Тело запроса",
       "requestMessages": "Сообщения запроса",
       "requestMessagesDescription": "Содержимое сообщения, отправленного клиентом",
-      "responseBody": "Содержимое тела ответа",
+      "responseHeaders": "Заголовки ответа",
+      "responseBody": "Тело ответа",
       "responseBodyDescription": "Полный ответ сервера (TTL 5 минут)",
+      "noHeaders": "Нет данных",
       "noData": "Нет данных"
     },
     "actions": {
@@ -468,6 +487,7 @@
     "usageLogs": "Журналы",
     "leaderboard": "Лидеры",
     "availability": "Доступность",
+    "myQuota": "Моя квота",
     "quotasManagement": "Квоты",
     "userManagement": "Пользователи",
     "providers": "Управление поставщиками",
@@ -815,25 +835,6 @@
     "editAriaLabel": "Редактировать пользователя",
     "deleteAriaLabel": "Удалить пользователя"
   },
-  "users": {
-    "title": "Управление пользователями",
-    "description": "Показано {count} пользователей",
-    "toolbar": {
-      "searchPlaceholder": "Поиск по имени, заметкам, тегам, ключам...",
-      "groupFilter": "Фильтр по группе",
-      "allGroups": "Все группы",
-      "tagFilter": "Фильтр по тегу",
-      "allTags": "Все теги",
-      "keyGroupFilter": "Группа ключей",
-      "allKeyGroups": "Все группы ключей",
-      "createUser": "Создать пользователя",
-      "createKey": "Создать ключ"
-    },
-    "dialog": {
-      "userProviderGroup": "Ваши группы провайдеров",
-      "userProviderGroupHint": "Новые ключи могут использовать только ваши существующие группы провайдеров"
-    }
-  },
   "availability": {
     "title": "Мониторинг доступности провайдеров",
     "description": "Мониторинг доступности и показателей производительности провайдеров в реальном времени",
@@ -946,6 +947,90 @@
       "refreshFailed": "Обновление не удалось, попробуйте снова"
     }
   },
+  "rateLimits": {
+    "title": "Статистика событий лимитов",
+    "description": "Просмотр и анализ статистики событий лимитов",
+    "loading": "Загрузка...",
+    "error": "Ошибка загрузки",
+    "totalEvents": "Всего событий",
+    "avgUsage": "Среднее использование",
+    "affectedUsers": "Затронутые пользователи",
+    "noData": "Нет данных",
+    "noDataHint": "Нет событий лимитов в выбранном диапазоне времени",
+    "filters": {
+      "startTime": "Начало",
+      "endTime": "Конец",
+      "user": "Пользователь",
+      "provider": "Провайдер",
+      "limitType": "Тип лимита",
+      "allUsers": "Все пользователи",
+      "allProviders": "Все провайдеры",
+      "allLimitTypes": "Все типы",
+      "apply": "Применить фильтры",
+      "reset": "Сбросить",
+      "loading": "Загрузка...",
+      "limitTypes": {
+        "rpm": "Лимит RPM",
+        "usd_5h": "Лимит расходов за 5ч",
+        "usd_weekly": "Недельный лимит расходов",
+        "usd_monthly": "Месячный лимит расходов",
+        "concurrent_sessions": "Лимит одновременных сессий",
+        "daily_quota": "Дневной лимит квоты"
+      }
+    },
+    "chart": {
+      "title": "Хронология событий лимитов",
+      "description": "Почасовой тренд событий лимитов",
+      "total": "Всего",
+      "events": "Событий"
+    },
+    "breakdown": {
+      "title": "Распределение по типам лимитов",
+      "description": "Доля событий по типам лимитов",
+      "total": "Всего",
+      "count": "Событий",
+      "percentage": "Доля",
+      "noData": "Нет данных",
+      "types": {
+        "rpm": "RPM",
+        "usd_5h": "Расходы 5ч",
+        "usd_weekly": "Недельные расходы",
+        "usd_monthly": "Месячные расходы",
+        "concurrent_sessions": "Одновременные сессии",
+        "daily_quota": "Дневная квота"
+      }
+    },
+    "topUsers": {
+      "title": "Топ затронутых пользователей",
+      "description": "Пользователи, чаще всего попадавшие под лимиты",
+      "total": "Всего",
+      "rank": "Место",
+      "username": "Имя пользователя",
+      "eventCount": "Событий",
+      "percentage": "Доля",
+      "loading": "Загрузка...",
+      "noData": "Нет данных"
+    }
+  },
+  "users": {
+    "title": "Управление пользователями",
+    "description": "Показано {count} пользователей",
+    "toolbar": {
+      "searchPlaceholder": "Поиск по имени, заметкам, тегам, ключам...",
+      "groupFilter": "Фильтр по группе",
+      "allGroups": "Все группы",
+      "tagFilter": "Фильтр по тегу",
+      "allTags": "Все теги",
+      "keyGroupFilter": "Группа ключей",
+      "allKeyGroups": "Все группы ключей",
+      "createUser": "Создать пользователя",
+      "createKey": "Создать ключ"
+    },
+    "dialog": {
+      "userProviderGroup": "Ваши группы провайдеров",
+      "userProviderGroupHint": "Новые ключи могут использовать только ваши существующие группы провайдеров"
+    }
+  },
   "userManagement": {
     "table": {
       "columns": {
@@ -1052,6 +1137,7 @@
       "keySaveFailed": "Не удалось сохранить ключ",
       "keyDeleteFailed": "Не удалось удалить ключ",
       "saveSuccess": "Изменения сохранены",
+      "atLeastOneKeyEnabled": "Необходимо оставить хотя бы один активный ключ",
       "operationFailed": "Операция не удалась",
       "userDisabled": "Пользователь отключен",
       "userEnabled": "Пользователь активирован",
@@ -1279,7 +1365,32 @@
     },
     "keyStatus": {
       "enabled": "Включён",
-      "disabled": "Отключён"
+      "disabled": "Отключён",
+      "active": "Активен",
+      "expired": "Истёк",
+      "expiringSoon": "Скоро истечёт",
+      "keyEnabled": "Ключ включён",
+      "keyDisabled": "Ключ отключён",
+      "toggleKeyStatus": "Переключить статус ключа",
+      "clickToDisableKey": "Нажмите, чтобы отключить ключ",
+      "clickToEnableKey": "Нажмите, чтобы включить ключ",
+      "operationFailed": "Операция не удалась",
+      "clickToQuickRenew": "Нажмите для быстрого продления"
+    },
+    "userStatus": {
+      "enabled": "Включён",
+      "disabled": "Отключён",
+      "active": "Активен",
+      "expired": "Истёк",
+      "expiringSoon": "Скоро истечёт",
+      "userEnabled": "Пользователь включён",
+      "userDisabled": "Пользователь отключён",
+      "toggleUserStatus": "Переключить статус пользователя",
+      "clickToDisableUser": "Нажмите, чтобы отключить пользователя",
+      "clickToEnableUser": "Нажмите, чтобы включить пользователя",
+      "operationFailed": "Операция не удалась",
+      "deleteFailed": "Не удалось удалить",
+      "deleteSuccess": "Удаление успешно"
     },
     "userEditSection": {
       "sections": {
@@ -1321,7 +1432,13 @@
           "enabledDescription": "Сейчас включён. При отключении пользователь и его ключи станут недоступны.",
           "disabledDescription": "Сейчас отключён. При включении пользователь и его ключи станут доступны.",
           "confirmDisable": "Подтвердить отключение",
-          "confirmEnable": "Подтвердить включение"
+          "confirmEnable": "Подтвердить включение",
+          "confirmEnableTitle": "Подтвердить включение пользователя",
+          "confirmDisableTitle": "Подтвердить отключение пользователя",
+          "confirmEnableDescription": "Включение позволит пользователю и его ключам работать в обычном режиме.",
+          "confirmDisableDescription": "Отключение сделает пользователя и его ключи недоступными.",
+          "cancel": "Отмена",
+          "processing": "Обработка..."
         }
       },
       "presetClients": {
@@ -1345,7 +1462,8 @@
         },
         "enableStatus": {
           "label": "Статус включения",
-          "description": "Отключённые ключи не могут использоваться"
+          "description": "Отключённые ключи не могут использоваться",
+          "cannotDisableTooltip": "Невозможно отключить последний активный ключ"
         },
         "balanceQueryPage": {
           "label": "Независимая страница использования",

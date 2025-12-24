@@ -106,6 +106,7 @@ export async function updateMessageRequestDetails(
     statusCode?: number;
     inputTokens?: number;
     outputTokens?: number;
+    ttfbMs?: number | null;
     cacheCreationInputTokens?: number;
     cacheReadInputTokens?: number;
     cacheCreation5mInputTokens?: number;
@@ -132,6 +133,9 @@ export async function updateMessageRequestDetails(
   }
   if (details.outputTokens !== undefined) {
     updateData.outputTokens = details.outputTokens;
+  }
+  if (details.ttfbMs !== undefined) {
+    updateData.ttfbMs = details.ttfbMs;
   }
   if (details.cacheCreationInputTokens !== undefined) {
     updateData.cacheCreationInputTokens = details.cacheCreationInputTokens;

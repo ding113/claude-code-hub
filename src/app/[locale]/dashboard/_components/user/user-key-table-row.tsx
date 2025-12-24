@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, SquarePen } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState, useTransition } from "react";
@@ -13,6 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useRouter } from "@/i18n/routing";
 import { cn } from "@/lib/utils";
+import { getContrastTextColor, getGroupColor } from "@/lib/utils/color";
 import { formatDate } from "@/lib/utils/date-format";
 import type { UserDisplay } from "@/types/user";
 import { KeyRowItem } from "./key-row-item";
@@ -66,6 +68,30 @@ export interface UserKeyTableRowProps {
 }
 
 const DEFAULT_GRID_COLUMNS_CLASS = "grid-cols-[minmax(260px,1fr)_120px_repeat(6,90px)_80px]";
+const EXPIRING_SOON_MS = 72 * 60 * 60 * 1000; // 72小时
+const MAX_VISIBLE_GROUPS = 2; // 最多显示的分组数量
+
+function splitGroups(value?: string | null): string[] {
+  return (value ?? "")
+    .split(",")
+    .map((g) => g.trim())
+    .filter(Boolean);
+}
+
+function getExpiryStatus(
+  isEnabled: boolean,
+  expiresAt: Date | null | undefined
+): { label: string; variant: "default" | "secondary" | "destructive" | "outline" } {
+  const now = Date.now();
+  const expTs = expiresAt?.getTime();
+  const hasExpiry = typeof expTs === "number" && Number.isFinite(expTs);
+
+  if (!isEnabled) return { label: "disabled", variant: "secondary" };
+  if (hasExpiry && expTs <= now) return { label: "expired", variant: "destructive" };
+  if (hasExpiry && expTs - now <= EXPIRING_SOON_MS)
+    return { label: "expiringSoon", variant: "outline" };
+  return { label: "active", variant: "default" };
+}
 
 function normalizeLimitValue(value: unknown): number | null {
   const raw = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
@@ -102,6 +128,7 @@ export function UserKeyTableRow({
   const tBatchEdit = useTranslations("dashboard.userManagement.batchEdit");
   const tUserStatus = useTranslations("dashboard.userManagement.userStatus");
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [_isPending, startTransition] = useTransition();
   const [isTogglingEnabled, setIsTogglingEnabled] = useState(false);
   // 乐观更新：本地状态跟踪启用状态
@@ -129,6 +156,14 @@ export function UserKeyTableRow({
 
   const expiresText = formatExpiry(localExpiresAt ?? null, locale);
 
+  // 计算用户过期状态
+  const expiryStatus = getExpiryStatus(localIsEnabled, localExpiresAt ?? null);
+
+  // 处理 Provider Group：拆分成数组
+  const userGroups = splitGroups(user.providerGroup);
+  const visibleGroups = userGroups.slice(0, MAX_VISIBLE_GROUPS);
+  const remainingGroupsCount = Math.max(0, userGroups.length - MAX_VISIBLE_GROUPS);
+
   const limit5h = normalizeLimitValue(user.limit5hUsd);
   const limitDaily = normalizeLimitValue(user.dailyQuota);
   const limitWeekly = normalizeLimitValue(user.limitWeeklyUsd);
@@ -144,6 +179,8 @@ export function UserKeyTableRow({
         return;
       }
       toast.success(tUserStatus("deleteSuccess"));
+      // 使 React Query 缓存失效，确保数据刷新
+      queryClient.invalidateQueries({ queryKey: ["users"] });
       router.refresh();
     });
   };
@@ -222,10 +259,33 @@ export function UserKeyTableRow({
               {isExpanded ? translations.collapse : translations.expand}
             </span>
             <span className="font-medium truncate">{user.name}</span>
-            {!localIsEnabled && (
+            <Badge variant={expiryStatus.variant} className="text-[10px] shrink-0">
+              {tUserStatus(expiryStatus.label)}
+            </Badge>
+            {visibleGroups.map((group) => {
+              const bgColor = getGroupColor(group);
+              return (
+                <Badge
+                  key={group}
+                  className="text-[10px] shrink-0"
+                  style={{
+                    backgroundColor: bgColor,
+                    color: getContrastTextColor(bgColor),
+                  }}
+                >
+                  {group}
+                </Badge>
+              );
+            })}
+            {remainingGroupsCount > 0 && (
               <Badge variant="secondary" className="text-[10px] shrink-0">
-                {translations.userStatus?.disabled || "Disabled"}
+                +{remainingGroupsCount}
               </Badge>
+            )}
+            {user.tags && user.tags.length > 0 && (
+              <span className="text-xs text-muted-foreground truncate">
+                [{user.tags.join(", ")}]
+              </span>
             )}
             {user.note ? (
               <span className="text-xs text-muted-foreground truncate">{user.note}</span>
