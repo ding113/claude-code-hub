@@ -25,7 +25,8 @@ export class ProxyAuthenticator {
       return null;
     }
 
-    return ProxyResponses.buildError(401, "令牌已过期或验证不正确");
+    // 返回详细的错误信息，帮助用户快速定位问题
+    return authState.errorResponse ?? ProxyResponses.buildError(401, "认证失败");
   }
 
   private static async validate(headers: {
@@ -52,7 +53,17 @@ export class ProxyAuthenticator {
         hasGeminiApiKeyHeader: !!headers.geminiApiKeyHeader,
         hasGeminiApiKeyQuery: !!headers.geminiApiKeyQuery,
       });
-      return { user: null, key: null, apiKey: null, success: false };
+      return {
+        user: null,
+        key: null,
+        apiKey: null,
+        success: false,
+        errorResponse: ProxyResponses.buildError(
+          401,
+          "未提供认证凭据。请在 Authorization 头部、x-api-key 头部或 x-goog-api-key 头部中包含 API 密钥。",
+          "authentication_error"
+        ),
+      };
     }
 
     const [firstKey] = providedKeys;
@@ -62,7 +73,17 @@ export class ProxyAuthenticator {
       logger.warn("[ProxyAuthenticator] Multiple conflicting API keys provided", {
         keyCount: providedKeys.length,
       });
-      return { user: null, key: null, apiKey: null, success: false };
+      return {
+        user: null,
+        key: null,
+        apiKey: null,
+        success: false,
+        errorResponse: ProxyResponses.buildError(
+          401,
+          "提供了多个冲突的 API 密钥。请仅使用一种认证方式。",
+          "authentication_error"
+        ),
+      };
     }
 
     const apiKey = firstKey;
@@ -74,7 +95,17 @@ export class ProxyAuthenticator {
         fromHeader: !!headers.authHeader || !!headers.apiKeyHeader || !!headers.geminiApiKeyHeader,
         fromQuery: !!headers.geminiApiKeyQuery,
       });
-      return { user: null, key: null, apiKey, success: false };
+      return {
+        user: null,
+        key: null,
+        apiKey,
+        success: false,
+        errorResponse: ProxyResponses.buildError(
+          401,
+          "API 密钥无效。提供的密钥不存在或已被删除。",
+          "invalid_api_key"
+        ),
+      };
     }
 
     // Check user status and expiration
@@ -86,7 +117,17 @@ export class ProxyAuthenticator {
         userId: user.id,
         userName: user.name,
       });
-      return { user: null, key: null, apiKey, success: false };
+      return {
+        user: null,
+        key: null,
+        apiKey,
+        success: false,
+        errorResponse: ProxyResponses.buildError(
+          401,
+          "用户账户已被禁用。请联系管理员。",
+          "user_disabled"
+        ),
+      };
     }
 
     // 2. Check if user is expired (lazy expiration check)
@@ -103,7 +144,17 @@ export class ProxyAuthenticator {
           error: error instanceof Error ? error.message : String(error),
         });
       });
-      return { user: null, key: null, apiKey, success: false };
+      return {
+        user: null,
+        key: null,
+        apiKey,
+        success: false,
+        errorResponse: ProxyResponses.buildError(
+          401,
+          `用户账户已于 ${user.expiresAt.toISOString().split("T")[0]} 过期。请续费订阅。`,
+          "user_expired"
+        ),
+      };
     }
 
     logger.debug("[ProxyAuthenticator] Authentication successful", {

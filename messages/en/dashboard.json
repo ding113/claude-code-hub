@@ -1392,6 +1392,9 @@
     "keyStatus": {
       "enabled": "Enabled",
       "disabled": "Disabled",
+      "active": "Active",
+      "expired": "Expired",
+      "expiringSoon": "Expiring Soon",
       "keyEnabled": "Key enabled",
       "keyDisabled": "Key disabled",
       "toggleKeyStatus": "Toggle key status",
@@ -1403,6 +1406,9 @@
     "userStatus": {
       "enabled": "Enabled",
       "disabled": "Disabled",
+      "active": "Active",
+      "expired": "Expired",
+      "expiringSoon": "Expiring Soon",
       "userEnabled": "User enabled",
       "userDisabled": "User disabled",
       "toggleUserStatus": "Toggle user status",

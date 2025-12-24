@@ -1364,11 +1364,24 @@
     },
     "keyStatus": {
       "enabled": "Включён",
-      "disabled": "Отключён"
+      "disabled": "Отключён",
+      "active": "Активен",
+      "expired": "Истёк",
+      "expiringSoon": "Скоро истечёт",
+      "keyEnabled": "Ключ включён",
+      "keyDisabled": "Ключ отключён",
+      "toggleKeyStatus": "Переключить статус ключа",
+      "clickToDisableKey": "Нажмите, чтобы отключить ключ",
+      "clickToEnableKey": "Нажмите, чтобы включить ключ",
+      "operationFailed": "Операция не удалась",
+      "clickToQuickRenew": "Нажмите для быстрого продления"
     },
     "userStatus": {
       "enabled": "Включён",
       "disabled": "Отключён",
+      "active": "Активен",
+      "expired": "Истёк",
+      "expiringSoon": "Скоро истечёт",
       "userEnabled": "Пользователь включён",
       "userDisabled": "Пользователь отключён",
       "toggleUserStatus": "Переключить статус пользователя",

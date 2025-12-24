@@ -17,6 +17,7 @@ export interface AuthState {
   key: Key | null;
   apiKey: string | null;
   success: boolean;
+  errorResponse?: Response; // 认证失败时的详细错误响应
 }
 
 export interface MessageContext {

@@ -1351,11 +1351,24 @@
     },
     "keyStatus": {
       "enabled": "有効",
-      "disabled": "無効"
+      "disabled": "無効",
+      "active": "正常",
+      "expired": "期限切れ",
+      "expiringSoon": "まもなく期限切れ",
+      "keyEnabled": "キーが有効になりました",
+      "keyDisabled": "キーが無効になりました",
+      "toggleKeyStatus": "キー状態を切り替える",
+      "clickToDisableKey": "クリックしてキーを無効化",
+      "clickToEnableKey": "クリックしてキーを有効化",
+      "operationFailed": "操作に失敗しました",
+      "clickToQuickRenew": "クリックして更新"
     },
     "userStatus": {
       "enabled": "有効",
       "disabled": "無効",
+      "active": "正常",
+      "expired": "期限切れ",
+      "expiringSoon": "まもなく期限切れ",
       "userEnabled": "ユーザーが有効になりました",
       "userDisabled": "ユーザーが無効になりました",
       "toggleUserStatus": "ユーザー状態を切り替える",
