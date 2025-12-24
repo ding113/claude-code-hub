@@ -55,6 +55,10 @@
     "filters": {
       "user": "User",
       "provider": "Provider",
+      "searchUser": "Search users...",
+      "searchProvider": "Search providers...",
+      "noUserFound": "No matching users found",
+      "noProviderFound": "No matching providers found",
       "model": "Model",
       "endpoint": "Endpoint",
       "status": "Status",

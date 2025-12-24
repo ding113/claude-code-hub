@@ -289,7 +289,7 @@ export function KeyEditSection({
     if (!normalizedKeyProviderGroup) return [];
     return normalizedKeyProviderGroup.split(",").filter(Boolean);
   }, [normalizedKeyProviderGroup]);
-  const extraKeyGroupOption = useMemo(() => {
+  const _extraKeyGroupOption = useMemo(() => {
     if (!normalizedKeyProviderGroup) return null;
     if (normalizedKeyProviderGroup === normalizedUserProviderGroup) return null;
     if (userGroups.includes(normalizedKeyProviderGroup)) return null;

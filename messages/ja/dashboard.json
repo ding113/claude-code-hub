@@ -55,6 +55,10 @@
     "filters": {
       "user": "ユーザー",
       "provider": "プロバイダー",
+      "searchUser": "ユーザーを検索...",
+      "searchProvider": "プロバイダーを検索...",
+      "noUserFound": "一致するユーザーが見つかりません",
+      "noProviderFound": "一致するプロバイダーが見つかりません",
       "model": "モデル",
       "endpoint": "エンドポイント",
       "status": "ステータス",

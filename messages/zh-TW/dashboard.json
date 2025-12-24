@@ -55,6 +55,10 @@
     "filters": {
       "user": "使用者",
       "provider": "供應商",
+      "searchUser": "搜尋使用者...",
+      "searchProvider": "搜尋供應商...",
+      "noUserFound": "未找到匹配的使用者",
+      "noProviderFound": "未找到匹配的供應商",
       "model": "模型",
       "endpoint": "端點",
       "status": "狀態",
