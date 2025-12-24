@@ -184,7 +184,7 @@ export async function findUsageLogsBatch(
     .select({
       id: messageRequest.id,
       createdAt: messageRequest.createdAt,
-      createdAtRaw: sql<string>`to_char(${messageRequest.createdAt}, 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+      createdAtRaw: sql<string>`to_char(${messageRequest.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
       sessionId: messageRequest.sessionId,
       requestSequence: messageRequest.requestSequence,
       userName: users.name,

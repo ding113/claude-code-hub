@@ -105,6 +105,13 @@ export function UsageLogsFilters({
     return dynamicOnly;
   }, [dynamicStatusCodes]);
 
+  const userMap = useMemo(() => new Map(users.map((user) => [user.id, user.name])), [users]);
+
+  const providerMap = useMemo(
+    () => new Map(providers.map((provider) => [provider.id, provider.name])),
+    [providers]
+  );
+
   const [keys, setKeys] = useState<Key[]>(initialKeys);
   const [localFilters, setLocalFilters] = useState(filters);
   const [isExporting, setIsExporting] = useState(false);
@@ -285,8 +292,7 @@ export function UsageLogsFilters({
                   className="w-full justify-between"
                 >
                   {localFilters.userId ? (
-                    (users.find((user) => user.id === localFilters.userId)?.name ??
-                    localFilters.userId.toString())
+                    (userMap.get(localFilters.userId) ?? localFilters.userId.toString())
                   ) : (
                     <span className="text-muted-foreground">
                       {isUsersLoading ? t("logs.stats.loading") : t("logs.filters.allUsers")}
@@ -392,8 +398,7 @@ export function UsageLogsFilters({
                   className="w-full justify-between"
                 >
                   {localFilters.providerId ? (
-                    (providers.find((provider) => provider.id === localFilters.providerId)?.name ??
-                    localFilters.providerId.toString())
+                    (providerMap.get(localFilters.providerId) ?? localFilters.providerId.toString())
                   ) : (
                     <span className="text-muted-foreground">
                       {isProvidersLoading
