@@ -8,6 +8,7 @@ import {
   setSessionDetailsCache,
 } from "@/lib/cache/session-cache";
 import { logger } from "@/lib/logger";
+import { normalizeRequestSequence } from "@/lib/utils/request-sequence";
 import type { ActiveSessionInfo } from "@/types/session";
 import { summarizeTerminateSessionsBatch } from "./active-sessions-utils";
 import type { ActionResult } from "./types";
@@ -512,6 +513,8 @@ export async function getSessionDetails(
   ActionResult<{
     messages: unknown | null;
     response: string | null;
+    requestHeaders: Record<string, string> | null;
+    responseHeaders: Record<string, string> | null;
     sessionStats: Awaited<
       ReturnType<typeof import("@/repository/message").aggregateSessionStats>
     > | null;
@@ -572,12 +575,18 @@ export async function getSessionDetails(
       };
     }
 
-    // 5. 并行获取 messages 和 response（不缓存，因为这些数据较大）
+    // 5. 解析 requestSequence：未指定时默认取当前最新请求序号
     const { SessionManager } = await import("@/lib/session-manager");
-    const [messages, response, requestCount] = await Promise.all([
-      SessionManager.getSessionMessages(sessionId, requestSequence),
-      SessionManager.getSessionResponse(sessionId, requestSequence),
-      SessionManager.getSessionRequestCount(sessionId),
+    const requestCount = await SessionManager.getSessionRequestCount(sessionId);
+    const normalizedSequence = normalizeRequestSequence(requestSequence);
+    const effectiveSequence = normalizedSequence ?? (requestCount > 0 ? requestCount : undefined);
+
+    // 6. 并行获取 messages 和 response（不缓存，因为这些数据较大）
+    const [messages, response, requestHeaders, responseHeaders] = await Promise.all([
+      SessionManager.getSessionMessages(sessionId, effectiveSequence),
+      SessionManager.getSessionResponse(sessionId, effectiveSequence),
+      SessionManager.getSessionRequestHeaders(sessionId, effectiveSequence),
+      SessionManager.getSessionResponseHeaders(sessionId, effectiveSequence),
     ]);
 
     return {
@@ -585,8 +594,10 @@ export async function getSessionDetails(
       data: {
         messages,
         response,
+        requestHeaders,
+        responseHeaders,
         sessionStats,
-        currentSequence: requestSequence ?? (requestCount > 0 ? requestCount : null),
+        currentSequence: effectiveSequence ?? null,
       },
     };
   } catch (error) {

@@ -1,7 +1,9 @@
 import "server-only";
 
 import crypto from "node:crypto";
+import { sanitizeHeaders } from "@/app/v1/_lib/proxy/errors";
 import { logger } from "@/lib/logger";
+import { normalizeRequestSequence } from "@/lib/utils/request-sequence";
 import type {
   ActiveSessionInfo,
   SessionProviderInfo,
@@ -10,6 +12,49 @@ import type {
 } from "@/types/session";
 import { getRedisClient } from "./redis";
 import { SessionTracker } from "./session-tracker";
+
+function headersToSanitizedObject(headers: Headers): Record<string, string> {
+  const sanitizedText = sanitizeHeaders(headers);
+  if (!sanitizedText || sanitizedText === "(empty)") {
+    return {};
+  }
+
+  const obj: Record<string, string> = {};
+  const lines = sanitizedText.split(/\r?\n/).filter(Boolean);
+  for (const line of lines) {
+    const colonIndex = line.indexOf(":");
+    if (colonIndex === -1) continue;
+    const name = line.slice(0, colonIndex).trim();
+    const value = line.slice(colonIndex + 1).trim();
+    if (!name) continue;
+
+    if (obj[name]) {
+      obj[name] = `${obj[name]}\n${value}`;
+    } else {
+      obj[name] = value;
+    }
+  }
+
+  return obj;
+}
+
+function parseHeaderRecord(value: string): Record<string, string> | null {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+
+    const record: Record<string, string> = {};
+    for (const [key, raw] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof raw === "string") {
+        record[key] = raw;
+      }
+    }
+    return record;
+  } catch (error) {
+    logger.warn("SessionManager: Failed to parse header record JSON", { error });
+    return null;
+  }
+}
 
 /**
  * Session 管理器
@@ -1278,6 +1323,95 @@ export class SessionManager {
       logger.error("SessionManager: Failed to store session response", {
         error,
       });
+    }
+  }
+
+  static async storeSessionRequestHeaders(
+    sessionId: string,
+    headers: Headers,
+    requestSequence?: number
+  ): Promise<void> {
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") return;
+
+    try {
+      const sequence = normalizeRequestSequence(requestSequence) ?? 1;
+      const key = `session:${sessionId}:req:${sequence}:reqHeaders`;
+      const headersJson = JSON.stringify(headersToSanitizedObject(headers));
+      await redis.setex(key, SessionManager.SESSION_TTL, headersJson);
+      logger.trace("SessionManager: Stored session request headers", {
+        sessionId,
+        requestSequence: sequence,
+        key,
+      });
+    } catch (error) {
+      logger.error("SessionManager: Failed to store session request headers", { error, sessionId });
+    }
+  }
+
+  static async storeSessionResponseHeaders(
+    sessionId: string,
+    headers: Headers,
+    requestSequence?: number
+  ): Promise<void> {
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") return;
+
+    try {
+      const sequence = normalizeRequestSequence(requestSequence) ?? 1;
+      const key = `session:${sessionId}:req:${sequence}:resHeaders`;
+      const headersJson = JSON.stringify(headersToSanitizedObject(headers));
+      await redis.setex(key, SessionManager.SESSION_TTL, headersJson);
+      logger.trace("SessionManager: Stored session response headers", {
+        sessionId,
+        requestSequence: sequence,
+        key,
+      });
+    } catch (error) {
+      logger.error("SessionManager: Failed to store session response headers", {
+        error,
+        sessionId,
+      });
+    }
+  }
+
+  static async getSessionRequestHeaders(
+    sessionId: string,
+    requestSequence?: number
+  ): Promise<Record<string, string> | null> {
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") return null;
+
+    try {
+      const sequence = normalizeRequestSequence(requestSequence);
+      if (!sequence) return null;
+      const key = `session:${sessionId}:req:${sequence}:reqHeaders`;
+      const value = await redis.get(key);
+      if (!value) return null;
+      return parseHeaderRecord(value);
+    } catch (error) {
+      logger.error("SessionManager: Failed to get session request headers", { error, sessionId });
+      return null;
+    }
+  }
+
+  static async getSessionResponseHeaders(
+    sessionId: string,
+    requestSequence?: number
+  ): Promise<Record<string, string> | null> {
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") return null;
+
+    try {
+      const sequence = normalizeRequestSequence(requestSequence);
+      if (!sequence) return null;
+      const key = `session:${sessionId}:req:${sequence}:resHeaders`;
+      const value = await redis.get(key);
+      if (!value) return null;
+      return parseHeaderRecord(value);
+    } catch (error) {
+      logger.error("SessionManager: Failed to get session response headers", { error, sessionId });
+      return null;
     }
   }
 

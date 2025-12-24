@@ -355,10 +355,14 @@
       "noDetailedData": "詳細データなし",
       "storageTip": "ヒント: メッセージとレスポンスの保存を有効にするには、環境変数 STORE_SESSION_MESSAGES=true を設定してください",
       "clientInfo": "クライアント情報",
+      "requestHeaders": "リクエストヘッダー",
+      "requestBody": "リクエストボディ",
       "requestMessages": "リクエスト メッセージ",
       "requestMessagesDescription": "クライアントが送信したメッセージ内容",
-      "responseBody": "レスポンスボディ内容",
+      "responseHeaders": "レスポンスヘッダー",
+      "responseBody": "レスポンスボディ",
       "responseBodyDescription": "サーバーからの完全なレスポンス (5 分間の TTL)",
+      "noHeaders": "データなし",
       "noData": "データなし"
     },
     "actions": {
