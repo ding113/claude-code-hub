@@ -1356,11 +1356,24 @@
     },
     "keyStatus": {
       "enabled": "啟用",
-      "disabled": "停用"
+      "disabled": "停用",
+      "active": "正常",
+      "expired": "已過期",
+      "expiringSoon": "即將過期",
+      "keyEnabled": "密鑰已啟用",
+      "keyDisabled": "密鑰已停用",
+      "toggleKeyStatus": "切換密鑰狀態",
+      "clickToDisableKey": "點擊停用密鑰",
+      "clickToEnableKey": "點擊啟用密鑰",
+      "operationFailed": "操作失敗",
+      "clickToQuickRenew": "點擊快速續期"
     },
     "userStatus": {
       "enabled": "啟用",
       "disabled": "停用",
+      "active": "正常",
+      "expired": "已過期",
+      "expiringSoon": "即將過期",
       "userEnabled": "使用者已啟用",
       "userDisabled": "使用者已停用",
       "toggleUserStatus": "切換使用者狀態",

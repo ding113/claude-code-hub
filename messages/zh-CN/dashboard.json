@@ -1384,6 +1384,9 @@
     "keyStatus": {
       "enabled": "启用",
       "disabled": "禁用",
+      "active": "正常",
+      "expired": "已过期",
+      "expiringSoon": "即将过期",
       "keyEnabled": "密钥已启用",
       "keyDisabled": "密钥已禁用",
       "toggleKeyStatus": "切换密钥启用状态",
@@ -1395,6 +1398,9 @@
     "userStatus": {
       "enabled": "启用",
       "disabled": "禁用",
+      "active": "正常",
+      "expired": "已过期",
+      "expiringSoon": "即将过期",
       "userEnabled": "用户已启用",
       "userDisabled": "用户已禁用",
       "toggleUserStatus": "切换用户启用状态",
