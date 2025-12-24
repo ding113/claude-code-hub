@@ -1068,6 +1068,18 @@
       "description": "配置上游服务商的金额限流和并发限制，留空表示无限制。"
     },
     "addProvider": "新增服务商",
+    "filter": {
+      "status": {
+        "all": "全部状态",
+        "active": "已启用",
+        "inactive": "已禁用"
+      },
+      "groups": {
+        "label": "分组:",
+        "all": "全部",
+        "default": "default"
+      }
+    },
     "editProvider": "编辑服务商",
     "createProvider": "新增服务商",
     "updateFailed": "更新服务商失败",

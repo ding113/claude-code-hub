@@ -1169,6 +1169,41 @@
             }
           },
           "hint": "提示：部分嚴格的 Codex 中轉站（如 88code、foxcode）需要官方 instructions，請選擇「自動」或「強制官方」策略"
+        },
+        "mcpPassthrough": {
+          "title": "MCP 透傳配置",
+          "summary": {
+            "none": "不啟用",
+            "minimax": "Minimax",
+            "glm": "智譜 GLM",
+            "custom": "自定義 (預留)"
+          },
+          "desc": "啟用後，將 MCP 工具調用透傳到指定的 AI 服務商（如 minimax 的圖片識別、聯網搜索）",
+          "select": {
+            "label": "透傳類型",
+            "none": {
+              "label": "不啟用",
+              "desc": "不啟用 MCP 透傳功能（默認）"
+            },
+            "minimax": {
+              "label": "Minimax",
+              "desc": "透傳到 minimax MCP 服務（支持圖片識別、聯網搜索等工具）"
+            },
+            "glm": {
+              "label": "智譜 GLM",
+              "desc": "透傳到智譜 GLM MCP 服務（支持圖片分析、視頻分析等工具）"
+            },
+            "custom": {
+              "label": "自定義",
+              "desc": "透傳到自定義 MCP 服務（預留，暫未實現）"
+            },
+            "placeholder": "選擇透傳類型"
+          },
+          "hint": "提示: MCP 透傳功能允許 Claude Code 客戶端使用第三方 AI 服務商提供的工具能力（如圖片識別、聯網搜索）",
+          "urlLabel": "MCP 透傳 URL",
+          "urlPlaceholder": "https://api.minimaxi.com",
+          "urlDesc": "MCP 服務的基礎 URL。留空則自動從提供商 URL 提取基礎域名",
+          "urlAuto": "自動提取: {url}"
         }
       },
       "providerTypes": {
@@ -1335,6 +1370,19 @@
       "description": "配置上游服务商的金额限流和并发限制，留空表示无限制。",
       "leaderboard": "供應商排行榜",
       "title": "服务商管理"
+    },
+    "addProvider": "新增服務商",
+    "filter": {
+      "status": {
+        "all": "所有狀態",
+        "active": "已啟用",
+        "inactive": "已停用"
+      },
+      "groups": {
+        "label": "分組:",
+        "all": "全部",
+        "default": "default"
+      }
     },
     "subtitle": "服務商管理",
     "subtitleDesc": "設定上游服務商的金額限流和並行限制。留空表示無限制。",
