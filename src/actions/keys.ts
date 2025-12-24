@@ -475,12 +475,16 @@ export async function removeKey(keyId: number): Promise<ActionResult> {
       return { ok: false, error: "无权限执行此操作" };
     }
 
-    const activeKeyCount = await countActiveKeysByUser(key.userId);
-    if (activeKeyCount <= 1) {
-      return {
-        ok: false,
-        error: "该用户至少需要保留一个可用的密钥，无法删除最后一个密钥",
-      };
+    // 只有删除启用的密钥时，才需要检查是否是最后一个启用的密钥
+    // 删除禁用的密钥不会影响用户的可用密钥数量
+    if (key.isEnabled) {
+      const activeKeyCount = await countActiveKeysByUser(key.userId);
+      if (activeKeyCount <= 1) {
+        return {
+          ok: false,
+          error: "该用户至少需要保留一个可用的密钥，无法删除最后一个密钥",
+        };
+      }
     }
 
     // 非 admin 删除时的额外检查：确保删除后用户仍有分组（防止分组被清空从而绕过限制）

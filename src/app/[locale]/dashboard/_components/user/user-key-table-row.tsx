@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, SquarePen } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState, useTransition } from "react";
@@ -102,6 +103,7 @@ export function UserKeyTableRow({
   const tBatchEdit = useTranslations("dashboard.userManagement.batchEdit");
   const tUserStatus = useTranslations("dashboard.userManagement.userStatus");
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [_isPending, startTransition] = useTransition();
   const [isTogglingEnabled, setIsTogglingEnabled] = useState(false);
   // 乐观更新：本地状态跟踪启用状态
@@ -144,6 +146,8 @@ export function UserKeyTableRow({
         return;
       }
       toast.success(tUserStatus("deleteSuccess"));
+      // 使 React Query 缓存失效，确保数据刷新
+      queryClient.invalidateQueries({ queryKey: ["users"] });
       router.refresh();
     });
   };
