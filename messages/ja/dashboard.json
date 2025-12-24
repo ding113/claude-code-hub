@@ -92,10 +92,13 @@
       "endpoint": "エンドポイント",
       "inputTokens": "入力",
       "outputTokens": "出力",
+      "tokens": "Tokens",
       "cacheWrite": "キャッシュ書き込み",
       "cacheRead": "キャッシュ読み取り",
+      "cache": "Cache",
       "cost": "コスト",
       "duration": "所要時間",
+      "performance": "Perf",
       "status": "ステータス"
     },
     "stats": {

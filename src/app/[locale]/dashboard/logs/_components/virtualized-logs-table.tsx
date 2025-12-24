@@ -13,26 +13,20 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { cn, formatTokenAmount } from "@/lib/utils";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
+import {
+  calculateOutputRate,
+  formatDuration,
+  formatPerformanceSecondLine,
+  NON_BILLING_ENDPOINT,
+} from "@/lib/utils/performance-formatter";
 import { formatProviderSummary } from "@/lib/utils/provider-chain-formatter";
 import type { BillingModelSource } from "@/types/system-config";
 import { ErrorDetailsDialog } from "./error-details-dialog";
 import { ModelDisplayWithRedirect } from "./model-display-with-redirect";
 import { ProviderChainPopover } from "./provider-chain-popover";
 
-const NON_BILLING_ENDPOINT = "/v1/messages/count_tokens";
 const BATCH_SIZE = 50;
 const ROW_HEIGHT = 52; // Estimated row height in pixels
-
-/**
- * Format duration
- */
-function formatDuration(durationMs: number | null): string {
-  if (!durationMs) return "-";
-  if (durationMs >= 1000) {
-    return `${(Number(durationMs) / 1000).toFixed(2)}s`;
-  }
-  return `${durationMs}ms`;
-}
 
 export interface VirtualizedLogsTableFilters {
   userId?: number;
@@ -199,28 +193,16 @@ export function VirtualizedLogsTable({
               {t("logs.columns.model")}
             </div>
             <div
-              className="w-[55px] min-w-[55px] shrink-0 text-right px-1 truncate"
-              title={t("logs.columns.inputTokens")}
+              className="w-[80px] min-w-[80px] shrink-0 text-right px-1 truncate"
+              title={t("logs.columns.tokens")}
             >
-              {t("logs.columns.inputTokens")}
+              {t("logs.columns.tokens")}
             </div>
             <div
-              className="w-[55px] min-w-[55px] shrink-0 text-right px-1 truncate"
-              title={t("logs.columns.outputTokens")}
+              className="w-[90px] min-w-[90px] shrink-0 text-right px-1 truncate"
+              title={t("logs.columns.cache")}
             >
-              {t("logs.columns.outputTokens")}
-            </div>
-            <div
-              className="flex-1 min-w-[70px] text-right px-1 truncate"
-              title={t("logs.columns.cacheWrite")}
-            >
-              {t("logs.columns.cacheWrite")}
-            </div>
-            <div
-              className="flex-[0.8] min-w-[55px] text-right px-1 truncate"
-              title={t("logs.columns.cacheRead")}
-            >
-              {t("logs.columns.cacheRead")}
+              {t("logs.columns.cache")}
             </div>
             <div
               className="flex-1 min-w-[70px] text-right px-1 truncate"
@@ -229,10 +211,10 @@ export function VirtualizedLogsTable({
               {t("logs.columns.cost")}
             </div>
             <div
-              className="w-[55px] min-w-[55px] shrink-0 text-right px-1 truncate"
-              title={t("logs.columns.duration")}
+              className="w-[75px] min-w-[75px] shrink-0 text-right px-1 truncate"
+              title={t("logs.columns.performance")}
             >
-              {t("logs.columns.duration")}
+              {t("logs.columns.performance")}
             </div>
             <div
               className="w-[65px] min-w-[65px] shrink-0 pr-2 truncate"
@@ -380,7 +362,7 @@ export function VirtualizedLogsTable({
                                   : "text-xs bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-300 dark:border-green-800 shrink-0"
                               }
                             >
-                              x{parseFloat(String(actualCostMultiplier)).toFixed(2)}
+                              ×{parseFloat(String(actualCostMultiplier)).toFixed(2)}
                             </Badge>
                           ) : null;
                         })()}
@@ -411,23 +393,38 @@ export function VirtualizedLogsTable({
                     </TooltipProvider>
                   </div>
 
-                  {/* Input Tokens */}
-                  <div className="w-[55px] min-w-[55px] shrink-0 text-right font-mono text-xs px-1">
-                    {formatTokenAmount(log.inputTokens)}
+                  {/* Tokens */}
+                  <div className="w-[80px] min-w-[80px] shrink-0 text-right font-mono text-xs px-1">
+                    <TooltipProvider>
+                      <Tooltip delayDuration={250}>
+                        <TooltipTrigger asChild>
+                          <span className="cursor-help">
+                            {formatTokenAmount(log.inputTokens)} /{" "}
+                            {formatTokenAmount(log.outputTokens)}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent align="end" className="text-xs space-y-1">
+                          <div>
+                            {t("logs.billingDetails.input")}: {formatTokenAmount(log.inputTokens)}
+                          </div>
+                          <div>
+                            {t("logs.billingDetails.output")}: {formatTokenAmount(log.outputTokens)}
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </div>
 
-                  {/* Output Tokens */}
-                  <div className="w-[55px] min-w-[55px] shrink-0 text-right font-mono text-xs px-1">
-                    {formatTokenAmount(log.outputTokens)}
-                  </div>
-
-                  {/* Cache Write */}
-                  <div className="flex-1 min-w-[70px] text-right font-mono text-xs px-1">
+                  {/* Cache */}
+                  <div className="w-[90px] min-w-[90px] shrink-0 text-right font-mono text-xs px-1">
                     <TooltipProvider>
                       <Tooltip delayDuration={250}>
                         <TooltipTrigger asChild>
                           <div className="flex items-center justify-end gap-1 cursor-help">
-                            <span>{formatTokenAmount(log.cacheCreationInputTokens)}</span>
+                            <span>
+                              {formatTokenAmount(log.cacheCreationInputTokens)} /{" "}
+                              {formatTokenAmount(log.cacheReadInputTokens)}
+                            </span>
                             {log.cacheTtlApplied ? (
                               <Badge variant="outline" className="text-[10px] leading-tight px-1">
                                 {log.cacheTtlApplied}
@@ -436,16 +433,18 @@ export function VirtualizedLogsTable({
                           </div>
                         </TooltipTrigger>
                         <TooltipContent align="end" className="text-xs space-y-1">
-                          <div>5m: {formatTokenAmount(log.cacheCreation5mInputTokens)}</div>
-                          <div>1h: {formatTokenAmount(log.cacheCreation1hInputTokens)}</div>
+                          <div className="font-medium">{t("logs.columns.cacheWrite")}</div>
+                          <div className="pl-2">
+                            5m: {formatTokenAmount(log.cacheCreation5mInputTokens)}
+                          </div>
+                          <div className="pl-2">
+                            1h: {formatTokenAmount(log.cacheCreation1hInputTokens)}
+                          </div>
+                          <div className="font-medium mt-1">{t("logs.columns.cacheRead")}</div>
+                          <div className="pl-2">{formatTokenAmount(log.cacheReadInputTokens)}</div>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
-                  </div>
-
-                  {/* Cache Read */}
-                  <div className="flex-[0.8] min-w-[55px] text-right font-mono text-xs px-1">
-                    {formatTokenAmount(log.cacheReadInputTokens)}
                   </div>
 
                   {/* Cost */}
@@ -490,9 +489,47 @@ export function VirtualizedLogsTable({
                     )}
                   </div>
 
-                  {/* Duration */}
-                  <div className="w-[55px] min-w-[55px] shrink-0 text-right font-mono text-xs px-1">
-                    {formatDuration(log.durationMs)}
+                  {/* Performance */}
+                  <div className="w-[75px] min-w-[75px] shrink-0 text-right font-mono text-xs px-1">
+                    <TooltipProvider>
+                      <Tooltip delayDuration={250}>
+                        <TooltipTrigger asChild>
+                          <div className="flex flex-col items-end cursor-help">
+                            <span>{formatDuration(log.durationMs)}</span>
+                            <span className="text-muted-foreground text-[10px]">
+                              {formatPerformanceSecondLine(
+                                log.ttfbMs,
+                                log.durationMs,
+                                log.outputTokens
+                              )}
+                            </span>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent align="end" className="text-xs space-y-1">
+                          <div>
+                            {t("logs.details.performance.duration")}:{" "}
+                            {formatDuration(log.durationMs)}
+                          </div>
+                          {log.ttfbMs != null && (
+                            <div>
+                              {t("logs.details.performance.ttfb")}: {formatDuration(log.ttfbMs)}
+                            </div>
+                          )}
+                          {(() => {
+                            const rate = calculateOutputRate(
+                              log.outputTokens,
+                              log.durationMs,
+                              log.ttfbMs
+                            );
+                            return rate !== null ? (
+                              <div>
+                                {t("logs.details.performance.outputRate")}: {rate.toFixed(1)} tok/s
+                              </div>
+                            ) : null;
+                          })()}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </div>
 
                   {/* Status */}
