@@ -20,7 +20,6 @@ import { formatCurrency } from "@/lib/utils/currency";
 import {
   calculateOutputRate,
   formatDuration,
-  formatPerformanceSecondLine,
   NON_BILLING_ENDPOINT,
 } from "@/lib/utils/performance-formatter";
 import { formatProviderSummary } from "@/lib/utils/provider-chain-formatter";
@@ -358,46 +357,56 @@ export function UsageLogsTable({
                       )}
                     </TableCell>
                     <TableCell className="text-right font-mono text-xs">
-                      <TooltipProvider>
-                        <Tooltip delayDuration={250}>
-                          <TooltipTrigger asChild>
-                            <div className="flex flex-col items-end cursor-help">
-                              <span>{formatDuration(log.durationMs)}</span>
-                              <span className="text-muted-foreground text-[10px]">
-                                {formatPerformanceSecondLine(
-                                  log.ttfbMs,
-                                  log.durationMs,
-                                  log.outputTokens
-                                )}
-                              </span>
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent align="end" className="text-xs space-y-1">
-                            <div>
-                              {t("logs.details.performance.duration")}:{" "}
-                              {formatDuration(log.durationMs)}
-                            </div>
-                            {log.ttfbMs != null && (
-                              <div>
-                                {t("logs.details.performance.ttfb")}: {formatDuration(log.ttfbMs)}
-                              </div>
-                            )}
-                            {(() => {
-                              const rate = calculateOutputRate(
-                                log.outputTokens,
-                                log.durationMs,
-                                log.ttfbMs
-                              );
-                              return rate !== null ? (
-                                <div>
-                                  {t("logs.details.performance.outputRate")}: {rate.toFixed(1)}{" "}
-                                  tok/s
+                      {(() => {
+                        const rate = calculateOutputRate(
+                          log.outputTokens,
+                          log.durationMs,
+                          log.ttfbMs
+                        );
+                        const secondLine = [
+                          log.ttfbMs != null &&
+                            log.ttfbMs > 0 &&
+                            `TTFB ${formatDuration(log.ttfbMs)}`,
+                          rate !== null && `${rate.toFixed(0)} tok/s`,
+                        ]
+                          .filter(Boolean)
+                          .join(" | ");
+
+                        return (
+                          <TooltipProvider>
+                            <Tooltip delayDuration={250}>
+                              <TooltipTrigger asChild>
+                                <div className="flex flex-col items-end cursor-help">
+                                  <span>{formatDuration(log.durationMs)}</span>
+                                  {secondLine && (
+                                    <span className="text-muted-foreground text-[10px]">
+                                      {secondLine}
+                                    </span>
+                                  )}
                                 </div>
-                              ) : null;
-                            })()}
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
+                              </TooltipTrigger>
+                              <TooltipContent align="end" className="text-xs space-y-1">
+                                <div>
+                                  {t("logs.details.performance.duration")}:{" "}
+                                  {formatDuration(log.durationMs)}
+                                </div>
+                                {log.ttfbMs != null && (
+                                  <div>
+                                    {t("logs.details.performance.ttfb")}:{" "}
+                                    {formatDuration(log.ttfbMs)}
+                                  </div>
+                                )}
+                                {rate !== null && (
+                                  <div>
+                                    {t("logs.details.performance.outputRate")}: {rate.toFixed(1)}{" "}
+                                    tok/s
+                                  </div>
+                                )}
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>
                       <ErrorDetailsDialog

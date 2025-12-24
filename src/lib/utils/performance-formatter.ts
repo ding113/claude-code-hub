@@ -32,23 +32,3 @@ export function calculateOutputRate(
   if (generationTimeMs <= 0) return null;
   return outputTokens / (generationTimeMs / 1000);
 }
-
-/**
- * 格式化性能第二行：TTFB | tok/s
- */
-export function formatPerformanceSecondLine(
-  ttfbMs: number | null,
-  durationMs: number | null,
-  outputTokens: number | null
-): string {
-  if (durationMs == null) return "-";
-  const parts: string[] = [];
-  if (ttfbMs != null && ttfbMs > 0) {
-    parts.push(`TTFB ${formatDuration(ttfbMs)}`);
-  }
-  const rate = calculateOutputRate(outputTokens, durationMs, ttfbMs);
-  if (rate !== null) {
-    parts.push(`${rate.toFixed(0)} tok/s`);
-  }
-  return parts.length > 0 ? parts.join(" | ") : "";
-}
