@@ -1,7 +1,8 @@
 "use client";
 
-import { Award, Medal, Trophy } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Award, Medal, Trophy } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -19,7 +20,11 @@ export interface ColumnDef<T> {
   header: string;
   className?: string;
   cell: (row: T, index: number) => React.ReactNode;
+  sortKey?: string; // 用于排序的字段名
+  getValue?: (row: T) => number | string; // 获取排序值的函数
 }
+
+type SortDirection = "asc" | "desc" | null;
 
 interface LeaderboardTableProps<T> {
   data: T[];
@@ -35,6 +40,61 @@ export function LeaderboardTable<T>({
   getRowKey,
 }: LeaderboardTableProps<T>) {
   const t = useTranslations("dashboard.leaderboard");
+
+  // 排序状态
+  const [sortKey, setSortKey] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(null);
+
+  // 处理表头点击排序
+  const handleSort = (key: string | undefined) => {
+    if (!key) return;
+
+    if (sortKey === key) {
+      // 循环切换：asc -> desc -> null
+      if (sortDirection === "asc") {
+        setSortDirection("desc");
+      } else if (sortDirection === "desc") {
+        setSortKey(null);
+        setSortDirection(null);
+      }
+    } else {
+      setSortKey(key);
+      setSortDirection("asc");
+    }
+  };
+
+  // 排序后的数据
+  const sortedData = useMemo(() => {
+    if (!sortKey || !sortDirection) return data;
+
+    const column = columns.find((col) => col.sortKey === sortKey);
+    if (!column?.getValue) return data;
+
+    return [...data].sort((a, b) => {
+      const valueA = column.getValue!(a);
+      const valueB = column.getValue!(b);
+
+      if (typeof valueA === "number" && typeof valueB === "number") {
+        return sortDirection === "asc" ? valueA - valueB : valueB - valueA;
+      }
+
+      const strA = String(valueA);
+      const strB = String(valueB);
+      return sortDirection === "asc" ? strA.localeCompare(strB) : strB.localeCompare(strA);
+    });
+  }, [data, sortKey, sortDirection, columns]);
+
+  // 获取排序图标
+  const getSortIcon = (key: string | undefined) => {
+    if (!key) return null;
+    if (sortKey !== key) {
+      return <ArrowUpDown className="ml-1 h-3 w-3 text-muted-foreground/50" />;
+    }
+    if (sortDirection === "asc") {
+      return <ArrowUp className="ml-1 h-3 w-3" />;
+    }
+    return <ArrowDown className="ml-1 h-3 w-3" />;
+  };
 
   if (data.length === 0) {
     const noDataKey =
@@ -114,20 +174,28 @@ export function LeaderboardTable<T>({
               <TableRow>
                 <TableHead className="w-24">{t("columns.rank")}</TableHead>
                 {columns.map((col, idx) => (
-                  <TableHead key={idx} className={col.className || ""}>
-                    {col.header}
+                  <TableHead
+                    key={idx}
+                    className={`${col.className || ""} ${col.sortKey ? "cursor-pointer select-none hover:bg-muted/50 transition-colors" : ""}`}
+                    onClick={col.sortKey ? () => handleSort(col.sortKey) : undefined}
+                  >
+                    <div className={`flex items-center ${col.className?.includes("text-right") ? "justify-end" : ""}`}>
+                      {col.header}
+                      {col.sortKey && getSortIcon(col.sortKey)}
+                    </div>
                   </TableHead>
                 ))}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data.map((row, index) => {
+              {sortedData.map((row, index) => {
                 const rank = index + 1;
                 const isTopThree = rank <= 3;
+                const rowKey = getRowKey ? getRowKey(row, index) ?? index : index;
 
                 return (
                   <TableRow
-                    key={(getRowKey ? getRowKey(row, index) : index) as React.Key}
+                    key={rowKey}
                     className={isTopThree ? "bg-muted/50" : ""}
                   >
                     <TableCell>{getRankBadge(rank)}</TableCell>
