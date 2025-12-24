@@ -26,6 +26,7 @@ import { logger } from "@/lib/logger";
 interface ResponseAPIRequest {
   model?: string;
   instructions?: string;
+  metadata?: Record<string, unknown>;
   input?: Array<{
     type?: string;
     role?: string;
@@ -115,7 +116,12 @@ function generateToolCallID(): string {
 /**
  * 生成用户 ID（基于 account 和 session）
  */
-function generateUserID(): string {
+function generateUserID(originalMetadata?: Record<string, unknown>): string {
+  const sessionIdRaw = originalMetadata?.session_id;
+  if (typeof sessionIdRaw === "string" && sessionIdRaw.trim()) {
+    return `codex_session_${sessionIdRaw.trim()}`;
+  }
+
   // 简化实现：使用随机 UUID
   const account = randomBytes(16).toString("hex");
   const session = randomBytes(16).toString("hex");
@@ -144,7 +150,7 @@ export function transformCodexRequestToClaude(
     max_tokens: 32000,
     messages: [],
     metadata: {
-      user_id: generateUserID(),
+      user_id: generateUserID(req.metadata),
     },
     stream,
   };
