@@ -3,6 +3,7 @@ import "server-only";
 import crypto from "node:crypto";
 import { sanitizeHeaders } from "@/app/v1/_lib/proxy/errors";
 import { logger } from "@/lib/logger";
+import { normalizeRequestSequence } from "@/lib/utils/request-sequence";
 import type {
   ActiveSessionInfo,
   SessionProviderInfo,
@@ -11,14 +12,6 @@ import type {
 } from "@/types/session";
 import { getRedisClient } from "./redis";
 import { SessionTracker } from "./session-tracker";
-
-function normalizeRequestSequence(requestSequence?: number): number | null {
-  if (typeof requestSequence !== "number") return null;
-  if (!Number.isFinite(requestSequence)) return null;
-  if (!Number.isInteger(requestSequence)) return null;
-  if (requestSequence <= 0) return null;
-  return requestSequence;
-}
 
 function headersToSanitizedObject(headers: Headers): Record<string, string> {
   const sanitizedText = sanitizeHeaders(headers);
@@ -57,7 +50,8 @@ function parseHeaderRecord(value: string): Record<string, string> | null {
       }
     }
     return record;
-  } catch {
+  } catch (error) {
+    logger.warn("SessionManager: Failed to parse header record JSON", { error });
     return null;
   }
 }

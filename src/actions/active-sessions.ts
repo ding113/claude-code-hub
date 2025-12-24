@@ -8,17 +8,10 @@ import {
   setSessionDetailsCache,
 } from "@/lib/cache/session-cache";
 import { logger } from "@/lib/logger";
+import { normalizeRequestSequence } from "@/lib/utils/request-sequence";
 import type { ActiveSessionInfo } from "@/types/session";
 import { summarizeTerminateSessionsBatch } from "./active-sessions-utils";
 import type { ActionResult } from "./types";
-
-function normalizeRequestSequence(requestSequence?: number): number | undefined {
-  if (typeof requestSequence !== "number") return undefined;
-  if (!Number.isFinite(requestSequence)) return undefined;
-  if (!Number.isInteger(requestSequence)) return undefined;
-  if (requestSequence <= 0) return undefined;
-  return requestSequence;
-}
 
 /**
  * 获取所有活跃 session 的详细信息（使用聚合数据 + 批量查询 + 缓存）
