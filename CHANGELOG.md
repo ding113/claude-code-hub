@@ -4,6 +4,50 @@
 
 ---
 
+## [v0.3.37](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.37) - 2025-12-24
+
+### 新增
+
+- Session 详情页新增请求/响应头日志展示，支持 Tab 切换查看 (#417)
+- 新增 TTFB（首字节时间）和输出速率性能指标追踪 (#421)
+- Codex 并发请求 Session 隔离功能，提升多请求场景稳定性 (#430)
+- 非管理员用户新增个人配额页面 (my-quota) (#412)
+- 用户页面供应商分组选择增强 (#424) [@Hwwwww-dev](https://github.com/Hwwwww-dev)
+- 认证错误和用户/密钥状态显示优化 (#425) [@NightYu](https://github.com/NightYuYyy)
+- 错误规则决策链记录匹配规则详情 (#416)
+
+### 优化
+
+- 使用日志表格列宽优化，采用全 flex 布局提升显示效果 (#437)
+- 供应商列宽度调整，防止内容重叠 (#443)
+- 支持缓存 5m/1h token 顶层扁平格式解析 (#443)
+- 排行榜视图时区和性能优化 (#436)
+- 移除 CANNOT_DISABLE_LAST_KEY 硬编码中文回退 [@NightYu](https://github.com/NightYuYyy)
+- 提取 normalizeRequestSequence 为共享工具函数并增强 JSON 解析日志
+
+### 修复
+
+- 修复删除密钥的两个问题 (#431, #438) [@NightYu](https://github.com/NightYuYyy)
+- 修复快捷续期到期时间计算和刷新问题 [@NightYu](https://github.com/NightYuYyy)
+- 修复创建新密钥时 isEnabled 状态未正确保存的问题 [@NightYu](https://github.com/NightYuYyy)
+- 修复编辑对话框中禁用所有密钥的问题 [@NightYu](https://github.com/NightYuYyy)
+- 修复 i18n 命名空间、翻译和图表高度问题 (#426)
+- 修复筛选器下拉和分页 Bug (#428, #429)
+- 修复空消息内容验证错误规则
+- 修复错误规则测试页面的误报警告 [@sususu](https://github.com/sususu98)
+- 修复分页时区和性能问题
+- 添加缺失的 rateLimits 和 userStatus 翻译
+- 修复 matchedRule 字段的 undefined 检查
+- 修复密钥重定向目标并增强错误处理
+
+### 其他
+
+- 新增 Session 管理辅助函数单元测试 (#420)
+- 新增 requestSequence 工具函数测试
+- 新增 usage metrics 提取测试
+
+---
+
 ## [v0.3.36](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.36) - 2025-12-23
 
 ### 新增
