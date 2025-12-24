@@ -625,6 +625,7 @@ function UnifiedEditDialogInner({
         enableStatus: {
           label: t("keyEditSection.fields.enableStatus.label"),
           description: t("keyEditSection.fields.enableStatus.description"),
+          cannotDisableTooltip: t("keyEditSection.fields.enableStatus.cannotDisableTooltip"),
         },
         balanceQueryPage: {
           label: t("keyEditSection.fields.balanceQueryPage.label"),
