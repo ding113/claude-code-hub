@@ -56,6 +56,13 @@ describe("Codex session extractor", () => {
     expect(result.source).toBe("body_previous_response_id");
   });
 
+  test("rejects previous_response_id that would exceed 256 after prefix", () => {
+    const longId = "a".repeat(250); // 250 + 11 (prefix) = 261 > 256
+    const result = extractCodexSessionId(new Headers(), { previous_response_id: longId }, null);
+    expect(result.sessionId).toBe(null);
+    expect(result.source).toBe(null);
+  });
+
   test("respects extraction priority", () => {
     const sessionIdFromHeader = "sess_123456789012345678904";
     const xSessionIdFromHeader = "sess_123456789012345678905";
@@ -93,6 +100,20 @@ describe("Codex session extractor", () => {
     );
     expect(result.sessionId).toBe(null);
     expect(result.source).toBe(null);
+  });
+
+  test("accepts session_id with exactly 21 characters (minimum)", () => {
+    const minId = "a".repeat(21);
+    const result = extractCodexSessionId(new Headers({ session_id: minId }), {}, null);
+    expect(result.sessionId).toBe(minId);
+    expect(result.source).toBe("header_session_id");
+  });
+
+  test("accepts session_id with exactly 256 characters (maximum)", () => {
+    const maxId = "a".repeat(256);
+    const result = extractCodexSessionId(new Headers({ session_id: maxId }), {}, null);
+    expect(result.sessionId).toBe(maxId);
+    expect(result.source).toBe("header_session_id");
   });
 
   test("rejects session_id longer than 256 characters", () => {

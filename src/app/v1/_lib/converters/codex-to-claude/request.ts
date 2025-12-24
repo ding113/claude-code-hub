@@ -18,6 +18,7 @@
  */
 
 import { randomBytes } from "node:crypto";
+import { normalizeCodexSessionId } from "@/app/v1/_lib/codex/session-extractor";
 import { logger } from "@/lib/logger";
 
 /**
@@ -117,9 +118,9 @@ function generateToolCallID(): string {
  * 生成用户 ID（基于 account 和 session）
  */
 function generateUserID(originalMetadata?: Record<string, unknown>): string {
-  const sessionIdRaw = originalMetadata?.session_id;
-  if (typeof sessionIdRaw === "string" && sessionIdRaw.trim()) {
-    return `codex_session_${sessionIdRaw.trim()}`;
+  const sessionId = normalizeCodexSessionId(originalMetadata?.session_id);
+  if (sessionId) {
+    return `codex_session_${sessionId}`;
   }
 
   // 简化实现：使用随机 UUID

@@ -99,6 +99,8 @@ export class SessionManager {
         });
         return result.sessionId;
       }
+
+      return null;
     }
 
     const metadata = requestMessage.metadata;

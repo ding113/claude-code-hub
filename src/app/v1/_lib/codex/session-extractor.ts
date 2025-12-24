@@ -21,7 +21,7 @@ const SESSION_ID_PATTERN = /^[\w\-.:]+$/; // Alphanumeric, dash, dot, colon only
 // Codex CLI User-Agent pattern (pre-compiled for performance)
 const CODEX_CLI_PATTERN = /^(codex_vscode|codex_cli_rs)\/[\d.]+/i;
 
-function normalizeCodexSessionId(value: unknown): string | null {
+export function normalizeCodexSessionId(value: unknown): string | null {
   if (typeof value !== "string") return null;
 
   const trimmed = value.trim();
@@ -98,11 +98,14 @@ export function extractCodexSessionId(
 
   const prevResponseId = normalizeCodexSessionId(requestBody.previous_response_id);
   if (prevResponseId) {
-    return {
-      sessionId: `codex_prev_${prevResponseId}`,
-      source: "body_previous_response_id",
-      isCodexClient: officialClient,
-    };
+    const sessionId = `codex_prev_${prevResponseId}`;
+    if (sessionId.length <= CODEX_SESSION_ID_MAX_LENGTH) {
+      return {
+        sessionId,
+        source: "body_previous_response_id",
+        isCodexClient: officialClient,
+      };
+    }
   }
 
   return { sessionId: null, source: null, isCodexClient: officialClient };
