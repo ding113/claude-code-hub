@@ -171,8 +171,6 @@ export function DatabaseImport() {
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-muted-foreground">{t("descriptionFull")}</p>
-
       {/* File selection */}
       <div className="flex flex-col gap-2">
         <Label htmlFor="backup-file">{t("selectFileLabel")}</Label>
