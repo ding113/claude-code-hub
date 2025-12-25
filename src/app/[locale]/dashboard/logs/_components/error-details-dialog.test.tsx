@@ -116,7 +116,7 @@ function parseHtml(html: string) {
   return window.document;
 }
 
-function getBillingAndPerformanceGrid(document: Document) {
+function getBillingAndPerformanceGrid(document: ReturnType<typeof parseHtml>) {
   return document.querySelector("div.grid.gap-4");
 }
 
