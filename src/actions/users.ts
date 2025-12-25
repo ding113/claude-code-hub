@@ -29,6 +29,7 @@ import {
   findUserById,
   findUserList,
   findUserListBatch,
+  searchUsersForFilter as searchUsersForFilterRepository,
   updateUser,
 } from "@/repository/user";
 import type { User, UserDisplay } from "@/types/user";
@@ -292,6 +293,38 @@ export async function getUsers(): Promise<UserDisplay[]> {
   } catch (error) {
     logger.error("Failed to fetch user data:", error);
     return [];
+  }
+}
+
+export async function searchUsersForFilter(
+  searchTerm?: string
+): Promise<ActionResult<Array<{ id: number; name: string }>>> {
+  try {
+    const tError = await getTranslations("errors");
+
+    const session = await getSession();
+    if (!session) {
+      return {
+        ok: false,
+        error: tError("UNAUTHORIZED"),
+        errorCode: ERROR_CODES.UNAUTHORIZED,
+      };
+    }
+
+    if (session.user.role !== "admin") {
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    const users = await searchUsersForFilterRepository(searchTerm);
+    return { ok: true, data: users };
+  } catch (error) {
+    logger.error("Failed to search users for filter:", error);
+    const message = error instanceof Error ? error.message : "Failed to search users for filter";
+    return { ok: false, error: message, errorCode: ERROR_CODES.DATABASE_ERROR };
   }
 }
 

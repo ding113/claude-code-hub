@@ -7,14 +7,12 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getKeys } from "@/actions/keys";
 import { getProviders } from "@/actions/providers";
-import { getUsers } from "@/actions/users";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import type { Key } from "@/types/key";
 import type { ProviderDisplay } from "@/types/provider";
 import type { BillingModelSource, SystemSettings } from "@/types/system-config";
-import type { UserDisplay } from "@/types/user";
 import { UsageLogsFilters } from "./usage-logs-filters";
 import { UsageLogsStatsPanel } from "./usage-logs-stats-panel";
 import { VirtualizedLogsTable, type VirtualizedLogsTableFilters } from "./virtualized-logs-table";
@@ -32,7 +30,6 @@ const queryClient = new QueryClient({
 interface UsageLogsViewVirtualizedProps {
   isAdmin: boolean;
   userId: number;
-  users?: UserDisplay[];
   providers?: ProviderDisplay[];
   initialKeys?: Key[];
   searchParams: { [key: string]: string | string[] | undefined };
@@ -51,7 +48,6 @@ async function fetchSystemSettings(): Promise<SystemSettings> {
 function UsageLogsViewContent({
   isAdmin,
   userId,
-  users,
   providers,
   initialKeys,
   searchParams,
@@ -78,13 +74,6 @@ function UsageLogsViewContent({
   const resolvedBillingModelSource =
     billingModelSource ?? systemSettings?.billingModelSource ?? "original";
 
-  const { data: usersData = [], isLoading: isUsersLoading } = useQuery<UserDisplay[]>({
-    queryKey: ["usage-log-users"],
-    queryFn: getUsers,
-    enabled: isAdmin && users === undefined,
-    placeholderData: [],
-  });
-
   const { data: providersData = [], isLoading: isProvidersLoading } = useQuery<ProviderDisplay[]>({
     queryKey: ["usage-log-providers"],
     queryFn: getProviders,
@@ -98,7 +87,6 @@ function UsageLogsViewContent({
     enabled: !isAdmin && initialKeys === undefined,
   });
 
-  const resolvedUsers = users ?? usersData;
   const resolvedProviders = providers ?? providersData;
   const resolvedKeys = initialKeys ?? (keysResult?.ok && keysResult.data ? keysResult.data : []);
 
@@ -212,13 +200,11 @@ function UsageLogsViewContent({
         <CardContent>
           <UsageLogsFilters
             isAdmin={isAdmin}
-            users={resolvedUsers}
             providers={resolvedProviders}
             initialKeys={resolvedKeys}
             filters={filters}
             onChange={handleFilterChange}
             onReset={() => router.push("/dashboard/logs")}
-            isUsersLoading={isUsersLoading}
             isProvidersLoading={isProvidersLoading}
             isKeysLoading={isKeysLoading}
           />

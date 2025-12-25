@@ -115,6 +115,27 @@ export async function findUserList(limit: number = 50, offset: number = 0): Prom
   return result.map(toUser);
 }
 
+export async function searchUsersForFilter(
+  searchTerm?: string
+): Promise<Array<{ id: number; name: string }>> {
+  const conditions = [isNull(users.deletedAt)];
+
+  const trimmedSearchTerm = searchTerm?.trim();
+  if (trimmedSearchTerm) {
+    const pattern = `%${trimmedSearchTerm}%`;
+    conditions.push(sql`${users.name} ILIKE ${pattern}`);
+  }
+
+  return db
+    .select({
+      id: users.id,
+      name: users.name,
+    })
+    .from(users)
+    .where(and(...conditions))
+    .orderBy(sql`CASE WHEN ${users.role} = 'admin' THEN 0 ELSE 1 END`, users.id);
+}
+
 /**
  * Cursor-based pagination (keyset pagination) for user list.
  *
