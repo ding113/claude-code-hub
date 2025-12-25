@@ -46,6 +46,12 @@ export function LeaderboardTable<T>({
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
 
+  // 判断列是否需要加粗
+  const getShouldBold = (col: ColumnDef<T>) => {
+    const isActiveSortColumn = sortKey === col.sortKey && sortDirection !== null;
+    const noSorting = sortKey === null;
+    return isActiveSortColumn || (col.defaultBold && noSorting);
+  };
   // 处理表头点击排序
   const handleSort = (key: string | undefined) => {
     if (!key) return;
@@ -175,9 +181,7 @@ export function LeaderboardTable<T>({
               <TableRow>
                 <TableHead className="w-24">{t("columns.rank")}</TableHead>
                 {columns.map((col, idx) => {
-                  const isActiveSortColumn = sortKey === col.sortKey && sortDirection !== null;
-                  const noSorting = sortKey === null;
-                  const shouldBold = isActiveSortColumn || (col.defaultBold && noSorting);
+                  const shouldBold = getShouldBold(col);
                   return (
                     <TableHead
                       key={idx}
@@ -205,9 +209,7 @@ export function LeaderboardTable<T>({
                   <TableRow key={rowKey} className={isTopThree ? "bg-muted/50" : ""}>
                     <TableCell>{getRankBadge(rank)}</TableCell>
                     {columns.map((col, idx) => {
-                      const isActiveSortColumn = sortKey === col.sortKey && sortDirection !== null;
-                      const noSorting = sortKey === null;
-                      const shouldBold = isActiveSortColumn || (col.defaultBold && noSorting);
+                      const shouldBold = getShouldBold(col);
                       return (
                         <TableCell
                           key={idx}
