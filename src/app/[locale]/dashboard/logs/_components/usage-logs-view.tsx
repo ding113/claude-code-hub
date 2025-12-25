@@ -13,14 +13,12 @@ import type { UsageLogsResult } from "@/repository/usage-logs";
 import type { Key } from "@/types/key";
 import type { ProviderDisplay } from "@/types/provider";
 import type { BillingModelSource } from "@/types/system-config";
-import type { UserDisplay } from "@/types/user";
 import { UsageLogsFilters } from "./usage-logs-filters";
 import { UsageLogsStatsPanel } from "./usage-logs-stats-panel";
 import { UsageLogsTable } from "./usage-logs-table";
 
 interface UsageLogsViewProps {
   isAdmin: boolean;
-  users: UserDisplay[];
   providers: ProviderDisplay[];
   initialKeys: Key[];
   searchParams: { [key: string]: string | string[] | undefined };
@@ -30,7 +28,6 @@ interface UsageLogsViewProps {
 
 export function UsageLogsView({
   isAdmin,
-  users,
   providers,
   initialKeys,
   searchParams,
@@ -235,7 +232,6 @@ export function UsageLogsView({
         <CardContent>
           <UsageLogsFilters
             isAdmin={isAdmin}
-            users={users}
             providers={providers}
             initialKeys={initialKeys}
             filters={filters}
