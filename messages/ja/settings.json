@@ -1569,7 +1569,22 @@
       "saving": "保存中...",
       "validation": {
         "fieldRequired": "名称と対象は必須です"
-      }
+      },
+      "bindingType": "適用先",
+      "bindingGlobal": "全プロバイダー（グローバル）",
+      "bindingProviders": "特定のプロバイダー",
+      "bindingGroups": "プロバイダーグループ",
+      "selectProviders": "プロバイダーを選択...",
+      "selectGroups": "グループを選択...",
+      "searchProviders": "プロバイダー検索...",
+      "searchGroups": "グループ検索...",
+      "noProvidersFound": "プロバイダーが見つかりません",
+      "noGroupsFound": "グループが見つかりません",
+      "providersSelected": "{count}件のプロバイダーを選択",
+      "groupsSelected": "{count}件のグループを選択",
+      "loading": "読み込み中...",
+      "clear": "クリア",
+      "selectAll": "すべて選択"
     },
     "table": {
       "name": "名称",
@@ -1578,6 +1593,7 @@
       "target": "対象",
       "replacement": "置換値",
       "priority": "優先度",
+      "apply": "適用",
       "status": "状態",
       "createdAt": "作成日時",
       "actions": "操作"

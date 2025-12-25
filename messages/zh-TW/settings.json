@@ -1575,7 +1575,22 @@
       "saving": "保存中...",
       "validation": {
         "fieldRequired": "名稱和目標為必填項"
-      }
+      },
+      "bindingType": "套用範圍",
+      "bindingGlobal": "所有Provider（全域）",
+      "bindingProviders": "指定Provider",
+      "bindingGroups": "Provider分組",
+      "selectProviders": "選擇Provider...",
+      "selectGroups": "選擇分組...",
+      "searchProviders": "搜尋Provider...",
+      "searchGroups": "搜尋分組...",
+      "noProvidersFound": "找不到Provider",
+      "noGroupsFound": "找不到分組",
+      "providersSelected": "已選 {count} 個Provider",
+      "groupsSelected": "已選 {count} 個分組",
+      "loading": "載入中...",
+      "clear": "清空",
+      "selectAll": "全選"
     },
     "table": {
       "name": "名稱",
@@ -1584,6 +1599,7 @@
       "target": "目標",
       "replacement": "替換值",
       "priority": "優先級",
+      "apply": "範圍",
       "status": "狀態",
       "createdAt": "建立時間",
       "actions": "操作"

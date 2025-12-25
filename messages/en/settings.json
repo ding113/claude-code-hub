@@ -1619,7 +1619,22 @@
       "saving": "Saving...",
       "validation": {
         "fieldRequired": "Name and target are required"
-      }
+      },
+      "bindingType": "Apply To",
+      "bindingGlobal": "All Providers (Global)",
+      "bindingProviders": "Specific Providers",
+      "bindingGroups": "Provider Groups",
+      "selectProviders": "Select providers...",
+      "selectGroups": "Select groups...",
+      "searchProviders": "Search providers...",
+      "searchGroups": "Search groups...",
+      "noProvidersFound": "No providers found",
+      "noGroupsFound": "No groups found",
+      "providersSelected": "{count} provider(s) selected",
+      "groupsSelected": "{count} group(s) selected",
+      "loading": "Loading...",
+      "clear": "Clear",
+      "selectAll": "Select All"
     },
     "table": {
       "name": "Name",
@@ -1628,6 +1643,7 @@
       "target": "Target",
       "replacement": "Replacement",
       "priority": "Priority",
+      "apply": "Apply",
       "status": "Status",
       "createdAt": "Created At",
       "actions": "Actions"

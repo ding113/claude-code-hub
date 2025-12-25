@@ -13,10 +13,10 @@ import type { ProxySession } from "./session";
 export class ProxyRequestFilter {
   static async ensure(session: ProxySession): Promise<void> {
     try {
-      await requestFilterEngine.apply(session);
+      await requestFilterEngine.applyGlobal(session);
     } catch (error) {
       // Fail-open: 过滤失败不阻塞主流程
-      logger.error("[ProxyRequestFilter] Failed to apply request filters", { error });
+      logger.error("[ProxyRequestFilter] Failed to apply global request filters", { error });
     }
   }
 }

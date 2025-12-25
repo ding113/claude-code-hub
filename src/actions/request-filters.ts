@@ -12,6 +12,7 @@ import {
   getRequestFilterById,
   type RequestFilter,
   type RequestFilterAction,
+  type RequestFilterBindingType,
   type RequestFilterMatchType,
   type RequestFilterScope,
   updateRequestFilter,
@@ -31,6 +32,9 @@ function validatePayload(data: {
   target: string;
   matchType?: RequestFilterMatchType;
   replacement?: unknown;
+  bindingType?: RequestFilterBindingType;
+  providerIds?: number[] | null;
+  groupTags?: string[] | null;
 }): string | null {
   if (!data.name?.trim()) return "名称不能为空";
   if (!data.target?.trim()) return "目标字段不能为空";
@@ -40,6 +44,34 @@ function validatePayload(data: {
       return "正则表达式存在 ReDoS 风险";
     }
   }
+
+  // Validate binding type constraints
+  const bindingType = data.bindingType ?? "global";
+  if (bindingType === "providers") {
+    if (!data.providerIds || data.providerIds.length === 0) {
+      return "至少选择一个 Provider";
+    }
+    if (data.groupTags && data.groupTags.length > 0) {
+      return "不能同时选择 Providers 和 Groups";
+    }
+  }
+  if (bindingType === "groups") {
+    if (!data.groupTags || data.groupTags.length === 0) {
+      return "至少选择一个 Group Tag";
+    }
+    if (data.providerIds && data.providerIds.length > 0) {
+      return "不能同时选择 Providers 和 Groups";
+    }
+  }
+  if (bindingType === "global") {
+    if (
+      (data.providerIds && data.providerIds.length > 0) ||
+      (data.groupTags && data.groupTags.length > 0)
+    ) {
+      return "Global 类型不能指定 Providers 或 Groups";
+    }
+  }
+
   return null;
 }
 
@@ -65,6 +97,9 @@ export async function createRequestFilterAction(data: {
   matchType?: RequestFilterMatchType;
   replacement?: unknown;
   priority?: number;
+  bindingType?: RequestFilterBindingType;
+  providerIds?: number[] | null;
+  groupTags?: string[] | null;
 }): Promise<ActionResult<RequestFilter>> {
   const session = await getSession();
   if (!isAdmin(session)) return { ok: false, error: "权限不足" };
@@ -82,6 +117,9 @@ export async function createRequestFilterAction(data: {
       matchType: data.matchType ?? null,
       replacement: data.replacement ?? null,
       priority: data.priority ?? 0,
+      bindingType: data.bindingType ?? "global",
+      providerIds: data.providerIds ?? null,
+      groupTags: data.groupTags ?? null,
     });
 
     revalidatePath(SETTINGS_PATH);
@@ -104,6 +142,9 @@ export async function updateRequestFilterAction(
     replacement: unknown;
     priority: number;
     isEnabled: boolean;
+    bindingType: RequestFilterBindingType;
+    providerIds: number[] | null;
+    groupTags: string[] | null;
   }>
 ): Promise<ActionResult<RequestFilter>> {
   const session = await getSession();
@@ -130,6 +171,39 @@ export async function updateRequestFilterAction(
 
     if (isTextReplace && isRegex && !safeRegex(updates.target)) {
       return { ok: false, error: "正则表达式存在 ReDoS 风险" };
+    }
+  }
+
+  // Validate binding type constraints when updating binding-related fields
+  if (
+    updates.bindingType !== undefined ||
+    updates.providerIds !== undefined ||
+    updates.groupTags !== undefined
+  ) {
+    // Need to merge updates with existing data
+    const existing = await getRequestFilterById(id);
+    if (!existing) {
+      return { ok: false, error: "记录不存在" };
+    }
+
+    const effectiveBindingType = updates.bindingType ?? existing.bindingType;
+    const effectiveProviderIds =
+      updates.providerIds !== undefined ? updates.providerIds : existing.providerIds;
+    const effectiveGroupTags =
+      updates.groupTags !== undefined ? updates.groupTags : existing.groupTags;
+
+    const validationError = validatePayload({
+      name: existing.name,
+      scope: existing.scope,
+      action: existing.action,
+      target: existing.target,
+      bindingType: effectiveBindingType,
+      providerIds: effectiveProviderIds,
+      groupTags: effectiveGroupTags,
+    });
+
+    if (validationError) {
+      return { ok: false, error: validationError };
     }
   }
 
@@ -174,5 +248,60 @@ export async function refreshRequestFiltersCache(): Promise<ActionResult<{ count
   } catch (error) {
     logger.error("[RequestFiltersAction] Failed to refresh cache", { error });
     return { ok: false, error: "刷新失败" };
+  }
+}
+
+/**
+ * Get list of all providers for filter binding selection
+ */
+export async function listProvidersForFilterAction(): Promise<
+  ActionResult<Array<{ id: number; name: string }>>
+> {
+  const session = await getSession();
+  if (!isAdmin(session)) return { ok: false, error: "权限不足" };
+
+  try {
+    const { findAllProviders } = await import("@/repository/provider");
+    const providers = await findAllProviders();
+    const simplified = providers.map((p) => ({ id: p.id, name: p.name }));
+    return { ok: true, data: simplified };
+  } catch (error) {
+    logger.error("[RequestFiltersAction] Failed to list providers", { error });
+    return { ok: false, error: "获取 Provider 列表失败" };
+  }
+}
+
+/**
+ * Get distinct provider group tags for filter binding selection
+ */
+export async function getDistinctProviderGroupsAction(): Promise<ActionResult<string[]>> {
+  const session = await getSession();
+  if (!isAdmin(session)) return { ok: false, error: "权限不足" };
+
+  try {
+    const { db } = await import("@/drizzle/db");
+    const { providers } = await import("@/drizzle/schema");
+    const { isNotNull } = await import("drizzle-orm");
+
+    const result = await db
+      .selectDistinct({ groupTag: providers.groupTag })
+      .from(providers)
+      .where(isNotNull(providers.groupTag));
+
+    // Parse comma-separated tags and flatten into unique array
+    const allTags = new Set<string>();
+    for (const row of result) {
+      if (row.groupTag) {
+        const tags = row.groupTag.split(",").map((tag) => tag.trim());
+        for (const tag of tags) {
+          if (tag) allTags.add(tag);
+        }
+      }
+    }
+
+    return { ok: true, data: Array.from(allTags).sort() };
+  } catch (error) {
+    logger.error("[RequestFiltersAction] Failed to get distinct group tags", { error });
+    return { ok: false, error: "获取 Group Tags 失败" };
   }
 }

@@ -82,7 +82,8 @@ function replaceText(
 }
 
 export class RequestFilterEngine {
-  private filters: RequestFilter[] = [];
+  private globalFilters: RequestFilter[] = [];
+  private providerFilters: RequestFilter[] = [];
   private lastReloadTime = 0;
   private isLoading = false;
   private isInitialized = false;
@@ -113,12 +114,22 @@ export class RequestFilterEngine {
     try {
       const { getActiveRequestFilters } = await import("@/repository/request-filters");
       const filters = await getActiveRequestFilters();
-      // 按优先级升序、id 升序排序，确保执行顺序稳定
-      filters.sort((a, b) => a.priority - b.priority || a.id - b.id);
-      this.filters = filters;
+
+      // Разделяем фильтры по типу привязки
+      this.globalFilters = filters
+        .filter((f) => f.bindingType === "global" || !f.bindingType)
+        .sort((a, b) => a.priority - b.priority || a.id - b.id);
+
+      this.providerFilters = filters
+        .filter((f) => f.bindingType === "providers" || f.bindingType === "groups")
+        .sort((a, b) => a.priority - b.priority || a.id - b.id);
+
       this.lastReloadTime = Date.now();
       this.isInitialized = true;
-      logger.info("[RequestFilterEngine] Filters loaded", { count: filters.length });
+      logger.info("[RequestFilterEngine] Filters loaded", {
+        globalCount: this.globalFilters.length,
+        providerCount: this.providerFilters.length,
+      });
     } catch (error) {
       logger.error("[RequestFilterEngine] Failed to reload filters", { error });
     } finally {
@@ -136,11 +147,14 @@ export class RequestFilterEngine {
     await this.initializationPromise;
   }
 
-  async apply(session: ProxySession): Promise<void> {
+  /**
+   * Применить глобальные фильтры (вызывается ДО выбора провайдера)
+   */
+  async applyGlobal(session: ProxySession): Promise<void> {
     await this.ensureInitialized();
-    if (this.filters.length === 0) return;
+    if (this.globalFilters.length === 0) return;
 
-    for (const filter of this.filters) {
+    for (const filter of this.globalFilters) {
       try {
         if (filter.scope === "header") {
           this.applyHeaderFilter(session, filter);
@@ -148,7 +162,7 @@ export class RequestFilterEngine {
           this.applyBodyFilter(session, filter);
         }
       } catch (error) {
-        logger.error("[RequestFilterEngine] Failed to apply filter", {
+        logger.error("[RequestFilterEngine] Failed to apply global filter", {
           filterId: filter.id,
           scope: filter.scope,
           action: filter.action,
@@ -156,6 +170,55 @@ export class RequestFilterEngine {
         });
       }
     }
+  }
+
+  /**
+   * Применить фильтры для конкретного провайдера (вызывается ПОСЛЕ выбора провайдера)
+   */
+  async applyForProvider(session: ProxySession): Promise<void> {
+    await this.ensureInitialized();
+    if (this.providerFilters.length === 0 || !session.provider) return;
+
+    const providerId = session.provider.id;
+    const providerGroupTag = session.provider.groupTag;
+    const providerTags = providerGroupTag?.split(",").map((t) => t.trim()) ?? [];
+
+    for (const filter of this.providerFilters) {
+      // Проверяем соответствие привязки
+      let matches = false;
+
+      if (filter.bindingType === "providers") {
+        matches = filter.providerIds?.includes(providerId) ?? false;
+      } else if (filter.bindingType === "groups") {
+        matches = filter.groupTags?.some((tag) => providerTags.includes(tag)) ?? false;
+      }
+
+      if (!matches) continue;
+
+      try {
+        if (filter.scope === "header") {
+          this.applyHeaderFilter(session, filter);
+        } else if (filter.scope === "body") {
+          this.applyBodyFilter(session, filter);
+        }
+      } catch (error) {
+        logger.error("[RequestFilterEngine] Failed to apply provider filter", {
+          filterId: filter.id,
+          providerId,
+          scope: filter.scope,
+          action: filter.action,
+          error,
+        });
+      }
+    }
+  }
+
+  /**
+   * @deprecated Используйте applyGlobal() вместо этого метода.
+   * Оставлено для обратной совместимости.
+   */
+  async apply(session: ProxySession): Promise<void> {
+    await this.applyGlobal(session);
   }
 
   private applyHeaderFilter(session: ProxySession, filter: RequestFilter) {
@@ -229,14 +292,17 @@ export class RequestFilterEngine {
 
   // 测试辅助：直接注入过滤器
   setFiltersForTest(filters: RequestFilter[]): void {
-    this.filters = [...filters];
+    this.globalFilters = filters.filter((f) => f.bindingType === "global" || !f.bindingType);
+    this.providerFilters = filters.filter(
+      (f) => f.bindingType === "providers" || f.bindingType === "groups"
+    );
     this.isInitialized = true;
     this.lastReloadTime = Date.now();
   }
 
   getStats() {
     return {
-      count: this.filters.length,
+      count: this.globalFilters.length + this.providerFilters.length,
       lastReloadTime: this.lastReloadTime,
       isLoading: this.isLoading,
       isInitialized: this.isInitialized,

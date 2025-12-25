@@ -1296,7 +1296,22 @@
       "saving": "保存中...",
       "validation": {
         "fieldRequired": "名称和目标为必填项"
-      }
+      },
+      "bindingType": "应用范围",
+      "bindingGlobal": "所有Provider（全局）",
+      "bindingProviders": "指定Provider",
+      "bindingGroups": "Provider分组",
+      "selectProviders": "选择Provider...",
+      "selectGroups": "选择分组...",
+      "searchProviders": "搜索Provider...",
+      "searchGroups": "搜索分组...",
+      "noProvidersFound": "未找到Provider",
+      "noGroupsFound": "未找到分组",
+      "providersSelected": "已选 {count} 个Provider",
+      "groupsSelected": "已选 {count} 个分组",
+      "loading": "加载中...",
+      "clear": "清空",
+      "selectAll": "全选"
     },
     "table": {
       "name": "名称",
@@ -1305,6 +1320,7 @@
       "target": "目标",
       "replacement": "替换值",
       "priority": "优先级",
+      "apply": "范围",
       "status": "状态",
       "createdAt": "创建时间",
       "actions": "操作"

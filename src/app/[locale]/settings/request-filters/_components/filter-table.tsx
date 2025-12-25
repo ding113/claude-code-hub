@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil, RefreshCw, Trash2 } from "lucide-react";
+import { Globe, Package, Pencil, RefreshCw, Tags, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
@@ -94,9 +94,10 @@ export function FilterTable({ filters }: Props) {
               <th className="px-4 py-3">{t("table.action")}</th>
               <th className="px-4 py-3">{t("table.target")}</th>
               <th className="px-4 py-3">{t("table.replacement")}</th>
-              <th className="px-4 py-3">{t("table.priority")}</th>
-              <th className="px-4 py-3">{t("table.status")}</th>
-              <th className="px-4 py-3 text-right">{t("table.actions")}</th>
+              <th className="px-2 py-3 w-20">{t("table.priority")}</th>
+              <th className="px-2 py-3 w-24">{t("table.apply")}</th>
+              <th className="px-2 py-3 w-20">{t("table.status")}</th>
+              <th className="px-2 py-3 text-right w-24">{t("table.actions")}</th>
             </tr>
           </thead>
           <tbody>
@@ -126,15 +127,34 @@ export function FilterTable({ filters }: Props) {
                       ? filter.replacement
                       : JSON.stringify(filter.replacement)}
                 </td>
-                <td className="px-4 py-3 text-sm">{filter.priority}</td>
-                <td className="px-4 py-3">
+                <td className="px-2 py-3 text-sm text-center">{filter.priority}</td>
+                <td className="px-2 py-3 text-center">
+                  {filter.bindingType === "global" && (
+                    <div className="flex items-center justify-center">
+                      <Globe className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  )}
+                  {filter.bindingType === "providers" && (
+                    <div className="flex items-center justify-center gap-1 text-sm">
+                      <Package className="h-4 w-4" />
+                      <span>{filter.providerIds?.length ?? 0}</span>
+                    </div>
+                  )}
+                  {filter.bindingType === "groups" && (
+                    <div className="flex items-center justify-center gap-1 text-sm">
+                      <Tags className="h-4 w-4" />
+                      <span>{filter.groupTags?.length ?? 0}</span>
+                    </div>
+                  )}
+                </td>
+                <td className="px-2 py-3 text-center">
                   <Switch
                     checked={filter.isEnabled}
                     onCheckedChange={(checked) => handleToggle(filter, checked)}
                   />
                 </td>
-                <td className="px-4 py-3 text-right">
-                  <div className="flex justify-end gap-2">
+                <td className="px-2 py-3 text-right">
+                  <div className="flex justify-end gap-1">
                     <Button variant="ghost" size="sm" onClick={() => setEditing(filter)}>
                       <Pencil className="h-4 w-4" />
                     </Button>
