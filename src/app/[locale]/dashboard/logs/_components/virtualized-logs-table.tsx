@@ -428,10 +428,24 @@ export function VirtualizedLogsTable({
                         <TooltipContent align="end" className="text-xs space-y-1">
                           <div className="font-medium">{t("logs.columns.cacheWrite")}</div>
                           <div className="pl-2">
-                            5m: {formatTokenAmount(log.cacheCreation5mInputTokens)}
+                            5m:{" "}
+                            {formatTokenAmount(
+                              (log.cacheCreation5mInputTokens ?? 0) > 0
+                                ? log.cacheCreation5mInputTokens
+                                : log.cacheTtlApplied !== "1h"
+                                  ? log.cacheCreationInputTokens
+                                  : 0
+                            )}
                           </div>
                           <div className="pl-2">
-                            1h: {formatTokenAmount(log.cacheCreation1hInputTokens)}
+                            1h:{" "}
+                            {formatTokenAmount(
+                              (log.cacheCreation1hInputTokens ?? 0) > 0
+                                ? log.cacheCreation1hInputTokens
+                                : log.cacheTtlApplied === "1h"
+                                  ? log.cacheCreationInputTokens
+                                  : 0
+                            )}
                           </div>
                           <div className="font-medium mt-1">{t("logs.columns.cacheRead")}</div>
                           <div className="pl-2">{formatTokenAmount(log.cacheReadInputTokens)}</div>
@@ -555,6 +569,7 @@ export function VirtualizedLogsTable({
                       billingModelSource={billingModelSource}
                       inputTokens={log.inputTokens}
                       outputTokens={log.outputTokens}
+                      cacheCreationInputTokens={log.cacheCreationInputTokens}
                       cacheCreation5mInputTokens={log.cacheCreation5mInputTokens}
                       cacheCreation1hInputTokens={log.cacheCreation1hInputTokens}
                       cacheReadInputTokens={log.cacheReadInputTokens}
