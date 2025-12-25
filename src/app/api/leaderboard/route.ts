@@ -114,7 +114,11 @@ export async function GET(request: NextRequest) {
     }
 
     let providerType: ProviderType | undefined;
-    if (scope === "providerCacheHitRate" && providerTypeParam && providerTypeParam !== "all") {
+    if (
+      (scope === "provider" || scope === "providerCacheHitRate") &&
+      providerTypeParam &&
+      providerTypeParam !== "all"
+    ) {
       if (!isProviderType(providerTypeParam)) {
         return NextResponse.json({ error: "参数 providerType 不合法" }, { status: 400 });
       }
