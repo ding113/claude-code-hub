@@ -90,7 +90,10 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
         if (period === "custom" && dateRange) {
           url += `&startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`;
         }
-        if ((scope === "providerCacheHitRate" || scope === "provider") && providerTypeFilter !== "all") {
+        if (
+          (scope === "providerCacheHitRate" || scope === "provider") &&
+          providerTypeFilter !== "all"
+        ) {
           url += `&providerType=${encodeURIComponent(providerTypeFilter)}`;
         }
         const res = await fetch(url);
