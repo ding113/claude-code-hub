@@ -22,6 +22,7 @@ export interface ColumnDef<T> {
   cell: (row: T, index: number) => React.ReactNode;
   sortKey?: string; // 用于排序的字段名
   getValue?: (row: T) => number | string; // 获取排序值的函数
+  defaultBold?: boolean; // 默认加粗（无排序时显示加粗）
 }
 
 type SortDirection = "asc" | "desc" | null;
@@ -173,18 +174,23 @@ export function LeaderboardTable<T>({
             <TableHeader>
               <TableRow>
                 <TableHead className="w-24">{t("columns.rank")}</TableHead>
-                {columns.map((col, idx) => (
-                  <TableHead
-                    key={idx}
-                    className={`${col.className || ""} ${col.sortKey ? "cursor-pointer select-none hover:bg-muted/50 transition-colors" : ""}`}
-                    onClick={col.sortKey ? () => handleSort(col.sortKey) : undefined}
-                  >
-                    <div className={`flex items-center ${col.className?.includes("text-right") ? "justify-end" : ""}`}>
-                      {col.header}
-                      {col.sortKey && getSortIcon(col.sortKey)}
-                    </div>
-                  </TableHead>
-                ))}
+                {columns.map((col, idx) => {
+                  const isActiveSortColumn = sortKey === col.sortKey && sortDirection !== null;
+                  const noSorting = sortKey === null;
+                  const shouldBold = isActiveSortColumn || (col.defaultBold && noSorting);
+                  return (
+                    <TableHead
+                      key={idx}
+                      className={`${col.className || ""} ${col.sortKey ? "cursor-pointer select-none hover:bg-muted/50 transition-colors" : ""}`}
+                      onClick={col.sortKey ? () => handleSort(col.sortKey) : undefined}
+                    >
+                      <div className={`flex items-center ${col.className?.includes("text-right") ? "justify-end" : ""} ${shouldBold ? "font-bold" : ""}`}>
+                        {col.header}
+                        {col.sortKey && getSortIcon(col.sortKey)}
+                      </div>
+                    </TableHead>
+                  );
+                })}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -199,11 +205,19 @@ export function LeaderboardTable<T>({
                     className={isTopThree ? "bg-muted/50" : ""}
                   >
                     <TableCell>{getRankBadge(rank)}</TableCell>
-                    {columns.map((col, idx) => (
-                      <TableCell key={idx} className={col.className || ""}>
-                        {col.cell(row, index)}
-                      </TableCell>
-                    ))}
+                    {columns.map((col, idx) => {
+                      const isActiveSortColumn = sortKey === col.sortKey && sortDirection !== null;
+                      const noSorting = sortKey === null;
+                      const shouldBold = isActiveSortColumn || (col.defaultBold && noSorting);
+                      return (
+                        <TableCell
+                          key={idx}
+                          className={`${col.className || ""} ${shouldBold ? "font-bold" : ""}`}
+                        >
+                          {col.cell(row, index)}
+                        </TableCell>
+                      );
+                    })}
                   </TableRow>
                 );
               })}

@@ -166,13 +166,14 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     },
     {
       header: t("columns.consumedAmount"),
-      className: "text-right font-mono font-semibold",
+      className: "text-right font-mono",
       cell: (row) => {
         const r = row as UserEntry & { totalCostFormatted?: string };
         return r.totalCostFormatted ?? r.totalCost;
       },
       sortKey: "totalCost",
       getValue: (row) => (row as UserEntry).totalCost,
+      defaultBold: true,
     },
   ];
 
@@ -192,13 +193,14 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     },
     {
       header: t("columns.cost"),
-      className: "text-right font-mono font-semibold",
+      className: "text-right font-mono",
       cell: (row) => {
         const r = row as ProviderEntry & { totalCostFormatted?: string };
         return r.totalCostFormatted ?? r.totalCost;
       },
       sortKey: "totalCost",
       getValue: (row) => (row as ProviderEntry).totalCost,
+      defaultBold: true,
     },
     {
       header: t("columns.tokens"),
@@ -297,13 +299,14 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     },
     {
       header: t("columns.cost"),
-      className: "text-right font-mono font-semibold",
+      className: "text-right font-mono",
       cell: (row) => {
         const r = row as ModelEntry & { totalCostFormatted?: string };
         return r.totalCostFormatted ?? r.totalCost;
       },
       sortKey: "totalCost",
       getValue: (row) => (row as ModelEntry).totalCost,
+      defaultBold: true,
     },
     {
       header: t("columns.successRate"),
