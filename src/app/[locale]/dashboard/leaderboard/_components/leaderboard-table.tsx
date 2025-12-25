@@ -184,7 +184,9 @@ export function LeaderboardTable<T>({
                       className={`${col.className || ""} ${col.sortKey ? "cursor-pointer select-none hover:bg-muted/50 transition-colors" : ""}`}
                       onClick={col.sortKey ? () => handleSort(col.sortKey) : undefined}
                     >
-                      <div className={`flex items-center ${col.className?.includes("text-right") ? "justify-end" : ""} ${shouldBold ? "font-bold" : ""}`}>
+                      <div
+                        className={`flex items-center ${col.className?.includes("text-right") ? "justify-end" : ""} ${shouldBold ? "font-bold" : ""}`}
+                      >
                         {col.header}
                         {col.sortKey && getSortIcon(col.sortKey)}
                       </div>
@@ -197,13 +199,10 @@ export function LeaderboardTable<T>({
               {sortedData.map((row, index) => {
                 const rank = index + 1;
                 const isTopThree = rank <= 3;
-                const rowKey = getRowKey ? getRowKey(row, index) ?? index : index;
+                const rowKey = getRowKey ? (getRowKey(row, index) ?? index) : index;
 
                 return (
-                  <TableRow
-                    key={rowKey}
-                    className={isTopThree ? "bg-muted/50" : ""}
-                  >
+                  <TableRow key={rowKey} className={isTopThree ? "bg-muted/50" : ""}>
                     <TableCell>{getRankBadge(rank)}</TableCell>
                     {columns.map((col, idx) => {
                       const isActiveSortColumn = sortKey === col.sortKey && sortDirection !== null;

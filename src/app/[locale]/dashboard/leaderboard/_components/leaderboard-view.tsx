@@ -360,7 +360,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
           </TabsList>
         </Tabs>
 
-        {(scope === "provider" || scope === "providerCacheHitRate") ? (
+        {scope === "provider" || scope === "providerCacheHitRate" ? (
           <ProviderTypeFilter
             value={providerTypeFilter}
             onChange={setProviderTypeFilter}
