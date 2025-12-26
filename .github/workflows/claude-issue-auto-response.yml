@@ -10,7 +10,21 @@ jobs:
     outputs:
       should_run: ${{ steps.check.outputs.should_run }}
     steps:
+      - name: Check user permissions
+        id: perm_check
+        run: |
+          # 外部用户直接跳过 Codex 检查
+          if [[ "${{ github.event.issue.author_association }}" == "NONE" ]]; then
+            echo "External user detected, skipping Codex check"
+            echo "should_run=true" >> $GITHUB_OUTPUT
+            echo "EXTERNAL_USER=true" >> $GITHUB_OUTPUT
+          else
+            echo "Internal user, will check Codex status"
+            echo "EXTERNAL_USER=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Check if Codex workflow succeeded for this issue
+        if: steps.perm_check.outputs.EXTERNAL_USER == 'false'
         id: check
         uses: actions/github-script@v7
         with:
@@ -60,6 +74,11 @@ jobs:
             // Timeout - run Claude as fallback
             console.log('Timeout waiting for Codex, running Claude');
             core.setOutput('should_run', 'true');
+
+      - name: Set output for external users
+        if: steps.perm_check.outputs.EXTERNAL_USER == 'true'
+        run: |
+          echo "should_run=true" >> $GITHUB_OUTPUT
 
   auto-response:
     needs: check-codex-status

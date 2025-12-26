@@ -6,8 +6,12 @@ on:
 
 jobs:
   pr-review:
-    # Skip draft PRs and bot actors
+    # 仅对有写入权限的用户运行，且跳过 draft PR 和 bot
     if: |
+      (github.event.pull_request.author_association == 'OWNER' ||
+       github.event.pull_request.author_association == 'MEMBER' ||
+       github.event.pull_request.author_association == 'CONTRIBUTOR' ||
+       github.event.pull_request.author_association == 'COLLABORATOR') &&
       github.event.pull_request.draft == false &&
       !endsWith(github.actor, '[bot]')
     runs-on: ubuntu-latest

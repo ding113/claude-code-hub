@@ -6,6 +6,11 @@ on:
 
 jobs:
   auto-response:
+    # 仅对有写入权限的用户运行
+    if: |
+      github.event.issue.author_association == 'OWNER' ||
+      github.event.issue.author_association == 'MEMBER' ||
+      github.event.issue.author_association == 'CONTRIBUTOR'
     runs-on: ubuntu-latest
     permissions:
       contents: read
