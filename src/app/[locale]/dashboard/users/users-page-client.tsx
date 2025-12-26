@@ -1,11 +1,15 @@
 "use client";
 
-import { QueryClient, QueryClientProvider, useInfiniteQuery } from "@tanstack/react-query";
+import {
+  QueryClient,
+  QueryClientProvider,
+  useInfiniteQuery,
+  useQuery,
+} from "@tanstack/react-query";
 import { Key, Loader2, Plus, Search } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getUsers, getUsersBatch } from "@/actions/users";
-import { Badge } from "@/components/ui/badge";
+import { getAllUserKeyGroups, getAllUserTags, getUsers, getUsersBatch } from "@/actions/users";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -16,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TagInput } from "@/components/ui/tag-input";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import type { User, UserDisplay } from "@/types/user";
 import { BatchEditDialog } from "../_components/user/batch-edit/batch-edit-dialog";
@@ -64,24 +69,62 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
   const tCommon = useTranslations("common");
   const isAdmin = currentUser.role === "admin";
   const [searchTerm, setSearchTerm] = useState("");
-  const [tagFilter, setTagFilter] = useState("all");
-  const [keyGroupFilter, setKeyGroupFilter] = useState("all");
+  const [tagFilters, setTagFilters] = useState<string[]>([]);
+  const [pendingTagFilters, setPendingTagFilters] = useState<string[]>([]);
+  const [keyGroupFilters, setKeyGroupFilters] = useState<string[]>([]);
+  const [pendingKeyGroupFilters, setPendingKeyGroupFilters] = useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "active" | "expired" | "expiringSoon" | "enabled" | "disabled"
+  >("all");
+  const [sortBy, setSortBy] = useState<
+    | "name"
+    | "tags"
+    | "expiresAt"
+    | "limit5hUsd"
+    | "limitDailyUsd"
+    | "limitWeeklyUsd"
+    | "limitMonthlyUsd"
+    | "createdAt"
+  >("createdAt");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
   // Debounce search term to avoid frequent API requests
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
+  const debouncedPendingTagsKey = useDebounce(pendingTagFilters.slice().sort().join("|"), 300);
+  const debouncedPendingKeyGroupsKey = useDebounce(
+    pendingKeyGroupFilters.slice().sort().join("|"),
+    300
+  );
 
   // Use debounced value for API queries, raw value for UI highlighting
   const resolvedSearchTerm = debouncedSearchTerm.trim() ? debouncedSearchTerm.trim() : undefined;
-  const resolvedTagFilter = tagFilter === "all" ? undefined : tagFilter;
-  const resolvedKeyGroupFilter = keyGroupFilter === "all" ? undefined : keyGroupFilter;
+  const resolvedTagFilters = tagFilters.length > 0 ? tagFilters : undefined;
+  const resolvedKeyGroupFilters = keyGroupFilters.length > 0 ? keyGroupFilters : undefined;
+  const resolvedStatusFilter = statusFilter === "all" ? undefined : statusFilter;
 
   // Stable queryKey for non-admin users to avoid unnecessary cache entries
   const queryKey = useMemo(
     () =>
       isAdmin
-        ? ["users", resolvedSearchTerm, resolvedTagFilter, resolvedKeyGroupFilter]
+        ? [
+            "users",
+            resolvedSearchTerm,
+            resolvedTagFilters,
+            resolvedKeyGroupFilters,
+            resolvedStatusFilter,
+            sortBy,
+            sortOrder,
+          ]
         : ["users", "self"],
-    [isAdmin, resolvedSearchTerm, resolvedTagFilter, resolvedKeyGroupFilter]
+    [
+      isAdmin,
+      resolvedSearchTerm,
+      resolvedTagFilters,
+      resolvedKeyGroupFilters,
+      resolvedStatusFilter,
+      sortBy,
+      sortOrder,
+    ]
   );
 
   const {
@@ -105,8 +148,11 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
         cursor: pageParam,
         limit: 50,
         searchTerm: resolvedSearchTerm,
-        tagFilter: resolvedTagFilter,
-        keyGroupFilter: resolvedKeyGroupFilter,
+        tagFilters: resolvedTagFilters,
+        keyGroupFilters: resolvedKeyGroupFilters,
+        statusFilter: resolvedStatusFilter,
+        sortBy,
+        sortOrder,
       });
       if (!result.ok) {
         throw new Error(result.error);
@@ -114,7 +160,29 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
       return result.data;
     },
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    initialPageParam: undefined as { id: number; createdAt: string } | undefined,
+    initialPageParam: 0,
+    placeholderData: (previousData) => previousData,
+  });
+
+  // Independent tag query - breaks circular dependency
+  const { data: allTags = [] } = useQuery({
+    queryKey: ["userTags"],
+    queryFn: async () => {
+      const result = await getAllUserTags();
+      if (!result.ok) throw new Error(result.error);
+      return result.data;
+    },
+    enabled: isAdmin,
+  });
+
+  const { data: allKeyGroups = [] } = useQuery({
+    queryKey: ["userKeyGroups"],
+    queryFn: async () => {
+      const result = await getAllUserKeyGroups();
+      if (!result.ok) throw new Error(result.error);
+      return result.data;
+    },
+    enabled: isAdmin,
   });
 
   const allUsers = useMemo(() => data?.pages.flatMap((page) => page.users) ?? [], [data]);
@@ -125,6 +193,28 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
 
   const isInitialLoading = isLoading && allUsers.length === 0;
   const isRefreshing = isFetching && !isInitialLoading && !isFetchingNextPage;
+
+  useEffect(() => {
+    setPendingTagFilters(tagFilters);
+  }, [tagFilters]);
+
+  useEffect(() => {
+    setPendingKeyGroupFilters(keyGroupFilters);
+  }, [keyGroupFilters]);
+
+  useEffect(() => {
+    const appliedKey = tagFilters.slice().sort().join("|");
+    if (debouncedPendingTagsKey !== appliedKey) {
+      setTagFilters(pendingTagFilters);
+    }
+  }, [debouncedPendingTagsKey, pendingTagFilters, tagFilters]);
+
+  useEffect(() => {
+    const appliedKey = keyGroupFilters.slice().sort().join("|");
+    if (debouncedPendingKeyGroupsKey !== appliedKey) {
+      setKeyGroupFilters(pendingKeyGroupFilters);
+    }
+  }, [debouncedPendingKeyGroupsKey, pendingKeyGroupFilters, keyGroupFilters]);
 
   // Batch edit / multi-select state
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
@@ -178,19 +268,34 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
     setShowCreateDialog(open);
   }, []);
 
-  // Extract unique tags from users
-  const uniqueTags = useMemo(() => {
-    const tags = visibleUsers.flatMap((u) => u.tags || []);
-    return [...new Set(tags)].sort();
-  }, [visibleUsers]);
-
-  // Extract unique key groups from users (split comma-separated tags)
-  const uniqueKeyGroups = useMemo(() => {
-    const groups = visibleUsers.flatMap(
-      (u) => u.keys?.flatMap((k) => splitTags(k.providerGroup)) || []
+  const hasPendingFilterChanges = useMemo(() => {
+    const normalize = (values: string[]) => [...values].sort().join("|");
+    return (
+      normalize(pendingTagFilters) !== normalize(tagFilters) ||
+      normalize(pendingKeyGroupFilters) !== normalize(keyGroupFilters)
     );
-    return [...new Set(groups)].sort();
-  }, [visibleUsers]);
+  }, [pendingTagFilters, tagFilters, pendingKeyGroupFilters, keyGroupFilters]);
+
+  const handleApplyFilters = useCallback(() => {
+    if (!hasPendingFilterChanges) return;
+    setTagFilters(pendingTagFilters);
+    setKeyGroupFilters(pendingKeyGroupFilters);
+  }, [pendingTagFilters, pendingKeyGroupFilters, hasPendingFilterChanges]);
+
+  const handleTagCommit = useCallback((nextTags: string[]) => {
+    setTagFilters(nextTags);
+    setPendingTagFilters(nextTags);
+  }, []);
+
+  const handleKeyGroupCommit = useCallback((nextGroups: string[]) => {
+    setKeyGroupFilters(nextGroups);
+    setPendingKeyGroupFilters(nextGroups);
+  }, []);
+
+  // Use independent query instead of circular dependency
+  const uniqueTags = isAdmin ? allTags : [];
+
+  const uniqueKeyGroups = isAdmin ? allKeyGroups : [];
 
   const matchingKeyIds = useMemo(() => {
     const matchingIds = new Set<number>();
@@ -209,7 +314,8 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
             (key.providerGroup || "").toLowerCase().includes(normalizedTerm));
 
         const matchesKeyGroup =
-          keyGroupFilter !== "all" && splitTags(key.providerGroup).includes(keyGroupFilter);
+          keyGroupFilters.length > 0 &&
+          keyGroupFilters.some((filter) => splitTags(key.providerGroup).includes(filter));
 
         if (matchesSearch || matchesKeyGroup) {
           matchingIds.add(key.id);
@@ -218,10 +324,10 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
     }
 
     return matchingIds;
-  }, [visibleUsers, searchTerm, keyGroupFilter]);
+  }, [visibleUsers, searchTerm, keyGroupFilters]);
 
   // Determine if we should highlight keys (either search or keyGroup filter is active)
-  const shouldHighlightKeys = searchTerm.trim().length > 0 || keyGroupFilter !== "all";
+  const shouldHighlightKeys = searchTerm.trim().length > 0 || keyGroupFilters.length > 0;
   const selfUser = useMemo(() => (isAdmin ? undefined : visibleUsers[0]), [isAdmin, visibleUsers]);
 
   const allVisibleUserIds = useMemo(() => visibleUsers.map((user) => user.id), [visibleUsers]);
@@ -376,8 +482,15 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
 
   const scrollResetKey = useMemo(
     () =>
-      `${resolvedSearchTerm ?? ""}|${resolvedTagFilter ?? "all"}|${resolvedKeyGroupFilter ?? "all"}`,
-    [resolvedSearchTerm, resolvedTagFilter, resolvedKeyGroupFilter]
+      `${resolvedSearchTerm ?? ""}|${resolvedTagFilters?.join(",") ?? "all"}|${resolvedKeyGroupFilters?.join(",") ?? "all"}|${resolvedStatusFilter ?? "all"}|${sortBy}|${sortOrder}`,
+    [
+      resolvedSearchTerm,
+      resolvedTagFilters,
+      resolvedKeyGroupFilters,
+      resolvedStatusFilter,
+      sortBy,
+      sortOrder,
+    ]
   );
 
   return (
@@ -405,9 +518,9 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
       </div>
 
       {/* Toolbar with search and filters */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+      <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center">
         {/* Search input */}
-        <div className="relative flex-1 max-w-sm">
+        <div className="relative flex-1 min-w-[220px] sm:min-w-[280px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder={t("toolbar.searchPlaceholder")}
@@ -419,51 +532,102 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
 
         {isAdmin ? (
           <>
-            {/* Tag filter */}
+            {/* Tag filter - Multi-select */}
             {isInitialLoading ? (
-              <Skeleton className="h-9 w-[180px]" />
+              <Skeleton className="h-9 w-[240px]" />
             ) : (
               uniqueTags.length > 0 && (
-                <Select value={tagFilter} onValueChange={setTagFilter}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder={t("toolbar.tagFilter")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">{t("toolbar.allTags")}</SelectItem>
-                    {uniqueTags.map((tag) => (
-                      <SelectItem key={tag} value={tag}>
-                        <Badge variant="secondary" className="mr-1 text-xs">
-                          {tag}
-                        </Badge>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="w-[200px] sm:w-[220px]">
+                  <TagInput
+                    value={pendingTagFilters}
+                    onChange={setPendingTagFilters}
+                    onChangeCommit={handleTagCommit}
+                    suggestions={uniqueTags}
+                    placeholder={t("toolbar.tagFilter")}
+                    maxVisibleTags={2}
+                    allowDuplicates={false}
+                    validateTag={(tag) => uniqueTags.includes(tag)}
+                    onSuggestionsClose={handleApplyFilters}
+                    clearable
+                    clearLabel={tCommon("clear")}
+                    className="h-9 flex-nowrap items-center overflow-hidden py-1"
+                  />
+                </div>
               )
             )}
 
             {/* Key group filter */}
             {isInitialLoading ? (
-              <Skeleton className="h-9 w-[180px]" />
+              <Skeleton className="h-9 w-[240px]" />
             ) : (
               uniqueKeyGroups.length > 0 && (
-                <Select value={keyGroupFilter} onValueChange={setKeyGroupFilter}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder={t("toolbar.keyGroupFilter")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">{t("toolbar.allKeyGroups")}</SelectItem>
-                    {uniqueKeyGroups.map((group) => (
-                      <SelectItem key={group} value={group}>
-                        <Badge variant="outline" className="mr-1 text-xs">
-                          {group}
-                        </Badge>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="w-[200px] sm:w-[220px]">
+                  <TagInput
+                    value={pendingKeyGroupFilters}
+                    onChange={setPendingKeyGroupFilters}
+                    onChangeCommit={handleKeyGroupCommit}
+                    suggestions={uniqueKeyGroups}
+                    placeholder={t("toolbar.keyGroupFilter")}
+                    maxVisibleTags={2}
+                    allowDuplicates={false}
+                    validateTag={(tag) => uniqueKeyGroups.includes(tag)}
+                    onSuggestionsClose={handleApplyFilters}
+                    clearable
+                    clearLabel={tCommon("clear")}
+                    className="h-9 flex-nowrap items-center overflow-hidden py-1"
+                  />
+                </div>
               )
             )}
+
+            {/* Sort by field */}
+            <Select value={sortBy} onValueChange={(value) => setSortBy(value as typeof sortBy)}>
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder={t("toolbar.sortBy")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="createdAt">{t("toolbar.sortByCreatedAt")}</SelectItem>
+                <SelectItem value="name">{t("toolbar.sortByName")}</SelectItem>
+                <SelectItem value="tags">{t("toolbar.sortByTags")}</SelectItem>
+                <SelectItem value="expiresAt">{t("toolbar.sortByExpiresAt")}</SelectItem>
+                <SelectItem value="limit5hUsd">{t("toolbar.sortByLimit5h")}</SelectItem>
+                <SelectItem value="limitDailyUsd">{t("toolbar.sortByLimitDaily")}</SelectItem>
+                <SelectItem value="limitWeeklyUsd">{t("toolbar.sortByLimitWeekly")}</SelectItem>
+                <SelectItem value="limitMonthlyUsd">{t("toolbar.sortByLimitMonthly")}</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Sort order */}
+            <Select
+              value={sortOrder}
+              onValueChange={(value) => setSortOrder(value as "asc" | "desc")}
+            >
+              <SelectTrigger className="w-[110px]">
+                <SelectValue placeholder={t("toolbar.sortOrder")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="asc">{t("toolbar.ascending")}</SelectItem>
+                <SelectItem value="desc">{t("toolbar.descending")}</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Status filter */}
+            <Select
+              value={statusFilter}
+              onValueChange={(value) => setStatusFilter(value as typeof statusFilter)}
+            >
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder={t("toolbar.statusFilter")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("toolbar.allStatus")}</SelectItem>
+                <SelectItem value="active">{t("toolbar.statusActive")}</SelectItem>
+                <SelectItem value="expired">{t("toolbar.statusExpired")}</SelectItem>
+                <SelectItem value="expiringSoon">{t("toolbar.statusExpiringSoon")}</SelectItem>
+                <SelectItem value="enabled">{t("toolbar.statusEnabled")}</SelectItem>
+                <SelectItem value="disabled">{t("toolbar.statusDisabled")}</SelectItem>
+              </SelectContent>
+            </Select>
           </>
         ) : null}
       </div>
@@ -476,7 +640,9 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
         </div>
       ) : (
         <div className="space-y-3">
-          {isRefreshing ? <InlineLoading label={tCommon("loading")} /> : null}
+          <div className="h-4">
+            {isRefreshing ? <InlineLoading label={tCommon("loading")} /> : null}
+          </div>
           <UserManagementTable
             users={visibleUsers}
             hasNextPage={hasNextPage}
