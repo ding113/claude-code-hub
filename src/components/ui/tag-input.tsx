@@ -2,6 +2,7 @@
 
 import { X } from "lucide-react";
 import * as React from "react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { Badge } from "./badge";
 
@@ -19,8 +20,14 @@ export type TagInputSuggestion =
 export interface TagInputProps extends Omit<React.ComponentProps<"input">, "value" | "onChange"> {
   value: string[];
   onChange: (tags: string[]) => void;
+  onChangeCommit?: (tags: string[]) => void;
   maxTags?: number;
   maxTagLength?: number;
+  maxVisibleTags?: number;
+  onSuggestionsClose?: () => void;
+  clearable?: boolean;
+  clearLabel?: string;
+  onClear?: () => void;
   allowDuplicates?: boolean;
   separator?: RegExp;
   placeholder?: string;
@@ -38,8 +45,14 @@ const DEFAULT_TAG_PATTERN = /^[a-zA-Z0-9_-]+$/; // 字母、数字、下划线�
 export function TagInput({
   value = [],
   onChange,
+  onChangeCommit,
   maxTags,
   maxTagLength = 50,
+  maxVisibleTags,
+  onSuggestionsClose,
+  clearable = false,
+  clearLabel,
+  onClear,
   allowDuplicates = false,
   separator = DEFAULT_SEPARATOR,
   placeholder,
@@ -55,6 +68,32 @@ export function TagInput({
   const [highlightedIndex, setHighlightedIndex] = React.useState(-1);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
+
+  const normalizedMaxVisible = React.useMemo(() => {
+    if (maxVisibleTags === undefined) return undefined;
+    return Math.max(0, maxVisibleTags);
+  }, [maxVisibleTags]);
+
+  const { visibleTags, hiddenTags } = React.useMemo(() => {
+    if (normalizedMaxVisible === undefined) {
+      return { visibleTags: value, hiddenTags: [] as string[] };
+    }
+    return {
+      visibleTags: value.slice(0, normalizedMaxVisible),
+      hiddenTags: value.slice(normalizedMaxVisible),
+    };
+  }, [value, normalizedMaxVisible]);
+
+  const previousShowSuggestions = React.useRef(showSuggestions);
+
+  React.useEffect(() => {
+    if (previousShowSuggestions.current && !showSuggestions) {
+      onSuggestionsClose?.();
+    }
+    previousShowSuggestions.current = showSuggestions;
+  }, [showSuggestions, onSuggestionsClose]);
+
+  const inputMinWidthClass = normalizedMaxVisible === undefined ? "min-w-[120px]" : "min-w-[60px]";
 
   // Normalize suggestions so callers can provide either strings or { value, label } objects.
   const normalizedSuggestions = React.useMemo(() => {
@@ -113,6 +152,12 @@ export function TagInput({
     [validateTag, defaultValidateTag]
   );
 
+  const commitIfClosed = React.useCallback(() => {
+    if (!showSuggestions) {
+      onSuggestionsClose?.();
+    }
+  }, [showSuggestions, onSuggestionsClose]);
+
   const addTag = React.useCallback(
     (tag: string, keepOpen = false) => {
       const trimmedTag = tag.trim();
@@ -123,9 +168,10 @@ export function TagInput({
           setShowSuggestions(false);
         }
         setHighlightedIndex(-1);
+        commitIfClosed();
       }
     },
-    [value, onChange, handleValidateTag]
+    [value, onChange, handleValidateTag, commitIfClosed]
   );
 
   const addTagsBatch = React.useCallback(
@@ -149,15 +195,20 @@ export function TagInput({
       setInputValue("");
       setShowSuggestions(false);
       setHighlightedIndex(-1);
+      commitIfClosed();
     },
-    [value, onChange, handleValidateTag]
+    [value, onChange, handleValidateTag, commitIfClosed]
   );
 
   const removeTag = React.useCallback(
     (indexToRemove: number) => {
-      onChange(value.filter((_, index) => index !== indexToRemove));
+      const nextTags = value.filter((_, index) => index !== indexToRemove);
+      onChange(nextTags);
+      onChangeCommit?.(nextTags);
+      setShowSuggestions(false);
+      setHighlightedIndex(-1);
     },
-    [value, onChange]
+    [value, onChange, onChangeCommit]
   );
 
   const handleKeyDown = React.useCallback(
@@ -262,19 +313,33 @@ export function TagInput({
     [addTag]
   );
 
+  const handleClear = React.useCallback(() => {
+    const nextTags: string[] = [];
+    if (onClear) {
+      onClear();
+    } else {
+      onChange(nextTags);
+    }
+    onChangeCommit?.(nextTags);
+    setInputValue("");
+    setShowSuggestions(false);
+    setHighlightedIndex(-1);
+  }, [onClear, onChange, onChangeCommit]);
+
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className="relative group">
       <div
         className={cn(
           "flex min-h-9 w-full flex-wrap gap-2 rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none",
           "focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-[3px]",
           "aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
           disabled && "pointer-events-none cursor-not-allowed opacity-50",
+          clearable && value.length > 0 && "pr-8",
           className
         )}
         onClick={() => inputRef.current?.focus()}
       >
-        {value.map((tag, index) => (
+        {visibleTags.map((tag, index) => (
           <Badge
             key={`${tag}-${index}`}
             variant="secondary"
@@ -296,6 +361,18 @@ export function TagInput({
             )}
           </Badge>
         ))}
+        {hiddenTags.length > 0 && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge variant="secondary" className="pr-2 pl-2 py-1 h-auto">
+                <span className="text-xs">+{hiddenTags.length}</span>
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" sideOffset={6}>
+              {hiddenTags.join(", ")}
+            </TooltipContent>
+          </Tooltip>
+        )}
         <input
           ref={inputRef}
           type="text"
@@ -308,12 +385,23 @@ export function TagInput({
           disabled={disabled}
           placeholder={value.length === 0 ? placeholder : undefined}
           className={cn(
-            "flex-1 min-w-[120px] bg-transparent outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed md:text-sm"
+            "flex-1 bg-transparent outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed md:text-sm",
+            inputMinWidthClass
           )}
           autoComplete="off"
           {...props}
         />
       </div>
+      {clearable && value.length > 0 && (
+        <button
+          type="button"
+          onClick={handleClear}
+          className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 group-focus-within:opacity-100"
+          aria-label={clearLabel || "Clear"}
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      )}
       {/* 建议下拉列表 */}
       {showSuggestions && filteredSuggestions.length > 0 && (
         <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md max-h-48 overflow-auto">
