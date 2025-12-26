@@ -1,0 +1,270 @@
+{
+  "_comment": "Vendor management translations for Japanese",
+
+  "page": {
+    "title": "ベンダー管理",
+    "description": "ベンダー、エンドポイント、キーを管理します（Vendor → Endpoint → Key）。"
+  },
+  "sections": {
+    "vendorList": {
+      "title": "ベンダー一覧",
+      "description": "ベンダーの基本情報と残高チェック設定を管理します。"
+    },
+    "endpoints": {
+      "title": "エンドポイント",
+      "description": "このベンダーの上流エンドポイントを設定します。"
+    },
+    "keys": {
+      "title": "キー",
+      "description": "エンドポイントごとにキーを管理します（有効化、重み、制限）。"
+    },
+    "balance": {
+      "title": "残高",
+      "description": "残高チェックを設定し、最新の残高を確認します。"
+    },
+    "sync": {
+      "title": "リモート同期",
+      "description": "管理対象のベンダーをリモート設定から同期します。"
+    }
+  },
+  "actions": {
+    "newVendor": "新規ベンダー",
+    "newEndpoint": "新規エンドポイント",
+    "newKey": "新規キー",
+    "edit": "編集",
+    "delete": "削除",
+    "save": "保存",
+    "cancel": "キャンセル",
+    "close": "閉じる",
+    "refresh": "更新",
+    "sync": "同期",
+    "syncing": "同期中...",
+    "checkBalance": "残高を確認",
+    "checkingBalance": "確認中...",
+    "enable": "有効化",
+    "disable": "無効化",
+    "expandAll": "すべて展開",
+    "collapseAll": "すべて折りたたむ"
+  },
+  "category": {
+    "label": "カテゴリ",
+    "placeholder": "カテゴリを選択",
+    "options": {
+      "official": "公式",
+      "relay": "リレー",
+      "self_hosted": "セルフホスト"
+    }
+  },
+  "apiFormat": {
+    "label": "API 形式",
+    "placeholder": "API 形式を選択",
+    "options": {
+      "claude": "Claude",
+      "codex": "Codex",
+      "gemini": "Gemini"
+    }
+  },
+  "status": {
+    "enabled": "有効",
+    "disabled": "無効",
+    "managed": "管理対象",
+    "unmanaged": "ローカル",
+    "userOverride": "ユーザー上書き"
+  },
+  "form": {
+    "vendor": {
+      "slug": {
+        "label": "スラッグ",
+        "placeholder": "例: anthropic",
+        "help": "URL 向けの識別子です。重複はできません。"
+      },
+      "name": {
+        "label": "名称",
+        "placeholder": "例: Anthropic"
+      },
+      "description": {
+        "label": "説明",
+        "placeholder": "任意"
+      },
+      "tags": {
+        "label": "タグ",
+        "placeholder": "例: claude, gpt",
+        "help": "カンマ区切り。フィルタやグルーピングに使用します。"
+      },
+      "websiteUrl": {
+        "label": "Web サイト URL",
+        "placeholder": "https://example.com"
+      },
+      "faviconUrl": {
+        "label": "Favicon URL",
+        "placeholder": "https://example.com/favicon.ico"
+      },
+      "isEnabled": {
+        "label": "有効"
+      },
+      "isManaged": {
+        "label": "管理対象",
+        "help": "管理対象のデータはリモート同期で上書きされる場合があります。"
+      }
+    },
+    "endpoint": {
+      "name": {
+        "label": "名称",
+        "placeholder": "Official API"
+      },
+      "url": {
+        "label": "ベース URL",
+        "placeholder": "https://api.example.com"
+      },
+      "priority": {
+        "label": "優先度",
+        "help": "数値が小さいほど優先度が高いです。"
+      },
+      "isEnabled": {
+        "label": "有効"
+      },
+      "healthCheckEnabled": {
+        "label": "ヘルスチェックを有効化"
+      },
+      "healthCheckEndpoint": {
+        "label": "ヘルスチェック パス",
+        "placeholder": "/v1/models"
+      },
+      "healthCheckIntervalSeconds": {
+        "label": "間隔（秒）",
+        "placeholder": "60"
+      },
+      "healthCheckTimeoutMs": {
+        "label": "タイムアウト（ms）",
+        "placeholder": "5000"
+      }
+    },
+    "key": {
+      "endpointId": {
+        "label": "エンドポイント",
+        "placeholder": "エンドポイントを選択"
+      },
+      "name": {
+        "label": "名称",
+        "placeholder": "デフォルトキー"
+      },
+      "key": {
+        "label": "API キー",
+        "placeholder": "sk-...",
+        "help": "空欄の場合は変更しません。"
+      },
+      "url": {
+        "label": "API URL",
+        "placeholder": "通常はエンドポイント URL を継承"
+      },
+      "providerType": {
+        "label": "タイプ",
+        "placeholder": "タイプを選択"
+      },
+      "groupTag": {
+        "label": "グループ",
+        "placeholder": "例: premium"
+      },
+      "priority": {
+        "label": "優先度"
+      },
+      "weight": {
+        "label": "重み"
+      },
+      "costMultiplier": {
+        "label": "コスト倍率"
+      },
+      "isEnabled": {
+        "label": "有効"
+      },
+      "isUserOverride": {
+        "label": "ユーザー上書き",
+        "help": "ユーザー上書きはリモート同期で更新されません。"
+      }
+    },
+    "balanceCheck": {
+      "enabled": {
+        "label": "残高チェックを有効化"
+      },
+      "endpoint": {
+        "label": "残高エンドポイント",
+        "placeholder": "/v1/usage"
+      },
+      "jsonpath": {
+        "label": "残高 JSONPath",
+        "placeholder": "$.remaining_credits",
+        "help": "JSON 応答から数値を抽出する必要があります。"
+      },
+      "intervalSeconds": {
+        "label": "間隔（秒）",
+        "placeholder": "3600"
+      },
+      "lowThresholdUsd": {
+        "label": "低残高しきい値（USD）",
+        "placeholder": "10"
+      }
+    }
+  },
+  "table": {
+    "vendors": {
+      "name": "名称",
+      "slug": "Slug",
+      "category": "カテゴリ",
+      "tags": "タグ",
+      "managed": "管理",
+      "enabled": "状態",
+      "updatedAt": "更新",
+      "actions": "操作"
+    },
+    "endpoints": {
+      "name": "名称",
+      "url": "ベース URL",
+      "apiFormat": "API 形式",
+      "priority": "優先度",
+      "latencyMs": "レイテンシ（ms）",
+      "health": "健康",
+      "enabled": "状態",
+      "updatedAt": "更新",
+      "actions": "操作"
+    },
+    "keys": {
+      "name": "名称",
+      "endpoint": "エンドポイント",
+      "providerType": "タイプ",
+      "groupTag": "グループ",
+      "priority": "優先度",
+      "weight": "重み",
+      "balance": "残高（USD）",
+      "enabled": "状態",
+      "updatedAt": "更新",
+      "actions": "操作"
+    },
+    "balanceChecks": {
+      "checkedAt": "確認日時",
+      "balanceUsd": "残高（USD）",
+      "statusCode": "ステータスコード",
+      "errorMessage": "エラー"
+    }
+  },
+  "tips": {
+    "managedNote": "管理対象のベンダーはリモート設定から同期されます。ローカル変更は上書きされることがあります。",
+    "userOverrideNote": "ユーザー上書きキーはリモート更新から保護されます。"
+  },
+  "messages": {
+    "createSuccess": "作成しました",
+    "updateSuccess": "保存しました",
+    "deleteSuccess": "削除しました",
+    "syncSuccess": "同期が完了しました",
+    "balanceCheckSuccess": "残高チェックが完了しました"
+  },
+  "errors": {
+    "loadFailed": "ベンダーの読み込みに失敗しました",
+    "saveFailed": "保存に失敗しました",
+    "deleteFailed": "削除に失敗しました",
+    "syncFailed": "同期に失敗しました: {error}",
+    "balanceCheckFailed": "残高チェックに失敗しました: {error}",
+    "required": "必須項目です",
+    "invalidUrl": "有効な URL を入力してください",
+    "invalidJsonpath": "JSONPath 式が無効です"
+  }
+}

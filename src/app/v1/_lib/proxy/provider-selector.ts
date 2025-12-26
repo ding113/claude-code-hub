@@ -1,9 +1,10 @@
 import { getCircuitState, isCircuitOpen } from "@/lib/circuit-breaker";
+import { findAllProvidersHybrid } from "@/lib/compat/provider-compat";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit";
 import { SessionManager } from "@/lib/session-manager";
-import { findAllProviders, findProviderById } from "@/repository/provider";
+import { findProviderById } from "@/repository/provider";
 import { getSystemSettings } from "@/repository/system-config";
 import type { ProviderChainItem } from "@/types/message";
 import type { Provider } from "@/types/provider";
@@ -609,7 +610,7 @@ export class ProxyProviderResolver {
     provider: Provider | null;
     context: NonNullable<ProviderChainItem["decisionContext"]>;
   }> {
-    const allProviders = await findAllProviders();
+    const allProviders = await findAllProvidersHybrid();
     const requestedModel = session?.getCurrentModel() || "";
 
     // === Step 1: 分组预过滤（静默，用户只能看到自己分组内的供应商）===

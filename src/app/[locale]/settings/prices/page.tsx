@@ -2,6 +2,7 @@ import { getTranslations } from "next-intl/server";
 import { Suspense } from "react";
 import { getModelPrices, getModelPricesPaginated } from "@/actions/model-prices";
 import { Section } from "@/components/section";
+import { ViewSwitcher } from "@/components/view-switcher";
 import { SettingsPageHeader } from "../_components/settings-page-header";
 import { PriceList } from "./_components/price-list";
 import { PricesSkeleton } from "./_components/prices-skeleton";
@@ -25,7 +26,10 @@ export default async function SettingsPricesPage({ searchParams }: SettingsPrice
 
   return (
     <>
-      <SettingsPageHeader title={t("prices.title")} description={t("prices.description")} />
+      <div className="flex items-start justify-between gap-4">
+        <SettingsPageHeader title={t("prices.title")} description={t("prices.description")} />
+        <ViewSwitcher legacyPath="/settings/prices" modernPath="/settings/prices-v2" />
+      </div>
       <Suspense fallback={<PricesSkeleton />}>
         <SettingsPricesContent searchParams={searchParams} />
       </Suspense>

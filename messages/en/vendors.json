@@ -1,0 +1,270 @@
+{
+  "_comment": "Vendor management translations for English",
+
+  "page": {
+    "title": "Vendors",
+    "description": "Manage vendors, endpoints, and keys (Vendor → Endpoint → Key)."
+  },
+  "sections": {
+    "vendorList": {
+      "title": "Vendor List",
+      "description": "Manage vendor metadata and balance check settings."
+    },
+    "endpoints": {
+      "title": "Endpoints",
+      "description": "Configure upstream endpoints for this vendor."
+    },
+    "keys": {
+      "title": "Keys",
+      "description": "Manage keys per endpoint (enable, weight, limits)."
+    },
+    "balance": {
+      "title": "Balance",
+      "description": "Configure balance checks and view latest balances."
+    },
+    "sync": {
+      "title": "Remote Sync",
+      "description": "Sync managed vendors from remote config."
+    }
+  },
+  "actions": {
+    "newVendor": "New vendor",
+    "newEndpoint": "New endpoint",
+    "newKey": "New key",
+    "edit": "Edit",
+    "delete": "Delete",
+    "save": "Save",
+    "cancel": "Cancel",
+    "close": "Close",
+    "refresh": "Refresh",
+    "sync": "Sync",
+    "syncing": "Syncing...",
+    "checkBalance": "Check balance",
+    "checkingBalance": "Checking...",
+    "enable": "Enable",
+    "disable": "Disable",
+    "expandAll": "Expand all",
+    "collapseAll": "Collapse all"
+  },
+  "category": {
+    "label": "Category",
+    "placeholder": "Select category",
+    "options": {
+      "official": "Official",
+      "relay": "Relay",
+      "self_hosted": "Self-hosted"
+    }
+  },
+  "apiFormat": {
+    "label": "API format",
+    "placeholder": "Select API format",
+    "options": {
+      "claude": "Claude",
+      "codex": "Codex",
+      "gemini": "Gemini"
+    }
+  },
+  "status": {
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "managed": "Managed",
+    "unmanaged": "Unmanaged",
+    "userOverride": "User override"
+  },
+  "form": {
+    "vendor": {
+      "slug": {
+        "label": "Slug",
+        "placeholder": "e.g. anthropic",
+        "help": "URL-friendly identifier. Must be unique."
+      },
+      "name": {
+        "label": "Name",
+        "placeholder": "e.g. Anthropic"
+      },
+      "description": {
+        "label": "Description",
+        "placeholder": "Optional"
+      },
+      "tags": {
+        "label": "Tags",
+        "placeholder": "e.g. claude, gpt",
+        "help": "Comma-separated tags used for filtering and grouping."
+      },
+      "websiteUrl": {
+        "label": "Website URL",
+        "placeholder": "https://example.com"
+      },
+      "faviconUrl": {
+        "label": "Favicon URL",
+        "placeholder": "https://example.com/favicon.ico"
+      },
+      "isEnabled": {
+        "label": "Enabled"
+      },
+      "isManaged": {
+        "label": "Managed",
+        "help": "Managed entries may be overwritten by remote sync."
+      }
+    },
+    "endpoint": {
+      "name": {
+        "label": "Name",
+        "placeholder": "Official API"
+      },
+      "url": {
+        "label": "Base URL",
+        "placeholder": "https://api.example.com"
+      },
+      "priority": {
+        "label": "Priority",
+        "help": "Lower number means higher priority."
+      },
+      "isEnabled": {
+        "label": "Enabled"
+      },
+      "healthCheckEnabled": {
+        "label": "Enable health check"
+      },
+      "healthCheckEndpoint": {
+        "label": "Health endpoint",
+        "placeholder": "/v1/models"
+      },
+      "healthCheckIntervalSeconds": {
+        "label": "Interval (seconds)",
+        "placeholder": "60"
+      },
+      "healthCheckTimeoutMs": {
+        "label": "Timeout (ms)",
+        "placeholder": "5000"
+      }
+    },
+    "key": {
+      "endpointId": {
+        "label": "Endpoint",
+        "placeholder": "Select endpoint"
+      },
+      "name": {
+        "label": "Name",
+        "placeholder": "Default key"
+      },
+      "key": {
+        "label": "API key",
+        "placeholder": "sk-...",
+        "help": "Leave empty to keep unchanged."
+      },
+      "url": {
+        "label": "API URL",
+        "placeholder": "Inherit endpoint URL by default"
+      },
+      "providerType": {
+        "label": "Provider type",
+        "placeholder": "Select type"
+      },
+      "groupTag": {
+        "label": "Group",
+        "placeholder": "e.g. premium"
+      },
+      "priority": {
+        "label": "Priority"
+      },
+      "weight": {
+        "label": "Weight"
+      },
+      "costMultiplier": {
+        "label": "Cost multiplier"
+      },
+      "isEnabled": {
+        "label": "Enabled"
+      },
+      "isUserOverride": {
+        "label": "User override",
+        "help": "User overrides are not updated by remote sync."
+      }
+    },
+    "balanceCheck": {
+      "enabled": {
+        "label": "Enable balance check"
+      },
+      "endpoint": {
+        "label": "Balance endpoint",
+        "placeholder": "/v1/usage"
+      },
+      "jsonpath": {
+        "label": "Balance JSONPath",
+        "placeholder": "$.remaining_credits",
+        "help": "Should return a number from the JSON response."
+      },
+      "intervalSeconds": {
+        "label": "Interval (seconds)",
+        "placeholder": "3600"
+      },
+      "lowThresholdUsd": {
+        "label": "Low balance threshold (USD)",
+        "placeholder": "10"
+      }
+    }
+  },
+  "table": {
+    "vendors": {
+      "name": "Name",
+      "slug": "Slug",
+      "category": "Category",
+      "tags": "Tags",
+      "managed": "Managed",
+      "enabled": "Status",
+      "updatedAt": "Updated",
+      "actions": "Actions"
+    },
+    "endpoints": {
+      "name": "Name",
+      "url": "Base URL",
+      "apiFormat": "API format",
+      "priority": "Priority",
+      "latencyMs": "Latency (ms)",
+      "health": "Health",
+      "enabled": "Status",
+      "updatedAt": "Updated",
+      "actions": "Actions"
+    },
+    "keys": {
+      "name": "Name",
+      "endpoint": "Endpoint",
+      "providerType": "Type",
+      "groupTag": "Group",
+      "priority": "Priority",
+      "weight": "Weight",
+      "balance": "Balance (USD)",
+      "enabled": "Status",
+      "updatedAt": "Updated",
+      "actions": "Actions"
+    },
+    "balanceChecks": {
+      "checkedAt": "Checked at",
+      "balanceUsd": "Balance (USD)",
+      "statusCode": "Status code",
+      "errorMessage": "Error"
+    }
+  },
+  "tips": {
+    "managedNote": "Managed vendors are synced from remote config. Local changes may be overwritten.",
+    "userOverrideNote": "User override keys are protected from remote updates."
+  },
+  "messages": {
+    "createSuccess": "Created successfully",
+    "updateSuccess": "Saved successfully",
+    "deleteSuccess": "Deleted successfully",
+    "syncSuccess": "Sync completed",
+    "balanceCheckSuccess": "Balance check completed"
+  },
+  "errors": {
+    "loadFailed": "Failed to load vendors",
+    "saveFailed": "Failed to save changes",
+    "deleteFailed": "Failed to delete",
+    "syncFailed": "Sync failed: {error}",
+    "balanceCheckFailed": "Balance check failed: {error}",
+    "required": "This field is required",
+    "invalidUrl": "Please enter a valid URL",
+    "invalidJsonpath": "Invalid JSONPath expression"
+  }
+}

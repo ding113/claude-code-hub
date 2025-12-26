@@ -1,0 +1,89 @@
+{
+  "_comment": "Pricing page translations for English",
+
+  "page": {
+    "title": "Pricing",
+    "description": "Manage model pricing table with remote sync and user overrides."
+  },
+  "sections": {
+    "table": {
+      "title": "Model Pricing",
+      "description": "Browse and edit model pricing records."
+    },
+    "sync": {
+      "title": "Sync",
+      "description": "Sync prices from remote config and manage overrides."
+    }
+  },
+  "filters": {
+    "searchPlaceholder": "Search model name...",
+    "sourceLabel": "Source",
+    "sourceAll": "All sources",
+    "overridesOnly": "Overrides only",
+    "clear": "Clear filters"
+  },
+  "source": {
+    "remote": "Remote",
+    "local": "Local",
+    "user": "User"
+  },
+  "actions": {
+    "refresh": "Refresh",
+    "sync": "Sync",
+    "syncing": "Syncing...",
+    "edit": "Edit",
+    "createOverride": "Create override",
+    "resetOverride": "Reset override",
+    "save": "Save",
+    "saving": "Saving...",
+    "cancel": "Cancel",
+    "close": "Close",
+    "import": "Import",
+    "export": "Export"
+  },
+  "table": {
+    "modelName": "Model",
+    "source": "Source",
+    "inputPrice": "Input ($/M)",
+    "outputPrice": "Output ($/M)",
+    "updatedAt": "Updated",
+    "remoteVersion": "Remote version",
+    "isUserOverride": "Override",
+    "actions": "Actions",
+    "loadedCount": "{count} loaded",
+    "loading": "Loading...",
+    "noMatch": "No matching models found",
+    "noDataTitle": "No price data available",
+    "noDataHint": "Sync from remote or create an override to get started."
+  },
+  "editor": {
+    "title": "Edit Model Price",
+    "description": "Update model pricing fields (stored as JSON).",
+    "modelName": "Model name",
+    "source": "Source",
+    "inputCostPerToken": "Input cost per token (USD)",
+    "outputCostPerToken": "Output cost per token (USD)",
+    "priceJson": "Price JSON",
+    "priceJsonPlaceholder": "e.g. {\"input_cost_per_token\":0.000001,\"output_cost_per_token\":0.000003}",
+    "validateJson": "Validate JSON"
+  },
+  "tips": {
+    "unitHint": "UI displays prices per 1M tokens. Stored values are per token.",
+    "overrideHint": "User overrides are protected from remote sync updates."
+  },
+  "messages": {
+    "syncSuccessWithChanges": "Price table updated: {added} added, {updated} updated, {unchanged} unchanged",
+    "syncSuccessNoChanges": "Price table is up to date, no updates needed",
+    "saveSuccess": "Saved successfully",
+    "resetOverrideSuccess": "Override reset successfully",
+    "createOverrideSuccess": "Override created successfully"
+  },
+  "errors": {
+    "loadFailed": "Failed to load prices",
+    "syncFailed": "Sync failed: {error}",
+    "saveFailed": "Failed to save: {error}",
+    "invalidJson": "Invalid JSON format",
+    "invalidNumber": "Invalid number",
+    "required": "This field is required"
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "_comment": "價格表頁面翻譯（繁體中文）",
+
+  "page": {
+    "title": "價格表",
+    "description": "管理價格表：支援遠端同步與使用者覆寫。"
+  },
+  "sections": {
+    "table": {
+      "title": "模型價格",
+      "description": "查看與編輯模型價格記錄。"
+    },
+    "sync": {
+      "title": "同步",
+      "description": "從遠端設定同步價格，並管理本地覆寫。"
+    }
+  },
+  "filters": {
+    "searchPlaceholder": "搜尋模型名稱...",
+    "sourceLabel": "來源",
+    "sourceAll": "全部來源",
+    "overridesOnly": "僅覆寫",
+    "clear": "清除篩選"
+  },
+  "source": {
+    "remote": "遠端",
+    "local": "本地",
+    "user": "使用者"
+  },
+  "actions": {
+    "refresh": "重新整理",
+    "sync": "同步",
+    "syncing": "同步中...",
+    "edit": "編輯",
+    "createOverride": "新增覆寫",
+    "resetOverride": "重置覆寫",
+    "save": "儲存",
+    "saving": "儲存中...",
+    "cancel": "取消",
+    "close": "關閉",
+    "import": "匯入",
+    "export": "匯出"
+  },
+  "table": {
+    "modelName": "模型",
+    "source": "來源",
+    "inputPrice": "輸入 ($/M)",
+    "outputPrice": "輸出 ($/M)",
+    "updatedAt": "更新時間",
+    "remoteVersion": "遠端版本",
+    "isUserOverride": "覆寫",
+    "actions": "操作",
+    "loadedCount": "已載入 {count} 筆",
+    "loading": "載入中...",
+    "noMatch": "未找到符合的模型",
+    "noDataTitle": "暫無價格資料",
+    "noDataHint": "可先從遠端同步或新增覆寫。"
+  },
+  "editor": {
+    "title": "編輯模型價格",
+    "description": "更新模型價格欄位（JSON 儲存）。",
+    "modelName": "模型名稱",
+    "source": "來源",
+    "inputCostPerToken": "輸入單 token 價格（USD）",
+    "outputCostPerToken": "輸出單 token 價格（USD）",
+    "priceJson": "價格 JSON",
+    "priceJsonPlaceholder": "例如: {\"input_cost_per_token\":0.000001,\"output_cost_per_token\":0.000003}",
+    "validateJson": "檢查 JSON"
+  },
+  "tips": {
+    "unitHint": "介面以每百萬 token 顯示價格；儲存值為每 token。",
+    "overrideHint": "使用者覆寫會被保護，不會被遠端同步覆寫。"
+  },
+  "messages": {
+    "syncSuccessWithChanges": "價格表更新完成：新增 {added}，更新 {updated}，無變化 {unchanged}",
+    "syncSuccessNoChanges": "價格表已是最新，無需更新",
+    "saveSuccess": "儲存成功",
+    "resetOverrideSuccess": "覆寫已重置",
+    "createOverrideSuccess": "覆寫已建立"
+  },
+  "errors": {
+    "loadFailed": "載入價格表失敗",
+    "syncFailed": "同步失敗：{error}",
+    "saveFailed": "儲存失敗：{error}",
+    "invalidJson": "JSON 格式無效",
+    "invalidNumber": "數值格式無效",
+    "required": "此欄位必填"
+  }
+}

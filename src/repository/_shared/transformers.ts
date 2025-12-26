@@ -2,9 +2,12 @@ import { formatCostForStorage } from "@/lib/utils/currency";
 import type { Key } from "@/types/key";
 import type { MessageRequest } from "@/types/message";
 import type { ModelPrice } from "@/types/model-price";
+import type { ModelPriceV2 } from "@/types/model-price-v2";
 import type { Provider } from "@/types/provider";
+import type { RemoteConfigSync } from "@/types/remote-config";
 import type { SystemSettings } from "@/types/system-config";
 import type { User } from "@/types/user";
+import type { Vendor, VendorEndpoint, VendorKey } from "@/types/vendor";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function toUser(dbUser: any): User {
@@ -145,5 +148,128 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     enableHttp2: dbSettings?.enableHttp2 ?? false,
     createdAt: dbSettings?.createdAt ? new Date(dbSettings.createdAt) : new Date(),
     updatedAt: dbSettings?.updatedAt ? new Date(dbSettings.updatedAt) : new Date(),
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function toVendor(dbVendor: any): Vendor {
+  return {
+    ...dbVendor,
+    description: dbVendor?.description ?? null,
+    isManaged: dbVendor?.isManaged ?? false,
+    isEnabled: dbVendor?.isEnabled ?? true,
+    tags: dbVendor?.tags ?? [],
+    websiteUrl: dbVendor?.websiteUrl ?? null,
+    faviconUrl: dbVendor?.faviconUrl ?? null,
+    balanceCheckEnabled: dbVendor?.balanceCheckEnabled ?? false,
+    balanceCheckEndpoint: dbVendor?.balanceCheckEndpoint ?? null,
+    balanceCheckJsonpath: dbVendor?.balanceCheckJsonpath ?? null,
+    balanceCheckIntervalSeconds: dbVendor?.balanceCheckIntervalSeconds ?? null,
+    balanceCheckLowThresholdUsd:
+      dbVendor?.balanceCheckLowThresholdUsd !== null &&
+      dbVendor?.balanceCheckLowThresholdUsd !== undefined
+        ? parseFloat(dbVendor.balanceCheckLowThresholdUsd)
+        : null,
+    createdAt: dbVendor?.createdAt ? new Date(dbVendor.createdAt) : new Date(),
+    updatedAt: dbVendor?.updatedAt ? new Date(dbVendor.updatedAt) : new Date(),
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function toVendorEndpoint(dbEndpoint: any): VendorEndpoint {
+  return {
+    ...dbEndpoint,
+    isEnabled: dbEndpoint?.isEnabled ?? true,
+    priority: dbEndpoint?.priority ?? 0,
+    latencyMs: dbEndpoint?.latencyMs ?? null,
+    healthCheckEnabled: dbEndpoint?.healthCheckEnabled ?? false,
+    healthCheckEndpoint: dbEndpoint?.healthCheckEndpoint ?? null,
+    healthCheckIntervalSeconds: dbEndpoint?.healthCheckIntervalSeconds ?? null,
+    healthCheckTimeoutMs: dbEndpoint?.healthCheckTimeoutMs ?? null,
+    healthCheckLastCheckedAt: dbEndpoint?.healthCheckLastCheckedAt
+      ? new Date(dbEndpoint.healthCheckLastCheckedAt)
+      : null,
+    healthCheckLastStatusCode: dbEndpoint?.healthCheckLastStatusCode ?? null,
+    healthCheckErrorMessage: dbEndpoint?.healthCheckErrorMessage ?? null,
+    createdAt: dbEndpoint?.createdAt ? new Date(dbEndpoint.createdAt) : new Date(),
+    updatedAt: dbEndpoint?.updatedAt ? new Date(dbEndpoint.updatedAt) : new Date(),
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function toVendorKey(dbKey: any): VendorKey {
+  return {
+    ...dbKey,
+    isUserOverride: dbKey?.isUserOverride ?? false,
+    balanceUsd:
+      dbKey?.balanceUsd !== null && dbKey?.balanceUsd !== undefined
+        ? parseFloat(dbKey.balanceUsd)
+        : null,
+    balanceUpdatedAt: dbKey?.balanceUpdatedAt ? new Date(dbKey.balanceUpdatedAt) : null,
+    isEnabled: dbKey?.isEnabled ?? true,
+    weight: dbKey?.weight ?? 1,
+    priority: dbKey?.priority ?? 0,
+    costMultiplier: dbKey?.costMultiplier ? parseFloat(dbKey.costMultiplier) : 1.0,
+    groupTag: dbKey?.groupTag ?? null,
+    providerType: dbKey?.providerType ?? "claude",
+    preserveClientIp: dbKey?.preserveClientIp ?? false,
+    modelRedirects: dbKey?.modelRedirects ?? null,
+    allowedModels: dbKey?.allowedModels ?? null,
+    joinClaudePool: dbKey?.joinClaudePool ?? false,
+    codexInstructionsStrategy: dbKey?.codexInstructionsStrategy ?? "auto",
+    mcpPassthroughType: dbKey?.mcpPassthroughType ?? "none",
+    mcpPassthroughUrl: dbKey?.mcpPassthroughUrl ?? null,
+    limit5hUsd: dbKey?.limit5hUsd ? parseFloat(dbKey.limit5hUsd) : null,
+    limitDailyUsd: dbKey?.limitDailyUsd ? parseFloat(dbKey.limitDailyUsd) : null,
+    dailyResetMode: dbKey?.dailyResetMode ?? "fixed",
+    dailyResetTime: dbKey?.dailyResetTime ?? "00:00",
+    limitWeeklyUsd: dbKey?.limitWeeklyUsd ? parseFloat(dbKey.limitWeeklyUsd) : null,
+    limitMonthlyUsd: dbKey?.limitMonthlyUsd ? parseFloat(dbKey.limitMonthlyUsd) : null,
+    limitConcurrentSessions: dbKey?.limitConcurrentSessions ?? 0,
+    maxRetryAttempts:
+      dbKey?.maxRetryAttempts !== undefined && dbKey?.maxRetryAttempts !== null
+        ? Number(dbKey.maxRetryAttempts)
+        : null,
+    circuitBreakerFailureThreshold: dbKey?.circuitBreakerFailureThreshold ?? 5,
+    circuitBreakerOpenDuration: dbKey?.circuitBreakerOpenDuration ?? 1800000,
+    circuitBreakerHalfOpenSuccessThreshold: dbKey?.circuitBreakerHalfOpenSuccessThreshold ?? 2,
+    proxyUrl: dbKey?.proxyUrl ?? null,
+    proxyFallbackToDirect: dbKey?.proxyFallbackToDirect ?? false,
+    firstByteTimeoutStreamingMs: dbKey?.firstByteTimeoutStreamingMs ?? 30000,
+    streamingIdleTimeoutMs: dbKey?.streamingIdleTimeoutMs ?? 10000,
+    requestTimeoutNonStreamingMs: dbKey?.requestTimeoutNonStreamingMs ?? 600000,
+    websiteUrl: dbKey?.websiteUrl ?? null,
+    faviconUrl: dbKey?.faviconUrl ?? null,
+    cacheTtlPreference: dbKey?.cacheTtlPreference ?? null,
+    context1mPreference: dbKey?.context1mPreference ?? null,
+    tpm: dbKey?.tpm ?? null,
+    rpm: dbKey?.rpm ?? null,
+    rpd: dbKey?.rpd ?? null,
+    cc: dbKey?.cc ?? null,
+    createdAt: dbKey?.createdAt ? new Date(dbKey.createdAt) : new Date(),
+    updatedAt: dbKey?.updatedAt ? new Date(dbKey.updatedAt) : new Date(),
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function toModelPriceV2(dbPrice: any): ModelPriceV2 {
+  return {
+    ...dbPrice,
+    remoteVersion: dbPrice?.remoteVersion ?? null,
+    createdAt: dbPrice?.createdAt ? new Date(dbPrice.createdAt) : new Date(),
+    updatedAt: dbPrice?.updatedAt ? new Date(dbPrice.updatedAt) : new Date(),
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function toRemoteConfigSync(dbRecord: any): RemoteConfigSync {
+  return {
+    ...dbRecord,
+    remoteVersion: dbRecord?.remoteVersion ?? null,
+    lastAttemptAt: dbRecord?.lastAttemptAt ? new Date(dbRecord.lastAttemptAt) : null,
+    lastSyncedAt: dbRecord?.lastSyncedAt ? new Date(dbRecord.lastSyncedAt) : null,
+    lastErrorMessage: dbRecord?.lastErrorMessage ?? null,
+    createdAt: dbRecord?.createdAt ? new Date(dbRecord.createdAt) : new Date(),
+    updatedAt: dbRecord?.updatedAt ? new Date(dbRecord.updatedAt) : new Date(),
   };
 }

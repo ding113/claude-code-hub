@@ -1,0 +1,89 @@
+{
+  "_comment": "Pricing page translations for Russian",
+
+  "page": {
+    "title": "Таблица цен",
+    "description": "Управление таблицей цен: удалённая синхронизация и пользовательские переопределения."
+  },
+  "sections": {
+    "table": {
+      "title": "Цены моделей",
+      "description": "Просмотр и редактирование записей цен моделей."
+    },
+    "sync": {
+      "title": "Синхронизация",
+      "description": "Синхронизируйте цены из удалённой конфигурации и управляйте переопределениями."
+    }
+  },
+  "filters": {
+    "searchPlaceholder": "Поиск по имени модели...",
+    "sourceLabel": "Источник",
+    "sourceAll": "Все источники",
+    "overridesOnly": "Только переопределения",
+    "clear": "Сбросить фильтры"
+  },
+  "source": {
+    "remote": "Удалённый",
+    "local": "Локальный",
+    "user": "Пользователь"
+  },
+  "actions": {
+    "refresh": "Обновить",
+    "sync": "Синхронизировать",
+    "syncing": "Синхронизация...",
+    "edit": "Редактировать",
+    "createOverride": "Создать переопределение",
+    "resetOverride": "Сбросить переопределение",
+    "save": "Сохранить",
+    "saving": "Сохранение...",
+    "cancel": "Отмена",
+    "close": "Закрыть",
+    "import": "Импорт",
+    "export": "Экспорт"
+  },
+  "table": {
+    "modelName": "Модель",
+    "source": "Источник",
+    "inputPrice": "Ввод ($/M)",
+    "outputPrice": "Вывод ($/M)",
+    "updatedAt": "Обновлено",
+    "remoteVersion": "Версия удалённой конфигурации",
+    "isUserOverride": "Переопределение",
+    "actions": "Действия",
+    "loadedCount": "Загружено: {count}",
+    "loading": "Загрузка...",
+    "noMatch": "Нет подходящих моделей",
+    "noDataTitle": "Нет данных о ценах",
+    "noDataHint": "Синхронизируйте из удалённой конфигурации или создайте переопределение."
+  },
+  "editor": {
+    "title": "Редактировать цену модели",
+    "description": "Обновите поля цены модели (хранятся как JSON).",
+    "modelName": "Имя модели",
+    "source": "Источник",
+    "inputCostPerToken": "Цена ввода за 1 token (USD)",
+    "outputCostPerToken": "Цена вывода за 1 token (USD)",
+    "priceJson": "JSON цены",
+    "priceJsonPlaceholder": "например: {\"input_cost_per_token\":0.000001,\"output_cost_per_token\":0.000003}",
+    "validateJson": "Проверить JSON"
+  },
+  "tips": {
+    "unitHint": "Интерфейс показывает цены за 1M token. В хранилище значения указаны за token.",
+    "overrideHint": "Пользовательские переопределения защищены от обновлений при удалённой синхронизации."
+  },
+  "messages": {
+    "syncSuccessWithChanges": "Таблица цен обновлена: добавлено {added}, обновлено {updated}, без изменений {unchanged}",
+    "syncSuccessNoChanges": "Таблица цен актуальна, обновления не требуются",
+    "saveSuccess": "Сохранено",
+    "resetOverrideSuccess": "Переопределение сброшено",
+    "createOverrideSuccess": "Переопределение создано"
+  },
+  "errors": {
+    "loadFailed": "Не удалось загрузить таблицу цен",
+    "syncFailed": "Синхронизация не удалась: {error}",
+    "saveFailed": "Не удалось сохранить: {error}",
+    "invalidJson": "Неверный формат JSON",
+    "invalidNumber": "Неверное число",
+    "required": "Поле обязательно"
+  }
+}

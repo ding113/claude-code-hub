@@ -48,5 +48,7 @@
   "theme": "主題",
   "light": "淺色",
   "dark": "深色",
-  "system": "跟隨系統"
+  "system": "跟隨系統",
+  "switchToLegacy": "切換到舊版視圖",
+  "switchToModern": "切換到新版視圖"
 }

@@ -1,0 +1,270 @@
+{
+  "_comment": "Vendor 管理页面的中文（简体）翻译",
+
+  "page": {
+    "title": "Vendor 管理",
+    "description": "管理 Vendor、线路与密钥（Vendor → Endpoint → Key）。"
+  },
+  "sections": {
+    "vendorList": {
+      "title": "Vendor 列表",
+      "description": "管理 Vendor 基础信息与余额检查配置。"
+    },
+    "endpoints": {
+      "title": "线路",
+      "description": "配置该 Vendor 的上游线路。"
+    },
+    "keys": {
+      "title": "密钥",
+      "description": "按线路管理密钥（启用、权重、限流等）。"
+    },
+    "balance": {
+      "title": "余额",
+      "description": "配置余额检查并查看最新余额。"
+    },
+    "sync": {
+      "title": "远程同步",
+      "description": "从远程配置同步托管 Vendor。"
+    }
+  },
+  "actions": {
+    "newVendor": "新建 Vendor",
+    "newEndpoint": "新建线路",
+    "newKey": "新建密钥",
+    "edit": "编辑",
+    "delete": "删除",
+    "save": "保存",
+    "cancel": "取消",
+    "close": "关闭",
+    "refresh": "刷新",
+    "sync": "同步",
+    "syncing": "同步中...",
+    "checkBalance": "检查余额",
+    "checkingBalance": "检查中...",
+    "enable": "启用",
+    "disable": "禁用",
+    "expandAll": "展开全部",
+    "collapseAll": "折叠全部"
+  },
+  "category": {
+    "label": "分类",
+    "placeholder": "选择分类",
+    "options": {
+      "official": "官方",
+      "relay": "中转",
+      "self_hosted": "自托管"
+    }
+  },
+  "apiFormat": {
+    "label": "API 格式",
+    "placeholder": "选择 API 格式",
+    "options": {
+      "claude": "Claude",
+      "codex": "Codex",
+      "gemini": "Gemini"
+    }
+  },
+  "status": {
+    "enabled": "启用",
+    "disabled": "禁用",
+    "managed": "托管",
+    "unmanaged": "本地",
+    "userOverride": "用户覆写"
+  },
+  "form": {
+    "vendor": {
+      "slug": {
+        "label": "Slug",
+        "placeholder": "例如: anthropic",
+        "help": "URL 友好标识，必须唯一。"
+      },
+      "name": {
+        "label": "名称",
+        "placeholder": "例如: Anthropic"
+      },
+      "description": {
+        "label": "描述",
+        "placeholder": "可选"
+      },
+      "tags": {
+        "label": "标签",
+        "placeholder": "例如: claude, gpt",
+        "help": "用逗号分隔，用于筛选与分组。"
+      },
+      "websiteUrl": {
+        "label": "官网地址",
+        "placeholder": "https://example.com"
+      },
+      "faviconUrl": {
+        "label": "Favicon 地址",
+        "placeholder": "https://example.com/favicon.ico"
+      },
+      "isEnabled": {
+        "label": "启用"
+      },
+      "isManaged": {
+        "label": "托管",
+        "help": "托管数据可能会被远程同步覆盖。"
+      }
+    },
+    "endpoint": {
+      "name": {
+        "label": "名称",
+        "placeholder": "Official API"
+      },
+      "url": {
+        "label": "基础 URL",
+        "placeholder": "https://api.example.com"
+      },
+      "priority": {
+        "label": "优先级",
+        "help": "数值越小优先级越高。"
+      },
+      "isEnabled": {
+        "label": "启用"
+      },
+      "healthCheckEnabled": {
+        "label": "启用健康检查"
+      },
+      "healthCheckEndpoint": {
+        "label": "健康检查路径",
+        "placeholder": "/v1/models"
+      },
+      "healthCheckIntervalSeconds": {
+        "label": "检查间隔（秒）",
+        "placeholder": "60"
+      },
+      "healthCheckTimeoutMs": {
+        "label": "超时（毫秒）",
+        "placeholder": "5000"
+      }
+    },
+    "key": {
+      "endpointId": {
+        "label": "线路",
+        "placeholder": "选择线路"
+      },
+      "name": {
+        "label": "名称",
+        "placeholder": "默认密钥"
+      },
+      "key": {
+        "label": "API 密钥",
+        "placeholder": "sk-...",
+        "help": "留空则不更改。"
+      },
+      "url": {
+        "label": "API 地址",
+        "placeholder": "默认继承线路 URL"
+      },
+      "providerType": {
+        "label": "类型",
+        "placeholder": "选择类型"
+      },
+      "groupTag": {
+        "label": "分组",
+        "placeholder": "例如: premium"
+      },
+      "priority": {
+        "label": "优先级"
+      },
+      "weight": {
+        "label": "权重"
+      },
+      "costMultiplier": {
+        "label": "成本倍数"
+      },
+      "isEnabled": {
+        "label": "启用"
+      },
+      "isUserOverride": {
+        "label": "用户覆写",
+        "help": "用户覆写不会被远程同步更新。"
+      }
+    },
+    "balanceCheck": {
+      "enabled": {
+        "label": "启用余额检查"
+      },
+      "endpoint": {
+        "label": "余额接口路径",
+        "placeholder": "/v1/usage"
+      },
+      "jsonpath": {
+        "label": "余额 JSONPath",
+        "placeholder": "$.remaining_credits",
+        "help": "需要从 JSON 响应中提取数值。"
+      },
+      "intervalSeconds": {
+        "label": "检查间隔（秒）",
+        "placeholder": "3600"
+      },
+      "lowThresholdUsd": {
+        "label": "低余额阈值（USD）",
+        "placeholder": "10"
+      }
+    }
+  },
+  "table": {
+    "vendors": {
+      "name": "名称",
+      "slug": "Slug",
+      "category": "分类",
+      "tags": "标签",
+      "managed": "托管",
+      "enabled": "状态",
+      "updatedAt": "更新时间",
+      "actions": "操作"
+    },
+    "endpoints": {
+      "name": "名称",
+      "url": "基础 URL",
+      "apiFormat": "API 格式",
+      "priority": "优先级",
+      "latencyMs": "延迟（ms）",
+      "health": "健康",
+      "enabled": "状态",
+      "updatedAt": "更新时间",
+      "actions": "操作"
+    },
+    "keys": {
+      "name": "名称",
+      "endpoint": "线路",
+      "providerType": "类型",
+      "groupTag": "分组",
+      "priority": "优先级",
+      "weight": "权重",
+      "balance": "余额（USD）",
+      "enabled": "状态",
+      "updatedAt": "更新时间",
+      "actions": "操作"
+    },
+    "balanceChecks": {
+      "checkedAt": "检查时间",
+      "balanceUsd": "余额（USD）",
+      "statusCode": "状态码",
+      "errorMessage": "错误"
+    }
+  },
+  "tips": {
+    "managedNote": "托管 Vendor 来自远程配置，同步后本地修改可能会被覆盖。",
+    "userOverrideNote": "用户覆写密钥会被保护，不会被远程更新覆盖。"
+  },
+  "messages": {
+    "createSuccess": "创建成功",
+    "updateSuccess": "保存成功",
+    "deleteSuccess": "删除成功",
+    "syncSuccess": "同步完成",
+    "balanceCheckSuccess": "余额检查完成"
+  },
+  "errors": {
+    "loadFailed": "加载 Vendor 失败",
+    "saveFailed": "保存失败",
+    "deleteFailed": "删除失败",
+    "syncFailed": "同步失败：{error}",
+    "balanceCheckFailed": "余额检查失败：{error}",
+    "required": "此字段不能为空",
+    "invalidUrl": "请输入有效的 URL",
+    "invalidJsonpath": "JSONPath 表达式无效"
+  }
+}

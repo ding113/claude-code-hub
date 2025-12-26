@@ -1,0 +1,270 @@
+{
+  "_comment": "Vendor 管理頁面的中文（繁體）翻譯",
+
+  "page": {
+    "title": "Vendor 管理",
+    "description": "管理 Vendor、線路與密鑰（Vendor → Endpoint → Key）。"
+  },
+  "sections": {
+    "vendorList": {
+      "title": "Vendor 列表",
+      "description": "管理 Vendor 基礎資訊與餘額檢查設定。"
+    },
+    "endpoints": {
+      "title": "線路",
+      "description": "設定此 Vendor 的上游線路。"
+    },
+    "keys": {
+      "title": "密鑰",
+      "description": "依線路管理密鑰（啟用、權重、限流等）。"
+    },
+    "balance": {
+      "title": "餘額",
+      "description": "設定餘額檢查並查看最新餘額。"
+    },
+    "sync": {
+      "title": "遠端同步",
+      "description": "從遠端設定同步托管 Vendor。"
+    }
+  },
+  "actions": {
+    "newVendor": "新增 Vendor",
+    "newEndpoint": "新增線路",
+    "newKey": "新增密鑰",
+    "edit": "編輯",
+    "delete": "刪除",
+    "save": "儲存",
+    "cancel": "取消",
+    "close": "關閉",
+    "refresh": "重新整理",
+    "sync": "同步",
+    "syncing": "同步中...",
+    "checkBalance": "檢查餘額",
+    "checkingBalance": "檢查中...",
+    "enable": "啟用",
+    "disable": "停用",
+    "expandAll": "全部展開",
+    "collapseAll": "全部摺疊"
+  },
+  "category": {
+    "label": "分類",
+    "placeholder": "選擇分類",
+    "options": {
+      "official": "官方",
+      "relay": "中轉",
+      "self_hosted": "自託管"
+    }
+  },
+  "apiFormat": {
+    "label": "API 格式",
+    "placeholder": "選擇 API 格式",
+    "options": {
+      "claude": "Claude",
+      "codex": "Codex",
+      "gemini": "Gemini"
+    }
+  },
+  "status": {
+    "enabled": "啟用",
+    "disabled": "停用",
+    "managed": "托管",
+    "unmanaged": "本地",
+    "userOverride": "使用者覆寫"
+  },
+  "form": {
+    "vendor": {
+      "slug": {
+        "label": "Slug",
+        "placeholder": "例如: anthropic",
+        "help": "URL 友善識別，必須唯一。"
+      },
+      "name": {
+        "label": "名稱",
+        "placeholder": "例如: Anthropic"
+      },
+      "description": {
+        "label": "描述",
+        "placeholder": "可選"
+      },
+      "tags": {
+        "label": "標籤",
+        "placeholder": "例如: claude, gpt",
+        "help": "以逗號分隔，用於篩選與分組。"
+      },
+      "websiteUrl": {
+        "label": "官網地址",
+        "placeholder": "https://example.com"
+      },
+      "faviconUrl": {
+        "label": "Favicon 地址",
+        "placeholder": "https://example.com/favicon.ico"
+      },
+      "isEnabled": {
+        "label": "啟用"
+      },
+      "isManaged": {
+        "label": "托管",
+        "help": "托管資料可能會被遠端同步覆寫。"
+      }
+    },
+    "endpoint": {
+      "name": {
+        "label": "名稱",
+        "placeholder": "Official API"
+      },
+      "url": {
+        "label": "基礎 URL",
+        "placeholder": "https://api.example.com"
+      },
+      "priority": {
+        "label": "優先級",
+        "help": "數值越小優先級越高。"
+      },
+      "isEnabled": {
+        "label": "啟用"
+      },
+      "healthCheckEnabled": {
+        "label": "啟用健康檢查"
+      },
+      "healthCheckEndpoint": {
+        "label": "健康檢查路徑",
+        "placeholder": "/v1/models"
+      },
+      "healthCheckIntervalSeconds": {
+        "label": "檢查間隔（秒）",
+        "placeholder": "60"
+      },
+      "healthCheckTimeoutMs": {
+        "label": "逾時（毫秒）",
+        "placeholder": "5000"
+      }
+    },
+    "key": {
+      "endpointId": {
+        "label": "線路",
+        "placeholder": "選擇線路"
+      },
+      "name": {
+        "label": "名稱",
+        "placeholder": "預設密鑰"
+      },
+      "key": {
+        "label": "API 密鑰",
+        "placeholder": "sk-...",
+        "help": "留空則不變更。"
+      },
+      "url": {
+        "label": "API 地址",
+        "placeholder": "預設繼承線路 URL"
+      },
+      "providerType": {
+        "label": "類型",
+        "placeholder": "選擇類型"
+      },
+      "groupTag": {
+        "label": "分組",
+        "placeholder": "例如: premium"
+      },
+      "priority": {
+        "label": "優先級"
+      },
+      "weight": {
+        "label": "權重"
+      },
+      "costMultiplier": {
+        "label": "成本倍數"
+      },
+      "isEnabled": {
+        "label": "啟用"
+      },
+      "isUserOverride": {
+        "label": "使用者覆寫",
+        "help": "使用者覆寫不會被遠端同步更新。"
+      }
+    },
+    "balanceCheck": {
+      "enabled": {
+        "label": "啟用餘額檢查"
+      },
+      "endpoint": {
+        "label": "餘額介面路徑",
+        "placeholder": "/v1/usage"
+      },
+      "jsonpath": {
+        "label": "餘額 JSONPath",
+        "placeholder": "$.remaining_credits",
+        "help": "需要從 JSON 回應中擷取數值。"
+      },
+      "intervalSeconds": {
+        "label": "檢查間隔（秒）",
+        "placeholder": "3600"
+      },
+      "lowThresholdUsd": {
+        "label": "低餘額閾值（USD）",
+        "placeholder": "10"
+      }
+    }
+  },
+  "table": {
+    "vendors": {
+      "name": "名稱",
+      "slug": "Slug",
+      "category": "分類",
+      "tags": "標籤",
+      "managed": "托管",
+      "enabled": "狀態",
+      "updatedAt": "更新時間",
+      "actions": "操作"
+    },
+    "endpoints": {
+      "name": "名稱",
+      "url": "基礎 URL",
+      "apiFormat": "API 格式",
+      "priority": "優先級",
+      "latencyMs": "延遲（ms）",
+      "health": "健康",
+      "enabled": "狀態",
+      "updatedAt": "更新時間",
+      "actions": "操作"
+    },
+    "keys": {
+      "name": "名稱",
+      "endpoint": "線路",
+      "providerType": "類型",
+      "groupTag": "分組",
+      "priority": "優先級",
+      "weight": "權重",
+      "balance": "餘額（USD）",
+      "enabled": "狀態",
+      "updatedAt": "更新時間",
+      "actions": "操作"
+    },
+    "balanceChecks": {
+      "checkedAt": "檢查時間",
+      "balanceUsd": "餘額（USD）",
+      "statusCode": "狀態碼",
+      "errorMessage": "錯誤"
+    }
+  },
+  "tips": {
+    "managedNote": "托管 Vendor 來自遠端設定，同步後本地修改可能會被覆寫。",
+    "userOverrideNote": "使用者覆寫密鑰會被保護，不會被遠端更新覆寫。"
+  },
+  "messages": {
+    "createSuccess": "建立成功",
+    "updateSuccess": "儲存成功",
+    "deleteSuccess": "刪除成功",
+    "syncSuccess": "同步完成",
+    "balanceCheckSuccess": "餘額檢查完成"
+  },
+  "errors": {
+    "loadFailed": "載入 Vendor 失敗",
+    "saveFailed": "儲存失敗",
+    "deleteFailed": "刪除失敗",
+    "syncFailed": "同步失敗：{error}",
+    "balanceCheckFailed": "餘額檢查失敗：{error}",
+    "required": "此欄位必填",
+    "invalidUrl": "請輸入有效的 URL",
+    "invalidJsonpath": "JSONPath 表達式無效"
+  }
+}

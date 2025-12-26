@@ -1,0 +1,89 @@
+{
+  "_comment": "价格表页面翻译（简体中文）",
+
+  "page": {
+    "title": "价格表",
+    "description": "管理价格表：支持远程同步与用户覆写。"
+  },
+  "sections": {
+    "table": {
+      "title": "模型价格",
+      "description": "查看和编辑模型价格记录。"
+    },
+    "sync": {
+      "title": "同步",
+      "description": "从远程配置同步价格，并管理本地覆写。"
+    }
+  },
+  "filters": {
+    "searchPlaceholder": "搜索模型名称...",
+    "sourceLabel": "来源",
+    "sourceAll": "全部来源",
+    "overridesOnly": "仅覆写",
+    "clear": "清除筛选"
+  },
+  "source": {
+    "remote": "远程",
+    "local": "本地",
+    "user": "用户"
+  },
+  "actions": {
+    "refresh": "刷新",
+    "sync": "同步",
+    "syncing": "同步中...",
+    "edit": "编辑",
+    "createOverride": "新建覆写",
+    "resetOverride": "重置覆写",
+    "save": "保存",
+    "saving": "保存中...",
+    "cancel": "取消",
+    "close": "关闭",
+    "import": "导入",
+    "export": "导出"
+  },
+  "table": {
+    "modelName": "模型",
+    "source": "来源",
+    "inputPrice": "输入 ($/M)",
+    "outputPrice": "输出 ($/M)",
+    "updatedAt": "更新时间",
+    "remoteVersion": "远程版本",
+    "isUserOverride": "覆写",
+    "actions": "操作",
+    "loadedCount": "已加载 {count} 条",
+    "loading": "加载中...",
+    "noMatch": "未找到匹配模型",
+    "noDataTitle": "暂无价格数据",
+    "noDataHint": "可先从远程同步或创建覆写。"
+  },
+  "editor": {
+    "title": "编辑模型价格",
+    "description": "更新模型价格字段（JSON 存储）。",
+    "modelName": "模型名称",
+    "source": "来源",
+    "inputCostPerToken": "输入单 token 价格（USD）",
+    "outputCostPerToken": "输出单 token 价格（USD）",
+    "priceJson": "价格 JSON",
+    "priceJsonPlaceholder": "例如: {\"input_cost_per_token\":0.000001,\"output_cost_per_token\":0.000003}",
+    "validateJson": "校验 JSON"
+  },
+  "tips": {
+    "unitHint": "界面按每百万 token 显示价格；存储值为每 token。",
+    "overrideHint": "用户覆写会被保护，不会被远程同步覆盖。"
+  },
+  "messages": {
+    "syncSuccessWithChanges": "价格表更新完成：新增 {added}，更新 {updated}，无变化 {unchanged}",
+    "syncSuccessNoChanges": "价格表已是最新，无需更新",
+    "saveSuccess": "保存成功",
+    "resetOverrideSuccess": "覆写已重置",
+    "createOverrideSuccess": "覆写已创建"
+  },
+  "errors": {
+    "loadFailed": "加载价格表失败",
+    "syncFailed": "同步失败：{error}",
+    "saveFailed": "保存失败：{error}",
+    "invalidJson": "JSON 格式无效",
+    "invalidNumber": "数值格式无效",
+    "required": "此字段不能为空"
+  }
+}

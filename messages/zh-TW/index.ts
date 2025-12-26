@@ -10,12 +10,14 @@ import myUsage from "./myUsage.json";
 import notifications from "./notifications.json";
 import providerChain from "./provider-chain.json";
 import providers from "./providers.json";
+import pricesV2 from "./prices-v2.json";
 import quota from "./quota.json";
 import settings from "./settings.json";
 import ui from "./ui.json";
 import usage from "./usage.json";
 import users from "./users.json";
 import validation from "./validation.json";
+import vendors from "./vendors.json";
 
 export default {
   auth,
@@ -28,6 +30,7 @@ export default {
   notifications,
   "provider-chain": providerChain,
   providers,
+  "prices-v2": pricesV2,
   quota,
   myUsage,
   settings,
@@ -35,5 +38,6 @@ export default {
   usage,
   users,
   validation,
+  vendors,
   internal,
 };

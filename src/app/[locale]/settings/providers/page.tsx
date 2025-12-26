@@ -2,6 +2,7 @@ import { BarChart3 } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 import { Section } from "@/components/section";
 import { Button } from "@/components/ui/button";
+import { ViewSwitcher } from "@/components/view-switcher";
 import { Link } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
 import { getEnvConfig } from "@/lib/config/env.schema";
@@ -21,7 +22,10 @@ export default async function SettingsProvidersPage() {
 
   return (
     <>
-      <SettingsPageHeader title={t("providers.title")} description={t("providers.description")} />
+      <div className="flex items-start justify-between gap-4">
+        <SettingsPageHeader title={t("providers.title")} description={t("providers.description")} />
+        <ViewSwitcher legacyPath="/settings/providers" modernPath="/settings/vendors" />
+      </div>
 
       <Section
         title={t("providers.section.title")}

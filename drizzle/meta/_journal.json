@@ -288,6 +288,13 @@
       "when": 1766509746306,
       "tag": "0040_bored_venus",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1766670483056,
+      "tag": "0041_vendor_architecture",
+      "breakpoints": true
     }
   ]
 }

@@ -48,5 +48,7 @@
   "theme": "テーマ",
   "light": "ライト",
   "dark": "ダーク",
-  "system": "システム設定"
+  "system": "システム設定",
+  "switchToLegacy": "従来の表示に切り替え",
+  "switchToModern": "新しい表示に切り替え"
 }

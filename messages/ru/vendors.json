@@ -1,0 +1,270 @@
+{
+  "_comment": "Vendor management translations for Russian",
+
+  "page": {
+    "title": "Вендоры",
+    "description": "Управление вендорами, эндпоинтами и ключами (Vendor → Endpoint → Key)."
+  },
+  "sections": {
+    "vendorList": {
+      "title": "Список вендоров",
+      "description": "Управление метаданными вендора и настройками проверки баланса."
+    },
+    "endpoints": {
+      "title": "Эндпоинты",
+      "description": "Настройка апстрим-эндпоинтов для этого вендора."
+    },
+    "keys": {
+      "title": "Ключи",
+      "description": "Управление ключами для каждого эндпоинта (включение, вес, лимиты)."
+    },
+    "balance": {
+      "title": "Баланс",
+      "description": "Настройка проверки баланса и просмотр последних значений."
+    },
+    "sync": {
+      "title": "Удалённая синхронизация",
+      "description": "Синхронизация управляемых вендоров из удалённой конфигурации."
+    }
+  },
+  "actions": {
+    "newVendor": "Новый вендор",
+    "newEndpoint": "Новый эндпоинт",
+    "newKey": "Новый ключ",
+    "edit": "Редактировать",
+    "delete": "Удалить",
+    "save": "Сохранить",
+    "cancel": "Отмена",
+    "close": "Закрыть",
+    "refresh": "Обновить",
+    "sync": "Синхронизировать",
+    "syncing": "Синхронизация...",
+    "checkBalance": "Проверить баланс",
+    "checkingBalance": "Проверка...",
+    "enable": "Включить",
+    "disable": "Отключить",
+    "expandAll": "Развернуть всё",
+    "collapseAll": "Свернуть всё"
+  },
+  "category": {
+    "label": "Категория",
+    "placeholder": "Выберите категорию",
+    "options": {
+      "official": "Официальный",
+      "relay": "Релей",
+      "self_hosted": "Самостоятельный хостинг"
+    }
+  },
+  "apiFormat": {
+    "label": "Формат API",
+    "placeholder": "Выберите формат API",
+    "options": {
+      "claude": "Claude",
+      "codex": "Codex",
+      "gemini": "Gemini"
+    }
+  },
+  "status": {
+    "enabled": "Включено",
+    "disabled": "Отключено",
+    "managed": "Управляемый",
+    "unmanaged": "Локальный",
+    "userOverride": "Переопределено пользователем"
+  },
+  "form": {
+    "vendor": {
+      "slug": {
+        "label": "Slug",
+        "placeholder": "например: anthropic",
+        "help": "Идентификатор для URL. Должен быть уникальным."
+      },
+      "name": {
+        "label": "Имя",
+        "placeholder": "например: Anthropic"
+      },
+      "description": {
+        "label": "Описание",
+        "placeholder": "Необязательно"
+      },
+      "tags": {
+        "label": "Теги",
+        "placeholder": "например: claude, gpt",
+        "help": "Теги через запятую для фильтрации и группировки."
+      },
+      "websiteUrl": {
+        "label": "URL сайта",
+        "placeholder": "https://example.com"
+      },
+      "faviconUrl": {
+        "label": "URL favicon",
+        "placeholder": "https://example.com/favicon.ico"
+      },
+      "isEnabled": {
+        "label": "Включено"
+      },
+      "isManaged": {
+        "label": "Управляемый",
+        "help": "Управляемые записи могут быть перезаписаны при удалённой синхронизации."
+      }
+    },
+    "endpoint": {
+      "name": {
+        "label": "Имя",
+        "placeholder": "Official API"
+      },
+      "url": {
+        "label": "Базовый URL",
+        "placeholder": "https://api.example.com"
+      },
+      "priority": {
+        "label": "Приоритет",
+        "help": "Меньшее значение означает более высокий приоритет."
+      },
+      "isEnabled": {
+        "label": "Включено"
+      },
+      "healthCheckEnabled": {
+        "label": "Включить проверку здоровья"
+      },
+      "healthCheckEndpoint": {
+        "label": "Путь проверки",
+        "placeholder": "/v1/models"
+      },
+      "healthCheckIntervalSeconds": {
+        "label": "Интервал (сек.)",
+        "placeholder": "60"
+      },
+      "healthCheckTimeoutMs": {
+        "label": "Таймаут (мс)",
+        "placeholder": "5000"
+      }
+    },
+    "key": {
+      "endpointId": {
+        "label": "Эндпоинт",
+        "placeholder": "Выберите эндпоинт"
+      },
+      "name": {
+        "label": "Имя",
+        "placeholder": "Ключ по умолчанию"
+      },
+      "key": {
+        "label": "API ключ",
+        "placeholder": "sk-...",
+        "help": "Оставьте пустым, чтобы не менять."
+      },
+      "url": {
+        "label": "API URL",
+        "placeholder": "По умолчанию наследуется от эндпоинта"
+      },
+      "providerType": {
+        "label": "Тип",
+        "placeholder": "Выберите тип"
+      },
+      "groupTag": {
+        "label": "Группа",
+        "placeholder": "например: premium"
+      },
+      "priority": {
+        "label": "Приоритет"
+      },
+      "weight": {
+        "label": "Вес"
+      },
+      "costMultiplier": {
+        "label": "Множитель стоимости"
+      },
+      "isEnabled": {
+        "label": "Включено"
+      },
+      "isUserOverride": {
+        "label": "Переопределение пользователем",
+        "help": "Переопределения пользователя не обновляются при удалённой синхронизации."
+      }
+    },
+    "balanceCheck": {
+      "enabled": {
+        "label": "Включить проверку баланса"
+      },
+      "endpoint": {
+        "label": "Путь баланса",
+        "placeholder": "/v1/usage"
+      },
+      "jsonpath": {
+        "label": "JSONPath баланса",
+        "placeholder": "$.remaining_credits",
+        "help": "Должен извлекать число из JSON ответа."
+      },
+      "intervalSeconds": {
+        "label": "Интервал (сек.)",
+        "placeholder": "3600"
+      },
+      "lowThresholdUsd": {
+        "label": "Порог низкого баланса (USD)",
+        "placeholder": "10"
+      }
+    }
+  },
+  "table": {
+    "vendors": {
+      "name": "Имя",
+      "slug": "Slug",
+      "category": "Категория",
+      "tags": "Теги",
+      "managed": "Управление",
+      "enabled": "Статус",
+      "updatedAt": "Обновлено",
+      "actions": "Действия"
+    },
+    "endpoints": {
+      "name": "Имя",
+      "url": "Базовый URL",
+      "apiFormat": "Формат API",
+      "priority": "Приоритет",
+      "latencyMs": "Задержка (мс)",
+      "health": "Здоровье",
+      "enabled": "Статус",
+      "updatedAt": "Обновлено",
+      "actions": "Действия"
+    },
+    "keys": {
+      "name": "Имя",
+      "endpoint": "Эндпоинт",
+      "providerType": "Тип",
+      "groupTag": "Группа",
+      "priority": "Приоритет",
+      "weight": "Вес",
+      "balance": "Баланс (USD)",
+      "enabled": "Статус",
+      "updatedAt": "Обновлено",
+      "actions": "Действия"
+    },
+    "balanceChecks": {
+      "checkedAt": "Время проверки",
+      "balanceUsd": "Баланс (USD)",
+      "statusCode": "Код статуса",
+      "errorMessage": "Ошибка"
+    }
+  },
+  "tips": {
+    "managedNote": "Управляемые вендоры синхронизируются из удалённой конфигурации. Локальные изменения могут быть перезаписаны.",
+    "userOverrideNote": "Ключи с переопределением пользователя защищены от удалённых обновлений."
+  },
+  "messages": {
+    "createSuccess": "Успешно создано",
+    "updateSuccess": "Успешно сохранено",
+    "deleteSuccess": "Успешно удалено",
+    "syncSuccess": "Синхронизация завершена",
+    "balanceCheckSuccess": "Проверка баланса завершена"
+  },
+  "errors": {
+    "loadFailed": "Не удалось загрузить вендоров",
+    "saveFailed": "Не удалось сохранить изменения",
+    "deleteFailed": "Не удалось удалить",
+    "syncFailed": "Синхронизация не удалась: {error}",
+    "balanceCheckFailed": "Проверка баланса не удалась: {error}",
+    "required": "Поле обязательно",
+    "invalidUrl": "Введите корректный URL",
+    "invalidJsonpath": "Некорректное выражение JSONPath"
+  }
+}

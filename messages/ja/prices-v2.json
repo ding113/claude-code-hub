@@ -1,0 +1,89 @@
+{
+  "_comment": "Pricing page translations for Japanese",
+
+  "page": {
+    "title": "価格表",
+    "description": "価格表を管理します。リモート同期とユーザー上書きをサポートします。"
+  },
+  "sections": {
+    "table": {
+      "title": "モデル価格",
+      "description": "モデル価格レコードの閲覧と編集を行います。"
+    },
+    "sync": {
+      "title": "同期",
+      "description": "リモート設定から価格を同期し、上書きを管理します。"
+    }
+  },
+  "filters": {
+    "searchPlaceholder": "モデル名を検索...",
+    "sourceLabel": "ソース",
+    "sourceAll": "すべてのソース",
+    "overridesOnly": "上書きのみ",
+    "clear": "フィルターをクリア"
+  },
+  "source": {
+    "remote": "リモート",
+    "local": "ローカル",
+    "user": "ユーザー"
+  },
+  "actions": {
+    "refresh": "更新",
+    "sync": "同期",
+    "syncing": "同期中...",
+    "edit": "編集",
+    "createOverride": "上書きを作成",
+    "resetOverride": "上書きをリセット",
+    "save": "保存",
+    "saving": "保存中...",
+    "cancel": "キャンセル",
+    "close": "閉じる",
+    "import": "インポート",
+    "export": "エクスポート"
+  },
+  "table": {
+    "modelName": "モデル",
+    "source": "ソース",
+    "inputPrice": "入力 ($/M)",
+    "outputPrice": "出力 ($/M)",
+    "updatedAt": "更新",
+    "remoteVersion": "リモート版",
+    "isUserOverride": "上書き",
+    "actions": "操作",
+    "loadedCount": "{count} 件読み込み済み",
+    "loading": "読み込み中...",
+    "noMatch": "一致するモデルが見つかりません",
+    "noDataTitle": "価格データがありません",
+    "noDataHint": "リモートから同期するか、上書きを作成してください。"
+  },
+  "editor": {
+    "title": "モデル価格を編集",
+    "description": "モデル価格フィールドを更新します（JSON として保存）。",
+    "modelName": "モデル名",
+    "source": "ソース",
+    "inputCostPerToken": "入力 1 token あたりの価格（USD）",
+    "outputCostPerToken": "出力 1 token あたりの価格（USD）",
+    "priceJson": "価格 JSON",
+    "priceJsonPlaceholder": "例: {\"input_cost_per_token\":0.000001,\"output_cost_per_token\":0.000003}",
+    "validateJson": "JSON を検証"
+  },
+  "tips": {
+    "unitHint": "画面は 100 万 token あたりの価格を表示します。保存値は token 単位です。",
+    "overrideHint": "ユーザー上書きはリモート同期の更新から保護されます。"
+  },
+  "messages": {
+    "syncSuccessWithChanges": "価格表を更新しました: 追加 {added}、更新 {updated}、変更なし {unchanged}",
+    "syncSuccessNoChanges": "価格表は最新です。更新は不要です。",
+    "saveSuccess": "保存しました",
+    "resetOverrideSuccess": "上書きをリセットしました",
+    "createOverrideSuccess": "上書きを作成しました"
+  },
+  "errors": {
+    "loadFailed": "価格表の読み込みに失敗しました",
+    "syncFailed": "同期に失敗しました: {error}",
+    "saveFailed": "保存に失敗しました: {error}",
+    "invalidJson": "JSON 形式が無効です",
+    "invalidNumber": "数値が無効です",
+    "required": "必須項目です"
+  }
+}
