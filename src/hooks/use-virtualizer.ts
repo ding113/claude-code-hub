@@ -23,10 +23,9 @@ const scheduleRerender = (rerender: React.DispatchWithoutAction) => {
   Promise.resolve().then(rerender);
 };
 
-function useVirtualizerBase<
-  TScrollElement extends Element | Window,
-  TItemElement extends Element,
->(options: VirtualizerOptions<TScrollElement, TItemElement>): Virtualizer<TScrollElement, TItemElement> {
+function useVirtualizerBase<TScrollElement extends Element | Window, TItemElement extends Element>(
+  options: VirtualizerOptions<TScrollElement, TItemElement>
+): Virtualizer<TScrollElement, TItemElement> {
   const rerender = React.useReducer(() => ({}), {})[1];
 
   const resolvedOptions: VirtualizerOptions<TScrollElement, TItemElement> = {
@@ -58,10 +57,7 @@ function useVirtualizerBase<
   return instance;
 }
 
-export function useVirtualizer<
-  TScrollElement extends Element,
-  TItemElement extends Element,
->(
+export function useVirtualizer<TScrollElement extends Element, TItemElement extends Element>(
   options: PartialKeys<
     VirtualizerOptions<TScrollElement, TItemElement>,
     "observeElementRect" | "observeElementOffset" | "scrollToFn"
@@ -78,10 +74,7 @@ export function useVirtualizer<
 export function useWindowVirtualizer<TItemElement extends Element>(
   options: PartialKeys<
     VirtualizerOptions<Window, TItemElement>,
-    | "getScrollElement"
-    | "observeElementRect"
-    | "observeElementOffset"
-    | "scrollToFn"
+    "getScrollElement" | "observeElementRect" | "observeElementOffset" | "scrollToFn"
   >
 ): Virtualizer<Window, TItemElement> {
   return useVirtualizerBase<Window, TItemElement>({
