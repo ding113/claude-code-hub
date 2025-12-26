@@ -343,7 +343,7 @@ export class ProxyResponseHandler {
           // 计算成本（复用相同逻辑）
           let costUsdStr: string | undefined;
           if (session.request.model) {
-            const priceData = await session.getCachedPriceData();
+            const priceData = await session.getCachedPriceDataByBillingSource();
             if (priceData) {
               const cost = calculateRequestCost(
                 usageMetrics,
@@ -905,7 +905,7 @@ export class ProxyResponseHandler {
         if (session.sessionId && usageForCost) {
           let costUsdStr: string | undefined;
           if (session.request.model) {
-            const priceData = await session.getCachedPriceData();
+            const priceData = await session.getCachedPriceDataByBillingSource();
             if (priceData) {
               const cost = calculateRequestCost(
                 usageForCost,
@@ -1789,7 +1789,7 @@ async function finalizeRequestStats(
   if (session.sessionId) {
     let costUsdStr: string | undefined;
     if (session.request.model) {
-      const priceData = await session.getCachedPriceData();
+      const priceData = await session.getCachedPriceDataByBillingSource();
       if (priceData) {
         const cost = calculateRequestCost(
           normalizedUsage,
@@ -1851,7 +1851,7 @@ async function trackCostToRedis(session: ProxySession, usage: UsageMetrics | nul
   if (!modelName) return;
 
   // 计算成本（应用倍率）- 使用 session 缓存避免重复查询
-  const priceData = await session.getCachedPriceData();
+  const priceData = await session.getCachedPriceDataByBillingSource();
   if (!priceData) return;
 
   const cost = calculateRequestCost(
