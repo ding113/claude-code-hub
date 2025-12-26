@@ -332,3 +332,92 @@ describe("ProxySession.getCachedPriceDataByBillingSource", () => {
     expect(findLatestPriceByModel).not.toHaveBeenCalled();
   });
 });
+
+function createSessionForHeaders(headers: Headers): ProxySession {
+  // 使用 ProxySession 的内部构造方法创建测试实例
+  const testSession = ProxySession.fromContext as any;
+  const session = Object.create(ProxySession.prototype);
+
+  Object.assign(session, {
+    startTime: Date.now(),
+    method: "POST",
+    requestUrl: new URL("https://example.com/v1/messages"),
+    headers,
+    originalHeaders: new Headers(headers), // 同步更新 originalHeaders
+    headerLog: JSON.stringify(Object.fromEntries(headers.entries())),
+    request: { message: {}, log: "" },
+    userAgent: headers.get("user-agent"),
+    context: null,
+    clientAbortSignal: null,
+    userName: "test-user",
+    authState: null,
+    provider: null,
+    messageContext: null,
+    sessionId: null,
+    requestSequence: 1,
+    originalFormat: "claude",
+    providerType: null,
+    originalModelName: null,
+    originalUrlPathname: null,
+    providerChain: [],
+    cacheTtlResolved: null,
+    context1mApplied: false,
+    cachedPriceData: undefined,
+    cachedBillingModelSource: undefined,
+  });
+
+  return session;
+}
+
+describe("ProxySession - isHeaderModified", () => {
+  it("应该检测到被修改的 header", () => {
+    const headers = new Headers([["user-agent", "original"]]);
+    const session = createSessionForHeaders(headers);
+
+    session.headers.set("user-agent", "modified");
+
+    expect(session.isHeaderModified("user-agent")).toBe(true);
+  });
+
+  it("应该检测未修改的 header", () => {
+    const headers = new Headers([["user-agent", "same"]]);
+    const session = createSessionForHeaders(headers);
+
+    expect(session.isHeaderModified("user-agent")).toBe(false);
+  });
+
+  it("应该处理不存在的 header", () => {
+    const headers = new Headers();
+    const session = createSessionForHeaders(headers);
+
+    expect(session.isHeaderModified("x-custom")).toBe(false);
+  });
+
+  it("应该检测到被删除的 header", () => {
+    const headers = new Headers([["user-agent", "original"]]);
+    const session = createSessionForHeaders(headers);
+
+    session.headers.delete("user-agent");
+
+    expect(session.isHeaderModified("user-agent")).toBe(true);
+  });
+
+  it("应该检测到新增的 header", () => {
+    const headers = new Headers();
+    const session = createSessionForHeaders(headers);
+
+    session.headers.set("x-new-header", "new-value");
+
+    expect(session.isHeaderModified("x-new-header")).toBe(true);
+  });
+
+  it("应该区分空字符串和 null", () => {
+    const headers = new Headers([["x-test", ""]]);
+    const session = createSessionForHeaders(headers);
+
+    session.headers.delete("x-test");
+
+    expect(session.isHeaderModified("x-test")).toBe(true); // "" -> null
+    expect(session.headers.get("x-test")).toBeNull();
+  });
+});

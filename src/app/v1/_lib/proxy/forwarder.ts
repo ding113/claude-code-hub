@@ -1847,13 +1847,31 @@ export class ProxyForwarder {
       delete overrides["x-api-key"];
     }
 
-    // Codex 特殊处理：若存在原始 User-Agent 则透传，否则兜底设置
+    // Codex 特殊处理：优先使用过滤器修改的 User-Agent
     if (provider.providerType === "codex") {
+      const filteredUA = session.headers.get("user-agent");
       const originalUA = session.userAgent;
-      overrides["user-agent"] =
-        originalUA || "codex_cli_rs/0.55.0 (Mac OS 26.1.0; arm64) vscode/2.0.64";
-      logger.debug("ProxyForwarder: Codex provider detected, setting User-Agent", {
-        originalUA: session.userAgent ? "provided" : "fallback",
+      const wasModified = session.isHeaderModified("user-agent");
+
+      // 优先级说明：
+      // 1. 如果过滤器修改了 user-agent（wasModified=true），使用过滤后的值
+      // 2. 如果过滤器删除了 user-agent（wasModified=true 但 filteredUA=null），回退到原始 UA
+      // 3. 如果原始 UA 也不存在，使用硬编码兜底值
+      // 注意：使用 ?? 而非 || 以确保空字符串 UA 能被正确保留
+      let resolvedUA: string;
+      if (wasModified) {
+        resolvedUA =
+          filteredUA ?? originalUA ?? "codex_cli_rs/0.55.0 (Mac OS 26.1.0; arm64) vscode/2.0.64";
+      } else {
+        resolvedUA = originalUA ?? "codex_cli_rs/0.55.0 (Mac OS 26.1.0; arm64) vscode/2.0.64";
+      }
+      overrides["user-agent"] = resolvedUA;
+
+      logger.debug("ProxyForwarder: Codex provider User-Agent resolution", {
+        wasModified,
+        hasFilteredUA: !!filteredUA,
+        hasOriginalUA: !!originalUA,
+        finalValueLength: resolvedUA.length,
       });
     }
 
@@ -2050,7 +2068,7 @@ export class ProxyForwarder {
       // 注意：使用前面已添加错误处理器的 rawBody
       rawBody.pipe(gunzip);
 
-      // 将 Gunzip 流转换为 Web ReadableStream（容错版本）
+      // 将 Gunzip 流转换为 Web 流（容错版本）
       bodyStream = ProxyForwarder.nodeStreamToWebStreamSafe(gunzip, providerId, providerName);
 
       // 移�� content-encoding 和 content-length（避免下游再解压或使用错误长度）

@@ -50,6 +50,8 @@ export class ProxySession {
   readonly method: string;
   requestUrl: URL; // 非 readonly，允许模型重定向修改 Gemini URL 路径
   readonly headers: Headers;
+  // 原始 headers 的副本，用于检测过滤器修改
+  private readonly originalHeaders: Headers;
   readonly headerLog: string;
   readonly request: ProxyRequestPayload;
   readonly userAgent: string | null; // User-Agent（用于客户端类型分析）
@@ -121,6 +123,7 @@ export class ProxySession {
     this.method = init.method;
     this.requestUrl = init.requestUrl;
     this.headers = init.headers;
+    this.originalHeaders = new Headers(init.headers); // 原始 headers 的副本，用于检测过滤器修改
     this.headerLog = init.headerLog;
     this.request = init.request;
     this.userAgent = init.userAgent;
@@ -203,6 +206,23 @@ export class ProxySession {
       context: c,
       clientAbortSignal,
     });
+  }
+
+  /**
+   * 检查 header 是否被过滤器修改过。
+   *
+   * 通过对比原始值和当前值判断。以下情况均视为"已修改"：
+   * - 值被修改
+   * - header 被删除
+   * - header 从不存在变为存在
+   *
+   * @param key - header 名称（不区分大小写）
+   * @returns true 表示 header 被修改过，false 表示未修改
+   */
+  isHeaderModified(key: string): boolean {
+    const original = this.originalHeaders.get(key);
+    const current = this.headers.get(key);
+    return original !== current;
   }
 
   setAuthState(state: AuthState): void {
