@@ -1,7 +1,7 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { useVirtualizer } from "@/hooks/use-virtualizer";
 import { Loader2, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -93,6 +93,10 @@ export interface UserManagementTableProps {
 
 const USER_ROW_HEIGHT = 52;
 const KEY_ROW_HEIGHT = 40;
+const KEY_ROW_BORDER_HEIGHT = 1;
+const EXPANDED_SECTION_PADDING = 24; // py-3 * 2
+const KEY_LIST_BORDER_HEIGHT = 2; // top + bottom border
+const EMPTY_KEYS_HEIGHT = 68; // py-6 * 2 + line height
 const MIN_TABLE_WIDTH_CLASS = "min-w-[980px]";
 const GRID_COLUMNS_CLASS = "grid-cols-[minmax(260px,1fr)_120px_repeat(6,90px)_80px]";
 
@@ -213,7 +217,18 @@ export function UserManagementTable({
       if (!user) return USER_ROW_HEIGHT;
       const expanded = showMultiSelect ? true : (expandedUsers.get(user.id) ?? false);
       if (!expanded) return USER_ROW_HEIGHT;
-      return USER_ROW_HEIGHT + (user.keys?.length ?? 0) * KEY_ROW_HEIGHT;
+      const keyCount = user.keys?.length ?? 0;
+      if (keyCount === 0) {
+        return USER_ROW_HEIGHT + EXPANDED_SECTION_PADDING + EMPTY_KEYS_HEIGHT;
+      }
+      const keyBorders = Math.max(0, keyCount - 1) * KEY_ROW_BORDER_HEIGHT;
+      return (
+        USER_ROW_HEIGHT +
+        EXPANDED_SECTION_PADDING +
+        KEY_LIST_BORDER_HEIGHT +
+        keyCount * KEY_ROW_HEIGHT +
+        keyBorders
+      );
     },
     [users, showMultiSelect, expandedUsers]
   );
@@ -246,7 +261,8 @@ export function UserManagementTable({
   useEffect(() => {
     if (!scrollResetKey) return;
     parentRef.current?.scrollTo({ top: 0 });
-  }, [scrollResetKey]);
+    rowVirtualizer.measure();
+  }, [scrollResetKey, rowVirtualizer]);
 
   const quickRenewTranslations = useMemo(() => {
     if (translations.quickRenew) return translations.quickRenew;

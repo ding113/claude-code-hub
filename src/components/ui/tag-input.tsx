@@ -111,8 +111,8 @@ export function TagInput({
     });
   }, [normalizedSuggestions, inputValue, value, allowDuplicates]);
 
-  // 默认验证函数
-  const defaultValidateTag = React.useCallback(
+  // 基础验证函数（不包含默认格式校验）
+  const validateBaseTag = React.useCallback(
     (tag: string, currentTags: string[]): boolean => {
       if (!tag || tag.trim().length === 0) {
         onInvalidTag?.(tag, "empty");
@@ -121,11 +121,6 @@ export function TagInput({
 
       if (tag.length > maxTagLength) {
         onInvalidTag?.(tag, "too_long");
-        return false;
-      }
-
-      if (!DEFAULT_TAG_PATTERN.test(tag)) {
-        onInvalidTag?.(tag, "invalid_format");
         return false;
       }
 
@@ -146,10 +141,15 @@ export function TagInput({
 
   const handleValidateTag = React.useCallback(
     (tag: string, currentTags: string[]): boolean => {
+      if (!validateBaseTag(tag, currentTags)) return false;
       if (validateTag) return validateTag(tag);
-      return defaultValidateTag(tag, currentTags);
+      if (!DEFAULT_TAG_PATTERN.test(tag)) {
+        onInvalidTag?.(tag, "invalid_format");
+        return false;
+      }
+      return true;
     },
-    [validateTag, defaultValidateTag]
+    [validateBaseTag, validateTag, onInvalidTag]
   );
 
   const commitIfClosed = React.useCallback(() => {
@@ -314,6 +314,7 @@ export function TagInput({
   );
 
   const handleClear = React.useCallback(() => {
+    if (disabled) return;
     const nextTags: string[] = [];
     if (onClear) {
       onClear();
@@ -324,7 +325,7 @@ export function TagInput({
     setInputValue("");
     setShowSuggestions(false);
     setHighlightedIndex(-1);
-  }, [onClear, onChange, onChangeCommit]);
+  }, [disabled, onClear, onChange, onChangeCommit]);
 
   return (
     <div ref={containerRef} className="relative group">
@@ -392,7 +393,7 @@ export function TagInput({
           {...props}
         />
       </div>
-      {clearable && value.length > 0 && (
+      {clearable && value.length > 0 && !disabled && (
         <button
           type="button"
           onClick={handleClear}
