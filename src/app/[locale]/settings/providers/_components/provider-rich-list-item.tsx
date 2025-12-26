@@ -45,6 +45,7 @@ import { Switch } from "@/components/ui/switch";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
 import { copyToClipboard, isClipboardSupported } from "@/lib/utils/clipboard";
+import { getContrastTextColor, getGroupColor } from "@/lib/utils/color";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
 import type { ProviderDisplay } from "@/types/provider";
@@ -306,11 +307,21 @@ export function ProviderRichListItem({
                 ?.split(",")
                 .map((t) => t.trim())
                 .filter(Boolean)
-                .map((tag, index) => (
-                  <Badge key={`${tag}-${index}`} variant="outline" className="flex-shrink-0">
-                    {tag}
-                  </Badge>
-                ))
+                .map((tag, index) => {
+                  const bgColor = getGroupColor(tag);
+                  return (
+                    <Badge
+                      key={`${tag}-${index}`}
+                      className="flex-shrink-0 text-xs"
+                      style={{
+                        backgroundColor: bgColor,
+                        color: getContrastTextColor(bgColor),
+                      }}
+                    >
+                      {tag}
+                    </Badge>
+                  );
+                })
             ) : (
               <Badge variant="outline" className="flex-shrink-0">
                 {PROVIDER_GROUP.DEFAULT}

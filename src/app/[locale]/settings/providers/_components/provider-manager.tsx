@@ -2,7 +2,15 @@
 import { Loader2, Search, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { type ReactNode, useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import type { CurrencyCode } from "@/lib/utils/currency";
@@ -43,11 +51,40 @@ export function ProviderManager({
   addDialogSlot,
 }: ProviderManagerProps) {
   const t = useTranslations("settings.providers.search");
+  const tFilter = useTranslations("settings.providers.filter");
   const tCommon = useTranslations("settings.common");
   const [typeFilter, setTypeFilter] = useState<ProviderType | "all">("all");
   const [sortBy, setSortBy] = useState<SortKey>("priority");
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
+
+  // Status and group filters
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [groupFilter, setGroupFilter] = useState<string[]>([]);
+
+  // Extract unique groups from all providers
+  const allGroups = useMemo(() => {
+    const groups = new Set<string>();
+    let hasDefaultGroup = false;
+    providers.forEach((p) => {
+      const tags = p.groupTag
+        ?.split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
+      if (!tags || tags.length === 0) {
+        hasDefaultGroup = true;
+      } else {
+        tags.forEach((g) => groups.add(g));
+      }
+    });
+
+    // Sort groups: "default" first, then alphabetically
+    const sortedGroups = Array.from(groups).sort();
+    if (hasDefaultGroup) {
+      return ["default", ...sortedGroups];
+    }
+    return sortedGroups;
+  }, [providers]);
 
   // 统一过滤逻辑：搜索 + 类型筛选 + 排序
   const filteredProviders = useMemo(() => {
@@ -70,6 +107,29 @@ export function ProviderManager({
     // 类型筛选
     if (typeFilter !== "all") {
       result = result.filter((p) => p.providerType === typeFilter);
+    }
+
+    // Filter by status
+    if (statusFilter !== "all") {
+      result = result.filter((p) => (statusFilter === "active" ? p.isEnabled : !p.isEnabled));
+    }
+
+    // Filter by groups
+    if (groupFilter.length > 0) {
+      result = result.filter((p) => {
+        const providerGroups =
+          p.groupTag
+            ?.split(",")
+            .map((t) => t.trim())
+            .filter(Boolean) || [];
+
+        // If provider has no groups and "default" is selected, include it
+        if (providerGroups.length === 0 && groupFilter.includes("default")) {
+          return true;
+        }
+
+        return groupFilter.some((g) => providerGroups.includes(g));
+      });
     }
 
     // 排序
@@ -101,7 +161,7 @@ export function ProviderManager({
           return 0;
       }
     });
-  }, [providers, debouncedSearchTerm, typeFilter, sortBy]);
+  }, [providers, debouncedSearchTerm, typeFilter, sortBy, statusFilter, groupFilter]);
 
   return (
     <div className="space-y-4">
@@ -110,6 +170,23 @@ export function ProviderManager({
       <div className="flex flex-col gap-3">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
           <ProviderTypeFilter value={typeFilter} onChange={setTypeFilter} disabled={loading} />
+
+          {/* Status filter */}
+          <Select
+            value={statusFilter}
+            onValueChange={(value) => setStatusFilter(value as "all" | "active" | "inactive")}
+            disabled={loading}
+          >
+            <SelectTrigger className="w-full sm:w-[140px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{tFilter("status.all")}</SelectItem>
+              <SelectItem value="active">{tFilter("status.active")}</SelectItem>
+              <SelectItem value="inactive">{tFilter("status.inactive")}</SelectItem>
+            </SelectContent>
+          </Select>
+
           <ProviderSortDropdown value={sortBy} onChange={setSortBy} disabled={loading} />
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -133,6 +210,38 @@ export function ProviderManager({
             )}
           </div>
         </div>
+
+        {/* Group filter */}
+        {allGroups.length > 0 && (
+          <div className="flex flex-wrap gap-2 items-center">
+            <span className="text-sm text-muted-foreground">{tFilter("groups.label")}</span>
+            <Button
+              variant={groupFilter.length === 0 ? "default" : "outline"}
+              size="sm"
+              onClick={() => setGroupFilter([])}
+              disabled={loading}
+              className="h-7"
+            >
+              {tFilter("groups.all")}
+            </Button>
+            {allGroups.map((group) => (
+              <Button
+                key={group}
+                variant={groupFilter.includes(group) ? "default" : "outline"}
+                size="sm"
+                onClick={() => {
+                  setGroupFilter((prev) =>
+                    prev.includes(group) ? prev.filter((g) => g !== group) : [...prev, group]
+                  );
+                }}
+                disabled={loading}
+                className="h-7"
+              >
+                {group}
+              </Button>
+            ))}
+          </div>
+        )}
         {/* 搜索结果提示 */}
         {debouncedSearchTerm ? (
           <p className="text-sm text-muted-foreground">

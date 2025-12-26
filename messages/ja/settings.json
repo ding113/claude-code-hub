@@ -1163,6 +1163,41 @@
             }
           },
           "hint": "ヒント: 88code や foxcode など一部の厳格な Codex 中継では公式 instructions が必要です。「自動」または「公式を強制」を選択してください。"
+        },
+        "mcpPassthrough": {
+          "title": "MCP パススルー設定",
+          "summary": {
+            "none": "無効",
+            "minimax": "Minimax",
+            "glm": "GLM",
+            "custom": "カスタム (予約)"
+          },
+          "desc": "有効にすると、MCP ツール呼び出しを指定された AI プロバイダにパススルーします（例：minimax の画像認識、Web 検索）",
+          "select": {
+            "label": "パススルータイプ",
+            "none": {
+              "label": "無効",
+              "desc": "MCP パススルーを有効にしません（デフォルト）"
+            },
+            "minimax": {
+              "label": "Minimax",
+              "desc": "minimax MCP サービスにパススルー（画像認識、Web 検索などをサポート）"
+            },
+            "glm": {
+              "label": "GLM",
+              "desc": "GLM MCP サービスにパススルー（画像分析、動画分析などをサポート）"
+            },
+            "custom": {
+              "label": "カスタム",
+              "desc": "カスタム MCP サービスにパススルー（予約、未実装）"
+            },
+            "placeholder": "パススルータイプを選択"
+          },
+          "hint": "ヒント: MCP パススルーにより、Claude Code クライアントは第三者の AI プロバイダー提供のツール機能（画像認識、Web 検索など）を使用できます",
+          "urlLabel": "MCP パススルー URL",
+          "urlPlaceholder": "https://api.minimaxi.com",
+          "urlDesc": "MCP サービスベース URL。空のままにすると、プロバイダー URL から自動的に抽出されます",
+          "urlAuto": "自動抽出: {url}"
         }
       },
       "providerTypes": {
@@ -1329,6 +1364,19 @@
       "description": "配置上游服务商的金额限流和并发限制，留空表示无限制。",
       "leaderboard": "プロバイダーランキング",
       "title": "服务商管理"
+    },
+    "addProvider": "プロバイダーを追加",
+    "filter": {
+      "status": {
+        "all": "すべてのステータス",
+        "active": "有効",
+        "inactive": "無効"
+      },
+      "groups": {
+        "label": "グループ:",
+        "all": "すべて",
+        "default": "default"
+      }
     },
     "subtitle": "プロバイダー管理",
     "subtitleDesc": "上流プロバイダーの支出制限とセッション並行制限を設定します。空のままにすると無制限です。",
