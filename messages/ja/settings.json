@@ -1607,7 +1607,10 @@
       "set": "ヘッダー設定",
       "json_path": "JSONパス置換",
       "text_replace": "テキスト置換"
-    }
+    },
+    "applyToAll": "すべてのリクエストに適用",
+    "providers": "プロバイダー",
+    "groups": "グループ"
   },
   "errorRules": {
     "nav": "エラールール",

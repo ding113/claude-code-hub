@@ -1613,7 +1613,10 @@
       "set": "設定 Header",
       "json_path": "JSON 路徑替換",
       "text_replace": "文字替換"
-    }
+    },
+    "applyToAll": "應用於所有請求",
+    "providers": "供應商",
+    "groups": "群組"
   },
   "errorRules": {
     "nav": "錯誤規則",

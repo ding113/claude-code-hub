@@ -1657,7 +1657,10 @@
       "set": "Set Header",
       "json_path": "JSON Path Replace",
       "text_replace": "Text Replace"
-    }
+    },
+    "applyToAll": "Applied to all requests",
+    "providers": "Providers",
+    "groups": "Groups"
   },
   "errorRules": {
     "nav": "Error Rules",

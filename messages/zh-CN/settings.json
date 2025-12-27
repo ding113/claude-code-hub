@@ -1334,7 +1334,10 @@
       "set": "设置 Header",
       "json_path": "JSON 路径替换",
       "text_replace": "文本替换"
-    }
+    },
+    "applyToAll": "应用于所有请求",
+    "providers": "供应商",
+    "groups": "组"
   },
   "logs": {
     "title": "日志管理",
