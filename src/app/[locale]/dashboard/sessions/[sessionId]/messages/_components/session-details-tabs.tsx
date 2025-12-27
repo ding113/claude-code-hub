@@ -1,11 +1,19 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { useMemo } from "react";
 import { CodeDisplay } from "@/components/ui/code-display";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { isSSEText } from "@/lib/utils/sse";
 
 export type SessionMessages = Record<string, unknown> | Record<string, unknown>[];
+
+function formatHeaders(headers: Record<string, string> | null): string | null {
+  if (!headers || Object.keys(headers).length === 0) return null;
+  return Object.entries(headers)
+    .map(([key, value]) => `${key}: ${value}`)
+    .join("\n");
+}
 
 interface SessionMessagesDetailsTabsProps {
   messages: SessionMessages | null;
@@ -22,11 +30,13 @@ export function SessionMessagesDetailsTabs({
 }: SessionMessagesDetailsTabsProps) {
   const t = useTranslations("dashboard.sessions");
 
-  const formatHeaders = (headers: Record<string, string>) => {
-    return Object.entries(headers)
-      .map(([key, value]) => `${key}: ${value}`)
-      .join("\n");
-  };
+  const requestBodyContent = useMemo(() => {
+    if (messages === null) return null;
+    return JSON.stringify(messages, null, 2);
+  }, [messages]);
+
+  const formattedRequestHeaders = useMemo(() => formatHeaders(requestHeaders), [requestHeaders]);
+  const formattedResponseHeaders = useMemo(() => formatHeaders(responseHeaders), [responseHeaders]);
 
   const responseLanguage = response && isSSEText(response) ? "sse" : "json";
 
@@ -48,11 +58,11 @@ export function SessionMessagesDetailsTabs({
       </TabsList>
 
       <TabsContent value="requestHeaders" data-testid="session-tab-request-headers">
-        {!requestHeaders || Object.keys(requestHeaders).length === 0 ? (
+        {formattedRequestHeaders === null ? (
           <div className="text-muted-foreground p-4">{t("details.noHeaders")}</div>
         ) : (
           <CodeDisplay
-            content={formatHeaders(requestHeaders)}
+            content={formattedRequestHeaders}
             language="text"
             fileName="request.headers"
             maxHeight="600px"
@@ -61,11 +71,11 @@ export function SessionMessagesDetailsTabs({
       </TabsContent>
 
       <TabsContent value="requestBody" data-testid="session-tab-request-body">
-        {messages === null ? (
+        {requestBodyContent === null ? (
           <div className="text-muted-foreground p-4">{t("details.noData")}</div>
         ) : (
           <CodeDisplay
-            content={JSON.stringify(messages, null, 2)}
+            content={requestBodyContent}
             language="json"
             fileName="request.json"
             maxHeight="600px"
@@ -74,11 +84,11 @@ export function SessionMessagesDetailsTabs({
       </TabsContent>
 
       <TabsContent value="responseHeaders" data-testid="session-tab-response-headers">
-        {!responseHeaders || Object.keys(responseHeaders).length === 0 ? (
+        {formattedResponseHeaders === null ? (
           <div className="text-muted-foreground p-4">{t("details.noHeaders")}</div>
         ) : (
           <CodeDisplay
-            content={formatHeaders(responseHeaders)}
+            content={formattedResponseHeaders}
             language="text"
             fileName="response.headers"
             maxHeight="600px"

@@ -91,8 +91,13 @@ export function CodeDisplay({
     const update = () => setSystemTheme(media.matches ? "dark" : "light");
     update();
 
-    media.addEventListener?.("change", update);
-    return () => media.removeEventListener?.("change", update);
+    if (media.addEventListener) {
+      media.addEventListener("change", update);
+      return () => media.removeEventListener("change", update);
+    }
+
+    media.addListener(update);
+    return () => media.removeListener(update);
   }, []);
 
   const effectiveTheme: ThemePreference = themePreference;

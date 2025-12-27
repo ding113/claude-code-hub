@@ -70,12 +70,17 @@ export function parseSSEData(sseText: string): ParsedSSEEvent[] {
  * 只认行首的 `event:` / `data:`（或前置注释行 `:`），避免 JSON 里包含 "data:" 误判。
  */
 export function isSSEText(text: string): boolean {
-  const lines = text.split("\n");
+  let start = 0;
 
-  for (const rawLine of lines) {
-    const line = rawLine.trim();
+  for (let i = 0; i <= text.length; i += 1) {
+    if (i !== text.length && text.charCodeAt(i) !== 10) continue; // '\n'
+
+    const line = text.slice(start, i).trim();
+    start = i + 1;
+
     if (!line) continue;
     if (line.startsWith(":")) continue;
+
     return line.startsWith("event:") || line.startsWith("data:");
   }
 
