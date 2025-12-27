@@ -474,7 +474,8 @@ const DEFAULT_ERROR_RULES = [
   },
   // Issue #471: tool_use_id found in tool_result blocks (non-retryable client error)
   {
-    pattern: "unexpected.*['\"]tool_use_id['\"].*found in.*['\"]tool_result['\"]|messages\\..*\\.content\\..*: unexpected ['\"]tool_use_id['\"].*['\"]tool_result['\"]",
+    pattern:
+      "unexpected.*['\"]tool_use_id['\"].*found in.*['\"]tool_result['\"]|messages\\..*\\.content\\..*: unexpected ['\"]tool_use_id['\"].*['\"]tool_result['\"]",
     category: "validation_error",
     description: "tool_use_id field incorrectly placed in tool_result blocks (client error)",
     matchType: "regex" as const,
