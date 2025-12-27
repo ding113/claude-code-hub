@@ -472,6 +472,23 @@ const DEFAULT_ERROR_RULES = [
       },
     },
   },
+  // Issue #470: server_tool_use.id format validation error (non-retryable)
+  {
+    pattern: "String should match pattern.*srvtoolu_|server_tool_use.*id.*should.*match",
+    category: "validation_error",
+    description: "server_tool_use.id format validation error (client error)",
+    matchType: "regex" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 89,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "validation_error",
+        message: "server_tool_use.id 格式错误，必须以 srvtoolu_ 开头且仅包含字母、数字和下划线",
+      },
+    },
+  },
   // Issue #471: tool_use_id found in tool_result blocks (non-retryable client error)
   {
     pattern:
