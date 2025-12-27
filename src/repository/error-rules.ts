@@ -474,7 +474,7 @@ const DEFAULT_ERROR_RULES = [
   },
   // Issue #470: server_tool_use.id format validation error (non-retryable)
   {
-    pattern: 'String should match pattern.*srvtoolu_|server_tool_use.*id.*should.*match',
+    pattern: "String should match pattern.*srvtoolu_|server_tool_use.*id.*should.*match",
     category: "validation_error",
     description: "server_tool_use.id format validation error (client error)",
     matchType: "regex" as const,
