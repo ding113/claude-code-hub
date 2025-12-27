@@ -472,6 +472,23 @@ const DEFAULT_ERROR_RULES = [
       },
     },
   },
+  // Issue #471: tool_use_id found in tool_result blocks (non-retryable client error)
+  {
+    pattern: "unexpected.*['\"]tool_use_id['\"].*found in.*['\"]tool_result['\"]|messages\\..*\\.content\\..*: unexpected ['\"]tool_use_id['\"].*['\"]tool_result['\"]",
+    category: "validation_error",
+    description: "tool_use_id field incorrectly placed in tool_result blocks (client error)",
+    matchType: "regex" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 89,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "validation_error",
+        message: "tool_result 块中不应包含 tool_use_id 字段，请检查消息格式",
+      },
+    },
+  },
   // Tool result validation errors (non-retryable)
   {
     pattern: "unexpected.*tool_use_id.*tool_result|tool_result.*must have.*corresponding.*tool_use",
