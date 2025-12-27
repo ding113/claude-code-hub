@@ -378,7 +378,9 @@
       "responseBody": "Тело ответа",
       "responseBodyDescription": "Полный ответ сервера (TTL 5 минут)",
       "noHeaders": "Нет данных",
-      "noData": "Нет данных"
+      "noData": "Нет данных",
+      "prevRequest": "Предыдущий",
+      "nextRequest": "Следующий"
     },
     "actions": {
       "back": "Назад",

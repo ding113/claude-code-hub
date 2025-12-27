@@ -1,26 +1,15 @@
 "use client";
 
-import { ChevronDown, ChevronUp, File as FileIcon, Laptop, Moon, Search, Sun } from "lucide-react";
+import { ChevronDown, ChevronUp, File as FileIcon, Search } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { cn } from "@/lib/utils";
 import { parseSSEDataForDisplay } from "@/lib/utils/sse";
-
-type ThemePreference = "auto" | "light" | "dark";
 
 export type CodeDisplayLanguage = "json" | "sse" | "text";
 
@@ -32,6 +21,8 @@ export interface CodeDisplayProps {
   language: CodeDisplayLanguage;
   fileName?: string;
   maxHeight?: string;
+  expandedMaxHeight?: string;
+  defaultExpanded?: boolean;
 }
 
 function safeJsonParse(text: string): { ok: true; value: unknown } | { ok: false } {
@@ -72,6 +63,8 @@ export function CodeDisplay({
   language,
   fileName,
   maxHeight = "600px",
+  expandedMaxHeight,
+  defaultExpanded = false,
 }: CodeDisplayProps) {
   const t = useTranslations("dashboard.sessions");
   const isOverMaxBytes = content.length > MAX_CONTENT_SIZE;
@@ -79,29 +72,23 @@ export function CodeDisplay({
   const [mode, setMode] = useState<"raw" | "pretty">(getDefaultMode(language));
   const [searchQuery, setSearchQuery] = useState("");
   const [showOnlyMatches, setShowOnlyMatches] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-  const [themePreference, setThemePreference] = useState<ThemePreference>("auto");
-  const [page, setPage] = useState(1);
-  const [systemTheme, setSystemTheme] = useState<"light" | "dark">("light");
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">("light");
+  const [expandedSseRows, setExpandedSseRows] = useState<Set<number>>(() => new Set());
+  const sseScrollRef = useRef<HTMLDivElement | null>(null);
+  const [sseViewportHeight, setSseViewportHeight] = useState(0);
+  const [sseScrollTop, setSseScrollTop] = useState(0);
 
   useEffect(() => {
-    if (!window.matchMedia) return;
+    const getTheme = () => (document.documentElement.classList.contains("dark") ? "dark" : "light");
 
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const update = () => setSystemTheme(media.matches ? "dark" : "light");
-    update();
+    setResolvedTheme(getTheme());
 
-    if (media.addEventListener) {
-      media.addEventListener("change", update);
-      return () => media.removeEventListener("change", update);
-    }
+    const observer = new MutationObserver(() => setResolvedTheme(getTheme()));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
 
-    media.addListener(update);
-    return () => media.removeListener(update);
+    return () => observer.disconnect();
   }, []);
-
-  const effectiveTheme: ThemePreference = themePreference;
-  const resolvedEffectiveTheme = effectiveTheme === "auto" ? systemTheme : effectiveTheme;
 
   const lineCount = useMemo(() => {
     if (isOverMaxBytes) return 0;
@@ -137,6 +124,32 @@ export function CodeDisplay({
     });
   }, [searchQuery, sseEvents]);
 
+  useEffect(() => {
+    if (language !== "sse" || mode !== "pretty") return;
+    setExpandedSseRows(new Set());
+  }, [language, mode]);
+
+  useEffect(() => {
+    if (language !== "sse" || mode !== "pretty") return;
+    const el = sseScrollRef.current;
+    if (!el) return;
+
+    const update = () => setSseViewportHeight(el.clientHeight);
+    update();
+
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(update);
+      ro.observe(el);
+    }
+
+    window.addEventListener("resize", update);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", update);
+    };
+  }, [language, mode]);
+
   const lineFilteredText = useMemo(() => {
     if (language === "sse") return null;
     if (isOverMaxBytes) return content;
@@ -147,31 +160,9 @@ export function CodeDisplay({
     return matches.length === 0 ? "" : matches.join("\n");
   }, [content, isOverMaxBytes, language, searchQuery, showOnlyMatches]);
 
-  type SseEvent = ReturnType<typeof parseSSEDataForDisplay>[number];
-  const pagination = useMemo((): {
-    pageSize: number;
-    totalPages: number;
-    page: number;
-    items: SseEvent[];
-  } => {
-    if (!filteredSseEvents) {
-      return { pageSize: 10, totalPages: 1, page: 1, items: [] };
-    }
-    const pageSize = 10;
-    const totalPages = Math.max(1, Math.ceil(filteredSseEvents.length / pageSize));
-    const safePage = Math.min(Math.max(1, page), totalPages);
-    const start = (safePage - 1) * pageSize;
-    const end = start + pageSize;
-    return {
-      pageSize,
-      totalPages,
-      page: safePage,
-      items: filteredSseEvents.slice(start, end),
-    };
-  }, [filteredSseEvents, page]);
-
-  const highlighterStyle = resolvedEffectiveTheme === "dark" ? oneDark : oneLight;
+  const highlighterStyle = resolvedTheme === "dark" ? oneDark : oneLight;
   const displayText = lineFilteredText ?? content;
+  const contentMaxHeight = isExpanded ? expandedMaxHeight : maxHeight;
 
   if (isHardLimited) {
     const sizeBytes = content.length;
@@ -220,8 +211,8 @@ export function CodeDisplay({
           data-testid="code-display-search"
           value={searchQuery}
           onChange={(e) => {
+            setExpandedSseRows(new Set());
             setSearchQuery(e.target.value);
-            setPage(1);
           }}
           placeholder={t("codeDisplay.searchPlaceholder")}
           className="pl-8 h-9"
@@ -239,42 +230,6 @@ export function CodeDisplay({
           {showOnlyMatches ? t("codeDisplay.showAll") : t("codeDisplay.onlyMatches")}
         </Button>
       )}
-
-      <div className="flex items-center gap-1">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onClick={() => setThemePreference("auto")}
-          data-testid="code-display-theme-auto"
-          aria-label={t("codeDisplay.themeAuto")}
-          className={cn("h-9 w-9", themePreference === "auto" && "bg-accent")}
-        >
-          <Laptop className="h-4 w-4" />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onClick={() => setThemePreference("light")}
-          data-testid="code-display-theme-light"
-          aria-label={t("codeDisplay.themeLight")}
-          className={cn("h-9 w-9", themePreference === "light" && "bg-accent")}
-        >
-          <Sun className="h-4 w-4" />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onClick={() => setThemePreference("dark")}
-          data-testid="code-display-theme-dark"
-          aria-label={t("codeDisplay.themeDark")}
-          className={cn("h-9 w-9", themePreference === "dark" && "bg-accent")}
-        >
-          <Moon className="h-4 w-4" />
-        </Button>
-      </div>
 
       {isLargeContent && (
         <Button
@@ -306,8 +261,8 @@ export function CodeDisplay({
       data-testid="code-display"
       data-language={language}
       data-expanded={String(isExpanded)}
-      data-theme={themePreference}
-      className="rounded-md border bg-muted/30"
+      data-resolved-theme={resolvedTheme}
+      className="rounded-md border bg-muted/30 flex flex-col min-h-0"
     >
       <div className="flex flex-col gap-3 p-3 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-2">
@@ -321,10 +276,7 @@ export function CodeDisplay({
         {headerRight}
       </div>
 
-      <div
-        className={cn("border-t p-3", !isExpanded && "overflow-hidden")}
-        style={{ maxHeight: isExpanded ? undefined : maxHeight }}
-      >
+      <div className="border-t p-3 flex flex-col min-h-0">
         <Tabs value={mode} onValueChange={(v) => setMode(v as "raw" | "pretty")} className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="raw" data-testid="code-display-mode-raw">
@@ -336,120 +288,162 @@ export function CodeDisplay({
           </TabsList>
 
           <TabsContent value="raw" className="mt-3">
-            <pre className="text-xs whitespace-pre-wrap break-words font-mono">{displayText}</pre>
+            <div className="overflow-auto" style={{ maxHeight: contentMaxHeight }}>
+              <pre className="text-xs whitespace-pre-wrap break-words font-mono">{displayText}</pre>
+            </div>
           </TabsContent>
 
           <TabsContent value="pretty" className="mt-3">
             {language === "json" ? (
-              <SyntaxHighlighter
-                language="json"
-                style={highlighterStyle}
-                customStyle={{
-                  margin: 0,
-                  background: "transparent",
-                  fontSize: "12px",
+              <div className="overflow-auto" style={{ maxHeight: contentMaxHeight }}>
+                <SyntaxHighlighter
+                  language="json"
+                  style={highlighterStyle}
+                  customStyle={{
+                    margin: 0,
+                    background: "transparent",
+                    fontSize: "12px",
+                  }}
+                >
+                  {formattedJson}
+                </SyntaxHighlighter>
+              </div>
+            ) : language === "sse" ? (
+              <div
+                ref={sseScrollRef}
+                className="overflow-auto"
+                style={{ maxHeight: contentMaxHeight }}
+                onScroll={(e) => {
+                  const target = e.currentTarget;
+                  setSseScrollTop(target.scrollTop);
                 }}
               >
-                {formattedJson}
-              </SyntaxHighlighter>
-            ) : language === "sse" ? (
-              <div className="space-y-3">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>#</TableHead>
-                      <TableHead>{t("codeDisplay.sseEvent")}</TableHead>
-                      <TableHead>{t("codeDisplay.sseData")}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {pagination.items.map((evt, idx) => {
-                      const rowIndex = (pagination.page - 1) * pagination.pageSize + idx + 1;
-                      const dataText =
-                        typeof evt.data === "string" ? evt.data : stringifyPretty(evt.data);
+                {(() => {
+                  if (!filteredSseEvents) return null;
 
-                      return (
-                        <TableRow
-                          key={`${rowIndex}-${evt.event}`}
-                          data-testid="code-display-sse-row"
-                        >
-                          <TableCell className="font-mono text-xs text-muted-foreground">
-                            {rowIndex}
-                          </TableCell>
-                          <TableCell className="font-mono text-xs">{evt.event}</TableCell>
-                          <TableCell className="whitespace-normal">
-                            <details>
-                              <summary className="cursor-pointer select-none text-xs text-muted-foreground">
-                                {dataText.length > 120 ? `${dataText.slice(0, 120)}...` : dataText}
+                  if (filteredSseEvents.length === 0) {
+                    return (
+                      <div className="text-xs text-muted-foreground">
+                        {t("codeDisplay.noMatches")}
+                      </div>
+                    );
+                  }
+
+                  const useVirtual =
+                    filteredSseEvents.length > 200 &&
+                    expandedSseRows.size === 0 &&
+                    sseViewportHeight > 0;
+
+                  const estimatedRowHeight = 44;
+                  const overscan = 12;
+                  const total = filteredSseEvents.length;
+
+                  const startIndex = useVirtual
+                    ? Math.max(0, Math.floor(sseScrollTop / estimatedRowHeight) - overscan)
+                    : 0;
+                  const endIndex = useVirtual
+                    ? Math.min(
+                        total,
+                        Math.ceil((sseScrollTop + sseViewportHeight) / estimatedRowHeight) +
+                          overscan
+                      )
+                    : total;
+
+                  const topPad = useVirtual ? startIndex * estimatedRowHeight : 0;
+                  const bottomPad = useVirtual ? (total - endIndex) * estimatedRowHeight : 0;
+
+                  const rows = filteredSseEvents.slice(startIndex, endIndex);
+
+                  return (
+                    <div className="space-y-2">
+                      {topPad > 0 && <div style={{ height: topPad }} />}
+                      {rows.map((evt, localIdx) => {
+                        const index = startIndex + localIdx;
+                        const open = expandedSseRows.has(index);
+                        const dataText =
+                          typeof evt.data === "string" ? evt.data : stringifyPretty(evt.data);
+                        const preview =
+                          dataText.length > 120 ? `${dataText.slice(0, 120)}...` : dataText;
+
+                        return (
+                          <div
+                            key={`${index}-${evt.event}`}
+                            data-testid="code-display-sse-row"
+                            className="rounded-md border bg-background/50"
+                          >
+                            <details open={open}>
+                              <summary
+                                className="cursor-pointer select-none px-3 py-2"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  setExpandedSseRows((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(index)) {
+                                      next.delete(index);
+                                    } else {
+                                      next.add(index);
+                                    }
+                                    return next;
+                                  });
+                                }}
+                              >
+                                <div className="flex items-start gap-3 min-w-0">
+                                  <span className="w-10 shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
+                                    {index + 1}
+                                  </span>
+                                  <span className="shrink-0 font-mono text-xs">{evt.event}</span>
+                                  <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                                    {preview}
+                                  </span>
+                                </div>
                               </summary>
-                              <div className="mt-2">
-                                <SyntaxHighlighter
-                                  language="json"
-                                  style={highlighterStyle}
-                                  customStyle={{
-                                    margin: 0,
-                                    background: "transparent",
-                                    fontSize: "12px",
-                                  }}
-                                >
-                                  {dataText}
-                                </SyntaxHighlighter>
+                              <div className="px-3 pb-3 pt-2 space-y-2">
+                                <div className="space-y-1">
+                                  <div className="text-xs text-muted-foreground">
+                                    {t("codeDisplay.sseEvent")}
+                                  </div>
+                                  <div className="font-mono text-xs break-all">{evt.event}</div>
+                                </div>
+                                <div className="space-y-1">
+                                  <div className="text-xs text-muted-foreground">
+                                    {t("codeDisplay.sseData")}
+                                  </div>
+                                  <SyntaxHighlighter
+                                    language="json"
+                                    style={highlighterStyle}
+                                    customStyle={{
+                                      margin: 0,
+                                      background: "transparent",
+                                      fontSize: "12px",
+                                    }}
+                                  >
+                                    {dataText}
+                                  </SyntaxHighlighter>
+                                </div>
                               </div>
                             </details>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-
-                <div className="flex items-center justify-between">
-                  <div className="text-xs text-muted-foreground">
-                    {t("codeDisplay.pageInfo", {
-                      page: pagination.page,
-                      total: pagination.totalPages,
-                    })}
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      data-testid="code-display-page-prev"
-                      onClick={() => setPage((p) => Math.max(1, p - 1))}
-                      disabled={pagination.page <= 1}
-                    >
-                      {t("codeDisplay.prevPage")}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      data-testid="code-display-page-next"
-                      onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
-                      disabled={pagination.page >= pagination.totalPages}
-                    >
-                      {t("codeDisplay.nextPage")}
-                    </Button>
-                  </div>
-                </div>
-
-                {filteredSseEvents && filteredSseEvents.length === 0 && (
-                  <div className="text-xs text-muted-foreground">{t("codeDisplay.noMatches")}</div>
-                )}
+                          </div>
+                        );
+                      })}
+                      {bottomPad > 0 && <div style={{ height: bottomPad }} />}
+                    </div>
+                  );
+                })()}
               </div>
             ) : (
-              <SyntaxHighlighter
-                language="text"
-                style={highlighterStyle}
-                customStyle={{
-                  margin: 0,
-                  background: "transparent",
-                  fontSize: "12px",
-                }}
-              >
-                {displayText}
-              </SyntaxHighlighter>
+              <div className="overflow-auto" style={{ maxHeight: contentMaxHeight }}>
+                <SyntaxHighlighter
+                  language="text"
+                  style={highlighterStyle}
+                  customStyle={{
+                    margin: 0,
+                    background: "transparent",
+                    fontSize: "12px",
+                  }}
+                >
+                  {displayText}
+                </SyntaxHighlighter>
+              </div>
             )}
           </TabsContent>
         </Tabs>

@@ -378,7 +378,9 @@
       "responseBody": "レスポンスボディ",
       "responseBodyDescription": "サーバーからの完全なレスポンス (5 分間の TTL)",
       "noHeaders": "データなし",
-      "noData": "データなし"
+      "noData": "データなし",
+      "prevRequest": "前のリクエスト",
+      "nextRequest": "次のリクエスト"
     },
     "actions": {
       "back": "戻る",

@@ -391,10 +391,12 @@ export function VirtualizedLogsTable({
                     <TooltipProvider>
                       <Tooltip delayDuration={250}>
                         <TooltipTrigger asChild>
-                          <span className="cursor-help">
-                            {formatTokenAmount(log.inputTokens)} /{" "}
-                            {formatTokenAmount(log.outputTokens)}
-                          </span>
+                          <div className="cursor-help flex flex-col items-end leading-tight tabular-nums">
+                            <span>{formatTokenAmount(log.inputTokens)}</span>
+                            <span className="text-muted-foreground">
+                              {formatTokenAmount(log.outputTokens)}
+                            </span>
+                          </div>
                         </TooltipTrigger>
                         <TooltipContent align="end" className="text-xs space-y-1">
                           <div>
@@ -413,16 +415,18 @@ export function VirtualizedLogsTable({
                     <TooltipProvider>
                       <Tooltip delayDuration={250}>
                         <TooltipTrigger asChild>
-                          <div className="flex items-center justify-end gap-1 cursor-help">
-                            <span>
-                              {formatTokenAmount(log.cacheCreationInputTokens)} /{" "}
+                          <div className="cursor-help flex flex-col items-end leading-tight tabular-nums">
+                            <div className="flex items-center gap-1">
+                              <span>{formatTokenAmount(log.cacheCreationInputTokens)}</span>
+                              {log.cacheTtlApplied ? (
+                                <Badge variant="outline" className="text-[10px] leading-tight px-1">
+                                  {log.cacheTtlApplied}
+                                </Badge>
+                              ) : null}
+                            </div>
+                            <span className="text-muted-foreground">
                               {formatTokenAmount(log.cacheReadInputTokens)}
                             </span>
-                            {log.cacheTtlApplied ? (
-                              <Badge variant="outline" className="text-[10px] leading-tight px-1">
-                                {log.cacheTtlApplied}
-                              </Badge>
-                            ) : null}
                           </div>
                         </TooltipTrigger>
                         <TooltipContent align="end" className="text-xs space-y-1">

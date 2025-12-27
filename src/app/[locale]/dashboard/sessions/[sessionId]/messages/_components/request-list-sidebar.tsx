@@ -101,6 +101,25 @@ export function RequestListSidebar({
     return "<1m";
   };
 
+  const formatRequestTimestamp = (date: Date | null) => {
+    if (!date) return "-";
+    const d = new Date(date);
+    if (Number.isNaN(d.getTime())) return "-";
+
+    const now = new Date();
+    const sameDay =
+      d.getFullYear() === now.getFullYear() &&
+      d.getMonth() === now.getMonth() &&
+      d.getDate() === now.getDate();
+
+    const pad2 = (v: number) => String(v).padStart(2, "0");
+    const pad3 = (v: number) => String(v).padStart(3, "0");
+    const time = `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}.${pad3(d.getMilliseconds())}`;
+
+    if (sameDay) return time;
+    return `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${time}`;
+  };
+
   // 获取状态图标
   const getStatusIcon = (statusCode: number | null) => {
     if (!statusCode) {
@@ -204,7 +223,14 @@ export function RequestListSidebar({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     {getStatusIcon(request.statusCode)}
-                    <span className="text-sm font-medium">#{request.sequence}</span>
+                    <span
+                      className="text-sm font-medium font-mono tabular-nums"
+                      title={
+                        request.createdAt ? new Date(request.createdAt).toISOString() : undefined
+                      }
+                    >
+                      {formatRequestTimestamp(request.createdAt)}
+                    </span>
                   </div>
                   <div className="flex items-center gap-1 text-xs text-muted-foreground">
                     <Clock className="h-3 w-3" />
@@ -213,7 +239,10 @@ export function RequestListSidebar({
                 </div>
                 <div className="mt-1 flex items-center justify-between">
                   <span className="text-xs text-muted-foreground font-mono truncate max-w-[120px]">
-                    {request.model || "-"}
+                    {request.model || "-"}{" "}
+                    <span className="text-[10px] text-muted-foreground/70">
+                      #{request.sequence}
+                    </span>
                   </span>
                   {request.statusCode && (
                     <Badge

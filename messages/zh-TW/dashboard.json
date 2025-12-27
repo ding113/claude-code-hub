@@ -379,7 +379,9 @@
       "responseBody": "響應體",
       "responseBodyDescription": "伺服器傳回的完整回覆（5分鐘 TTL）",
       "noHeaders": "無資料",
-      "noData": "暫無資料"
+      "noData": "暫無資料",
+      "prevRequest": "上一條",
+      "nextRequest": "下一條"
     },
     "actions": {
       "back": "返回",

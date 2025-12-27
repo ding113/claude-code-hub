@@ -519,6 +519,8 @@ export async function getSessionDetails(
       ReturnType<typeof import("@/repository/message").aggregateSessionStats>
     > | null;
     currentSequence: number | null;
+    prevSequence: number | null;
+    nextSequence: number | null;
   }>
 > {
   try {
@@ -581,6 +583,12 @@ export async function getSessionDetails(
     const normalizedSequence = normalizeRequestSequence(requestSequence);
     const effectiveSequence = normalizedSequence ?? (requestCount > 0 ? requestCount : undefined);
 
+    const { findAdjacentRequestSequences } = await import("@/repository/message");
+    const adjacent =
+      effectiveSequence == null
+        ? { prevSequence: null, nextSequence: null }
+        : await findAdjacentRequestSequences(sessionId, effectiveSequence);
+
     const parseJsonStringOrNull = (value: unknown): unknown => {
       if (typeof value !== "string") return value;
       try {
@@ -615,6 +623,8 @@ export async function getSessionDetails(
         responseHeaders,
         sessionStats,
         currentSequence: effectiveSequence ?? null,
+        prevSequence: adjacent.prevSequence,
+        nextSequence: adjacent.nextSequence,
       },
     };
   } catch (error) {

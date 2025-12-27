@@ -379,7 +379,9 @@
       "responseBody": "Response Body",
       "responseBodyDescription": "Complete server response (5-minute TTL)",
       "noHeaders": "No data",
-      "noData": "No Data"
+      "noData": "No Data",
+      "prevRequest": "Previous",
+      "nextRequest": "Next"
     },
     "actions": {
       "back": "Back",

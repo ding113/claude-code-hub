@@ -64,6 +64,8 @@ export function SessionMessagesClient() {
       Extract<Awaited<ReturnType<typeof getSessionDetails>>, { ok: true }>["data"]["sessionStats"]
     >(null);
   const [currentSequence, setCurrentSequence] = useState<number | null>(null);
+  const [prevSequence, setPrevSequence] = useState<number | null>(null);
+  const [nextSequence, setNextSequence] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copiedMessages, setCopiedMessages] = useState(false);
@@ -109,6 +111,8 @@ export function SessionMessagesClient() {
           setResponseHeaders(result.data.responseHeaders);
           setSessionStats(result.data.sessionStats);
           setCurrentSequence(result.data.currentSequence);
+          setPrevSequence(result.data.prevSequence);
+          setNextSequence(result.data.nextSequence);
         } else {
           setError(result.error || t("status.fetchFailed"));
         }
@@ -325,6 +329,25 @@ export function SessionMessagesClient() {
                     requestHeaders={requestHeaders}
                     responseHeaders={responseHeaders}
                   />
+
+                  <div className="flex items-center justify-between">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!prevSequence}
+                      onClick={() => prevSequence && handleSelectRequest(prevSequence)}
+                    >
+                      {t("details.prevRequest")}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!nextSequence}
+                      onClick={() => nextSequence && handleSelectRequest(nextSequence)}
+                    >
+                      {t("details.nextRequest")}
+                    </Button>
+                  </div>
                 </div>
 
                 {/* 无数据提示 */}

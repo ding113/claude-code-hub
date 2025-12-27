@@ -29,6 +29,7 @@ export function SessionMessagesDetailsTabs({
   responseHeaders,
 }: SessionMessagesDetailsTabsProps) {
   const t = useTranslations("dashboard.sessions");
+  const codeExpandedMaxHeight = "calc(100vh - 260px)";
 
   const requestBodyContent = useMemo(() => {
     if (messages === null) return null;
@@ -66,6 +67,8 @@ export function SessionMessagesDetailsTabs({
             language="text"
             fileName="request.headers"
             maxHeight="600px"
+            defaultExpanded
+            expandedMaxHeight={codeExpandedMaxHeight}
           />
         )}
       </TabsContent>
@@ -79,6 +82,8 @@ export function SessionMessagesDetailsTabs({
             language="json"
             fileName="request.json"
             maxHeight="600px"
+            defaultExpanded
+            expandedMaxHeight={codeExpandedMaxHeight}
           />
         )}
       </TabsContent>
@@ -92,6 +97,8 @@ export function SessionMessagesDetailsTabs({
             language="text"
             fileName="response.headers"
             maxHeight="600px"
+            defaultExpanded
+            expandedMaxHeight={codeExpandedMaxHeight}
           />
         )}
       </TabsContent>
@@ -105,6 +112,8 @@ export function SessionMessagesDetailsTabs({
             language={responseLanguage}
             fileName={responseLanguage === "sse" ? "response.sse" : "response.json"}
             maxHeight="600px"
+            defaultExpanded
+            expandedMaxHeight={codeExpandedMaxHeight}
           />
         )}
       </TabsContent>

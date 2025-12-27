@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { NextIntlClientProvider } from "next-intl";
-import { describe, expect, test, vi } from "vitest";
+import { describe, expect, test } from "vitest";
 import { CodeDisplay } from "@/components/ui/code-display";
 
 const messages = {
@@ -228,19 +228,7 @@ describe("CodeDisplay", () => {
       <CodeDisplay content={sse} language="sse" fileName="response.sse" />
     );
 
-    expect(container.querySelectorAll("[data-testid='code-display-sse-row']").length).toBe(10);
-
-    const next = container.querySelector(
-      "[data-testid='code-display-page-next']"
-    ) as HTMLButtonElement;
-    click(next);
-    expect(container.querySelectorAll("[data-testid='code-display-sse-row']").length).toBe(1);
-
-    const prev = container.querySelector(
-      "[data-testid='code-display-page-prev']"
-    ) as HTMLButtonElement;
-    click(prev);
-    expect(container.querySelectorAll("[data-testid='code-display-sse-row']").length).toBe(10);
+    expect(container.querySelectorAll("[data-testid='code-display-sse-row']").length).toBe(11);
 
     const input = container.querySelector(
       "[data-testid='code-display-search']"
@@ -255,36 +243,22 @@ describe("CodeDisplay", () => {
     unmount();
   });
 
-  test("auto theme uses matchMedia when available", async () => {
-    const original = window.matchMedia;
-    const add = vi.fn();
-    const remove = vi.fn();
+  test("follows global theme class on <html>", async () => {
+    document.documentElement.classList.remove("dark");
 
-    // @ts-expect-error test stub
-    window.matchMedia = () => ({
-      matches: true,
-      addEventListener: add,
-      removeEventListener: remove,
-    });
+    const { container, unmount } = renderWithIntl(
+      <CodeDisplay content='{"a":1}' language="json" />
+    );
+    const root = container.querySelector("[data-testid='code-display']") as HTMLElement;
+    expect(root.getAttribute("data-resolved-theme")).toBe("light");
 
-    const { unmount } = renderWithIntl(<CodeDisplay content='{"a":1}' language="json" />);
+    document.documentElement.classList.add("dark");
     await act(async () => {
-      await Promise.resolve();
+      await new Promise((r) => setTimeout(r, 0));
     });
-    expect(add).toHaveBeenCalled();
+    expect(root.getAttribute("data-resolved-theme")).toBe("dark");
 
     unmount();
-    window.matchMedia = original;
-  });
-
-  test("auto theme is a no-op when matchMedia is missing", () => {
-    const original = window.matchMedia;
-    // @ts-expect-error test stub
-    window.matchMedia = undefined;
-
-    const { unmount } = renderWithIntl(<CodeDisplay content='{"a":1}' language="json" />);
-    unmount();
-    window.matchMedia = original;
   });
 
   test("large content shows expand/collapse and toggles expanded state", () => {
@@ -327,31 +301,6 @@ describe("CodeDisplay", () => {
 
     expect(container.textContent).toContain("Content too large");
     expect(container.textContent).toContain("10,000 lines");
-    unmount();
-  });
-
-  test("theme toggles update data-theme", () => {
-    const { container, unmount } = renderWithIntl(
-      <CodeDisplay content='{"a":1}' language="json" fileName="request.json" />
-    );
-
-    const root = container.querySelector("[data-testid='code-display']") as HTMLElement;
-    expect(root.getAttribute("data-theme")).toBe("auto");
-
-    const dark = container.querySelector("[data-testid='code-display-theme-dark']") as HTMLElement;
-    click(dark);
-    expect(root.getAttribute("data-theme")).toBe("dark");
-
-    const light = container.querySelector(
-      "[data-testid='code-display-theme-light']"
-    ) as HTMLElement;
-    click(light);
-    expect(root.getAttribute("data-theme")).toBe("light");
-
-    const auto = container.querySelector("[data-testid='code-display-theme-auto']") as HTMLElement;
-    click(auto);
-    expect(root.getAttribute("data-theme")).toBe("auto");
-
     unmount();
   });
 });
