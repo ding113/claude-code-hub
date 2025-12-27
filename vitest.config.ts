@@ -5,7 +5,19 @@ export default defineConfig({
   test: {
     // ==================== 全局配置 ====================
     globals: true, // 使用全局 API (describe, test, expect)
-    environment: "node", // Node.js 环境（服务端测试）
+    projects: [
+      {
+        extends: true,
+        test: {
+          environment: "happy-dom",
+          include: [
+            "tests/unit/**/*.{test,spec}.tsx",
+            "tests/api/**/*.{test,spec}.tsx",
+            "src/**/*.{test,spec}.tsx",
+          ],
+        },
+      },
+    ],
 
     // 测试前置脚本
     setupFiles: ["./tests/setup.ts"],
@@ -51,8 +63,9 @@ export default defineConfig({
 
     // ==================== 文件匹配 ====================
     include: [
-      "tests/**/*.test.ts", // 所有测试文件
-      "src/**/*.{test,spec}.{ts,tsx}", // 支持源码中的测试
+      "tests/unit/**/*.{test,spec}.ts", // 单元测试
+      "tests/api/**/*.{test,spec}.ts", // API 测试
+      "src/**/*.{test,spec}.ts", // 支持源码中的测试
     ],
     exclude: [
       "node_modules",

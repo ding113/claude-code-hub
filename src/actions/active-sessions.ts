@@ -581,6 +581,20 @@ export async function getSessionDetails(
     const normalizedSequence = normalizeRequestSequence(requestSequence);
     const effectiveSequence = normalizedSequence ?? (requestCount > 0 ? requestCount : undefined);
 
+    const parseJsonStringOrNull = (value: unknown): unknown => {
+      if (typeof value !== "string") return value;
+      try {
+        return JSON.parse(value) as unknown;
+      } catch (error) {
+        logger.warn("getSessionDetails: failed to parse session messages JSON string", {
+          sessionId,
+          requestSequence: effectiveSequence ?? null,
+          error,
+        });
+        return null;
+      }
+    };
+
     // 6. 并行获取 messages 和 response（不缓存，因为这些数据较大）
     const [messages, response, requestHeaders, responseHeaders] = await Promise.all([
       SessionManager.getSessionMessages(sessionId, effectiveSequence),
@@ -589,10 +603,13 @@ export async function getSessionDetails(
       SessionManager.getSessionResponseHeaders(sessionId, effectiveSequence),
     ]);
 
+    // 兼容：历史/异常数据可能是 JSON 字符串（前端需要根级对象/数组）
+    const normalizedMessages = parseJsonStringOrNull(messages);
+
     return {
       ok: true,
       data: {
-        messages,
+        messages: normalizedMessages,
         response,
         requestHeaders,
         responseHeaders,

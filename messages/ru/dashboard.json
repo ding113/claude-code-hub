@@ -410,6 +410,24 @@
       "batchTerminateNone": "Не удалось прервать ни одной сессии",
       "noSelection": "Выберите хотя бы одну сессию"
     },
+    "codeDisplay": {
+      "raw": "Сырой",
+      "pretty": "Форматированный",
+      "searchPlaceholder": "Поиск",
+      "expand": "Развернуть",
+      "collapse": "Свернуть",
+      "themeAuto": "Авто",
+      "themeLight": "Светлая",
+      "themeDark": "Тёмная",
+      "noMatches": "Нет совпадений",
+      "onlyMatches": "Только совпадения",
+      "showAll": "Показать всё",
+      "prevPage": "Назад",
+      "nextPage": "Вперёд",
+      "pageInfo": "Страница {page} / {total}",
+      "sseEvent": "Событие",
+      "sseData": "Данные"
+    },
     "status": {
       "loading": "Загрузка...",
       "loadError": "Ошибка загрузки",

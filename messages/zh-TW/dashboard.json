@@ -411,6 +411,24 @@
       "batchTerminateNone": "沒有任何會話被終止",
       "noSelection": "請至少選擇一個會話"
     },
+    "codeDisplay": {
+      "raw": "原始",
+      "pretty": "美化",
+      "searchPlaceholder": "搜尋",
+      "expand": "展開",
+      "collapse": "收起",
+      "themeAuto": "跟隨系統",
+      "themeLight": "淺色",
+      "themeDark": "深色",
+      "noMatches": "沒有符合結果",
+      "onlyMatches": "僅符合行",
+      "showAll": "顯示全部",
+      "prevPage": "上一頁",
+      "nextPage": "下一頁",
+      "pageInfo": "第 {page} / {total} 頁",
+      "sseEvent": "事件",
+      "sseData": "資料"
+    },
     "status": {
       "loading": "載入中...",
       "loadError": "載入失敗",

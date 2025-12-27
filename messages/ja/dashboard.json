@@ -410,6 +410,24 @@
       "batchTerminateNone": "終了できたセッションはありません",
       "noSelection": "少なくとも1つのセッションを選択してください"
     },
+    "codeDisplay": {
+      "raw": "Raw",
+      "pretty": "Pretty",
+      "searchPlaceholder": "検索",
+      "expand": "展開",
+      "collapse": "折りたたむ",
+      "themeAuto": "自動",
+      "themeLight": "ライト",
+      "themeDark": "ダーク",
+      "noMatches": "一致する結果はありません",
+      "onlyMatches": "一致のみ",
+      "showAll": "すべて表示",
+      "prevPage": "前へ",
+      "nextPage": "次へ",
+      "pageInfo": "{page} / {total} ページ",
+      "sseEvent": "イベント",
+      "sseData": "データ"
+    },
     "status": {
       "loading": "読み込み中...",
       "loadError": "読み込み失敗",

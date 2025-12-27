@@ -411,6 +411,24 @@
       "batchTerminateNone": "No sessions were terminated",
       "noSelection": "Please select at least one session"
     },
+    "codeDisplay": {
+      "raw": "Raw",
+      "pretty": "Pretty",
+      "searchPlaceholder": "Search",
+      "expand": "Expand",
+      "collapse": "Collapse",
+      "themeAuto": "Auto",
+      "themeLight": "Light",
+      "themeDark": "Dark",
+      "noMatches": "No matches",
+      "onlyMatches": "Only matches",
+      "showAll": "Show all",
+      "prevPage": "Prev",
+      "nextPage": "Next",
+      "pageInfo": "Page {page} / {total}",
+      "sseEvent": "Event",
+      "sseData": "Data"
+    },
     "status": {
       "loading": "Loading...",
       "loadError": "Load failed",
