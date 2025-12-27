@@ -2,12 +2,12 @@
 
 import type { PartialKeys, VirtualizerOptions } from "@tanstack/virtual-core";
 import {
-  Virtualizer,
   elementScroll,
   observeElementOffset,
   observeElementRect,
   observeWindowOffset,
   observeWindowRect,
+  Virtualizer,
   windowScroll,
 } from "@tanstack/virtual-core";
 import * as React from "react";
