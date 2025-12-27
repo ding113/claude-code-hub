@@ -411,6 +411,24 @@
       "batchTerminateNone": "没有任何 Session 被终止",
       "noSelection": "请至少选择一个 Session"
     },
+    "codeDisplay": {
+      "raw": "原始",
+      "pretty": "美化",
+      "searchPlaceholder": "搜索",
+      "expand": "展开",
+      "collapse": "收起",
+      "themeAuto": "跟随系统",
+      "themeLight": "浅色",
+      "themeDark": "深色",
+      "noMatches": "无匹配结果",
+      "onlyMatches": "仅匹配行",
+      "showAll": "显示全部",
+      "prevPage": "上一页",
+      "nextPage": "下一页",
+      "pageInfo": "第 {page} / {total} 页",
+      "sseEvent": "事件",
+      "sseData": "数据"
+    },
     "status": {
       "loading": "加载中...",
       "loadError": "加载失败",

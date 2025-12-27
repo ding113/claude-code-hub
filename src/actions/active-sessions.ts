@@ -589,10 +589,20 @@ export async function getSessionDetails(
       SessionManager.getSessionResponseHeaders(sessionId, effectiveSequence),
     ]);
 
+    // 兼容：历史/异常数据可能是 JSON 字符串（前端需要根级对象/数组）
+    const normalizedMessages = (() => {
+      if (typeof messages !== "string") return messages;
+      try {
+        return JSON.parse(messages) as unknown;
+      } catch {
+        return messages as unknown;
+      }
+    })();
+
     return {
       ok: true,
       data: {
-        messages,
+        messages: normalizedMessages,
         response,
         requestHeaders,
         responseHeaders,
