@@ -1,16 +1,16 @@
 "use client";
 
-import * as React from "react";
+import type { PartialKeys, VirtualizerOptions } from "@tanstack/virtual-core";
 import {
-  Virtualizer,
   elementScroll,
   observeElementOffset,
   observeElementRect,
   observeWindowOffset,
   observeWindowRect,
+  Virtualizer,
   windowScroll,
 } from "@tanstack/virtual-core";
-import type { PartialKeys, VirtualizerOptions } from "@tanstack/virtual-core";
+import * as React from "react";
 
 const useIsomorphicLayoutEffect =
   typeof document !== "undefined" ? React.useLayoutEffect : React.useEffect;

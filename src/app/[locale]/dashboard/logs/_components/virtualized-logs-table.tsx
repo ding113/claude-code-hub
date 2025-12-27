@@ -1,7 +1,6 @@
 "use client";
 
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { useVirtualizer } from "@/hooks/use-virtualizer";
 import { ArrowUp, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -10,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RelativeTime } from "@/components/ui/relative-time";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useVirtualizer } from "@/hooks/use-virtualizer";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";

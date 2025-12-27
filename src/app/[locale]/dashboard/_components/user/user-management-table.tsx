@@ -1,7 +1,6 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { useVirtualizer } from "@/hooks/use-virtualizer";
 import { Loader2, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -9,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { renewUser } from "@/actions/users";
 import { Button } from "@/components/ui/button";
+import { useVirtualizer } from "@/hooks/use-virtualizer";
 import { cn } from "@/lib/utils";
 import type { User, UserDisplay } from "@/types/user";
 import { BatchEditToolbar } from "./batch-edit/batch-edit-toolbar";
