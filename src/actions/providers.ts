@@ -10,7 +10,6 @@ import {
   getAllHealthStatusAsync,
   resetCircuit,
 } from "@/lib/circuit-breaker";
-import { CodexInstructionsCache } from "@/lib/codex-instructions-cache";
 import { PROVIDER_GROUP, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import {
@@ -365,7 +364,6 @@ export async function addProvider(data: {
   streaming_idle_timeout_ms?: number;
   request_timeout_non_streaming_ms?: number;
   website_url?: string | null;
-  codex_instructions_strategy?: "auto" | "force_official" | "keep_original";
   mcp_passthrough_type?: "none" | "minimax" | "glm" | "custom";
   mcp_passthrough_url?: string | null;
   tpm: number | null;
@@ -521,7 +519,6 @@ export async function editProvider(
     streaming_idle_timeout_ms?: number;
     request_timeout_non_streaming_ms?: number;
     website_url?: string | null;
-    codex_instructions_strategy?: "auto" | "force_official" | "keep_original";
     mcp_passthrough_type?: "none" | "minimax" | "glm" | "custom";
     mcp_passthrough_url?: string | null;
     tpm?: number | null;
@@ -599,19 +596,6 @@ export async function editProvider(
         logger.debug("editProvider:config_synced_to_redis", { providerId });
       } catch (error) {
         logger.warn("editProvider:redis_sync_failed", {
-          providerId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-
-    // 清理 Codex Instructions 缓存（如果策略有变化）
-    if (validated.codex_instructions_strategy !== undefined) {
-      try {
-        await CodexInstructionsCache.clearByProvider(providerId);
-        logger.debug("editProvider:codex_cache_cleared", { providerId });
-      } catch (error) {
-        logger.warn("editProvider:codex_cache_clear_failed", {
           providerId,
           error: error instanceof Error ? error.message : String(error),
         });

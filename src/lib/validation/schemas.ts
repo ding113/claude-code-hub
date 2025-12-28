@@ -354,11 +354,6 @@ export const CreateProviderSchema = z.object({
   model_redirects: z.record(z.string(), z.string()).nullable().optional(),
   allowed_models: z.array(z.string()).nullable().optional(),
   join_claude_pool: z.boolean().optional().default(false),
-  // Codex Instructions 策略
-  codex_instructions_strategy: z
-    .enum(["auto", "force_official", "keep_original"])
-    .optional()
-    .default("auto"),
   // MCP 透传配置
   mcp_passthrough_type: z.enum(["none", "minimax", "glm", "custom"]).optional().default("none"),
   mcp_passthrough_url: z
@@ -550,7 +545,6 @@ export const UpdateProviderSchema = z
     model_redirects: z.record(z.string(), z.string()).nullable().optional(),
     allowed_models: z.array(z.string()).nullable().optional(),
     join_claude_pool: z.boolean().optional(),
-    codex_instructions_strategy: z.enum(["auto", "force_official", "keep_original"]).optional(),
     // MCP 透传配置
     mcp_passthrough_type: z.enum(["none", "minimax", "glm", "custom"]).optional(),
     mcp_passthrough_url: z

@@ -32,12 +32,7 @@ import { TagInput } from "@/components/ui/tag-input";
 import { PROVIDER_DEFAULTS, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import type { Context1mPreference } from "@/lib/special-attributes";
 import { extractBaseUrl, isValidUrl, validateNumericField } from "@/lib/utils/validation";
-import type {
-  CodexInstructionsStrategy,
-  McpPassthroughType,
-  ProviderDisplay,
-  ProviderType,
-} from "@/types/provider";
+import type { McpPassthroughType, ProviderDisplay, ProviderType } from "@/types/provider";
 import { ModelMultiSelect } from "../model-multi-select";
 import { ModelRedirectEditor } from "../model-redirect-editor";
 import { ApiTestButton } from "./api-test-button";
@@ -178,10 +173,6 @@ export function ProviderForm({
   // 供应商官网地址
   const [websiteUrl, setWebsiteUrl] = useState<string>(sourceProvider?.websiteUrl ?? "");
 
-  // Codex Instructions 策略配置
-  const [codexInstructionsStrategy, setCodexInstructionsStrategy] =
-    useState<CodexInstructionsStrategy>(sourceProvider?.codexInstructionsStrategy ?? "auto");
-
   // MCP 透传配置
   const [mcpPassthroughType, setMcpPassthroughType] = useState<McpPassthroughType>(
     sourceProvider?.mcpPassthroughType ?? "none"
@@ -198,7 +189,6 @@ export function ProviderForm({
     | "proxy"
     | "timeout"
     | "apiTest"
-    | "codexStrategy"
     | "mcpPassthrough";
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
     routing: false,
@@ -207,7 +197,6 @@ export function ProviderForm({
     proxy: false,
     timeout: false,
     apiTest: false,
-    codexStrategy: false,
     mcpPassthrough: false,
   });
 
@@ -252,7 +241,6 @@ export function ProviderForm({
       proxy: true,
       timeout: true,
       apiTest: true,
-      codexStrategy: true,
       mcpPassthrough: true,
     });
   };
@@ -266,7 +254,6 @@ export function ProviderForm({
       proxy: false,
       timeout: false,
       apiTest: false,
-      codexStrategy: false,
       mcpPassthrough: false,
     });
   };
@@ -326,7 +313,6 @@ export function ProviderForm({
             streaming_idle_timeout_ms?: number;
             request_timeout_non_streaming_ms?: number;
             website_url?: string | null;
-            codex_instructions_strategy?: CodexInstructionsStrategy;
             mcp_passthrough_type?: McpPassthroughType;
             mcp_passthrough_url?: string | null;
             preserve_client_ip?: boolean;
@@ -375,7 +361,6 @@ export function ProviderForm({
                 ? requestTimeoutNonStreamingSeconds * 1000
                 : undefined,
             website_url: websiteUrl.trim() || null,
-            codex_instructions_strategy: codexInstructionsStrategy,
             mcp_passthrough_type: mcpPassthroughType,
             mcp_passthrough_url: mcpPassthroughUrl.trim() || null,
             tpm: null,
@@ -437,7 +422,6 @@ export function ProviderForm({
                 ? requestTimeoutNonStreamingSeconds * 1000
                 : PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS,
             website_url: websiteUrl.trim() || null,
-            codex_instructions_strategy: codexInstructionsStrategy,
             mcp_passthrough_type: mcpPassthroughType,
             mcp_passthrough_url: mcpPassthroughUrl.trim() || null,
             tpm: null,
@@ -489,7 +473,6 @@ export function ProviderForm({
             PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS / 1000
           );
           setWebsiteUrl("");
-          setCodexInstructionsStrategy("auto");
           setContext1mPreference("inherit");
         }
         onSuccess?.();
@@ -1566,99 +1549,6 @@ export function ProviderForm({
             </div>
           </CollapsibleContent>
         </Collapsible>
-
-        {/* Codex Instructions 策略配置 - 仅 Codex 供应商显示 */}
-        {providerType === "codex" && (
-          <Collapsible
-            open={openSections.codexStrategy}
-            onOpenChange={() => toggleSection("codexStrategy")}
-          >
-            <CollapsibleTrigger asChild>
-              <button
-                type="button"
-                className="flex items-center justify-between w-full py-4 border-t hover:bg-muted/50 transition-colors cursor-pointer"
-                disabled={isPending}
-              >
-                <div className="flex items-center gap-2">
-                  <ChevronDown
-                    className={`h-4 w-4 transition-transform ${
-                      openSections.codexStrategy ? "rotate-180" : ""
-                    }`}
-                  />
-                  <span className="text-sm font-medium">{t("sections.codexStrategy.title")}</span>
-                </div>
-                <span className="text-xs text-muted-foreground">
-                  {codexInstructionsStrategy === "auto" && t("sections.codexStrategy.summary.auto")}
-                  {codexInstructionsStrategy === "force_official" &&
-                    t("sections.codexStrategy.summary.force")}
-                  {codexInstructionsStrategy === "keep_original" &&
-                    t("sections.codexStrategy.summary.keep")}
-                </span>
-              </button>
-            </CollapsibleTrigger>
-            <CollapsibleContent className="space-y-4 pb-4">
-              <div className="space-y-4">
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">
-                    {t("sections.codexStrategy.desc")}
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor={isEdit ? "edit-codex-strategy" : "codex-strategy"}>
-                    {t("sections.codexStrategy.select.label")}
-                  </Label>
-                  <Select
-                    value={codexInstructionsStrategy}
-                    onValueChange={(value) =>
-                      setCodexInstructionsStrategy(value as CodexInstructionsStrategy)
-                    }
-                    disabled={isPending}
-                  >
-                    <SelectTrigger id={isEdit ? "edit-codex-strategy" : "codex-strategy"}>
-                      <SelectValue placeholder={t("sections.codexStrategy.select.placeholder")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="auto">
-                        <div className="space-y-1">
-                          <div className="font-medium">
-                            {t("sections.codexStrategy.select.auto.label")}
-                          </div>
-                          <div className="text-xs text-muted-foreground max-w-xs">
-                            {t("sections.codexStrategy.select.auto.desc")}
-                          </div>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="force_official">
-                        <div className="space-y-1">
-                          <div className="font-medium">
-                            {t("sections.codexStrategy.select.force.label")}
-                          </div>
-                          <div className="text-xs text-muted-foreground max-w-xs">
-                            {t("sections.codexStrategy.select.force.desc")}
-                          </div>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="keep_original">
-                        <div className="space-y-1">
-                          <div className="font-medium">
-                            {t("sections.codexStrategy.select.keep.label")}
-                          </div>
-                          <div className="text-xs text-muted-foreground max-w-xs">
-                            {t("sections.codexStrategy.select.keep.desc")}
-                          </div>
-                        </div>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    {t("sections.codexStrategy.hint")}
-                  </p>
-                </div>
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
-        )}
 
         {/* MCP 透传配置 */}
         <Collapsible
