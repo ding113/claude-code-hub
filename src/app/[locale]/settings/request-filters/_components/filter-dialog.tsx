@@ -193,16 +193,16 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
   };
 
   const content = (
-    <DialogContent>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <DialogHeader>
-          <DialogTitle>
-            {mode === "create" ? t("dialog.createTitle") : t("dialog.editTitle")}
-          </DialogTitle>
-          <DialogDescription>{t("description")}</DialogDescription>
-        </DialogHeader>
+    <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+      <DialogHeader className="flex-shrink-0">
+        <DialogTitle>
+          {mode === "create" ? t("dialog.createTitle") : t("dialog.editTitle")}
+        </DialogTitle>
+        <DialogDescription>{t("description")}</DialogDescription>
+      </DialogHeader>
 
-        <div className="grid gap-4">
+      <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+        <div className="grid gap-4 overflow-y-auto pr-2 flex-1">
           <div className="grid gap-2">
             <Label htmlFor="filter-name">{t("dialog.name")}</Label>
             <Input
@@ -368,7 +368,7 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="flex-shrink-0 pt-4">
           <Button
             type="button"
             variant="outline"
