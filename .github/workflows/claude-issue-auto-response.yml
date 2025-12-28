@@ -8,7 +8,7 @@ jobs:
   check-codex-status:
     runs-on: ubuntu-latest
     outputs:
-      should_run: ${{ steps.check.outputs.should_run }}
+      should_run: ${{ steps.check.outputs.should_run || steps.perm_check.outputs.should_run }}
     steps:
       - name: Check if Codex workflow succeeded for this issue
         id: check
