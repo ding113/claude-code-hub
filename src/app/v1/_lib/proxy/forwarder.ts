@@ -8,7 +8,6 @@ import {
   recordFailure,
   recordSuccess,
 } from "@/lib/circuit-breaker";
-import { CodexInstructionsCache } from "@/lib/codex-instructions-cache";
 import { isHttp2Enabled } from "@/lib/config";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { PROVIDER_DEFAULTS, PROVIDER_LIMITS } from "@/lib/constants/provider.constants";
@@ -17,7 +16,6 @@ import { createProxyAgentForProvider } from "@/lib/proxy-agent";
 import { SessionManager } from "@/lib/session-manager";
 import { CONTEXT_1M_BETA_HEADER, shouldApplyContext1m } from "@/lib/special-attributes";
 import type { CacheTtlPreference, CacheTtlResolved } from "@/types/cache";
-import { getDefaultInstructions } from "../codex/constants/codex-instructions";
 import { isOfficialCodexClient, sanitizeCodexRequest } from "../codex/utils/request-sanitizer";
 import { defaultRegistry } from "../converters";
 import type { Format } from "../converters/types";
@@ -139,8 +137,7 @@ const UNDICI_REQUEST_TIMEOUT_MS = 600_000; // 600 秒 = 10 分钟，LLM 服务�
 /**
  * 过滤私有参数（下划线前缀）
  *
- * 目的：防止私有参数（如 _canRetryWithOfficialInstructions）泄露到上游供应商
- * 导致 "Unsupported parameter" 错误
+ * 目的：防止私有参数（下划线前缀）泄露到上游供应商导致 "Unsupported parameter" 错误
  *
  * @param obj - 原始请求对象
  * @returns 过滤后的请求对象
@@ -302,41 +299,6 @@ export class ProxyForwarder {
 
           // ========== 成功分支 ==========
           recordSuccess(currentProvider.id);
-
-          // ⭐ Phase 4: 成功响应后缓存 instructions（自动学习）
-          if (
-            currentProvider.providerType === "codex" &&
-            currentProvider.codexInstructionsStrategy === "auto"
-          ) {
-            try {
-              const requestBody = session.request.message as Record<string, unknown>;
-              const instructions = requestBody.instructions;
-
-              if (instructions && typeof instructions === "string") {
-                await CodexInstructionsCache.set(
-                  currentProvider.id,
-                  session.request.model || "gpt-5-codex",
-                  instructions
-                );
-
-                logger.debug(
-                  "[ProxyForwarder] Cached successful instructions for future requests",
-                  {
-                    providerId: currentProvider.id,
-                    providerName: currentProvider.name,
-                    model: session.request.model,
-                    instructionsLength: instructions.length,
-                  }
-                );
-              }
-            } catch (error) {
-              // Fail Open: 缓存失败不影响主流程
-              logger.warn("[ProxyForwarder] Failed to cache instructions, continuing", {
-                error,
-                providerId: currentProvider.id,
-              });
-            }
-          }
 
           // ⭐ 成功后绑定 session 到供应商（智能绑定策略）
           if (session.sessionId) {
@@ -719,99 +681,6 @@ export class ProxyForwarder {
               willRetry,
             });
 
-            // 🆕 特殊处理：400 + "Instructions are not valid" 错误智能重试
-            // 针对部分严格的 Codex 中转站（如 88code、foxcode），会验证 instructions 字段
-            // 如果检测到该错误且满足重试条件，根据策略选择重试方式
-            if (statusCode === 400 && errorMessage.includes("Instructions are not valid")) {
-              const canRetryWithOfficial = (session.request.message as Record<string, unknown>)
-                ._canRetryWithOfficialInstructions;
-              const canRetryWithCache = currentProvider.codexInstructionsStrategy === "auto";
-
-              if (canRetryWithOfficial || canRetryWithCache) {
-                logger.warn(
-                  "[ProxyForwarder] Detected 'Instructions are not valid' error, intelligent retry",
-                  {
-                    providerId: currentProvider.id,
-                    providerName: currentProvider.name,
-                    strategy: currentProvider.codexInstructionsStrategy,
-                    attemptNumber: attemptCount,
-                    totalProvidersAttempted,
-                  }
-                );
-
-                // 优先尝试使用缓存的 instructions（如果存在）
-                let retryInstructions: string | null = null;
-                let instructionsSource: "cache" | "official" = "official";
-
-                if (canRetryWithCache) {
-                  try {
-                    retryInstructions = await CodexInstructionsCache.get(
-                      currentProvider.id,
-                      session.request.model || "gpt-5-codex"
-                    );
-
-                    if (retryInstructions) {
-                      instructionsSource = "cache";
-                      logger.info("[ProxyForwarder] Retrying with cached instructions", {
-                        providerId: currentProvider.id,
-                        instructionsLength: retryInstructions.length,
-                      });
-                    }
-                  } catch (error) {
-                    logger.warn("[ProxyForwarder] Failed to fetch cached instructions", { error });
-                  }
-                }
-
-                // Fallback: 使用官方 instructions
-                if (!retryInstructions) {
-                  retryInstructions = getDefaultInstructions(
-                    session.request.model || "gpt-5-codex"
-                  );
-                  instructionsSource = "official";
-
-                  logger.info("[ProxyForwarder] Retrying with official instructions (fallback)", {
-                    providerId: currentProvider.id,
-                    instructionsLength: retryInstructions.length,
-                  });
-                }
-
-                // 替换 instructions
-                (session.request.message as Record<string, unknown>).instructions =
-                  retryInstructions;
-
-                // 删除重试标记（避免无限循环）
-                delete (session.request.message as Record<string, unknown>)
-                  ._canRetryWithOfficialInstructions;
-
-                // 记录到决策链
-                session.addProviderToChain(currentProvider, {
-                  reason:
-                    instructionsSource === "cache"
-                      ? "retry_with_cached_instructions"
-                      : "retry_with_official_instructions",
-                  circuitState: getCircuitState(currentProvider.id),
-                  attemptNumber: attemptCount,
-                  errorMessage: errorMessage,
-                  statusCode: statusCode,
-                  errorDetails: {
-                    provider: {
-                      id: currentProvider.id,
-                      name: currentProvider.name,
-                      statusCode: statusCode,
-                      statusText: proxyError.message,
-                      upstreamBody: proxyError.upstreamError?.body,
-                      upstreamParsed: proxyError.upstreamError?.parsed,
-                    },
-                    instructionsSource,
-                    request: buildRequestDetails(session),
-                  },
-                });
-
-                // 继续内层循环（重试当前供应商，不切换）
-                continue;
-              }
-            }
-
             // 获取熔断器健康信息（用于决策链显示）
             const { health, config } = await getProviderHealthInfo(currentProvider.id);
 
@@ -1080,27 +949,20 @@ export class ProxyForwarder {
           providerId: provider.id,
           providerName: provider.name,
           officialClient: isOfficialClient,
-          codexStrategy: provider.codexInstructionsStrategy,
         });
 
-        const shouldBypassSanitizer =
-          isOfficialClient && (provider.codexInstructionsStrategy ?? "auto") === "auto";
-
-        if (shouldBypassSanitizer) {
-          logger.debug(
-            "[ProxyForwarder] Bypassing sanitizer for official Codex CLI (auto strategy)",
-            {
-              providerId: provider.id,
-              providerName: provider.name,
-            }
-          );
+        if (isOfficialClient) {
+          logger.debug("[ProxyForwarder] Bypassing sanitizer for official Codex CLI client", {
+            providerId: provider.id,
+            providerName: provider.name,
+          });
         } else {
           try {
             const sanitized = await sanitizeCodexRequest(
               session.request.message as Record<string, unknown>,
               session.request.model || "gpt-5-codex",
-              provider.codexInstructionsStrategy,
-              provider.id,
+              undefined,
+              undefined,
               { isOfficialClient }
             );
 
@@ -1108,7 +970,7 @@ export class ProxyForwarder {
               typeof sanitized.instructions === "string" ? sanitized.instructions.length : 0;
 
             if (!instructionsLength) {
-              logger.warn("[ProxyForwarder] Codex sanitization yielded empty instructions", {
+              logger.debug("[ProxyForwarder] Codex request has no instructions (passthrough)", {
                 providerId: provider.id,
                 officialClient: isOfficialClient,
               });
