@@ -5,12 +5,15 @@ import { useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatProviderDescription } from "@/lib/utils/provider-chain-formatter";
 import type { ProviderChainItem } from "@/types/message";
 
 interface ProviderChainPopoverProps {
   chain: ProviderChainItem[];
   finalProvider: string;
+  /** 是否会显示倍率 Badge，影响名称最大宽度 */
+  hasCostBadge?: boolean;
 }
 
 /**
@@ -32,34 +35,77 @@ function isActualRequest(item: ProviderChainItem): boolean {
   return false;
 }
 
-export function ProviderChainPopover({ chain, finalProvider }: ProviderChainPopoverProps) {
+export function ProviderChainPopover({
+  chain,
+  finalProvider,
+  hasCostBadge = false,
+}: ProviderChainPopoverProps) {
   const t = useTranslations("dashboard");
   const tChain = useTranslations("provider-chain");
 
   // 计算实际请求次数（排除中间状态）
   const requestCount = chain.filter(isActualRequest).length;
 
-  // 如果只有一次请求，不显示 popover
+  // 空字符串兜底
+  const displayName = finalProvider || "-";
+
+  // 根据是否有倍率 Badge 决定名称最大宽度
+  const maxWidthClass = hasCostBadge ? "max-w-[140px]" : "max-w-[180px]";
+
+  // 如果只有一次请求，不显示 popover，只显示带 Tooltip 的名称
   if (requestCount <= 1) {
-    return <span>{finalProvider}</span>;
+    return (
+      <div className={`${maxWidthClass} min-w-0`}>
+        <TooltipProvider>
+          <Tooltip delayDuration={300}>
+            <TooltipTrigger asChild>
+              <span className="truncate block cursor-help" dir="auto">
+                {displayName}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" align="start">
+              <p className="text-xs">{displayName}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
+    );
   }
 
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="ghost" className="h-auto p-0 font-normal hover:bg-transparent">
-          <span className="flex items-center gap-1">
-            {finalProvider}
-            <Badge variant="secondary" className="ml-1">
+        <Button
+          type="button"
+          variant="ghost"
+          className="h-auto p-0 font-normal hover:bg-transparent max-w-full shrink min-w-0"
+          aria-label={`${displayName} - ${requestCount}${t("logs.table.times")}`}
+        >
+          <span className="flex items-center gap-1 min-w-0">
+            <div className={`${maxWidthClass} min-w-0`}>
+              <TooltipProvider>
+                <Tooltip delayDuration={300}>
+                  <TooltipTrigger asChild>
+                    <span className="truncate block cursor-help" dir="auto">
+                      {displayName}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" align="start">
+                    <p className="text-xs">{displayName}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            <Badge variant="secondary" className="shrink-0 ml-1">
               {requestCount}
               {t("logs.table.times")}
             </Badge>
-            <InfoIcon className="h-3 w-3 text-muted-foreground" />
+            <InfoIcon className="h-3 w-3 text-muted-foreground shrink-0" aria-hidden="true" />
           </span>
         </Button>
       </PopoverTrigger>
 
-      <PopoverContent className="w-[500px]" align="start">
+      <PopoverContent className="w-[500px] max-w-[calc(100vw-2rem)]" align="start">
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h4 className="font-semibold text-sm">{t("logs.providerChain.decisionChain")}</h4>
