@@ -2,6 +2,7 @@ import { SocksProxyAgent } from "socks-proxy-agent";
 import { Agent, ProxyAgent, setGlobalDispatcher } from "undici";
 import type { Provider } from "@/types/provider";
 import { logger } from "./logger";
+import { getEnvConfig } from "./config/env.schema";
 
 /**
  * undici 全局超时配置
@@ -15,18 +16,23 @@ import { logger } from "./logger";
  */
 const UNDICI_TIMEOUT_MS = 600_000; // 600 秒 = 10 分钟，LLM 服务最大超时时间
 
+// 从环境变量读取 TCP 连接超时（默认 30 秒）
+const { FETCH_CONNECT_TIMEOUT: connectTimeout } = getEnvConfig();
+
 /**
  * 设置 undici 全局 Agent，覆盖默认的 300 秒超时
  * 此配置对所有 fetch() 调用生效（无论是否使用代理）
  */
 setGlobalDispatcher(
   new Agent({
+    connectTimeout,
     headersTimeout: UNDICI_TIMEOUT_MS,
     bodyTimeout: UNDICI_TIMEOUT_MS,
   })
 );
 
 logger.info("undici global dispatcher configured", {
+  connectTimeout,
   headersTimeout: UNDICI_TIMEOUT_MS,
   bodyTimeout: UNDICI_TIMEOUT_MS,
   note: "覆盖 undici 默认 300s 超时，匹配 LLM 最大响应时间",
@@ -126,10 +132,11 @@ export function createProxyAgentForProvider(
     } else if (parsedProxy.protocol === "http:" || parsedProxy.protocol === "https:") {
       // HTTP/HTTPS 代理（使用 undici）
       // 支持 HTTP/2：通过 allowH2 选项启用 ALPN 协商
-      // ⭐ 配置 600 秒超时，覆盖 undici 默认的 300 秒，匹配 LLM 最大响应时间
+      // ⭐ 配置超时，覆盖 undici 默认值，匹配 LLM 最大响应时间
       agent = new ProxyAgent({
         uri: proxyUrl,
         allowH2: enableHttp2,
+        connectTimeout,
         headersTimeout: UNDICI_TIMEOUT_MS, // 等待响应头的超时
         bodyTimeout: UNDICI_TIMEOUT_MS, // 等待响应体的超时
       });
@@ -142,6 +149,7 @@ export function createProxyAgentForProvider(
         proxyPort: parsedProxy.port,
         targetUrl: new URL(targetUrl).origin,
         http2Enabled: enableHttp2,
+        connectTimeout,
         headersTimeout: UNDICI_TIMEOUT_MS,
         bodyTimeout: UNDICI_TIMEOUT_MS,
       });
