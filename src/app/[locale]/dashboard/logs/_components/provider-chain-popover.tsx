@@ -35,7 +35,11 @@ function isActualRequest(item: ProviderChainItem): boolean {
   return false;
 }
 
-export function ProviderChainPopover({ chain, finalProvider, hasCostBadge = false }: ProviderChainPopoverProps) {
+export function ProviderChainPopover({
+  chain,
+  finalProvider,
+  hasCostBadge = false,
+}: ProviderChainPopoverProps) {
   const t = useTranslations("dashboard");
   const tChain = useTranslations("provider-chain");
 
