@@ -284,9 +284,9 @@ export class RequestFilterEngine {
         // Optimization #3: O(1) lookup instead of O(n)
         matches = filter.providerIdsSet?.has(providerId) ?? false;
       } else if (filter.bindingType === "groups" && providerTagsSet) {
-        // Optimization #3: O(m) instead of O(m*n)
+        // Optimization #3: O(m) instead of O(m*n), iterate smaller set (provider tags)
         matches = filter.groupTagsSet
-          ? Array.from(filter.groupTagsSet).some((tag) => providerTagsSet!.has(tag))
+          ? Array.from(providerTagsSet).some((tag) => filter.groupTagsSet!.has(tag))
           : false;
       }
 
