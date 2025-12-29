@@ -4,6 +4,10 @@
 
 ---
 
+## [v0.3.38](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.38) - 2025-12-29
+
+---
+
 ## [v0.3.37](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.37) - 2025-12-24
 
 ### 新增
