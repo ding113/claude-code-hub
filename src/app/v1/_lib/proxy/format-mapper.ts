@@ -25,8 +25,9 @@ import type { Format } from "../converters/types";
  * - "claude": 检测到 Claude Messages API 格式的请求（通过 `system` 或 Claude 特有字段）
  * - "gemini": 检测到 Gemini API 直接格式的请求（通过 `contents` 字段）
  * - "gemini-cli": 检测到 Gemini CLI 格式的请求（通过 `request` envelope）
+ * - "models-list": 模型列表请求（格式无关，不限制供应商类型）
  */
-export type ClientFormat = "response" | "openai" | "claude" | "gemini" | "gemini-cli";
+export type ClientFormat = "response" | "openai" | "claude" | "gemini" | "gemini-cli" | "models-list";
 
 /**
  * 根据请求端点检测客户端格式（优先级最高）
@@ -66,6 +67,13 @@ export function detectFormatByEndpoint(pathname: string): ClientFormat | null {
 
     // OpenAI Chat Completions
     { pattern: /^\/v1\/chat\/completions$/i, format: "openai" },
+
+    // ⭐ 模型列表端点（格式无关，不限制供应商类型，仅按用户分组过滤）
+    // 支持多种客户端：有些请求 /v1/models，有些在 base URL 后加 /models
+    { pattern: /^\/v1\/models$/i, format: "models-list" },
+    { pattern: /^\/v1\/responses\/models$/i, format: "models-list" },
+    { pattern: /^\/v1\/chat\/completions\/models$/i, format: "models-list" },
+    { pattern: /^\/v1beta\/models$/i, format: "models-list" },
 
     // Gemini Direct API
     {
@@ -107,6 +115,10 @@ export function mapClientFormatToTransformer(clientFormat: ClientFormat): Format
       return "gemini-cli"; // 直接 Gemini 格式内部使用 gemini-cli 转换器
     case "gemini-cli":
       return "gemini-cli";
+    case "models-list":
+      // 模型列表端点不需要格式转换，默认返回 openai-compatible
+      // 因为大多数客户端期望 OpenAI 格式的模型列表响应
+      return "openai-compatible";
     default: {
       // 类型守卫：如果有未处理的格式，TypeScript 会报错
       const _exhaustiveCheck: never = clientFormat;
@@ -154,6 +166,16 @@ export function mapTransformerFormatToClient(transformerFormat: Format): ClientF
       throw new Error(`Unknown transformer format: ${_exhaustiveCheck}`);
     }
   }
+}
+
+/**
+ * 检查是否为模型列表端点（格式无关）
+ *
+ * @param format - 客户端格式
+ * @returns 是否为模型列表端点
+ */
+export function isModelsListFormat(format: ClientFormat): boolean {
+  return format === "models-list";
 }
 
 /**

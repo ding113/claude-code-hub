@@ -43,8 +43,11 @@ const STANDARD_ENDPOINTS = [
   "/v1/messages",
   "/v1/messages/count_tokens",
   "/v1/responses",
+  "/v1/responses/models",
   "/v1/chat/completions",
+  "/v1/chat/completions/models",
   "/v1/models",
+  "/v1beta/models",
 ];
 
 const RETRY_LIMITS = PROVIDER_LIMITS.MAX_RETRY_ATTEMPTS;
@@ -1083,10 +1086,29 @@ export class ProxyForwarder {
         );
       }
 
+      // ⭐ 兼容客户端在 base URL 后加 /models 获取模型列表
+      // 例如客户端配置 base URL 为 /v1/responses，会请求 /v1/responses/models
+      // 需要重写为标准的 /v1/models 路径
+      const MODELS_PATH_REWRITES: Record<string, string> = {
+        "/v1/responses/models": "/v1/models",
+        "/v1/chat/completions/models": "/v1/models",
+      };
+
+      let effectiveRequestUrl = session.requestUrl;
+      const rewrittenPath = MODELS_PATH_REWRITES[requestPath];
+      if (rewrittenPath) {
+        effectiveRequestUrl = new URL(session.requestUrl.href);
+        effectiveRequestUrl.pathname = rewrittenPath;
+        logger.debug("ProxyForwarder: Rewriting models path", {
+          originalPath: requestPath,
+          rewrittenPath,
+        });
+      }
+
       // ⭐ 直接使用原始请求路径，让 buildProxyUrl() 智能处理路径拼接
       // 移除了强制 /v1/responses 路径重写，解决 Issue #139
       // buildProxyUrl() 会检测 base_url 是否已包含完整路径，避免重复拼接
-      proxyUrl = buildProxyUrl(effectiveBaseUrl, session.requestUrl);
+      proxyUrl = buildProxyUrl(effectiveBaseUrl, effectiveRequestUrl);
 
       logger.debug("ProxyForwarder: Final proxy URL", {
         url: proxyUrl,

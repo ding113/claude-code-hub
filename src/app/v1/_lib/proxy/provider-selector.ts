@@ -8,6 +8,7 @@ import { getSystemSettings } from "@/repository/system-config";
 import type { ProviderChainItem } from "@/types/message";
 import type { Provider } from "@/types/provider";
 import type { ClientFormat } from "./format-mapper";
+import { isModelsListFormat } from "./format-mapper";
 import { ProxyResponses } from "./responses";
 import type { ProxySession } from "./session";
 
@@ -181,6 +182,7 @@ function providerSupportsModel(provider: Provider, requestedModel: string): bool
  * - openai → openai-compatible
  * - gemini → gemini
  * - gemini-cli → gemini-cli
+ * - models-list → 所有类型（格式无关，不限制供应商类型）
  *
  * @param format - 客户端请求格式（从 session.originalFormat 获取）
  * @param providerType - 供应商类型
@@ -192,6 +194,11 @@ function checkFormatProviderTypeCompatibility(
   format: ClientFormat,
   providerType: Provider["providerType"]
 ): boolean {
+  // ⭐ 模型列表端点：格式无关，不限制供应商类型
+  if (isModelsListFormat(format)) {
+    return true;
+  }
+
   switch (format) {
     case "claude":
       return providerType === "claude" || providerType === "claude-auth";
@@ -713,8 +720,13 @@ export class ProxyProviderResolver {
 
       // 2c. 模型匹配（保留原有逻辑）
       if (!requestedModel) {
-        // 没有模型信息时，只选择 Anthropic 提供商（向后兼容）
-        return provider.providerType === "claude";
+        // 没有模型信息时，根据请求格式选择对应类型的供应商
+        if (session?.originalFormat) {
+          // 如果有格式信息，已经在 2b 步骤过滤过了，这里直接返回 true
+          return true;
+        }
+        // 没有格式信息时，只选择 Anthropic 提供商（向后兼容）
+        return provider.providerType === "claude" || provider.providerType === "claude-auth";
       }
 
       return providerSupportsModel(provider, requestedModel);
