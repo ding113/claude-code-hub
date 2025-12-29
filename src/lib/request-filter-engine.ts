@@ -421,10 +421,12 @@ export class RequestFilterEngine {
       return cached;
     });
 
-    this.globalFilters = cachedFilters.filter((f) => f.bindingType === "global" || !f.bindingType);
-    this.providerFilters = cachedFilters.filter(
-      (f) => f.bindingType === "providers" || f.bindingType === "groups"
-    );
+    this.globalFilters = cachedFilters
+      .filter((f) => f.bindingType === "global" || !f.bindingType)
+      .sort((a, b) => a.priority - b.priority || a.id - b.id);
+    this.providerFilters = cachedFilters
+      .filter((f) => f.bindingType === "providers" || f.bindingType === "groups")
+      .sort((a, b) => a.priority - b.priority || a.id - b.id);
     this.hasGroupBasedFilters = this.providerFilters.some((f) => f.bindingType === "groups");
     this.isInitialized = true;
     this.lastReloadTime = Date.now();
