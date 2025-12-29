@@ -130,9 +130,10 @@ function resolveMaxAttemptsForProvider(
  * 背景：undiciRequest() 在使用非 undici 原生 dispatcher（如 SocksProxyAgent）时，
  * 不会继承全局 Agent 的超时配置，需要显式传递超时参数。
  *
- * 这个值与 proxy-agent.ts 中的 UNDICI_TIMEOUT_MS 保持一致。
+ * 这里与全局 undici Agent 使用同一套环境变量配置（FETCH_HEADERS_TIMEOUT / FETCH_BODY_TIMEOUT）。
  */
-const UNDICI_REQUEST_TIMEOUT_MS = 600_000; // 600 秒 = 10 分钟，LLM 服务最大超时时间
+// 注意：undici.request 的 headersTimeout/bodyTimeout 属于 RequestOptions；
+// connectTimeout 属于 Dispatcher/Client 配置（已在全局 Agent / ProxyAgent 里处理）。
 
 /**
  * 过滤私有参数（下划线前缀）
@@ -1832,6 +1833,9 @@ export class ProxyForwarder {
     providerName: string,
     session?: ProxySession
   ): Promise<Response> {
+    const { FETCH_HEADERS_TIMEOUT: headersTimeout, FETCH_BODY_TIMEOUT: bodyTimeout } =
+      getEnvConfig();
+
     logger.debug("ProxyForwarder: Using undici.request to bypass auto-decompression", {
       providerId,
       providerName,
@@ -1858,8 +1862,8 @@ export class ProxyForwarder {
       body: init.body as string | Buffer | undefined,
       signal: init.signal,
       dispatcher: init.dispatcher,
-      bodyTimeout: UNDICI_REQUEST_TIMEOUT_MS,
-      headersTimeout: UNDICI_REQUEST_TIMEOUT_MS,
+      bodyTimeout,
+      headersTimeout,
     });
 
     // ⭐ 立即为 undici body 添加错误处理，防止 uncaughtException
