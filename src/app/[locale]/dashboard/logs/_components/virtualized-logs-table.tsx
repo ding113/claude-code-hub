@@ -1,7 +1,6 @@
 "use client";
 
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowUp, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -10,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RelativeTime } from "@/components/ui/relative-time";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useVirtualizer } from "@/hooks/use-virtualizer";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
@@ -296,20 +296,8 @@ export function VirtualizedLogsTable({
                     ) : (
                       <div className="flex flex-col items-start gap-0.5 min-w-0">
                         <div className="flex items-center gap-1 min-w-0">
-                          {log.providerChain && log.providerChain.length > 0 ? (
-                            <ProviderChainPopover
-                              chain={log.providerChain}
-                              finalProvider={
-                                log.providerChain[log.providerChain.length - 1].name ||
-                                log.providerName ||
-                                tChain("circuit.unknown")
-                              }
-                            />
-                          ) : (
-                            <span className="truncate">{log.providerName || "-"}</span>
-                          )}
-                          {/* Cost multiplier badge */}
                           {(() => {
+                            // 计算倍率，用于判断是否显示 Badge
                             const successfulProvider =
                               log.providerChain && log.providerChain.length > 0
                                 ? [...log.providerChain]
@@ -322,19 +310,38 @@ export function VirtualizedLogsTable({
                                 : null;
                             const actualCostMultiplier =
                               successfulProvider?.costMultiplier ?? log.costMultiplier;
-                            return actualCostMultiplier &&
-                              parseFloat(String(actualCostMultiplier)) !== 1.0 ? (
-                              <Badge
-                                variant="outline"
-                                className={
-                                  parseFloat(String(actualCostMultiplier)) > 1.0
-                                    ? "text-xs bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800 shrink-0"
-                                    : "text-xs bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-300 dark:border-green-800 shrink-0"
-                                }
-                              >
-                                x{parseFloat(String(actualCostMultiplier)).toFixed(2)}
-                              </Badge>
-                            ) : null;
+                            const hasCostBadge =
+                              !!actualCostMultiplier &&
+                              parseFloat(String(actualCostMultiplier)) !== 1.0;
+
+                            return (
+                              <>
+                                <ProviderChainPopover
+                                  chain={log.providerChain ?? []}
+                                  finalProvider={
+                                    (log.providerChain && log.providerChain.length > 0
+                                      ? log.providerChain[log.providerChain.length - 1].name
+                                      : null) ||
+                                    log.providerName ||
+                                    tChain("circuit.unknown")
+                                  }
+                                  hasCostBadge={hasCostBadge}
+                                />
+                                {/* Cost multiplier badge */}
+                                {hasCostBadge && (
+                                  <Badge
+                                    variant="outline"
+                                    className={
+                                      parseFloat(String(actualCostMultiplier)) > 1.0
+                                        ? "text-xs bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800 shrink-0"
+                                        : "text-xs bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-300 dark:border-green-800 shrink-0"
+                                    }
+                                  >
+                                    x{parseFloat(String(actualCostMultiplier)).toFixed(2)}
+                                  </Badge>
+                                )}
+                              </>
+                            );
                           })()}
                         </div>
                         {log.providerChain &&
@@ -391,10 +398,12 @@ export function VirtualizedLogsTable({
                     <TooltipProvider>
                       <Tooltip delayDuration={250}>
                         <TooltipTrigger asChild>
-                          <span className="cursor-help">
-                            {formatTokenAmount(log.inputTokens)} /{" "}
-                            {formatTokenAmount(log.outputTokens)}
-                          </span>
+                          <div className="cursor-help flex flex-col items-end leading-tight tabular-nums">
+                            <span>{formatTokenAmount(log.inputTokens)}</span>
+                            <span className="text-muted-foreground">
+                              {formatTokenAmount(log.outputTokens)}
+                            </span>
+                          </div>
                         </TooltipTrigger>
                         <TooltipContent align="end" className="text-xs space-y-1">
                           <div>
@@ -413,25 +422,41 @@ export function VirtualizedLogsTable({
                     <TooltipProvider>
                       <Tooltip delayDuration={250}>
                         <TooltipTrigger asChild>
-                          <div className="flex items-center justify-end gap-1 cursor-help">
-                            <span>
-                              {formatTokenAmount(log.cacheCreationInputTokens)} /{" "}
+                          <div className="cursor-help flex flex-col items-end leading-tight tabular-nums">
+                            <div className="flex items-center gap-1">
+                              <span>{formatTokenAmount(log.cacheCreationInputTokens)}</span>
+                              {log.cacheTtlApplied ? (
+                                <Badge variant="outline" className="text-[10px] leading-tight px-1">
+                                  {log.cacheTtlApplied}
+                                </Badge>
+                              ) : null}
+                            </div>
+                            <span className="text-muted-foreground">
                               {formatTokenAmount(log.cacheReadInputTokens)}
                             </span>
-                            {log.cacheTtlApplied ? (
-                              <Badge variant="outline" className="text-[10px] leading-tight px-1">
-                                {log.cacheTtlApplied}
-                              </Badge>
-                            ) : null}
                           </div>
                         </TooltipTrigger>
                         <TooltipContent align="end" className="text-xs space-y-1">
                           <div className="font-medium">{t("logs.columns.cacheWrite")}</div>
                           <div className="pl-2">
-                            5m: {formatTokenAmount(log.cacheCreation5mInputTokens)}
+                            5m:{" "}
+                            {formatTokenAmount(
+                              (log.cacheCreation5mInputTokens ?? 0) > 0
+                                ? log.cacheCreation5mInputTokens
+                                : log.cacheTtlApplied !== "1h"
+                                  ? log.cacheCreationInputTokens
+                                  : 0
+                            )}
                           </div>
                           <div className="pl-2">
-                            1h: {formatTokenAmount(log.cacheCreation1hInputTokens)}
+                            1h:{" "}
+                            {formatTokenAmount(
+                              (log.cacheCreation1hInputTokens ?? 0) > 0
+                                ? log.cacheCreation1hInputTokens
+                                : log.cacheTtlApplied === "1h"
+                                  ? log.cacheCreationInputTokens
+                                  : 0
+                            )}
                           </div>
                           <div className="font-medium mt-1">{t("logs.columns.cacheRead")}</div>
                           <div className="pl-2">{formatTokenAmount(log.cacheReadInputTokens)}</div>
@@ -555,6 +580,7 @@ export function VirtualizedLogsTable({
                       billingModelSource={billingModelSource}
                       inputTokens={log.inputTokens}
                       outputTokens={log.outputTokens}
+                      cacheCreationInputTokens={log.cacheCreationInputTokens}
                       cacheCreation5mInputTokens={log.cacheCreation5mInputTokens}
                       cacheCreation1hInputTokens={log.cacheCreation1hInputTokens}
                       cacheReadInputTokens={log.cacheReadInputTokens}

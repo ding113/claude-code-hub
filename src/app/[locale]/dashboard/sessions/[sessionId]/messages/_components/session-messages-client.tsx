@@ -21,10 +21,11 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePathname, useRouter } from "@/i18n/routing";
 import { type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
 import { RequestListSidebar } from "./request-list-sidebar";
+import { type SessionMessages, SessionMessagesDetailsTabs } from "./session-details-tabs";
+import { isSessionMessages } from "./session-messages-guards";
 
 async function fetchSystemSettings(): Promise<{
   currencyDisplay: CurrencyCode;
@@ -36,10 +37,6 @@ async function fetchSystemSettings(): Promise<{
   return response.json();
 }
 
-/**
- * Session Messages 详情页面客户端组件
- * 三栏布局：左侧请求列表 + 中间完整内容 + 右侧信息卡片
- */
 export function SessionMessagesClient() {
   const t = useTranslations("dashboard.sessions");
   const tDesc = useTranslations("dashboard.description");
@@ -58,7 +55,7 @@ export function SessionMessagesClient() {
     return parsed;
   })();
 
-  const [messages, setMessages] = useState<unknown | null>(null);
+  const [messages, setMessages] = useState<SessionMessages | null>(null);
   const [response, setResponse] = useState<string | null>(null);
   const [requestHeaders, setRequestHeaders] = useState<Record<string, string> | null>(null);
   const [responseHeaders, setResponseHeaders] = useState<Record<string, string> | null>(null);
@@ -67,6 +64,8 @@ export function SessionMessagesClient() {
       Extract<Awaited<ReturnType<typeof getSessionDetails>>, { ok: true }>["data"]["sessionStats"]
     >(null);
   const [currentSequence, setCurrentSequence] = useState<number | null>(null);
+  const [prevSequence, setPrevSequence] = useState<number | null>(null);
+  const [nextSequence, setNextSequence] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copiedMessages, setCopiedMessages] = useState(false);
@@ -93,6 +92,8 @@ export function SessionMessagesClient() {
   );
 
   useEffect(() => {
+    let cancelled = false;
+
     const fetchDetails = async () => {
       setIsLoading(true);
       setError(null);
@@ -100,24 +101,36 @@ export function SessionMessagesClient() {
       try {
         // 传入 requestSequence 参数以获取特定请求的消息
         const result = await getSessionDetails(sessionId, selectedSeq ?? undefined);
+        if (cancelled) return;
+
         if (result.ok) {
-          setMessages(result.data.messages);
+          const maybeMessages = result.data.messages;
+          setMessages(isSessionMessages(maybeMessages) ? maybeMessages : null);
           setResponse(result.data.response);
           setRequestHeaders(result.data.requestHeaders);
           setResponseHeaders(result.data.responseHeaders);
           setSessionStats(result.data.sessionStats);
           setCurrentSequence(result.data.currentSequence);
+          setPrevSequence(result.data.prevSequence);
+          setNextSequence(result.data.nextSequence);
         } else {
           setError(result.error || t("status.fetchFailed"));
         }
       } catch (err) {
+        if (cancelled) return;
         setError(err instanceof Error ? err.message : t("status.unknownError"));
       } finally {
-        setIsLoading(false);
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       }
     };
 
     void fetchDetails();
+
+    return () => {
+      cancelled = true;
+    };
   }, [sessionId, selectedSeq, t]);
 
   const handleCopyMessages = async () => {
@@ -175,16 +188,6 @@ export function SessionMessagesClient() {
     } finally {
       setIsTerminating(false);
       setShowTerminateDialog(false);
-    }
-  };
-
-  // 格式化响应体（尝试美化 JSON）
-  const formatResponse = (raw: string) => {
-    try {
-      const parsed = JSON.parse(raw);
-      return JSON.stringify(parsed, null, 2);
-    } catch {
-      return raw;
     }
   };
 
@@ -297,70 +300,55 @@ export function SessionMessagesClient() {
                   </Section>
                 )}
 
-                <Tabs defaultValue="requestBody" className="w-full">
-                  <TabsList className="grid w-full grid-cols-4">
-                    <TabsTrigger value="requestHeaders">{t("details.requestHeaders")}</TabsTrigger>
-                    <TabsTrigger value="requestBody">{t("details.requestBody")}</TabsTrigger>
-                    <TabsTrigger value="responseHeaders">
-                      {t("details.responseHeaders")}
-                    </TabsTrigger>
-                    <TabsTrigger value="responseBody">{t("details.responseBody")}</TabsTrigger>
-                  </TabsList>
+                <div className="space-y-2">
+                  {response !== null && (
+                    <div className="flex justify-end">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleCopyResponse}
+                        disabled={copiedResponse}
+                      >
+                        {copiedResponse ? (
+                          <>
+                            <Check className="h-4 w-4 mr-2" />
+                            {t("actions.copied")}
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-4 w-4 mr-2" />
+                            {t("actions.copyResponse")}
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                  <SessionMessagesDetailsTabs
+                    messages={messages}
+                    response={response}
+                    requestHeaders={requestHeaders}
+                    responseHeaders={responseHeaders}
+                  />
 
-                  <TabsContent value="requestHeaders">
-                    <HeadersDisplay headers={requestHeaders} />
-                  </TabsContent>
-
-                  <TabsContent value="requestBody">
-                    {messages === null ? (
-                      <div className="text-muted-foreground p-4">{t("details.noData")}</div>
-                    ) : (
-                      <div className="rounded-md border bg-muted/50 p-6 max-h-[600px] overflow-auto">
-                        <pre className="text-xs whitespace-pre-wrap break-words font-mono">
-                          {JSON.stringify(messages, null, 2)}
-                        </pre>
-                      </div>
-                    )}
-                  </TabsContent>
-
-                  <TabsContent value="responseHeaders">
-                    <HeadersDisplay headers={responseHeaders} />
-                  </TabsContent>
-
-                  <TabsContent value="responseBody">
-                    {response === null ? (
-                      <div className="text-muted-foreground p-4">{t("details.noData")}</div>
-                    ) : (
-                      <div className="space-y-2">
-                        <div className="flex justify-end">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={handleCopyResponse}
-                            disabled={copiedResponse}
-                          >
-                            {copiedResponse ? (
-                              <>
-                                <Check className="h-4 w-4 mr-2" />
-                                {t("actions.copied")}
-                              </>
-                            ) : (
-                              <>
-                                <Copy className="h-4 w-4 mr-2" />
-                                {t("actions.copyResponse")}
-                              </>
-                            )}
-                          </Button>
-                        </div>
-                        <div className="rounded-md border bg-muted/50 p-6 max-h-[600px] overflow-auto">
-                          <pre className="text-xs whitespace-pre-wrap break-words font-mono">
-                            {formatResponse(response)}
-                          </pre>
-                        </div>
-                      </div>
-                    )}
-                  </TabsContent>
-                </Tabs>
+                  <div className="flex items-center justify-between">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!prevSequence}
+                      onClick={() => prevSequence && handleSelectRequest(prevSequence)}
+                    >
+                      {t("details.prevRequest")}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!nextSequence}
+                      onClick={() => nextSequence && handleSelectRequest(nextSequence)}
+                    >
+                      {t("details.nextRequest")}
+                    </Button>
+                  </div>
+                </div>
 
                 {/* 无数据提示 */}
                 {!sessionStats?.userAgent &&
@@ -611,22 +599,6 @@ export function SessionMessagesClient() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
-  );
-}
-
-function HeadersDisplay({ headers }: { headers: Record<string, string> | null }) {
-  const t = useTranslations("dashboard.sessions");
-  if (!headers || Object.keys(headers).length === 0) {
-    return <div className="text-muted-foreground p-4">{t("details.noHeaders")}</div>;
-  }
-  return (
-    <div className="rounded-md border bg-muted/50 p-6 max-h-[600px] overflow-auto">
-      <pre className="text-xs whitespace-pre-wrap break-words font-mono">
-        {Object.entries(headers)
-          .map(([key, value]) => `${key}: ${value}`)
-          .join("\n")}
-      </pre>
     </div>
   );
 }

@@ -29,22 +29,36 @@ import {
   findUserById,
   findUserList,
   findUserListBatch,
+  getAllUserProviderGroups as getAllUserProviderGroupsRepository,
+  getAllUserTags as getAllUserTagsRepository,
+  searchUsersForFilter as searchUsersForFilterRepository,
   updateUser,
 } from "@/repository/user";
 import type { User, UserDisplay } from "@/types/user";
 import type { ActionResult } from "./types";
 
 export interface GetUsersBatchParams {
-  cursor?: { id: number; createdAt: string };
+  cursor?: number;
   limit?: number;
   searchTerm?: string;
-  tagFilter?: string;
-  keyGroupFilter?: string;
+  tagFilters?: string[];
+  keyGroupFilters?: string[];
+  statusFilter?: "all" | "active" | "expired" | "expiringSoon" | "enabled" | "disabled";
+  sortBy?:
+    | "name"
+    | "tags"
+    | "expiresAt"
+    | "limit5hUsd"
+    | "limitDailyUsd"
+    | "limitWeeklyUsd"
+    | "limitMonthlyUsd"
+    | "createdAt";
+  sortOrder?: "asc" | "desc";
 }
 
 export interface GetUsersBatchResult {
   users: UserDisplay[];
-  nextCursor: { id: number; createdAt: string } | null;
+  nextCursor: number | null;
   hasMore: boolean;
 }
 
@@ -295,6 +309,111 @@ export async function getUsers(): Promise<UserDisplay[]> {
   }
 }
 
+export async function searchUsersForFilter(
+  searchTerm?: string
+): Promise<ActionResult<Array<{ id: number; name: string }>>> {
+  try {
+    const tError = await getTranslations("errors");
+
+    const session = await getSession();
+    if (!session) {
+      return {
+        ok: false,
+        error: tError("UNAUTHORIZED"),
+        errorCode: ERROR_CODES.UNAUTHORIZED,
+      };
+    }
+
+    if (session.user.role !== "admin") {
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    const users = await searchUsersForFilterRepository(searchTerm);
+    return { ok: true, data: users };
+  } catch (error) {
+    logger.error("Failed to search users for filter:", error);
+    const message = error instanceof Error ? error.message : "Failed to search users for filter";
+    return { ok: false, error: message, errorCode: ERROR_CODES.DATABASE_ERROR };
+  }
+}
+
+/**
+ * 获取所有用户标签（用于标签筛选下拉框）
+ * 返回所有用户的标签，不受当前筛选条件影响
+ *
+ * 注意：仅管理员可用。
+ */
+export async function getAllUserTags(): Promise<ActionResult<string[]>> {
+  try {
+    const tError = await getTranslations("errors");
+
+    const session = await getSession();
+    if (!session) {
+      return {
+        ok: false,
+        error: tError("UNAUTHORIZED"),
+        errorCode: ERROR_CODES.UNAUTHORIZED,
+      };
+    }
+
+    if (session.user.role !== "admin") {
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    const tags = await getAllUserTagsRepository();
+    return { ok: true, data: tags };
+  } catch (error) {
+    logger.error("Failed to get all user tags:", error);
+    const message = error instanceof Error ? error.message : "Failed to get all user tags";
+    return { ok: false, error: message, errorCode: ERROR_CODES.DATABASE_ERROR };
+  }
+}
+
+/**
+ * 获取所有用户密钥分组（用于密钥分组筛选下拉框）
+ * 返回所有用户的分组，不受当前筛选条件影响
+ *
+ * 注意：仅管理员可用。
+ */
+export async function getAllUserKeyGroups(): Promise<ActionResult<string[]>> {
+  try {
+    const tError = await getTranslations("errors");
+
+    const session = await getSession();
+    if (!session) {
+      return {
+        ok: false,
+        error: tError("UNAUTHORIZED"),
+        errorCode: ERROR_CODES.UNAUTHORIZED,
+      };
+    }
+
+    if (session.user.role !== "admin") {
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    const groups = await getAllUserProviderGroupsRepository();
+    return { ok: true, data: groups };
+  } catch (error) {
+    logger.error("Failed to get all user provider groups:", error);
+    const message =
+      error instanceof Error ? error.message : "Failed to get all user provider groups";
+    return { ok: false, error: message, errorCode: ERROR_CODES.DATABASE_ERROR };
+  }
+}
+
 /**
  * 游标分页获取用户列表（用于无限滚动）
  *
@@ -329,8 +448,11 @@ export async function getUsersBatch(
       cursor: params.cursor,
       limit: params.limit,
       searchTerm: params.searchTerm,
-      tagFilter: params.tagFilter,
-      keyGroupFilter: params.keyGroupFilter,
+      tagFilters: params.tagFilters,
+      keyGroupFilters: params.keyGroupFilters,
+      statusFilter: params.statusFilter,
+      sortBy: params.sortBy,
+      sortOrder: params.sortOrder,
     });
 
     if (users.length === 0) {

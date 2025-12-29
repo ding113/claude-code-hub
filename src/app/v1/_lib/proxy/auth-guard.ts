@@ -102,7 +102,7 @@ export class ProxyAuthenticator {
         success: false,
         errorResponse: ProxyResponses.buildError(
           401,
-          "API 密钥无效。提供的密钥不存在或已被删除。",
+          "API 密钥无效。提供的密钥不存在、已被删除、已被禁用或已过期。",
           "invalid_api_key"
         ),
       };

@@ -90,7 +90,10 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
         if (period === "custom" && dateRange) {
           url += `&startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`;
         }
-        if (scope === "providerCacheHitRate" && providerTypeFilter !== "all") {
+        if (
+          (scope === "providerCacheHitRate" || scope === "provider") &&
+          providerTypeFilter !== "all"
+        ) {
           url += `&providerType=${encodeURIComponent(providerTypeFilter)}`;
         }
         const res = await fetch(url);
@@ -143,61 +146,75 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
   const userColumns: ColumnDef<UserEntry>[] = [
     {
       header: t("columns.user"),
-      cell: (row, index) => (
-        <span className={index < 3 ? "font-semibold" : ""}>{(row as UserEntry).userName}</span>
-      ),
+      cell: (row) => (row as UserEntry).userName,
+      sortKey: "userName",
+      getValue: (row) => (row as UserEntry).userName,
     },
     {
       header: t("columns.requests"),
       className: "text-right",
       cell: (row) => (row as UserEntry).totalRequests.toLocaleString(),
+      sortKey: "totalRequests",
+      getValue: (row) => (row as UserEntry).totalRequests,
     },
     {
       header: t("columns.tokens"),
       className: "text-right",
       cell: (row) => formatTokenAmount((row as UserEntry).totalTokens),
+      sortKey: "totalTokens",
+      getValue: (row) => (row as UserEntry).totalTokens,
     },
     {
       header: t("columns.consumedAmount"),
-      className: "text-right font-mono font-semibold",
+      className: "text-right font-mono",
       cell: (row) => {
         const r = row as UserEntry & { totalCostFormatted?: string };
         return r.totalCostFormatted ?? r.totalCost;
       },
+      sortKey: "totalCost",
+      getValue: (row) => (row as UserEntry).totalCost,
+      defaultBold: true,
     },
   ];
 
   const providerColumns: ColumnDef<ProviderEntry>[] = [
     {
       header: t("columns.provider"),
-      cell: (row, index) => (
-        <span className={index < 3 ? "font-semibold" : ""}>
-          {(row as ProviderEntry).providerName}
-        </span>
-      ),
+      cell: (row) => (row as ProviderEntry).providerName,
+      sortKey: "providerName",
+      getValue: (row) => (row as ProviderEntry).providerName,
     },
     {
       header: t("columns.requests"),
       className: "text-right",
       cell: (row) => (row as ProviderEntry).totalRequests.toLocaleString(),
+      sortKey: "totalRequests",
+      getValue: (row) => (row as ProviderEntry).totalRequests,
     },
     {
       header: t("columns.cost"),
-      className: "text-right font-mono font-semibold",
+      className: "text-right font-mono",
       cell: (row) => {
         const r = row as ProviderEntry & { totalCostFormatted?: string };
         return r.totalCostFormatted ?? r.totalCost;
       },
+      sortKey: "totalCost",
+      getValue: (row) => (row as ProviderEntry).totalCost,
+      defaultBold: true,
     },
     {
       header: t("columns.tokens"),
       className: "text-right",
       cell: (row) => formatTokenAmount((row as ProviderEntry).totalTokens),
+      sortKey: "totalTokens",
+      getValue: (row) => (row as ProviderEntry).totalTokens,
     },
     {
       header: t("columns.successRate"),
       className: "text-right",
       cell: (row) => `${(Number((row as ProviderEntry).successRate || 0) * 100).toFixed(1)}%`,
+      sortKey: "successRate",
+      getValue: (row) => (row as ProviderEntry).successRate,
     },
     {
       header: t("columns.avgTtfbMs"),
@@ -206,6 +223,8 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
         const val = (row as ProviderEntry).avgTtfbMs;
         return val && val > 0 ? `${Math.round(val).toLocaleString()} ms` : "-";
       },
+      sortKey: "avgTtfbMs",
+      getValue: (row) => (row as ProviderEntry).avgTtfbMs ?? 0,
     },
     {
       header: t("columns.avgTokensPerSecond"),
@@ -214,72 +233,87 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
         const val = (row as ProviderEntry).avgTokensPerSecond;
         return val && val > 0 ? `${val.toFixed(1)} tok/s` : "-";
       },
+      sortKey: "avgTokensPerSecond",
+      getValue: (row) => (row as ProviderEntry).avgTokensPerSecond ?? 0,
     },
   ];
 
   const providerCacheHitRateColumns: ColumnDef<ProviderCacheHitRateEntry>[] = [
     {
       header: t("columns.provider"),
-      cell: (row, index) => (
-        <span className={index < 3 ? "font-semibold" : ""}>
-          {(row as ProviderCacheHitRateEntry).providerName}
-        </span>
-      ),
+      cell: (row) => (row as ProviderCacheHitRateEntry).providerName,
+      sortKey: "providerName",
+      getValue: (row) => (row as ProviderCacheHitRateEntry).providerName,
     },
     {
       header: t("columns.cacheHitRequests"),
       className: "text-right",
       cell: (row) => (row as ProviderCacheHitRateEntry).totalRequests.toLocaleString(),
+      sortKey: "totalRequests",
+      getValue: (row) => (row as ProviderCacheHitRateEntry).totalRequests,
     },
     {
       header: t("columns.cacheHitRate"),
       className: "text-right",
       cell: (row) =>
         `${(Number((row as ProviderCacheHitRateEntry).cacheHitRate || 0) * 100).toFixed(1)}%`,
+      sortKey: "cacheHitRate",
+      getValue: (row) => (row as ProviderCacheHitRateEntry).cacheHitRate,
     },
     {
       header: t("columns.cacheReadTokens"),
       className: "text-right",
       cell: (row) => formatTokenAmount((row as ProviderCacheHitRateEntry).cacheReadTokens),
+      sortKey: "cacheReadTokens",
+      getValue: (row) => (row as ProviderCacheHitRateEntry).cacheReadTokens,
     },
     {
       header: t("columns.totalTokens"),
       className: "text-right",
       cell: (row) => formatTokenAmount((row as ProviderCacheHitRateEntry).totalTokens),
+      sortKey: "totalTokens",
+      getValue: (row) => (row as ProviderCacheHitRateEntry).totalTokens,
     },
   ];
 
   const modelColumns: ColumnDef<ModelEntry>[] = [
     {
       header: t("columns.model"),
-      cell: (row, index) => (
-        <span className={index < 3 ? "font-semibold font-mono text-sm" : "font-mono text-sm"}>
-          {(row as ModelEntry).model}
-        </span>
-      ),
+      cell: (row) => <span className="font-mono text-sm">{(row as ModelEntry).model}</span>,
+      sortKey: "model",
+      getValue: (row) => (row as ModelEntry).model,
     },
     {
       header: t("columns.requests"),
       className: "text-right",
       cell: (row) => (row as ModelEntry).totalRequests.toLocaleString(),
+      sortKey: "totalRequests",
+      getValue: (row) => (row as ModelEntry).totalRequests,
     },
     {
       header: t("columns.tokens"),
       className: "text-right",
       cell: (row) => formatTokenAmount((row as ModelEntry).totalTokens),
+      sortKey: "totalTokens",
+      getValue: (row) => (row as ModelEntry).totalTokens,
     },
     {
       header: t("columns.cost"),
-      className: "text-right font-mono font-semibold",
+      className: "text-right font-mono",
       cell: (row) => {
         const r = row as ModelEntry & { totalCostFormatted?: string };
         return r.totalCostFormatted ?? r.totalCost;
       },
+      sortKey: "totalCost",
+      getValue: (row) => (row as ModelEntry).totalCost,
+      defaultBold: true,
     },
     {
       header: t("columns.successRate"),
       className: "text-right",
       cell: (row) => `${(Number((row as ModelEntry).successRate || 0) * 100).toFixed(1)}%`,
+      sortKey: "successRate",
+      getValue: (row) => (row as ModelEntry).successRate,
     },
   ];
 
@@ -326,7 +360,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
           </TabsList>
         </Tabs>
 
-        {scope === "providerCacheHitRate" ? (
+        {scope === "provider" || scope === "providerCacheHitRate" ? (
           <ProviderTypeFilter
             value={providerTypeFilter}
             onChange={setProviderTypeFilter}

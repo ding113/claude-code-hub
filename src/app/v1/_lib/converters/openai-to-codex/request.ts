@@ -7,7 +7,7 @@
  *
  * 核心转换：
  * - messages[] → input[] (message 类型)
- * - system messages → instructions (需要检测并注入强制 prompt)
+ * - system messages → instructions（透传映射，不再注入默认 prompt）
  * - messages[].content.text → input_text / output_text
  * - messages[].content.image_url → input_image
  * - messages[].tool_calls → function_call
@@ -18,13 +18,13 @@
  */
 
 import { logger } from "@/lib/logger";
-import { getDefaultInstructions } from "../../codex/constants/codex-instructions";
 
 /**
  * OpenAI Chat Completions 请求体接口（简化类型定义）
  */
 interface OpenAIChatCompletionRequest {
   model?: string;
+  instructions?: string;
   messages?: Array<{
     role: string;
     content?:
@@ -155,10 +155,23 @@ export function transformOpenAIRequestToCodex(
     instructionsLength: extractedInstructions.length,
   });
 
+  // 步骤 1.1：决定输出 instructions（优先透传输入的 instructions，其次使用 system messages）
+  // 约定：不再强制注入官方默认 prompt，避免覆盖用户/客户端的 instructions
+  const providedInstructions = typeof req.instructions === "string" ? req.instructions : undefined;
+  const resolvedInstructions =
+    providedInstructions !== undefined ? providedInstructions : extractedInstructions || undefined;
+  const instructionsSource: "passthrough" | "system" | "none" =
+    resolvedInstructions === undefined
+      ? "none"
+      : providedInstructions !== undefined
+        ? "passthrough"
+        : "system";
+  if (resolvedInstructions !== undefined) {
+    output.instructions = resolvedInstructions;
+  }
+
   // 步骤 2: 转换 messages → input（跳过 system messages）
   const nonSystemMessages = req.messages?.filter((m) => m.role !== "system") || [];
-  let firstUserMessageIndex = -1;
-  let processedFirstMessage = false;
 
   for (let i = 0; i < nonSystemMessages.length; i++) {
     const message = nonSystemMessages[i];
@@ -202,46 +215,21 @@ export function transformOpenAIRequestToCodex(
     // 处理普通消息内容
     const content = message.content;
 
-    // 记录第一条用户消息的位置
-    if (role === "user" && firstUserMessageIndex === -1) {
-      firstUserMessageIndex = output.input.length;
-    }
-
     if (typeof content === "string") {
       // 简单文本内容
       const textType = role === "assistant" ? "output_text" : "input_text";
 
-      // 如果是第一条用户消息且有 system messages，将其前置
-      if (role === "user" && !processedFirstMessage && extractedInstructions) {
-        // 将 system messages 转为 user 角色，前置到第一条用户消息
-        output.input.push({
-          type: "message",
-          role: "user",
-          content: [
-            {
-              type: "input_text",
-              text: extractedInstructions, // 用户的 system message
-            },
-            {
-              type: "input_text",
-              text: content, // 用户的第一条消息
-            },
-          ],
-        });
-        processedFirstMessage = true;
-      } else {
-        // 正常消息（无 system message 或已处理过）
-        output.input.push({
-          type: "message",
-          role,
-          content: [
-            {
-              type: textType,
-              text: content,
-            },
-          ],
-        });
-      }
+      // 约定：system messages 已映射到 instructions，不再注入到第一条 user 消息中
+      output.input.push({
+        type: "message",
+        role,
+        content: [
+          {
+            type: textType,
+            text: content,
+          },
+        ],
+      });
     } else if (Array.isArray(content)) {
       // 多模态内容
       const contentParts: Array<{
@@ -265,42 +253,16 @@ export function transformOpenAIRequestToCodex(
         }
       }
 
-      // 如果是第一条用户消息且有 system messages，将其前置
-      if (role === "user" && !processedFirstMessage && extractedInstructions) {
-        // 将 system messages 转为 user 角色，前置到多模态消息
-        const injectedContent = [
-          {
-            type: "input_text",
-            text: extractedInstructions, // 用户的 system message
-          },
-          ...contentParts, // 原始多模态内容
-        ];
-
+      // 约定：system messages 已映射到 instructions，不再注入到第一条 user 消息中
+      if (contentParts.length > 0) {
         output.input.push({
           type: "message",
-          role: "user",
-          content: injectedContent,
+          role,
+          content: contentParts,
         });
-        processedFirstMessage = true;
-      } else {
-        // 正常多模态消息（无 system message 或已处理过）
-        if (contentParts.length > 0) {
-          output.input.push({
-            type: "message",
-            role,
-            content: contentParts,
-          });
-        }
       }
     }
   }
-
-  // 步骤 8: 设置 instructions 字段（参考 CLIProxyAPI:codex_openai-responses_request.go:101）
-  // ⚠️ 关键修复：Codex API 强制要求此字段必须是完整的官方 prompt
-  // 对于 Codex 格式，始终使用官方完整 instructions（Codex 供应商强制校验）
-  // 用户的自定义 instructions 已经通过消息注入处理（步骤 4）
-  // 参考：官方 Codex CLI 客户端响应体中的 instructions 字段（约 4000+ 字完整 prompt）
-  output.instructions = getDefaultInstructions(model);
 
   // 步骤 5: 转换 tools
   if (req.tools && Array.isArray(req.tools)) {
@@ -340,9 +302,10 @@ export function transformOpenAIRequestToCodex(
     inputCount: output.input.length,
     hasInstructions: !!output.instructions,
     instructionsPreview: output.instructions ? `${output.instructions.slice(0, 100)}...` : "N/A",
+    instructionsSource,
     hasTools: !!output.tools,
     toolsCount: output.tools?.length || 0,
-    systemMessagesHandled: !!extractedInstructions && processedFirstMessage,
+    systemMessagesCount: systemMessages.length,
   });
 
   return output as unknown as Record<string, unknown>;

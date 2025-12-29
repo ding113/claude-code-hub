@@ -1,6 +1,7 @@
 import { SocksProxyAgent } from "socks-proxy-agent";
 import { Agent, ProxyAgent, setGlobalDispatcher } from "undici";
 import type { Provider } from "@/types/provider";
+import { getEnvConfig } from "./config/env.schema";
 import { logger } from "./logger";
 
 /**
@@ -8,12 +9,16 @@ import { logger } from "./logger";
  *
  * 背景：undici (Node.js 内置 fetch) 有默认的 300 秒超时 (headersTimeout + bodyTimeout)
  * 问题：即使业务层通过 AbortController 设置更长的超时，undici 的 300 秒会先触发
- * 解决：显式配置 undici 全局超时为 600 秒，匹配 LLM 服务的最大响应时间
+ * 解决：显式配置 undici 全局超时（默认 600 秒，可通过环境变量调整），匹配 LLM 服务的最大响应时间
  *
  * @see https://github.com/nodejs/undici/issues/1373
  * @see https://github.com/nodejs/node/issues/46706
  */
-const UNDICI_TIMEOUT_MS = 600_000; // 600 秒 = 10 分钟，LLM 服务最大超时时间
+const {
+  FETCH_CONNECT_TIMEOUT: connectTimeout,
+  FETCH_HEADERS_TIMEOUT: headersTimeout,
+  FETCH_BODY_TIMEOUT: bodyTimeout,
+} = getEnvConfig();
 
 /**
  * 设置 undici 全局 Agent，覆盖默认的 300 秒超时
@@ -21,14 +26,16 @@ const UNDICI_TIMEOUT_MS = 600_000; // 600 秒 = 10 分钟，LLM 服务最大超�
  */
 setGlobalDispatcher(
   new Agent({
-    headersTimeout: UNDICI_TIMEOUT_MS,
-    bodyTimeout: UNDICI_TIMEOUT_MS,
+    connectTimeout,
+    headersTimeout,
+    bodyTimeout,
   })
 );
 
 logger.info("undici global dispatcher configured", {
-  headersTimeout: UNDICI_TIMEOUT_MS,
-  bodyTimeout: UNDICI_TIMEOUT_MS,
+  connectTimeout,
+  headersTimeout,
+  bodyTimeout,
   note: "覆盖 undici 默认 300s 超时，匹配 LLM 最大响应时间",
 });
 
@@ -99,7 +106,7 @@ export function createProxyAgentForProvider(
       // SOCKS 代理（不支持 HTTP/2）
       // ⭐ 超时说明：
       // - SocksProxyAgent 仅处理 SOCKS 连接建立阶段（默认 30s 超时，足够）
-      // - 连接建立后，HTTP 数据传输由全局 undici Agent 控制（已配置 600s）
+      // - 连接建立后，HTTP 数据传输由全局 undici Agent 控制（headersTimeout/bodyTimeout 可配置）
       // - 因此 SOCKS 代理无需额外配置 headersTimeout/bodyTimeout
       // @see https://github.com/TooTallNate/node-socks-proxy-agent/issues/26
       agent = new SocksProxyAgent(proxyUrl);
@@ -126,12 +133,13 @@ export function createProxyAgentForProvider(
     } else if (parsedProxy.protocol === "http:" || parsedProxy.protocol === "https:") {
       // HTTP/HTTPS 代理（使用 undici）
       // 支持 HTTP/2：通过 allowH2 选项启用 ALPN 协商
-      // ⭐ 配置 600 秒超时，覆盖 undici 默认的 300 秒，匹配 LLM 最大响应时间
+      // ⭐ 配置超时，覆盖 undici 默认值，匹配 LLM 最大响应时间（默认 600 秒，可通过环境变量调整）
       agent = new ProxyAgent({
         uri: proxyUrl,
         allowH2: enableHttp2,
-        headersTimeout: UNDICI_TIMEOUT_MS, // 等待响应头的超时
-        bodyTimeout: UNDICI_TIMEOUT_MS, // 等待响应体的超时
+        connectTimeout,
+        headersTimeout, // 等待响应头的超时
+        bodyTimeout, // 等待响应体的超时
       });
       actualHttp2Enabled = enableHttp2;
       logger.debug("HTTP/HTTPS ProxyAgent created", {
@@ -142,8 +150,9 @@ export function createProxyAgentForProvider(
         proxyPort: parsedProxy.port,
         targetUrl: new URL(targetUrl).origin,
         http2Enabled: enableHttp2,
-        headersTimeout: UNDICI_TIMEOUT_MS,
-        bodyTimeout: UNDICI_TIMEOUT_MS,
+        connectTimeout,
+        headersTimeout,
+        bodyTimeout,
       });
     } else {
       throw new Error(

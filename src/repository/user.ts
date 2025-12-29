@@ -1,33 +1,41 @@
 "use server";
 
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, type SQL, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, users } from "@/drizzle/schema";
 import type { CreateUserData, UpdateUserData, User } from "@/types/user";
 import { toUser } from "./_shared/transformers";
 
-export interface UserListCursor {
-  id: number;
-  /** ISO string */
-  createdAt: string;
-}
-
 export interface UserListBatchFilters {
-  /** Keyset pagination cursor */
-  cursor?: UserListCursor;
+  /** Offset pagination cursor */
+  cursor?: number;
   /** Page size */
   limit?: number;
   /** Search in username / note */
   searchTerm?: string;
-  /** Filter by a single tag */
-  tagFilter?: string;
+  /** Filter by multiple tags (OR logic: users with ANY selected tag) */
+  tagFilters?: string[];
   /** Filter by provider group (derived from keys) */
-  keyGroupFilter?: string;
+  keyGroupFilters?: string[];
+  /** Filter by user status */
+  statusFilter?: "all" | "active" | "expired" | "expiringSoon" | "enabled" | "disabled";
+  /** Sort field */
+  sortBy?:
+    | "name"
+    | "tags"
+    | "expiresAt"
+    | "limit5hUsd"
+    | "limitDailyUsd"
+    | "limitWeeklyUsd"
+    | "limitMonthlyUsd"
+    | "createdAt";
+  /** Sort direction */
+  sortOrder?: "asc" | "desc";
 }
 
 export interface UserListBatchResult {
   users: User[];
-  nextCursor: UserListCursor | null;
+  nextCursor: number | null;
   hasMore: boolean;
 }
 
@@ -115,15 +123,43 @@ export async function findUserList(limit: number = 50, offset: number = 0): Prom
   return result.map(toUser);
 }
 
+export async function searchUsersForFilter(
+  searchTerm?: string
+): Promise<Array<{ id: number; name: string }>> {
+  const conditions = [isNull(users.deletedAt)];
+
+  const trimmedSearchTerm = searchTerm?.trim();
+  if (trimmedSearchTerm) {
+    const pattern = `%${trimmedSearchTerm}%`;
+    conditions.push(sql`${users.name} ILIKE ${pattern}`);
+  }
+
+  return db
+    .select({
+      id: users.id,
+      name: users.name,
+    })
+    .from(users)
+    .where(and(...conditions))
+    .orderBy(sql`CASE WHEN ${users.role} = 'admin' THEN 0 ELSE 1 END`, users.id);
+}
+
 /**
- * Cursor-based pagination (keyset pagination) for user list.
- *
- * Cursor uses composite key (created_at, id) to ensure stable ordering.
+ * Offset-based pagination for user list.
  */
 export async function findUserListBatch(
   filters: UserListBatchFilters
 ): Promise<UserListBatchResult> {
-  const { cursor, limit = 50, searchTerm, tagFilter, keyGroupFilter } = filters;
+  const {
+    cursor,
+    limit = 50,
+    searchTerm,
+    tagFilters,
+    keyGroupFilters,
+    statusFilter,
+    sortBy = "createdAt",
+    sortOrder = "asc",
+  } = filters;
 
   const conditions = [isNull(users.deletedAt)];
 
@@ -153,27 +189,82 @@ export async function findUserListBatch(
     )`);
   }
 
-  const trimmedTag = tagFilter?.trim();
-  if (trimmedTag) {
-    conditions.push(sql`${users.tags} @> ${JSON.stringify([trimmedTag])}::jsonb`);
+  // Multi-tag filter with OR logic: users with ANY selected tag
+  const normalizedTags = (tagFilters ?? []).map((tag) => tag.trim()).filter(Boolean);
+  let tagFilterCondition: SQL | undefined;
+  if (normalizedTags.length > 0) {
+    const tagConditions = normalizedTags.map(
+      (tag) => sql`${users.tags} @> ${JSON.stringify([tag])}::jsonb`
+    );
+    tagFilterCondition = sql`(${sql.join(tagConditions, sql` OR `)})`;
   }
 
-  const trimmedGroup = keyGroupFilter?.trim();
-  if (trimmedGroup) {
-    conditions.push(
-      sql`${trimmedGroup} = ANY(regexp_split_to_array(coalesce(${users.providerGroup}, ''), '\\s*,\\s*'))`
+  const trimmedGroups = (keyGroupFilters ?? []).map((group) => group.trim()).filter(Boolean);
+  let keyGroupFilterCondition: SQL | undefined;
+  if (trimmedGroups.length > 0) {
+    const groupConditions = trimmedGroups.map(
+      (group) =>
+        sql`${group} = ANY(regexp_split_to_array(coalesce(${users.providerGroup}, ''), '\\s*,\\s*'))`
     );
+    keyGroupFilterCondition = sql`(${sql.join(groupConditions, sql` OR `)})`;
   }
 
-  // Cursor-based pagination: WHERE (created_at, id) > (cursor_created_at, cursor_id)
-  if (cursor) {
-    conditions.push(
-      sql`(${users.createdAt}, ${users.id}) > (${cursor.createdAt}::timestamptz, ${cursor.id})`
-    );
+  if (tagFilterCondition && keyGroupFilterCondition) {
+    conditions.push(sql`(${tagFilterCondition} OR ${keyGroupFilterCondition})`);
+  } else if (tagFilterCondition) {
+    conditions.push(tagFilterCondition);
+  } else if (keyGroupFilterCondition) {
+    conditions.push(keyGroupFilterCondition);
   }
+
+  // Status filter
+  if (statusFilter && statusFilter !== "all") {
+    switch (statusFilter) {
+      case "active":
+        // User is enabled and either never expires or expires in the future
+        conditions.push(
+          sql`(${users.expiresAt} IS NULL OR ${users.expiresAt} >= NOW()) AND ${users.isEnabled} = true`
+        );
+        break;
+      case "expired":
+        // User has expired (expiresAt is in the past)
+        conditions.push(sql`${users.expiresAt} < NOW()`);
+        break;
+      case "expiringSoon":
+        // User expires within 7 days
+        conditions.push(
+          sql`${users.expiresAt} IS NOT NULL AND ${users.expiresAt} >= NOW() AND ${users.expiresAt} <= NOW() + INTERVAL '7 days'`
+        );
+        break;
+      case "enabled":
+        // User is enabled regardless of expiration
+        conditions.push(sql`${users.isEnabled} = true`);
+        break;
+      case "disabled":
+        // User is disabled
+        conditions.push(sql`${users.isEnabled} = false`);
+        break;
+    }
+  }
+
+  const offset = Math.max(cursor ?? 0, 0);
 
   // Fetch limit + 1 to determine if there are more records
   const fetchLimit = limit + 1;
+
+  // Build dynamic ORDER BY based on sortBy and sortOrder
+  const sortColumn = {
+    name: users.name,
+    tags: users.tags,
+    expiresAt: users.expiresAt,
+    limit5hUsd: users.limit5hUsd,
+    limitDailyUsd: users.dailyLimitUsd,
+    limitWeeklyUsd: users.limitWeeklyUsd,
+    limitMonthlyUsd: users.limitMonthlyUsd,
+    createdAt: users.createdAt,
+  }[sortBy];
+
+  const orderByClause = sortOrder === "asc" ? asc(sortColumn) : sql`${sortColumn} DESC`;
 
   const results = await db
     .select({
@@ -186,7 +277,6 @@ export async function findUserListBatch(
       providerGroup: users.providerGroup,
       tags: users.tags,
       createdAt: users.createdAt,
-      createdAtRaw: sql<string>`to_char(${users.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
       updatedAt: users.updatedAt,
       deletedAt: users.deletedAt,
       limit5hUsd: users.limit5hUsd,
@@ -203,17 +293,14 @@ export async function findUserListBatch(
     })
     .from(users)
     .where(and(...conditions))
-    .orderBy(asc(users.createdAt), asc(users.id))
-    .limit(fetchLimit);
+    .orderBy(orderByClause, asc(users.id))
+    .limit(fetchLimit)
+    .offset(offset);
 
   const hasMore = results.length > limit;
   const usersToReturn = hasMore ? results.slice(0, limit) : results;
 
-  const lastUser = usersToReturn[usersToReturn.length - 1];
-  const nextCursor =
-    hasMore && lastUser?.createdAtRaw
-      ? { createdAt: lastUser.createdAtRaw, id: lastUser.id }
-      : null;
+  const nextCursor = hasMore ? offset + limit : null;
 
   return {
     users: usersToReturn.map(toUser),
@@ -368,4 +455,48 @@ export async function markUserExpired(userId: number): Promise<boolean> {
     .returning({ id: users.id });
 
   return result.length > 0;
+}
+
+/**
+ * Get all unique tags from all users (for tag filter dropdown)
+ * Returns tags from all users regardless of current filters
+ */
+export async function getAllUserTags(): Promise<string[]> {
+  const result = await db.select({ tags: users.tags }).from(users).where(isNull(users.deletedAt));
+
+  const allTags = new Set<string>();
+  for (const row of result) {
+    if (row.tags && Array.isArray(row.tags)) {
+      for (const tag of row.tags) {
+        allTags.add(tag);
+      }
+    }
+  }
+
+  return Array.from(allTags).sort();
+}
+
+/**
+ * Get all unique provider groups from users (for key group filter dropdown)
+ * Returns groups from all users regardless of current filters
+ */
+export async function getAllUserProviderGroups(): Promise<string[]> {
+  const result = await db
+    .select({ providerGroup: users.providerGroup })
+    .from(users)
+    .where(isNull(users.deletedAt));
+
+  const allGroups = new Set<string>();
+  for (const row of result) {
+    const groups = row.providerGroup
+      ?.split(",")
+      .map((group) => group.trim())
+      .filter(Boolean);
+    if (!groups || groups.length === 0) continue;
+    for (const group of groups) {
+      allGroups.add(group);
+    }
+  }
+
+  return Array.from(allGroups).sort();
 }

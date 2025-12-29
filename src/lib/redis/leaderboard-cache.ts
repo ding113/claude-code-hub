@@ -95,7 +95,7 @@ async function queryDatabase(
       return await findCustomRangeLeaderboard(dateRange);
     }
     if (scope === "provider") {
-      return await findCustomRangeProviderLeaderboard(dateRange);
+      return await findCustomRangeProviderLeaderboard(dateRange, filters?.providerType);
     }
     if (scope === "providerCacheHitRate") {
       return await findCustomRangeProviderCacheHitRateLeaderboard(dateRange, filters?.providerType);
@@ -120,15 +120,15 @@ async function queryDatabase(
   if (scope === "provider") {
     switch (period) {
       case "daily":
-        return await findDailyProviderLeaderboard();
+        return await findDailyProviderLeaderboard(filters?.providerType);
       case "weekly":
-        return await findWeeklyProviderLeaderboard();
+        return await findWeeklyProviderLeaderboard(filters?.providerType);
       case "monthly":
-        return await findMonthlyProviderLeaderboard();
+        return await findMonthlyProviderLeaderboard(filters?.providerType);
       case "allTime":
-        return await findAllTimeProviderLeaderboard();
+        return await findAllTimeProviderLeaderboard(filters?.providerType);
       default:
-        return await findDailyProviderLeaderboard();
+        return await findDailyProviderLeaderboard(filters?.providerType);
     }
   }
   if (scope === "providerCacheHitRate") {

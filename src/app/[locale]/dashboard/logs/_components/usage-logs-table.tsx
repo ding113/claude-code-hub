@@ -117,45 +117,67 @@ export function UsageLogsTable({
                       ) : (
                         <div className="flex items-start gap-2">
                           <div className="flex flex-col items-start gap-0.5 min-w-0 flex-1">
-                            {log.providerChain && log.providerChain.length > 0 ? (
-                              <>
-                                <div className="w-full">
-                                  <ProviderChainPopover
-                                    chain={log.providerChain}
-                                    finalProvider={
-                                      log.providerChain[log.providerChain.length - 1].name ||
-                                      log.providerName ||
-                                      tChain("circuit.unknown")
-                                    }
-                                  />
-                                </div>
-                                {/* 摘要文字（第二行显示，左对齐） */}
-                                {formatProviderSummary(log.providerChain, tChain) && (
+                            {(() => {
+                              // 计算倍率，用于判断是否显示 Badge
+                              const successfulProvider =
+                                log.providerChain && log.providerChain.length > 0
+                                  ? [...log.providerChain]
+                                      .reverse()
+                                      .find(
+                                        (item) =>
+                                          item.reason === "request_success" ||
+                                          item.reason === "retry_success"
+                                      )
+                                  : null;
+                              const actualCostMultiplier =
+                                successfulProvider?.costMultiplier ?? log.costMultiplier;
+                              const hasCostBadge =
+                                !!actualCostMultiplier &&
+                                parseFloat(String(actualCostMultiplier)) !== 1.0;
+
+                              return (
+                                <>
                                   <div className="w-full">
-                                    <TooltipProvider>
-                                      <Tooltip delayDuration={300}>
-                                        <TooltipTrigger asChild>
-                                          <span className="text-xs text-muted-foreground cursor-help truncate max-w-[200px] block text-left">
-                                            {formatProviderSummary(log.providerChain, tChain)}
-                                          </span>
-                                        </TooltipTrigger>
-                                        <TooltipContent
-                                          side="bottom"
-                                          align="start"
-                                          className="max-w-[500px]"
-                                        >
-                                          <p className="text-xs whitespace-normal break-words font-mono">
-                                            {formatProviderSummary(log.providerChain, tChain)}
-                                          </p>
-                                        </TooltipContent>
-                                      </Tooltip>
-                                    </TooltipProvider>
+                                    <ProviderChainPopover
+                                      chain={log.providerChain ?? []}
+                                      finalProvider={
+                                        (log.providerChain && log.providerChain.length > 0
+                                          ? log.providerChain[log.providerChain.length - 1].name
+                                          : null) ||
+                                        log.providerName ||
+                                        tChain("circuit.unknown")
+                                      }
+                                      hasCostBadge={hasCostBadge}
+                                    />
                                   </div>
-                                )}
-                              </>
-                            ) : (
-                              <span>{log.providerName || "-"}</span>
-                            )}
+                                  {/* 摘要文字（第二行显示，左对齐） */}
+                                  {log.providerChain &&
+                                    log.providerChain.length > 0 &&
+                                    formatProviderSummary(log.providerChain, tChain) && (
+                                      <div className="w-full">
+                                        <TooltipProvider>
+                                          <Tooltip delayDuration={300}>
+                                            <TooltipTrigger asChild>
+                                              <span className="text-xs text-muted-foreground cursor-help truncate max-w-[200px] block text-left">
+                                                {formatProviderSummary(log.providerChain, tChain)}
+                                              </span>
+                                            </TooltipTrigger>
+                                            <TooltipContent
+                                              side="bottom"
+                                              align="start"
+                                              className="max-w-[500px]"
+                                            >
+                                              <p className="text-xs whitespace-normal break-words font-mono">
+                                                {formatProviderSummary(log.providerChain, tChain)}
+                                              </p>
+                                            </TooltipContent>
+                                          </Tooltip>
+                                        </TooltipProvider>
+                                      </div>
+                                    )}
+                                </>
+                              );
+                            })()}
                           </div>
                           {/* 显示供应商倍率 Badge（不为 1.0 时） */}
                           {(() => {
@@ -252,10 +274,24 @@ export function UsageLogsTable({
                           <TooltipContent align="end" className="text-xs space-y-1">
                             <div className="font-medium">{t("logs.columns.cacheWrite")}</div>
                             <div className="pl-2">
-                              5m: {formatTokenAmount(log.cacheCreation5mInputTokens)}
+                              5m:{" "}
+                              {formatTokenAmount(
+                                (log.cacheCreation5mInputTokens ?? 0) > 0
+                                  ? log.cacheCreation5mInputTokens
+                                  : log.cacheTtlApplied !== "1h"
+                                    ? log.cacheCreationInputTokens
+                                    : 0
+                              )}
                             </div>
                             <div className="pl-2">
-                              1h: {formatTokenAmount(log.cacheCreation1hInputTokens)}
+                              1h:{" "}
+                              {formatTokenAmount(
+                                (log.cacheCreation1hInputTokens ?? 0) > 0
+                                  ? log.cacheCreation1hInputTokens
+                                  : log.cacheTtlApplied === "1h"
+                                    ? log.cacheCreationInputTokens
+                                    : 0
+                              )}
                             </div>
                             <div className="font-medium mt-1">{t("logs.columns.cacheRead")}</div>
                             <div className="pl-2">
@@ -425,6 +461,7 @@ export function UsageLogsTable({
                         billingModelSource={billingModelSource}
                         inputTokens={log.inputTokens}
                         outputTokens={log.outputTokens}
+                        cacheCreationInputTokens={log.cacheCreationInputTokens}
                         cacheCreation5mInputTokens={log.cacheCreation5mInputTokens}
                         cacheCreation1hInputTokens={log.cacheCreation1hInputTokens}
                         cacheReadInputTokens={log.cacheReadInputTokens}

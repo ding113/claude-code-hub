@@ -95,8 +95,13 @@ export function UsageLogsTable({
                       </div>
                     ) : null}
                   </TableCell>
-                  <TableCell className="text-right text-sm font-mono">
-                    {log.inputTokens}/{log.outputTokens}
+                  <TableCell className="text-right text-xs font-mono tabular-nums">
+                    <div className="flex flex-col items-end leading-tight">
+                      <span>{formatTokenAmount(log.inputTokens)}</span>
+                      <span className="text-muted-foreground">
+                        {formatTokenAmount(log.outputTokens)}
+                      </span>
+                    </div>
                   </TableCell>
                   <TableCell className="text-right font-mono text-xs">
                     <TooltipProvider>

@@ -47,6 +47,7 @@ interface ErrorDetailsDialogProps {
   // 计费详情
   inputTokens?: number | null;
   outputTokens?: number | null;
+  cacheCreationInputTokens?: number | null; // 缓存创建总量
   cacheCreation5mInputTokens?: number | null;
   cacheCreation1hInputTokens?: number | null;
   cacheReadInputTokens?: number | null;
@@ -77,6 +78,7 @@ export function ErrorDetailsDialog({
   billingModelSource = "original",
   inputTokens,
   outputTokens,
+  cacheCreationInputTokens,
   cacheCreation5mInputTokens,
   cacheCreation1hInputTokens,
   cacheReadInputTokens,
@@ -421,25 +423,35 @@ export function ErrorDetailsDialog({
                             {formatTokenAmount(outputTokens)} tokens
                           </span>
                         </div>
-                        {(cacheCreation5mInputTokens ?? 0) > 0 && (
+                        {((cacheCreation5mInputTokens ?? 0) > 0 ||
+                          ((cacheCreationInputTokens ?? 0) > 0 && cacheTtlApplied !== "1h")) && (
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">
                               {t("logs.billingDetails.cacheWrite5m")}:
                             </span>
                             <span className="font-mono">
-                              {formatTokenAmount(cacheCreation5mInputTokens)} tokens{" "}
-                              <span className="text-orange-600">(1.25x)</span>
+                              {formatTokenAmount(
+                                (cacheCreation5mInputTokens ?? 0) > 0
+                                  ? cacheCreation5mInputTokens
+                                  : cacheCreationInputTokens
+                              )}{" "}
+                              tokens <span className="text-orange-600">(1.25x)</span>
                             </span>
                           </div>
                         )}
-                        {(cacheCreation1hInputTokens ?? 0) > 0 && (
+                        {((cacheCreation1hInputTokens ?? 0) > 0 ||
+                          ((cacheCreationInputTokens ?? 0) > 0 && cacheTtlApplied === "1h")) && (
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">
                               {t("logs.billingDetails.cacheWrite1h")}:
                             </span>
                             <span className="font-mono">
-                              {formatTokenAmount(cacheCreation1hInputTokens)} tokens{" "}
-                              <span className="text-orange-600">(2x)</span>
+                              {formatTokenAmount(
+                                (cacheCreation1hInputTokens ?? 0) > 0
+                                  ? cacheCreation1hInputTokens
+                                  : cacheCreationInputTokens
+                              )}{" "}
+                              tokens <span className="text-orange-600">(2x)</span>
                             </span>
                           </div>
                         )}

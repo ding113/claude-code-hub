@@ -8,25 +8,7 @@
  * 参考：claude-relay-service/src/validators/clients/codexCliValidator.js
  */
 
-import { CodexInstructionsCache } from "@/lib/codex-instructions-cache";
 import { logger } from "@/lib/logger";
-import { getDefaultInstructions } from "../../codex/constants/codex-instructions";
-
-/**
- * 功能开关：是否启用 Codex Instructions 注入
- *
- * 用途：控制是否强制替换请求中的 instructions 字段为官方完整 prompt
- *
- * - true：强制替换 instructions（约 4000+ 字完整 prompt）
- * - false (默认)：保持原样透传，不修改 instructions
- *
- * 注意：
- * - 某些 Codex 供应商可能要求必须包含官方 instructions
- * - 如果代理请求失败，可以尝试启用此开关
- * - 官方 Codex CLI 客户端会自动包含完整 instructions，不需要注入
- */
-export const ENABLE_CODEX_INSTRUCTIONS_INJECTION =
-  process.env.ENABLE_CODEX_INSTRUCTIONS_INJECTION === "true" || false;
 
 /**
  * 检测是否为官方 Codex CLI 客户端
@@ -60,39 +42,33 @@ export function isOfficialCodexClient(userAgent: string | null): boolean {
  * 清洗 Codex 请求（即使格式相同也需要执行）
  *
  * 清洗内容：
- * 1. 根据策略处理 instructions（auto/force_official/keep_original）
+ * 1. instructions 一律透传（不注入、不替换、不缓存）
  * 2. 删除不支持的参数：max_tokens, temperature, top_p 等
- * 3. 确保必需字段：stream, store, parallel_tool_calls
+ * 3. 确保必需字段：store, parallel_tool_calls
  *
  * 参考：
  * - OpenAI → Codex 转换器的处理逻辑
  * - CLIProxyAPI 的参数过滤规则
  *
  * @param request - 原始请求体
- * @param model - 模型名称（用于选择 instructions）
- * @param strategy - Codex Instructions 策略（供应商级别配置，可选）
- * @param providerId - 供应商 ID（用于缓存 instructions）
+ * @param model - 模型名称（用于日志）
+ * @param _strategy - 历史参数保留兼容（已不再生效）
+ * @param _providerId - 历史参数保留兼容（已不再生效）
  * @returns 清洗后的请求体
  */
 export async function sanitizeCodexRequest(
   request: Record<string, unknown>,
   model: string,
-  strategy?: "auto" | "force_official" | "keep_original",
-  providerId?: number,
+  _strategy?: "auto" | "force_official" | "keep_original",
+  _providerId?: number,
   options?: { isOfficialClient?: boolean }
 ): Promise<Record<string, unknown>> {
   const { isOfficialClient = false } = options ?? {};
 
-  // 优先使用供应商级别策略，否则使用全局环境变量
-  const effectiveStrategy =
-    strategy || (ENABLE_CODEX_INSTRUCTIONS_INJECTION ? "force_official" : "auto");
-
-  // 官方 Codex CLI 客户端 + auto 策略：保持原始请求
-  if (isOfficialClient && effectiveStrategy === "auto") {
-    logger.debug("[CodexSanitizer] Official client detected, skipping auto sanitization", {
+  // 官方 Codex CLI 客户端：保持原始请求，避免清洗逻辑误伤官方参数
+  if (isOfficialClient) {
+    logger.debug("[CodexSanitizer] Official client detected, bypassing sanitization", {
       model,
-      providerId,
-      strategy: effectiveStrategy,
       hasInstructions: typeof request.instructions === "string",
       instructionsLength:
         typeof request.instructions === "string" ? request.instructions.length : 0,
@@ -102,94 +78,9 @@ export async function sanitizeCodexRequest(
 
   const output = { ...request };
 
-  // 步骤 1: 根据策略决定是否替换 instructions
-  if (effectiveStrategy === "force_official") {
-    // 策略 1: 强制使用官方 instructions
-    const officialInstructions = getDefaultInstructions(model);
-    output.instructions = officialInstructions;
-
-    logger.info("[CodexSanitizer] Using 'force_official' strategy, replaced with official prompt", {
-      model,
-      strategy: effectiveStrategy,
-      instructionsLength: officialInstructions.length,
-      instructionsPreview: `${officialInstructions.substring(0, 100)}...`,
-    });
-  } else if (effectiveStrategy === "keep_original") {
-    // 策略 2: 始终透传，不添加重试标记
-    logger.info("[CodexSanitizer] Using 'keep_original' strategy, keeping original instructions", {
-      model,
-      strategy: effectiveStrategy,
-      hasInstructions: !!output.instructions,
-      originalInstructionsLength:
-        typeof output.instructions === "string" ? output.instructions.length : 0,
-    });
-  } else {
-    // 策略 3 (默认): auto - 智能缓存对比 + 透传 + 添加重试标记
-
-    // ⭐ Phase 3: 缓存对比和自动覆盖
-    let shouldUseCachedInstructions = false;
-    if (providerId) {
-      try {
-        const cachedInstructions = await CodexInstructionsCache.get(providerId, model);
-
-        if (cachedInstructions) {
-          const clientInstructions =
-            typeof output.instructions === "string" ? output.instructions : "";
-
-          // 对比缓存和客户端 instructions（允许 5% 长度误差）
-          const lengthDiff = Math.abs(cachedInstructions.length - clientInstructions.length);
-          const lengthThreshold = cachedInstructions.length * 0.05;
-
-          if (lengthDiff > lengthThreshold) {
-            // 不匹配：覆盖为缓存的 instructions
-            logger.warn("[CodexSanitizer] Client instructions mismatch with cache, overriding", {
-              model,
-              providerId,
-              cachedLength: cachedInstructions.length,
-              clientLength: clientInstructions.length,
-              lengthDiff,
-              threshold: lengthThreshold,
-            });
-
-            output.instructions = cachedInstructions;
-            shouldUseCachedInstructions = true;
-          } else {
-            logger.debug("[CodexSanitizer] Client instructions match cache", {
-              model,
-              providerId,
-              instructionsLength: clientInstructions.length,
-            });
-          }
-        } else {
-          logger.debug("[CodexSanitizer] No cached instructions found for this provider+model", {
-            model,
-            providerId,
-          });
-        }
-      } catch (error) {
-        // Fail Open: 缓存读取失败不影响主流程
-        logger.warn("[CodexSanitizer] Failed to read cached instructions, continuing", {
-          error,
-          providerId,
-          model,
-        });
-      }
-    }
-
-    logger.info("[CodexSanitizer] Using 'auto' strategy with cache-aware logic", {
-      model,
-      strategy: effectiveStrategy,
-      providerId,
-      hasInstructions: !!output.instructions,
-      instructionsSource: shouldUseCachedInstructions ? "cache" : "client",
-      originalInstructionsLength:
-        typeof output.instructions === "string" ? output.instructions.length : 0,
-    });
-
-    // ⭐ Phase 1: 添加重试标记（仅当未使用缓存时）
-    if (!shouldUseCachedInstructions) {
-      output._canRetryWithOfficialInstructions = true;
-    }
+  // Codex instructions：一律透传，不注入、不替换、不缓存、不写入内部重试标记
+  if ("_canRetryWithOfficialInstructions" in output) {
+    delete (output as Record<string, unknown>)._canRetryWithOfficialInstructions;
   }
 
   // 步骤 2: 删除 Codex 不支持的参数

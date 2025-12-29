@@ -50,6 +50,8 @@ export class ProxySession {
   readonly method: string;
   requestUrl: URL; // 非 readonly，允许模型重定向修改 Gemini URL 路径
   readonly headers: Headers;
+  // 原始 headers 的副本，用于检测过滤器修改
+  private readonly originalHeaders: Headers;
   readonly headerLog: string;
   readonly request: ProxyRequestPayload;
   readonly userAgent: string | null; // User-Agent（用于客户端类型分析）
@@ -94,6 +96,18 @@ export class ProxySession {
   // Cached price data (lazy loaded: undefined=not loaded, null=no data)
   private cachedPriceData?: ModelPriceData | null;
 
+  // Cached billing model source config (per-request)
+  private cachedBillingModelSource?: "original" | "redirected";
+
+  /**
+   * Promise cache for billingModelSource load (concurrency safe).
+   * Ensures system settings are loaded at most once per request/session.
+   */
+  private billingModelSourcePromise?: Promise<"original" | "redirected">;
+
+  // Cached price data for billing model source (lazy loaded: undefined=not loaded, null=no data)
+  private cachedBillingPriceData?: ModelPriceData | null;
+
   private constructor(init: {
     startTime: number;
     method: string;
@@ -109,6 +123,7 @@ export class ProxySession {
     this.method = init.method;
     this.requestUrl = init.requestUrl;
     this.headers = init.headers;
+    this.originalHeaders = new Headers(init.headers); // 原始 headers 的副本，用于检测过滤器修改
     this.headerLog = init.headerLog;
     this.request = init.request;
     this.userAgent = init.userAgent;
@@ -191,6 +206,23 @@ export class ProxySession {
       context: c,
       clientAbortSignal,
     });
+  }
+
+  /**
+   * 检查 header 是否被过滤器修改过。
+   *
+   * 通过对比原始值和当前值判断。以下情况均视为"已修改"：
+   * - 值被修改
+   * - header 被删除
+   * - header 从不存在变为存在
+   *
+   * @param key - header 名称（不区分大小写）
+   * @returns true 表示 header 被修改过，false 表示未修改
+   */
+  isHeaderModified(key: string): boolean {
+    const original = this.originalHeaders.get(key);
+    const current = this.headers.get(key);
+    return original !== current;
   }
 
   setAuthState(state: AuthState): void {
@@ -560,6 +592,121 @@ export class ProxySession {
     }
     return this.cachedPriceData ?? null;
   }
+
+  /**
+   * 根据系统配置的计费模型来源获取价格数据（带缓存）
+   *
+   * billingModelSource:
+   * - "original": 优先使用重定向前模型（getOriginalModel）
+   * - "redirected": 优先使用重定向后模型（request.model）
+   *
+   * Fallback：主模型无价格时尝试备选模型。
+   *
+   * @returns 价格数据；无模型或无价格时返回 null
+   */
+  async getCachedPriceDataByBillingSource(): Promise<ModelPriceData | null> {
+    if (this.cachedBillingPriceData !== undefined) {
+      return this.cachedBillingPriceData;
+    }
+
+    const originalModel = this.getOriginalModel();
+    const redirectedModel = this.request.model;
+    if (!originalModel && !redirectedModel) {
+      this.cachedBillingPriceData = null;
+      return null;
+    }
+
+    // 懒加载配置（每请求只读取一次；并发安全）
+    if (this.cachedBillingModelSource === undefined) {
+      if (!this.billingModelSourcePromise) {
+        this.billingModelSourcePromise = (async () => {
+          try {
+            const { getSystemSettings } = await import("@/repository/system-config");
+            const systemSettings = await getSystemSettings();
+            const source = systemSettings.billingModelSource;
+
+            if (source !== "original" && source !== "redirected") {
+              logger.warn(
+                `[ProxySession] Invalid billingModelSource: ${String(source)}, fallback to "redirected"`
+              );
+              return "redirected";
+            }
+
+            return source;
+          } catch (error) {
+            logger.error("[ProxySession] Failed to load billing model source", { error });
+            return "redirected";
+          }
+        })();
+      }
+
+      this.cachedBillingModelSource = await this.billingModelSourcePromise;
+    }
+
+    const useOriginal = this.cachedBillingModelSource === "original";
+    const primaryModel = useOriginal ? originalModel : redirectedModel;
+    const fallbackModel = useOriginal ? redirectedModel : originalModel;
+
+    const findValidPriceDataByModel = async (modelName: string): Promise<ModelPriceData | null> => {
+      const result = await findLatestPriceByModel(modelName);
+      const data = result?.priceData;
+      if (!data || !hasValidPriceData(data)) {
+        return null;
+      }
+      return data;
+    };
+
+    let priceData: ModelPriceData | null = null;
+    if (primaryModel) {
+      priceData = await findValidPriceDataByModel(primaryModel);
+    }
+
+    if (!priceData && fallbackModel && fallbackModel !== primaryModel) {
+      priceData = await findValidPriceDataByModel(fallbackModel);
+    }
+
+    this.cachedBillingPriceData = priceData;
+    return this.cachedBillingPriceData;
+  }
+}
+
+/**
+ * 判断价格数据是否包含至少一个可用于计费的价格字段。
+ * 避免把数据库中的 `{}` 或仅包含元信息的记录当成有效价格。
+ */
+function hasValidPriceData(priceData: ModelPriceData): boolean {
+  const numericCosts = [
+    priceData.input_cost_per_token,
+    priceData.output_cost_per_token,
+    priceData.cache_creation_input_token_cost,
+    priceData.cache_creation_input_token_cost_above_1hr,
+    priceData.cache_read_input_token_cost,
+    priceData.input_cost_per_token_above_200k_tokens,
+    priceData.output_cost_per_token_above_200k_tokens,
+    priceData.cache_creation_input_token_cost_above_200k_tokens,
+    priceData.cache_read_input_token_cost_above_200k_tokens,
+    priceData.output_cost_per_image,
+  ];
+
+  if (
+    numericCosts.some((value) => typeof value === "number" && Number.isFinite(value) && value >= 0)
+  ) {
+    return true;
+  }
+
+  const searchCosts = priceData.search_context_cost_per_query;
+  if (searchCosts) {
+    const searchCostFields = [
+      searchCosts.search_context_size_high,
+      searchCosts.search_context_size_low,
+      searchCosts.search_context_size_medium,
+    ];
+    return searchCostFields.some(
+      (value) => typeof value === "number" && Number.isFinite(value) && value >= 0
+    );
+  }
+
+  return false;
 }
 
 function formatHeadersForLog(headers: Headers): string {
