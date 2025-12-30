@@ -1448,6 +1448,18 @@
       "statusEnabled": "有効",
       "statusDisabled": "無効"
     },
+    "inlineEdit": {
+      "save": "保存",
+      "cancel": "キャンセル",
+      "saveSuccess": "保存に成功しました",
+      "saveFailed": "保存に失敗しました",
+      "priorityLabel": "優先度",
+      "weightLabel": "重み",
+      "costMultiplierLabel": "コスト倍率",
+      "priorityInvalid": "0 以上の整数を入力してください",
+      "weightInvalid": "1〜100 の整数を入力してください",
+      "costMultiplierInvalid": "0以上の数値を入力してください"
+    },
     "schedulingDialog": {
       "title": "プロバイダースケジューリングルール",
       "description": "システムが高可用性とコスト最適化のために上流プロバイダーをインテリジェントに選択する方法を理解する",

@@ -1448,6 +1448,18 @@
       "statusEnabled": "включен",
       "statusDisabled": "отключен"
     },
+    "inlineEdit": {
+      "save": "Сохранить",
+      "cancel": "Отмена",
+      "saveSuccess": "Успешно сохранено",
+      "saveFailed": "Не удалось сохранить",
+      "priorityLabel": "Приоритет",
+      "weightLabel": "Вес",
+      "costMultiplierLabel": "Коэф цены",
+      "priorityInvalid": "Введите целое число >= 0",
+      "weightInvalid": "Введите целое число от 1 до 100",
+      "costMultiplierInvalid": "Введите число не меньше 0"
+    },
     "schedulingDialog": {
       "title": "Правила планирования провайдеров",
       "description": "Узнайте, как система интеллектуально выбирает вышестоящих провайдеров для высокой доступности и оптимизации затрат",

@@ -331,9 +331,9 @@ export const CreateProviderSchema = z.object({
   is_enabled: z.boolean().optional().default(PROVIDER_DEFAULTS.IS_ENABLED),
   weight: z
     .number()
-    .int()
-    .min(PROVIDER_LIMITS.WEIGHT.MIN)
-    .max(PROVIDER_LIMITS.WEIGHT.MAX)
+    .int("权重必须是整数")
+    .min(PROVIDER_LIMITS.WEIGHT.MIN, "权重不能小于 1")
+    .max(PROVIDER_LIMITS.WEIGHT.MAX, "权重不能超过 100")
     .optional()
     .default(PROVIDER_DEFAULTS.WEIGHT),
   priority: z
@@ -525,9 +525,9 @@ export const UpdateProviderSchema = z
     is_enabled: z.boolean().optional(),
     weight: z
       .number()
-      .int()
-      .min(PROVIDER_LIMITS.WEIGHT.MIN)
-      .max(PROVIDER_LIMITS.WEIGHT.MAX)
+      .int("权重必须是整数")
+      .min(PROVIDER_LIMITS.WEIGHT.MIN, "权重不能小于 1")
+      .max(PROVIDER_LIMITS.WEIGHT.MAX, "权重不能超过 100")
       .optional(),
     priority: z
       .number()
