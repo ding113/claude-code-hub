@@ -419,8 +419,12 @@ export class RequestFilterEngine {
         } else {
           try {
             cached.compiledRegex = new RegExp(f.target, "g");
-          } catch {
-            // ignore
+          } catch (error) {
+            logger.warn("[RequestFilterEngine] Failed to compile regex in test", {
+              filterId: f.id,
+              target: f.target,
+              error,
+            });
           }
         }
       }
