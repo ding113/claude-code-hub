@@ -133,7 +133,6 @@ export function ProviderMultiSelect({
                       <Checkbox
                         checked={selectedProviderIds.includes(provider.id)}
                         className="mr-2"
-                        onCheckedChange={() => toggleProvider(provider.id)}
                       />
                       <div className="flex-1">
                         <span className="font-medium">{provider.name}</span>

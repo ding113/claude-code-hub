@@ -15,12 +15,11 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { RequestFilter } from "@/repository/request-filters";
-import type { Provider } from "@/types/provider";
 import { FilterDialog } from "./filter-dialog";
 
 interface Props {
   filters: RequestFilter[];
-  providers: Provider[];
+  providers: Array<{ id: number; name: string }>;
 }
 
 export function FilterTable({ filters, providers }: Props) {

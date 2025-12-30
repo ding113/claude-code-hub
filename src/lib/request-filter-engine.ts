@@ -170,16 +170,23 @@ export class RequestFilterEngine {
       const cachedFilters = filters.map((f) => {
         const cached: CachedRequestFilter = { ...f };
 
-        // Optimization #2: Pre-compile regex for text_replace
+        // Optimization #2: Pre-compile regex for text_replace (with ReDoS validation)
         if (f.matchType === "regex" && f.action === "text_replace") {
-          try {
-            cached.compiledRegex = new RegExp(f.target, "g");
-          } catch (error) {
-            logger.warn("[RequestFilterEngine] Failed to compile regex at load", {
+          if (!safeRegex(f.target)) {
+            logger.warn("[RequestFilterEngine] Skip unsafe regex at load", {
               filterId: f.id,
               target: f.target,
-              error,
             });
+          } else {
+            try {
+              cached.compiledRegex = new RegExp(f.target, "g");
+            } catch (error) {
+              logger.warn("[RequestFilterEngine] Failed to compile regex at load", {
+                filterId: f.id,
+                target: f.target,
+                error,
+              });
+            }
           }
         }
 
@@ -404,10 +411,17 @@ export class RequestFilterEngine {
       const cached: CachedRequestFilter = { ...f };
 
       if (f.matchType === "regex" && f.action === "text_replace") {
-        try {
-          cached.compiledRegex = new RegExp(f.target, "g");
-        } catch {
-          // ignore
+        if (!safeRegex(f.target)) {
+          logger.warn("[RequestFilterEngine] Skip unsafe regex in test", {
+            filterId: f.id,
+            target: f.target,
+          });
+        } else {
+          try {
+            cached.compiledRegex = new RegExp(f.target, "g");
+          } catch {
+            // ignore
+          }
         }
       }
 
