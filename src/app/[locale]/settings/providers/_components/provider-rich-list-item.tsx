@@ -284,59 +284,32 @@ export function ProviderRichListItem({
     });
   };
 
-  const handleSavePriority = async (value: number) => {
-    try {
-      const res = await editProvider(provider.id, { priority: value });
-      if (res.ok) {
-        toast.success(tInline("saveSuccess"));
-        queryClient.invalidateQueries({ queryKey: ["providers"] });
-        router.refresh();
-        return true;
+  const createSaveHandler = (fieldName: "priority" | "weight" | "cost_multiplier") => {
+    return async (value: number) => {
+      try {
+        const res = await editProvider(
+          provider.id,
+          { [fieldName]: value } as Parameters<typeof editProvider>[1],
+        );
+        if (res.ok) {
+          toast.success(tInline("saveSuccess"));
+          queryClient.invalidateQueries({ queryKey: ["providers"] });
+          router.refresh();
+          return true;
+        }
+        toast.error(tInline("saveFailed"), { description: res.error || tList("unknownError") });
+        return false;
+      } catch (error) {
+        console.error(`更新 ${fieldName} 失败:`, error);
+        toast.error(tInline("saveFailed"), { description: tList("unknownError") });
+        return false;
       }
-      toast.error(tInline("saveFailed"), { description: res.error || tList("unknownError") });
-      return false;
-    } catch (error) {
-      console.error("更新 priority 失败:", error);
-      toast.error(tInline("saveFailed"), { description: tList("deleteError") });
-      return false;
-    }
+    };
   };
 
-  const handleSaveWeight = async (value: number) => {
-    try {
-      const res = await editProvider(provider.id, { weight: value });
-      if (res.ok) {
-        toast.success(tInline("saveSuccess"));
-        queryClient.invalidateQueries({ queryKey: ["providers"] });
-        router.refresh();
-        return true;
-      }
-      toast.error(tInline("saveFailed"), { description: res.error || tList("unknownError") });
-      return false;
-    } catch (error) {
-      console.error("更新 weight 失败:", error);
-      toast.error(tInline("saveFailed"), { description: tList("deleteError") });
-      return false;
-    }
-  };
-
-  const handleSaveCostMultiplier = async (value: number) => {
-    try {
-      const res = await editProvider(provider.id, { cost_multiplier: value });
-      if (res.ok) {
-        toast.success(tInline("saveSuccess"));
-        queryClient.invalidateQueries({ queryKey: ["providers"] });
-        router.refresh();
-        return true;
-      }
-      toast.error(tInline("saveFailed"), { description: res.error || tList("unknownError") });
-      return false;
-    } catch (error) {
-      console.error("更新 costMultiplier 失败:", error);
-      toast.error(tInline("saveFailed"), { description: tList("deleteError") });
-      return false;
-    }
-  };
+  const handleSavePriority = createSaveHandler("priority");
+  const handleSaveWeight = createSaveHandler("weight");
+  const handleSaveCostMultiplier = createSaveHandler("cost_multiplier");
 
   return (
     <>
