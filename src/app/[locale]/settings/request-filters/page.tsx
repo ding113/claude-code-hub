@@ -2,6 +2,7 @@ import { getTranslations } from "next-intl/server";
 import { Suspense } from "react";
 import { listRequestFilters } from "@/actions/request-filters";
 import { Section } from "@/components/section";
+import { findAllProviders } from "@/repository/provider";
 import { SettingsPageHeader } from "../_components/settings-page-header";
 import { FilterTable } from "./_components/filter-table";
 import { RequestFiltersTableSkeleton } from "./_components/request-filters-skeleton";
@@ -24,7 +25,7 @@ export default async function RequestFiltersPage() {
 }
 
 async function RequestFiltersContent() {
-  const filters = await listRequestFilters();
+  const [filters, providers] = await Promise.all([listRequestFilters(), findAllProviders()]);
 
-  return <FilterTable filters={filters} />;
+  return <FilterTable filters={filters} providers={providers} />;
 }

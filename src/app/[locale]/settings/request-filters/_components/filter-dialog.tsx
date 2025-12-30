@@ -27,7 +27,13 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import type { RequestFilter, RequestFilterMatchType } from "@/repository/request-filters";
+import type {
+  RequestFilter,
+  RequestFilterBindingType,
+  RequestFilterMatchType,
+} from "@/repository/request-filters";
+import { GroupMultiSelect } from "./group-multi-select";
+import { ProviderMultiSelect } from "./provider-multi-select";
 
 type Mode = "create" | "edit";
 
@@ -62,6 +68,11 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
     filter?.matchType ?? "contains"
   );
   const [isEnabled, setIsEnabled] = useState<boolean>(filter?.isEnabled ?? true);
+  const [bindingType, setBindingType] = useState<RequestFilterBindingType>(
+    filter?.bindingType ?? "global"
+  );
+  const [providerIds, setProviderIds] = useState<number[]>(filter?.providerIds ?? []);
+  const [groupTags, setGroupTags] = useState<string[]>(filter?.groupTags ?? []);
 
   useEffect(() => {
     // Sync controlled open prop to internal state
@@ -87,6 +98,9 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
       setPriority(filter.priority);
       setMatchType(filter.matchType ?? "contains");
       setIsEnabled(filter.isEnabled);
+      setBindingType(filter.bindingType ?? "global");
+      setProviderIds(filter.providerIds ?? []);
+      setGroupTags(filter.groupTags ?? []);
     }
   }, [filter]);
 
@@ -104,6 +118,19 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
 
   const showMatchType = scope === "body" && action === "text_replace";
   const showReplacement = action === "set" || action === "json_path" || action === "text_replace";
+
+  const handleBindingTypeChange = (value: RequestFilterBindingType) => {
+    setBindingType(value);
+    // Clear selections when changing binding type
+    if (value === "global") {
+      setProviderIds([]);
+      setGroupTags([]);
+    } else if (value === "providers") {
+      setGroupTags([]);
+    } else if (value === "groups") {
+      setProviderIds([]);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -139,6 +166,9 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
         replacement: showReplacement ? parsedReplacement : null,
         priority,
         isEnabled,
+        bindingType,
+        providerIds: bindingType === "providers" ? providerIds : null,
+        groupTags: bindingType === "groups" ? groupTags : null,
       } as const;
 
       const result =
@@ -163,16 +193,16 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
   };
 
   const content = (
-    <DialogContent>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <DialogHeader>
-          <DialogTitle>
-            {mode === "create" ? t("dialog.createTitle") : t("dialog.editTitle")}
-          </DialogTitle>
-          <DialogDescription>{t("description")}</DialogDescription>
-        </DialogHeader>
+    <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+      <DialogHeader className="flex-shrink-0">
+        <DialogTitle>
+          {mode === "create" ? t("dialog.createTitle") : t("dialog.editTitle")}
+        </DialogTitle>
+        <DialogDescription>{t("description")}</DialogDescription>
+      </DialogHeader>
 
-        <div className="grid gap-4">
+      <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+        <div className="grid gap-4 overflow-y-auto pr-2 flex-1">
           <div className="grid gap-2">
             <Label htmlFor="filter-name">{t("dialog.name")}</Label>
             <Input
@@ -181,6 +211,44 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
               onChange={(e) => setName(e.target.value)}
               required
             />
+          </div>
+
+          <div className="grid gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="binding-type">{t("dialog.bindingType")}</Label>
+              <Select value={bindingType} onValueChange={handleBindingTypeChange}>
+                <SelectTrigger id="binding-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="global">{t("dialog.bindingGlobal")}</SelectItem>
+                  <SelectItem value="providers">{t("dialog.bindingProviders")}</SelectItem>
+                  <SelectItem value="groups">{t("dialog.bindingGroups")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {bindingType === "providers" && (
+              <div className="grid gap-2">
+                <Label>{t("dialog.selectProviders")}</Label>
+                <ProviderMultiSelect
+                  selectedProviderIds={providerIds}
+                  onChange={setProviderIds}
+                  disabled={isSubmitting}
+                />
+              </div>
+            )}
+
+            {bindingType === "groups" && (
+              <div className="grid gap-2">
+                <Label>{t("dialog.selectGroups")}</Label>
+                <GroupMultiSelect
+                  selectedGroupTags={groupTags}
+                  onChange={setGroupTags}
+                  disabled={isSubmitting}
+                />
+              </div>
+            )}
           </div>
 
           <div className="grid gap-2">
@@ -300,7 +368,7 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="flex-shrink-0 pt-4">
           <Button
             type="button"
             variant="outline"

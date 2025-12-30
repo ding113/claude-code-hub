@@ -288,6 +288,13 @@
       "when": 1766509746306,
       "tag": "0040_bored_venus",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1766696732309,
+      "tag": "0041_sticky_jackal",
+      "breakpoints": true
     }
   ]
 }
