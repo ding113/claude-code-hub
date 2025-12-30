@@ -187,6 +187,18 @@
       "statusEnabled": "启用",
       "statusDisabled": "禁用"
     },
+    "inlineEdit": {
+      "save": "保存",
+      "cancel": "取消",
+      "saveSuccess": "保存成功",
+      "saveFailed": "保存失败",
+      "priorityLabel": "优先级",
+      "weightLabel": "权重",
+      "costMultiplierLabel": "成本倍数",
+      "priorityInvalid": "请输入大于等于 0 的整数",
+      "weightInvalid": "请输入大于等于 0 的整数",
+      "costMultiplierInvalid": "请输入大于等于 0 的数字"
+    },
     "schedulingDialog": {
       "title": "供应商调度规则说明",
       "description": "了解系统如何智能选择上游供应商，确保高可用性和成本优化",

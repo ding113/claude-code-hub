@@ -1454,6 +1454,18 @@
       "statusEnabled": "啟用",
       "statusDisabled": "禁用"
     },
+    "inlineEdit": {
+      "save": "保存",
+      "cancel": "取消",
+      "saveSuccess": "保存成功",
+      "saveFailed": "保存失敗",
+      "priorityLabel": "優先級",
+      "weightLabel": "權重",
+      "costMultiplierLabel": "成本倍數",
+      "priorityInvalid": "請輸入大於等於 0 的整數",
+      "weightInvalid": "請輸入大於等於 0 的整數",
+      "costMultiplierInvalid": "請輸入大於等於 0 的數字"
+    },
     "schedulingDialog": {
       "title": "供應商調度規則說明",
       "description": "了解系統如何智慧選擇上游供應商，確保高可用性和成本優化",
