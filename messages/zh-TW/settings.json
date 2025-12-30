@@ -1463,7 +1463,7 @@
       "weightLabel": "權重",
       "costMultiplierLabel": "成本倍數",
       "priorityInvalid": "請輸入大於等於 0 的整數",
-      "weightInvalid": "請輸入大於等於 0 的整數",
+      "weightInvalid": "請輸入 1-100 之間的整數",
       "costMultiplierInvalid": "請輸入大於等於 0 的數字"
     },
     "schedulingDialog": {

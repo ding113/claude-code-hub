@@ -1457,7 +1457,7 @@
       "weightLabel": "Вес",
       "costMultiplierLabel": "Коэф цены",
       "priorityInvalid": "Введите целое число >= 0",
-      "weightInvalid": "Введите целое число не меньше 0",
+      "weightInvalid": "Введите целое число от 1 до 100",
       "costMultiplierInvalid": "Введите число не меньше 0"
     },
     "schedulingDialog": {

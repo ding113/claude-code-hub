@@ -11,8 +11,8 @@ describe("Provider schemas - priority/weight/costMultiplier 规则对齐", () =>
       expect(UpdateProviderSchema.safeParse({ priority: 123 }).success).toBe(true);
     });
 
-    test("weight 接受 0 和正整数（上限 100）", () => {
-      expect(UpdateProviderSchema.safeParse({ weight: 0 }).success).toBe(true);
+    test("weight 接受 1-100 正整数，拒绝 0 和超出范围的值", () => {
+      expect(UpdateProviderSchema.safeParse({ weight: 0 }).success).toBe(false);
       expect(UpdateProviderSchema.safeParse({ weight: 1 }).success).toBe(true);
       expect(UpdateProviderSchema.safeParse({ weight: 100 }).success).toBe(true);
       expect(UpdateProviderSchema.safeParse({ weight: 101 }).success).toBe(false);
@@ -60,8 +60,8 @@ describe("Provider schemas - priority/weight/costMultiplier 规则对齐", () =>
       expect(CreateProviderSchema.safeParse({ ...base, priority: 123 }).success).toBe(true);
     });
 
-    test("weight 接受 0 和正整数（上限 100）", () => {
-      expect(CreateProviderSchema.safeParse({ ...base, weight: 0 }).success).toBe(true);
+    test("weight 接受 1-100 正整数，拒绝 0 和超出范围的值", () => {
+      expect(CreateProviderSchema.safeParse({ ...base, weight: 0 }).success).toBe(false);
       expect(CreateProviderSchema.safeParse({ ...base, weight: 1 }).success).toBe(true);
       expect(CreateProviderSchema.safeParse({ ...base, weight: 100 }).success).toBe(true);
       expect(CreateProviderSchema.safeParse({ ...base, weight: 101 }).success).toBe(false);

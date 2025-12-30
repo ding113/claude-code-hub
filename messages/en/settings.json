@@ -583,7 +583,7 @@
       "weightLabel": "Weight",
       "costMultiplierLabel": "Cost Multiplier",
       "priorityInvalid": "Please enter an integer >= 0",
-      "weightInvalid": "Please enter a non-negative integer",
+      "weightInvalid": "Please enter an integer between 1 and 100",
       "costMultiplierInvalid": "Please enter a non-negative number"
     },
     "schedulingDialog": {

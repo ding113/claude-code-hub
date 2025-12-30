@@ -2,8 +2,8 @@
  * 供应商配置相关常量
  */
 export const PROVIDER_LIMITS = {
-  // 权重：用于加权轮询，0-100；weight=0 时不参与加权（若同优先级全为 0 则退化为随机选择）
-  WEIGHT: { MIN: 0, MAX: 100 },
+  // 权重：用于加权轮询，1-100 覆盖绝大多数场景
+  WEIGHT: { MIN: 1, MAX: 100 },
   // 单个供应商最大重试次数
   MAX_RETRY_ATTEMPTS: { MIN: 1, MAX: 10 },
   // 5小时消费上限：保持 1000 USD 上限，步进 1 美元
