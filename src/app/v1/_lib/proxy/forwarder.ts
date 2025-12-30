@@ -1,3 +1,4 @@
+import { STATUS_CODES } from "node:http";
 import type { Readable } from "node:stream";
 import { createGunzip, constants as zlibConstants } from "node:zlib";
 import type { Dispatcher } from "undici";
@@ -825,9 +826,12 @@ export class ProxyForwarder {
 
     // --- GEMINI HANDLING ---
     if (provider.providerType === "gemini" || provider.providerType === "gemini-cli") {
-      // 1. 直接透传请求体（不转换）
-      const bodyString = JSON.stringify(session.request.message);
-      requestBody = bodyString;
+      // 1. 直接透传请求体（不转换）- 仅对有 body 的请求
+      const hasBody = session.method !== "GET" && session.method !== "HEAD";
+      if (hasBody) {
+        const bodyString = JSON.stringify(session.request.message);
+        requestBody = bodyString;
+      }
 
       // 检测流式请求：Gemini 支持两种方式
       // 1. URL 路径检测（官方 Gemini API）: /v1beta/models/xxx:streamGenerateContent?alt=sse
@@ -1960,7 +1964,7 @@ export class ProxyForwarder {
 
     return new Response(bodyStream, {
       status: undiciRes.statusCode,
-      statusText: String(undiciRes.statusCode),
+      statusText: STATUS_CODES[undiciRes.statusCode] ?? "OK",
       headers: responseHeaders,
     });
   }

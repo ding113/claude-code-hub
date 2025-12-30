@@ -6,6 +6,35 @@
 
 ## [v0.3.38](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.38) - 2025-12-29
 
+### 新增
+
+- Session 详情页新增请求/响应头日志展示，支持 Tab 切换查看 (#469)
+- 排行榜新增排序和供应商类型筛选功能 (#448) [@YewFence](https://github.com/YewFence)
+- 虚拟化表格组件 (use-virtualizer hook) 用于大数据量列表性能优化 (#467) [@NightYuYyy](https://github.com/NightYuYyy)
+- 新增 `FETCH_CONNECT_TIMEOUT` 环境变量，统一配置 Undici 连接超时（默认 30 秒）(#479, #480)
+
+### 优化
+
+- 供应商管理页面 UX 改进，优化交互体验 (#446) [@miraserver](https://github.com/miraserver)
+- 用户筛选与排序体验优化，移除使用日志用户筛选限制 (#462, #449) [@NightYu](https://github.com/NightYuYyy)
+- 缓存 tooltip 显示改进，当 5m/1h breakdown 不可用时提供友好提示 (#445) [@Hwwwww](https://github.com/Hwwwww-dev)
+- TagInput 组件和虚拟化表格稳定性增强 (#467) [@NightYuYyy](https://github.com/NightYuYyy)
+- SSE 解析工具增强，添加错误处理和测试 (#469)
+- Session 消息客户端 SSE 性能和 matchMedia 回退优化 (#469)
+
+### 修复
+
+- 修复计费模型来源配置不生效问题 (#464)
+- Codex instructions 一律透传，移除缓存与策略 (#475)
+- 修复 Session 详情页中的 tool_use_id 验证问题 (#473, #472)
+- 修复日志表格中供应商名称溢出问题 (#478) [@YangQing-Lin](https://github.com/YangQing-Lin)
+- 请求过滤器 header 修改追踪修复，确保在 Session 详情中正确显示 (#465)
+- 数据导入组件优化，移除重复描述文本 (#458) [@Abner](https://github.com)
+
+### 其他
+
+- 新增多项单元测试：undici 超时、proxy forwarder、session 等 (#469, #479)
+- 移除 codex-instructions-cache.ts 模块，简化代码结构 (#475)
 ---
 
 ## [v0.3.37](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.37) - 2025-12-24
