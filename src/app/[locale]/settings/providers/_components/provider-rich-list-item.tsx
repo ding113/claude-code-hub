@@ -287,10 +287,9 @@ export function ProviderRichListItem({
   const createSaveHandler = (fieldName: "priority" | "weight" | "cost_multiplier") => {
     return async (value: number) => {
       try {
-        const res = await editProvider(
-          provider.id,
-          { [fieldName]: value } as Parameters<typeof editProvider>[1],
-        );
+        const res = await editProvider(provider.id, { [fieldName]: value } as Parameters<
+          typeof editProvider
+        >[1]);
         if (res.ok) {
           toast.success(tInline("saveSuccess"));
           queryClient.invalidateQueries({ queryKey: ["providers"] });
