@@ -1,7 +1,7 @@
 import type { Job } from "bull";
 import Queue from "bull";
+import type { NotificationJobType } from "@/lib/constants/notification.constants";
 import { logger } from "@/lib/logger";
-import { type NotificationJobType } from "@/lib/constants/notification.constants";
 import {
   buildCircuitBreakerMessage,
   buildCostAlertMessage,
