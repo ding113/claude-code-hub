@@ -1964,7 +1964,8 @@ export class ProxyForwarder {
 
     return new Response(bodyStream, {
       status: undiciRes.statusCode,
-      statusText: STATUS_CODES[undiciRes.statusCode] ?? "OK",
+      // 未知/非标准状态码不应兜底为 OK（避免误导客户端日志与调试）
+      statusText: STATUS_CODES[undiciRes.statusCode] ?? "",
       headers: responseHeaders,
     });
   }
