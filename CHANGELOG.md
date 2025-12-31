@@ -4,6 +4,35 @@
 
 ---
 
+## [v0.3.39](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.39) - 2025-12-31
+
+### 新增
+
+- 新增飞书 (Feishu) Webhook 通知支持，支持飞书机器人卡片消息推送 (#490) [@Kevin Cui](https://github.com/kevin-cui-tw)
+- Webhook 平台自动检测功能，根据 URL 自动识别平台类型并显示对应徽章 (#487)
+- 请求过滤器新增供应商/分组绑定功能，支持为特定供应商或供应商分组设置独立的过滤规则 (#484)
+- 供应商管理页面新增内联编辑功能，支持直接在列表中编辑优先级、权重和成本系数 (#486) [@YangQing-Lin](https://github.com/YangQing-Lin)
+
+### 优化
+
+- 供应商权重最小值从 0 调整为 1，提升配置清晰度 (#486) [@YangQing-Lin](https://github.com/YangQing-Lin)
+- 请求过滤器表格 UI 优化，改进布局、滚动和工具提示显示 (#484)
+- 优化分组标签匹配性能，减少迭代数据集大小 (#484)
+
+### 修复
+
+- 修复代理转发器中未知 HTTP 状态码错误地兜底返回 OK 的问题 (#490)
+- 修复 HTTP statusText 处理问题以及 Gemini GET/HEAD 请求的处理逻辑 (#481) [@near](https://github.com/near)
+- 修复请求过滤器的安全性和 UX 问题，改进表单布局和错误提示 (#488)
+
+### 其他
+
+- 重构 Webhook 模块架构，统一渲染器接口和模板系统 (#490)
+- 新增多项单元测试覆盖：请求过滤器绑定、Webhook 渲染器、HTTP 状态文本等
+- 移除旧的微信机器人模块代码，改用新的 Webhook 架构 (#490)
+
+---
+
 ## [v0.3.38](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.38) - 2025-12-29
 
 ### 新增
