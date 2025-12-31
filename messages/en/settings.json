@@ -1527,7 +1527,8 @@
         "label": "Groups:",
         "all": "All",
         "default": "default"
-      }
+      },
+      "circuitBroken": "Circuit Broken"
     },
     "subtitle": "Provider Management",
     "subtitleDesc": "Configure upstream provider rate limiting and concurrent session limits. Leave empty for unlimited.",

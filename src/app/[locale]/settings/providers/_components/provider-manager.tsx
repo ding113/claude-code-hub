@@ -1,9 +1,10 @@
 "use client";
-import { Loader2, Search, X } from "lucide-react";
+import { AlertTriangle, Loader2, Search, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { type ReactNode, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -12,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import type { ProviderDisplay, ProviderType } from "@/types/provider";
@@ -61,6 +63,12 @@ export function ProviderManager({
   // Status and group filters
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [groupFilter, setGroupFilter] = useState<string[]>([]);
+  const [circuitBrokenFilter, setCircuitBrokenFilter] = useState(false);
+
+  // Count providers with circuit breaker open
+  const circuitBrokenCount = useMemo(() => {
+    return providers.filter((p) => healthStatus[p.id]?.circuitState === "open").length;
+  }, [providers, healthStatus]);
 
   // Extract unique groups from all providers
   const allGroups = useMemo(() => {
@@ -132,6 +140,11 @@ export function ProviderManager({
       });
     }
 
+    // Filter by circuit breaker state
+    if (circuitBrokenFilter) {
+      result = result.filter((p) => healthStatus[p.id]?.circuitState === "open");
+    }
+
     // 排序
     return [...result].sort((a, b) => {
       switch (sortBy) {
@@ -161,7 +174,7 @@ export function ProviderManager({
           return 0;
       }
     });
-  }, [providers, debouncedSearchTerm, typeFilter, sortBy, statusFilter, groupFilter]);
+  }, [providers, debouncedSearchTerm, typeFilter, sortBy, statusFilter, groupFilter, circuitBrokenFilter, healthStatus]);
 
   return (
     <div className="space-y-4">
@@ -242,22 +255,50 @@ export function ProviderManager({
             ))}
           </div>
         )}
-        {/* 搜索结果提示 */}
-        {debouncedSearchTerm ? (
-          <p className="text-sm text-muted-foreground">
-            {loading
-              ? tCommon("loading")
-              : filteredProviders.length > 0
-                ? t("found", { count: filteredProviders.length })
-                : t("notFound")}
-          </p>
-        ) : (
-          <div className="text-sm text-muted-foreground">
-            {loading
-              ? tCommon("loading")
-              : t("showing", { filtered: filteredProviders.length, total: providers.length })}
-          </div>
-        )}
+        {/* 搜索结果提示 + Circuit Breaker filter */}
+        <div className="flex items-center justify-between">
+          {debouncedSearchTerm ? (
+            <p className="text-sm text-muted-foreground">
+              {loading
+                ? tCommon("loading")
+                : filteredProviders.length > 0
+                  ? t("found", { count: filteredProviders.length })
+                  : t("notFound")}
+            </p>
+          ) : (
+            <div className="text-sm text-muted-foreground">
+              {loading
+                ? tCommon("loading")
+                : t("showing", { filtered: filteredProviders.length, total: providers.length })}
+            </div>
+          )}
+
+          {/* Circuit Breaker toggle - only show if there are broken providers */}
+          {circuitBrokenCount > 0 && (
+            <div className="flex items-center gap-2">
+              <AlertTriangle
+                className={`h-4 w-4 ${circuitBrokenFilter ? "text-destructive" : "text-muted-foreground"}`}
+              />
+              <Label
+                htmlFor="circuit-broken-filter"
+                className={`text-sm cursor-pointer select-none ${circuitBrokenFilter ? "text-destructive font-medium" : "text-muted-foreground"}`}
+              >
+                {tFilter("circuitBroken")}
+              </Label>
+              <Switch
+                id="circuit-broken-filter"
+                checked={circuitBrokenFilter}
+                onCheckedChange={setCircuitBrokenFilter}
+                disabled={loading}
+              />
+              <span
+                className={`text-sm tabular-nums ${circuitBrokenFilter ? "text-destructive font-medium" : "text-muted-foreground"}`}
+              >
+                ({circuitBrokenCount})
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* 供应商列表 */}

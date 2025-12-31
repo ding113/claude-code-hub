@@ -1108,7 +1108,8 @@
         "label": "分组:",
         "all": "全部",
         "default": "default"
-      }
+      },
+      "circuitBroken": "熔断"
     },
     "editProvider": "编辑服务商",
     "createProvider": "新增服务商",
