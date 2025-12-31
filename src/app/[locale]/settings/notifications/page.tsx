@@ -20,6 +20,7 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
+import type { NotificationJobType } from "@/lib/constants/notification.constants";
 
 /**
  * 通知设置表单 Schema
@@ -50,7 +51,7 @@ export default function NotificationsPage() {
   const t = useTranslations("settings");
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [testingWebhook, setTestingWebhook] = useState<string | null>(null);
+  const [testingWebhook, setTestingWebhook] = useState<NotificationJobType | null>(null);
 
   const {
     register,
@@ -129,7 +130,7 @@ export default function NotificationsPage() {
     }
   };
 
-  const handleTestWebhook = async (webhookUrl: string, type: string) => {
+  const handleTestWebhook = async (webhookUrl: string, type: NotificationJobType) => {
     if (!webhookUrl || !webhookUrl.trim()) {
       toast.error(t("notifications.form.webhookRequired"));
       return;
@@ -138,7 +139,7 @@ export default function NotificationsPage() {
     setTestingWebhook(type);
 
     try {
-      const result = await testWebhookAction(webhookUrl);
+      const result = await testWebhookAction(webhookUrl, type);
 
       if (result.success) {
         toast.success(t("notifications.form.testSuccess"));
@@ -229,12 +230,12 @@ export default function NotificationsPage() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    disabled={!enabled || testingWebhook === "circuitBreaker"}
+                    disabled={!enabled || testingWebhook === "circuit-breaker"}
                     onClick={() =>
-                      handleTestWebhook(watch("circuitBreakerWebhook") || "", "circuitBreaker")
+                      handleTestWebhook(watch("circuitBreakerWebhook") || "", "circuit-breaker")
                     }
                   >
-                    {testingWebhook === "circuitBreaker" ? (
+                    {testingWebhook === "circuit-breaker" ? (
                       <>
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                         {t("common.testing")}
@@ -325,12 +326,12 @@ export default function NotificationsPage() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    disabled={!enabled || testingWebhook === "dailyLeaderboard"}
+                    disabled={!enabled || testingWebhook === "daily-leaderboard"}
                     onClick={() =>
-                      handleTestWebhook(watch("dailyLeaderboardWebhook") || "", "dailyLeaderboard")
+                      handleTestWebhook(watch("dailyLeaderboardWebhook") || "", "daily-leaderboard")
                     }
                   >
-                    {testingWebhook === "dailyLeaderboard" ? (
+                    {testingWebhook === "daily-leaderboard" ? (
                       <>
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                         {t("common.testing")}
@@ -419,10 +420,10 @@ export default function NotificationsPage() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    disabled={!enabled || testingWebhook === "costAlert"}
-                    onClick={() => handleTestWebhook(watch("costAlertWebhook") || "", "costAlert")}
+                    disabled={!enabled || testingWebhook === "cost-alert"}
+                    onClick={() => handleTestWebhook(watch("costAlertWebhook") || "", "cost-alert")}
                   >
-                    {testingWebhook === "costAlert" ? (
+                    {testingWebhook === "cost-alert" ? (
                       <>
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                         {t("common.testing")}

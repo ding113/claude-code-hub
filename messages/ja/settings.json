@@ -370,7 +370,7 @@
   },
   "notifications": {
     "title": "プッシュ通知",
-    "description": "WeCom（企業微信）ロボットのプッシュ通知を設定",
+    "description": "Webhook プッシュ通知を設定",
     "global": {
       "title": "通知マスタースイッチ",
       "description": "すべてのプッシュ通知機能を有効または無効にする",
@@ -417,7 +417,7 @@
       "saveError": "設定の保存に失敗しました",
       "loadError": "通知設定の読み込みに失敗しました",
       "webhookRequired": "まずWebhook URLを入力してください",
-      "testSuccess": "テストメッセージを送信しました。WeComを確認してください",
+      "testSuccess": "テストメッセージを送信しました",
       "testFailed": "テストに失敗しました",
       "testFailedRetry": "テストに失敗しました。再試行してください",
       "testError": "接続テストに失敗しました",

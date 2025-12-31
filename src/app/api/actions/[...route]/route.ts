@@ -29,6 +29,7 @@ import * as usageLogActions from "@/actions/usage-logs";
 // 导入 actions
 import * as userActions from "@/actions/users";
 import { createActionRoute } from "@/lib/api/action-adapter-openapi";
+import { NOTIFICATION_JOB_TYPES } from "@/lib/constants/notification.constants";
 // 导入 validation schemas
 import {
   CreateProviderSchema,
@@ -809,6 +810,7 @@ const { route: testWebhookRoute, handler: testWebhookHandler } = createActionRou
   {
     requestSchema: z.object({
       webhookUrl: z.string().url(),
+      type: z.enum(NOTIFICATION_JOB_TYPES),
     }),
     description: "测试 Webhook 配置",
     summary: "测试 Webhook 配置",

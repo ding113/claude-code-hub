@@ -370,7 +370,7 @@
   },
   "notifications": {
     "title": "訊息推送",
-    "description": "設定企業微信機器人訊息推送",
+    "description": "設定 Webhook 訊息推送",
     "global": {
       "title": "通知總開關",
       "description": "啟用或停用所有訊息推送功能",
@@ -417,7 +417,7 @@
       "saveError": "儲存設定失敗",
       "loadError": "載入通知設定失敗",
       "webhookRequired": "請先填寫 Webhook URL",
-      "testSuccess": "測試訊息已發送，請檢查企業微信",
+      "testSuccess": "測試訊息已發送",
       "testFailed": "測試失敗",
       "testFailedRetry": "測試失敗，請重試",
       "testError": "測試連線失敗",

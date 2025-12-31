@@ -454,7 +454,7 @@ export const systemSettings = pgTable('system_settings', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 });
 
-// Notification Settings table - 企业微信机器人通知配置
+// Notification Settings table - Webhook 通知配置
 export const notificationSettings = pgTable('notification_settings', {
   id: serial('id').primaryKey(),
 

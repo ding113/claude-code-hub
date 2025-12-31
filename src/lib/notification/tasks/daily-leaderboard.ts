@@ -1,5 +1,5 @@
 import { logger } from "@/lib/logger";
-import type { DailyLeaderboardData } from "@/lib/wechat/message-templates";
+import type { DailyLeaderboardData } from "@/lib/webhook";
 import { findLast24HoursLeaderboard } from "@/repository/leaderboard";
 
 /**

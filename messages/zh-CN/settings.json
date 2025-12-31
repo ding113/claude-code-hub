@@ -1591,7 +1591,7 @@
   },
   "notifications": {
     "title": "消息推送",
-    "description": "配置企业微信机器人消息推送",
+    "description": "配置 Webhook 消息推送",
     "global": {
       "title": "通知总开关",
       "description": "启用或禁用所有消息推送功能",
@@ -1638,7 +1638,7 @@
       "saveError": "保存设置失败",
       "loadError": "加载通知设置失败",
       "webhookRequired": "请先填写 Webhook URL",
-      "testSuccess": "测试消息已发送，请检查企业微信",
+      "testSuccess": "测试消息已发送",
       "testFailed": "测试失败",
       "testFailedRetry": "测试失败，请重试",
       "testError": "测试连接失败",
