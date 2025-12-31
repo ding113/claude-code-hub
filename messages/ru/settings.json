@@ -370,7 +370,7 @@
   },
   "notifications": {
     "title": "Push-уведомления",
-    "description": "Настройка push-уведомлений робота WeChat Work",
+    "description": "Настройка push-уведомлений Webhook",
     "global": {
       "title": "Главный переключатель уведомлений",
       "description": "Включить или отключить все функции push-уведомлений",
@@ -417,7 +417,7 @@
       "saveError": "Не удалось сохранить настройки",
       "loadError": "Не удалось загрузить настройки уведомлений",
       "webhookRequired": "Сначала заполните Webhook URL",
-      "testSuccess": "Тестовое сообщение отправлено, проверьте WeChat Work",
+      "testSuccess": "Тестовое сообщение отправлено",
       "testFailed": "Тест не пройден",
       "testFailedRetry": "Тест не пройден, попробуйте снова",
       "testError": "Ошибка тестирования подключения",

@@ -379,7 +379,7 @@
   },
   "notifications": {
     "title": "Push Notifications",
-    "description": "Configure WeChat Work robot push notifications",
+    "description": "Configure Webhook push notifications",
     "global": {
       "title": "Notification Master Switch",
       "description": "Enable or disable all push notification features",
@@ -426,7 +426,7 @@
       "saveError": "Failed to save settings",
       "loadError": "Failed to load notification settings",
       "webhookRequired": "Please fill in Webhook URL first",
-      "testSuccess": "Test message sent, please check WeChat Work",
+      "testSuccess": "Test message sent",
       "testFailed": "Test failed",
       "testFailedRetry": "Test failed, please retry",
       "testError": "Test connection failed",
