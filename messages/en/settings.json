@@ -808,7 +808,12 @@
         "manualDesc": "Support adding any model name (not limited to price table)",
         "claude": "Claude",
         "openai": "OpenAI",
-        "gemini": "Gemini"
+        "gemini": "Gemini",
+        "sourceUpstream": "Upstream",
+        "sourceUpstreamDesc": "Model list from upstream provider API",
+        "sourceFallback": "Local",
+        "sourceFallbackDesc": "Using local price list (upstream unavailable or unsupported)",
+        "refresh": "Refresh model list"
       },
       "modelRedirect": {
         "currentRules": "Current Rules ({count})",

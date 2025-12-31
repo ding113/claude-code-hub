@@ -745,6 +745,7 @@ export function ProviderForm({
                   providerType={
                     providerType as
                       | "claude"
+                      | "claude-auth"
                       | "codex"
                       | "gemini"
                       | "gemini-cli"
@@ -753,6 +754,11 @@ export function ProviderForm({
                   selectedModels={allowedModels}
                   onChange={setAllowedModels}
                   disabled={isPending}
+                  providerUrl={url}
+                  apiKey={key}
+                  proxyUrl={proxyUrl}
+                  proxyFallbackToDirect={proxyFallbackToDirect}
+                  providerId={isEdit ? provider?.id : undefined}
                 />
 
                 {allowedModels.length > 0 && (

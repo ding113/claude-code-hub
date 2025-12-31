@@ -719,7 +719,12 @@
         "manualDesc": "Поддержка добавления любого названия модели (не ограничено прайс-листом)",
         "claude": "Claude",
         "openai": "OpenAI",
-        "gemini": "Gemini"
+        "gemini": "Gemini",
+        "sourceUpstream": "Upstream",
+        "sourceUpstreamDesc": "Список моделей из API провайдера",
+        "sourceFallback": "Локально",
+        "sourceFallbackDesc": "Используется локальный прайс-лист (upstream недоступен или не поддерживается)",
+        "refresh": "Обновить список моделей"
       },
       "modelRedirect": {
         "currentRules": "Текущие правила ({count})",
