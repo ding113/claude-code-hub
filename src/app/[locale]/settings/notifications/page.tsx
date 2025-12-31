@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AlertTriangle, Bell, Loader2, TestTube, TrendingUp } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -12,6 +12,7 @@ import {
   testWebhookAction,
   updateNotificationSettingsAction,
 } from "@/actions/notifications";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -68,6 +69,35 @@ export default function NotificationsPage() {
   const dailyLeaderboardEnabled = watch("dailyLeaderboardEnabled");
   const costAlertEnabled = watch("costAlertEnabled");
   const costAlertThreshold = watch("costAlertThreshold");
+  const costAlertWebhook = watch("costAlertWebhook");
+  const circuitBreakerWebhook = watch("circuitBreakerWebhook");
+  const dailyLeaderboardWebhook = watch("dailyLeaderboardWebhook");
+
+  // Detect webhook platform type from URL
+  const detectWebhookType = useCallback((url: string | undefined): "wechat" | "feishu" | null => {
+    if (!url) return null;
+    try {
+      const parsed = new URL(url);
+      if (parsed.hostname === "qyapi.weixin.qq.com") return "wechat";
+      if (parsed.hostname === "open.feishu.cn") return "feishu";
+      return null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const costAlertWebhookType = useMemo(
+    () => detectWebhookType(costAlertWebhook),
+    [costAlertWebhook, detectWebhookType]
+  );
+  const circuitBreakerWebhookType = useMemo(
+    () => detectWebhookType(circuitBreakerWebhook),
+    [circuitBreakerWebhook, detectWebhookType]
+  );
+  const dailyLeaderboardWebhookType = useMemo(
+    () => detectWebhookType(dailyLeaderboardWebhook),
+    [dailyLeaderboardWebhook, detectWebhookType]
+  );
 
   const loadSettings = useCallback(async () => {
     try {
@@ -212,9 +242,18 @@ export default function NotificationsPage() {
                 <div className="space-y-4 pt-4">
                   <Separator />
                   <div className="space-y-2">
-                    <Label htmlFor="circuitBreakerWebhook">
-                      {t("notifications.circuitBreaker.webhook")}
-                    </Label>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="circuitBreakerWebhook">
+                        {t("notifications.circuitBreaker.webhook")}
+                      </Label>
+                      {circuitBreakerWebhookType && (
+                        <Badge variant="secondary">
+                          {circuitBreakerWebhookType === "wechat"
+                            ? t("notifications.costAlert.webhookTypeWeCom")
+                            : t("notifications.costAlert.webhookTypeFeishu")}
+                        </Badge>
+                      )}
+                    </div>
                     <Input
                       id="circuitBreakerWebhook"
                       {...register("circuitBreakerWebhook")}
@@ -223,6 +262,11 @@ export default function NotificationsPage() {
                     />
                     {errors.circuitBreakerWebhook && (
                       <p className="text-sm text-red-500">{errors.circuitBreakerWebhook.message}</p>
+                    )}
+                    {circuitBreakerWebhook && !circuitBreakerWebhookType && (
+                      <p className="text-sm text-amber-500">
+                        {t("notifications.costAlert.webhookTypeUnknown")}
+                      </p>
                     )}
                   </div>
 
@@ -279,9 +323,18 @@ export default function NotificationsPage() {
                   <Separator />
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="dailyLeaderboardWebhook">
-                        {t("notifications.dailyLeaderboard.webhook")}
-                      </Label>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="dailyLeaderboardWebhook">
+                          {t("notifications.dailyLeaderboard.webhook")}
+                        </Label>
+                        {dailyLeaderboardWebhookType && (
+                          <Badge variant="secondary">
+                            {dailyLeaderboardWebhookType === "wechat"
+                              ? t("notifications.costAlert.webhookTypeWeCom")
+                              : t("notifications.costAlert.webhookTypeFeishu")}
+                          </Badge>
+                        )}
+                      </div>
                       <Input
                         id="dailyLeaderboardWebhook"
                         {...register("dailyLeaderboardWebhook")}
@@ -291,6 +344,11 @@ export default function NotificationsPage() {
                       {errors.dailyLeaderboardWebhook && (
                         <p className="text-sm text-red-500">
                           {errors.dailyLeaderboardWebhook.message}
+                        </p>
+                      )}
+                      {dailyLeaderboardWebhook && !dailyLeaderboardWebhookType && (
+                        <p className="text-sm text-amber-500">
+                          {t("notifications.costAlert.webhookTypeUnknown")}
                         </p>
                       )}
                     </div>
@@ -372,7 +430,18 @@ export default function NotificationsPage() {
                 <div className="space-y-4 pt-4">
                   <Separator />
                   <div className="space-y-2">
-                    <Label htmlFor="costAlertWebhook">{t("notifications.costAlert.webhook")}</Label>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="costAlertWebhook">
+                        {t("notifications.costAlert.webhook")}
+                      </Label>
+                      {costAlertWebhookType && (
+                        <Badge variant="secondary">
+                          {costAlertWebhookType === "wechat"
+                            ? t("notifications.costAlert.webhookTypeWeCom")
+                            : t("notifications.costAlert.webhookTypeFeishu")}
+                        </Badge>
+                      )}
+                    </div>
                     <Input
                       id="costAlertWebhook"
                       {...register("costAlertWebhook")}
@@ -381,6 +450,11 @@ export default function NotificationsPage() {
                     />
                     {errors.costAlertWebhook && (
                       <p className="text-sm text-red-500">{errors.costAlertWebhook.message}</p>
+                    )}
+                    {costAlertWebhook && !costAlertWebhookType && (
+                      <p className="text-sm text-amber-500">
+                        {t("notifications.costAlert.webhookTypeUnknown")}
+                      </p>
                     )}
                   </div>
 
@@ -404,7 +478,7 @@ export default function NotificationsPage() {
 
                   <div className="space-y-2">
                     <Label htmlFor="costAlertCheckInterval">
-                      {t("notifications.costAlert.checkInterval")}
+                      {t("notifications.costAlert.interval")}
                     </Label>
                     <Input
                       id="costAlertCheckInterval"
