@@ -370,7 +370,7 @@
   },
   "notifications": {
     "title": "プッシュ通知",
-    "description": "WeCom（企業微信）ロボットのプッシュ通知を設定",
+    "description": "Webhook プッシュ通知を設定",
     "global": {
       "title": "通知マスタースイッチ",
       "description": "すべてのプッシュ通知機能を有効または無効にする",
@@ -402,6 +402,9 @@
       "enable": "コストアラートを有効にする",
       "webhook": "Webhook URL",
       "webhookPlaceholder": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...",
+      "webhookTypeWeCom": "企業微信",
+      "webhookTypeFeishu": "飛書",
+      "webhookTypeUnknown": "不明なプラットフォーム。企業微信または飛書のWebhook URLを使用してください",
       "threshold": "アラートしきい値",
       "thresholdLabel": "アラートしきい値: {percent}%",
       "thresholdHelp": "消費がクォータの{percent}%に達した時にアラート",
@@ -417,7 +420,7 @@
       "saveError": "設定の保存に失敗しました",
       "loadError": "通知設定の読み込みに失敗しました",
       "webhookRequired": "まずWebhook URLを入力してください",
-      "testSuccess": "テストメッセージを送信しました。WeComを確認してください",
+      "testSuccess": "テストメッセージを送信しました",
       "testFailed": "テストに失敗しました",
       "testFailedRetry": "テストに失敗しました。再試行してください",
       "testError": "接続テストに失敗しました",
@@ -1448,6 +1451,18 @@
       "statusEnabled": "有効",
       "statusDisabled": "無効"
     },
+    "inlineEdit": {
+      "save": "保存",
+      "cancel": "キャンセル",
+      "saveSuccess": "保存に成功しました",
+      "saveFailed": "保存に失敗しました",
+      "priorityLabel": "優先度",
+      "weightLabel": "重み",
+      "costMultiplierLabel": "コスト倍率",
+      "priorityInvalid": "0 以上の整数を入力してください",
+      "weightInvalid": "1〜100 の整数を入力してください",
+      "costMultiplierInvalid": "0以上の数値を入力してください"
+    },
     "schedulingDialog": {
       "title": "プロバイダースケジューリングルール",
       "description": "システムが高可用性とコスト最適化のために上流プロバイダーをインテリジェントに選択する方法を理解する",
@@ -1569,7 +1584,22 @@
       "saving": "保存中...",
       "validation": {
         "fieldRequired": "名称と対象は必須です"
-      }
+      },
+      "bindingType": "適用先",
+      "bindingGlobal": "全プロバイダー（グローバル）",
+      "bindingProviders": "特定のプロバイダー",
+      "bindingGroups": "プロバイダーグループ",
+      "selectProviders": "プロバイダーを選択...",
+      "selectGroups": "グループを選択...",
+      "searchProviders": "プロバイダー検索...",
+      "searchGroups": "グループ検索...",
+      "noProvidersFound": "プロバイダーが見つかりません",
+      "noGroupsFound": "グループが見つかりません",
+      "providersSelected": "{count}件のプロバイダーを選択",
+      "groupsSelected": "{count}件のグループを選択",
+      "loading": "読み込み中...",
+      "clear": "クリア",
+      "selectAll": "すべて選択"
     },
     "table": {
       "name": "名称",
@@ -1578,6 +1608,7 @@
       "target": "対象",
       "replacement": "置換値",
       "priority": "優先度",
+      "apply": "適用",
       "status": "状態",
       "createdAt": "作成日時",
       "actions": "操作"
@@ -1591,7 +1622,10 @@
       "set": "ヘッダー設定",
       "json_path": "JSONパス置換",
       "text_replace": "テキスト置換"
-    }
+    },
+    "applyToAll": "すべてのリクエストに適用",
+    "providers": "プロバイダー",
+    "groups": "グループ"
   },
   "errorRules": {
     "nav": "エラールール",

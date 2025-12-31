@@ -8,6 +8,7 @@ import { emitRequestFiltersUpdated } from "@/lib/emit-event";
 export type RequestFilterScope = "header" | "body";
 export type RequestFilterAction = "remove" | "set" | "json_path" | "text_replace";
 export type RequestFilterMatchType = "regex" | "contains" | "exact" | null;
+export type RequestFilterBindingType = "global" | "providers" | "groups";
 
 export interface RequestFilter {
   id: number;
@@ -20,6 +21,9 @@ export interface RequestFilter {
   replacement: unknown;
   priority: number;
   isEnabled: boolean;
+  bindingType: RequestFilterBindingType;
+  providerIds: number[] | null;
+  groupTags: string[] | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -38,6 +42,9 @@ function mapRow(row: Row): RequestFilter {
     replacement: row.replacement ?? null,
     priority: row.priority,
     isEnabled: row.isEnabled,
+    bindingType: (row.bindingType as RequestFilterBindingType) ?? "global",
+    providerIds: (row.providerIds as number[] | null) ?? null,
+    groupTags: (row.groupTags as string[] | null) ?? null,
     createdAt: row.createdAt ?? new Date(),
     updatedAt: row.updatedAt ?? new Date(),
   };
@@ -87,6 +94,9 @@ interface CreateRequestFilterInput {
   replacement?: unknown;
   priority?: number;
   isEnabled?: boolean;
+  bindingType?: RequestFilterBindingType;
+  providerIds?: number[] | null;
+  groupTags?: string[] | null;
 }
 
 export async function createRequestFilter(data: CreateRequestFilterInput): Promise<RequestFilter> {
@@ -102,6 +112,9 @@ export async function createRequestFilter(data: CreateRequestFilterInput): Promi
       replacement: data.replacement ?? null,
       priority: data.priority ?? 0,
       isEnabled: data.isEnabled ?? true,
+      bindingType: data.bindingType ?? "global",
+      providerIds: data.providerIds ?? null,
+      groupTags: data.groupTags ?? null,
     })
     .returning();
 
@@ -119,6 +132,9 @@ interface UpdateRequestFilterInput {
   replacement?: unknown;
   priority?: number;
   isEnabled?: boolean;
+  bindingType?: RequestFilterBindingType;
+  providerIds?: number[] | null;
+  groupTags?: string[] | null;
 }
 
 export async function updateRequestFilter(

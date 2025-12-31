@@ -1,22 +1,19 @@
 import type { Job } from "bull";
 import Queue from "bull";
+import type { NotificationJobType } from "@/lib/constants/notification.constants";
 import { logger } from "@/lib/logger";
-import { sendWeChatNotification } from "@/lib/wechat/bot";
 import {
-  buildCircuitBreakerAlert,
-  buildCostAlert,
-  buildDailyLeaderboard,
+  buildCircuitBreakerMessage,
+  buildCostAlertMessage,
+  buildDailyLeaderboardMessage,
   type CircuitBreakerAlertData,
   type CostAlertData,
   type DailyLeaderboardData,
-} from "@/lib/wechat/message-templates";
+  type StructuredMessage,
+  sendWebhookMessage,
+} from "@/lib/webhook";
 import { generateCostAlerts } from "./tasks/cost-alert";
 import { generateDailyLeaderboard } from "./tasks/daily-leaderboard";
-
-/**
- * 通知任务类型
- */
-export type NotificationJobType = "circuit-breaker" | "daily-leaderboard" | "cost-alert";
 
 /**
  * 通知任务数据
@@ -124,11 +121,11 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
     });
 
     try {
-      // 构建消息内容
-      let content: string;
+      // 构建结构化消息
+      let message: StructuredMessage;
       switch (type) {
         case "circuit-breaker":
-          content = buildCircuitBreakerAlert(data as CircuitBreakerAlertData);
+          message = buildCircuitBreakerMessage(data as CircuitBreakerAlertData);
           break;
         case "daily-leaderboard": {
           // 动态生成排行榜数据
@@ -146,7 +143,7 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
             return { success: true, skipped: true };
           }
 
-          content = buildDailyLeaderboard(leaderboardData);
+          message = buildDailyLeaderboardMessage(leaderboardData);
           break;
         }
         case "cost-alert": {
@@ -166,7 +163,7 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
           }
 
           // 发送第一个告警（后续可扩展为批量发送）
-          content = buildCostAlert(alerts[0]);
+          message = buildCostAlertMessage(alerts[0]);
           break;
         }
         default:
@@ -174,7 +171,7 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
       }
 
       // 发送通知
-      const result = await sendWeChatNotification(webhookUrl, content);
+      const result = await sendWebhookMessage(webhookUrl, message);
 
       if (!result.success) {
         throw new Error(result.error || "Failed to send notification");

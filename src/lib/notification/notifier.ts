@@ -1,6 +1,6 @@
 import { logger } from "@/lib/logger";
 import { getRedisClient } from "@/lib/redis/client";
-import type { CircuitBreakerAlertData } from "@/lib/wechat/message-templates";
+import type { CircuitBreakerAlertData } from "@/lib/webhook";
 import { generateCostAlerts } from "./tasks/cost-alert";
 import { generateDailyLeaderboard } from "./tasks/daily-leaderboard";
 

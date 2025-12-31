@@ -370,7 +370,7 @@
   },
   "notifications": {
     "title": "Push-уведомления",
-    "description": "Настройка push-уведомлений робота WeChat Work",
+    "description": "Настройка push-уведомлений Webhook",
     "global": {
       "title": "Главный переключатель уведомлений",
       "description": "Включить или отключить все функции push-уведомлений",
@@ -402,6 +402,9 @@
       "enable": "Включить оповещение о расходах",
       "webhook": "Webhook URL",
       "webhookPlaceholder": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...",
+      "webhookTypeWeCom": "WeCom",
+      "webhookTypeFeishu": "Feishu",
+      "webhookTypeUnknown": "Неизвестная платформа. Используйте URL вебхука WeCom или Feishu",
       "threshold": "Порог оповещения",
       "thresholdLabel": "Порог оповещения: {percent}%",
       "thresholdHelp": "Оповещение при достижении {percent}% квоты",
@@ -417,7 +420,7 @@
       "saveError": "Не удалось сохранить настройки",
       "loadError": "Не удалось загрузить настройки уведомлений",
       "webhookRequired": "Сначала заполните Webhook URL",
-      "testSuccess": "Тестовое сообщение отправлено, проверьте WeChat Work",
+      "testSuccess": "Тестовое сообщение отправлено",
       "testFailed": "Тест не пройден",
       "testFailedRetry": "Тест не пройден, попробуйте снова",
       "testError": "Ошибка тестирования подключения",
@@ -1448,6 +1451,18 @@
       "statusEnabled": "включен",
       "statusDisabled": "отключен"
     },
+    "inlineEdit": {
+      "save": "Сохранить",
+      "cancel": "Отмена",
+      "saveSuccess": "Успешно сохранено",
+      "saveFailed": "Не удалось сохранить",
+      "priorityLabel": "Приоритет",
+      "weightLabel": "Вес",
+      "costMultiplierLabel": "Коэф цены",
+      "priorityInvalid": "Введите целое число >= 0",
+      "weightInvalid": "Введите целое число от 1 до 100",
+      "costMultiplierInvalid": "Введите число не меньше 0"
+    },
     "schedulingDialog": {
       "title": "Правила планирования провайдеров",
       "description": "Узнайте, как система интеллектуально выбирает вышестоящих провайдеров для высокой доступности и оптимизации затрат",
@@ -1569,7 +1584,22 @@
       "saving": "Сохранение...",
       "validation": {
         "fieldRequired": "Название и цель обязательны"
-      }
+      },
+      "bindingType": "Применить к",
+      "bindingGlobal": "Все провайдеры (глобально)",
+      "bindingProviders": "Конкретные провайдеры",
+      "bindingGroups": "Группы провайдеров",
+      "selectProviders": "Выберите провайдеров...",
+      "selectGroups": "Выберите группы...",
+      "searchProviders": "Поиск провайдеров...",
+      "searchGroups": "Поиск групп...",
+      "noProvidersFound": "Провайдеры не найдены",
+      "noGroupsFound": "Группы не найдены",
+      "providersSelected": "Выбрано провайдеров: {count}",
+      "groupsSelected": "Выбрано групп: {count}",
+      "loading": "Загрузка...",
+      "clear": "Очистить",
+      "selectAll": "Выбрать все"
     },
     "table": {
       "name": "Название",
@@ -1578,6 +1608,7 @@
       "target": "Цель",
       "replacement": "Значение",
       "priority": "Приоритет",
+      "apply": "Область",
       "status": "Статус",
       "createdAt": "Создано",
       "actions": "Действия"
@@ -1591,7 +1622,10 @@
       "set": "Установить header",
       "json_path": "Замена по JSON пути",
       "text_replace": "Замена текста"
-    }
+    },
+    "applyToAll": "Применяется ко всем запросам",
+    "providers": "Провайдеры",
+    "groups": "Группы"
   },
   "errorRules": {
     "nav": "Правила ошибок",

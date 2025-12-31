@@ -2,7 +2,7 @@ import { and, eq, gte, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys, messageRequest, providers } from "@/drizzle/schema";
 import { logger } from "@/lib/logger";
-import type { CostAlertData } from "@/lib/wechat/message-templates";
+import type { CostAlertData } from "@/lib/webhook";
 
 /**
  * 生成成本预警数据

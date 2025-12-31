@@ -2,6 +2,7 @@ import { getTranslations } from "next-intl/server";
 import { Suspense } from "react";
 import { listRequestFilters } from "@/actions/request-filters";
 import { Section } from "@/components/section";
+import { findAllProviders } from "@/repository/provider";
 import { SettingsPageHeader } from "../_components/settings-page-header";
 import { FilterTable } from "./_components/filter-table";
 import { RequestFiltersTableSkeleton } from "./_components/request-filters-skeleton";
@@ -24,7 +25,10 @@ export default async function RequestFiltersPage() {
 }
 
 async function RequestFiltersContent() {
-  const filters = await listRequestFilters();
+  const [filters, providers] = await Promise.all([listRequestFilters(), findAllProviders()]);
 
-  return <FilterTable filters={filters} />;
+  // Only pass id and name to avoid leaking provider keys to client
+  const providerOptions = providers.map((p) => ({ id: p.id, name: p.name }));
+
+  return <FilterTable filters={filters} providers={providerOptions} />;
 }

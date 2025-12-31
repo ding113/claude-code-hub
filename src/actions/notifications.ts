@@ -1,7 +1,9 @@
 "use server";
 
+import type { NotificationJobType } from "@/lib/constants/notification.constants";
 import { logger } from "@/lib/logger";
-import { WeChatBot } from "@/lib/wechat/bot";
+import { WebhookNotifier } from "@/lib/webhook";
+import { buildTestMessage } from "@/lib/webhook/templates/test-messages";
 import {
   getNotificationSettings,
   type NotificationSettings,
@@ -116,7 +118,8 @@ export async function updateNotificationSettingsAction(
  * 测试 Webhook 连通性
  */
 export async function testWebhookAction(
-  webhookUrl: string
+  webhookUrl: string,
+  type: NotificationJobType
 ): Promise<{ success: boolean; error?: string }> {
   if (!webhookUrl || !webhookUrl.trim()) {
     return { success: false, error: "Webhook URL 不能为空" };
@@ -135,10 +138,9 @@ export async function testWebhookAction(
   }
 
   try {
-    const bot = new WeChatBot(trimmedUrl);
-    const result = await bot.testConnection();
-
-    return result;
+    const notifier = new WebhookNotifier(trimmedUrl, { maxRetries: 1 });
+    const testMessage = buildTestMessage(type);
+    return notifier.send(testMessage);
   } catch (error) {
     return {
       success: false,

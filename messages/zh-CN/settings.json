@@ -187,6 +187,18 @@
       "statusEnabled": "启用",
       "statusDisabled": "禁用"
     },
+    "inlineEdit": {
+      "save": "保存",
+      "cancel": "取消",
+      "saveSuccess": "保存成功",
+      "saveFailed": "保存失败",
+      "priorityLabel": "优先级",
+      "weightLabel": "权重",
+      "costMultiplierLabel": "成本倍数",
+      "priorityInvalid": "请输入大于等于 0 的整数",
+      "weightInvalid": "请输入 1-100 之间的整数",
+      "costMultiplierInvalid": "请输入大于等于 0 的数字"
+    },
     "schedulingDialog": {
       "title": "供应商调度规则说明",
       "description": "了解系统如何智能选择上游供应商，确保高可用性和成本优化",
@@ -1296,7 +1308,22 @@
       "saving": "保存中...",
       "validation": {
         "fieldRequired": "名称和目标为必填项"
-      }
+      },
+      "bindingType": "应用范围",
+      "bindingGlobal": "所有Provider（全局）",
+      "bindingProviders": "指定Provider",
+      "bindingGroups": "Provider分组",
+      "selectProviders": "选择Provider...",
+      "selectGroups": "选择分组...",
+      "searchProviders": "搜索Provider...",
+      "searchGroups": "搜索分组...",
+      "noProvidersFound": "未找到Provider",
+      "noGroupsFound": "未找到分组",
+      "providersSelected": "已选 {count} 个Provider",
+      "groupsSelected": "已选 {count} 个分组",
+      "loading": "加载中...",
+      "clear": "清空",
+      "selectAll": "全选"
     },
     "table": {
       "name": "名称",
@@ -1305,6 +1332,7 @@
       "target": "目标",
       "replacement": "替换值",
       "priority": "优先级",
+      "apply": "范围",
       "status": "状态",
       "createdAt": "创建时间",
       "actions": "操作"
@@ -1318,7 +1346,10 @@
       "set": "设置 Header",
       "json_path": "JSON 路径替换",
       "text_replace": "文本替换"
-    }
+    },
+    "applyToAll": "应用于所有请求",
+    "providers": "供应商",
+    "groups": "组"
   },
   "logs": {
     "title": "日志管理",
@@ -1560,7 +1591,7 @@
   },
   "notifications": {
     "title": "消息推送",
-    "description": "配置企业微信机器人消息推送",
+    "description": "配置 Webhook 消息推送",
     "global": {
       "title": "通知总开关",
       "description": "启用或禁用所有消息推送功能",
@@ -1592,6 +1623,9 @@
       "enable": "启用成本预警",
       "webhook": "Webhook URL",
       "webhookPlaceholder": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...",
+      "webhookTypeWeCom": "企业微信",
+      "webhookTypeFeishu": "飞书",
+      "webhookTypeUnknown": "未知平台，请使用企业微信或飞书的 Webhook URL",
       "threshold": "预警阈值",
       "thresholdLabel": "预警阈值: {percent}%",
       "thresholdHelp": "当消费达到配额的 {percent}% 时触发告警",
@@ -1607,7 +1641,7 @@
       "saveError": "保存设置失败",
       "loadError": "加载通知设置失败",
       "webhookRequired": "请先填写 Webhook URL",
-      "testSuccess": "测试消息已发送，请检查企业微信",
+      "testSuccess": "测试消息已发送",
       "testFailed": "测试失败",
       "testFailedRetry": "测试失败，请重试",
       "testError": "测试连接失败",

@@ -1,9 +1,9 @@
 "use client";
 
-import { Pencil, RefreshCw, Trash2 } from "lucide-react";
+import { Globe, Package, Pencil, RefreshCw, Tags, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   deleteRequestFilterAction,
@@ -13,17 +13,23 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { RequestFilter } from "@/repository/request-filters";
 import { FilterDialog } from "./filter-dialog";
 
 interface Props {
   filters: RequestFilter[];
+  providers: Array<{ id: number; name: string }>;
 }
 
-export function FilterTable({ filters }: Props) {
+export function FilterTable({ filters, providers }: Props) {
   const t = useTranslations("settings.requestFilters");
   const router = useRouter();
   const [editing, setEditing] = useState<RequestFilter | null>(null);
+
+  const providerMap = useMemo(() => {
+    return new Map(providers.map((p) => [p.id, p.name]));
+  }, [providers]);
 
   const handleToggle = async (filter: RequestFilter, checked: boolean) => {
     const res = await updateRequestFilterAction(filter.id, { isEnabled: checked });
@@ -94,19 +100,27 @@ export function FilterTable({ filters }: Props) {
               <th className="px-4 py-3">{t("table.action")}</th>
               <th className="px-4 py-3">{t("table.target")}</th>
               <th className="px-4 py-3">{t("table.replacement")}</th>
-              <th className="px-4 py-3">{t("table.priority")}</th>
-              <th className="px-4 py-3">{t("table.status")}</th>
-              <th className="px-4 py-3 text-right">{t("table.actions")}</th>
+              <th className="px-2 py-3 w-20">{t("table.priority")}</th>
+              <th className="px-2 py-3 w-24">{t("table.apply")}</th>
+              <th className="px-2 py-3 w-20">{t("table.status")}</th>
+              <th className="px-2 py-3 text-right w-24">{t("table.actions")}</th>
             </tr>
           </thead>
           <tbody>
             {filters.map((filter) => (
               <tr key={filter.id} className="border-b hover:bg-muted/30">
-                <td className="px-4 py-3 text-sm">
+                <td className="px-4 py-3 text-sm max-w-[200px]">
                   <div className="flex flex-col gap-1">
-                    <span className="font-medium">{filter.name}</span>
+                    <span className="font-medium truncate" title={filter.name}>
+                      {filter.name}
+                    </span>
                     {filter.description && (
-                      <span className="text-xs text-muted-foreground">{filter.description}</span>
+                      <span
+                        className="text-xs text-muted-foreground truncate"
+                        title={filter.description}
+                      >
+                        {filter.description}
+                      </span>
                     )}
                   </div>
                 </td>
@@ -116,25 +130,90 @@ export function FilterTable({ filters }: Props) {
                 <td className="px-4 py-3 text-sm">
                   <Badge>{t(`actionLabel.${filter.action}`)}</Badge>
                 </td>
-                <td className="px-4 py-3 text-sm">
-                  <code className="rounded bg-muted px-2 py-1">{filter.target}</code>
+                <td className="px-4 py-3 text-sm max-w-[250px]">
+                  <code className="block rounded bg-muted px-2 py-1 truncate" title={filter.target}>
+                    {filter.target}
+                  </code>
                 </td>
-                <td className="px-4 py-3 text-sm text-muted-foreground max-w-xs truncate">
-                  {filter.replacement === null || filter.replacement === undefined
-                    ? "-"
-                    : typeof filter.replacement === "string"
-                      ? filter.replacement
-                      : JSON.stringify(filter.replacement)}
+                <td className="px-4 py-3 text-sm max-w-[200px]">
+                  <span
+                    className="block truncate text-muted-foreground"
+                    title={
+                      filter.replacement === null || filter.replacement === undefined
+                        ? "-"
+                        : typeof filter.replacement === "string"
+                          ? filter.replacement
+                          : JSON.stringify(filter.replacement)
+                    }
+                  >
+                    {filter.replacement === null || filter.replacement === undefined
+                      ? "-"
+                      : typeof filter.replacement === "string"
+                        ? filter.replacement
+                        : JSON.stringify(filter.replacement)}
+                  </span>
                 </td>
-                <td className="px-4 py-3 text-sm">{filter.priority}</td>
-                <td className="px-4 py-3">
+                <td className="px-2 py-3 text-sm text-center">{filter.priority}</td>
+                <td className="px-2 py-3 text-center">
+                  {filter.bindingType === "global" && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center justify-center cursor-help">
+                          <Globe className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{t("applyToAll")}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                  {filter.bindingType === "providers" && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center justify-center gap-1 text-sm cursor-help">
+                          <Package className="h-4 w-4" />
+                          <span>{filter.providerIds?.length ?? 0}</span>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <div className="max-w-xs">
+                          <p className="font-medium mb-1">{t("providers")}:</p>
+                          <ul className="text-xs list-disc list-inside">
+                            {filter.providerIds?.map((id) => (
+                              <li key={id}>{providerMap.get(id) ?? `ID: ${id}`}</li>
+                            )) ?? <li>-</li>}
+                          </ul>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                  {filter.bindingType === "groups" && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center justify-center gap-1 text-sm cursor-help">
+                          <Tags className="h-4 w-4" />
+                          <span>{filter.groupTags?.length ?? 0}</span>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <div className="max-w-xs">
+                          <p className="font-medium mb-1">{t("groups")}:</p>
+                          <ul className="text-xs list-disc list-inside">
+                            {filter.groupTags?.map((tag) => <li key={tag}>{tag}</li>) ?? <li>-</li>}
+                          </ul>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                </td>
+                <td className="px-2 py-3 text-center">
                   <Switch
                     checked={filter.isEnabled}
                     onCheckedChange={(checked) => handleToggle(filter, checked)}
                   />
                 </td>
-                <td className="px-4 py-3 text-right">
-                  <div className="flex justify-end gap-2">
+                <td className="px-2 py-3 text-right">
+                  <div className="flex justify-end gap-1">
                     <Button variant="ghost" size="sm" onClick={() => setEditing(filter)}>
                       <Pencil className="h-4 w-4" />
                     </Button>
