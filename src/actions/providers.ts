@@ -2871,7 +2871,7 @@ async function executeProxiedFetch(
 
   const init: UndiciFetchOptions = {
     method: "GET",
-    headers: { "Content-Type": "application/json", ...headers },
+    headers,
     signal: AbortSignal.timeout(timeoutMs),
   };
 
