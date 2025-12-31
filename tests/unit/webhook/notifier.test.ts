@@ -45,7 +45,7 @@ describe("WebhookNotifier", () => {
 
     it("should throw for unsupported provider", () => {
       expect(() => new WebhookNotifier("https://unknown.com/webhook")).toThrow(
-        "Unsupported webhook URL"
+        "Unsupported webhook hostname: unknown.com"
       );
     });
   });
