@@ -130,11 +130,7 @@ export function GroupMultiSelect({
                       onSelect={() => toggleGroup(groupTag)}
                       className="cursor-pointer"
                     >
-                      <Checkbox
-                        checked={selectedGroupTags.includes(groupTag)}
-                        className="mr-2"
-                        onCheckedChange={() => toggleGroup(groupTag)}
-                      />
+                      <Checkbox checked={selectedGroupTags.includes(groupTag)} className="mr-2" />
                       <div className="flex-1">
                         <span className="font-mono">{groupTag}</span>
                       </div>

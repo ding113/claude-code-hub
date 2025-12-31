@@ -27,5 +27,8 @@ export default async function RequestFiltersPage() {
 async function RequestFiltersContent() {
   const [filters, providers] = await Promise.all([listRequestFilters(), findAllProviders()]);
 
-  return <FilterTable filters={filters} providers={providers} />;
+  // Only pass id and name to avoid leaking provider keys to client
+  const providerOptions = providers.map((p) => ({ id: p.id, name: p.name }));
+
+  return <FilterTable filters={filters} providers={providerOptions} />;
 }
