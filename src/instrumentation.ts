@@ -6,6 +6,7 @@
 import { startCacheCleanup, stopCacheCleanup } from "@/lib/cache/session-cache";
 import { logger } from "@/lib/logger";
 import { closeRedis } from "@/lib/redis";
+import { closeSubscriber } from "@/lib/redis/pubsub";
 
 const instrumentationState = globalThis as unknown as {
   __CCH_CACHE_CLEANUP_STARTED__?: boolean;
@@ -73,6 +74,15 @@ export async function register() {
           instrumentationState.__CCH_CACHE_CLEANUP_STARTED__ = false;
         } catch (error) {
           logger.warn("[Instrumentation] Failed to stop cache cleanup", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+
+        // 关闭 Redis Pub/Sub 订阅连接
+        try {
+          await closeSubscriber();
+        } catch (error) {
+          logger.warn("[Instrumentation] Failed to close Redis subscriber", {
             error: error instanceof Error ? error.message : String(error),
           });
         }
