@@ -281,7 +281,7 @@ export async function getDistinctProviderGroupsAction(): Promise<ActionResult<st
   try {
     const { db } = await import("@/drizzle/db");
     const { providers } = await import("@/drizzle/schema");
-    const { isNull, and, sql } = await import("drizzle-orm");
+    const { isNull, isNotNull, ne, and } = await import("drizzle-orm");
 
     const result = await db
       .selectDistinct({ groupTag: providers.groupTag })
@@ -289,7 +289,7 @@ export async function getDistinctProviderGroupsAction(): Promise<ActionResult<st
       .where(
         and(
           isNull(providers.deletedAt),
-          sql`${providers.groupTag} IS NOT NULL AND ${providers.groupTag} != ''`
+          and(isNotNull(providers.groupTag), ne(providers.groupTag, ""))
         )
       );
 

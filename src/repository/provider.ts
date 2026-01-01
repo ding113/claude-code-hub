@@ -1,6 +1,6 @@
 "use server";
 
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { providers } from "@/drizzle/schema";
 import { getEnvConfig } from "@/lib/config";
@@ -453,7 +453,7 @@ export async function getDistinctProviderGroups(): Promise<string[]> {
     .where(
       and(
         isNull(providers.deletedAt),
-        sql`${providers.groupTag} IS NOT NULL AND ${providers.groupTag} != ''`
+        and(isNotNull(providers.groupTag), ne(providers.groupTag, ""))
       )
     )
     .orderBy(providers.groupTag);
