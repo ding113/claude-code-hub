@@ -67,6 +67,37 @@ export class ProxySessionGuard {
       const requestSequence = await SessionManager.getNextRequestSequence(sessionId);
       session.setRequestSequence(requestSequence);
 
+      // 4.2 存储完整请求体与客户端端点（用于 Session 详情调试）
+      // 注意：必须在后续任何格式转换/过滤前触发存储，避免记录被“后处理”污染
+      if (session.sessionId) {
+        void SessionManager.storeSessionRequestBody(
+          session.sessionId,
+          session.request.message,
+          requestSequence
+        ).catch((err) => {
+          logger.error("[ProxySessionGuard] Failed to store session request body:", err);
+        });
+
+        void SessionManager.storeSessionClientRequestMeta(
+          session.sessionId,
+          { url: session.requestUrl, method: session.method },
+          requestSequence
+        ).catch((err) => {
+          logger.error("[ProxySessionGuard] Failed to store client request meta:", err);
+        });
+
+        // 可选：存储 messages（受环境变量控制，按请求序号独立存储）
+        if (messages !== undefined) {
+          void SessionManager.storeSessionMessages(
+            session.sessionId,
+            messages,
+            requestSequence
+          ).catch((err) => {
+            logger.error("[ProxySessionGuard] Failed to store session messages:", err);
+          });
+        }
+      }
+
       // 5. 追踪 session（添加到活跃集合）
       void SessionTracker.trackSession(sessionId, keyId).catch((err) => {
         logger.error("[ProxySessionGuard] Failed to track session:", err);
@@ -87,14 +118,6 @@ export class ProxySessionGuard {
                 apiType: session.originalFormat === "openai" ? "codex" : "chat",
               });
             });
-
-            // 可选：存储 messages（受环境变量控制，按请求序号独立存储，带重试）
-            const messages = session.getMessages();
-            if (messages) {
-              await executeWithRetry(async () => {
-                await SessionManager.storeSessionMessages(sessionId, messages, requestSequence);
-              });
-            }
           }
         } catch (error) {
           // 重试后仍然失败，记录错误但不阻塞请求
