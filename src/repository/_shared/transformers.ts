@@ -13,7 +13,11 @@ export function toUser(dbUser: any): User {
     description: dbUser?.description || "",
     role: (dbUser?.role as User["role"]) || "user",
     rpm: dbUser?.rpm ?? null,
-    dailyQuota: dbUser?.dailyQuota ? parseFloat(dbUser.dailyQuota) : null,
+    dailyQuota: (() => {
+      if (dbUser?.dailyQuota === null || dbUser?.dailyQuota === undefined) return null;
+      const parsed = Number.parseFloat(dbUser.dailyQuota);
+      return parsed > 0 ? parsed : null;
+    })(),
     providerGroup: dbUser?.providerGroup ?? null,
     tags: dbUser?.tags ?? [],
     limitTotalUsd:
