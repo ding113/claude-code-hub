@@ -121,6 +121,7 @@ export class RequestFilterEngine {
 
   // Optimization #1: Memory leak cleanup
   private eventEmitterCleanup: (() => void) | null = null;
+  private redisPubSubCleanup: (() => void) | null = null;
 
   // Optimization #5: Skip tag parsing when no group filters
   private hasGroupBasedFilters = false;
@@ -144,6 +145,19 @@ export class RequestFilterEngine {
         this.eventEmitterCleanup = () => {
           eventEmitter.off("requestFiltersUpdated", handler);
         };
+
+        // 跨进程通知（用于多 worker / 多实例）
+        try {
+          const { CHANNEL_REQUEST_FILTERS_UPDATED, subscribeCacheInvalidation } = await import(
+            "@/lib/redis/pubsub"
+          );
+          this.redisPubSubCleanup = await subscribeCacheInvalidation(
+            CHANNEL_REQUEST_FILTERS_UPDATED,
+            handler
+          );
+        } catch {
+          // 忽略导入错误
+        }
       } catch {
         // 忽略导入错误
       }
@@ -155,6 +169,10 @@ export class RequestFilterEngine {
     if (this.eventEmitterCleanup) {
       this.eventEmitterCleanup();
       this.eventEmitterCleanup = null;
+    }
+    if (this.redisPubSubCleanup) {
+      this.redisPubSubCleanup();
+      this.redisPubSubCleanup = null;
     }
   }
 

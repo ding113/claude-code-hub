@@ -97,14 +97,23 @@ class ErrorRuleDetector {
     if (typeof process !== "undefined" && process.env.NEXT_RUNTIME !== "edge") {
       try {
         const { eventEmitter } = await import("@/lib/event-emitter");
-        eventEmitter.on("errorRulesUpdated", () => {
+        const handleUpdated = () => {
           // 重置标记，强制下次从数据库重新加载
           this.dbLoadedSuccessfully = false;
           this.isInitialized = false;
           this.reload().catch((error) => {
             logger.error("[ErrorRuleDetector] Failed to reload cache on event:", error);
           });
-        });
+        };
+
+        // 同进程事件（用于单 worker 的即时更新）
+        eventEmitter.on("errorRulesUpdated", handleUpdated);
+
+        // 跨进程通知（用于多 worker / 多实例）
+        const { CHANNEL_ERROR_RULES_UPDATED, subscribeCacheInvalidation } = await import(
+          "@/lib/redis/pubsub"
+        );
+        await subscribeCacheInvalidation(CHANNEL_ERROR_RULES_UPDATED, handleUpdated);
       } catch {
         // 忽略导入错误（可能在 Edge runtime 中）
       }
