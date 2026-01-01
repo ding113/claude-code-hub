@@ -12,7 +12,11 @@ export function toUser(dbUser: any): User {
     ...dbUser,
     description: dbUser?.description || "",
     role: (dbUser?.role as User["role"]) || "user",
-    rpm: dbUser?.rpm ?? null,
+    rpm: (() => {
+      if (dbUser?.rpm === null || dbUser?.rpm === undefined) return null;
+      const parsed = Number(dbUser.rpm);
+      return parsed > 0 ? parsed : null;
+    })(),
     dailyQuota: (() => {
       if (dbUser?.dailyQuota === null || dbUser?.dailyQuota === undefined) return null;
       const parsed = Number.parseFloat(dbUser.dailyQuota);

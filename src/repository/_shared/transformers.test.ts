@@ -40,10 +40,13 @@ describe("src/repository/_shared/transformers.ts", () => {
     };
 
     describe("rpm 字段处理", () => {
+      /**
+       * 注意：rpm <= 0 表示"无限制"，在 toUser() 中统一归一化为 null
+       */
       it.each([
         { title: "dbUser.rpm = null -> null", rpm: null, expected: null },
         { title: "dbUser.rpm = undefined -> null", rpm: undefined, expected: null },
-        { title: "dbUser.rpm = 0 -> 0（0 是有效值）", rpm: 0, expected: 0 },
+        { title: "dbUser.rpm = 0 -> null（0 表示无限制）", rpm: 0, expected: null },
         { title: "dbUser.rpm = 60 -> 60", rpm: 60, expected: 60 },
       ])("$title", ({ rpm, expected }) => {
         const result = toUser({ ...baseDbUser, rpm });
