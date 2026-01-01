@@ -3093,7 +3093,10 @@ async function fetchAnthropicModels(
 
   try {
     const response = await executeProxiedFetch(
-      { proxyUrl: data.proxyUrl ?? null, proxyFallbackToDirect: data.proxyFallbackToDirect ?? false },
+      {
+        proxyUrl: data.proxyUrl ?? null,
+        proxyFallbackToDirect: data.proxyFallbackToDirect ?? false,
+      },
       url,
       authHeaders,
       timeoutMs
