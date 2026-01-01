@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import safeRegex from "safe-regex";
 import { getSession } from "@/lib/auth";
-import { validateErrorOverrideResponse } from "@/lib/error-override-validator";
 import { emitErrorRulesUpdated } from "@/lib/emit-event";
+import { validateErrorOverrideResponse } from "@/lib/error-override-validator";
 import { errorRuleDetector } from "@/lib/error-rule-detector";
 import { logger } from "@/lib/logger";
 import * as repo from "@/repository/error-rules";
