@@ -338,8 +338,9 @@ async function findProviderLeaderboardWithTimezone(
               AND ${messageRequest.durationMs} IS NOT NULL
               AND ${messageRequest.ttfbMs} IS NOT NULL
               AND ${messageRequest.ttfbMs} < ${messageRequest.durationMs}
+              AND (${messageRequest.durationMs} - ${messageRequest.ttfbMs}) >= 100
             THEN (${messageRequest.outputTokens}::double precision)
-              / NULLIF((${messageRequest.durationMs} - ${messageRequest.ttfbMs}) / 1000.0, 0)
+              / ((${messageRequest.durationMs} - ${messageRequest.ttfbMs}) / 1000.0)
           END
         )::double precision,
         0::double precision
