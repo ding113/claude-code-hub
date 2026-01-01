@@ -80,6 +80,7 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
     | "name"
     | "tags"
     | "expiresAt"
+    | "rpm"
     | "limit5hUsd"
     | "limitDailyUsd"
     | "limitWeeklyUsd"
@@ -428,6 +429,7 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
           username: tUserMgmt("table.columns.username"),
           note: tUserMgmt("table.columns.note"),
           expiresAt: tUserMgmt("table.columns.expiresAt"),
+          limitRpm: tUserMgmt("table.columns.limitRpm"),
           limit5h: tUserMgmt("table.columns.limit5h"),
           limitDaily: tUserMgmt("table.columns.limitDaily"),
           limitWeekly: tUserMgmt("table.columns.limitWeekly"),
@@ -590,6 +592,7 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
                 <SelectItem value="name">{t("toolbar.sortByName")}</SelectItem>
                 <SelectItem value="tags">{t("toolbar.sortByTags")}</SelectItem>
                 <SelectItem value="expiresAt">{t("toolbar.sortByExpiresAt")}</SelectItem>
+                <SelectItem value="rpm">{t("toolbar.sortByRpm")}</SelectItem>
                 <SelectItem value="limit5hUsd">{t("toolbar.sortByLimit5h")}</SelectItem>
                 <SelectItem value="limitDailyUsd">{t("toolbar.sortByLimitDaily")}</SelectItem>
                 <SelectItem value="limitWeeklyUsd">{t("toolbar.sortByLimitWeekly")}</SelectItem>

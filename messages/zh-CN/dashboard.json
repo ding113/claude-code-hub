@@ -959,6 +959,7 @@
       "sortByName": "按名称",
       "sortByTags": "按标签",
       "sortByExpiresAt": "按过期时间",
+      "sortByRpm": "按RPM限制",
       "sortByLimit5h": "按5小时限额",
       "sortByLimitDaily": "按每日限额",
       "sortByLimitWeekly": "按周限额",
@@ -1100,6 +1101,7 @@
         "note": "备注",
         "expiresAt": "到期时间",
         "expiresAtHint": "点击快捷续期",
+        "limitRpm": "RPM",
         "limit5h": "5h 限额",
         "limitDaily": "每日限额",
         "limitWeekly": "周限额",
@@ -1258,6 +1260,7 @@
         "fields": {
           "note": "备注",
           "tags": "标签",
+          "rpm": "RPM 限制",
           "limit5h": "5h 限额 (USD)",
           "limitDaily": "每日限额 (USD)",
           "limitWeekly": "周限额 (USD)",
@@ -1331,6 +1334,7 @@
     "limitRules": {
       "addRule": "添加限额规则",
       "ruleTypes": {
+        "limitRpm": "RPM 限额",
         "limit5h": "5小时限额",
         "limitDaily": "每日限额",
         "limitWeekly": "周限额",
@@ -1343,6 +1347,7 @@
         "rolling": "滚动窗口（24h）"
       },
       "quickValues": {
+        "unlimited": "无限",
         "10": "$10",
         "50": "$50",
         "100": "$100",

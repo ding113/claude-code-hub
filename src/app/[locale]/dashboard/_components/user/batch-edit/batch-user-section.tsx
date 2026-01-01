@@ -10,6 +10,8 @@ export interface BatchUserSectionState {
   note: string;
   tagsEnabled: boolean;
   tags: string[];
+  rpmEnabled: boolean;
+  rpm: string;
   limit5hUsdEnabled: boolean;
   limit5hUsd: string;
   dailyQuotaEnabled: boolean;
@@ -31,6 +33,7 @@ export interface BatchUserSectionProps {
     fields: {
       note: string;
       tags: string;
+      rpm: string;
       limit5h: string;
       limitDaily: string;
       limitWeekly: string;
@@ -85,6 +88,23 @@ export function BatchUserSection({
             onChange={(tags) => onChange({ tags })}
             disabled={!state.tagsEnabled}
             placeholder={translations.placeholders.tagsPlaceholder}
+          />
+        </FieldCard>
+
+        <FieldCard
+          title={translations.fields.rpm}
+          enabled={state.rpmEnabled}
+          onEnabledChange={(enabled) => onChange({ rpmEnabled: enabled })}
+          enableFieldAria={translations.enableFieldAria}
+        >
+          <Input
+            type="number"
+            inputMode="numeric"
+            min={0}
+            value={state.rpm}
+            onChange={(e) => onChange({ rpm: e.target.value })}
+            disabled={!state.rpmEnabled}
+            placeholder={translations.placeholders.emptyNoLimit}
           />
         </FieldCard>
 

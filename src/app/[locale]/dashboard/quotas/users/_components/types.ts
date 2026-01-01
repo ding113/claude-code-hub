@@ -1,8 +1,8 @@
 import type { CurrencyCode } from "@/lib/utils/currency";
 
 export interface UserQuotaSnapshot {
-  rpm: { current: number; limit: number; window: "per_minute" };
-  dailyCost: { current: number; limit: number; resetAt: Date };
+  rpm: { current: number; limit: number | null; window: "per_minute" };
+  dailyCost: { current: number; limit: number | null; resetAt: Date };
 }
 
 export interface UserKeyWithUsage {

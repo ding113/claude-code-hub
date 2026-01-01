@@ -143,30 +143,32 @@ export class ProxyRateLimitGuard {
       );
     }
 
-    // 4. User RPM（频率闸门，挡住高频噪声）
-    const rpmCheck = await RateLimitService.checkUserRPM(user.id, user.rpm);
-    if (!rpmCheck.allowed) {
-      logger.warn(`[RateLimit] User RPM exceeded: user=${user.id}, ${rpmCheck.reason}`);
+    // 4. User RPM（频率闸门，挡住高频噪声）- null 表示无限制
+    if (user.rpm !== null) {
+      const rpmCheck = await RateLimitService.checkUserRPM(user.id, user.rpm);
+      if (!rpmCheck.allowed) {
+        logger.warn(`[RateLimit] User RPM exceeded: user=${user.id}, ${rpmCheck.reason}`);
 
-      const resetTime = new Date(Date.now() + 60 * 1000).toISOString();
+        const resetTime = new Date(Date.now() + 60 * 1000).toISOString();
 
-      const { getLocale } = await import("next-intl/server");
-      const locale = await getLocale();
-      const message = await getErrorMessageServer(locale, ERROR_CODES.RATE_LIMIT_RPM_EXCEEDED, {
-        current: String(rpmCheck.current || 0),
-        limit: String(user.rpm),
-        resetTime,
-      });
+        const { getLocale } = await import("next-intl/server");
+        const locale = await getLocale();
+        const message = await getErrorMessageServer(locale, ERROR_CODES.RATE_LIMIT_RPM_EXCEEDED, {
+          current: String(rpmCheck.current || 0),
+          limit: String(user.rpm),
+          resetTime,
+        });
 
-      throw new RateLimitError(
-        "rate_limit_error",
-        message,
-        "rpm",
-        rpmCheck.current || 0,
-        user.rpm,
-        resetTime,
-        null
-      );
+        throw new RateLimitError(
+          "rate_limit_error",
+          message,
+          "rpm",
+          rpmCheck.current || 0,
+          user.rpm,
+          resetTime,
+          null
+        );
+      }
     }
 
     // ========== 第三层：短期周期限额（混合检查）==========
@@ -237,45 +239,47 @@ export class ProxyRateLimitGuard {
       );
     }
 
-    // 7. User 每日额度（User 独有的常用预算）
-    const dailyCheck = await RateLimitService.checkUserDailyCost(
-      user.id,
-      user.dailyQuota,
-      user.dailyResetTime,
-      user.dailyResetMode
-    );
-
-    if (!dailyCheck.allowed) {
-      logger.warn(`[RateLimit] User daily limit exceeded: user=${user.id}, ${dailyCheck.reason}`);
-
-      // 使用用户配置的重置时间和模式计算正确的 resetTime
-      const resetInfo = getResetInfoWithMode("daily", user.dailyResetTime, user.dailyResetMode);
-      // rolling 模式没有 resetAt，使用 24 小时后作为 fallback
-      const resetTime =
-        resetInfo.resetAt?.toISOString() ??
-        new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-
-      const { getLocale } = await import("next-intl/server");
-      const locale = await getLocale();
-      const message = await getErrorMessageServer(
-        locale,
-        ERROR_CODES.RATE_LIMIT_DAILY_QUOTA_EXCEEDED,
-        {
-          current: (dailyCheck.current || 0).toFixed(4),
-          limit: user.dailyQuota.toFixed(4),
-          resetTime,
-        }
-      );
-
-      throw new RateLimitError(
-        "rate_limit_error",
-        message,
-        "daily_quota",
-        dailyCheck.current || 0,
+    // 7. User 每日额度（User 独有的常用预算）- null 表示无限制
+    if (user.dailyQuota !== null) {
+      const dailyCheck = await RateLimitService.checkUserDailyCost(
+        user.id,
         user.dailyQuota,
-        resetTime,
-        null
+        user.dailyResetTime,
+        user.dailyResetMode
       );
+
+      if (!dailyCheck.allowed) {
+        logger.warn(`[RateLimit] User daily limit exceeded: user=${user.id}, ${dailyCheck.reason}`);
+
+        // 使用用户配置的重置时间和模式计算正确的 resetTime
+        const resetInfo = getResetInfoWithMode("daily", user.dailyResetTime, user.dailyResetMode);
+        // rolling 模式没有 resetAt，使用 24 小时后作为 fallback
+        const resetTime =
+          resetInfo.resetAt?.toISOString() ??
+          new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+        const { getLocale } = await import("next-intl/server");
+        const locale = await getLocale();
+        const message = await getErrorMessageServer(
+          locale,
+          ERROR_CODES.RATE_LIMIT_DAILY_QUOTA_EXCEEDED,
+          {
+            current: (dailyCheck.current || 0).toFixed(4),
+            limit: user.dailyQuota.toFixed(4),
+            resetTime,
+          }
+        );
+
+        throw new RateLimitError(
+          "rate_limit_error",
+          message,
+          "daily_quota",
+          dailyCheck.current || 0,
+          user.dailyQuota,
+          resetTime,
+          null
+        );
+      }
     }
 
     // ========== 第四层：中长期周期限额（混合检查）==========

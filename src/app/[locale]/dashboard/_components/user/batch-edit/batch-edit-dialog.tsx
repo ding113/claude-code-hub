@@ -46,6 +46,7 @@ type ValidationMessages = {
 type UserFieldLabels = {
   note: string;
   tags: string;
+  rpm: string;
   limit5h: string;
   limitDaily: string;
   limitWeekly: string;
@@ -67,6 +68,8 @@ const INITIAL_USER_STATE: BatchUserSectionState = {
   note: "",
   tagsEnabled: false,
   tags: [],
+  rpmEnabled: false,
+  rpm: "",
   limit5hUsdEnabled: false,
   limit5hUsd: "",
   dailyQuotaEnabled: false,
@@ -124,6 +127,11 @@ function buildUserUpdates(
   if (state.tagsEnabled) {
     updates.tags = state.tags;
     enabledFields.push(args.fieldLabels.tags);
+  }
+  if (state.rpmEnabled) {
+    const rpmValue = parseNumberOrNull(state.rpm, args.validationMessages);
+    updates.rpm = rpmValue !== null ? Math.floor(rpmValue) : null;
+    enabledFields.push(args.fieldLabels.rpm);
   }
   if (state.limit5hUsdEnabled) {
     updates.limit5hUsd = parseNumberOrNull(state.limit5hUsd, args.validationMessages);
@@ -229,6 +237,7 @@ function BatchEditDialogInner({
     () => ({
       note: t("user.fields.note"),
       tags: t("user.fields.tags"),
+      rpm: t("user.fields.rpm"),
       limit5h: t("user.fields.limit5h"),
       limitDaily: t("user.fields.limitDaily"),
       limitWeekly: t("user.fields.limitWeekly"),

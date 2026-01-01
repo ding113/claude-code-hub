@@ -12,8 +12,8 @@ export function toUser(dbUser: any): User {
     ...dbUser,
     description: dbUser?.description || "",
     role: (dbUser?.role as User["role"]) || "user",
-    rpm: dbUser?.rpm || 60,
-    dailyQuota: dbUser?.dailyQuota ? parseFloat(dbUser.dailyQuota) : 0,
+    rpm: dbUser?.rpm ?? null,
+    dailyQuota: dbUser?.dailyQuota ? parseFloat(dbUser.dailyQuota) : null,
     providerGroup: dbUser?.providerGroup ?? null,
     tags: dbUser?.tags ?? [],
     limitTotalUsd:

@@ -24,6 +24,7 @@ export interface UserListBatchFilters {
     | "name"
     | "tags"
     | "expiresAt"
+    | "rpm"
     | "limit5hUsd"
     | "limitDailyUsd"
     | "limitWeeklyUsd"
@@ -257,6 +258,7 @@ export async function findUserListBatch(
     name: users.name,
     tags: users.tags,
     expiresAt: users.expiresAt,
+    rpm: users.rpmLimit,
     limit5hUsd: users.limit5hUsd,
     limitDailyUsd: users.dailyLimitUsd,
     limitWeeklyUsd: users.limitWeeklyUsd,
@@ -351,7 +353,7 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
   interface UpdateDbData {
     name?: string;
     description?: string;
-    rpmLimit?: number;
+    rpmLimit?: number | null;
     dailyLimitUsd?: string | null;
     providerGroup?: string | null;
     tags?: string[];

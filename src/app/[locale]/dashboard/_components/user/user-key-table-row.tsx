@@ -43,6 +43,7 @@ export interface UserKeyTableRowProps {
       note: string;
       expiresAt: string;
       expiresAtHint?: string;
+      limitRpm: string;
       limit5h: string;
       limitDaily: string;
       limitWeekly: string;
@@ -67,7 +68,7 @@ export interface UserKeyTableRowProps {
   };
 }
 
-const DEFAULT_GRID_COLUMNS_CLASS = "grid-cols-[minmax(260px,1fr)_120px_repeat(6,90px)_80px]";
+const DEFAULT_GRID_COLUMNS_CLASS = "grid-cols-[minmax(260px,1fr)_120px_repeat(7,90px)_80px]";
 const EXPIRING_SOON_MS = 72 * 60 * 60 * 1000; // 72小时
 const MAX_VISIBLE_GROUPS = 2; // 最多显示的分组数量
 
@@ -164,6 +165,8 @@ export function UserKeyTableRow({
   const visibleGroups = userGroups.slice(0, MAX_VISIBLE_GROUPS);
   const remainingGroupsCount = Math.max(0, userGroups.length - MAX_VISIBLE_GROUPS);
 
+  // RPM: null 或 0 或负值表示无限制
+  const rpm = user.rpm !== null && user.rpm > 0 ? user.rpm : null;
   const limit5h = normalizeLimitValue(user.limit5hUsd);
   const limitDaily = normalizeLimitValue(user.dailyQuota);
   const limitWeekly = normalizeLimitValue(user.limitWeeklyUsd);
@@ -308,6 +311,18 @@ export function UserKeyTableRow({
           title={onQuickRenew ? translations.columns.expiresAtHint : undefined}
         >
           {expiresText}
+        </div>
+
+        {/* RPM 限额 */}
+        <div className="px-2 flex items-center justify-center">
+          <Badge
+            variant={rpm ? "secondary" : "outline"}
+            className="px-2 py-0.5 tabular-nums text-xs"
+            title={`${translations.columns.limitRpm}: ${rpm ?? "-"}`}
+            aria-label={`${translations.columns.limitRpm}: ${rpm ?? "-"}`}
+          >
+            {rpm ?? "-"}
+          </Badge>
         </div>
 
         {/* 5h 限额 */}

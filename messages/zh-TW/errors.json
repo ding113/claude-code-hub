@@ -46,6 +46,7 @@
   "QUOTA_EXCEEDED": "配額已用盡",
   "BATCH_SIZE_EXCEEDED": "批次操作不能超過 {max} 個項目",
   "RATE_LIMIT_EXCEEDED": "請求過於頻繁，請稍後重試",
+  "RATE_LIMIT_RPM_EXCEEDED": "請求頻率超限：當前 {current} 次/分鐘（限制：{limit} 次/分鐘）。將於 {resetTime} 重置",
   "RESOURCE_BUSY": "資源正在使用中",
   "INVALID_STATE": "當前狀態不允許此操作",
   "CONFLICT": "操作衝突",
