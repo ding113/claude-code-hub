@@ -1230,6 +1230,19 @@
         "cancel": "取消",
         "confirm": "確認刪除"
       },
+      "failureThresholdConfirmDialog": {
+        "title": "確認特殊設定",
+        "descriptionDisabledPrefix": "您將熔斷失敗閾值設定為 ",
+        "descriptionDisabledValue": "0",
+        "descriptionDisabledMiddle": "，這表示",
+        "descriptionDisabledAction": "停用熔斷器",
+        "descriptionDisabledSuffix": "，供應商將不會因為連續失敗而被熔斷。",
+        "descriptionHighValuePrefix": "您將熔斷失敗閾值設定為 ",
+        "descriptionHighValueSuffix": "，這是一個較高的值，可能會導致供應商在大量失敗後才被熔斷。",
+        "confirmQuestion": "是否確認儲存此設定？",
+        "cancel": "取消",
+        "confirm": "確認儲存"
+      },
       "errors": {
         "invalidUrl": "請輸入有效的 API 位址",
         "invalidWebsiteUrl": "請輸入有效的供應商官網",
