@@ -218,7 +218,11 @@ export function UserEditSection({
       limitTypes: translations.limitRules.ruleTypes,
       quickValues: translations.limitRules.quickValues,
     } satisfies Record<string, unknown>;
-  }, [translations.limitRules.addRule, translations.limitRules.ruleTypes, translations.limitRules.quickValues]);
+  }, [
+    translations.limitRules.addRule,
+    translations.limitRules.ruleTypes,
+    translations.limitRules.quickValues,
+  ]);
 
   const handleRemoveRule = (type: string) => {
     switch (type) {
