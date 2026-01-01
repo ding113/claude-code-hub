@@ -719,7 +719,12 @@
         "manualDesc": "任意のモデル名を追加できます（価格表のモデルに限定されません）",
         "claude": "Claude",
         "openai": "OpenAI",
-        "gemini": "Gemini"
+        "gemini": "Gemini",
+        "sourceUpstream": "上流",
+        "sourceUpstreamDesc": "モデルリストは上流プロバイダーAPIから取得",
+        "sourceFallback": "ローカル",
+        "sourceFallbackDesc": "ローカル価格表のモデルリストを使用（上流が利用不可または未対応）",
+        "refresh": "モデルリストを更新"
       },
       "modelRedirect": {
         "currentRules": "現在のルール ({count})",
