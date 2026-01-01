@@ -128,7 +128,7 @@ function resolveMaxAttemptsForProvider(
 /**
  * undici request 超时配置（毫秒）
  *
- * 背景：undiciRequest() 在使用非 undici 原生 dispatcher（如 SocksProxyAgent）时，
+ * 背景：undiciRequest() 在使用自定义 dispatcher（如 SOCKS 代理）时，
  * 不会继承全局 Agent 的超时配置，需要显式传递超时参数。
  *
  * 这里与全局 undici Agent 使用同一套环境变量配置（FETCH_HEADERS_TIMEOUT / FETCH_BODY_TIMEOUT）。
@@ -1873,7 +1873,7 @@ export class ProxyForwarder {
     }
 
     // 使用 undici.request 获取未自动解压的响应
-    // ⭐ 显式配置超时：确保使用非 undici 原生 dispatcher（如 SocksProxyAgent）时也能正确应用超时
+    // ⭐ 显式配置超时：确保使用自定义 dispatcher（如 SOCKS 代理）时也能正确应用超时
     const undiciRes = await undiciRequest(url, {
       method: init.method as string,
       headers: headersObj,
