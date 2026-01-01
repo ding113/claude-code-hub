@@ -174,7 +174,16 @@ export function ProviderManager({
           return 0;
       }
     });
-  }, [providers, debouncedSearchTerm, typeFilter, sortBy, statusFilter, groupFilter, circuitBrokenFilter, healthStatus]);
+  }, [
+    providers,
+    debouncedSearchTerm,
+    typeFilter,
+    sortBy,
+    statusFilter,
+    groupFilter,
+    circuitBrokenFilter,
+    healthStatus,
+  ]);
 
   return (
     <div className="space-y-4">
