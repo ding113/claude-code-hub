@@ -981,7 +981,7 @@
       "startTime": "Начало",
       "endTime": "Конец",
       "user": "Пользователь",
-      "provider": "Провайдер",
+      "provider": "Поставщик",
       "limitType": "Тип лимита",
       "allUsers": "Все пользователи",
       "allProviders": "Все провайдеры",
@@ -1048,7 +1048,8 @@
       "sortByName": "Имя",
       "sortByTags": "Теги",
       "sortByExpiresAt": "Срок действия",
-      "sortByLimit5h": "Лимит 5ч",
+      "sortByRpm": "Лимит RPM",
+      "sortByLimit5h": "Лимит 5 ч",
       "sortByLimitDaily": "Дневной лимит",
       "sortByLimitWeekly": "Недельный лимит",
       "sortByLimitMonthly": "Месячный лимит",
@@ -1077,6 +1078,7 @@
         "note": "Примечание",
         "expiresAt": "Дата истечения",
         "expiresAtHint": "Нажмите для быстрого продления",
+        "limitRpm": "RPM",
         "limit5h": "Лимит 5 ч",
         "limitDaily": "Дневной лимит",
         "limitWeekly": "Недельный лимит",
@@ -1230,6 +1232,7 @@
         "fields": {
           "note": "Заметка",
           "tags": "Теги",
+          "rpm": "Лимит RPM",
           "limit5h": "Лимит за 5 часов (USD)",
           "limitDaily": "Дневной лимит (USD)",
           "limitWeekly": "Недельный лимит (USD)",
@@ -1303,6 +1306,7 @@
     "limitRules": {
       "addRule": "Добавить правило лимита",
       "ruleTypes": {
+        "limitRpm": "Лимит RPM",
         "limit5h": "Лимит за 5 часов",
         "limitDaily": "Дневной лимит",
         "limitWeekly": "Недельный лимит",
@@ -1315,6 +1319,7 @@
         "rolling": "Скользящее окно (24ч)"
       },
       "quickValues": {
+        "unlimited": "Без ограничений",
         "10": "$10",
         "50": "$50",
         "100": "$100",
@@ -1445,7 +1450,8 @@
         },
         "description": {
           "label": "Заметка",
-          "placeholder": "Введите заметку (необязательно)"
+          "placeholder": "Введите заметку (необязательно)",
+          "description": "Используется для описания назначения пользователя или примечаний"
         },
         "tags": {
           "label": "Теги пользователя",
@@ -1457,8 +1463,8 @@
         },
         "allowedClients": {
           "label": "Ограничения клиентов",
-          "description": "Ограничьте CLI/IDE клиенты для этой учетной записи. Пусто = без ограничений.",
-          "customLabel": "Пользовательский шаблон клиента",
+          "description": "Ограничьте, какие CLI/IDE клиенты могут использовать эту учетную запись. Пусто = без ограничений.",
+          "customLabel": "Пользовательские шаблоны клиентов",
           "customPlaceholder": "Введите шаблон (например, 'xcode', 'my-ide')"
         },
         "allowedModels": {

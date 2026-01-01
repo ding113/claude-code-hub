@@ -158,7 +158,7 @@ export function UserQuotaListItem({ user, currencyCode = "USD" }: UserQuotaListI
             </div>
             <Progress
               value={
-                user.quota?.rpm && user.quota.rpm.limit > 0
+                user.quota?.rpm && user.quota.rpm.limit !== null && user.quota.rpm.limit > 0
                   ? (user.quota.rpm.current / user.quota.rpm.limit) * 100
                   : 0
               }

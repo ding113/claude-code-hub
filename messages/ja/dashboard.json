@@ -911,7 +911,7 @@
     },
     "chart": {
       "title": "可用性トレンド",
-      "description": "時間経過による可用性の変化",
+      "description": "時間ごとの可用性の変化",
       "availabilityScore": "可用性スコア",
       "requestVolume": "リクエスト量",
       "latencyTrend": "遅延トレンド",
@@ -1046,6 +1046,7 @@
       "sortByName": "名前",
       "sortByTags": "タグ",
       "sortByExpiresAt": "有効期限",
+      "sortByRpm": "RPM上限",
       "sortByLimit5h": "5時間上限",
       "sortByLimitDaily": "日次上限",
       "sortByLimitWeekly": "週次上限",
@@ -1070,11 +1071,12 @@
         "note": "メモ",
         "expiresAt": "有効期限",
         "expiresAtHint": "クリックで期限を延長",
-        "limit5h": "5時間上限",
-        "limitDaily": "日次上限",
-        "limitWeekly": "週次上限",
-        "limitMonthly": "月次上限",
-        "limitTotal": "総上限",
+        "limitRpm": "RPM上限",
+        "limit5h": "5時間上限 (USD)",
+        "limitDaily": "日次上限 (USD)",
+        "limitWeekly": "週次上限 (USD)",
+        "limitMonthly": "月次上限 (USD)",
+        "limitTotal": "合計上限",
         "limitSessions": "同時セッション"
       },
       "keyRow": {
@@ -1219,10 +1221,11 @@
         "fields": {
           "note": "メモ",
           "tags": "タグ",
+          "rpm": "RPM上限",
           "limit5h": "5時間上限 (USD)",
           "limitDaily": "日次上限 (USD)",
-          "limitWeekly": "週間上限 (USD)",
-          "limitMonthly": "月間上限 (USD)"
+          "limitWeekly": "週次上限 (USD)",
+          "limitMonthly": "月次上限 (USD)"
         },
         "placeholders": {
           "emptyToClear": "空欄でクリア",
@@ -1292,6 +1295,7 @@
     "limitRules": {
       "addRule": "上限ルールを追加",
       "ruleTypes": {
+        "limitRpm": "RPM 上限",
         "limit5h": "5時間上限",
         "limitDaily": "日次上限",
         "limitWeekly": "週次上限",
@@ -1304,6 +1308,7 @@
         "rolling": "ローリングウィンドウ（24時間）"
       },
       "quickValues": {
+        "unlimited": "無制限",
         "10": "$10",
         "50": "$50",
         "100": "$100",

@@ -23,8 +23,8 @@ export const users = pgTable('users', {
   name: varchar('name').notNull(),
   description: text('description'),
   role: varchar('role').default('user'),
-  rpmLimit: integer('rpm_limit').default(60),
-  dailyLimitUsd: numeric('daily_limit_usd', { precision: 10, scale: 2 }).default('100.00'),
+  rpmLimit: integer('rpm_limit'),
+  dailyLimitUsd: numeric('daily_limit_usd', { precision: 10, scale: 2 }),
   providerGroup: varchar('provider_group', { length: 50 }).default('default'),
   // 用户标签（用于分类和筛选）
   tags: jsonb('tags').$type<string[]>().default([]),

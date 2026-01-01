@@ -6,8 +6,8 @@ export interface User {
   name: string;
   description: string;
   role: "admin" | "user";
-  rpm: number; // 每分钟请求数限制
-  dailyQuota: number; // 每日额度限制（美元）
+  rpm: number | null; // 每分钟请求数限制，null = 无限制
+  dailyQuota: number | null; // 每日额度限制（美元），null = 无限制
   providerGroup: string | null; // 供应商分组
   tags?: string[]; // 用户标签（可选）
   createdAt: Date;
@@ -37,8 +37,8 @@ export interface User {
 export interface CreateUserData {
   name: string;
   description: string;
-  rpm?: number; // 可选，有默认值
-  dailyQuota?: number; // 可选，有默认值
+  rpm?: number | null; // 可选，null = 无限制
+  dailyQuota?: number | null; // 可选，null = 无限制
   providerGroup?: string | null; // 可选，供应商分组
   tags?: string[]; // 可选，用户标签
   // User-level quota fields
@@ -65,7 +65,7 @@ export interface CreateUserData {
 export interface UpdateUserData {
   name?: string;
   description?: string;
-  rpm?: number;
+  rpm?: number | null;
   dailyQuota?: number | null;
   providerGroup?: string | null; // 可选，供应商分组
   tags?: string[]; // 可选，用户标签
@@ -132,8 +132,8 @@ export interface UserDisplay {
   name: string;
   note?: string;
   role: "admin" | "user";
-  rpm: number;
-  dailyQuota: number;
+  rpm: number | null;
+  dailyQuota: number | null;
   providerGroup?: string | null;
   tags?: string[]; // 用户标签
   keys: UserKeyDisplay[];

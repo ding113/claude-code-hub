@@ -1,14 +1,9 @@
 /**
- * 用户相关默认值与取值范围
+ * 用户相关取值范围
  */
-export const USER_DEFAULTS = {
-  RPM: 100,
-  DAILY_QUOTA: 100,
-} as const;
-
 export const USER_LIMITS = {
   RPM: {
-    MIN: 1,
+    MIN: 0, // 0 = 无限制
     MAX: 1_000_000, // 提升到 100 万
   },
   DAILY_QUOTA: {

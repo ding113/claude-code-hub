@@ -34,6 +34,7 @@ export interface UserEditSectionProps {
     expiresAt?: Date | null;
     providerGroup?: string | null;
     // 所有限额字段
+    rpm?: number | null;
     limit5hUsd?: number | null;
     dailyQuota?: number | null; // 新增：用户每日限额
     limitWeeklyUsd?: number | null;
@@ -180,6 +181,8 @@ export function UserEditSection({
       items.push({ type, value: numeric, ...extra });
     };
 
+    // RPM: user.rpm > 0 表示有限制
+    add("limitRpm", user.rpm);
     add("limit5h", user.limit5hUsd);
     // 新增：添加每日限额到 rules
     add("limitDaily", user.dailyQuota, {
@@ -193,6 +196,7 @@ export function UserEditSection({
 
     return items;
   }, [
+    user.rpm,
     user.limit5hUsd,
     user.dailyQuota,
     user.dailyResetMode,
@@ -212,11 +216,19 @@ export function UserEditSection({
     return {
       title: translations.limitRules.addRule,
       limitTypes: translations.limitRules.ruleTypes,
+      quickValues: translations.limitRules.quickValues,
     } satisfies Record<string, unknown>;
-  }, [translations.limitRules.addRule, translations.limitRules.ruleTypes]);
+  }, [
+    translations.limitRules.addRule,
+    translations.limitRules.ruleTypes,
+    translations.limitRules.quickValues,
+  ]);
 
   const handleRemoveRule = (type: string) => {
     switch (type) {
+      case "limitRpm":
+        emitChange("rpm", 0); // 0 = 无限制
+        return;
       case "limit5h":
         emitChange("limit5hUsd", null);
         return;
@@ -247,6 +259,9 @@ export function UserEditSection({
 
   const handleAddRule = (type: LimitType, value: number, mode?: DailyResetMode, time?: string) => {
     switch (type) {
+      case "limitRpm":
+        emitChange("rpm", Math.floor(value)); // RPM 应为整数
+        return;
       case "limit5h":
         emitChange("limit5hUsd", value);
         return;

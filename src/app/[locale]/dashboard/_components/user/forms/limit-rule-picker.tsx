@@ -23,6 +23,7 @@ import {
 import { cn } from "@/lib/utils";
 
 export type LimitType =
+  | "limitRpm"
   | "limit5h"
   | "limitDaily"
   | "limitWeekly"
@@ -54,6 +55,7 @@ export interface LimitRulePickerProps {
 }
 
 const LIMIT_TYPE_OPTIONS: Array<{ type: LimitType; fallbackLabel: string }> = [
+  { type: "limitRpm", fallbackLabel: "RPM 限额" },
   { type: "limit5h", fallbackLabel: "5小时限额" },
   { type: "limitDaily", fallbackLabel: "每日限额" },
   { type: "limitWeekly", fallbackLabel: "周限额" },
@@ -63,7 +65,8 @@ const LIMIT_TYPE_OPTIONS: Array<{ type: LimitType; fallbackLabel: string }> = [
 ];
 
 const QUICK_VALUES = [10, 50, 100, 500] as const;
-const SESSION_QUICK_VALUES = [5, 10, 15, 20] as const;
+const SESSION_QUICK_VALUES = [0, 5, 10, 15, 20] as const;
+const RPM_QUICK_VALUES = [0, 30, 60, 120, 300] as const;
 
 function getTranslation(translations: Record<string, unknown>, path: string, fallback: string) {
   const value = path.split(".").reduce<unknown>((acc, key) => {
@@ -205,7 +208,7 @@ export function LimitRulePicker({
               <Input
                 type="number"
                 min={0}
-                step={type === "limitSessions" ? 1 : 0.01}
+                step={type === "limitSessions" || type === "limitRpm" ? 1 : 0.01}
                 inputMode="decimal"
                 autoFocus
                 value={rawValue}
@@ -215,7 +218,12 @@ export function LimitRulePicker({
               />
 
               <div className="flex flex-wrap gap-2">
-                {(type === "limitSessions" ? SESSION_QUICK_VALUES : QUICK_VALUES).map((v) => (
+                {(type === "limitSessions"
+                  ? SESSION_QUICK_VALUES
+                  : type === "limitRpm"
+                    ? RPM_QUICK_VALUES
+                    : QUICK_VALUES
+                ).map((v) => (
                   <Button
                     key={v}
                     type="button"
@@ -223,7 +231,11 @@ export function LimitRulePicker({
                     size="sm"
                     onClick={() => setRawValue(String(v))}
                   >
-                    {type === "limitSessions" ? v : `$${v}`}
+                    {v === 0
+                      ? getTranslation(translations, "quickValues.unlimited", "无限")
+                      : type === "limitSessions" || type === "limitRpm"
+                        ? v
+                        : `$${v}`}
                   </Button>
                 ))}
               </div>

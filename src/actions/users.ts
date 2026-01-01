@@ -8,7 +8,6 @@ import { db } from "@/drizzle/db";
 import { users as usersTable } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
-import { USER_DEFAULTS } from "@/lib/constants/user.constants";
 import { logger } from "@/lib/logger";
 import { getUnauthorizedFields } from "@/lib/permissions/user-field-permissions";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
@@ -48,6 +47,7 @@ export interface GetUsersBatchParams {
     | "name"
     | "tags"
     | "expiresAt"
+    | "rpm"
     | "limit5hUsd"
     | "limitDailyUsd"
     | "limitWeeklyUsd"
@@ -73,6 +73,7 @@ export interface BatchUpdateUsersParams {
   updates: {
     note?: string;
     tags?: string[];
+    rpm?: number | null;
     dailyQuota?: number | null;
     limit5hUsd?: number | null;
     limitWeeklyUsd?: number | null;
@@ -612,6 +613,7 @@ export async function batchUpdateUsers(
     const updatesSchema = UpdateUserSchema.pick({
       note: true,
       tags: true,
+      rpm: true,
       dailyQuota: true,
       limit5hUsd: true,
       limitWeeklyUsd: true,
@@ -654,6 +656,7 @@ export async function batchUpdateUsers(
 
       if (updates.note !== undefined) dbUpdates.description = updates.note;
       if (updates.tags !== undefined) dbUpdates.tags = updates.tags;
+      if (updates.rpm !== undefined) dbUpdates.rpmLimit = updates.rpm;
       if (updates.dailyQuota !== undefined)
         dbUpdates.dailyLimitUsd =
           updates.dailyQuota === null ? null : updates.dailyQuota.toString();
@@ -706,7 +709,7 @@ export async function addUser(data: {
   note?: string;
   providerGroup?: string | null;
   tags?: string[];
-  rpm?: number;
+  rpm?: number | null;
   dailyQuota?: number | null;
   limit5hUsd?: number | null;
   limitWeeklyUsd?: number | null;
@@ -728,8 +731,8 @@ export async function addUser(data: {
       role: string;
       isEnabled: boolean;
       expiresAt: Date | null;
-      rpm: number;
-      dailyQuota: number;
+      rpm: number | null;
+      dailyQuota: number | null;
       providerGroup?: string;
       tags: string[];
       limit5hUsd: number | null;
@@ -766,7 +769,7 @@ export async function addUser(data: {
       note: data.note || "",
       providerGroup: data.providerGroup || "",
       tags: data.tags || [],
-      rpm: data.rpm || USER_DEFAULTS.RPM,
+      rpm: data.rpm ?? null,
       dailyQuota: data.dailyQuota ?? null,
       limit5hUsd: data.limit5hUsd,
       limitWeeklyUsd: data.limitWeeklyUsd,
@@ -898,8 +901,8 @@ export async function createUserOnly(data: {
   note?: string;
   providerGroup?: string | null;
   tags?: string[];
-  rpm?: number;
-  dailyQuota?: number;
+  rpm?: number | null;
+  dailyQuota?: number | null;
   limit5hUsd?: number | null;
   limitWeeklyUsd?: number | null;
   limitMonthlyUsd?: number | null;
@@ -920,8 +923,8 @@ export async function createUserOnly(data: {
       role: string;
       isEnabled: boolean;
       expiresAt: Date | null;
-      rpm: number;
-      dailyQuota: number;
+      rpm: number | null;
+      dailyQuota: number | null;
       providerGroup?: string;
       tags: string[];
       limit5hUsd: number | null;
@@ -951,7 +954,7 @@ export async function createUserOnly(data: {
       note: data.note || "",
       providerGroup: data.providerGroup || "",
       tags: data.tags || [],
-      rpm: data.rpm || USER_DEFAULTS.RPM,
+      rpm: data.rpm ?? null,
       dailyQuota: data.dailyQuota ?? null,
       limit5hUsd: data.limit5hUsd,
       limitWeeklyUsd: data.limitWeeklyUsd,
@@ -1067,7 +1070,7 @@ export async function editUser(
     note?: string;
     providerGroup?: string | null;
     tags?: string[];
-    rpm?: number;
+    rpm?: number | null;
     dailyQuota?: number | null;
     limit5hUsd?: number | null;
     limitWeeklyUsd?: number | null;
@@ -1229,8 +1232,8 @@ export async function removeUser(userId: number): Promise<ActionResult> {
  */
 export async function getUserLimitUsage(userId: number): Promise<
   ActionResult<{
-    rpm: { current: number; limit: number; window: "per_minute" };
-    dailyCost: { current: number; limit: number; resetAt: Date };
+    rpm: { current: number; limit: number | null; window: "per_minute" };
+    dailyCost: { current: number; limit: number | null; resetAt: Date };
   }>
 > {
   try {
@@ -1273,12 +1276,12 @@ export async function getUserLimitUsage(userId: number): Promise<
       data: {
         rpm: {
           current: rpmCurrent,
-          limit: user.rpm || 60,
+          limit: user.rpm,
           window: "per_minute",
         },
         dailyCost: {
           current: dailyCost,
-          limit: user.dailyQuota ?? 100,
+          limit: user.dailyQuota,
           resetAt: getDailyResetTime(),
         },
       },
