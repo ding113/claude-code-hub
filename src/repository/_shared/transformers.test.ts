@@ -172,13 +172,13 @@ describe("src/repository/_shared/transformers.ts", () => {
       });
       expect(withoutCost.costUsd).toBeUndefined();
 
-      const invalidCost = toMessageRequest({
+      const emptyCost = toMessageRequest({
         id: 3,
-        costUsd: "not-a-number",
+        costUsd: "",
         createdAt: undefined,
         updatedAt: undefined,
       });
-      expect(invalidCost.costUsd).toBeUndefined();
+      expect(emptyCost.costUsd).toBeUndefined();
     });
 
     it("对可选字段进行 null/undefined 归一化", () => {
