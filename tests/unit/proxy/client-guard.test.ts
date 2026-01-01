@@ -82,10 +82,9 @@ describe("ProxyClientGuard", () => {
 
   describe("pattern matching with hyphen/underscore normalization", () => {
     test("should match gemini-cli pattern against GeminiCLI User-Agent", async () => {
-      const session = createMockSession(
-        "GeminiCLI/0.22.5/gemini-3-pro-preview (darwin; arm64)",
-        ["gemini-cli"]
-      );
+      const session = createMockSession("GeminiCLI/0.22.5/gemini-3-pro-preview (darwin; arm64)", [
+        "gemini-cli",
+      ]);
       const result = await ProxyClientGuard.ensure(session);
       expect(result).toBeNull();
     });
@@ -123,10 +122,7 @@ describe("ProxyClientGuard", () => {
     });
 
     test("should match when User-Agent contains pattern as substring", async () => {
-      const session = createMockSession(
-        "Mozilla/5.0 claude-cli/1.0 Compatible",
-        ["claude-cli"]
-      );
+      const session = createMockSession("Mozilla/5.0 claude-cli/1.0 Compatible", ["claude-cli"]);
       const result = await ProxyClientGuard.ensure(session);
       expect(result).toBeNull();
     });
@@ -134,20 +130,13 @@ describe("ProxyClientGuard", () => {
 
   describe("multiple patterns", () => {
     test("should allow when one of multiple patterns matches", async () => {
-      const session = createMockSession("GeminiCLI/1.0", [
-        "claude-cli",
-        "gemini-cli",
-        "codex-cli",
-      ]);
+      const session = createMockSession("GeminiCLI/1.0", ["claude-cli", "gemini-cli", "codex-cli"]);
       const result = await ProxyClientGuard.ensure(session);
       expect(result).toBeNull();
     });
 
     test("should reject when no patterns match", async () => {
-      const session = createMockSession("UnknownClient/1.0", [
-        "claude-cli",
-        "gemini-cli",
-      ]);
+      const session = createMockSession("UnknownClient/1.0", ["claude-cli", "gemini-cli"]);
       const result = await ProxyClientGuard.ensure(session);
       expect(result).not.toBeNull();
       expect(result?.status).toBe(400);
