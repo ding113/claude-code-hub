@@ -719,7 +719,12 @@
         "manualDesc": "Поддержка добавления любого названия модели (не ограничено прайс-листом)",
         "claude": "Claude",
         "openai": "OpenAI",
-        "gemini": "Gemini"
+        "gemini": "Gemini",
+        "sourceUpstream": "Upstream",
+        "sourceUpstreamDesc": "Список моделей из API провайдера",
+        "sourceFallback": "Локально",
+        "sourceFallbackDesc": "Используется локальный прайс-лист (upstream недоступен или не поддерживается)",
+        "refresh": "Обновить список моделей"
       },
       "modelRedirect": {
         "currentRules": "Текущие правила ({count})",
@@ -1218,6 +1223,19 @@
         "description": "Удалить провайдера «{name}»? Это действие необратимо.",
         "cancel": "Отмена",
         "confirm": "Подтвердить удаление"
+      },
+      "failureThresholdConfirmDialog": {
+        "title": "Подтвердите особую конфигурацию",
+        "descriptionDisabledPrefix": "Вы устанавливаете порог сбоев автоматического выключателя на ",
+        "descriptionDisabledValue": "0",
+        "descriptionDisabledMiddle": ", что означает ",
+        "descriptionDisabledAction": "отключение автоматического выключателя",
+        "descriptionDisabledSuffix": ". Провайдер не будет отключаться из-за последовательных сбоев.",
+        "descriptionHighValuePrefix": "Вы устанавливаете порог сбоев автоматического выключателя на ",
+        "descriptionHighValueSuffix": ", что является высоким значением и может привести к отключению провайдера только после многочисленных сбоев.",
+        "confirmQuestion": "Вы уверены, что хотите сохранить эту конфигурацию?",
+        "cancel": "Отмена",
+        "confirm": "Подтвердить сохранение"
       },
       "errors": {
         "invalidUrl": "Введите корректный адрес API",

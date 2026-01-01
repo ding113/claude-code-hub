@@ -15,6 +15,7 @@ const messages = {
       details: {
         requestHeaders: "Request Headers",
         requestBody: "Request Body",
+        requestMessages: "Request Messages",
         responseHeaders: "Response Headers",
         responseBody: "Response Body",
         noHeaders: "No data",
@@ -78,19 +79,42 @@ describe("SessionMessagesDetailsTabs", () => {
 
     const { container, unmount } = renderWithIntl(
       <SessionMessagesDetailsTabs
+        requestBody={{ model: "gpt-5.2", instructions: "test" }}
         messages={{ role: "user", content: "hi" }}
         response={sse}
         requestHeaders={{ a: "1" }}
         responseHeaders={{ b: "2" }}
+        requestMeta={{
+          clientUrl: "https://example.com/v1/responses",
+          upstreamUrl: null,
+          method: "POST",
+        }}
+        responseMeta={{ upstreamUrl: "https://api.example.com/v1/responses", statusCode: 200 }}
       />
     );
 
     expect(container.querySelector("[data-testid='session-details-tabs']")).not.toBeNull();
+    expect(
+      container.querySelector("[data-testid='session-tab-trigger-request-messages']")
+    ).not.toBeNull();
 
     const requestBody = container.querySelector(
       "[data-testid='session-tab-request-body'] [data-testid='code-display']"
     ) as HTMLElement;
     expect(requestBody.getAttribute("data-language")).toBe("json");
+    expect(container.textContent).toContain('"model": "gpt-5.2"');
+
+    const requestHeadersTrigger = container.querySelector(
+      "[data-testid='session-tab-trigger-request-headers']"
+    ) as HTMLElement;
+    click(requestHeadersTrigger);
+    expect(container.textContent).toContain("CLIENT: POST https://example.com/v1/responses");
+
+    const requestMessagesTrigger = container.querySelector(
+      "[data-testid='session-tab-trigger-request-messages']"
+    ) as HTMLElement;
+    click(requestMessagesTrigger);
+    expect(container.textContent).toContain('"content": "hi"');
 
     const responseBodyTrigger = container.querySelector(
       "[data-testid='session-tab-trigger-response-body']"
@@ -102,16 +126,27 @@ describe("SessionMessagesDetailsTabs", () => {
     ) as HTMLElement;
     expect(responseBody.getAttribute("data-language")).toBe("sse");
 
+    const responseHeadersTrigger = container.querySelector(
+      "[data-testid='session-tab-trigger-response-headers']"
+    ) as HTMLElement;
+    click(responseHeadersTrigger);
+    expect(container.textContent).toContain(
+      "UPSTREAM: HTTP 200 https://api.example.com/v1/responses"
+    );
+
     unmount();
   });
 
   test("detects JSON response when response is not SSE", () => {
     const { container, unmount } = renderWithIntl(
       <SessionMessagesDetailsTabs
+        requestBody={{ model: "gpt-5.2", instructions: "test" }}
         messages={{ role: "user", content: "hi" }}
         response='{"ok":true}'
         requestHeaders={{}}
         responseHeaders={{}}
+        requestMeta={{ clientUrl: null, upstreamUrl: null, method: null }}
+        responseMeta={{ upstreamUrl: null, statusCode: null }}
       />
     );
 
@@ -131,10 +166,13 @@ describe("SessionMessagesDetailsTabs", () => {
   test("renders empty states for missing data", () => {
     const { container, unmount } = renderWithIntl(
       <SessionMessagesDetailsTabs
+        requestBody={null}
         messages={null}
         response={null}
         requestHeaders={null}
         responseHeaders={null}
+        requestMeta={{ clientUrl: null, upstreamUrl: null, method: null }}
+        responseMeta={{ upstreamUrl: null, statusCode: null }}
       />
     );
 

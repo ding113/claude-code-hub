@@ -44,6 +44,7 @@ export interface UserManagementTableProps {
         note: string;
         expiresAt: string;
         expiresAtHint?: string;
+        limitRpm: string;
         limit5h: string;
         limitDaily: string;
         limitWeekly: string;
@@ -97,8 +98,8 @@ const KEY_ROW_BORDER_HEIGHT = 1;
 const EXPANDED_SECTION_PADDING = 24; // py-3 * 2
 const KEY_LIST_BORDER_HEIGHT = 2; // top + bottom border
 const EMPTY_KEYS_HEIGHT = 68; // py-6 * 2 + line height
-const MIN_TABLE_WIDTH_CLASS = "min-w-[980px]";
-const GRID_COLUMNS_CLASS = "grid-cols-[minmax(260px,1fr)_120px_repeat(6,90px)_80px]";
+const MIN_TABLE_WIDTH_CLASS = "min-w-[1070px]";
+const GRID_COLUMNS_CLASS = "grid-cols-[minmax(260px,1fr)_120px_repeat(7,90px)_80px]";
 
 export function UserManagementTable({
   users,
@@ -444,6 +445,11 @@ export function UserManagementTable({
                 <div className="px-2 min-w-0">
                   <span className="block truncate" title={translations.table.columns.expiresAt}>
                     {translations.table.columns.expiresAt}
+                  </span>
+                </div>
+                <div className="px-2 text-center min-w-0">
+                  <span className="block truncate" title={translations.table.columns.limitRpm}>
+                    {translations.table.columns.limitRpm}
                   </span>
                 </div>
                 <div className="px-2 text-center min-w-0">

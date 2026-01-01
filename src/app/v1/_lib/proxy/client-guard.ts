@@ -43,11 +43,16 @@ export class ProxyClientGuard {
       );
     }
 
-    // Case-insensitive substring match
-    const userAgentLower = userAgent.toLowerCase();
-    const isAllowed = allowedClients.some((pattern) =>
-      userAgentLower.includes(pattern.toLowerCase())
-    );
+    // Case-insensitive substring match with hyphen/underscore normalization
+    // This handles variations like "gemini-cli" matching "GeminiCLI" or "gemini_cli"
+    const normalize = (s: string) => s.toLowerCase().replace(/[-_]/g, "");
+    const userAgentNorm = normalize(userAgent);
+    const isAllowed = allowedClients.some((pattern) => {
+      const normalizedPattern = normalize(pattern);
+      // Skip empty patterns to prevent includes("") matching everything
+      if (normalizedPattern === "") return false;
+      return userAgentNorm.includes(normalizedPattern);
+    });
 
     if (!isAllowed) {
       return ProxyResponses.buildError(

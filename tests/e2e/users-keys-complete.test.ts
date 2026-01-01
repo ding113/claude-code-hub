@@ -447,7 +447,7 @@ describe("用户和 Key 管理 - 完整 E2E 测试", () => {
     test("5.2 创建用户 - 应该拒绝无效的 RPM", async () => {
       const error = await expectError("users", "addUser", {
         name: "测试",
-        rpm: 0, // 最小值是 1
+        rpm: -1, // 负数无效，0 表示无限制
         dailyQuota: 10,
       });
 

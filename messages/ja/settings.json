@@ -719,7 +719,12 @@
         "manualDesc": "任意のモデル名を追加できます（価格表のモデルに限定されません）",
         "claude": "Claude",
         "openai": "OpenAI",
-        "gemini": "Gemini"
+        "gemini": "Gemini",
+        "sourceUpstream": "上流",
+        "sourceUpstreamDesc": "モデルリストは上流プロバイダーAPIから取得",
+        "sourceFallback": "ローカル",
+        "sourceFallbackDesc": "ローカル価格表のモデルリストを使用（上流が利用不可または未対応）",
+        "refresh": "モデルリストを更新"
       },
       "modelRedirect": {
         "currentRules": "現在のルール ({count})",
@@ -1218,6 +1223,19 @@
         "description": "プロバイダー「{name}」を削除しますか？この操作は元に戻せません。",
         "cancel": "キャンセル",
         "confirm": "削除を確定"
+      },
+      "failureThresholdConfirmDialog": {
+        "title": "特別な設定を確認",
+        "descriptionDisabledPrefix": "サーキットブレーカーの失敗閾値を",
+        "descriptionDisabledValue": "0",
+        "descriptionDisabledMiddle": "に設定しています。これは",
+        "descriptionDisabledAction": "サーキットブレーカーを無効化",
+        "descriptionDisabledSuffix": "することを意味し、プロバイダーは連続した失敗によって遮断されません。",
+        "descriptionHighValuePrefix": "サーキットブレーカーの失敗閾値を",
+        "descriptionHighValueSuffix": "に設定しています。これは高い値であり、プロバイダーが多数の失敗の後にのみ遮断される可能性があります。",
+        "confirmQuestion": "この設定を保存してもよろしいですか？",
+        "cancel": "キャンセル",
+        "confirm": "保存を確定"
       },
       "errors": {
         "invalidUrl": "有効な API アドレスを入力してください",

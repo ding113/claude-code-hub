@@ -46,6 +46,7 @@
   "QUOTA_EXCEEDED": "クォータを超過しました",
   "BATCH_SIZE_EXCEEDED": "一括操作は {max} 件を超えることはできません",
   "RATE_LIMIT_EXCEEDED": "リクエストが多すぎます。後でもう一度お試しください",
+  "RATE_LIMIT_RPM_EXCEEDED": "リクエストレート制限を超過しました：現在 {current} 回/分（制限：{limit} 回/分）。{resetTime} にリセットされます",
   "RESOURCE_BUSY": "リソースは現在使用中です",
   "INVALID_STATE": "現在の状態では操作が許可されていません",
   "CONFLICT": "操作の競合",

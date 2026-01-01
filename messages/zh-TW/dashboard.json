@@ -474,10 +474,7 @@
     },
     "labels": {
       "byName": "按名稱",
-      "byUsageRate": "按使用率",
-      "all": "全部",
-      "warning": "接近額度 (>60%)",
-      "exceeded": "已超額 (≥100%)"
+      "byUsageRate": "按使用率"
     },
     "users": {
       "title": "用戶額度統計",
@@ -1049,6 +1046,7 @@
       "sortByName": "按名稱",
       "sortByTags": "按標籤",
       "sortByExpiresAt": "按過期時間",
+      "sortByRpm": "按RPM限制",
       "sortByLimit5h": "按5小時限額",
       "sortByLimitDaily": "按每日限額",
       "sortByLimitWeekly": "按週限額",
@@ -1078,11 +1076,12 @@
         "note": "備註",
         "expiresAt": "到期時間",
         "expiresAtHint": "點擊快速續期",
-        "limit5h": "5h 限額",
-        "limitDaily": "每日限額",
-        "limitWeekly": "週限額",
-        "limitMonthly": "月限額",
-        "limitTotal": "總限額",
+        "limitRpm": "RPM 限制",
+        "limit5h": "5h 限額 (USD)",
+        "limitDaily": "每日限額 (USD)",
+        "limitWeekly": "週限額 (USD)",
+        "limitMonthly": "月限額 (USD)",
+        "limitTotal": "總限額 (USD)",
         "limitSessions": "並發"
       },
       "keyRow": {
@@ -1231,6 +1230,7 @@
         "fields": {
           "note": "備註",
           "tags": "標籤",
+          "rpm": "RPM 限制",
           "limit5h": "5h 限額 (USD)",
           "limitDaily": "每日限額 (USD)",
           "limitWeekly": "週限額 (USD)",
@@ -1304,6 +1304,7 @@
     "limitRules": {
       "addRule": "新增限額規則",
       "ruleTypes": {
+        "limitRpm": "RPM 限額",
         "limit5h": "5小時限額",
         "limitDaily": "每日限額",
         "limitWeekly": "週限額",
@@ -1316,6 +1317,7 @@
         "rolling": "滾動視窗（24h）"
       },
       "quickValues": {
+        "unlimited": "無限",
         "10": "$10",
         "50": "$50",
         "100": "$100",

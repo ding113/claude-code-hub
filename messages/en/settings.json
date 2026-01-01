@@ -808,7 +808,12 @@
         "manualDesc": "Support adding any model name (not limited to price table)",
         "claude": "Claude",
         "openai": "OpenAI",
-        "gemini": "Gemini"
+        "gemini": "Gemini",
+        "sourceUpstream": "Upstream",
+        "sourceUpstreamDesc": "Model list from upstream provider API",
+        "sourceFallback": "Local",
+        "sourceFallbackDesc": "Using local price list (upstream unavailable or unsupported)",
+        "refresh": "Refresh model list"
       },
       "modelRedirect": {
         "currentRules": "Current Rules ({count})",
@@ -1348,6 +1353,19 @@
         "description": "Are you sure you want to delete provider \"{name}\"? This action cannot be undone.",
         "cancel": "Cancel",
         "confirm": "Confirm Delete"
+      },
+      "failureThresholdConfirmDialog": {
+        "title": "Confirm Special Configuration",
+        "descriptionDisabledPrefix": "You are setting the circuit breaker failure threshold to ",
+        "descriptionDisabledValue": "0",
+        "descriptionDisabledMiddle": ", which means ",
+        "descriptionDisabledAction": "disabling the circuit breaker",
+        "descriptionDisabledSuffix": ". The provider will not be circuit-broken due to consecutive failures.",
+        "descriptionHighValuePrefix": "You are setting the circuit breaker failure threshold to ",
+        "descriptionHighValueSuffix": ", which is a high value and may cause the provider to be circuit-broken only after many failures.",
+        "confirmQuestion": "Are you sure you want to save this configuration?",
+        "cancel": "Cancel",
+        "confirm": "Confirm Save"
       },
       "errors": {
         "invalidUrl": "Please enter a valid API address",

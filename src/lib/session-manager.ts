@@ -2,7 +2,7 @@ import "server-only";
 
 import crypto from "node:crypto";
 import { extractCodexSessionId } from "@/app/v1/_lib/codex/session-extractor";
-import { sanitizeHeaders } from "@/app/v1/_lib/proxy/errors";
+import { sanitizeHeaders, sanitizeUrl } from "@/app/v1/_lib/proxy/errors";
 import { logger } from "@/lib/logger";
 import { normalizeRequestSequence } from "@/lib/utils/request-sequence";
 import type {
@@ -56,6 +56,16 @@ function parseHeaderRecord(value: string): Record<string, string> | null {
     return null;
   }
 }
+
+type SessionRequestMeta = {
+  url: string;
+  method: string;
+};
+
+type SessionResponseMeta = {
+  url: string;
+  statusCode: number;
+};
 
 /**
  * Session 管理器
@@ -1343,6 +1353,235 @@ export class SessionManager {
       logger.error("SessionManager: Failed to store session response", {
         error,
       });
+    }
+  }
+
+  /**
+   * 存储 session 完整请求体（客户端原始请求体，临时存储，5分钟过期）
+   *
+   * 注意：此数据可能较大且包含用户输入，仅在 STORE_SESSION_MESSAGES=true 时启用。
+   *
+   * @param sessionId - Session ID
+   * @param requestBody - 请求体（完整 JSON）
+   * @param requestSequence - 可选，请求序号
+   */
+  static async storeSessionRequestBody(
+    sessionId: string,
+    requestBody: unknown,
+    requestSequence?: number
+  ): Promise<void> {
+    if (!SessionManager.STORE_MESSAGES) {
+      logger.trace("SessionManager: STORE_SESSION_MESSAGES is disabled, skipping request body");
+      return;
+    }
+
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") return;
+
+    try {
+      const sequence = normalizeRequestSequence(requestSequence) ?? 1;
+      const key = `session:${sessionId}:req:${sequence}:requestBody`;
+      const payload = JSON.stringify(requestBody);
+      await redis.setex(key, SessionManager.SESSION_TTL, payload);
+      logger.trace("SessionManager: Stored session request body", {
+        sessionId,
+        requestSequence: sequence,
+        key,
+        size: payload.length,
+      });
+    } catch (error) {
+      logger.error("SessionManager: Failed to store session request body", { error, sessionId });
+    }
+  }
+
+  /**
+   * 获取 session 完整请求体（客户端原始请求体）
+   *
+   * @param sessionId - Session ID
+   * @param requestSequence - 请求序号
+   * @returns 解析后的 JSON 对象
+   */
+  static async getSessionRequestBody(
+    sessionId: string,
+    requestSequence?: number
+  ): Promise<unknown | null> {
+    if (!SessionManager.STORE_MESSAGES) {
+      logger.warn("SessionManager: STORE_SESSION_MESSAGES is disabled");
+      return null;
+    }
+
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") return null;
+
+    try {
+      const sequence = normalizeRequestSequence(requestSequence);
+      if (!sequence) return null;
+      const key = `session:${sessionId}:req:${sequence}:requestBody`;
+      const value = await redis.get(key);
+      if (!value) return null;
+      return JSON.parse(value) as unknown;
+    } catch (error) {
+      logger.error("SessionManager: Failed to get session request body", { error, sessionId });
+      return null;
+    }
+  }
+
+  /**
+   * 存储客户端请求元信息（端点/方法，临时存储，5分钟过期）
+   *
+   * @param sessionId - Session ID
+   * @param meta - 元信息
+   * @param requestSequence - 请求序号
+   */
+  static async storeSessionClientRequestMeta(
+    sessionId: string,
+    meta: { url: string | URL; method: string },
+    requestSequence?: number
+  ): Promise<void> {
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") return;
+
+    try {
+      const sequence = normalizeRequestSequence(requestSequence) ?? 1;
+      const key = `session:${sessionId}:req:${sequence}:clientReqMeta`;
+      const payload: SessionRequestMeta = {
+        url: sanitizeUrl(meta.url),
+        method: meta.method,
+      };
+      await redis.setex(key, SessionManager.SESSION_TTL, JSON.stringify(payload));
+    } catch (error) {
+      logger.error("SessionManager: Failed to store client request meta", { error, sessionId });
+    }
+  }
+
+  static async getSessionClientRequestMeta(
+    sessionId: string,
+    requestSequence?: number
+  ): Promise<SessionRequestMeta | null> {
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") return null;
+
+    try {
+      const sequence = normalizeRequestSequence(requestSequence);
+      if (!sequence) return null;
+      const key = `session:${sessionId}:req:${sequence}:clientReqMeta`;
+      const value = await redis.get(key);
+      if (!value) return null;
+
+      const parsed: unknown = JSON.parse(value);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+      const obj = parsed as Record<string, unknown>;
+      if (typeof obj.url !== "string" || typeof obj.method !== "string") return null;
+      return { url: obj.url, method: obj.method };
+    } catch (error) {
+      logger.error("SessionManager: Failed to get client request meta", { error, sessionId });
+      return null;
+    }
+  }
+
+  /**
+   * 存储上游请求元信息（端点/方法，临时存储，5分钟过期）
+   *
+   * @param sessionId - Session ID
+   * @param meta - 元信息
+   * @param requestSequence - 请求序号
+   */
+  static async storeSessionUpstreamRequestMeta(
+    sessionId: string,
+    meta: { url: string | URL; method: string },
+    requestSequence?: number
+  ): Promise<void> {
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") return;
+
+    try {
+      const sequence = normalizeRequestSequence(requestSequence) ?? 1;
+      const key = `session:${sessionId}:req:${sequence}:upstreamReqMeta`;
+      const payload: SessionRequestMeta = {
+        url: sanitizeUrl(meta.url),
+        method: meta.method,
+      };
+      await redis.setex(key, SessionManager.SESSION_TTL, JSON.stringify(payload));
+    } catch (error) {
+      logger.error("SessionManager: Failed to store upstream request meta", { error, sessionId });
+    }
+  }
+
+  static async getSessionUpstreamRequestMeta(
+    sessionId: string,
+    requestSequence?: number
+  ): Promise<SessionRequestMeta | null> {
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") return null;
+
+    try {
+      const sequence = normalizeRequestSequence(requestSequence);
+      if (!sequence) return null;
+      const key = `session:${sessionId}:req:${sequence}:upstreamReqMeta`;
+      const value = await redis.get(key);
+      if (!value) return null;
+
+      const parsed: unknown = JSON.parse(value);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+      const obj = parsed as Record<string, unknown>;
+      if (typeof obj.url !== "string" || typeof obj.method !== "string") return null;
+      return { url: obj.url, method: obj.method };
+    } catch (error) {
+      logger.error("SessionManager: Failed to get upstream request meta", { error, sessionId });
+      return null;
+    }
+  }
+
+  /**
+   * 存储上游响应元信息（端点/状态码，临时存储，5分钟过期）
+   *
+   * @param sessionId - Session ID
+   * @param meta - 元信息
+   * @param requestSequence - 请求序号
+   */
+  static async storeSessionUpstreamResponseMeta(
+    sessionId: string,
+    meta: { url: string | URL; statusCode: number },
+    requestSequence?: number
+  ): Promise<void> {
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") return;
+
+    try {
+      const sequence = normalizeRequestSequence(requestSequence) ?? 1;
+      const key = `session:${sessionId}:req:${sequence}:upstreamResMeta`;
+      const payload: SessionResponseMeta = {
+        url: sanitizeUrl(meta.url),
+        statusCode: meta.statusCode,
+      };
+      await redis.setex(key, SessionManager.SESSION_TTL, JSON.stringify(payload));
+    } catch (error) {
+      logger.error("SessionManager: Failed to store upstream response meta", { error, sessionId });
+    }
+  }
+
+  static async getSessionUpstreamResponseMeta(
+    sessionId: string,
+    requestSequence?: number
+  ): Promise<SessionResponseMeta | null> {
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") return null;
+
+    try {
+      const sequence = normalizeRequestSequence(requestSequence);
+      if (!sequence) return null;
+      const key = `session:${sessionId}:req:${sequence}:upstreamResMeta`;
+      const value = await redis.get(key);
+      if (!value) return null;
+
+      const parsed: unknown = JSON.parse(value);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+      const obj = parsed as Record<string, unknown>;
+      if (typeof obj.url !== "string" || typeof obj.statusCode !== "number") return null;
+      return { url: obj.url, statusCode: obj.statusCode };
+    } catch (error) {
+      logger.error("SessionManager: Failed to get upstream response meta", { error, sessionId });
+      return null;
     }
   }
 

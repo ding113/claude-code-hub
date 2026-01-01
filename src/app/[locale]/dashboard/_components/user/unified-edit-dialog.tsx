@@ -130,6 +130,8 @@ function buildDefaultValues(
         note: "",
         tags: [],
         expiresAt: undefined,
+        providerGroup: PROVIDER_GROUP.DEFAULT,
+        rpm: 0,
         limit5hUsd: null,
         dailyQuota: null,
         limitWeeklyUsd: null,
@@ -175,6 +177,7 @@ function buildDefaultValues(
       tags: user.tags || [],
       expiresAt: user.expiresAt ?? undefined,
       providerGroup: normalizeProviderGroup(user.providerGroup),
+      rpm: user.rpm ?? 0,
       limit5hUsd: user.limit5hUsd ?? null,
       dailyQuota: user.dailyQuota ?? null,
       limitWeeklyUsd: user.limitWeeklyUsd ?? null,
@@ -349,6 +352,7 @@ function UnifiedEditDialogInner({
                 note: data.user.note,
                 tags: data.user.tags,
                 expiresAt: data.user.expiresAt ?? null,
+                rpm: data.user.rpm,
                 limit5hUsd: data.user.limit5hUsd,
                 dailyQuota: data.user.dailyQuota ?? undefined,
                 limitWeeklyUsd: data.user.limitWeeklyUsd,
@@ -413,6 +417,7 @@ function UnifiedEditDialogInner({
                 tags: data.user.tags,
                 expiresAt: data.user.expiresAt ?? null,
                 providerGroup: normalizeProviderGroup(data.user.providerGroup),
+                rpm: data.user.rpm,
                 limit5hUsd: data.user.limit5hUsd,
                 dailyQuota: data.user.dailyQuota,
                 limitWeeklyUsd: data.user.limitWeeklyUsd,
@@ -586,6 +591,7 @@ function UnifiedEditDialogInner({
       limitRules: {
         addRule: t("limitRules.addRule"),
         ruleTypes: {
+          limitRpm: t("limitRules.ruleTypes.limitRpm"),
           limit5h: t("limitRules.ruleTypes.limit5h"),
           limitDaily: t("limitRules.ruleTypes.limitDaily"),
           limitWeekly: t("limitRules.ruleTypes.limitWeekly"),
@@ -594,6 +600,7 @@ function UnifiedEditDialogInner({
           limitSessions: t("limitRules.ruleTypes.limitSessions"),
         },
         quickValues: {
+          unlimited: t("limitRules.quickValues.unlimited"),
           "10": t("limitRules.quickValues.10"),
           "50": t("limitRules.quickValues.50"),
           "100": t("limitRules.quickValues.100"),
@@ -652,6 +659,7 @@ function UnifiedEditDialogInner({
       limitRules: {
         title: t("keyEditSection.limitRules.title"),
         limitTypes: {
+          limitRpm: t("limitRules.ruleTypes.limitRpm"),
           limit5h: t("limitRules.ruleTypes.limit5h"),
           limitDaily: t("limitRules.ruleTypes.limitDaily"),
           limitWeekly: t("limitRules.ruleTypes.limitWeekly"),
@@ -660,6 +668,7 @@ function UnifiedEditDialogInner({
           limitSessions: t("limitRules.ruleTypes.limitSessions"),
         },
         quickValues: {
+          unlimited: t("limitRules.quickValues.unlimited"),
           "10": t("limitRules.quickValues.10"),
           "50": t("limitRules.quickValues.50"),
           "100": t("limitRules.quickValues.100"),
@@ -877,6 +886,7 @@ function UnifiedEditDialogInner({
                   tags: currentUserDraft.tags || [],
                   expiresAt: currentUserDraft.expiresAt ?? null,
                   providerGroup: normalizeProviderGroup(currentUserDraft.providerGroup),
+                  rpm: currentUserDraft.rpm ?? 0,
                   limit5hUsd: currentUserDraft.limit5hUsd ?? null,
                   dailyQuota: currentUserDraft.dailyQuota ?? null,
                   limitWeeklyUsd: currentUserDraft.limitWeeklyUsd ?? null,

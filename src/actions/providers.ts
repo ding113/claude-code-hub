@@ -2783,3 +2783,337 @@ export async function getProviderTestPresets(
     };
   }
 }
+
+// ============================================================================
+// Fetch Upstream Models
+// ============================================================================
+
+/**
+ * 上游模型列表获取参数
+ */
+export type FetchUpstreamModelsArgs = {
+  providerUrl: string;
+  apiKey: string;
+  providerType: ProviderType;
+  proxyUrl?: string | null;
+  proxyFallbackToDirect?: boolean;
+  /** 超时时间（毫秒），默认 10000 */
+  timeoutMs?: number;
+};
+
+/**
+ * 上游模型列表获取结果
+ */
+export type FetchUpstreamModelsResult = ActionResult<{
+  models: string[];
+  source: "upstream";
+}>;
+
+// OpenAI /v1/models 响应类型
+type OpenAIModelsResponse = {
+  object: "list";
+  data: Array<{
+    id: string;
+    object: "model";
+    created?: number;
+    owned_by?: string;
+  }>;
+};
+
+// Gemini /v1beta/models 响应类型
+type GeminiModelsResponse = {
+  models: Array<{
+    name: string;
+    displayName?: string;
+    description?: string;
+    supportedGenerationMethods?: string[];
+  }>;
+  nextPageToken?: string;
+};
+
+// Anthropic /v1/models 响应类型
+type AnthropicModelsResponse = {
+  data: Array<{
+    id: string;
+    created_at: string;
+    display_name: string;
+    type: "model";
+  }>;
+  first_id: string;
+  has_more: boolean;
+  last_id: string;
+};
+
+const UPSTREAM_FETCH_TIMEOUT_MS = 10000;
+
+// 通用 fetch 选项类型（undici 兼容）
+interface UndiciFetchOptions extends RequestInit {
+  dispatcher?: unknown;
+}
+
+/**
+ * 执行带代理的 fetch 请求（通用函数）
+ */
+async function executeProxiedFetch(
+  proxyConfig: { proxyUrl: string | null; proxyFallbackToDirect: boolean },
+  url: string,
+  headers: Record<string, string>,
+  timeoutMs: number
+): Promise<Response> {
+  const tempProvider: ProviderProxyConfig = {
+    id: -1,
+    name: "fetch-models",
+    proxyUrl: proxyConfig.proxyUrl,
+    proxyFallbackToDirect: proxyConfig.proxyFallbackToDirect,
+  };
+
+  const proxy = createProxyAgentForProvider(tempProvider, url);
+
+  const init: UndiciFetchOptions = {
+    method: "GET",
+    headers,
+    signal: AbortSignal.timeout(timeoutMs),
+  };
+
+  if (proxy) {
+    init.dispatcher = proxy.agent;
+  }
+
+  return fetch(url, init);
+}
+
+/**
+ * 处理 HTTP 错误响应
+ */
+function handleHttpError(
+  response: Response,
+  errorText: string,
+  logPrefix: string
+): FetchUpstreamModelsResult {
+  logger.warn(`${logPrefix}: API returned error`, {
+    status: response.status,
+    errorPreview: errorText.substring(0, 200),
+  });
+  return { ok: false, error: `API 返回错误: HTTP ${response.status}` };
+}
+
+/**
+ * 处理 fetch 异常
+ */
+function handleFetchException(error: unknown, logPrefix: string): FetchUpstreamModelsResult {
+  const err = error as Error & { code?: string };
+  logger.warn(`${logPrefix}: request failed`, {
+    error: err.message,
+    code: err.code,
+  });
+  return { ok: false, error: `请求失败: ${err.message}` };
+}
+
+/**
+ * 构建成功响应
+ */
+function buildSuccessResult(models: string[], logPrefix: string): FetchUpstreamModelsResult {
+  logger.debug(`${logPrefix}: success`, { modelCount: models.length });
+  return { ok: true, data: { models, source: "upstream" } };
+}
+
+/**
+ * 从上游服务商获取模型列表
+ *
+ * 支持的服务商类型：
+ * - claude / claude-auth: 调用 /v1/models (Anthropic API)
+ * - codex / openai-compatible: 调用 /v1/models (OpenAI 兼容 API)
+ * - gemini / gemini-cli: 调用 /v1beta/models (Google AI API)
+ *
+ * @returns 模型列表或错误
+ */
+export async function fetchUpstreamModels(
+  data: FetchUpstreamModelsArgs
+): Promise<FetchUpstreamModelsResult> {
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return { ok: false, error: "无权限执行此操作" };
+    }
+
+    // 验证 URL
+    const urlValidation = validateProviderUrlForConnectivity(data.providerUrl);
+    if (!urlValidation.valid) {
+      return { ok: false, error: urlValidation.error.message };
+    }
+
+    // 验证代理 URL
+    if (data.proxyUrl && !isValidProxyUrl(data.proxyUrl)) {
+      return { ok: false, error: "代理地址格式无效" };
+    }
+
+    const normalizedUrl = urlValidation.normalizedUrl.replace(/\/$/, "");
+    const timeoutMs = data.timeoutMs ?? UPSTREAM_FETCH_TIMEOUT_MS;
+
+    // 根据供应商类型选择不同的 API
+    if (data.providerType === "claude" || data.providerType === "claude-auth") {
+      return await fetchAnthropicModels(data, normalizedUrl, timeoutMs);
+    }
+
+    if (data.providerType === "gemini" || data.providerType === "gemini-cli") {
+      return await fetchGeminiModels(data, normalizedUrl, timeoutMs);
+    }
+
+    // OpenAI 兼容 API (codex, openai-compatible)
+    return await fetchOpenAIModels(data, normalizedUrl, timeoutMs);
+  } catch (error) {
+    logger.error("fetchUpstreamModels error", { error, providerType: data.providerType });
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "获取上游模型列表失败",
+    };
+  }
+}
+
+/**
+ * 从 OpenAI 兼容 API 获取模型列表
+ */
+async function fetchOpenAIModels(
+  data: FetchUpstreamModelsArgs,
+  normalizedUrl: string,
+  timeoutMs: number
+): Promise<FetchUpstreamModelsResult> {
+  const url = `${normalizedUrl}/v1/models`;
+
+  try {
+    const response = await executeProxiedFetch(
+      {
+        proxyUrl: data.proxyUrl ?? null,
+        proxyFallbackToDirect: data.proxyFallbackToDirect ?? false,
+      },
+      url,
+      { Authorization: `Bearer ${data.apiKey}` },
+      timeoutMs
+    );
+
+    if (!response.ok) {
+      return handleHttpError(response, await response.text(), "fetchOpenAIModels");
+    }
+
+    const result = (await response.json()) as OpenAIModelsResponse;
+
+    if (!result.data || !Array.isArray(result.data)) {
+      return { ok: false, error: "响应格式无效：缺少 data 数组" };
+    }
+
+    return buildSuccessResult(result.data.map((m) => m.id).sort(), "fetchOpenAIModels");
+  } catch (error) {
+    return handleFetchException(error, "fetchOpenAIModels");
+  }
+}
+
+/**
+ * 从 Gemini API 获取模型列表
+ * 注意：保留了 401/403 重试逻辑，因为 Gemini 支持多种认证方式
+ */
+async function fetchGeminiModels(
+  data: FetchUpstreamModelsArgs,
+  normalizedUrl: string,
+  timeoutMs: number
+): Promise<FetchUpstreamModelsResult> {
+  const proxyConfig = {
+    proxyUrl: data.proxyUrl ?? null,
+    proxyFallbackToDirect: data.proxyFallbackToDirect ?? false,
+  };
+
+  // Gemini 认证处理
+  let processedApiKey = data.apiKey;
+  let isJsonCreds = false;
+
+  try {
+    processedApiKey = await GeminiAuth.getAccessToken(data.apiKey);
+    isJsonCreds = GeminiAuth.isJson(data.apiKey);
+  } catch (e) {
+    logger.warn("fetchGeminiModels: auth process failed", { error: e });
+  }
+
+  const url = `${normalizedUrl}/v1beta/models?pageSize=100`;
+  const headers: Record<string, string> = isJsonCreds
+    ? { Authorization: `Bearer ${processedApiKey}` }
+    : { "x-goog-api-key": processedApiKey };
+
+  try {
+    let response = await executeProxiedFetch(proxyConfig, url, headers, timeoutMs);
+
+    // 如果 header 认证失败（401/403），尝试 URL 参数认证（不动此逻辑）
+    if (!isJsonCreds && (response.status === 401 || response.status === 403)) {
+      logger.debug("fetchGeminiModels: header auth failed, trying URL param auth");
+      const urlWithKey = `${normalizedUrl}/v1beta/models?pageSize=100&key=${encodeURIComponent(processedApiKey)}`;
+      response = await executeProxiedFetch(
+        proxyConfig,
+        urlWithKey,
+        { "x-goog-api-key": processedApiKey },
+        timeoutMs
+      );
+    }
+
+    if (!response.ok) {
+      return handleHttpError(response, await response.text(), "fetchGeminiModels");
+    }
+
+    const result = (await response.json()) as GeminiModelsResponse;
+
+    if (!result.models || !Array.isArray(result.models)) {
+      return { ok: false, error: "响应格式无效：缺少 models 数组" };
+    }
+
+    // Gemini 模型名称格式: "models/gemini-pro" -> "gemini-pro"
+    // 注意：部分代理返回 supportedGenerationMethods 为 null，此时不过滤
+    const models = result.models
+      .filter(
+        (m) =>
+          !m.supportedGenerationMethods || m.supportedGenerationMethods.includes("generateContent")
+      )
+      .map((m) => m.name.replace(/^models\//, ""))
+      .sort();
+
+    return buildSuccessResult(models, "fetchGeminiModels");
+  } catch (error) {
+    return handleFetchException(error, "fetchGeminiModels");
+  }
+}
+
+/**
+ * 从 Anthropic API 获取模型列表
+ */
+async function fetchAnthropicModels(
+  data: FetchUpstreamModelsArgs,
+  normalizedUrl: string,
+  timeoutMs: number
+): Promise<FetchUpstreamModelsResult> {
+  const url = `${normalizedUrl}/v1/models`;
+
+  // 复用认证逻辑：官方 API 用 x-api-key，代理用 Bearer token
+  const authHeaders = resolveAnthropicAuthHeaders(data.apiKey, normalizedUrl);
+
+  try {
+    const response = await executeProxiedFetch(
+      {
+        proxyUrl: data.proxyUrl ?? null,
+        proxyFallbackToDirect: data.proxyFallbackToDirect ?? false,
+      },
+      url,
+      authHeaders,
+      timeoutMs
+    );
+
+    if (!response.ok) {
+      return handleHttpError(response, await response.text(), "fetchAnthropicModels");
+    }
+
+    const result = (await response.json()) as AnthropicModelsResponse;
+
+    if (!result.data || !Array.isArray(result.data)) {
+      return { ok: false, error: "响应格式无效：缺少 data 数组" };
+    }
+
+    return buildSuccessResult(result.data.map((m) => m.id).sort(), "fetchAnthropicModels");
+  } catch (error) {
+    return handleFetchException(error, "fetchAnthropicModels");
+  }
+}

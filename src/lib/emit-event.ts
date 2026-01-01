@@ -16,6 +16,15 @@ export async function emitErrorRulesUpdated(): Promise<void> {
     } catch {
       // 忽略导入错误
     }
+
+    try {
+      const { CHANNEL_ERROR_RULES_UPDATED, publishCacheInvalidation } = await import(
+        "@/lib/redis/pubsub"
+      );
+      await publishCacheInvalidation(CHANNEL_ERROR_RULES_UPDATED);
+    } catch {
+      // 忽略导入错误
+    }
   }
 }
 
@@ -41,6 +50,15 @@ export async function emitRequestFiltersUpdated(): Promise<void> {
     try {
       const { eventEmitter } = await import("@/lib/event-emitter");
       eventEmitter.emitRequestFiltersUpdated();
+    } catch {
+      // 忽略导入错误
+    }
+
+    try {
+      const { CHANNEL_REQUEST_FILTERS_UPDATED, publishCacheInvalidation } = await import(
+        "@/lib/redis/pubsub"
+      );
+      await publishCacheInvalidation(CHANNEL_REQUEST_FILTERS_UPDATED);
     } catch {
       // 忽略导入错误
     }

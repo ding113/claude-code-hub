@@ -410,7 +410,12 @@
         "manualDesc": "支持添加任意模型名称（不限于价格表中的模型）",
         "claude": "Claude",
         "openai": "OpenAI",
-        "gemini": "Gemini"
+        "gemini": "Gemini",
+        "sourceUpstream": "上游",
+        "sourceUpstreamDesc": "模型列表来自上游服务商 API",
+        "sourceFallback": "本地",
+        "sourceFallbackDesc": "使用本地价格表中的模型列表（上游获取失败或不支持）",
+        "refresh": "刷新模型列表"
       },
       "modelRedirect": {
         "currentRules": "当前规则 ({count})",
@@ -939,6 +944,19 @@
         "description": "确定要删除服务商 \"{name}\" 吗？此操作不可恢复。",
         "cancel": "取消",
         "confirm": "确认删除"
+      },
+      "failureThresholdConfirmDialog": {
+        "title": "确认特殊配置",
+        "descriptionDisabledPrefix": "您将熔断失败阈值设置为 ",
+        "descriptionDisabledValue": "0",
+        "descriptionDisabledMiddle": "，这表示",
+        "descriptionDisabledAction": "禁用熔断器",
+        "descriptionDisabledSuffix": "，供应商将不会因为连续失败而被熔断。",
+        "descriptionHighValuePrefix": "您将熔断失败阈值设置为 ",
+        "descriptionHighValueSuffix": "，这是一个较高的值，可能会导致供应商在大量失败后才被熔断。",
+        "confirmQuestion": "是否确认保存此配置？",
+        "cancel": "取消",
+        "confirm": "确认保存"
       },
       "errors": {
         "invalidUrl": "请输入有效的 API 地址",

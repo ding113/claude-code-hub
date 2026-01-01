@@ -57,6 +57,7 @@ export class WeChatRenderer implements Renderer {
       case "warning":
         return "⚠️";
       case "info":
+        return "📊";
       default:
         return "📊";
     }

@@ -15,11 +15,11 @@ const COLLAPSIBLE_TRIGGER_CLASS =
 function getUsageRate(user: UserQuotaWithUsage): number {
   // W-014: 添加 NaN 防护
   const rpmRate =
-    user.quota?.rpm && user.quota.rpm.limit > 0
+    user.quota?.rpm && user.quota.rpm.limit !== null && user.quota.rpm.limit > 0
       ? ((user.quota.rpm.current ?? 0) / user.quota.rpm.limit) * 100
       : 0;
   const dailyRate =
-    user.quota?.dailyCost && user.quota.dailyCost.limit > 0
+    user.quota?.dailyCost && user.quota.dailyCost.limit !== null && user.quota.dailyCost.limit > 0
       ? ((user.quota.dailyCost.current ?? 0) / user.quota.dailyCost.limit) * 100
       : 0;
   const result = Math.max(rpmRate, dailyRate);

@@ -4,7 +4,7 @@ import {
   PROVIDER_LIMITS,
   PROVIDER_TIMEOUT_LIMITS,
 } from "@/lib/constants/provider.constants";
-import { USER_DEFAULTS, USER_LIMITS } from "@/lib/constants/user.constants";
+import { USER_LIMITS } from "@/lib/constants/user.constants";
 import { CURRENCY_CONFIG } from "@/lib/utils/currency";
 
 const CACHE_TTL_PREFERENCE = z.enum(["inherit", "5m", "1h"]);
@@ -27,8 +27,8 @@ export const CreateUserSchema = z.object({
     .int("RPM必须是整数")
     .min(USER_LIMITS.RPM.MIN, `RPM不能低于${USER_LIMITS.RPM.MIN}`)
     .max(USER_LIMITS.RPM.MAX, `RPM不能超过${USER_LIMITS.RPM.MAX}`)
-    .optional()
-    .default(USER_DEFAULTS.RPM),
+    .nullable()
+    .optional(),
   dailyQuota: z.coerce
     .number()
     .min(USER_LIMITS.DAILY_QUOTA.MIN, `每日额度不能低于${USER_LIMITS.DAILY_QUOTA.MIN}美元`)
@@ -437,8 +437,7 @@ export const CreateProviderSchema = z.object({
   circuit_breaker_failure_threshold: z.coerce
     .number()
     .int("失败阈值必须是整数")
-    .min(1, "失败阈值不能少于1次")
-    .max(100, "失败阈值不能超过100次")
+    .min(0, "失败阈值不能为负数")
     .optional(),
   circuit_breaker_open_duration: z.coerce
     .number()
@@ -626,8 +625,7 @@ export const UpdateProviderSchema = z
     circuit_breaker_failure_threshold: z.coerce
       .number()
       .int("失败阈值必须是整数")
-      .min(1, "失败阈值不能少于1次")
-      .max(100, "失败阈值不能超过100次")
+      .min(0, "失败阈值不能为负数")
       .optional(),
     circuit_breaker_open_duration: z.coerce
       .number()

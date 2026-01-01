@@ -1070,6 +1070,7 @@
       "sortByName": "Name",
       "sortByTags": "Tags",
       "sortByExpiresAt": "Expires at",
+      "sortByRpm": "RPM Limit",
       "sortByLimit5h": "5h limit",
       "sortByLimitDaily": "Daily limit",
       "sortByLimitWeekly": "Weekly limit",
@@ -1099,6 +1100,7 @@
         "note": "Note",
         "expiresAt": "Expires at",
         "expiresAtHint": "Click to quick renew",
+        "limitRpm": "RPM",
         "limit5h": "5h limit",
         "limitDaily": "Daily limit",
         "limitWeekly": "Weekly limit",
@@ -1257,6 +1259,7 @@
         "fields": {
           "note": "Note",
           "tags": "Tags",
+          "rpm": "RPM Limit",
           "limit5h": "5h Limit (USD)",
           "limitDaily": "Daily Limit (USD)",
           "limitWeekly": "Weekly Limit (USD)",
@@ -1330,6 +1333,7 @@
     "limitRules": {
       "addRule": "Add limit rule",
       "ruleTypes": {
+        "limitRpm": "RPM limit",
         "limit5h": "5-hour limit",
         "limitDaily": "Daily limit",
         "limitWeekly": "Weekly limit",
@@ -1342,6 +1346,7 @@
         "rolling": "Rolling window (24h)"
       },
       "quickValues": {
+        "unlimited": "Unlimited",
         "10": "$10",
         "50": "$50",
         "100": "$100",

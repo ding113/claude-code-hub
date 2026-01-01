@@ -879,6 +879,12 @@ export class ProxyForwarder {
       processedHeaders = headers;
 
       if (session.sessionId) {
+        void SessionManager.storeSessionUpstreamRequestMeta(
+          session.sessionId,
+          { url: proxyUrl, method: session.method },
+          session.requestSequence
+        ).catch((err) => logger.error("Failed to store upstream request meta:", err));
+
         void SessionManager.storeSessionRequestHeaders(
           session.sessionId,
           processedHeaders,
@@ -1099,6 +1105,14 @@ export class ProxyForwarder {
         mcpPassthroughType: provider.mcpPassthroughType,
         usedBaseUrl: effectiveBaseUrl,
       });
+
+      if (session.sessionId) {
+        void SessionManager.storeSessionUpstreamRequestMeta(
+          session.sessionId,
+          { url: proxyUrl, method: session.method },
+          session.requestSequence
+        ).catch((err) => logger.error("Failed to store upstream request meta:", err));
+      }
 
       const hasBody = session.method !== "GET" && session.method !== "HEAD";
 
@@ -1899,6 +1913,12 @@ export class ProxyForwarder {
         responseHeaders,
         session.requestSequence
       ).catch((err) => logger.error("Failed to store response headers:", err));
+
+      void SessionManager.storeSessionUpstreamResponseMeta(
+        session.sessionId,
+        { url, statusCode: undiciRes.statusCode },
+        session.requestSequence
+      ).catch((err) => logger.error("Failed to store upstream response meta:", err));
     }
 
     // 检测响应是否为 gzip 压缩

@@ -56,9 +56,19 @@ export function SessionMessagesClient() {
   })();
 
   const [messages, setMessages] = useState<SessionMessages | null>(null);
+  const [requestBody, setRequestBody] = useState<unknown | null>(null);
   const [response, setResponse] = useState<string | null>(null);
   const [requestHeaders, setRequestHeaders] = useState<Record<string, string> | null>(null);
   const [responseHeaders, setResponseHeaders] = useState<Record<string, string> | null>(null);
+  const [requestMeta, setRequestMeta] = useState<{
+    clientUrl: string | null;
+    upstreamUrl: string | null;
+    method: string | null;
+  }>({ clientUrl: null, upstreamUrl: null, method: null });
+  const [responseMeta, setResponseMeta] = useState<{
+    upstreamUrl: string | null;
+    statusCode: number | null;
+  }>({ upstreamUrl: null, statusCode: null });
   const [sessionStats, setSessionStats] =
     useState<
       Extract<Awaited<ReturnType<typeof getSessionDetails>>, { ok: true }>["data"]["sessionStats"]
@@ -104,20 +114,29 @@ export function SessionMessagesClient() {
         if (cancelled) return;
 
         if (result.ok) {
+          setRequestBody(result.data.requestBody);
           const maybeMessages = result.data.messages;
           setMessages(isSessionMessages(maybeMessages) ? maybeMessages : null);
           setResponse(result.data.response);
           setRequestHeaders(result.data.requestHeaders);
           setResponseHeaders(result.data.responseHeaders);
+          setRequestMeta(result.data.requestMeta);
+          setResponseMeta(result.data.responseMeta);
           setSessionStats(result.data.sessionStats);
           setCurrentSequence(result.data.currentSequence);
           setPrevSequence(result.data.prevSequence);
           setNextSequence(result.data.nextSequence);
         } else {
+          setRequestBody(null);
+          setRequestMeta({ clientUrl: null, upstreamUrl: null, method: null });
+          setResponseMeta({ upstreamUrl: null, statusCode: null });
           setError(result.error || t("status.fetchFailed"));
         }
       } catch (err) {
         if (cancelled) return;
+        setRequestBody(null);
+        setRequestMeta({ clientUrl: null, upstreamUrl: null, method: null });
+        setResponseMeta({ upstreamUrl: null, statusCode: null });
         setError(err instanceof Error ? err.message : t("status.unknownError"));
       } finally {
         if (!cancelled) {
@@ -325,9 +344,12 @@ export function SessionMessagesClient() {
                   )}
                   <SessionMessagesDetailsTabs
                     messages={messages}
+                    requestBody={requestBody}
                     response={response}
                     requestHeaders={requestHeaders}
                     responseHeaders={responseHeaders}
+                    requestMeta={requestMeta}
+                    responseMeta={responseMeta}
                   />
 
                   <div className="flex items-center justify-between">
@@ -353,6 +375,7 @@ export function SessionMessagesClient() {
                 {/* 无数据提示 */}
                 {!sessionStats?.userAgent &&
                   !messages &&
+                  !requestBody &&
                   !response &&
                   !requestHeaders &&
                   !responseHeaders && (
