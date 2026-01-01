@@ -2900,10 +2900,7 @@ function handleHttpError(
 /**
  * 处理 fetch 异常
  */
-function handleFetchException(
-  error: unknown,
-  logPrefix: string
-): FetchUpstreamModelsResult {
+function handleFetchException(error: unknown, logPrefix: string): FetchUpstreamModelsResult {
   const err = error as Error & { code?: string };
   logger.warn(`${logPrefix}: request failed`, {
     error: err.message,
@@ -2915,10 +2912,7 @@ function handleFetchException(
 /**
  * 构建成功响应
  */
-function buildSuccessResult(
-  models: string[],
-  logPrefix: string
-): FetchUpstreamModelsResult {
+function buildSuccessResult(models: string[], logPrefix: string): FetchUpstreamModelsResult {
   logger.debug(`${logPrefix}: success`, { modelCount: models.length });
   return { ok: true, data: { models, source: "upstream" } };
 }
@@ -2988,7 +2982,10 @@ async function fetchOpenAIModels(
 
   try {
     const response = await executeProxiedFetch(
-      { proxyUrl: data.proxyUrl ?? null, proxyFallbackToDirect: data.proxyFallbackToDirect ?? false },
+      {
+        proxyUrl: data.proxyUrl ?? null,
+        proxyFallbackToDirect: data.proxyFallbackToDirect ?? false,
+      },
       url,
       { Authorization: `Bearer ${data.apiKey}` },
       timeoutMs
@@ -3019,7 +3016,10 @@ async function fetchGeminiModels(
   normalizedUrl: string,
   timeoutMs: number
 ): Promise<FetchUpstreamModelsResult> {
-  const proxyConfig = { proxyUrl: data.proxyUrl ?? null, proxyFallbackToDirect: data.proxyFallbackToDirect ?? false };
+  const proxyConfig = {
+    proxyUrl: data.proxyUrl ?? null,
+    proxyFallbackToDirect: data.proxyFallbackToDirect ?? false,
+  };
 
   // Gemini 认证处理
   let processedApiKey = data.apiKey;
@@ -3044,7 +3044,12 @@ async function fetchGeminiModels(
     if (!isJsonCreds && (response.status === 401 || response.status === 403)) {
       logger.debug("fetchGeminiModels: header auth failed, trying URL param auth");
       const urlWithKey = `${normalizedUrl}/v1beta/models?pageSize=100&key=${encodeURIComponent(processedApiKey)}`;
-      response = await executeProxiedFetch(proxyConfig, urlWithKey, { "x-goog-api-key": processedApiKey }, timeoutMs);
+      response = await executeProxiedFetch(
+        proxyConfig,
+        urlWithKey,
+        { "x-goog-api-key": processedApiKey },
+        timeoutMs
+      );
     }
 
     if (!response.ok) {
@@ -3060,7 +3065,10 @@ async function fetchGeminiModels(
     // Gemini 模型名称格式: "models/gemini-pro" -> "gemini-pro"
     // 注意：部分代理返回 supportedGenerationMethods 为 null，此时不过滤
     const models = result.models
-      .filter((m) => !m.supportedGenerationMethods || m.supportedGenerationMethods.includes("generateContent"))
+      .filter(
+        (m) =>
+          !m.supportedGenerationMethods || m.supportedGenerationMethods.includes("generateContent")
+      )
       .map((m) => m.name.replace(/^models\//, ""))
       .sort();
 
