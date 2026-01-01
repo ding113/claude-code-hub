@@ -511,10 +511,13 @@ export async function getSessionDetails(
   requestSequence?: number
 ): Promise<
   ActionResult<{
+    requestBody: unknown | null;
     messages: unknown | null;
     response: string | null;
     requestHeaders: Record<string, string> | null;
     responseHeaders: Record<string, string> | null;
+    requestMeta: { clientUrl: string | null; upstreamUrl: string | null; method: string | null };
+    responseMeta: { upstreamUrl: string | null; statusCode: number | null };
     sessionStats: Awaited<
       ReturnType<typeof import("@/repository/message").aggregateSessionStats>
     > | null;
@@ -603,24 +606,52 @@ export async function getSessionDetails(
       }
     };
 
-    // 6. 并行获取 messages 和 response（不缓存，因为这些数据较大）
-    const [messages, response, requestHeaders, responseHeaders] = await Promise.all([
+    // 6. 并行获取 messages、requestBody 和 response（不缓存，因为这些数据较大）
+    const [
+      requestBody,
+      messages,
+      response,
+      requestHeaders,
+      responseHeaders,
+      clientReqMeta,
+      upstreamReqMeta,
+      upstreamResMeta,
+    ] = await Promise.all([
+      SessionManager.getSessionRequestBody(sessionId, effectiveSequence),
       SessionManager.getSessionMessages(sessionId, effectiveSequence),
       SessionManager.getSessionResponse(sessionId, effectiveSequence),
       SessionManager.getSessionRequestHeaders(sessionId, effectiveSequence),
       SessionManager.getSessionResponseHeaders(sessionId, effectiveSequence),
+      SessionManager.getSessionClientRequestMeta(sessionId, effectiveSequence),
+      SessionManager.getSessionUpstreamRequestMeta(sessionId, effectiveSequence),
+      SessionManager.getSessionUpstreamResponseMeta(sessionId, effectiveSequence),
     ]);
 
     // 兼容：历史/异常数据可能是 JSON 字符串（前端需要根级对象/数组）
     const normalizedMessages = parseJsonStringOrNull(messages);
+    const normalizedRequestBody = parseJsonStringOrNull(requestBody);
+
+    const requestMeta = {
+      clientUrl: clientReqMeta?.url ?? null,
+      upstreamUrl: upstreamReqMeta?.url ?? null,
+      method: clientReqMeta?.method ?? upstreamReqMeta?.method ?? null,
+    };
+
+    const responseMeta = {
+      upstreamUrl: upstreamResMeta?.url ?? upstreamReqMeta?.url ?? null,
+      statusCode: upstreamResMeta?.statusCode ?? null,
+    };
 
     return {
       ok: true,
       data: {
+        requestBody: normalizedRequestBody,
         messages: normalizedMessages,
         response,
         requestHeaders,
         responseHeaders,
+        requestMeta,
+        responseMeta,
         sessionStats,
         currentSequence: effectiveSequence ?? null,
         prevSequence: adjacent.prevSequence,
