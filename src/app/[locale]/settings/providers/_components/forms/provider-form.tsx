@@ -10,6 +10,7 @@ import {
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
+  AlertDialogFooter,
   AlertDialogTrigger,
   AlertDialogHeader as AlertHeader,
   AlertDialogTitle as AlertTitle,
@@ -1698,36 +1699,41 @@ export function ProviderForm({
         >
           <AlertDialogContent>
             <AlertHeader>
-              <AlertTitle>确认特殊配置</AlertTitle>
-              <AlertDialogDescription>
-                {failureThreshold === 0 ? (
-                  <>
-                    您将熔断失败阈值设置为 <strong>0</strong>，这表示
-                    <strong>禁用熔断器</strong>
-                    ，供应商将不会因为连续失败而被熔断。
-                  </>
-                ) : (
-                  <>
-                    您将熔断失败阈值设置为 <strong>{failureThreshold}</strong>
-                    ，这是一个较高的值，可能会导致供应商在大量失败后才被熔断。
-                  </>
-                )}
-                <br />
-                <br />
-                是否确认保存此配置？
+              <AlertTitle>{t("failureThresholdConfirmDialog.title")}</AlertTitle>
+              <AlertDialogDescription asChild>
+                <div className="space-y-3">
+                  {failureThreshold === 0 ? (
+                    <p>
+                      {t("failureThresholdConfirmDialog.descriptionDisabledPrefix")}
+                      <strong>{t("failureThresholdConfirmDialog.descriptionDisabledValue")}</strong>
+                      {t("failureThresholdConfirmDialog.descriptionDisabledMiddle")}
+                      <strong>
+                        {t("failureThresholdConfirmDialog.descriptionDisabledAction")}
+                      </strong>
+                      {t("failureThresholdConfirmDialog.descriptionDisabledSuffix")}
+                    </p>
+                  ) : (
+                    <p>
+                      {t("failureThresholdConfirmDialog.descriptionHighValuePrefix")}
+                      <strong>{failureThreshold}</strong>
+                      {t("failureThresholdConfirmDialog.descriptionHighValueSuffix")}
+                    </p>
+                  )}
+                  <p>{t("failureThresholdConfirmDialog.confirmQuestion")}</p>
+                </div>
               </AlertDialogDescription>
             </AlertHeader>
-            <div className="flex flex-col-reverse sm:flex-row gap-2 justify-end">
-              <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogFooter>
+              <AlertDialogCancel>{t("failureThresholdConfirmDialog.cancel")}</AlertDialogCancel>
               <AlertDialogAction
                 onClick={() => {
                   setShowFailureThresholdConfirm(false);
                   performSubmit();
                 }}
               >
-                确认保存
+                {t("failureThresholdConfirmDialog.confirm")}
               </AlertDialogAction>
-            </div>
+            </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
 
@@ -1748,7 +1754,7 @@ export function ProviderForm({
                     })}
                   </AlertDialogDescription>
                 </AlertHeader>
-                <div className="flex flex-col-reverse sm:flex-row gap-2 justify-end">
+                <AlertDialogFooter>
                   <AlertDialogCancel>{t("deleteDialog.cancel")}</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={() => {
@@ -1770,7 +1776,7 @@ export function ProviderForm({
                   >
                     {t("deleteDialog.confirm")}
                   </AlertDialogAction>
-                </div>
+                </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
 
