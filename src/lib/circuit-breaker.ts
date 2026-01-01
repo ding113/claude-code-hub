@@ -245,7 +245,8 @@ export async function recordFailure(providerId: number, error: Error): Promise<v
   );
 
   // 检查是否需要打开熔断器
-  if (health.failureCount >= config.failureThreshold) {
+  // failureThreshold = 0 表示禁用熔断器
+  if (config.failureThreshold > 0 && health.failureCount >= config.failureThreshold) {
     health.circuitState = "open";
     health.circuitOpenUntil = Date.now() + config.openDuration;
     health.halfOpenSuccessCount = 0;

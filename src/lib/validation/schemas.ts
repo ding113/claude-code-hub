@@ -437,8 +437,7 @@ export const CreateProviderSchema = z.object({
   circuit_breaker_failure_threshold: z.coerce
     .number()
     .int("失败阈值必须是整数")
-    .min(1, "失败阈值不能少于1次")
-    .max(100, "失败阈值不能超过100次")
+    .min(0, "失败阈值不能为负数")
     .optional(),
   circuit_breaker_open_duration: z.coerce
     .number()
@@ -626,8 +625,7 @@ export const UpdateProviderSchema = z
     circuit_breaker_failure_threshold: z.coerce
       .number()
       .int("失败阈值必须是整数")
-      .min(1, "失败阈值不能少于1次")
-      .max(100, "失败阈值不能超过100次")
+      .min(0, "失败阈值不能为负数")
       .optional(),
     circuit_breaker_open_duration: z.coerce
       .number()

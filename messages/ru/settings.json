@@ -1224,6 +1224,19 @@
         "cancel": "Отмена",
         "confirm": "Подтвердить удаление"
       },
+      "failureThresholdConfirmDialog": {
+        "title": "Подтвердите особую конфигурацию",
+        "descriptionDisabledPrefix": "Вы устанавливаете порог сбоев автоматического выключателя на ",
+        "descriptionDisabledValue": "0",
+        "descriptionDisabledMiddle": ", что означает ",
+        "descriptionDisabledAction": "отключение автоматического выключателя",
+        "descriptionDisabledSuffix": ". Провайдер не будет отключаться из-за последовательных сбоев.",
+        "descriptionHighValuePrefix": "Вы устанавливаете порог сбоев автоматического выключателя на ",
+        "descriptionHighValueSuffix": ", что является высоким значением и может привести к отключению провайдера только после многочисленных сбоев.",
+        "confirmQuestion": "Вы уверены, что хотите сохранить эту конфигурацию?",
+        "cancel": "Отмена",
+        "confirm": "Подтвердить сохранение"
+      },
       "errors": {
         "invalidUrl": "Введите корректный адрес API",
         "invalidWebsiteUrl": "Введите корректный адрес сайта провайдера",

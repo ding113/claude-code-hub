@@ -1354,6 +1354,19 @@
         "cancel": "Cancel",
         "confirm": "Confirm Delete"
       },
+      "failureThresholdConfirmDialog": {
+        "title": "Confirm Special Configuration",
+        "descriptionDisabledPrefix": "You are setting the circuit breaker failure threshold to ",
+        "descriptionDisabledValue": "0",
+        "descriptionDisabledMiddle": ", which means ",
+        "descriptionDisabledAction": "disabling the circuit breaker",
+        "descriptionDisabledSuffix": ". The provider will not be circuit-broken due to consecutive failures.",
+        "descriptionHighValuePrefix": "You are setting the circuit breaker failure threshold to ",
+        "descriptionHighValueSuffix": ", which is a high value and may cause the provider to be circuit-broken only after many failures.",
+        "confirmQuestion": "Are you sure you want to save this configuration?",
+        "cancel": "Cancel",
+        "confirm": "Confirm Save"
+      },
       "errors": {
         "invalidUrl": "Please enter a valid API address",
         "invalidWebsiteUrl": "Please enter a valid provider website URL",
