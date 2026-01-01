@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import safeRegex from "safe-regex";
 import { getSession } from "@/lib/auth";
+import { emitErrorRulesUpdated } from "@/lib/emit-event";
 import { validateErrorOverrideResponse } from "@/lib/error-override-validator";
 import { errorRuleDetector } from "@/lib/error-rule-detector";
 import { logger } from "@/lib/logger";
@@ -175,8 +176,8 @@ export async function createErrorRuleAction(data: {
       overrideStatusCode: data.overrideStatusCode ?? null,
     });
 
-    // 刷新缓存（直接调用 reload，不再触发事件避免重复刷新）
-    await errorRuleDetector.reload();
+    // 刷新缓存（事件广播，支持多 worker 同步）
+    await emitErrorRulesUpdated();
 
     revalidatePath("/settings/error-rules");
 
@@ -308,8 +309,8 @@ export async function updateErrorRuleAction(
       };
     }
 
-    // 刷新缓存（直接调用 reload，不再触发事件避免重复刷新）
-    await errorRuleDetector.reload();
+    // 刷新缓存（事件广播，支持多 worker 同步）
+    await emitErrorRulesUpdated();
 
     revalidatePath("/settings/error-rules");
 
@@ -362,8 +363,8 @@ export async function deleteErrorRuleAction(id: number): Promise<ActionResult> {
       };
     }
 
-    // 刷新缓存（直接调用 reload，不再触发事件避免重复刷新）
-    await errorRuleDetector.reload();
+    // 刷新缓存（事件广播，支持多 worker 同步）
+    await emitErrorRulesUpdated();
 
     revalidatePath("/settings/error-rules");
 
