@@ -200,6 +200,9 @@ export function ProviderForm({
     mcpPassthrough: false,
   });
 
+  // failureThreshold 确认对话框状态
+  const [showFailureThresholdConfirm, setShowFailureThresholdConfirm] = useState(false);
+
   // 从 localStorage 加载折叠偏好
   useEffect(() => {
     const saved = localStorage.getItem("provider-form-sections");
@@ -276,6 +279,19 @@ export function ProviderForm({
       return;
     }
 
+    // 检查 failureThreshold 是否为特殊值（0 或大于 100）
+    const threshold = failureThreshold ?? 5;
+    if (threshold === 0 || threshold > 100) {
+      setShowFailureThresholdConfirm(true);
+      return;
+    }
+
+    // 正常提交
+    performSubmit();
+  };
+
+  // 实际提交逻辑
+  const performSubmit = () => {
     // 处理模型重定向（空对象转为 null）
     const parsedModelRedirects = Object.keys(modelRedirects).length > 0 ? modelRedirects : null;
 
@@ -1189,8 +1205,7 @@ export function ProviderForm({
                     }}
                     placeholder={t("sections.circuitBreaker.failureThreshold.placeholder")}
                     disabled={isPending}
-                    min="1"
-                    max="100"
+                    min="0"
                     step="1"
                   />
                   <p className="text-xs text-muted-foreground">
@@ -1675,6 +1690,46 @@ export function ProviderForm({
             </div>
           </CollapsibleContent>
         </Collapsible>
+
+        {/* failureThreshold 特殊值确认对话框 */}
+        <AlertDialog
+          open={showFailureThresholdConfirm}
+          onOpenChange={setShowFailureThresholdConfirm}
+        >
+          <AlertDialogContent>
+            <AlertHeader>
+              <AlertTitle>确认特殊配置</AlertTitle>
+              <AlertDialogDescription>
+                {failureThreshold === 0 ? (
+                  <>
+                    您将熔断失败阈值设置为 <strong>0</strong>，这表示
+                    <strong>禁用熔断器</strong>
+                    ，供应商将不会因为连续失败而被熔断。
+                  </>
+                ) : (
+                  <>
+                    您将熔断失败阈值设置为 <strong>{failureThreshold}</strong>
+                    ，这是一个较高的值，可能会导致供应商在大量失败后才被熔断。
+                  </>
+                )}
+                <br />
+                <br />
+                是否确认保存此配置？
+              </AlertDialogDescription>
+            </AlertHeader>
+            <div className="flex flex-col-reverse sm:flex-row gap-2 justify-end">
+              <AlertDialogCancel>取消</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  setShowFailureThresholdConfirm(false);
+                  performSubmit();
+                }}
+              >
+                确认保存
+              </AlertDialogAction>
+            </div>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {isEdit ? (
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-4">
