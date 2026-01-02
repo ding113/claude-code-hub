@@ -1,5 +1,5 @@
 {
-  "id": "1f7c9b64-5c00-4a95-993c-802a3be11622",
+  "id": "ecc7b05c-cbc9-482c-8c1f-30965c519670",
   "prevId": "21302171-827d-483a-aa6c-1e9c4084bebc",
   "version": "7",
   "dialect": "postgresql",
@@ -871,7 +871,7 @@
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
-          "default": true
+          "default": false
         },
         "circuit_breaker_enabled": {
           "name": "circuit_breaker_enabled",

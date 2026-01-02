@@ -1267,31 +1267,6 @@
       "creating": "作成中...",
       "create": "作成"
     },
-    "onboarding": {
-      "skip": "スキップ",
-      "next": "次へ",
-      "prev": "前へ",
-      "finish": "作成を開始",
-      "stepIndicator": "ステップ {current} / {total}",
-      "steps": {
-        "welcome": {
-          "title": "ユーザーとキー",
-          "description": "ユーザーは API アクセスの主体です。各ユーザーは複数の API キーを持つことができます。ユーザーレベルの上限はすべてのキーに影響し、キーレベルの上限でより細かく制御できます。"
-        },
-        "limits": {
-          "title": "上限管理",
-          "description": "6 種類の上限をサポート：5 時間、日次、週次、月次、総上限、同時セッション。上限ルールを必要に応じて追加し、柔軟に使用量を制御できます。"
-        },
-        "groups": {
-          "title": "プロバイダーグループ",
-          "description": "グループ機能を使用して、ユーザーが特定のプロバイダーのみを使用するよう制限できます。キーレベルのグループはユーザーレベルのグループより優先されます。"
-        },
-        "keyFeatures": {
-          "title": "キーの特殊機能",
-          "description": "各キーは、キャッシュ TTL の上書き、Web UI へのログイン許可など、高度な機能を個別に設定できます。"
-        }
-      }
-    },
     "limitRules": {
       "addRule": "上限ルールを追加",
       "ruleTypes": {
@@ -1535,5 +1510,44 @@
         "overwriteHint": "このタイプは既に存在します。保存すると既存の値が上書きされます"
       }
     }
+  },
+  "webhookMigration": {
+    "title": "Webhook システムアップグレード",
+    "description": "新しい Webhook 通知システムをリリースしました。マルチターゲット配信、個別設定、信頼性の向上をサポートしています。",
+    "step1": {
+      "title": "レガシー Webhook 設定を検出",
+      "description": "システムはレガシー Webhook 設定を検出しました。新システムはより強力な機能を提供しており、移行をお勧めします。"
+    },
+    "step2": {
+      "title": "プラットフォームタイプを選択",
+      "description": "以下の Webhook URL は自動的に識別できませんでした。手動でプラットフォームを選択してください："
+    },
+    "platformOptions": {
+      "wechat": "WeCom",
+      "feishu": "Feishu",
+      "dingtalk": "DingTalk",
+      "telegram": "Telegram",
+      "custom": "カスタム"
+    },
+    "migrateButton": "移行を開始",
+    "skipButton": "後で",
+    "nextButton": "次へ",
+    "goToSettingsButton": "設定へ移動",
+    "migrating": "移行中...",
+    "success": "移行完了",
+    "successDescription": "Webhook 設定が新システムに正常に移行されました。",
+    "error": "移行失敗",
+    "errorGeneric": "移行に失敗しました。しばらくしてからもう一度お試しください。",
+    "detectedWebhooks": "検出された Webhook",
+    "notificationTypes": {
+      "circuit_breaker": "サーキットブレーカーアラート",
+      "daily_leaderboard": "デイリーリーダーボード",
+      "cost_alert": "コストアラート"
+    },
+    "urlLabel": "Webhook URL",
+    "platformLabel": "プラットフォームタイプ",
+    "autoDetected": "自動検出",
+    "selectPlatform": "プラットフォームを選択",
+    "successStats": "{targets} 個のターゲット、{bindings} 個のバインディングを作成しました"
   }
 }

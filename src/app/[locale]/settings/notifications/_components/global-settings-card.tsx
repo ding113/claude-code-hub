@@ -2,22 +2,16 @@
 
 import { Bell } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 
 interface GlobalSettingsCardProps {
   enabled: boolean;
-  useLegacyMode: boolean;
   onEnabledChange: (enabled: boolean) => void | Promise<void>;
 }
 
-export function GlobalSettingsCard({
-  enabled,
-  useLegacyMode,
-  onEnabledChange,
-}: GlobalSettingsCardProps) {
+export function GlobalSettingsCard({ enabled, onEnabledChange }: GlobalSettingsCardProps) {
   const t = useTranslations("settings");
 
   return (
@@ -39,13 +33,6 @@ export function GlobalSettingsCard({
             onCheckedChange={(checked) => onEnabledChange(checked)}
           />
         </div>
-
-        {useLegacyMode ? (
-          <Alert>
-            <AlertTitle>{t("notifications.global.legacyModeTitle")}</AlertTitle>
-            <AlertDescription>{t("notifications.global.legacyModeDescription")}</AlertDescription>
-          </Alert>
-        ) : null}
       </CardContent>
     </Card>
   );

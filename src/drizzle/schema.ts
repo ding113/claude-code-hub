@@ -473,7 +473,7 @@ export const notificationSettings = pgTable('notification_settings', {
   // 全局开关
   enabled: boolean('enabled').notNull().default(false),
   // 兼容旧配置：默认使用 legacy 字段（单 URL / 自动识别），创建新目标后会切到新模式
-  useLegacyMode: boolean('use_legacy_mode').notNull().default(true),
+  useLegacyMode: boolean('use_legacy_mode').notNull().default(false),
 
   // 熔断器告警配置
   circuitBreakerEnabled: boolean('circuit_breaker_enabled').notNull().default(false),
