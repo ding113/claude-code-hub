@@ -7,9 +7,10 @@ import { getSession } from "@/lib/auth";
 import { getEnvConfig } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit/service";
+import { getTimeRangeForPeriodWithMode } from "@/lib/rate-limit/time-utils";
 import { SessionTracker } from "@/lib/session-tracker";
 import type { CurrencyCode } from "@/lib/utils";
-import { sumUserCostToday } from "@/repository/statistics";
+import { sumUserCostInTimeRange } from "@/repository/statistics";
 import { getSystemSettings } from "@/repository/system-config";
 import {
   findUsageLogsWithDetails,
@@ -198,6 +199,13 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
 
     const key = session.key;
     const user = session.user;
+    const userDailyResetMode = user.dailyResetMode ?? "fixed";
+    const userDailyResetTime = user.dailyResetTime ?? "00:00";
+    const userDailyRange = getTimeRangeForPeriodWithMode(
+      "daily",
+      userDailyResetTime,
+      userDailyResetMode
+    );
 
     const [
       keyCost5h,
@@ -226,7 +234,7 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       getTotalUsageForKey(key.key),
       SessionTracker.getKeySessionCount(key.id),
       sumUserCost(user.id, "5h"),
-      sumUserCostToday(user.id),
+      sumUserCostInTimeRange(user.id, userDailyRange.startTime, userDailyRange.endTime),
       sumUserCost(user.id, "weekly"),
       sumUserCost(user.id, "monthly"),
       sumUserCost(user.id, "total"),

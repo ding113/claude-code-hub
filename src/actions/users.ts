@@ -1260,8 +1260,10 @@ export async function getUserLimitUsage(userId: number): Promise<
     }
 
     // 动态导入避免循环依赖
-    const { sumUserCostToday } = await import("@/repository/statistics");
-    const { getDailyResetTime } = await import("@/lib/rate-limit/time-utils");
+    const { sumUserCostInTimeRange } = await import("@/repository/statistics");
+    const { getResetInfoWithMode, getTimeRangeForPeriodWithMode } = await import(
+      "@/lib/rate-limit/time-utils"
+    );
 
     // 获取当前 RPM 使用情况（从 Redis）
     // 注意：RPM 是实时的滑动窗口，无法直接获取"当前值"，这里返回 0
@@ -1269,7 +1271,12 @@ export async function getUserLimitUsage(userId: number): Promise<
     const rpmCurrent = 0; // RPM 是动态滑动窗口，此处无法精确获取
 
     // 获取每日消费（直接查询数据库）
-    const dailyCost = await sumUserCostToday(userId);
+    const resetTime = user.dailyResetTime ?? "00:00";
+    const resetMode = user.dailyResetMode ?? "fixed";
+    const { startTime, endTime } = getTimeRangeForPeriodWithMode("daily", resetTime, resetMode);
+    const dailyCost = await sumUserCostInTimeRange(userId, startTime, endTime);
+    const resetInfo = getResetInfoWithMode("daily", resetTime, resetMode);
+    const resetAt = resetInfo.resetAt ?? new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     return {
       ok: true,
@@ -1282,7 +1289,7 @@ export async function getUserLimitUsage(userId: number): Promise<
         dailyCost: {
           current: dailyCost,
           limit: user.dailyQuota,
-          resetAt: getDailyResetTime(),
+          resetAt,
         },
       },
     };
