@@ -22,7 +22,7 @@ import { CURRENCY_CONFIG, type CurrencyCode } from "@/lib/utils/currency";
 
 interface UserQuota {
   rpm: { current: number; limit: number; window: "per_minute" };
-  dailyCost: { current: number; limit: number; resetAt: Date };
+  dailyCost: { current: number; limit: number; resetAt?: Date };
 }
 
 interface EditUserQuotaDialogProps {

@@ -75,7 +75,7 @@ import {
   TRACK_COST_DAILY_ROLLING_WINDOW,
 } from "@/lib/redis/lua-scripts";
 import { SessionTracker } from "@/lib/session-tracker";
-import { sumKeyTotalCost, sumUserCostToday, sumUserTotalCost } from "@/repository/statistics";
+import { sumKeyTotalCost, sumUserCostInTimeRange, sumUserTotalCost } from "@/repository/statistics";
 import {
   type DailyResetMode,
   getTimeRangeForPeriodWithMode,
@@ -1017,7 +1017,12 @@ export class RateLimitService {
           } else {
             // Cache Miss: 从数据库恢复
             logger.info(`[RateLimit] Cache miss for ${key}, querying database`);
-            currentCost = await sumUserCostToday(userId);
+            const { startTime, endTime } = getTimeRangeForPeriodWithMode(
+              "daily",
+              normalizedResetTime,
+              mode
+            );
+            currentCost = await sumUserCostInTimeRange(userId, startTime, endTime);
 
             // Cache Warming: 写回 Redis
             const ttl = getTTLForPeriodWithMode("daily", normalizedResetTime, "fixed");
@@ -1027,7 +1032,12 @@ export class RateLimitService {
       } else {
         // Slow Path: 数据库查询（Redis 不可用）
         logger.warn("[RateLimit] Redis unavailable, querying database for user daily cost");
-        currentCost = await sumUserCostToday(userId);
+        const { startTime, endTime } = getTimeRangeForPeriodWithMode(
+          "daily",
+          normalizedResetTime,
+          mode
+        );
+        currentCost = await sumUserCostInTimeRange(userId, startTime, endTime);
       }
 
       if (currentCost >= dailyLimitUsd) {
