@@ -275,6 +275,13 @@ Docker Compose 是**首选部署方式**，自动配置数据库、Redis 和应�
 | ------------------------------------------ | ------------------------ | ---------------------------------------------------------------------------- |
 | `ADMIN_TOKEN`                              | `change-me`              | 后台登录令牌，部署前必须修改。                                               |
 | `DSN`                                      | -                        | PostgreSQL 连接串，如 `postgres://user:pass@host:5432/db`.                   |
+| `DB_POOL_MAX`                              | 生产环境 `20` / 开发 `10` | PostgreSQL 连接池上限（每进程）；高并发可提高，k8s 多副本需结合 `max_connections` 分摊。 |
+| `DB_POOL_IDLE_TIMEOUT`                     | `20`                     | 空闲连接回收（秒）；避免连接长期占用。                                       |
+| `DB_POOL_CONNECT_TIMEOUT`                  | `10`                     | 建立连接超时（秒）；避免网络异常时卡住连接获取。                             |
+| `MESSAGE_REQUEST_WRITE_MODE`               | `async`                  | 请求日志写入模式：`async` 异步批量（默认）；`sync` 同步写入（更实时但更慢）。 |
+| `MESSAGE_REQUEST_ASYNC_FLUSH_INTERVAL_MS`  | `250`                    | 异步批量写入 flush 间隔（毫秒）。                                            |
+| `MESSAGE_REQUEST_ASYNC_BATCH_SIZE`         | `200`                    | 单次批量写入最大条数（避免单条 SQL 过大）。                                  |
+| `MESSAGE_REQUEST_ASYNC_MAX_PENDING`        | `5000`                   | 内存队列上限（防止 DB 异常时无限增长；超限将丢弃最旧更新并告警）。           |
 | `AUTO_MIGRATE`                             | `true`                   | 启动时自动执行 Drizzle 迁移；生产环境可关闭以人工控制。                      |
 | `REDIS_URL`                                | `redis://localhost:6379` | Redis 地址，支持 `rediss://` 用于 TLS。                                      |
 | `REDIS_TLS_REJECT_UNAUTHORIZED`            | `true`                   | 是否验证 Redis TLS 证书；设为 `false` 可跳过验证（用于自签/共享证书）。      |

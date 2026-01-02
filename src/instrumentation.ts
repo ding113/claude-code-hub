@@ -84,6 +84,18 @@ export async function register() {
             error: error instanceof Error ? error.message : String(error),
           });
         }
+
+        // 尽力将 message_request 的异步批量更新刷入数据库（避免终止时丢失尾部日志）
+        try {
+          const { stopMessageRequestWriteBuffer } = await import(
+            "@/repository/message-write-buffer"
+          );
+          await stopMessageRequestWriteBuffer();
+        } catch (error) {
+          logger.warn("[Instrumentation] Failed to stop message request write buffer", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
       };
 
       process.once("SIGTERM", () => {

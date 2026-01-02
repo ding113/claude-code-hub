@@ -1967,14 +1967,20 @@ async function persistRequestFailure(options: {
       context1mApplied: session.getContext1mApplied(),
     });
 
-    logger.info("ResponseHandler: Successfully persisted request failure", {
-      taskId,
-      phase,
-      messageId: messageContext.id,
-      duration,
-      statusCode,
-      errorMessage,
-    });
+    const isAsyncWrite = process.env.MESSAGE_REQUEST_WRITE_MODE !== "sync";
+    logger.info(
+      isAsyncWrite
+        ? "ResponseHandler: Request failure persistence enqueued"
+        : "ResponseHandler: Successfully persisted request failure",
+      {
+        taskId,
+        phase,
+        messageId: messageContext.id,
+        duration,
+        statusCode,
+        errorMessage,
+      }
+    );
   } catch (dbError) {
     logger.error("ResponseHandler: Failed to persist request failure", {
       taskId,
