@@ -132,8 +132,9 @@ export function WebhookMigrationDialog() {
           // Not in legacy mode, mark as completed
           setOnboardingCompleted("webhookMigration");
         }
-      } catch {
-        // Silently fail - don't block user if settings fetch fails
+      } catch (error) {
+        // Don't block user if settings fetch fails, but log for debugging
+        console.warn("[WebhookMigrationDialog] Failed to load notification settings:", error);
       }
     };
 

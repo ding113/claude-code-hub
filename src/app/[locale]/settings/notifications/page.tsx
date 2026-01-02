@@ -64,7 +64,7 @@ export default function NotificationsPage() {
         onCreate={createTarget}
         onUpdate={updateTarget}
         onDelete={deleteTarget}
-        onTest={testTarget as any}
+        onTest={testTarget}
       />
 
       <div className="grid gap-6">
