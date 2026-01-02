@@ -190,7 +190,7 @@ function createFallbackSettings(): NotificationSettings {
   return {
     id: 0,
     enabled: false,
-    useLegacyMode: true,
+    useLegacyMode: false,
     circuitBreakerEnabled: false,
     circuitBreakerWebhook: null,
     dailyLeaderboardEnabled: false,
@@ -216,7 +216,7 @@ export async function getNotificationSettings(): Promise<NotificationSettings> {
     if (settings) {
       return {
         ...settings,
-        useLegacyMode: settings.useLegacyMode ?? true,
+        useLegacyMode: settings.useLegacyMode ?? false,
         createdAt: settings.createdAt ?? new Date(),
         updatedAt: settings.updatedAt ?? new Date(),
       };
@@ -241,7 +241,7 @@ export async function getNotificationSettings(): Promise<NotificationSettings> {
     if (created) {
       return {
         ...created,
-        useLegacyMode: created.useLegacyMode ?? true,
+        useLegacyMode: created.useLegacyMode ?? false,
         createdAt: created.createdAt ?? new Date(),
         updatedAt: created.updatedAt ?? new Date(),
       };
@@ -256,7 +256,7 @@ export async function getNotificationSettings(): Promise<NotificationSettings> {
 
     return {
       ...fallback,
-      useLegacyMode: fallback.useLegacyMode ?? true,
+      useLegacyMode: fallback.useLegacyMode ?? false,
       createdAt: fallback.createdAt ?? new Date(),
       updatedAt: fallback.updatedAt ?? new Date(),
     };

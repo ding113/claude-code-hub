@@ -1276,31 +1276,6 @@
       "creating": "建立中...",
       "create": "建立"
     },
-    "onboarding": {
-      "skip": "跳過",
-      "next": "下一步",
-      "prev": "上一步",
-      "finish": "開始建立",
-      "stepIndicator": "第 {current} 步，共 {total} 步",
-      "steps": {
-        "welcome": {
-          "title": "使用者與金鑰",
-          "description": "使用者是 API 存取的主體，每個使用者可以擁有多個 API Key。使用者級限額影響所有 Key，Key 級限額可進一步細化控制。"
-        },
-        "limits": {
-          "title": "限額管理",
-          "description": "支援 6 種限額類型：5 小時、每日、每週、每月、總限額和並發 Session。限額規則按需新增，靈活控制使用量。"
-        },
-        "groups": {
-          "title": "供應商分組",
-          "description": "透過分組功能，可以限制使用者只能使用特定供應商。Key 級分組優先於使用者級分組。"
-        },
-        "keyFeatures": {
-          "title": "Key 特殊功能",
-          "description": "每個 Key 可獨立配置 Cache TTL 覆寫、是否允許登入 Web UI 等進階功能。"
-        }
-      }
-    },
     "limitRules": {
       "addRule": "新增限額規則",
       "ruleTypes": {
@@ -1544,5 +1519,44 @@
         "overwriteHint": "此類型已存在，儲存將覆蓋原有值"
       }
     }
+  },
+  "webhookMigration": {
+    "title": "Webhook 系統升級",
+    "description": "我們推出了全新的 Webhook 通知系統，支援多目標推送、獨立設定和更好的可靠性。",
+    "step1": {
+      "title": "偵測到舊版 Webhook 設定",
+      "description": "系統偵測到您正在使用舊版 Webhook 設定。新版系統支援更強大的功能，建議您進行遷移。"
+    },
+    "step2": {
+      "title": "選擇平台類型",
+      "description": "以下 Webhook 地址無法自動識別平台類型，請手動選擇："
+    },
+    "platformOptions": {
+      "wechat": "企業微信",
+      "feishu": "飛書",
+      "dingtalk": "釘釘",
+      "telegram": "Telegram",
+      "custom": "自訂"
+    },
+    "migrateButton": "開始遷移",
+    "skipButton": "稍後再說",
+    "nextButton": "下一步",
+    "goToSettingsButton": "前往設定",
+    "migrating": "正在遷移...",
+    "success": "遷移完成",
+    "successDescription": "您的 Webhook 設定已成功遷移到新系統。",
+    "error": "遷移失敗",
+    "errorGeneric": "遷移失敗，請稍後重試。",
+    "detectedWebhooks": "偵測到的 Webhook",
+    "notificationTypes": {
+      "circuit_breaker": "熔斷器告警",
+      "daily_leaderboard": "每日排行榜",
+      "cost_alert": "成本預警"
+    },
+    "urlLabel": "Webhook 地址",
+    "platformLabel": "平台類型",
+    "autoDetected": "自動識別",
+    "selectPlatform": "請選擇平台",
+    "successStats": "已建立 {targets} 個目標，{bindings} 個綁定"
   }
 }

@@ -26,9 +26,7 @@ import type { User, UserDisplay } from "@/types/user";
 import { BatchEditDialog } from "../_components/user/batch-edit/batch-edit-dialog";
 import { UnifiedEditDialog } from "../_components/user/unified-edit-dialog";
 import { UserManagementTable } from "../_components/user/user-management-table";
-import { UserOnboardingTour } from "../_components/user/user-onboarding-tour";
 
-const ONBOARDING_KEY = "cch-users-onboarding-seen";
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -223,45 +221,14 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
   const [selectedKeyIds, setSelectedKeyIds] = useState<Set<number>>(() => new Set());
   const [batchEditDialogOpen, setBatchEditDialogOpen] = useState(false);
 
-  // Onboarding and create dialog state
-  const [showOnboarding, setShowOnboarding] = useState(false);
+  // Create dialog state
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [hasSeenOnboarding, setHasSeenOnboarding] = useState(true);
-
-  // Check localStorage for onboarding status on mount
-  useEffect(() => {
-    try {
-      if (typeof window !== "undefined" && window.localStorage) {
-        const seen = localStorage.getItem(ONBOARDING_KEY);
-        setHasSeenOnboarding(seen === "true");
-      }
-    } catch {
-      // localStorage not available (e.g., privacy mode)
-      setHasSeenOnboarding(true);
-    }
-  }, []);
 
   const handleCreateUser = useCallback(() => {
-    if (!hasSeenOnboarding) {
-      setShowOnboarding(true);
-    } else {
-      setShowCreateDialog(true);
-    }
-  }, [hasSeenOnboarding]);
-
-  const handleCreateKey = useCallback(() => {
     setShowCreateDialog(true);
   }, []);
 
-  const handleOnboardingComplete = useCallback(() => {
-    try {
-      if (typeof window !== "undefined" && window.localStorage) {
-        localStorage.setItem(ONBOARDING_KEY, "true");
-      }
-    } catch {
-      // localStorage not available
-    }
-    setHasSeenOnboarding(true);
+  const handleCreateKey = useCallback(() => {
     setShowCreateDialog(true);
   }, []);
 
@@ -680,13 +647,6 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
           onSuccess={handleBatchEditSuccess}
         />
       ) : null}
-
-      {/* Onboarding Tour */}
-      <UserOnboardingTour
-        open={showOnboarding}
-        onOpenChange={setShowOnboarding}
-        onComplete={handleOnboardingComplete}
-      />
 
       {/* Create User Dialog */}
       <UnifiedEditDialog

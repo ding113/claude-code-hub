@@ -1,12 +1,10 @@
 "use client";
 
-import { AlertTriangle, DollarSign, Loader2, TestTube, TrendingUp } from "lucide-react";
+import { AlertTriangle, DollarSign, TrendingUp } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { ComponentProps } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
+import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,10 +28,6 @@ interface NotificationTypeCardProps {
     patch: Partial<NotificationSettingsState>
   ) => Promise<ClientActionResult<void>>;
   onSaveBindings: BindingSelectorProps["onSave"];
-  onTestLegacyWebhook: (
-    type: NotificationType,
-    webhookUrl: string
-  ) => Promise<ClientActionResult<void>>;
 }
 
 type BindingSelectorProps = ComponentProps<typeof BindingSelector>;
@@ -56,7 +50,6 @@ export function NotificationTypeCard({
   bindings,
   onUpdateSettings,
   onSaveBindings,
-  onTestLegacyWebhook,
 }: NotificationTypeCardProps) {
   const t = useTranslations("settings");
 
@@ -69,11 +62,6 @@ export function NotificationTypeCard({
           enabled: settings.circuitBreakerEnabled,
           enabledKey: "circuitBreakerEnabled" as const,
           enableLabel: t("notifications.circuitBreaker.enable"),
-          webhookKey: "circuitBreakerWebhook" as const,
-          webhookValue: settings.circuitBreakerWebhook,
-          webhookLabel: t("notifications.circuitBreaker.webhook"),
-          webhookPlaceholder: t("notifications.circuitBreaker.webhookPlaceholder"),
-          webhookTestLabel: t("notifications.circuitBreaker.test"),
         };
       case "daily_leaderboard":
         return {
@@ -82,11 +70,6 @@ export function NotificationTypeCard({
           enabled: settings.dailyLeaderboardEnabled,
           enabledKey: "dailyLeaderboardEnabled" as const,
           enableLabel: t("notifications.dailyLeaderboard.enable"),
-          webhookKey: "dailyLeaderboardWebhook" as const,
-          webhookValue: settings.dailyLeaderboardWebhook,
-          webhookLabel: t("notifications.dailyLeaderboard.webhook"),
-          webhookPlaceholder: t("notifications.dailyLeaderboard.webhookPlaceholder"),
-          webhookTestLabel: t("notifications.dailyLeaderboard.test"),
         };
       case "cost_alert":
         return {
@@ -95,54 +78,15 @@ export function NotificationTypeCard({
           enabled: settings.costAlertEnabled,
           enabledKey: "costAlertEnabled" as const,
           enableLabel: t("notifications.costAlert.enable"),
-          webhookKey: "costAlertWebhook" as const,
-          webhookValue: settings.costAlertWebhook,
-          webhookLabel: t("notifications.costAlert.webhook"),
-          webhookPlaceholder: t("notifications.costAlert.webhookPlaceholder"),
-          webhookTestLabel: t("notifications.costAlert.test"),
         };
     }
   }, [settings, t, type]);
 
   const enabled = meta.enabled;
-  const useLegacyMode = settings.useLegacyMode;
 
   const bindingEnabledCount = useMemo(() => {
     return bindings.filter((b) => b.isEnabled && b.target.isEnabled).length;
   }, [bindings]);
-
-  const legacyWebhookInputRef = useRef<HTMLInputElement>(null);
-  const [legacyWebhookUrl, setLegacyWebhookUrl] = useState(meta.webhookValue ?? "");
-  const [isTestingLegacy, setIsTestingLegacy] = useState(false);
-
-  useEffect(() => {
-    if (
-      typeof document !== "undefined" &&
-      document.activeElement === legacyWebhookInputRef.current
-    ) {
-      return;
-    }
-    setLegacyWebhookUrl(meta.webhookValue ?? "");
-  }, [meta.webhookValue]);
-
-  const saveLegacyWebhook = async () => {
-    const patch = { [meta.webhookKey]: legacyWebhookUrl } as Partial<NotificationSettingsState>;
-    await onUpdateSettings(patch);
-  };
-
-  const testLegacyWebhook = async () => {
-    setIsTestingLegacy(true);
-    try {
-      const result = await onTestLegacyWebhook(type, legacyWebhookUrl);
-      if (result.ok) {
-        toast.success(t("notifications.form.testSuccess"));
-      } else {
-        toast.error(result.error || t("notifications.form.testFailed"));
-      }
-    } finally {
-      setIsTestingLegacy(false);
-    }
-  };
 
   return (
     <Card>
@@ -152,16 +96,14 @@ export function NotificationTypeCard({
             {getIcon(type)}
             <span>{meta.title}</span>
           </div>
-          {!useLegacyMode ? (
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary">
-                {t("notifications.bindings.boundCount", { count: bindings.length })}
-              </Badge>
-              <Badge variant={bindingEnabledCount > 0 ? "default" : "secondary"}>
-                {t("notifications.bindings.enabledCount", { count: bindingEnabledCount })}
-              </Badge>
-            </div>
-          ) : null}
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary">
+              {t("notifications.bindings.boundCount", { count: bindings.length })}
+            </Badge>
+            <Badge variant={bindingEnabledCount > 0 ? "default" : "secondary"}>
+              {t("notifications.bindings.enabledCount", { count: bindingEnabledCount })}
+            </Badge>
+          </div>
         </CardTitle>
         <CardDescription>{meta.description}</CardDescription>
       </CardHeader>
@@ -176,37 +118,6 @@ export function NotificationTypeCard({
             onCheckedChange={(checked) => onUpdateSettings({ [meta.enabledKey]: checked } as any)}
           />
         </div>
-
-        {useLegacyMode ? (
-          <div className="space-y-2">
-            <Label htmlFor={`${type}-legacy-webhook`}>{meta.webhookLabel}</Label>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <Input
-                ref={legacyWebhookInputRef}
-                id={`${type}-legacy-webhook`}
-                value={legacyWebhookUrl}
-                placeholder={meta.webhookPlaceholder}
-                disabled={!settings.enabled || !enabled}
-                onChange={(e) => setLegacyWebhookUrl(e.target.value)}
-                onBlur={saveLegacyWebhook}
-              />
-              <Button
-                type="button"
-                variant="secondary"
-                className="w-full sm:w-auto"
-                disabled={!settings.enabled || !enabled || isTestingLegacy}
-                onClick={testLegacyWebhook}
-              >
-                {isTestingLegacy ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <TestTube className="mr-2 h-4 w-4" />
-                )}
-                {meta.webhookTestLabel}
-              </Button>
-            </div>
-          </div>
-        ) : null}
 
         {type === "daily_leaderboard" ? (
           <div className="grid gap-4 md:grid-cols-2">
@@ -276,17 +187,15 @@ export function NotificationTypeCard({
           </div>
         ) : null}
 
-        {!useLegacyMode ? (
-          <div className="space-y-2">
-            <Label>{t("notifications.bindings.title")}</Label>
-            <BindingSelector
-              type={type}
-              targets={targets}
-              bindings={bindings}
-              onSave={onSaveBindings}
-            />
-          </div>
-        ) : null}
+        <div className="space-y-2">
+          <Label>{t("notifications.bindings.title")}</Label>
+          <BindingSelector
+            type={type}
+            targets={targets}
+            bindings={bindings}
+            onSave={onSaveBindings}
+          />
+        </div>
       </CardContent>
     </Card>
   );

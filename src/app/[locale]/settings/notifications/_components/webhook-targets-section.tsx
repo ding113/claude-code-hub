@@ -149,7 +149,7 @@ export function WebhookTargetsSection({
         onOpenChange={setDialogOpen}
         onCreate={handleCreate}
         onUpdate={handleUpdate}
-        onTest={onTest as any}
+        onTest={onTest}
       />
     </Card>
   );

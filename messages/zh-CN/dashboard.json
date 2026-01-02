@@ -1306,31 +1306,6 @@
       "creating": "创建中...",
       "create": "创建"
     },
-    "onboarding": {
-      "skip": "跳过",
-      "next": "下一步",
-      "prev": "上一步",
-      "finish": "开始创建",
-      "stepIndicator": "第 {current} 步，共 {total} 步",
-      "steps": {
-        "welcome": {
-          "title": "用户与密钥",
-          "description": "用户是 API 访问的主体，每个用户可以拥有多个 API Key。用户级限额影响所有 Key，Key 级限额可进一步细化控制。"
-        },
-        "limits": {
-          "title": "限额管理",
-          "description": "支持 6 种限额类型：5 小时、每日、每周、每月、总限额和并发 Session。限额规则按需添加，灵活控制使用量。"
-        },
-        "groups": {
-          "title": "供应商分组",
-          "description": "通过分组功能，可以限制用户只能使用特定供应商。Key 级分组优先于用户级分组。"
-        },
-        "keyFeatures": {
-          "title": "Key 特殊功能",
-          "description": "每个 Key 可独立配置 Cache TTL 覆写、是否允许登录 Web UI 等高级功能。"
-        }
-      }
-    },
     "limitRules": {
       "addRule": "添加限额规则",
       "ruleTypes": {
@@ -1574,5 +1549,44 @@
         "overwriteHint": "此类型已存在，保存将覆盖原有值"
       }
     }
+  },
+  "webhookMigration": {
+    "title": "Webhook 系统升级",
+    "description": "我们推出了全新的 Webhook 通知系统，支持多目标推送、独立配置和更好的可靠性。",
+    "step1": {
+      "title": "检测到旧版 Webhook 配置",
+      "description": "系统检测到您正在使用旧版 Webhook 配置。新版系统支持更强大的功能，建议您进行迁移。"
+    },
+    "step2": {
+      "title": "选择平台类型",
+      "description": "以下 Webhook 地址无法自动识别平台类型，请手动选择："
+    },
+    "platformOptions": {
+      "wechat": "企业微信",
+      "feishu": "飞书",
+      "dingtalk": "钉钉",
+      "telegram": "Telegram",
+      "custom": "自定义"
+    },
+    "migrateButton": "开始迁移",
+    "skipButton": "稍后再说",
+    "nextButton": "下一步",
+    "goToSettingsButton": "前往设置",
+    "migrating": "正在迁移...",
+    "success": "迁移完成",
+    "successDescription": "您的 Webhook 配置已成功迁移到新系统。",
+    "error": "迁移失败",
+    "errorGeneric": "迁移失败，请稍后重试。",
+    "detectedWebhooks": "检测到的 Webhook",
+    "notificationTypes": {
+      "circuit_breaker": "熔断器告警",
+      "daily_leaderboard": "每日排行榜",
+      "cost_alert": "成本预警"
+    },
+    "urlLabel": "Webhook 地址",
+    "platformLabel": "平台类型",
+    "autoDetected": "自动识别",
+    "selectPlatform": "请选择平台",
+    "successStats": "已创建 {targets} 个目标，{bindings} 个绑定"
   }
 }

@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { getBindingsForTypeAction, updateBindingsAction } from "@/actions/notification-bindings";
 import {
   getNotificationSettingsAction,
-  testWebhookAction,
   updateNotificationSettingsAction,
 } from "@/actions/notifications";
 import {
@@ -24,7 +23,6 @@ export interface ClientActionResult<T> {
 
 export interface NotificationSettingsState {
   enabled: boolean;
-  useLegacyMode: boolean;
 
   circuitBreakerEnabled: boolean;
   circuitBreakerWebhook: string;
@@ -85,7 +83,6 @@ export const NOTIFICATION_TYPES: NotificationType[] = [
 function toClientSettings(raw: any): NotificationSettingsState {
   return {
     enabled: Boolean(raw?.enabled),
-    useLegacyMode: Boolean(raw?.useLegacyMode),
     circuitBreakerEnabled: Boolean(raw?.circuitBreakerEnabled),
     circuitBreakerWebhook: raw?.circuitBreakerWebhook || "",
     dailyLeaderboardEnabled: Boolean(raw?.dailyLeaderboardEnabled),
@@ -121,7 +118,7 @@ export function useNotificationsPageData() {
   const refreshTargets = useCallback(async () => {
     const result = await getWebhookTargetsAction();
     if (!result.ok) {
-      throw new Error(result.error || "加载推送目标失败");
+      throw new Error(result.error || "LOAD_TARGETS_FAILED");
     }
     setTargets(result.data as WebhookTargetState[]);
   }, []);
@@ -129,7 +126,7 @@ export function useNotificationsPageData() {
   const refreshBindingsForType = useCallback(async (type: NotificationType) => {
     const result = await getBindingsForTypeAction(type);
     if (!result.ok) {
-      throw new Error(result.error || "加载通知绑定失败");
+      throw new Error(result.error || "LOAD_BINDINGS_FAILED");
     }
     setBindingsByType((prev) => ({ ...prev, [type]: result.data as NotificationBindingState[] }));
   }, []);
@@ -145,7 +142,7 @@ export function useNotificationsPageData() {
         ...NOTIFICATION_TYPES.map((type) => refreshBindingsForType(type)),
       ]);
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : "加载失败");
+      setLoadError(error instanceof Error ? error.message : "LOAD_FAILED");
     } finally {
       setIsLoading(false);
     }
@@ -159,7 +156,6 @@ export function useNotificationsPageData() {
     async (patch: Partial<NotificationSettingsState>) => {
       const result = await updateNotificationSettingsAction({
         ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
-        ...(patch.useLegacyMode !== undefined ? { useLegacyMode: patch.useLegacyMode } : {}),
         ...(patch.circuitBreakerEnabled !== undefined
           ? { circuitBreakerEnabled: patch.circuitBreakerEnabled }
           : {}),
@@ -205,7 +201,7 @@ export function useNotificationsPageData() {
       } as any);
 
       if (!result.success) {
-        return { ok: false, error: result.error || "保存失败" } as ClientActionResult<void>;
+        return { ok: false, error: result.error || "SAVE_FAILED" } as ClientActionResult<void>;
       }
 
       if (result.data) {
@@ -218,29 +214,6 @@ export function useNotificationsPageData() {
     },
     [refreshSettings]
   );
-
-  const testLegacyWebhook = useCallback(async (type: NotificationType, webhookUrl: string) => {
-    const trimmed = webhookUrl.trim();
-    if (!trimmed) {
-      return { ok: false, error: "请先填写 Webhook URL" } as ClientActionResult<void>;
-    }
-
-    const jobType = (() => {
-      switch (type) {
-        case "circuit_breaker":
-          return "circuit-breaker" as const;
-        case "daily_leaderboard":
-          return "daily-leaderboard" as const;
-        case "cost_alert":
-          return "cost-alert" as const;
-      }
-    })();
-
-    const result = await testWebhookAction(trimmed, jobType);
-    return result.success
-      ? ({ ok: true } as ClientActionResult<void>)
-      : ({ ok: false, error: result.error || "测试失败" } as ClientActionResult<void>);
-  }, []);
 
   const saveBindings = useCallback(
     async (
@@ -340,6 +313,5 @@ export function useNotificationsPageData() {
     updateTarget,
     deleteTarget,
     testTarget,
-    testLegacyWebhook,
   };
 }

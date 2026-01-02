@@ -24,7 +24,6 @@ export default function NotificationsPage() {
     updateTarget,
     deleteTarget,
     testTarget,
-    testLegacyWebhook,
   } = useNotificationsPageData();
 
   const handleUpdateSettings = async (patch: any) => {
@@ -55,7 +54,6 @@ export default function NotificationsPage() {
 
       <GlobalSettingsCard
         enabled={settings.enabled}
-        useLegacyMode={settings.useLegacyMode}
         onEnabledChange={async (enabled) => {
           await handleUpdateSettings({ enabled });
         }}
@@ -66,7 +64,7 @@ export default function NotificationsPage() {
         onCreate={createTarget}
         onUpdate={updateTarget}
         onDelete={deleteTarget}
-        onTest={testTarget as any}
+        onTest={testTarget}
       />
 
       <div className="grid gap-6">
@@ -79,7 +77,6 @@ export default function NotificationsPage() {
             bindings={bindingsByType[type]}
             onUpdateSettings={handleUpdateSettings}
             onSaveBindings={saveBindings}
-            onTestLegacyWebhook={testLegacyWebhook}
           />
         ))}
       </div>

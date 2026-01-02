@@ -25,8 +25,9 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import type { WebhookTargetState } from "../_lib/hooks";
+import type { ClientActionResult, WebhookTargetState } from "../_lib/hooks";
 import {
+  type NotificationType,
   type WebhookProviderType,
   WebhookProviderTypeSchema,
   WebhookTargetFormSchema,
@@ -41,12 +42,12 @@ interface WebhookTargetDialogProps {
   target?: WebhookTargetState;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreate: (input: any) => Promise<{ ok: boolean; error?: string }>;
-  onUpdate: (id: number, input: any) => Promise<{ ok: boolean; error?: string }>;
+  onCreate: (input: any) => Promise<ClientActionResult<WebhookTargetState>>;
+  onUpdate: (id: number, input: any) => Promise<ClientActionResult<WebhookTargetState>>;
   onTest: (
     id: number,
-    type: any
-  ) => Promise<{ ok: boolean; error?: string; data?: { latencyMs: number } }>;
+    type: NotificationType
+  ) => Promise<ClientActionResult<{ latencyMs: number }>>;
 }
 
 function toJsonString(value: unknown): string {

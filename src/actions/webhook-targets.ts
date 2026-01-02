@@ -466,8 +466,11 @@ export async function testWebhookTargetAction(
         error: error instanceof Error ? error.message : "测试失败",
         latencyMs,
       });
-    } catch (_e) {
-      // 忽略写回失败
+    } catch (writeBackError) {
+      logger.warn("Failed to persist webhook test result:", {
+        targetId: id,
+        error: writeBackError,
+      });
     }
 
     logger.error("测试推送目标失败:", error);

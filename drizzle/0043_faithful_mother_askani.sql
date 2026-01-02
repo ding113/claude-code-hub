@@ -1,19 +1,13 @@
--- Step 1: 创建枚举类型（幂等）
 DO $$ BEGIN
-	CREATE TYPE "public"."notification_type" AS ENUM('circuit_breaker', 'daily_leaderboard', 'cost_alert');
+  CREATE TYPE "public"."notification_type" AS ENUM('circuit_breaker', 'daily_leaderboard', 'cost_alert');
 EXCEPTION
-	WHEN duplicate_object THEN null;
-END $$;
---> statement-breakpoint
-
+  WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
 DO $$ BEGIN
-	CREATE TYPE "public"."webhook_provider_type" AS ENUM('wechat', 'feishu', 'dingtalk', 'telegram', 'custom');
+  CREATE TYPE "public"."webhook_provider_type" AS ENUM('wechat', 'feishu', 'dingtalk', 'telegram', 'custom');
 EXCEPTION
-	WHEN duplicate_object THEN null;
-END $$;
---> statement-breakpoint
-
--- Step 2: 创建表（幂等）
+  WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "notification_target_bindings" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"notification_type" "notification_type" NOT NULL,
@@ -44,19 +38,16 @@ CREATE TABLE IF NOT EXISTS "webhook_targets" (
 	"updated_at" timestamp with time zone DEFAULT now()
 );
 --> statement-breakpoint
-
--- Step 3: 兼容旧配置（幂等）
-ALTER TABLE "notification_settings" ADD COLUMN IF NOT EXISTS "use_legacy_mode" boolean DEFAULT true NOT NULL;--> statement-breakpoint
-
--- Step 4: 外键约束（幂等）
 DO $$ BEGIN
-	ALTER TABLE "notification_target_bindings" ADD CONSTRAINT "notification_target_bindings_target_id_webhook_targets_id_fk" FOREIGN KEY ("target_id") REFERENCES "public"."webhook_targets"("id") ON DELETE cascade ON UPDATE no action;
+  ALTER TABLE "notification_settings" ADD COLUMN "use_legacy_mode" boolean DEFAULT false NOT NULL;
 EXCEPTION
-	WHEN duplicate_object THEN null;
-END $$;
---> statement-breakpoint
-
--- Step 5: 索引（幂等）
+  WHEN duplicate_column THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+  ALTER TABLE "notification_target_bindings" ADD CONSTRAINT "notification_target_bindings_target_id_webhook_targets_id_fk" FOREIGN KEY ("target_id") REFERENCES "public"."webhook_targets"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "unique_notification_target_binding" ON "notification_target_bindings" USING btree ("notification_type","target_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_notification_bindings_type" ON "notification_target_bindings" USING btree ("notification_type","is_enabled");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_notification_bindings_target" ON "notification_target_bindings" USING btree ("target_id","is_enabled");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_notification_bindings_target" ON "notification_target_bindings" USING btree ("target_id","is_enabled");
