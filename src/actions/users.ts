@@ -1232,8 +1232,8 @@ export async function removeUser(userId: number): Promise<ActionResult> {
  */
 export async function getUserLimitUsage(userId: number): Promise<
   ActionResult<{
-    rpm: { current: number; limit: number; window: "per_minute" };
-    dailyCost: { current: number; limit: number; resetAt?: Date };
+    rpm: { current: number; limit: number | null; window: "per_minute" };
+    dailyCost: { current: number; limit: number | null; resetAt?: Date };
   }>
 > {
   try {
@@ -1283,12 +1283,12 @@ export async function getUserLimitUsage(userId: number): Promise<
       data: {
         rpm: {
           current: rpmCurrent,
-          limit: user.rpm || 60,
+          limit: user.rpm,
           window: "per_minute",
         },
         dailyCost: {
           current: dailyCost,
-          limit: user.dailyQuota ?? 100,
+          limit: user.dailyQuota,
           resetAt,
         },
       },

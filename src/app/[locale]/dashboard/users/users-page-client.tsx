@@ -106,14 +106,14 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
     () =>
       isAdmin
         ? [
-          "users",
-          resolvedSearchTerm,
-          resolvedTagFilters,
-          resolvedKeyGroupFilters,
-          resolvedStatusFilter,
-          sortBy,
-          sortOrder,
-        ]
+            "users",
+            resolvedSearchTerm,
+            resolvedTagFilters,
+            resolvedKeyGroupFilters,
+            resolvedStatusFilter,
+            sortBy,
+            sortOrder,
+          ]
         : ["users", "self"],
     [
       isAdmin,
@@ -610,9 +610,7 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
         </div>
       ) : (
         <div className="space-y-3">
-          <div>
-            {isRefreshing ? <InlineLoading label={tCommon("loading")} /> : null}
-          </div>
+          <div>{isRefreshing ? <InlineLoading label={tCommon("loading")} /> : null}</div>
           <UserManagementTable
             users={visibleUsers}
             hasNextPage={hasNextPage}
