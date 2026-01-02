@@ -1,4 +1,5 @@
 import { AsyncTaskManager } from "@/lib/async-task-manager";
+import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { RateLimitService } from "@/lib/rate-limit";
@@ -1967,7 +1968,7 @@ async function persistRequestFailure(options: {
       context1mApplied: session.getContext1mApplied(),
     });
 
-    const isAsyncWrite = process.env.MESSAGE_REQUEST_WRITE_MODE !== "sync";
+    const isAsyncWrite = getEnvConfig().MESSAGE_REQUEST_WRITE_MODE !== "sync";
     logger.info(
       isAsyncWrite
         ? "ResponseHandler: Request failure persistence enqueued"

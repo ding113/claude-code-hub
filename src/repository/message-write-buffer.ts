@@ -150,8 +150,9 @@ class MessageRequestWriteBuffer {
   private readonly config: WriterConfig;
   private readonly pending = new Map<number, MessageRequestUpdatePatch>();
   private flushTimer: NodeJS.Timeout | null = null;
-  private flushing = false;
   private flushAgainAfterCurrent = false;
+  private flushInFlight: Promise<void> | null = null;
+  private stopping = false;
 
   constructor(config: WriterConfig) {
     this.config = config;
@@ -171,18 +172,49 @@ class MessageRequestWriteBuffer {
 
     // 队列上限保护：DB 异常时避免无限增长导致 OOM
     if (this.pending.size > this.config.maxPending) {
-      const oldestId = this.pending.keys().next().value as number | undefined;
-      if (oldestId !== undefined) {
-        this.pending.delete(oldestId);
-        logger.warn("[MessageRequestWriteBuffer] Pending queue overflow, dropping oldest update", {
+      // 优先丢弃非“终态”更新（没有 durationMs 的条目），尽量保留请求完成信息
+      let droppedId: number | undefined;
+      let droppedPatch: MessageRequestUpdatePatch | undefined;
+
+      for (const [candidateId, candidatePatch] of this.pending) {
+        if (candidatePatch.durationMs === undefined) {
+          droppedId = candidateId;
+          droppedPatch = candidatePatch;
+          break;
+        }
+      }
+
+      if (droppedId === undefined) {
+        const first = this.pending.entries().next().value as
+          | [number, MessageRequestUpdatePatch]
+          | undefined;
+        if (first) {
+          droppedId = first[0];
+          droppedPatch = first[1];
+        }
+      }
+
+      if (droppedId !== undefined) {
+        this.pending.delete(droppedId);
+        logger.warn("[MessageRequestWriteBuffer] Pending queue overflow, dropping update", {
           maxPending: this.config.maxPending,
-          droppedId: oldestId,
+          droppedId,
+          droppedHasDurationMs: droppedPatch?.durationMs !== undefined,
           currentPending: this.pending.size,
         });
       }
     }
 
-    this.ensureFlushTimer();
+    // flush 过程中有新任务：标记需要再跑一轮（避免刚好 flush 完成时遗漏）
+    if (this.flushInFlight) {
+      this.flushAgainAfterCurrent = true;
+      return;
+    }
+
+    // 停止阶段不再调度 timer，避免阻止进程退出
+    if (!this.stopping) {
+      this.ensureFlushTimer();
+    }
 
     // 达到批量阈值时尽快 flush，降低 durationMs 为空的“悬挂时间”
     if (this.pending.size >= this.config.batchSize) {
@@ -191,7 +223,7 @@ class MessageRequestWriteBuffer {
   }
 
   private ensureFlushTimer(): void {
-    if (this.flushTimer) {
+    if (this.stopping || this.flushTimer) {
       return;
     }
 
@@ -209,70 +241,76 @@ class MessageRequestWriteBuffer {
   }
 
   async flush(): Promise<void> {
-    if (this.flushing) {
+    if (this.flushInFlight) {
       this.flushAgainAfterCurrent = true;
-      return;
+      return this.flushInFlight;
     }
 
-    if (this.pending.size === 0) {
-      this.clearFlushTimer();
-      return;
-    }
-
-    this.flushing = true;
+    // 进入 flush：先清理 timer，避免重复调度
     this.clearFlushTimer();
 
-    try {
-      while (this.pending.size > 0) {
-        const batch = takeBatch(this.pending, this.config.batchSize);
-        const query = buildBatchUpdateSql(batch);
-        if (!query) {
-          continue;
-        }
+    this.flushInFlight = (async () => {
+      do {
+        this.flushAgainAfterCurrent = false;
 
-        try {
-          await db.execute(query);
-        } catch (error) {
-          // 失败重试：将 batch 放回队列（保持顺序不是强需求，但尽量不丢）
-          for (const item of batch) {
-            const existing = this.pending.get(item.id) ?? {};
-            this.pending.set(item.id, { ...item.patch, ...existing });
+        while (this.pending.size > 0) {
+          const batch = takeBatch(this.pending, this.config.batchSize);
+          const query = buildBatchUpdateSql(batch);
+          if (!query) {
+            continue;
           }
 
-          logger.error("[MessageRequestWriteBuffer] Flush failed, will retry later", {
-            error: error instanceof Error ? error.message : String(error),
-            pending: this.pending.size,
-            batchSize: batch.length,
-          });
+          try {
+            await db.execute(query);
+          } catch (error) {
+            // 失败重试：将 batch 放回队列
+            // 合并策略：保留“更新更晚”的字段（existing 优先），避免覆盖新数据
+            for (const item of batch) {
+              const existing = this.pending.get(item.id) ?? {};
+              this.pending.set(item.id, { ...item.patch, ...existing });
+            }
 
-          break;
+            logger.error("[MessageRequestWriteBuffer] Flush failed, will retry later", {
+              error: error instanceof Error ? error.message : String(error),
+              pending: this.pending.size,
+              batchSize: batch.length,
+            });
+
+            // DB 异常时不在当前循环内死磕，留待下一次 timer/手动 flush
+            break;
+          }
         }
-      }
-    } finally {
-      this.flushing = false;
-
-      // 如果 flush 过程中又有新任务进来，继续调度下一轮
-      if (this.pending.size > 0) {
+      } while (this.flushAgainAfterCurrent);
+    })().finally(() => {
+      this.flushInFlight = null;
+      // 如果还有积压：运行态下继续用 timer 退避重试；停止阶段不再调度 timer
+      if (this.pending.size > 0 && !this.stopping) {
         this.ensureFlushTimer();
       }
+    });
 
-      if (this.flushAgainAfterCurrent) {
-        this.flushAgainAfterCurrent = false;
-        void this.flush();
-      }
-    }
+    await this.flushInFlight;
   }
 
   async stop(): Promise<void> {
+    this.stopping = true;
     this.clearFlushTimer();
     await this.flush();
+    // stop 期间尽量补刷一次，避免极小概率竞态导致的 tail 更新残留
+    if (this.pending.size > 0) {
+      await this.flush();
+    }
   }
 }
 
 let _buffer: MessageRequestWriteBuffer | null = null;
+let _bufferState: "running" | "stopping" | "stopped" = "running";
 
-function getBuffer(): MessageRequestWriteBuffer {
+function getBuffer(): MessageRequestWriteBuffer | null {
   if (!_buffer) {
+    if (_bufferState !== "running") {
+      return null;
+    }
     _buffer = new MessageRequestWriteBuffer(loadWriterConfig());
   }
   return _buffer;
@@ -283,7 +321,11 @@ export function enqueueMessageRequestUpdate(id: number, patch: MessageRequestUpd
   if (getEnvConfig().MESSAGE_REQUEST_WRITE_MODE !== "async") {
     return;
   }
-  getBuffer().enqueue(id, patch);
+  const buffer = getBuffer();
+  if (!buffer) {
+    return;
+  }
+  buffer.enqueue(id, patch);
 }
 
 export async function flushMessageRequestWriteBuffer(): Promise<void> {
@@ -294,9 +336,17 @@ export async function flushMessageRequestWriteBuffer(): Promise<void> {
 }
 
 export async function stopMessageRequestWriteBuffer(): Promise<void> {
-  if (!_buffer) {
+  if (_bufferState === "stopped") {
     return;
   }
+  _bufferState = "stopping";
+
+  if (!_buffer) {
+    _bufferState = "stopped";
+    return;
+  }
+
   await _buffer.stop();
   _buffer = null;
+  _bufferState = "stopped";
 }
