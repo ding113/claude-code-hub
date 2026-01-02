@@ -19,7 +19,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -512,12 +512,13 @@ export function ProviderForm({
   };
 
   return (
-    <div className="space-y-4">
-      <DialogHeader>
+    <>
+      <DialogHeader className="flex-shrink-0">
         <DialogTitle>{isEdit ? t("title.edit") : t("title.create")}</DialogTitle>
       </DialogHeader>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+        <div className="space-y-4 overflow-y-auto pr-2 flex-1">
         <div className="space-y-2">
           <Label htmlFor={isEdit ? "edit-name" : "name"}>{t("name.label")}</Label>
           <Input
@@ -1749,9 +1750,11 @@ export function ProviderForm({
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+        </div>
 
+        <DialogFooter className="flex-shrink-0 pt-4 border-t mt-4">
         {isEdit ? (
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 w-full">
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button type="button" variant="destructive" disabled={isPending}>
@@ -1798,13 +1801,14 @@ export function ProviderForm({
             </Button>
           </div>
         ) : (
-          <div className="flex justify-end gap-2 pt-4">
+          <div className="flex justify-end gap-2 w-full">
             <Button type="submit" disabled={isPending}>
               {isPending ? t("buttons.submitting") : t("buttons.submit")}
             </Button>
           </div>
         )}
+        </DialogFooter>
       </form>
-    </div>
+    </>
   );
 }
