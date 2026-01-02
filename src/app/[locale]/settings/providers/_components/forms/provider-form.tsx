@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { addProvider, editProvider, removeProvider } from "@/actions/providers";
+import { getDistinctProviderGroupsAction } from "@/actions/request-filters";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -95,6 +96,7 @@ export function ProviderForm({
           .filter(Boolean)
       : []
   );
+  const [groupSuggestions, setGroupSuggestions] = useState<string[]>([]);
   const [limit5hUsd, setLimit5hUsd] = useState<number | null>(sourceProvider?.limit5hUsd ?? null);
   const [limitDailyUsd, setLimitDailyUsd] = useState<number | null>(
     sourceProvider?.limitDailyUsd ?? null
@@ -229,6 +231,15 @@ export function ProviderForm({
       nameInputRef.current?.focus();
     }, 100);
     return () => clearTimeout(timer);
+  }, []);
+
+  // 加载已存在的供应商分组作为建议
+  useEffect(() => {
+    getDistinctProviderGroupsAction().then((res) => {
+      if (res.ok && res.data) {
+        setGroupSuggestions(res.data);
+      }
+    });
   }, []);
 
   // 折叠区域切换函数
@@ -670,6 +681,34 @@ export function ProviderForm({
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor={isEdit ? "edit-group" : "group"}>
+                  {t("sections.routing.scheduleParams.group.label")}
+                </Label>
+                <TagInput
+                  id={isEdit ? "edit-group" : "group"}
+                  value={groupTag}
+                  onChange={setGroupTag}
+                  placeholder={t("sections.routing.scheduleParams.group.placeholder")}
+                  disabled={isPending}
+                  maxTagLength={50}
+                  suggestions={groupSuggestions}
+                  onInvalidTag={(_tag, reason) => {
+                    const messages: Record<string, string> = {
+                      empty: tUI("emptyTag"),
+                      duplicate: tUI("duplicateTag"),
+                      too_long: tUI("tooLong", { max: 50 }),
+                      invalid_format: tUI("invalidFormat"),
+                      max_tags: tUI("maxTags"),
+                    };
+                    toast.error(messages[reason] || reason);
+                  }}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t("sections.routing.scheduleParams.group.desc")}
+                </p>
+              </div>
+
+              <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label htmlFor={isEdit ? "edit-preserve-client-ip" : "preserve-client-ip"}>
@@ -879,32 +918,6 @@ export function ProviderForm({
                       {t("sections.routing.scheduleParams.costMultiplier.desc")}
                     </p>
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor={isEdit ? "edit-group" : "group"}>
-                    {t("sections.routing.scheduleParams.group.label")}
-                  </Label>
-                  <TagInput
-                    id={isEdit ? "edit-group" : "group"}
-                    value={groupTag}
-                    onChange={setGroupTag}
-                    placeholder={t("sections.routing.scheduleParams.group.placeholder")}
-                    disabled={isPending}
-                    maxTagLength={50}
-                    onInvalidTag={(_tag, reason) => {
-                      const messages: Record<string, string> = {
-                        empty: tUI("emptyTag"),
-                        duplicate: tUI("duplicateTag"),
-                        too_long: tUI("tooLong", { max: 50 }),
-                        invalid_format: tUI("invalidFormat"),
-                        max_tags: tUI("maxTags"),
-                      };
-                      toast.error(messages[reason] || reason);
-                    }}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {t("sections.routing.scheduleParams.group.desc")}
-                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label>{t("sections.routing.cacheTtl.label")}</Label>
