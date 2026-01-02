@@ -5,6 +5,7 @@ import type {
   StructuredMessage,
   WebhookPayload,
 } from "../types";
+import { formatTimestamp } from "../utils/date";
 import type { Renderer } from "./index";
 
 export class WeChatRenderer implements Renderer {
@@ -31,7 +32,7 @@ export class WeChatRenderer implements Renderer {
     }
 
     // Timestamp
-    lines.push(this.formatTimestamp(message.timestamp));
+    lines.push(formatTimestamp(message.timestamp));
 
     const content = lines.join("\n");
 
@@ -108,18 +109,5 @@ export class WeChatRenderer implements Renderer {
       lines.push("");
     }
     return lines;
-  }
-
-  private formatTimestamp(date: Date): string {
-    return date.toLocaleString("zh-CN", {
-      timeZone: "Asia/Shanghai",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
-    });
   }
 }

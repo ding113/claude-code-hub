@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
+import { scheduleNotifications } from "@/lib/notification/notification-queue";
 import {
   type BindingInput,
   getBindingsByType,
@@ -55,6 +56,7 @@ export async function updateBindingsAction(
     const validatedBindings = z.array(BindingInputSchema).parse(bindings);
 
     await upsertBindings(validatedType, validatedBindings);
+    await scheduleNotifications();
     return { ok: true, data: undefined };
   } catch (error) {
     logger.error("更新通知绑定失败:", error);

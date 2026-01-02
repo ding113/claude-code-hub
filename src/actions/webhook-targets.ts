@@ -28,9 +28,18 @@ import type { ActionResult } from "./types";
 function isInternalUrl(urlString: string): boolean {
   try {
     const url = new URL(urlString);
-    const hostname = url.hostname.toLowerCase();
+    const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
 
     if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") {
+      return true;
+    }
+
+    // 云厂商元数据服务（SSRF 高危）
+    if (
+      hostname === "metadata.google.internal" ||
+      hostname === "169.254.169.254" ||
+      hostname === "100.100.100.200"
+    ) {
       return true;
     }
 
@@ -46,6 +55,9 @@ function isInternalUrl(urlString: string): boolean {
     }
 
     const ipv6Hostname = hostname.replace(/^\[|\]$/g, "");
+    if (ipv6Hostname === "fd00:ec2::254") {
+      return true;
+    }
     if (
       ipv6Hostname.startsWith("::ffff:127.") ||
       ipv6Hostname.startsWith("::ffff:10.") ||
@@ -91,6 +103,34 @@ function parseCustomTemplate(value: string | null | undefined): Record<string, u
     throw new Error("自定义模板必须是 JSON 对象");
   }
   return parsed as Record<string, unknown>;
+}
+
+function validateProviderConfig(params: {
+  providerType: WebhookProviderType;
+  webhookUrl: string | null;
+  telegramBotToken: string | null;
+  telegramChatId: string | null;
+  customTemplate?: Record<string, unknown> | null;
+}): void {
+  const { providerType, webhookUrl, telegramBotToken, telegramChatId, customTemplate } = params;
+
+  if (providerType === "telegram") {
+    if (!telegramBotToken || !telegramChatId) {
+      throw new Error("Telegram 需要 Bot Token 和 Chat ID");
+    }
+    return;
+  }
+
+  if (!webhookUrl) {
+    throw new Error("Webhook URL 不能为空");
+  }
+  if (isInternalUrl(webhookUrl)) {
+    throw new Error("不允许访问内部网络地址");
+  }
+
+  if (providerType === "custom" && customTemplate !== undefined && !customTemplate) {
+    throw new Error("自定义 Webhook 需要配置模板");
+  }
 }
 
 const ProviderTypeSchema = z.enum(["wechat", "feishu", "dingtalk", "telegram", "custom"]);
@@ -145,23 +185,18 @@ function normalizeTargetInput(input: z.infer<typeof BaseTargetSchema>): {
     throw new Error("代理地址格式不正确（支持 http:// https:// socks5:// socks4://）");
   }
 
-  if (providerType === "telegram") {
-    if (!telegramBotToken || !telegramChatId) {
-      throw new Error("Telegram 需要 Bot Token 和 Chat ID");
-    }
-  } else {
-    if (!webhookUrl) {
-      throw new Error("Webhook URL 不能为空");
-    }
-    if (isInternalUrl(webhookUrl)) {
-      throw new Error("不允许访问内部网络地址");
-    }
-  }
+  validateProviderConfig({ providerType, webhookUrl, telegramBotToken, telegramChatId });
 
   const customTemplate =
     providerType === "custom" ? parseCustomTemplate(input.customTemplate) : null;
-  if (providerType === "custom" && !customTemplate) {
-    throw new Error("自定义 Webhook 需要配置模板");
+  if (providerType === "custom") {
+    validateProviderConfig({
+      providerType,
+      webhookUrl,
+      telegramBotToken,
+      telegramChatId,
+      customTemplate,
+    });
   }
 
   return {
@@ -226,21 +261,15 @@ function normalizeTargetUpdateInput(
     throw new Error("代理地址格式不正确（支持 http:// https:// socks5:// socks4://）");
   }
 
-  if (providerType === "telegram") {
-    if (!telegramBotToken || !telegramChatId) {
-      throw new Error("Telegram 需要 Bot Token 和 Chat ID");
-    }
-  } else {
-    if (!webhookUrl) {
-      throw new Error("Webhook URL 不能为空");
-    }
-    if (isInternalUrl(webhookUrl)) {
-      throw new Error("不允许访问内部网络地址");
-    }
-  }
-
-  if (providerType === "custom" && !customTemplate) {
-    throw new Error("自定义 Webhook 需要配置模板");
+  validateProviderConfig({ providerType, webhookUrl, telegramBotToken, telegramChatId });
+  if (providerType === "custom") {
+    validateProviderConfig({
+      providerType,
+      webhookUrl,
+      telegramBotToken,
+      telegramChatId,
+      customTemplate,
+    });
   }
 
   return {

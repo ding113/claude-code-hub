@@ -5,6 +5,7 @@ import type {
   StructuredMessage,
   WebhookPayload,
 } from "../types";
+import { formatTimestamp } from "../utils/date";
 import type { Renderer } from "./index";
 
 export class DingTalkRenderer implements Renderer {
@@ -39,7 +40,7 @@ export class DingTalkRenderer implements Renderer {
       lines.push("");
     }
 
-    lines.push(this.formatTimestamp(message.timestamp));
+    lines.push(formatTimestamp(message.timestamp));
     return lines.join("\n").trim();
   }
 
@@ -94,18 +95,5 @@ export class DingTalkRenderer implements Renderer {
 
   private escapeText(value: string): string {
     return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
-  }
-
-  private formatTimestamp(date: Date): string {
-    return date.toLocaleString("zh-CN", {
-      timeZone: "Asia/Shanghai",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
-    });
   }
 }

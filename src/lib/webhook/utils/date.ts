@@ -14,3 +14,7 @@ export function formatDateTime(date: Date | string): string {
     hour12: false,
   });
 }
+
+export function formatTimestamp(date: Date): string {
+  return formatDateTime(date);
+}

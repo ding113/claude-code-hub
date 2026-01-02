@@ -5,6 +5,7 @@ import type {
   StructuredMessage,
   WebhookPayload,
 } from "../types";
+import { formatTimestamp } from "../utils/date";
 import type { Renderer } from "./index";
 
 export class TelegramRenderer implements Renderer {
@@ -41,7 +42,7 @@ export class TelegramRenderer implements Renderer {
       lines.push("");
     }
 
-    lines.push(this.escapeHtml(this.formatTimestamp(message.timestamp)));
+    lines.push(this.escapeHtml(formatTimestamp(message.timestamp)));
     return lines.join("\n").trim();
   }
 
@@ -100,18 +101,5 @@ export class TelegramRenderer implements Renderer {
       .replaceAll("<", "&lt;")
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;");
-  }
-
-  private formatTimestamp(date: Date): string {
-    return date.toLocaleString("zh-CN", {
-      timeZone: "Asia/Shanghai",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
-    });
   }
 }

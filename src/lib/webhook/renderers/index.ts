@@ -37,5 +37,9 @@ export function createRenderer(provider: ProviderType, config?: WebhookTargetCon
       }
       return new CustomRenderer(template, config?.customHeaders ?? null);
     }
+    default: {
+      const _exhaustiveCheck: never = provider;
+      throw new Error(`不支持的推送渠道: ${provider}`);
+    }
   }
 }
