@@ -281,12 +281,17 @@ export async function getDistinctProviderGroupsAction(): Promise<ActionResult<st
   try {
     const { db } = await import("@/drizzle/db");
     const { providers } = await import("@/drizzle/schema");
-    const { isNotNull } = await import("drizzle-orm");
+    const { isNull, isNotNull, ne, and } = await import("drizzle-orm");
 
     const result = await db
       .selectDistinct({ groupTag: providers.groupTag })
       .from(providers)
-      .where(isNotNull(providers.groupTag));
+      .where(
+        and(
+          isNull(providers.deletedAt),
+          and(isNotNull(providers.groupTag), ne(providers.groupTag, ""))
+        )
+      );
 
     // Parse comma-separated tags and flatten into unique array
     const allTags = new Set<string>();

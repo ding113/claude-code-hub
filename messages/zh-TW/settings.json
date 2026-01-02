@@ -1403,7 +1403,8 @@
         "label": "分組:",
         "all": "全部",
         "default": "default"
-      }
+      },
+      "circuitBroken": "熔斷"
     },
     "subtitle": "服務商管理",
     "subtitleDesc": "設定上游服務商的金額限流和並行限制。留空表示無限制。",
