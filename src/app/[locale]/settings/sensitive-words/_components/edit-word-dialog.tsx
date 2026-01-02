@@ -79,14 +79,14 @@ export function EditWordDialog({ word, open, onOpenChange }: EditWordDialogProps
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <form onSubmit={handleSubmit}>
-          <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>{t("sensitiveWords.dialog.editTitle")}</DialogTitle>
             <DialogDescription>{t("sensitiveWords.dialog.editDescription")}</DialogDescription>
           </DialogHeader>
 
-          <div className="grid gap-4 py-4">
+          <div className="grid gap-4 py-4 overflow-y-auto pr-2 flex-1">
             <div className="grid gap-2">
               <Label htmlFor="edit-word">{t("sensitiveWords.dialog.wordLabel")}</Label>
               <Input
@@ -128,7 +128,7 @@ export function EditWordDialog({ word, open, onOpenChange }: EditWordDialogProps
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="flex-shrink-0 pt-4">
             <Button
               type="button"
               variant="outline"
