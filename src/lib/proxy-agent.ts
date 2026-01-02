@@ -108,7 +108,7 @@ export function createProxyAgentForProvider(
         {
           type: parsedProxy.protocol === "socks5:" ? 5 : 4,
           host: parsedProxy.hostname,
-          port: parseInt(parsedProxy.port) || 1080,
+          port: parseInt(parsedProxy.port, 10) || 1080,
           userId: parsedProxy.username || undefined,
           password: parsedProxy.password || undefined,
         },

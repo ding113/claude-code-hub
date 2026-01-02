@@ -11,6 +11,7 @@ import {
   type DailyLeaderboardData,
   type StructuredMessage,
   sendWebhookMessage,
+  type WebhookNotificationType,
 } from "@/lib/webhook";
 import { generateCostAlerts } from "./tasks/cost-alert";
 import { generateDailyLeaderboard } from "./tasks/daily-leaderboard";
@@ -20,8 +21,23 @@ import { generateDailyLeaderboard } from "./tasks/daily-leaderboard";
  */
 export interface NotificationJobData {
   type: NotificationJobType;
-  webhookUrl: string;
+  // legacy 模式使用（单 URL）
+  webhookUrl?: string;
+  // 新模式使用（多目标）
+  targetId?: number;
+  bindingId?: number;
   data?: CircuitBreakerAlertData | DailyLeaderboardData | CostAlertData; // 可选：定时任务会在执行时动态生成
+}
+
+function toWebhookNotificationType(type: NotificationJobType): WebhookNotificationType {
+  switch (type) {
+    case "circuit-breaker":
+      return "circuit_breaker";
+    case "daily-leaderboard":
+      return "daily_leaderboard";
+    case "cost-alert":
+      return "cost_alert";
+  }
 }
 
 /**
@@ -112,7 +128,7 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
    * 处理通知任务
    */
   queue.process(async (job: Job<NotificationJobData>) => {
-    const { type, webhookUrl, data } = job.data;
+    const { type, webhookUrl, targetId, bindingId, data } = job.data;
 
     logger.info({
       action: "notification_job_start",
@@ -123,6 +139,8 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
     try {
       // 构建结构化消息
       let message: StructuredMessage;
+      let templateData: CircuitBreakerAlertData | DailyLeaderboardData | CostAlertData | undefined =
+        data;
       switch (type) {
         case "circuit-breaker":
           message = buildCircuitBreakerMessage(data as CircuitBreakerAlertData);
@@ -143,6 +161,7 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
             return { success: true, skipped: true };
           }
 
+          templateData = leaderboardData;
           message = buildDailyLeaderboardMessage(leaderboardData);
           break;
         }
@@ -163,6 +182,7 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
           }
 
           // 发送第一个告警（后续可扩展为批量发送）
+          templateData = alerts[0];
           message = buildCostAlertMessage(alerts[0]);
           break;
         }
@@ -171,7 +191,40 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
       }
 
       // 发送通知
-      const result = await sendWebhookMessage(webhookUrl, message);
+      let result;
+      if (webhookUrl) {
+        result = await sendWebhookMessage(webhookUrl, message);
+      } else if (targetId) {
+        const { getWebhookTargetById } = await import("@/repository/webhook-targets");
+        const target = await getWebhookTargetById(targetId);
+
+        if (!target || !target.isEnabled) {
+          logger.warn({
+            action: "notification_target_missing_or_disabled",
+            jobId: job.id,
+            type,
+            targetId,
+          });
+          return { success: true, skipped: true };
+        }
+
+        const notificationType = toWebhookNotificationType(type);
+
+        let templateOverride: Record<string, unknown> | null = null;
+        if (bindingId) {
+          const { getBindingById } = await import("@/repository/notification-bindings");
+          const binding = await getBindingById(bindingId);
+          templateOverride = binding?.templateOverride ?? null;
+        }
+
+        result = await sendWebhookMessage(target, message, {
+          notificationType,
+          data: templateData,
+          templateOverride,
+        });
+      } else {
+        throw new Error("Missing notification destination (webhookUrl/targetId)");
+      }
 
       if (!result.success) {
         throw new Error(result.error || "Failed to send notification");
@@ -242,6 +295,39 @@ export async function addNotificationJob(
 }
 
 /**
+ * 新模式：为指定目标添加通知任务
+ */
+export async function addNotificationJobForTarget(
+  type: NotificationJobType,
+  targetId: number,
+  bindingId: number | null,
+  data: CircuitBreakerAlertData | DailyLeaderboardData | CostAlertData
+): Promise<void> {
+  try {
+    const queue = getNotificationQueue();
+    await queue.add({
+      type,
+      targetId,
+      ...(bindingId ? { bindingId } : {}),
+      data,
+    });
+
+    logger.info({
+      action: "notification_job_added",
+      type,
+      targetId,
+    });
+  } catch (error) {
+    logger.error({
+      action: "notification_job_add_error",
+      type,
+      targetId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+/**
  * 调度定时通知任务
  */
 export async function scheduleNotifications() {
@@ -270,59 +356,122 @@ export async function scheduleNotifications() {
       await queue.removeRepeatableByKey(job.key);
     }
 
-    // 调度每日排行榜任务
-    if (
-      settings.dailyLeaderboardEnabled &&
-      settings.dailyLeaderboardWebhook &&
-      settings.dailyLeaderboardTime
-    ) {
-      const [hour, minute] = settings.dailyLeaderboardTime.split(":").map(Number);
-      const cron = `${minute} ${hour} * * *`; // 每天指定时间
+    if (settings.useLegacyMode) {
+      // legacy 模式：单 URL
+      if (
+        settings.dailyLeaderboardEnabled &&
+        settings.dailyLeaderboardWebhook &&
+        settings.dailyLeaderboardTime
+      ) {
+        const [hour, minute] = settings.dailyLeaderboardTime.split(":").map(Number);
+        const cron = `${minute} ${hour} * * *`; // 每天指定时间
 
-      await queue.add(
-        {
-          type: "daily-leaderboard",
-          webhookUrl: settings.dailyLeaderboardWebhook,
-          // data 字段省略，任务执行时动态生成
-        },
-        {
-          repeat: {
-            cron,
+        await queue.add(
+          {
+            type: "daily-leaderboard",
+            webhookUrl: settings.dailyLeaderboardWebhook,
+            // data 字段省略，任务执行时动态生成
           },
-          jobId: "daily-leaderboard-scheduled", // 使用 jobId 标识，便于管理
-        }
-      );
+          {
+            repeat: { cron },
+            jobId: "daily-leaderboard-scheduled",
+          }
+        );
 
-      logger.info({
-        action: "daily_leaderboard_scheduled",
-        schedule: cron,
-      });
-    }
+        logger.info({
+          action: "daily_leaderboard_scheduled",
+          schedule: cron,
+          mode: "legacy",
+        });
+      }
 
-    // 调度成本预警任务
-    if (settings.costAlertEnabled && settings.costAlertWebhook) {
-      const interval = settings.costAlertCheckInterval; // 分钟
-      const cron = `*/${interval} * * * *`; // 每 N 分钟
+      if (settings.costAlertEnabled && settings.costAlertWebhook) {
+        const interval = settings.costAlertCheckInterval; // 分钟
+        const cron = `*/${interval} * * * *`; // 每 N 分钟
 
-      await queue.add(
-        {
-          type: "cost-alert",
-          webhookUrl: settings.costAlertWebhook,
-          // data 字段省略，任务执行时动态生成
-        },
-        {
-          repeat: {
-            cron,
+        await queue.add(
+          {
+            type: "cost-alert",
+            webhookUrl: settings.costAlertWebhook,
+            // data 字段省略，任务执行时动态生成
           },
-          jobId: "cost-alert-scheduled", // 使用 jobId 标识，便于管理
-        }
-      );
+          {
+            repeat: { cron },
+            jobId: "cost-alert-scheduled",
+          }
+        );
 
-      logger.info({
-        action: "cost_alert_scheduled",
-        schedule: cron,
-        intervalMinutes: interval,
-      });
+        logger.info({
+          action: "cost_alert_scheduled",
+          schedule: cron,
+          intervalMinutes: interval,
+          mode: "legacy",
+        });
+      }
+    } else {
+      // 新模式：按绑定调度（支持 cron 覆盖）
+      const { getEnabledBindingsByType } = await import("@/repository/notification-bindings");
+
+      if (settings.dailyLeaderboardEnabled) {
+        const bindings = await getEnabledBindingsByType("daily_leaderboard");
+        const [hour, minute] = (settings.dailyLeaderboardTime ?? "09:00").split(":").map(Number);
+        const defaultCron = `${minute} ${hour} * * *`;
+
+        for (const binding of bindings) {
+          const cron = binding.scheduleCron ?? defaultCron;
+          const tz = binding.scheduleTimezone ?? "Asia/Shanghai";
+
+          await queue.add(
+            {
+              type: "daily-leaderboard",
+              targetId: binding.targetId,
+              bindingId: binding.id,
+            },
+            {
+              repeat: { cron, tz },
+              jobId: `daily-leaderboard:${binding.id}`,
+            }
+          );
+        }
+
+        logger.info({
+          action: "daily_leaderboard_scheduled",
+          schedule: defaultCron,
+          targets: bindings.length,
+          mode: "targets",
+        });
+      }
+
+      if (settings.costAlertEnabled) {
+        const bindings = await getEnabledBindingsByType("cost_alert");
+        const interval = settings.costAlertCheckInterval ?? 60;
+        const defaultCron = `*/${interval} * * * *`;
+
+        for (const binding of bindings) {
+          const cron = binding.scheduleCron ?? defaultCron;
+          const tz = binding.scheduleTimezone ?? "Asia/Shanghai";
+
+          await queue.add(
+            {
+              type: "cost-alert",
+              targetId: binding.targetId,
+              bindingId: binding.id,
+            },
+            {
+              repeat: { cron, tz },
+              jobId: `cost-alert:${binding.id}`,
+            }
+          );
+        }
+
+        logger.info({
+          action: "cost_alert_scheduled",
+          schedule: defaultCron,
+          intervalMinutes: interval,
+          targets: bindings.length,
+          mode: "targets",
+        });
+      }
     }
 
     logger.info({ action: "notifications_scheduled" });
