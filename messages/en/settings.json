@@ -1616,7 +1616,6 @@
       "leaderboard": "Leaderboard",
       "title": "Provider Management"
     },
-    "addProvider": "Add server",
     "filter": {
       "status": {
         "all": "Any status",

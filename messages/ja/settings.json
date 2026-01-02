@@ -1486,7 +1486,6 @@
       "leaderboard": "プロバイダーランキング",
       "title": "服务商管理"
     },
-    "addProvider": "プロバイダーを追加",
     "filter": {
       "status": {
         "all": "すべてのステータス",
