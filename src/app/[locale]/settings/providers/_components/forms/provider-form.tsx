@@ -907,7 +907,7 @@ export function ProviderForm({
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <Label>Cache TTL 覆写</Label>
+                  <Label>{t("sections.routing.cacheTtl.label")}</Label>
                   <Select
                     value={cacheTtlPreference}
                     onValueChange={(val) => setCacheTtlPreference(val as "inherit" | "5m" | "1h")}
@@ -917,13 +917,13 @@ export function ProviderForm({
                       <SelectValue placeholder="inherit" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="inherit">不覆写（跟随客户端）</SelectItem>
-                      <SelectItem value="5m">5m</SelectItem>
-                      <SelectItem value="1h">1h</SelectItem>
+                      <SelectItem value="inherit">{t("sections.routing.cacheTtl.options.inherit")}</SelectItem>
+                      <SelectItem value="5m">{t("sections.routing.cacheTtl.options.5m")}</SelectItem>
+                      <SelectItem value="1h">{t("sections.routing.cacheTtl.options.1h")}</SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    强制设置 prompt cache TTL；仅影响包含 cache_control 的请求。
+                    {t("sections.routing.cacheTtl.desc")}
                   </p>
                 </div>
 
