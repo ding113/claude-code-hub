@@ -15,7 +15,7 @@ export type KeyQuota = {
 
 export type UserQuota = {
   rpm: { current: number; limit: number; window: "per_minute" };
-  dailyCost: { current: number; limit: number; resetAt: Date };
+  dailyCost: { current: number; limit: number; resetAt?: Date };
 } | null;
 
 /**

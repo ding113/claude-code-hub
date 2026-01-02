@@ -4,12 +4,11 @@ import { and, eq, gte, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
-import { getEnvConfig } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit/service";
+import type { DailyResetMode } from "@/lib/rate-limit/time-utils";
 import { SessionTracker } from "@/lib/session-tracker";
 import type { CurrencyCode } from "@/lib/utils";
-import { sumUserCostToday } from "@/repository/statistics";
 import { getSystemSettings } from "@/repository/system-config";
 import {
   findUsageLogsWithDetails,
@@ -199,6 +198,18 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
     const key = session.key;
     const user = session.user;
 
+    // 获取用户每日消费时使用用户的 dailyResetTime 和 dailyResetMode 配置
+    // 导入时间工具函数
+    const { getTimeRangeForPeriodWithMode } = await import("@/lib/rate-limit/time-utils");
+    const { sumUserCostInTimeRange } = await import("@/repository/statistics");
+
+    // 计算用户每日消费的时间范围(使用用户的配置)
+    const userDailyTimeRange = getTimeRangeForPeriodWithMode(
+      "daily",
+      user.dailyResetTime ?? "00:00",
+      (user.dailyResetMode as DailyResetMode | undefined) ?? "fixed"
+    );
+
     const [
       keyCost5h,
       keyCostDaily,
@@ -226,7 +237,8 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       getTotalUsageForKey(key.key),
       SessionTracker.getKeySessionCount(key.id),
       sumUserCost(user.id, "5h"),
-      sumUserCostToday(user.id),
+      // 修复: 使用与 Key 层级相同的时间范围逻辑来计算用户每日消费
+      sumUserCostInTimeRange(user.id, userDailyTimeRange.startTime, userDailyTimeRange.endTime),
       sumUserCost(user.id, "weekly"),
       sumUserCost(user.id, "monthly"),
       sumUserCost(user.id, "total"),
@@ -290,8 +302,13 @@ export async function getMyTodayStats(): Promise<ActionResult<MyTodayStats>> {
     const billingModelSource = settings.billingModelSource;
     const currencyCode = settings.currencyDisplay;
 
-    const timezone = getEnvConfig().TZ || "UTC";
-    const startOfDay = sql`(CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date`;
+    // 修复: 使用 Key 的 dailyResetTime 和 dailyResetMode 来计算时间范围
+    const { getTimeRangeForPeriodWithMode } = await import("@/lib/rate-limit/time-utils");
+    const timeRange = getTimeRangeForPeriodWithMode(
+      "daily",
+      session.key.dailyResetTime ?? "00:00",
+      (session.key.dailyResetMode as DailyResetMode | undefined) ?? "fixed"
+    );
 
     const [aggregate] = await db
       .select({
@@ -305,7 +322,8 @@ export async function getMyTodayStats(): Promise<ActionResult<MyTodayStats>> {
         and(
           eq(messageRequest.key, session.key.key),
           isNull(messageRequest.deletedAt),
-          sql`(${messageRequest.createdAt} AT TIME ZONE ${timezone})::date = ${startOfDay}`
+          gte(messageRequest.createdAt, timeRange.startTime),
+          sql`${messageRequest.createdAt} < ${timeRange.endTime}`
         )
       );
 
@@ -323,7 +341,8 @@ export async function getMyTodayStats(): Promise<ActionResult<MyTodayStats>> {
         and(
           eq(messageRequest.key, session.key.key),
           isNull(messageRequest.deletedAt),
-          sql`(${messageRequest.createdAt} AT TIME ZONE ${timezone})::date = ${startOfDay}`
+          gte(messageRequest.createdAt, timeRange.startTime),
+          sql`${messageRequest.createdAt} < ${timeRange.endTime}`
         )
       )
       .groupBy(messageRequest.model, messageRequest.originalModel);
