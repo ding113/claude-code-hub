@@ -371,13 +371,95 @@
   "notifications": {
     "title": "Push-уведомления",
     "description": "Настройка push-уведомлений Webhook",
-    "global": {
-      "title": "Главный переключатель уведомлений",
-      "description": "Включить или отключить все функции push-уведомлений",
-      "enable": "Включить push-уведомления"
+  "global": {
+    "title": "Главный переключатель уведомлений",
+    "description": "Включить или отключить все функции push-уведомлений",
+    "enable": "Включить push-уведомления",
+    "legacyModeTitle": "Режим совместимости",
+    "legacyModeDescription": "Сейчас используется устаревшая схема уведомлений с одним URL. Создайте цель отправки, чтобы перейти на режим с несколькими целями."
+  },
+  "targets": {
+    "title": "Цели отправки",
+    "description": "Управление целями отправки. Поддерживает WeCom, Feishu, DingTalk, Telegram и пользовательский Webhook.",
+    "add": "Добавить цель",
+    "update": "Сохранить цель",
+    "edit": "Редактировать",
+    "delete": "Удалить",
+    "deleteConfirmTitle": "Удалить цель",
+    "deleteConfirm": "Удалить эту цель? Связанные привязки также будут удалены.",
+    "enable": "Включить цель",
+    "statusEnabled": "Включено",
+    "statusDisabled": "Отключено",
+    "lastTestAt": "Последний тест",
+    "lastTestNever": "Тестов не было",
+    "lastTestSuccess": "Тест OK",
+    "lastTestFailed": "Тест не пройден",
+    "test": "Тест",
+    "testSelectType": "Выберите тип теста",
+    "emptyHint": "Целей нет. Нажмите «Добавить цель», чтобы создать.",
+    "created": "Цель создана",
+    "updated": "Цель обновлена",
+    "deleted": "Цель удалена",
+    "bindingsSaved": "Привязки сохранены"
+  },
+  "targetDialog": {
+    "createTitle": "Добавить цель",
+    "editTitle": "Редактировать цель",
+    "name": "Название",
+    "namePlaceholder": "например, Ops Group",
+    "type": "Платформа",
+    "selectType": "Выберите платформу",
+    "enable": "Включить",
+    "webhookUrl": "Webhook URL",
+    "webhookUrlPlaceholder": "https://example.com/webhook",
+    "telegramBotToken": "Telegram Bot Token",
+    "telegramBotTokenPlaceholder": "например, 123456:ABCDEF...",
+    "telegramChatId": "Telegram Chat ID",
+    "telegramChatIdPlaceholder": "например, -1001234567890",
+    "dingtalkSecret": "Секрет DingTalk",
+    "dingtalkSecretPlaceholder": "Необязательно, для подписи",
+    "customHeaders": "Пользовательские заголовки (JSON)",
+    "customHeadersPlaceholder": "{\"X-Token\":\"...\"}",
+    "types": {
+      "wechat": "WeCom",
+      "feishu": "Feishu",
+      "dingtalk": "DingTalk",
+      "telegram": "Telegram",
+      "custom": "Custom Webhook"
     },
-    "circuitBreaker": {
-      "title": "Оповещение о размыкателе цепи",
+    "proxy": {
+      "title": "Прокси",
+      "toggle": "Показать/скрыть настройки прокси",
+      "url": "URL прокси",
+      "urlPlaceholder": "http://127.0.0.1:7890",
+      "fallbackToDirect": "При ошибке прокси — прямое подключение"
+    }
+  },
+  "bindings": {
+    "title": "Привязки",
+    "noTargets": "Нет доступных целей отправки.",
+    "bindTarget": "Привязать цель",
+    "enable": "Включить",
+    "enableType": "Включить это уведомление",
+    "advanced": "Дополнительно",
+    "scheduleCron": "Cron",
+    "scheduleCronPlaceholder": "например, 0 9 * * *",
+    "scheduleTimezone": "Часовой пояс",
+    "templateOverride": "Переопределение шаблона",
+    "editTemplateOverride": "Редактировать",
+    "templateOverrideTitle": "Редактировать переопределение шаблона",
+    "boundCount": "Привязано: {count}",
+    "enabledCount": "Включено: {count}"
+  },
+  "templateEditor": {
+    "title": "Шаблон (JSON)",
+    "placeholder": "Введите JSON-шаблон...",
+    "jsonInvalid": "Некорректный JSON",
+    "placeholders": "Плейсхолдеры",
+    "insert": "Вставить"
+  },
+  "circuitBreaker": {
+    "title": "Оповещение о размыкателе цепи",
       "description": "Отправить оповещение немедленно при полном размыкании провайдера",
       "enable": "Включить оповещение о размыкателе цепи",
       "webhook": "Webhook URL",

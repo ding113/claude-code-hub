@@ -16,6 +16,7 @@
     "test": "vitest run",
     "test:ui": "vitest --ui --watch",
     "test:e2e": "vitest run --config vitest.e2e.config.ts --reporter=verbose",
+    "test:integration": "vitest run --config vitest.integration.config.ts --reporter=verbose",
     "test:coverage": "vitest run --coverage",
     "test:ci": "vitest run --reporter=default --reporter=junit --outputFile.junit=reports/vitest-junit.xml",
     "cui": "npx cui-server --host 0.0.0.0 --port 30000 --token a7564bc8882aa9a2d25d8b4ea6ea1e2e",

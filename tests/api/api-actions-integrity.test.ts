@@ -164,6 +164,33 @@ describe("OpenAPI 端点完整性检查", () => {
     }
   });
 
+  test("Webhook 目标管理模块的所有端点应该被注册", () => {
+    const expectedPaths = [
+      "/api/actions/webhook-targets/getWebhookTargetsAction",
+      "/api/actions/webhook-targets/createWebhookTargetAction",
+      "/api/actions/webhook-targets/updateWebhookTargetAction",
+      "/api/actions/webhook-targets/deleteWebhookTargetAction",
+      "/api/actions/webhook-targets/testWebhookTargetAction",
+    ];
+
+    for (const path of expectedPaths) {
+      expect(openApiDoc.paths[path]).toBeDefined();
+      expect(openApiDoc.paths[path].post).toBeDefined();
+    }
+  });
+
+  test("通知绑定模块的所有端点应该被注册", () => {
+    const expectedPaths = [
+      "/api/actions/notification-bindings/getBindingsForTypeAction",
+      "/api/actions/notification-bindings/updateBindingsAction",
+    ];
+
+    for (const path of expectedPaths) {
+      expect(openApiDoc.paths[path]).toBeDefined();
+      expect(openApiDoc.paths[path].post).toBeDefined();
+    }
+  });
+
   test("所有端点的 summary 应该非空", () => {
     const pathsWithoutSummary: string[] = [];
 
@@ -192,6 +219,8 @@ describe("OpenAPI 端点完整性检查", () => {
       "/api/actions/sensitive-words/": "敏感词管理",
       "/api/actions/active-sessions/": "Session 管理",
       "/api/actions/notifications/": "通知管理",
+      "/api/actions/webhook-targets/": "通知管理",
+      "/api/actions/notification-bindings/": "通知管理",
     };
 
     for (const [path, methods] of Object.entries(openApiDoc.paths)) {

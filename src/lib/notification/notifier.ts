@@ -14,7 +14,7 @@ export async function sendCircuitBreakerAlert(data: CircuitBreakerAlertData): Pr
     const { getNotificationSettings } = await import("@/repository/notifications");
     const settings = await getNotificationSettings();
 
-    if (!settings.enabled || !settings.circuitBreakerEnabled || !settings.circuitBreakerWebhook) {
+    if (!settings.enabled || !settings.circuitBreakerEnabled) {
       logger.info({
         action: "circuit_breaker_alert_disabled",
         providerId: data.providerId,
@@ -38,17 +38,75 @@ export async function sendCircuitBreakerAlert(data: CircuitBreakerAlertData): Pr
       }
 
       // 动态导入通知队列（避免 Turbopack 编译 Bull）
-      const { addNotificationJob } = await import("./notification-queue");
+      const { addNotificationJob, addNotificationJobForTarget } = await import(
+        "./notification-queue"
+      );
 
-      // 发送告警
-      await addNotificationJob("circuit-breaker", settings.circuitBreakerWebhook, data);
+      if (settings.useLegacyMode) {
+        if (!settings.circuitBreakerWebhook) {
+          logger.info({
+            action: "circuit_breaker_alert_disabled",
+            providerId: data.providerId,
+            reason: "legacy_webhook_missing",
+          });
+          return;
+        }
+
+        await addNotificationJob("circuit-breaker", settings.circuitBreakerWebhook, data);
+      } else {
+        const { getEnabledBindingsByType } = await import("@/repository/notification-bindings");
+        const bindings = await getEnabledBindingsByType("circuit_breaker");
+
+        if (bindings.length === 0) {
+          logger.info({
+            action: "circuit_breaker_alert_skipped",
+            providerId: data.providerId,
+            reason: "no_bindings",
+          });
+          return;
+        }
+
+        for (const binding of bindings) {
+          await addNotificationJobForTarget("circuit-breaker", binding.targetId, binding.id, data);
+        }
+      }
 
       // 设置缓存，5 分钟过期
       await redisClient.set(cacheKey, "1", "EX", 300);
     } else {
       // Redis 不可用，直接发送告警
-      const { addNotificationJob } = await import("./notification-queue");
-      await addNotificationJob("circuit-breaker", settings.circuitBreakerWebhook, data);
+      const { addNotificationJob, addNotificationJobForTarget } = await import(
+        "./notification-queue"
+      );
+
+      if (settings.useLegacyMode) {
+        if (!settings.circuitBreakerWebhook) {
+          logger.info({
+            action: "circuit_breaker_alert_disabled",
+            providerId: data.providerId,
+            reason: "legacy_webhook_missing",
+          });
+          return;
+        }
+
+        await addNotificationJob("circuit-breaker", settings.circuitBreakerWebhook, data);
+      } else {
+        const { getEnabledBindingsByType } = await import("@/repository/notification-bindings");
+        const bindings = await getEnabledBindingsByType("circuit_breaker");
+
+        if (bindings.length === 0) {
+          logger.info({
+            action: "circuit_breaker_alert_skipped",
+            providerId: data.providerId,
+            reason: "no_bindings",
+          });
+          return;
+        }
+
+        for (const binding of bindings) {
+          await addNotificationJobForTarget("circuit-breaker", binding.targetId, binding.id, data);
+        }
+      }
     }
 
     logger.info({
@@ -72,11 +130,7 @@ export async function sendDailyLeaderboard(): Promise<void> {
     const { getNotificationSettings } = await import("@/repository/notifications");
     const settings = await getNotificationSettings();
 
-    if (
-      !settings.enabled ||
-      !settings.dailyLeaderboardEnabled ||
-      !settings.dailyLeaderboardWebhook
-    ) {
+    if (!settings.enabled || !settings.dailyLeaderboardEnabled) {
       logger.info({ action: "daily_leaderboard_disabled" });
       return;
     }
@@ -90,10 +144,29 @@ export async function sendDailyLeaderboard(): Promise<void> {
     }
 
     // 动态导入通知队列
-    const { addNotificationJob } = await import("./notification-queue");
+    const { addNotificationJob, addNotificationJobForTarget } = await import(
+      "./notification-queue"
+    );
 
-    // 发送通知
-    await addNotificationJob("daily-leaderboard", settings.dailyLeaderboardWebhook, data);
+    if (settings.useLegacyMode) {
+      if (!settings.dailyLeaderboardWebhook) {
+        logger.info({ action: "daily_leaderboard_disabled", reason: "legacy_webhook_missing" });
+        return;
+      }
+      await addNotificationJob("daily-leaderboard", settings.dailyLeaderboardWebhook, data);
+    } else {
+      const { getEnabledBindingsByType } = await import("@/repository/notification-bindings");
+      const bindings = await getEnabledBindingsByType("daily_leaderboard");
+
+      if (bindings.length === 0) {
+        logger.info({ action: "daily_leaderboard_skipped", reason: "no_bindings" });
+        return;
+      }
+
+      for (const binding of bindings) {
+        await addNotificationJobForTarget("daily-leaderboard", binding.targetId, binding.id, data);
+      }
+    }
 
     logger.info({
       action: "daily_leaderboard_sent",
@@ -115,7 +188,7 @@ export async function sendCostAlerts(): Promise<void> {
     const { getNotificationSettings } = await import("@/repository/notifications");
     const settings = await getNotificationSettings();
 
-    if (!settings.enabled || !settings.costAlertEnabled || !settings.costAlertWebhook) {
+    if (!settings.enabled || !settings.costAlertEnabled) {
       logger.info({ action: "cost_alert_disabled" });
       return;
     }
@@ -129,11 +202,32 @@ export async function sendCostAlerts(): Promise<void> {
     }
 
     // 动态导入通知队列
-    const { addNotificationJob } = await import("./notification-queue");
+    const { addNotificationJob, addNotificationJobForTarget } = await import(
+      "./notification-queue"
+    );
 
-    // 逐个发送告警
-    for (const alert of alerts) {
-      await addNotificationJob("cost-alert", settings.costAlertWebhook, alert);
+    if (settings.useLegacyMode) {
+      if (!settings.costAlertWebhook) {
+        logger.info({ action: "cost_alert_disabled", reason: "legacy_webhook_missing" });
+        return;
+      }
+      for (const alert of alerts) {
+        await addNotificationJob("cost-alert", settings.costAlertWebhook, alert);
+      }
+    } else {
+      const { getEnabledBindingsByType } = await import("@/repository/notification-bindings");
+      const bindings = await getEnabledBindingsByType("cost_alert");
+
+      if (bindings.length === 0) {
+        logger.info({ action: "cost_alerts_skipped", reason: "no_bindings" });
+        return;
+      }
+
+      for (const alert of alerts) {
+        for (const binding of bindings) {
+          await addNotificationJobForTarget("cost-alert", binding.targetId, binding.id, alert);
+        }
+      }
     }
 
     logger.info({

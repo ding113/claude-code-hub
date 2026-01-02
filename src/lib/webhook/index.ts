@@ -20,6 +20,9 @@ export type {
   Section,
   SectionContent,
   StructuredMessage,
+  WebhookNotificationType,
   WebhookPayload,
   WebhookResult,
+  WebhookSendOptions,
+  WebhookTargetConfig,
 } from "./types";
