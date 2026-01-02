@@ -262,7 +262,11 @@ export function UserManagementTable({
   useEffect(() => {
     if (!scrollResetKey) return;
     parentRef.current?.scrollTo({ top: 0 });
-    rowVirtualizer.measure();
+    // Defer measurement to next frame to ensure DOM has updated
+    const rafId = requestAnimationFrame(() => {
+      rowVirtualizer.measure();
+    });
+    return () => cancelAnimationFrame(rafId);
   }, [scrollResetKey, rowVirtualizer]);
 
   const quickRenewTranslations = useMemo(() => {
