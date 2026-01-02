@@ -120,44 +120,25 @@ export interface MyUsageLogsResult {
   billingModelSource: BillingModelSource;
 }
 
-function getPeriodStart(period: "5h" | "weekly" | "monthly" | "total" | "today") {
-  const now = new Date();
-  if (period === "total") return null;
-  if (period === "today") {
-    const start = new Date(now);
-    start.setHours(0, 0, 0, 0);
-    return start;
-  }
-  if (period === "5h") {
-    return new Date(now.getTime() - 5 * 60 * 60 * 1000);
-  }
-  if (period === "weekly") {
-    return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-  }
-  if (period === "monthly") {
-    return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-  }
-  return null;
-}
-
+/**
+ * 查询用户在指定周期内的消费
+ * 使用与 Key 层级和限额检查相同的时间范围计算逻辑
+ *
+ * @deprecated 此函数已被重构为使用统一的时间范围计算逻辑
+ */
 async function sumUserCost(userId: number, period: "5h" | "weekly" | "monthly" | "total") {
-  const conditions = [
-    eq(keysTable.userId, userId),
-    isNull(keysTable.deletedAt),
-    isNull(messageRequest.deletedAt),
-  ];
-  const start = getPeriodStart(period);
-  if (start) {
-    conditions.push(gte(messageRequest.createdAt, start));
+  // 动态导入避免循环依赖
+  const { sumUserCostInTimeRange, sumUserTotalCost } = await import("@/repository/statistics");
+  const { getTimeRangeForPeriod } = await import("@/lib/rate-limit/time-utils");
+
+  // 总消费：使用专用函数
+  if (period === "total") {
+    return await sumUserTotalCost(userId);
   }
 
-  const [row] = await db
-    .select({ total: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)` })
-    .from(messageRequest)
-    .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
-    .where(and(...conditions));
-
-  return Number(row?.total ?? 0);
+  // 其他周期：使用统一的时间范围计算
+  const { startTime, endTime } = getTimeRangeForPeriod(period);
+  return await sumUserCostInTimeRange(userId, startTime, endTime);
 }
 
 export async function getMyUsageMetadata(): Promise<ActionResult<MyUsageMetadata>> {
