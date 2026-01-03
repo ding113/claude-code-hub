@@ -20,75 +20,6 @@ import {
 } from "@/repository/webhook-targets";
 import type { ActionResult } from "./types";
 
-/**
- * SSRF 防护：阻止访问内部/私有网络地址
- *
- * 说明：代理地址不做此限制（Telegram 在部分环境需要本地代理）。
- */
-function isInternalUrl(urlString: string): boolean {
-  try {
-    const url = new URL(urlString);
-    const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
-
-    if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") {
-      return true;
-    }
-
-    // 云厂商元数据服务（SSRF 高危）
-    if (
-      hostname === "metadata.google.internal" ||
-      hostname === "169.254.169.254" ||
-      hostname === "100.100.100.200"
-    ) {
-      return true;
-    }
-
-    const ipv4Match = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-    if (ipv4Match) {
-      const [, a, b] = ipv4Match.map(Number);
-      if (a === 127) return true;
-      if (a === 10) return true;
-      if (a === 172 && b >= 16 && b <= 31) return true;
-      if (a === 192 && b === 168) return true;
-      if (a === 169 && b === 254) return true;
-      if (a === 0) return true;
-    }
-
-    const ipv6Hostname = hostname.replace(/^\[|\]$/g, "");
-    if (ipv6Hostname === "fd00:ec2::254") {
-      return true;
-    }
-    if (
-      ipv6Hostname.startsWith("::ffff:127.") ||
-      ipv6Hostname.startsWith("::ffff:10.") ||
-      ipv6Hostname.startsWith("::ffff:192.168.") ||
-      ipv6Hostname.startsWith("::ffff:0.")
-    ) {
-      return true;
-    }
-    const ipv6MappedMatch = ipv6Hostname.match(/^::ffff:172\.(\d+)\./);
-    if (ipv6MappedMatch) {
-      const secondOctet = parseInt(ipv6MappedMatch[1], 10);
-      if (secondOctet >= 16 && secondOctet <= 31) return true;
-    }
-    if (ipv6Hostname.startsWith("fc") || ipv6Hostname.startsWith("fd")) {
-      return true;
-    }
-    if (ipv6Hostname.startsWith("fe80:")) {
-      return true;
-    }
-
-    const dangerousPorts = [22, 23, 3306, 5432, 27017, 6379, 11211];
-    if (url.port && dangerousPorts.includes(parseInt(url.port, 10))) {
-      return true;
-    }
-
-    return false;
-  } catch {
-    return true;
-  }
-}
-
 function trimToNull(value: string | null | undefined): string | null {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
@@ -123,9 +54,6 @@ function validateProviderConfig(params: {
 
   if (!webhookUrl) {
     throw new Error("Webhook URL 不能为空");
-  }
-  if (isInternalUrl(webhookUrl)) {
-    throw new Error("不允许访问内部网络地址");
   }
 
   if (providerType === "custom" && customTemplate !== undefined && !customTemplate) {

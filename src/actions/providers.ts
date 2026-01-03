@@ -30,6 +30,7 @@ import {
 } from "@/lib/redis/circuit-breaker-config";
 import type { Context1mPreference } from "@/lib/special-attributes";
 import { maskKey } from "@/lib/utils/validation";
+import { validateProviderUrlForConnectivity } from "@/lib/validation/provider-url";
 import { CreateProviderSchema, UpdateProviderSchema } from "@/lib/validation/schemas";
 import {
   createProvider,
@@ -1785,92 +1786,6 @@ function mergeStreamChunks(chunks: ProviderApiResponse[]): ProviderApiResponse {
   return base;
 }
 
-type ProviderUrlValidationError = {
-  message: string;
-  details: {
-    error: string;
-    errorType: "InvalidProviderUrl" | "BlockedUrl" | "BlockedPort";
-  };
-};
-
-function validateProviderUrlForConnectivity(
-  providerUrl: string
-): { valid: true; normalizedUrl: string } | { valid: false; error: ProviderUrlValidationError } {
-  const trimmedUrl = providerUrl.trim();
-
-  try {
-    const parsedProviderUrl = new URL(trimmedUrl);
-
-    if (!["https:", "http:"].includes(parsedProviderUrl.protocol)) {
-      return {
-        valid: false,
-        error: {
-          message: "供应商地址格式无效",
-          details: {
-            error: "仅支持 HTTP 和 HTTPS 协议",
-            errorType: "InvalidProviderUrl",
-          },
-        },
-      };
-    }
-
-    const hostname = parsedProviderUrl.hostname.toLowerCase();
-    const blockedPatterns = [
-      /^localhost$/i,
-      /^127\.\d+\.\d+\.\d+$/,
-      /^10\.\d+\.\d+\.\d+$/,
-      /^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/,
-      /^192\.168\.\d+\.\d+$/,
-      /^169\.254\.\d+\.\d+$/,
-      /^::1$/,
-      /^fe80:/i,
-      /^fc00:/i,
-      /^fd00:/i,
-    ];
-
-    if (blockedPatterns.some((pattern) => pattern.test(hostname))) {
-      return {
-        valid: false,
-        error: {
-          message: "供应商地址安全检查失败",
-          details: {
-            error: "不允许访问内部网络地址",
-            errorType: "BlockedUrl",
-          },
-        },
-      };
-    }
-
-    const port = parsedProviderUrl.port ? parseInt(parsedProviderUrl.port, 10) : null;
-    const dangerousPorts = [22, 23, 25, 3306, 5432, 6379, 27017, 9200];
-    if (port && dangerousPorts.includes(port)) {
-      return {
-        valid: false,
-        error: {
-          message: "供应商地址端口检查失败",
-          details: {
-            error: "不允许访问内部服务端口",
-            errorType: "BlockedPort",
-          },
-        },
-      };
-    }
-
-    return { valid: true, normalizedUrl: trimmedUrl };
-  } catch (error) {
-    return {
-      valid: false,
-      error: {
-        message: "供应商地址格式无效",
-        details: {
-          error: error instanceof Error ? error.message : "URL 解析失败",
-          errorType: "InvalidProviderUrl",
-        },
-      },
-    };
-  }
-}
-
 async function executeProviderApiTest(
   data: ProviderApiTestArgs,
   options: {
@@ -2630,8 +2545,8 @@ const SUB_STATUS_MESSAGES: Record<TestSubStatus, string> = {
 };
 
 /**
- * Check if a URL is safe for API testing (SSRF prevention)
- * Wraps validateProviderUrlForConnectivity with a simpler interface
+ * 检查 URL 是否可用于 API 测试（仅做基础格式校验）
+ * 对 validateProviderUrlForConnectivity 的薄封装
  */
 async function isUrlSafeForApiTest(
   providerUrl: string
