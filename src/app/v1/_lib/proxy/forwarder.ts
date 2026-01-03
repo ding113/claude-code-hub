@@ -848,26 +848,6 @@ export class ProxyForwarder {
       const accessToken = await GeminiAuth.getAccessToken(provider.key);
       const isApiKey = GeminiAuth.isApiKey(provider.key);
 
-      const headers = new Headers();
-      headers.set("Content-Type", "application/json");
-
-      // ⭐ 统一禁用 gzip 压缩（不仅限于流式请求）
-      // 原因：undici（Node.js fetch）在连接提前关闭时会对不完整的 gzip 流抛出 "TypeError: terminated"
-      // Bun 的 fetch 实现更宽松，不会报错，这导致 bun dev 正常但 Docker 构建后失败
-      // 参考：Gunzip.emit → emitErrorNT → emitErrorCloseNT 错误链
-      headers.set("accept-encoding", "identity");
-
-      if (isApiKey) {
-        headers.set(GEMINI_PROTOCOL.HEADERS.API_KEY, accessToken);
-      } else {
-        headers.set("Authorization", `Bearer ${accessToken}`);
-      }
-
-      // CLI specific headers
-      if (provider.providerType === "gemini-cli") {
-        headers.set(GEMINI_PROTOCOL.HEADERS.API_CLIENT, "GeminiCLI/1.0");
-      }
-
       // 3. 直接透传：使用 buildProxyUrl() 拼接原始路径和查询参数
       const baseUrl =
         provider.url ||
@@ -876,7 +856,16 @@ export class ProxyForwarder {
           : GEMINI_PROTOCOL.CLI_ENDPOINT);
 
       proxyUrl = buildProxyUrl(baseUrl, session.requestUrl);
-      processedHeaders = headers;
+
+      // 4. Headers 处理：默认透传 session.headers（含请求过滤器修改），但移除代理认证头并覆盖上游鉴权
+      // 说明：之前 Gemini 分支使用 new Headers() 重建 headers，会导致 user-agent 丢失且过滤器不生效
+      processedHeaders = ProxyForwarder.buildGeminiHeaders(
+        session,
+        provider,
+        baseUrl,
+        accessToken,
+        isApiKey
+      );
 
       if (session.sessionId) {
         void SessionManager.storeSessionUpstreamRequestMeta(
@@ -1802,6 +1791,51 @@ export class ProxyForwarder {
 
     const headerProcessor = HeaderProcessor.createForProxy({
       blacklist: ["content-length", "connection"], // 删除 content-length（动态计算）和 connection（undici 自动管理）
+      preserveClientIpHeaders: preserveClientIp,
+      overrides,
+    });
+
+    return headerProcessor.process(session.headers);
+  }
+
+  private static buildGeminiHeaders(
+    session: ProxySession,
+    provider: NonNullable<typeof session.provider>,
+    baseUrl: string,
+    accessToken: string,
+    isApiKey: boolean
+  ): Headers {
+    const preserveClientIp = provider.preserveClientIp ?? false;
+    const { clientIp, xForwardedFor } = ProxyForwarder.resolveClientIp(session.headers);
+
+    const overrides: Record<string, string> = {
+      host: HeaderProcessor.extractHost(baseUrl),
+      "content-type": "application/json",
+      "accept-encoding": "identity",
+      "user-agent": session.headers.get("user-agent") ?? session.userAgent ?? "claude-code-hub",
+    };
+
+    if (isApiKey) {
+      overrides[GEMINI_PROTOCOL.HEADERS.API_KEY] = accessToken;
+    } else {
+      overrides.authorization = `Bearer ${accessToken}`;
+    }
+
+    if (provider.providerType === "gemini-cli") {
+      overrides[GEMINI_PROTOCOL.HEADERS.API_CLIENT] = "GeminiCLI/1.0";
+    }
+
+    if (preserveClientIp) {
+      if (xForwardedFor) {
+        overrides["x-forwarded-for"] = xForwardedFor;
+      }
+      if (clientIp) {
+        overrides["x-real-ip"] = clientIp;
+      }
+    }
+
+    const headerProcessor = HeaderProcessor.createForProxy({
+      blacklist: ["content-length", "connection", "x-api-key", GEMINI_PROTOCOL.HEADERS.API_KEY],
       preserveClientIpHeaders: preserveClientIp,
       overrides,
     });
