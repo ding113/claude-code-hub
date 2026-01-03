@@ -27,6 +27,7 @@ export interface OverviewMetrics {
  */
 export async function getOverviewMetrics(): Promise<OverviewMetrics> {
   const timezone = getEnvConfig().TZ;
+  const excludeWarmup = sql`(${messageRequest.blockedBy} IS NULL OR ${messageRequest.blockedBy} <> 'warmup')`;
 
   const [result] = await db
     .select({
@@ -39,6 +40,7 @@ export async function getOverviewMetrics(): Promise<OverviewMetrics> {
     .where(
       and(
         isNull(messageRequest.deletedAt),
+        excludeWarmup,
         sql`(${messageRequest.createdAt} AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date`
       )
     );

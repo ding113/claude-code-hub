@@ -111,7 +111,8 @@ export function ErrorDetailsDialog({
 
   const isSuccess = statusCode && statusCode >= 200 && statusCode < 300;
   const isInProgress = !statusCode; // 没有状态码表示请求进行中
-  const isBlocked = !!blockedBy; // 是否被拦截
+  const isWarmupSkipped = blockedBy === "warmup";
+  const isBlocked = !!blockedBy && !isWarmupSkipped; // 是否被拦截（不含 warmup 跳过）
 
   const outputTokensPerSecond = (() => {
     if (
@@ -257,6 +258,29 @@ export function ErrorDetailsDialog({
         </DialogHeader>
 
         <div className="space-y-6 mt-4">
+          {/* Warmup 跳过信息 */}
+          {isWarmupSkipped && (
+            <div className="space-y-2">
+              <h4 className="font-semibold text-sm flex items-center gap-2">
+                <CheckCircle className="h-4 w-4 text-blue-600" />
+                {t("logs.details.skipped.title")}
+              </h4>
+              <div className="rounded-md border bg-blue-50 dark:bg-blue-950/20 p-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-blue-900 dark:text-blue-100">
+                    {t("logs.details.skipped.reason")}:
+                  </span>
+                  <Badge variant="outline" className="border-blue-600 text-blue-700">
+                    {t("logs.details.skipped.warmup")}
+                  </Badge>
+                </div>
+                <p className="text-xs text-blue-900/80 dark:text-blue-100/80">
+                  {t("logs.details.skipped.desc")}
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* 拦截信息 */}
           {isBlocked && blockedBy && (
             <div className="space-y-2">

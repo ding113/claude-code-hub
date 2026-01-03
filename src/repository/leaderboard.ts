@@ -7,6 +7,9 @@ import { getEnvConfig } from "@/lib/config";
 import type { ProviderType } from "@/types/provider";
 import { getSystemSettings } from "./system-config";
 
+// Warmup 抢答请求不计入任何排行榜/统计
+const EXCLUDE_WARMUP_CONDITION = sql`(${messageRequest.blockedBy} IS NULL OR ${messageRequest.blockedBy} <> 'warmup')`;
+
 /**
  * 排行榜条目类型
  */
@@ -170,7 +173,13 @@ async function findLeaderboardWithTimezone(
     })
     .from(messageRequest)
     .innerJoin(users, and(sql`${messageRequest.userId} = ${users.id}`, isNull(users.deletedAt)))
-    .where(and(isNull(messageRequest.deletedAt), buildDateCondition(period, timezone, dateRange)))
+    .where(
+      and(
+        isNull(messageRequest.deletedAt),
+        EXCLUDE_WARMUP_CONDITION,
+        buildDateCondition(period, timezone, dateRange)
+      )
+    )
     .groupBy(messageRequest.userId, users.name)
     .orderBy(desc(sql`sum(${messageRequest.costUsd})`));
 
@@ -306,6 +315,7 @@ async function findProviderLeaderboardWithTimezone(
 ): Promise<ProviderLeaderboardEntry[]> {
   const whereConditions = [
     isNull(messageRequest.deletedAt),
+    EXCLUDE_WARMUP_CONDITION,
     buildDateCondition(period, timezone, dateRange),
     providerType ? eq(providers.providerType, providerType) : undefined,
   ];
@@ -405,6 +415,7 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
 
   const whereConditions = [
     isNull(messageRequest.deletedAt),
+    EXCLUDE_WARMUP_CONDITION,
     buildDateCondition(period, timezone, dateRange),
     cacheRequiredCondition,
     providerType ? eq(providers.providerType, providerType) : undefined,
@@ -547,7 +558,13 @@ async function findModelLeaderboardWithTimezone(
       )`,
     })
     .from(messageRequest)
-    .where(and(isNull(messageRequest.deletedAt), buildDateCondition(period, timezone, dateRange)))
+    .where(
+      and(
+        isNull(messageRequest.deletedAt),
+        EXCLUDE_WARMUP_CONDITION,
+        buildDateCondition(period, timezone, dateRange)
+      )
+    )
     .groupBy(modelField)
     .orderBy(desc(sql`count(*)`)); // 按请求数排序
 

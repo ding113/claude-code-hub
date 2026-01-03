@@ -24,8 +24,9 @@ let cachedSettings: SystemSettings | null = null;
 let cachedAt: number = 0;
 
 /** Default settings used when cache fetch fails */
-const DEFAULT_SETTINGS: Pick<SystemSettings, "enableHttp2"> = {
+const DEFAULT_SETTINGS: Pick<SystemSettings, "enableHttp2" | "interceptAnthropicWarmupRequests"> = {
   enableHttp2: false,
+  interceptAnthropicWarmupRequests: false,
 };
 
 /**
@@ -84,6 +85,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       cleanupBatchSize: 10000,
       enableClientVersionCheck: false,
       enableHttp2: DEFAULT_SETTINGS.enableHttp2,
+      interceptAnthropicWarmupRequests: DEFAULT_SETTINGS.interceptAnthropicWarmupRequests,
       createdAt: new Date(),
       updatedAt: new Date(),
     } satisfies SystemSettings;

@@ -31,6 +31,7 @@ function makeSystemSettings(
     enableClientVersionCheck: false,
     verboseProviderError: false,
     enableHttp2: false,
+    interceptAnthropicWarmupRequests: false,
     createdAt: now,
     updatedAt: now,
   };
@@ -49,9 +50,13 @@ function makePriceRecord(modelName: string, priceData: ModelPriceData): ModelPri
 function createSession({
   originalModel,
   redirectedModel,
+  requestUrl,
+  requestMessage,
 }: {
   originalModel?: string | null;
   redirectedModel?: string | null;
+  requestUrl?: URL;
+  requestMessage?: Record<string, unknown>;
 }): ProxySession {
   const session = new (
     ProxySession as unknown as {
@@ -70,10 +75,10 @@ function createSession({
   )({
     startTime: Date.now(),
     method: "POST",
-    requestUrl: new URL("http://localhost/v1/messages"),
+    requestUrl: requestUrl ?? new URL("http://localhost/v1/messages"),
     headers: new Headers(),
     headerLog: "",
-    request: { message: {}, log: "(test)", model: redirectedModel ?? null },
+    request: { message: requestMessage ?? {}, log: "(test)", model: redirectedModel ?? null },
     userAgent: null,
     context: {},
     clientAbortSignal: null,
@@ -419,5 +424,246 @@ describe("ProxySession - isHeaderModified", () => {
 
     expect(session.isHeaderModified("x-test")).toBe(true); // "" -> null
     expect(session.headers.get("x-test")).toBeNull();
+  });
+});
+
+describe("ProxySession.isWarmupRequest", () => {
+  it("应识别合法的 Warmup 请求（忽略大小写与首尾空格）", () => {
+    const session = createSession({
+      redirectedModel: "claude-sonnet-4-5-20250929",
+      requestMessage: {
+        model: "claude-sonnet-4-5-20250929",
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "  WaRmUp  ",
+                cache_control: { type: "ephemeral" },
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(session.isWarmupRequest()).toBe(true);
+  });
+
+  it("endpoint 非 /v1/messages 时不应命中", () => {
+    const session = createSession({
+      redirectedModel: "claude-sonnet-4-5-20250929",
+      requestUrl: new URL("http://localhost/v1/messages/count_tokens"),
+      requestMessage: {
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "Warmup",
+                cache_control: { type: "ephemeral" },
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(session.isWarmupRequest()).toBe(false);
+  });
+
+  it("缺少 cache_control 或 type 不为 ephemeral 时不应命中", () => {
+    const missingCacheControl = createSession({
+      redirectedModel: "claude-sonnet-4-5-20250929",
+      requestMessage: {
+        messages: [
+          {
+            role: "user",
+            content: [{ type: "text", text: "Warmup" }],
+          },
+        ],
+      },
+    });
+    expect(missingCacheControl.isWarmupRequest()).toBe(false);
+
+    const wrongCacheControl = createSession({
+      redirectedModel: "claude-sonnet-4-5-20250929",
+      requestMessage: {
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "Warmup",
+                cache_control: { type: "persistent" },
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(wrongCacheControl.isWarmupRequest()).toBe(false);
+  });
+
+  it("messages/content 非严格形态时不应命中（防误判）", () => {
+    const multiMessages = createSession({
+      redirectedModel: "claude-sonnet-4-5-20250929",
+      requestMessage: {
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "Warmup",
+                cache_control: { type: "ephemeral" },
+              },
+            ],
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "Warmup",
+                cache_control: { type: "ephemeral" },
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(multiMessages.isWarmupRequest()).toBe(false);
+
+    const multiBlocks = createSession({
+      redirectedModel: "claude-sonnet-4-5-20250929",
+      requestMessage: {
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "Warmup",
+                cache_control: { type: "ephemeral" },
+              },
+              { type: "text", text: "Warmup", cache_control: { type: "ephemeral" } },
+            ],
+          },
+        ],
+      },
+    });
+    expect(multiBlocks.isWarmupRequest()).toBe(false);
+  });
+
+  it("messages/role/content 结构异常时不应命中", () => {
+    const missingMessages = createSession({
+      redirectedModel: "claude-sonnet-4-5-20250929",
+      requestMessage: {},
+    });
+    expect(missingMessages.isWarmupRequest()).toBe(false);
+
+    const nonArrayMessages = createSession({
+      redirectedModel: "claude-sonnet-4-5-20250929",
+      requestMessage: { messages: "Warmup" },
+    });
+    expect(nonArrayMessages.isWarmupRequest()).toBe(false);
+
+    const roleNotUser = createSession({
+      redirectedModel: "claude-sonnet-4-5-20250929",
+      requestMessage: {
+        messages: [
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "text",
+                text: "Warmup",
+                cache_control: { type: "ephemeral" },
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(roleNotUser.isWarmupRequest()).toBe(false);
+
+    const contentNotArray = createSession({
+      redirectedModel: "claude-sonnet-4-5-20250929",
+      requestMessage: {
+        messages: [{ role: "user", content: "Warmup" }],
+      },
+    });
+    expect(contentNotArray.isWarmupRequest()).toBe(false);
+  });
+
+  it("block/text/cache_control 结构异常时不应命中", () => {
+    const blockNotObject = createSession({
+      redirectedModel: "claude-sonnet-4-5-20250929",
+      requestMessage: {
+        messages: [{ role: "user", content: [null] }],
+      },
+    });
+    expect(blockNotObject.isWarmupRequest()).toBe(false);
+
+    const typeNotText = createSession({
+      redirectedModel: "claude-sonnet-4-5-20250929",
+      requestMessage: {
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image",
+                text: "Warmup",
+                cache_control: { type: "ephemeral" },
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(typeNotText.isWarmupRequest()).toBe(false);
+
+    const textNotString = createSession({
+      redirectedModel: "claude-sonnet-4-5-20250929",
+      requestMessage: {
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: 123,
+                cache_control: { type: "ephemeral" },
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(textNotString.isWarmupRequest()).toBe(false);
+
+    const cacheControlNotObject = createSession({
+      redirectedModel: "claude-sonnet-4-5-20250929",
+      requestMessage: {
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "Warmup",
+                cache_control: null,
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(cacheControlNotObject.isWarmupRequest()).toBe(false);
   });
 });

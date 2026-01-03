@@ -127,6 +127,7 @@
       "nextPage": "Next Page",
       "blocked": "Blocked",
       "nonBilling": "Non-Billing",
+      "skipped": "Skipped",
       "times": "times",
       "loadedCount": "Loaded {count} records",
       "loadingMore": "Loading more...",
@@ -152,6 +153,12 @@
       "success": "Request completed successfully",
       "error": "Request failed, here are the detailed error messages and provider decision chain",
       "processing": "Request is in progress, not yet completed",
+      "skipped": {
+        "title": "Skipped",
+        "reason": "Reason",
+        "warmup": "Warmup Fast Response (CCH)",
+        "desc": "This request was identified as a Warmup probe and was answered directly by CCH without forwarding to upstream providers; it is not billed, not rate-limited, and excluded from statistics."
+      },
       "blocked": {
         "title": "Blocking Information",
         "type": "Blocking Type",

@@ -127,6 +127,7 @@
       "nextPage": "下一页",
       "blocked": "被拦截",
       "nonBilling": "非计费",
+      "skipped": "已跳过",
       "times": "次",
       "loadedCount": "已加载 {count} 条记录",
       "loadingMore": "加载更多中...",
@@ -152,6 +153,12 @@
       "success": "请求成功完成",
       "error": "请求失败，以下是详细的错误信息和供应商决策链",
       "processing": "请求正在进行中，尚未完成",
+      "skipped": {
+        "title": "跳过信息",
+        "reason": "原因",
+        "warmup": "Warmup 抢答（CCH）",
+        "desc": "该请求被识别为 Warmup 探测请求，已由 CCH 直接抢答响应，未转发上游供应商；不计费、不限流、不计入统计。"
+      },
       "blocked": {
         "title": "拦截信息",
         "type": "拦截类型",

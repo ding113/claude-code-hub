@@ -526,6 +526,7 @@ export async function getProviderStatistics(): Promise<
         FROM providers p
         -- 性能优化：添加日期过滤条件，仅扫描今日数据（避免全表扫描）
         LEFT JOIN message_request mr ON mr.deleted_at IS NULL
+          AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
           AND mr.created_at >= (CURRENT_DATE AT TIME ZONE ${timezone})
         WHERE p.deleted_at IS NULL
         GROUP BY p.id
@@ -542,6 +543,7 @@ export async function getProviderStatistics(): Promise<
         FROM message_request
         -- 性能优化：添加 7 天时间范围限制（避免扫描历史数据）
         WHERE deleted_at IS NULL
+          AND (blocked_by IS NULL OR blocked_by <> 'warmup')
           AND created_at >= (CURRENT_DATE AT TIME ZONE ${timezone} - INTERVAL '7 days')
         ORDER BY final_provider_id, created_at DESC
       )

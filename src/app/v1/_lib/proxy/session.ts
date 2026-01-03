@@ -568,6 +568,68 @@ export class ProxySession {
   }
 
   /**
+   * 检查是否为 Claude Messages Warmup 请求（仅用于 Anthropic /v1/messages）
+   *
+   * 判定标准（尽量严格，降低误判）：
+   * - endpoint 必须是 /v1/messages（排除 count_tokens 等）
+   * - messages 仅 1 条，且 role=user
+   * - content 为单个 text block
+   * - text == "Warmup"（忽略大小写/首尾空格）
+   * - cache_control.type == "ephemeral"
+   */
+  isWarmupRequest(): boolean {
+    const endpoint = this.getEndpoint();
+    if (endpoint !== "/v1/messages") {
+      return false;
+    }
+
+    const msg = this.request.message as Record<string, unknown>;
+    const messages = msg.messages;
+
+    if (!Array.isArray(messages) || messages.length !== 1) {
+      return false;
+    }
+
+    const firstMessage = messages[0];
+    if (!firstMessage || typeof firstMessage !== "object") {
+      return false;
+    }
+
+    const firstObj = firstMessage as Record<string, unknown>;
+    if (firstObj.role !== "user") {
+      return false;
+    }
+
+    const content = firstObj.content;
+    if (!Array.isArray(content) || content.length !== 1) {
+      return false;
+    }
+
+    const firstBlock = content[0];
+    if (!firstBlock || typeof firstBlock !== "object") {
+      return false;
+    }
+
+    const blockObj = firstBlock as Record<string, unknown>;
+    if (blockObj.type !== "text") {
+      return false;
+    }
+
+    const text = typeof blockObj.text === "string" ? blockObj.text.trim() : "";
+    if (!text || text.toLowerCase() !== "warmup") {
+      return false;
+    }
+
+    const cacheControl = blockObj.cache_control;
+    if (!cacheControl || typeof cacheControl !== "object") {
+      return false;
+    }
+
+    const cacheControlObj = cacheControl as Record<string, unknown>;
+    return cacheControlObj.type === "ephemeral";
+  }
+
+  /**
    * 设置上次选择的决策上下文（用于记录到 providerChain）
    */
   setLastSelectionContext(context: ProviderChainItem["decisionContext"]): void {

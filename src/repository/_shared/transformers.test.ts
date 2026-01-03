@@ -231,8 +231,19 @@ describe("src/repository/_shared/transformers.ts", () => {
       expect(result.enableClientVersionCheck).toBe(false);
       expect(result.verboseProviderError).toBe(false);
       expect(result.enableHttp2).toBe(false);
+      expect(result.interceptAnthropicWarmupRequests).toBe(false);
       expect(result.createdAt).toEqual(now);
       expect(result.updatedAt).toEqual(now);
+    });
+
+    it("应映射 interceptAnthropicWarmupRequests 字段", () => {
+      const result = toSystemSettings({
+        id: 1,
+        interceptAnthropicWarmupRequests: true,
+      });
+
+      expect(result.id).toBe(1);
+      expect(result.interceptAnthropicWarmupRequests).toBe(true);
     });
   });
 });

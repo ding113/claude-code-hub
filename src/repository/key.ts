@@ -8,6 +8,9 @@ import type { CreateKeyData, Key, UpdateKeyData } from "@/types/key";
 import type { User } from "@/types/user";
 import { toKey, toUser } from "./_shared/transformers";
 
+// Warmup 抢答请求只用于探测/预热：不计入任何统计/额度计算
+const EXCLUDE_WARMUP_CONDITION = sql`(${messageRequest.blockedBy} IS NULL OR ${messageRequest.blockedBy} <> 'warmup')`;
+
 export async function findKeyById(id: number): Promise<Key | null> {
   const [key] = await db
     .select({
@@ -295,6 +298,7 @@ export async function findKeyUsageToday(
       and(
         eq(messageRequest.key, keys.key),
         isNull(messageRequest.deletedAt),
+        EXCLUDE_WARMUP_CONDITION,
         gte(messageRequest.createdAt, today),
         lt(messageRequest.createdAt, tomorrow)
       )
@@ -339,6 +343,7 @@ export async function findKeyUsageTodayBatch(
       and(
         eq(messageRequest.key, keys.key),
         isNull(messageRequest.deletedAt),
+        EXCLUDE_WARMUP_CONDITION,
         gte(messageRequest.createdAt, today),
         lt(messageRequest.createdAt, tomorrow)
       )
@@ -563,6 +568,7 @@ export async function findKeysWithStatistics(userId: number): Promise<KeyStatist
         and(
           eq(messageRequest.key, key.key),
           isNull(messageRequest.deletedAt),
+          EXCLUDE_WARMUP_CONDITION,
           gte(messageRequest.createdAt, today),
           lt(messageRequest.createdAt, tomorrow)
         )
@@ -576,7 +582,13 @@ export async function findKeysWithStatistics(userId: number): Promise<KeyStatist
       })
       .from(messageRequest)
       .innerJoin(providers, eq(messageRequest.providerId, providers.id))
-      .where(and(eq(messageRequest.key, key.key), isNull(messageRequest.deletedAt)))
+      .where(
+        and(
+          eq(messageRequest.key, key.key),
+          isNull(messageRequest.deletedAt),
+          EXCLUDE_WARMUP_CONDITION
+        )
+      )
       .orderBy(desc(messageRequest.createdAt))
       .limit(1);
 
@@ -592,6 +604,7 @@ export async function findKeysWithStatistics(userId: number): Promise<KeyStatist
         and(
           eq(messageRequest.key, key.key),
           isNull(messageRequest.deletedAt),
+          EXCLUDE_WARMUP_CONDITION,
           gte(messageRequest.createdAt, today),
           lt(messageRequest.createdAt, tomorrow),
           sql`${messageRequest.model} IS NOT NULL`
@@ -677,6 +690,7 @@ export async function findKeysWithStatisticsBatch(
       and(
         inArray(messageRequest.key, keyStrings),
         isNull(messageRequest.deletedAt),
+        EXCLUDE_WARMUP_CONDITION,
         gte(messageRequest.createdAt, today),
         lt(messageRequest.createdAt, tomorrow)
       )
@@ -699,7 +713,13 @@ export async function findKeysWithStatisticsBatch(
     })
     .from(messageRequest)
     .innerJoin(providers, eq(messageRequest.providerId, providers.id))
-    .where(and(inArray(messageRequest.key, keyStrings), isNull(messageRequest.deletedAt)))
+    .where(
+      and(
+        inArray(messageRequest.key, keyStrings),
+        isNull(messageRequest.deletedAt),
+        EXCLUDE_WARMUP_CONDITION
+      )
+    )
     .orderBy(messageRequest.key, desc(messageRequest.createdAt));
 
   const lastUsageMap = new Map<string, { createdAt: Date | null; providerName: string | null }>();
@@ -725,6 +745,7 @@ export async function findKeysWithStatisticsBatch(
       and(
         inArray(messageRequest.key, keyStrings),
         isNull(messageRequest.deletedAt),
+        EXCLUDE_WARMUP_CONDITION,
         gte(messageRequest.createdAt, today),
         lt(messageRequest.createdAt, tomorrow),
         sql`${messageRequest.model} IS NOT NULL`

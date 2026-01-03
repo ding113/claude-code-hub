@@ -124,6 +124,10 @@ process.env.API_BASE_URL = process.env.API_BASE_URL || "http://localhost:13500/a
 // 便于 API 测试复用 ADMIN_TOKEN（validateKey 支持该 token 直通管理员会话）
 process.env.TEST_ADMIN_TOKEN = process.env.TEST_ADMIN_TOKEN || process.env.ADMIN_TOKEN;
 
+// ==================== React act 环境标记 ====================
+// React 18+ 在测试环境中会检查该标记，避免出现 “not configured to support act(...)” 的噪声警告。
+(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
 // ==================== 全局超时配置 ====================
 
 // 设置全局默认超时（可以被单个测试覆盖）

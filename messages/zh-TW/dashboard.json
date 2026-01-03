@@ -127,6 +127,7 @@
       "nextPage": "下一頁",
       "blocked": "已攔截",
       "nonBilling": "非計費",
+      "skipped": "已跳過",
       "times": "次",
       "loadedCount": "已載入 {count} 筆記錄",
       "loadingMore": "載入更多中...",
@@ -152,6 +153,12 @@
       "success": "請求成功完成",
       "error": "請求失敗，以下是詳細的錯誤訊息和供應商決策鏈",
       "processing": "請求正在進行中，尚未完成",
+      "skipped": {
+        "title": "跳過資訊",
+        "reason": "原因",
+        "warmup": "Warmup 搶答（CCH）",
+        "desc": "該請求被識別為 Warmup 探測請求，已由 CCH 直接搶答回應，未轉發上游供應商；不計費、不限流、不計入統計。"
+      },
       "blocked": {
         "title": "攔截資訊",
         "type": "攔截類型",
