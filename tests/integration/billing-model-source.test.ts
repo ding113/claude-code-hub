@@ -99,6 +99,7 @@ function makeSystemSettings(
     enableClientVersionCheck: false,
     verboseProviderError: false,
     enableHttp2: false,
+    interceptAnthropicWarmupRequests: false,
     createdAt: now,
     updatedAt: now,
   };

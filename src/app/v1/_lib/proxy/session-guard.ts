@@ -1,3 +1,4 @@
+import { getCachedSystemSettings } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { SessionManager } from "@/lib/session-manager";
 import { SessionTracker } from "@/lib/session-tracker";
@@ -46,6 +47,14 @@ export class ProxySessionGuard {
     }
 
     try {
+      const warmupMaybeIntercepted =
+        session.isWarmupRequest() &&
+        !!session.authState?.success &&
+        !!session.authState.user &&
+        !!session.authState.key &&
+        !!session.authState.apiKey &&
+        (await getCachedSystemSettings()).interceptAnthropicWarmupRequests;
+
       // 1. 尝试从客户端提取 session_id（metadata.session_id）
       const clientSessionId =
         SessionManager.extractClientSessionId(
@@ -99,9 +108,12 @@ export class ProxySessionGuard {
       }
 
       // 5. 追踪 session（添加到活跃集合）
-      void SessionTracker.trackSession(sessionId, keyId).catch((err) => {
-        logger.error("[ProxySessionGuard] Failed to track session:", err);
-      });
+      // Warmup 拦截请求不应计入并发会话（避免影响后续真实请求的限额判断）
+      if (!warmupMaybeIntercepted) {
+        void SessionTracker.trackSession(sessionId, keyId).catch((err) => {
+          logger.error("[ProxySessionGuard] Failed to track session:", err);
+        });
+      }
 
       // 6. 存储 session 详细信息到 Redis（用于实时监控，带重试机制）
       void (async () => {

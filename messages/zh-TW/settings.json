@@ -100,6 +100,8 @@
       "allowGlobalViewDesc": "關閉後，普通使用者在儀表板僅能查看自己金鑰的使用統計。",
       "verboseProviderError": "詳細供應商錯誤資訊",
       "verboseProviderErrorDesc": "開啟後，當所有供應商不可用時返回詳細錯誤資訊（包含供應商數量、限流原因等）；關閉後僅返回簡潔錯誤碼。",
+      "interceptAnthropicWarmupRequests": "攔截 Warmup 請求（Anthropic）",
+      "interceptAnthropicWarmupRequestsDesc": "開啟後，識別到 Claude Code 的 Warmup 探測請求將由 CCH 直接搶答短回應，避免存取上游供應商；該請求會記錄在日誌中，但不計費、不限流、不計入統計。",
       "cleanupSchedule": "清理週期",
       "cleanupScheduleDesc": "選擇自動清理的執行週期",
       "configUpdated": "系統設定已更新，頁面將重新整理以應用貨幣顯示變更。",

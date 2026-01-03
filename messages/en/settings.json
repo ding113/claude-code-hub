@@ -102,6 +102,8 @@
       "verboseProviderErrorDesc": "When enabled, return detailed error messages when all providers are unavailable (including provider count, rate limit reasons, etc.); when disabled, only return a simple error code.",
       "enableHttp2": "Enable HTTP/2",
       "enableHttp2Desc": "When enabled, proxy requests will prefer HTTP/2 protocol. Automatically falls back to HTTP/1.1 on failure.",
+      "interceptAnthropicWarmupRequests": "Intercept Warmup Requests (Anthropic)",
+      "interceptAnthropicWarmupRequestsDesc": "When enabled, Claude Code warmup probe requests will be answered by CCH directly to avoid upstream provider calls; the request is logged for audit but is not billed, not rate-limited, and excluded from statistics.",
       "cleanupSchedule": "Cleanup Schedule",
       "cleanupScheduleDesc": "Select the execution schedule for automatic cleanup",
       "configUpdated": "System settings updated. The page will refresh to apply currency display changes.",
