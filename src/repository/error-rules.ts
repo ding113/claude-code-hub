@@ -622,6 +622,25 @@ const DEFAULT_ERROR_RULES = [
       },
     },
   },
+  // Issue #518: Invalid signature in thinking block (cross-channel format incompatibility)
+  {
+    pattern: "Invalid `signature` in `thinking` block",
+    category: "thinking_error",
+    description:
+      "Invalid signature in thinking block (occurs when switching between Anthropic and non-Anthropic channels)",
+    matchType: "contains" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 71,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "thinking_error",
+        message:
+          "thinking 块签名无效，通常发生在 Anthropic 渠道与非 Anthropic 渠道切换时，请检查请求格式",
+      },
+    },
+  },
   {
     pattern: "Missing required parameter|Extra inputs.*not permitted",
     category: "parameter_error",
