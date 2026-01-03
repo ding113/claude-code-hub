@@ -42,7 +42,12 @@ export async function getActiveUserVersions(days = 7): Promise<RawUserVersion[]>
       .from(messageRequest)
       .leftJoin(users, and(sql`${messageRequest.userId} = ${users.id}`, isNull(users.deletedAt)))
       .where(
-        and(gte(messageRequest.createdAt, cutoffDate), sql`${messageRequest.userAgent} IS NOT NULL`)
+        and(
+          isNull(messageRequest.deletedAt),
+          sql`${messageRequest.blockedBy} IS DISTINCT FROM 'warmup'`,
+          gte(messageRequest.createdAt, cutoffDate),
+          sql`${messageRequest.userAgent} IS NOT NULL`
+        )
       )
       .groupBy(messageRequest.userId, users.name, messageRequest.userAgent)
       .orderBy(sql`MAX(${messageRequest.createdAt}) DESC`);

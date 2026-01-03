@@ -31,6 +31,7 @@ function makeSystemSettings(
     enableClientVersionCheck: false,
     verboseProviderError: false,
     enableHttp2: false,
+    enableAnthropicWarmupIntercept: false,
     createdAt: now,
     updatedAt: now,
   };

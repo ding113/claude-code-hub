@@ -100,6 +100,8 @@
       "allowGlobalViewDesc": "無効にすると、一般ユーザーはダッシュボードで自分のキーの使用統計のみを表示できます。",
       "verboseProviderError": "詳細なプロバイダーエラー",
       "verboseProviderErrorDesc": "有効にすると、すべてのプロバイダーが利用不可の場合に詳細なエラーメッセージ（プロバイダー数、レート制限の理由など）を返します。無効の場合は簡潔なエラーコードのみを返します。",
+      "enableAnthropicWarmupIntercept": "Anthropic Warmup リクエストをインターセプト",
+      "enableAnthropicWarmupInterceptDesc": "有効にすると、CCH は Claude/Anthropic の Warmup リクエストを検出して上流への送信をスキップし、ローカルの短い応答を返します。",
       "cleanupSchedule": "クリーンアップスケジュール",
       "cleanupScheduleDesc": "自動クリーンアップの実行スケジュールを選択します",
       "configUpdated": "システム設定が更新されました。ページが更新され、通貨表示の変更が適用されます。",

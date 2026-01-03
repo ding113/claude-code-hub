@@ -39,6 +39,7 @@ export async function getOverviewMetrics(): Promise<OverviewMetrics> {
     .where(
       and(
         isNull(messageRequest.deletedAt),
+        sql`${messageRequest.blockedBy} IS DISTINCT FROM 'warmup'`,
         sql`(${messageRequest.createdAt} AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date`
       )
     );

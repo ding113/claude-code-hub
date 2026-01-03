@@ -29,6 +29,7 @@ interface SystemSettingsFormProps {
     | "billingModelSource"
     | "verboseProviderError"
     | "enableHttp2"
+    | "enableAnthropicWarmupIntercept"
   >;
 }
 
@@ -50,6 +51,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
     initialSettings.verboseProviderError
   );
   const [enableHttp2, setEnableHttp2] = useState(initialSettings.enableHttp2);
+  const [enableAnthropicWarmupIntercept, setEnableAnthropicWarmupIntercept] = useState(
+    initialSettings.enableAnthropicWarmupIntercept
+  );
   const [isPending, startTransition] = useTransition();
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -68,6 +72,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         billingModelSource,
         verboseProviderError,
         enableHttp2,
+        enableAnthropicWarmupIntercept,
       });
 
       if (!result.ok) {
@@ -82,6 +87,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setBillingModelSource(result.data.billingModelSource);
         setVerboseProviderError(result.data.verboseProviderError);
         setEnableHttp2(result.data.enableHttp2);
+        setEnableAnthropicWarmupIntercept(result.data.enableAnthropicWarmupIntercept);
       }
 
       toast.success(t("configUpdated"));
@@ -188,6 +194,23 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
           id="enable-http2"
           checked={enableHttp2}
           onCheckedChange={(checked) => setEnableHttp2(checked)}
+          disabled={isPending}
+        />
+      </div>
+
+      <div className="flex items-start justify-between gap-4 rounded-lg border border-dashed border-border px-4 py-3">
+        <div>
+          <Label htmlFor="enable-anthropic-warmup-intercept" className="text-sm font-medium">
+            {t("enableAnthropicWarmupIntercept")}
+          </Label>
+          <p className="text-xs text-muted-foreground mt-1">
+            {t("enableAnthropicWarmupInterceptDesc")}
+          </p>
+        </div>
+        <Switch
+          id="enable-anthropic-warmup-intercept"
+          checked={enableAnthropicWarmupIntercept}
+          onCheckedChange={(checked) => setEnableAnthropicWarmupIntercept(checked)}
           disabled={isPending}
         />
       </div>

@@ -170,7 +170,13 @@ async function findLeaderboardWithTimezone(
     })
     .from(messageRequest)
     .innerJoin(users, and(sql`${messageRequest.userId} = ${users.id}`, isNull(users.deletedAt)))
-    .where(and(isNull(messageRequest.deletedAt), buildDateCondition(period, timezone, dateRange)))
+    .where(
+      and(
+        isNull(messageRequest.deletedAt),
+        buildDateCondition(period, timezone, dateRange),
+        sql`${messageRequest.blockedBy} IS DISTINCT FROM 'warmup'`
+      )
+    )
     .groupBy(messageRequest.userId, users.name)
     .orderBy(desc(sql`sum(${messageRequest.costUsd})`));
 
@@ -306,6 +312,7 @@ async function findProviderLeaderboardWithTimezone(
 ): Promise<ProviderLeaderboardEntry[]> {
   const whereConditions = [
     isNull(messageRequest.deletedAt),
+    sql`${messageRequest.blockedBy} IS DISTINCT FROM 'warmup'`,
     buildDateCondition(period, timezone, dateRange),
     providerType ? eq(providers.providerType, providerType) : undefined,
   ];
@@ -405,6 +412,7 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
 
   const whereConditions = [
     isNull(messageRequest.deletedAt),
+    sql`${messageRequest.blockedBy} IS DISTINCT FROM 'warmup'`,
     buildDateCondition(period, timezone, dateRange),
     cacheRequiredCondition,
     providerType ? eq(providers.providerType, providerType) : undefined,
@@ -547,7 +555,13 @@ async function findModelLeaderboardWithTimezone(
       )`,
     })
     .from(messageRequest)
-    .where(and(isNull(messageRequest.deletedAt), buildDateCondition(period, timezone, dateRange)))
+    .where(
+      and(
+        isNull(messageRequest.deletedAt),
+        buildDateCondition(period, timezone, dateRange),
+        sql`${messageRequest.blockedBy} IS DISTINCT FROM 'warmup'`
+      )
+    )
     .groupBy(modelField)
     .orderBy(desc(sql`count(*)`)); // 按请求数排序
 

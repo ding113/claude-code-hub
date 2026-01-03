@@ -46,6 +46,7 @@ export async function getUserStatisticsFromDB(timeRange: TimeRange): Promise<Dat
           LEFT JOIN message_request mr ON u.id = mr.user_id
             AND DATE_TRUNC('hour', mr.created_at AT TIME ZONE ${timezone}) = hr.hour
             AND mr.deleted_at IS NULL
+            AND mr.blocked_by IS DISTINCT FROM 'warmup'
           WHERE u.deleted_at IS NULL
           GROUP BY u.id, u.name, hr.hour
         )
@@ -82,6 +83,7 @@ export async function getUserStatisticsFromDB(timeRange: TimeRange): Promise<Dat
           LEFT JOIN message_request mr ON u.id = mr.user_id
             AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
             AND mr.deleted_at IS NULL
+            AND mr.blocked_by IS DISTINCT FROM 'warmup'
           WHERE u.deleted_at IS NULL
           GROUP BY u.id, u.name, dr.date
         )
@@ -118,6 +120,7 @@ export async function getUserStatisticsFromDB(timeRange: TimeRange): Promise<Dat
           LEFT JOIN message_request mr ON u.id = mr.user_id
             AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
             AND mr.deleted_at IS NULL
+            AND mr.blocked_by IS DISTINCT FROM 'warmup'
           WHERE u.deleted_at IS NULL
           GROUP BY u.id, u.name, dr.date
         )
@@ -154,6 +157,7 @@ export async function getUserStatisticsFromDB(timeRange: TimeRange): Promise<Dat
           LEFT JOIN message_request mr ON u.id = mr.user_id
             AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
             AND mr.deleted_at IS NULL
+            AND mr.blocked_by IS DISTINCT FROM 'warmup'
           WHERE u.deleted_at IS NULL
           GROUP BY u.id, u.name, dr.date
         )
@@ -230,6 +234,7 @@ export async function getKeyStatisticsFromDB(
             AND mr.user_id = ${userId}
             AND DATE_TRUNC('hour', mr.created_at AT TIME ZONE ${timezone}) = hr.hour
             AND mr.deleted_at IS NULL
+            AND mr.blocked_by IS DISTINCT FROM 'warmup'
           GROUP BY k.id, k.name, hr.hour
         )
         SELECT
@@ -271,6 +276,7 @@ export async function getKeyStatisticsFromDB(
             AND mr.user_id = ${userId}
             AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
             AND mr.deleted_at IS NULL
+            AND mr.blocked_by IS DISTINCT FROM 'warmup'
           GROUP BY k.id, k.name, dr.date
         )
         SELECT
@@ -312,6 +318,7 @@ export async function getKeyStatisticsFromDB(
             AND mr.user_id = ${userId}
             AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
             AND mr.deleted_at IS NULL
+            AND mr.blocked_by IS DISTINCT FROM 'warmup'
           GROUP BY k.id, k.name, dr.date
         )
         SELECT
@@ -353,6 +360,7 @@ export async function getKeyStatisticsFromDB(
             AND mr.user_id = ${userId}
             AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
             AND mr.deleted_at IS NULL
+            AND mr.blocked_by IS DISTINCT FROM 'warmup'
           GROUP BY k.id, k.name, dr.date
         )
         SELECT
@@ -435,6 +443,7 @@ export async function getMixedStatisticsFromDB(
             AND mr.user_id = ${userId}
             AND DATE_TRUNC('hour', mr.created_at AT TIME ZONE ${timezone}) = hr.hour
             AND mr.deleted_at IS NULL
+            AND mr.blocked_by IS DISTINCT FROM 'warmup'
           GROUP BY k.id, k.name, hr.hour
         )
         SELECT
@@ -465,6 +474,7 @@ export async function getMixedStatisticsFromDB(
           LEFT JOIN message_request mr ON DATE_TRUNC('hour', mr.created_at AT TIME ZONE ${timezone}) = hr.hour
             AND mr.user_id != ${userId}
             AND mr.deleted_at IS NULL
+            AND mr.blocked_by IS DISTINCT FROM 'warmup'
           GROUP BY hr.hour
         )
         SELECT
@@ -507,6 +517,7 @@ export async function getMixedStatisticsFromDB(
             AND mr.user_id = ${userId}
             AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
             AND mr.deleted_at IS NULL
+            AND mr.blocked_by IS DISTINCT FROM 'warmup'
           GROUP BY k.id, k.name, dr.date
         )
         SELECT
@@ -537,6 +548,7 @@ export async function getMixedStatisticsFromDB(
           LEFT JOIN message_request mr ON (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
             AND mr.user_id != ${userId}
             AND mr.deleted_at IS NULL
+            AND mr.blocked_by IS DISTINCT FROM 'warmup'
           GROUP BY dr.date
         )
         SELECT
@@ -579,6 +591,7 @@ export async function getMixedStatisticsFromDB(
             AND mr.user_id = ${userId}
             AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
             AND mr.deleted_at IS NULL
+            AND mr.blocked_by IS DISTINCT FROM 'warmup'
           GROUP BY k.id, k.name, dr.date
         )
         SELECT
@@ -609,6 +622,7 @@ export async function getMixedStatisticsFromDB(
           LEFT JOIN message_request mr ON (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
             AND mr.user_id != ${userId}
             AND mr.deleted_at IS NULL
+            AND mr.blocked_by IS DISTINCT FROM 'warmup'
           GROUP BY dr.date
         )
         SELECT
@@ -651,6 +665,7 @@ export async function getMixedStatisticsFromDB(
             AND mr.user_id = ${userId}
             AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
             AND mr.deleted_at IS NULL
+            AND mr.blocked_by IS DISTINCT FROM 'warmup'
           GROUP BY k.id, k.name, dr.date
         )
         SELECT
@@ -681,6 +696,7 @@ export async function getMixedStatisticsFromDB(
           LEFT JOIN message_request mr ON (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
             AND mr.user_id != ${userId}
             AND mr.deleted_at IS NULL
+            AND mr.blocked_by IS DISTINCT FROM 'warmup'
           GROUP BY dr.date
         )
         SELECT
@@ -728,6 +744,7 @@ export async function sumUserCostToday(userId: number): Promise<number> {
     WHERE k.user_id = ${userId}
       AND (mr.created_at AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date
       AND mr.deleted_at IS NULL
+      AND mr.blocked_by IS DISTINCT FROM 'warmup'
       AND k.deleted_at IS NULL
   `;
 

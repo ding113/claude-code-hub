@@ -563,6 +563,7 @@ export async function findKeysWithStatistics(userId: number): Promise<KeyStatist
         and(
           eq(messageRequest.key, key.key),
           isNull(messageRequest.deletedAt),
+          sql`${messageRequest.blockedBy} IS DISTINCT FROM 'warmup'`,
           gte(messageRequest.createdAt, today),
           lt(messageRequest.createdAt, tomorrow)
         )
@@ -576,7 +577,13 @@ export async function findKeysWithStatistics(userId: number): Promise<KeyStatist
       })
       .from(messageRequest)
       .innerJoin(providers, eq(messageRequest.providerId, providers.id))
-      .where(and(eq(messageRequest.key, key.key), isNull(messageRequest.deletedAt)))
+      .where(
+        and(
+          eq(messageRequest.key, key.key),
+          isNull(messageRequest.deletedAt),
+          sql`${messageRequest.blockedBy} IS DISTINCT FROM 'warmup'`
+        )
+      )
       .orderBy(desc(messageRequest.createdAt))
       .limit(1);
 
@@ -592,6 +599,7 @@ export async function findKeysWithStatistics(userId: number): Promise<KeyStatist
         and(
           eq(messageRequest.key, key.key),
           isNull(messageRequest.deletedAt),
+          sql`${messageRequest.blockedBy} IS DISTINCT FROM 'warmup'`,
           gte(messageRequest.createdAt, today),
           lt(messageRequest.createdAt, tomorrow),
           sql`${messageRequest.model} IS NOT NULL`
@@ -677,6 +685,7 @@ export async function findKeysWithStatisticsBatch(
       and(
         inArray(messageRequest.key, keyStrings),
         isNull(messageRequest.deletedAt),
+        sql`${messageRequest.blockedBy} IS DISTINCT FROM 'warmup'`,
         gte(messageRequest.createdAt, today),
         lt(messageRequest.createdAt, tomorrow)
       )
@@ -699,7 +708,13 @@ export async function findKeysWithStatisticsBatch(
     })
     .from(messageRequest)
     .innerJoin(providers, eq(messageRequest.providerId, providers.id))
-    .where(and(inArray(messageRequest.key, keyStrings), isNull(messageRequest.deletedAt)))
+    .where(
+      and(
+        inArray(messageRequest.key, keyStrings),
+        isNull(messageRequest.deletedAt),
+        sql`${messageRequest.blockedBy} IS DISTINCT FROM 'warmup'`
+      )
+    )
     .orderBy(messageRequest.key, desc(messageRequest.createdAt));
 
   const lastUsageMap = new Map<string, { createdAt: Date | null; providerName: string | null }>();
@@ -725,6 +740,7 @@ export async function findKeysWithStatisticsBatch(
       and(
         inArray(messageRequest.key, keyStrings),
         isNull(messageRequest.deletedAt),
+        sql`${messageRequest.blockedBy} IS DISTINCT FROM 'warmup'`,
         gte(messageRequest.createdAt, today),
         lt(messageRequest.createdAt, tomorrow),
         sql`${messageRequest.model} IS NOT NULL`
