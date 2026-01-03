@@ -1150,6 +1150,7 @@
         "create": "Add Provider",
         "edit": "Edit Provider"
       },
+      "dialogDescription": "Configure provider details and advanced settings.",
       "url": {
         "label": "API Address *",
         "placeholder": "e.g. https://open.bigmodel.cn/api/anthropic"
@@ -1470,6 +1471,7 @@
       "errors": {
         "invalidUrl": "Please enter a valid API address",
         "invalidWebsiteUrl": "Please enter a valid provider website URL",
+        "groupTagTooLong": "Provider group tags are too long (max {max} chars total)",
         "addFailed": "Failed to add provider",
         "updateFailed": "Failed to update provider",
         "deleteFailed": "Failed to delete provider"
