@@ -4,6 +4,33 @@
 
 ---
 
+## [v0.3.40](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.40) - 2026-01-01
+
+### 新增
+
+- 供应商模型动态获取功能，支持从上游 API 动态获取允许的模型列表 (#491) [@NieiR](https://github.com/NieiR)
+- Redis Pub/Sub 缓存失效通知机制，实现多实例间缓存同步 (#493)
+- RPM 限流管理功能，支持每分钟请求数限制配置 (#499)
+
+### 优化
+
+- 供应商故障阈值配置优化，允许 failureThreshold 设置为 0 或超过 100 (#498) [@Tethys Plex](https://github.com/Privnode-HQ)
+- Session 详情记录增强，补全请求和响应的完整 payload (#495)
+- 排行榜输出速率计算优化，修复除以过小值导致的异常 (#497) [@NieiR](https://github.com/NieiR)
+- 客户端模式匹配规范化，统一处理连字符和下划线 (c79b87c)
+
+### 修复
+
+- 修复 E2E 测试中 RPM 验证的测试用例 (ca0ada4)
+- 移除新建用户时的默认限额配置，提供更清晰的配置体验 (#499)
+
+### 其他
+
+- 多语言翻译更新（英语/日语/俄语/简体中文/繁体中文）
+- 代码格式化和 Biome lint 修复
+
+---
+
 ## [v0.3.39](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.39) - 2025-12-31
 
 ### 新增

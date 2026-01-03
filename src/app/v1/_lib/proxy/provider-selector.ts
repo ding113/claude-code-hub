@@ -993,6 +993,134 @@ export class ProxyProviderResolver {
 
     return providers[providers.length - 1];
   }
+
+  /**
+   * 为指定用户和 providerType 选择最优 Provider（用于 /v1/models 端点）
+   *
+   * 此方法允许直接指定 providerType，用于对不同类型的 provider 进行独立决策
+   * （如 openai 格式分别决策 codex 和 openai-compatible）
+   */
+  static async selectProviderByType(
+    authState: {
+      user: { id: number; providerGroup: string | null } | null;
+      key: { providerGroup: string | null } | null;
+    } | null,
+    providerType: Provider["providerType"]
+  ): Promise<{
+    provider: Provider | null;
+    context: NonNullable<ProviderChainItem["decisionContext"]>;
+  }> {
+    const allProviders = await findAllProviders();
+
+    // 分组预过滤
+    const effectiveGroupPick =
+      authState?.key?.providerGroup || authState?.user?.providerGroup || null;
+
+    let visibleProviders = allProviders;
+    if (effectiveGroupPick) {
+      const groupFiltered = allProviders.filter((p) =>
+        checkProviderGroupMatch(p.groupTag, effectiveGroupPick)
+      );
+      if (groupFiltered.length > 0) {
+        visibleProviders = groupFiltered;
+      }
+    }
+
+    // 按 providerType 精确过滤
+    const typeFiltered = visibleProviders.filter(
+      (p) => p.isEnabled && p.providerType === providerType
+    );
+
+    // 将 providerType 映射为 decisionContext 允许的 targetType
+    const targetType: "claude" | "codex" | "openai-compatible" | "gemini" | "gemini-cli" =
+      providerType === "claude-auth" ? "claude" : providerType;
+
+    if (typeFiltered.length === 0) {
+      return {
+        provider: null,
+        context: {
+          totalProviders: visibleProviders.length,
+          enabledProviders: 0,
+          targetType,
+          requestedModel: "",
+          groupFilterApplied: !!effectiveGroupPick,
+          userGroup: effectiveGroupPick || undefined,
+          beforeHealthCheck: 0,
+          afterHealthCheck: 0,
+          filteredProviders: [],
+          priorityLevels: [],
+          selectedPriority: 0,
+          candidatesAtPriority: [],
+        },
+      };
+    }
+
+    // 健康度检查（熔断器 + 费用限制）
+    const healthyProviders = await ProxyProviderResolver.filterByLimits(typeFiltered);
+
+    if (healthyProviders.length === 0) {
+      // 被过滤的供应商（健康检查失败）
+      const filtered = typeFiltered.map((p) => ({
+        id: p.id,
+        name: p.name,
+        reason: "rate_limited" as const, // 简化：统一标记为 rate_limited
+      }));
+
+      return {
+        provider: null,
+        context: {
+          totalProviders: visibleProviders.length,
+          enabledProviders: typeFiltered.length,
+          targetType,
+          requestedModel: "",
+          groupFilterApplied: !!effectiveGroupPick,
+          userGroup: effectiveGroupPick || undefined,
+          beforeHealthCheck: typeFiltered.length,
+          afterHealthCheck: 0,
+          filteredProviders: filtered,
+          priorityLevels: [],
+          selectedPriority: 0,
+          candidatesAtPriority: [],
+        },
+      };
+    }
+
+    // 优先级分层
+    const topPriorityProviders = ProxyProviderResolver.selectTopPriority(healthyProviders);
+
+    // 成本排序 + 加权随机选择
+    const selected = ProxyProviderResolver.selectOptimal(topPriorityProviders);
+
+    // 计算候选者概率
+    const totalWeight = topPriorityProviders.reduce((sum, p) => sum + p.weight, 0);
+    const candidates = topPriorityProviders.map((p) => ({
+      id: p.id,
+      name: p.name,
+      weight: p.weight,
+      costMultiplier: p.costMultiplier,
+      probability: totalWeight > 0 ? p.weight / totalWeight : 1 / topPriorityProviders.length,
+    }));
+
+    return {
+      provider: selected,
+      context: {
+        totalProviders: visibleProviders.length,
+        enabledProviders: typeFiltered.length,
+        targetType,
+        requestedModel: "",
+        groupFilterApplied: !!effectiveGroupPick,
+        userGroup: effectiveGroupPick || undefined,
+        beforeHealthCheck: typeFiltered.length,
+        afterHealthCheck: healthyProviders.length,
+        filteredProviders: [],
+        priorityLevels: [...new Set(healthyProviders.map((p) => p.priority || 0))].sort(
+          (a, b) => a - b
+        ),
+        selectedPriority: selected.priority || 0,
+        candidatesAtPriority: candidates,
+      },
+    };
+  }
 }
 
 // Export for testing

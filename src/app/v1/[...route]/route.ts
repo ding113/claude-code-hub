@@ -3,6 +3,11 @@ import { Hono } from "hono";
 import { handle } from "hono/vercel";
 import { handleChatCompletions } from "@/app/v1/_lib/codex/chat-completions-handler";
 import { registerCors } from "@/app/v1/_lib/cors";
+import {
+  handleAvailableModels,
+  handleCodexModels,
+  handleOpenAICompatibleModels,
+} from "@/app/v1/_lib/models/available-models";
 import { handleProxyRequest } from "@/app/v1/_lib/proxy-handler";
 import { logger } from "@/lib/logger";
 import { sensitiveWordDetector } from "@/lib/sensitive-word-detector";
@@ -23,6 +28,12 @@ sensitiveWordDetector.reload().catch((err) => {
 const app = new Hono().basePath("/v1");
 
 registerCors(app);
+
+// 模型列表端点
+app.get("/models", handleAvailableModels); // 聚合式，返回用户可用的所有模型
+app.get("/responses/models", handleCodexModels); // 只返回 codex 类型（用于 /v1/responses）
+app.get("/chat/completions/models", handleOpenAICompatibleModels); // 只返回 openai-compatible 类型
+app.get("/chat/models", handleOpenAICompatibleModels); // 简写路径
 
 // OpenAI Compatible API 路由
 app.post("/chat/completions", handleChatCompletions);
