@@ -610,9 +610,7 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
         </div>
       ) : (
         <div className="space-y-3">
-          <div className="h-4">
-            {isRefreshing ? <InlineLoading label={tCommon("loading")} /> : null}
-          </div>
+          <div>{isRefreshing ? <InlineLoading label={tCommon("loading")} /> : null}</div>
           <UserManagementTable
             users={visibleUsers}
             hasNextPage={hasNextPage}

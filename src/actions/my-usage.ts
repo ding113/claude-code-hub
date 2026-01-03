@@ -4,12 +4,11 @@ import { and, eq, gte, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
-import { getEnvConfig } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit/service";
+import type { DailyResetMode } from "@/lib/rate-limit/time-utils";
 import { SessionTracker } from "@/lib/session-tracker";
 import type { CurrencyCode } from "@/lib/utils";
-import { sumUserCostToday } from "@/repository/statistics";
 import { getSystemSettings } from "@/repository/system-config";
 import {
   findUsageLogsWithDetails,
@@ -121,44 +120,25 @@ export interface MyUsageLogsResult {
   billingModelSource: BillingModelSource;
 }
 
-function getPeriodStart(period: "5h" | "weekly" | "monthly" | "total" | "today") {
-  const now = new Date();
-  if (period === "total") return null;
-  if (period === "today") {
-    const start = new Date(now);
-    start.setHours(0, 0, 0, 0);
-    return start;
-  }
-  if (period === "5h") {
-    return new Date(now.getTime() - 5 * 60 * 60 * 1000);
-  }
-  if (period === "weekly") {
-    return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-  }
-  if (period === "monthly") {
-    return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-  }
-  return null;
-}
-
+/**
+ * 查询用户在指定周期内的消费
+ * 使用与 Key 层级和限额检查相同的时间范围计算逻辑
+ *
+ * @deprecated 此函数已被重构为使用统一的时间范围计算逻辑
+ */
 async function sumUserCost(userId: number, period: "5h" | "weekly" | "monthly" | "total") {
-  const conditions = [
-    eq(keysTable.userId, userId),
-    isNull(keysTable.deletedAt),
-    isNull(messageRequest.deletedAt),
-  ];
-  const start = getPeriodStart(period);
-  if (start) {
-    conditions.push(gte(messageRequest.createdAt, start));
+  // 动态导入避免循环依赖
+  const { sumUserCostInTimeRange, sumUserTotalCost } = await import("@/repository/statistics");
+  const { getTimeRangeForPeriod } = await import("@/lib/rate-limit/time-utils");
+
+  // 总消费：使用专用函数
+  if (period === "total") {
+    return await sumUserTotalCost(userId);
   }
 
-  const [row] = await db
-    .select({ total: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)` })
-    .from(messageRequest)
-    .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
-    .where(and(...conditions));
-
-  return Number(row?.total ?? 0);
+  // 其他周期：使用统一的时间范围计算
+  const { startTime, endTime } = getTimeRangeForPeriod(period);
+  return await sumUserCostInTimeRange(userId, startTime, endTime);
 }
 
 export async function getMyUsageMetadata(): Promise<ActionResult<MyUsageMetadata>> {
@@ -199,6 +179,18 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
     const key = session.key;
     const user = session.user;
 
+    // 获取用户每日消费时使用用户的 dailyResetTime 和 dailyResetMode 配置
+    // 导入时间工具函数
+    const { getTimeRangeForPeriodWithMode } = await import("@/lib/rate-limit/time-utils");
+    const { sumUserCostInTimeRange } = await import("@/repository/statistics");
+
+    // 计算用户每日消费的时间范围(使用用户的配置)
+    const userDailyTimeRange = getTimeRangeForPeriodWithMode(
+      "daily",
+      user.dailyResetTime ?? "00:00",
+      (user.dailyResetMode as DailyResetMode | undefined) ?? "fixed"
+    );
+
     const [
       keyCost5h,
       keyCostDaily,
@@ -226,7 +218,8 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       getTotalUsageForKey(key.key),
       SessionTracker.getKeySessionCount(key.id),
       sumUserCost(user.id, "5h"),
-      sumUserCostToday(user.id),
+      // 修复: 使用与 Key 层级相同的时间范围逻辑来计算用户每日消费
+      sumUserCostInTimeRange(user.id, userDailyTimeRange.startTime, userDailyTimeRange.endTime),
       sumUserCost(user.id, "weekly"),
       sumUserCost(user.id, "monthly"),
       sumUserCost(user.id, "total"),
@@ -290,8 +283,13 @@ export async function getMyTodayStats(): Promise<ActionResult<MyTodayStats>> {
     const billingModelSource = settings.billingModelSource;
     const currencyCode = settings.currencyDisplay;
 
-    const timezone = getEnvConfig().TZ || "UTC";
-    const startOfDay = sql`(CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date`;
+    // 修复: 使用 Key 的 dailyResetTime 和 dailyResetMode 来计算时间范围
+    const { getTimeRangeForPeriodWithMode } = await import("@/lib/rate-limit/time-utils");
+    const timeRange = getTimeRangeForPeriodWithMode(
+      "daily",
+      session.key.dailyResetTime ?? "00:00",
+      (session.key.dailyResetMode as DailyResetMode | undefined) ?? "fixed"
+    );
 
     const [aggregate] = await db
       .select({
@@ -305,7 +303,8 @@ export async function getMyTodayStats(): Promise<ActionResult<MyTodayStats>> {
         and(
           eq(messageRequest.key, session.key.key),
           isNull(messageRequest.deletedAt),
-          sql`(${messageRequest.createdAt} AT TIME ZONE ${timezone})::date = ${startOfDay}`
+          gte(messageRequest.createdAt, timeRange.startTime),
+          sql`${messageRequest.createdAt} < ${timeRange.endTime}`
         )
       );
 
@@ -323,7 +322,8 @@ export async function getMyTodayStats(): Promise<ActionResult<MyTodayStats>> {
         and(
           eq(messageRequest.key, session.key.key),
           isNull(messageRequest.deletedAt),
-          sql`(${messageRequest.createdAt} AT TIME ZONE ${timezone})::date = ${startOfDay}`
+          gte(messageRequest.createdAt, timeRange.startTime),
+          sql`${messageRequest.createdAt} < ${timeRange.endTime}`
         )
       )
       .groupBy(messageRequest.model, messageRequest.originalModel);

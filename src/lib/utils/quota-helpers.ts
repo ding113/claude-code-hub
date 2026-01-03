@@ -14,8 +14,8 @@ export type KeyQuota = {
 } | null;
 
 export type UserQuota = {
-  rpm: { current: number; limit: number; window: "per_minute" };
-  dailyCost: { current: number; limit: number; resetAt: Date };
+  rpm: { current: number; limit: number | null; window: "per_minute" };
+  dailyCost: { current: number; limit: number | null; resetAt?: Date };
 } | null;
 
 /**
@@ -57,8 +57,9 @@ export function getUsageRate(current: number, limit: number | null): number {
 export function isUserExceeded(userQuota: UserQuota): boolean {
   if (!userQuota) return false;
 
-  const rpmExceeded = userQuota.rpm.current >= userQuota.rpm.limit;
-  const dailyExceeded = userQuota.dailyCost.current >= userQuota.dailyCost.limit;
+  const rpmExceeded = userQuota.rpm.limit !== null && userQuota.rpm.current >= userQuota.rpm.limit;
+  const dailyExceeded =
+    userQuota.dailyCost.limit !== null && userQuota.dailyCost.current >= userQuota.dailyCost.limit;
 
   return rpmExceeded || dailyExceeded;
 }
