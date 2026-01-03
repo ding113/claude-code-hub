@@ -233,13 +233,17 @@ export function ProviderForm({
     return () => clearTimeout(timer);
   }, []);
 
-  // 加载已存在的供应商分组作为建议
+  // Load existing provider groups as suggestions
   useEffect(() => {
-    getDistinctProviderGroupsAction().then((res) => {
-      if (res.ok && res.data) {
-        setGroupSuggestions(res.data);
-      }
-    });
+    getDistinctProviderGroupsAction()
+      .then((res) => {
+        if (res.ok && res.data) {
+          setGroupSuggestions(res.data);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load provider groups:", err);
+      });
   }, []);
 
   // 折叠区域切换函数
