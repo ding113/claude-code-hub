@@ -1,4 +1,5 @@
 export const NON_BILLING_ENDPOINT = "/v1/messages/count_tokens";
+export const WARMUP_INTERCEPT_BLOCKED_BY = "warmup";
 
 /**
  * 格式化请求耗时

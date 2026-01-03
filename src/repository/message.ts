@@ -296,20 +296,24 @@ export async function aggregateSessionStats(sessionId: string): Promise<{
   // 1. 聚合统计
   const [stats] = await db
     .select({
-      requestCount: sql<number>`count(*)::double precision`,
-      totalCostUsd: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
-      totalInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens})::double precision, 0::double precision)`,
-      totalOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens})::double precision, 0::double precision)`,
-      totalCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens})::double precision, 0::double precision)`,
-      totalCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens})::double precision, 0::double precision)`,
-      totalDurationMs: sql<number>`COALESCE(sum(${messageRequest.durationMs})::double precision, 0::double precision)`,
+      // 用于判断 session 是否存在（包含 warmup 等被跳过的请求）
+      requestCountAll: sql<number>`count(*)::double precision`,
+
+      // 统计口径：排除 warmup（不计入任何统计数据）
+      requestCount: sql<number>`count(*) FILTER (WHERE ${messageRequest.blockedBy} IS DISTINCT FROM 'warmup')::double precision`,
+      totalCostUsd: sql<string>`COALESCE(sum(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.blockedBy} IS DISTINCT FROM 'warmup'), 0)`,
+      totalInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}) FILTER (WHERE ${messageRequest.blockedBy} IS DISTINCT FROM 'warmup')::double precision, 0::double precision)`,
+      totalOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}) FILTER (WHERE ${messageRequest.blockedBy} IS DISTINCT FROM 'warmup')::double precision, 0::double precision)`,
+      totalCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}) FILTER (WHERE ${messageRequest.blockedBy} IS DISTINCT FROM 'warmup')::double precision, 0::double precision)`,
+      totalCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}) FILTER (WHERE ${messageRequest.blockedBy} IS DISTINCT FROM 'warmup')::double precision, 0::double precision)`,
+      totalDurationMs: sql<number>`COALESCE(sum(${messageRequest.durationMs}) FILTER (WHERE ${messageRequest.blockedBy} IS DISTINCT FROM 'warmup')::double precision, 0::double precision)`,
       firstRequestAt: sql<Date>`min(${messageRequest.createdAt})`,
       lastRequestAt: sql<Date>`max(${messageRequest.createdAt})`,
     })
     .from(messageRequest)
     .where(and(eq(messageRequest.sessionId, sessionId), isNull(messageRequest.deletedAt)));
 
-  if (!stats || stats.requestCount === 0) {
+  if (!stats || stats.requestCountAll === 0) {
     return null;
   }
 
@@ -325,7 +329,8 @@ export async function aggregateSessionStats(sessionId: string): Promise<{
       and(
         eq(messageRequest.sessionId, sessionId),
         isNull(messageRequest.deletedAt),
-        sql`${messageRequest.providerId} IS NOT NULL`
+        sql`${messageRequest.providerId} > 0`,
+        sql`${messageRequest.blockedBy} IS DISTINCT FROM 'warmup'`
       )
     );
 
@@ -337,7 +342,8 @@ export async function aggregateSessionStats(sessionId: string): Promise<{
       and(
         eq(messageRequest.sessionId, sessionId),
         isNull(messageRequest.deletedAt),
-        sql`${messageRequest.model} IS NOT NULL`
+        sql`${messageRequest.model} IS NOT NULL`,
+        sql`${messageRequest.blockedBy} IS DISTINCT FROM 'warmup'`
       )
     );
 
@@ -349,7 +355,8 @@ export async function aggregateSessionStats(sessionId: string): Promise<{
       and(
         eq(messageRequest.sessionId, sessionId),
         isNull(messageRequest.deletedAt),
-        sql`${messageRequest.cacheTtlApplied} IS NOT NULL`
+        sql`${messageRequest.cacheTtlApplied} IS NOT NULL`,
+        sql`${messageRequest.blockedBy} IS DISTINCT FROM 'warmup'`
       )
     );
 
@@ -448,13 +455,17 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
   const statsResults = await db
     .select({
       sessionId: messageRequest.sessionId,
-      requestCount: sql<number>`count(*)::double precision`,
-      totalCostUsd: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
-      totalInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens})::double precision, 0::double precision)`,
-      totalOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens})::double precision, 0::double precision)`,
-      totalCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens})::double precision, 0::double precision)`,
-      totalCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens})::double precision, 0::double precision)`,
-      totalDurationMs: sql<number>`COALESCE(sum(${messageRequest.durationMs})::double precision, 0::double precision)`,
+      // 用于判断 session 是否存在（包含 warmup 等被跳过的请求）
+      requestCountAll: sql<number>`count(*)::double precision`,
+
+      // 统计口径：排除 warmup（不计入任何统计数据）
+      requestCount: sql<number>`count(*) FILTER (WHERE ${messageRequest.blockedBy} IS DISTINCT FROM 'warmup')::double precision`,
+      totalCostUsd: sql<string>`COALESCE(sum(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.blockedBy} IS DISTINCT FROM 'warmup'), 0)`,
+      totalInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}) FILTER (WHERE ${messageRequest.blockedBy} IS DISTINCT FROM 'warmup')::double precision, 0::double precision)`,
+      totalOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}) FILTER (WHERE ${messageRequest.blockedBy} IS DISTINCT FROM 'warmup')::double precision, 0::double precision)`,
+      totalCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}) FILTER (WHERE ${messageRequest.blockedBy} IS DISTINCT FROM 'warmup')::double precision, 0::double precision)`,
+      totalCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}) FILTER (WHERE ${messageRequest.blockedBy} IS DISTINCT FROM 'warmup')::double precision, 0::double precision)`,
+      totalDurationMs: sql<number>`COALESCE(sum(${messageRequest.durationMs}) FILTER (WHERE ${messageRequest.blockedBy} IS DISTINCT FROM 'warmup')::double precision, 0::double precision)`,
       firstRequestAt: sql<Date>`min(${messageRequest.createdAt})`,
       lastRequestAt: sql<Date>`max(${messageRequest.createdAt})`,
     })
@@ -478,7 +489,8 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
       and(
         inArray(messageRequest.sessionId, sessionIds),
         isNull(messageRequest.deletedAt),
-        sql`${messageRequest.providerId} IS NOT NULL`
+        sql`${messageRequest.providerId} > 0`,
+        sql`${messageRequest.blockedBy} IS DISTINCT FROM 'warmup'`
       )
     );
 
@@ -508,7 +520,8 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
       and(
         inArray(messageRequest.sessionId, sessionIds),
         isNull(messageRequest.deletedAt),
-        sql`${messageRequest.model} IS NOT NULL`
+        sql`${messageRequest.model} IS NOT NULL`,
+        sql`${messageRequest.blockedBy} IS DISTINCT FROM 'warmup'`
       )
     );
 
@@ -535,7 +548,8 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
       and(
         inArray(messageRequest.sessionId, sessionIds),
         isNull(messageRequest.deletedAt),
-        sql`${messageRequest.cacheTtlApplied} IS NOT NULL`
+        sql`${messageRequest.cacheTtlApplied} IS NOT NULL`,
+        sql`${messageRequest.blockedBy} IS DISTINCT FROM 'warmup'`
       )
     );
 
@@ -590,7 +604,7 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
     const userInfo = userInfoMap.get(sessionId);
 
     // 跳过没有数据的 session
-    if (!stats || !userInfo || stats.requestCount === 0) {
+    if (!stats || !userInfo || stats.requestCountAll === 0) {
       continue;
     }
 

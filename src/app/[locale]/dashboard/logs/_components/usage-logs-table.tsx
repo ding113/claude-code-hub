@@ -21,6 +21,7 @@ import {
   calculateOutputRate,
   formatDuration,
   NON_BILLING_ENDPOINT,
+  WARMUP_INTERCEPT_BLOCKED_BY,
 } from "@/lib/utils/performance-formatter";
 import { formatProviderSummary } from "@/lib/utils/provider-chain-formatter";
 import type { UsageLogRow } from "@/repository/usage-logs";
@@ -89,7 +90,8 @@ export function UsageLogsTable({
               </TableRow>
             ) : (
               logs.map((log) => {
-                const isNonBilling = log.endpoint === NON_BILLING_ENDPOINT;
+                const isWarmupIntercept = log.blockedBy === WARMUP_INTERCEPT_BLOCKED_BY;
+                const isNonBilling = log.endpoint === NON_BILLING_ENDPOINT || isWarmupIntercept;
 
                 return (
                   <TableRow
@@ -302,7 +304,11 @@ export function UsageLogsTable({
                       </TooltipProvider>
                     </TableCell>
                     <TableCell className="text-right font-mono text-xs">
-                      {isNonBilling ? (
+                      {isWarmupIntercept ? (
+                        <span className="text-orange-700 dark:text-orange-300">
+                          {t("logs.table.skipped")}
+                        </span>
+                      ) : isNonBilling ? (
                         "-"
                       ) : log.costUsd ? (
                         <TooltipProvider>

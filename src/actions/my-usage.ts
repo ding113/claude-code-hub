@@ -303,6 +303,7 @@ export async function getMyTodayStats(): Promise<ActionResult<MyTodayStats>> {
         and(
           eq(messageRequest.key, session.key.key),
           isNull(messageRequest.deletedAt),
+          sql`${messageRequest.blockedBy} IS DISTINCT FROM 'warmup'`,
           gte(messageRequest.createdAt, timeRange.startTime),
           sql`${messageRequest.createdAt} < ${timeRange.endTime}`
         )
@@ -322,6 +323,7 @@ export async function getMyTodayStats(): Promise<ActionResult<MyTodayStats>> {
         and(
           eq(messageRequest.key, session.key.key),
           isNull(messageRequest.deletedAt),
+          sql`${messageRequest.blockedBy} IS DISTINCT FROM 'warmup'`,
           gte(messageRequest.createdAt, timeRange.startTime),
           sql`${messageRequest.createdAt} < ${timeRange.endTime}`
         )

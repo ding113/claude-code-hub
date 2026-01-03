@@ -462,6 +462,11 @@ export const systemSettings = pgTable('system_settings', {
   // 启用 HTTP/2 连接供应商（默认关闭，启用后自动回退到 HTTP/1.1 失败时）
   enableHttp2: boolean('enable_http2').notNull().default(false),
 
+  // 可选：拦截 Anthropic/Claude Warmup 请求并由 CCH 抢答（默认关闭）
+  enableAnthropicWarmupIntercept: boolean('enable_anthropic_warmup_intercept')
+    .notNull()
+    .default(false),
+
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 });

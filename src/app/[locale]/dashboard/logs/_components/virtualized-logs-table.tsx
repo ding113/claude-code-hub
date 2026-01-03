@@ -17,6 +17,7 @@ import {
   calculateOutputRate,
   formatDuration,
   NON_BILLING_ENDPOINT,
+  WARMUP_INTERCEPT_BLOCKED_BY,
 } from "@/lib/utils/performance-formatter";
 import { formatProviderSummary } from "@/lib/utils/provider-chain-formatter";
 import type { BillingModelSource } from "@/types/system-config";
@@ -250,7 +251,8 @@ export function VirtualizedLogsTable({
                 );
               }
 
-              const isNonBilling = log.endpoint === NON_BILLING_ENDPOINT;
+              const isWarmupIntercept = log.blockedBy === WARMUP_INTERCEPT_BLOCKED_BY;
+              const isNonBilling = log.endpoint === NON_BILLING_ENDPOINT || isWarmupIntercept;
 
               return (
                 <div
@@ -467,7 +469,11 @@ export function VirtualizedLogsTable({
 
                   {/* Cost */}
                   <div className="flex-[0.7] min-w-[60px] text-right font-mono text-xs px-1">
-                    {isNonBilling ? (
+                    {isWarmupIntercept ? (
+                      <span className="text-orange-700 dark:text-orange-300">
+                        {t("logs.table.skipped")}
+                      </span>
+                    ) : isNonBilling ? (
                       "-"
                     ) : log.costUsd ? (
                       <TooltipProvider>

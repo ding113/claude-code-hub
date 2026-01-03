@@ -29,6 +29,9 @@ export interface SystemSettings {
   // 启用 HTTP/2 连接供应商
   enableHttp2: boolean;
 
+  // 可选：拦截 Anthropic/Claude Warmup 请求并由 CCH 抢答
+  enableAnthropicWarmupIntercept: boolean;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -58,4 +61,7 @@ export interface UpdateSystemSettingsInput {
 
   // 启用 HTTP/2 连接供应商（可选）
   enableHttp2?: boolean;
+
+  // 可选：拦截 Anthropic/Claude Warmup 请求并由 CCH 抢答（可选）
+  enableAnthropicWarmupIntercept?: boolean;
 }

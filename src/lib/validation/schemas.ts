@@ -698,6 +698,8 @@ export const UpdateSystemSettingsSchema = z.object({
   verboseProviderError: z.boolean().optional(),
   // 启用 HTTP/2 连接供应商（可选）
   enableHttp2: z.boolean().optional(),
+  // 可选：拦截 Anthropic/Claude Warmup 请求并由 CCH 抢答（可选）
+  enableAnthropicWarmupIntercept: z.boolean().optional(),
 });
 
 // 导出类型推断

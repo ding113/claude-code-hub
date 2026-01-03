@@ -26,6 +26,7 @@ import {
 import { Link } from "@/i18n/routing";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/currency";
+import { WARMUP_INTERCEPT_BLOCKED_BY } from "@/lib/utils/performance-formatter";
 import { formatProviderTimeline } from "@/lib/utils/provider-chain-formatter";
 import type { ProviderChainItem } from "@/types/message";
 import type { BillingModelSource } from "@/types/system-config";
@@ -272,7 +273,9 @@ export function ErrorDetailsDialog({
                   <Badge variant="outline" className="border-orange-600 text-orange-600">
                     {blockedBy === "sensitive_word"
                       ? t("logs.details.blocked.sensitiveWord")
-                      : blockedBy}
+                      : blockedBy === WARMUP_INTERCEPT_BLOCKED_BY
+                        ? t("logs.details.blocked.warmupIntercept")
+                        : blockedBy}
                   </Badge>
                 </div>
                 {parsedBlockedReason && (
