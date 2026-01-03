@@ -420,6 +420,11 @@
     "dingtalkSecretPlaceholder": "Необязательно, для подписи",
     "customHeaders": "Пользовательские заголовки (JSON)",
     "customHeadersPlaceholder": "{\"X-Token\":\"...\"}",
+    "errors": {
+      "headersInvalidJson": "Заголовки должны быть корректным JSON",
+      "headersMustBeObject": "Заголовки должны быть JSON-объектом",
+      "headersValueMustBeString": "Значения заголовков должны быть строками"
+    },
     "types": {
       "wechat": "WeCom",
       "feishu": "Feishu",

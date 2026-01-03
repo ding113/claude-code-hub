@@ -37,6 +37,7 @@ describe("允许内网地址输入", () => {
   });
 
   test("testWebhookAction 不阻止内网 URL（但会因 hostname 不支持而失败）", async () => {
+    // 该用例验证：输入层允许内网 IP（不会被拦截），但 provider 检测会因 hostname 不受支持而失败
     const { testWebhookAction } = await import("@/actions/notifications");
     const result = await testWebhookAction("http://127.0.0.1:8080/webhook", "cost-alert");
 

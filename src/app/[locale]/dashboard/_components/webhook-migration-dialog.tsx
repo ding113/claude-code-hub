@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { logger } from "@/lib/logger";
 import { setOnboardingCompleted, shouldShowOnboarding } from "@/lib/onboarding";
 import { cn } from "@/lib/utils";
 import {
@@ -135,7 +136,7 @@ export function WebhookMigrationDialog() {
         }
       } catch (error) {
         // Don't block user if settings fetch fails, but log for debugging
-        console.warn("[WebhookMigrationDialog] Failed to load notification settings:", error);
+        logger.warn("[WebhookMigrationDialog] Failed to load notification settings", { error });
       }
     };
 
