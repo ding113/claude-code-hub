@@ -1,5 +1,6 @@
 "use server";
 
+import { getSession } from "@/lib/auth";
 import type { NotificationJobType } from "@/lib/constants/notification.constants";
 import { logger } from "@/lib/logger";
 import { WebhookNotifier } from "@/lib/webhook";
@@ -15,6 +16,10 @@ import {
  * 获取通知设置
  */
 export async function getNotificationSettingsAction(): Promise<NotificationSettings> {
+  const session = await getSession();
+  if (!session || session.user.role !== "admin") {
+    throw new Error("无权限执行此操作");
+  }
   return getNotificationSettings();
 }
 
@@ -25,6 +30,11 @@ export async function updateNotificationSettingsAction(
   payload: UpdateNotificationSettingsInput
 ): Promise<{ success: boolean; data?: NotificationSettings; error?: string }> {
   try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return { success: false, error: "无权限执行此操作" };
+    }
+
     const updated = await updateNotificationSettings(payload);
 
     // 重新调度通知任务（仅生产环境）
@@ -56,6 +66,11 @@ export async function testWebhookAction(
   webhookUrl: string,
   type: NotificationJobType
 ): Promise<{ success: boolean; error?: string }> {
+  const session = await getSession();
+  if (!session || session.user.role !== "admin") {
+    return { success: false, error: "无权限执行此操作" };
+  }
+
   if (!webhookUrl || !webhookUrl.trim()) {
     return { success: false, error: "Webhook URL 不能为空" };
   }

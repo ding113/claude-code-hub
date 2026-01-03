@@ -1,11 +1,12 @@
 import { describe, expect, test, vi } from "vitest";
 
+const getSessionMock = vi.fn(async () => ({ user: { role: "admin" } }));
 const webhookSendMock = vi.fn(async () => ({ success: true as const }));
 const createWebhookTargetMock = vi.fn(async (input: any) => ({ id: 1, ...input }));
 
 vi.mock("@/lib/auth", () => {
   return {
-    getSession: vi.fn(async () => ({ user: { role: "admin" } })),
+    getSession: getSessionMock,
   };
 });
 
@@ -42,6 +43,17 @@ describe("允许内网地址输入", () => {
 
     expect(result.success).toBe(true);
     expect(webhookSendMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("testWebhookAction 非管理员应被拒绝", async () => {
+    getSessionMock.mockResolvedValueOnce({ user: { role: "user" } });
+
+    const { testWebhookAction } = await import("@/actions/notifications");
+    const result = await testWebhookAction("http://127.0.0.1:8080/webhook", "cost-alert");
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("无权限执行此操作");
+    expect(webhookSendMock).not.toHaveBeenCalled();
   });
 
   test("createWebhookTargetAction 允许内网 webhookUrl", async () => {
