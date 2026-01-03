@@ -21,8 +21,8 @@ import { Label } from "@/components/ui/label";
 import { CURRENCY_CONFIG, type CurrencyCode } from "@/lib/utils/currency";
 
 interface UserQuota {
-  rpm: { current: number; limit: number; window: "per_minute" };
-  dailyCost: { current: number; limit: number; resetAt: Date };
+  rpm: { current: number; limit: number | null; window: "per_minute" };
+  dailyCost: { current: number; limit: number | null; resetAt?: Date };
 }
 
 interface EditUserQuotaDialogProps {
@@ -116,7 +116,7 @@ export function EditUserQuotaDialog({
                   <p className="text-xs text-muted-foreground">
                     {t("rpm.current", {
                       current: currentQuota.rpm.current,
-                      limit: currentQuota.rpm.limit,
+                      limit: currentQuota.rpm.limit ?? t("unlimited"),
                     })}
                   </p>
                 )}

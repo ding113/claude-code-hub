@@ -712,6 +712,11 @@ export async function getMixedStatisticsFromDB(
 /**
  * 查询用户今日总消费（所有 Key 的消费总和）
  * 用于用户层每日限额检查（Redis 降级）
+ *
+ * DEPRECATED: 该函数使用简单的日期比较，不考虑用户的 dailyResetTime 配置。
+ * 请使用 sumUserCostInTimeRange() 配合 getTimeRangeForPeriodWithMode() 来获取正确的时间范围。
+ *
+ * @deprecated 使用 sumUserCostInTimeRange() 替代
  */
 export async function sumUserCostToday(userId: number): Promise<number> {
   const timezone = getEnvConfig().TZ;

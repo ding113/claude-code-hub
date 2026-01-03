@@ -1,5 +1,5 @@
-import { SocksProxyAgent } from "socks-proxy-agent";
-import { Agent, ProxyAgent, setGlobalDispatcher } from "undici";
+import { socksDispatcher } from "fetch-socks";
+import { Agent, type Dispatcher, ProxyAgent, setGlobalDispatcher } from "undici";
 import type { Provider } from "@/types/provider";
 import { getEnvConfig } from "./config/env.schema";
 import { logger } from "./logger";
@@ -43,8 +43,7 @@ logger.info("undici global dispatcher configured", {
  * 代理配置结果
  */
 export interface ProxyConfig {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  agent: ProxyAgent | SocksProxyAgent | any; // any to support non-undici agents
+  agent: ProxyAgent | Dispatcher;
   fallbackToDirect: boolean;
   proxyUrl: string;
   http2Enabled: boolean; // HTTP/2 是否启用（SOCKS 代理不支持 HTTP/2）
@@ -99,17 +98,26 @@ export function createProxyAgentForProvider(
     const parsedProxy = new URL(proxyUrl);
 
     // 根据协议选择 Agent
-    let agent: ProxyAgent | SocksProxyAgent;
+    let agent: ProxyAgent | Dispatcher;
     let actualHttp2Enabled = false; // 实际是否启用 HTTP/2
 
     if (parsedProxy.protocol === "socks5:" || parsedProxy.protocol === "socks4:") {
-      // SOCKS 代理（不支持 HTTP/2）
-      // ⭐ 超时说明：
-      // - SocksProxyAgent 仅处理 SOCKS 连接建立阶段（默认 30s 超时，足够）
-      // - 连接建立后，HTTP 数据传输由全局 undici Agent 控制（headersTimeout/bodyTimeout 可配置）
-      // - 因此 SOCKS 代理无需额外配置 headersTimeout/bodyTimeout
-      // @see https://github.com/TooTallNate/node-socks-proxy-agent/issues/26
-      agent = new SocksProxyAgent(proxyUrl);
+      // SOCKS 代理通过 fetch-socks（undici 兼容）
+      // 使用 socksDispatcher 创建 undici 兼容的 Dispatcher
+      agent = socksDispatcher(
+        {
+          type: parsedProxy.protocol === "socks5:" ? 5 : 4,
+          host: parsedProxy.hostname,
+          port: parseInt(parsedProxy.port, 10) || 1080,
+          userId: parsedProxy.username || undefined,
+          password: parsedProxy.password || undefined,
+        },
+        {
+          connect: {
+            timeout: connectTimeout,
+          },
+        }
+      );
       actualHttp2Enabled = false; // SOCKS 不支持 HTTP/2
 
       // 警告：SOCKS 代理不支持 HTTP/2
@@ -121,14 +129,14 @@ export function createProxyAgentForProvider(
         });
       }
 
-      logger.debug("SOCKS ProxyAgent created", {
+      logger.debug("SOCKS dispatcher created via fetch-socks", {
         providerId: provider.id,
         providerName: provider.name ?? "unknown",
         protocol: parsedProxy.protocol,
         proxyHost: parsedProxy.hostname,
         proxyPort: parsedProxy.port,
         targetUrl: new URL(targetUrl).origin,
-        http2Enabled: false, // SOCKS 不支持 HTTP/2
+        http2Enabled: false,
       });
     } else if (parsedProxy.protocol === "http:" || parsedProxy.protocol === "https:") {
       // HTTP/HTTPS 代理（使用 undici）

@@ -3,9 +3,11 @@
 import { and, asc, desc, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest, providers, users } from "@/drizzle/schema";
+import { getEnvConfig } from "@/lib/config/env.schema";
 import { formatCostForStorage } from "@/lib/utils/currency";
 import type { CreateMessageRequestData, MessageRequest } from "@/types/message";
 import { toMessageRequest } from "./_shared/transformers";
+import { enqueueMessageRequestUpdate } from "./message-write-buffer";
 
 /**
  * 创建消息请求记录
@@ -67,6 +69,11 @@ export async function createMessageRequest(
  * 更新消息请求的耗时
  */
 export async function updateMessageRequestDuration(id: number, durationMs: number): Promise<void> {
+  if (getEnvConfig().MESSAGE_REQUEST_WRITE_MODE === "async") {
+    enqueueMessageRequestUpdate(id, { durationMs });
+    return;
+  }
+
   await db
     .update(messageRequest)
     .set({
@@ -85,6 +92,11 @@ export async function updateMessageRequestCost(
 ): Promise<void> {
   const formattedCost = formatCostForStorage(costUsd);
   if (!formattedCost) {
+    return;
+  }
+
+  if (getEnvConfig().MESSAGE_REQUEST_WRITE_MODE === "async") {
+    enqueueMessageRequestUpdate(id, { costUsd: formattedCost });
     return;
   }
 
@@ -121,6 +133,11 @@ export async function updateMessageRequestDetails(
     context1mApplied?: boolean; // 是否应用了1M上下文窗口
   }
 ): Promise<void> {
+  if (getEnvConfig().MESSAGE_REQUEST_WRITE_MODE === "async") {
+    enqueueMessageRequestUpdate(id, details);
+    return;
+  }
+
   const updateData: Record<string, unknown> = {
     updatedAt: new Date(),
   };

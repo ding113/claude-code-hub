@@ -371,14 +371,96 @@
   "notifications": {
     "title": "訊息推送",
     "description": "設定 Webhook 訊息推送",
-    "global": {
-      "title": "通知總開關",
-      "description": "啟用或停用所有訊息推送功能",
-      "enable": "啟用訊息推送"
+  "global": {
+    "title": "通知總開關",
+    "description": "啟用或停用所有訊息推送功能",
+    "enable": "啟用訊息推送",
+    "legacyModeTitle": "相容模式",
+    "legacyModeDescription": "目前使用舊版單一 URL 推送設定。建立推送目標後將自動切換為多目標模式。"
+  },
+  "targets": {
+    "title": "推送目標",
+    "description": "管理推送目標，支援企業微信、飛書、釘釘、Telegram、自訂 Webhook",
+    "add": "新增目標",
+    "update": "儲存目標",
+    "edit": "編輯",
+    "delete": "刪除",
+    "deleteConfirmTitle": "刪除推送目標",
+    "deleteConfirm": "確定要刪除此目標嗎？相關綁定也會被移除。",
+    "enable": "啟用目標",
+    "statusEnabled": "已啟用",
+    "statusDisabled": "已停用",
+    "lastTestAt": "上次測試",
+    "lastTestNever": "從未測試",
+    "lastTestSuccess": "測試成功",
+    "lastTestFailed": "測試失敗",
+    "test": "測試",
+    "testSelectType": "選擇測試類型",
+    "emptyHint": "尚無推送目標，點擊「新增目標」建立。",
+    "created": "目標已新增",
+    "updated": "目標已更新",
+    "deleted": "目標已刪除",
+    "bindingsSaved": "綁定已儲存"
+  },
+  "targetDialog": {
+    "createTitle": "新增推送目標",
+    "editTitle": "編輯推送目標",
+    "name": "目標名稱",
+    "namePlaceholder": "例如：運維群",
+    "type": "平台類型",
+    "selectType": "請選擇平台類型",
+    "enable": "啟用",
+    "webhookUrl": "Webhook URL",
+    "webhookUrlPlaceholder": "https://example.com/webhook",
+    "telegramBotToken": "Telegram Bot Token",
+    "telegramBotTokenPlaceholder": "例如：123456:ABCDEF...",
+    "telegramChatId": "Telegram Chat ID",
+    "telegramChatIdPlaceholder": "例如：-1001234567890",
+    "dingtalkSecret": "釘釘簽名密鑰",
+    "dingtalkSecretPlaceholder": "可選，用於簽名",
+    "customHeaders": "自訂 Headers（JSON）",
+    "customHeadersPlaceholder": "{\"X-Token\":\"...\"}",
+    "types": {
+      "wechat": "企業微信",
+      "feishu": "飛書",
+      "dingtalk": "釘釘",
+      "telegram": "Telegram",
+      "custom": "自訂 Webhook"
     },
-    "circuitBreaker": {
-      "title": "熔斷器告警",
-      "description": "供應商完全熔斷時立即推送告警訊息",
+    "proxy": {
+      "title": "代理設定",
+      "toggle": "展開/收起代理設定",
+      "url": "代理位址",
+      "urlPlaceholder": "http://127.0.0.1:7890",
+      "fallbackToDirect": "代理失敗時回退直連"
+    }
+  },
+  "bindings": {
+    "title": "綁定",
+    "noTargets": "尚無可用推送目標",
+    "bindTarget": "綁定目標",
+    "enable": "啟用",
+    "enableType": "啟用此通知",
+    "advanced": "進階",
+    "scheduleCron": "Cron 表達式",
+    "scheduleCronPlaceholder": "例如：0 9 * * *",
+    "scheduleTimezone": "時區",
+    "templateOverride": "模板覆蓋",
+    "editTemplateOverride": "編輯覆蓋",
+    "templateOverrideTitle": "編輯模板覆蓋",
+    "boundCount": "已綁定：{count}",
+    "enabledCount": "已啟用：{count}"
+  },
+  "templateEditor": {
+    "title": "模板（JSON）",
+    "placeholder": "請輸入 JSON 模板...",
+    "jsonInvalid": "JSON 格式不正確",
+    "placeholders": "佔位符",
+    "insert": "插入"
+  },
+  "circuitBreaker": {
+    "title": "熔斷器告警",
+    "description": "供應商完全熔斷時立即推送告警訊息",
       "enable": "啟用熔斷器告警",
       "webhook": "Webhook URL",
       "webhookPlaceholder": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...",
@@ -636,6 +718,15 @@
         "chunksCount": "已接收 {count} 個區塊（{format}）",
         "truncatedPreview": "顯示前 {length} 個字元，複製可查看完整內容",
         "truncatedBrief": "顯示前 {length} 個字元，點擊「查看詳情」以查看更多",
+        "timeout": {
+          "label": "逾時時間（秒）",
+          "desc": "測試請求的最大等待時間（5-120 秒）",
+          "geminiHint": "，Gemini Thinking 模型建議 60 秒以上"
+        },
+        "geminiAuthFallback": {
+          "warning": "Header 認證失敗，使用了 URL 參數認證",
+          "desc": "實際代理轉發僅使用 Header 認證，可能導致請求失敗"
+        },
         "copyFormat": {
           "testResult": "測試結果",
           "message": "訊息",
@@ -1038,6 +1129,15 @@
               "desc": "分組標籤。僅供 providerGroup 與此值相符的用戶使用。例：設為「premium」表示僅供 providerGroup=\"premium\" 的用戶使用"
             }
           },
+          "cacheTtl": {
+            "label": "Cache TTL 覆寫",
+            "options": {
+              "inherit": "不覆寫（跟隨客戶端）",
+              "5m": "5 分鐘",
+              "1h": "1 小時"
+            },
+            "desc": "強制設定 prompt cache TTL；僅影響包含 cache_control 的請求。"
+          },
           "context1m": {
             "label": "1M 上下文視窗",
             "options": {
@@ -1392,7 +1492,6 @@
       "leaderboard": "供應商排行榜",
       "title": "服务商管理"
     },
-    "addProvider": "新增服務商",
     "filter": {
       "status": {
         "all": "所有狀態",
@@ -1403,7 +1502,8 @@
         "label": "分組:",
         "all": "全部",
         "default": "default"
-      }
+      },
+      "circuitBroken": "熔斷"
     },
     "subtitle": "服務商管理",
     "subtitleDesc": "設定上游服務商的金額限流和並行限制。留空表示無限制。",

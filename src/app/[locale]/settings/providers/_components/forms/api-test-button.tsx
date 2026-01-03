@@ -313,8 +313,8 @@ export function ApiTestButton({
 
         // 如果使用了 fallback 认证方式，显示警告
         if (isSuccess && usedFallback) {
-          toast.warning("Header 认证失败，使用了 URL 参数认证", {
-            description: "实际代理转发仅使用 Header 认证，可能导致请求失败",
+          toast.warning(t("geminiAuthFallback.warning"), {
+            description: t("geminiAuthFallback.desc"),
             duration: 6000,
           });
         }
@@ -473,7 +473,7 @@ export function ApiTestButton({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="test-timeout">超时时间（秒）</Label>
+        <Label htmlFor="test-timeout">{t("timeout.label")}</Label>
         <Input
           id="test-timeout"
           type="number"
@@ -490,8 +490,8 @@ export function ApiTestButton({
           className="w-24"
         />
         <div className="text-xs text-muted-foreground">
-          测试请求的最大等待时间（5-120 秒）
-          {apiFormat === "gemini" && "，Gemini Thinking 模型建议 60 秒以上"}
+          {t("timeout.desc")}
+          {apiFormat === "gemini" && t("timeout.geminiHint")}
         </div>
       </div>
 

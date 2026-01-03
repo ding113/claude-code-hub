@@ -11,6 +11,7 @@ import { logger } from "@/lib/logger";
 export interface NotificationSettings {
   id: number;
   enabled: boolean;
+  useLegacyMode: boolean;
 
   // 熔断器告警配置
   circuitBreakerEnabled: boolean;
@@ -37,6 +38,7 @@ export interface NotificationSettings {
  */
 export interface UpdateNotificationSettingsInput {
   enabled?: boolean;
+  useLegacyMode?: boolean;
 
   circuitBreakerEnabled?: boolean;
   circuitBreakerWebhook?: string | null;
@@ -117,6 +119,70 @@ function isTableMissingError(error: unknown, depth = 0): boolean {
 }
 
 /**
+ * 检查是否是字段缺失错误（用于灰度上线时，代码先于迁移发布的场景）
+ */
+function isColumnMissingError(error: unknown, depth = 0): boolean {
+  if (!error || depth > 5) {
+    return false;
+  }
+
+  if (typeof error === "string") {
+    const normalized = error.toLowerCase();
+    return (
+      normalized.includes("42703") ||
+      (normalized.includes("use_legacy_mode") &&
+        (normalized.includes("does not exist") ||
+          normalized.includes("doesn't exist") ||
+          normalized.includes("找不到")))
+    );
+  }
+
+  if (typeof error === "object") {
+    const err = error as {
+      code?: unknown;
+      message?: unknown;
+      cause?: unknown;
+      errors?: unknown;
+      originalError?: unknown;
+    };
+
+    if (typeof err.code === "string" && err.code.toUpperCase() === "42703") {
+      return true;
+    }
+
+    if (typeof err.message === "string" && isColumnMissingError(err.message, depth + 1)) {
+      return true;
+    }
+
+    if ("cause" in err && err.cause && isColumnMissingError(err.cause, depth + 1)) {
+      return true;
+    }
+
+    if (Array.isArray(err.errors)) {
+      return err.errors.some((item) => isColumnMissingError(item, depth + 1));
+    }
+
+    if (err.originalError && isColumnMissingError(err.originalError, depth + 1)) {
+      return true;
+    }
+
+    const stringified = (() => {
+      try {
+        return String(error);
+      } catch {
+        return undefined;
+      }
+    })();
+
+    if (stringified) {
+      return isColumnMissingError(stringified, depth + 1);
+    }
+  }
+
+  return false;
+}
+
+/**
  * 创建默认通知设置
  */
 function createFallbackSettings(): NotificationSettings {
@@ -124,6 +190,7 @@ function createFallbackSettings(): NotificationSettings {
   return {
     id: 0,
     enabled: false,
+    useLegacyMode: false,
     circuitBreakerEnabled: false,
     circuitBreakerWebhook: null,
     dailyLeaderboardEnabled: false,
@@ -149,6 +216,7 @@ export async function getNotificationSettings(): Promise<NotificationSettings> {
     if (settings) {
       return {
         ...settings,
+        useLegacyMode: settings.useLegacyMode ?? false,
         createdAt: settings.createdAt ?? new Date(),
         updatedAt: settings.updatedAt ?? new Date(),
       };
@@ -173,6 +241,7 @@ export async function getNotificationSettings(): Promise<NotificationSettings> {
     if (created) {
       return {
         ...created,
+        useLegacyMode: created.useLegacyMode ?? false,
         createdAt: created.createdAt ?? new Date(),
         updatedAt: created.updatedAt ?? new Date(),
       };
@@ -187,12 +256,17 @@ export async function getNotificationSettings(): Promise<NotificationSettings> {
 
     return {
       ...fallback,
+      useLegacyMode: fallback.useLegacyMode ?? false,
       createdAt: fallback.createdAt ?? new Date(),
       updatedAt: fallback.updatedAt ?? new Date(),
     };
   } catch (error) {
     if (isTableMissingError(error)) {
       logger.warn("notification_settings 表不存在，返回默认配置。请运行数据库迁移。", { error });
+      return createFallbackSettings();
+    }
+    if (isColumnMissingError(error)) {
+      logger.warn("notification_settings 缺少字段，返回默认配置。请运行数据库迁移。", { error });
       return createFallbackSettings();
     }
     throw error;
@@ -216,6 +290,9 @@ export async function updateNotificationSettings(
     // 全局开关
     if (payload.enabled !== undefined) {
       updates.enabled = payload.enabled;
+    }
+    if (payload.useLegacyMode !== undefined) {
+      updates.useLegacyMode = payload.useLegacyMode;
     }
 
     // 熔断器告警配置
@@ -272,6 +349,9 @@ export async function updateNotificationSettings(
   } catch (error) {
     if (isTableMissingError(error)) {
       throw new Error("通知设置数据表不存在，请先执行数据库迁移。");
+    }
+    if (isColumnMissingError(error)) {
+      throw new Error("通知设置字段缺失，请先执行数据库迁移。");
     }
     throw error;
   }

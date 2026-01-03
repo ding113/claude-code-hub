@@ -289,6 +289,15 @@
         "chunksCount": "接收 {count} 个数据块 ({format})",
         "truncatedPreview": "显示前 {length} 字符，完整内容请复制查看",
         "truncatedBrief": "显示前 {length} 字符，完整内容请点击「查看详情」",
+        "timeout": {
+          "label": "超时时间（秒）",
+          "desc": "测试请求的最大等待时间（5-120 秒）",
+          "geminiHint": "，Gemini Thinking 模型建议 60 秒以上"
+        },
+        "geminiAuthFallback": {
+          "warning": "Header 认证失败，使用了 URL 参数认证",
+          "desc": "实际代理转发仅使用 Header 认证，可能导致请求失败"
+        },
         "copyFormat": {
           "testResult": "测试结果",
           "message": "消息",
@@ -734,6 +743,15 @@
               "desc": "供应商分组标签（支持多个，逗号分隔）。只有用户的 providerGroup 与此值匹配时，该用户才能使用此供应商。留空=对所有用户开放"
             }
           },
+          "cacheTtl": {
+            "label": "Cache TTL 覆写",
+            "options": {
+              "inherit": "不覆写（跟随客户端）",
+              "5m": "5 分钟",
+              "1h": "1 小时"
+            },
+            "desc": "强制设置 prompt cache TTL；仅影响包含 cache_control 的请求。"
+          },
           "context1m": {
             "label": "1M 上下文窗口",
             "options": {
@@ -1108,7 +1126,8 @@
         "label": "分组:",
         "all": "全部",
         "default": "default"
-      }
+      },
+      "circuitBroken": "熔断"
     },
     "editProvider": "编辑服务商",
     "createProvider": "新增服务商",
@@ -1610,14 +1629,96 @@
   "notifications": {
     "title": "消息推送",
     "description": "配置 Webhook 消息推送",
-    "global": {
-      "title": "通知总开关",
-      "description": "启用或禁用所有消息推送功能",
-      "enable": "启用消息推送"
+  "global": {
+    "title": "通知总开关",
+    "description": "启用或禁用所有消息推送功能",
+    "enable": "启用消息推送",
+    "legacyModeTitle": "兼容模式",
+    "legacyModeDescription": "当前使用旧版单 URL 推送配置。创建推送目标后将自动切换到多目标模式。"
+  },
+  "targets": {
+    "title": "推送目标",
+    "description": "管理推送目标，支持企业微信、飞书、钉钉、Telegram、自定义 Webhook",
+    "add": "添加目标",
+    "update": "保存目标",
+    "edit": "编辑",
+    "delete": "删除",
+    "deleteConfirmTitle": "删除推送目标",
+    "deleteConfirm": "确定要删除该目标吗？相关绑定也会被移除。",
+    "enable": "启用目标",
+    "statusEnabled": "已启用",
+    "statusDisabled": "已禁用",
+    "lastTestAt": "上次测试",
+    "lastTestNever": "从未测试",
+    "lastTestSuccess": "测试成功",
+    "lastTestFailed": "测试失败",
+    "test": "测试",
+    "testSelectType": "选择测试类型",
+    "emptyHint": "暂无推送目标，点击“添加目标”创建。",
+    "created": "目标已创建",
+    "updated": "目标已更新",
+    "deleted": "目标已删除",
+    "bindingsSaved": "绑定已保存"
+  },
+  "targetDialog": {
+    "createTitle": "添加推送目标",
+    "editTitle": "编辑推送目标",
+    "name": "目标名称",
+    "namePlaceholder": "例如：运维群",
+    "type": "平台类型",
+    "selectType": "请选择平台类型",
+    "enable": "启用",
+    "webhookUrl": "Webhook URL",
+    "webhookUrlPlaceholder": "https://example.com/webhook",
+    "telegramBotToken": "Telegram Bot Token",
+    "telegramBotTokenPlaceholder": "例如：123456:ABCDEF...",
+    "telegramChatId": "Telegram Chat ID",
+    "telegramChatIdPlaceholder": "例如：-1001234567890",
+    "dingtalkSecret": "钉钉签名密钥",
+    "dingtalkSecretPlaceholder": "可选，用于签名",
+    "customHeaders": "自定义 Headers（JSON）",
+    "customHeadersPlaceholder": "{\"X-Token\":\"...\"}",
+    "types": {
+      "wechat": "企业微信",
+      "feishu": "飞书",
+      "dingtalk": "钉钉",
+      "telegram": "Telegram",
+      "custom": "自定义 Webhook"
     },
-    "circuitBreaker": {
-      "title": "熔断器告警",
-      "description": "供应商完全熔断时立即推送告警消息",
+    "proxy": {
+      "title": "代理设置",
+      "toggle": "展开/收起代理设置",
+      "url": "代理地址",
+      "urlPlaceholder": "http://127.0.0.1:7890",
+      "fallbackToDirect": "代理失败时回退直连"
+    }
+  },
+  "bindings": {
+    "title": "绑定",
+    "noTargets": "暂无可用推送目标",
+    "bindTarget": "绑定目标",
+    "enable": "启用",
+    "enableType": "启用该通知",
+    "advanced": "高级",
+    "scheduleCron": "Cron 表达式",
+    "scheduleCronPlaceholder": "例如：0 9 * * *",
+    "scheduleTimezone": "时区",
+    "templateOverride": "模板覆盖",
+    "editTemplateOverride": "编辑覆盖",
+    "templateOverrideTitle": "编辑模板覆盖",
+    "boundCount": "已绑定：{count}",
+    "enabledCount": "已启用：{count}"
+  },
+  "templateEditor": {
+    "title": "模板（JSON）",
+    "placeholder": "请输入 JSON 模板...",
+    "jsonInvalid": "JSON 格式不正确",
+    "placeholders": "占位符",
+    "insert": "插入"
+  },
+  "circuitBreaker": {
+    "title": "熔断器告警",
+    "description": "供应商完全熔断时立即推送告警消息",
       "enable": "启用熔断器告警",
       "webhook": "Webhook URL",
       "webhookPlaceholder": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...",

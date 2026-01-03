@@ -16,6 +16,18 @@ import { relations, sql } from 'drizzle-orm';
 
 // Enums
 export const dailyResetModeEnum = pgEnum('daily_reset_mode', ['fixed', 'rolling']);
+export const webhookProviderTypeEnum = pgEnum('webhook_provider_type', [
+  'wechat',
+  'feishu',
+  'dingtalk',
+  'telegram',
+  'custom',
+]);
+export const notificationTypeEnum = pgEnum('notification_type', [
+  'circuit_breaker',
+  'daily_leaderboard',
+  'cost_alert',
+]);
 
 // Users table
 export const users = pgTable('users', {
@@ -460,6 +472,8 @@ export const notificationSettings = pgTable('notification_settings', {
 
   // 全局开关
   enabled: boolean('enabled').notNull().default(false),
+  // 兼容旧配置：默认使用 legacy 字段（单 URL / 自动识别），创建新目标后会切到新模式
+  useLegacyMode: boolean('use_legacy_mode').notNull().default(false),
 
   // 熔断器告警配置
   circuitBreakerEnabled: boolean('circuit_breaker_enabled').notNull().default(false),
@@ -480,6 +494,73 @@ export const notificationSettings = pgTable('notification_settings', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 });
+
+// Webhook Targets table - 推送目标（多平台配置）
+export const webhookTargets = pgTable('webhook_targets', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 100 }).notNull(),
+  providerType: webhookProviderTypeEnum('provider_type').notNull(),
+
+  // 通用配置
+  webhookUrl: varchar('webhook_url', { length: 1024 }),
+
+  // Telegram 特有配置
+  telegramBotToken: varchar('telegram_bot_token', { length: 256 }),
+  telegramChatId: varchar('telegram_chat_id', { length: 64 }),
+
+  // 钉钉签名配置
+  dingtalkSecret: varchar('dingtalk_secret', { length: 256 }),
+
+  // 自定义 Webhook 配置
+  customTemplate: jsonb('custom_template'),
+  customHeaders: jsonb('custom_headers'),
+
+  // 代理配置
+  proxyUrl: varchar('proxy_url', { length: 512 }),
+  proxyFallbackToDirect: boolean('proxy_fallback_to_direct').default(false),
+
+  // 元数据
+  isEnabled: boolean('is_enabled').notNull().default(true),
+  lastTestAt: timestamp('last_test_at', { withTimezone: true }),
+  lastTestResult: jsonb('last_test_result'),
+
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+});
+
+// Notification Target Bindings table - 通知类型与目标绑定
+export const notificationTargetBindings = pgTable(
+  'notification_target_bindings',
+  {
+    id: serial('id').primaryKey(),
+    notificationType: notificationTypeEnum('notification_type').notNull(),
+    targetId: integer('target_id')
+      .notNull()
+      .references(() => webhookTargets.id, { onDelete: 'cascade' }),
+
+    isEnabled: boolean('is_enabled').notNull().default(true),
+
+    // 定时配置覆盖（可选，仅用于定时类通知）
+    scheduleCron: varchar('schedule_cron', { length: 100 }),
+    scheduleTimezone: varchar('schedule_timezone', { length: 50 }).default('Asia/Shanghai'),
+
+    // 模板覆盖（可选，主要用于 custom webhook）
+    templateOverride: jsonb('template_override'),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => ({
+    uniqueBinding: uniqueIndex('unique_notification_target_binding').on(
+      table.notificationType,
+      table.targetId
+    ),
+    bindingsTypeIdx: index('idx_notification_bindings_type').on(
+      table.notificationType,
+      table.isEnabled
+    ),
+    bindingsTargetIdx: index('idx_notification_bindings_target').on(table.targetId, table.isEnabled),
+  })
+);
 
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({

@@ -380,14 +380,96 @@
   "notifications": {
     "title": "Push Notifications",
     "description": "Configure Webhook push notifications",
-    "global": {
-      "title": "Notification Master Switch",
-      "description": "Enable or disable all push notification features",
-      "enable": "Enable Push Notifications"
+  "global": {
+    "title": "Notification Master Switch",
+    "description": "Enable or disable all push notification features",
+    "enable": "Enable Push Notifications",
+    "legacyModeTitle": "Legacy Mode",
+    "legacyModeDescription": "You are using legacy single-URL notifications. Create a push target to switch to multi-target mode."
+  },
+  "targets": {
+    "title": "Push Targets",
+    "description": "Manage push targets. Supports WeCom, Feishu, DingTalk, Telegram and custom Webhook.",
+    "add": "Add Target",
+    "update": "Save Target",
+    "edit": "Edit",
+    "delete": "Delete",
+    "deleteConfirmTitle": "Delete Push Target",
+    "deleteConfirm": "Are you sure you want to delete this target? Related bindings will also be removed.",
+    "enable": "Enable Target",
+    "statusEnabled": "Enabled",
+    "statusDisabled": "Disabled",
+    "lastTestAt": "Last Test",
+    "lastTestNever": "Never tested",
+    "lastTestSuccess": "Test OK",
+    "lastTestFailed": "Test Failed",
+    "test": "Test",
+    "testSelectType": "Select test type",
+    "emptyHint": "No push targets yet. Click \"Add Target\" to create one.",
+    "created": "Target created",
+    "updated": "Target updated",
+    "deleted": "Target deleted",
+    "bindingsSaved": "Bindings saved"
+  },
+  "targetDialog": {
+    "createTitle": "Add Push Target",
+    "editTitle": "Edit Push Target",
+    "name": "Target Name",
+    "namePlaceholder": "e.g. Ops Group",
+    "type": "Platform Type",
+    "selectType": "Select platform type",
+    "enable": "Enable",
+    "webhookUrl": "Webhook URL",
+    "webhookUrlPlaceholder": "https://example.com/webhook",
+    "telegramBotToken": "Telegram Bot Token",
+    "telegramBotTokenPlaceholder": "e.g. 123456:ABCDEF...",
+    "telegramChatId": "Telegram Chat ID",
+    "telegramChatIdPlaceholder": "e.g. -1001234567890",
+    "dingtalkSecret": "DingTalk Secret",
+    "dingtalkSecretPlaceholder": "Optional, used for signing",
+    "customHeaders": "Custom Headers (JSON)",
+    "customHeadersPlaceholder": "{\"X-Token\":\"...\"}",
+    "types": {
+      "wechat": "WeCom",
+      "feishu": "Feishu",
+      "dingtalk": "DingTalk",
+      "telegram": "Telegram",
+      "custom": "Custom Webhook"
     },
-    "circuitBreaker": {
-      "title": "Circuit Breaker Alert",
-      "description": "Send alert immediately when provider is fully circuit broken",
+    "proxy": {
+      "title": "Proxy",
+      "toggle": "Toggle proxy settings",
+      "url": "Proxy URL",
+      "urlPlaceholder": "http://127.0.0.1:7890",
+      "fallbackToDirect": "Fallback to direct on proxy failure"
+    }
+  },
+  "bindings": {
+    "title": "Bindings",
+    "noTargets": "No push targets available.",
+    "bindTarget": "Bind target",
+    "enable": "Enable",
+    "enableType": "Enable this notification",
+    "advanced": "Advanced",
+    "scheduleCron": "Cron",
+    "scheduleCronPlaceholder": "e.g. 0 9 * * *",
+    "scheduleTimezone": "Timezone",
+    "templateOverride": "Template Override",
+    "editTemplateOverride": "Edit Override",
+    "templateOverrideTitle": "Edit Template Override",
+    "boundCount": "Bound: {count}",
+    "enabledCount": "Enabled: {count}"
+  },
+  "templateEditor": {
+    "title": "Template (JSON)",
+    "placeholder": "Enter JSON template...",
+    "jsonInvalid": "Invalid JSON",
+    "placeholders": "Placeholders",
+    "insert": "Insert"
+  },
+  "circuitBreaker": {
+    "title": "Circuit Breaker Alert",
+    "description": "Send alert immediately when provider is fully circuit broken",
       "enable": "Enable Circuit Breaker Alert",
       "webhook": "Webhook URL",
       "webhookPlaceholder": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...",
@@ -666,6 +748,15 @@
         "chunksCount": "Received {count} chunks ({format})",
         "truncatedPreview": "Showing first {length} characters, copy to see full content",
         "truncatedBrief": "Showing first {length} characters, click \"View Details\" for more",
+        "timeout": {
+          "label": "Timeout (seconds)",
+          "desc": "Max wait time for test request (5-120 sec)",
+          "geminiHint": ", Gemini Thinking models recommend 60+ sec"
+        },
+        "geminiAuthFallback": {
+          "warning": "Header auth failed, using URL parameter auth",
+          "desc": "Actual proxy forwarding only uses header auth, may cause request failures"
+        },
         "copyFormat": {
           "testResult": "Test result",
           "message": "Message",
@@ -1143,6 +1234,15 @@
               "desc": "Group tag. Only users whose providerGroup matches can use this provider. Example: set to \"premium\" to serve users with providerGroup=\"premium\" only"
             }
           },
+          "cacheTtl": {
+            "label": "Cache TTL Override",
+            "options": {
+              "inherit": "No override (follow client)",
+              "5m": "5 minutes",
+              "1h": "1 hour"
+            },
+            "desc": "Force prompt cache TTL; only affects requests with cache_control."
+          },
           "context1m": {
             "label": "1M Context Window",
             "options": {
@@ -1516,7 +1616,6 @@
       "leaderboard": "Leaderboard",
       "title": "Provider Management"
     },
-    "addProvider": "Add server",
     "filter": {
       "status": {
         "all": "Any status",
@@ -1527,7 +1626,8 @@
         "label": "Groups:",
         "all": "All",
         "default": "default"
-      }
+      },
+      "circuitBroken": "Circuit Broken"
     },
     "subtitle": "Provider Management",
     "subtitleDesc": "Configure upstream provider rate limiting and concurrent session limits. Leave empty for unlimited.",

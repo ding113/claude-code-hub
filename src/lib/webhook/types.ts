@@ -76,7 +76,34 @@ export interface CostAlertData {
  * Webhook 相关类型
  */
 
-export type ProviderType = "wechat" | "feishu";
+export type ProviderType = "wechat" | "feishu" | "dingtalk" | "telegram" | "custom";
+
+export type WebhookNotificationType = "circuit_breaker" | "daily_leaderboard" | "cost_alert";
+
+export interface WebhookTargetConfig {
+  id?: number;
+  name?: string;
+  providerType: ProviderType;
+
+  webhookUrl?: string | null;
+
+  telegramBotToken?: string | null;
+  telegramChatId?: string | null;
+
+  dingtalkSecret?: string | null;
+
+  customTemplate?: Record<string, unknown> | null;
+  customHeaders?: Record<string, string> | null;
+
+  proxyUrl?: string | null;
+  proxyFallbackToDirect?: boolean;
+}
+
+export interface WebhookSendOptions {
+  notificationType?: WebhookNotificationType;
+  data?: unknown;
+  templateOverride?: Record<string, unknown> | null;
+}
 
 export interface WebhookPayload {
   body: string;

@@ -192,9 +192,9 @@ describe("OpenAPI 规范验证", () => {
   test("端点数量应该符合预期", () => {
     const totalPaths = Object.keys(openApiDoc.paths).length;
 
-    // 根据代码分析，应该有 39 个端点
-    expect(totalPaths).toBeGreaterThanOrEqual(35);
-    expect(totalPaths).toBeLessThanOrEqual(45);
+    // 端点数量会随着功能模块增长而变化：这里只做“合理范围”约束
+    expect(totalPaths).toBeGreaterThanOrEqual(40);
+    expect(totalPaths).toBeLessThanOrEqual(60);
   });
 
   test("summary 和 description 应该不同", () => {

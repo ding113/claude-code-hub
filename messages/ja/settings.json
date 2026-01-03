@@ -371,13 +371,95 @@
   "notifications": {
     "title": "プッシュ通知",
     "description": "Webhook プッシュ通知を設定",
-    "global": {
-      "title": "通知マスタースイッチ",
-      "description": "すべてのプッシュ通知機能を有効または無効にする",
-      "enable": "プッシュ通知を有効にする"
+  "global": {
+    "title": "通知マスタースイッチ",
+    "description": "すべてのプッシュ通知機能を有効または無効にする",
+    "enable": "プッシュ通知を有効にする",
+    "legacyModeTitle": "互換モード",
+    "legacyModeDescription": "現在は旧来の単一URL通知設定を使用しています。プッシュ先を作成するとマルチターゲットモードに切り替わります。"
+  },
+  "targets": {
+    "title": "プッシュ先",
+    "description": "プッシュ先を管理します。WeCom、Feishu、DingTalk、Telegram、カスタムWebhookに対応。",
+    "add": "追加",
+    "update": "保存",
+    "edit": "編集",
+    "delete": "削除",
+    "deleteConfirmTitle": "プッシュ先を削除",
+    "deleteConfirm": "このプッシュ先を削除しますか？関連するバインドも削除されます。",
+    "enable": "有効化",
+    "statusEnabled": "有効",
+    "statusDisabled": "無効",
+    "lastTestAt": "最終テスト",
+    "lastTestNever": "未テスト",
+    "lastTestSuccess": "テスト成功",
+    "lastTestFailed": "テスト失敗",
+    "test": "テスト",
+    "testSelectType": "テスト種類を選択",
+    "emptyHint": "プッシュ先がありません。「追加」で作成してください。",
+    "created": "プッシュ先を作成しました",
+    "updated": "プッシュ先を更新しました",
+    "deleted": "プッシュ先を削除しました",
+    "bindingsSaved": "バインドを保存しました"
+  },
+  "targetDialog": {
+    "createTitle": "プッシュ先を追加",
+    "editTitle": "プッシュ先を編集",
+    "name": "名前",
+    "namePlaceholder": "例: Ops グループ",
+    "type": "プラットフォーム",
+    "selectType": "プラットフォームを選択",
+    "enable": "有効化",
+    "webhookUrl": "Webhook URL",
+    "webhookUrlPlaceholder": "https://example.com/webhook",
+    "telegramBotToken": "Telegram Bot Token",
+    "telegramBotTokenPlaceholder": "例: 123456:ABCDEF...",
+    "telegramChatId": "Telegram Chat ID",
+    "telegramChatIdPlaceholder": "例: -1001234567890",
+    "dingtalkSecret": "DingTalk シークレット",
+    "dingtalkSecretPlaceholder": "任意（署名用）",
+    "customHeaders": "カスタムヘッダー（JSON）",
+    "customHeadersPlaceholder": "{\"X-Token\":\"...\"}",
+    "types": {
+      "wechat": "WeCom",
+      "feishu": "Feishu",
+      "dingtalk": "DingTalk",
+      "telegram": "Telegram",
+      "custom": "カスタムWebhook"
     },
-    "circuitBreaker": {
-      "title": "サーキットブレーカーアラート",
+    "proxy": {
+      "title": "プロキシ",
+      "toggle": "プロキシ設定を切り替え",
+      "url": "プロキシURL",
+      "urlPlaceholder": "http://127.0.0.1:7890",
+      "fallbackToDirect": "プロキシ失敗時に直結へフォールバック"
+    }
+  },
+  "bindings": {
+    "title": "バインド",
+    "noTargets": "プッシュ先がありません",
+    "bindTarget": "プッシュ先をバインド",
+    "enable": "有効",
+    "enableType": "この通知を有効化",
+    "advanced": "詳細",
+    "scheduleCron": "Cron",
+    "scheduleCronPlaceholder": "例: 0 9 * * *",
+    "scheduleTimezone": "タイムゾーン",
+    "templateOverride": "テンプレート上書き",
+    "editTemplateOverride": "上書きを編集",
+    "templateOverrideTitle": "テンプレート上書きを編集",
+    "boundCount": "バインド: {count}",
+    "enabledCount": "有効: {count}"
+  },
+  "templateEditor": {
+    "title": "テンプレート（JSON）",
+    "placeholder": "JSON テンプレートを入力...",
+    "jsonInvalid": "JSON が不正です",
+    "placeholders": "プレースホルダー",
+    "insert": "挿入"
+  },
+  "circuitBreaker": {
+    "title": "サーキットブレーカーアラート",
       "description": "プロバイダーが完全に遮断された時に即座にアラートを送信",
       "enable": "サーキットブレーカーアラートを有効にする",
       "webhook": "Webhook URL",
@@ -402,9 +484,9 @@
       "enable": "コストアラートを有効にする",
       "webhook": "Webhook URL",
       "webhookPlaceholder": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...",
-      "webhookTypeWeCom": "企業微信",
-      "webhookTypeFeishu": "飛書",
-      "webhookTypeUnknown": "不明なプラットフォーム。企業微信または飛書のWebhook URLを使用してください",
+      "webhookTypeWeCom": "WeCom",
+      "webhookTypeFeishu": "Feishu",
+      "webhookTypeUnknown": "不明なプラットフォームです。WeComまたはFeishuのWebhook URLを使用してください",
       "threshold": "アラートしきい値",
       "thresholdLabel": "アラートしきい値: {percent}%",
       "thresholdHelp": "消費がクォータの{percent}%に達した時にアラート",
@@ -598,6 +680,15 @@
         "chunksCount": "{count} チャンク受信 ({format})",
         "truncatedPreview": "先頭 {length} 文字を表示、全文はコピーして確認",
         "truncatedBrief": "先頭 {length} 文字を表示、全文は「詳細を見る」をクリック",
+        "timeout": {
+          "label": "タイムアウト（秒）",
+          "desc": "テストリクエストの最大待機時間（5〜120秒）",
+          "geminiHint": "、Gemini Thinkingモデルは60秒以上を推奨"
+        },
+        "geminiAuthFallback": {
+          "warning": "ヘッダー認証に失敗し、URLパラメータ認証を使用しました",
+          "desc": "実際のプロキシ転送はヘッダー認証のみを使用するため、リクエストが失敗する可能性があります"
+        },
         "copyFormat": {
           "testResult": "テスト結果",
           "message": "メッセージ",
@@ -1038,6 +1129,15 @@
               "desc": "グループタグ。ユーザーの providerGroup が一致する場合のみ利用可能。例: \"premium\" に設定すると providerGroup=\"premium\" のユーザーのみ対象"
             }
           },
+          "cacheTtl": {
+            "label": "キャッシュTTLオーバーライド",
+            "options": {
+              "inherit": "オーバーライドしない（クライアントに従う）",
+              "5m": "5分",
+              "1h": "1時間"
+            },
+            "desc": "プロンプトキャッシュのTTLを強制設定。cache_controlを含むリクエストにのみ適用されます。"
+          },
           "context1m": {
             "label": "1M コンテキストウィンドウ",
             "options": {
@@ -1386,7 +1486,6 @@
       "leaderboard": "プロバイダーランキング",
       "title": "服务商管理"
     },
-    "addProvider": "プロバイダーを追加",
     "filter": {
       "status": {
         "all": "すべてのステータス",
@@ -1397,7 +1496,8 @@
         "label": "グループ:",
         "all": "すべて",
         "default": "default"
-      }
+      },
+      "circuitBroken": "サーキットブレーカー"
     },
     "subtitle": "プロバイダー管理",
     "subtitleDesc": "上流プロバイダーの支出制限とセッション並行制限を設定します。空のままにすると無制限です。",

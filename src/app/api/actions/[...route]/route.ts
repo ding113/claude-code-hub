@@ -20,6 +20,7 @@ import { z } from "zod";
 import * as activeSessionActions from "@/actions/active-sessions";
 import * as keyActions from "@/actions/keys";
 import * as modelPriceActions from "@/actions/model-prices";
+import * as notificationBindingActions from "@/actions/notification-bindings";
 import * as notificationActions from "@/actions/notifications";
 import * as overviewActions from "@/actions/overview";
 import * as providerActions from "@/actions/providers";
@@ -28,6 +29,7 @@ import * as statisticsActions from "@/actions/statistics";
 import * as usageLogActions from "@/actions/usage-logs";
 // 导入 actions
 import * as userActions from "@/actions/users";
+import * as webhookTargetActions from "@/actions/webhook-targets";
 import { createActionRoute } from "@/lib/api/action-adapter-openapi";
 import { NOTIFICATION_JOB_TYPES } from "@/lib/constants/notification.constants";
 // 导入 validation schemas
@@ -777,8 +779,8 @@ const { route: getNotificationSettingsRoute, handler: getNotificationSettingsHan
     notificationActions.getNotificationSettingsAction,
     {
       requestSchema: z.object({}).describe("无需请求参数"),
-      description: "获取通知设置",
       summary: "获取通知设置",
+      description: "获取通知系统的全局开关与各类型通知配置（含 legacy 模式字段）",
       tags: ["通知管理"],
       requiredRole: "admin",
     }
@@ -789,14 +791,55 @@ const { route: updateNotificationSettingsRoute, handler: updateNotificationSetti
   createActionRoute(
     "notifications",
     "updateNotificationSettingsAction",
-    notificationActions.updateNotificationSettingsAction,
+    async (payload) => {
+      const result = await notificationActions.updateNotificationSettingsAction(payload);
+      return result.success
+        ? { ok: true, data: result.data }
+        : { ok: false, error: result.error || "更新通知设置失败" };
+    },
     {
       requestSchema: z.object({
-        webhookUrl: z.string().url().optional(),
-        enabledEvents: z.array(z.string()).optional(),
+        enabled: z.boolean().optional().describe("通知总开关"),
+        useLegacyMode: z.boolean().optional().describe("是否启用旧版单 Webhook 模式"),
+
+        circuitBreakerEnabled: z.boolean().optional().describe("是否启用熔断告警"),
+        circuitBreakerWebhook: z
+          .string()
+          .url()
+          .nullable()
+          .optional()
+          .describe("熔断告警 Webhook URL"),
+
+        dailyLeaderboardEnabled: z.boolean().optional().describe("是否启用每日排行榜"),
+        dailyLeaderboardWebhook: z
+          .string()
+          .url()
+          .nullable()
+          .optional()
+          .describe("每日排行榜 Webhook URL（旧版模式）"),
+        dailyLeaderboardTime: z.string().optional().describe("每日排行榜发送时间（HH:mm）"),
+        dailyLeaderboardTopN: z.number().int().positive().optional().describe("每日排行榜 TopN"),
+
+        costAlertEnabled: z.boolean().optional().describe("是否启用成本预警"),
+        costAlertWebhook: z
+          .string()
+          .url()
+          .nullable()
+          .optional()
+          .describe("成本预警 Webhook URL（旧版模式）"),
+        costAlertThreshold: z
+          .string()
+          .optional()
+          .describe("成本预警阈值（numeric 字段以 string 表示）"),
+        costAlertCheckInterval: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe("成本预警检查间隔（分钟）"),
       }),
-      description: "更新通知设置",
       summary: "更新通知设置",
+      description: "更新通知开关与各类型通知配置（生产环境会触发重新调度定时任务）",
       tags: ["通知管理"],
       requiredRole: "admin",
     }
@@ -806,19 +849,217 @@ app.openapi(updateNotificationSettingsRoute, updateNotificationSettingsHandler);
 const { route: testWebhookRoute, handler: testWebhookHandler } = createActionRoute(
   "notifications",
   "testWebhookAction",
-  notificationActions.testWebhookAction,
+  async (webhookUrl, type) => {
+    const result = await notificationActions.testWebhookAction(webhookUrl, type);
+    return result.success ? { ok: true } : { ok: false, error: result.error || "测试失败" };
+  },
   {
     requestSchema: z.object({
       webhookUrl: z.string().url(),
       type: z.enum(NOTIFICATION_JOB_TYPES),
     }),
-    description: "测试 Webhook 配置",
     summary: "测试 Webhook 配置",
+    description: "向指定 Webhook URL 发送测试消息，用于验证连通性与格式",
+    tags: ["通知管理"],
+    requiredRole: "admin",
+    argsMapper: (body) => [body.webhookUrl, body.type],
+  }
+);
+app.openapi(testWebhookRoute, testWebhookHandler);
+
+// ==================== Webhook 目标管理 ====================
+
+const WebhookProviderTypeSchema = z.enum(["wechat", "feishu", "dingtalk", "telegram", "custom"]);
+const WebhookNotificationTypeSchema = z.enum([
+  "circuit_breaker",
+  "daily_leaderboard",
+  "cost_alert",
+]);
+
+const WebhookTargetSchema = z.object({
+  id: z.number().int().positive().describe("目标 ID"),
+  name: z.string().describe("目标名称"),
+  providerType: WebhookProviderTypeSchema.describe("推送平台类型"),
+  webhookUrl: z.string().nullable().describe("Webhook URL（Telegram 为空）"),
+  telegramBotToken: z.string().nullable().describe("Telegram Bot Token"),
+  telegramChatId: z.string().nullable().describe("Telegram Chat ID"),
+  dingtalkSecret: z.string().nullable().describe("钉钉签名密钥"),
+  customTemplate: z.record(z.string(), z.unknown()).nullable().describe("自定义模板（JSON 对象）"),
+  customHeaders: z.record(z.string(), z.string()).nullable().describe("自定义请求头"),
+  proxyUrl: z.string().nullable().describe("代理地址"),
+  proxyFallbackToDirect: z.boolean().describe("代理失败是否降级直连"),
+  isEnabled: z.boolean().describe("是否启用"),
+  lastTestAt: z.string().nullable().describe("最后测试时间"),
+  lastTestResult: z
+    .object({
+      success: z.boolean(),
+      error: z.string().optional(),
+      latencyMs: z.number().optional(),
+    })
+    .nullable()
+    .describe("最后测试结果"),
+  createdAt: z.string().describe("创建时间"),
+  updatedAt: z.string().describe("更新时间"),
+});
+
+const WebhookTargetCreateSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  providerType: WebhookProviderTypeSchema,
+  webhookUrl: z.string().trim().url().optional().nullable(),
+  telegramBotToken: z.string().trim().optional().nullable(),
+  telegramChatId: z.string().trim().optional().nullable(),
+  dingtalkSecret: z.string().trim().optional().nullable(),
+  customTemplate: z.string().trim().optional().nullable(),
+  customHeaders: z.record(z.string(), z.string()).optional().nullable(),
+  proxyUrl: z.string().trim().optional().nullable(),
+  proxyFallbackToDirect: z.boolean().optional(),
+  isEnabled: z.boolean().optional(),
+});
+
+const WebhookTargetUpdateSchema = WebhookTargetCreateSchema.partial();
+
+const { route: getWebhookTargetsRoute, handler: getWebhookTargetsHandler } = createActionRoute(
+  "webhook-targets",
+  "getWebhookTargetsAction",
+  webhookTargetActions.getWebhookTargetsAction,
+  {
+    requestSchema: z.object({}).describe("无需请求参数"),
+    responseSchema: z.array(WebhookTargetSchema),
+    summary: "获取推送目标列表",
+    description: "获取所有 Webhook 推送目标（用于通知类型绑定）",
     tags: ["通知管理"],
     requiredRole: "admin",
   }
 );
-app.openapi(testWebhookRoute, testWebhookHandler);
+app.openapi(getWebhookTargetsRoute, getWebhookTargetsHandler);
+
+const { route: createWebhookTargetRoute, handler: createWebhookTargetHandler } = createActionRoute(
+  "webhook-targets",
+  "createWebhookTargetAction",
+  webhookTargetActions.createWebhookTargetAction,
+  {
+    requestSchema: WebhookTargetCreateSchema,
+    responseSchema: WebhookTargetSchema,
+    summary: "创建推送目标",
+    description: "创建一个新的 Webhook 推送目标（创建后可绑定到通知类型）",
+    tags: ["通知管理"],
+    requiredRole: "admin",
+  }
+);
+app.openapi(createWebhookTargetRoute, createWebhookTargetHandler);
+
+const { route: updateWebhookTargetRoute, handler: updateWebhookTargetHandler } = createActionRoute(
+  "webhook-targets",
+  "updateWebhookTargetAction",
+  webhookTargetActions.updateWebhookTargetAction,
+  {
+    requestSchema: z.object({
+      id: z.number().int().positive(),
+      input: WebhookTargetUpdateSchema,
+    }),
+    responseSchema: WebhookTargetSchema,
+    summary: "更新推送目标（支持局部更新）",
+    description: "更新指定推送目标的配置（支持仅提交变更字段）",
+    tags: ["通知管理"],
+    requiredRole: "admin",
+    argsMapper: (body) => [body.id, body.input],
+  }
+);
+app.openapi(updateWebhookTargetRoute, updateWebhookTargetHandler);
+
+const { route: deleteWebhookTargetRoute, handler: deleteWebhookTargetHandler } = createActionRoute(
+  "webhook-targets",
+  "deleteWebhookTargetAction",
+  webhookTargetActions.deleteWebhookTargetAction,
+  {
+    requestSchema: z.object({
+      id: z.number().int().positive(),
+    }),
+    summary: "删除推送目标",
+    description: "删除指定推送目标（会级联删除与该目标关联的通知绑定）",
+    tags: ["通知管理"],
+    requiredRole: "admin",
+  }
+);
+app.openapi(deleteWebhookTargetRoute, deleteWebhookTargetHandler);
+
+const { route: testWebhookTargetRoute, handler: testWebhookTargetHandler } = createActionRoute(
+  "webhook-targets",
+  "testWebhookTargetAction",
+  webhookTargetActions.testWebhookTargetAction,
+  {
+    requestSchema: z.object({
+      id: z.number().int().positive(),
+      notificationType: WebhookNotificationTypeSchema,
+    }),
+    responseSchema: z.object({
+      latencyMs: z.number().describe("耗时（毫秒）"),
+    }),
+    summary: "测试推送目标配置",
+    description: "向目标发送测试消息并记录 lastTestResult（用于 UI 展示与排查）",
+    tags: ["通知管理"],
+    requiredRole: "admin",
+    argsMapper: (body) => [body.id, body.notificationType],
+  }
+);
+app.openapi(testWebhookTargetRoute, testWebhookTargetHandler);
+
+// ==================== 通知目标绑定 ====================
+
+const NotificationBindingSchema = z.object({
+  id: z.number().int().positive().describe("绑定 ID"),
+  notificationType: WebhookNotificationTypeSchema.describe("通知类型"),
+  targetId: z.number().int().positive().describe("目标 ID"),
+  isEnabled: z.boolean().describe("是否启用"),
+  scheduleCron: z.string().nullable().describe("Cron 表达式覆盖"),
+  scheduleTimezone: z.string().nullable().describe("时区覆盖"),
+  templateOverride: z.record(z.string(), z.unknown()).nullable().describe("模板覆盖"),
+  createdAt: z.string().describe("创建时间"),
+  target: WebhookTargetSchema.describe("目标详情"),
+});
+
+const NotificationBindingInputSchema = z.object({
+  targetId: z.number().int().positive(),
+  isEnabled: z.boolean().optional(),
+  scheduleCron: z.string().trim().max(100).optional().nullable(),
+  scheduleTimezone: z.string().trim().max(50).optional().nullable(),
+  templateOverride: z.record(z.string(), z.unknown()).optional().nullable(),
+});
+
+const { route: getBindingsRoute, handler: getBindingsHandler } = createActionRoute(
+  "notification-bindings",
+  "getBindingsForTypeAction",
+  notificationBindingActions.getBindingsForTypeAction,
+  {
+    requestSchema: z.object({
+      type: WebhookNotificationTypeSchema,
+    }),
+    responseSchema: z.array(NotificationBindingSchema),
+    summary: "获取通知绑定列表",
+    description: "获取指定通知类型的目标绑定（返回包含 target 详情的列表）",
+    tags: ["通知管理"],
+    requiredRole: "admin",
+  }
+);
+app.openapi(getBindingsRoute, getBindingsHandler);
+
+const { route: updateBindingsRoute, handler: updateBindingsHandler } = createActionRoute(
+  "notification-bindings",
+  "updateBindingsAction",
+  notificationBindingActions.updateBindingsAction,
+  {
+    requestSchema: z.object({
+      type: WebhookNotificationTypeSchema,
+      bindings: z.array(NotificationBindingInputSchema),
+    }),
+    summary: "更新通知绑定",
+    description: "按通知类型批量写入绑定（缺失的绑定会被删除，已有绑定会被更新）",
+    tags: ["通知管理"],
+    requiredRole: "admin",
+    argsMapper: (body) => [body.type, body.bindings],
+  }
+);
+app.openapi(updateBindingsRoute, updateBindingsHandler);
 
 // ==================== OpenAPI 文档 ====================
 

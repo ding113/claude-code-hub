@@ -1305,31 +1305,6 @@
       "creating": "Creating...",
       "create": "Create"
     },
-    "onboarding": {
-      "skip": "Skip",
-      "next": "Next",
-      "prev": "Previous",
-      "finish": "Start Creating",
-      "stepIndicator": "Step {current} of {total}",
-      "steps": {
-        "welcome": {
-          "title": "Users & Keys",
-          "description": "Users are the main entities for API access. Each user can have multiple API Keys. User-level limits affect all keys, while key-level limits provide finer control."
-        },
-        "limits": {
-          "title": "Limit Management",
-          "description": "Six types of limits are supported: 5-hour, daily, weekly, monthly, total, and concurrent sessions. Add limit rules as needed to flexibly control usage."
-        },
-        "groups": {
-          "title": "Provider Groups",
-          "description": "Use the group feature to restrict users to specific providers. Key-level groups take priority over user-level groups."
-        },
-        "keyFeatures": {
-          "title": "Key Features",
-          "description": "Each key can be independently configured with Cache TTL override, Web UI login permission, and other advanced features."
-        }
-      }
-    },
     "limitRules": {
       "addRule": "Add limit rule",
       "ruleTypes": {
@@ -1575,5 +1550,44 @@
         "overwriteHint": "This type already exists, saving will overwrite the existing value"
       }
     }
+  },
+  "webhookMigration": {
+    "title": "Webhook System Upgrade",
+    "description": "We have launched a new Webhook notification system with multi-target delivery, independent configuration, and improved reliability.",
+    "step1": {
+      "title": "Legacy Webhook Configuration Detected",
+      "description": "The system detected that you are using legacy Webhook configuration. The new system offers more powerful features, and we recommend migrating."
+    },
+    "step2": {
+      "title": "Select Platform Type",
+      "description": "The following Webhook URLs could not be automatically identified. Please select the platform manually:"
+    },
+    "platformOptions": {
+      "wechat": "WeChat Work",
+      "feishu": "Feishu",
+      "dingtalk": "DingTalk",
+      "telegram": "Telegram",
+      "custom": "Custom"
+    },
+    "migrateButton": "Start Migration",
+    "skipButton": "Maybe Later",
+    "nextButton": "Next",
+    "goToSettingsButton": "Go to Settings",
+    "migrating": "Migrating...",
+    "success": "Migration Complete",
+    "successDescription": "Your Webhook configuration has been successfully migrated to the new system.",
+    "error": "Migration Failed",
+    "errorGeneric": "Migration failed. Please try again later.",
+    "detectedWebhooks": "Detected Webhooks",
+    "notificationTypes": {
+      "circuit_breaker": "Circuit Breaker Alert",
+      "daily_leaderboard": "Daily Leaderboard",
+      "cost_alert": "Cost Alert"
+    },
+    "urlLabel": "Webhook URL",
+    "platformLabel": "Platform Type",
+    "autoDetected": "Auto-detected",
+    "selectPlatform": "Select platform",
+    "successStats": "Created {targets} targets, {bindings} bindings"
   }
 }
