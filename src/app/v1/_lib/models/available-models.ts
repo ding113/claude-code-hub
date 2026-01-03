@@ -10,7 +10,7 @@ import { ProxyProviderResolver } from "../proxy/provider-selector";
 
 type ResponseFormat = "openai" | "anthropic" | "gemini" | "codex";
 
-interface FetchedModel {
+export interface FetchedModel {
   id: string;
   displayName?: string;
   createdAt?: string;
@@ -125,7 +125,7 @@ function mapResponseFormatToClientFormat(format: ResponseFormat): ClientFormat {
 /**
  * 根据模型 ID 推断所有者
  */
-function inferOwner(modelId: string): string {
+export function inferOwner(modelId: string): string {
   if (modelId.startsWith("claude-")) return "anthropic";
   if (modelId.startsWith("gpt-") || modelId.startsWith("o1") || modelId.startsWith("o3"))
     return "openai";
@@ -256,7 +256,7 @@ async function fetchModelsFromProvider(provider: Provider): Promise<FetchedModel
 /**
  * 根据客户端格式获取需要决策的 providerType 列表
  */
-function getProviderTypesForFormat(clientFormat: ClientFormat): Provider["providerType"][] {
+export function getProviderTypesForFormat(clientFormat: ClientFormat): Provider["providerType"][] {
   switch (clientFormat) {
     case "claude":
       return ["claude", "claude-auth"];
@@ -298,7 +298,7 @@ async function getAvailableModels(
 /**
  * 格式化为 OpenAI 响应
  */
-function formatOpenAIResponse(models: FetchedModel[]): object {
+export function formatOpenAIResponse(models: FetchedModel[]): object {
   const now = Math.floor(Date.now() / 1000);
   const data = models.map((m) => ({
     id: m.id,
@@ -313,7 +313,7 @@ function formatOpenAIResponse(models: FetchedModel[]): object {
 /**
  * 格式化为 Anthropic 响应
  */
-function formatAnthropicResponse(models: FetchedModel[]): object {
+export function formatAnthropicResponse(models: FetchedModel[]): object {
   const now = new Date().toISOString();
   const data = models.map((m) => ({
     id: m.id,
@@ -328,7 +328,7 @@ function formatAnthropicResponse(models: FetchedModel[]): object {
 /**
  * 格式化为 Gemini 响应
  */
-function formatGeminiResponse(models: FetchedModel[]): object {
+export function formatGeminiResponse(models: FetchedModel[]): object {
   const geminiModels = models.map((m) => ({
     name: `models/${m.id}`,
     displayName: m.displayName || m.id,
