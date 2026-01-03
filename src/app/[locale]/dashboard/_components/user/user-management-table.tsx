@@ -261,12 +261,7 @@ export function UserManagementTable({
 
   useEffect(() => {
     if (!scrollResetKey) return;
-    parentRef.current?.scrollTo({ top: 0 });
-    // Defer measurement to next frame to ensure DOM has updated
-    const rafId = requestAnimationFrame(() => {
-      rowVirtualizer.measure();
-    });
-    return () => cancelAnimationFrame(rafId);
+    rowVirtualizer.scrollToOffset(0);
   }, [scrollResetKey, rowVirtualizer]);
 
   const quickRenewTranslations = useMemo(() => {
