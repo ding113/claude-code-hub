@@ -420,6 +420,11 @@
     "dingtalkSecretPlaceholder": "任意（署名用）",
     "customHeaders": "カスタムヘッダー（JSON）",
     "customHeadersPlaceholder": "{\"X-Token\":\"...\"}",
+    "errors": {
+      "headersInvalidJson": "Headers は有効な JSON である必要があります",
+      "headersMustBeObject": "Headers は JSON オブジェクトである必要があります",
+      "headersValueMustBeString": "Headers の値は文字列である必要があります"
+    },
     "types": {
       "wechat": "WeCom",
       "feishu": "Feishu",

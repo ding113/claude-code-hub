@@ -25,15 +25,27 @@ function trimToNull(value: string | null | undefined): string | null {
   return trimmed ? trimmed : null;
 }
 
-function parseCustomTemplate(value: string | null | undefined): Record<string, unknown> | null {
-  const trimmed = trimToNull(value);
-  if (!trimmed) return null;
-
-  const parsed = JSON.parse(trimmed) as unknown;
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("自定义模板必须是 JSON 对象");
+function parseCustomTemplate(value: unknown): Record<string, unknown> | null {
+  if (value === null || value === undefined) {
+    return null;
   }
-  return parsed as Record<string, unknown>;
+
+  if (typeof value === "string") {
+    const trimmed = trimToNull(value);
+    if (!trimmed) return null;
+
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("自定义模板必须是 JSON 对象");
+    }
+    return parsed as Record<string, unknown>;
+  }
+
+  if (typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+
+  throw new Error("自定义模板必须是 JSON 对象");
 }
 
 function validateProviderConfig(params: {
@@ -66,6 +78,8 @@ const NotificationTypeSchema = z.enum(["circuit_breaker", "daily_leaderboard", "
 
 export type NotificationType = z.infer<typeof NotificationTypeSchema>;
 
+const CustomTemplateSchema = z.union([z.string().trim(), z.record(z.string(), z.unknown())]);
+
 const BaseTargetSchema = z.object({
   name: z.string().trim().min(1, "目标名称不能为空").max(100, "目标名称不能超过100个字符"),
   providerType: ProviderTypeSchema,
@@ -77,7 +91,7 @@ const BaseTargetSchema = z.object({
 
   dingtalkSecret: z.string().trim().optional().nullable(),
 
-  customTemplate: z.string().trim().optional().nullable(),
+  customTemplate: CustomTemplateSchema.optional().nullable(),
   customHeaders: z.record(z.string(), z.string()).optional().nullable(),
 
   proxyUrl: z.string().trim().optional().nullable(),

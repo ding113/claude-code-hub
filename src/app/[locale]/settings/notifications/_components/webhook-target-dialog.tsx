@@ -67,20 +67,52 @@ function toJsonString(value: unknown): string {
   }
 }
 
-function parseHeadersJson(value: string | null | undefined): Record<string, string> | null {
+type TranslateFn = (key: string) => string;
+
+function parseTemplateJson(
+  value: string | null | undefined,
+  t: TranslateFn
+): Record<string, unknown> | null {
   const trimmed = value?.trim();
   if (!trimmed) return null;
 
-  const parsed = JSON.parse(trimmed) as unknown;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed) as unknown;
+  } catch {
+    throw new Error(t("notifications.templateEditor.jsonInvalid"));
+  }
+
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("Headers 必须是 JSON 对象");
+    throw new Error(t("notifications.templateEditor.jsonInvalid"));
+  }
+
+  return parsed as Record<string, unknown>;
+}
+
+function parseHeadersJson(
+  value: string | null | undefined,
+  t: TranslateFn
+): Record<string, string> | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed) as unknown;
+  } catch {
+    throw new Error(t("notifications.targetDialog.errors.headersInvalidJson"));
+  }
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(t("notifications.targetDialog.errors.headersMustBeObject"));
   }
 
   const record = parsed as Record<string, unknown>;
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(record)) {
     if (typeof v !== "string") {
-      throw new Error("Headers 的值必须为字符串");
+      throw new Error(t("notifications.targetDialog.errors.headersValueMustBeString"));
     }
     out[k] = v;
   }
@@ -160,8 +192,9 @@ export function WebhookTargetDialog({
         telegramBotToken: values.telegramBotToken || null,
         telegramChatId: values.telegramChatId || null,
         dingtalkSecret: values.dingtalkSecret || null,
-        customTemplate: values.customTemplate || null,
-        customHeaders: parseHeadersJson(values.customHeaders),
+        customTemplate:
+          normalizedType === "custom" ? parseTemplateJson(values.customTemplate, t) : null,
+        customHeaders: parseHeadersJson(values.customHeaders, t),
         proxyUrl: values.proxyUrl || null,
         proxyFallbackToDirect: values.proxyFallbackToDirect,
         isEnabled: values.isEnabled,

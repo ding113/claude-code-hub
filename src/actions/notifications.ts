@@ -11,6 +11,7 @@ import {
   type UpdateNotificationSettingsInput,
   updateNotificationSettings,
 } from "@/repository/notifications";
+import type { ActionResult } from "./types";
 
 /**
  * 获取通知设置
@@ -28,11 +29,11 @@ export async function getNotificationSettingsAction(): Promise<NotificationSetti
  */
 export async function updateNotificationSettingsAction(
   payload: UpdateNotificationSettingsInput
-): Promise<{ success: boolean; data?: NotificationSettings; error?: string }> {
+): Promise<ActionResult<NotificationSettings>> {
   try {
     const session = await getSession();
     if (!session || session.user.role !== "admin") {
-      return { success: false, error: "无权限执行此操作" };
+      return { ok: false, error: "无权限执行此操作" };
     }
 
     const updated = await updateNotificationSettings(payload);
@@ -50,10 +51,10 @@ export async function updateNotificationSettingsAction(
       });
     }
 
-    return { success: true, data: updated };
+    return { ok: true, data: updated };
   } catch (error) {
     return {
-      success: false,
+      ok: false,
       error: error instanceof Error ? error.message : "更新通知设置失败",
     };
   }

@@ -69,7 +69,7 @@ export interface WebhookTargetCreateInput {
   telegramBotToken?: string | null;
   telegramChatId?: string | null;
   dingtalkSecret?: string | null;
-  customTemplate?: string | null;
+  customTemplate?: Record<string, unknown> | null;
   customHeaders?: Record<string, string> | null;
   proxyUrl?: string | null;
   proxyFallbackToDirect?: boolean;
@@ -169,66 +169,63 @@ export function useNotificationsPageData() {
   }, [refreshAll]);
 
   const updateSettings = useCallback(
-    async (patch: Partial<NotificationSettingsState>) => {
-      const result = await updateNotificationSettingsAction({
-        ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
-        ...(patch.circuitBreakerEnabled !== undefined
-          ? { circuitBreakerEnabled: patch.circuitBreakerEnabled }
-          : {}),
-        ...(patch.circuitBreakerWebhook !== undefined
-          ? {
-              circuitBreakerWebhook: patch.circuitBreakerWebhook?.trim()
-                ? patch.circuitBreakerWebhook.trim()
-                : null,
-            }
-          : {}),
-        ...(patch.dailyLeaderboardEnabled !== undefined
-          ? { dailyLeaderboardEnabled: patch.dailyLeaderboardEnabled }
-          : {}),
-        ...(patch.dailyLeaderboardWebhook !== undefined
-          ? {
-              dailyLeaderboardWebhook: patch.dailyLeaderboardWebhook?.trim()
-                ? patch.dailyLeaderboardWebhook.trim()
-                : null,
-            }
-          : {}),
-        ...(patch.dailyLeaderboardTime !== undefined
-          ? { dailyLeaderboardTime: patch.dailyLeaderboardTime }
-          : {}),
-        ...(patch.dailyLeaderboardTopN !== undefined
-          ? { dailyLeaderboardTopN: patch.dailyLeaderboardTopN }
-          : {}),
-        ...(patch.costAlertEnabled !== undefined
-          ? { costAlertEnabled: patch.costAlertEnabled }
-          : {}),
-        ...(patch.costAlertWebhook !== undefined
-          ? {
-              costAlertWebhook: patch.costAlertWebhook?.trim()
-                ? patch.costAlertWebhook.trim()
-                : null,
-            }
-          : {}),
-        ...(patch.costAlertThreshold !== undefined
-          ? { costAlertThreshold: patch.costAlertThreshold.toString() }
-          : {}),
-        ...(patch.costAlertCheckInterval !== undefined
-          ? { costAlertCheckInterval: patch.costAlertCheckInterval }
-          : {}),
-      } as any);
+    async (patch: Partial<NotificationSettingsState>): Promise<ClientActionResult<void>> => {
+      type UpdatePayload = Parameters<typeof updateNotificationSettingsAction>[0];
+      const payload: UpdatePayload = {};
 
-      if (!result.success) {
-        return { ok: false, error: result.error || "SAVE_FAILED" } as ClientActionResult<void>;
+      if (patch.enabled !== undefined) {
+        payload.enabled = patch.enabled;
       }
 
-      if (result.data) {
-        setSettings(toClientSettings(result.data));
-      } else {
-        await refreshSettings();
+      if (patch.circuitBreakerEnabled !== undefined) {
+        payload.circuitBreakerEnabled = patch.circuitBreakerEnabled;
+      }
+      if (patch.circuitBreakerWebhook !== undefined) {
+        payload.circuitBreakerWebhook = patch.circuitBreakerWebhook?.trim()
+          ? patch.circuitBreakerWebhook.trim()
+          : null;
       }
 
-      return { ok: true } as ClientActionResult<void>;
+      if (patch.dailyLeaderboardEnabled !== undefined) {
+        payload.dailyLeaderboardEnabled = patch.dailyLeaderboardEnabled;
+      }
+      if (patch.dailyLeaderboardWebhook !== undefined) {
+        payload.dailyLeaderboardWebhook = patch.dailyLeaderboardWebhook?.trim()
+          ? patch.dailyLeaderboardWebhook.trim()
+          : null;
+      }
+      if (patch.dailyLeaderboardTime !== undefined) {
+        payload.dailyLeaderboardTime = patch.dailyLeaderboardTime;
+      }
+      if (patch.dailyLeaderboardTopN !== undefined) {
+        payload.dailyLeaderboardTopN = patch.dailyLeaderboardTopN;
+      }
+
+      if (patch.costAlertEnabled !== undefined) {
+        payload.costAlertEnabled = patch.costAlertEnabled;
+      }
+      if (patch.costAlertWebhook !== undefined) {
+        payload.costAlertWebhook = patch.costAlertWebhook?.trim()
+          ? patch.costAlertWebhook.trim()
+          : null;
+      }
+      if (patch.costAlertThreshold !== undefined) {
+        payload.costAlertThreshold = patch.costAlertThreshold.toString();
+      }
+      if (patch.costAlertCheckInterval !== undefined) {
+        payload.costAlertCheckInterval = patch.costAlertCheckInterval;
+      }
+
+      const result = await updateNotificationSettingsAction(payload);
+
+      if (!result.ok) {
+        return { ok: false, error: result.error || "SAVE_FAILED" };
+      }
+
+      setSettings(toClientSettings(result.data));
+      return { ok: true };
     },
-    [refreshSettings]
+    []
   );
 
   const saveBindings = useCallback(
@@ -246,13 +243,13 @@ export function useNotificationsPageData() {
       if (result.ok) {
         await refreshBindingsForType(type);
       }
-      return result as ClientActionResult<void>;
+      return result;
     },
     [refreshBindingsForType]
   );
 
   const createTarget = useCallback(
-    async (input: WebhookTargetCreateInput) => {
+    async (input: WebhookTargetCreateInput): Promise<ClientActionResult<WebhookTargetState>> => {
       const result = await createWebhookTargetAction(input);
       if (result.ok) {
         await Promise.all([
@@ -261,13 +258,16 @@ export function useNotificationsPageData() {
           refreshSettings(),
         ]);
       }
-      return result as ClientActionResult<WebhookTargetState>;
+      return result;
     },
     [refreshBindingsForType, refreshSettings, refreshTargets]
   );
 
   const updateTarget = useCallback(
-    async (id: number, input: WebhookTargetUpdateInput) => {
+    async (
+      id: number,
+      input: WebhookTargetUpdateInput
+    ): Promise<ClientActionResult<WebhookTargetState>> => {
       const result = await updateWebhookTargetAction(id, input);
       if (result.ok) {
         await Promise.all([
@@ -275,13 +275,13 @@ export function useNotificationsPageData() {
           ...NOTIFICATION_TYPES.map((type) => refreshBindingsForType(type)),
         ]);
       }
-      return result as ClientActionResult<WebhookTargetState>;
+      return result;
     },
     [refreshBindingsForType, refreshTargets]
   );
 
   const deleteTarget = useCallback(
-    async (id: number) => {
+    async (id: number): Promise<ClientActionResult<void>> => {
       const result = await deleteWebhookTargetAction(id);
       if (result.ok) {
         await Promise.all([
@@ -289,18 +289,21 @@ export function useNotificationsPageData() {
           ...NOTIFICATION_TYPES.map((type) => refreshBindingsForType(type)),
         ]);
       }
-      return result as ClientActionResult<void>;
+      return result;
     },
     [refreshBindingsForType, refreshTargets]
   );
 
   const testTarget = useCallback(
-    async (id: number, type: NotificationType) => {
+    async (
+      id: number,
+      type: NotificationType
+    ): Promise<ClientActionResult<{ latencyMs: number }>> => {
       const result = await testWebhookTargetAction(id, type);
       if (result.ok) {
         await refreshTargets();
       }
-      return result as ClientActionResult<{ latencyMs: number }>;
+      return result;
     },
     [refreshTargets]
   );

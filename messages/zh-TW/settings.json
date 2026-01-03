@@ -420,6 +420,11 @@
     "dingtalkSecretPlaceholder": "可選，用於簽名",
     "customHeaders": "自訂 Headers（JSON）",
     "customHeadersPlaceholder": "{\"X-Token\":\"...\"}",
+    "errors": {
+      "headersInvalidJson": "Headers 不是有效 JSON",
+      "headersMustBeObject": "Headers 必須是 JSON 物件",
+      "headersValueMustBeString": "Headers 的值必須為字串"
+    },
     "types": {
       "wechat": "企業微信",
       "feishu": "飛書",

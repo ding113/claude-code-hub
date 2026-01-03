@@ -429,6 +429,11 @@
     "dingtalkSecretPlaceholder": "Optional, used for signing",
     "customHeaders": "Custom Headers (JSON)",
     "customHeadersPlaceholder": "{\"X-Token\":\"...\"}",
+    "errors": {
+      "headersInvalidJson": "Headers must be valid JSON",
+      "headersMustBeObject": "Headers must be a JSON object",
+      "headersValueMustBeString": "Header values must be strings"
+    },
     "types": {
       "wechat": "WeCom",
       "feishu": "Feishu",
