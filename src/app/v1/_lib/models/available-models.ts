@@ -189,7 +189,8 @@ async function fetchModelsWithConfig(
   const proxyConfig = createProxyAgentForProvider(provider, url);
   const timeout = getProviderTimeout(provider);
 
-  logger.debug(`[AvailableModels] Fetching models from ${provider.name}: ${url}`);
+  const safeUrl = url.replace(/[?&]key=[^&]+/, "[key=REDACTED]");
+  logger.debug(`[AvailableModels] Fetching models from ${provider.name}: ${safeUrl}`);
 
   const response = await undiciRequest(url, {
     method: "GET",
@@ -386,8 +387,11 @@ async function getAvailableModelsByProviderTypes(
   const allModels: FetchedModel[] = [];
   const seenIds = new Set<string>();
 
-  for (const provider of selectedProviders) {
-    const models = await fetchModelsFromProvider(provider);
+  const fetchResults = await Promise.all(
+    selectedProviders.map((provider) => fetchModelsFromProvider(provider))
+  );
+
+  for (const models of fetchResults) {
     for (const model of models) {
       if (!seenIds.has(model.id)) {
         seenIds.add(model.id);
