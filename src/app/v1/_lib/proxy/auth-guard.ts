@@ -193,3 +193,40 @@ export class ProxyAuthenticator {
     return trimmed.length > 0 ? trimmed : null;
   }
 }
+
+/**
+ * 从请求头中提取 API Key（独立函数，供非 Guard 流程使用）
+ *
+ * 支持多种认证方式：
+ * - Authorization: Bearer <key>
+ * - x-api-key: <key>
+ * - x-goog-api-key: <key>（Gemini）
+ */
+export function extractApiKeyFromHeaders(headers: {
+  authorization?: string | null;
+  "x-api-key"?: string | null;
+  "x-goog-api-key"?: string | null;
+}): string | null {
+  // 1. Bearer token
+  const authHeader = headers.authorization?.trim();
+  if (authHeader) {
+    const match = /^Bearer\s+(.+)$/i.exec(authHeader);
+    if (match?.[1]?.trim()) {
+      return match[1].trim();
+    }
+  }
+
+  // 2. x-api-key header
+  const apiKey = headers["x-api-key"]?.trim();
+  if (apiKey) {
+    return apiKey;
+  }
+
+  // 3. x-goog-api-key header (Gemini)
+  const geminiKey = headers["x-goog-api-key"]?.trim();
+  if (geminiKey) {
+    return geminiKey;
+  }
+
+  return null;
+}
