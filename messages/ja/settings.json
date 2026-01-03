@@ -486,7 +486,7 @@
       "webhookPlaceholder": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...",
       "webhookTypeWeCom": "WeCom",
       "webhookTypeFeishu": "Feishu",
-      "webhookTypeUnknown": "Unknown platform. Please use a WeCom or Feishu Webhook URL",
+      "webhookTypeUnknown": "不明なプラットフォームです。WeComまたはFeishuのWebhook URLを使用してください",
       "threshold": "アラートしきい値",
       "thresholdLabel": "アラートしきい値: {percent}%",
       "thresholdHelp": "消費がクォータの{percent}%に達した時にアラート",
