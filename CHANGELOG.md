@@ -4,6 +4,40 @@
 
 ---
 
+## [v0.3.41](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.41) - 2026-01-03
+
+### 新增
+
+- 新增 `/v1/models` 端点，聚合返回用户可用模型列表 (#517) [@NieiR](https://github.com/NieiR)
+- Webhook 系统重构：支持多目标管理、自定义模板、统一渲染架构 (#506)
+- Webhook 引导系统：旧配置迁移向导，一键升级到新架构
+- 通知系统增强：支持多类型通知绑定和全局配置 (#506)
+
+### 优化
+
+- 数据库连接池优化：采用 lazy connection 降低资源占用 (#503)
+- 请求日志写入优化：实现异步批量写入缓冲区，减少数据库压力 (#503)
+- Webhook 模板系统：支持占位符变量替换和多平台适配（钉钉、Telegram、企业微信）
+- 限额时区判断统一：修复用户层级和 Key 层级每日限额时区不一致问题 (#507)
+- 管理后台 UX 改进：优化对话框体验和 i18n 问题修复 (#514)
+- 内部 URL 白名单验证：允许配置内部地址避免 SSRF 误报 (#516)
+
+### 修复
+
+- 修复 Gemini 供应商 User-Agent 透传问题 (a4797187)
+- 修复 Codex Session 提取：优先使用 `prompt_cache_key` 作为会话标识 (#521)
+- 修复 `/v1/models` 分组隔离：确保用户只能看到授权的供应商模型 (#522)
+- 修复 Webhook 处理逻辑：加固多目标通知的并发安全性 (#522)
+- 添加 "Invalid signature in thinking block" 错误规则 (#519)
+- 请求过滤器改进：修复 SOCKS 代理问题 (#501)
+
+### 其他
+
+- 新增数据库迁移：notification_bindings, webhook_targets 表 (0043)
+- 更新 LiteLLM 模型价格数据
+
+---
+
 ## [v0.3.40](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.40) - 2026-01-01
 
 ### 新增
