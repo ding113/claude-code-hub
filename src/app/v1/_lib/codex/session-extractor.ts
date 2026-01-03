@@ -3,6 +3,7 @@ import "server-only";
 export type CodexSessionIdSource =
   | "header_session_id"
   | "header_x_session_id"
+  | "body_prompt_cache_key"
   | "body_metadata_session_id"
   | "body_previous_response_id"
   | null;
@@ -56,8 +57,9 @@ export function isCodexClient(userAgent: string | null): boolean {
  * Extract Codex session id from headers/body with priority:
  * 1) headers["session_id"]
  * 2) headers["x-session-id"]
- * 3) body.metadata.session_id
- * 4) body.previous_response_id (fallback, prefixed with "codex_prev_")
+ * 3) body.prompt_cache_key
+ * 4) body.metadata.session_id
+ * 5) body.previous_response_id (fallback, prefixed with "codex_prev_")
  *
  * Only accept session ids with length > 20.
  */
@@ -82,6 +84,16 @@ export function extractCodexSessionId(
     return {
       sessionId: headerXSessionId,
       source: "header_x_session_id",
+      isCodexClient: officialClient,
+    };
+  }
+
+  // 当请求头未提供 session_id 时，优先尝试使用 prompt_cache_key 作为稳定的会话标识
+  const bodyPromptCacheKey = normalizeCodexSessionId(requestBody.prompt_cache_key);
+  if (bodyPromptCacheKey) {
+    return {
+      sessionId: bodyPromptCacheKey,
+      source: "body_prompt_cache_key",
       isCodexClient: officialClient,
     };
   }

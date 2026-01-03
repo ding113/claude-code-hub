@@ -22,6 +22,7 @@ describe("Codex session extractor", () => {
     const result = extractCodexSessionId(
       new Headers({ "x-session-id": headerSessionId }),
       {
+        prompt_cache_key: "019b82ff-08ff-75a3-a203-7e10274fdbd8",
         metadata: { session_id: "sess_aaaaaaaaaaaaaaaaaaaaa" },
         previous_response_id: "resp_123456789012345678901",
       },
@@ -41,6 +42,43 @@ describe("Codex session extractor", () => {
     );
 
     expect(result.sessionId).toBe(bodySessionId);
+    expect(result.source).toBe("body_metadata_session_id");
+  });
+
+  test("extracts from body prompt_cache_key", () => {
+    const promptCacheKey = "019b82ff-08ff-75a3-a203-7e10274fdbd8";
+    const result = extractCodexSessionId(
+      new Headers(),
+      { prompt_cache_key: promptCacheKey },
+      "codex_cli_rs/0.50.0 (Mac OS 26.0.1; arm64)"
+    );
+
+    expect(result.sessionId).toBe(promptCacheKey);
+    expect(result.source).toBe("body_prompt_cache_key");
+  });
+
+  test("prompt_cache_key has higher priority than metadata.session_id", () => {
+    const promptCacheKey = "019b82ff-08ff-75a3-a203-7e10274fdbd8";
+    const metadataSessionId = "sess_123456789012345678903";
+    const result = extractCodexSessionId(
+      new Headers(),
+      { prompt_cache_key: promptCacheKey, metadata: { session_id: metadataSessionId } },
+      null
+    );
+
+    expect(result.sessionId).toBe(promptCacheKey);
+    expect(result.source).toBe("body_prompt_cache_key");
+  });
+
+  test("ignores invalid prompt_cache_key and falls back to metadata.session_id", () => {
+    const metadataSessionId = "sess_123456789012345678903";
+    const result = extractCodexSessionId(
+      new Headers(),
+      { prompt_cache_key: "short", metadata: { session_id: metadataSessionId } },
+      null
+    );
+
+    expect(result.sessionId).toBe(metadataSessionId);
     expect(result.source).toBe("body_metadata_session_id");
   });
 
@@ -75,6 +113,7 @@ describe("Codex session extractor", () => {
         "x-session-id": xSessionIdFromHeader,
       }),
       {
+        prompt_cache_key: "019b82ff-08ff-75a3-a203-7e10274fdbd8",
         metadata: { session_id: sessionIdFromBody },
         previous_response_id: previousResponseId,
       },
