@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 
 const getSessionMock = vi.fn(async () => ({ user: { role: "admin" } }));
 const webhookSendMock = vi.fn(async () => ({ success: true as const }));
@@ -37,6 +37,15 @@ vi.mock("@/repository/webhook-targets", () => {
 });
 
 describe("允许内网地址输入", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    // 默认：管理员可执行
+    getSessionMock.mockResolvedValue({ user: { role: "admin" } });
+    webhookSendMock.mockResolvedValue({ success: true as const });
+    createWebhookTargetMock.mockImplementation(async (input: any) => ({ id: 1, ...input }));
+  });
+
   test("testWebhookAction 不阻止内网 URL", async () => {
     const { testWebhookAction } = await import("@/actions/notifications");
     const result = await testWebhookAction("http://127.0.0.1:8080/webhook", "cost-alert");

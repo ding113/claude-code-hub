@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   resetAllOnboarding,
   resetOnboarding,
@@ -29,6 +29,15 @@ afterEach(() => {
 });
 
 describe("onboarding", () => {
+  beforeEach(() => {
+    // 在某些测试环境（例如 DOM 仿真环境）下，window/localStorage 可能默认存在
+    // 为了让“SSR 环境”用例稳定，这里在每个用例开始前都强制清理一次
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (globalThis as any).window;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (globalThis as any).localStorage;
+  });
+
   it("SSR 环境下不显示引导", () => {
     expect(shouldShowOnboarding("webhookMigration")).toBe(false);
   });
