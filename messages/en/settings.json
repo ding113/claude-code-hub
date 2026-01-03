@@ -748,6 +748,15 @@
         "chunksCount": "Received {count} chunks ({format})",
         "truncatedPreview": "Showing first {length} characters, copy to see full content",
         "truncatedBrief": "Showing first {length} characters, click \"View Details\" for more",
+        "timeout": {
+          "label": "Timeout (seconds)",
+          "desc": "Max wait time for test request (5-120 sec)",
+          "geminiHint": ", Gemini Thinking models recommend 60+ sec"
+        },
+        "geminiAuthFallback": {
+          "warning": "Header auth failed, using URL parameter auth",
+          "desc": "Actual proxy forwarding only uses header auth, may cause request failures"
+        },
         "copyFormat": {
           "testResult": "Test result",
           "message": "Message",
@@ -1225,6 +1234,15 @@
               "desc": "Group tag. Only users whose providerGroup matches can use this provider. Example: set to \"premium\" to serve users with providerGroup=\"premium\" only"
             }
           },
+          "cacheTtl": {
+            "label": "Cache TTL Override",
+            "options": {
+              "inherit": "No override (follow client)",
+              "5m": "5 minutes",
+              "1h": "1 hour"
+            },
+            "desc": "Force prompt cache TTL; only affects requests with cache_control."
+          },
           "context1m": {
             "label": "1M Context Window",
             "options": {
@@ -1598,7 +1616,6 @@
       "leaderboard": "Leaderboard",
       "title": "Provider Management"
     },
-    "addProvider": "Add server",
     "filter": {
       "status": {
         "all": "Any status",

@@ -95,6 +95,14 @@ export function buildProxyUrl(baseUrl: string, requestUrl: URL): string {
 export function previewProxyUrls(baseUrl: string, providerType?: string): Record<string, string> {
   const previews: Record<string, string> = {};
 
+  // 验证 URL 格式有效性（防止 new URL() 抛出异常）
+  try {
+    new URL(baseUrl);
+  } catch {
+    // URL 无效，返回空预览
+    return previews;
+  }
+
   // 根据供应商类型定义端点映射
   const endpointsByType: Record<string, Array<{ name: string; path: string }>> = {
     claude: [

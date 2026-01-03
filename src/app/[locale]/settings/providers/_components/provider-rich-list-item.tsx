@@ -607,7 +607,7 @@ export function ProviderRichListItem({
 
       {/* 编辑 Dialog */}
       <Dialog open={openEdit} onOpenChange={setOpenEdit}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col">
           <FormErrorBoundary>
             <ProviderForm
               mode="edit"
@@ -626,7 +626,7 @@ export function ProviderRichListItem({
 
       {/* 克隆 Dialog */}
       <Dialog open={openClone} onOpenChange={setOpenClone}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col">
           <FormErrorBoundary>
             <ProviderForm
               mode="create"

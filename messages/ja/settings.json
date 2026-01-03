@@ -680,6 +680,15 @@
         "chunksCount": "{count} チャンク受信 ({format})",
         "truncatedPreview": "先頭 {length} 文字を表示、全文はコピーして確認",
         "truncatedBrief": "先頭 {length} 文字を表示、全文は「詳細を見る」をクリック",
+        "timeout": {
+          "label": "タイムアウト（秒）",
+          "desc": "テストリクエストの最大待機時間（5〜120秒）",
+          "geminiHint": "、Gemini Thinkingモデルは60秒以上を推奨"
+        },
+        "geminiAuthFallback": {
+          "warning": "ヘッダー認証に失敗し、URLパラメータ認証を使用しました",
+          "desc": "実際のプロキシ転送はヘッダー認証のみを使用するため、リクエストが失敗する可能性があります"
+        },
         "copyFormat": {
           "testResult": "テスト結果",
           "message": "メッセージ",
@@ -1120,6 +1129,15 @@
               "desc": "グループタグ。ユーザーの providerGroup が一致する場合のみ利用可能。例: \"premium\" に設定すると providerGroup=\"premium\" のユーザーのみ対象"
             }
           },
+          "cacheTtl": {
+            "label": "キャッシュTTLオーバーライド",
+            "options": {
+              "inherit": "オーバーライドしない（クライアントに従う）",
+              "5m": "5分",
+              "1h": "1時間"
+            },
+            "desc": "プロンプトキャッシュのTTLを強制設定。cache_controlを含むリクエストにのみ適用されます。"
+          },
           "context1m": {
             "label": "1M コンテキストウィンドウ",
             "options": {
@@ -1468,7 +1486,6 @@
       "leaderboard": "プロバイダーランキング",
       "title": "服务商管理"
     },
-    "addProvider": "プロバイダーを追加",
     "filter": {
       "status": {
         "all": "すべてのステータス",

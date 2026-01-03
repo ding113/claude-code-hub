@@ -289,6 +289,15 @@
         "chunksCount": "接收 {count} 个数据块 ({format})",
         "truncatedPreview": "显示前 {length} 字符，完整内容请复制查看",
         "truncatedBrief": "显示前 {length} 字符，完整内容请点击「查看详情」",
+        "timeout": {
+          "label": "超时时间（秒）",
+          "desc": "测试请求的最大等待时间（5-120 秒）",
+          "geminiHint": "，Gemini Thinking 模型建议 60 秒以上"
+        },
+        "geminiAuthFallback": {
+          "warning": "Header 认证失败，使用了 URL 参数认证",
+          "desc": "实际代理转发仅使用 Header 认证，可能导致请求失败"
+        },
         "copyFormat": {
           "testResult": "测试结果",
           "message": "消息",
@@ -733,6 +742,15 @@
               "placeholder": "输入分组标签",
               "desc": "供应商分组标签（支持多个，逗号分隔）。只有用户的 providerGroup 与此值匹配时，该用户才能使用此供应商。留空=对所有用户开放"
             }
+          },
+          "cacheTtl": {
+            "label": "Cache TTL 覆写",
+            "options": {
+              "inherit": "不覆写（跟随客户端）",
+              "5m": "5 分钟",
+              "1h": "1 小时"
+            },
+            "desc": "强制设置 prompt cache TTL；仅影响包含 cache_control 的请求。"
           },
           "context1m": {
             "label": "1M 上下文窗口",
