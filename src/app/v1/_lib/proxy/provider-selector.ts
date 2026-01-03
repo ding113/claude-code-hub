@@ -1018,12 +1018,9 @@ export class ProxyProviderResolver {
 
     let visibleProviders = allProviders;
     if (effectiveGroupPick) {
-      const groupFiltered = allProviders.filter((p) =>
+      visibleProviders = allProviders.filter((p) =>
         checkProviderGroupMatch(p.groupTag, effectiveGroupPick)
       );
-      if (groupFiltered.length > 0) {
-        visibleProviders = groupFiltered;
-      }
     }
 
     // 按 providerType 精确过滤

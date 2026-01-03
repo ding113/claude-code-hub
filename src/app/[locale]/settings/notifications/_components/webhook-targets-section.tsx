@@ -6,15 +6,23 @@ import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import type { ClientActionResult, WebhookTargetState } from "../_lib/hooks";
+import type {
+  ClientActionResult,
+  WebhookTargetCreateInput,
+  WebhookTargetState,
+  WebhookTargetUpdateInput,
+} from "../_lib/hooks";
 import type { NotificationType } from "../_lib/schemas";
 import { WebhookTargetCard } from "./webhook-target-card";
 import { WebhookTargetDialog } from "./webhook-target-dialog";
 
 interface WebhookTargetsSectionProps {
   targets: WebhookTargetState[];
-  onCreate: (input: any) => Promise<ClientActionResult<WebhookTargetState>>;
-  onUpdate: (id: number, input: any) => Promise<ClientActionResult<WebhookTargetState>>;
+  onCreate: (input: WebhookTargetCreateInput) => Promise<ClientActionResult<WebhookTargetState>>;
+  onUpdate: (
+    id: number,
+    input: WebhookTargetUpdateInput
+  ) => Promise<ClientActionResult<WebhookTargetState>>;
   onDelete: (id: number) => Promise<ClientActionResult<void>>;
   onTest: (
     id: number,
@@ -47,7 +55,7 @@ export function WebhookTargetsSection({
   };
 
   const handleCreate = useCallback(
-    async (input: any) => {
+    async (input: WebhookTargetCreateInput) => {
       const result = await onCreate(input);
       if (!result.ok) {
         return result;
@@ -59,7 +67,7 @@ export function WebhookTargetsSection({
   );
 
   const handleUpdate = useCallback(
-    async (id: number, input: any) => {
+    async (id: number, input: WebhookTargetUpdateInput) => {
       const result = await onUpdate(id, input);
       if (!result.ok) {
         return result;

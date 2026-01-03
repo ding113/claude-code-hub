@@ -163,8 +163,11 @@ const UPSTREAM_CONFIGS: Record<string, UpstreamFetchConfig> = {
     },
   },
   gemini: {
-    buildUrl: (baseUrl, p) => `${baseUrl}/v1beta/models?key=${p.key}`,
-    buildHeaders: () => ({}),
+    buildUrl: (baseUrl) => {
+      const prefix = baseUrl.endsWith("/v1beta") ? baseUrl : `${baseUrl}/v1beta`;
+      return `${prefix}/models`;
+    },
+    buildHeaders: (p) => ({ "x-goog-api-key": p.key }),
     parseResponse: (body) => {
       const models =
         (body as { models?: Array<{ name: string; displayName?: string }> }).models || [];

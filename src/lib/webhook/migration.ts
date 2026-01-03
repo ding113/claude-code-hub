@@ -147,6 +147,10 @@ export async function migrateToNewWebhookSystem(
   settings: NotificationSettings,
   platformSelections: Map<string, WebhookProviderType>
 ): Promise<MigrationResult> {
+  // 统计创建计数器：放在 try 外，保证异常时也能返回已完成的部分进度
+  let createdTargets = 0;
+  let createdBindings = 0;
+
   try {
     // 收集需要迁移的 Webhook
     const legacyWebhooks = collectLegacyWebhooks(settings);
@@ -154,14 +158,10 @@ export async function migrateToNewWebhookSystem(
     if (legacyWebhooks.length === 0) {
       return {
         success: true,
-        createdTargets: 0,
-        createdBindings: 0,
+        createdTargets,
+        createdBindings,
       };
     }
-
-    // 统计创建计数器
-    let createdTargets = 0;
-    let createdBindings = 0;
 
     // 按平台类型统计，用于生成唯一名称
     const providerCounters = new Map<WebhookProviderType, number>();
@@ -284,8 +284,8 @@ export async function migrateToNewWebhookSystem(
     return {
       success: false,
       error: message,
-      createdTargets: 0,
-      createdBindings: 0,
+      createdTargets,
+      createdBindings,
     };
   }
 }

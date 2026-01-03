@@ -1,7 +1,7 @@
 "use client";
 
 import { Pencil, Trash2 } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import {
   AlertDialog,
@@ -20,6 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import type { WebhookTargetState } from "../_lib/hooks";
+import type { NotificationType } from "../_lib/schemas";
 import { TestWebhookButton } from "./test-webhook-button";
 
 interface WebhookTargetCardProps {
@@ -27,15 +28,15 @@ interface WebhookTargetCardProps {
   onEdit: (target: WebhookTargetState) => void;
   onDelete: (id: number) => Promise<void> | void;
   onToggleEnabled: (id: number, enabled: boolean) => Promise<void> | void;
-  onTest: (id: number, type: any) => Promise<void> | void;
+  onTest: (id: number, type: NotificationType) => Promise<void> | void;
 }
 
-function formatLastTest(target: WebhookTargetState): string | null {
+function formatLastTest(target: WebhookTargetState, locale: string): string | null {
   if (!target.lastTestAt) return null;
   try {
     const date =
       typeof target.lastTestAt === "string" ? new Date(target.lastTestAt) : target.lastTestAt;
-    return date.toLocaleString("zh-CN", { hour12: false });
+    return date.toLocaleString(locale, { hour12: false });
   } catch {
     return null;
   }
@@ -49,13 +50,14 @@ export function WebhookTargetCard({
   onTest,
 }: WebhookTargetCardProps) {
   const t = useTranslations("settings");
+  const locale = useLocale();
   const [isDeleting, setIsDeleting] = useState(false);
 
   const typeLabel = useMemo(() => {
     return t(`notifications.targetDialog.types.${target.providerType}` as any);
   }, [t, target.providerType]);
 
-  const lastTestText = useMemo(() => formatLastTest(target), [target]);
+  const lastTestText = useMemo(() => formatLastTest(target, locale), [target, locale]);
   const lastTestOk = target.lastTestResult?.success;
   const lastTestLatency = target.lastTestResult?.latencyMs;
 

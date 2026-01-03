@@ -25,7 +25,12 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import type { ClientActionResult, WebhookTargetState } from "../_lib/hooks";
+import type {
+  ClientActionResult,
+  WebhookTargetCreateInput,
+  WebhookTargetState,
+  WebhookTargetUpdateInput,
+} from "../_lib/hooks";
 import {
   type NotificationType,
   type WebhookProviderType,
@@ -42,8 +47,11 @@ interface WebhookTargetDialogProps {
   target?: WebhookTargetState;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreate: (input: any) => Promise<ClientActionResult<WebhookTargetState>>;
-  onUpdate: (id: number, input: any) => Promise<ClientActionResult<WebhookTargetState>>;
+  onCreate: (input: WebhookTargetCreateInput) => Promise<ClientActionResult<WebhookTargetState>>;
+  onUpdate: (
+    id: number,
+    input: WebhookTargetUpdateInput
+  ) => Promise<ClientActionResult<WebhookTargetState>>;
   onTest: (
     id: number,
     type: NotificationType
@@ -145,7 +153,7 @@ export function WebhookTargetDialog({
     try {
       const normalizedType = WebhookProviderTypeSchema.parse(values.providerType);
 
-      const payload = {
+      const payload: WebhookTargetCreateInput = {
         name: values.name,
         providerType: normalizedType,
         webhookUrl: values.webhookUrl || null,
@@ -176,7 +184,7 @@ export function WebhookTargetDialog({
     }
   };
 
-  const handleTest = async (id: number, type: any) => {
+  const handleTest = async (id: number, type: NotificationType) => {
     const result = await onTest(id, type);
     if (result.ok) {
       toast.success(t("notifications.form.testSuccess"));

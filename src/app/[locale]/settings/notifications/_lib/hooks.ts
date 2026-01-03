@@ -62,6 +62,22 @@ export interface WebhookTargetState {
   lastTestResult: WebhookTestResult | null;
 }
 
+export interface WebhookTargetCreateInput {
+  name: string;
+  providerType: WebhookProviderType;
+  webhookUrl?: string | null;
+  telegramBotToken?: string | null;
+  telegramChatId?: string | null;
+  dingtalkSecret?: string | null;
+  customTemplate?: string | null;
+  customHeaders?: Record<string, string> | null;
+  proxyUrl?: string | null;
+  proxyFallbackToDirect?: boolean;
+  isEnabled?: boolean;
+}
+
+export type WebhookTargetUpdateInput = Partial<WebhookTargetCreateInput>;
+
 export interface NotificationBindingState {
   id: number;
   notificationType: NotificationType;
@@ -236,7 +252,7 @@ export function useNotificationsPageData() {
   );
 
   const createTarget = useCallback(
-    async (input: any) => {
+    async (input: WebhookTargetCreateInput) => {
       const result = await createWebhookTargetAction(input);
       if (result.ok) {
         await Promise.all([
@@ -251,7 +267,7 @@ export function useNotificationsPageData() {
   );
 
   const updateTarget = useCallback(
-    async (id: number, input: any) => {
+    async (id: number, input: WebhookTargetUpdateInput) => {
       const result = await updateWebhookTargetAction(id, input);
       if (result.ok) {
         await Promise.all([

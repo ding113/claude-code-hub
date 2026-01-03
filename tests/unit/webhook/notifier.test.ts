@@ -154,8 +154,10 @@ describe("WebhookNotifier", () => {
     });
 
     it("should treat custom webhook as success without parsing json", async () => {
+      const arrayBuffer = vi.fn(async () => new ArrayBuffer(0));
       mockFetch.mockResolvedValue({
         ok: true,
+        arrayBuffer,
       });
 
       const notifier = new WebhookNotifier({
@@ -171,8 +173,33 @@ describe("WebhookNotifier", () => {
       });
 
       expect(result.success).toBe(true);
+      expect(arrayBuffer).toHaveBeenCalledTimes(1);
       const init = mockFetch.mock.calls[0]?.[1] as any;
       expect(init.headers["X-Test"]).toBe("1");
+    });
+
+    it("should include error body when webhook returns non-2xx", async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: "Internal Server Error",
+        text: () => Promise.resolve("oops"),
+      });
+
+      const notifier = new WebhookNotifier(
+        {
+          providerType: "custom",
+          webhookUrl: "https://example.com/hook",
+          customTemplate: { text: "title={{title}}" },
+        },
+        { maxRetries: 1 }
+      );
+
+      const result = await notifier.send(createMessage());
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("HTTP 500");
+      expect(result.error).toContain("oops");
     });
   });
 

@@ -38,9 +38,9 @@ export function TemplateEditor({
       JSON.parse(trimmed);
       return null;
     } catch (e) {
-      return e instanceof Error ? e.message : "JSON 格式错误";
+      return e instanceof Error ? e.message : t("notifications.templateEditor.jsonInvalid");
     }
-  }, [value]);
+  }, [value, t]);
 
   const insertAtCursor = (text: string) => {
     const el = textareaRef.current;

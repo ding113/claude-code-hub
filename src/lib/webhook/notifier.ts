@@ -180,10 +180,15 @@ export class WebhookNotifier {
     const response = await fetch(url, init);
 
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      const errorBody = await response.text().catch(() => "");
+      throw new Error(
+        `HTTP ${response.status}: ${response.statusText}${errorBody ? ` - ${errorBody}` : ""}`
+      );
     }
 
     if (this.providerType === "custom") {
+      // 自定义 webhook 不要求响应结构，但仍需消费 body 以便连接复用（undici fetch）。
+      await response.arrayBuffer().catch(() => undefined);
       return { success: true };
     }
 
