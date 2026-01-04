@@ -343,6 +343,10 @@ export async function editKey(
       }
     }
 
+    // 仅当调用方显式携带 expiresAt 字段时才更新/清除该字段：
+    // - 避免像“仅修改限额”这类局部更新把 expiresAt 意外清空
+    const hasExpiresAtField = Object.hasOwn(data, "expiresAt");
+
     const validatedData = KeyFormSchema.parse(data);
 
     // 服务端验证：Key限额不能超过用户限额
@@ -417,9 +421,23 @@ export async function editKey(
 
     // 移除 providerGroup 子集校验（用户分组由 Key 分组自动计算）
 
-    // 转换 expiresAt: undefined → null（清除日期），string → Date（设置日期）
-    const expiresAt =
-      validatedData.expiresAt === undefined ? null : new Date(validatedData.expiresAt);
+    // 转换 expiresAt：
+    // - 未携带 expiresAt：不更新该字段
+    // - 携带 expiresAt 但为空：清除（永不过期）
+    // - 携带 expiresAt 且为字符串：设置为对应 Date
+    const expiresAt = hasExpiresAtField
+      ? validatedData.expiresAt === undefined
+        ? null
+        : new Date(validatedData.expiresAt)
+      : undefined;
+
+    if (expiresAt && Number.isNaN(expiresAt.getTime())) {
+      return {
+        ok: false,
+        error: tError("INVALID_FORMAT"),
+        errorCode: ERROR_CODES.INVALID_FORMAT,
+      };
+    }
 
     const isAdmin = session.user.role === "admin";
     const prevProviderGroup = normalizeProviderGroup(key.providerGroup);
@@ -428,7 +446,7 @@ export async function editKey(
 
     await updateKey(keyId, {
       name: validatedData.name,
-      expires_at: expiresAt,
+      ...(hasExpiresAtField ? { expires_at: expiresAt } : {}),
       can_login_web_ui: validatedData.canLoginWebUi,
       ...(data.isEnabled !== undefined ? { is_enabled: data.isEnabled } : {}),
       limit_5h_usd: validatedData.limit5hUsd,
