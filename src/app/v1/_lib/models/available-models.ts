@@ -3,6 +3,11 @@ import { request as undiciRequest } from "undici";
 import { logger } from "@/lib/logger";
 import { createProxyAgentForProvider } from "@/lib/proxy-agent";
 import { validateApiKeyAndGetUser } from "@/repository/key";
+import type {
+  AnthropicModelsResponse,
+  GeminiModelsResponse,
+  OpenAIModelsResponse,
+} from "@/types/models";
 import type { Provider } from "@/types/provider";
 import { extractApiKeyFromHeaders } from "../proxy/auth-guard";
 import type { ClientFormat } from "../proxy/format-mapper";
@@ -123,9 +128,14 @@ function mapResponseFormatToClientFormat(format: ResponseFormat): ClientFormat {
 }
 
 /**
+ * 模型所有者类型
+ */
+export type ModelOwner = "anthropic" | "openai" | "google" | "deepseek" | "alibaba" | "unknown";
+
+/**
  * 根据模型 ID 推断所有者
  */
-export function inferOwner(modelId: string): string {
+export function inferOwner(modelId: string): ModelOwner {
   if (modelId.startsWith("claude-")) return "anthropic";
   if (modelId.startsWith("gpt-") || modelId.startsWith("o1") || modelId.startsWith("o3"))
     return "openai";
@@ -301,7 +311,7 @@ async function getAvailableModels(
 /**
  * 格式化为 OpenAI 响应
  */
-export function formatOpenAIResponse(models: FetchedModel[]): object {
+export function formatOpenAIResponse(models: FetchedModel[]): OpenAIModelsResponse {
   const now = Math.floor(Date.now() / 1000);
   const data = models.map((m) => ({
     id: m.id,
@@ -316,7 +326,7 @@ export function formatOpenAIResponse(models: FetchedModel[]): object {
 /**
  * 格式化为 Anthropic 响应
  */
-export function formatAnthropicResponse(models: FetchedModel[]): object {
+export function formatAnthropicResponse(models: FetchedModel[]): AnthropicModelsResponse {
   const now = new Date().toISOString();
   const data = models.map((m) => ({
     id: m.id,
@@ -331,7 +341,7 @@ export function formatAnthropicResponse(models: FetchedModel[]): object {
 /**
  * 格式化为 Gemini 响应
  */
-export function formatGeminiResponse(models: FetchedModel[]): object {
+export function formatGeminiResponse(models: FetchedModel[]): GeminiModelsResponse {
   const geminiModels = models.map((m) => ({
     name: `models/${m.id}`,
     displayName: m.displayName || m.id,

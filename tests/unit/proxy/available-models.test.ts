@@ -23,6 +23,11 @@ import {
   inferOwner,
   type FetchedModel,
 } from "@/app/v1/_lib/models/available-models";
+import type {
+  AnthropicModelsResponse,
+  GeminiModelsResponse,
+  OpenAIModelsResponse,
+} from "@/types/models";
 
 describe("inferOwner - 根据模型 ID 推断所有者", () => {
   describe("Anthropic 模型", () => {
@@ -113,7 +118,7 @@ describe("getProviderTypesForFormat - 客户端格式到 Provider 类型映射",
 
 describe("formatOpenAIResponse - OpenAI 格式响应", () => {
   test("空模型列表应返回空 data 数组", () => {
-    const result = formatOpenAIResponse([]) as { object: string; data: unknown[] };
+    const result: OpenAIModelsResponse = formatOpenAIResponse([]);
     expect(result.object).toBe("list");
     expect(result.data).toEqual([]);
   });
@@ -125,10 +130,7 @@ describe("formatOpenAIResponse - OpenAI 格式响应", () => {
       { id: "gemini-pro" },
     ];
 
-    const result = formatOpenAIResponse(models) as {
-      object: string;
-      data: Array<{ id: string; object: string; created: number; owned_by: string }>;
-    };
+    const result: OpenAIModelsResponse = formatOpenAIResponse(models);
 
     expect(result.object).toBe("list");
     expect(result.data).toHaveLength(3);
@@ -147,9 +149,7 @@ describe("formatOpenAIResponse - OpenAI 格式响应", () => {
 
   test("created 时间戳应为当前时间（秒）", () => {
     const before = Math.floor(Date.now() / 1000);
-    const result = formatOpenAIResponse([{ id: "test" }]) as {
-      data: Array<{ created: number }>;
-    };
+    const result: OpenAIModelsResponse = formatOpenAIResponse([{ id: "test" }]);
     const after = Math.floor(Date.now() / 1000);
 
     expect(result.data[0].created).toBeGreaterThanOrEqual(before);
@@ -159,21 +159,22 @@ describe("formatOpenAIResponse - OpenAI 格式响应", () => {
 
 describe("formatAnthropicResponse - Anthropic 格式响应", () => {
   test("空模型列表应返回空 data 数组", () => {
-    const result = formatAnthropicResponse([]) as { data: unknown[]; has_more: boolean };
+    const result: AnthropicModelsResponse = formatAnthropicResponse([]);
     expect(result.data).toEqual([]);
     expect(result.has_more).toBe(false);
   });
 
   test("应正确格式化模型列表", () => {
     const models: FetchedModel[] = [
-      { id: "claude-3-opus-20240229", displayName: "Claude 3 Opus", createdAt: "2024-02-29T00:00:00Z" },
+      {
+        id: "claude-3-opus-20240229",
+        displayName: "Claude 3 Opus",
+        createdAt: "2024-02-29T00:00:00Z",
+      },
       { id: "claude-3-sonnet-20240229" },
     ];
 
-    const result = formatAnthropicResponse(models) as {
-      data: Array<{ id: string; type: string; display_name: string; created_at: string }>;
-      has_more: boolean;
-    };
+    const result: AnthropicModelsResponse = formatAnthropicResponse(models);
 
     expect(result.has_more).toBe(false);
     expect(result.data).toHaveLength(2);
@@ -189,16 +190,14 @@ describe("formatAnthropicResponse - Anthropic 格式响应", () => {
   });
 
   test("缺少 displayName 时应使用 id 作为 display_name", () => {
-    const result = formatAnthropicResponse([{ id: "test-model" }]) as {
-      data: Array<{ display_name: string }>;
-    };
+    const result: AnthropicModelsResponse = formatAnthropicResponse([{ id: "test-model" }]);
     expect(result.data[0].display_name).toBe("test-model");
   });
 });
 
 describe("formatGeminiResponse - Gemini 格式响应", () => {
   test("空模型列表应返回空 models 数组", () => {
-    const result = formatGeminiResponse([]) as { models: unknown[] };
+    const result: GeminiModelsResponse = formatGeminiResponse([]);
     expect(result.models).toEqual([]);
   });
 
@@ -208,13 +207,7 @@ describe("formatGeminiResponse - Gemini 格式响应", () => {
       { id: "gemini-1.5-flash" },
     ];
 
-    const result = formatGeminiResponse(models) as {
-      models: Array<{
-        name: string;
-        displayName: string;
-        supportedGenerationMethods: string[];
-      }>;
-    };
+    const result: GeminiModelsResponse = formatGeminiResponse(models);
 
     expect(result.models).toHaveLength(2);
 
@@ -227,16 +220,12 @@ describe("formatGeminiResponse - Gemini 格式响应", () => {
   });
 
   test("模型名称应添加 models/ 前缀", () => {
-    const result = formatGeminiResponse([{ id: "test-model" }]) as {
-      models: Array<{ name: string }>;
-    };
+    const result: GeminiModelsResponse = formatGeminiResponse([{ id: "test-model" }]);
     expect(result.models[0].name).toBe("models/test-model");
   });
 
   test("缺少 displayName 时应使用 id", () => {
-    const result = formatGeminiResponse([{ id: "test-model" }]) as {
-      models: Array<{ displayName: string }>;
-    };
+    const result: GeminiModelsResponse = formatGeminiResponse([{ id: "test-model" }]);
     expect(result.models[0].displayName).toBe("test-model");
   });
 });
