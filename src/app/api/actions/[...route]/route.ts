@@ -791,12 +791,7 @@ const { route: updateNotificationSettingsRoute, handler: updateNotificationSetti
   createActionRoute(
     "notifications",
     "updateNotificationSettingsAction",
-    async (payload) => {
-      const result = await notificationActions.updateNotificationSettingsAction(payload);
-      return result.success
-        ? { ok: true, data: result.data }
-        : { ok: false, error: result.error || "更新通知设置失败" };
-    },
+    notificationActions.updateNotificationSettingsAction,
     {
       requestSchema: z.object({
         enabled: z.boolean().optional().describe("通知总开关"),
@@ -909,7 +904,10 @@ const WebhookTargetCreateSchema = z.object({
   telegramBotToken: z.string().trim().optional().nullable(),
   telegramChatId: z.string().trim().optional().nullable(),
   dingtalkSecret: z.string().trim().optional().nullable(),
-  customTemplate: z.string().trim().optional().nullable(),
+  customTemplate: z
+    .union([z.string().trim(), z.record(z.string(), z.unknown())])
+    .optional()
+    .nullable(),
   customHeaders: z.record(z.string(), z.string()).optional().nullable(),
   proxyUrl: z.string().trim().optional().nullable(),
   proxyFallbackToDirect: z.boolean().optional(),

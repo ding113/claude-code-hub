@@ -1678,6 +1678,11 @@
     "dingtalkSecretPlaceholder": "可选，用于签名",
     "customHeaders": "自定义 Headers（JSON）",
     "customHeadersPlaceholder": "{\"X-Token\":\"...\"}",
+    "errors": {
+      "headersInvalidJson": "Headers 不是有效 JSON",
+      "headersMustBeObject": "Headers 必须是 JSON 对象",
+      "headersValueMustBeString": "Headers 的值必须为字符串"
+    },
     "types": {
       "wechat": "企业微信",
       "feishu": "飞书",
