@@ -179,8 +179,12 @@ describe("Warmup 请求：不计入任何聚合统计", () => {
 
     vi.doMock("@/lib/logger", () => ({
       logger: {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
         trace: vi.fn(),
         error: vi.fn(),
+        fatal: vi.fn(),
       },
     }));
 

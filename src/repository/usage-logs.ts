@@ -267,10 +267,11 @@ export async function getTotalUsageForKey(keyString: string): Promise<number> {
 
 export async function getDistinctModelsForKey(keyString: string): Promise<string[]> {
   const result = await db.execute(
-    sql`select distinct coalesce(${messageRequest.originalModel}, ${messageRequest.model}) as model
+    sql`select distinct ${messageRequest.model} as model
         from ${messageRequest}
         where ${messageRequest.key} = ${keyString}
           and ${messageRequest.deletedAt} is null
+          and ${messageRequest.model} is not null
         order by model asc`
   );
 

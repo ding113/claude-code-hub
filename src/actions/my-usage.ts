@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, gte, isNull, sql } from "drizzle-orm";
+import { and, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
@@ -19,6 +19,9 @@ import {
 } from "@/repository/usage-logs";
 import type { BillingModelSource } from "@/types/system-config";
 import type { ActionResult } from "./types";
+
+// Warmup 抢答请求只用于探测/预热：日志可见，但不计入任何聚合统计
+const EXCLUDE_WARMUP_CONDITION = sql`(${messageRequest.blockedBy} IS NULL OR ${messageRequest.blockedBy} <> 'warmup')`;
 
 export interface MyUsageMetadata {
   keyName: string;
@@ -303,8 +306,9 @@ export async function getMyTodayStats(): Promise<ActionResult<MyTodayStats>> {
         and(
           eq(messageRequest.key, session.key.key),
           isNull(messageRequest.deletedAt),
+          EXCLUDE_WARMUP_CONDITION,
           gte(messageRequest.createdAt, timeRange.startTime),
-          sql`${messageRequest.createdAt} < ${timeRange.endTime}`
+          lt(messageRequest.createdAt, timeRange.endTime)
         )
       );
 
@@ -322,8 +326,9 @@ export async function getMyTodayStats(): Promise<ActionResult<MyTodayStats>> {
         and(
           eq(messageRequest.key, session.key.key),
           isNull(messageRequest.deletedAt),
+          EXCLUDE_WARMUP_CONDITION,
           gte(messageRequest.createdAt, timeRange.startTime),
-          sql`${messageRequest.createdAt} < ${timeRange.endTime}`
+          lt(messageRequest.createdAt, timeRange.endTime)
         )
       )
       .groupBy(messageRequest.model, messageRequest.originalModel);
