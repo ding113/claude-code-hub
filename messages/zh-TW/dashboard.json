@@ -393,8 +393,8 @@
     "actions": {
       "back": "返回",
       "view": "檢視",
-      "copyMessages": "複製 Messages",
-      "downloadMessages": "下載 Messages",
+      "copyMessages": "複製請求頭與請求體",
+      "downloadMessages": "下載請求頭與請求體",
       "copied": "已複製",
       "copyResponse": "複製回覆主體",
       "terminate": "終止",

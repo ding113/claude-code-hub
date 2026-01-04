@@ -392,8 +392,8 @@
     "actions": {
       "back": "Назад",
       "view": "Просмотр",
-      "copyMessages": "Копировать сообщения",
-      "downloadMessages": "Скачать сообщения",
+      "copyMessages": "Копировать запрос (заголовки и тело)",
+      "downloadMessages": "Скачать запрос (заголовки и тело)",
       "copied": "Скопировано",
       "copyResponse": "Копировать тело ответа",
       "terminate": "Прервать",

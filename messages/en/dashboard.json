@@ -393,8 +393,8 @@
     "actions": {
       "back": "Back",
       "view": "View",
-      "copyMessages": "Copy Messages",
-      "downloadMessages": "Download Messages",
+      "copyMessages": "Copy Request (Headers + Body)",
+      "downloadMessages": "Download Request (Headers + Body)",
       "copied": "Copied",
       "copyResponse": "Copy Response",
       "terminate": "Terminate",

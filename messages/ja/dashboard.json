@@ -392,8 +392,8 @@
     "actions": {
       "back": "戻る",
       "view": "表示",
-      "copyMessages": "メッセージをコピー",
-      "downloadMessages": "メッセージをダウンロード",
+      "copyMessages": "リクエスト(ヘッダーとボディ)をコピー",
+      "downloadMessages": "リクエスト(ヘッダーとボディ)をダウンロード",
       "copied": "コピーしました",
       "copyResponse": "レスポンスボディをコピー",
       "terminate": "強制終了",
