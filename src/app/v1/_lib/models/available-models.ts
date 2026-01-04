@@ -315,12 +315,12 @@ export function formatOpenAIResponse(models: FetchedModel[]): OpenAIModelsRespon
   const now = Math.floor(Date.now() / 1000);
   const data = models.map((m) => ({
     id: m.id,
-    object: "model",
+    object: "model" as const,
     created: now,
     owned_by: inferOwner(m.id),
   }));
 
-  return { object: "list", data };
+  return { object: "list" as const, data };
 }
 
 /**
@@ -330,7 +330,7 @@ export function formatAnthropicResponse(models: FetchedModel[]): AnthropicModels
   const now = new Date().toISOString();
   const data = models.map((m) => ({
     id: m.id,
-    type: "model",
+    type: "model" as const,
     display_name: m.displayName || m.id,
     created_at: m.createdAt || now,
   }));
