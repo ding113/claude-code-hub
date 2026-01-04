@@ -11,6 +11,25 @@ export type ProviderType =
   | "gemini-cli"
   | "openai-compatible";
 
+// Codex（Responses API）请求参数覆写偏好
+// - "inherit": 遵循客户端请求（默认）
+// - 其他值: 强制覆写请求体字段
+export type CodexReasoningEffortPreference =
+  | "inherit"
+  | "none"
+  | "minimal"
+  | "low"
+  | "medium"
+  | "high"
+  | "xhigh";
+
+export type CodexReasoningSummaryPreference = "inherit" | "auto" | "detailed";
+
+export type CodexTextVerbosityPreference = "inherit" | "low" | "medium" | "high";
+
+// 由于 Select 的 value 需要是字符串，这里用 "true"/"false" 表示布尔值
+export type CodexParallelToolCallsPreference = "inherit" | "true" | "false";
+
 // Codex Instructions 策略枚举
 export type CodexInstructionsStrategy = "auto" | "force_official" | "keep_original";
 
@@ -101,6 +120,12 @@ export interface Provider {
   // 1M Context Window 偏好配置（仅对 Anthropic 类型供应商有效）
   context1mPreference: Context1mPreference | null;
 
+  // Codex（Responses API）参数覆写（仅对 Codex 类型供应商有效）
+  codexReasoningEffortPreference: CodexReasoningEffortPreference | null;
+  codexReasoningSummaryPreference: CodexReasoningSummaryPreference | null;
+  codexTextVerbosityPreference: CodexTextVerbosityPreference | null;
+  codexParallelToolCallsPreference: CodexParallelToolCallsPreference | null;
+
   // 废弃（保留向后兼容，但不再使用）
   // TPM (Tokens Per Minute): 每分钟可处理的文本总量
   tpm: number | null;
@@ -169,6 +194,10 @@ export interface ProviderDisplay {
   faviconUrl: string | null;
   cacheTtlPreference: CacheTtlPreference | null;
   context1mPreference: Context1mPreference | null;
+  codexReasoningEffortPreference: CodexReasoningEffortPreference | null;
+  codexReasoningSummaryPreference: CodexReasoningSummaryPreference | null;
+  codexTextVerbosityPreference: CodexTextVerbosityPreference | null;
+  codexParallelToolCallsPreference: CodexParallelToolCallsPreference | null;
   // 废弃字段（保留向后兼容）
   tpm: number | null;
   rpm: number | null;
@@ -237,6 +266,10 @@ export interface CreateProviderData {
   favicon_url?: string | null;
   cache_ttl_preference?: CacheTtlPreference | null;
   context_1m_preference?: Context1mPreference | null;
+  codex_reasoning_effort_preference?: CodexReasoningEffortPreference | null;
+  codex_reasoning_summary_preference?: CodexReasoningSummaryPreference | null;
+  codex_text_verbosity_preference?: CodexTextVerbosityPreference | null;
+  codex_parallel_tool_calls_preference?: CodexParallelToolCallsPreference | null;
 
   // 废弃字段（保留向后兼容）
   // TPM (Tokens Per Minute): 每分钟可处理的文本总量
@@ -303,6 +336,10 @@ export interface UpdateProviderData {
   favicon_url?: string | null;
   cache_ttl_preference?: CacheTtlPreference | null;
   context_1m_preference?: Context1mPreference | null;
+  codex_reasoning_effort_preference?: CodexReasoningEffortPreference | null;
+  codex_reasoning_summary_preference?: CodexReasoningSummaryPreference | null;
+  codex_text_verbosity_preference?: CodexTextVerbosityPreference | null;
+  codex_parallel_tool_calls_preference?: CodexParallelToolCallsPreference | null;
 
   // 废弃字段（保留向后兼容）
   // TPM (Tokens Per Minute): 每分钟可处理的文本总量

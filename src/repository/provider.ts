@@ -53,6 +53,10 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     faviconUrl: providerData.favicon_url ?? null,
     cacheTtlPreference: providerData.cache_ttl_preference ?? null,
     context1mPreference: providerData.context_1m_preference ?? null,
+    codexReasoningEffortPreference: providerData.codex_reasoning_effort_preference ?? null,
+    codexReasoningSummaryPreference: providerData.codex_reasoning_summary_preference ?? null,
+    codexTextVerbosityPreference: providerData.codex_text_verbosity_preference ?? null,
+    codexParallelToolCallsPreference: providerData.codex_parallel_tool_calls_preference ?? null,
     tpm: providerData.tpm,
     rpm: providerData.rpm,
     rpd: providerData.rpd,
@@ -99,6 +103,10 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     faviconUrl: providers.faviconUrl,
     cacheTtlPreference: providers.cacheTtlPreference,
     context1mPreference: providers.context1mPreference,
+    codexReasoningEffortPreference: providers.codexReasoningEffortPreference,
+    codexReasoningSummaryPreference: providers.codexReasoningSummaryPreference,
+    codexTextVerbosityPreference: providers.codexTextVerbosityPreference,
+    codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
     tpm: providers.tpm,
     rpm: providers.rpm,
     rpd: providers.rpd,
@@ -156,6 +164,10 @@ export async function findProviderList(
       faviconUrl: providers.faviconUrl,
       cacheTtlPreference: providers.cacheTtlPreference,
       context1mPreference: providers.context1mPreference,
+      codexReasoningEffortPreference: providers.codexReasoningEffortPreference,
+      codexReasoningSummaryPreference: providers.codexReasoningSummaryPreference,
+      codexTextVerbosityPreference: providers.codexTextVerbosityPreference,
+      codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
       tpm: providers.tpm,
       rpm: providers.rpm,
       rpd: providers.rpd,
@@ -224,6 +236,10 @@ export async function findAllProviders(): Promise<Provider[]> {
       faviconUrl: providers.faviconUrl,
       cacheTtlPreference: providers.cacheTtlPreference,
       context1mPreference: providers.context1mPreference,
+      codexReasoningEffortPreference: providers.codexReasoningEffortPreference,
+      codexReasoningSummaryPreference: providers.codexReasoningSummaryPreference,
+      codexTextVerbosityPreference: providers.codexTextVerbosityPreference,
+      codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
       tpm: providers.tpm,
       rpm: providers.rpm,
       rpd: providers.rpd,
@@ -286,6 +302,10 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       faviconUrl: providers.faviconUrl,
       cacheTtlPreference: providers.cacheTtlPreference,
       context1mPreference: providers.context1mPreference,
+      codexReasoningEffortPreference: providers.codexReasoningEffortPreference,
+      codexReasoningSummaryPreference: providers.codexReasoningSummaryPreference,
+      codexTextVerbosityPreference: providers.codexTextVerbosityPreference,
+      codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
       tpm: providers.tpm,
       rpm: providers.rpm,
       rpd: providers.rpd,
@@ -382,6 +402,16 @@ export async function updateProvider(
     dbData.cacheTtlPreference = providerData.cache_ttl_preference ?? null;
   if (providerData.context_1m_preference !== undefined)
     dbData.context1mPreference = providerData.context_1m_preference ?? null;
+  if (providerData.codex_reasoning_effort_preference !== undefined)
+    dbData.codexReasoningEffortPreference = providerData.codex_reasoning_effort_preference ?? null;
+  if (providerData.codex_reasoning_summary_preference !== undefined)
+    dbData.codexReasoningSummaryPreference =
+      providerData.codex_reasoning_summary_preference ?? null;
+  if (providerData.codex_text_verbosity_preference !== undefined)
+    dbData.codexTextVerbosityPreference = providerData.codex_text_verbosity_preference ?? null;
+  if (providerData.codex_parallel_tool_calls_preference !== undefined)
+    dbData.codexParallelToolCallsPreference =
+      providerData.codex_parallel_tool_calls_preference ?? null;
   if (providerData.tpm !== undefined) dbData.tpm = providerData.tpm;
   if (providerData.rpm !== undefined) dbData.rpm = providerData.rpm;
   if (providerData.rpd !== undefined) dbData.rpd = providerData.rpd;
@@ -431,6 +461,10 @@ export async function updateProvider(
       faviconUrl: providers.faviconUrl,
       cacheTtlPreference: providers.cacheTtlPreference,
       context1mPreference: providers.context1mPreference,
+      codexReasoningEffortPreference: providers.codexReasoningEffortPreference,
+      codexReasoningSummaryPreference: providers.codexReasoningSummaryPreference,
+      codexTextVerbosityPreference: providers.codexTextVerbosityPreference,
+      codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
       tpm: providers.tpm,
       rpm: providers.rpm,
       rpd: providers.rpd,

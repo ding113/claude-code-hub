@@ -9,6 +9,7 @@ import {
   recordFailure,
   recordSuccess,
 } from "@/lib/circuit-breaker";
+import { applyCodexProviderOverrides } from "@/lib/codex/provider-overrides";
 import { isHttp2Enabled } from "@/lib/config";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { PROVIDER_DEFAULTS, PROVIDER_LIMITS } from "@/lib/constants/provider.constants";
@@ -990,6 +991,13 @@ export class ProxyForwarder {
             });
           }
         }
+
+        // Codex 供应商级参数覆写（默认 inherit=遵循客户端）
+        // 说明：即使官方客户端跳过清洗，也允许管理员在供应商层面强制覆写关键参数
+        session.request.message = applyCodexProviderOverrides(
+          provider,
+          session.request.message as Record<string, unknown>
+        );
       }
 
       if (

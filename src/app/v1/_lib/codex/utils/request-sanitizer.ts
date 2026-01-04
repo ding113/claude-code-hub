@@ -120,7 +120,10 @@ export async function sanitizeCodexRequest(
   // 如果客户端未指定 stream，则保持 undefined，由上游 API 决定默认行为
   // 参考：https://github.com/ding113/claude-code-hub/issues/368
   output.store = false; // Codex 不存储对话历史
-  output.parallel_tool_calls = true; // Codex 支持并行工具调用
+  // 并行工具调用：默认值为 true，但应允许客户端显式关闭
+  if (typeof output.parallel_tool_calls !== "boolean") {
+    output.parallel_tool_calls = true;
+  }
 
   logger.info("[CodexSanitizer] Request sanitized successfully", {
     model,
