@@ -457,7 +457,7 @@ export async function addProvider(data: {
         validated.request_timeout_non_streaming_ms ??
         PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS,
       cache_ttl_preference: validated.cache_ttl_preference ?? "inherit",
-      context_1m_preference: validated.context_1m_preference ?? null,
+      context_1m_preference: validated.context_1m_preference ?? "inherit",
       codex_reasoning_effort_preference: validated.codex_reasoning_effort_preference ?? "inherit",
       codex_reasoning_summary_preference: validated.codex_reasoning_summary_preference ?? "inherit",
       codex_text_verbosity_preference: validated.codex_text_verbosity_preference ?? "inherit",

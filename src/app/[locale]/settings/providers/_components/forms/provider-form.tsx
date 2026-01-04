@@ -77,22 +77,20 @@ function FieldLabelWithTooltip({
   return (
     <div className="flex items-center gap-2">
       <Label htmlFor={htmlFor}>{label}</Label>
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              className="text-muted-foreground hover:text-foreground transition-colors"
-              aria-label={`${label} - help`}
-            >
-              <Info className="h-4 w-4" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="max-w-xs">
-            <p className="text-sm leading-relaxed">{tooltip}</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className="text-muted-foreground hover:text-foreground transition-colors"
+            aria-label={`${label} - help`}
+          >
+            <Info className="h-4 w-4" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-xs">
+          <p className="text-sm leading-relaxed">{tooltip}</p>
+        </TooltipContent>
+      </Tooltip>
     </div>
   );
 }
@@ -599,7 +597,7 @@ export function ProviderForm({
   };
 
   return (
-    <>
+    <TooltipProvider>
       <DialogHeader className="flex-shrink-0">
         <DialogTitle>{isEdit ? t("title.edit") : t("title.create")}</DialogTitle>
       </DialogHeader>
@@ -2096,6 +2094,6 @@ export function ProviderForm({
           )}
         </DialogFooter>
       </form>
-    </>
+    </TooltipProvider>
   );
 }
