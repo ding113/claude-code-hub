@@ -770,6 +770,12 @@
       "defaultDescription": "default 分组包含所有未设置 groupTag 的供应商",
       "descriptionWithUserGroup": "供应商分组（默认：default；用户分组：{group}）"
     },
+    "successTitle": "密钥创建成功",
+    "successDescription": "您的 API 密钥已成功创建。",
+    "generatedKey": {
+      "label": "生成的密钥",
+      "hint": "您可以随时在密钥列表中查看和复制此密钥"
+    },
     "errors": {
       "userIdMissing": "用户ID不存在",
       "createFailed": "创建失败，请稍后重试",
@@ -1143,6 +1149,9 @@
       "defaultGroup": "default",
       "userStatus": {
         "disabled": "已禁用"
+      },
+      "actions": {
+        "addKey": "新增密钥"
       }
     },
     "keyFullDisplay": {
@@ -1211,8 +1220,8 @@
       "editKeyTitle": "编辑 Key"
     },
     "editDialog": {
-      "title": "编辑用户与密钥",
-      "description": "编辑用户信息和 API 密钥设置",
+      "title": "编辑用户",
+      "description": "编辑用户信息",
       "userSection": "用户设置",
       "keysSection": "密钥设置",
       "scrollToKey": "滚动到密钥",
@@ -1311,6 +1320,10 @@
       "saveFailed": "创建用户失败",
       "keyCreateFailed": "创建密钥失败",
       "createSuccess": "用户创建成功",
+      "successTitle": "创建成功",
+      "successDescription": "用户和密钥已成功创建",
+      "generatedKey": "生成的密钥",
+      "keyHint": "您可以随时在用户管理页面查看和复制此密钥",
       "keysSection": "密钥",
       "addKey": "添加密钥",
       "removeKey": "删除密钥",
@@ -1528,7 +1541,7 @@
           "label": "独立个人用量页面",
           "description": "启用后，此密钥可使用独立的个人用量查询页面",
           "descriptionEnabled": "启用后，此密钥在登录时将进入独立的个人用量页面。但不可修改自己密钥的供应商分组。",
-          "descriptionDisabled": "关闭后，用户将无法进入个人独立用量页面 UI。但可在受限的 Web UI功能中修改自己密钥的供应商分组。"
+          "descriptionDisabled": "关闭后，用户将无法进入个人独立用量页面 UI，而是进入受限的 Web UI。"
         },
       "providerGroup": {
         "label": "供应商分组",

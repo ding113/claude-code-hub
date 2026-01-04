@@ -51,6 +51,9 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
   const router = useRouter();
   const t = useTranslations("quota.keys.editKeyForm");
   const tKeyEdit = useTranslations("dashboard.userManagement.keyEditSection.fields");
+  const tBalancePage = useTranslations(
+    "dashboard.userManagement.keyEditSection.fields.balanceQueryPage"
+  );
   const tUI = useTranslations("ui.tagInput");
   const tCommon = useTranslations("common");
   const tErrors = useTranslations("errors");
@@ -168,17 +171,25 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
         touched={form.getFieldProps("expiresAt").touched}
       />
 
+      {/* Balance Query Page toggle uses inverted logic by design:
+          - canLoginWebUi=true means user accesses full WebUI (switch OFF)
+          - canLoginWebUi=false means user uses independent balance page (switch ON)
+          The switch represents "enable independent page" which is !canLoginWebUi */}
       <div className="flex items-start justify-between gap-4 rounded-lg border border-dashed border-border px-4 py-3">
         <div>
           <Label htmlFor="can-login-web-ui" className="text-sm font-medium">
-            {t("canLoginWebUi.label")}
+            {tBalancePage("label")}
           </Label>
-          <p className="text-xs text-muted-foreground mt-1">{t("canLoginWebUi.description")}</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {form.values.canLoginWebUi
+              ? tBalancePage("descriptionDisabled")
+              : tBalancePage("descriptionEnabled")}
+          </p>
         </div>
         <Switch
           id="can-login-web-ui"
-          checked={form.values.canLoginWebUi}
-          onCheckedChange={(checked) => form.setValue("canLoginWebUi", checked)}
+          checked={!form.values.canLoginWebUi}
+          onCheckedChange={(checked) => form.setValue("canLoginWebUi", !checked)}
         />
       </div>
 

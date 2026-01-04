@@ -769,6 +769,12 @@
       "defaultDescription": "default includes providers without groupTag.",
       "descriptionWithUserGroup": "Provider groups for this key (user groups: {group}; default: default)."
     },
+    "successTitle": "Key Created Successfully",
+    "successDescription": "Your API key has been created successfully.",
+    "generatedKey": {
+      "label": "Generated Key",
+      "hint": "You can view and copy this key anytime from the key list."
+    },
     "errors": {
       "userIdMissing": "User ID does not exist",
       "createFailed": "Failed to create, please try again later",
@@ -1142,6 +1148,9 @@
       "defaultGroup": "default",
       "userStatus": {
         "disabled": "Disabled"
+      },
+      "actions": {
+        "addKey": "Add Key"
       }
     },
     "keyFullDisplay": {
@@ -1210,8 +1219,8 @@
       "editKeyTitle": "Edit Key"
     },
     "editDialog": {
-      "title": "Edit user and keys",
-      "description": "Edit user information and API key settings",
+      "title": "Edit user",
+      "description": "Edit user information",
       "userSection": "User settings",
       "keysSection": "Key settings",
       "scrollToKey": "Scroll to key",
@@ -1310,6 +1319,10 @@
       "saveFailed": "Failed to create user",
       "keyCreateFailed": "Failed to create key",
       "createSuccess": "User created successfully",
+      "successTitle": "Created Successfully",
+      "successDescription": "User and key have been created",
+      "generatedKey": "Generated Key",
+      "keyHint": "You can view and copy this key anytime from the user management page",
       "keysSection": "Keys",
       "addKey": "Add key",
       "removeKey": "Remove key",
@@ -1404,7 +1417,7 @@
         "label": "Enable dedicated balance page",
         "description": "Allow users to view their balance via a dedicated page",
         "descriptionEnabled": "When enabled, this key will access an independent personal usage page upon login. However, it cannot modify its own key's provider group.",
-        "descriptionDisabled": "When disabled, the user cannot access the personal usage page UI. However, they can modify their own key's provider group in the restricted Web UI."
+        "descriptionDisabled": "When disabled, the user cannot access the personal usage page UI. Instead, they will use the restricted Web UI."
       },
       "cacheTtlOverride": {
         "label": "Cache TTL override",
@@ -1529,7 +1542,7 @@
           "label": "Independent Personal Usage Page",
           "description": "When enabled, this key can access an independent personal usage page",
           "descriptionEnabled": "When enabled, this key will access an independent personal usage page upon login. However, it cannot modify its own key's provider group.",
-          "descriptionDisabled": "When disabled, the user cannot access the personal usage page UI. However, they can modify their own key's provider group in the restricted Web UI."
+          "descriptionDisabled": "When disabled, the user cannot access the personal usage page UI. Instead, they will use the restricted Web UI."
         },
       "providerGroup": {
         "label": "Provider Group",
