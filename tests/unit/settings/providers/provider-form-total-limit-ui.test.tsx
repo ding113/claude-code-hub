@@ -173,7 +173,7 @@ describe("ProviderForm: 编辑时应支持提交总消费上限(limit_total_usd)
 
     await act(async () => {
       if (!totalInput) return;
-      setNativeValue(totalInput, "10");
+      setNativeValue(totalInput, "10.5");
       totalInput.dispatchEvent(new Event("input", { bubbles: true }));
       totalInput.dispatchEvent(new Event("change", { bubbles: true }));
     });
@@ -196,7 +196,118 @@ describe("ProviderForm: 编辑时应支持提交总消费上限(limit_total_usd)
     expect(providersActionMocks.editProvider).toHaveBeenCalledTimes(1);
     const [, payload] = providersActionMocks.editProvider.mock.calls[0] as [number, any];
     expect(Object.hasOwn(payload, "limit_total_usd")).toBe(true);
-    expect(payload.limit_total_usd).toBe(10);
+    expect(payload.limit_total_usd).toBe(10.5);
+
+    unmount();
+  });
+});
+
+describe("ProviderForm: 新增成功后应重置总消费上限输入", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    const storage = (() => {
+      let store: Record<string, string> = {};
+      return {
+        getItem: (key: string) => (Object.hasOwn(store, key) ? store[key] : null),
+        setItem: (key: string, value: string) => {
+          store[key] = String(value);
+        },
+        removeItem: (key: string) => {
+          delete store[key];
+        },
+        clear: () => {
+          store = {};
+        },
+        key: (index: number) => Object.keys(store)[index] ?? null,
+        get length() {
+          return Object.keys(store).length;
+        },
+      };
+    })();
+
+    Object.defineProperty(globalThis, "localStorage", {
+      value: storage,
+      configurable: true,
+    });
+
+    storage.setItem("provider-form-sections", JSON.stringify({ rateLimit: true }));
+  });
+
+  test("提交新增后应清空 limit_total_usd，避免连续添加沿用上一次输入", async () => {
+    const messages = loadMessages();
+
+    const { unmount } = render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <Dialog open onOpenChange={() => {}}>
+          <ProviderForm mode="create" enableMultiProviderTypes />
+        </Dialog>
+      </NextIntlClientProvider>
+    );
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    const nameInput = document.getElementById("name") as HTMLInputElement | null;
+    const urlInput = document.getElementById("url") as HTMLInputElement | null;
+    const keyInput = document.getElementById("key") as HTMLInputElement | null;
+    expect(nameInput).toBeTruthy();
+    expect(urlInput).toBeTruthy();
+    expect(keyInput).toBeTruthy();
+
+    await act(async () => {
+      if (!nameInput || !urlInput || !keyInput) return;
+      setNativeValue(nameInput, "p2");
+      nameInput.dispatchEvent(new Event("input", { bubbles: true }));
+      nameInput.dispatchEvent(new Event("change", { bubbles: true }));
+
+      setNativeValue(urlInput, "https://example.com");
+      urlInput.dispatchEvent(new Event("input", { bubbles: true }));
+      urlInput.dispatchEvent(new Event("change", { bubbles: true }));
+
+      setNativeValue(keyInput, "k");
+      keyInput.dispatchEvent(new Event("input", { bubbles: true }));
+      keyInput.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    const totalInput = document.getElementById("limit-total") as HTMLInputElement | null;
+    expect(totalInput).toBeTruthy();
+
+    await act(async () => {
+      if (!totalInput) return;
+      setNativeValue(totalInput, "10.5");
+      totalInput.dispatchEvent(new Event("input", { bubbles: true }));
+      totalInput.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    const form = document.body.querySelector("form") as HTMLFormElement | null;
+    expect(form).toBeTruthy();
+
+    await act(async () => {
+      form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    for (let i = 0; i < 5; i++) {
+      if (providersActionMocks.addProvider.mock.calls.length > 0) break;
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 0));
+      });
+    }
+
+    expect(providersActionMocks.addProvider).toHaveBeenCalledTimes(1);
+    const [payload] = providersActionMocks.addProvider.mock.calls[0] as [any];
+    expect(payload.limit_total_usd).toBe(10.5);
+
+    // 等待一次调度，让 React 处理新增成功后的 state 重置
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    // 成功后应清空输入（state -> null -> input value 变为空字符串）
+    expect((document.getElementById("limit-total") as HTMLInputElement | null)?.value ?? null).toBe(
+      ""
+    );
 
     unmount();
   });

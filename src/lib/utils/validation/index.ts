@@ -4,6 +4,7 @@ export {
   clampWeight,
   formatTpmDisplay,
   validateNumericField,
+  validatePositiveDecimalField,
 } from "./provider";
 
 import { logger } from "@/lib/logger";
