@@ -42,7 +42,14 @@ import {
   updateProvider,
 } from "@/repository/provider";
 import type { CacheTtlPreference } from "@/types/cache";
-import type { ProviderDisplay, ProviderType } from "@/types/provider";
+import type {
+  CodexParallelToolCallsPreference,
+  CodexReasoningEffortPreference,
+  CodexReasoningSummaryPreference,
+  CodexTextVerbosityPreference,
+  ProviderDisplay,
+  ProviderType,
+} from "@/types/provider";
 import type { ActionResult } from "./types";
 
 const API_TEST_TIMEOUT_LIMITS = {
@@ -219,6 +226,10 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         faviconUrl: provider.faviconUrl,
         cacheTtlPreference: provider.cacheTtlPreference,
         context1mPreference: provider.context1mPreference,
+        codexReasoningEffortPreference: provider.codexReasoningEffortPreference,
+        codexReasoningSummaryPreference: provider.codexReasoningSummaryPreference,
+        codexTextVerbosityPreference: provider.codexTextVerbosityPreference,
+        codexParallelToolCallsPreference: provider.codexParallelToolCallsPreference,
         tpm: provider.tpm,
         rpm: provider.rpm,
         rpd: provider.rpd,
@@ -358,6 +369,10 @@ export async function addProvider(data: {
   limit_concurrent_sessions?: number | null;
   cache_ttl_preference?: CacheTtlPreference | null;
   context_1m_preference?: Context1mPreference | null;
+  codex_reasoning_effort_preference?: CodexReasoningEffortPreference | null;
+  codex_reasoning_summary_preference?: CodexReasoningSummaryPreference | null;
+  codex_text_verbosity_preference?: CodexTextVerbosityPreference | null;
+  codex_parallel_tool_calls_preference?: CodexParallelToolCallsPreference | null;
   max_retry_attempts?: number | null;
   circuit_breaker_failure_threshold?: number;
   circuit_breaker_open_duration?: number;
@@ -442,6 +457,12 @@ export async function addProvider(data: {
         validated.request_timeout_non_streaming_ms ??
         PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS,
       cache_ttl_preference: validated.cache_ttl_preference ?? "inherit",
+      context_1m_preference: validated.context_1m_preference ?? null,
+      codex_reasoning_effort_preference: validated.codex_reasoning_effort_preference ?? "inherit",
+      codex_reasoning_summary_preference: validated.codex_reasoning_summary_preference ?? "inherit",
+      codex_text_verbosity_preference: validated.codex_text_verbosity_preference ?? "inherit",
+      codex_parallel_tool_calls_preference:
+        validated.codex_parallel_tool_calls_preference ?? "inherit",
       website_url: validated.website_url ?? null,
       favicon_url: faviconUrl,
       tpm: validated.tpm ?? null,
@@ -515,6 +536,10 @@ export async function editProvider(
     limit_concurrent_sessions?: number | null;
     cache_ttl_preference?: "inherit" | "5m" | "1h";
     context_1m_preference?: Context1mPreference | null;
+    codex_reasoning_effort_preference?: CodexReasoningEffortPreference | null;
+    codex_reasoning_summary_preference?: CodexReasoningSummaryPreference | null;
+    codex_text_verbosity_preference?: CodexTextVerbosityPreference | null;
+    codex_parallel_tool_calls_preference?: CodexParallelToolCallsPreference | null;
     max_retry_attempts?: number | null;
     circuit_breaker_failure_threshold?: number;
     circuit_breaker_open_duration?: number;

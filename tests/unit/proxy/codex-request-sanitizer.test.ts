@@ -22,6 +22,20 @@ describe("Codex 请求清洗 - instructions 透传", () => {
     expect(output.parallel_tool_calls).toBe(true);
   });
 
+  it("当客户端显式设置 parallel_tool_calls=false 时应保留（默认不强制覆写）", async () => {
+    const input: Record<string, unknown> = {
+      instructions: "abc",
+      parallel_tool_calls: false,
+    };
+
+    const output = await sanitizeCodexRequest(input, "gpt-5-codex", "auto", 1, {
+      isOfficialClient: false,
+    });
+
+    expect(output.parallel_tool_calls).toBe(false);
+    expect(input.parallel_tool_calls).toBe(false);
+  });
+
   it("auto 策略也不应写入私有重试标记", async () => {
     const originalInstructions = "abc";
     const input: Record<string, unknown> = { instructions: originalInstructions };

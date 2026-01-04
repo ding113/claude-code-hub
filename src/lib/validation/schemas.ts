@@ -10,6 +10,20 @@ import { CURRENCY_CONFIG } from "@/lib/utils/currency";
 const CACHE_TTL_PREFERENCE = z.enum(["inherit", "5m", "1h"]);
 const CONTEXT_1M_PREFERENCE = z.enum(["inherit", "force_enable", "disabled"]);
 
+// Codex（Responses API）供应商级覆写偏好
+const CODEX_REASONING_EFFORT_PREFERENCE = z.enum([
+  "inherit",
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+]);
+const CODEX_REASONING_SUMMARY_PREFERENCE = z.enum(["inherit", "auto", "detailed"]);
+const CODEX_TEXT_VERBOSITY_PREFERENCE = z.enum(["inherit", "low", "medium", "high"]);
+const CODEX_PARALLEL_TOOL_CALLS_PREFERENCE = z.enum(["inherit", "true", "false"]);
+
 /**
  * 用户创建数据验证schema
  */
@@ -412,6 +426,13 @@ export const CreateProviderSchema = z.object({
     .default(0),
   cache_ttl_preference: CACHE_TTL_PREFERENCE.optional().default("inherit"),
   context_1m_preference: CONTEXT_1M_PREFERENCE.nullable().optional(),
+  codex_reasoning_effort_preference:
+    CODEX_REASONING_EFFORT_PREFERENCE.optional().default("inherit"),
+  codex_reasoning_summary_preference:
+    CODEX_REASONING_SUMMARY_PREFERENCE.optional().default("inherit"),
+  codex_text_verbosity_preference: CODEX_TEXT_VERBOSITY_PREFERENCE.optional().default("inherit"),
+  codex_parallel_tool_calls_preference:
+    CODEX_PARALLEL_TOOL_CALLS_PREFERENCE.optional().default("inherit"),
   max_retry_attempts: z.coerce
     .number()
     .int("重试次数必须是整数")
@@ -582,6 +603,10 @@ export const UpdateProviderSchema = z
       .optional(),
     cache_ttl_preference: CACHE_TTL_PREFERENCE.optional(),
     context_1m_preference: CONTEXT_1M_PREFERENCE.nullable().optional(),
+    codex_reasoning_effort_preference: CODEX_REASONING_EFFORT_PREFERENCE.optional(),
+    codex_reasoning_summary_preference: CODEX_REASONING_SUMMARY_PREFERENCE.optional(),
+    codex_text_verbosity_preference: CODEX_TEXT_VERBOSITY_PREFERENCE.optional(),
+    codex_parallel_tool_calls_preference: CODEX_PARALLEL_TOOL_CALLS_PREFERENCE.optional(),
     max_retry_attempts: z.coerce
       .number()
       .int("重试次数必须是整数")

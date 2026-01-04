@@ -1153,6 +1153,49 @@
               "disabled": "無効"
             },
             "desc": "1M コンテキストウィンドウのサポートを設定します。Sonnet モデル（claude-sonnet-4-5、claude-sonnet-4）にのみ適用されます。有効時は段階的料金が適用されます。"
+          },
+          "codexOverrides": {
+            "reasoningEffort": {
+              "label": "推論強度オーバーライド",
+              "help": "回答前にモデルが使う推論の強度（推論トークン量）を制御します。「クライアントに従う」はリクエストを変更しません。その他の値は reasoning.effort を強制します。注意: none は GPT-5.1 のみ、xhigh は GPT-5.1-Codex-Max のみ対応で、未対応モデルではエラーになります。",
+              "options": {
+                "inherit": "オーバーライドしない（クライアントに従う）",
+                "minimal": "minimal",
+                "low": "low",
+                "medium": "medium（デフォルト）",
+                "high": "high",
+                "xhigh": "xhigh（GPT-5.1-Codex-Max のみ）",
+                "none": "none（GPT-5.1 のみ）"
+              }
+            },
+            "reasoningSummary": {
+              "label": "推論サマリーオーバーライド",
+              "help": "推論サマリーを返すかどうかを制御します。auto は簡潔、detailed は詳細です。「クライアントに従う」は reasoning.summary を変更しません。",
+              "options": {
+                "inherit": "オーバーライドしない（クライアントに従う）",
+                "auto": "auto",
+                "detailed": "detailed"
+              }
+            },
+            "textVerbosity": {
+              "label": "出力の詳細度オーバーライド",
+              "help": "モデル出力の冗長さを制御します。low は簡潔、high は詳細です。「クライアントに従う」は text.verbosity を変更しません。",
+              "options": {
+                "inherit": "オーバーライドしない（クライアントに従う）",
+                "low": "low",
+                "medium": "medium（デフォルト）",
+                "high": "high"
+              }
+            },
+            "parallelToolCalls": {
+              "label": "並列ツール呼び出しオーバーライド",
+              "help": "並列の tool calls を許可するかどうかを制御します。「クライアントに従う」は parallel_tool_calls を変更しません。無効化すると並列度が下がる可能性があります。",
+              "options": {
+                "inherit": "オーバーライドしない（クライアントに従う）",
+                "true": "強制有効",
+                "false": "強制無効"
+              }
+            }
           }
         },
         "rateLimit": {

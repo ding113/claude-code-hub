@@ -37,4 +37,14 @@ describe("OpenAI → Codex 转换 - instructions 透传", () => {
     const output = transformOpenAIRequestToCodex("gpt-5-codex", input, true) as any;
     expect(output.instructions).toBeUndefined();
   });
+
+  it("当输入显式设置 parallel_tool_calls=false 时，应透传到 Codex 请求", () => {
+    const input: Record<string, unknown> = {
+      messages: [{ role: "user", content: "你好" }],
+      parallel_tool_calls: false,
+    };
+
+    const output = transformOpenAIRequestToCodex("gpt-5-codex", input, true) as any;
+    expect(output.parallel_tool_calls).toBe(false);
+  });
 });

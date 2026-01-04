@@ -243,6 +243,14 @@ export const providers = pgTable('providers', {
   // - 'disabled': 禁用 1M 上下文，即使客户端请求也不启用
   context1mPreference: varchar('context_1m_preference', { length: 20 }),
 
+  // Codex（Responses API）参数覆写（仅对 Codex 类型供应商有效）
+  // - 'inherit' 或 null: 遵循客户端请求
+  // - 其他值: 强制覆写对应请求体字段
+  codexReasoningEffortPreference: varchar('codex_reasoning_effort_preference', { length: 20 }),
+  codexReasoningSummaryPreference: varchar('codex_reasoning_summary_preference', { length: 20 }),
+  codexTextVerbosityPreference: varchar('codex_text_verbosity_preference', { length: 10 }),
+  codexParallelToolCallsPreference: varchar('codex_parallel_tool_calls_preference', { length: 10 }),
+
   // 废弃（保留向后兼容，但不再使用）
   tpm: integer('tpm').default(0),
   rpm: integer('rpm').default(0),

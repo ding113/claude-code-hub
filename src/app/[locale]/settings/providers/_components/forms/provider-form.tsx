@@ -1,5 +1,5 @@
 "use client";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Info } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { TagInput } from "@/components/ui/tag-input";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { PROVIDER_DEFAULTS, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import type { Context1mPreference } from "@/lib/special-attributes";
 import {
@@ -39,7 +40,15 @@ import {
   validateNumericField,
   validatePositiveDecimalField,
 } from "@/lib/utils/validation";
-import type { McpPassthroughType, ProviderDisplay, ProviderType } from "@/types/provider";
+import type {
+  CodexParallelToolCallsPreference,
+  CodexReasoningEffortPreference,
+  CodexReasoningSummaryPreference,
+  CodexTextVerbosityPreference,
+  McpPassthroughType,
+  ProviderDisplay,
+  ProviderType,
+} from "@/types/provider";
 import { ModelMultiSelect } from "../model-multi-select";
 import { ModelRedirectEditor } from "../model-redirect-editor";
 import { ApiTestButton } from "./api-test-button";
@@ -54,6 +63,38 @@ interface ProviderFormProps {
   provider?: ProviderDisplay; // edit 模式需要，create 可空
   cloneProvider?: ProviderDisplay; // create 模式用于克隆数据
   enableMultiProviderTypes: boolean;
+}
+
+function FieldLabelWithTooltip({
+  label,
+  tooltip,
+  htmlFor,
+}: {
+  label: string;
+  tooltip: string;
+  htmlFor?: string;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <Label htmlFor={htmlFor}>{label}</Label>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              aria-label={`${label} - help`}
+            >
+              <Info className="h-4 w-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-xs">
+            <p className="text-sm leading-relaxed">{tooltip}</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    </div>
+  );
 }
 
 export function ProviderForm({
@@ -136,6 +177,24 @@ export function ProviderForm({
   const [context1mPreference, setContext1mPreference] = useState<
     "inherit" | "force_enable" | "disabled"
   >((sourceProvider?.context1mPreference as "inherit" | "force_enable" | "disabled") ?? "inherit");
+
+  // Codex（Responses API）供应商级参数覆写（仅对 Codex 类型供应商有效）
+  const [codexReasoningEffortPreference, setCodexReasoningEffortPreference] =
+    useState<CodexReasoningEffortPreference>(
+      sourceProvider?.codexReasoningEffortPreference ?? "inherit"
+    );
+  const [codexReasoningSummaryPreference, setCodexReasoningSummaryPreference] =
+    useState<CodexReasoningSummaryPreference>(
+      sourceProvider?.codexReasoningSummaryPreference ?? "inherit"
+    );
+  const [codexTextVerbosityPreference, setCodexTextVerbosityPreference] =
+    useState<CodexTextVerbosityPreference>(
+      sourceProvider?.codexTextVerbosityPreference ?? "inherit"
+    );
+  const [codexParallelToolCallsPreference, setCodexParallelToolCallsPreference] =
+    useState<CodexParallelToolCallsPreference>(
+      sourceProvider?.codexParallelToolCallsPreference ?? "inherit"
+    );
 
   // 熔断器配置（以分钟为单位显示，提交时转换为毫秒）
   // 允许 undefined，用户可以清空输入框，提交时使用默认值
@@ -344,6 +403,10 @@ export function ProviderForm({
             limit_concurrent_sessions?: number | null;
             cache_ttl_preference?: "inherit" | "5m" | "1h";
             context_1m_preference?: Context1mPreference | null;
+            codex_reasoning_effort_preference?: CodexReasoningEffortPreference | null;
+            codex_reasoning_summary_preference?: CodexReasoningSummaryPreference | null;
+            codex_text_verbosity_preference?: CodexTextVerbosityPreference | null;
+            codex_parallel_tool_calls_preference?: CodexParallelToolCallsPreference | null;
             max_retry_attempts?: number | null;
             circuit_breaker_failure_threshold?: number;
             circuit_breaker_open_duration?: number;
@@ -383,6 +446,10 @@ export function ProviderForm({
             limit_concurrent_sessions: limitConcurrentSessions ?? 0,
             cache_ttl_preference: cacheTtlPreference,
             context_1m_preference: context1mPreference,
+            codex_reasoning_effort_preference: codexReasoningEffortPreference,
+            codex_reasoning_summary_preference: codexReasoningSummaryPreference,
+            codex_text_verbosity_preference: codexTextVerbosityPreference,
+            codex_parallel_tool_calls_preference: codexParallelToolCallsPreference,
             max_retry_attempts: maxRetryAttempts,
             circuit_breaker_failure_threshold: failureThreshold ?? 5,
             circuit_breaker_open_duration: openDurationMinutes
@@ -444,6 +511,10 @@ export function ProviderForm({
             limit_concurrent_sessions: limitConcurrentSessions ?? 0,
             cache_ttl_preference: cacheTtlPreference,
             context_1m_preference: context1mPreference,
+            codex_reasoning_effort_preference: codexReasoningEffortPreference,
+            codex_reasoning_summary_preference: codexReasoningSummaryPreference,
+            codex_text_verbosity_preference: codexTextVerbosityPreference,
+            codex_parallel_tool_calls_preference: codexParallelToolCallsPreference,
             max_retry_attempts: maxRetryAttempts,
             circuit_breaker_failure_threshold: failureThreshold ?? 5,
             circuit_breaker_open_duration: openDurationMinutes
@@ -994,6 +1065,152 @@ export function ProviderForm({
                       <p className="text-xs text-muted-foreground">
                         {t("sections.routing.context1m.desc")}
                       </p>
+                    </div>
+                  )}
+
+                  {/* Codex 参数覆写 - 仅 Codex 类型供应商显示 */}
+                  {providerType === "codex" && (
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <FieldLabelWithTooltip
+                          label={t("sections.routing.codexOverrides.reasoningEffort.label")}
+                          tooltip={t("sections.routing.codexOverrides.reasoningEffort.help")}
+                        />
+                        <Select
+                          value={codexReasoningEffortPreference}
+                          onValueChange={(val) =>
+                            setCodexReasoningEffortPreference(val as CodexReasoningEffortPreference)
+                          }
+                          disabled={isPending}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="inherit" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="inherit">
+                              {t("sections.routing.codexOverrides.reasoningEffort.options.inherit")}
+                            </SelectItem>
+                            <SelectItem value="minimal">
+                              {t("sections.routing.codexOverrides.reasoningEffort.options.minimal")}
+                            </SelectItem>
+                            <SelectItem value="low">
+                              {t("sections.routing.codexOverrides.reasoningEffort.options.low")}
+                            </SelectItem>
+                            <SelectItem value="medium">
+                              {t("sections.routing.codexOverrides.reasoningEffort.options.medium")}
+                            </SelectItem>
+                            <SelectItem value="high">
+                              {t("sections.routing.codexOverrides.reasoningEffort.options.high")}
+                            </SelectItem>
+                            <SelectItem value="xhigh">
+                              {t("sections.routing.codexOverrides.reasoningEffort.options.xhigh")}
+                            </SelectItem>
+                            <SelectItem value="none">
+                              {t("sections.routing.codexOverrides.reasoningEffort.options.none")}
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <FieldLabelWithTooltip
+                          label={t("sections.routing.codexOverrides.reasoningSummary.label")}
+                          tooltip={t("sections.routing.codexOverrides.reasoningSummary.help")}
+                        />
+                        <Select
+                          value={codexReasoningSummaryPreference}
+                          onValueChange={(val) =>
+                            setCodexReasoningSummaryPreference(
+                              val as CodexReasoningSummaryPreference
+                            )
+                          }
+                          disabled={isPending}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="inherit" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="inherit">
+                              {t(
+                                "sections.routing.codexOverrides.reasoningSummary.options.inherit"
+                              )}
+                            </SelectItem>
+                            <SelectItem value="auto">
+                              {t("sections.routing.codexOverrides.reasoningSummary.options.auto")}
+                            </SelectItem>
+                            <SelectItem value="detailed">
+                              {t(
+                                "sections.routing.codexOverrides.reasoningSummary.options.detailed"
+                              )}
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <FieldLabelWithTooltip
+                          label={t("sections.routing.codexOverrides.textVerbosity.label")}
+                          tooltip={t("sections.routing.codexOverrides.textVerbosity.help")}
+                        />
+                        <Select
+                          value={codexTextVerbosityPreference}
+                          onValueChange={(val) =>
+                            setCodexTextVerbosityPreference(val as CodexTextVerbosityPreference)
+                          }
+                          disabled={isPending}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="inherit" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="inherit">
+                              {t("sections.routing.codexOverrides.textVerbosity.options.inherit")}
+                            </SelectItem>
+                            <SelectItem value="low">
+                              {t("sections.routing.codexOverrides.textVerbosity.options.low")}
+                            </SelectItem>
+                            <SelectItem value="medium">
+                              {t("sections.routing.codexOverrides.textVerbosity.options.medium")}
+                            </SelectItem>
+                            <SelectItem value="high">
+                              {t("sections.routing.codexOverrides.textVerbosity.options.high")}
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <FieldLabelWithTooltip
+                          label={t("sections.routing.codexOverrides.parallelToolCalls.label")}
+                          tooltip={t("sections.routing.codexOverrides.parallelToolCalls.help")}
+                        />
+                        <Select
+                          value={codexParallelToolCallsPreference}
+                          onValueChange={(val) =>
+                            setCodexParallelToolCallsPreference(
+                              val as CodexParallelToolCallsPreference
+                            )
+                          }
+                          disabled={isPending}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="inherit" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="inherit">
+                              {t(
+                                "sections.routing.codexOverrides.parallelToolCalls.options.inherit"
+                              )}
+                            </SelectItem>
+                            <SelectItem value="true">
+                              {t("sections.routing.codexOverrides.parallelToolCalls.options.true")}
+                            </SelectItem>
+                            <SelectItem value="false">
+                              {t("sections.routing.codexOverrides.parallelToolCalls.options.false")}
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
                   )}
                 </div>

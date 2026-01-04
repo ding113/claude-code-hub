@@ -1153,6 +1153,49 @@
               "disabled": "停用"
             },
             "desc": "設定 1M 上下文視窗支援。僅對 Sonnet 模型生效（claude-sonnet-4-5、claude-sonnet-4）。啟用後將套用階梯定價。"
+          },
+          "codexOverrides": {
+            "reasoningEffort": {
+              "label": "推理等級覆寫",
+              "help": "控制模型在輸出前用於推理的強度（推理 token 數量）。選擇「跟隨客戶端」表示不改寫請求；選擇其他值則強制覆寫 reasoning.effort。注意：none 僅 GPT-5.1 系列支援；xhigh 僅 GPT-5.1-Codex-Max 支援，模型不支援會返回錯誤。",
+              "options": {
+                "inherit": "不覆寫（跟隨客戶端）",
+                "minimal": "minimal（更省、更快）",
+                "low": "low",
+                "medium": "medium（預設）",
+                "high": "high（更強推理）",
+                "xhigh": "xhigh（僅 GPT-5.1-Codex-Max）",
+                "none": "none（僅 GPT-5.1）"
+              }
+            },
+            "reasoningSummary": {
+              "label": "推理摘要覆寫",
+              "help": "控制是否回傳推理摘要。auto 回傳精簡摘要，detailed 回傳更詳細摘要；「跟隨客戶端」不改寫 reasoning.summary。",
+              "options": {
+                "inherit": "不覆寫（跟隨客戶端）",
+                "auto": "auto（精簡）",
+                "detailed": "detailed（更詳細）"
+              }
+            },
+            "textVerbosity": {
+              "label": "輸出冗長度覆寫",
+              "help": "控制模型輸出的詳細程度。low 較精簡，high 較詳細；「跟隨客戶端」不改寫 text.verbosity。",
+              "options": {
+                "inherit": "不覆寫（跟隨客戶端）",
+                "low": "low（精簡）",
+                "medium": "medium（預設）",
+                "high": "high（更詳細）"
+              }
+            },
+            "parallelToolCalls": {
+              "label": "並行工具呼叫覆寫",
+              "help": "控制是否允許並行 tool calls。關閉可能降低工具呼叫並發能力；「跟隨客戶端」不改寫 parallel_tool_calls。",
+              "options": {
+                "inherit": "不覆寫（跟隨客戶端）",
+                "true": "強制開啟",
+                "false": "強制關閉"
+              }
+            }
           }
         },
         "rateLimit": {

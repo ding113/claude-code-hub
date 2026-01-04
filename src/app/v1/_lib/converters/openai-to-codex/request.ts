@@ -126,7 +126,9 @@ export function transformOpenAIRequestToCodex(
     model,
     stream: true, // 强制 stream: true
     store: false, // 强制 store: false
-    parallel_tool_calls: true, // 强制启用并行工具调用
+    // 并行工具调用：默认 true，但应允许客户端显式关闭
+    parallel_tool_calls:
+      typeof req.parallel_tool_calls === "boolean" ? req.parallel_tool_calls : true,
     include: ["reasoning.encrypted_content"], // 包含推理内容
     input: [],
   };
