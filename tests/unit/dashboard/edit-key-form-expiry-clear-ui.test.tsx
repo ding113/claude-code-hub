@@ -129,7 +129,7 @@ describe("EditKeyForm: 清除 expiresAt 后应携带 expiresAt 字段提交（�
     expect(keysActionMocks.editKey).toHaveBeenCalledTimes(1);
     const [, payload] = keysActionMocks.editKey.mock.calls[0] as [number, any];
 
-    // 关键点：必须显式携带 expiresAt 字段（即使为 undefined），后端才会识别为“清除”
+    // 关键点：必须显式携带 expiresAt 字段（清除时通常为 ""），后端才会识别为“清除”
     expect(Object.hasOwn(payload, "expiresAt")).toBe(true);
 
     unmount();

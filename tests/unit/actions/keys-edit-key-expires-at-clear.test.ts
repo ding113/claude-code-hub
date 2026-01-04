@@ -120,6 +120,21 @@ describe("editKey: expiresAt 清除/不更新语义", () => {
     );
   });
 
+  test('携带 expiresAt="" 时应清除 expires_at（写入 null）', async () => {
+    const { editKey } = await import("@/actions/keys");
+
+    const res = await editKey(1, { name: "k2", expiresAt: "" });
+
+    expect(res.ok).toBe(true);
+    expect(updateKeyMock).toHaveBeenCalledTimes(1);
+    expect(updateKeyMock).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        expires_at: null,
+      })
+    );
+  });
+
   test("携带 expiresAt=YYYY-MM-DD 时应写入对应 Date", async () => {
     const { editKey } = await import("@/actions/keys");
 
