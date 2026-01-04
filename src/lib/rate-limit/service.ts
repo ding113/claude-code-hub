@@ -248,9 +248,10 @@ export class RateLimitService {
           }
 
           if (current >= limit.amount) {
+            const typeName = type === "key" ? "Key" : type === "provider" ? "供应商" : "User";
             return {
               allowed: false,
-              reason: `${type === "key" ? "Key" : "供应商"} ${limit.name}消费上限已达到（${current.toFixed(4)}/${limit.amount}）`,
+              reason: `${typeName} ${limit.name}消费上限已达到（${current.toFixed(4)}/${limit.amount}）`,
             };
           }
         }
