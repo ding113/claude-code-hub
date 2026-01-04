@@ -442,7 +442,8 @@ function UnifiedEditDialogInner({
                 const keyRes = await addKey({
                   userId: user.id,
                   name: key.name,
-                  expiresAt: key.expiresAt || undefined,
+                  // 重要：清除到期时间时用空字符串表达，避免 undefined 在 Server Action 序列化时被丢弃
+                  expiresAt: key.expiresAt ?? "",
                   isEnabled: key.isEnabled,
                   canLoginWebUi: key.canLoginWebUi,
                   providerGroup: normalizeProviderGroup(key.providerGroup),
@@ -466,7 +467,8 @@ function UnifiedEditDialogInner({
                 // Existing key - edit it
                 const keyRes = await editKey(key.id, {
                   name: key.name,
-                  expiresAt: key.expiresAt || undefined,
+                  // 重要：清除到期时间时用空字符串表达，避免 undefined 在 Server Action 序列化时被丢弃
+                  expiresAt: key.expiresAt ?? "",
                   canLoginWebUi: key.canLoginWebUi,
                   isEnabled: key.isEnabled,
                   providerGroup: normalizeProviderGroup(key.providerGroup),

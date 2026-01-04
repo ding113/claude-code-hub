@@ -103,7 +103,8 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
         try {
           const res = await editKey(keyData.id, {
             name: data.name,
-            expiresAt: data.expiresAt || undefined,
+            // 重要：清除到期时间时用空字符串表达，避免 undefined 在 Server Action 序列化时被丢弃
+            expiresAt: data.expiresAt ?? "",
             canLoginWebUi: data.canLoginWebUi,
             cacheTtlPreference: data.cacheTtlPreference,
             limit5hUsd: data.limit5hUsd,
