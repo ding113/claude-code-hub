@@ -393,8 +393,8 @@
     "actions": {
       "back": "返回",
       "view": "檢視",
-      "copyMessages": "複製 Messages",
-      "downloadMessages": "下載 Messages",
+      "copyMessages": "複製請求頭與請求體",
+      "downloadMessages": "下載請求頭與請求體",
       "copied": "已複製",
       "copyResponse": "複製回覆主體",
       "terminate": "終止",
@@ -436,7 +436,14 @@
       "nextPage": "下一頁",
       "pageInfo": "第 {page} / {total} 頁",
       "sseEvent": "事件",
-      "sseData": "資料"
+      "sseData": "資料",
+      "hardLimit": {
+        "title": "內容過大",
+        "size": "大小：{sizeMB} MB（{sizeBytes} 位元組）",
+        "maximum": "上限：{maxSizeMB} MB 或 {maxLines} 行",
+        "hint": "請下載檔案以查看完整內容。",
+        "download": "下載"
+      }
     },
     "status": {
       "loading": "載入中...",

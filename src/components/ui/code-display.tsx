@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronUp, File as FileIcon, Search } from "lucide-react";
+import { ChevronDown, ChevronUp, Download, File as FileIcon, Search } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -13,8 +13,9 @@ import { parseSSEDataForDisplay } from "@/lib/utils/sse";
 
 export type CodeDisplayLanguage = "json" | "sse" | "text";
 
-const MAX_CONTENT_SIZE = 1_000_000; // 1MB
-const MAX_LINES = 10_000;
+const DEFAULT_MAX_CONTENT_BYTES = 1_000_000; // 1MB
+const DEFAULT_MAX_LINES = 10_000;
+const PRETTY_MODE_DEFAULT_MAX_CHARS = 100_000;
 
 export interface CodeDisplayProps {
   content: string;
@@ -23,6 +24,8 @@ export interface CodeDisplayProps {
   maxHeight?: string;
   expandedMaxHeight?: string;
   defaultExpanded?: boolean;
+  maxContentBytes?: number;
+  maxLines?: number;
 }
 
 function safeJsonParse(text: string): { ok: true; value: unknown } | { ok: false } {
@@ -65,11 +68,22 @@ export function CodeDisplay({
   maxHeight = "600px",
   expandedMaxHeight,
   defaultExpanded = false,
+  maxContentBytes,
+  maxLines,
 }: CodeDisplayProps) {
   const t = useTranslations("dashboard.sessions");
-  const isOverMaxBytes = content.length > MAX_CONTENT_SIZE;
+  const resolvedMaxContentBytes = maxContentBytes ?? DEFAULT_MAX_CONTENT_BYTES;
+  const resolvedMaxLines = maxLines ?? DEFAULT_MAX_LINES;
+  const contentBytes = useMemo(() => new Blob([content]).size, [content]);
+  const isOverMaxBytes = contentBytes > resolvedMaxContentBytes;
 
-  const [mode, setMode] = useState<"raw" | "pretty">(getDefaultMode(language));
+  const [mode, setMode] = useState<"raw" | "pretty">(() => {
+    const defaultMode = getDefaultMode(language);
+    if (defaultMode === "pretty" && content.length > PRETTY_MODE_DEFAULT_MAX_CHARS) {
+      return "raw";
+    }
+    return defaultMode;
+  });
   const [searchQuery, setSearchQuery] = useState("");
   const [showOnlyMatches, setShowOnlyMatches] = useState(false);
   const [expanded, setExpanded] = useState(defaultExpanded);
@@ -90,27 +104,36 @@ export function CodeDisplay({
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    if (mode !== "pretty") return;
+    if (language === "text") return;
+    if (content.length <= PRETTY_MODE_DEFAULT_MAX_CHARS) return;
+    setMode("raw");
+  }, [content, language, mode]);
+
   const lineCount = useMemo(() => {
     if (isOverMaxBytes) return 0;
-    return countLinesUpTo(content, MAX_LINES + 1);
-  }, [content, isOverMaxBytes]);
+    return countLinesUpTo(content, resolvedMaxLines + 1);
+  }, [content, isOverMaxBytes, resolvedMaxLines]);
   const isLargeContent = content.length > 4000 || lineCount > 200;
   const isExpanded = expanded || !isLargeContent;
-  const isHardLimited = isOverMaxBytes || lineCount > MAX_LINES;
+  const isHardLimited = isOverMaxBytes || lineCount > resolvedMaxLines;
 
   const formattedJson = useMemo(() => {
     if (language !== "json") return content;
-    if (isOverMaxBytes) return content;
+    if (mode !== "pretty") return content;
+    if (isHardLimited) return content;
     const parsed = safeJsonParse(content);
     if (!parsed.ok) return content;
     return stringifyPretty(parsed.value);
-  }, [content, isOverMaxBytes, language]);
+  }, [content, isHardLimited, language, mode]);
 
   const sseEvents = useMemo(() => {
     if (language !== "sse") return null;
-    if (isOverMaxBytes) return null;
+    if (mode !== "pretty") return null;
+    if (isHardLimited) return null;
     return parseSSEDataForDisplay(content);
-  }, [content, isOverMaxBytes, language]);
+  }, [content, isHardLimited, language, mode]);
 
   const filteredSseEvents = useMemo(() => {
     if (!sseEvents) return null;
@@ -165,9 +188,30 @@ export function CodeDisplay({
   const contentMaxHeight = isExpanded ? expandedMaxHeight : maxHeight;
 
   if (isHardLimited) {
-    const sizeBytes = content.length;
+    const sizeBytes = contentBytes;
     const sizeMB = (sizeBytes / 1_000_000).toFixed(2);
-    const maxSizeMB = (MAX_CONTENT_SIZE / 1_000_000).toFixed(2);
+    const maxSizeMB = (resolvedMaxContentBytes / 1_000_000).toFixed(2);
+    const downloadFileName =
+      fileName ??
+      (language === "json" ? "content.json" : language === "sse" ? "content.sse" : "content.txt");
+    const handleDownload = () => {
+      const blob = new Blob([content], {
+        type: language === "json" ? "application/json" : "text/plain",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      try {
+        a.href = url;
+        a.download = downloadFileName;
+        document.body.appendChild(a);
+        a.click();
+      } finally {
+        if (a.isConnected) {
+          document.body.removeChild(a);
+        }
+        URL.revokeObjectURL(url);
+      }
+    };
 
     return (
       <div data-testid="code-display" className="rounded-md border bg-muted/30">
@@ -186,17 +230,33 @@ export function CodeDisplay({
           <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive">
             <div className="flex items-center gap-2">
               <FileIcon className="h-4 w-4 text-destructive" />
-              <p className="font-medium">Content too large</p>
+              <p className="font-medium">{t("codeDisplay.hardLimit.title")}</p>
             </div>
             <p className="mt-1 text-sm">
-              Size: {sizeMB} MB ({sizeBytes.toLocaleString()} bytes)
+              {t("codeDisplay.hardLimit.size", {
+                sizeMB,
+                sizeBytes: sizeBytes.toLocaleString(),
+              })}
             </p>
             <p className="text-sm">
-              Maximum allowed: {maxSizeMB} MB or {MAX_LINES.toLocaleString()} lines
+              {t("codeDisplay.hardLimit.maximum", {
+                maxSizeMB,
+                maxLines: resolvedMaxLines.toLocaleString(),
+              })}
             </p>
-            <p className="mt-2 text-xs opacity-70">
-              Please download the file to view the full content.
-            </p>
+            <p className="mt-2 text-xs opacity-70">{t("codeDisplay.hardLimit.hint")}</p>
+            <div className="mt-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleDownload}
+                data-testid="code-display-hard-limit-download"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                {t("codeDisplay.hardLimit.download")}
+              </Button>
+            </div>
           </div>
         </div>
       </div>

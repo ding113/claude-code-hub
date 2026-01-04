@@ -78,11 +78,25 @@ export function SessionMessagesClient() {
   const [nextSequence, setNextSequence] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [copiedMessages, setCopiedMessages] = useState(false);
+  const [copiedRequest, setCopiedRequest] = useState(false);
   const [copiedResponse, setCopiedResponse] = useState(false);
   const [showTerminateDialog, setShowTerminateDialog] = useState(false);
   const [isTerminating, setIsTerminating] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  const resetDetailsState = useCallback(() => {
+    setMessages(null);
+    setRequestBody(null);
+    setResponse(null);
+    setRequestHeaders(null);
+    setResponseHeaders(null);
+    setRequestMeta({ clientUrl: null, upstreamUrl: null, method: null });
+    setResponseMeta({ upstreamUrl: null, statusCode: null });
+    setSessionStats(null);
+    setCurrentSequence(null);
+    setPrevSequence(null);
+    setNextSequence(null);
+  }, []);
 
   const { data: systemSettings } = useQuery({
     queryKey: ["system-settings"],
@@ -127,16 +141,12 @@ export function SessionMessagesClient() {
           setPrevSequence(result.data.prevSequence);
           setNextSequence(result.data.nextSequence);
         } else {
-          setRequestBody(null);
-          setRequestMeta({ clientUrl: null, upstreamUrl: null, method: null });
-          setResponseMeta({ upstreamUrl: null, statusCode: null });
+          resetDetailsState();
           setError(result.error || t("status.fetchFailed"));
         }
       } catch (err) {
         if (cancelled) return;
-        setRequestBody(null);
-        setRequestMeta({ clientUrl: null, upstreamUrl: null, method: null });
-        setResponseMeta({ upstreamUrl: null, statusCode: null });
+        resetDetailsState();
         setError(err instanceof Error ? err.message : t("status.unknownError"));
       } finally {
         if (!cancelled) {
@@ -150,15 +160,32 @@ export function SessionMessagesClient() {
     return () => {
       cancelled = true;
     };
-  }, [sessionId, selectedSeq, t]);
+  }, [resetDetailsState, sessionId, selectedSeq, t]);
 
-  const handleCopyMessages = async () => {
-    if (!messages) return;
+  const canExportRequest =
+    !isLoading && error === null && requestHeaders !== null && requestBody !== null;
+  const exportSequence = selectedSeq ?? currentSequence;
+  const getRequestExportJson = () => {
+    return JSON.stringify(
+      {
+        sessionId,
+        sequence: exportSequence,
+        meta: requestMeta,
+        headers: requestHeaders,
+        body: requestBody,
+      },
+      null,
+      2
+    );
+  };
+
+  const handleCopyRequest = async () => {
+    if (!canExportRequest) return;
 
     try {
-      await navigator.clipboard.writeText(JSON.stringify(messages, null, 2));
-      setCopiedMessages(true);
-      setTimeout(() => setCopiedMessages(false), 2000);
+      await navigator.clipboard.writeText(getRequestExportJson());
+      setCopiedRequest(true);
+      setTimeout(() => setCopiedRequest(false), 2000);
     } catch (err) {
       console.error(t("errors.copyFailed"), err);
     }
@@ -176,15 +203,16 @@ export function SessionMessagesClient() {
     }
   };
 
-  const handleDownload = () => {
-    if (!messages) return;
+  const handleDownloadRequest = () => {
+    if (!canExportRequest) return;
 
-    const jsonStr = JSON.stringify(messages, null, 2);
+    const jsonStr = getRequestExportJson();
     const blob = new Blob([jsonStr], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `session-${sessionId.substring(0, 8)}-messages.json`;
+    const seqPart = exportSequence !== null ? `-seq-${exportSequence}` : "";
+    a.download = `session-${sessionId.substring(0, 8)}${seqPart}-request.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -253,15 +281,15 @@ export function SessionMessagesClient() {
 
             {/* 操作按钮 */}
             <div className="flex gap-2">
-              {messages !== null && (
+              {canExportRequest && (
                 <>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={handleCopyMessages}
-                    disabled={copiedMessages}
+                    onClick={handleCopyRequest}
+                    disabled={copiedRequest}
                   >
-                    {copiedMessages ? (
+                    {copiedRequest ? (
                       <>
                         <Check className="h-4 w-4 mr-2" />
                         {t("actions.copied")}
@@ -273,7 +301,7 @@ export function SessionMessagesClient() {
                       </>
                     )}
                   </Button>
-                  <Button variant="outline" size="sm" onClick={handleDownload}>
+                  <Button variant="outline" size="sm" onClick={handleDownloadRequest}>
                     <Download className="h-4 w-4 mr-2" />
                     {t("actions.downloadMessages")}
                   </Button>

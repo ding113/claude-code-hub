@@ -393,8 +393,8 @@
     "actions": {
       "back": "Back",
       "view": "View",
-      "copyMessages": "Copy Messages",
-      "downloadMessages": "Download Messages",
+      "copyMessages": "Copy Request (Headers + Body)",
+      "downloadMessages": "Download Request (Headers + Body)",
       "copied": "Copied",
       "copyResponse": "Copy Response",
       "terminate": "Terminate",
@@ -436,7 +436,14 @@
       "nextPage": "Next",
       "pageInfo": "Page {page} / {total}",
       "sseEvent": "Event",
-      "sseData": "Data"
+      "sseData": "Data",
+      "hardLimit": {
+        "title": "Content too large",
+        "size": "Size: {sizeMB} MB ({sizeBytes} bytes)",
+        "maximum": "Maximum allowed: {maxSizeMB} MB or {maxLines} lines",
+        "hint": "Please download the file to view the full content.",
+        "download": "Download"
+      }
     },
     "status": {
       "loading": "Loading...",

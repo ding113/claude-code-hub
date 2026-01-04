@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { NextIntlClientProvider } from "next-intl";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { SessionMessagesDetailsTabs } from "./session-details-tabs";
 
 const messages = {
@@ -38,6 +38,13 @@ const messages = {
         pageInfo: "Page {page} / {total}",
         sseEvent: "Event",
         sseData: "Data",
+        hardLimit: {
+          title: "Content too large",
+          size: "Size: {sizeMB} MB ({sizeBytes} bytes)",
+          maximum: "Maximum allowed: {maxSizeMB} MB or {maxLines} lines",
+          hint: "Please download the file to view the full content.",
+          download: "Download",
+        },
       },
     },
   },
@@ -185,5 +192,103 @@ describe("SessionMessagesDetailsTabs", () => {
     expect(container.textContent).toContain("No data");
 
     unmount();
+  });
+
+  test("uses larger hard-limit threshold (<= 30,000 lines) for request headers", () => {
+    const requestHeaders = Object.fromEntries(
+      Array.from({ length: 10_100 }, (_, i) => [`x-h-${i}`, `v-${i}`])
+    );
+
+    const { container, unmount } = renderWithIntl(
+      <SessionMessagesDetailsTabs
+        requestBody={null}
+        messages={{ role: "user", content: "hi" }}
+        response='{"ok":true}'
+        requestHeaders={requestHeaders}
+        responseHeaders={{ b: "2" }}
+        requestMeta={{ clientUrl: null, upstreamUrl: null, method: null }}
+        responseMeta={{ upstreamUrl: null, statusCode: null }}
+      />
+    );
+
+    const requestHeadersTrigger = container.querySelector(
+      "[data-testid='session-tab-trigger-request-headers']"
+    ) as HTMLElement;
+    click(requestHeadersTrigger);
+
+    const requestHeadersTab = container.querySelector(
+      "[data-testid='session-tab-request-headers']"
+    ) as HTMLElement;
+    expect(requestHeadersTab.textContent).not.toContain("Content too large");
+
+    const search = requestHeadersTab.querySelector(
+      "[data-testid='code-display-search']"
+    ) as HTMLInputElement;
+    expect(search).not.toBeNull();
+
+    unmount();
+  });
+
+  test("hard-limited request body provides in-panel download for request.json", async () => {
+    const requestBody = Array.from({ length: 30_001 }, (_, i) => i);
+    const expectedJson = JSON.stringify(requestBody, null, 2);
+
+    const createObjectURLSpy = vi
+      .spyOn(URL, "createObjectURL")
+      .mockImplementation(() => "blob:mock");
+    const revokeObjectURLSpy = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    const originalCreateElement = document.createElement.bind(document);
+    const createElementSpy = vi.spyOn(document, "createElement");
+    let lastAnchor: HTMLAnchorElement | null = null;
+    createElementSpy.mockImplementation(((tagName: string) => {
+      const el = originalCreateElement(tagName);
+      if (tagName === "a") {
+        lastAnchor = el as HTMLAnchorElement;
+      }
+      return el;
+    }) as unknown as typeof document.createElement);
+
+    const { container, unmount } = renderWithIntl(
+      <SessionMessagesDetailsTabs
+        requestBody={requestBody}
+        messages={{ role: "user", content: "hi" }}
+        response='{"ok":true}'
+        requestHeaders={{ a: "1" }}
+        responseHeaders={{ b: "2" }}
+        requestMeta={{ clientUrl: null, upstreamUrl: null, method: null }}
+        responseMeta={{ upstreamUrl: null, statusCode: null }}
+      />
+    );
+
+    const requestBodyTab = container.querySelector(
+      "[data-testid='session-tab-request-body']"
+    ) as HTMLElement;
+    expect(requestBodyTab.textContent).toContain("Content too large");
+    expect(requestBodyTab.textContent).toContain("30,000 lines");
+
+    const downloadBtn = requestBodyTab.querySelector(
+      "[data-testid='code-display-hard-limit-download']"
+    ) as HTMLButtonElement;
+    expect(downloadBtn).not.toBeNull();
+    click(downloadBtn);
+
+    expect(createObjectURLSpy).toHaveBeenCalledTimes(1);
+    const anchor = lastAnchor as HTMLAnchorElement | null;
+    if (!anchor) throw new Error("anchor not created");
+    expect(anchor.download).toBe("request.json");
+    expect(anchor.href).toBe("blob:mock");
+
+    const blob = createObjectURLSpy.mock.calls[0]?.[0] as Blob;
+    expect(await blob.text()).toBe(expectedJson);
+    expect(revokeObjectURLSpy).toHaveBeenCalledWith("blob:mock");
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+
+    unmount();
+    createObjectURLSpy.mockRestore();
+    revokeObjectURLSpy.mockRestore();
+    clickSpy.mockRestore();
+    createElementSpy.mockRestore();
   });
 });

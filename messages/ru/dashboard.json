@@ -392,8 +392,8 @@
     "actions": {
       "back": "Назад",
       "view": "Просмотр",
-      "copyMessages": "Копировать сообщения",
-      "downloadMessages": "Скачать сообщения",
+      "copyMessages": "Копировать запрос (заголовки и тело)",
+      "downloadMessages": "Скачать запрос (заголовки и тело)",
       "copied": "Скопировано",
       "copyResponse": "Копировать тело ответа",
       "terminate": "Прервать",
@@ -435,7 +435,14 @@
       "nextPage": "Вперёд",
       "pageInfo": "Страница {page} / {total}",
       "sseEvent": "Событие",
-      "sseData": "Данные"
+      "sseData": "Данные",
+      "hardLimit": {
+        "title": "Содержимое слишком большое",
+        "size": "Размер: {sizeMB} MB ({sizeBytes} bytes)",
+        "maximum": "Максимум: {maxSizeMB} MB или {maxLines} строк",
+        "hint": "Пожалуйста, скачайте файл, чтобы посмотреть весь контент.",
+        "download": "Скачать"
+      }
     },
     "status": {
       "loading": "Загрузка...",

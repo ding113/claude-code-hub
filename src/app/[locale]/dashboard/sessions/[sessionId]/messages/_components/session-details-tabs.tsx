@@ -8,6 +8,9 @@ import { isSSEText } from "@/lib/utils/sse";
 
 export type SessionMessages = Record<string, unknown> | Record<string, unknown>[];
 
+const SESSION_DETAILS_MAX_CONTENT_BYTES = 5_000_000;
+const SESSION_DETAILS_MAX_LINES = 30_000;
+
 function formatHeaders(
   headers: Record<string, string> | null,
   preambleLines?: string[]
@@ -135,6 +138,8 @@ export function SessionMessagesDetailsTabs({
             content={formattedRequestHeaders}
             language="text"
             fileName="request.headers"
+            maxContentBytes={SESSION_DETAILS_MAX_CONTENT_BYTES}
+            maxLines={SESSION_DETAILS_MAX_LINES}
             maxHeight="600px"
             defaultExpanded
             expandedMaxHeight={codeExpandedMaxHeight}
@@ -150,6 +155,8 @@ export function SessionMessagesDetailsTabs({
             content={requestBodyContent}
             language="json"
             fileName="request.json"
+            maxContentBytes={SESSION_DETAILS_MAX_CONTENT_BYTES}
+            maxLines={SESSION_DETAILS_MAX_LINES}
             maxHeight="600px"
             defaultExpanded
             expandedMaxHeight={codeExpandedMaxHeight}
@@ -165,6 +172,8 @@ export function SessionMessagesDetailsTabs({
             content={requestMessagesContent}
             language="json"
             fileName="request.messages.json"
+            maxContentBytes={SESSION_DETAILS_MAX_CONTENT_BYTES}
+            maxLines={SESSION_DETAILS_MAX_LINES}
             maxHeight="600px"
             defaultExpanded
             expandedMaxHeight={codeExpandedMaxHeight}
@@ -180,6 +189,8 @@ export function SessionMessagesDetailsTabs({
             content={formattedResponseHeaders}
             language="text"
             fileName="response.headers"
+            maxContentBytes={SESSION_DETAILS_MAX_CONTENT_BYTES}
+            maxLines={SESSION_DETAILS_MAX_LINES}
             maxHeight="600px"
             defaultExpanded
             expandedMaxHeight={codeExpandedMaxHeight}
@@ -195,6 +206,8 @@ export function SessionMessagesDetailsTabs({
             content={response}
             language={responseLanguage}
             fileName={responseLanguage === "sse" ? "response.sse" : "response.json"}
+            maxContentBytes={SESSION_DETAILS_MAX_CONTENT_BYTES}
+            maxLines={SESSION_DETAILS_MAX_LINES}
             maxHeight="600px"
             defaultExpanded
             expandedMaxHeight={codeExpandedMaxHeight}

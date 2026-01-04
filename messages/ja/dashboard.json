@@ -392,8 +392,8 @@
     "actions": {
       "back": "戻る",
       "view": "表示",
-      "copyMessages": "メッセージをコピー",
-      "downloadMessages": "メッセージをダウンロード",
+      "copyMessages": "リクエスト(ヘッダーとボディ)をコピー",
+      "downloadMessages": "リクエスト(ヘッダーとボディ)をダウンロード",
       "copied": "コピーしました",
       "copyResponse": "レスポンスボディをコピー",
       "terminate": "強制終了",
@@ -435,7 +435,14 @@
       "nextPage": "次へ",
       "pageInfo": "{page} / {total} ページ",
       "sseEvent": "イベント",
-      "sseData": "データ"
+      "sseData": "データ",
+      "hardLimit": {
+        "title": "コンテンツが大きすぎます",
+        "size": "サイズ: {sizeMB} MB ({sizeBytes} bytes)",
+        "maximum": "上限: {maxSizeMB} MB または {maxLines} 行",
+        "hint": "全内容を表示するにはダウンロードしてください。",
+        "download": "ダウンロード"
+      }
     },
     "status": {
       "loading": "読み込み中...",
