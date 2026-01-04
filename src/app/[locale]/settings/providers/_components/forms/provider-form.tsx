@@ -33,7 +33,12 @@ import { Switch } from "@/components/ui/switch";
 import { TagInput } from "@/components/ui/tag-input";
 import { PROVIDER_DEFAULTS, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import type { Context1mPreference } from "@/lib/special-attributes";
-import { extractBaseUrl, isValidUrl, validateNumericField } from "@/lib/utils/validation";
+import {
+  extractBaseUrl,
+  isValidUrl,
+  validateNumericField,
+  validatePositiveDecimalField,
+} from "@/lib/utils/validation";
 import type { McpPassthroughType, ProviderDisplay, ProviderType } from "@/types/provider";
 import { ModelMultiSelect } from "../model-multi-select";
 import { ModelRedirectEditor } from "../model-redirect-editor";
@@ -112,6 +117,9 @@ export function ProviderForm({
   );
   const [limitMonthlyUsd, setLimitMonthlyUsd] = useState<number | null>(
     sourceProvider?.limitMonthlyUsd ?? null
+  );
+  const [limitTotalUsd, setLimitTotalUsd] = useState<number | null>(
+    sourceProvider?.limitTotalUsd ?? null
   );
   const [limitConcurrentSessions, setLimitConcurrentSessions] = useState<number | null>(
     sourceProvider?.limitConcurrentSessions ?? null
@@ -332,6 +340,7 @@ export function ProviderForm({
             daily_reset_time?: string;
             limit_weekly_usd?: number | null;
             limit_monthly_usd?: number | null;
+            limit_total_usd?: number | null;
             limit_concurrent_sessions?: number | null;
             cache_ttl_preference?: "inherit" | "5m" | "1h";
             context_1m_preference?: Context1mPreference | null;
@@ -370,6 +379,7 @@ export function ProviderForm({
             daily_reset_time: dailyResetTime,
             limit_weekly_usd: limitWeeklyUsd,
             limit_monthly_usd: limitMonthlyUsd,
+            limit_total_usd: limitTotalUsd,
             limit_concurrent_sessions: limitConcurrentSessions ?? 0,
             cache_ttl_preference: cacheTtlPreference,
             context_1m_preference: context1mPreference,
@@ -430,6 +440,7 @@ export function ProviderForm({
             daily_reset_time: dailyResetTime,
             limit_weekly_usd: limitWeeklyUsd,
             limit_monthly_usd: limitMonthlyUsd,
+            limit_total_usd: limitTotalUsd,
             limit_concurrent_sessions: limitConcurrentSessions ?? 0,
             cache_ttl_preference: cacheTtlPreference,
             context_1m_preference: context1mPreference,
@@ -487,6 +498,7 @@ export function ProviderForm({
           setDailyResetTime("00:00");
           setLimitWeeklyUsd(null);
           setLimitMonthlyUsd(null);
+          setLimitTotalUsd(null);
           setLimitConcurrentSessions(null);
           setMaxRetryAttempts(null);
           setFailureThreshold(5);
@@ -1036,6 +1048,12 @@ export function ProviderForm({
                           amount: limitMonthlyUsd,
                         })
                       );
+                    if (limitTotalUsd)
+                      limits.push(
+                        t("sections.rateLimit.summary.total", {
+                          amount: limitTotalUsd,
+                        })
+                      );
                     if (limitConcurrentSessions)
                       limits.push(
                         t("sections.rateLimit.summary.concurrent", {
@@ -1060,7 +1078,7 @@ export function ProviderForm({
                       id={isEdit ? "edit-limit-5h" : "limit-5h"}
                       type="number"
                       value={limit5hUsd?.toString() ?? ""}
-                      onChange={(e) => setLimit5hUsd(validateNumericField(e.target.value))}
+                      onChange={(e) => setLimit5hUsd(validatePositiveDecimalField(e.target.value))}
                       placeholder={t("sections.rateLimit.limit5h.placeholder")}
                       disabled={isPending}
                       min="0"
@@ -1075,7 +1093,9 @@ export function ProviderForm({
                       id={isEdit ? "edit-limit-daily" : "limit-daily"}
                       type="number"
                       value={limitDailyUsd?.toString() ?? ""}
-                      onChange={(e) => setLimitDailyUsd(validateNumericField(e.target.value))}
+                      onChange={(e) =>
+                        setLimitDailyUsd(validatePositiveDecimalField(e.target.value))
+                      }
                       placeholder={t("sections.rateLimit.limitDaily.placeholder")}
                       disabled={isPending}
                       min="0"
@@ -1139,8 +1159,27 @@ export function ProviderForm({
                       id={isEdit ? "edit-limit-weekly" : "limit-weekly"}
                       type="number"
                       value={limitWeeklyUsd?.toString() ?? ""}
-                      onChange={(e) => setLimitWeeklyUsd(validateNumericField(e.target.value))}
+                      onChange={(e) =>
+                        setLimitWeeklyUsd(validatePositiveDecimalField(e.target.value))
+                      }
                       placeholder={t("sections.rateLimit.limitWeekly.placeholder")}
+                      disabled={isPending}
+                      min="0"
+                      step="0.01"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={isEdit ? "edit-limit-total" : "limit-total"}>
+                      {t("sections.rateLimit.limitTotal.label")}
+                    </Label>
+                    <Input
+                      id={isEdit ? "edit-limit-total" : "limit-total"}
+                      type="number"
+                      value={limitTotalUsd?.toString() ?? ""}
+                      onChange={(e) =>
+                        setLimitTotalUsd(validatePositiveDecimalField(e.target.value))
+                      }
+                      placeholder={t("sections.rateLimit.limitTotal.placeholder")}
                       disabled={isPending}
                       min="0"
                       step="0.01"
@@ -1157,7 +1196,9 @@ export function ProviderForm({
                       id={isEdit ? "edit-limit-monthly" : "limit-monthly"}
                       type="number"
                       value={limitMonthlyUsd?.toString() ?? ""}
-                      onChange={(e) => setLimitMonthlyUsd(validateNumericField(e.target.value))}
+                      onChange={(e) =>
+                        setLimitMonthlyUsd(validatePositiveDecimalField(e.target.value))
+                      }
                       placeholder={t("sections.rateLimit.limitMonthly.placeholder")}
                       disabled={isPending}
                       min="0"

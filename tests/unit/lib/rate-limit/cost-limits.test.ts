@@ -38,6 +38,7 @@ const statisticsMock = {
   // total cost
   sumKeyTotalCost: vi.fn(async () => 0),
   sumUserTotalCost: vi.fn(async () => 0),
+  sumProviderTotalCost: vi.fn(async () => 0),
 
   // fixed-window sums
   sumKeyCostInTimeRange: vi.fn(async () => 0),
@@ -199,6 +200,62 @@ describe("RateLimitService - cost limits and quota checks", () => {
     expect(result.allowed).toBe(true);
     expect(result.current).toBe(5);
     expect(redisClient.setex).toHaveBeenCalledWith("total_cost:user:7", 300, "5");
+  });
+
+  it("checkTotalCostLimit：Provider Redis miss 时应 fallback DB 并写回缓存（cache key 应包含 resetAt）", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+
+    const resetAt = new Date(nowMs - 123_000);
+
+    redisClient.get.mockResolvedValueOnce(null);
+    statisticsMock.sumProviderTotalCost.mockResolvedValueOnce(5);
+
+    const result = await RateLimitService.checkTotalCostLimit(9, "provider", 10, {
+      resetAt,
+    });
+
+    expect(result.allowed).toBe(true);
+    expect(result.current).toBe(5);
+    expect(statisticsMock.sumProviderTotalCost).toHaveBeenCalledTimes(1);
+    expect(statisticsMock.sumProviderTotalCost).toHaveBeenCalledWith(9, resetAt);
+    expect(redisClient.setex).toHaveBeenCalledWith(
+      `total_cost:provider:9:${resetAt.getTime()}`,
+      300,
+      "5"
+    );
+  });
+
+  it("checkTotalCostLimit：Provider resetAt 为空时应使用 none key 并回退到 DB", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+
+    redisClient.get.mockResolvedValueOnce(null);
+    statisticsMock.sumProviderTotalCost.mockResolvedValueOnce(5);
+
+    const result = await RateLimitService.checkTotalCostLimit(9, "provider", 10, {
+      resetAt: null,
+    });
+
+    expect(result.allowed).toBe(true);
+    expect(result.current).toBe(5);
+    expect(statisticsMock.sumProviderTotalCost).toHaveBeenCalledWith(9, null);
+    expect(redisClient.setex).toHaveBeenCalledWith("total_cost:provider:9:none", 300, "5");
+  });
+
+  it("checkTotalCostLimit：Provider Redis cache hit 且已超限时应返回 not allowed（按 resetAt key 命中）", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+
+    const resetAt = new Date(nowMs - 456_000);
+
+    redisClient.get.mockImplementation(async (key: string) => {
+      if (key === `total_cost:provider:9:${resetAt.getTime()}`) return "20";
+      return null;
+    });
+
+    const result = await RateLimitService.checkTotalCostLimit(9, "provider", 10, {
+      resetAt,
+    });
+    expect(result.allowed).toBe(false);
+    expect(result.current).toBe(20);
   });
 
   it("checkUserDailyCost：fixed 模式 cache hit 超限时应拦截", async () => {

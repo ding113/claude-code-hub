@@ -70,6 +70,10 @@ export interface Provider {
   dailyResetTime: string;
   limitWeeklyUsd: number | null;
   limitMonthlyUsd: number | null;
+  // 总消费上限（手动重置后从 0 重新累计）
+  limitTotalUsd: number | null;
+  // 总消费重置时间：用于实现“达到总限额后手动重置用量”
+  totalCostResetAt: Date | null;
   limitConcurrentSessions: number;
 
   // 熔断器配置（每个供应商独立配置）
@@ -146,6 +150,7 @@ export interface ProviderDisplay {
   dailyResetTime: string;
   limitWeeklyUsd: number | null;
   limitMonthlyUsd: number | null;
+  limitTotalUsd: number | null;
   limitConcurrentSessions: number;
   // 熔断器配置
   maxRetryAttempts: number | null;
@@ -209,6 +214,7 @@ export interface CreateProviderData {
   daily_reset_time?: string;
   limit_weekly_usd?: number | null;
   limit_monthly_usd?: number | null;
+  limit_total_usd?: number | null;
   limit_concurrent_sessions?: number;
 
   // 熔断器配置
@@ -274,6 +280,7 @@ export interface UpdateProviderData {
   daily_reset_time?: string;
   limit_weekly_usd?: number | null;
   limit_monthly_usd?: number | null;
+  limit_total_usd?: number | null;
   limit_concurrent_sessions?: number;
 
   // 熔断器配置

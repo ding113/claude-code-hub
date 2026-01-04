@@ -397,6 +397,12 @@ export const CreateProviderSchema = z.object({
     .max(200000, "月消费上限不能超过200000美元")
     .nullable()
     .optional(),
+  limit_total_usd: z.coerce
+    .number()
+    .min(0, "总消费上限不能为负数")
+    .max(10000000, "总消费上限不能超过10000000美元")
+    .nullable()
+    .optional(),
   limit_concurrent_sessions: z.coerce
     .number()
     .int("并发Session上限必须是整数")
@@ -560,6 +566,12 @@ export const UpdateProviderSchema = z
       .number()
       .min(0, "月消费上限不能为负数")
       .max(200000, "月消费上限不能超过200000美元")
+      .nullable()
+      .optional(),
+    limit_total_usd: z.coerce
+      .number()
+      .min(0, "总消费上限不能为负数")
+      .max(10000000, "总消费上限不能超过10000000美元")
       .nullable()
       .optional(),
     limit_concurrent_sessions: z.coerce

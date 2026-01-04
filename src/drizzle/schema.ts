@@ -198,6 +198,8 @@ export const providers = pgTable('providers', {
     .notNull(), // HH:mm 格式，如 "18:00"（仅 fixed 模式使用）
   limitWeeklyUsd: numeric('limit_weekly_usd', { precision: 10, scale: 2 }),
   limitMonthlyUsd: numeric('limit_monthly_usd', { precision: 10, scale: 2 }),
+  limitTotalUsd: numeric('limit_total_usd', { precision: 10, scale: 2 }),
+  totalCostResetAt: timestamp('total_cost_reset_at', { withTimezone: true }),
   limitConcurrentSessions: integer('limit_concurrent_sessions').default(0),
 
   // 熔断器配置（每个供应商独立配置）

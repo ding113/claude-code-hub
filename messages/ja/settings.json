@@ -1161,6 +1161,7 @@
             "fiveHour": "5h: ${amount}",
             "weekly": "週: ${amount}",
             "monthly": "月: ${amount}",
+            "total": "総: ${amount}",
             "concurrent": "同時: {count}",
             "none": "無制限"
           },
@@ -1174,6 +1175,10 @@
           },
           "limitMonthly": {
             "label": "月の上限 (USD)",
+            "placeholder": "空欄で無制限"
+          },
+          "limitTotal": {
+            "label": "総消費上限 (USD)",
             "placeholder": "空欄で無制限"
           },
           "limitConcurrent": {
@@ -1570,6 +1575,10 @@
       "resetCircuitSuccess": "サーキットブレーカーがリセットされました",
       "resetCircuitSuccessDesc": "プロバイダー \"{name}\" のサーキットブレーカーステータスがクリアされました",
       "resetCircuitFailed": "サーキットブレーカーのリセットに失敗しました",
+      "resetUsageTitle": "総用量をリセット",
+      "resetUsageSuccess": "総用量をリセットしました",
+      "resetUsageSuccessDesc": "プロバイダー \"{name}\" の総用量をリセットしました",
+      "resetUsageFailed": "総用量のリセットに失敗しました",
       "toggleSuccess": "プロバイダーが{status}になりました",
       "toggleSuccessDesc": "プロバイダー \"{name}\" のステータスが更新されました",
       "toggleFailed": "切り替えに失敗しました",

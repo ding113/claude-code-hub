@@ -38,6 +38,7 @@ import {
   findAllProviders,
   findProviderById,
   getProviderStatistics,
+  resetProviderTotalCostResetAt,
   updateProvider,
 } from "@/repository/provider";
 import type { CacheTtlPreference } from "@/types/cache";
@@ -203,6 +204,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         dailyResetTime: provider.dailyResetTime,
         limitWeeklyUsd: provider.limitWeeklyUsd,
         limitMonthlyUsd: provider.limitMonthlyUsd,
+        limitTotalUsd: provider.limitTotalUsd,
         limitConcurrentSessions: provider.limitConcurrentSessions,
         maxRetryAttempts: provider.maxRetryAttempts,
         circuitBreakerFailureThreshold: provider.circuitBreakerFailureThreshold,
@@ -352,6 +354,7 @@ export async function addProvider(data: {
   daily_reset_time?: string;
   limit_weekly_usd?: number | null;
   limit_monthly_usd?: number | null;
+  limit_total_usd?: number | null;
   limit_concurrent_sessions?: number | null;
   cache_ttl_preference?: CacheTtlPreference | null;
   context_1m_preference?: Context1mPreference | null;
@@ -421,6 +424,7 @@ export async function addProvider(data: {
       daily_reset_time: validated.daily_reset_time ?? "00:00",
       limit_weekly_usd: validated.limit_weekly_usd ?? null,
       limit_monthly_usd: validated.limit_monthly_usd ?? null,
+      limit_total_usd: validated.limit_total_usd ?? null,
       limit_concurrent_sessions: validated.limit_concurrent_sessions ?? 0,
       max_retry_attempts: validated.max_retry_attempts ?? null,
       circuit_breaker_failure_threshold: validated.circuit_breaker_failure_threshold ?? 5,
@@ -507,6 +511,7 @@ export async function editProvider(
     daily_reset_time?: string;
     limit_weekly_usd?: number | null;
     limit_monthly_usd?: number | null;
+    limit_total_usd?: number | null;
     limit_concurrent_sessions?: number | null;
     cache_ttl_preference?: "inherit" | "5m" | "1h";
     context_1m_preference?: Context1mPreference | null;
@@ -710,6 +715,34 @@ export async function resetProviderCircuit(providerId: number): Promise<ActionRe
   } catch (error) {
     logger.error("重置熔断器失败:", error);
     const message = error instanceof Error ? error.message : "重置熔断器失败";
+    return { ok: false, error: message };
+  }
+}
+
+/**
+ * 手动重置供应商“总用量”（用于总消费上限 limit_total_usd）
+ *
+ * 说明：
+ * - 不删除历史请求日志，仅更新 providers.total_cost_reset_at 作为聚合下限。
+ */
+export async function resetProviderTotalUsage(providerId: number): Promise<ActionResult> {
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return { ok: false, error: "无权限执行此操作" };
+    }
+
+    const ok = await resetProviderTotalCostResetAt(providerId, new Date());
+    if (!ok) {
+      return { ok: false, error: "供应商不存在" };
+    }
+
+    revalidatePath("/settings/providers");
+    revalidatePath("/dashboard/quotas/providers");
+    return { ok: true };
+  } catch (error) {
+    logger.error("重置供应商总用量失败:", error);
+    const message = error instanceof Error ? error.message : "重置供应商总用量失败";
     return { ok: false, error: message };
   }
 }

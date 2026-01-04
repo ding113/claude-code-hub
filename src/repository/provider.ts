@@ -36,6 +36,8 @@ export async function createProvider(providerData: CreateProviderData): Promise<
       providerData.limit_weekly_usd != null ? providerData.limit_weekly_usd.toString() : null,
     limitMonthlyUsd:
       providerData.limit_monthly_usd != null ? providerData.limit_monthly_usd.toString() : null,
+    limitTotalUsd:
+      providerData.limit_total_usd != null ? providerData.limit_total_usd.toString() : null,
     limitConcurrentSessions: providerData.limit_concurrent_sessions,
     maxRetryAttempts: providerData.max_retry_attempts ?? null,
     circuitBreakerFailureThreshold: providerData.circuit_breaker_failure_threshold ?? 5,
@@ -81,6 +83,8 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     dailyResetTime: providers.dailyResetTime,
     limitWeeklyUsd: providers.limitWeeklyUsd,
     limitMonthlyUsd: providers.limitMonthlyUsd,
+    limitTotalUsd: providers.limitTotalUsd,
+    totalCostResetAt: providers.totalCostResetAt,
     limitConcurrentSessions: providers.limitConcurrentSessions,
     maxRetryAttempts: providers.maxRetryAttempts,
     circuitBreakerFailureThreshold: providers.circuitBreakerFailureThreshold,
@@ -136,6 +140,8 @@ export async function findProviderList(
       dailyResetTime: providers.dailyResetTime,
       limitWeeklyUsd: providers.limitWeeklyUsd,
       limitMonthlyUsd: providers.limitMonthlyUsd,
+      limitTotalUsd: providers.limitTotalUsd,
+      totalCostResetAt: providers.totalCostResetAt,
       limitConcurrentSessions: providers.limitConcurrentSessions,
       maxRetryAttempts: providers.maxRetryAttempts,
       circuitBreakerFailureThreshold: providers.circuitBreakerFailureThreshold,
@@ -202,6 +208,8 @@ export async function findAllProviders(): Promise<Provider[]> {
       dailyResetTime: providers.dailyResetTime,
       limitWeeklyUsd: providers.limitWeeklyUsd,
       limitMonthlyUsd: providers.limitMonthlyUsd,
+      limitTotalUsd: providers.limitTotalUsd,
+      totalCostResetAt: providers.totalCostResetAt,
       limitConcurrentSessions: providers.limitConcurrentSessions,
       maxRetryAttempts: providers.maxRetryAttempts,
       circuitBreakerFailureThreshold: providers.circuitBreakerFailureThreshold,
@@ -262,6 +270,8 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       dailyResetTime: providers.dailyResetTime,
       limitWeeklyUsd: providers.limitWeeklyUsd,
       limitMonthlyUsd: providers.limitMonthlyUsd,
+      limitTotalUsd: providers.limitTotalUsd,
+      totalCostResetAt: providers.totalCostResetAt,
       limitConcurrentSessions: providers.limitConcurrentSessions,
       maxRetryAttempts: providers.maxRetryAttempts,
       circuitBreakerFailureThreshold: providers.circuitBreakerFailureThreshold,
@@ -343,6 +353,9 @@ export async function updateProvider(
   if (providerData.limit_monthly_usd !== undefined)
     dbData.limitMonthlyUsd =
       providerData.limit_monthly_usd != null ? providerData.limit_monthly_usd.toString() : null;
+  if (providerData.limit_total_usd !== undefined)
+    dbData.limitTotalUsd =
+      providerData.limit_total_usd != null ? providerData.limit_total_usd.toString() : null;
   if (providerData.limit_concurrent_sessions !== undefined)
     dbData.limitConcurrentSessions = providerData.limit_concurrent_sessions;
   if (providerData.max_retry_attempts !== undefined)
@@ -402,6 +415,8 @@ export async function updateProvider(
       dailyResetTime: providers.dailyResetTime,
       limitWeeklyUsd: providers.limitWeeklyUsd,
       limitMonthlyUsd: providers.limitMonthlyUsd,
+      limitTotalUsd: providers.limitTotalUsd,
+      totalCostResetAt: providers.totalCostResetAt,
       limitConcurrentSessions: providers.limitConcurrentSessions,
       maxRetryAttempts: providers.maxRetryAttempts,
       circuitBreakerFailureThreshold: providers.circuitBreakerFailureThreshold,
@@ -434,6 +449,25 @@ export async function deleteProvider(id: number): Promise<boolean> {
     .update(providers)
     .set({ deletedAt: new Date() })
     .where(and(eq(providers.id, id), isNull(providers.deletedAt)))
+    .returning({ id: providers.id });
+
+  return result.length > 0;
+}
+
+/**
+ * 手动重置供应商“总消费”统计起点
+ *
+ * 说明：
+ * - 不删除 message_request 历史记录，仅通过 resetAt 作为聚合下限实现“从 0 重新累计”。
+ */
+export async function resetProviderTotalCostResetAt(
+  providerId: number,
+  resetAt: Date
+): Promise<boolean> {
+  const result = await db
+    .update(providers)
+    .set({ totalCostResetAt: resetAt, updatedAt: new Date() })
+    .where(and(eq(providers.id, providerId), isNull(providers.deletedAt)))
     .returning({ id: providers.id });
 
   return result.length > 0;

@@ -660,6 +660,10 @@
       "resetCircuitSuccess": "Circuit breaker reset",
       "resetCircuitSuccessDesc": "Provider \"{name}\" circuit breaker status cleared",
       "resetCircuitFailed": "Failed to reset circuit breaker",
+      "resetUsageTitle": "Reset total usage",
+      "resetUsageSuccess": "Total usage reset",
+      "resetUsageSuccessDesc": "Provider \"{name}\" total usage has been reset",
+      "resetUsageFailed": "Failed to reset total usage",
       "toggleSuccess": "Provider {status}",
       "toggleSuccessDesc": "Provider \"{name}\" status updated",
       "toggleFailed": "Toggle failed",
@@ -1267,6 +1271,7 @@
             "daily": "Day: ${amount} (reset ${resetTime})",
             "weekly": "Week: ${amount}",
             "monthly": "Month: ${amount}",
+            "total": "Total: ${amount}",
             "concurrent": "Concurrent: {count}",
             "none": "Unlimited"
           },
@@ -1298,6 +1303,10 @@
           },
           "limitMonthly": {
             "label": "Monthly Spend Limit (USD)",
+            "placeholder": "Leave empty for unlimited"
+          },
+          "limitTotal": {
+            "label": "Total Spend Limit (USD)",
             "placeholder": "Leave empty for unlimited"
           },
           "limitConcurrent": {
