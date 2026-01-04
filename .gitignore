@@ -12,6 +12,7 @@
 
 # testing
 /coverage
+/coverage-quota
 
 # next.js
 /.next/
