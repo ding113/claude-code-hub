@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { validateProviderUrlForConnectivity } from "@/lib/validation/provider-url";
 
 describe("validateProviderUrlForConnectivity", () => {
@@ -50,5 +50,34 @@ describe("validateProviderUrlForConnectivity", () => {
   test("仍然拒绝无法解析的 URL", () => {
     const result = validateProviderUrlForConnectivity("not a url");
     expect(result.valid).toBe(false);
+  });
+
+  test("当 URL 构造器抛出非 Error 时，应返回兜底错误信息（覆盖边界分支）", () => {
+    const originalURL = globalThis.URL;
+
+    vi.stubGlobal(
+      "URL",
+      class {
+        constructor() {
+          throw "boom";
+        }
+      } as any
+    );
+
+    try {
+      const result = validateProviderUrlForConnectivity("https://example.com");
+      expect(result.valid).toBe(false);
+      if (result.valid) return;
+
+      expect(result.error).toEqual(
+        expect.objectContaining({
+          details: expect.objectContaining({
+            error: "URL 解析失败",
+          }),
+        })
+      );
+    } finally {
+      vi.stubGlobal("URL", originalURL as any);
+    }
   });
 });

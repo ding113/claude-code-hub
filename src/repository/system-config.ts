@@ -86,6 +86,7 @@ function createFallbackSettings(): SystemSettings {
     enableClientVersionCheck: false,
     verboseProviderError: false,
     enableHttp2: false,
+    interceptAnthropicWarmupRequests: false,
     createdAt: now,
     updatedAt: now,
   };
@@ -110,6 +111,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
         enableClientVersionCheck: systemSettings.enableClientVersionCheck,
         verboseProviderError: systemSettings.verboseProviderError,
         enableHttp2: systemSettings.enableHttp2,
+        interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
         createdAt: systemSettings.createdAt,
         updatedAt: systemSettings.updatedAt,
       })
@@ -142,6 +144,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
         enableClientVersionCheck: systemSettings.enableClientVersionCheck,
         verboseProviderError: systemSettings.verboseProviderError,
         enableHttp2: systemSettings.enableHttp2,
+        interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
         createdAt: systemSettings.createdAt,
         updatedAt: systemSettings.updatedAt,
       });
@@ -165,6 +168,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
         enableClientVersionCheck: systemSettings.enableClientVersionCheck,
         verboseProviderError: systemSettings.verboseProviderError,
         enableHttp2: systemSettings.enableHttp2,
+        interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
         createdAt: systemSettings.createdAt,
         updatedAt: systemSettings.updatedAt,
       })
@@ -246,6 +250,11 @@ export async function updateSystemSettings(
       updates.enableHttp2 = payload.enableHttp2;
     }
 
+    // Warmup 拦截开关（如果提供）
+    if (payload.interceptAnthropicWarmupRequests !== undefined) {
+      updates.interceptAnthropicWarmupRequests = payload.interceptAnthropicWarmupRequests;
+    }
+
     const [updated] = await db
       .update(systemSettings)
       .set(updates)
@@ -263,6 +272,7 @@ export async function updateSystemSettings(
         enableClientVersionCheck: systemSettings.enableClientVersionCheck,
         verboseProviderError: systemSettings.verboseProviderError,
         enableHttp2: systemSettings.enableHttp2,
+        interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
         createdAt: systemSettings.createdAt,
         updatedAt: systemSettings.updatedAt,
       });

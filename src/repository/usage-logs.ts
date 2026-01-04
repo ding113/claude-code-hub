@@ -5,6 +5,9 @@ import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest, providers, users } from "@/drizzle/schema";
 import type { ProviderChainItem } from "@/types/message";
 
+// Warmup 抢答请求只用于探测/预热：日志可见，但不计入任何聚合统计
+const EXCLUDE_WARMUP_CONDITION = sql`(${messageRequest.blockedBy} IS NULL OR ${messageRequest.blockedBy} <> 'warmup')`;
+
 export interface UsageLogFilters {
   userId?: number;
   keyId?: number;
@@ -366,20 +369,24 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
   // 查询总数和统计数据（添加 innerJoin keysTable 以支持 keyId 过滤）
   const [summaryResult] = await db
     .select({
-      totalRequests: sql<number>`count(*)::double precision`,
-      totalCost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
-      totalInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens})::double precision, 0::double precision)`,
-      totalOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens})::double precision, 0::double precision)`,
-      totalCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens})::double precision, 0::double precision)`,
-      totalCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens})::double precision, 0::double precision)`,
-      totalCacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens})::double precision, 0::double precision)`,
-      totalCacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens})::double precision, 0::double precision)`,
+      // total：用于分页/审计，必须包含 warmup
+      totalRows: sql<number>`count(*)::double precision`,
+      // summary：所有统计字段必须排除 warmup（不计入任何统计）
+      totalRequests: sql<number>`count(*) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision`,
+      totalCost: sql<string>`COALESCE(sum(${messageRequest.costUsd}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION}), 0)`,
+      totalInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+      totalOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+      totalCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+      totalCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+      totalCacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+      totalCacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
     })
     .from(messageRequest)
     .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
     .where(and(...conditions));
 
-  const total = summaryResult?.totalRequests ?? 0;
+  const total = summaryResult?.totalRows ?? 0;
+  const totalRequests = summaryResult?.totalRequests ?? 0;
   const totalCost = parseFloat(summaryResult?.totalCost ?? "0");
   const totalTokens =
     (summaryResult?.totalInputTokens ?? 0) +
@@ -454,7 +461,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
     logs,
     total,
     summary: {
-      totalRequests: total,
+      totalRequests,
       totalCost,
       totalTokens,
       totalInputTokens: summaryResult?.totalInputTokens ?? 0,
@@ -577,6 +584,8 @@ export async function findUsageLogsStats(
     );
   }
 
+  const statsConditions = [...conditions, EXCLUDE_WARMUP_CONDITION];
+
   // 执行聚合查询（添加 innerJoin keysTable 以支持 keyId 过滤）
   const [summaryResult] = await db
     .select({
@@ -591,7 +600,7 @@ export async function findUsageLogsStats(
     })
     .from(messageRequest)
     .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
-    .where(and(...conditions));
+    .where(and(...statsConditions));
 
   const totalRequests = summaryResult?.totalRequests ?? 0;
   const totalCost = parseFloat(summaryResult?.totalCost ?? "0");
