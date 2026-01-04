@@ -230,17 +230,21 @@ export function CodeDisplay({
           <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive">
             <div className="flex items-center gap-2">
               <FileIcon className="h-4 w-4 text-destructive" />
-              <p className="font-medium">Content too large</p>
+              <p className="font-medium">{t("codeDisplay.hardLimit.title")}</p>
             </div>
             <p className="mt-1 text-sm">
-              Size: {sizeMB} MB ({sizeBytes.toLocaleString()} bytes)
+              {t("codeDisplay.hardLimit.size", {
+                sizeMB,
+                sizeBytes: sizeBytes.toLocaleString(),
+              })}
             </p>
             <p className="text-sm">
-              Maximum allowed: {maxSizeMB} MB or {resolvedMaxLines.toLocaleString()} lines
+              {t("codeDisplay.hardLimit.maximum", {
+                maxSizeMB,
+                maxLines: resolvedMaxLines.toLocaleString(),
+              })}
             </p>
-            <p className="mt-2 text-xs opacity-70">
-              Please download the file to view the full content.
-            </p>
+            <p className="mt-2 text-xs opacity-70">{t("codeDisplay.hardLimit.hint")}</p>
             <div className="mt-3">
               <Button
                 type="button"
@@ -250,7 +254,7 @@ export function CodeDisplay({
                 data-testid="code-display-hard-limit-download"
               >
                 <Download className="h-4 w-4 mr-2" />
-                Download
+                {t("codeDisplay.hardLimit.download")}
               </Button>
             </div>
           </div>

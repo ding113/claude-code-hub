@@ -435,7 +435,14 @@
       "nextPage": "Вперёд",
       "pageInfo": "Страница {page} / {total}",
       "sseEvent": "Событие",
-      "sseData": "Данные"
+      "sseData": "Данные",
+      "hardLimit": {
+        "title": "Содержимое слишком большое",
+        "size": "Размер: {sizeMB} MB ({sizeBytes} bytes)",
+        "maximum": "Максимум: {maxSizeMB} MB или {maxLines} строк",
+        "hint": "Пожалуйста, скачайте файл, чтобы посмотреть весь контент.",
+        "download": "Скачать"
+      }
     },
     "status": {
       "loading": "Загрузка...",

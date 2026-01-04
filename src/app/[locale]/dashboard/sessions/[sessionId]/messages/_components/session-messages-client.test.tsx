@@ -38,6 +38,13 @@ const messages = {
         pageInfo: "Page {page} / {total}",
         sseEvent: "Event",
         sseData: "Data",
+        hardLimit: {
+          title: "Content too large",
+          size: "Size: {sizeMB} MB ({sizeBytes} bytes)",
+          maximum: "Maximum allowed: {maxSizeMB} MB or {maxLines} lines",
+          hint: "Please download the file to view the full content.",
+          download: "Download",
+        },
       },
     },
   },

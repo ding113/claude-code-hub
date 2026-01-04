@@ -436,7 +436,14 @@
       "nextPage": "下一页",
       "pageInfo": "第 {page} / {total} 页",
       "sseEvent": "事件",
-      "sseData": "数据"
+      "sseData": "数据",
+      "hardLimit": {
+        "title": "内容过大",
+        "size": "大小：{sizeMB} MB（{sizeBytes} 字节）",
+        "maximum": "上限：{maxSizeMB} MB 或 {maxLines} 行",
+        "hint": "请下载文件以查看完整内容。",
+        "download": "下载"
+      }
     },
     "status": {
       "loading": "加载中...",

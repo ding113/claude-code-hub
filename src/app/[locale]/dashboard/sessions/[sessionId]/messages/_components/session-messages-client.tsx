@@ -84,6 +84,20 @@ export function SessionMessagesClient() {
   const [isTerminating, setIsTerminating] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
+  const resetDetailsState = useCallback(() => {
+    setMessages(null);
+    setRequestBody(null);
+    setResponse(null);
+    setRequestHeaders(null);
+    setResponseHeaders(null);
+    setRequestMeta({ clientUrl: null, upstreamUrl: null, method: null });
+    setResponseMeta({ upstreamUrl: null, statusCode: null });
+    setSessionStats(null);
+    setCurrentSequence(null);
+    setPrevSequence(null);
+    setNextSequence(null);
+  }, []);
+
   const { data: systemSettings } = useQuery({
     queryKey: ["system-settings"],
     queryFn: fetchSystemSettings,
@@ -127,32 +141,12 @@ export function SessionMessagesClient() {
           setPrevSequence(result.data.prevSequence);
           setNextSequence(result.data.nextSequence);
         } else {
-          setMessages(null);
-          setRequestBody(null);
-          setResponse(null);
-          setRequestHeaders(null);
-          setResponseHeaders(null);
-          setRequestMeta({ clientUrl: null, upstreamUrl: null, method: null });
-          setResponseMeta({ upstreamUrl: null, statusCode: null });
-          setSessionStats(null);
-          setCurrentSequence(null);
-          setPrevSequence(null);
-          setNextSequence(null);
+          resetDetailsState();
           setError(result.error || t("status.fetchFailed"));
         }
       } catch (err) {
         if (cancelled) return;
-        setMessages(null);
-        setRequestBody(null);
-        setResponse(null);
-        setRequestHeaders(null);
-        setResponseHeaders(null);
-        setRequestMeta({ clientUrl: null, upstreamUrl: null, method: null });
-        setResponseMeta({ upstreamUrl: null, statusCode: null });
-        setSessionStats(null);
-        setCurrentSequence(null);
-        setPrevSequence(null);
-        setNextSequence(null);
+        resetDetailsState();
         setError(err instanceof Error ? err.message : t("status.unknownError"));
       } finally {
         if (!cancelled) {
@@ -166,10 +160,10 @@ export function SessionMessagesClient() {
     return () => {
       cancelled = true;
     };
-  }, [sessionId, selectedSeq, t]);
+  }, [resetDetailsState, sessionId, selectedSeq, t]);
 
-  const hasRequestForExport = requestHeaders !== null || requestBody !== null;
-  const canExportRequest = !isLoading && error === null && hasRequestForExport;
+  const canExportRequest =
+    !isLoading && error === null && requestHeaders !== null && requestBody !== null;
   const exportSequence = selectedSeq ?? currentSequence;
   const getRequestExportJson = () => {
     return JSON.stringify(
@@ -217,7 +211,7 @@ export function SessionMessagesClient() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    const seqPart = exportSequence ? `-seq-${exportSequence}` : "";
+    const seqPart = exportSequence !== null ? `-seq-${exportSequence}` : "";
     a.download = `session-${sessionId.substring(0, 8)}${seqPart}-request.json`;
     document.body.appendChild(a);
     a.click();

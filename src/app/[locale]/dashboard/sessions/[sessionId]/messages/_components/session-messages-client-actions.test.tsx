@@ -327,6 +327,37 @@ describe("SessionMessagesClient (request export actions)", () => {
     unmount();
   });
 
+  test("does not render export buttons when request body is missing but headers exist", async () => {
+    getSessionDetailsMock.mockResolvedValue({
+      ok: true,
+      data: {
+        requestBody: null,
+        messages: { role: "user", content: "hi" },
+        response: null,
+        requestHeaders: { "content-type": "application/json" },
+        responseHeaders: null,
+        requestMeta: {
+          clientUrl: "https://client.example/v1/responses",
+          upstreamUrl: "https://upstream.example/v1/responses",
+          method: "POST",
+        },
+        responseMeta: { upstreamUrl: null, statusCode: null },
+        sessionStats: null,
+        currentSequence: 1,
+        prevSequence: null,
+        nextSequence: null,
+      },
+    });
+
+    const { container, unmount } = renderClient(<SessionMessagesClient />);
+    await flushEffects();
+
+    expect(container.textContent).not.toContain("actions.copyMessages");
+    expect(container.textContent).not.toContain("actions.downloadMessages");
+
+    unmount();
+  });
+
   test("shows error when getSessionDetails returns ok:false", async () => {
     getSessionDetailsMock.mockResolvedValue({
       ok: false,
