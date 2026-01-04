@@ -1161,6 +1161,7 @@
             "fiveHour": "5ч: ${amount}",
             "weekly": "Неделя: ${amount}",
             "monthly": "Месяц: ${amount}",
+            "total": "Всего: ${amount}",
             "concurrent": "Параллельно: {count}",
             "none": "Без ограничений"
           },
@@ -1174,6 +1175,10 @@
           },
           "limitMonthly": {
             "label": "Месячный лимит (USD)",
+            "placeholder": "Пусто — без ограничений"
+          },
+          "limitTotal": {
+            "label": "Общий лимит (USD)",
             "placeholder": "Пусто — без ограничений"
           },
           "limitConcurrent": {
@@ -1570,6 +1575,10 @@
       "resetCircuitSuccess": "Автоматический выключатель сброшен",
       "resetCircuitSuccessDesc": "Статус автоматического выключателя провайдера \"{name}\" очищен",
       "resetCircuitFailed": "Не удалось сбросить автоматический выключатель",
+      "resetUsageTitle": "Сбросить общий расход",
+      "resetUsageSuccess": "Общий расход сброшен",
+      "resetUsageSuccessDesc": "Общий расход провайдера \"{name}\" был сброшен",
+      "resetUsageFailed": "Не удалось сбросить общий расход",
       "toggleSuccess": "Провайдер {status}",
       "toggleSuccessDesc": "Статус провайдера \"{name}\" обновлен",
       "toggleFailed": "Не удалось переключить",

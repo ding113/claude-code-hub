@@ -82,6 +82,11 @@ export function toProvider(dbProvider: any): Provider {
     dailyResetTime: dbProvider?.dailyResetTime ?? "00:00",
     limitWeeklyUsd: dbProvider?.limitWeeklyUsd ? parseFloat(dbProvider.limitWeeklyUsd) : null,
     limitMonthlyUsd: dbProvider?.limitMonthlyUsd ? parseFloat(dbProvider.limitMonthlyUsd) : null,
+    limitTotalUsd:
+      dbProvider?.limitTotalUsd !== null && dbProvider?.limitTotalUsd !== undefined
+        ? parseFloat(dbProvider.limitTotalUsd)
+        : null,
+    totalCostResetAt: dbProvider?.totalCostResetAt ? new Date(dbProvider.totalCostResetAt) : null,
     limitConcurrentSessions: dbProvider?.limitConcurrentSessions ?? 0,
     maxRetryAttempts:
       dbProvider?.maxRetryAttempts !== undefined && dbProvider?.maxRetryAttempts !== null

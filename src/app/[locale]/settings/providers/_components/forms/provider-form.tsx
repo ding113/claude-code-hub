@@ -113,6 +113,9 @@ export function ProviderForm({
   const [limitMonthlyUsd, setLimitMonthlyUsd] = useState<number | null>(
     sourceProvider?.limitMonthlyUsd ?? null
   );
+  const [limitTotalUsd, setLimitTotalUsd] = useState<number | null>(
+    sourceProvider?.limitTotalUsd ?? null
+  );
   const [limitConcurrentSessions, setLimitConcurrentSessions] = useState<number | null>(
     sourceProvider?.limitConcurrentSessions ?? null
   );
@@ -332,6 +335,7 @@ export function ProviderForm({
             daily_reset_time?: string;
             limit_weekly_usd?: number | null;
             limit_monthly_usd?: number | null;
+            limit_total_usd?: number | null;
             limit_concurrent_sessions?: number | null;
             cache_ttl_preference?: "inherit" | "5m" | "1h";
             context_1m_preference?: Context1mPreference | null;
@@ -370,6 +374,7 @@ export function ProviderForm({
             daily_reset_time: dailyResetTime,
             limit_weekly_usd: limitWeeklyUsd,
             limit_monthly_usd: limitMonthlyUsd,
+            limit_total_usd: limitTotalUsd,
             limit_concurrent_sessions: limitConcurrentSessions ?? 0,
             cache_ttl_preference: cacheTtlPreference,
             context_1m_preference: context1mPreference,
@@ -430,6 +435,7 @@ export function ProviderForm({
             daily_reset_time: dailyResetTime,
             limit_weekly_usd: limitWeeklyUsd,
             limit_monthly_usd: limitMonthlyUsd,
+            limit_total_usd: limitTotalUsd,
             limit_concurrent_sessions: limitConcurrentSessions ?? 0,
             cache_ttl_preference: cacheTtlPreference,
             context_1m_preference: context1mPreference,
@@ -1036,6 +1042,12 @@ export function ProviderForm({
                           amount: limitMonthlyUsd,
                         })
                       );
+                    if (limitTotalUsd)
+                      limits.push(
+                        t("sections.rateLimit.summary.total", {
+                          amount: limitTotalUsd,
+                        })
+                      );
                     if (limitConcurrentSessions)
                       limits.push(
                         t("sections.rateLimit.summary.concurrent", {
@@ -1141,6 +1153,21 @@ export function ProviderForm({
                       value={limitWeeklyUsd?.toString() ?? ""}
                       onChange={(e) => setLimitWeeklyUsd(validateNumericField(e.target.value))}
                       placeholder={t("sections.rateLimit.limitWeekly.placeholder")}
+                      disabled={isPending}
+                      min="0"
+                      step="0.01"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={isEdit ? "edit-limit-total" : "limit-total"}>
+                      {t("sections.rateLimit.limitTotal.label")}
+                    </Label>
+                    <Input
+                      id={isEdit ? "edit-limit-total" : "limit-total"}
+                      type="number"
+                      value={limitTotalUsd?.toString() ?? ""}
+                      onChange={(e) => setLimitTotalUsd(validateNumericField(e.target.value))}
+                      placeholder={t("sections.rateLimit.limitTotal.placeholder")}
                       disabled={isPending}
                       min="0"
                       step="0.01"

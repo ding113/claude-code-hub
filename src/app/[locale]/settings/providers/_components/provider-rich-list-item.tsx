@@ -20,6 +20,7 @@ import {
   getUnmaskedProviderKey,
   removeProvider,
   resetProviderCircuit,
+  resetProviderTotalUsage,
 } from "@/actions/providers";
 import { FormErrorBoundary } from "@/components/form-error-boundary";
 import {
@@ -89,6 +90,7 @@ export function ProviderRichListItem({
   const [copied, setCopied] = useState(false);
   const [clipboardAvailable, setClipboardAvailable] = useState(false);
   const [resetPending, startResetTransition] = useTransition();
+  const [resetUsagePending, startResetUsageTransition] = useTransition();
   const [deletePending, startDeleteTransition] = useTransition();
   const [togglePending, startToggleTransition] = useTransition();
 
@@ -249,6 +251,32 @@ export function ProviderRichListItem({
       } catch (error) {
         console.error("重置熔断器失败:", error);
         toast.error(tList("resetCircuitFailed"), {
+          description: tList("deleteError"),
+        });
+      }
+    });
+  };
+
+  // 处理手动重置总用量（总限额用）
+  const handleResetTotalUsage = () => {
+    startResetUsageTransition(async () => {
+      try {
+        const res = await resetProviderTotalUsage(provider.id);
+        if (res.ok) {
+          toast.success(tList("resetUsageSuccess"), {
+            description: tList("resetUsageSuccessDesc", { name: provider.name }),
+          });
+          queryClient.invalidateQueries({ queryKey: ["providers"] });
+          queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+          router.refresh();
+        } else {
+          toast.error(tList("resetUsageFailed"), {
+            description: res.error || tList("unknownError"),
+          });
+        }
+      } catch (error) {
+        console.error("重置总用量失败:", error);
+        toast.error(tList("resetUsageFailed"), {
           description: tList("deleteError"),
         });
       }
@@ -563,6 +591,22 @@ export function ProviderRichListItem({
               disabled={resetPending}
             >
               <RotateCcw className="h-4 w-4 text-orange-600" />
+            </Button>
+          )}
+
+          {/* 总用量重置按钮（仅配置了总限额时显示） */}
+          {canEdit && provider.limitTotalUsd !== null && provider.limitTotalUsd > 0 && (
+            <Button
+              size="icon"
+              variant="ghost"
+              title={tList("resetUsageTitle")}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleResetTotalUsage();
+              }}
+              disabled={resetUsagePending}
+            >
+              <RotateCcw className="h-4 w-4 text-blue-600" />
             </Button>
           )}
 

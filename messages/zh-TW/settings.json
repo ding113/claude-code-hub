@@ -1161,6 +1161,7 @@
             "fiveHour": "5h：${amount}",
             "weekly": "週：${amount}",
             "monthly": "月：${amount}",
+            "total": "總：${amount}",
             "concurrent": "並發：{count}",
             "none": "無限制"
           },
@@ -1174,6 +1175,10 @@
           },
           "limitMonthly": {
             "label": "月消費上限 (USD)",
+            "placeholder": "留空表示無限制"
+          },
+          "limitTotal": {
+            "label": "總消費上限 (USD)",
             "placeholder": "留空表示無限制"
           },
           "limitConcurrent": {
@@ -1576,6 +1581,10 @@
       "resetCircuitSuccess": "熔斷器已重置",
       "resetCircuitSuccessDesc": "供應商 \"{name}\" 的熔斷狀態已解除",
       "resetCircuitFailed": "重置熔斷器失敗",
+      "resetUsageTitle": "重置總用量",
+      "resetUsageSuccess": "總用量已重置",
+      "resetUsageSuccessDesc": "供應商 \"{name}\" 的總用量已重置",
+      "resetUsageFailed": "重置總用量失敗",
       "toggleSuccess": "供應商已{status}",
       "toggleSuccessDesc": "供應商 \"{name}\" 狀態已更新",
       "toggleFailed": "狀態切換失敗",

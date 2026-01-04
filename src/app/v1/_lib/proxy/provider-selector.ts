@@ -594,6 +594,42 @@ export class ProxyProviderResolver {
     }
     // No auth group info (effectiveGroup is null) can reuse any provider
 
+    // 会话复用也必须遵守限额（否则会绕过“达到限额即禁用”的语义）
+    const costCheck = await RateLimitService.checkCostLimits(provider.id, "provider", {
+      limit_5h_usd: provider.limit5hUsd,
+      limit_daily_usd: provider.limitDailyUsd,
+      daily_reset_mode: provider.dailyResetMode,
+      daily_reset_time: provider.dailyResetTime,
+      limit_weekly_usd: provider.limitWeeklyUsd,
+      limit_monthly_usd: provider.limitMonthlyUsd,
+    });
+
+    if (!costCheck.allowed) {
+      logger.debug("ProviderSelector: Session provider cost limit exceeded, reject reuse", {
+        sessionId: session.sessionId,
+        providerId: provider.id,
+      });
+      return null;
+    }
+
+    const totalCheck = await RateLimitService.checkTotalCostLimit(
+      provider.id,
+      "provider",
+      provider.limitTotalUsd,
+      {
+        resetAt: provider.totalCostResetAt,
+      }
+    );
+
+    if (!totalCheck.allowed) {
+      logger.debug("ProviderSelector: Session provider total cost limit exceeded, reject reuse", {
+        sessionId: session.sessionId,
+        providerId: provider.id,
+        reason: totalCheck.reason,
+      });
+      return null;
+    }
+
     logger.info("ProviderSelector: Reusing provider", {
       providerName: provider.name,
       providerId: provider.id,
@@ -919,6 +955,24 @@ export class ProxyProviderResolver {
         if (!costCheck.allowed) {
           logger.debug("ProviderSelector: Provider cost limit exceeded", {
             providerId: p.id,
+          });
+          return null;
+        }
+
+        // 2. 检查总消费上限（无重置窗口，达到后需要管理员取消限额或手动重置）
+        const totalCheck = await RateLimitService.checkTotalCostLimit(
+          p.id,
+          "provider",
+          p.limitTotalUsd,
+          {
+            resetAt: p.totalCostResetAt,
+          }
+        );
+
+        if (!totalCheck.allowed) {
+          logger.debug("ProviderSelector: Provider total cost limit exceeded", {
+            providerId: p.id,
+            reason: totalCheck.reason,
           });
           return null;
         }

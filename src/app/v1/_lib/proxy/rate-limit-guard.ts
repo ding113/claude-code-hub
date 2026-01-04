@@ -46,7 +46,7 @@ export class ProxyRateLimitGuard {
       key.id,
       "key",
       key.limitTotalUsd ?? null,
-      key.key
+      { keyHash: key.key }
     );
 
     if (!keyTotalCheck.allowed) {
@@ -76,8 +76,7 @@ export class ProxyRateLimitGuard {
     const userTotalCheck = await RateLimitService.checkTotalCostLimit(
       user.id,
       "user",
-      user.limitTotalUsd ?? null,
-      undefined
+      user.limitTotalUsd ?? null
     );
 
     if (!userTotalCheck.allowed) {

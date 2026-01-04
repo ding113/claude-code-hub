@@ -820,6 +820,39 @@ export async function sumUserTotalCost(userId: number, maxAgeDays: number = 365)
 }
 
 /**
+ * 查询供应商历史总消费
+ * 用于供应商总消费限额检查（limit_total_usd）。
+ *
+ * 重要语义：
+ * - 总限额必须是“从 resetAt 起累计到现在”的结果；resetAt 为空时表示从历史最早记录开始累计。
+ * - 这里不再做 365 天时间截断，否则会导致达到总限额后“过期自动恢复”，违背禁用语义。
+ *
+ * @param providerId - 供应商 ID
+ * @param resetAt - 手动重置时间（用于实现“从 0 重新累计”）
+ */
+export async function sumProviderTotalCost(
+  providerId: number,
+  resetAt?: Date | null
+): Promise<number> {
+  const effectiveStart =
+    resetAt instanceof Date && !Number.isNaN(resetAt.getTime()) ? resetAt : null;
+
+  const result = await db
+    .select({ total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)` })
+    .from(messageRequest)
+    .where(
+      and(
+        eq(messageRequest.providerId, providerId),
+        isNull(messageRequest.deletedAt),
+        EXCLUDE_WARMUP_CONDITION,
+        ...(effectiveStart ? [gte(messageRequest.createdAt, effectiveStart)] : [])
+      )
+    );
+
+  return Number(result[0]?.total || 0);
+}
+
+/**
  * 查询用户在指定时间范围内的消费总和
  * 用于用户层限额百分比显示
  */
