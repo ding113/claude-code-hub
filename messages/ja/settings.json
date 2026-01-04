@@ -1052,6 +1052,7 @@
         "create": "プロバイダーを追加",
         "edit": "プロバイダーを編集"
       },
+      "dialogDescription": "プロバイダーの詳細と高度な設定を構成します。",
       "url": {
         "label": "API アドレス *",
         "placeholder": "例: https://open.bigmodel.cn/api/anthropic"
@@ -1395,6 +1396,7 @@
       "errors": {
         "invalidUrl": "有効な API アドレスを入力してください",
         "invalidWebsiteUrl": "有効な公式サイト URL を入力してください",
+        "groupTagTooLong": "プロバイダーグループが長すぎます（合計{max}文字まで）",
         "addFailed": "プロバイダーの追加に失敗しました",
         "updateFailed": "プロバイダーの更新に失敗しました",
         "deleteFailed": "プロバイダーの削除に失敗しました"

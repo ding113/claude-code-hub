@@ -1052,6 +1052,7 @@
         "create": "新增供應商",
         "edit": "編輯供應商"
       },
+      "dialogDescription": "設定供應商資訊與進階設定。",
       "url": {
         "label": "API 位址 *",
         "placeholder": "例如：https://open.bigmodel.cn/api/anthropic"
@@ -1401,6 +1402,7 @@
       "errors": {
         "invalidUrl": "請輸入有效的 API 位址",
         "invalidWebsiteUrl": "請輸入有效的供應商官網",
+        "groupTagTooLong": "分組標籤總長度不能超過 {max} 個字元",
         "addFailed": "新增供應商失敗",
         "updateFailed": "更新供應商失敗",
         "deleteFailed": "刪除供應商失敗"

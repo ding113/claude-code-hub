@@ -19,7 +19,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -54,6 +54,8 @@ import { ModelRedirectEditor } from "../model-redirect-editor";
 import { ApiTestButton } from "./api-test-button";
 import { ProxyTestButton } from "./proxy-test-button";
 import { UrlPreview } from "./url-preview";
+
+const GROUP_TAG_MAX_TOTAL_LENGTH = 50;
 
 type Mode = "create" | "edit";
 
@@ -360,6 +362,14 @@ export function ProviderForm({
       return;
     }
 
+    // group_tag 在 DB/schema 中限制为 varchar(50)，并且后端按整串校验 max(50)
+    // 这里限制逗号拼接后的总长度，避免“UI 看似可选多标签，但保存必失败”的体验
+    const serializedGroupTag = groupTag.join(",");
+    if (serializedGroupTag.length > GROUP_TAG_MAX_TOTAL_LENGTH) {
+      toast.error(t("errors.groupTagTooLong", { max: GROUP_TAG_MAX_TOTAL_LENGTH }));
+      return;
+    }
+
     // 检查 failureThreshold 是否为特殊值（0 或大于 100）
     const threshold = failureThreshold ?? 5;
     if (threshold === 0 || threshold > 100) {
@@ -369,6 +379,15 @@ export function ProviderForm({
 
     // 正常提交
     performSubmit();
+  };
+
+  const handleGroupTagChange = (nextTags: string[]) => {
+    const serialized = nextTags.join(",");
+    if (serialized.length > GROUP_TAG_MAX_TOTAL_LENGTH) {
+      toast.error(t("errors.groupTagTooLong", { max: GROUP_TAG_MAX_TOTAL_LENGTH }));
+      return;
+    }
+    setGroupTag(nextTags);
   };
 
   // 实际提交逻辑
@@ -600,6 +619,7 @@ export function ProviderForm({
     <TooltipProvider>
       <DialogHeader className="flex-shrink-0">
         <DialogTitle>{isEdit ? t("title.edit") : t("title.create")}</DialogTitle>
+        <DialogDescription className="sr-only">{t("dialogDescription")}</DialogDescription>
       </DialogHeader>
 
       <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
@@ -773,16 +793,16 @@ export function ProviderForm({
                   <TagInput
                     id={isEdit ? "edit-group" : "group"}
                     value={groupTag}
-                    onChange={setGroupTag}
+                    onChange={handleGroupTagChange}
                     placeholder={t("sections.routing.scheduleParams.group.placeholder")}
                     disabled={isPending}
-                    maxTagLength={50}
+                    maxTagLength={GROUP_TAG_MAX_TOTAL_LENGTH}
                     suggestions={groupSuggestions}
                     onInvalidTag={(_tag, reason) => {
                       const messages: Record<string, string> = {
                         empty: tUI("emptyTag"),
                         duplicate: tUI("duplicateTag"),
-                        too_long: tUI("tooLong", { max: 50 }),
+                        too_long: tUI("tooLong", { max: GROUP_TAG_MAX_TOTAL_LENGTH }),
                         invalid_format: tUI("invalidFormat"),
                         max_tags: tUI("maxTags"),
                       };

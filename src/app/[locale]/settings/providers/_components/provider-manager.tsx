@@ -1,7 +1,7 @@
 "use client";
 import { AlertTriangle, Loader2, Search, X } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -69,6 +69,13 @@ export function ProviderManager({
   const circuitBrokenCount = useMemo(() => {
     return providers.filter((p) => healthStatus[p.id]?.circuitState === "open").length;
   }, [providers, healthStatus]);
+
+  // Auto-reset circuit broken filter when no providers are broken
+  useEffect(() => {
+    if (circuitBrokenCount === 0 && circuitBrokenFilter) {
+      setCircuitBrokenFilter(false);
+    }
+  }, [circuitBrokenCount, circuitBrokenFilter]);
 
   // Extract unique groups from all providers
   const allGroups = useMemo(() => {
