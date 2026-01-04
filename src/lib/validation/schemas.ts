@@ -199,8 +199,11 @@ export const UpdateUserSchema = z.object({
   isEnabled: z.boolean().optional(),
   expiresAt: z.preprocess(
     (val) => {
-      // null/undefined/空字符串 -> 视为未设置
-      if (val === null || val === undefined || val === "") return undefined;
+      // 更新语义：
+      // - undefined：不更新该字段
+      // - null/空字符串：显式清除过期时间（永不过期）
+      if (val === undefined) return undefined;
+      if (val === null || val === "") return null;
 
       // 已经是 Date 对象
       if (val instanceof Date) {
@@ -222,6 +225,7 @@ export const UpdateUserSchema = z.object({
     },
     z
       .date()
+      .nullable()
       .optional()
       .superRefine((date, ctx) => {
         if (!date) {
