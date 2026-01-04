@@ -26,6 +26,9 @@ vi.mock("next/headers", () => ({
     delete: vi.fn(),
     has: vi.fn((name: string) => name === "auth-token" && !!process.env.TEST_ADMIN_TOKEN),
   })),
+  headers: vi.fn(() => ({
+    get: vi.fn(() => null),
+  })),
 }));
 
 // ==================== Mock next-intl ====================

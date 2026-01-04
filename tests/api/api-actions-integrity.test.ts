@@ -113,6 +113,22 @@ describe("OpenAPI 端点完整性检查", () => {
     }
   });
 
+  test("我的用量模块的所有端点应该被注册", () => {
+    const expectedPaths = [
+      "/api/actions/my-usage/getMyUsageMetadata",
+      "/api/actions/my-usage/getMyQuota",
+      "/api/actions/my-usage/getMyTodayStats",
+      "/api/actions/my-usage/getMyUsageLogs",
+      "/api/actions/my-usage/getMyAvailableModels",
+      "/api/actions/my-usage/getMyAvailableEndpoints",
+    ];
+
+    for (const path of expectedPaths) {
+      expect(openApiDoc.paths[path]).toBeDefined();
+      expect(openApiDoc.paths[path].post).toBeDefined();
+    }
+  });
+
   test("概览模块的所有端点应该被注册", () => {
     const expectedPaths = ["/api/actions/overview/getOverviewData"];
 

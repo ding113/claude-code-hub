@@ -4,9 +4,9 @@
  * 用途：在测试后自动清理创建的测试数据
  */
 
-import { and, isNull, like, or, sql } from "drizzle-orm";
+import { and, inArray, isNull, like, or, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { users } from "@/drizzle/schema";
+import { keys as keysTable, users } from "@/drizzle/schema";
 
 /**
  * 清理所有测试用户及其关联数据
@@ -53,26 +53,25 @@ export async function cleanupTestUsers(options?: {
     const testUserIds = testUsers.map((u) => u.id);
 
     // 2. 软删除关联的 Keys
-    const deletedKeys = await db.execute(sql`
-      UPDATE keys
-      SET deleted_at = NOW(), updated_at = NOW()
-      WHERE user_id = ANY(${testUserIds})
-        AND deleted_at IS NULL
-    `);
+    const now = new Date();
+    const deletedKeys = await db
+      .update(keysTable)
+      .set({ deletedAt: now, updatedAt: now })
+      .where(and(inArray(keysTable.userId, testUserIds), isNull(keysTable.deletedAt)))
+      .returning({ id: keysTable.id });
 
     // 3. 软删除测试用户
-    const _deletedUsers = await db.execute(sql`
-      UPDATE users
-      SET deleted_at = NOW(), updated_at = NOW()
-      WHERE id = ANY(${testUserIds})
-        AND deleted_at IS NULL
-    `);
+    await db
+      .update(users)
+      .set({ deletedAt: now, updatedAt: now })
+      .where(and(inArray(users.id, testUserIds), isNull(users.deletedAt)))
+      .returning({ id: users.id });
 
     console.log(`✅ 清理完成：删除 ${testUsers.length} 个用户和对应的 Keys`);
 
     return {
       deletedUsers: testUsers.length,
-      deletedKeys: deletedKeys.count ?? 0,
+      deletedKeys: deletedKeys.length,
       userNames: testUsers.map((u) => u.name),
     };
   } catch (error) {
