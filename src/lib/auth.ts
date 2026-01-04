@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { config } from "@/lib/config/config";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { findActiveKeyByKeyString } from "@/repository/key";
@@ -119,10 +119,29 @@ export async function getSession(options?: {
    */
   allowReadOnlyAccess?: boolean;
 }): Promise<AuthSession | null> {
-  const keyString = await getAuthCookie();
+  const keyString = await getAuthToken();
   if (!keyString) {
     return null;
   }
 
   return validateKey(keyString, options);
+}
+
+function parseBearerToken(raw: string | null | undefined): string | undefined {
+  const trimmed = raw?.trim();
+  if (!trimmed) return undefined;
+
+  const match = /^Bearer\s+(.+)$/i.exec(trimmed);
+  const token = match?.[1]?.trim();
+  return token || undefined;
+}
+
+async function getAuthToken(): Promise<string | undefined> {
+  // 优先使用 Cookie（兼容现有 Web UI 的登录态）
+  const cookieToken = await getAuthCookie();
+  if (cookieToken) return cookieToken;
+
+  // Cookie 缺失时，允许通过 Authorization: Bearer <token> 自助调用只读接口
+  const headersStore = await headers();
+  return parseBearerToken(headersStore.get("authorization"));
 }

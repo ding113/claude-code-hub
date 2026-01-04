@@ -6,9 +6,9 @@ import { callActionsRoute } from "../test-utils";
 
 /**
  * 说明：
- * - /api/actions 的鉴权在 adapter 层通过 Cookie 读取 auth-token
- * - my-usage 的业务逻辑在 action 层仍会调用 getSession()（next/headers cookies）
- * - 测试环境下需要 mock next/headers，否则 getSession 无法读取 Cookie
+ * - /api/actions 的鉴权在 adapter 层支持 Cookie 与 Authorization: Bearer <token>
+ * - my-usage 的业务逻辑在 action 层仍会调用 getSession()（next/headers cookies/headers）
+ * - 测试环境下需要 mock next/headers，否则 getSession 无法读取认证信息
  *
  * 这里用一个可变的 currentAuthToken 作为“当前请求 Cookie”，并确保：
  * - adapter 校验用的 Cookie（callActionsRoute.authToken）
@@ -16,6 +16,7 @@ import { callActionsRoute } from "../test-utils";
  * 两者保持一致，避免出现“adapter 通过但 action 读不到 session”的假失败。
  */
 let currentAuthToken: string | undefined;
+let currentAuthorization: string | undefined;
 
 vi.mock("next/headers", () => ({
   cookies: () => ({
@@ -26,6 +27,12 @@ vi.mock("next/headers", () => ({
     set: vi.fn(),
     delete: vi.fn(),
     has: (name: string) => name === "auth-token" && Boolean(currentAuthToken),
+  }),
+  headers: () => ({
+    get: (name: string) => {
+      if (name.toLowerCase() !== "authorization") return null;
+      return currentAuthorization ?? null;
+    },
   }),
 }));
 
@@ -142,6 +149,7 @@ describe("my-usage API：只读 Key 自助查询", () => {
 
   beforeEach(() => {
     currentAuthToken = undefined;
+    currentAuthorization = undefined;
   });
 
   test("未携带 auth-token：my-usage 端点应返回 401", async () => {
@@ -207,6 +215,54 @@ describe("my-usage API：只读 Key 自助查询", () => {
     });
     expect(usageLogsApi.response.status).toBe(401);
     expect(usageLogsApi.json).toMatchObject({ ok: false });
+  });
+
+  test("Bearer-only：仅 Authorization 也应可查询 my-usage，但仍禁止访问 WebUI API", async () => {
+    const unique = `my-usage-bearer-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const user = await createTestUser(`Test ${unique}`);
+    createdUserIds.push(user.id);
+
+    const readonlyKey = await createTestKey({
+      userId: user.id,
+      key: `test-readonly-key-${unique}`,
+      name: `readonly-${unique}`,
+      canLoginWebUi: false,
+    });
+    createdKeyIds.push(readonlyKey.id);
+
+    const now = new Date();
+    const msgId = await createMessage({
+      userId: user.id,
+      key: readonlyKey.key,
+      model: "gpt-4.1-mini",
+      endpoint: "/v1/messages",
+      costUsd: "0.0100",
+      inputTokens: 10,
+      outputTokens: 20,
+      createdAt: new Date(now.getTime() - 60 * 1000),
+    });
+    createdMessageIds.push(msgId);
+
+    currentAuthorization = `Bearer ${readonlyKey.key}`;
+
+    const stats = await callActionsRoute({
+      method: "POST",
+      pathname: "/api/actions/my-usage/getMyTodayStats",
+      headers: { Authorization: currentAuthorization },
+      body: {},
+    });
+    expect(stats.response.status).toBe(200);
+    expect(stats.json).toMatchObject({ ok: true });
+    expect((stats.json as any).data.calls).toBe(1);
+
+    const usersApi = await callActionsRoute({
+      method: "POST",
+      pathname: "/api/actions/users/getUsers",
+      headers: { Authorization: currentAuthorization },
+      body: {},
+    });
+    expect(usersApi.response.status).toBe(401);
+    expect(usersApi.json).toMatchObject({ ok: false });
   });
 
   test("今日统计：应与 message_request 数据一致，并排除 warmup 与其他 Key 数据", async () => {

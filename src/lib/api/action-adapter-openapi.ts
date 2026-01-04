@@ -19,7 +19,7 @@ function getBearerTokenFromAuthHeader(raw: string | undefined): string | null {
   const trimmed = raw?.trim();
   if (!trimmed) return null;
 
-  const match = /^Bearer\\s+(.+)$/i.exec(trimmed);
+  const match = /^Bearer\s+(.+)$/i.exec(trimmed);
   const token = match?.[1]?.trim();
   return token ? token : null;
 }

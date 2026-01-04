@@ -19,6 +19,7 @@ import {
  */
 
 let currentCookieValue: string | undefined;
+let currentAuthorizationValue: string | undefined;
 const cookieSet = vi.fn((name: string, value: string) => {
   if (name === "auth-token") currentCookieValue = value;
 });
@@ -35,6 +36,12 @@ vi.mock("next/headers", () => ({
     set: cookieSet,
     delete: cookieDelete,
     has: (name: string) => name === "auth-token" && Boolean(currentCookieValue),
+  }),
+  headers: () => ({
+    get: (name: string) => {
+      if (name.toLowerCase() !== "authorization") return null;
+      return currentAuthorizationValue ?? null;
+    },
   }),
 }));
 
@@ -98,6 +105,7 @@ describe("auth.ts：validateKey / getSession（安全边界）", () => {
 
   beforeEach(() => {
     currentCookieValue = undefined;
+    currentAuthorizationValue = undefined;
     cookieSet.mockClear();
     cookieDelete.mockClear();
   });
@@ -186,11 +194,28 @@ describe("auth.ts：validateKey / getSession（安全边界）", () => {
     const session = await getSession({ allowReadOnlyAccess: true });
     expect(session?.key.key).toBe(key.key);
   });
+
+  test("getSession：仅 Authorization: Bearer 时也应返回 session", async () => {
+    const unique = `auth-bearer-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const user = await createTestUser(`Test ${unique}`);
+    createdUserIds.push(user.id);
+    const key = await createTestKey({
+      userId: user.id,
+      key: `test-key-${unique}`,
+      canLoginWebUi: false,
+    });
+    createdKeyIds.push(key.id);
+
+    currentAuthorizationValue = `Bearer ${key.key}`;
+    const session = await getSession({ allowReadOnlyAccess: true });
+    expect(session?.key.key).toBe(key.key);
+  });
 });
 
 describe("auth.ts：Cookie 工具函数与跳转目标", () => {
   beforeEach(() => {
     currentCookieValue = undefined;
+    currentAuthorizationValue = undefined;
     cookieSet.mockClear();
     cookieDelete.mockClear();
   });
