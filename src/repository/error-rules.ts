@@ -705,6 +705,24 @@ const DEFAULT_ERROR_RULES = [
       },
     },
   },
+  // Issue #541: Codex model reasoning effort mismatch
+  {
+    pattern: "Unsupported value.*is not supported with.*model.*Supported values",
+    category: "thinking_error",
+    description: "Reasoning effort (thinking intensity) not supported by the Codex model",
+    matchType: "regex" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 72,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "thinking_error",
+        message:
+          "当前思考强度不支持该模型，请调整 reasoning_effort 参数或切换模型（如 'high' 仅支持部分模型）",
+      },
+    },
+  },
 ];
 
 /**
