@@ -302,8 +302,8 @@ const DEFAULT_ERROR_RULES = [
       error: {
         code: 400,
         status: "INVALID_ARGUMENT",
-        message: "当前中转站不支持 Gemini generateContent 端点"
-      }
+        message: "当前中转站不支持 Gemini generateContent 端点",
+      },
     },
   },
   {
