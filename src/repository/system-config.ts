@@ -333,6 +333,9 @@ export async function updateSystemSettings(
     if (isTableMissingError(error)) {
       throw new Error("系统设置数据表不存在，请先执行数据库迁移。");
     }
+    if (isUndefinedColumnError(error)) {
+      throw new Error("system_settings 表列缺失，请执行数据库迁移以升级数据库结构。");
+    }
     throw error;
   }
 }
