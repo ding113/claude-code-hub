@@ -85,6 +85,8 @@
       "enableHttp2Desc": "启用后，代理请求将优先使用 HTTP/2 协议。如果 HTTP/2 失败，将自动降级到 HTTP/1.1。",
       "interceptAnthropicWarmupRequests": "拦截 Warmup 请求（Anthropic）",
       "interceptAnthropicWarmupRequestsDesc": "开启后，识别到 Claude Code 的 Warmup 探测请求将由 CCH 直接抢答短响应，避免访问上游供应商；该请求会记录在日志中，但不计费、不限流、不计入统计。",
+      "enableThinkingSignatureFix": "启用 Thinking 签名修复",
+      "enableThinkingSignatureFixDesc": "开启后，当上游返回 4xx/5xx 错误且请求中包含 thinking/redacted_thinking 块时，CCH 将自动移除这些块并重试一次，用于降低跨供应商切换导致的 thinking 签名不兼容风险；该行为会在请求日志中留下审计标记。",
       "saveSettings": "保存设置",
       "keepDays": "保留天数",
       "keepDaysDesc": "清理超过此天数的历史日志",

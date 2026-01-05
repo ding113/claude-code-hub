@@ -128,6 +128,7 @@
       "blocked": "被拦截",
       "nonBilling": "非计费",
       "skipped": "已跳过",
+      "thinkingSignatureFix": "修复",
       "times": "次",
       "loadedCount": "已加载 {count} 条记录",
       "loadingMore": "加载更多中...",

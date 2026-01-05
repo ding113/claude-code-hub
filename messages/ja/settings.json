@@ -102,6 +102,8 @@
       "verboseProviderErrorDesc": "有効にすると、すべてのプロバイダーが利用不可の場合に詳細なエラーメッセージ（プロバイダー数、レート制限の理由など）を返します。無効の場合は簡潔なエラーコードのみを返します。",
       "interceptAnthropicWarmupRequests": "Warmup リクエストを遮断（Anthropic）",
       "interceptAnthropicWarmupRequestsDesc": "有効にすると、Claude Code の Warmup プローブ要求は CCH が直接短い応答を返し、上流プロバイダーへのリクエストを回避します。ログには残りますが、課金/レート制限/統計には含まれません。",
+      "enableThinkingSignatureFix": "Thinking 署名修復を有効化",
+      "enableThinkingSignatureFixDesc": "有効にすると、上流が 4xx/5xx を返し、リクエストに thinking/redacted_thinking ブロックが含まれる場合、CCH はそれらを除去して 1 回だけ再試行します（プロバイダー切り替え時の署名不整合対策）。この動作は監査のためログに記録されます。",
       "cleanupSchedule": "クリーンアップスケジュール",
       "cleanupScheduleDesc": "自動クリーンアップの実行スケジュールを選択します",
       "configUpdated": "システム設定が更新されました。ページが更新され、通貨表示の変更が適用されます。",

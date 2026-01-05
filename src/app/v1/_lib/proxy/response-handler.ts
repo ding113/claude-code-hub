@@ -55,6 +55,20 @@ function cleanResponseHeaders(headers: Headers): Headers {
   return cleaned;
 }
 
+function getThinkingSignatureFixAuditPatch(session: ProxySession): {
+  thinkingSignatureFixApplied?: boolean;
+  thinkingSignatureFixReason?: string | null;
+} {
+  if (!session.getThinkingSignatureFixApplied()) {
+    return {};
+  }
+
+  return {
+    thinkingSignatureFixApplied: true,
+    thinkingSignatureFixReason: session.getThinkingSignatureFixReason(),
+  };
+}
+
 export class ProxyResponseHandler {
   static async dispatch(session: ProxySession, response: Response): Promise<Response> {
     const contentType = response.headers.get("content-type") || "";
@@ -240,6 +254,7 @@ export class ProxyResponseHandler {
             model: session.getCurrentModel() ?? undefined, // ⭐ 更新重定向后的模型
             providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
             context1mApplied: session.getContext1mApplied(),
+            ...getThinkingSignatureFixAuditPatch(session),
           });
           const tracker = ProxyStatusTracker.getInstance();
           tracker.endRequest(messageContext.user.id, messageContext.id);
@@ -390,6 +405,7 @@ export class ProxyResponseHandler {
             model: session.getCurrentModel() ?? undefined, // ⭐ 更新重定向后的模型
             providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
             context1mApplied: session.getContext1mApplied(),
+            ...getThinkingSignatureFixAuditPatch(session),
           });
 
           // 记录请求结束
@@ -948,6 +964,7 @@ export class ProxyResponseHandler {
           model: session.getCurrentModel() ?? undefined, // ⭐ 更新重定向后的模型
           providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
           context1mApplied: session.getContext1mApplied(),
+          ...getThinkingSignatureFixAuditPatch(session),
         });
       };
 
@@ -1751,6 +1768,7 @@ async function finalizeRequestStats(
       model: session.getCurrentModel() ?? undefined,
       providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
       context1mApplied: session.getContext1mApplied(),
+      ...getThinkingSignatureFixAuditPatch(session),
     });
     return;
   }
@@ -1832,6 +1850,7 @@ async function finalizeRequestStats(
     model: session.getCurrentModel() ?? undefined,
     providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
     context1mApplied: session.getContext1mApplied(),
+    ...getThinkingSignatureFixAuditPatch(session),
   });
 }
 
@@ -1966,6 +1985,7 @@ async function persistRequestFailure(options: {
       model: session.getCurrentModel() ?? undefined,
       providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
       context1mApplied: session.getContext1mApplied(),
+      ...getThinkingSignatureFixAuditPatch(session),
     });
 
     const isAsyncWrite = getEnvConfig().MESSAGE_REQUEST_WRITE_MODE !== "sync";

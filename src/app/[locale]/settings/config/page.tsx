@@ -41,6 +41,7 @@ async function SettingsConfigContent() {
             verboseProviderError: settings.verboseProviderError,
             enableHttp2: settings.enableHttp2,
             interceptAnthropicWarmupRequests: settings.interceptAnthropicWarmupRequests,
+            enableThinkingSignatureFix: settings.enableThinkingSignatureFix,
           }}
         />
       </Section>

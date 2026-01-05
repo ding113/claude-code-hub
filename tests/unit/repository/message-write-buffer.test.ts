@@ -143,6 +143,29 @@ describe("message_request 异步批量写入", () => {
     expect(built.sql).toContain("::jsonb");
   });
 
+  it("应支持 thinkingSignatureFixApplied/Reason 字段批量写入（用于审计）", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+
+    const { enqueueMessageRequestUpdate, stopMessageRequestWriteBuffer } = await import(
+      "@/repository/message-write-buffer"
+    );
+
+    enqueueMessageRequestUpdate(99, {
+      thinkingSignatureFixApplied: true,
+      thinkingSignatureFixReason: '{"action":"strip_thinking_blocks"}',
+    });
+
+    await stopMessageRequestWriteBuffer();
+
+    expect(executeMock).toHaveBeenCalledTimes(1);
+
+    const query = executeMock.mock.calls[0]?.[0];
+    const built = toSqlText(query);
+
+    expect(built.sql).toContain("thinking_signature_fix_applied");
+    expect(built.sql).toContain("thinking_signature_fix_reason");
+  });
+
   it("stop 应等待 in-flight flush 完成", async () => {
     process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
 

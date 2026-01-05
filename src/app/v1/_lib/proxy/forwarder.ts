@@ -10,7 +10,7 @@ import {
   recordSuccess,
 } from "@/lib/circuit-breaker";
 import { applyCodexProviderOverrides } from "@/lib/codex/provider-overrides";
-import { isHttp2Enabled } from "@/lib/config";
+import { isHttp2Enabled, isThinkingSignatureFixEnabled } from "@/lib/config";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { PROVIDER_DEFAULTS, PROVIDER_LIMITS } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
@@ -40,6 +40,10 @@ import { mapClientFormatToTransformer, mapProviderTypeToTransformer } from "./fo
 import { ModelRedirector } from "./model-redirector";
 import { ProxyProviderResolver } from "./provider-selector";
 import type { ProxySession } from "./session";
+import {
+  isThinkingSignatureRelatedError,
+  sanitizeClaudeMessagesRequestThinkingBlocks,
+} from "./thinking-signature-recovery";
 
 const STANDARD_ENDPOINTS = [
   "/v1/messages",
@@ -1641,10 +1645,131 @@ export class ProxyForwarder {
       if (responseTimeoutId) {
         clearTimeout(responseTimeoutId);
       }
-      throw await ProxyError.fromUpstreamResponse(response, {
+      const proxyError = await ProxyError.fromUpstreamResponse(response, {
         id: provider.id,
         name: provider.name,
       });
+
+      // 可选：对 thinking/signature 相关 400 做一次最小降级重试，避免会话进入不可恢复错误循环
+      try {
+        const enabled = await isThinkingSignatureFixEnabled();
+
+        if (enabled && typeof init.body === "string") {
+          let parsedBody: unknown = null;
+          try {
+            parsedBody = JSON.parse(init.body);
+          } catch {
+            parsedBody = null;
+          }
+
+          if (parsedBody && typeof parsedBody === "object" && !Array.isArray(parsedBody)) {
+            const { sanitized, changed, removedBlocks } =
+              sanitizeClaudeMessagesRequestThinkingBlocks(parsedBody as Record<string, unknown>);
+
+            if (changed) {
+              const isMatchedErrorPattern = isThinkingSignatureRelatedError(proxyError);
+              const status = proxyError.statusCode;
+
+              // 错误格式/状态码不稳定时的保守回退：
+              // - 仅当请求体里确实存在 thinking/redacted_thinking（changed=true）才会进入此逻辑
+              // - 排除明显无关的状态码（鉴权/限流/配额/路由），避免无意义二次请求
+              //
+              // 注意：即使错误消息命中 signature/thinking 关键字，也不应对这些状态码重试，
+              // 否则可能掩盖真实的鉴权/配额/限流问题并造成额外请求压力。
+              const excludedStatusCodes = new Set([401, 402, 403, 404, 429]);
+              if (excludedStatusCodes.has(status)) {
+                throw proxyError;
+              }
+
+              logger.info(
+                "[ThinkingSignatureFix] Retrying request after stripping thinking blocks",
+                {
+                  providerId: provider.id,
+                  providerName: provider.name,
+                  removedBlocks,
+                  status,
+                  matchedPattern: isMatchedErrorPattern,
+                }
+              );
+
+              session.setThinkingSignatureFixApplied({
+                action: "strip_thinking_blocks",
+                removedBlocks,
+                triggerErrorMessage: proxyError.message,
+                triggerStatusCode: status,
+                strategy: isMatchedErrorPattern ? "matched_error_pattern" : "fallback_status_only",
+              });
+
+              // 重新启动响应超时计时器（如果有配置超时时间）
+              if (responseTimeoutMs > 0) {
+                responseTimeoutId = setTimeout(() => {
+                  responseController.abort();
+                  logger.warn("[ThinkingSignatureFix] Response timeout on retry", {
+                    providerId: provider.id,
+                    providerName: provider.name,
+                    responseTimeoutMs,
+                  });
+                }, responseTimeoutMs);
+              }
+
+              const retryInit = { ...init, body: JSON.stringify(sanitized) };
+              const retryResponse = useErrorTolerantFetch
+                ? await ProxyForwarder.fetchWithoutAutoDecode(
+                    proxyUrl,
+                    retryInit,
+                    provider.id,
+                    provider.name,
+                    session
+                  )
+                : await fetch(proxyUrl, retryInit);
+
+              if (retryResponse.ok) {
+                // 让 response-handler 继续负责清理 response timeout
+                // 注意：这里不能直接 return，否则会跳过下方“为 session 绑定 clearResponseTimeout/responseController”
+                const sessionWithTimeout = session as ProxySession & {
+                  clearResponseTimeout?: () => void;
+                  responseController?: AbortController;
+                };
+
+                sessionWithTimeout.clearResponseTimeout = () => {
+                  if (responseTimeoutId) {
+                    clearTimeout(responseTimeoutId);
+                  }
+                  logger.debug("ProxyForwarder: Response timeout cleared by response-handler", {
+                    providerId: provider.id,
+                    responseTimeoutMs,
+                    responseTimeoutType,
+                  });
+                };
+
+                sessionWithTimeout.responseController = responseController;
+                return retryResponse;
+              }
+
+              // Retry 仍失败：按常规错误处理抛出
+              if (responseTimeoutId) {
+                clearTimeout(responseTimeoutId);
+              }
+              throw await ProxyError.fromUpstreamResponse(retryResponse, {
+                id: provider.id,
+                name: provider.name,
+              });
+            }
+          }
+        }
+      } catch (retryError) {
+        // 若重试逻辑内部抛出 ProxyError，直接向上抛；否则回退为原始错误
+        if (retryError instanceof ProxyError) {
+          throw retryError;
+        }
+        logger.warn("[ThinkingSignatureFix] Retry attempt aborted due to internal error", {
+          providerId: provider.id,
+          providerName: provider.name,
+          error: retryError instanceof Error ? retryError.message : String(retryError),
+        });
+      }
+
+      throw proxyError;
     }
 
     // 将响应超时清理函数和 controller 引用附加到 session，供 response-handler 使用

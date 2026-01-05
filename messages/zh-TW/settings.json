@@ -102,6 +102,8 @@
       "verboseProviderErrorDesc": "開啟後，當所有供應商不可用時返回詳細錯誤資訊（包含供應商數量、限流原因等）；關閉後僅返回簡潔錯誤碼。",
       "interceptAnthropicWarmupRequests": "攔截 Warmup 請求（Anthropic）",
       "interceptAnthropicWarmupRequestsDesc": "開啟後，識別到 Claude Code 的 Warmup 探測請求將由 CCH 直接搶答短回應，避免存取上游供應商；該請求會記錄在日誌中，但不計費、不限流、不計入統計。",
+      "enableThinkingSignatureFix": "啟用 Thinking 簽名修復",
+      "enableThinkingSignatureFixDesc": "開啟後，當上游返回 4xx/5xx 且請求中包含 thinking/redacted_thinking 區塊時，CCH 會移除這些區塊並重試一次，用於降低跨供應商切換造成的 thinking 簽名不相容風險；該行為會在請求日誌中留下審計標記。",
       "cleanupSchedule": "清理週期",
       "cleanupScheduleDesc": "選擇自動清理的執行週期",
       "configUpdated": "系統設定已更新，頁面將重新整理以應用貨幣顯示變更。",

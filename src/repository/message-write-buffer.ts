@@ -26,6 +26,9 @@ export type MessageRequestUpdatePatch = {
   model?: string;
   providerId?: number;
   context1mApplied?: boolean;
+  // thinking/signature 修复审计字段（默认 false，仅在触发修复时写入 true）
+  thinkingSignatureFixApplied?: boolean;
+  thinkingSignatureFixReason?: string | null;
 };
 
 type MessageRequestUpdateRecord = {
@@ -58,6 +61,8 @@ const COLUMN_MAP: Record<keyof MessageRequestUpdatePatch, string> = {
   model: "model",
   providerId: "provider_id",
   context1mApplied: "context_1m_applied",
+  thinkingSignatureFixApplied: "thinking_signature_fix_applied",
+  thinkingSignatureFixReason: "thinking_signature_fix_reason",
 };
 
 function loadWriterConfig(): WriterConfig {

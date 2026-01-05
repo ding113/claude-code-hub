@@ -38,6 +38,7 @@ export async function saveSystemSettings(formData: {
   verboseProviderError?: boolean;
   enableHttp2?: boolean;
   interceptAnthropicWarmupRequests?: boolean;
+  enableThinkingSignatureFix?: boolean;
 }): Promise<ActionResult<SystemSettings>> {
   try {
     const session = await getSession();
@@ -59,6 +60,7 @@ export async function saveSystemSettings(formData: {
       verboseProviderError: validated.verboseProviderError,
       enableHttp2: validated.enableHttp2,
       interceptAnthropicWarmupRequests: validated.interceptAnthropicWarmupRequests,
+      enableThinkingSignatureFix: validated.enableThinkingSignatureFix,
     });
 
     // Invalidate the system settings cache so proxy requests get fresh settings

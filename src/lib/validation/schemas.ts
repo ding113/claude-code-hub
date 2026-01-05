@@ -741,6 +741,8 @@ export const UpdateSystemSettingsSchema = z.object({
   enableHttp2: z.boolean().optional(),
   // 可选拦截 Anthropic Warmup 请求（可选）
   interceptAnthropicWarmupRequests: z.boolean().optional(),
+  // 可选：对 thinking/signature 不兼容错误做最小降级重试（可选）
+  enableThinkingSignatureFix: z.boolean().optional(),
 });
 
 // 导出类型推断

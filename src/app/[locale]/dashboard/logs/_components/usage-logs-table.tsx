@@ -218,6 +218,14 @@ export function UsageLogsTable({
                               </Badge>
                             ) : null;
                           })()}
+                          {log.thinkingSignatureFixApplied ? (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] leading-tight px-1 bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800 shrink-0"
+                            >
+                              {t("logs.table.thinkingSignatureFix")}
+                            </Badge>
+                          ) : null}
                         </div>
                       )}
                     </TableCell>

@@ -8,4 +8,5 @@ export {
   getCachedSystemSettings,
   invalidateSystemSettingsCache,
   isHttp2Enabled,
+  isThinkingSignatureFixEnabled,
 } from "./system-settings-cache";

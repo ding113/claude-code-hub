@@ -128,6 +128,7 @@
       "blocked": "已攔截",
       "nonBilling": "非計費",
       "skipped": "已跳過",
+      "thinkingSignatureFix": "修復",
       "times": "次",
       "loadedCount": "已載入 {count} 筆記錄",
       "loadingMore": "載入更多中...",

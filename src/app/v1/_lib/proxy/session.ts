@@ -93,6 +93,10 @@ export class ProxySession {
   // 1M Context Window applied (resolved)
   private context1mApplied: boolean = false;
 
+  // Thinking signature 修复标记（用于审计：是否对请求做过 thinking 块降级处理）
+  private thinkingSignatureFixApplied: boolean = false;
+  private thinkingSignatureFixReason: string | null = null;
+
   // Cached price data (lazy loaded: undefined=not loaded, null=no data)
   private cachedPriceData?: ModelPriceData | null;
 
@@ -253,6 +257,27 @@ export class ProxySession {
 
   getContext1mApplied(): boolean {
     return this.context1mApplied;
+  }
+
+  setThinkingSignatureFixApplied(details: {
+    action: "strip_thinking_blocks";
+    removedBlocks: number;
+    triggerErrorMessage: string;
+    // 错误码不稳定：保留触发时的状态码用于审计/排查
+    triggerStatusCode?: number;
+    // 策略标记：区分命中明确错误模式 vs 仅凭状态码做保守回退
+    strategy?: "matched_error_pattern" | "fallback_status_only";
+  }): void {
+    this.thinkingSignatureFixApplied = true;
+    this.thinkingSignatureFixReason = JSON.stringify(details);
+  }
+
+  getThinkingSignatureFixApplied(): boolean {
+    return Boolean(this.thinkingSignatureFixApplied);
+  }
+
+  getThinkingSignatureFixReason(): string | null {
+    return this.thinkingSignatureFixReason ?? null;
   }
 
   /**

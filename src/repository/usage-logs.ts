@@ -58,6 +58,8 @@ export interface UsageLogRow {
   userAgent: string | null; // User-Agent（客户端信息）
   messagesCount: number | null; // Messages 数量
   context1mApplied: boolean | null; // 是否应用了1M上下文窗口
+  thinkingSignatureFixApplied: boolean | null; // 是否触发 thinking/signature 修复（审计标记）
+  thinkingSignatureFixReason: string | null; // 修复原因/元数据（JSON 字符串）
 }
 
 export interface UsageLogSummary {
@@ -215,6 +217,8 @@ export async function findUsageLogsBatch(
       userAgent: messageRequest.userAgent,
       messagesCount: messageRequest.messagesCount,
       context1mApplied: messageRequest.context1mApplied,
+      thinkingSignatureFixApplied: messageRequest.thinkingSignatureFixApplied,
+      thinkingSignatureFixReason: messageRequest.thinkingSignatureFixReason,
     })
     .from(messageRequest)
     .innerJoin(users, eq(messageRequest.userId, users.id))
@@ -428,6 +432,8 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       userAgent: messageRequest.userAgent, // User-Agent
       messagesCount: messageRequest.messagesCount, // Messages 数量
       context1mApplied: messageRequest.context1mApplied, // 1M上下文窗口
+      thinkingSignatureFixApplied: messageRequest.thinkingSignatureFixApplied, // thinking/signature 修复标记
+      thinkingSignatureFixReason: messageRequest.thinkingSignatureFixReason, // 修复原因/元数据
     })
     .from(messageRequest)
     .innerJoin(users, eq(messageRequest.userId, users.id))

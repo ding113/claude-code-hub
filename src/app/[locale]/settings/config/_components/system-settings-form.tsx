@@ -30,6 +30,7 @@ interface SystemSettingsFormProps {
     | "verboseProviderError"
     | "enableHttp2"
     | "interceptAnthropicWarmupRequests"
+    | "enableThinkingSignatureFix"
   >;
 }
 
@@ -54,6 +55,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   const [interceptAnthropicWarmupRequests, setInterceptAnthropicWarmupRequests] = useState(
     initialSettings.interceptAnthropicWarmupRequests
   );
+  const [enableThinkingSignatureFix, setEnableThinkingSignatureFix] = useState(
+    initialSettings.enableThinkingSignatureFix
+  );
   const [isPending, startTransition] = useTransition();
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -73,6 +77,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         verboseProviderError,
         enableHttp2,
         interceptAnthropicWarmupRequests,
+        enableThinkingSignatureFix,
       });
 
       if (!result.ok) {
@@ -88,6 +93,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setVerboseProviderError(result.data.verboseProviderError);
         setEnableHttp2(result.data.enableHttp2);
         setInterceptAnthropicWarmupRequests(result.data.interceptAnthropicWarmupRequests);
+        setEnableThinkingSignatureFix(result.data.enableThinkingSignatureFix);
       }
 
       toast.success(t("configUpdated"));
@@ -211,6 +217,23 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
           id="intercept-anthropic-warmup"
           checked={interceptAnthropicWarmupRequests}
           onCheckedChange={(checked) => setInterceptAnthropicWarmupRequests(checked)}
+          disabled={isPending}
+        />
+      </div>
+
+      <div className="flex items-start justify-between gap-4 rounded-lg border border-dashed border-border px-4 py-3">
+        <div>
+          <Label htmlFor="enable-thinking-signature-fix" className="text-sm font-medium">
+            {t("enableThinkingSignatureFix")}
+          </Label>
+          <p className="text-xs text-muted-foreground mt-1">
+            {t("enableThinkingSignatureFixDesc")}
+          </p>
+        </div>
+        <Switch
+          id="enable-thinking-signature-fix"
+          checked={enableThinkingSignatureFix}
+          onCheckedChange={(checked) => setEnableThinkingSignatureFix(checked)}
           disabled={isPending}
         />
       </div>

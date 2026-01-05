@@ -161,6 +161,7 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     verboseProviderError: dbSettings?.verboseProviderError ?? false,
     enableHttp2: dbSettings?.enableHttp2 ?? false,
     interceptAnthropicWarmupRequests: dbSettings?.interceptAnthropicWarmupRequests ?? false,
+    enableThinkingSignatureFix: dbSettings?.enableThinkingSignatureFix ?? false,
     createdAt: dbSettings?.createdAt ? new Date(dbSettings.createdAt) : new Date(),
     updatedAt: dbSettings?.updatedAt ? new Date(dbSettings.updatedAt) : new Date(),
   };

@@ -148,6 +148,7 @@ function createFallbackSettings(): SystemSettings {
     verboseProviderError: false,
     enableHttp2: false,
     interceptAnthropicWarmupRequests: false,
+    enableThinkingSignatureFix: false,
     createdAt: now,
     updatedAt: now,
   };
@@ -172,6 +173,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       verboseProviderError: systemSettings.verboseProviderError,
       enableHttp2: systemSettings.enableHttp2,
       interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
+      enableThinkingSignatureFix: systemSettings.enableThinkingSignatureFix,
       createdAt: systemSettings.createdAt,
       updatedAt: systemSettings.updatedAt,
     };
@@ -302,6 +304,11 @@ export async function updateSystemSettings(
       updates.interceptAnthropicWarmupRequests = payload.interceptAnthropicWarmupRequests;
     }
 
+    // thinking/signature 修复开关（如果提供）
+    if (payload.enableThinkingSignatureFix !== undefined) {
+      updates.enableThinkingSignatureFix = payload.enableThinkingSignatureFix;
+    }
+
     const [updated] = await db
       .update(systemSettings)
       .set(updates)
@@ -320,6 +327,7 @@ export async function updateSystemSettings(
         verboseProviderError: systemSettings.verboseProviderError,
         enableHttp2: systemSettings.enableHttp2,
         interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
+        enableThinkingSignatureFix: systemSettings.enableThinkingSignatureFix,
         createdAt: systemSettings.createdAt,
         updatedAt: systemSettings.updatedAt,
       });

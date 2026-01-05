@@ -32,6 +32,9 @@ export interface SystemSettings {
   // 可选拦截 Anthropic Warmup 请求（默认关闭）
   interceptAnthropicWarmupRequests: boolean;
 
+  // 可选：对 thinking/signature 不兼容错误做最小降级重试（默认关闭）
+  enableThinkingSignatureFix: boolean;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -64,4 +67,7 @@ export interface UpdateSystemSettingsInput {
 
   // 可选拦截 Anthropic Warmup 请求（可选）
   interceptAnthropicWarmupRequests?: boolean;
+
+  // 可选：对 thinking/signature 不兼容错误做最小降级重试（可选）
+  enableThinkingSignatureFix?: boolean;
 }

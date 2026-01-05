@@ -104,6 +104,8 @@
       "enableHttp2Desc": "When enabled, proxy requests will prefer HTTP/2 protocol. Automatically falls back to HTTP/1.1 on failure.",
       "interceptAnthropicWarmupRequests": "Intercept Warmup Requests (Anthropic)",
       "interceptAnthropicWarmupRequestsDesc": "When enabled, Claude Code warmup probe requests will be answered by CCH directly to avoid upstream provider calls; the request is logged for audit but is not billed, not rate-limited, and excluded from statistics.",
+      "enableThinkingSignatureFix": "Enable Thinking Signature Fix",
+      "enableThinkingSignatureFixDesc": "When enabled, if upstream returns a 4xx/5xx error and the request contains thinking/redacted_thinking blocks, CCH will strip those blocks and retry once to mitigate cross-provider thinking signature incompatibility. This will be marked in request logs for audit.",
       "cleanupSchedule": "Cleanup Schedule",
       "cleanupScheduleDesc": "Select the execution schedule for automatic cleanup",
       "configUpdated": "System settings updated. The page will refresh to apply currency display changes.",

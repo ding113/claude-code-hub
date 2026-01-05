@@ -317,6 +317,10 @@ export const messageRequest = pgTable('message_request', {
   // 1M Context Window 应用状态
   context1mApplied: boolean('context_1m_applied').default(false),
 
+  // thinking/signature 修复标记（用于审计：是否对请求做过 thinking 块降级处理）
+  thinkingSignatureFixApplied: boolean('thinking_signature_fix_applied').notNull().default(false),
+  thinkingSignatureFixReason: text('thinking_signature_fix_reason'),
+
   // 错误信息
   errorMessage: text('error_message'),
   errorStack: text('error_stack'),  // 完整堆栈信息，用于排查 TypeError: terminated 等流错误
@@ -477,6 +481,9 @@ export const systemSettings = pgTable('system_settings', {
   interceptAnthropicWarmupRequests: boolean('intercept_anthropic_warmup_requests')
     .notNull()
     .default(false),
+
+  // 可选：对 thinking/signature 不兼容错误做最小降级重试（默认关闭）
+  enableThinkingSignatureFix: boolean('enable_thinking_signature_fix').notNull().default(false),
 
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),

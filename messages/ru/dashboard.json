@@ -128,6 +128,7 @@
       "blocked": "Заблокировано",
       "nonBilling": "Не тарифицируется",
       "skipped": "Пропущено",
+      "thinkingSignatureFix": "Fix",
       "times": "раз",
       "loadedCount": "Загружено {count} записей",
       "loadingMore": "Загрузка...",

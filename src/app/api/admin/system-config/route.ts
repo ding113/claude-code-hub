@@ -39,6 +39,12 @@ export async function GET() {
  *   cleanupRetentionDays?: number;
  *   cleanupSchedule?: string;
  *   cleanupBatchSize?: number;
+ *   billingModelSource?: string;
+ *   enableClientVersionCheck?: boolean;
+ *   verboseProviderError?: boolean;
+ *   enableHttp2?: boolean;
+ *   interceptAnthropicWarmupRequests?: boolean;
+ *   enableThinkingSignatureFix?: boolean;
  * }
  */
 export async function POST(req: Request) {
@@ -63,6 +69,12 @@ export async function POST(req: Request) {
       cleanupRetentionDays: validated.cleanupRetentionDays,
       cleanupSchedule: validated.cleanupSchedule,
       cleanupBatchSize: validated.cleanupBatchSize,
+      billingModelSource: validated.billingModelSource,
+      enableClientVersionCheck: validated.enableClientVersionCheck,
+      verboseProviderError: validated.verboseProviderError,
+      enableHttp2: validated.enableHttp2,
+      interceptAnthropicWarmupRequests: validated.interceptAnthropicWarmupRequests,
+      enableThinkingSignatureFix: validated.enableThinkingSignatureFix,
     });
 
     logger.info("系统配置已更新", {

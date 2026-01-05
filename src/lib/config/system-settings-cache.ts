@@ -24,9 +24,13 @@ let cachedSettings: SystemSettings | null = null;
 let cachedAt: number = 0;
 
 /** Default settings used when cache fetch fails */
-const DEFAULT_SETTINGS: Pick<SystemSettings, "enableHttp2" | "interceptAnthropicWarmupRequests"> = {
+const DEFAULT_SETTINGS: Pick<
+  SystemSettings,
+  "enableHttp2" | "interceptAnthropicWarmupRequests" | "enableThinkingSignatureFix"
+> = {
   enableHttp2: false,
   interceptAnthropicWarmupRequests: false,
+  enableThinkingSignatureFix: false,
 };
 
 /**
@@ -86,6 +90,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       enableClientVersionCheck: false,
       enableHttp2: DEFAULT_SETTINGS.enableHttp2,
       interceptAnthropicWarmupRequests: DEFAULT_SETTINGS.interceptAnthropicWarmupRequests,
+      enableThinkingSignatureFix: DEFAULT_SETTINGS.enableThinkingSignatureFix,
       createdAt: new Date(),
       updatedAt: new Date(),
     } satisfies SystemSettings;
@@ -100,6 +105,16 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
 export async function isHttp2Enabled(): Promise<boolean> {
   const settings = await getCachedSystemSettings();
   return settings.enableHttp2;
+}
+
+/**
+ * Get only the thinking signature fix enabled setting (optimized for proxy error recovery path)
+ *
+ * @returns Whether thinking signature fix is enabled
+ */
+export async function isThinkingSignatureFixEnabled(): Promise<boolean> {
+  const settings = await getCachedSystemSettings();
+  return settings.enableThinkingSignatureFix;
 }
 
 /**
