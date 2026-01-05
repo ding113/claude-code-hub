@@ -21,11 +21,11 @@ import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { useZodForm } from "@/lib/hooks/use-zod-form";
 import { getErrorMessage } from "@/lib/utils/error-messages";
 import { KeyFormSchema } from "@/lib/validation/schemas";
-import type { User } from "@/types/user";
+import type { KeyDialogUserContext } from "@/types/user";
 
 interface AddKeyFormProps {
   userId?: number;
-  user?: User;
+  user?: KeyDialogUserContext;
   isAdmin?: boolean;
   onSuccess?: (result: { generatedKey: string; name: string }) => void;
 }

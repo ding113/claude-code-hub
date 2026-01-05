@@ -322,22 +322,12 @@ export function KeyListHeader({
                     activeUser
                       ? {
                           id: activeUser.id,
-                          name: activeUser.name,
-                          description: activeUser.note || "",
-                          role: activeUser.role,
-                          rpm: activeUser.rpm,
-                          dailyQuota: activeUser.dailyQuota,
-                          providerGroup: activeUser.providerGroup || "default",
-                          createdAt: new Date(),
-                          updatedAt: new Date(),
+                          providerGroup: activeUser.providerGroup ?? null,
                           limit5hUsd: activeUser.limit5hUsd ?? undefined,
                           limitWeeklyUsd: activeUser.limitWeeklyUsd ?? undefined,
                           limitMonthlyUsd: activeUser.limitMonthlyUsd ?? undefined,
+                          limitTotalUsd: activeUser.limitTotalUsd ?? undefined,
                           limitConcurrentSessions: activeUser.limitConcurrentSessions ?? undefined,
-                          dailyResetMode: activeUser.dailyResetMode ?? "fixed",
-                          dailyResetTime: activeUser.dailyResetTime ?? "00:00",
-                          isEnabled: activeUser.isEnabled,
-                          expiresAt: activeUser.expiresAt ?? undefined,
                         }
                       : undefined
                   }

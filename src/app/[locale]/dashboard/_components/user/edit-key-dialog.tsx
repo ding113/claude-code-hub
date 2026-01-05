@@ -8,7 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { User } from "@/types/user";
+import type { KeyDialogUserContext } from "@/types/user";
 import { EditKeyForm } from "./forms/edit-key-form";
 
 export interface EditKeyDialogProps {
@@ -30,7 +30,7 @@ export interface EditKeyDialogProps {
     limitTotalUsd?: number | null;
     limitConcurrentSessions?: number;
   };
-  user?: User;
+  user?: KeyDialogUserContext;
   isAdmin?: boolean;
   onSuccess?: () => void;
 }

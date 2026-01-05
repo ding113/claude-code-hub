@@ -673,18 +673,15 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
           open={showCreateDialog}
           onOpenChange={handleCreateDialogClose}
           userId={selfUser.id}
-          user={
-            {
-              id: selfUser.id,
-              name: selfUser.name,
-              providerGroup: selfUser.providerGroup ?? null,
-              limit5hUsd: selfUser.limit5hUsd ?? undefined,
-              limitWeeklyUsd: selfUser.limitWeeklyUsd ?? undefined,
-              limitMonthlyUsd: selfUser.limitMonthlyUsd ?? undefined,
-              limitTotalUsd: selfUser.limitTotalUsd ?? undefined,
-              limitConcurrentSessions: selfUser.limitConcurrentSessions ?? undefined,
-            } as any
-          }
+          user={{
+            id: selfUser.id,
+            providerGroup: selfUser.providerGroup ?? null,
+            limit5hUsd: selfUser.limit5hUsd ?? undefined,
+            limitWeeklyUsd: selfUser.limitWeeklyUsd ?? undefined,
+            limitMonthlyUsd: selfUser.limitMonthlyUsd ?? undefined,
+            limitTotalUsd: selfUser.limitTotalUsd ?? undefined,
+            limitConcurrentSessions: selfUser.limitConcurrentSessions ?? undefined,
+          }}
           isAdmin={false}
           onSuccess={handleKeyCreated}
         />
@@ -696,18 +693,15 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
           open={showAddKeyDialog}
           onOpenChange={handleAddKeyDialogClose}
           userId={addKeyUser.id}
-          user={
-            {
-              id: addKeyUser.id,
-              name: addKeyUser.name,
-              providerGroup: addKeyUser.providerGroup ?? null,
-              limit5hUsd: addKeyUser.limit5hUsd ?? undefined,
-              limitWeeklyUsd: addKeyUser.limitWeeklyUsd ?? undefined,
-              limitMonthlyUsd: addKeyUser.limitMonthlyUsd ?? undefined,
-              limitTotalUsd: addKeyUser.limitTotalUsd ?? undefined,
-              limitConcurrentSessions: addKeyUser.limitConcurrentSessions ?? undefined,
-            } as any
-          }
+          user={{
+            id: addKeyUser.id,
+            providerGroup: addKeyUser.providerGroup ?? null,
+            limit5hUsd: addKeyUser.limit5hUsd ?? undefined,
+            limitWeeklyUsd: addKeyUser.limitWeeklyUsd ?? undefined,
+            limitMonthlyUsd: addKeyUser.limitMonthlyUsd ?? undefined,
+            limitTotalUsd: addKeyUser.limitTotalUsd ?? undefined,
+            limitConcurrentSessions: addKeyUser.limitConcurrentSessions ?? undefined,
+          }}
           isAdmin={isAdmin}
           onSuccess={handleKeyCreated}
         />

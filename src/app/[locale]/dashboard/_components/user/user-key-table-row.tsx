@@ -522,18 +522,15 @@ export function UserKeyTableRow({
                 limitTotalUsd: editingKey.limitTotalUsd,
                 limitConcurrentSessions: editingKey.limitConcurrentSessions,
               }}
-              user={
-                {
-                  id: user.id,
-                  name: user.name,
-                  providerGroup: user.providerGroup ?? null,
-                  limit5hUsd: user.limit5hUsd ?? undefined,
-                  limitWeeklyUsd: user.limitWeeklyUsd ?? undefined,
-                  limitMonthlyUsd: user.limitMonthlyUsd ?? undefined,
-                  limitTotalUsd: user.limitTotalUsd ?? undefined,
-                  limitConcurrentSessions: user.limitConcurrentSessions ?? undefined,
-                } as any
-              }
+              user={{
+                id: user.id,
+                providerGroup: user.providerGroup ?? null,
+                limit5hUsd: user.limit5hUsd ?? undefined,
+                limitWeeklyUsd: user.limitWeeklyUsd ?? undefined,
+                limitMonthlyUsd: user.limitMonthlyUsd ?? undefined,
+                limitTotalUsd: user.limitTotalUsd ?? undefined,
+                limitConcurrentSessions: user.limitConcurrentSessions ?? undefined,
+              }}
               isAdmin={isAdmin}
               onSuccess={() => {
                 setEditingKeyId(null);

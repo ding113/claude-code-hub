@@ -156,5 +156,19 @@ export interface UserDisplay {
 }
 
 /**
+ * Key Dialog 所需的用户上下文（精简版）
+ * 用于 AddKeyDialog/EditKeyDialog 组件，只包含限额相关字段
+ */
+export interface KeyDialogUserContext {
+  id: number;
+  providerGroup?: string | null;
+  limit5hUsd?: number;
+  limitWeeklyUsd?: number;
+  limitMonthlyUsd?: number;
+  limitTotalUsd?: number | null;
+  limitConcurrentSessions?: number;
+}
+
+/**
  * 用户表单数据
  */
