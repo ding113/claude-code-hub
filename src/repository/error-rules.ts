@@ -291,6 +291,22 @@ export async function deleteErrorRule(id: number): Promise<boolean> {
  */
 const DEFAULT_ERROR_RULES = [
   {
+    pattern: "Missing or invalid 'alt' query parameter. Expected 'alt=sse'",
+    category: "parameter_error",
+    description: "Not supported non-streaming request",
+    matchType: "contains" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 105,
+    overrideResponse: {
+      error: {
+        code: 400,
+        status: "INVALID_ARGUMENT",
+        message: "当前中转站不支持 Gemini generateContent 端点",
+      },
+    },
+  },
+  {
     pattern: "prompt is too long.*(tokens.*maximum|maximum.*tokens)",
     category: "prompt_limit",
     description: "Prompt token limit exceeded",
