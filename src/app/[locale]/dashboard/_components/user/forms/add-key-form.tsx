@@ -21,11 +21,11 @@ import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { useZodForm } from "@/lib/hooks/use-zod-form";
 import { getErrorMessage } from "@/lib/utils/error-messages";
 import { KeyFormSchema } from "@/lib/validation/schemas";
-import type { User } from "@/types/user";
+import type { KeyDialogUserContext } from "@/types/user";
 
 interface AddKeyFormProps {
   userId?: number;
-  user?: User;
+  user?: KeyDialogUserContext;
   isAdmin?: boolean;
   onSuccess?: (result: { generatedKey: string; name: string }) => void;
 }
@@ -53,7 +53,7 @@ export function AddKeyForm({ userId, user, isAdmin = false, onSuccess }: AddKeyF
     defaultValues: {
       name: "",
       expiresAt: "",
-      canLoginWebUi: true,
+      canLoginWebUi: false,
       providerGroup: PROVIDER_GROUP.DEFAULT,
       cacheTtlPreference: "inherit",
       limit5hUsd: null,
@@ -74,7 +74,8 @@ export function AddKeyForm({ userId, user, isAdmin = false, onSuccess }: AddKeyF
         const result = await addKey({
           userId: userId!,
           name: data.name,
-          expiresAt: data.expiresAt || undefined,
+          // 重要：清除到期时间时用空字符串表达，避免 undefined 在 Server Action 序列化时被丢弃
+          expiresAt: data.expiresAt ?? "",
           canLoginWebUi: data.canLoginWebUi,
           limit5hUsd: data.limit5hUsd,
           limitDailyUsd: data.limitDailyUsd,
@@ -151,6 +152,10 @@ export function AddKeyForm({ userId, user, isAdmin = false, onSuccess }: AddKeyF
         touched={form.getFieldProps("expiresAt").touched}
       />
 
+      {/* Balance Query Page toggle uses inverted logic by design:
+          - canLoginWebUi=true means user accesses full WebUI (switch OFF)
+          - canLoginWebUi=false means user uses independent balance page (switch ON)
+          The switch represents "enable independent page" which is !canLoginWebUi */}
       <div className="flex items-start justify-between gap-4 rounded-lg border border-dashed border-border px-4 py-3">
         <div>
           <Label htmlFor="can-login-web-ui" className="text-sm font-medium">
@@ -160,8 +165,8 @@ export function AddKeyForm({ userId, user, isAdmin = false, onSuccess }: AddKeyF
         </div>
         <Switch
           id="can-login-web-ui"
-          checked={form.values.canLoginWebUi}
-          onCheckedChange={(checked) => form.setValue("canLoginWebUi", checked)}
+          checked={!form.values.canLoginWebUi}
+          onCheckedChange={(checked) => form.setValue("canLoginWebUi", !checked)}
         />
       </div>
 

@@ -5,8 +5,9 @@ import {
   QueryClientProvider,
   useInfiniteQuery,
   useQuery,
+  useQueryClient,
 } from "@tanstack/react-query";
-import { Key, Loader2, Plus, Search } from "lucide-react";
+import { Loader2, Plus, Search } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getAllUserKeyGroups, getAllUserTags, getUsers, getUsersBatch } from "@/actions/users";
@@ -23,8 +24,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { TagInput } from "@/components/ui/tag-input";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import type { User, UserDisplay } from "@/types/user";
+import { AddKeyDialog } from "../_components/user/add-key-dialog";
 import { BatchEditDialog } from "../_components/user/batch-edit/batch-edit-dialog";
-import { UnifiedEditDialog } from "../_components/user/unified-edit-dialog";
+import { CreateUserDialog } from "../_components/user/create-user-dialog";
 import { UserManagementTable } from "../_components/user/user-management-table";
 
 const queryClient = new QueryClient({
@@ -65,6 +67,7 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
   const tUserMgmt = useTranslations("dashboard.userManagement");
   const tKeyList = useTranslations("dashboard.keyList");
   const tCommon = useTranslations("common");
+  const queryClient = useQueryClient();
   const isAdmin = currentUser.role === "admin";
   const [searchTerm, setSearchTerm] = useState("");
   const [tagFilters, setTagFilters] = useState<string[]>([]);
@@ -224,6 +227,10 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
   // Create dialog state
   const [showCreateDialog, setShowCreateDialog] = useState(false);
 
+  // Add key dialog state
+  const [showAddKeyDialog, setShowAddKeyDialog] = useState(false);
+  const [addKeyUser, setAddKeyUser] = useState<UserDisplay | null>(null);
+
   const handleCreateUser = useCallback(() => {
     setShowCreateDialog(true);
   }, []);
@@ -235,6 +242,22 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
   const handleCreateDialogClose = useCallback((open: boolean) => {
     setShowCreateDialog(open);
   }, []);
+
+  const handleAddKey = useCallback((user: UserDisplay) => {
+    setAddKeyUser(user);
+    setShowAddKeyDialog(true);
+  }, []);
+
+  const handleAddKeyDialogClose = useCallback((open: boolean) => {
+    setShowAddKeyDialog(open);
+    if (!open) {
+      setAddKeyUser(null);
+    }
+  }, []);
+
+  const handleKeyCreated = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["users"] });
+  }, [queryClient]);
 
   const hasPendingFilterChanges = useMemo(() => {
     const normalize = (values: string[]) => [...values].sort().join("|");
@@ -473,15 +496,10 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
               : t("description", { count: visibleUsers.length })}
           </p>
         </div>
-        {isAdmin ? (
+        {isAdmin && (
           <Button onClick={handleCreateUser}>
             <Plus className="mr-2 h-4 w-4" />
             {t("toolbar.createUser")}
-          </Button>
-        ) : (
-          <Button onClick={handleCreateKey}>
-            <Key className="mr-2 h-4 w-4" />
-            {t("toolbar.createKey")}
           </Button>
         )}
       </div>
@@ -620,6 +638,7 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
             currentUser={currentUser}
             currencyCode="USD"
             onCreateUser={isAdmin ? handleCreateUser : handleCreateKey}
+            onAddKey={handleAddKey}
             highlightKeyIds={shouldHighlightKeys ? matchingKeyIds : undefined}
             autoExpandOnFilter={shouldHighlightKeys}
             isMultiSelectMode={isAdmin && isMultiSelectMode}
@@ -646,15 +665,47 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
         />
       ) : null}
 
-      {/* Create User Dialog */}
-      <UnifiedEditDialog
-        open={showCreateDialog}
-        onOpenChange={handleCreateDialogClose}
-        mode="create"
-        user={selfUser}
-        keyOnlyMode={!isAdmin}
-        currentUser={currentUser}
-      />
+      {/* Create User Dialog (Admin) or Add Key Dialog (non-Admin) */}
+      {isAdmin ? (
+        <CreateUserDialog open={showCreateDialog} onOpenChange={handleCreateDialogClose} />
+      ) : selfUser ? (
+        <AddKeyDialog
+          open={showCreateDialog}
+          onOpenChange={handleCreateDialogClose}
+          userId={selfUser.id}
+          user={{
+            id: selfUser.id,
+            providerGroup: selfUser.providerGroup ?? null,
+            limit5hUsd: selfUser.limit5hUsd ?? undefined,
+            limitWeeklyUsd: selfUser.limitWeeklyUsd ?? undefined,
+            limitMonthlyUsd: selfUser.limitMonthlyUsd ?? undefined,
+            limitTotalUsd: selfUser.limitTotalUsd ?? undefined,
+            limitConcurrentSessions: selfUser.limitConcurrentSessions ?? undefined,
+          }}
+          isAdmin={false}
+          onSuccess={handleKeyCreated}
+        />
+      ) : null}
+
+      {/* Add Key Dialog (triggered from key list) */}
+      {addKeyUser && (
+        <AddKeyDialog
+          open={showAddKeyDialog}
+          onOpenChange={handleAddKeyDialogClose}
+          userId={addKeyUser.id}
+          user={{
+            id: addKeyUser.id,
+            providerGroup: addKeyUser.providerGroup ?? null,
+            limit5hUsd: addKeyUser.limit5hUsd ?? undefined,
+            limitWeeklyUsd: addKeyUser.limitWeeklyUsd ?? undefined,
+            limitMonthlyUsd: addKeyUser.limitMonthlyUsd ?? undefined,
+            limitTotalUsd: addKeyUser.limitTotalUsd ?? undefined,
+            limitConcurrentSessions: addKeyUser.limitConcurrentSessions ?? undefined,
+          }}
+          isAdmin={isAdmin}
+          onSuccess={handleKeyCreated}
+        />
+      )}
     </div>
   );
 }

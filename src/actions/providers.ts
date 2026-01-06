@@ -3090,3 +3090,79 @@ async function fetchAnthropicModels(
     return handleFetchException(error, "fetchAnthropicModels");
   }
 }
+
+/**
+ * 解析分组字符串为数组
+ */
+function parseGroupString(groupString: string): string[] {
+  return groupString
+    .split(",")
+    .map((g) => g.trim())
+    .filter(Boolean);
+}
+
+/**
+ * 检查供应商分组是否匹配用户分组
+ */
+function checkProviderGroupMatch(providerGroupTag: string | null, userGroups: string[]): boolean {
+  if (userGroups.includes(PROVIDER_GROUP.ALL)) {
+    return true;
+  }
+
+  const providerTags = providerGroupTag
+    ? parseGroupString(providerGroupTag)
+    : [PROVIDER_GROUP.DEFAULT];
+
+  return providerTags.some((tag) => userGroups.includes(tag));
+}
+
+/**
+ * 根据供应商分组获取模型建议列表
+ *
+ * 用于用户/密钥编辑时的模型限制下拉建议。
+ * 从匹配分组的启用供应商中收集 allowedModels 并去重。
+ *
+ * @param providerGroup - 可选的供应商分组（逗号分隔），默认为 "default"
+ * @returns 去重后的模型列表
+ */
+export async function getModelSuggestionsByProviderGroup(
+  providerGroup?: string | null
+): Promise<ActionResult<string[]>> {
+  try {
+    const session = await getSession();
+    if (!session) {
+      return { ok: false, error: "未登录" };
+    }
+
+    // 获取所有启用的供应商
+    const providers = await findAllProviders();
+    const enabledProviders = providers.filter((p) => p.isEnabled);
+
+    // 解析用户分组
+    const userGroups = providerGroup ? parseGroupString(providerGroup) : [PROVIDER_GROUP.DEFAULT];
+
+    // 过滤匹配分组的供应商并收集 allowedModels
+    const modelSet = new Set<string>();
+
+    for (const provider of enabledProviders) {
+      if (checkProviderGroupMatch(provider.groupTag, userGroups)) {
+        const models = provider.allowedModels;
+        if (models && Array.isArray(models)) {
+          for (const model of models) {
+            if (model) {
+              modelSet.add(model);
+            }
+          }
+        }
+      }
+    }
+
+    // 转换为数组并排序
+    const sortedModels = Array.from(modelSet).sort();
+
+    return { ok: true, data: sortedModels };
+  } catch (error) {
+    logger.error("获取模型建议列表失败:", error);
+    return { ok: false, error: "获取模型建议列表失败" };
+  }
+}

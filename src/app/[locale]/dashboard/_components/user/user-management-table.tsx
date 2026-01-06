@@ -12,8 +12,8 @@ import { useVirtualizer } from "@/hooks/use-virtualizer";
 import { cn } from "@/lib/utils";
 import type { User, UserDisplay } from "@/types/user";
 import { BatchEditToolbar } from "./batch-edit/batch-edit-toolbar";
+import { EditUserDialog } from "./edit-user-dialog";
 import { QuickRenewDialog, type QuickRenewUser } from "./forms/quick-renew-dialog";
-import { UnifiedEditDialog } from "./unified-edit-dialog";
 import { UserKeyTableRow } from "./user-key-table-row";
 
 export interface UserManagementTableProps {
@@ -26,6 +26,7 @@ export interface UserManagementTableProps {
   currentUser?: User;
   currencyCode?: string;
   onCreateUser?: () => void;
+  onAddKey?: (user: UserDisplay) => void;
   highlightKeyIds?: Set<number>;
   autoExpandOnFilter?: boolean;
   isMultiSelectMode?: boolean;
@@ -110,6 +111,7 @@ export function UserManagementTable({
   currentUser,
   currencyCode,
   onCreateUser,
+  onAddKey,
   highlightKeyIds,
   autoExpandOnFilter,
   isMultiSelectMode,
@@ -140,7 +142,6 @@ export function UserManagementTable({
   const prevAutoExpandRef = useRef(autoExpandOnFilter);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
-  const [scrollToKeyId, setScrollToKeyId] = useState<number | undefined>(undefined);
 
   // Quick renew dialog state
   const [quickRenewOpen, setQuickRenewOpen] = useState(false);
@@ -204,7 +205,10 @@ export function UserManagementTable({
       collapse: translations.table.collapse,
       noKeys: translations.table.noKeys,
       defaultGroup: translations.table.defaultGroup,
-      actions: translations.actions,
+      actions: {
+        ...translations.actions,
+        addKey: tUserMgmt("table.actions.addKey"),
+      },
       userStatus: {
         disabled: tUserMgmt("keyStatus.disabled"),
       },
@@ -301,7 +305,6 @@ export function UserManagementTable({
     if (!editingUser) {
       setEditDialogOpen(false);
       setEditingUserId(null);
-      setScrollToKeyId(undefined);
     }
   }, [editDialogOpen, editingUser]);
 
@@ -318,9 +321,8 @@ export function UserManagementTable({
     setExpandedUsers(new Map(users.map((user) => [user.id, nextExpanded])));
   };
 
-  const openEditDialog = (userId: number, keyId?: number) => {
+  const openEditDialog = (userId: number) => {
     setEditingUserId(userId);
-    setScrollToKeyId(keyId);
     setEditDialogOpen(true);
   };
 
@@ -328,7 +330,6 @@ export function UserManagementTable({
     setEditDialogOpen(open);
     if (open) return;
     setEditingUserId(null);
-    setScrollToKeyId(undefined);
   };
 
   // Quick renew handlers
@@ -563,7 +564,8 @@ export function UserManagementTable({
                           }
                           selectedKeyIds={selectedKeyIdSet}
                           onSelectKey={showMultiSelect ? onSelectKey : undefined}
-                          onEditUser={(keyId) => openEditDialog(user.id, keyId)}
+                          onEditUser={() => openEditDialog(user.id)}
+                          onAddKey={onAddKey ? () => onAddKey(user) : undefined}
                           onQuickRenew={isAdmin ? handleOpenQuickRenew : undefined}
                           optimisticExpiresAt={optimisticUserExpiries.get(user.id)}
                           currentUser={currentUser}
@@ -587,15 +589,11 @@ export function UserManagementTable({
         </div>
       ) : null}
 
-      {editingUser ? (
-        <UnifiedEditDialog
+      {editingUser && isAdmin ? (
+        <EditUserDialog
           open={editDialogOpen}
           onOpenChange={handleEditDialogOpenChange}
-          mode="edit"
           user={editingUser}
-          scrollToKeyId={scrollToKeyId}
-          keyOnlyMode={!isAdmin}
-          currentUser={currentUser}
         />
       ) : null}
 

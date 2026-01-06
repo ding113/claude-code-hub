@@ -750,6 +750,12 @@
       "defaultDescription": "default は groupTag 未設定のプロバイダーを含みます",
       "descriptionWithUserGroup": "このキーのプロバイダーグループ（ユーザーのグループ: {group}、既定: default）"
     },
+    "successTitle": "キーが正常に作成されました",
+    "successDescription": "APIキーが正常に作成されました。",
+    "generatedKey": {
+      "label": "生成されたキー",
+      "hint": "このキーはキー一覧からいつでも確認・コピーできます。"
+    },
     "errors": {
       "userIdMissing": "ユーザーIDが存在しません",
       "createFailed": "作成に失敗しました。後でもう一度お試しください",
@@ -1113,6 +1119,9 @@
       "defaultGroup": "default",
       "userStatus": {
         "disabled": "無効"
+      },
+      "actions": {
+        "addKey": "キーを追加"
       }
     },
     "keyFullDisplay": {
@@ -1172,8 +1181,8 @@
       "failed": "更新に失敗しました"
     },
     "editDialog": {
-      "title": "ユーザーとキーを編集",
-      "description": "ユーザー情報とAPIキーの設定を編集",
+      "title": "ユーザーを編集",
+      "description": "ユーザー情報を編集",
       "userSection": "ユーザー設定",
       "keysSection": "キー設定",
       "scrollToKey": "キーへスクロール",
@@ -1272,6 +1281,10 @@
       "saveFailed": "ユーザーの作成に失敗しました",
       "keyCreateFailed": "キーの作成に失敗しました",
       "createSuccess": "ユーザーが作成されました",
+      "successTitle": "作成完了",
+      "successDescription": "ユーザーとキーが作成されました",
+      "generatedKey": "生成されたキー",
+      "keyHint": "このキーはユーザー管理ページからいつでも確認・コピーできます",
       "keysSection": "キー",
       "addKey": "キーを追加",
       "removeKey": "キーを削除",
@@ -1489,7 +1502,7 @@
           "label": "独立した個人使用量ページ",
           "description": "有効にすると、このキーで独立した個人使用量ページにアクセスできます",
           "descriptionEnabled": "有効にすると、このキーはログイン時に独立した個人使用量ページにアクセスします。ただし、自分のキーのプロバイダーグループは変更できません。",
-          "descriptionDisabled": "無効にすると、ユーザーは個人使用量ページUIにアクセスできません。ただし、制限されたWeb UIで自分のキーのプロバイダーグループを変更できます。"
+          "descriptionDisabled": "無効にすると、ユーザーは個人使用量ページUIにアクセスできません。代わりに制限されたWeb UIを使用します。"
         },
         "providerGroup": {
           "label": "プロバイダーグループ",

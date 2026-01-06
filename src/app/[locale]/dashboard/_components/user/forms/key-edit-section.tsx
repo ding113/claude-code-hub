@@ -48,6 +48,10 @@ export interface KeyEditSectionProps {
   /** 是否是最后一个启用的 key (用于禁用 Switch 防止全部禁用) */
   isLastEnabledKey?: boolean;
   userProviderGroup?: string;
+  /** 是否显示限额规则区域，默认为 true */
+  showLimitRules?: boolean;
+  /** 是否显示到期时间区域，默认为 true */
+  showExpireTime?: boolean;
   onChange: {
     (field: string, value: any): void;
     (batch: Record<string, any>): void;
@@ -136,6 +140,8 @@ export function KeyEditSection({
   isAdmin = false,
   isLastEnabledKey = false,
   userProviderGroup,
+  showLimitRules = true,
+  showExpireTime = true,
   onChange,
   scrollRef,
   translations,
@@ -370,55 +376,59 @@ export function KeyEditSection({
         </div>
       </section>
 
-      {/* 到期时间区域 */}
-      <section className="rounded-lg border border-border bg-card/50 p-3 space-y-3">
-        <div className="flex items-center gap-2">
-          <Calendar className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-          <h4 className="text-sm font-semibold">{translations.sections.expireTime}</h4>
-        </div>
-        <DatePickerField
-          label={translations.sections.expireTime}
-          value={expiresAtValue}
-          onChange={(val) => onChange("expiresAt", parseDateStringEndOfDay(val))}
-        />
-        <QuickExpirePicker
-          translations={translations.quickExpire || {}}
-          onSelect={(date) => onChange("expiresAt", toEndOfDay(date))}
-        />
-      </section>
-
-      {/* 限额规则区域 */}
-      <section className="rounded-lg border border-border bg-card/50 p-3 space-y-3">
-        <div className="flex items-center justify-between gap-3">
+      {/* 到期时间区域 - 仅在 showExpireTime 为 true 时显示 */}
+      {showExpireTime && (
+        <section className="rounded-lg border border-border bg-card/50 p-3 space-y-3">
           <div className="flex items-center gap-2">
-            <Gauge className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-            <h4 className="text-sm font-semibold">{translations.sections.limitRules}</h4>
+            <Calendar className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            <h4 className="text-sm font-semibold">{translations.sections.expireTime}</h4>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setLimitPickerOpen(true)}
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            {addRuleText}
-          </Button>
-        </div>
+          <DatePickerField
+            label={translations.sections.expireTime}
+            value={expiresAtValue}
+            onChange={(val) => onChange("expiresAt", parseDateStringEndOfDay(val))}
+          />
+          <QuickExpirePicker
+            translations={translations.quickExpire || {}}
+            onSelect={(date) => onChange("expiresAt", toEndOfDay(date))}
+          />
+        </section>
+      )}
 
-        <LimitRulesDisplay
-          rules={limitRules}
-          onRemove={handleRemoveLimitRule}
-          translations={translations.limitRules || {}}
-        />
+      {/* 限额规则区域 - 仅在 showLimitRules 为 true 时显示 */}
+      {showLimitRules && (
+        <section className="rounded-lg border border-border bg-card/50 p-3 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Gauge className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              <h4 className="text-sm font-semibold">{translations.sections.limitRules}</h4>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setLimitPickerOpen(true)}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              {addRuleText}
+            </Button>
+          </div>
 
-        <LimitRulePicker
-          open={limitPickerOpen}
-          onOpenChange={setLimitPickerOpen}
-          onConfirm={handleConfirmLimitRule}
-          existingTypes={existingLimitTypes}
-          translations={translations.limitRules || {}}
-        />
-      </section>
+          <LimitRulesDisplay
+            rules={limitRules}
+            onRemove={handleRemoveLimitRule}
+            translations={translations.limitRules || {}}
+          />
+
+          <LimitRulePicker
+            open={limitPickerOpen}
+            onOpenChange={setLimitPickerOpen}
+            onConfirm={handleConfirmLimitRule}
+            existingTypes={existingLimitTypes}
+            translations={translations.limitRules || {}}
+          />
+        </section>
+      )}
 
       {/* 特殊功能区域 */}
       <section
