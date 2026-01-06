@@ -11,11 +11,13 @@ import { SessionTracker } from "@/lib/session-tracker";
 import type { CurrencyCode } from "@/lib/utils";
 import { getSystemSettings } from "@/repository/system-config";
 import {
+  findUsageLogsStats,
   findUsageLogsWithDetails,
   getDistinctEndpointsForKey,
   getDistinctModelsForKey,
   getTotalUsageForKey,
   type UsageLogFilters,
+  type UsageLogSummary,
 } from "@/repository/usage-logs";
 import type { BillingModelSource } from "@/types/system-config";
 import type { ActionResult } from "./types";
@@ -56,6 +58,7 @@ export interface MyUsageQuota {
   userLimitMonthlyUsd: number | null;
   userLimitTotalUsd: number | null;
   userLimitConcurrentSessions: number | null;
+  userRpmLimit: number | null;
   userCurrent5hUsd: number;
   userCurrentDailyUsd: number;
   userCurrentWeeklyUsd: number;
@@ -72,6 +75,9 @@ export interface MyUsageQuota {
   keyProviderGroup: string | null;
   keyName: string;
   keyIsEnabled: boolean;
+
+  userAllowedModels: string[];
+  userAllowedClients: string[];
 
   expiresAt: Date | null;
   dailyResetMode: "fixed" | "rolling";
@@ -248,6 +254,7 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       userLimitMonthlyUsd: user.limitMonthlyUsd ?? null,
       userLimitTotalUsd: user.limitTotalUsd ?? null,
       userLimitConcurrentSessions: user.limitConcurrentSessions ?? null,
+      userRpmLimit: user.rpm ?? null,
       userCurrent5hUsd: userCost5h,
       userCurrentDailyUsd: userCostDaily,
       userCurrentWeeklyUsd: userCostWeekly,
@@ -264,6 +271,9 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       keyProviderGroup: key.providerGroup ?? null,
       keyName: key.name,
       keyIsEnabled: key.isEnabled ?? true,
+
+      userAllowedModels: user.allowedModels ?? [],
+      userAllowedClients: user.allowedClients ?? [],
 
       expiresAt: key.expiresAt ?? null,
       dailyResetMode: key.dailyResetMode ?? "fixed",
@@ -488,5 +498,122 @@ async function getUserConcurrentSessions(userId: number): Promise<number> {
   } catch (error) {
     logger.error("[my-usage] getUserConcurrentSessions failed", error);
     return 0;
+  }
+}
+
+export interface MyStatsSummaryFilters {
+  startDate?: string; // "YYYY-MM-DD"
+  endDate?: string; // "YYYY-MM-DD"
+}
+
+export interface ModelBreakdownItem {
+  model: string | null;
+  requests: number;
+  cost: number;
+  inputTokens: number;
+  outputTokens: number;
+}
+
+export interface MyStatsSummary extends UsageLogSummary {
+  keyModelBreakdown: ModelBreakdownItem[];
+  userModelBreakdown: ModelBreakdownItem[];
+  currencyCode: CurrencyCode;
+}
+
+/**
+ * Get aggregated statistics for a date range
+ * Uses findUsageLogsStats for efficient aggregation
+ */
+export async function getMyStatsSummary(
+  filters: MyStatsSummaryFilters = {}
+): Promise<ActionResult<MyStatsSummary>> {
+  try {
+    const session = await getSession({ allowReadOnlyAccess: true });
+    if (!session) return { ok: false, error: "Unauthorized" };
+
+    const settings = await getSystemSettings();
+    const currencyCode = settings.currencyDisplay;
+
+    const startTime = filters.startDate
+      ? new Date(`${filters.startDate}T00:00:00`).getTime()
+      : undefined;
+    const endTime = filters.endDate
+      ? new Date(`${filters.endDate}T23:59:59.999`).getTime()
+      : undefined;
+
+    // Get aggregated stats using existing repository function
+    const stats = await findUsageLogsStats({
+      keyId: session.key.id,
+      startTime,
+      endTime,
+    });
+
+    // Get model breakdown for current key
+    const keyBreakdown = await db
+      .select({
+        model: messageRequest.model,
+        requests: sql<number>`count(*)::int`,
+        cost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
+        inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::int`,
+        outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::int`,
+      })
+      .from(messageRequest)
+      .where(
+        and(
+          eq(messageRequest.key, session.key.key),
+          isNull(messageRequest.deletedAt),
+          EXCLUDE_WARMUP_CONDITION,
+          startTime ? gte(messageRequest.createdAt, new Date(startTime)) : undefined,
+          endTime ? lt(messageRequest.createdAt, new Date(endTime)) : undefined
+        )
+      )
+      .groupBy(messageRequest.model)
+      .orderBy(sql`sum(${messageRequest.costUsd}) DESC`);
+
+    // Get model breakdown for user (all keys)
+    const userBreakdown = await db
+      .select({
+        model: messageRequest.model,
+        requests: sql<number>`count(*)::int`,
+        cost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
+        inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::int`,
+        outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::int`,
+      })
+      .from(messageRequest)
+      .where(
+        and(
+          eq(messageRequest.userId, session.user.id),
+          isNull(messageRequest.deletedAt),
+          EXCLUDE_WARMUP_CONDITION,
+          startTime ? gte(messageRequest.createdAt, new Date(startTime)) : undefined,
+          endTime ? lt(messageRequest.createdAt, new Date(endTime)) : undefined
+        )
+      )
+      .groupBy(messageRequest.model)
+      .orderBy(sql`sum(${messageRequest.costUsd}) DESC`);
+
+    const result: MyStatsSummary = {
+      ...stats,
+      keyModelBreakdown: keyBreakdown.map((row) => ({
+        model: row.model,
+        requests: row.requests,
+        cost: Number(row.cost ?? 0),
+        inputTokens: row.inputTokens,
+        outputTokens: row.outputTokens,
+      })),
+      userModelBreakdown: userBreakdown.map((row) => ({
+        model: row.model,
+        requests: row.requests,
+        cost: Number(row.cost ?? 0),
+        inputTokens: row.inputTokens,
+        outputTokens: row.outputTokens,
+      })),
+      currencyCode,
+    };
+
+    return { ok: true, data: result };
+  } catch (error) {
+    logger.error("[my-usage] getMyStatsSummary failed", error);
+    return { ok: false, error: "Failed to get statistics summary" };
   }
 }

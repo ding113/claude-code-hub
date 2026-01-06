@@ -71,7 +71,9 @@ export function MyUsageHeader({
     <div className="flex items-center justify-between gap-4">
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-xl font-semibold leading-tight">{t("title")}</h1>
+          <h1 className="text-xl font-semibold leading-tight">
+            {userName ? t("welcome", { name: userName }) : t("title")}
+          </h1>
           {renderCountdownChip(tExpiration("keyExpires"), keyExpiresAt, keyCountdown)}
           {renderCountdownChip(tExpiration("userExpires"), userExpiresAt, userCountdown)}
         </div>
@@ -85,7 +87,6 @@ export function MyUsageHeader({
             <span>{userName ?? "—"}</span>
           </span>
         </div>
-        <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
       </div>
       <div className="flex items-center gap-2">
         <Button variant="outline" size="sm" onClick={handleLogout} className="gap-2">

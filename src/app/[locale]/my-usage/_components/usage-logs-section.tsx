@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
+import { Loader2, ScrollText } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import {
@@ -189,7 +189,10 @@ export function UsageLogsSection({
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>{t("title")}</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <ScrollText className="h-4 w-4" />
+          {t("title")}
+        </CardTitle>
         {autoRefreshSeconds ? (
           <span className="text-xs text-muted-foreground shrink-0 whitespace-nowrap">
             {t("autoRefresh", { seconds: autoRefreshSeconds })}
