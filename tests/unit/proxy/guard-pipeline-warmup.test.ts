@@ -144,4 +144,68 @@ describe("GuardPipeline：warmup 拦截点", () => {
     expect(callOrder).not.toContain("provider");
     expect(callOrder).not.toContain("messageContext");
   });
+
+  test("probe 请求应在 probe 步骤提前结束，不应触发 session/warmup 等后续步骤", async () => {
+    callOrder.length = 0;
+
+    const { GuardPipelineBuilder, RequestType } = await import(
+      "@/app/v1/_lib/proxy/guard-pipeline"
+    );
+
+    const pipeline = GuardPipelineBuilder.fromRequestType(RequestType.CHAT);
+
+    const session = {
+      isProbeRequest: () => {
+        callOrder.push("probe");
+        return true;
+      },
+    } as any;
+
+    const res = await pipeline.run(session);
+
+    expect(res).not.toBeNull();
+    expect(res?.status).toBe(200);
+    expect(callOrder).toEqual(["auth", "client", "model", "version", "probe"]);
+    expect(callOrder).not.toContain("session");
+    expect(callOrder).not.toContain("warmup");
+    expect(callOrder).not.toContain("rateLimit");
+    expect(callOrder).not.toContain("provider");
+    expect(callOrder).not.toContain("messageContext");
+  });
+
+  test("COUNT_TOKENS pipeline 应走最小链路（且覆盖 fromRequestType 分支）", async () => {
+    callOrder.length = 0;
+
+    const { GuardPipelineBuilder, RequestType } = await import(
+      "@/app/v1/_lib/proxy/guard-pipeline"
+    );
+
+    const pipeline = GuardPipelineBuilder.fromRequestType(RequestType.COUNT_TOKENS);
+
+    const session = {
+      isProbeRequest: () => {
+        callOrder.push("probe");
+        return false;
+      },
+    } as any;
+
+    const res = await pipeline.run(session);
+
+    expect(res).toBeNull();
+    expect(callOrder).toEqual([
+      "auth",
+      "client",
+      "model",
+      "version",
+      "probe",
+      "requestFilter",
+      "provider",
+      "providerRequestFilter",
+    ]);
+    expect(callOrder).not.toContain("session");
+    expect(callOrder).not.toContain("warmup");
+    expect(callOrder).not.toContain("sensitive");
+    expect(callOrder).not.toContain("rateLimit");
+    expect(callOrder).not.toContain("messageContext");
+  });
 });
