@@ -524,6 +524,25 @@ const DEFAULT_ERROR_RULES = [
       },
     },
   },
+  // Issue #550: tool_use block missing corresponding tool_result in next message (non-retryable)
+  {
+    pattern:
+      "tool_use.*ids were found without.*tool_result.*immediately after|tool_use.*block must have.*corresponding.*tool_result.*block in the next message",
+    category: "validation_error",
+    description: "tool_use block missing corresponding tool_result in next message (client error)",
+    matchType: "regex" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 88,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "validation_error",
+        message:
+          "tool_use 块缺少对应的 tool_result，请确保每个 tool_use 在下一条消息中有对应的 tool_result 块",
+      },
+    },
+  },
   // Model-related errors (non-retryable)
   {
     pattern: '"actualModel" is null|actualModel.*null',
