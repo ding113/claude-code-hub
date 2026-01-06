@@ -773,7 +773,7 @@
     "successDescription": "Your API key has been created successfully.",
     "generatedKey": {
       "label": "Generated Key",
-      "hint": "You can view and copy this key anytime from the key list."
+      "hint": "You can manage this key in the key list (enable/disable, quotas, etc.), but the full key is only shown once. Copy it now."
     },
     "errors": {
       "userIdMissing": "User ID does not exist",
@@ -1318,11 +1318,12 @@
       "description": "Create a new user and configure API keys",
       "saveFailed": "Failed to create user",
       "keyCreateFailed": "Failed to create key",
+      "rollbackFailed": "Rollback failed. The user may have been created without a key. Please delete the user manually (userId: {userId}) and try again.",
       "createSuccess": "User created successfully",
       "successTitle": "Created Successfully",
       "successDescription": "User and key have been created",
       "generatedKey": "Generated Key",
-      "keyHint": "You can view and copy this key anytime from the user management page",
+      "keyHint": "You can manage this key from the user management page (enable/disable, quotas, etc.), but the full key is only shown once. Copy it now.",
       "keysSection": "Keys",
       "addKey": "Add key",
       "removeKey": "Remove key",

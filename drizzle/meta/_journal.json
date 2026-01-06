@@ -337,6 +337,13 @@
       "when": 1767584162916,
       "tag": "0047_fix_system_settings_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1767718395411,
+      "tag": "0048_add_message_request_blocked_by_index",
+      "breakpoints": true
     }
   ]
 }

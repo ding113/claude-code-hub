@@ -16,10 +16,15 @@ export function useModelSuggestions(providerGroup?: string | null): string[] {
       .then((res) => {
         if (res.ok && res.data) {
           setModelSuggestions(res.data);
+          return;
         }
+        setModelSuggestions([]);
       })
-      .catch(() => {
-        // Silently fail - model suggestions are optional enhancement
+      .catch((error) => {
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("[useModelSuggestions] Failed to fetch model suggestions", error);
+        }
+        setModelSuggestions([]);
       });
   }, [providerGroup]);
 

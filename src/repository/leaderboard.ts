@@ -5,10 +5,8 @@ import { db } from "@/drizzle/db";
 import { messageRequest, providers, users } from "@/drizzle/schema";
 import { getEnvConfig } from "@/lib/config";
 import type { ProviderType } from "@/types/provider";
+import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
 import { getSystemSettings } from "./system-config";
-
-// Warmup 抢答请求不计入任何排行榜/统计
-const EXCLUDE_WARMUP_CONDITION = sql`(${messageRequest.blockedBy} IS NULL OR ${messageRequest.blockedBy} <> 'warmup')`;
 
 /**
  * 排行榜条目类型

@@ -6,10 +6,8 @@ import { keys, messageRequest, providers, users } from "@/drizzle/schema";
 import { Decimal, toCostDecimal } from "@/lib/utils/currency";
 import type { CreateKeyData, Key, UpdateKeyData } from "@/types/key";
 import type { User } from "@/types/user";
+import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
 import { toKey, toUser } from "./_shared/transformers";
-
-// Warmup 抢答请求只用于探测/预热：不计入任何统计/额度计算
-const EXCLUDE_WARMUP_CONDITION = sql`(${messageRequest.blockedBy} IS NULL OR ${messageRequest.blockedBy} <> 'warmup')`;
 
 export async function findKeyById(id: number): Promise<Key | null> {
   const [key] = await db

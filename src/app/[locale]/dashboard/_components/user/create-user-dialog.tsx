@@ -185,12 +185,17 @@ function CreateUserDialogInner({ onOpenChange, onSuccess }: CreateUserDialogProp
 
           if (!keyRes.ok) {
             // Rollback: delete the user since key creation failed
+            let rollbackFailed = false;
             try {
               await removeUser(newUserId);
             } catch (rollbackError) {
+              rollbackFailed = true;
               console.error("[CreateUserDialog] rollback failed", rollbackError);
             }
             toast.error(keyRes.error || t("createDialog.keyCreateFailed", { name: data.key.name }));
+            if (rollbackFailed) {
+              toast.error(t("createDialog.rollbackFailed", { userId: newUserId }));
+            }
             return;
           }
 

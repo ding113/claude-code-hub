@@ -9,6 +9,7 @@ import { RateLimitService } from "@/lib/rate-limit/service";
 import type { DailyResetMode } from "@/lib/rate-limit/time-utils";
 import { SessionTracker } from "@/lib/session-tracker";
 import type { CurrencyCode } from "@/lib/utils";
+import { EXCLUDE_WARMUP_CONDITION } from "@/repository/_shared/message-request-conditions";
 import { getSystemSettings } from "@/repository/system-config";
 import {
   findUsageLogsWithDetails,
@@ -19,9 +20,6 @@ import {
 } from "@/repository/usage-logs";
 import type { BillingModelSource } from "@/types/system-config";
 import type { ActionResult } from "./types";
-
-// Warmup 抢答请求只用于探测/预热：日志可见，但不计入任何聚合统计
-const EXCLUDE_WARMUP_CONDITION = sql`(${messageRequest.blockedBy} IS NULL OR ${messageRequest.blockedBy} <> 'warmup')`;
 
 export interface MyUsageMetadata {
   keyName: string;

@@ -173,6 +173,7 @@ export const CHAT_PIPELINE: GuardConfig = {
   // Full guard chain for normal chat requests
   steps: [
     "auth",
+    "sensitive",
     "client",
     "model",
     "version",
@@ -180,7 +181,6 @@ export const CHAT_PIPELINE: GuardConfig = {
     "session",
     "warmup",
     "requestFilter",
-    "sensitive",
     "rateLimit",
     "provider",
     "providerRequestFilter",

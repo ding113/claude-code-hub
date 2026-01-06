@@ -151,25 +151,37 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
   };
 
   const handleDisableUser = async () => {
-    const res = await toggleUserEnabled(user.id, false);
-    if (!res.ok) {
-      throw new Error(res.error || t("editDialog.operationFailed"));
+    try {
+      const res = await toggleUserEnabled(user.id, false);
+      if (!res.ok) {
+        toast.error(res.error || t("editDialog.operationFailed"));
+        return;
+      }
+      toast.success(t("editDialog.userDisabled"));
+      onSuccess?.();
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      router.refresh();
+    } catch (error) {
+      console.error("[EditUserDialog] disable user failed", error);
+      toast.error(t("editDialog.operationFailed"));
     }
-    toast.success(t("editDialog.userDisabled"));
-    onSuccess?.();
-    queryClient.invalidateQueries({ queryKey: ["users"] });
-    router.refresh();
   };
 
   const handleEnableUser = async () => {
-    const res = await toggleUserEnabled(user.id, true);
-    if (!res.ok) {
-      throw new Error(res.error || t("editDialog.operationFailed"));
+    try {
+      const res = await toggleUserEnabled(user.id, true);
+      if (!res.ok) {
+        toast.error(res.error || t("editDialog.operationFailed"));
+        return;
+      }
+      toast.success(t("editDialog.userEnabled"));
+      onSuccess?.();
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      router.refresh();
+    } catch (error) {
+      console.error("[EditUserDialog] enable user failed", error);
+      toast.error(t("editDialog.operationFailed"));
     }
-    toast.success(t("editDialog.userEnabled"));
-    onSuccess?.();
-    queryClient.invalidateQueries({ queryKey: ["users"] });
-    router.refresh();
   };
 
   const handleDeleteUser = async () => {

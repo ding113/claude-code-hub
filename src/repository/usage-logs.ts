@@ -4,9 +4,7 @@ import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest, providers, users } from "@/drizzle/schema";
 import type { ProviderChainItem } from "@/types/message";
-
-// Warmup 抢答请求只用于探测/预热：日志可见，但不计入任何聚合统计
-const EXCLUDE_WARMUP_CONDITION = sql`(${messageRequest.blockedBy} IS NULL OR ${messageRequest.blockedBy} <> 'warmup')`;
+import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
 
 export interface UsageLogFilters {
   userId?: number;

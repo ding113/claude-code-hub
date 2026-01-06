@@ -14,9 +14,7 @@ import type {
   RateLimitType,
   TimeRange,
 } from "@/types/statistics";
-
-// Warmup 抢答请求只用于探测/预热：必须排除在所有统计/限额计算之外
-const EXCLUDE_WARMUP_CONDITION = sql`(${messageRequest.blockedBy} IS NULL OR ${messageRequest.blockedBy} <> 'warmup')`;
+import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
 
 /**
  * 根据时间范围获取用户消费和API调用统计

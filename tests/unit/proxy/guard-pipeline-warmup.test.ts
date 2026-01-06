@@ -109,11 +109,14 @@ describe("GuardPipeline：warmup 拦截点", () => {
   test("CHAT pipeline 必须包含 warmup，且位于 session 之后、requestFilter 之前", async () => {
     const { CHAT_PIPELINE } = await import("@/app/v1/_lib/proxy/guard-pipeline");
 
+    const sensitiveIdx = CHAT_PIPELINE.steps.indexOf("sensitive");
     const sessionIdx = CHAT_PIPELINE.steps.indexOf("session");
     const warmupIdx = CHAT_PIPELINE.steps.indexOf("warmup");
     const requestFilterIdx = CHAT_PIPELINE.steps.indexOf("requestFilter");
 
+    expect(sensitiveIdx).toBeGreaterThanOrEqual(0);
     expect(sessionIdx).toBeGreaterThanOrEqual(0);
+    expect(sensitiveIdx).toBeLessThan(sessionIdx);
     expect(warmupIdx).toBe(sessionIdx + 1);
     expect(requestFilterIdx).toBeGreaterThan(warmupIdx);
   });
@@ -139,7 +142,16 @@ describe("GuardPipeline：warmup 拦截点", () => {
     expect(res).not.toBeNull();
     expect(res?.status).toBe(200);
 
-    expect(callOrder).toEqual(["auth", "client", "model", "version", "probe", "session", "warmup"]);
+    expect(callOrder).toEqual([
+      "auth",
+      "sensitive",
+      "client",
+      "model",
+      "version",
+      "probe",
+      "session",
+      "warmup",
+    ]);
     expect(callOrder).not.toContain("rateLimit");
     expect(callOrder).not.toContain("provider");
     expect(callOrder).not.toContain("messageContext");
@@ -165,7 +177,7 @@ describe("GuardPipeline：warmup 拦截点", () => {
 
     expect(res).not.toBeNull();
     expect(res?.status).toBe(200);
-    expect(callOrder).toEqual(["auth", "client", "model", "version", "probe"]);
+    expect(callOrder).toEqual(["auth", "sensitive", "client", "model", "version", "probe"]);
     expect(callOrder).not.toContain("session");
     expect(callOrder).not.toContain("warmup");
     expect(callOrder).not.toContain("rateLimit");

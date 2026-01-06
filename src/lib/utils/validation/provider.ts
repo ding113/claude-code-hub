@@ -19,8 +19,11 @@ export function validateNumericField(value: string): number | null {
 export function validatePositiveDecimalField(value: string): number | null {
   if (!value.trim()) return null;
   const num = Number.parseFloat(value);
-  if (!Number.isFinite(num) || num <= 0) return null;
-  return Math.round(num * 100) / 100;
+  if (!Number.isFinite(num)) return null;
+
+  const rounded = Math.round(num * 100) / 100;
+  if (!Number.isFinite(rounded) || rounded <= 0) return null;
+  return rounded;
 }
 
 /**

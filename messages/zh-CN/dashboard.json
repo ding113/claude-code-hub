@@ -774,7 +774,7 @@
     "successDescription": "您的 API 密钥已成功创建。",
     "generatedKey": {
       "label": "生成的密钥",
-      "hint": "您可以随时在密钥列表中查看和复制此密钥"
+      "hint": "您可以在密钥列表中管理此密钥（启用/禁用、设置限额等），但完整密钥仅显示一次，请立即复制并妥善保存"
     },
     "errors": {
       "userIdMissing": "用户ID不存在",
@@ -1319,11 +1319,12 @@
       "description": "创建新用户并配置 API 密钥",
       "saveFailed": "创建用户失败",
       "keyCreateFailed": "创建密钥失败",
+      "rollbackFailed": "自动回滚失败：可能已创建用户但未创建密钥。请手动删除该用户（userId: {userId}）后重试",
       "createSuccess": "用户创建成功",
       "successTitle": "创建成功",
       "successDescription": "用户和密钥已成功创建",
       "generatedKey": "生成的密钥",
-      "keyHint": "您可以随时在用户管理页面查看和复制此密钥",
+      "keyHint": "您可以在用户管理页面管理此密钥（启用/禁用、设置限额等），但完整密钥仅显示一次，请立即复制并妥善保存",
       "keysSection": "密钥",
       "addKey": "添加密钥",
       "removeKey": "删除密钥",

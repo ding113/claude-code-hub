@@ -15,13 +15,13 @@ import type { ActionResult } from "@/actions/types";
 import { validateKey } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 
-function getBearerTokenFromAuthHeader(raw: string | undefined): string | null {
+function getBearerTokenFromAuthHeader(raw: string | undefined): string | undefined {
   const trimmed = raw?.trim();
-  if (!trimmed) return null;
+  if (!trimmed) return undefined;
 
   const match = /^Bearer\s+(.+)$/i.exec(trimmed);
   const token = match?.[1]?.trim();
-  return token ? token : null;
+  return token || undefined;
 }
 
 // Server Action 函数签名 (支持两种格式)

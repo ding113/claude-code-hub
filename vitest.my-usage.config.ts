@@ -17,10 +17,10 @@ export default defineConfig({
     include: [
       "tests/api/my-usage-readonly.test.ts",
       "tests/api/api-actions-integrity.test.ts",
-      "tests/api/auth.unit.test.ts",
+      "tests/integration/auth.test.ts",
       "tests/api/action-adapter-openapi.unit.test.ts",
     ],
-    exclude: ["node_modules", ".next", "dist", "build", "coverage", "tests/integration/**"],
+    exclude: ["node_modules", ".next", "dist", "build", "coverage"],
 
     coverage: {
       provider: "v8",

@@ -754,7 +754,7 @@
     "successDescription": "您的 API 金鑰已成功建立。",
     "generatedKey": {
       "label": "產生的金鑰",
-      "hint": "您可以隨時在金鑰列表中查看和複製此金鑰"
+      "hint": "您可以在金鑰列表中管理此金鑰（啟用/停用、設定限額等），但完整金鑰僅顯示一次，請立即複製並妥善保存"
     },
     "errors": {
       "userIdMissing": "使用者 ID 不存在",
@@ -1289,11 +1289,12 @@
       "description": "建立新使用者並設定 API 金鑰",
       "saveFailed": "建立使用者失敗",
       "keyCreateFailed": "建立金鑰失敗",
+      "rollbackFailed": "自動回滾失敗：可能已建立使用者但未建立金鑰。請手動刪除該使用者（userId: {userId}）後重試",
       "createSuccess": "使用者建立成功",
       "successTitle": "建立成功",
       "successDescription": "使用者和金鑰已成功建立",
       "generatedKey": "產生的金鑰",
-      "keyHint": "您可以隨時在使用者管理頁面查看和複製此金鑰",
+      "keyHint": "您可以在使用者管理頁面管理此金鑰（啟用/停用、設定限額等），但完整金鑰僅顯示一次，請立即複製並妥善保存",
       "keysSection": "金鑰",
       "addKey": "新增金鑰",
       "removeKey": "刪除金鑰",

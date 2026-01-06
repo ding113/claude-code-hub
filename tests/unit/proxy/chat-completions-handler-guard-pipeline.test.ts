@@ -296,7 +296,7 @@ describe("handleChatCompletions：必须走 GuardPipeline", () => {
     const res = await handleChatCompletions({} as any);
 
     expect(res.status).toBe(400);
-    expect(h.callOrder).toEqual(["auth", "client"]);
+    expect(h.callOrder).toEqual(["auth", "sensitive", "client"]);
     expect(h.callOrder).not.toContain("forward");
     expect(h.callOrder).not.toContain("dispatch");
   });
@@ -315,6 +315,7 @@ describe("handleChatCompletions：必须走 GuardPipeline", () => {
     expect(res.status).toBe(200);
     expect(h.callOrder).toEqual([
       "auth",
+      "sensitive",
       "client",
       "model",
       "version",
@@ -341,6 +342,7 @@ describe("handleChatCompletions：必须走 GuardPipeline", () => {
     expect(res.status).toBe(200);
     expect(h.callOrder).toEqual([
       "auth",
+      "sensitive",
       "client",
       "model",
       "version",
@@ -348,7 +350,6 @@ describe("handleChatCompletions：必须走 GuardPipeline", () => {
       "session",
       "warmup",
       "requestFilter",
-      "sensitive",
       "rateLimit",
       "provider",
       "providerRequestFilter",
@@ -373,6 +374,7 @@ describe("handleChatCompletions：必须走 GuardPipeline", () => {
     expect(res.status).toBe(200);
     expect(h.callOrder).toEqual([
       "auth",
+      "sensitive",
       "client",
       "model",
       "version",
@@ -380,7 +382,6 @@ describe("handleChatCompletions：必须走 GuardPipeline", () => {
       "session",
       "warmup",
       "requestFilter",
-      "sensitive",
       "rateLimit",
       "provider",
       "providerRequestFilter",
