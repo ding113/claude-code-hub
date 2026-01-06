@@ -301,6 +301,33 @@ describe("handleChatCompletions：必须走 GuardPipeline", () => {
     expect(h.callOrder).not.toContain("dispatch");
   });
 
+  test("warmup 早退时，不应进行并发计数（避免 decrement 未匹配 increment）", async () => {
+    h.session = createSession({
+      model: "gpt-4.1-mini",
+      messages: [{ role: "user", content: "hi" }],
+      stream: false,
+    });
+    h.warmupResult = new Response("warmup", { status: 200 });
+
+    const { handleChatCompletions } = await import("@/app/v1/_lib/codex/chat-completions-handler");
+    const res = await handleChatCompletions({} as any);
+
+    expect(res.status).toBe(200);
+    expect(h.callOrder).toEqual([
+      "auth",
+      "client",
+      "model",
+      "version",
+      "probe",
+      "session",
+      "warmup",
+    ]);
+    expect(h.callOrder).not.toContain("concurrencyInc");
+    expect(h.callOrder).not.toContain("concurrencyDec");
+    expect(h.callOrder).not.toContain("forward");
+    expect(h.callOrder).not.toContain("dispatch");
+  });
+
   test("OpenAI(messages) 请求成功路径必须执行全链路 guards/filters 再 forward/dispatch", async () => {
     h.session = createSession({
       model: "gpt-4.1-mini",

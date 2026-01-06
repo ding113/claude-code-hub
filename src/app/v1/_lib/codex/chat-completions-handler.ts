@@ -33,6 +33,7 @@ export async function handleChatCompletions(c: Context): Promise<Response> {
   logger.info("[ChatCompletions] Received OpenAI Compatible API request");
 
   let session: ProxySession | null = null;
+  let concurrentCountIncremented = false;
 
   try {
     session = await ProxySession.fromContext(c);
@@ -119,9 +120,6 @@ export async function handleChatCompletions(c: Context): Promise<Response> {
             inputLength: Array.isArray(msgObj.input) ? msgObj.input.length : "N/A",
           });
         }
-
-        // 标记为 OpenAI 格式（用于响应转换）
-        session.setOriginalFormat("openai");
       } catch (transformError) {
         logger.error("[ChatCompletions] Request transformation failed:", {
           context: transformError,
@@ -168,6 +166,7 @@ export async function handleChatCompletions(c: Context): Promise<Response> {
     // 增加并发计数（在所有检查通过后，请求开始前）- 跳过 count_tokens
     if (session.sessionId && !session.isCountTokensRequest()) {
       await SessionTracker.incrementConcurrentCount(session.sessionId);
+      concurrentCountIncremented = true;
     }
 
     // 记录请求开始
@@ -202,7 +201,7 @@ export async function handleChatCompletions(c: Context): Promise<Response> {
     return ProxyResponses.buildError(500, "代理请求发生未知错误");
   } finally {
     // 减少并发计数（确保无论成功失败都执行）- 跳过 count_tokens
-    if (session?.sessionId && !session.isCountTokensRequest()) {
+    if (concurrentCountIncremented && session?.sessionId && !session.isCountTokensRequest()) {
       await SessionTracker.decrementConcurrentCount(session.sessionId);
     }
   }
