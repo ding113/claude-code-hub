@@ -64,6 +64,20 @@ PackyCode offers a special discount for users of this software. Register via thi
 </tr>
 </table>
 
+<table>
+<tr>
+<td width="200">
+<a href="https://co.yes.vg/register?ref=ygxz">
+<img src="public/readme/yescode.png" alt="YesCode Logo" width="180"/>
+</a>
+</td>
+<td>
+<b>💎 Special Offer</b>: <a href="https://co.yes.vg/register?ref=ygxz">YesCode</a> is a low-profile yet highly reliable AI API relay service, dedicated to providing developers with stable access to Claude, Codex, Gemini, and other models. Built on solid technical foundations with consistently dependable service quality.<br/>
+Register via this link to get started → <a href="https://co.yes.vg/register?ref=ygxz">Visit Now</a>
+</td>
+</tr>
+</table>
+
 ## ✨ Core Highlights
 
 - 🤖 **Intelligent load balancing**: Weight + priority + grouping scheduler with built-in circuit breaker and up to three failover retries to keep requests stable.

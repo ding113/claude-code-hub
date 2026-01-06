@@ -31,7 +31,7 @@ Claude Code Hub 通过 Next.js 15 + Hono + PostgreSQL + Redis 组合，实现 Cl
 </td>
 <td>
 <b>💎 特别优惠</b>：<a href="https://cubence.com?source=cch">Cubence</a> 一家稳定高效的AI服务中转平台，为 Claude Code、Codex、Gemini 等AI工具提供中转服务，有着不错的稳定性和性价比。<br/>
-Cubence 为 CCH 的使用用户提供了特别的优惠折扣：在购买时使用优惠券 <code>DING113CCH</code>，可享受 <b>20% 优惠折扣</b> → <a href="https://cubence.com?source=cch">立即访问</a>
+Cubence 为 CCH 的使用用户提供了特别的优惠折扣：在购买时使用优惠券 <code>DING113CCH</code>，可享受 <b>10% 优惠折扣</b> → <a href="https://cubence.com?source=cch">立即访问</a>
 </td>
 </tr>
 </table>
@@ -60,6 +60,20 @@ Cubence 为 CCH 的使用用户提供了特别的优惠折扣：在购买时使�
 <td>
 <b>💎 特别优惠</b>：感谢 <a href="https://www.packyapi.com/register?aff=withcch">PackyCode</a> 赞助本项目！PackyCode 是一家稳定、高效的 API 中转服务商，提供 Claude Code、Codex、Gemini 等多种中转服务。<br/>
 PackyCode 为本软件的用户提供了特别优惠，使用此链接注册并在充值时填写优惠码 <code>WITHCCH</code>，可享受 <b>9 折优惠</b> → <a href="https://www.packyapi.com/register?aff=withcch">立即访问</a>
+</td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td width="200">
+<a href="https://co.yes.vg/register?ref=ygxz">
+<img src="public/readme/yescode.png" alt="YesCode Logo" width="180"/>
+</a>
+</td>
+<td>
+<b>💎 特别优惠</b>：<a href="https://co.yes.vg/register?ref=ygxz">YesCode</a> 是一家低调务实的 AI API 中转服务商，专注于为开发者提供稳定可靠的 Claude、Codex、Gemini 等模型接入服务，以扎实的技术底蕴和持续稳定的服务质量赢得用户信赖。<br/>
+通过此链接注册即可体验 → <a href="https://co.yes.vg/register?ref=ygxz">立即访问</a>
 </td>
 </tr>
 </table>
