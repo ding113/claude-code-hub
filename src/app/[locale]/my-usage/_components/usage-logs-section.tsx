@@ -1,8 +1,8 @@
 "use client";
 
-import { Loader2, ScrollText } from "lucide-react";
+import { Check, ChevronDown, Filter, Loader2, RefreshCw, ScrollText, X } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   getMyAvailableEndpoints,
   getMyAvailableModels,
@@ -10,8 +10,13 @@ import {
   type MyUsageLogsResult,
 } from "@/actions/my-usage";
 import { LogsDateRangePicker } from "@/app/[locale]/dashboard/logs/_components/logs-date-range-picker";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -21,12 +26,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import { UsageLogsTable } from "./usage-logs-table";
 
 interface UsageLogsSectionProps {
   initialData?: MyUsageLogsResult | null;
   loading?: boolean;
   autoRefreshSeconds?: number;
+  defaultOpen?: boolean;
 }
 
 interface Filters {
@@ -44,10 +51,13 @@ export function UsageLogsSection({
   initialData = null,
   loading = false,
   autoRefreshSeconds,
+  defaultOpen = false,
 }: UsageLogsSectionProps) {
   const t = useTranslations("myUsage.logs");
+  const tCollapsible = useTranslations("myUsage.logsCollapsible");
   const tDashboard = useTranslations("dashboard");
   const tCommon = useTranslations("common");
+  const [isOpen, setIsOpen] = useState(defaultOpen);
   const [models, setModels] = useState<string[]>([]);
   const [endpoints, setEndpoints] = useState<string[]>([]);
   const [isModelsLoading, setIsModelsLoading] = useState(true);
@@ -57,6 +67,51 @@ export function UsageLogsSection({
   const [data, setData] = useState<MyUsageLogsResult | null>(initialData);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+
+  // Compute metrics for header summary
+  const logs = data?.logs ?? [];
+
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (appliedFilters.startDate || appliedFilters.endDate) count++;
+    if (appliedFilters.model) count++;
+    if (appliedFilters.endpoint) count++;
+    if (appliedFilters.statusCode || appliedFilters.excludeStatusCode200) count++;
+    if (appliedFilters.minRetryCount) count++;
+    return count;
+  }, [appliedFilters]);
+
+  const lastLog = useMemo(() => {
+    if (!logs || logs.length === 0) return null;
+    return logs[0]; // First log is the most recent (sorted by createdAt DESC)
+  }, [logs]);
+
+  const lastStatusText = useMemo(() => {
+    if (!lastLog?.createdAt) return null;
+    const now = new Date();
+    const logTime = new Date(lastLog.createdAt);
+    const diffMs = now.getTime() - logTime.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+
+    if (diffMins < 1) return "now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    return `${Math.floor(diffHours / 24)}d ago`;
+  }, [lastLog]);
+
+  const successRate = useMemo(() => {
+    if (!logs || logs.length === 0) return null;
+    const successCount = logs.filter((log) => log.statusCode && log.statusCode < 400).length;
+    return Math.round((successCount / logs.length) * 100);
+  }, [logs]);
+
+  const lastStatusColor = useMemo(() => {
+    if (!lastLog?.statusCode) return "";
+    if (lastLog.statusCode === 200) return "text-green-600 dark:text-green-400";
+    if (lastLog.statusCode >= 400) return "text-red-600 dark:text-red-400";
+    return "";
+  }, [lastLog]);
 
   // Sync initialData from parent when it becomes available
   // (useState only uses initialData on first mount, not on subsequent updates)
@@ -187,19 +242,144 @@ export function UsageLogsSection({
   const isRefreshing = isPending && Boolean(data);
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="flex items-center gap-2">
-          <ScrollText className="h-4 w-4" />
-          {t("title")}
-        </CardTitle>
-        {autoRefreshSeconds ? (
-          <span className="text-xs text-muted-foreground shrink-0 whitespace-nowrap">
-            {t("autoRefresh", { seconds: autoRefreshSeconds })}
-          </span>
-        ) : null}
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <div className="rounded-lg border bg-card">
+        <CollapsibleTrigger asChild>
+          <button
+            className={cn(
+              "flex w-full items-center justify-between gap-4 p-4",
+              "hover:bg-muted/50 transition-colors",
+              isOpen && "border-b"
+            )}
+          >
+            {/* Icon + Title */}
+            <div className="flex items-center gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
+                <ScrollText className="h-4 w-4" />
+              </div>
+              <span className="text-sm font-semibold">{tCollapsible("title")}</span>
+            </div>
+
+            {/* Header Summary */}
+            <div className="flex items-center gap-3">
+              {/* Desktop Summary */}
+              <div className="hidden sm:flex items-center gap-2 text-sm">
+                {/* Last Status */}
+                {lastLog ? (
+                  <span className={cn("font-mono", lastStatusColor)}>
+                    {tCollapsible("lastStatus", {
+                      code: lastLog.statusCode ?? "-",
+                      time: lastStatusText ?? "-",
+                    })}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">{tCollapsible("noData")}</span>
+                )}
+
+                <span className="text-muted-foreground">|</span>
+
+                {/* Success Rate */}
+                {successRate !== null ? (
+                  <span
+                    className={cn(
+                      "flex items-center gap-1",
+                      successRate >= 80
+                        ? "text-green-600 dark:text-green-400"
+                        : "text-red-600 dark:text-red-400"
+                    )}
+                  >
+                    {successRate >= 80 ? (
+                      <Check className="h-3 w-3" />
+                    ) : (
+                      <X className="h-3 w-3" />
+                    )}
+                    {tCollapsible("successRate", { rate: successRate })}
+                  </span>
+                ) : null}
+
+                {/* Active Filters Badge */}
+                {activeFiltersCount > 0 && (
+                  <>
+                    <span className="text-muted-foreground">|</span>
+                    <Badge variant="secondary" className="h-5 px-1.5 text-xs">
+                      <Filter className="h-3 w-3 mr-1" />
+                      {activeFiltersCount}
+                    </Badge>
+                  </>
+                )}
+
+                {/* Auto-refresh */}
+                {autoRefreshSeconds && (
+                  <>
+                    <span className="text-muted-foreground">|</span>
+                    <RefreshCw
+                      className={cn("h-3.5 w-3.5", autoRefreshSeconds && "animate-spin")}
+                    />
+                    <span className="text-xs text-muted-foreground">{autoRefreshSeconds}s</span>
+                  </>
+                )}
+              </div>
+
+              {/* Mobile Summary */}
+              <div className="flex items-center gap-1.5 text-xs sm:hidden">
+                {/* Last Status - compact */}
+                {lastLog ? (
+                  <span className={cn("font-mono", lastStatusColor)}>
+                    {lastLog.statusCode ?? "-"} ({lastStatusText ?? "-"})
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">{tCollapsible("noData")}</span>
+                )}
+
+                <span className="text-muted-foreground">|</span>
+
+                {/* Success Rate - compact */}
+                {successRate !== null ? (
+                  <span
+                    className={cn(
+                      "flex items-center gap-0.5",
+                      successRate >= 80 ? "text-green-600" : "text-red-600"
+                    )}
+                  >
+                    {successRate >= 80 ? (
+                      <Check className="h-3 w-3" />
+                    ) : (
+                      <X className="h-3 w-3" />
+                    )}
+                    {successRate}%
+                  </span>
+                ) : null}
+
+                {/* Filters + Refresh */}
+                {activeFiltersCount > 0 && (
+                  <>
+                    <span className="text-muted-foreground">|</span>
+                    <Badge variant="secondary" className="h-4 px-1 text-[10px]">
+                      {activeFiltersCount}
+                    </Badge>
+                  </>
+                )}
+                {autoRefreshSeconds && (
+                  <>
+                    <span className="text-muted-foreground">|</span>
+                    <RefreshCw className={cn("h-3 w-3", autoRefreshSeconds && "animate-spin")} />
+                  </>
+                )}
+              </div>
+
+              {/* Chevron */}
+              <ChevronDown
+                className={cn(
+                  "h-4 w-4 text-muted-foreground transition-transform duration-200",
+                  isOpen && "rotate-180"
+                )}
+              />
+            </div>
+          </button>
+        </CollapsibleTrigger>
+
+        <CollapsibleContent>
+          <div className="p-4 space-y-4">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-12">
           <div className="space-y-1.5 lg:col-span-4">
             <Label>
@@ -342,7 +522,9 @@ export function UsageLogsSection({
           loading={isInitialLoading}
           loadingLabel={tCommon("loading")}
         />
-      </CardContent>
-    </Card>
+          </div>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
   );
 }

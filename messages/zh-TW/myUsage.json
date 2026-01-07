@@ -105,5 +105,11 @@
     "daily": "日",
     "monthly": "月",
     "total": "總計"
+  },
+  "logsCollapsible": {
+    "title": "使用記錄",
+    "lastStatus": "最近: {code} ({time})",
+    "successRate": "{rate}%",
+    "noData": "無資料"
   }
 }

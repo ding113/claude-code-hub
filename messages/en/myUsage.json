@@ -105,5 +105,11 @@
     "daily": "Daily",
     "monthly": "Monthly",
     "total": "Total"
+  },
+  "logsCollapsible": {
+    "title": "Usage Logs",
+    "lastStatus": "Last: {code} ({time})",
+    "successRate": "{rate}%",
+    "noData": "No data"
   }
 }

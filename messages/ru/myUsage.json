@@ -105,5 +105,11 @@
     "daily": "День",
     "monthly": "Месяц",
     "total": "Всего"
+  },
+  "logsCollapsible": {
+    "title": "Журнал запросов",
+    "lastStatus": "Посл.: {code} ({time})",
+    "successRate": "{rate}%",
+    "noData": "Нет данных"
   }
 }

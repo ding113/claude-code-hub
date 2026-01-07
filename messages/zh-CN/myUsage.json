@@ -105,5 +105,11 @@
     "daily": "日",
     "monthly": "月",
     "total": "总计"
+  },
+  "logsCollapsible": {
+    "title": "使用日志",
+    "lastStatus": "最近: {code} ({time})",
+    "successRate": "{rate}%",
+    "noData": "无数据"
   }
 }
