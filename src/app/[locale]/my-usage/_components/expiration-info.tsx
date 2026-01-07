@@ -96,7 +96,7 @@ export function ExpirationInfo({
         <p className="text-xs font-medium text-muted-foreground">{t("rpmLimit")}</p>
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold text-foreground">
-            {userRpmLimit != null ? userRpmLimit.toLocaleString() : t("neverExpires")}
+            {userRpmLimit != null ? userRpmLimit.toLocaleString() : "∞"}
           </span>
         </div>
       </div>

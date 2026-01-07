@@ -211,9 +211,9 @@ export function StatisticsSummaryCard({
                   </p>
                   {stats.keyModelBreakdown.length > 0 ? (
                     <div className="space-y-2">
-                      {stats.keyModelBreakdown.map((item) => (
+                      {stats.keyModelBreakdown.map((item, index) => (
                         <ModelBreakdownRow
-                          key={item.model ?? "unknown"}
+                          key={`key-${item.model ?? "unknown"}-${index}`}
                           model={item.model}
                           requests={item.requests}
                           cost={item.cost}
@@ -235,9 +235,9 @@ export function StatisticsSummaryCard({
                   </p>
                   {stats.userModelBreakdown.length > 0 ? (
                     <div className="space-y-2">
-                      {stats.userModelBreakdown.map((item) => (
+                      {stats.userModelBreakdown.map((item, index) => (
                         <ModelBreakdownRow
-                          key={item.model ?? "unknown"}
+                          key={`user-${item.model ?? "unknown"}-${index}`}
                           model={item.model}
                           requests={item.requests}
                           cost={item.cost}
