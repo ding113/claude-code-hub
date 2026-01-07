@@ -4,8 +4,11 @@ import type {
   CodexReasoningSummaryPreference,
   CodexTextVerbosityPreference,
 } from "@/types/provider";
+import type { ProviderParameterOverrideSpecialSetting } from "@/types/special-settings";
 
 type CodexProviderOverrideConfig = {
+  id?: number;
+  name?: string;
   providerType?: string;
   codexReasoningEffortPreference?: CodexReasoningEffortPreference | null;
   codexReasoningSummaryPreference?: CodexReasoningSummaryPreference | null;
@@ -15,6 +18,14 @@ type CodexProviderOverrideConfig = {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function toAuditValue(value: unknown): string | number | boolean | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return value;
+  }
+  return null;
 }
 
 function normalizeStringPreference(value: string | null | undefined): string | null {
@@ -87,4 +98,86 @@ export function applyCodexProviderOverrides(
   }
 
   return output;
+}
+
+export function applyCodexProviderOverridesWithAudit(
+  provider: CodexProviderOverrideConfig,
+  request: Record<string, unknown>
+): { request: Record<string, unknown>; audit: ProviderParameterOverrideSpecialSetting | null } {
+  if (provider.providerType !== "codex") {
+    return { request, audit: null };
+  }
+
+  const parallelToolCalls = normalizeParallelToolCallsPreference(
+    provider.codexParallelToolCallsPreference
+  );
+  const reasoningEffort = normalizeStringPreference(provider.codexReasoningEffortPreference);
+  const reasoningSummary = normalizeStringPreference(provider.codexReasoningSummaryPreference);
+  const textVerbosity = normalizeStringPreference(provider.codexTextVerbosityPreference);
+
+  const hit =
+    parallelToolCalls !== null ||
+    reasoningEffort !== null ||
+    reasoningSummary !== null ||
+    textVerbosity !== null;
+
+  if (!hit) {
+    return { request, audit: null };
+  }
+
+  const beforeParallelToolCalls = toAuditValue(request.parallel_tool_calls);
+  const beforeReasoning = isPlainObject(request.reasoning) ? request.reasoning : null;
+  const beforeReasoningEffort = toAuditValue(beforeReasoning?.effort);
+  const beforeReasoningSummary = toAuditValue(beforeReasoning?.summary);
+  const beforeText = isPlainObject(request.text) ? request.text : null;
+  const beforeTextVerbosity = toAuditValue(beforeText?.verbosity);
+
+  const nextRequest = applyCodexProviderOverrides(provider, request);
+
+  const afterParallelToolCalls = toAuditValue(nextRequest.parallel_tool_calls);
+  const afterReasoning = isPlainObject(nextRequest.reasoning) ? nextRequest.reasoning : null;
+  const afterReasoningEffort = toAuditValue(afterReasoning?.effort);
+  const afterReasoningSummary = toAuditValue(afterReasoning?.summary);
+  const afterText = isPlainObject(nextRequest.text) ? nextRequest.text : null;
+  const afterTextVerbosity = toAuditValue(afterText?.verbosity);
+
+  const changes: ProviderParameterOverrideSpecialSetting["changes"] = [
+    {
+      path: "parallel_tool_calls",
+      before: beforeParallelToolCalls,
+      after: afterParallelToolCalls,
+      changed: !Object.is(beforeParallelToolCalls, afterParallelToolCalls),
+    },
+    {
+      path: "reasoning.effort",
+      before: beforeReasoningEffort,
+      after: afterReasoningEffort,
+      changed: !Object.is(beforeReasoningEffort, afterReasoningEffort),
+    },
+    {
+      path: "reasoning.summary",
+      before: beforeReasoningSummary,
+      after: afterReasoningSummary,
+      changed: !Object.is(beforeReasoningSummary, afterReasoningSummary),
+    },
+    {
+      path: "text.verbosity",
+      before: beforeTextVerbosity,
+      after: afterTextVerbosity,
+      changed: !Object.is(beforeTextVerbosity, afterTextVerbosity),
+    },
+  ];
+
+  const audit: ProviderParameterOverrideSpecialSetting = {
+    type: "provider_parameter_override",
+    scope: "provider",
+    providerId: provider.id ?? null,
+    providerName: provider.name ?? null,
+    providerType: provider.providerType ?? null,
+    hit: true,
+    changed: changes.some((c) => c.changed),
+    changes,
+  };
+
+  return { request: nextRequest, audit };
 }

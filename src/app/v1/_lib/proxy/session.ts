@@ -9,6 +9,7 @@ import type { Key } from "@/types/key";
 import type { ProviderChainItem } from "@/types/message";
 import type { ModelPriceData } from "@/types/model-price";
 import type { Provider, ProviderType } from "@/types/provider";
+import type { SpecialSetting } from "@/types/special-settings";
 import type { User } from "@/types/user";
 import { ProxyError } from "./errors";
 import type { ClientFormat } from "./format-mapper";
@@ -93,6 +94,9 @@ export class ProxySession {
 
   // 1M Context Window applied (resolved)
   private context1mApplied: boolean = false;
+
+  // 特殊设置（用于审计/展示，可扩展）
+  private specialSettings: SpecialSetting[] = [];
 
   // Cached price data (lazy loaded: undefined=not loaded, null=no data)
   private cachedPriceData?: ModelPriceData | null;
@@ -262,6 +266,14 @@ export class ProxySession {
 
   getContext1mApplied(): boolean {
     return this.context1mApplied;
+  }
+
+  addSpecialSetting(setting: SpecialSetting): void {
+    this.specialSettings.push(setting);
+  }
+
+  getSpecialSettings(): SpecialSetting[] | null {
+    return this.specialSettings.length > 0 ? this.specialSettings : null;
   }
 
   /**

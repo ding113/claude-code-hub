@@ -16,6 +16,7 @@ const messages = {
         requestHeaders: "Request Headers",
         requestBody: "Request Body",
         requestMessages: "Request Messages",
+        specialSettings: "Special",
         responseHeaders: "Response Headers",
         responseBody: "Response Body",
         noHeaders: "No data",
@@ -88,6 +89,7 @@ describe("SessionMessagesDetailsTabs", () => {
       <SessionMessagesDetailsTabs
         requestBody={{ model: "gpt-5.2", instructions: "test" }}
         messages={{ role: "user", content: "hi" }}
+        specialSettings={null}
         response={sse}
         requestHeaders={{ a: "1" }}
         responseHeaders={{ b: "2" }}
@@ -149,6 +151,7 @@ describe("SessionMessagesDetailsTabs", () => {
       <SessionMessagesDetailsTabs
         requestBody={{ model: "gpt-5.2", instructions: "test" }}
         messages={{ role: "user", content: "hi" }}
+        specialSettings={null}
         response='{"ok":true}'
         requestHeaders={{}}
         responseHeaders={{}}
@@ -175,6 +178,7 @@ describe("SessionMessagesDetailsTabs", () => {
       <SessionMessagesDetailsTabs
         requestBody={null}
         messages={null}
+        specialSettings={null}
         response={null}
         requestHeaders={null}
         responseHeaders={null}
@@ -191,6 +195,12 @@ describe("SessionMessagesDetailsTabs", () => {
     click(requestHeadersTrigger);
     expect(container.textContent).toContain("No data");
 
+    const specialSettingsTrigger = container.querySelector(
+      "[data-testid='session-tab-trigger-special-settings']"
+    ) as HTMLElement;
+    click(specialSettingsTrigger);
+    expect(container.textContent).toContain("No Data");
+
     unmount();
   });
 
@@ -203,6 +213,7 @@ describe("SessionMessagesDetailsTabs", () => {
       <SessionMessagesDetailsTabs
         requestBody={null}
         messages={{ role: "user", content: "hi" }}
+        specialSettings={null}
         response='{"ok":true}'
         requestHeaders={requestHeaders}
         responseHeaders={{ b: "2" }}
@@ -254,6 +265,7 @@ describe("SessionMessagesDetailsTabs", () => {
       <SessionMessagesDetailsTabs
         requestBody={requestBody}
         messages={{ role: "user", content: "hi" }}
+        specialSettings={null}
         response='{"ok":true}'
         requestHeaders={{ a: "1" }}
         responseHeaders={{ b: "2" }}

@@ -128,6 +128,7 @@
       "blocked": "被拦截",
       "nonBilling": "非计费",
       "skipped": "已跳过",
+      "specialSettings": "特殊设置",
       "times": "次",
       "loadedCount": "已加载 {count} 条记录",
       "loadingMore": "加载更多中...",
@@ -153,6 +154,9 @@
       "success": "请求成功完成",
       "error": "请求失败，以下是详细的错误信息和供应商决策链",
       "processing": "请求正在进行中，尚未完成",
+      "specialSettings": {
+        "title": "特殊设置"
+      },
       "skipped": {
         "title": "跳过信息",
         "reason": "原因",
@@ -381,6 +385,7 @@
       "requestHeaders": "请求头",
       "requestBody": "请求体",
       "requestMessages": "请求 Messages",
+      "specialSettings": "特殊设置",
       "requestMessagesDescription": "客户端发送的消息内容",
       "responseHeaders": "响应头",
       "responseBody": "响应体",

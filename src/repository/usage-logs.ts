@@ -4,6 +4,7 @@ import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest, providers, users } from "@/drizzle/schema";
 import type { ProviderChainItem } from "@/types/message";
+import type { SpecialSetting } from "@/types/special-settings";
 import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
 
 export interface UsageLogFilters {
@@ -56,6 +57,7 @@ export interface UsageLogRow {
   userAgent: string | null; // User-Agent（客户端信息）
   messagesCount: number | null; // Messages 数量
   context1mApplied: boolean | null; // 是否应用了1M上下文窗口
+  specialSettings: SpecialSetting[] | null; // 特殊设置（审计/展示）
 }
 
 export interface UsageLogSummary {
@@ -213,6 +215,7 @@ export async function findUsageLogsBatch(
       userAgent: messageRequest.userAgent,
       messagesCount: messageRequest.messagesCount,
       context1mApplied: messageRequest.context1mApplied,
+      specialSettings: messageRequest.specialSettings,
     })
     .from(messageRequest)
     .innerJoin(users, eq(messageRequest.userId, users.id))
@@ -426,6 +429,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       userAgent: messageRequest.userAgent, // User-Agent
       messagesCount: messageRequest.messagesCount, // Messages 数量
       context1mApplied: messageRequest.context1mApplied, // 1M上下文窗口
+      specialSettings: messageRequest.specialSettings, // 特殊设置（审计/展示）
     })
     .from(messageRequest)
     .innerJoin(users, eq(messageRequest.userId, users.id))

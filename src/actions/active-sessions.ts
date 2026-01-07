@@ -10,6 +10,7 @@ import {
 import { logger } from "@/lib/logger";
 import { normalizeRequestSequence } from "@/lib/utils/request-sequence";
 import type { ActiveSessionInfo } from "@/types/session";
+import type { SpecialSetting } from "@/types/special-settings";
 import { summarizeTerminateSessionsBatch } from "./active-sessions-utils";
 import type { ActionResult } from "./types";
 
@@ -518,6 +519,7 @@ export async function getSessionDetails(
     responseHeaders: Record<string, string> | null;
     requestMeta: { clientUrl: string | null; upstreamUrl: string | null; method: string | null };
     responseMeta: { upstreamUrl: string | null; statusCode: number | null };
+    specialSettings: SpecialSetting[] | null;
     sessionStats: Awaited<
       ReturnType<typeof import("@/repository/message").aggregateSessionStats>
     > | null;
@@ -616,6 +618,7 @@ export async function getSessionDetails(
       clientReqMeta,
       upstreamReqMeta,
       upstreamResMeta,
+      specialSettings,
     ] = await Promise.all([
       SessionManager.getSessionRequestBody(sessionId, effectiveSequence),
       SessionManager.getSessionMessages(sessionId, effectiveSequence),
@@ -625,6 +628,7 @@ export async function getSessionDetails(
       SessionManager.getSessionClientRequestMeta(sessionId, effectiveSequence),
       SessionManager.getSessionUpstreamRequestMeta(sessionId, effectiveSequence),
       SessionManager.getSessionUpstreamResponseMeta(sessionId, effectiveSequence),
+      SessionManager.getSessionSpecialSettings(sessionId, effectiveSequence),
     ]);
 
     // 兼容：历史/异常数据可能是 JSON 字符串（前端需要根级对象/数组）
@@ -652,6 +656,7 @@ export async function getSessionDetails(
         responseHeaders,
         requestMeta,
         responseMeta,
+        specialSettings,
         sessionStats,
         currentSequence: effectiveSequence ?? null,
         prevSequence: adjacent.prevSequence,

@@ -128,6 +128,7 @@
       "blocked": "Заблокировано",
       "nonBilling": "Не тарифицируется",
       "skipped": "Пропущено",
+      "specialSettings": "Особые",
       "times": "раз",
       "loadedCount": "Загружено {count} записей",
       "loadingMore": "Загрузка...",
@@ -153,6 +154,9 @@
       "success": "Запрос успешно выполнен",
       "error": "Запрос не выполнен, ниже подробная информация об ошибке и цепочке решений поставщика",
       "processing": "Запрос находится в процессе выполнения и еще не завершен",
+      "specialSettings": {
+        "title": "Особые настройки"
+      },
       "skipped": {
         "title": "Пропущено",
         "reason": "Причина",
@@ -380,6 +384,7 @@
       "requestHeaders": "Заголовки запроса",
       "requestBody": "Тело запроса",
       "requestMessages": "Сообщения запроса",
+      "specialSettings": "Особые",
       "requestMessagesDescription": "Содержимое сообщения, отправленного клиентом",
       "responseHeaders": "Заголовки ответа",
       "responseBody": "Тело ответа",
