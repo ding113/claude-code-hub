@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { GeminiAuth } from "@/app/v1/_lib/gemini/auth";
 import { isClientAbortError } from "@/app/v1/_lib/proxy/errors";
 import { getSession } from "@/lib/auth";
+import { publishProviderCacheInvalidation } from "@/lib/cache/provider-cache";
 import {
   clearConfigCache,
   clearProviderState,
@@ -36,6 +37,7 @@ import {
   createProvider,
   deleteProvider,
   findAllProviders,
+  findAllProvidersFresh,
   findProviderById,
   getProviderStatistics,
   resetProviderTotalCostResetAt,
@@ -102,6 +104,29 @@ const API_TEST_CONFIG = {
 const PROXY_RETRY_STATUS_CODES = new Set([502, 504, 520, 521, 522, 523, 524, 525, 526, 527, 530]);
 const CLOUDFLARE_ERROR_STATUS_CODES = new Set([520, 521, 522, 523, 524, 525, 526, 527, 530]);
 
+/**
+ * 广播 Provider 缓存失效通知（跨实例）
+ *
+ * CRUD 操作后调用，通知所有实例清除缓存。
+ * 失败时不影响主流程，其他实例将依赖 TTL 过期后刷新。
+ */
+async function broadcastProviderCacheInvalidation(context: {
+  operation: "add" | "edit" | "remove";
+  providerId: number;
+}): Promise<void> {
+  try {
+    await publishProviderCacheInvalidation();
+    logger.debug(`${context.operation} Provider:cache_invalidation_success`, {
+      providerId: context.providerId,
+    });
+  } catch (error) {
+    logger.warn(`${context.operation} Provider:cache_invalidation_failed`, {
+      providerId: context.providerId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 // 获取服务商数据
 export async function getProviders(): Promise<ProviderDisplay[]> {
   try {
@@ -121,7 +146,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
 
     // 并行获取供应商列表和统计数据
     const [providers, statistics] = await Promise.all([
-      findAllProviders(),
+      findAllProvidersFresh(),
       getProviderStatistics().catch((error) => {
         logger.trace("getProviders:statistics_error", {
           message: error.message,
@@ -309,7 +334,7 @@ export async function getProviderGroupsWithCount(): Promise<
   ActionResult<Array<{ group: string; providerCount: number }>>
 > {
   try {
-    const providers = await findAllProviders();
+    const providers = await findAllProvidersFresh();
     const groupCounts = new Map<string, number>();
 
     for (const provider of providers) {
@@ -495,6 +520,9 @@ export async function addProvider(data: {
       // 不影响主流程，仅记录警告
     }
 
+    // 广播缓存更新（跨实例即时生效）
+    await broadcastProviderCacheInvalidation({ operation: "add", providerId: provider.id });
+
     revalidatePath("/settings/providers");
     logger.trace("addProvider:revalidated", { path: "/settings/providers" });
 
@@ -633,6 +661,9 @@ export async function editProvider(
       }
     }
 
+    // 广播缓存更新（跨实例即时生效）
+    await broadcastProviderCacheInvalidation({ operation: "edit", providerId });
+
     revalidatePath("/settings/providers");
     return { ok: true };
   } catch (error) {
@@ -667,6 +698,9 @@ export async function removeProvider(providerId: number): Promise<ActionResult> 
       });
     }
 
+    // 广播缓存更新（跨实例即时生效）
+    await broadcastProviderCacheInvalidation({ operation: "remove", providerId });
+
     revalidatePath("/settings/providers");
     return { ok: true };
   } catch (error) {
@@ -687,7 +721,7 @@ export async function getProvidersHealthStatus() {
       return {};
     }
 
-    const providerIds = await findAllProviders().then((providers) => providers.map((p) => p.id));
+    const providerIds = await findAllProvidersFresh().then((providers) => providers.map((p) => p.id));
     const healthStatus = await getAllHealthStatusAsync(providerIds, {
       forceRefresh: true,
     });

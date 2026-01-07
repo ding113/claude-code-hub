@@ -3,6 +3,7 @@
 import { and, desc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { providers } from "@/drizzle/schema";
+import { getCachedProviders } from "@/lib/cache/provider-cache";
 import { getEnvConfig } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import type { CreateProviderData, Provider, UpdateProviderData } from "@/types/provider";
@@ -191,10 +192,13 @@ export async function findProviderList(
 }
 
 /**
- * Fetch all providers without pagination limits.
- * Use this when you need the complete provider list (e.g., for selection, health status).
+ * 直接从数据库获取所有供应商（绕过缓存）
+ *
+ * 用于：
+ * - 管理后台需要保证数据新鲜度的场景
+ * - 缓存刷新时的数据源
  */
-export async function findAllProviders(): Promise<Provider[]> {
+export async function findAllProvidersFresh(): Promise<Provider[]> {
   const result = await db
     .select({
       id: providers.id,
@@ -252,12 +256,25 @@ export async function findAllProviders(): Promise<Provider[]> {
     .where(isNull(providers.deletedAt))
     .orderBy(desc(providers.createdAt));
 
-  logger.trace("findAllProviders:query_result", {
+  logger.trace("findAllProvidersFresh:query_result", {
     count: result.length,
     ids: result.map((r) => r.id),
   });
 
   return result.map(toProvider);
+}
+
+/**
+ * 获取所有供应商（带缓存）
+ *
+ * 使用进程级缓存：
+ * - 30s TTL 自动过期
+ * - Redis Pub/Sub 跨实例即时失效
+ *
+ * 用于高频读取场景（如供应商选择）
+ */
+export async function findAllProviders(): Promise<Provider[]> {
+  return getCachedProviders(findAllProvidersFresh);
 }
 
 export async function findProviderById(id: number): Promise<Provider | null> {
