@@ -346,6 +346,8 @@ export const messageRequest = pgTable('message_request', {
   messageRequestSessionSeqIdx: index('idx_message_request_session_seq').on(table.sessionId, table.requestSequence).where(sql`${table.deletedAt} IS NULL`),
   // Endpoint 过滤查询索引（仅针对未删除数据）
   messageRequestEndpointIdx: index('idx_message_request_endpoint').on(table.endpoint).where(sql`${table.deletedAt} IS NULL`),
+  // blocked_by 过滤查询索引（用于排除 warmup/sensitive 等拦截请求）
+  messageRequestBlockedByIdx: index('idx_message_request_blocked_by').on(table.blockedBy).where(sql`${table.deletedAt} IS NULL`),
   // 基础索引
   messageRequestProviderIdIdx: index('idx_message_request_provider_id').on(table.providerId),
   messageRequestUserIdIdx: index('idx_message_request_user_id').on(table.userId),
