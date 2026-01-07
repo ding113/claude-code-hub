@@ -127,12 +127,17 @@ export function UsageLogsTable({
                     {formatTokenAmount(log.cacheReadInputTokens)}
                   </TableCell>
                   <TableCell className="text-right text-sm font-mono">
-                    {CURRENCY_CONFIG[currencyCode]?.symbol ?? currencyCode}{Number(log.cost ?? 0).toFixed(4)}
+                    {CURRENCY_CONFIG[currencyCode]?.symbol ?? currencyCode}
+                    {Number(log.cost ?? 0).toFixed(4)}
                   </TableCell>
                   <TableCell>
                     <Badge
                       variant={log.statusCode && log.statusCode >= 400 ? "destructive" : "outline"}
-                      className={log.statusCode === 200 ? "border-green-500 text-green-600 dark:text-green-400" : undefined}
+                      className={
+                        log.statusCode === 200
+                          ? "border-green-500 text-green-600 dark:text-green-400"
+                          : undefined
+                      }
                     >
                       {log.statusCode ?? "-"}
                     </Badge>

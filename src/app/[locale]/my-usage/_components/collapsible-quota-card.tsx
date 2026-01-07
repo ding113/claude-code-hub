@@ -4,11 +4,7 @@ import { AlertTriangle, ChevronDown, Infinity, PieChart } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import type { MyUsageQuota } from "@/actions/my-usage";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import type { CurrencyCode } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { calculateUsagePercent } from "@/lib/utils/limit-helpers";
@@ -120,9 +116,7 @@ export function CollapsibleQuotaCard({
                       <span className={cn("font-semibold", getPercentColor(dailyPct))}>
                         {Math.round(dailyPct)}%
                       </span>
-                      {dailyPct >= 80 && (
-                        <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                      )}
+                      {dailyPct >= 80 && <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
                     </>
                   )}
                 </div>
@@ -136,9 +130,7 @@ export function CollapsibleQuotaCard({
                       <span className={cn("font-semibold", getPercentColor(monthlyPct))}>
                         {Math.round(monthlyPct)}%
                       </span>
-                      {monthlyPct >= 80 && (
-                        <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                      )}
+                      {monthlyPct >= 80 && <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
                     </>
                   )}
                 </div>
@@ -152,9 +144,7 @@ export function CollapsibleQuotaCard({
                       <span className={cn("font-semibold", getPercentColor(totalPct))}>
                         {Math.round(totalPct)}%
                       </span>
-                      {totalPct >= 80 && (
-                        <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                      )}
+                      {totalPct >= 80 && <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
                     </>
                   )}
                 </div>
@@ -171,9 +161,7 @@ export function CollapsibleQuotaCard({
                 <span className={cn("font-semibold", getPercentColor(totalPct))}>
                   T:{totalPct === null ? "∞" : `${Math.round(totalPct)}%`}
                 </span>
-                {hasWarning && (
-                  <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                )}
+                {hasWarning && <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
               </div>
 
               <ChevronDown

@@ -820,24 +820,28 @@ const { route: getMyStatsSummaryRoute, handler: getMyStatsSummaryHandler } = cre
       totalOutputTokens: z.number().describe("总输出 Token"),
       totalCacheCreationTokens: z.number().describe("缓存创建 Token"),
       totalCacheReadTokens: z.number().describe("缓存读取 Token"),
-      keyModelBreakdown: z.array(
-        z.object({
-          model: z.string().nullable(),
-          requests: z.number(),
-          cost: z.number(),
-          inputTokens: z.number(),
-          outputTokens: z.number(),
-        })
-      ).describe("当前 Key 的模型分布"),
-      userModelBreakdown: z.array(
-        z.object({
-          model: z.string().nullable(),
-          requests: z.number(),
-          cost: z.number(),
-          inputTokens: z.number(),
-          outputTokens: z.number(),
-        })
-      ).describe("用户所有 Key 的模型分布"),
+      keyModelBreakdown: z
+        .array(
+          z.object({
+            model: z.string().nullable(),
+            requests: z.number(),
+            cost: z.number(),
+            inputTokens: z.number(),
+            outputTokens: z.number(),
+          })
+        )
+        .describe("当前 Key 的模型分布"),
+      userModelBreakdown: z
+        .array(
+          z.object({
+            model: z.string().nullable(),
+            requests: z.number(),
+            cost: z.number(),
+            inputTokens: z.number(),
+            outputTokens: z.number(),
+          })
+        )
+        .describe("用户所有 Key 的模型分布"),
       currencyCode: z.string().describe("货币代码"),
     }),
     description: "获取指定日期范围内的聚合统计（仅返回自己的数据）",

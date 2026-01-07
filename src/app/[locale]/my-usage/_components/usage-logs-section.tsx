@@ -12,11 +12,7 @@ import {
 import { LogsDateRangePicker } from "@/app/[locale]/dashboard/logs/_components/logs-date-range-picker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -288,11 +284,7 @@ export function UsageLogsSection({
                         : "text-red-600 dark:text-red-400"
                     )}
                   >
-                    {successRate >= 80 ? (
-                      <Check className="h-3 w-3" />
-                    ) : (
-                      <X className="h-3 w-3" />
-                    )}
+                    {successRate >= 80 ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
                     {tCollapsible("successRate", { rate: successRate })}
                   </span>
                 ) : null}
@@ -312,9 +304,7 @@ export function UsageLogsSection({
                 {autoRefreshSeconds && (
                   <>
                     <span className="text-muted-foreground">|</span>
-                    <RefreshCw
-                      className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")}
-                    />
+                    <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")} />
                     <span className="text-xs text-muted-foreground">{autoRefreshSeconds}s</span>
                   </>
                 )}
@@ -341,11 +331,7 @@ export function UsageLogsSection({
                       successRate >= 80 ? "text-green-600" : "text-red-600"
                     )}
                   >
-                    {successRate >= 80 ? (
-                      <Check className="h-3 w-3" />
-                    ) : (
-                      <X className="h-3 w-3" />
-                    )}
+                    {successRate >= 80 ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
                     {successRate}%
                   </span>
                 ) : null}
@@ -380,148 +366,155 @@ export function UsageLogsSection({
 
         <CollapsibleContent>
           <div className="p-4 space-y-4">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-12">
-          <div className="space-y-1.5 lg:col-span-4">
-            <Label>
-              {t("filters.startDate")} / {t("filters.endDate")}
-            </Label>
-            <LogsDateRangePicker
-              startDate={draftFilters.startDate}
-              endDate={draftFilters.endDate}
-              onDateRangeChange={handleDateRangeChange}
-            />
-          </div>
-          <div className="space-y-1.5 lg:col-span-4">
-            <Label>{t("filters.model")}</Label>
-            <Select
-              value={draftFilters.model ?? "__all__"}
-              onValueChange={(value) =>
-                handleFilterChange({
-                  model: value === "__all__" ? undefined : value,
-                })
-              }
-              disabled={isModelsLoading}
-            >
-              <SelectTrigger>
-                <SelectValue
-                  placeholder={isModelsLoading ? tCommon("loading") : t("filters.allModels")}
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-12">
+              <div className="space-y-1.5 lg:col-span-4">
+                <Label>
+                  {t("filters.startDate")} / {t("filters.endDate")}
+                </Label>
+                <LogsDateRangePicker
+                  startDate={draftFilters.startDate}
+                  endDate={draftFilters.endDate}
+                  onDateRangeChange={handleDateRangeChange}
                 />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">{t("filters.allModels")}</SelectItem>
-                {models.map((model) => (
-                  <SelectItem key={model} value={model}>
-                    {model}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5 lg:col-span-4">
-            <Label>{tDashboard("logs.filters.endpoint")}</Label>
-            <Select
-              value={draftFilters.endpoint ?? "__all__"}
-              onValueChange={(value) =>
-                handleFilterChange({
-                  endpoint: value === "__all__" ? undefined : value,
-                })
-              }
-              disabled={isEndpointsLoading}
-            >
-              <SelectTrigger>
-                <SelectValue
-                  placeholder={
-                    isEndpointsLoading
-                      ? tCommon("loading")
-                      : tDashboard("logs.filters.allEndpoints")
+              </div>
+              <div className="space-y-1.5 lg:col-span-4">
+                <Label>{t("filters.model")}</Label>
+                <Select
+                  value={draftFilters.model ?? "__all__"}
+                  onValueChange={(value) =>
+                    handleFilterChange({
+                      model: value === "__all__" ? undefined : value,
+                    })
+                  }
+                  disabled={isModelsLoading}
+                >
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={isModelsLoading ? tCommon("loading") : t("filters.allModels")}
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__all__">{t("filters.allModels")}</SelectItem>
+                    {models.map((model) => (
+                      <SelectItem key={model} value={model}>
+                        {model}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5 lg:col-span-4">
+                <Label>{tDashboard("logs.filters.endpoint")}</Label>
+                <Select
+                  value={draftFilters.endpoint ?? "__all__"}
+                  onValueChange={(value) =>
+                    handleFilterChange({
+                      endpoint: value === "__all__" ? undefined : value,
+                    })
+                  }
+                  disabled={isEndpointsLoading}
+                >
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={
+                        isEndpointsLoading
+                          ? tCommon("loading")
+                          : tDashboard("logs.filters.allEndpoints")
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__all__">
+                      {tDashboard("logs.filters.allEndpoints")}
+                    </SelectItem>
+                    {endpoints.map((endpoint) => (
+                      <SelectItem key={endpoint} value={endpoint}>
+                        {endpoint}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5 lg:col-span-4">
+                <Label>{t("filters.status")}</Label>
+                <Select
+                  value={
+                    draftFilters.excludeStatusCode200
+                      ? "!200"
+                      : (draftFilters.statusCode?.toString() ?? "__all__")
+                  }
+                  onValueChange={(value) =>
+                    handleFilterChange({
+                      statusCode:
+                        value === "__all__" || value === "!200" ? undefined : parseInt(value, 10),
+                      excludeStatusCode200: value === "!200",
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t("filters.allStatus")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__all__">{t("filters.allStatus")}</SelectItem>
+                    <SelectItem value="!200">{tDashboard("logs.statusCodes.not200")}</SelectItem>
+                    <SelectItem value="200">200</SelectItem>
+                    <SelectItem value="400">400</SelectItem>
+                    <SelectItem value="401">401</SelectItem>
+                    <SelectItem value="429">429</SelectItem>
+                    <SelectItem value="500">500</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5 lg:col-span-4">
+                <Label>{tDashboard("logs.filters.minRetryCount")}</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  inputMode="numeric"
+                  value={draftFilters.minRetryCount?.toString() ?? ""}
+                  placeholder={tDashboard("logs.filters.minRetryCountPlaceholder")}
+                  onChange={(e) =>
+                    handleFilterChange({
+                      minRetryCount: e.target.value ? parseInt(e.target.value, 10) : undefined,
+                    })
                   }
                 />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">{tDashboard("logs.filters.allEndpoints")}</SelectItem>
-                {endpoints.map((endpoint) => (
-                  <SelectItem key={endpoint} value={endpoint}>
-                    {endpoint}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5 lg:col-span-4">
-            <Label>{t("filters.status")}</Label>
-            <Select
-              value={
-                draftFilters.excludeStatusCode200
-                  ? "!200"
-                  : (draftFilters.statusCode?.toString() ?? "__all__")
-              }
-              onValueChange={(value) =>
-                handleFilterChange({
-                  statusCode:
-                    value === "__all__" || value === "!200" ? undefined : parseInt(value, 10),
-                  excludeStatusCode200: value === "!200",
-                })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder={t("filters.allStatus")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">{t("filters.allStatus")}</SelectItem>
-                <SelectItem value="!200">{tDashboard("logs.statusCodes.not200")}</SelectItem>
-                <SelectItem value="200">200</SelectItem>
-                <SelectItem value="400">400</SelectItem>
-                <SelectItem value="401">401</SelectItem>
-                <SelectItem value="429">429</SelectItem>
-                <SelectItem value="500">500</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5 lg:col-span-4">
-            <Label>{tDashboard("logs.filters.minRetryCount")}</Label>
-            <Input
-              type="number"
-              min={0}
-              inputMode="numeric"
-              value={draftFilters.minRetryCount?.toString() ?? ""}
-              placeholder={tDashboard("logs.filters.minRetryCountPlaceholder")}
-              onChange={(e) =>
-                handleFilterChange({
-                  minRetryCount: e.target.value ? parseInt(e.target.value, 10) : undefined,
-                })
-              }
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" onClick={handleApply} disabled={isPending || loading}>
+                {t("filters.apply")}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleReset}
+                disabled={isPending || loading}
+              >
+                {t("filters.reset")}
+              </Button>
+            </div>
+
+            {error ? <p className="text-sm text-destructive">{error}</p> : null}
+
+            {isRefreshing ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                <span>{tCommon("loading")}</span>
+              </div>
+            ) : null}
+
+            <UsageLogsTable
+              logs={data?.logs ?? []}
+              total={data?.total ?? 0}
+              page={appliedFilters.page ?? 1}
+              pageSize={data?.pageSize ?? 20}
+              onPageChange={handlePageChange}
+              currencyCode={data?.currencyCode}
+              loading={isInitialLoading}
+              loadingLabel={tCommon("loading")}
             />
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" onClick={handleApply} disabled={isPending || loading}>
-            {t("filters.apply")}
-          </Button>
-          <Button size="sm" variant="outline" onClick={handleReset} disabled={isPending || loading}>
-            {t("filters.reset")}
-          </Button>
-        </div>
-
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
-
-        {isRefreshing ? (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Loader2 className="h-3 w-3 animate-spin" />
-            <span>{tCommon("loading")}</span>
-          </div>
-        ) : null}
-
-        <UsageLogsTable
-          logs={data?.logs ?? []}
-          total={data?.total ?? 0}
-          page={appliedFilters.page ?? 1}
-          pageSize={data?.pageSize ?? 20}
-          onPageChange={handlePageChange}
-          currencyCode={data?.currencyCode}
-          loading={isInitialLoading}
-          loadingLabel={tCommon("loading")}
-        />
           </div>
         </CollapsibleContent>
       </div>
