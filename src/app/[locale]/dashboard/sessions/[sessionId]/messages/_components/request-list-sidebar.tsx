@@ -93,8 +93,6 @@ export function RequestListSidebar({
     });
   };
 
-
-
   const getStatusColor = (statusCode: number | null) => {
     if (!statusCode) return "text-muted-foreground";
     if (statusCode >= 200 && statusCode < 300) return "text-emerald-600 dark:text-emerald-500";
