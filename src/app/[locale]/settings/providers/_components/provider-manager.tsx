@@ -1,5 +1,5 @@
 "use client";
-import { AlertTriangle, Loader2, Search, X } from "lucide-react";
+import { AlertTriangle, Loader2, Search } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -224,19 +224,9 @@ export function ProviderManager({
               placeholder={t("placeholder")}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9 pr-9"
+              className="pl-9"
               disabled={loading}
             />
-            {searchTerm && (
-              <button
-                onClick={() => setSearchTerm("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                aria-label={t("clear")}
-                disabled={loading}
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
           </div>
         </div>
 
