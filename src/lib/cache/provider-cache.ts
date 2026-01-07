@@ -11,9 +11,13 @@
 
 import "server-only";
 
+import { getEnvConfig } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { publishCacheInvalidation, subscribeCacheInvalidation } from "@/lib/redis/pubsub";
 import type { Provider } from "@/types/provider";
+
+// 模块级别读取配置，避免热路径函数中频繁调用
+const { ENABLE_PROVIDER_CACHE } = getEnvConfig();
 
 export const CHANNEL_PROVIDERS_UPDATED = "cch:cache:providers:updated";
 
@@ -89,6 +93,12 @@ export async function publishProviderCacheInvalidation(): Promise<void> {
  * @returns Provider 列表
  */
 export async function getCachedProviders(fetcher: () => Promise<Provider[]>): Promise<Provider[]> {
+  // 检查是否启用缓存（默认启用）
+  if (!ENABLE_PROVIDER_CACHE) {
+    logger.debug("[ProviderCache] Cache disabled, fetching from DB");
+    return fetcher();
+  }
+
   // 确保订阅已初始化（异步，不阻塞）
   void ensureSubscription();
 
