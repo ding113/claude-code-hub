@@ -83,6 +83,8 @@
       "verboseProviderErrorDesc": "开启后，当所有供应商不可用时返回详细错误信息（包含供应商数量、限流原因等）；关闭后仅返回简洁错误码。",
       "enableHttp2": "启用 HTTP/2",
       "enableHttp2Desc": "启用后，代理请求将优先使用 HTTP/2 协议。如果 HTTP/2 失败，将自动降级到 HTTP/1.1。",
+      "interceptAnthropicWarmupRequests": "拦截 Warmup 请求（Anthropic）",
+      "interceptAnthropicWarmupRequestsDesc": "开启后，识别到 Claude Code 的 Warmup 探测请求将由 CCH 直接抢答短响应，避免访问上游供应商；该请求会记录在日志中，但不计费、不限流、不计入统计。",
       "saveSettings": "保存设置",
       "keepDays": "保留天数",
       "keepDaysDesc": "清理超过此天数的历史日志",
@@ -181,6 +183,10 @@
       "resetCircuitSuccess": "熔断器已重置",
       "resetCircuitSuccessDesc": "供应商 \"{name}\" 的熔断状态已解除",
       "resetCircuitFailed": "重置熔断器失败",
+      "resetUsageTitle": "重置总用量",
+      "resetUsageSuccess": "总用量已重置",
+      "resetUsageSuccessDesc": "供应商 \"{name}\" 的总用量已重置",
+      "resetUsageFailed": "重置总用量失败",
       "toggleSuccess": "供应商已{status}",
       "toggleSuccessDesc": "供应商 \"{name}\" 状态已更新",
       "toggleFailed": "状态切换失败",
@@ -659,6 +665,7 @@
         "create": "新增服务商",
         "edit": "编辑服务商"
       },
+      "dialogDescription": "配置供应商信息及高级设置。",
       "url": {
         "label": "API 地址 *",
         "placeholder": "例如: https://open.bigmodel.cn/api/anthropic"
@@ -760,6 +767,49 @@
               "disabled": "禁用"
             },
             "desc": "配置 1M 上下文窗口支持。仅对 Sonnet 模型生效（claude-sonnet-4-5、claude-sonnet-4）。启用后将应用阶梯定价。"
+          },
+          "codexOverrides": {
+            "reasoningEffort": {
+              "label": "推理等级覆写",
+              "help": "控制模型在输出前用于推理的强度（推理 token 数量）。选择“跟随客户端”表示不改写请求；选择其他值则强制覆写 reasoning.effort。注意：none 仅 GPT-5.1 系列支持；xhigh 仅 GPT-5.1-Codex-Max 支持，模型不支持会返回错误。",
+              "options": {
+                "inherit": "不覆写（跟随客户端）",
+                "minimal": "minimal（更省、更快）",
+                "low": "low",
+                "medium": "medium（默认）",
+                "high": "high（更强推理）",
+                "xhigh": "xhigh（仅 GPT-5.1-Codex-Max）",
+                "none": "none（仅 GPT-5.1）"
+              }
+            },
+            "reasoningSummary": {
+              "label": "推理摘要覆写",
+              "help": "控制是否返回推理摘要。auto 返回精简摘要，detailed 返回更详细摘要；“跟随客户端”不改写 reasoning.summary。",
+              "options": {
+                "inherit": "不覆写（跟随客户端）",
+                "auto": "auto（精简）",
+                "detailed": "detailed（更详细）"
+              }
+            },
+            "textVerbosity": {
+              "label": "输出冗长度覆写",
+              "help": "控制模型输出的详细程度。low 更简洁，high 更详细；“跟随客户端”不改写 text.verbosity。",
+              "options": {
+                "inherit": "不覆写（跟随客户端）",
+                "low": "low（简洁）",
+                "medium": "medium（默认）",
+                "high": "high（更详细）"
+              }
+            },
+            "parallelToolCalls": {
+              "label": "并行工具调用覆写",
+              "help": "控制是否允许并行 tool calls。关闭可能降低工具调用并发能力；“跟随客户端”不改写 parallel_tool_calls。",
+              "options": {
+                "inherit": "不覆写（跟随客户端）",
+                "true": "强制开启",
+                "false": "强制关闭"
+              }
+            }
           }
         },
         "rateLimit": {
@@ -769,6 +819,7 @@
             "daily": "日: {amount} (重置 {resetTime})",
             "weekly": "周: {amount}",
             "monthly": "月: {amount}",
+            "total": "总: {amount}",
             "concurrent": "并发: {count}",
             "none": "无限制"
           },
@@ -800,6 +851,10 @@
           },
           "limitMonthly": {
             "label": "月消费上限 (USD)",
+            "placeholder": "留空表示无限制"
+          },
+          "limitTotal": {
+            "label": "总消费上限 (USD)",
             "placeholder": "留空表示无限制"
           },
           "limitConcurrent": {
@@ -979,6 +1034,7 @@
       "errors": {
         "invalidUrl": "请输入有效的 API 地址",
         "invalidWebsiteUrl": "请输入有效的供应商官网地址",
+        "groupTagTooLong": "分组标签总长度不能超过 {max} 个字符",
         "addFailed": "添加服务商失败",
         "updateFailed": "更新服务商失败",
         "deleteFailed": "删除服务商失败"
@@ -1678,6 +1734,11 @@
     "dingtalkSecretPlaceholder": "可选，用于签名",
     "customHeaders": "自定义 Headers（JSON）",
     "customHeadersPlaceholder": "{\"X-Token\":\"...\"}",
+    "errors": {
+      "headersInvalidJson": "Headers 不是有效 JSON",
+      "headersMustBeObject": "Headers 必须是 JSON 对象",
+      "headersValueMustBeString": "Headers 的值必须为字符串"
+    },
     "types": {
       "wechat": "企业微信",
       "feishu": "飞书",

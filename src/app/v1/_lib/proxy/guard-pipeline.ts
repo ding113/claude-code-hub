@@ -10,6 +10,7 @@ import { ProxySensitiveWordGuard } from "./sensitive-word-guard";
 import type { ProxySession } from "./session";
 import { ProxySessionGuard } from "./session-guard";
 import { ProxyVersionGuard } from "./version-guard";
+import { ProxyWarmupGuard } from "./warmup-guard";
 
 // Request type classification for pipeline presets
 export enum RequestType {
@@ -31,6 +32,7 @@ export type GuardStepKey =
   | "version"
   | "probe"
   | "session"
+  | "warmup"
   | "requestFilter"
   | "sensitive"
   | "rateLimit"
@@ -89,6 +91,12 @@ const Steps: Record<GuardStepKey, GuardStep> = {
     async execute(session) {
       await ProxySessionGuard.ensure(session);
       return null;
+    },
+  },
+  warmup: {
+    name: "warmup",
+    async execute(session) {
+      return ProxyWarmupGuard.ensure(session);
     },
   },
   requestFilter: {
@@ -165,13 +173,14 @@ export const CHAT_PIPELINE: GuardConfig = {
   // Full guard chain for normal chat requests
   steps: [
     "auth",
+    "sensitive",
     "client",
     "model",
     "version",
     "probe",
     "session",
+    "warmup",
     "requestFilter",
-    "sensitive",
     "rateLimit",
     "provider",
     "providerRequestFilter",

@@ -9,6 +9,7 @@ import {
   recordFailure,
   recordSuccess,
 } from "@/lib/circuit-breaker";
+import { applyCodexProviderOverridesWithAudit } from "@/lib/codex/provider-overrides";
 import { isHttp2Enabled } from "@/lib/config";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { PROVIDER_DEFAULTS, PROVIDER_LIMITS } from "@/lib/constants/provider.constants";
@@ -16,6 +17,7 @@ import { logger } from "@/lib/logger";
 import { createProxyAgentForProvider } from "@/lib/proxy-agent";
 import { SessionManager } from "@/lib/session-manager";
 import { CONTEXT_1M_BETA_HEADER, shouldApplyContext1m } from "@/lib/special-attributes";
+import { updateMessageRequestDetails } from "@/repository/message";
 import type { CacheTtlPreference, CacheTtlResolved } from "@/types/cache";
 import { isOfficialCodexClient, sanitizeCodexRequest } from "../codex/utils/request-sanitizer";
 import { defaultRegistry } from "../converters";
@@ -987,6 +989,43 @@ export class ProxyForwarder {
             logger.error("[ProxyForwarder] Failed to sanitize Codex request, using original", {
               error,
               providerId: provider.id,
+            });
+          }
+        }
+
+        // Codex 供应商级参数覆写（默认 inherit=遵循客户端）
+        // 说明：即使官方客户端跳过清洗，也允许管理员在供应商层面强制覆写关键参数
+        const { request: overridden, audit } = applyCodexProviderOverridesWithAudit(
+          provider,
+          session.request.message as Record<string, unknown>
+        );
+        session.request.message = overridden;
+
+        if (audit) {
+          session.addSpecialSetting(audit);
+          const specialSettings = session.getSpecialSettings();
+
+          if (session.sessionId) {
+            void SessionManager.storeSessionSpecialSettings(
+              session.sessionId,
+              specialSettings,
+              session.requestSequence
+            ).catch((err) => {
+              logger.error("[ProxyForwarder] Failed to store special settings", {
+                error: err,
+                sessionId: session.sessionId,
+              });
+            });
+          }
+
+          if (session.messageContext?.id) {
+            void updateMessageRequestDetails(session.messageContext.id, {
+              specialSettings,
+            }).catch((err) => {
+              logger.error("[ProxyForwarder] Failed to persist special settings", {
+                error: err,
+                messageRequestId: session.messageContext?.id,
+              });
             });
           }
         }

@@ -12,6 +12,9 @@
 
 # testing
 /coverage
+/coverage-quota
+/coverage-my-usage
+/coverage-proxy-guard-pipeline
 
 # next.js
 /.next/

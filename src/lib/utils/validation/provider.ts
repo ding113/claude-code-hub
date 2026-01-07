@@ -10,6 +10,23 @@ export function validateNumericField(value: string): number | null {
 }
 
 /**
+ * 金额字段验证：要么不填（null），要么是大于0的数值（最多保留两位小数）
+ *
+ * 说明：
+ * - 0 或负数视为未设置（与后端“<=0 不限额”的语义保持一致）
+ * - 这里做两位小数截断，避免输入过多小数导致显示/存储不一致
+ */
+export function validatePositiveDecimalField(value: string): number | null {
+  if (!value.trim()) return null;
+  const num = Number.parseFloat(value);
+  if (!Number.isFinite(num)) return null;
+
+  const rounded = Math.round(num * 100) / 100;
+  if (!Number.isFinite(rounded) || rounded <= 0) return null;
+  return rounded;
+}
+
+/**
  * 限制权重值在有效范围内
  */
 export function clampWeight(value: number): number {

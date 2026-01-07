@@ -90,13 +90,15 @@ export function UsageLogsTable({
             ) : (
               logs.map((log) => {
                 const isNonBilling = log.endpoint === NON_BILLING_ENDPOINT;
+                const isWarmupSkipped = log.blockedBy === "warmup";
+                const isMutedRow = isNonBilling || isWarmupSkipped;
 
                 return (
                   <TableRow
                     key={log.id}
                     className={cn(
                       newLogIds?.has(log.id) ? "animate-highlight-flash" : "",
-                      isNonBilling ? "bg-muted/60 text-muted-foreground dark:bg-muted/20" : ""
+                      isMutedRow ? "bg-muted/60 text-muted-foreground dark:bg-muted/20" : ""
                     )}
                     aria-label={isNonBilling ? t("logs.table.nonBilling") : undefined}
                   >
@@ -108,7 +110,13 @@ export function UsageLogsTable({
                     <TableCell>{log.userName}</TableCell>
                     <TableCell className="font-mono text-xs">{log.keyName}</TableCell>
                     <TableCell className="text-left">
-                      {log.blockedBy ? (
+                      {isWarmupSkipped ? (
+                        // Warmup 被跳过的请求显示“抢答/跳过”标记
+                        <span className="inline-flex items-center gap-1 rounded-md bg-blue-100 dark:bg-blue-950 px-2 py-1 text-xs font-medium text-blue-700 dark:text-blue-300">
+                          <span className="h-1.5 w-1.5 rounded-full bg-blue-600 dark:bg-blue-400" />
+                          {t("logs.table.skipped")}
+                        </span>
+                      ) : log.blockedBy ? (
                         // 被拦截的请求显示拦截标记
                         <span className="inline-flex items-center gap-1 rounded-md bg-orange-100 dark:bg-orange-950 px-2 py-1 text-xs font-medium text-orange-700 dark:text-orange-300">
                           <span className="h-1.5 w-1.5 rounded-full bg-orange-600 dark:bg-orange-400" />
@@ -226,6 +234,14 @@ export function UsageLogsTable({
                                   setDialogState({ logId: log.id, scrollToRedirect: true })
                                 }
                               />
+                              {log.specialSettings && log.specialSettings.length > 0 ? (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] leading-tight px-1 shrink-0"
+                                >
+                                  {t("logs.table.specialSettings")}
+                                </Badge>
+                              ) : null}
                             </div>
                           </TooltipTrigger>
                           <TooltipContent>
@@ -302,7 +318,26 @@ export function UsageLogsTable({
                       </TooltipProvider>
                     </TableCell>
                     <TableCell className="text-right font-mono text-xs">
-                      {isNonBilling ? (
+                      {isWarmupSkipped ? (
+                        <TooltipProvider>
+                          <Tooltip delayDuration={250}>
+                            <TooltipTrigger asChild>
+                              <span className="cursor-help inline-flex items-center gap-1">
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] leading-tight px-1 bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800"
+                                >
+                                  {t("logs.table.skipped")}
+                                </Badge>
+                                <span className="text-[10px] text-muted-foreground">Warmup</span>
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent align="end" className="text-xs max-w-[320px]">
+                              {t("logs.details.skipped.desc")}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : isNonBilling ? (
                         "-"
                       ) : log.costUsd ? (
                         <TooltipProvider>
@@ -459,6 +494,7 @@ export function UsageLogsTable({
                         messagesCount={log.messagesCount}
                         endpoint={log.endpoint}
                         billingModelSource={billingModelSource}
+                        specialSettings={log.specialSettings}
                         inputTokens={log.inputTokens}
                         outputTokens={log.outputTokens}
                         cacheCreationInputTokens={log.cacheCreationInputTokens}

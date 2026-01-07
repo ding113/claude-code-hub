@@ -15,6 +15,15 @@ import type { ActionResult } from "@/actions/types";
 import { validateKey } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 
+function getBearerTokenFromAuthHeader(raw: string | undefined): string | undefined {
+  const trimmed = raw?.trim();
+  if (!trimmed) return undefined;
+
+  const match = /^Bearer\s+(.+)$/i.exec(trimmed);
+  const token = match?.[1]?.trim();
+  return token || undefined;
+}
+
 // Server Action 函数签名 (支持两种格式)
 type ServerAction =
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -56,6 +65,17 @@ export interface ActionRouteOptions {
    * @default true
    */
   requiresAuth?: boolean;
+
+  /**
+   * 允许仅访问只读页面/接口（如 my-usage），跳过 canLoginWebUi 校验
+   *
+   * 注意：
+   * - 这是一个“白名单开关”，仅应对“只读且强制绑定当前会话”的端点开启
+   * - 绝不能用于允许传入 userId/keyId 等可导致越权的管理型接口
+   *
+   * @default false
+   */
+  allowReadOnlyAccess?: boolean;
 
   /**
    * 权限要求
@@ -243,6 +263,7 @@ export function createActionRoute(
     summary,
     tags = [module],
     requiresAuth = true,
+    allowReadOnlyAccess = false,
     requiredRole,
     requestExamples,
     argsMapper, // 新增：参数映射函数
@@ -269,7 +290,7 @@ export function createActionRoute(
     responses: createResponseSchemas(responseSchema),
     // 安全定义 (可选,需要在 OpenAPI 文档中配置)
     ...(requiresAuth && {
-      security: [{ cookieAuth: [] }],
+      security: [{ cookieAuth: [] }, { bearerAuth: [] }],
     }),
   });
 
@@ -281,13 +302,14 @@ export function createActionRoute(
     try {
       // 0. 认证检查 (如果需要)
       if (requiresAuth) {
-        const authToken = getCookie(c, "auth-token");
+        const authToken =
+          getCookie(c, "auth-token") ?? getBearerTokenFromAuthHeader(c.req.header("authorization"));
         if (!authToken) {
           logger.warn(`[ActionAPI] ${fullPath} 认证失败: 缺少 auth-token`);
           return c.json({ ok: false, error: "未认证" }, 401);
         }
 
-        const session = await validateKey(authToken);
+        const session = await validateKey(authToken, { allowReadOnlyAccess });
         if (!session) {
           logger.warn(`[ActionAPI] ${fullPath} 认证失败: 无效的 auth-token`);
           return c.json({ ok: false, error: "认证无效或已过期" }, 401);

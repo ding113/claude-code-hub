@@ -100,6 +100,8 @@
       "allowGlobalViewDesc": "無効にすると、一般ユーザーはダッシュボードで自分のキーの使用統計のみを表示できます。",
       "verboseProviderError": "詳細なプロバイダーエラー",
       "verboseProviderErrorDesc": "有効にすると、すべてのプロバイダーが利用不可の場合に詳細なエラーメッセージ（プロバイダー数、レート制限の理由など）を返します。無効の場合は簡潔なエラーコードのみを返します。",
+      "interceptAnthropicWarmupRequests": "Warmup リクエストを遮断（Anthropic）",
+      "interceptAnthropicWarmupRequestsDesc": "有効にすると、Claude Code の Warmup プローブ要求は CCH が直接短い応答を返し、上流プロバイダーへのリクエストを回避します。ログには残りますが、課金/レート制限/統計には含まれません。",
       "cleanupSchedule": "クリーンアップスケジュール",
       "cleanupScheduleDesc": "自動クリーンアップの実行スケジュールを選択します",
       "configUpdated": "システム設定が更新されました。ページが更新され、通貨表示の変更が適用されます。",
@@ -420,6 +422,11 @@
     "dingtalkSecretPlaceholder": "任意（署名用）",
     "customHeaders": "カスタムヘッダー（JSON）",
     "customHeadersPlaceholder": "{\"X-Token\":\"...\"}",
+    "errors": {
+      "headersInvalidJson": "Headers は有効な JSON である必要があります",
+      "headersMustBeObject": "Headers は JSON オブジェクトである必要があります",
+      "headersValueMustBeString": "Headers の値は文字列である必要があります"
+    },
     "types": {
       "wechat": "WeCom",
       "feishu": "Feishu",
@@ -1045,6 +1052,7 @@
         "create": "プロバイダーを追加",
         "edit": "プロバイダーを編集"
       },
+      "dialogDescription": "プロバイダーの詳細と高度な設定を構成します。",
       "url": {
         "label": "API アドレス *",
         "placeholder": "例: https://open.bigmodel.cn/api/anthropic"
@@ -1146,6 +1154,49 @@
               "disabled": "無効"
             },
             "desc": "1M コンテキストウィンドウのサポートを設定します。Sonnet モデル（claude-sonnet-4-5、claude-sonnet-4）にのみ適用されます。有効時は段階的料金が適用されます。"
+          },
+          "codexOverrides": {
+            "reasoningEffort": {
+              "label": "推論強度オーバーライド",
+              "help": "回答前にモデルが使う推論の強度（推論トークン量）を制御します。「クライアントに従う」はリクエストを変更しません。その他の値は reasoning.effort を強制します。注意: none は GPT-5.1 のみ、xhigh は GPT-5.1-Codex-Max のみ対応で、未対応モデルではエラーになります。",
+              "options": {
+                "inherit": "オーバーライドしない（クライアントに従う）",
+                "minimal": "minimal",
+                "low": "low",
+                "medium": "medium（デフォルト）",
+                "high": "high",
+                "xhigh": "xhigh（GPT-5.1-Codex-Max のみ）",
+                "none": "none（GPT-5.1 のみ）"
+              }
+            },
+            "reasoningSummary": {
+              "label": "推論サマリーオーバーライド",
+              "help": "推論サマリーを返すかどうかを制御します。auto は簡潔、detailed は詳細です。「クライアントに従う」は reasoning.summary を変更しません。",
+              "options": {
+                "inherit": "オーバーライドしない（クライアントに従う）",
+                "auto": "auto",
+                "detailed": "detailed"
+              }
+            },
+            "textVerbosity": {
+              "label": "出力の詳細度オーバーライド",
+              "help": "モデル出力の冗長さを制御します。low は簡潔、high は詳細です。「クライアントに従う」は text.verbosity を変更しません。",
+              "options": {
+                "inherit": "オーバーライドしない（クライアントに従う）",
+                "low": "low",
+                "medium": "medium（デフォルト）",
+                "high": "high"
+              }
+            },
+            "parallelToolCalls": {
+              "label": "並列ツール呼び出しオーバーライド",
+              "help": "並列の tool calls を許可するかどうかを制御します。「クライアントに従う」は parallel_tool_calls を変更しません。無効化すると並列度が下がる可能性があります。",
+              "options": {
+                "inherit": "オーバーライドしない（クライアントに従う）",
+                "true": "強制有効",
+                "false": "強制無効"
+              }
+            }
           }
         },
         "rateLimit": {
@@ -1154,6 +1205,7 @@
             "fiveHour": "5h: ${amount}",
             "weekly": "週: ${amount}",
             "monthly": "月: ${amount}",
+            "total": "総: ${amount}",
             "concurrent": "同時: {count}",
             "none": "無制限"
           },
@@ -1167,6 +1219,10 @@
           },
           "limitMonthly": {
             "label": "月の上限 (USD)",
+            "placeholder": "空欄で無制限"
+          },
+          "limitTotal": {
+            "label": "総消費上限 (USD)",
             "placeholder": "空欄で無制限"
           },
           "limitConcurrent": {
@@ -1340,6 +1396,7 @@
       "errors": {
         "invalidUrl": "有効な API アドレスを入力してください",
         "invalidWebsiteUrl": "有効な公式サイト URL を入力してください",
+        "groupTagTooLong": "プロバイダーグループが長すぎます（合計{max}文字まで）",
         "addFailed": "プロバイダーの追加に失敗しました",
         "updateFailed": "プロバイダーの更新に失敗しました",
         "deleteFailed": "プロバイダーの削除に失敗しました"
@@ -1563,6 +1620,10 @@
       "resetCircuitSuccess": "サーキットブレーカーがリセットされました",
       "resetCircuitSuccessDesc": "プロバイダー \"{name}\" のサーキットブレーカーステータスがクリアされました",
       "resetCircuitFailed": "サーキットブレーカーのリセットに失敗しました",
+      "resetUsageTitle": "総用量をリセット",
+      "resetUsageSuccess": "総用量をリセットしました",
+      "resetUsageSuccessDesc": "プロバイダー \"{name}\" の総用量をリセットしました",
+      "resetUsageFailed": "総用量のリセットに失敗しました",
       "toggleSuccess": "プロバイダーが{status}になりました",
       "toggleSuccessDesc": "プロバイダー \"{name}\" のステータスが更新されました",
       "toggleFailed": "切り替えに失敗しました",

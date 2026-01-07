@@ -9,18 +9,14 @@
 import type { Context } from "hono";
 import { logger } from "@/lib/logger";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
-import { ProxyAuthenticator } from "../proxy/auth-guard";
+import { SessionTracker } from "@/lib/session-tracker";
 import { ProxyErrorHandler } from "../proxy/error-handler";
 import { ProxyError } from "../proxy/errors";
 import { ProxyForwarder } from "../proxy/forwarder";
-import { ProxyMessageService } from "../proxy/message-service";
-import { ProxyProviderResolver } from "../proxy/provider-selector";
-import { ProxyRateLimitGuard } from "../proxy/rate-limit-guard";
+import { GuardPipelineBuilder, RequestType } from "../proxy/guard-pipeline";
 import { ProxyResponseHandler } from "../proxy/response-handler";
 import { ProxyResponses } from "../proxy/responses";
-import { ProxySensitiveWordGuard } from "../proxy/sensitive-word-guard";
 import { ProxySession } from "../proxy/session";
-import { ProxySessionGuard } from "../proxy/session-guard";
 import type { ChatCompletionRequest } from "./types/compatible";
 
 /**
@@ -37,6 +33,7 @@ export async function handleChatCompletions(c: Context): Promise<Response> {
   logger.info("[ChatCompletions] Received OpenAI Compatible API request");
 
   let session: ProxySession | null = null;
+  let concurrentCountIncremented = false;
 
   try {
     session = await ProxySession.fromContext(c);
@@ -123,9 +120,6 @@ export async function handleChatCompletions(c: Context): Promise<Response> {
             inputLength: Array.isArray(msgObj.input) ? msgObj.input.length : "N/A",
           });
         }
-
-        // 标记为 OpenAI 格式（用于响应转换）
-        session.setOriginalFormat("openai");
       } catch (transformError) {
         logger.error("[ChatCompletions] Request transformation failed:", {
           context: transformError,
@@ -163,53 +157,17 @@ export async function handleChatCompletions(c: Context): Promise<Response> {
       }
     }
 
-    // 复用现有代理流程
-    // 1. 认证检查
-    const unauthorized = await ProxyAuthenticator.ensure(session);
-    if (unauthorized) {
-      return unauthorized;
+    const type = session.isCountTokensRequest() ? RequestType.COUNT_TOKENS : RequestType.CHAT;
+    const pipeline = GuardPipelineBuilder.fromRequestType(type);
+
+    const early = await pipeline.run(session);
+    if (early) return early;
+
+    // 增加并发计数（在所有检查通过后，请求开始前）- 跳过 count_tokens
+    if (session.sessionId && !session.isCountTokensRequest()) {
+      await SessionTracker.incrementConcurrentCount(session.sessionId);
+      concurrentCountIncremented = true;
     }
-
-    // 2. Session 分配（用于会话粘性）
-    await ProxySessionGuard.ensure(session);
-
-    // 3. 敏感词检查（在计费之前）
-    const blockedBySensitiveWord = await ProxySensitiveWordGuard.ensure(session);
-    if (blockedBySensitiveWord) {
-      return blockedBySensitiveWord;
-    }
-
-    // 4. 限流检查
-    await ProxyRateLimitGuard.ensure(session);
-
-    // 5. 供应商选择（根据模型自动匹配）
-    const providerUnavailable = await ProxyProviderResolver.ensure(session);
-    if (providerUnavailable) {
-      // 创建失败记录（供应商不可用）
-      await ProxyMessageService.ensureContext(session);
-
-      // 解析错误响应
-      const errorBody = await providerUnavailable
-        .clone()
-        .json()
-        .catch(() => null);
-      const errorMessage = errorBody?.error?.message || "供应商不可用";
-
-      // 记录失败消息
-      if (session.messageContext) {
-        const { updateMessageRequestDetails } = await import("@/repository/message");
-        await updateMessageRequestDetails(session.messageContext.id, {
-          statusCode: providerUnavailable.status,
-          errorMessage: JSON.stringify(errorBody?.error || { message: errorMessage }),
-          model: session.getCurrentModel() ?? undefined,
-          context1mApplied: session.getContext1mApplied(),
-        });
-      }
-
-      return providerUnavailable;
-    }
-
-    await ProxyMessageService.ensureContext(session);
 
     // 记录请求开始
     if (session.messageContext && session.provider) {
@@ -241,5 +199,10 @@ export async function handleChatCompletions(c: Context): Promise<Response> {
     }
 
     return ProxyResponses.buildError(500, "代理请求发生未知错误");
+  } finally {
+    // 减少并发计数（确保无论成功失败都执行）- 跳过 count_tokens
+    if (concurrentCountIncremented && session?.sessionId && !session.isCountTokensRequest()) {
+      await SessionTracker.decrementConcurrentCount(session.sessionId);
+    }
   }
 }

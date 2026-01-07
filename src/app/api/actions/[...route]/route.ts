@@ -20,6 +20,7 @@ import { z } from "zod";
 import * as activeSessionActions from "@/actions/active-sessions";
 import * as keyActions from "@/actions/keys";
 import * as modelPriceActions from "@/actions/model-prices";
+import * as myUsageActions from "@/actions/my-usage";
 import * as notificationBindingActions from "@/actions/notification-bindings";
 import * as notificationActions from "@/actions/notifications";
 import * as overviewActions from "@/actions/overview";
@@ -53,6 +54,14 @@ app.openAPIRegistry.registerComponent("securitySchemes", "cookieAuth", {
   name: "auth-token",
   description:
     "HTTP Cookie 认证。请先通过 Web UI 登录获取 auth-token Cookie，或从浏览器开发者工具中复制 Cookie 值用于 API 调用。详见上方「认证方式」章节。",
+});
+
+app.openAPIRegistry.registerComponent("securitySchemes", "bearerAuth", {
+  type: "http",
+  scheme: "bearer",
+  bearerFormat: "API Key",
+  description:
+    "Authorization: Bearer <token> 方式认证（适合脚本/CLI 调用）。注意：token 与 Cookie 中 auth-token 值一致。",
 });
 
 // ==================== 用户管理 ====================
@@ -607,6 +616,194 @@ const { route: getStatusCodeListRoute, handler: getStatusCodeListHandler } = cre
 );
 app.openapi(getStatusCodeListRoute, getStatusCodeListHandler);
 
+// ==================== 我的用量（只读 Key 可访问） ====================
+
+const { route: getMyUsageMetadataRoute, handler: getMyUsageMetadataHandler } = createActionRoute(
+  "my-usage",
+  "getMyUsageMetadata",
+  myUsageActions.getMyUsageMetadata,
+  {
+    requestSchema: z.object({}).describe("无需请求参数"),
+    responseSchema: z.object({
+      keyName: z.string().describe("当前 Key 名称"),
+      keyProviderGroup: z.string().nullable().describe("Key 供应商分组（可为空）"),
+      keyExpiresAt: z.string().nullable().describe("Key 过期时间（ISO 字符串，可为空）"),
+      keyIsEnabled: z.boolean().describe("Key 是否启用"),
+      userName: z.string().describe("当前用户名称"),
+      userProviderGroup: z.string().nullable().describe("用户供应商分组（可为空）"),
+      userExpiresAt: z.string().nullable().describe("用户过期时间（ISO 字符串，可为空）"),
+      userIsEnabled: z.boolean().describe("用户是否启用"),
+      dailyResetMode: z.enum(["fixed", "rolling"]).describe("日限额重置模式"),
+      dailyResetTime: z.string().describe("日限额重置时间（HH:mm）"),
+      currencyCode: z.string().describe("货币显示（如 USD）"),
+    }),
+    description: "获取当前会话的基础信息（仅返回自己的数据）",
+    summary: "获取我的用量元信息",
+    tags: ["概览"],
+    allowReadOnlyAccess: true,
+  }
+);
+app.openapi(getMyUsageMetadataRoute, getMyUsageMetadataHandler);
+
+const { route: getMyQuotaRoute, handler: getMyQuotaHandler } = createActionRoute(
+  "my-usage",
+  "getMyQuota",
+  myUsageActions.getMyQuota,
+  {
+    requestSchema: z.object({}).describe("无需请求参数"),
+    responseSchema: z.object({
+      keyLimit5hUsd: z.number().nullable(),
+      keyLimitDailyUsd: z.number().nullable(),
+      keyLimitWeeklyUsd: z.number().nullable(),
+      keyLimitMonthlyUsd: z.number().nullable(),
+      keyLimitTotalUsd: z.number().nullable(),
+      keyLimitConcurrentSessions: z.number().nullable(),
+      keyCurrent5hUsd: z.number(),
+      keyCurrentDailyUsd: z.number(),
+      keyCurrentWeeklyUsd: z.number(),
+      keyCurrentMonthlyUsd: z.number(),
+      keyCurrentTotalUsd: z.number(),
+      keyCurrentConcurrentSessions: z.number(),
+
+      userLimit5hUsd: z.number().nullable(),
+      userLimitWeeklyUsd: z.number().nullable(),
+      userLimitMonthlyUsd: z.number().nullable(),
+      userLimitTotalUsd: z.number().nullable(),
+      userLimitConcurrentSessions: z.number().nullable(),
+      userCurrent5hUsd: z.number(),
+      userCurrentDailyUsd: z.number(),
+      userCurrentWeeklyUsd: z.number(),
+      userCurrentMonthlyUsd: z.number(),
+      userCurrentTotalUsd: z.number(),
+      userCurrentConcurrentSessions: z.number(),
+
+      userLimitDailyUsd: z.number().nullable(),
+      userExpiresAt: z.string().nullable(),
+      userProviderGroup: z.string().nullable(),
+      userName: z.string(),
+      userIsEnabled: z.boolean(),
+
+      keyProviderGroup: z.string().nullable(),
+      keyName: z.string(),
+      keyIsEnabled: z.boolean(),
+
+      expiresAt: z.string().nullable(),
+      dailyResetMode: z.enum(["fixed", "rolling"]),
+      dailyResetTime: z.string(),
+    }),
+    description: "获取当前会话的限额与当前使用量（仅返回自己的数据）",
+    summary: "获取我的限额与用量",
+    tags: ["密钥管理"],
+    allowReadOnlyAccess: true,
+  }
+);
+app.openapi(getMyQuotaRoute, getMyQuotaHandler);
+
+const { route: getMyTodayStatsRoute, handler: getMyTodayStatsHandler } = createActionRoute(
+  "my-usage",
+  "getMyTodayStats",
+  myUsageActions.getMyTodayStats,
+  {
+    requestSchema: z.object({}).describe("无需请求参数"),
+    responseSchema: z.object({
+      calls: z.number(),
+      inputTokens: z.number(),
+      outputTokens: z.number(),
+      costUsd: z.number(),
+      modelBreakdown: z.array(
+        z.object({
+          model: z.string().nullable(),
+          billingModel: z.string().nullable(),
+          calls: z.number(),
+          costUsd: z.number(),
+          inputTokens: z.number(),
+          outputTokens: z.number(),
+        })
+      ),
+      currencyCode: z.string(),
+      billingModelSource: z.enum(["original", "redirected"]),
+    }),
+    description: "获取当前会话的“今日”使用统计（按 Key 的日重置配置计算）",
+    summary: "获取我的今日使用统计",
+    tags: ["统计分析"],
+    allowReadOnlyAccess: true,
+  }
+);
+app.openapi(getMyTodayStatsRoute, getMyTodayStatsHandler);
+
+const { route: getMyUsageLogsRoute, handler: getMyUsageLogsHandler } = createActionRoute(
+  "my-usage",
+  "getMyUsageLogs",
+  myUsageActions.getMyUsageLogs,
+  {
+    requestSchema: z.object({
+      startDate: z.string().optional().describe("开始日期（YYYY-MM-DD，可为空）"),
+      endDate: z.string().optional().describe("结束日期（YYYY-MM-DD，可为空）"),
+      model: z.string().optional(),
+      endpoint: z.string().optional(),
+      statusCode: z.number().optional(),
+      excludeStatusCode200: z.boolean().optional(),
+      minRetryCount: z.number().int().nonnegative().optional(),
+      pageSize: z.number().int().positive().max(100).default(20).optional(),
+      page: z.number().int().positive().default(1).optional(),
+    }),
+    responseSchema: z.object({
+      logs: z.array(
+        z.object({
+          id: z.number(),
+          createdAt: z.string().nullable(),
+          model: z.string().nullable(),
+          billingModel: z.string().nullable(),
+          modelRedirect: z.string().nullable(),
+          inputTokens: z.number(),
+          outputTokens: z.number(),
+          cost: z.number(),
+          statusCode: z.number().nullable(),
+          duration: z.number().nullable(),
+          endpoint: z.string().nullable(),
+          cacheCreationInputTokens: z.number().nullable(),
+          cacheReadInputTokens: z.number().nullable(),
+          cacheCreation5mInputTokens: z.number().nullable(),
+          cacheCreation1hInputTokens: z.number().nullable(),
+          cacheTtlApplied: z.string().nullable(),
+        })
+      ),
+      total: z.number(),
+      page: z.number(),
+      pageSize: z.number(),
+      currencyCode: z.string(),
+      billingModelSource: z.enum(["original", "redirected"]),
+    }),
+    description: "获取当前会话的使用日志（仅返回自己的数据）",
+    summary: "获取我的使用日志",
+    tags: ["使用日志"],
+    allowReadOnlyAccess: true,
+  }
+);
+app.openapi(getMyUsageLogsRoute, getMyUsageLogsHandler);
+
+const { route: getMyAvailableModelsRoute, handler: getMyAvailableModelsHandler } =
+  createActionRoute("my-usage", "getMyAvailableModels", myUsageActions.getMyAvailableModels, {
+    requestSchema: z.object({}).describe("无需请求参数"),
+    responseSchema: z.array(z.string()),
+    description: "获取当前会话日志中出现过的模型列表（仅返回自己的数据）",
+    summary: "获取我的模型筛选项",
+    tags: ["使用日志"],
+    allowReadOnlyAccess: true,
+  });
+app.openapi(getMyAvailableModelsRoute, getMyAvailableModelsHandler);
+
+const { route: getMyAvailableEndpointsRoute, handler: getMyAvailableEndpointsHandler } =
+  createActionRoute("my-usage", "getMyAvailableEndpoints", myUsageActions.getMyAvailableEndpoints, {
+    requestSchema: z.object({}).describe("无需请求参数"),
+    responseSchema: z.array(z.string()),
+    description: "获取当前会话日志中出现过的 endpoint 列表（仅返回自己的数据）",
+    summary: "获取我的 endpoint 筛选项",
+    tags: ["使用日志"],
+    allowReadOnlyAccess: true,
+  });
+app.openapi(getMyAvailableEndpointsRoute, getMyAvailableEndpointsHandler);
+
 // ==================== 概览数据 ====================
 
 const { route: getOverviewDataRoute, handler: getOverviewDataHandler } = createActionRoute(
@@ -791,12 +988,7 @@ const { route: updateNotificationSettingsRoute, handler: updateNotificationSetti
   createActionRoute(
     "notifications",
     "updateNotificationSettingsAction",
-    async (payload) => {
-      const result = await notificationActions.updateNotificationSettingsAction(payload);
-      return result.success
-        ? { ok: true, data: result.data }
-        : { ok: false, error: result.error || "更新通知设置失败" };
-    },
+    notificationActions.updateNotificationSettingsAction,
     {
       requestSchema: z.object({
         enabled: z.boolean().optional().describe("通知总开关"),
@@ -909,7 +1101,10 @@ const WebhookTargetCreateSchema = z.object({
   telegramBotToken: z.string().trim().optional().nullable(),
   telegramChatId: z.string().trim().optional().nullable(),
   dingtalkSecret: z.string().trim().optional().nullable(),
-  customTemplate: z.string().trim().optional().nullable(),
+  customTemplate: z
+    .union([z.string().trim(), z.record(z.string(), z.unknown())])
+    .optional()
+    .nullable(),
   customHeaders: z.record(z.string(), z.string()).optional().nullable(),
   proxyUrl: z.string().trim().optional().nullable(),
   proxyFallbackToDirect: z.boolean().optional(),

@@ -82,6 +82,11 @@ export function toProvider(dbProvider: any): Provider {
     dailyResetTime: dbProvider?.dailyResetTime ?? "00:00",
     limitWeeklyUsd: dbProvider?.limitWeeklyUsd ? parseFloat(dbProvider.limitWeeklyUsd) : null,
     limitMonthlyUsd: dbProvider?.limitMonthlyUsd ? parseFloat(dbProvider.limitMonthlyUsd) : null,
+    limitTotalUsd:
+      dbProvider?.limitTotalUsd !== null && dbProvider?.limitTotalUsd !== undefined
+        ? parseFloat(dbProvider.limitTotalUsd)
+        : null,
+    totalCostResetAt: dbProvider?.totalCostResetAt ? new Date(dbProvider.totalCostResetAt) : null,
     limitConcurrentSessions: dbProvider?.limitConcurrentSessions ?? 0,
     maxRetryAttempts:
       dbProvider?.maxRetryAttempts !== undefined && dbProvider?.maxRetryAttempts !== null
@@ -99,6 +104,10 @@ export function toProvider(dbProvider: any): Provider {
     faviconUrl: dbProvider?.faviconUrl ?? null,
     cacheTtlPreference: dbProvider?.cacheTtlPreference ?? null,
     context1mPreference: dbProvider?.context1mPreference ?? null,
+    codexReasoningEffortPreference: dbProvider?.codexReasoningEffortPreference ?? null,
+    codexReasoningSummaryPreference: dbProvider?.codexReasoningSummaryPreference ?? null,
+    codexTextVerbosityPreference: dbProvider?.codexTextVerbosityPreference ?? null,
+    codexParallelToolCallsPreference: dbProvider?.codexParallelToolCallsPreference ?? null,
     tpm: dbProvider?.tpm ?? null,
     rpm: dbProvider?.rpm ?? null,
     rpd: dbProvider?.rpd ?? null,
@@ -124,6 +133,7 @@ export function toMessageRequest(dbMessage: any): MessageRequest {
     cacheCreation1hInputTokens: dbMessage?.cacheCreation1hInputTokens ?? undefined,
     cacheTtlApplied: dbMessage?.cacheTtlApplied ?? null,
     context1mApplied: dbMessage?.context1mApplied ?? false,
+    specialSettings: dbMessage?.specialSettings ?? null,
   };
 }
 
@@ -151,6 +161,7 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     enableClientVersionCheck: dbSettings?.enableClientVersionCheck ?? false,
     verboseProviderError: dbSettings?.verboseProviderError ?? false,
     enableHttp2: dbSettings?.enableHttp2 ?? false,
+    interceptAnthropicWarmupRequests: dbSettings?.interceptAnthropicWarmupRequests ?? false,
     createdAt: dbSettings?.createdAt ? new Date(dbSettings.createdAt) : new Date(),
     updatedAt: dbSettings?.updatedAt ? new Date(dbSettings.updatedAt) : new Date(),
   };

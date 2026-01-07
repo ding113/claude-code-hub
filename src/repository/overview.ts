@@ -5,6 +5,7 @@ import { db } from "@/drizzle/db";
 import { messageRequest } from "@/drizzle/schema";
 import { getEnvConfig } from "@/lib/config";
 import { Decimal, toCostDecimal } from "@/lib/utils/currency";
+import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
 
 /**
  * 今日概览统计数据
@@ -39,6 +40,7 @@ export async function getOverviewMetrics(): Promise<OverviewMetrics> {
     .where(
       and(
         isNull(messageRequest.deletedAt),
+        EXCLUDE_WARMUP_CONDITION,
         sql`(${messageRequest.createdAt} AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date`
       )
     );

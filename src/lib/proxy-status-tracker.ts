@@ -1,6 +1,7 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys, messageRequest, providers, users } from "@/drizzle/schema";
+import { maskKey } from "@/lib/utils/validation";
 import type { ProxyStatusResponse } from "@/types/proxy-status";
 
 type ActiveRequestRow = {
@@ -96,7 +97,7 @@ export class ProxyStatusTracker {
       const startTime = toTimestamp(row.createdAt) ?? now;
       list.push({
         requestId: row.requestId,
-        keyName: row.keyName || row.keyString,
+        keyName: row.keyName ?? maskKey(row.keyString),
         providerId: row.providerId,
         providerName: row.providerName,
         model: row.model || "unknown",
@@ -122,7 +123,7 @@ export class ProxyStatusTracker {
             const endTime = toTimestamp(lastRow.endTime) ?? now;
             return {
               requestId: lastRow.requestId,
-              keyName: lastRow.keyName || lastRow.keyString,
+              keyName: lastRow.keyName ?? maskKey(lastRow.keyString),
               providerId: lastRow.providerId,
               providerName: lastRow.providerName,
               model: lastRow.model || "unknown",
@@ -185,6 +186,7 @@ export class ProxyStatusTracker {
       JOIN providers p ON mr.provider_id = p.id AND p.deleted_at IS NULL
       LEFT JOIN keys k ON k.key = mr.key AND k.deleted_at IS NULL
       WHERE mr.deleted_at IS NULL
+        AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
       ORDER BY mr.user_id, mr.updated_at DESC
     `;
 

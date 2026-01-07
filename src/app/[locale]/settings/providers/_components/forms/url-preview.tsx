@@ -39,7 +39,8 @@ export function UrlPreview({ baseUrl, providerType }: UrlPreviewProps) {
     }
 
     try {
-      return previewProxyUrls(baseUrl, providerType);
+      const result = previewProxyUrls(baseUrl, providerType);
+      return Object.keys(result).length > 0 ? result : null;
     } catch {
       return null;
     }

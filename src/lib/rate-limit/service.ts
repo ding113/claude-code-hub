@@ -75,7 +75,12 @@ import {
   TRACK_COST_DAILY_ROLLING_WINDOW,
 } from "@/lib/redis/lua-scripts";
 import { SessionTracker } from "@/lib/session-tracker";
-import { sumKeyTotalCost, sumUserCostInTimeRange, sumUserTotalCost } from "@/repository/statistics";
+import {
+  sumKeyTotalCost,
+  sumProviderTotalCost,
+  sumUserCostInTimeRange,
+  sumUserTotalCost,
+} from "@/repository/statistics";
 import {
   type DailyResetMode,
   getTimeRangeForPeriodWithMode,
@@ -248,9 +253,10 @@ export class RateLimitService {
           }
 
           if (current >= limit.amount) {
+            const typeName = type === "key" ? "Key" : type === "provider" ? "供应商" : "User";
             return {
               allowed: false,
-              reason: `${type === "key" ? "Key" : "供应商"} ${limit.name}消费上限已达到（${current.toFixed(4)}/${limit.amount}）`,
+              reason: `${typeName} ${limit.name}消费上限已达到（${current.toFixed(4)}/${limit.amount}）`,
             };
           }
         }
@@ -273,9 +279,9 @@ export class RateLimitService {
    */
   static async checkTotalCostLimit(
     entityId: number,
-    entityType: "key" | "user",
+    entityType: "key" | "user" | "provider",
     limitTotalUsd: number | null,
-    keyHash?: string
+    options?: { keyHash?: string; resetAt?: Date | null }
   ): Promise<{ allowed: boolean; current?: number; reason?: string }> {
     if (limitTotalUsd === null || limitTotalUsd === undefined || limitTotalUsd <= 0) {
       return { allowed: true };
@@ -283,8 +289,19 @@ export class RateLimitService {
 
     try {
       let current = 0;
-      const cacheKey =
-        entityType === "key" ? `total_cost:key:${keyHash}` : `total_cost:user:${entityId}`;
+      const cacheKey = (() => {
+        if (entityType === "key") {
+          return `total_cost:key:${options?.keyHash}`;
+        }
+        if (entityType === "user") {
+          return `total_cost:user:${entityId}`;
+        }
+        const resetAtMs =
+          options?.resetAt instanceof Date && !Number.isNaN(options.resetAt.getTime())
+            ? options.resetAt.getTime()
+            : "none";
+        return `total_cost:provider:${entityId}:${resetAtMs}`;
+      })();
       const cacheTtl = 300; // 5 minutes
 
       // 尝试从 Redis 缓存获取
@@ -297,13 +314,15 @@ export class RateLimitService {
           } else {
             // 缓存未命中，查询数据库
             if (entityType === "key") {
-              if (!keyHash) {
+              if (!options?.keyHash) {
                 logger.warn("[RateLimit] Missing key hash for total cost check, skip enforcement");
                 return { allowed: true };
               }
-              current = await sumKeyTotalCost(keyHash);
-            } else {
+              current = await sumKeyTotalCost(options.keyHash);
+            } else if (entityType === "user") {
               current = await sumUserTotalCost(entityId);
+            } else {
+              current = await sumProviderTotalCost(entityId, options?.resetAt ?? null);
             }
             // 异步写入缓存，不阻塞请求
             redis.setex(cacheKey, cacheTtl, current.toString()).catch((err) => {
@@ -314,32 +333,37 @@ export class RateLimitService {
           // Redis 读取失败，降级到数据库查询
           logger.warn("[RateLimit] Redis cache read failed, falling back to database:", redisError);
           if (entityType === "key") {
-            if (!keyHash) {
+            if (!options?.keyHash) {
               return { allowed: true };
             }
-            current = await sumKeyTotalCost(keyHash);
-          } else {
+            current = await sumKeyTotalCost(options.keyHash);
+          } else if (entityType === "user") {
             current = await sumUserTotalCost(entityId);
+          } else {
+            current = await sumProviderTotalCost(entityId, options?.resetAt ?? null);
           }
         }
       } else {
         // Redis 不可用，直接查询数据库
         if (entityType === "key") {
-          if (!keyHash) {
+          if (!options?.keyHash) {
             logger.warn("[RateLimit] Missing key hash for total cost check, skip enforcement");
             return { allowed: true };
           }
-          current = await sumKeyTotalCost(keyHash);
-        } else {
+          current = await sumKeyTotalCost(options.keyHash);
+        } else if (entityType === "user") {
           current = await sumUserTotalCost(entityId);
+        } else {
+          current = await sumProviderTotalCost(entityId, options?.resetAt ?? null);
         }
       }
 
       if (current >= limitTotalUsd) {
+        const typeName = entityType === "key" ? "Key" : entityType === "user" ? "User" : "供应商";
         return {
           allowed: false,
           current,
-          reason: `${entityType === "key" ? "Key" : "User"} total spending limit reached (${current.toFixed(4)}/${limitTotalUsd})`,
+          reason: `${typeName} total spending limit reached (${current.toFixed(4)}/${limitTotalUsd})`,
         };
       }
 

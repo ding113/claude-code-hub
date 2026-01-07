@@ -1,7 +1,7 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, SquarePen } from "lucide-react";
+import { ChevronDown, ChevronRight, Plus, SquarePen } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { getContrastTextColor, getGroupColor } from "@/lib/utils/color";
 import { formatDate } from "@/lib/utils/date-format";
 import type { UserDisplay } from "@/types/user";
+import { EditKeyDialog } from "./edit-key-dialog";
 import { KeyRowItem } from "./key-row-item";
 import { UserLimitBadge } from "./user-limit-badge";
 
@@ -31,7 +32,8 @@ export interface UserKeyTableRowProps {
   onSelect?: (checked: boolean) => void;
   selectedKeyIds?: Set<number>;
   onSelectKey?: (keyId: number, checked: boolean) => void;
-  onEditUser: (scrollToKeyId?: number) => void;
+  onEditUser: () => void;
+  onAddKey?: () => void;
   onQuickRenew?: (user: UserDisplay) => void;
   optimisticExpiresAt?: Date;
   currentUser?: { role: string };
@@ -61,6 +63,7 @@ export interface UserKeyTableRowProps {
       details: string;
       logs: string;
       delete: string;
+      addKey?: string;
     };
     userStatus?: {
       disabled: string;
@@ -119,6 +122,7 @@ export function UserKeyTableRow({
   selectedKeyIds,
   onSelectKey,
   onEditUser,
+  onAddKey,
   onQuickRenew,
   optimisticExpiresAt,
   currencyCode,
@@ -136,6 +140,8 @@ export function UserKeyTableRow({
   const [localIsEnabled, setLocalIsEnabled] = useState(user.isEnabled);
   // 乐观更新：本地状态跟踪过期时间
   const [localExpiresAt, setLocalExpiresAt] = useState<Date | null | undefined>(user.expiresAt);
+  // Key 编辑 Dialog 状态
+  const [editingKeyId, setEditingKeyId] = useState<number | null>(null);
   const isExpanded = isMultiSelectMode ? true : expanded;
   const resolvedGridColumnsClass = gridColumnsClass ?? DEFAULT_GRID_COLUMNS_CLASS;
 
@@ -456,10 +462,10 @@ export function UserKeyTableRow({
                   isMultiSelectMode={isMultiSelectMode}
                   isSelected={selectedKeyIds?.has(key.id) ?? false}
                   onSelect={(checked) => onSelectKey?.(key.id, checked)}
-                  onEdit={() => onEditUser(key.id)}
+                  onEdit={() => setEditingKeyId(key.id)}
                   onDelete={() => handleDeleteKey(key.id)}
                   onViewLogs={() => router.push(`/dashboard/logs?keyId=${key.id}`)}
-                  onViewDetails={() => onEditUser(key.id)}
+                  onViewDetails={() => setEditingKeyId(key.id)}
                   currencyCode={currencyCode}
                   translations={keyRowTranslations}
                   highlight={highlightKeyIds?.has(key.id)}
@@ -471,8 +477,69 @@ export function UserKeyTableRow({
               {translations.noKeys}
             </div>
           )}
+          {onAddKey && (
+            <div className="mt-2 flex justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddKey();
+                }}
+              >
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                {translations.actions.addKey}
+              </Button>
+            </div>
+          )}
         </div>
       ) : null}
+
+      {/* Key 编辑 Dialog */}
+      {editingKeyId !== null &&
+        (() => {
+          const editingKey = user.keys.find((k) => k.id === editingKeyId);
+          if (!editingKey) return null;
+          return (
+            <EditKeyDialog
+              open={true}
+              onOpenChange={(open) => {
+                if (!open) setEditingKeyId(null);
+              }}
+              keyData={{
+                id: editingKey.id,
+                name: editingKey.name,
+                expiresAt: editingKey.expiresAt,
+                canLoginWebUi: editingKey.canLoginWebUi,
+                providerGroup: editingKey.providerGroup ?? null,
+                limit5hUsd: editingKey.limit5hUsd,
+                limitDailyUsd: editingKey.limitDailyUsd,
+                dailyResetMode: editingKey.dailyResetMode,
+                dailyResetTime: editingKey.dailyResetTime,
+                limitWeeklyUsd: editingKey.limitWeeklyUsd,
+                limitMonthlyUsd: editingKey.limitMonthlyUsd,
+                limitTotalUsd: editingKey.limitTotalUsd,
+                limitConcurrentSessions: editingKey.limitConcurrentSessions,
+              }}
+              user={{
+                id: user.id,
+                providerGroup: user.providerGroup ?? null,
+                limit5hUsd: user.limit5hUsd ?? undefined,
+                limitWeeklyUsd: user.limitWeeklyUsd ?? undefined,
+                limitMonthlyUsd: user.limitMonthlyUsd ?? undefined,
+                limitTotalUsd: user.limitTotalUsd ?? undefined,
+                limitConcurrentSessions: user.limitConcurrentSessions ?? undefined,
+              }}
+              isAdmin={isAdmin}
+              onSuccess={() => {
+                setEditingKeyId(null);
+                queryClient.invalidateQueries({ queryKey: ["users"] });
+                router.refresh();
+              }}
+            />
+          );
+        })()}
     </div>
   );
 }

@@ -25,13 +25,13 @@ Claude Code Hub combines Next.js 15, Hono, PostgreSQL, and Redis to deliver a Cl
 <table>
 <tr>
 <td width="200">
-<a href="https://cubence.com?source=cch">
+<a href="https://cubence.com/signup?code=SCE7Y3QR&source=cch">
 <img src="public/readme/cubence.jpg" alt="Cubence Logo" width="180"/>
 </a>
 </td>
 <td>
-<b>💎 Special Offer</b>: <a href="https://cubence.com?source=cch">Cubence</a> is a stable and efficient AI service transit platform, providing transit services for AI tools such as Claude Code, Codex, Gemini, with good stability and cost-effectiveness.<br/>
-Cubence offers special discount coupons for users of CCH: when purchasing with the coupon <code>DING113CCH</code>, you can enjoy a <b>10% discount</b> → <a href="https://cubence.com?source=cch">Visit Now</a>
+<b>💎 Special Offer</b>: <a href="https://cubence.com/signup?code=SCE7Y3QR&source=cch">Cubence</a> is a stable and efficient AI service transit platform, providing transit services for AI tools such as Claude Code, Codex, Gemini, with good stability and cost-effectiveness.<br/>
+Cubence offers special discount coupons for users of CCH: when purchasing with the coupon <code>DING113CCH</code>, you can enjoy a <b>10% discount</b> → <a href="https://cubence.com/signup?code=SCE7Y3QR&source=cch">Visit Now</a>
 </td>
 </tr>
 </table>
@@ -60,6 +60,20 @@ Use code <code>WITHCCH</code> for <b>15% off</b> → <a href="https://privnode.c
 <td>
 <b>💎 Special Offer</b>: Thanks to <a href="https://www.packyapi.com/register?aff=withcch">PackyCode</a> for sponsoring this project! PackyCode is a stable and efficient API relay service provider, offering relay services for Claude Code, Codex, Gemini and more.<br/>
 PackyCode offers a special discount for users of this software. Register via this link and enter code <code>WITHCCH</code> when recharging to enjoy <b>10% off</b> → <a href="https://www.packyapi.com/register?aff=withcch">Visit Now</a>
+</td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td width="200">
+<a href="https://co.yes.vg/register?ref=ygxz">
+<img src="public/readme/yescode.png" alt="YesCode Logo" width="180"/>
+</a>
+</td>
+<td>
+<b>💎 Special Offer</b>: <a href="https://co.yes.vg/register?ref=ygxz">YesCode</a> is a low-profile yet highly reliable AI API relay service, dedicated to providing developers with stable access to Claude, Codex, Gemini, and other models. Built on solid technical foundations with consistently dependable service quality.<br/>
+Register via this link to get started → <a href="https://co.yes.vg/register?ref=ygxz">Visit Now</a>
 </td>
 </tr>
 </table>

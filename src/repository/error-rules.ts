@@ -291,6 +291,22 @@ export async function deleteErrorRule(id: number): Promise<boolean> {
  */
 const DEFAULT_ERROR_RULES = [
   {
+    pattern: "Missing or invalid 'alt' query parameter. Expected 'alt=sse'",
+    category: "parameter_error",
+    description: "Not supported non-streaming request",
+    matchType: "contains" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 105,
+    overrideResponse: {
+      error: {
+        code: 400,
+        status: "INVALID_ARGUMENT",
+        message: "当前中转站不支持 Gemini generateContent 端点",
+      },
+    },
+  },
+  {
     pattern: "prompt is too long.*(tokens.*maximum|maximum.*tokens)",
     category: "prompt_limit",
     description: "Prompt token limit exceeded",
@@ -524,6 +540,25 @@ const DEFAULT_ERROR_RULES = [
       },
     },
   },
+  // Issue #550: tool_use block missing corresponding tool_result in next message (non-retryable)
+  {
+    pattern:
+      "tool_use.*ids were found without.*tool_result.*immediately after|tool_use.*block must have.*corresponding.*tool_result.*block in the next message",
+    category: "validation_error",
+    description: "tool_use block missing corresponding tool_result in next message (client error)",
+    matchType: "regex" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 88,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "validation_error",
+        message:
+          "tool_use 块缺少对应的 tool_result，请确保每个 tool_use 在下一条消息中有对应的 tool_result 块",
+      },
+    },
+  },
   // Model-related errors (non-retryable)
   {
     pattern: '"actualModel" is null|actualModel.*null',
@@ -702,6 +737,24 @@ const DEFAULT_ERROR_RULES = [
       error: {
         type: "invalid_request",
         message: "图片大小超过最大限制，请压缩图片后重试",
+      },
+    },
+  },
+  // Issue #541: Codex model reasoning effort mismatch
+  {
+    pattern: "Unsupported value.*is not supported with.*model.*Supported values",
+    category: "thinking_error",
+    description: "Reasoning effort (thinking intensity) not supported by the Codex model",
+    matchType: "regex" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 72,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "thinking_error",
+        message:
+          "当前思考强度不支持该模型，请调整 reasoning_effort 参数或切换模型（如 'high' 仅支持部分模型）",
       },
     },
   },

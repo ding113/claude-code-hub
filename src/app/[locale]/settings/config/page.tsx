@@ -40,6 +40,7 @@ async function SettingsConfigContent() {
             billingModelSource: settings.billingModelSource,
             verboseProviderError: settings.verboseProviderError,
             enableHttp2: settings.enableHttp2,
+            interceptAnthropicWarmupRequests: settings.interceptAnthropicWarmupRequests,
           }}
         />
       </Section>

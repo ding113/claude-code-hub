@@ -71,6 +71,67 @@ function isTableMissingError(error: unknown, depth = 0): boolean {
   return false;
 }
 
+function isUndefinedColumnError(error: unknown, depth = 0): boolean {
+  if (!error || depth > 5) {
+    return false;
+  }
+
+  if (typeof error === "string") {
+    const normalized = error.toLowerCase();
+    return (
+      normalized.includes("42703") ||
+      (normalized.includes("column") &&
+        (normalized.includes("does not exist") ||
+          normalized.includes("doesn't exist") ||
+          normalized.includes("不存在")))
+    );
+  }
+
+  if (typeof error === "object") {
+    const err = error as {
+      code?: unknown;
+      message?: unknown;
+      cause?: unknown;
+      errors?: unknown;
+      originalError?: unknown;
+    };
+
+    if (typeof err.code === "string" && err.code.toUpperCase() === "42703") {
+      return true;
+    }
+
+    if (typeof err.message === "string" && isUndefinedColumnError(err.message, depth + 1)) {
+      return true;
+    }
+
+    if ("cause" in err && err.cause && isUndefinedColumnError(err.cause, depth + 1)) {
+      return true;
+    }
+
+    if (Array.isArray(err.errors)) {
+      return err.errors.some((item) => isUndefinedColumnError(item, depth + 1));
+    }
+
+    if (err.originalError && isUndefinedColumnError(err.originalError, depth + 1)) {
+      return true;
+    }
+
+    const stringified = (() => {
+      try {
+        return String(error);
+      } catch {
+        return undefined;
+      }
+    })();
+
+    if (stringified) {
+      return isUndefinedColumnError(stringified, depth + 1);
+    }
+  }
+
+  return false;
+}
+
 function createFallbackSettings(): SystemSettings {
   const now = new Date();
   return {
@@ -86,6 +147,7 @@ function createFallbackSettings(): SystemSettings {
     enableClientVersionCheck: false,
     verboseProviderError: false,
     enableHttp2: false,
+    interceptAnthropicWarmupRequests: false,
     createdAt: now,
     updatedAt: now,
   };
@@ -95,32 +157,61 @@ function createFallbackSettings(): SystemSettings {
  * 获取系统设置，如果不存在则创建默认记录
  */
 export async function getSystemSettings(): Promise<SystemSettings> {
+  async function selectSettingsRow() {
+    const fullSelection = {
+      id: systemSettings.id,
+      siteTitle: systemSettings.siteTitle,
+      allowGlobalUsageView: systemSettings.allowGlobalUsageView,
+      currencyDisplay: systemSettings.currencyDisplay,
+      billingModelSource: systemSettings.billingModelSource,
+      enableAutoCleanup: systemSettings.enableAutoCleanup,
+      cleanupRetentionDays: systemSettings.cleanupRetentionDays,
+      cleanupSchedule: systemSettings.cleanupSchedule,
+      cleanupBatchSize: systemSettings.cleanupBatchSize,
+      enableClientVersionCheck: systemSettings.enableClientVersionCheck,
+      verboseProviderError: systemSettings.verboseProviderError,
+      enableHttp2: systemSettings.enableHttp2,
+      interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
+      createdAt: systemSettings.createdAt,
+      updatedAt: systemSettings.updatedAt,
+    };
+
+    try {
+      const [row] = await db.select(fullSelection).from(systemSettings).limit(1);
+      return row ?? null;
+    } catch (error) {
+      // 兼容旧版本数据库：system_settings 表存在但列未迁移齐全
+      if (isUndefinedColumnError(error)) {
+        logger.warn("system_settings 表列缺失，使用降级字段集读取（建议运行数据库迁移）。", {
+          error,
+        });
+
+        const minimalSelection = {
+          id: systemSettings.id,
+          siteTitle: systemSettings.siteTitle,
+          allowGlobalUsageView: systemSettings.allowGlobalUsageView,
+          currencyDisplay: systemSettings.currencyDisplay,
+          billingModelSource: systemSettings.billingModelSource,
+          createdAt: systemSettings.createdAt,
+          updatedAt: systemSettings.updatedAt,
+        };
+
+        const [row] = await db.select(minimalSelection).from(systemSettings).limit(1);
+        return row ?? null;
+      }
+
+      throw error;
+    }
+  }
+
   try {
-    const [settings] = await db
-      .select({
-        id: systemSettings.id,
-        siteTitle: systemSettings.siteTitle,
-        allowGlobalUsageView: systemSettings.allowGlobalUsageView,
-        currencyDisplay: systemSettings.currencyDisplay,
-        billingModelSource: systemSettings.billingModelSource,
-        enableAutoCleanup: systemSettings.enableAutoCleanup,
-        cleanupRetentionDays: systemSettings.cleanupRetentionDays,
-        cleanupSchedule: systemSettings.cleanupSchedule,
-        cleanupBatchSize: systemSettings.cleanupBatchSize,
-        enableClientVersionCheck: systemSettings.enableClientVersionCheck,
-        verboseProviderError: systemSettings.verboseProviderError,
-        enableHttp2: systemSettings.enableHttp2,
-        createdAt: systemSettings.createdAt,
-        updatedAt: systemSettings.updatedAt,
-      })
-      .from(systemSettings)
-      .limit(1);
+    const settings = await selectSettingsRow();
 
     if (settings) {
       return toSystemSettings(settings);
     }
 
-    const [created] = await db
+    await db
       .insert(systemSettings)
       .values({
         siteTitle: DEFAULT_SITE_TITLE,
@@ -128,49 +219,9 @@ export async function getSystemSettings(): Promise<SystemSettings> {
         currencyDisplay: "USD",
         billingModelSource: "original",
       })
-      .onConflictDoNothing()
-      .returning({
-        id: systemSettings.id,
-        siteTitle: systemSettings.siteTitle,
-        allowGlobalUsageView: systemSettings.allowGlobalUsageView,
-        currencyDisplay: systemSettings.currencyDisplay,
-        billingModelSource: systemSettings.billingModelSource,
-        enableAutoCleanup: systemSettings.enableAutoCleanup,
-        cleanupRetentionDays: systemSettings.cleanupRetentionDays,
-        cleanupSchedule: systemSettings.cleanupSchedule,
-        cleanupBatchSize: systemSettings.cleanupBatchSize,
-        enableClientVersionCheck: systemSettings.enableClientVersionCheck,
-        verboseProviderError: systemSettings.verboseProviderError,
-        enableHttp2: systemSettings.enableHttp2,
-        createdAt: systemSettings.createdAt,
-        updatedAt: systemSettings.updatedAt,
-      });
+      .onConflictDoNothing();
 
-    if (created) {
-      return toSystemSettings(created);
-    }
-
-    // 如果并发导致没有返回，重新查询一次
-    const [fallback] = await db
-      .select({
-        id: systemSettings.id,
-        siteTitle: systemSettings.siteTitle,
-        allowGlobalUsageView: systemSettings.allowGlobalUsageView,
-        currencyDisplay: systemSettings.currencyDisplay,
-        billingModelSource: systemSettings.billingModelSource,
-        enableAutoCleanup: systemSettings.enableAutoCleanup,
-        cleanupRetentionDays: systemSettings.cleanupRetentionDays,
-        cleanupSchedule: systemSettings.cleanupSchedule,
-        cleanupBatchSize: systemSettings.cleanupBatchSize,
-        enableClientVersionCheck: systemSettings.enableClientVersionCheck,
-        verboseProviderError: systemSettings.verboseProviderError,
-        enableHttp2: systemSettings.enableHttp2,
-        createdAt: systemSettings.createdAt,
-        updatedAt: systemSettings.updatedAt,
-      })
-      .from(systemSettings)
-      .limit(1);
-
+    const fallback = await selectSettingsRow();
     if (!fallback) {
       throw new Error("Failed to initialize system settings");
     }
@@ -246,6 +297,11 @@ export async function updateSystemSettings(
       updates.enableHttp2 = payload.enableHttp2;
     }
 
+    // Warmup 拦截开关（如果提供）
+    if (payload.interceptAnthropicWarmupRequests !== undefined) {
+      updates.interceptAnthropicWarmupRequests = payload.interceptAnthropicWarmupRequests;
+    }
+
     const [updated] = await db
       .update(systemSettings)
       .set(updates)
@@ -263,6 +319,7 @@ export async function updateSystemSettings(
         enableClientVersionCheck: systemSettings.enableClientVersionCheck,
         verboseProviderError: systemSettings.verboseProviderError,
         enableHttp2: systemSettings.enableHttp2,
+        interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
         createdAt: systemSettings.createdAt,
         updatedAt: systemSettings.updatedAt,
       });
@@ -275,6 +332,9 @@ export async function updateSystemSettings(
   } catch (error) {
     if (isTableMissingError(error)) {
       throw new Error("系统设置数据表不存在，请先执行数据库迁移。");
+    }
+    if (isUndefinedColumnError(error)) {
+      throw new Error("system_settings 表列缺失，请执行数据库迁移以升级数据库结构。");
     }
     throw error;
   }

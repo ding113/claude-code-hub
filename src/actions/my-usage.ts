@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, gte, isNull, sql } from "drizzle-orm";
+import { and, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
@@ -9,6 +9,7 @@ import { RateLimitService } from "@/lib/rate-limit/service";
 import type { DailyResetMode } from "@/lib/rate-limit/time-utils";
 import { SessionTracker } from "@/lib/session-tracker";
 import type { CurrencyCode } from "@/lib/utils";
+import { EXCLUDE_WARMUP_CONDITION } from "@/repository/_shared/message-request-conditions";
 import { getSystemSettings } from "@/repository/system-config";
 import {
   findUsageLogsWithDetails,
@@ -303,8 +304,9 @@ export async function getMyTodayStats(): Promise<ActionResult<MyTodayStats>> {
         and(
           eq(messageRequest.key, session.key.key),
           isNull(messageRequest.deletedAt),
+          EXCLUDE_WARMUP_CONDITION,
           gte(messageRequest.createdAt, timeRange.startTime),
-          sql`${messageRequest.createdAt} < ${timeRange.endTime}`
+          lt(messageRequest.createdAt, timeRange.endTime)
         )
       );
 
@@ -322,8 +324,9 @@ export async function getMyTodayStats(): Promise<ActionResult<MyTodayStats>> {
         and(
           eq(messageRequest.key, session.key.key),
           isNull(messageRequest.deletedAt),
+          EXCLUDE_WARMUP_CONDITION,
           gte(messageRequest.createdAt, timeRange.startTime),
-          sql`${messageRequest.createdAt} < ${timeRange.endTime}`
+          lt(messageRequest.createdAt, timeRange.endTime)
         )
       )
       .groupBy(messageRequest.model, messageRequest.originalModel);

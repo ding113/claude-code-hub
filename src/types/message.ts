@@ -1,5 +1,6 @@
 import type { Numeric } from "decimal.js-light";
 import type { CacheTtlApplied } from "./cache";
+import type { SpecialSetting } from "./special-settings";
 
 /**
  * 供应商信息（用于决策链）
@@ -226,6 +227,9 @@ export interface MessageRequest {
   // 1M 上下文窗口是否已应用
   context1mApplied?: boolean;
 
+  // 特殊设置（用于记录各类“特殊行为/覆写”的命中与生效情况，便于审计与展示）
+  specialSettings?: SpecialSetting[] | null;
+
   createdAt: Date;
   updatedAt: Date;
   deletedAt?: Date;
@@ -280,6 +284,9 @@ export interface CreateMessageRequestData {
 
   // Messages 数量（用于短请求检测和分析）
   messages_count?: number;
+
+  // 特殊设置（用于审计与展示；JSONB）
+  special_settings?: SpecialSetting[] | null;
 }
 
 /**

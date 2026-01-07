@@ -3,11 +3,13 @@ import type { Context } from "hono";
 import { logger } from "@/lib/logger";
 import { clientRequestsContext1m as clientRequestsContext1mHelper } from "@/lib/special-attributes";
 import { findLatestPriceByModel } from "@/repository/model-price";
+import { findAllProviders } from "@/repository/provider";
 import type { CacheTtlResolved } from "@/types/cache";
 import type { Key } from "@/types/key";
 import type { ProviderChainItem } from "@/types/message";
 import type { ModelPriceData } from "@/types/model-price";
 import type { Provider, ProviderType } from "@/types/provider";
+import type { SpecialSetting } from "@/types/special-settings";
 import type { User } from "@/types/user";
 import { ProxyError } from "./errors";
 import type { ClientFormat } from "./format-mapper";
@@ -93,6 +95,9 @@ export class ProxySession {
   // 1M Context Window applied (resolved)
   private context1mApplied: boolean = false;
 
+  // 特殊设置（用于审计/展示，可扩展）
+  private specialSettings: SpecialSetting[] = [];
+
   // Cached price data (lazy loaded: undefined=not loaded, null=no data)
   private cachedPriceData?: ModelPriceData | null;
 
@@ -107,6 +112,14 @@ export class ProxySession {
 
   // Cached price data for billing model source (lazy loaded: undefined=not loaded, null=no data)
   private cachedBillingPriceData?: ModelPriceData | null;
+
+  /**
+   * 请求级 Provider 快照
+   *
+   * 在 Session 首次获取时冻结，整个请求生命周期保持不变。
+   * 用于保证故障迁移期间数据一致性（避免同一请求多次调用返回不同结果）。
+   */
+  private providersSnapshot: Provider[] | null = null;
 
   private constructor(init: {
     startTime: number;
@@ -255,6 +268,14 @@ export class ProxySession {
     return this.context1mApplied;
   }
 
+  addSpecialSetting(setting: SpecialSetting): void {
+    this.specialSettings.push(setting);
+  }
+
+  getSpecialSettings(): SpecialSetting[] | null {
+    return this.specialSettings.length > 0 ? this.specialSettings : null;
+  }
+
   /**
    * Check if client requests 1M context (based on anthropic-beta header)
    */
@@ -311,6 +332,23 @@ export class ProxySession {
    */
   getRequestSequence(): number {
     return this.requestSequence;
+  }
+
+  /**
+   * 获取 Provider 列表快照
+   *
+   * 首次调用时从进程缓存获取并冻结，后续调用返回相同数据。
+   * 用于保证故障迁移期间数据一致性（避免同一请求多次调用返回不同结果）。
+   *
+   * @returns Provider 列表（整个请求生命周期不变）
+   */
+  async getProvidersSnapshot(): Promise<Provider[]> {
+    if (this.providersSnapshot !== null) {
+      return this.providersSnapshot;
+    }
+
+    this.providersSnapshot = await findAllProviders();
+    return this.providersSnapshot;
   }
 
   /**
@@ -565,6 +603,68 @@ export class ProxySession {
     // 匹配探测模式（完全匹配，忽略大小写和空格）
     const trimmed = content.trim().toLowerCase();
     return trimmed === "foo" || trimmed === "count";
+  }
+
+  /**
+   * 检查是否为 Claude Messages Warmup 请求（仅用于 Anthropic /v1/messages）
+   *
+   * 判定标准（尽量严格，降低误判）：
+   * - endpoint 必须是 /v1/messages（排除 count_tokens 等）
+   * - messages 仅 1 条，且 role=user
+   * - content 为单个 text block
+   * - text == "Warmup"（忽略大小写/首尾空格）
+   * - cache_control.type == "ephemeral"
+   */
+  isWarmupRequest(): boolean {
+    const endpoint = this.getEndpoint();
+    if (endpoint !== "/v1/messages") {
+      return false;
+    }
+
+    const msg = this.request.message as Record<string, unknown>;
+    const messages = msg.messages;
+
+    if (!Array.isArray(messages) || messages.length !== 1) {
+      return false;
+    }
+
+    const firstMessage = messages[0];
+    if (!firstMessage || typeof firstMessage !== "object") {
+      return false;
+    }
+
+    const firstObj = firstMessage as Record<string, unknown>;
+    if (firstObj.role !== "user") {
+      return false;
+    }
+
+    const content = firstObj.content;
+    if (!Array.isArray(content) || content.length !== 1) {
+      return false;
+    }
+
+    const firstBlock = content[0];
+    if (!firstBlock || typeof firstBlock !== "object") {
+      return false;
+    }
+
+    const blockObj = firstBlock as Record<string, unknown>;
+    if (blockObj.type !== "text") {
+      return false;
+    }
+
+    const text = typeof blockObj.text === "string" ? blockObj.text.trim() : "";
+    if (!text || text.toLowerCase() !== "warmup") {
+      return false;
+    }
+
+    const cacheControl = blockObj.cache_control;
+    if (!cacheControl || typeof cacheControl !== "object") {
+      return false;
+    }
+
+    const cacheControlObj = cacheControl as Record<string, unknown>;
+    return cacheControlObj.type === "ephemeral";
   }
 
   /**

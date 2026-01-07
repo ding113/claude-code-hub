@@ -127,6 +127,8 @@
       "nextPage": "Next Page",
       "blocked": "Blocked",
       "nonBilling": "Non-Billing",
+      "skipped": "Skipped",
+      "specialSettings": "Special",
       "times": "times",
       "loadedCount": "Loaded {count} records",
       "loadingMore": "Loading more...",
@@ -152,6 +154,15 @@
       "success": "Request completed successfully",
       "error": "Request failed, here are the detailed error messages and provider decision chain",
       "processing": "Request is in progress, not yet completed",
+      "specialSettings": {
+        "title": "Special settings"
+      },
+      "skipped": {
+        "title": "Skipped",
+        "reason": "Reason",
+        "warmup": "Warmup Fast Response (CCH)",
+        "desc": "This request was identified as a Warmup probe and was answered directly by CCH without forwarding to upstream providers; it is not billed, not rate-limited, and excluded from statistics."
+      },
       "blocked": {
         "title": "Blocking Information",
         "type": "Blocking Type",
@@ -369,11 +380,12 @@
       "providers": "Providers",
       "models": "Models",
       "noDetailedData": "No detailed data available",
-      "storageTip": "Tip: Set environment variable STORE_SESSION_MESSAGES=true to enable messages and response storage",
+      "storageTip": "No detailed data found. To view request details, please check if the environment variable STORE_SESSION_MESSAGES is set to true. Note: Enabling this increases Redis memory usage and may include sensitive information.",
       "clientInfo": "Client Info",
       "requestHeaders": "Request Headers",
       "requestBody": "Request Body",
       "requestMessages": "Request Messages",
+      "specialSettings": "Special",
       "requestMessagesDescription": "Message content sent by the client",
       "responseHeaders": "Response Headers",
       "responseBody": "Response Body",
@@ -386,8 +398,10 @@
     "actions": {
       "back": "Back",
       "view": "View",
-      "copyMessages": "Copy Messages",
-      "downloadMessages": "Download Messages",
+      "copy": "Copy",
+      "download": "Download",
+      "copyMessages": "Copy Request (Headers + Body)",
+      "downloadMessages": "Download Request (Headers + Body)",
       "copied": "Copied",
       "copyResponse": "Copy Response",
       "terminate": "Terminate",
@@ -429,7 +443,14 @@
       "nextPage": "Next",
       "pageInfo": "Page {page} / {total}",
       "sseEvent": "Event",
-      "sseData": "Data"
+      "sseData": "Data",
+      "hardLimit": {
+        "title": "Content too large",
+        "size": "Size: {sizeMB} MB ({sizeBytes} bytes)",
+        "maximum": "Maximum allowed: {maxSizeMB} MB or {maxLines} lines",
+        "hint": "Please download the file to view the full content.",
+        "download": "Download"
+      }
     },
     "status": {
       "loading": "Loading...",
@@ -754,6 +775,12 @@
       "description": "Provider groups for this key (default: default).",
       "defaultDescription": "default includes providers without groupTag.",
       "descriptionWithUserGroup": "Provider groups for this key (user groups: {group}; default: default)."
+    },
+    "successTitle": "Key Created Successfully",
+    "successDescription": "Your API key has been created successfully.",
+    "generatedKey": {
+      "label": "Generated Key",
+      "hint": "You can manage this key in the key list (enable/disable, quotas, etc.), but the full key is only shown once. Copy it now."
     },
     "errors": {
       "userIdMissing": "User ID does not exist",
@@ -1128,6 +1155,9 @@
       "defaultGroup": "default",
       "userStatus": {
         "disabled": "Disabled"
+      },
+      "actions": {
+        "addKey": "Add Key"
       }
     },
     "keyFullDisplay": {
@@ -1196,8 +1226,8 @@
       "editKeyTitle": "Edit Key"
     },
     "editDialog": {
-      "title": "Edit user and keys",
-      "description": "Edit user information and API key settings",
+      "title": "Edit user",
+      "description": "Edit user information",
       "userSection": "User settings",
       "keysSection": "Key settings",
       "scrollToKey": "Scroll to key",
@@ -1295,7 +1325,12 @@
       "description": "Create a new user and configure API keys",
       "saveFailed": "Failed to create user",
       "keyCreateFailed": "Failed to create key",
+      "rollbackFailed": "Rollback failed. The user may have been created without a key. Please delete the user manually (userId: {userId}) and try again.",
       "createSuccess": "User created successfully",
+      "successTitle": "Created Successfully",
+      "successDescription": "User and key have been created",
+      "generatedKey": "Generated Key",
+      "keyHint": "You can manage this key from the user management page (enable/disable, quotas, etc.), but the full key is only shown once. Copy it now.",
       "keysSection": "Keys",
       "addKey": "Add key",
       "removeKey": "Remove key",
@@ -1390,7 +1425,7 @@
         "label": "Enable dedicated balance page",
         "description": "Allow users to view their balance via a dedicated page",
         "descriptionEnabled": "When enabled, this key will access an independent personal usage page upon login. However, it cannot modify its own key's provider group.",
-        "descriptionDisabled": "When disabled, the user cannot access the personal usage page UI. However, they can modify their own key's provider group in the restricted Web UI."
+        "descriptionDisabled": "When disabled, the user cannot access the personal usage page UI. Instead, they will use the restricted Web UI."
       },
       "cacheTtlOverride": {
         "label": "Cache TTL override",
@@ -1515,7 +1550,7 @@
           "label": "Independent Personal Usage Page",
           "description": "When enabled, this key can access an independent personal usage page",
           "descriptionEnabled": "When enabled, this key will access an independent personal usage page upon login. However, it cannot modify its own key's provider group.",
-          "descriptionDisabled": "When disabled, the user cannot access the personal usage page UI. However, they can modify their own key's provider group in the restricted Web UI."
+          "descriptionDisabled": "When disabled, the user cannot access the personal usage page UI. Instead, they will use the restricted Web UI."
         },
       "providerGroup": {
         "label": "Provider Group",

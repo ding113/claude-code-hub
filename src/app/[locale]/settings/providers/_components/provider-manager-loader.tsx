@@ -1,11 +1,15 @@
 "use client";
 
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
-import type { ReactNode } from "react";
-import { getProviders, getProvidersHealthStatus } from "@/actions/providers";
+import {
+  getProviderStatisticsAsync,
+  getProviders,
+  getProvidersHealthStatus,
+} from "@/actions/providers";
 import type { CurrencyCode } from "@/lib/utils/currency";
-import type { ProviderDisplay } from "@/types/provider";
+import type { ProviderDisplay, ProviderStatisticsMap } from "@/types/provider";
 import type { User } from "@/types/user";
+import { AddProviderDialog } from "./add-provider-dialog";
 import { ProviderManager } from "./provider-manager";
 
 type ProviderHealthStatus = Record<
@@ -39,13 +43,11 @@ async function fetchSystemSettings(): Promise<{ currencyDisplay: CurrencyCode }>
 interface ProviderManagerLoaderProps {
   currentUser?: User;
   enableMultiProviderTypes: boolean;
-  addDialogSlot?: ReactNode;
 }
 
 function ProviderManagerLoaderContent({
   currentUser,
   enableMultiProviderTypes,
-  addDialogSlot,
 }: ProviderManagerLoaderProps) {
   const {
     data: providers = [],
@@ -65,6 +67,15 @@ function ProviderManagerLoaderContent({
     queryFn: getProvidersHealthStatus,
   });
 
+  // Statistics loaded independently with longer cache
+  const { data: statistics = {} as ProviderStatisticsMap, isLoading: isStatisticsLoading } =
+    useQuery<ProviderStatisticsMap>({
+      queryKey: ["providers-statistics"],
+      queryFn: getProviderStatisticsAsync,
+      staleTime: 30_000,
+      refetchInterval: 60_000,
+    });
+
   const {
     data: systemSettings,
     isLoading: isSettingsLoading,
@@ -83,11 +94,13 @@ function ProviderManagerLoaderContent({
       providers={providers}
       currentUser={currentUser}
       healthStatus={healthStatus}
+      statistics={statistics}
+      statisticsLoading={isStatisticsLoading}
       currencyCode={currencyCode}
       enableMultiProviderTypes={enableMultiProviderTypes}
       loading={loading}
       refreshing={refreshing}
-      addDialogSlot={addDialogSlot}
+      addDialogSlot={<AddProviderDialog enableMultiProviderTypes={enableMultiProviderTypes} />}
     />
   );
 }

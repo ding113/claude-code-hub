@@ -5,6 +5,7 @@ import { db } from "@/drizzle/db";
 import { messageRequest, providers, users } from "@/drizzle/schema";
 import { getEnvConfig } from "@/lib/config";
 import type { ProviderType } from "@/types/provider";
+import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
 import { getSystemSettings } from "./system-config";
 
 /**
@@ -170,7 +171,13 @@ async function findLeaderboardWithTimezone(
     })
     .from(messageRequest)
     .innerJoin(users, and(sql`${messageRequest.userId} = ${users.id}`, isNull(users.deletedAt)))
-    .where(and(isNull(messageRequest.deletedAt), buildDateCondition(period, timezone, dateRange)))
+    .where(
+      and(
+        isNull(messageRequest.deletedAt),
+        EXCLUDE_WARMUP_CONDITION,
+        buildDateCondition(period, timezone, dateRange)
+      )
+    )
     .groupBy(messageRequest.userId, users.name)
     .orderBy(desc(sql`sum(${messageRequest.costUsd})`));
 
@@ -306,6 +313,7 @@ async function findProviderLeaderboardWithTimezone(
 ): Promise<ProviderLeaderboardEntry[]> {
   const whereConditions = [
     isNull(messageRequest.deletedAt),
+    EXCLUDE_WARMUP_CONDITION,
     buildDateCondition(period, timezone, dateRange),
     providerType ? eq(providers.providerType, providerType) : undefined,
   ];
@@ -405,6 +413,7 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
 
   const whereConditions = [
     isNull(messageRequest.deletedAt),
+    EXCLUDE_WARMUP_CONDITION,
     buildDateCondition(period, timezone, dateRange),
     cacheRequiredCondition,
     providerType ? eq(providers.providerType, providerType) : undefined,
@@ -547,7 +556,13 @@ async function findModelLeaderboardWithTimezone(
       )`,
     })
     .from(messageRequest)
-    .where(and(isNull(messageRequest.deletedAt), buildDateCondition(period, timezone, dateRange)))
+    .where(
+      and(
+        isNull(messageRequest.deletedAt),
+        EXCLUDE_WARMUP_CONDITION,
+        buildDateCondition(period, timezone, dateRange)
+      )
+    )
     .groupBy(modelField)
     .orderBy(desc(sql`count(*)`)); // 按请求数排序
 

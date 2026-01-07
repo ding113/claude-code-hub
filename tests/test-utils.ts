@@ -13,6 +13,7 @@
  * - 以及需要校验“缺少 Cookie 直接 401”的端点
  */
 
+import { Request as UndiciRequest } from "undici";
 import { GET, POST } from "@/app/api/actions/[...route]/route";
 
 export type ActionsRouteCallOptions = {
@@ -52,13 +53,14 @@ export async function callActionsRoute(options: ActionsRouteCallOptions): Promis
   if (options.authToken) {
     const existing = headers.Cookie ? `${headers.Cookie}; ` : "";
     headers.Cookie = `${existing}auth-token=${options.authToken}`;
+    headers.Authorization = headers.Authorization ?? `Bearer ${options.authToken}`;
   }
 
   if (options.method === "POST") {
     headers["Content-Type"] = headers["Content-Type"] ?? "application/json";
   }
 
-  const request = new Request(url, {
+  const request = new UndiciRequest(url, {
     method: options.method,
     headers,
     body: options.method === "POST" ? JSON.stringify(options.body ?? {}) : undefined,

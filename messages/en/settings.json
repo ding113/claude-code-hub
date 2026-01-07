@@ -102,6 +102,8 @@
       "verboseProviderErrorDesc": "When enabled, return detailed error messages when all providers are unavailable (including provider count, rate limit reasons, etc.); when disabled, only return a simple error code.",
       "enableHttp2": "Enable HTTP/2",
       "enableHttp2Desc": "When enabled, proxy requests will prefer HTTP/2 protocol. Automatically falls back to HTTP/1.1 on failure.",
+      "interceptAnthropicWarmupRequests": "Intercept Warmup Requests (Anthropic)",
+      "interceptAnthropicWarmupRequestsDesc": "When enabled, Claude Code warmup probe requests will be answered by CCH directly to avoid upstream provider calls; the request is logged for audit but is not billed, not rate-limited, and excluded from statistics.",
       "cleanupSchedule": "Cleanup Schedule",
       "cleanupScheduleDesc": "Select the execution schedule for automatic cleanup",
       "configUpdated": "System settings updated. The page will refresh to apply currency display changes.",
@@ -429,6 +431,11 @@
     "dingtalkSecretPlaceholder": "Optional, used for signing",
     "customHeaders": "Custom Headers (JSON)",
     "customHeadersPlaceholder": "{\"X-Token\":\"...\"}",
+    "errors": {
+      "headersInvalidJson": "Headers must be valid JSON",
+      "headersMustBeObject": "Headers must be a JSON object",
+      "headersValueMustBeString": "Header values must be strings"
+    },
     "types": {
       "wechat": "WeCom",
       "feishu": "Feishu",
@@ -653,6 +660,10 @@
       "resetCircuitSuccess": "Circuit breaker reset",
       "resetCircuitSuccessDesc": "Provider \"{name}\" circuit breaker status cleared",
       "resetCircuitFailed": "Failed to reset circuit breaker",
+      "resetUsageTitle": "Reset total usage",
+      "resetUsageSuccess": "Total usage reset",
+      "resetUsageSuccessDesc": "Provider \"{name}\" total usage has been reset",
+      "resetUsageFailed": "Failed to reset total usage",
       "toggleSuccess": "Provider {status}",
       "toggleSuccessDesc": "Provider \"{name}\" status updated",
       "toggleFailed": "Toggle failed",
@@ -1150,6 +1161,7 @@
         "create": "Add Provider",
         "edit": "Edit Provider"
       },
+      "dialogDescription": "Configure provider details and advanced settings.",
       "url": {
         "label": "API Address *",
         "placeholder": "e.g. https://open.bigmodel.cn/api/anthropic"
@@ -1251,6 +1263,49 @@
               "disabled": "Disabled"
             },
             "desc": "Configure 1M context window support. Only affects Sonnet models (claude-sonnet-4-5, claude-sonnet-4). Tiered pricing applies when enabled."
+          },
+          "codexOverrides": {
+            "reasoningEffort": {
+              "label": "Reasoning Effort Override",
+              "help": "Controls how much reasoning effort the model uses before answering. \"inherit\" follows the client request; other values force override reasoning.effort. Note: \"none\" is only supported on GPT-5.1 models; \"xhigh\" is only supported on GPT-5.1-Codex-Max. Using an unsupported value will cause an upstream error.",
+              "options": {
+                "inherit": "No override (follow client)",
+                "minimal": "minimal",
+                "low": "low",
+                "medium": "medium (default)",
+                "high": "high",
+                "xhigh": "xhigh (GPT-5.1-Codex-Max only)",
+                "none": "none (GPT-5.1 only)"
+              }
+            },
+            "reasoningSummary": {
+              "label": "Reasoning Summary Override",
+              "help": "Controls whether the Responses API returns reasoning summaries. \"auto\" returns a condensed summary, \"detailed\" returns a more comprehensive one. \"inherit\" follows the client request.",
+              "options": {
+                "inherit": "No override (follow client)",
+                "auto": "auto",
+                "detailed": "detailed"
+              }
+            },
+            "textVerbosity": {
+              "label": "Text Verbosity Override",
+              "help": "Controls how verbose the model output is. \"low\" is concise, \"high\" is verbose. \"inherit\" follows the client request.",
+              "options": {
+                "inherit": "No override (follow client)",
+                "low": "low",
+                "medium": "medium (default)",
+                "high": "high"
+              }
+            },
+            "parallelToolCalls": {
+              "label": "Parallel Tool Calls Override",
+              "help": "Controls whether parallel tool calls are allowed. \"inherit\" follows the client request. Disabling may reduce tool-call concurrency.",
+              "options": {
+                "inherit": "No override (follow client)",
+                "true": "Force enable",
+                "false": "Force disable"
+              }
+            }
           }
         },
         "rateLimit": {
@@ -1260,6 +1315,7 @@
             "daily": "Day: ${amount} (reset ${resetTime})",
             "weekly": "Week: ${amount}",
             "monthly": "Month: ${amount}",
+            "total": "Total: ${amount}",
             "concurrent": "Concurrent: {count}",
             "none": "Unlimited"
           },
@@ -1291,6 +1347,10 @@
           },
           "limitMonthly": {
             "label": "Monthly Spend Limit (USD)",
+            "placeholder": "Leave empty for unlimited"
+          },
+          "limitTotal": {
+            "label": "Total Spend Limit (USD)",
             "placeholder": "Leave empty for unlimited"
           },
           "limitConcurrent": {
@@ -1470,6 +1530,7 @@
       "errors": {
         "invalidUrl": "Please enter a valid API address",
         "invalidWebsiteUrl": "Please enter a valid provider website URL",
+        "groupTagTooLong": "Provider group tags are too long (max {max} chars total)",
         "addFailed": "Failed to add provider",
         "updateFailed": "Failed to update provider",
         "deleteFailed": "Failed to delete provider"

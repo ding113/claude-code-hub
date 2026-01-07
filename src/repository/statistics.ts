@@ -14,6 +14,7 @@ import type {
   RateLimitType,
   TimeRange,
 } from "@/types/statistics";
+import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
 
 /**
  * 根据时间范围获取用户消费和API调用统计
@@ -45,7 +46,7 @@ export async function getUserStatisticsFromDB(timeRange: TimeRange): Promise<Dat
           CROSS JOIN hour_range hr
           LEFT JOIN message_request mr ON u.id = mr.user_id
             AND DATE_TRUNC('hour', mr.created_at AT TIME ZONE ${timezone}) = hr.hour
-            AND mr.deleted_at IS NULL
+            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
           WHERE u.deleted_at IS NULL
           GROUP BY u.id, u.name, hr.hour
         )
@@ -81,7 +82,7 @@ export async function getUserStatisticsFromDB(timeRange: TimeRange): Promise<Dat
           CROSS JOIN date_range dr
           LEFT JOIN message_request mr ON u.id = mr.user_id
             AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-            AND mr.deleted_at IS NULL
+            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
           WHERE u.deleted_at IS NULL
           GROUP BY u.id, u.name, dr.date
         )
@@ -117,7 +118,7 @@ export async function getUserStatisticsFromDB(timeRange: TimeRange): Promise<Dat
           CROSS JOIN date_range dr
           LEFT JOIN message_request mr ON u.id = mr.user_id
             AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-            AND mr.deleted_at IS NULL
+            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
           WHERE u.deleted_at IS NULL
           GROUP BY u.id, u.name, dr.date
         )
@@ -153,7 +154,7 @@ export async function getUserStatisticsFromDB(timeRange: TimeRange): Promise<Dat
           CROSS JOIN date_range dr
           LEFT JOIN message_request mr ON u.id = mr.user_id
             AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-            AND mr.deleted_at IS NULL
+            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
           WHERE u.deleted_at IS NULL
           GROUP BY u.id, u.name, dr.date
         )
@@ -229,7 +230,7 @@ export async function getKeyStatisticsFromDB(
           LEFT JOIN message_request mr ON mr.key = k.key
             AND mr.user_id = ${userId}
             AND DATE_TRUNC('hour', mr.created_at AT TIME ZONE ${timezone}) = hr.hour
-            AND mr.deleted_at IS NULL
+            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
           GROUP BY k.id, k.name, hr.hour
         )
         SELECT
@@ -270,7 +271,7 @@ export async function getKeyStatisticsFromDB(
           LEFT JOIN message_request mr ON mr.key = k.key
             AND mr.user_id = ${userId}
             AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-            AND mr.deleted_at IS NULL
+            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
           GROUP BY k.id, k.name, dr.date
         )
         SELECT
@@ -311,7 +312,7 @@ export async function getKeyStatisticsFromDB(
           LEFT JOIN message_request mr ON mr.key = k.key
             AND mr.user_id = ${userId}
             AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-            AND mr.deleted_at IS NULL
+            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
           GROUP BY k.id, k.name, dr.date
         )
         SELECT
@@ -352,7 +353,7 @@ export async function getKeyStatisticsFromDB(
           LEFT JOIN message_request mr ON mr.key = k.key
             AND mr.user_id = ${userId}
             AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-            AND mr.deleted_at IS NULL
+            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
           GROUP BY k.id, k.name, dr.date
         )
         SELECT
@@ -434,7 +435,7 @@ export async function getMixedStatisticsFromDB(
           LEFT JOIN message_request mr ON mr.key = k.key
             AND mr.user_id = ${userId}
             AND DATE_TRUNC('hour', mr.created_at AT TIME ZONE ${timezone}) = hr.hour
-            AND mr.deleted_at IS NULL
+            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
           GROUP BY k.id, k.name, hr.hour
         )
         SELECT
@@ -464,7 +465,7 @@ export async function getMixedStatisticsFromDB(
           FROM hour_range hr
           LEFT JOIN message_request mr ON DATE_TRUNC('hour', mr.created_at AT TIME ZONE ${timezone}) = hr.hour
             AND mr.user_id != ${userId}
-            AND mr.deleted_at IS NULL
+            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
           GROUP BY hr.hour
         )
         SELECT
@@ -506,7 +507,7 @@ export async function getMixedStatisticsFromDB(
           LEFT JOIN message_request mr ON mr.key = k.key
             AND mr.user_id = ${userId}
             AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-            AND mr.deleted_at IS NULL
+            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
           GROUP BY k.id, k.name, dr.date
         )
         SELECT
@@ -536,7 +537,7 @@ export async function getMixedStatisticsFromDB(
           FROM date_range dr
           LEFT JOIN message_request mr ON (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
             AND mr.user_id != ${userId}
-            AND mr.deleted_at IS NULL
+            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
           GROUP BY dr.date
         )
         SELECT
@@ -578,7 +579,7 @@ export async function getMixedStatisticsFromDB(
           LEFT JOIN message_request mr ON mr.key = k.key
             AND mr.user_id = ${userId}
             AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-            AND mr.deleted_at IS NULL
+            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
           GROUP BY k.id, k.name, dr.date
         )
         SELECT
@@ -608,7 +609,7 @@ export async function getMixedStatisticsFromDB(
           FROM date_range dr
           LEFT JOIN message_request mr ON (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
             AND mr.user_id != ${userId}
-            AND mr.deleted_at IS NULL
+            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
           GROUP BY dr.date
         )
         SELECT
@@ -650,7 +651,7 @@ export async function getMixedStatisticsFromDB(
           LEFT JOIN message_request mr ON mr.key = k.key
             AND mr.user_id = ${userId}
             AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-            AND mr.deleted_at IS NULL
+            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
           GROUP BY k.id, k.name, dr.date
         )
         SELECT
@@ -680,7 +681,7 @@ export async function getMixedStatisticsFromDB(
           FROM date_range dr
           LEFT JOIN message_request mr ON (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
             AND mr.user_id != ${userId}
-            AND mr.deleted_at IS NULL
+            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
           GROUP BY dr.date
         )
         SELECT
@@ -727,7 +728,7 @@ export async function sumUserCostToday(userId: number): Promise<number> {
     INNER JOIN keys k ON mr.key = k.key
     WHERE k.user_id = ${userId}
       AND (mr.created_at AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date
-      AND mr.deleted_at IS NULL
+      AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
       AND k.deleted_at IS NULL
   `;
 
@@ -779,6 +780,7 @@ export async function sumKeyTotalCost(keyHash: string, maxAgeDays: number = 365)
       and(
         eq(messageRequest.key, keyHash),
         isNull(messageRequest.deletedAt),
+        EXCLUDE_WARMUP_CONDITION,
         gte(messageRequest.createdAt, cutoffDate)
       )
     );
@@ -807,7 +809,41 @@ export async function sumUserTotalCost(userId: number, maxAgeDays: number = 365)
       and(
         eq(messageRequest.userId, userId),
         isNull(messageRequest.deletedAt),
+        EXCLUDE_WARMUP_CONDITION,
         gte(messageRequest.createdAt, cutoffDate)
+      )
+    );
+
+  return Number(result[0]?.total || 0);
+}
+
+/**
+ * 查询供应商历史总消费
+ * 用于供应商总消费限额检查（limit_total_usd）。
+ *
+ * 重要语义：
+ * - 总限额必须是“从 resetAt 起累计到现在”的结果；resetAt 为空时表示从历史最早记录开始累计。
+ * - 这里不再做 365 天时间截断，否则会导致达到总限额后“过期自动恢复”，违背禁用语义。
+ *
+ * @param providerId - 供应商 ID
+ * @param resetAt - 手动重置时间（用于实现“从 0 重新累计”）
+ */
+export async function sumProviderTotalCost(
+  providerId: number,
+  resetAt?: Date | null
+): Promise<number> {
+  const effectiveStart =
+    resetAt instanceof Date && !Number.isNaN(resetAt.getTime()) ? resetAt : null;
+
+  const result = await db
+    .select({ total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)` })
+    .from(messageRequest)
+    .where(
+      and(
+        eq(messageRequest.providerId, providerId),
+        isNull(messageRequest.deletedAt),
+        EXCLUDE_WARMUP_CONDITION,
+        ...(effectiveStart ? [gte(messageRequest.createdAt, effectiveStart)] : [])
       )
     );
 
@@ -831,7 +867,8 @@ export async function sumUserCostInTimeRange(
         eq(messageRequest.userId, userId),
         gte(messageRequest.createdAt, startTime),
         lt(messageRequest.createdAt, endTime),
-        isNull(messageRequest.deletedAt)
+        isNull(messageRequest.deletedAt),
+        EXCLUDE_WARMUP_CONDITION
       )
     );
 
@@ -866,7 +903,8 @@ export async function sumKeyCostInTimeRange(
         eq(messageRequest.key, keyString), // 使用 key 字符串而非 ID
         gte(messageRequest.createdAt, startTime),
         lt(messageRequest.createdAt, endTime),
-        isNull(messageRequest.deletedAt)
+        isNull(messageRequest.deletedAt),
+        EXCLUDE_WARMUP_CONDITION
       )
     );
 
@@ -899,7 +937,8 @@ export async function findUserCostEntriesInTimeRange(
         eq(messageRequest.userId, userId),
         gte(messageRequest.createdAt, startTime),
         lt(messageRequest.createdAt, endTime),
-        isNull(messageRequest.deletedAt)
+        isNull(messageRequest.deletedAt),
+        EXCLUDE_WARMUP_CONDITION
       )
     );
 
@@ -933,7 +972,8 @@ export async function findProviderCostEntriesInTimeRange(
         eq(messageRequest.providerId, providerId),
         gte(messageRequest.createdAt, startTime),
         lt(messageRequest.createdAt, endTime),
-        isNull(messageRequest.deletedAt)
+        isNull(messageRequest.deletedAt),
+        EXCLUDE_WARMUP_CONDITION
       )
     );
 
@@ -978,7 +1018,8 @@ export async function findKeyCostEntriesInTimeRange(
         eq(messageRequest.key, keyString), // 使用 key 字符串而非 ID
         gte(messageRequest.createdAt, startTime),
         lt(messageRequest.createdAt, endTime),
-        isNull(messageRequest.deletedAt)
+        isNull(messageRequest.deletedAt),
+        EXCLUDE_WARMUP_CONDITION
       )
     );
 
@@ -1170,7 +1211,8 @@ export async function sumProviderCostInTimeRange(
         eq(messageRequest.providerId, providerId),
         gte(messageRequest.createdAt, startTime),
         lt(messageRequest.createdAt, endTime),
-        isNull(messageRequest.deletedAt)
+        isNull(messageRequest.deletedAt),
+        EXCLUDE_WARMUP_CONDITION
       )
     );
 
