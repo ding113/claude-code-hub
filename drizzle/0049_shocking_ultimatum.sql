@@ -1,0 +1,1 @@
+ALTER TABLE "message_request" ADD COLUMN "special_settings" jsonb;

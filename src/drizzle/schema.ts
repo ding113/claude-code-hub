@@ -13,6 +13,7 @@ import {
   pgEnum,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
+import type { SpecialSetting } from '@/types/special-settings';
 
 // Enums
 export const dailyResetModeEnum = pgEnum('daily_reset_mode', ['fixed', 'rolling']);
@@ -316,6 +317,9 @@ export const messageRequest = pgTable('message_request', {
 
   // 1M Context Window 应用状态
   context1mApplied: boolean('context_1m_applied').default(false),
+
+  // 特殊设置（用于记录各类“特殊行为/覆写”的命中与生效情况，便于审计与展示）
+  specialSettings: jsonb('special_settings').$type<SpecialSetting[]>(),
 
   // 错误信息
   errorMessage: text('error_message'),

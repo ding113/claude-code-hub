@@ -11,6 +11,7 @@ import type {
   SessionStoreInfo,
   SessionUsageUpdate,
 } from "@/types/session";
+import type { SpecialSetting } from "@/types/special-settings";
 import { getRedisClient } from "./redis";
 import { SessionTracker } from "./session-tracker";
 
@@ -1422,6 +1423,58 @@ export class SessionManager {
       return JSON.parse(value) as unknown;
     } catch (error) {
       logger.error("SessionManager: Failed to get session request body", { error, sessionId });
+      return null;
+    }
+  }
+
+  /**
+   * 存储特殊设置（审计字段，临时存储，5分钟过期）
+   *
+   * @param sessionId - Session ID
+   * @param specialSettings - 特殊设置（可为空）
+   * @param requestSequence - 请求序号
+   */
+  static async storeSessionSpecialSettings(
+    sessionId: string,
+    specialSettings: SpecialSetting[] | null,
+    requestSequence?: number
+  ): Promise<void> {
+    if (!specialSettings || specialSettings.length === 0) {
+      return;
+    }
+
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") return;
+
+    try {
+      const sequence = normalizeRequestSequence(requestSequence) ?? 1;
+      const key = `session:${sessionId}:req:${sequence}:specialSettings`;
+      const payload = JSON.stringify(specialSettings);
+      await redis.setex(key, SessionManager.SESSION_TTL, payload);
+    } catch (error) {
+      logger.error("SessionManager: Failed to store special settings", { error, sessionId });
+    }
+  }
+
+  static async getSessionSpecialSettings(
+    sessionId: string,
+    requestSequence?: number
+  ): Promise<SpecialSetting[] | null> {
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") return null;
+
+    try {
+      const sequence = normalizeRequestSequence(requestSequence);
+      if (!sequence) return null;
+      const key = `session:${sessionId}:req:${sequence}:specialSettings`;
+      const value = await redis.get(key);
+      if (!value) return null;
+
+      const parsed: unknown = JSON.parse(value);
+      if (!Array.isArray(parsed)) return null;
+      return parsed as SpecialSetting[];
+    } catch (error) {
+      logger.error("SessionManager: Failed to get special settings", { error, sessionId });
       return null;
     }
   }

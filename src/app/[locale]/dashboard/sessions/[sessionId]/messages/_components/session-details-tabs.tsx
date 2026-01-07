@@ -32,6 +32,7 @@ function formatHeaders(
 interface SessionMessagesDetailsTabsProps {
   requestBody: unknown | null;
   messages: SessionMessages | null;
+  specialSettings: unknown | null;
   requestHeaders: Record<string, string> | null;
   responseHeaders: Record<string, string> | null;
   response: string | null;
@@ -42,6 +43,7 @@ interface SessionMessagesDetailsTabsProps {
 export function SessionMessagesDetailsTabs({
   requestBody,
   messages,
+  specialSettings,
   response,
   requestHeaders,
   responseHeaders,
@@ -60,6 +62,11 @@ export function SessionMessagesDetailsTabs({
     if (messages === null) return null;
     return JSON.stringify(messages, null, 2);
   }, [messages]);
+
+  const specialSettingsContent = useMemo(() => {
+    if (specialSettings === null) return null;
+    return JSON.stringify(specialSettings, null, 2);
+  }, [specialSettings]);
 
   const requestHeadersPreamble = useMemo(() => {
     const lines: string[] = [];
@@ -112,7 +119,7 @@ export function SessionMessagesDetailsTabs({
 
   return (
     <Tabs defaultValue="requestBody" className="w-full" data-testid="session-details-tabs">
-      <TabsList className="grid w-full grid-cols-5">
+      <TabsList className="grid w-full grid-cols-6">
         <TabsTrigger value="requestHeaders" data-testid="session-tab-trigger-request-headers">
           {t("details.requestHeaders")}
         </TabsTrigger>
@@ -121,6 +128,9 @@ export function SessionMessagesDetailsTabs({
         </TabsTrigger>
         <TabsTrigger value="requestMessages" data-testid="session-tab-trigger-request-messages">
           {t("details.requestMessages")}
+        </TabsTrigger>
+        <TabsTrigger value="specialSettings" data-testid="session-tab-trigger-special-settings">
+          {t("details.specialSettings")}
         </TabsTrigger>
         <TabsTrigger value="responseHeaders" data-testid="session-tab-trigger-response-headers">
           {t("details.responseHeaders")}
@@ -172,6 +182,23 @@ export function SessionMessagesDetailsTabs({
             content={requestMessagesContent}
             language="json"
             fileName="request.messages.json"
+            maxContentBytes={SESSION_DETAILS_MAX_CONTENT_BYTES}
+            maxLines={SESSION_DETAILS_MAX_LINES}
+            maxHeight="600px"
+            defaultExpanded
+            expandedMaxHeight={codeExpandedMaxHeight}
+          />
+        )}
+      </TabsContent>
+
+      <TabsContent value="specialSettings" data-testid="session-tab-special-settings">
+        {specialSettingsContent === null ? (
+          <div className="text-muted-foreground p-4">{t("details.noData")}</div>
+        ) : (
+          <CodeDisplay
+            content={specialSettingsContent}
+            language="json"
+            fileName="specialSettings.json"
             maxContentBytes={SESSION_DETAILS_MAX_CONTENT_BYTES}
             maxLines={SESSION_DETAILS_MAX_LINES}
             maxHeight="600px"

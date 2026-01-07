@@ -60,6 +60,13 @@ export function SessionMessagesClient() {
   const [response, setResponse] = useState<string | null>(null);
   const [requestHeaders, setRequestHeaders] = useState<Record<string, string> | null>(null);
   const [responseHeaders, setResponseHeaders] = useState<Record<string, string> | null>(null);
+  const [specialSettings, setSpecialSettings] =
+    useState<
+      Extract<
+        Awaited<ReturnType<typeof getSessionDetails>>,
+        { ok: true }
+      >["data"]["specialSettings"]
+    >(null);
   const [requestMeta, setRequestMeta] = useState<{
     clientUrl: string | null;
     upstreamUrl: string | null;
@@ -90,6 +97,7 @@ export function SessionMessagesClient() {
     setResponse(null);
     setRequestHeaders(null);
     setResponseHeaders(null);
+    setSpecialSettings(null);
     setRequestMeta({ clientUrl: null, upstreamUrl: null, method: null });
     setResponseMeta({ upstreamUrl: null, statusCode: null });
     setSessionStats(null);
@@ -134,6 +142,7 @@ export function SessionMessagesClient() {
           setResponse(result.data.response);
           setRequestHeaders(result.data.requestHeaders);
           setResponseHeaders(result.data.responseHeaders);
+          setSpecialSettings(result.data.specialSettings);
           setRequestMeta(result.data.requestMeta);
           setResponseMeta(result.data.responseMeta);
           setSessionStats(result.data.sessionStats);
@@ -173,6 +182,7 @@ export function SessionMessagesClient() {
         meta: requestMeta,
         headers: requestHeaders,
         body: requestBody,
+        specialSettings,
       },
       null,
       2
@@ -373,6 +383,7 @@ export function SessionMessagesClient() {
                   <SessionMessagesDetailsTabs
                     messages={messages}
                     requestBody={requestBody}
+                    specialSettings={specialSettings}
                     response={response}
                     requestHeaders={requestHeaders}
                     responseHeaders={responseHeaders}

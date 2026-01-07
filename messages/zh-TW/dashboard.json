@@ -128,6 +128,7 @@
       "blocked": "已攔截",
       "nonBilling": "非計費",
       "skipped": "已跳過",
+      "specialSettings": "特殊設定",
       "times": "次",
       "loadedCount": "已載入 {count} 筆記錄",
       "loadingMore": "載入更多中...",
@@ -153,6 +154,9 @@
       "success": "請求成功完成",
       "error": "請求失敗，以下是詳細的錯誤訊息和供應商決策鏈",
       "processing": "請求正在進行中，尚未完成",
+      "specialSettings": {
+        "title": "特殊設定"
+      },
       "skipped": {
         "title": "跳過資訊",
         "reason": "原因",
@@ -381,6 +385,7 @@
       "requestHeaders": "請求頭",
       "requestBody": "請求體",
       "requestMessages": "請求訊息",
+      "specialSettings": "特殊設定",
       "requestMessagesDescription": "用戶端傳送的訊息內容",
       "responseHeaders": "響應頭",
       "responseBody": "響應體",

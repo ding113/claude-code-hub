@@ -344,6 +344,13 @@
       "when": 1767758201870,
       "tag": "0048_unknown_bushwacker",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1767764802281,
+      "tag": "0049_shocking_ultimatum",
+      "breakpoints": true
     }
   ]
 }

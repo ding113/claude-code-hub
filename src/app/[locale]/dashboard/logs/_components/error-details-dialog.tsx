@@ -28,6 +28,7 @@ import { cn, formatTokenAmount } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/currency";
 import { formatProviderTimeline } from "@/lib/utils/provider-chain-formatter";
 import type { ProviderChainItem } from "@/types/message";
+import type { SpecialSetting } from "@/types/special-settings";
 import type { BillingModelSource } from "@/types/system-config";
 
 interface ErrorDetailsDialogProps {
@@ -44,6 +45,7 @@ interface ErrorDetailsDialogProps {
   messagesCount?: number | null; // Messages 数量
   endpoint?: string | null; // API 端点
   billingModelSource?: BillingModelSource; // 计费模型来源
+  specialSettings?: SpecialSetting[] | null; // 特殊设置（审计/展示）
   // 计费详情
   inputTokens?: number | null;
   outputTokens?: number | null;
@@ -76,6 +78,7 @@ export function ErrorDetailsDialog({
   messagesCount,
   endpoint,
   billingModelSource = "original",
+  specialSettings,
   inputTokens,
   outputTokens,
   cacheCreationInputTokens,
@@ -113,6 +116,9 @@ export function ErrorDetailsDialog({
   const isInProgress = !statusCode; // 没有状态码表示请求进行中
   const isWarmupSkipped = blockedBy === "warmup";
   const isBlocked = !!blockedBy && !isWarmupSkipped; // 是否被拦截（不含 warmup 跳过）
+
+  const specialSettingsContent =
+    specialSettings && specialSettings.length > 0 ? JSON.stringify(specialSettings, null, 2) : null;
 
   const outputTokensPerSecond = (() => {
     if (
@@ -408,6 +414,18 @@ export function ErrorDetailsDialog({
               <h4 className="font-semibold text-sm">{t("logs.columns.endpoint")}</h4>
               <div className="rounded-md border bg-muted/50 p-3">
                 <code className="text-xs font-mono break-all">{endpoint}</code>
+              </div>
+            </div>
+          )}
+
+          {/* 特殊设置（审计） */}
+          {specialSettingsContent && (
+            <div className="space-y-2">
+              <h4 className="font-semibold text-sm">{t("logs.details.specialSettings.title")}</h4>
+              <div className="rounded-md border bg-muted/50 p-3">
+                <pre className="text-xs whitespace-pre-wrap break-words font-mono">
+                  {specialSettingsContent}
+                </pre>
               </div>
             </div>
           )}

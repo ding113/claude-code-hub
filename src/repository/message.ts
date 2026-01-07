@@ -132,6 +132,7 @@ export async function updateMessageRequestDetails(
     model?: string; // ⭐ 新增：支持更新重定向后的模型名称
     providerId?: number; // ⭐ 新增：支持更新最终供应商ID（重试切换后）
     context1mApplied?: boolean; // 是否应用了1M上下文窗口
+    specialSettings?: CreateMessageRequestData["special_settings"]; // 特殊设置（审计/展示）
   }
 ): Promise<void> {
   if (getEnvConfig().MESSAGE_REQUEST_WRITE_MODE === "async") {
@@ -190,6 +191,9 @@ export async function updateMessageRequestDetails(
   }
   if (details.context1mApplied !== undefined) {
     updateData.context1mApplied = details.context1mApplied;
+  }
+  if (details.specialSettings !== undefined) {
+    updateData.specialSettings = details.specialSettings;
   }
 
   await db.update(messageRequest).set(updateData).where(eq(messageRequest.id, id));

@@ -26,6 +26,7 @@ export type MessageRequestUpdatePatch = {
   model?: string;
   providerId?: number;
   context1mApplied?: boolean;
+  specialSettings?: CreateMessageRequestData["special_settings"];
 };
 
 type MessageRequestUpdateRecord = {
@@ -58,6 +59,7 @@ const COLUMN_MAP: Record<keyof MessageRequestUpdatePatch, string> = {
   model: "model",
   providerId: "provider_id",
   context1mApplied: "context_1m_applied",
+  specialSettings: "special_settings",
 };
 
 function loadWriterConfig(): WriterConfig {
@@ -99,7 +101,7 @@ function buildBatchUpdateSql(updates: MessageRequestUpdateRecord[]): SQL | null 
         continue;
       }
 
-      if (key === "providerChain") {
+      if (key === "providerChain" || key === "specialSettings") {
         if (value === null) {
           cases.push(sql`WHEN ${update.id} THEN NULL`);
           continue;
