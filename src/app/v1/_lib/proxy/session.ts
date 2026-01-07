@@ -3,6 +3,7 @@ import type { Context } from "hono";
 import { logger } from "@/lib/logger";
 import { clientRequestsContext1m as clientRequestsContext1mHelper } from "@/lib/special-attributes";
 import { findLatestPriceByModel } from "@/repository/model-price";
+import { findAllProviders } from "@/repository/provider";
 import type { CacheTtlResolved } from "@/types/cache";
 import type { Key } from "@/types/key";
 import type { ProviderChainItem } from "@/types/message";
@@ -107,6 +108,14 @@ export class ProxySession {
 
   // Cached price data for billing model source (lazy loaded: undefined=not loaded, null=no data)
   private cachedBillingPriceData?: ModelPriceData | null;
+
+  /**
+   * 请求级 Provider 快照
+   *
+   * 在 Session 首次获取时冻结，整个请求生命周期保持不变。
+   * 用于保证故障迁移期间数据一致性（避免同一请求多次调用返回不同结果）。
+   */
+  private providersSnapshot: Provider[] | null = null;
 
   private constructor(init: {
     startTime: number;
@@ -311,6 +320,23 @@ export class ProxySession {
    */
   getRequestSequence(): number {
     return this.requestSequence;
+  }
+
+  /**
+   * 获取 Provider 列表快照
+   *
+   * 首次调用时从进程缓存获取并冻结，后续调用返回相同数据。
+   * 用于保证故障迁移期间数据一致性（避免同一请求多次调用返回不同结果）。
+   *
+   * @returns Provider 列表（整个请求生命周期不变）
+   */
+  async getProvidersSnapshot(): Promise<Provider[]> {
+    if (this.providersSnapshot !== null) {
+      return this.providersSnapshot;
+    }
+
+    this.providersSnapshot = await findAllProviders();
+    return this.providersSnapshot;
   }
 
   /**
