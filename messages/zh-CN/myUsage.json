@@ -49,7 +49,7 @@
       "tokens": "Tokens (入/出)",
       "cacheWrite": "缓存写入",
       "cacheRead": "缓存读取",
-      "cost": "{currency} 消耗",
+      "cost": "消耗",
       "status": "状态",
       "endpoint": "API 端点"
     },

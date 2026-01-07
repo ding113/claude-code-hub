@@ -47,9 +47,9 @@
       "time": "Время",
       "model": "Модель",
       "tokens": "Токены (вх/вых)",
-      "cacheWrite": "Запись кэша",
-      "cacheRead": "Чтение кэша",
-      "cost": "Стоимость {currency}",
+      "cacheWrite": "Запись кэш",
+      "cacheRead": "Чтение кэш",
+      "cost": "Цена",
       "status": "Статус",
       "endpoint": "API Endpoint"
     },

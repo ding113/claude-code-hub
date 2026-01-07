@@ -49,7 +49,7 @@
       "tokens": "Tokens (入/出)",
       "cacheWrite": "快取寫入",
       "cacheRead": "快取讀取",
-      "cost": "{currency} 花費",
+      "cost": "花費",
       "status": "狀態",
       "endpoint": "API 端點"
     },

@@ -49,7 +49,7 @@
       "tokens": "Tokens (in/out)",
       "cacheWrite": "Cache Write",
       "cacheRead": "Cache Read",
-      "cost": "{currency} cost",
+      "cost": "Cost",
       "status": "Status",
       "endpoint": "Endpoint"
     },

@@ -49,7 +49,7 @@
       "tokens": "トークン (入/出)",
       "cacheWrite": "キャッシュ書込",
       "cacheRead": "キャッシュ読取",
-      "cost": "{currency} コスト",
+      "cost": "コスト",
       "status": "ステータス",
       "endpoint": "エンドポイント"
     },

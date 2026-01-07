@@ -40,8 +40,8 @@ export function ProviderGroupInfo({
     >
       {/* Provider Groups */}
       <div className="space-y-2">
-        <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-          <Layers className="h-3.5 w-3.5" />
+        <div className="flex items-center gap-2 text-base font-semibold">
+          <Layers className="h-4 w-4" />
           <span>{tGroup("title")}</span>
         </div>
         <div className="space-y-1">
@@ -61,8 +61,8 @@ export function ProviderGroupInfo({
 
       {/* Access Restrictions */}
       <div className="space-y-2">
-        <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-          <ShieldCheck className="h-3.5 w-3.5" />
+        <div className="flex items-center gap-2 text-base font-semibold">
+          <ShieldCheck className="h-4 w-4" />
           <span>{tRestrictions("title")}</span>
         </div>
         <div className="space-y-1">
