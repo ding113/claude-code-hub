@@ -1,6 +1,5 @@
 "use client";
 
-import { useTranslations } from "next-intl";
 import {
   Calendar,
   Clock,
@@ -12,18 +11,19 @@ import {
   Server,
   Zap,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface SessionStatsProps {
   stats: {
     userAgent: string | null;
     requestCount: number;
-    firstRequestAt: string | null;
-    lastRequestAt: string | null;
+    firstRequestAt: Date | string | null;
+    lastRequestAt: Date | string | null;
     totalDurationMs: number;
     providers: { id: number; name: string }[];
     models: string[];
@@ -218,9 +218,9 @@ function TokenRow({
   );
 }
 
-function TimeRow({ label, date }: { label: string; date: string | null }) {
+function TimeRow({ label, date }: { label: string; date: Date | string | null }) {
   if (!date) return null;
-  const d = new Date(date);
+  const d = date instanceof Date ? date : new Date(date);
   return (
     <div className="flex flex-col gap-0.5">
       <span className="text-[10px] text-muted-foreground uppercase">{label}</span>
