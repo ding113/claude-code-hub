@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import { parseSSEDataForDisplay } from "@/lib/utils/sse";
 
 export type CodeDisplayLanguage = "json" | "sse" | "text";
@@ -37,6 +38,7 @@ export interface CodeDisplayProps {
   maxLines?: number;
   enableDownload?: boolean;
   enableCopy?: boolean;
+  className?: string;
 }
 
 function safeJsonParse(text: string): { ok: true; value: unknown } | { ok: false } {
@@ -83,6 +85,7 @@ export function CodeDisplay({
   maxLines,
   enableDownload = true,
   enableCopy = true,
+  className,
 }: CodeDisplayProps) {
   const t = useTranslations("dashboard.sessions");
   const tActions = useTranslations("dashboard.actions");
@@ -241,7 +244,7 @@ export function CodeDisplay({
     const maxSizeMB = (resolvedMaxContentBytes / 1_000_000).toFixed(2);
 
     return (
-      <div data-testid="code-display" className="rounded-md border bg-muted/30">
+      <div data-testid="code-display" className={cn("rounded-md border bg-muted/30", className)}>
         <div className="flex flex-col gap-3 p-3 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-2">
             {fileName && (
@@ -379,7 +382,7 @@ export function CodeDisplay({
       data-language={language}
       data-expanded={String(isExpanded)}
       data-resolved-theme={resolvedTheme}
-      className="rounded-md border bg-muted/30 flex flex-col min-h-0"
+      className={cn("rounded-md border bg-muted/30 flex flex-col min-h-0", className)}
     >
       <div className="flex flex-col gap-3 p-3 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-2">
