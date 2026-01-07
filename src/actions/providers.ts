@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { GeminiAuth } from "@/app/v1/_lib/gemini/auth";
 import { isClientAbortError } from "@/app/v1/_lib/proxy/errors";
 import { getSession } from "@/lib/auth";
@@ -50,6 +49,7 @@ import type {
   CodexReasoningSummaryPreference,
   CodexTextVerbosityPreference,
   ProviderDisplay,
+  ProviderStatisticsMap,
   ProviderType,
 } from "@/types/provider";
 import type { ActionResult } from "./types";
@@ -144,19 +144,10 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
       return [];
     }
 
-    // 并行获取供应商列表和统计数据
-    const [providers, statistics] = await Promise.all([
-      findAllProvidersFresh(),
-      getProviderStatistics().catch((error) => {
-        logger.trace("getProviders:statistics_error", {
-          message: error.message,
-          stack: error.stack,
-          name: error.name,
-        });
-        logger.error("获取供应商统计数据失败:", error);
-        return []; // 统计查询失败时返回空数组，不影响供应商列表显示
-      }),
-    ]);
+    // 仅获取供应商列表，统计数据由前端异步获取
+    const providers = await findAllProvidersFresh();
+    // 空统计数组，保持后续合并逻辑兼容
+    const statistics: Awaited<ReturnType<typeof getProviderStatistics>> = [];
 
     logger.trace("getProviders:raw_data", {
       providerCount: providers.length,
@@ -278,6 +269,50 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
     });
     logger.error("获取服务商数据失败:", error);
     return [];
+  }
+}
+
+/**
+ * Async get provider statistics data (today cost, call count, last call info)
+ * Called independently by frontend, does not block main list loading
+ */
+export async function getProviderStatisticsAsync(): Promise<ProviderStatisticsMap> {
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") return {};
+
+    const statistics = await getProviderStatistics();
+
+    // Transform to Record<providerId, stats> format
+    const result: ProviderStatisticsMap = {};
+
+    for (const s of statistics) {
+      let lastCallTimeStr: string | null = null;
+      if (s.last_call_time) {
+        if (s.last_call_time instanceof Date) {
+          lastCallTimeStr = s.last_call_time.toISOString();
+        } else if (typeof s.last_call_time === "string") {
+          lastCallTimeStr = s.last_call_time;
+        } else {
+          const date = new Date(s.last_call_time as string | number);
+          if (!Number.isNaN(date.getTime())) {
+            lastCallTimeStr = date.toISOString();
+          }
+        }
+      }
+
+      result[s.id] = {
+        todayCost: s.today_cost,
+        todayCalls: s.today_calls,
+        lastCallTime: lastCallTimeStr,
+        lastCallModel: s.last_call_model,
+      };
+    }
+
+    return result;
+  } catch (error) {
+    logger.error("Failed to get provider statistics async:", error);
+    return {};
   }
 }
 
@@ -523,9 +558,6 @@ export async function addProvider(data: {
     // 广播缓存更新（跨实例即时生效）
     await broadcastProviderCacheInvalidation({ operation: "add", providerId: provider.id });
 
-    revalidatePath("/settings/providers");
-    logger.trace("addProvider:revalidated", { path: "/settings/providers" });
-
     return { ok: true };
   } catch (error) {
     logger.trace("addProvider:error", {
@@ -664,7 +696,6 @@ export async function editProvider(
     // 广播缓存更新（跨实例即时生效）
     await broadcastProviderCacheInvalidation({ operation: "edit", providerId });
 
-    revalidatePath("/settings/providers");
     return { ok: true };
   } catch (error) {
     logger.error("更新服务商失败:", error);
@@ -701,7 +732,6 @@ export async function removeProvider(providerId: number): Promise<ActionResult> 
     // 广播缓存更新（跨实例即时生效）
     await broadcastProviderCacheInvalidation({ operation: "remove", providerId });
 
-    revalidatePath("/settings/providers");
     return { ok: true };
   } catch (error) {
     logger.error("删除服务商失败:", error);
@@ -770,7 +800,6 @@ export async function resetProviderCircuit(providerId: number): Promise<ActionRe
     }
 
     resetCircuit(providerId);
-    revalidatePath("/settings/providers");
 
     return { ok: true };
   } catch (error) {
@@ -798,8 +827,6 @@ export async function resetProviderTotalUsage(providerId: number): Promise<Actio
       return { ok: false, error: "供应商不存在" };
     }
 
-    revalidatePath("/settings/providers");
-    revalidatePath("/dashboard/quotas/providers");
     return { ok: true };
   } catch (error) {
     logger.error("重置供应商总用量失败:", error);

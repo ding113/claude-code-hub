@@ -2,7 +2,7 @@
 import { Globe } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { CurrencyCode } from "@/lib/utils/currency";
-import type { ProviderDisplay } from "@/types/provider";
+import type { ProviderDisplay, ProviderStatisticsMap } from "@/types/provider";
 import type { User } from "@/types/user";
 import { ProviderRichListItem } from "./provider-rich-list-item";
 
@@ -19,6 +19,8 @@ interface ProviderListProps {
       recoveryMinutes: number | null;
     }
   >;
+  statistics?: ProviderStatisticsMap;
+  statisticsLoading?: boolean;
   currencyCode?: CurrencyCode;
   enableMultiProviderTypes: boolean;
 }
@@ -27,6 +29,8 @@ export function ProviderList({
   providers,
   currentUser,
   healthStatus,
+  statistics = {},
+  statisticsLoading = false,
   currencyCode = "USD",
   enableMultiProviderTypes,
 }: ProviderListProps) {
@@ -52,6 +56,8 @@ export function ProviderList({
           provider={provider}
           currentUser={currentUser}
           healthStatus={healthStatus[provider.id]}
+          statistics={statistics[provider.id]}
+          statisticsLoading={statisticsLoading}
           currencyCode={currencyCode}
           enableMultiProviderTypes={enableMultiProviderTypes}
         />

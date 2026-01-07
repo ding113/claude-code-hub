@@ -16,7 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import type { CurrencyCode } from "@/lib/utils/currency";
-import type { ProviderDisplay, ProviderType } from "@/types/provider";
+import type { ProviderDisplay, ProviderStatisticsMap, ProviderType } from "@/types/provider";
 import type { User } from "@/types/user";
 import { ProviderList } from "./provider-list";
 import { ProviderSortDropdown, type SortKey } from "./provider-sort-dropdown";
@@ -35,6 +35,8 @@ interface ProviderManagerProps {
       recoveryMinutes: number | null;
     }
   >;
+  statistics?: ProviderStatisticsMap;
+  statisticsLoading?: boolean;
   currencyCode?: CurrencyCode;
   enableMultiProviderTypes: boolean;
   loading?: boolean;
@@ -46,6 +48,8 @@ export function ProviderManager({
   providers,
   currentUser,
   healthStatus,
+  statistics = {},
+  statisticsLoading = false,
   currencyCode = "USD",
   enableMultiProviderTypes,
   loading = false,
@@ -317,6 +321,8 @@ export function ProviderManager({
             providers={filteredProviders}
             currentUser={currentUser}
             healthStatus={healthStatus}
+            statistics={statistics}
+            statisticsLoading={statisticsLoading}
             currencyCode={currencyCode}
             enableMultiProviderTypes={enableMultiProviderTypes}
           />

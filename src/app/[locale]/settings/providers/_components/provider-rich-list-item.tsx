@@ -42,6 +42,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { PROVIDER_GROUP, PROVIDER_LIMITS } from "@/lib/constants/provider.constants";
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
@@ -49,7 +50,7 @@ import { copyToClipboard, isClipboardSupported } from "@/lib/utils/clipboard";
 import { getContrastTextColor, getGroupColor } from "@/lib/utils/color";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
-import type { ProviderDisplay } from "@/types/provider";
+import type { ProviderDisplay, ProviderStatistics } from "@/types/provider";
 import type { User } from "@/types/user";
 import { ProviderForm } from "./forms/provider-form";
 import { InlineEditPopover } from "./inline-edit-popover";
@@ -64,6 +65,8 @@ interface ProviderRichListItemProps {
     circuitOpenUntil: number | null;
     recoveryMinutes: number | null;
   };
+  statistics?: ProviderStatistics;
+  statisticsLoading?: boolean;
   currencyCode?: CurrencyCode;
   enableMultiProviderTypes: boolean;
   onEdit?: () => void;
@@ -75,6 +78,8 @@ export function ProviderRichListItem({
   provider,
   currentUser,
   healthStatus,
+  statistics,
+  statisticsLoading = false,
   currencyCode = "USD",
   enableMultiProviderTypes,
   onEdit: onEditProp,
@@ -178,7 +183,7 @@ export function ProviderRichListItem({
             });
           }
         } catch (error) {
-          console.error("删除供应商失败:", error);
+          console.error("Failed to delete provider:", error);
           toast.error(tList("deleteFailed"), {
             description: tList("deleteError"),
           });
@@ -249,7 +254,7 @@ export function ProviderRichListItem({
           });
         }
       } catch (error) {
-        console.error("重置熔断器失败:", error);
+        console.error("Failed to reset circuit breaker:", error);
         toast.error(tList("resetCircuitFailed"), {
           description: tList("deleteError"),
         });
@@ -275,7 +280,7 @@ export function ProviderRichListItem({
           });
         }
       } catch (error) {
-        console.error("重置总用量失败:", error);
+        console.error("Failed to reset total usage:", error);
         toast.error(tList("resetUsageFailed"), {
           description: tList("deleteError"),
         });
@@ -304,7 +309,7 @@ export function ProviderRichListItem({
           });
         }
       } catch (error) {
-        console.error("状态切换失败:", error);
+        console.error("Failed to toggle provider status:", error);
         toast.error(tList("toggleFailed"), {
           description: tList("deleteError"),
         });
@@ -327,7 +332,7 @@ export function ProviderRichListItem({
         toast.error(tInline("saveFailed"), { description: res.error || tList("unknownError") });
         return false;
       } catch (error) {
-        console.error(`更新 ${fieldName} 失败:`, error);
+        console.error(`Failed to update ${fieldName}:`, error);
         toast.error(tInline("saveFailed"), { description: tList("unknownError") });
         return false;
       }
@@ -529,12 +534,26 @@ export function ProviderRichListItem({
         {/* 今日用量（仅大屏） */}
         <div className="hidden lg:block text-center flex-shrink-0 min-w-[100px]">
           <div className="text-xs text-muted-foreground">{tList("todayUsageLabel")}</div>
-          <div className="font-medium">
-            {tList("todayUsageCount", { count: provider.todayCallCount || 0 })}
-          </div>
-          <div className="text-xs font-mono text-muted-foreground mt-0.5">
-            {formatCurrency(parseFloat(provider.todayTotalCostUsd || "0"), currencyCode)}
-          </div>
+          {statisticsLoading ? (
+            <>
+              <Skeleton className="h-5 w-16 mx-auto my-0.5" />
+              <Skeleton className="h-4 w-12 mx-auto mt-0.5" />
+            </>
+          ) : (
+            <>
+              <div className="font-medium">
+                {tList("todayUsageCount", {
+                  count: statistics?.todayCalls ?? provider.todayCallCount ?? 0,
+                })}
+              </div>
+              <div className="text-xs font-mono text-muted-foreground mt-0.5">
+                {formatCurrency(
+                  parseFloat(statistics?.todayCost ?? provider.todayTotalCostUsd ?? "0"),
+                  currencyCode
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         {/* 操作按钮 */}

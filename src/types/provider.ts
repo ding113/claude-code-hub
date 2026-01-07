@@ -212,6 +212,22 @@ export interface ProviderDisplay {
   lastCallModel?: string | null;
 }
 
+/**
+ * Provider statistics loaded asynchronously
+ * Used by getProviderStatisticsAsync() return type
+ */
+export interface ProviderStatistics {
+  todayCost: string;
+  todayCalls: number;
+  lastCallTime: string | null;
+  lastCallModel: string | null;
+}
+
+/**
+ * Map of provider ID to statistics
+ */
+export type ProviderStatisticsMap = Record<number, ProviderStatistics>;
+
 export interface CreateProviderData {
   name: string;
   url: string;
