@@ -22,8 +22,8 @@ interface SessionStatsProps {
   stats: {
     userAgent: string | null;
     requestCount: number;
-    firstRequestAt: string | null;
-    lastRequestAt: string | null;
+    firstRequestAt: Date | null;
+    lastRequestAt: Date | null;
     totalDurationMs: number;
     providers: { id: number; name: string }[];
     models: string[];
@@ -218,9 +218,9 @@ function TokenRow({
   );
 }
 
-function TimeRow({ label, date }: { label: string; date: string | null }) {
+function TimeRow({ label, date }: { label: string; date: Date | null }) {
   if (!date) return null;
-  const d = new Date(date);
+  const d = date instanceof Date ? date : new Date(date);
   return (
     <div className="flex flex-col gap-0.5">
       <span className="text-[10px] text-muted-foreground uppercase">{label}</span>
