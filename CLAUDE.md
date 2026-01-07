@@ -2,114 +2,139 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Common Commands
+## Repository Info
+
+- **Source**: https://github.com/ding113/claude-code-hub
+- **PR Target Branch**: `dev` (all pull requests must target the dev branch)
+
+## Critical Rules
+
+1. **No Emoji in Code** - Never use emoji characters in any code, comments, or string literals
+2. **Test Coverage** - All new features must have unit test coverage of at least 80%
+3. **i18n Required** - All user-facing strings must use i18n (5 languages supported). Never hardcode display text
+4. **Pre-commit Checklist** - Before committing, always run:
+   ```bash
+   bun run build      # Production build
+   bun run lint       # Biome check
+   bun run lint:fix   # Biome auto-fix
+   bun run typecheck  # TypeScript check (uses tsgo)
+   bun run test       # Run Vitest tests
+   ```
+
+## Build & Development Commands
 
 ```bash
-bun install                    # Install dependencies
-bun run dev                    # Dev server on port 13500
-bun run build                  # Production build (copies VERSION to standalone)
-bun run lint                   # Biome check
-bun run lint:fix               # Biome auto-fix
-bun run typecheck              # TypeScript check (uses tsgo for speed)
-bun run test                   # Run Vitest tests
-bun run test -- path/to/test   # Run single test file
-bun run test:ui                # Vitest with browser UI
-bun run db:generate            # Generate Drizzle migration (validates afterward)
-bun run db:migrate             # Apply migrations
-bun run db:studio              # Drizzle Studio GUI
+# Development
+bun install               # Install dependencies
+bun run dev               # Start dev server (port 13500)
+
+# Build & Production
+bun run build             # Build for production (copies VERSION to standalone)
+bun run start             # Start production server
+
+# Quality Checks
+bun run typecheck         # Type check with tsgo (faster)
+bun run typecheck:tsc     # Type check with tsc
+bun run lint              # Lint with Biome
+bun run lint:fix          # Auto-fix lint issues
+bun run format            # Format code
+
+# Testing
+bun run test              # Run unit tests (vitest)
+bun run test:ui           # Interactive test UI
+bun run test:coverage     # Coverage report
+bunx vitest run <file>    # Run single test file
+bunx vitest run -t "test name"  # Run specific test
+
+# Dev environment (via dev/Makefile)
+cd dev && make dev        # Start all services (PG + Redis + app)
+cd dev && make db         # Start only database services
 ```
 
-## Architecture
+## Database Migration Workflow
 
-### Proxy Request Pipeline (`src/app/v1/_lib/`)
+**IMPORTANT**: Never create SQL migration files manually. Always follow this workflow:
 
-Request flow through `proxy-handler.ts`:
-1. `ProxySession.fromContext()` - Parse incoming request
-2. `detectFormat()` - Identify API format (Claude/OpenAI/Codex)
-3. `GuardPipelineBuilder.run()` - Execute guard chain:
-   - `ProxyAuthenticator` - Validate API key
-   - `SensitiveWordGuard` - Content filtering
-   - `VersionGuard` - Client version check
-   - `ProxySessionGuard` - Session allocation via Redis
-   - `ProxyRateLimitGuard` - Multi-dimensional rate limiting
-   - `ProxyProviderResolver` - Select provider (weight/priority/circuit breaker)
-4. `ProxyForwarder.send()` - Forward with up to 3 retries on failure
-5. `ProxyResponseHandler.dispatch()` - Handle streaming/non-streaming response
+1. **Modify schema** - Edit `src/drizzle/schema.ts`
+2. **Generate migration** - Run `bun run db:generate`
+3. **Review generated SQL** - Check the generated file in `drizzle/` directory
+4. **Edit if necessary** - Make any required adjustments to the generated SQL
+5. **Apply migration** - Run `bun run db:migrate` or let `AUTO_MIGRATE=true` handle it on startup
 
-### Format Converters (`src/app/v1/_lib/converters/`)
+```bash
+bun run db:generate       # Generate Drizzle migrations from schema changes
+bun run db:migrate        # Apply migrations
+bun run db:push           # Push schema changes (dev only)
+bun run db:studio         # Open Drizzle Studio
+```
 
-Registry pattern in `registry.ts` maps conversion pairs:
-- Claude <-> OpenAI bidirectional
-- Claude <-> Codex (OpenAI Responses API)
-- OpenAI <-> Codex
-- Gemini CLI adapters
+## Architecture Overview
 
-### Core Services (`src/lib/`)
+### Tech Stack
+- **Framework**: Next.js 16 (App Router) + Hono for API routes
+- **Database**: PostgreSQL (Drizzle ORM) + Redis (ioredis)
+- **UI**: React 19 + shadcn/ui + Tailwind CSS + Recharts
+- **Package Manager**: Bun (1.3+)
+- **Testing**: Vitest + happy-dom
 
-**Session Manager** (`session-manager.ts`):
-- 5-minute Redis context cache with sliding window
-- Decision chain recording for audit trail
-- Session ID extraction from metadata.user_id or messages hash
+### Directory Structure
+```
+src/
+├── app/
+│   ├── [locale]/dashboard/    # Dashboard UI pages
+│   ├── api/                   # Internal API routes
+│   └── v1/                    # Proxy API (Claude/OpenAI compatible)
+│       └── _lib/
+│           ├── proxy/         # Core proxy pipeline
+│           ├── converters/    # Format converters (claude/openai/codex/gemini)
+│           └── codex/         # Codex CLI adapter
+├── actions/                   # Server Actions (exposed via /api/actions)
+├── lib/                       # Core business logic
+│   ├── session-manager.ts     # Session & context caching
+│   ├── circuit-breaker.ts     # Provider health management
+│   ├── rate-limit/            # Multi-dimensional rate limiting
+│   └── redis/                 # Redis utilities
+├── repository/                # Drizzle ORM data access layer
+└── drizzle/
+    └── schema.ts              # Database schema definition
+```
 
-**Circuit Breaker** (`circuit-breaker.ts`):
-- State machine: CLOSED -> OPEN -> HALF_OPEN -> CLOSED
-- Per-provider isolation with configurable thresholds
-- Redis persistence for multi-instance coordination
+### Core Proxy Flow
+The proxy pipeline (`src/app/v1/_lib/proxy-handler.ts`) processes requests through a guard chain:
 
-**Rate Limiting** (`rate-limit/`):
-- Dimensions: RPM, cost (5h/week/month), concurrent sessions
-- Levels: User, Key, Provider
-- Redis Lua scripts for atomic operations
-- Fail-open when Redis unavailable
+```
+Request -> GuardPipeline -> [auth -> sensitive -> client -> model -> version -> probe ->
+                            session -> warmup -> requestFilter -> rateLimit ->
+                            provider -> providerRequestFilter -> messageContext] ->
+           ProxyForwarder -> ProxyResponseHandler -> Response
+```
 
-### Database (`src/drizzle/`, `src/repository/`)
+Key components:
+- **GuardPipeline** (`guard-pipeline.ts`): Configurable chain of request guards
+- **ProxySession** (`session.ts`): Request context holder
+- **ProxyForwarder** (`forwarder.ts`): Handles upstream API calls
+- **ProviderResolver** (`provider-selector.ts`): Load balancing with weight/priority
+- **Format Converters** (`converters/`): Bidirectional format translation
 
-Drizzle ORM with PostgreSQL. Key tables:
-- `users`, `keys` - Authentication and quotas
-- `providers` - Upstream config (weight, priority, proxy, timeouts)
-- `message_request` - Request logs with decision chain
-- `model_prices` - Token pricing for cost calculation
-- `error_rules`, `request_filters` - Request/response manipulation
+### API Layer
+- **Proxy endpoints**: `/v1/messages`, `/v1/chat/completions`, `/v1/responses`
+- **Management API**: `/api/actions/{module}/{action}` - Auto-generated OpenAPI docs
+- **Docs**: `/api/actions/scalar` (Scalar UI), `/api/actions/docs` (Swagger)
 
-Repository pattern in `src/repository/` wraps Drizzle queries.
+## Code Conventions
 
-### Server Actions API (`src/app/api/actions/`)
+- **Path alias**: `@/` maps to `./src/`
+- **Formatting**: Biome (double quotes, trailing commas, 2-space indent, 100 char width)
+- **Exports**: Prefer named exports over default exports
+- **i18n**: Use `next-intl` for internationalization (5 languages: zh-CN, en, ja, ko, de)
+- **Testing**: Unit tests in `tests/unit/`, integration in `tests/integration/`, source-adjacent tests in `src/**/*.test.ts`
 
-39 Server Actions auto-exposed as REST endpoints via `[...route]/route.ts`:
-- OpenAPI 3.1.0 spec auto-generated from Zod schemas
-- Swagger UI: `/api/actions/docs`
-- Scalar UI: `/api/actions/scalar`
+## Environment Variables
 
-## Code Style
-
-- Biome: 2-space indent, double quotes, trailing commas, 100 char max line
-- Path alias: `@/*` -> `./src/*`
-- Icons: Use `lucide-react`, no custom SVGs
-- UI components in `src/components/ui/` (excluded from typecheck)
-
-## Testing
-
-Vitest configuration in `vitest.config.ts`:
-- Environment: Node
-- Coverage thresholds: 50% lines/functions, 40% branches
-- Integration tests requiring DB are in `tests/integration/` (excluded by default)
-- Test database must contain 'test' in name for safety
-
-## I18n
-
-5 locales via next-intl: `en`, `ja`, `ru`, `zh-CN`, `zh-TW`
-- Messages: `messages/{locale}/*.json`
-- Routing: `src/i18n/`
-
-## Environment
-
-See `.env.example` for all variables. Critical ones:
-- `ADMIN_TOKEN` - Dashboard login (must change from default)
-- `DSN` - PostgreSQL connection string
-- `REDIS_URL` - Redis for rate limiting and sessions
-- `AUTO_MIGRATE` - Run Drizzle migrations on startup
-
-## Contributing
-
-See `CONTRIBUTING.md` for branch naming, commit format, and PR process.
-All PRs target `dev` branch; `main` is release-only.
+Critical variables (see `.env.example` for full list):
+- `ADMIN_TOKEN`: Admin login token (required)
+- `DSN`: PostgreSQL connection string
+- `REDIS_URL`: Redis connection URL
+- `ENABLE_RATE_LIMIT`: Toggle rate limiting
+- `SESSION_TTL`: Session cache TTL (default 300s)
+- `AUTO_MIGRATE`: Auto-run migrations on startup
