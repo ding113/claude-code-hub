@@ -12,10 +12,7 @@
 import "server-only";
 
 import { logger } from "@/lib/logger";
-import {
-  publishCacheInvalidation,
-  subscribeCacheInvalidation,
-} from "@/lib/redis/pubsub";
+import { publishCacheInvalidation, subscribeCacheInvalidation } from "@/lib/redis/pubsub";
 import type { Provider } from "@/types/provider";
 
 export const CHANNEL_PROVIDERS_UPDATED = "cch:cache:providers:updated";
@@ -91,9 +88,7 @@ export async function publishProviderCacheInvalidation(): Promise<void> {
  * @param fetcher - 数据库查询函数（依赖注入，便于测试）
  * @returns Provider 列表
  */
-export async function getCachedProviders(
-  fetcher: () => Promise<Provider[]>
-): Promise<Provider[]> {
+export async function getCachedProviders(fetcher: () => Promise<Provider[]>): Promise<Provider[]> {
   // 确保订阅已初始化（异步，不阻塞）
   void ensureSubscription();
 
@@ -140,9 +135,7 @@ export async function getCachedProviders(
 /**
  * 预热缓存（启动时调用）
  */
-export async function warmupProviderCache(
-  fetcher: () => Promise<Provider[]>
-): Promise<void> {
+export async function warmupProviderCache(fetcher: () => Promise<Provider[]>): Promise<void> {
   try {
     await getCachedProviders(fetcher);
     logger.info("[ProviderCache] Cache warmed up successfully");

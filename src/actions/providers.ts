@@ -721,7 +721,9 @@ export async function getProvidersHealthStatus() {
       return {};
     }
 
-    const providerIds = await findAllProvidersFresh().then((providers) => providers.map((p) => p.id));
+    const providerIds = await findAllProvidersFresh().then((providers) =>
+      providers.map((p) => p.id)
+    );
     const healthStatus = await getAllHealthStatusAsync(providerIds, {
       forceRefresh: true,
     });

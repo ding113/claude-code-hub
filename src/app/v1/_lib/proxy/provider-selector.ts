@@ -647,9 +647,7 @@ export class ProxyProviderResolver {
   }> {
     // 使用 Session 快照保证故障迁移期间数据一致性
     // 如果没有 session，回退到 findAllProviders（内部已使用缓存）
-    const allProviders = session
-      ? await session.getProvidersSnapshot()
-      : await findAllProviders();
+    const allProviders = session ? await session.getProvidersSnapshot() : await findAllProviders();
     const requestedModel = session?.getCurrentModel() || "";
 
     // === Step 1: 分组预过滤（静默，用户只能看到自己分组内的供应商）===
