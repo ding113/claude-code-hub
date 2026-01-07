@@ -804,6 +804,50 @@ const { route: getMyAvailableEndpointsRoute, handler: getMyAvailableEndpointsHan
   });
 app.openapi(getMyAvailableEndpointsRoute, getMyAvailableEndpointsHandler);
 
+const { route: getMyStatsSummaryRoute, handler: getMyStatsSummaryHandler } = createActionRoute(
+  "my-usage",
+  "getMyStatsSummary",
+  myUsageActions.getMyStatsSummary,
+  {
+    requestSchema: z.object({
+      startDate: z.string().optional().describe("开始日期（YYYY-MM-DD，可为空）"),
+      endDate: z.string().optional().describe("结束日期（YYYY-MM-DD，可为空）"),
+    }),
+    responseSchema: z.object({
+      totalRequests: z.number().describe("总请求数"),
+      totalCost: z.number().describe("总费用"),
+      totalInputTokens: z.number().describe("总输入 Token"),
+      totalOutputTokens: z.number().describe("总输出 Token"),
+      totalCacheCreationTokens: z.number().describe("缓存创建 Token"),
+      totalCacheReadTokens: z.number().describe("缓存读取 Token"),
+      keyModelBreakdown: z.array(
+        z.object({
+          model: z.string().nullable(),
+          requests: z.number(),
+          cost: z.number(),
+          inputTokens: z.number(),
+          outputTokens: z.number(),
+        })
+      ).describe("当前 Key 的模型分布"),
+      userModelBreakdown: z.array(
+        z.object({
+          model: z.string().nullable(),
+          requests: z.number(),
+          cost: z.number(),
+          inputTokens: z.number(),
+          outputTokens: z.number(),
+        })
+      ).describe("用户所有 Key 的模型分布"),
+      currencyCode: z.string().describe("货币代码"),
+    }),
+    description: "获取指定日期范围内的聚合统计（仅返回自己的数据）",
+    summary: "获取我的统计摘要",
+    tags: ["统计分析"],
+    allowReadOnlyAccess: true,
+  }
+);
+app.openapi(getMyStatsSummaryRoute, getMyStatsSummaryHandler);
+
 // ==================== 概览数据 ====================
 
 const { route: getOverviewDataRoute, handler: getOverviewDataHandler } = createActionRoute(
