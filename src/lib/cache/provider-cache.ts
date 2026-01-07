@@ -42,16 +42,18 @@ let subscriptionInitialized = false;
  * 初始化 Redis 订阅
  *
  * 使用失效通知模式：收到通知后清除本地缓存，下次请求时从 DB 刷新
+ * pubsub.ts 订阅：静默降级
  */
 async function ensureSubscription(): Promise<void> {
   if (subscriptionInitialized) return;
-  subscriptionInitialized = true;
 
   // CI/build 阶段跳过
   if (process.env.CI === "true" || process.env.NEXT_PHASE === "phase-production-build") {
+    subscriptionInitialized = true;
     return;
   }
 
+  subscriptionInitialized = true;
   // pubsub.ts 订阅机制
   await subscribeCacheInvalidation(CHANNEL_PROVIDERS_UPDATED, () => {
     invalidateCache();
