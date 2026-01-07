@@ -313,7 +313,7 @@ export function UsageLogsSection({
                   <>
                     <span className="text-muted-foreground">|</span>
                     <RefreshCw
-                      className={cn("h-3.5 w-3.5", autoRefreshSeconds && "animate-spin")}
+                      className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")}
                     />
                     <span className="text-xs text-muted-foreground">{autoRefreshSeconds}s</span>
                   </>
@@ -362,7 +362,7 @@ export function UsageLogsSection({
                 {autoRefreshSeconds && (
                   <>
                     <span className="text-muted-foreground">|</span>
-                    <RefreshCw className={cn("h-3 w-3", autoRefreshSeconds && "animate-spin")} />
+                    <RefreshCw className={cn("h-3 w-3", isRefreshing && "animate-spin")} />
                   </>
                 )}
               </div>
