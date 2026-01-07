@@ -99,6 +99,10 @@ export const EnvSchema = z.object({
   TZ: z.string().default("Asia/Shanghai"),
   ENABLE_MULTI_PROVIDER_TYPES: z.string().default("false").transform(booleanTransform),
   ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS: z.string().default("false").transform(booleanTransform),
+  // 供应商缓存开关
+  // - true (默认)：启用进程级缓存，30s TTL，提升供应商查询性能
+  // - false：禁用缓存，每次请求直接查询数据库
+  ENABLE_PROVIDER_CACHE: z.string().default("true").transform(booleanTransform),
   MAX_RETRY_ATTEMPTS_DEFAULT: z.coerce
     .number()
     .min(1, "MAX_RETRY_ATTEMPTS_DEFAULT 不能小于 1")
