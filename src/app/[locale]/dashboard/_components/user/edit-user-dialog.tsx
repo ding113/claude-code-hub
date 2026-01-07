@@ -72,10 +72,8 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
   const tCommon = useTranslations("common");
   const [isPending, startTransition] = useTransition();
 
-  // Use shared hooks
-  const modelSuggestions = useModelSuggestions(user.providerGroup);
-  const showUserProviderGroup = Boolean(user.providerGroup?.trim());
-  const userEditTranslations = useUserTranslations({ showProviderGroup: showUserProviderGroup });
+  // Always show providerGroup field in edit mode
+  const userEditTranslations = useUserTranslations({ showProviderGroup: true });
 
   const defaultValues = useMemo(() => buildDefaultValues(user), [user]);
 
@@ -124,6 +122,9 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
   const errorMessage = useMemo(() => getFirstErrorMessage(form.errors), [form.errors]);
 
   const currentUserDraft = form.values || defaultValues;
+
+  // Model suggestions based on current providerGroup value
+  const modelSuggestions = useModelSuggestions(currentUserDraft.providerGroup);
 
   const handleUserChange = (field: string | Record<string, any>, value?: any) => {
     const prev = form.values || defaultValues;
@@ -224,7 +225,7 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
                 await handleEnableUser();
               }
             }}
-            showProviderGroup={showUserProviderGroup}
+            showProviderGroup
             onChange={handleUserChange}
             translations={userEditTranslations}
             modelSuggestions={modelSuggestions}
