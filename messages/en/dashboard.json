@@ -1364,6 +1364,10 @@
       "threeMonths": "In 3 months",
       "oneYear": "In 1 year"
     },
+    "providerGroupSelect": {
+      "providersSuffix": "providers",
+      "loadFailed": "Failed to load provider groups"
+    },
     "providerGroup": {
       "label": "Provider group",
       "placeholder": "Select provider group",

@@ -1365,6 +1365,10 @@
       "threeMonths": "三月后",
       "oneYear": "一年后"
     },
+    "providerGroupSelect": {
+      "providersSuffix": "个供应商",
+      "loadFailed": "加载供应商分组失败"
+    },
     "providerGroup": {
       "label": "供应商分组",
       "placeholder": "选择供应商分组",

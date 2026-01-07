@@ -1326,6 +1326,10 @@
       "threeMonths": "3か月後",
       "oneYear": "1年後"
     },
+    "providerGroupSelect": {
+      "providersSuffix": "件のプロバイダー",
+      "loadFailed": "プロバイダーグループの読み込みに失敗しました"
+    },
     "providerGroup": {
       "label": "プロバイダーグループ",
       "placeholder": "プロバイダーグループを選択",

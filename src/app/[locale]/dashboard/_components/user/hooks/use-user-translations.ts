@@ -26,6 +26,17 @@ export interface UserEditTranslations {
     providerGroup?: {
       label: string;
       placeholder: string;
+      providersSuffix?: string;
+      tagInputErrors?: {
+        empty?: string;
+        duplicate?: string;
+        too_long?: string;
+        invalid_format?: string;
+        max_tags?: string;
+      };
+      errors?: {
+        loadFailed?: string;
+      };
     };
     enableStatus: {
       label: string;
@@ -98,6 +109,7 @@ export function useUserTranslations(
 ): UserEditTranslations {
   const { showProviderGroup = false } = options;
   const t = useTranslations("dashboard.userManagement");
+  const tUi = useTranslations("ui.tagInput");
 
   return useMemo(() => {
     return {
@@ -124,6 +136,17 @@ export function useUserTranslations(
           ? {
               label: t("userEditSection.fields.providerGroup.label"),
               placeholder: t("userEditSection.fields.providerGroup.placeholder"),
+              providersSuffix: t("providerGroupSelect.providersSuffix"),
+              tagInputErrors: {
+                empty: tUi("emptyTag"),
+                duplicate: tUi("duplicateTag"),
+                too_long: tUi("tooLong", { max: 50 }),
+                invalid_format: tUi("invalidFormat"),
+                max_tags: tUi("maxTags"),
+              },
+              errors: {
+                loadFailed: t("providerGroupSelect.loadFailed"),
+              },
             }
           : undefined,
         enableStatus: {
@@ -187,5 +210,5 @@ export function useUserTranslations(
         year: t("quickExpire.oneYear"),
       },
     };
-  }, [t, showProviderGroup]);
+  }, [t, tUi, showProviderGroup]);
 }

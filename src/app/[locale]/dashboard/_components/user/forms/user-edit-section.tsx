@@ -69,6 +69,17 @@ export interface UserEditSectionProps {
       providerGroup?: {
         label: string;
         placeholder: string;
+        providersSuffix?: string;
+        tagInputErrors?: {
+          empty?: string;
+          duplicate?: string;
+          too_long?: string;
+          invalid_format?: string;
+          max_tags?: string;
+        };
+        errors?: {
+          loadFailed?: string;
+        };
       };
       enableStatus?: {
         label: string;
@@ -415,10 +426,7 @@ export function UserEditSection({
                 value={user.providerGroup || PROVIDER_GROUP.DEFAULT}
                 onChange={(val) => emitChange("providerGroup", val)}
                 disabled={false}
-                translations={{
-                  label: translations.fields.providerGroup.label,
-                  placeholder: translations.fields.providerGroup.placeholder,
-                }}
+                translations={translations.fields.providerGroup}
               />
             )}
           </div>
