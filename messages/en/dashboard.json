@@ -380,7 +380,7 @@
       "providers": "Providers",
       "models": "Models",
       "noDetailedData": "No detailed data available",
-      "storageTip": "Tip: Set environment variable STORE_SESSION_MESSAGES=true to enable messages and response storage",
+      "storageTip": "No detailed data found. To view request details, please check if the environment variable STORE_SESSION_MESSAGES is set to true. Note: Enabling this increases Redis memory usage and may include sensitive information.",
       "clientInfo": "Client Info",
       "requestHeaders": "Request Headers",
       "requestBody": "Request Body",
@@ -398,6 +398,8 @@
     "actions": {
       "back": "Back",
       "view": "View",
+      "copy": "Copy",
+      "download": "Download",
       "copyMessages": "Copy Request (Headers + Body)",
       "downloadMessages": "Download Request (Headers + Body)",
       "copied": "Copied",

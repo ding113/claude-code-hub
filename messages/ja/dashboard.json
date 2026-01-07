@@ -379,7 +379,7 @@
       "providers": "プロバイダー",
       "models": "モデル",
       "noDetailedData": "詳細データなし",
-      "storageTip": "ヒント: メッセージとレスポンスの保存を有効にするには、環境変数 STORE_SESSION_MESSAGES=true を設定してください",
+      "storageTip": "詳細データが見つかりません。リクエストの詳細を表示するには、環境変数 STORE_SESSION_MESSAGES が true に設定されているか確認してください。注意：有効にすると Redis のメモリ使用量が増加し、機密情報が含まれる可能性があります。",
       "clientInfo": "クライアント情報",
       "requestHeaders": "リクエストヘッダー",
       "requestBody": "リクエストボディ",
@@ -397,6 +397,8 @@
     "actions": {
       "back": "戻る",
       "view": "表示",
+      "copy": "コピー",
+      "download": "ダウンロード",
       "copyMessages": "リクエスト(ヘッダーとボディ)をコピー",
       "downloadMessages": "リクエスト(ヘッダーとボディ)をダウンロード",
       "copied": "コピーしました",

@@ -407,7 +407,7 @@ export async function aggregateSessionStats(sessionId: string): Promise<{
     lastRequestAt: stats.lastRequestAt,
     providers: providerList.map((p) => ({
       id: p.providerId!,
-      name: p.providerName || "未知",
+      name: p.providerName || `Provider #${p.providerId}`,
     })),
     models: modelList.map((m) => m.model!),
     userName: userInfo.userName,
@@ -505,7 +505,7 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
     }
     providersMap.get(p.sessionId)?.push({
       id: p.providerId!,
-      name: p.providerName || "未知",
+      name: p.providerName || `Provider #${p.providerId}`,
     });
   }
 

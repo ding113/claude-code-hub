@@ -1,6 +1,14 @@
 "use client";
 
-import { ChevronDown, ChevronUp, Download, File as FileIcon, Search } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  Download,
+  File as FileIcon,
+  Search,
+} from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -9,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { parseSSEDataForDisplay } from "@/lib/utils/sse";
 
 export type CodeDisplayLanguage = "json" | "sse" | "text";
@@ -26,6 +35,8 @@ export interface CodeDisplayProps {
   defaultExpanded?: boolean;
   maxContentBytes?: number;
   maxLines?: number;
+  enableDownload?: boolean;
+  enableCopy?: boolean;
 }
 
 function safeJsonParse(text: string): { ok: true; value: unknown } | { ok: false } {
@@ -70,8 +81,11 @@ export function CodeDisplay({
   defaultExpanded = false,
   maxContentBytes,
   maxLines,
+  enableDownload = true,
+  enableCopy = true,
 }: CodeDisplayProps) {
   const t = useTranslations("dashboard.sessions");
+  const tActions = useTranslations("dashboard.actions");
   const resolvedMaxContentBytes = maxContentBytes ?? DEFAULT_MAX_CONTENT_BYTES;
   const resolvedMaxLines = maxLines ?? DEFAULT_MAX_LINES;
   const contentBytes = useMemo(() => new Blob([content]).size, [content]);
@@ -92,6 +106,7 @@ export function CodeDisplay({
   const sseScrollRef = useRef<HTMLDivElement | null>(null);
   const [sseViewportHeight, setSseViewportHeight] = useState(0);
   const [sseScrollTop, setSseScrollTop] = useState(0);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     const getTheme = () => (document.documentElement.classList.contains("dark") ? "dark" : "light");
@@ -187,31 +202,43 @@ export function CodeDisplay({
   const displayText = lineFilteredText ?? content;
   const contentMaxHeight = isExpanded ? expandedMaxHeight : maxHeight;
 
+  const downloadFileName =
+    fileName ??
+    (language === "json" ? "content.json" : language === "sse" ? "content.sse" : "content.txt");
+
+  const handleDownload = () => {
+    const blob = new Blob([content], {
+      type: language === "json" ? "application/json" : "text/plain",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    try {
+      a.href = url;
+      a.download = downloadFileName;
+      document.body.appendChild(a);
+      a.click();
+    } finally {
+      if (a.isConnected) {
+        document.body.removeChild(a);
+      }
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Copy failed", err);
+    }
+  };
+
   if (isHardLimited) {
     const sizeBytes = contentBytes;
     const sizeMB = (sizeBytes / 1_000_000).toFixed(2);
     const maxSizeMB = (resolvedMaxContentBytes / 1_000_000).toFixed(2);
-    const downloadFileName =
-      fileName ??
-      (language === "json" ? "content.json" : language === "sse" ? "content.sse" : "content.txt");
-    const handleDownload = () => {
-      const blob = new Blob([content], {
-        type: language === "json" ? "application/json" : "text/plain",
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      try {
-        a.href = url;
-        a.download = downloadFileName;
-        document.body.appendChild(a);
-        a.click();
-      } finally {
-        if (a.isConnected) {
-          document.body.removeChild(a);
-        }
-        URL.revokeObjectURL(url);
-      }
-    };
 
     return (
       <div data-testid="code-display" className="rounded-md border bg-muted/30">
@@ -289,6 +316,36 @@ export function CodeDisplay({
         >
           {showOnlyMatches ? t("codeDisplay.showAll") : t("codeDisplay.onlyMatches")}
         </Button>
+      )}
+
+      {enableCopy && (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="sm" onClick={handleCopy} className="h-9 w-9 p-0">
+                {copied ? (
+                  <Check className="h-4 w-4 text-green-500" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{copied ? tActions("copied") : tActions("copy")}</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
+
+      {enableDownload && (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="sm" onClick={handleDownload} className="h-9 w-9 p-0">
+                <Download className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{tActions("download")}</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       )}
 
       {isLargeContent && (

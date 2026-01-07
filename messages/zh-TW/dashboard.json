@@ -380,7 +380,7 @@
       "providers": "供應商",
       "models": "模型",
       "noDetailedData": "暫無詳細資料",
-      "storageTip": "提示：請設定環境變數 STORE_SESSION_MESSAGES=true 以啟用 messages 和 response 儲存",
+      "storageTip": "未找到詳細資料。如需查看請求詳情，請檢查環境變數 STORE_SESSION_MESSAGES 是否已設定為 true。注意：啟用後會增加 Redis 記憶體使用，且可能包含敏感資訊。",
       "clientInfo": "用戶端資訊",
       "requestHeaders": "請求頭",
       "requestBody": "請求體",
@@ -398,6 +398,8 @@
     "actions": {
       "back": "返回",
       "view": "檢視",
+      "copy": "複製",
+      "download": "下載",
       "copyMessages": "複製請求頭與請求體",
       "downloadMessages": "下載請求頭與請求體",
       "copied": "已複製",
