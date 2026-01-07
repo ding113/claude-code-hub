@@ -37,6 +37,7 @@ import {
   createProvider,
   deleteProvider,
   findAllProviders,
+  findAllProvidersFresh,
   findProviderById,
   getProviderStatistics,
   resetProviderTotalCostResetAt,
@@ -145,7 +146,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
 
     // 并行获取供应商列表和统计数据
     const [providers, statistics] = await Promise.all([
-      findAllProviders(),
+      findAllProvidersFresh(),
       getProviderStatistics().catch((error) => {
         logger.trace("getProviders:statistics_error", {
           message: error.message,
@@ -333,7 +334,7 @@ export async function getProviderGroupsWithCount(): Promise<
   ActionResult<Array<{ group: string; providerCount: number }>>
 > {
   try {
-    const providers = await findAllProviders();
+    const providers = await findAllProvidersFresh();
     const groupCounts = new Map<string, number>();
 
     for (const provider of providers) {
@@ -720,7 +721,7 @@ export async function getProvidersHealthStatus() {
       return {};
     }
 
-    const providerIds = await findAllProviders().then((providers) => providers.map((p) => p.id));
+    const providerIds = await findAllProvidersFresh().then((providers) => providers.map((p) => p.id));
     const healthStatus = await getAllHealthStatusAsync(providerIds, {
       forceRefresh: true,
     });
