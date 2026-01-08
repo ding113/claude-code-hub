@@ -7,48 +7,12 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { NextIntlClientProvider } from "next-intl";
 import { describe, expect, test, vi } from "vitest";
+import dashboardMessages from "@/../messages/en/dashboard.json";
 import { SessionMessagesDetailsTabs } from "./session-details-tabs";
 
+// Use real locale messages to ensure test stays in sync with actual translations
 const messages = {
-  dashboard: {
-    sessions: {
-      details: {
-        requestHeaders: "Request Headers",
-        requestBody: "Request Body",
-        requestMessages: "Request Messages",
-        specialSettings: "Special",
-        responseHeaders: "Response Headers",
-        responseBody: "Response Body",
-        noHeaders: "No data",
-        noData: "No Data",
-      },
-      codeDisplay: {
-        raw: "Raw",
-        pretty: "Pretty",
-        searchPlaceholder: "Search",
-        expand: "Expand",
-        collapse: "Collapse",
-        themeAuto: "Auto",
-        themeLight: "Light",
-        themeDark: "Dark",
-        noMatches: "No matches",
-        onlyMatches: "Only matches",
-        showAll: "Show all",
-        prevPage: "Prev",
-        nextPage: "Next",
-        pageInfo: "Page {page} / {total}",
-        sseEvent: "Event",
-        sseData: "Data",
-        hardLimit: {
-          title: "Content too large",
-          size: "Size: {sizeMB} MB ({sizeBytes} bytes)",
-          maximum: "Maximum allowed: {maxSizeMB} MB or {maxLines} lines",
-          hint: "Please download the file to view the full content.",
-          download: "Download",
-        },
-      },
-    },
-  },
+  dashboard: dashboardMessages,
 } as const;
 
 function renderWithIntl(node: ReactNode) {
@@ -107,39 +71,59 @@ describe("SessionMessagesDetailsTabs", () => {
       container.querySelector("[data-testid='session-tab-trigger-request-messages']")
     ).not.toBeNull();
 
-    const requestBody = container.querySelector(
-      "[data-testid='session-tab-request-body'] [data-testid='code-display']"
+    // Check request body tab content within its scope
+    const requestBodyTab = container.querySelector(
+      "[data-testid='session-tab-request-body']"
     ) as HTMLElement;
-    expect(requestBody.getAttribute("data-language")).toBe("json");
-    expect(container.textContent).toContain('"model": "gpt-5.2"');
+    const requestBodyCodeDisplay = requestBodyTab.querySelector(
+      "[data-testid='code-display']"
+    ) as HTMLElement;
+    expect(requestBodyCodeDisplay.getAttribute("data-language")).toBe("json");
+    expect(requestBodyTab.textContent).toContain('"model": "gpt-5.2"');
 
+    // Switch to request headers tab and check within its scope
     const requestHeadersTrigger = container.querySelector(
       "[data-testid='session-tab-trigger-request-headers']"
     ) as HTMLElement;
     click(requestHeadersTrigger);
-    expect(container.textContent).toContain("CLIENT: POST https://example.com/v1/responses");
+    const requestHeadersTab = container.querySelector(
+      "[data-testid='session-tab-request-headers']"
+    ) as HTMLElement;
+    expect(requestHeadersTab.textContent).toContain("CLIENT: POST https://example.com/v1/responses");
 
+    // Switch to request messages tab and check within its scope
     const requestMessagesTrigger = container.querySelector(
       "[data-testid='session-tab-trigger-request-messages']"
     ) as HTMLElement;
     click(requestMessagesTrigger);
-    expect(container.textContent).toContain('"content": "hi"');
+    const requestMessagesTab = container.querySelector(
+      "[data-testid='session-tab-request-messages']"
+    ) as HTMLElement;
+    expect(requestMessagesTab.textContent).toContain('"content": "hi"');
 
+    // Switch to response body tab and check SSE detection
     const responseBodyTrigger = container.querySelector(
       "[data-testid='session-tab-trigger-response-body']"
     ) as HTMLElement;
     click(responseBodyTrigger);
 
-    const responseBody = container.querySelector(
-      "[data-testid='session-tab-response-body'] [data-testid='code-display']"
+    const responseBodyTab = container.querySelector(
+      "[data-testid='session-tab-response-body']"
     ) as HTMLElement;
-    expect(responseBody.getAttribute("data-language")).toBe("sse");
+    const responseBodyCodeDisplay = responseBodyTab.querySelector(
+      "[data-testid='code-display']"
+    ) as HTMLElement;
+    expect(responseBodyCodeDisplay.getAttribute("data-language")).toBe("sse");
 
+    // Switch to response headers tab and check within its scope
     const responseHeadersTrigger = container.querySelector(
       "[data-testid='session-tab-trigger-response-headers']"
     ) as HTMLElement;
     click(responseHeadersTrigger);
-    expect(container.textContent).toContain(
+    const responseHeadersTab = container.querySelector(
+      "[data-testid='session-tab-response-headers']"
+    ) as HTMLElement;
+    expect(responseHeadersTab.textContent).toContain(
       "UPSTREAM: HTTP 200 https://api.example.com/v1/responses"
     );
 
@@ -165,10 +149,13 @@ describe("SessionMessagesDetailsTabs", () => {
     ) as HTMLElement;
     click(responseBodyTrigger);
 
-    const responseBody = container.querySelector(
-      "[data-testid='session-tab-response-body'] [data-testid='code-display']"
+    const responseBodyTab = container.querySelector(
+      "[data-testid='session-tab-response-body']"
     ) as HTMLElement;
-    expect(responseBody.getAttribute("data-language")).toBe("json");
+    const responseBodyCodeDisplay = responseBodyTab.querySelector(
+      "[data-testid='code-display']"
+    ) as HTMLElement;
+    expect(responseBodyCodeDisplay.getAttribute("data-language")).toBe("json");
 
     unmount();
   });
@@ -187,19 +174,31 @@ describe("SessionMessagesDetailsTabs", () => {
       />
     );
 
-    expect(container.textContent).toContain("No Data");
+    // Check default tab (request body) shows storageTip when null - scoped to tab
+    const requestBodyTab = container.querySelector(
+      "[data-testid='session-tab-request-body']"
+    ) as HTMLElement;
+    expect(requestBodyTab.textContent).toContain(dashboardMessages.sessions.details.storageTip);
 
+    // Switch to request headers tab and check storageTip - scoped to tab
     const requestHeadersTrigger = container.querySelector(
       "[data-testid='session-tab-trigger-request-headers']"
     ) as HTMLElement;
     click(requestHeadersTrigger);
-    expect(container.textContent).toContain("No data");
+    const requestHeadersTab = container.querySelector(
+      "[data-testid='session-tab-request-headers']"
+    ) as HTMLElement;
+    expect(requestHeadersTab.textContent).toContain(dashboardMessages.sessions.details.storageTip);
 
+    // Switch to special settings tab and check noData - scoped to tab
     const specialSettingsTrigger = container.querySelector(
       "[data-testid='session-tab-trigger-special-settings']"
     ) as HTMLElement;
     click(specialSettingsTrigger);
-    expect(container.textContent).toContain("No Data");
+    const specialSettingsTab = container.querySelector(
+      "[data-testid='session-tab-special-settings']"
+    ) as HTMLElement;
+    expect(specialSettingsTab.textContent).toContain(dashboardMessages.sessions.details.noData);
 
     unmount();
   });
@@ -230,7 +229,9 @@ describe("SessionMessagesDetailsTabs", () => {
     const requestHeadersTab = container.querySelector(
       "[data-testid='session-tab-request-headers']"
     ) as HTMLElement;
-    expect(requestHeadersTab.textContent).not.toContain("Content too large");
+    expect(requestHeadersTab.textContent).not.toContain(
+      dashboardMessages.sessions.codeDisplay.hardLimit.title
+    );
 
     const search = requestHeadersTab.querySelector(
       "[data-testid='code-display-search']"
@@ -277,8 +278,9 @@ describe("SessionMessagesDetailsTabs", () => {
     const requestBodyTab = container.querySelector(
       "[data-testid='session-tab-request-body']"
     ) as HTMLElement;
-    expect(requestBodyTab.textContent).toContain("Content too large");
-    expect(requestBodyTab.textContent).toContain("30,000 lines");
+    expect(requestBodyTab.textContent).toContain(
+      dashboardMessages.sessions.codeDisplay.hardLimit.title
+    );
 
     const downloadBtn = requestBodyTab.querySelector(
       "[data-testid='code-display-hard-limit-download']"

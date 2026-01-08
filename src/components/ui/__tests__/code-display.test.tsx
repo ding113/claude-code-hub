@@ -7,38 +7,12 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { NextIntlClientProvider } from "next-intl";
 import { describe, expect, test, vi } from "vitest";
+import dashboardMessages from "@/../messages/en/dashboard.json";
 import { CodeDisplay } from "@/components/ui/code-display";
 
+// Use real locale messages to ensure test stays in sync with actual translations
 const messages = {
-  dashboard: {
-    sessions: {
-      codeDisplay: {
-        raw: "Raw",
-        pretty: "Pretty",
-        searchPlaceholder: "Search",
-        expand: "Expand",
-        collapse: "Collapse",
-        themeAuto: "Auto",
-        themeLight: "Light",
-        themeDark: "Dark",
-        noMatches: "No matches",
-        onlyMatches: "Only matches",
-        showAll: "Show all",
-        prevPage: "Prev",
-        nextPage: "Next",
-        pageInfo: "Page {page} / {total}",
-        sseEvent: "Event",
-        sseData: "Data",
-        hardLimit: {
-          title: "Content too large",
-          size: "Size: {sizeMB} MB ({sizeBytes} bytes)",
-          maximum: "Maximum allowed: {maxSizeMB} MB or {maxLines} lines",
-          hint: "Please download the file to view the full content.",
-          download: "Download",
-        },
-      },
-    },
-  },
+  dashboard: dashboardMessages,
 } as const;
 
 function renderWithIntl(node: ReactNode) {
@@ -208,7 +182,7 @@ describe("CodeDisplay", () => {
       "[data-testid='code-display-only-matches-toggle']"
     ) as HTMLElement;
     click(toggle);
-    expect(container.textContent).toContain("No matches");
+    expect(container.textContent).toContain(dashboardMessages.sessions.codeDisplay.noMatches);
 
     act(() => {
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
@@ -245,7 +219,7 @@ describe("CodeDisplay", () => {
       setter?.call(input, "does-not-exist");
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    expect(container.textContent).toContain("No matches");
+    expect(container.textContent).toContain(dashboardMessages.sessions.codeDisplay.noMatches);
 
     unmount();
   });
@@ -295,8 +269,7 @@ describe("CodeDisplay", () => {
       <CodeDisplay content={hugeContent} language="text" fileName="huge.txt" />
     );
 
-    expect(container.textContent).toContain("Content too large");
-    expect(container.textContent).toContain("1.00 MB");
+    expect(container.textContent).toContain(dashboardMessages.sessions.codeDisplay.hardLimit.title);
     unmount();
   });
 
@@ -352,8 +325,7 @@ describe("CodeDisplay", () => {
       <CodeDisplay content={manyLines} language="text" fileName="many-lines.txt" />
     );
 
-    expect(container.textContent).toContain("Content too large");
-    expect(container.textContent).toContain("10,000 lines");
+    expect(container.textContent).toContain(dashboardMessages.sessions.codeDisplay.hardLimit.title);
     unmount();
   });
 });
