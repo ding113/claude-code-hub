@@ -1,7 +1,7 @@
 {
   "header": {
     "title": "我的用量",
-    "subtitle": "查看額度與使用記錄",
+    "welcome": "歡迎，{name}",
     "logout": "登出",
     "keyLabel": "金鑰",
     "userLabel": "使用者",
@@ -29,21 +29,6 @@
     "unlimited": "不限",
     "empty": "暫無額度資料"
   },
-  "today": {
-    "title": "今日使用",
-    "autoRefresh": "每{seconds}s自動刷新",
-    "refresh": "刷新",
-    "calls": "呼叫次數",
-    "tokensIn": "輸入 Tokens",
-    "tokensOut": "輸出 Tokens",
-    "cost": "{currency} 花費",
-    "modelBreakdown": "按模型",
-    "unknownModel": "未知模型",
-    "billingModel": "計費模型：{model}",
-    "callsShort": "{count} 次",
-    "tokensShort": "入 {in} / 出 {out}",
-    "noData": "今日無資料"
-  },
   "logs": {
     "title": "使用紀錄",
     "autoRefresh": "每 {seconds} 秒自動刷新",
@@ -64,7 +49,7 @@
       "tokens": "Tokens (入/出)",
       "cacheWrite": "快取寫入",
       "cacheRead": "快取讀取",
-      "cost": "{currency} 花費",
+      "cost": "花費",
       "status": "狀態",
       "endpoint": "API 端點"
     },
@@ -79,15 +64,52 @@
     "title": "到期時間",
     "keyExpires": "金鑰到期",
     "userExpires": "使用者到期",
+    "rpmLimit": "RPM限制",
     "neverExpires": "永不過期",
     "expired": "已過期",
     "expiresIn": "剩餘 {time}",
     "expiringWarning": "即將到期"
   },
   "providerGroup": {
+    "title": "供應商分組",
     "keyGroup": "金鑰分組",
     "userGroup": "使用者分組",
     "allProviders": "全部供應商",
     "inheritedFromUser": "繼承自使用者"
+  },
+  "stats": {
+    "title": "統計摘要",
+    "autoRefresh": "每{seconds}秒自動刷新",
+    "totalRequests": "總請求數",
+    "totalCost": "總費用",
+    "totalTokens": "總Token數",
+    "cacheTokens": "快取Token",
+    "input": "輸入",
+    "output": "輸出",
+    "write": "寫入",
+    "read": "讀取",
+    "modelBreakdown": "按模型",
+    "keyStats": "金鑰",
+    "userStats": "使用者",
+    "noData": "所選時段無資料",
+    "unknownModel": "未知"
+  },
+  "accessRestrictions": {
+    "title": "存取限制",
+    "models": "模型",
+    "clients": "客戶端",
+    "noRestrictions": "無限制"
+  },
+  "quotaCollapsible": {
+    "title": "配額使用",
+    "daily": "日",
+    "monthly": "月",
+    "total": "總計"
+  },
+  "logsCollapsible": {
+    "title": "使用記錄",
+    "lastStatus": "最近: {code} ({time})",
+    "successRate": "{rate}%",
+    "noData": "無資料"
   }
 }

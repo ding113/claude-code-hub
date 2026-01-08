@@ -9,6 +9,7 @@ import { formatDate, getLocaleDateFormat } from "@/lib/utils/date-format";
 interface ExpirationInfoProps {
   keyExpiresAt: Date | null;
   userExpiresAt: Date | null;
+  userRpmLimit?: number | null;
   className?: string;
 }
 
@@ -17,7 +18,12 @@ const ONE_DAY_IN_SECONDS = 24 * 60 * 60;
 
 type ExpireStatus = "none" | "normal" | "warning" | "danger" | "expired";
 
-export function ExpirationInfo({ keyExpiresAt, userExpiresAt, className }: ExpirationInfoProps) {
+export function ExpirationInfo({
+  keyExpiresAt,
+  userExpiresAt,
+  userRpmLimit,
+  className,
+}: ExpirationInfoProps) {
   const t = useTranslations("myUsage.expiration");
   const locale = useLocale();
 
@@ -67,7 +73,9 @@ export function ExpirationInfo({ keyExpiresAt, userExpiresAt, className }: Expir
         <p className="text-xs font-medium text-muted-foreground">{label}</p>
         <div className="flex items-center gap-2">
           <span className={cn("text-sm font-semibold", statusStyles[status])}>
-            {status === "expired" ? t("expired") : formatExpiry(value)}
+            {status === "expired"
+              ? `${t("expired")} (${formatExpiry(value)})`
+              : formatExpiry(value)}
           </span>
         </div>
         {showCountdown ? (
@@ -81,9 +89,17 @@ export function ExpirationInfo({ keyExpiresAt, userExpiresAt, className }: Expir
   };
 
   return (
-    <div className={cn("grid gap-3 sm:grid-cols-2", className)}>
+    <div className={cn("grid gap-3 sm:grid-cols-3", className)}>
       {renderItem(t("keyExpires"), keyExpiresAt, keyCountdown)}
       {renderItem(t("userExpires"), userExpiresAt, userCountdown)}
+      <div className="space-y-2 rounded-md border border-border/60 bg-card/50 p-3">
+        <p className="text-xs font-medium text-muted-foreground">{t("rpmLimit")}</p>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-foreground">
+            {userRpmLimit != null ? userRpmLimit.toLocaleString() : "∞"}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }

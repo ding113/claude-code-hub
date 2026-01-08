@@ -1,7 +1,7 @@
 {
   "header": {
     "title": "Мои расходы",
-    "subtitle": "Лимиты и журналы использования",
+    "welcome": "Добро пожаловать, {name}",
     "logout": "Выйти",
     "keyLabel": "Ключ",
     "userLabel": "Пользователь",
@@ -29,21 +29,6 @@
     "unlimited": "Без лимита",
     "empty": "Нет данных о лимитах"
   },
-  "today": {
-    "title": "Использование сегодня",
-    "autoRefresh": "Автообновление каждые {seconds}с",
-    "refresh": "Обновить",
-    "calls": "Запросы",
-    "tokensIn": "Входные токены",
-    "tokensOut": "Выходные токены",
-    "cost": "Стоимость {currency}",
-    "modelBreakdown": "По моделям",
-    "unknownModel": "Неизвестная модель",
-    "billingModel": "Биллинговая модель: {model}",
-    "callsShort": "{count} раз",
-    "tokensShort": "Вх {in} / Вых {out}",
-    "noData": "Нет данных за сегодня"
-  },
   "logs": {
     "title": "Журнал использования",
     "autoRefresh": "Автообновление каждые {seconds}с",
@@ -62,9 +47,9 @@
       "time": "Время",
       "model": "Модель",
       "tokens": "Токены (вх/вых)",
-      "cacheWrite": "Запись кэша",
-      "cacheRead": "Чтение кэша",
-      "cost": "Стоимость {currency}",
+      "cacheWrite": "Запись кэш",
+      "cacheRead": "Чтение кэш",
+      "cost": "Цена",
       "status": "Статус",
       "endpoint": "API Endpoint"
     },
@@ -79,15 +64,52 @@
     "title": "Срок действия",
     "keyExpires": "Срок ключа",
     "userExpires": "Срок пользователя",
+    "rpmLimit": "Лимит RPM",
     "neverExpires": "Бессрочно",
     "expired": "Истёк",
     "expiresIn": "через {time}",
     "expiringWarning": "Скоро истечёт"
   },
   "providerGroup": {
+    "title": "Группы провайдеров",
     "keyGroup": "Группа ключа",
     "userGroup": "Группа пользователя",
     "allProviders": "Все провайдеры",
     "inheritedFromUser": "Наследовано от пользователя"
+  },
+  "stats": {
+    "title": "Сводка статистики",
+    "autoRefresh": "Автообновление каждые {seconds}с",
+    "totalRequests": "Всего запросов",
+    "totalCost": "Общая стоимость",
+    "totalTokens": "Всего токенов",
+    "cacheTokens": "Токены кэша",
+    "input": "Вход",
+    "output": "Выход",
+    "write": "Запись",
+    "read": "Чтение",
+    "modelBreakdown": "По моделям",
+    "keyStats": "Ключ",
+    "userStats": "Пользователь",
+    "noData": "Нет данных за выбранный период",
+    "unknownModel": "Неизвестно"
+  },
+  "accessRestrictions": {
+    "title": "Ограничения доступа",
+    "models": "Модели",
+    "clients": "Клиенты",
+    "noRestrictions": "Без ограничений"
+  },
+  "quotaCollapsible": {
+    "title": "Использование квоты",
+    "daily": "День",
+    "monthly": "Месяц",
+    "total": "Всего"
+  },
+  "logsCollapsible": {
+    "title": "Журнал запросов",
+    "lastStatus": "Посл.: {code} ({time})",
+    "successRate": "{rate}%",
+    "noData": "Нет данных"
   }
 }
