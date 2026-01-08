@@ -1006,7 +1006,8 @@ export class ProxyForwarder {
           const specialSettings = session.getSpecialSettings();
 
           if (session.sessionId) {
-            void SessionManager.storeSessionSpecialSettings(
+            // 这里用 await：避免后续响应侧写入（ResponseFixer 等）先完成后，被本次旧快照覆写
+            await SessionManager.storeSessionSpecialSettings(
               session.sessionId,
               specialSettings,
               session.requestSequence
@@ -1019,7 +1020,8 @@ export class ProxyForwarder {
           }
 
           if (session.messageContext?.id) {
-            void updateMessageRequestDetails(session.messageContext.id, {
+            // 同上：确保 special_settings 的“旧值”不会在并发下覆盖“新值”
+            await updateMessageRequestDetails(session.messageContext.id, {
               specialSettings,
             }).catch((err) => {
               logger.error("[ProxyForwarder] Failed to persist special settings", {

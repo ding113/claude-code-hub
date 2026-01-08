@@ -532,11 +532,17 @@ export async function getMyStatsSummary(
     const settings = await getSystemSettings();
     const currencyCode = settings.currencyDisplay;
 
-    const startTime = filters.startDate
-      ? new Date(`${filters.startDate}T00:00:00`).getTime()
-      : undefined;
-    const endTime = filters.endDate
-      ? new Date(`${filters.endDate}T23:59:59.999`).getTime()
+    const parsedStart = filters.startDate
+      ? Date.parse(`${filters.startDate}T00:00:00.000Z`)
+      : Number.NaN;
+    const parsedEndStart = filters.endDate
+      ? Date.parse(`${filters.endDate}T00:00:00.000Z`)
+      : Number.NaN;
+
+    const startTime = Number.isFinite(parsedStart) ? parsedStart : undefined;
+    // endTime 使用“次日零点”作为排他上界（created_at < endTime），避免 23:59:59.999 的边界问题
+    const endTime = Number.isFinite(parsedEndStart)
+      ? parsedEndStart + 24 * 60 * 60 * 1000
       : undefined;
 
     // Get aggregated stats using existing repository function

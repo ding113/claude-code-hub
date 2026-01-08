@@ -351,6 +351,13 @@
       "when": 1767764802281,
       "tag": "0049_shocking_ultimatum",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1767894561890,
+      "tag": "0050_flippant_jack_flag",
+      "breakpoints": true
     }
   ]
 }

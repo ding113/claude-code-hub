@@ -21,6 +21,7 @@ import { GeminiAdapter } from "../gemini/adapter";
 import type { GeminiResponse } from "../gemini/types";
 import { isClientAbortError } from "./errors";
 import { mapClientFormatToTransformer, mapProviderTypeToTransformer } from "./format-mapper";
+import { ResponseFixer } from "./response-fixer";
 import type { ProxySession } from "./session";
 
 export type UsageMetrics = {
@@ -57,14 +58,16 @@ function cleanResponseHeaders(headers: Headers): Headers {
 
 export class ProxyResponseHandler {
   static async dispatch(session: ProxySession, response: Response): Promise<Response> {
-    const contentType = response.headers.get("content-type") || "";
+    const fixedResponse = await ResponseFixer.process(session, response);
+
+    const contentType = fixedResponse.headers.get("content-type") || "";
     const isSSE = contentType.includes("text/event-stream");
 
     if (!isSSE) {
-      return await ProxyResponseHandler.handleNonStream(session, response);
+      return await ProxyResponseHandler.handleNonStream(session, fixedResponse);
     }
 
-    return await ProxyResponseHandler.handleStream(session, response);
+    return await ProxyResponseHandler.handleStream(session, fixedResponse);
   }
 
   private static async handleNonStream(

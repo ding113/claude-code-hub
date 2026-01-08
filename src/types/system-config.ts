@@ -3,6 +3,14 @@ import type { CurrencyCode } from "@/lib/utils";
 // 计费模型来源: 'original' (重定向前) | 'redirected' (重定向后)
 export type BillingModelSource = "original" | "redirected";
 
+export interface ResponseFixerConfig {
+  fixTruncatedJson: boolean;
+  fixSseFormat: boolean;
+  fixEncoding: boolean;
+  maxJsonDepth: number;
+  maxFixSize: number;
+}
+
 export interface SystemSettings {
   id: number;
   siteTitle: string;
@@ -31,6 +39,10 @@ export interface SystemSettings {
 
   // 可选拦截 Anthropic Warmup 请求（默认关闭）
   interceptAnthropicWarmupRequests: boolean;
+
+  // 响应整流（默认开启）
+  enableResponseFixer: boolean;
+  responseFixerConfig: ResponseFixerConfig;
 
   createdAt: Date;
   updatedAt: Date;
@@ -64,4 +76,8 @@ export interface UpdateSystemSettingsInput {
 
   // 可选拦截 Anthropic Warmup 请求（可选）
   interceptAnthropicWarmupRequests?: boolean;
+
+  // 响应整流（可选）
+  enableResponseFixer?: boolean;
+  responseFixerConfig?: Partial<ResponseFixerConfig>;
 }

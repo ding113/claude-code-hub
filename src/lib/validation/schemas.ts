@@ -741,6 +741,23 @@ export const UpdateSystemSettingsSchema = z.object({
   enableHttp2: z.boolean().optional(),
   // 可选拦截 Anthropic Warmup 请求（可选）
   interceptAnthropicWarmupRequests: z.boolean().optional(),
+  // 响应整流（可选）
+  enableResponseFixer: z.boolean().optional(),
+  responseFixerConfig: z
+    .object({
+      fixTruncatedJson: z.boolean().optional(),
+      fixSseFormat: z.boolean().optional(),
+      fixEncoding: z.boolean().optional(),
+      maxJsonDepth: z.coerce.number().int("maxJsonDepth 必须是整数").min(1).max(2000).optional(),
+      maxFixSize: z.coerce
+        .number()
+        .int("maxFixSize 必须是整数")
+        .min(1024)
+        .max(10 * 1024 * 1024)
+        .optional(),
+    })
+    .partial()
+    .optional(),
 });
 
 // 导出类型推断

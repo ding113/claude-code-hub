@@ -31,25 +31,13 @@ export function CollapsibleQuotaCard({
   const t = useTranslations("myUsage.quotaCollapsible");
 
   // Calculate summary metrics
-  const keyDailyPct = calculateUsagePercent(
-    quota?.keyCurrentDailyUsd ?? 0,
-    quota?.keyLimitDailyUsd ?? null
-  );
   const userDailyPct = calculateUsagePercent(
     quota?.userCurrentDailyUsd ?? 0,
     quota?.userLimitDailyUsd ?? null
   );
-  const keyMonthlyPct = calculateUsagePercent(
-    quota?.keyCurrentMonthlyUsd ?? 0,
-    quota?.keyLimitMonthlyUsd ?? null
-  );
   const userMonthlyPct = calculateUsagePercent(
     quota?.userCurrentMonthlyUsd ?? 0,
     quota?.userLimitMonthlyUsd ?? null
-  );
-  const keyTotalPct = calculateUsagePercent(
-    quota?.keyCurrentTotalUsd ?? 0,
-    quota?.keyLimitTotalUsd ?? null
   );
   const userTotalPct = calculateUsagePercent(
     quota?.userCurrentTotalUsd ?? 0,
