@@ -1,7 +1,7 @@
 {
   "header": {
     "title": "My Usage",
-    "subtitle": "View your quotas and usage logs",
+    "welcome": "Welcome, {name}",
     "logout": "Logout",
     "keyLabel": "Key",
     "userLabel": "User",
@@ -29,21 +29,6 @@
     "unlimited": "Unlimited",
     "empty": "No quota data"
   },
-  "today": {
-    "title": "Today's Usage",
-    "autoRefresh": "Auto refresh every {seconds}s",
-    "refresh": "Refresh",
-    "calls": "Calls",
-    "tokensIn": "Input tokens",
-    "tokensOut": "Output tokens",
-    "cost": "{currency} cost",
-    "modelBreakdown": "By model",
-    "unknownModel": "Unknown model",
-    "billingModel": "Billing model: {model}",
-    "callsShort": "{count} calls",
-    "tokensShort": "In {in} / Out {out}",
-    "noData": "No data today"
-  },
   "logs": {
     "title": "Usage Logs",
     "autoRefresh": "Auto refresh every {seconds}s",
@@ -64,7 +49,7 @@
       "tokens": "Tokens (in/out)",
       "cacheWrite": "Cache Write",
       "cacheRead": "Cache Read",
-      "cost": "{currency} cost",
+      "cost": "Cost",
       "status": "Status",
       "endpoint": "Endpoint"
     },
@@ -79,15 +64,52 @@
     "title": "Expiration",
     "keyExpires": "Key Expires",
     "userExpires": "User Expires",
+    "rpmLimit": "RPM Limit",
     "neverExpires": "Never",
     "expired": "Expired",
     "expiresIn": "in {time}",
     "expiringWarning": "Expiring Soon"
   },
   "providerGroup": {
+    "title": "Provider Groups",
     "keyGroup": "Key Group",
     "userGroup": "User Group",
     "allProviders": "All Providers",
     "inheritedFromUser": "Inherited from User"
+  },
+  "stats": {
+    "title": "Statistics Summary",
+    "autoRefresh": "Auto refresh every {seconds}s",
+    "totalRequests": "Total Requests",
+    "totalCost": "Total Cost",
+    "totalTokens": "Total Tokens",
+    "cacheTokens": "Cache Tokens",
+    "input": "Input",
+    "output": "Output",
+    "write": "Write",
+    "read": "Read",
+    "modelBreakdown": "Model Breakdown",
+    "keyStats": "Key",
+    "userStats": "User",
+    "noData": "No data for selected period",
+    "unknownModel": "Unknown"
+  },
+  "accessRestrictions": {
+    "title": "Access Restrictions",
+    "models": "Models",
+    "clients": "Clients",
+    "noRestrictions": "No restrictions"
+  },
+  "quotaCollapsible": {
+    "title": "Quota Usage",
+    "daily": "Daily",
+    "monthly": "Monthly",
+    "total": "Total"
+  },
+  "logsCollapsible": {
+    "title": "Usage Logs",
+    "lastStatus": "Last: {code} ({time})",
+    "successRate": "{rate}%",
+    "noData": "No data"
   }
 }

@@ -13,7 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import type { CurrencyCode } from "@/lib/utils";
+import { CURRENCY_CONFIG, type CurrencyCode } from "@/lib/utils";
 
 interface UsageLogsTableProps {
   logs: MyUsageLogEntry[];
@@ -55,9 +55,7 @@ export function UsageLogsTable({
               <TableHead className="text-right">{t("table.tokens")}</TableHead>
               <TableHead className="text-right">{t("table.cacheWrite")}</TableHead>
               <TableHead className="text-right">{t("table.cacheRead")}</TableHead>
-              <TableHead className="text-right">
-                {t("table.cost", { currency: currencyCode })}
-              </TableHead>
+              <TableHead className="text-right">{t("table.cost")}</TableHead>
               <TableHead>{t("table.status")}</TableHead>
             </TableRow>
           </TableHeader>
@@ -129,11 +127,17 @@ export function UsageLogsTable({
                     {formatTokenAmount(log.cacheReadInputTokens)}
                   </TableCell>
                   <TableCell className="text-right text-sm font-mono">
-                    {currencyCode} {Number(log.cost ?? 0).toFixed(4)}
+                    {CURRENCY_CONFIG[currencyCode]?.symbol ?? currencyCode}
+                    {Number(log.cost ?? 0).toFixed(4)}
                   </TableCell>
                   <TableCell>
                     <Badge
                       variant={log.statusCode && log.statusCode >= 400 ? "destructive" : "outline"}
+                      className={
+                        log.statusCode === 200
+                          ? "border-green-500 text-green-600 dark:text-green-400"
+                          : undefined
+                      }
                     >
                       {log.statusCode ?? "-"}
                     </Badge>

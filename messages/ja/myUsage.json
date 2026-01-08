@@ -1,7 +1,7 @@
 {
   "header": {
     "title": "マイ利用状況",
-    "subtitle": "クォータと利用ログを確認",
+    "welcome": "ようこそ、{name}さん",
     "logout": "ログアウト",
     "keyLabel": "キー",
     "userLabel": "ユーザー",
@@ -29,21 +29,6 @@
     "unlimited": "無制限",
     "empty": "クォータ情報がありません"
   },
-  "today": {
-    "title": "本日の利用",
-    "autoRefresh": "{seconds}秒ごとに自動更新",
-    "refresh": "更新",
-    "calls": "リクエスト数",
-    "tokensIn": "入力トークン",
-    "tokensOut": "出力トークン",
-    "cost": "{currency} コスト",
-    "modelBreakdown": "モデル別",
-    "unknownModel": "不明なモデル",
-    "billingModel": "課金モデル: {model}",
-    "callsShort": "{count} 回",
-    "tokensShort": "入力 {in} / 出力 {out}",
-    "noData": "本日のデータはありません"
-  },
   "logs": {
     "title": "利用ログ",
     "autoRefresh": "{seconds}秒ごとに自動更新",
@@ -64,7 +49,7 @@
       "tokens": "トークン (入/出)",
       "cacheWrite": "キャッシュ書込",
       "cacheRead": "キャッシュ読取",
-      "cost": "{currency} コスト",
+      "cost": "コスト",
       "status": "ステータス",
       "endpoint": "エンドポイント"
     },
@@ -79,15 +64,52 @@
     "title": "有効期限",
     "keyExpires": "キーの期限",
     "userExpires": "ユーザーの期限",
+    "rpmLimit": "RPM制限",
     "neverExpires": "期限なし",
     "expired": "期限切れ",
     "expiresIn": "{time} で期限",
     "expiringWarning": "まもなく期限"
   },
   "providerGroup": {
+    "title": "プロバイダーグループ",
     "keyGroup": "キーグループ",
     "userGroup": "ユーザーグループ",
     "allProviders": "すべてのプロバイダー",
     "inheritedFromUser": "ユーザーから継承"
+  },
+  "stats": {
+    "title": "統計サマリー",
+    "autoRefresh": "{seconds}秒ごとに自動更新",
+    "totalRequests": "リクエスト総数",
+    "totalCost": "総コスト",
+    "totalTokens": "トークン総数",
+    "cacheTokens": "キャッシュトークン",
+    "input": "入力",
+    "output": "出力",
+    "write": "書込",
+    "read": "読取",
+    "modelBreakdown": "モデル別",
+    "keyStats": "キー",
+    "userStats": "ユーザー",
+    "noData": "選択期間のデータがありません",
+    "unknownModel": "不明"
+  },
+  "accessRestrictions": {
+    "title": "アクセス制限",
+    "models": "モデル",
+    "clients": "クライアント",
+    "noRestrictions": "制限なし"
+  },
+  "quotaCollapsible": {
+    "title": "クォータ使用状況",
+    "daily": "日次",
+    "monthly": "月次",
+    "total": "合計"
+  },
+  "logsCollapsible": {
+    "title": "使用ログ",
+    "lastStatus": "最終: {code} ({time})",
+    "successRate": "{rate}%",
+    "noData": "データなし"
   }
 }
