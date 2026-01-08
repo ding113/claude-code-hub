@@ -560,10 +560,12 @@ export function SessionMessagesClient() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{t("actions.terminateSessionTitle")}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("actions.terminateSessionDescription")}
-              <div className="mt-2 p-2 bg-muted rounded font-mono text-xs break-all">
-                {sessionId}
+            <AlertDialogDescription asChild>
+              <div>
+                {t("actions.terminateSessionDescription")}
+                <div className="mt-2 p-2 bg-muted rounded font-mono text-xs break-all">
+                  {sessionId}
+                </div>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
