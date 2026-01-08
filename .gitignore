@@ -1,0 +1,8 @@
+# macOS system files
+.DS_Store
+
+# JetBrains IDEs (IntelliJ IDEA, WebStorm, etc.)
+.idea/
+
+# Claude local settings
+.claude/
