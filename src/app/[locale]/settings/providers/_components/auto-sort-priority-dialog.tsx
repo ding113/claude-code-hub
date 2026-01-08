@@ -2,7 +2,6 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, ListOrdered, Loader2 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -49,7 +48,6 @@ type AutoSortResult = {
 };
 
 export function AutoSortPriorityDialog() {
-  const router = useRouter();
   const queryClient = useQueryClient();
   const t = useTranslations("settings.providers.autoSort");
   const tCommon = useTranslations("settings.common");
@@ -116,7 +114,6 @@ export function AutoSortPriorityDialog() {
       if (result.ok) {
         toast.success(t("success", { count: result.data.summary.changedCount }));
         queryClient.invalidateQueries({ queryKey: ["providers"] });
-        router.refresh();
         setOpen(false);
       } else {
         toast.error(getActionErrorMessage(result));
