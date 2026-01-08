@@ -607,6 +607,22 @@
     "addFailed": "Failed to add provider",
     "addProvider": "Add Provider",
     "addSuccess": "Provider added successfully",
+    "autoSort": {
+      "button": "Auto Sort Priority",
+      "dialogTitle": "Auto Sort Provider Priority",
+      "dialogDescription": "Automatically assign priority based on cost multiplier (lower cost = higher priority)",
+      "changeCount": "{count} providers will be updated",
+      "noChanges": "No changes needed (already sorted)",
+      "costMultiplierHeader": "Cost Multiplier",
+      "priorityHeader": "Priority",
+      "providersHeader": "Providers",
+      "changesTitle": "Change Details",
+      "providerHeader": "Provider",
+      "priorityChangeHeader": "Priority Change",
+      "confirm": "Apply Changes",
+      "success": "Updated priority for {count} providers",
+      "error": "Failed to update priorities"
+    },
     "types": {
       "claude": {
         "label": "Claude",

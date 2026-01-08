@@ -495,6 +495,43 @@ export async function updateProvider(
   return toProvider(provider);
 }
 
+export async function updateProviderPrioritiesBatch(
+  updates: Array<{ id: number; priority: number }>
+): Promise<number> {
+  if (updates.length === 0) {
+    return 0;
+  }
+
+  // Deduplicate ids: last one wins
+  const updateMap = new Map<number, number>();
+  for (const update of updates) {
+    updateMap.set(update.id, update.priority);
+  }
+
+  const ids = Array.from(updateMap.keys());
+  const priorityCol = sql.identifier("priority");
+  const updatedAtCol = sql.identifier("updated_at");
+  const cases = ids.map((id) => sql`WHEN ${id} THEN ${updateMap.get(id)!}`);
+
+  const idList = sql.join(
+    ids.map((id) => sql`${id}`),
+    sql`, `
+  );
+
+  const query = sql`
+    UPDATE providers
+    SET
+      ${priorityCol} = CASE id ${sql.join(cases, sql` `)} ELSE ${priorityCol} END,
+      ${updatedAtCol} = NOW()
+    WHERE id IN (${idList}) AND deleted_at IS NULL
+  `;
+
+  const result = await db.execute(query);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (result as any).rowCount || 0;
+}
+
 export async function deleteProvider(id: number): Promise<boolean> {
   const result = await db
     .update(providers)
