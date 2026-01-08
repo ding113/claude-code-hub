@@ -7,7 +7,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { NextIntlClientProvider } from "next-intl";
 import { describe, expect, test, vi } from "vitest";
-import dashboardMessages from "@/../messages/en/dashboard.json";
+import dashboardMessages from "@messages/en/dashboard.json";
 import { CodeDisplay } from "@/components/ui/code-display";
 
 // Use real locale messages to ensure test stays in sync with actual translations
@@ -304,8 +304,9 @@ describe("CodeDisplay", () => {
     click(downloadBtn);
 
     expect(createObjectURLSpy).toHaveBeenCalledTimes(1);
-    expect(lastAnchor?.download).toBe("huge.txt");
-    expect(lastAnchor?.href).toBe("blob:mock");
+    expect(lastAnchor).not.toBeNull();
+    expect(lastAnchor!.download).toBe("huge.txt");
+    expect(lastAnchor!.href).toBe("blob:mock");
 
     const blob = createObjectURLSpy.mock.calls[0]?.[0] as Blob;
     expect(await blob.text()).toBe(hugeContent);

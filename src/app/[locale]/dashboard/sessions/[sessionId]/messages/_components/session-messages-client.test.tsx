@@ -7,7 +7,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { NextIntlClientProvider } from "next-intl";
 import { describe, expect, test, vi } from "vitest";
-import dashboardMessages from "@/../messages/en/dashboard.json";
+import dashboardMessages from "@messages/en/dashboard.json";
 import { SessionMessagesDetailsTabs } from "./session-details-tabs";
 
 // Use real locale messages to ensure test stays in sync with actual translations

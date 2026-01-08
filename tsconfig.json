@@ -20,7 +20,8 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@messages/*": ["./messages/*"]
     }
   },
   "include": [
@@ -31,5 +32,5 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules", "src/components/ui/**", "tests/**", "docs-site", ".next", "dist"]
+  "exclude": ["node_modules", "tests/**", "docs-site", ".next", "dist"]
 }
