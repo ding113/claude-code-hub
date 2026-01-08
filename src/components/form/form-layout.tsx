@@ -56,7 +56,7 @@ export function DialogFormLayout({
         {config.description && <DialogDescription>{config.description}</DialogDescription>}
       </DialogHeader>
 
-      <div className="flex-1 overflow-y-auto min-h-0 py-4 pr-2 -mr-2">
+      <div className="flex-1 overflow-y-auto min-h-0 py-4 px-1 -mx-1">
         <div className="grid gap-4">
           {children}
 

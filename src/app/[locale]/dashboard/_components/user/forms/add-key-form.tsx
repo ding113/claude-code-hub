@@ -1,7 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { addKey } from "@/actions/keys";
 import { getAvailableProviderGroups } from "@/actions/providers";
@@ -119,6 +119,23 @@ export function AddKeyForm({ userId, user, isAdmin = false, onSuccess }: AddKeyF
     },
   });
 
+  // 选择分组时，自动移除 default（当有多个分组时）
+  const handleProviderGroupChange = useCallback(
+    (newValue: string) => {
+      const groups = newValue
+        .split(",")
+        .map((g) => g.trim())
+        .filter(Boolean);
+      if (groups.length > 1 && groups.includes(PROVIDER_GROUP.DEFAULT)) {
+        const withoutDefault = groups.filter((g) => g !== PROVIDER_GROUP.DEFAULT);
+        form.setValue("providerGroup", withoutDefault.join(","));
+      } else {
+        form.setValue("providerGroup", newValue);
+      }
+    },
+    [form]
+  );
+
   return (
     <DialogFormLayout
       config={{
@@ -193,7 +210,7 @@ export function AddKeyForm({ userId, user, isAdmin = false, onSuccess }: AddKeyF
           toast.error(messages[reason] || reason);
         }}
         value={String(form.getFieldProps("providerGroup").value)}
-        onChange={form.getFieldProps("providerGroup").onChange}
+        onChange={handleProviderGroupChange}
         error={form.getFieldProps("providerGroup").error}
         touched={form.getFieldProps("providerGroup").touched}
       />
