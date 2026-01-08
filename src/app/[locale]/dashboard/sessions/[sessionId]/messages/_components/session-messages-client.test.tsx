@@ -89,7 +89,9 @@ describe("SessionMessagesDetailsTabs", () => {
     const requestHeadersTab = container.querySelector(
       "[data-testid='session-tab-request-headers']"
     ) as HTMLElement;
-    expect(requestHeadersTab.textContent).toContain("CLIENT: POST https://example.com/v1/responses");
+    expect(requestHeadersTab.textContent).toContain(
+      "CLIENT: POST https://example.com/v1/responses"
+    );
 
     // Switch to request messages tab and check within its scope
     const requestMessagesTrigger = container.querySelector(
