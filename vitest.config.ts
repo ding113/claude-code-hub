@@ -104,6 +104,7 @@ export default defineConfig({
       "tests/api/users-actions.test.ts",
       "tests/api/providers-actions.test.ts",
       "tests/api/keys-actions.test.ts",
+      "tests/api/my-usage-readonly.test.ts",
     ],
 
     // ==================== 监听模式配置 ====================
