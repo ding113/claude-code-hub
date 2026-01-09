@@ -141,6 +141,7 @@ export function toMessageRequest(dbMessage: any): MessageRequest {
 export function toModelPrice(dbPrice: any): ModelPrice {
   return {
     ...dbPrice,
+    source: dbPrice?.source ?? "litellm", // 默认为 litellm（向后兼容）
     createdAt: dbPrice?.createdAt ? new Date(dbPrice.createdAt) : new Date(),
     updatedAt: dbPrice?.updatedAt ? new Date(dbPrice.updatedAt) : new Date(),
   };

@@ -1,10 +1,25 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, DollarSign, Package, Search } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  DollarSign,
+  MoreHorizontal,
+  Package,
+  Pencil,
+  Search,
+  Trash2,
+} from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -23,6 +38,8 @@ import {
 } from "@/components/ui/table";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import type { ModelPrice } from "@/types/model-price";
+import { DeleteModelDialog } from "./delete-model-dialog";
+import { ModelPriceDialog } from "./model-price-dialog";
 
 interface PriceListProps {
   initialPrices: ModelPrice[];
@@ -53,6 +70,17 @@ export function PriceList({
 
   // 计算总页数
   const totalPages = Math.ceil(total / pageSize);
+
+  // 监听价格数据变化事件（由其他组件触发）
+  useEffect(() => {
+    const handlePriceUpdate = () => {
+      fetchPrices(page, pageSize, debouncedSearchTerm);
+    };
+
+    window.addEventListener("price-data-updated", handlePriceUpdate);
+    return () => window.removeEventListener("price-data-updated", handlePriceUpdate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, pageSize, debouncedSearchTerm]);
 
   // 从 URL 搜索参数中读取初始状态（仅在挂载时执行一次）
   useEffect(() => {
@@ -229,12 +257,13 @@ export function PriceList({
               <TableHead className="w-32 text-right">{t("table.inputPrice")}</TableHead>
               <TableHead className="w-32 text-right">{t("table.outputPrice")}</TableHead>
               <TableHead className="w-32">{t("table.updatedAt")}</TableHead>
+              <TableHead className="w-20">{t("table.actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8">
+                <TableCell colSpan={7} className="text-center py-8">
                   <div className="flex items-center justify-center gap-2 text-muted-foreground">
                     <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-current"></div>
                     <span>{t("table.loading")}</span>
@@ -274,11 +303,46 @@ export function PriceList({
                   <TableCell className="text-sm text-muted-foreground">
                     {new Date(price.createdAt).toLocaleDateString("zh-CN")}
                   </TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <ModelPriceDialog
+                          mode="edit"
+                          initialData={price}
+                          onSuccess={() => fetchPrices(page, pageSize, debouncedSearchTerm)}
+                          trigger={
+                            <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                              <Pencil className="h-4 w-4 mr-2" />
+                              {t("actions.edit")}
+                            </DropdownMenuItem>
+                          }
+                        />
+                        <DeleteModelDialog
+                          modelName={price.modelName}
+                          onSuccess={() => fetchPrices(page, pageSize, debouncedSearchTerm)}
+                          trigger={
+                            <DropdownMenuItem
+                              onSelect={(e) => e.preventDefault()}
+                              className="text-destructive focus:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              {t("actions.delete")}
+                            </DropdownMenuItem>
+                          }
+                        />
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
                 </TableRow>
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8">
+                <TableCell colSpan={7} className="text-center py-8">
                   <div className="flex flex-col items-center gap-2 text-muted-foreground">
                     {searchTerm ? (
                       <>

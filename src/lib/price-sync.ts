@@ -13,7 +13,7 @@ import { isClientAbortError } from "@/app/v1/_lib/proxy/errors";
 import { logger } from "@/lib/logger";
 
 const LITELLM_PRICE_URL =
-  "https://jsd-proxy.ygxz.in/gh/BerriAI/litellm/model_prices_and_context_window.json";
+  "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";
 const CACHE_FILE_PATH = path.join(process.cwd(), "public", "cache", "litellm-prices.json");
 const FETCH_TIMEOUT_MS = 10000; // 10 秒超时
 

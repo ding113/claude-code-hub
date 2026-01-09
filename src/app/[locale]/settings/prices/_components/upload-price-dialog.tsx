@@ -118,6 +118,7 @@ export function UploadPriceDialog({
       setResult(response.data);
       const totalUpdates = response.data.added.length + response.data.updated.length;
       toast.success(t("dialog.updateSuccess", { count: totalUpdates }));
+      window.dispatchEvent(new Event("price-data-updated"));
     } catch (error) {
       console.error("更新失败:", error);
       toast.error(t("dialog.updateFailed"));

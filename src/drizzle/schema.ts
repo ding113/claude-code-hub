@@ -366,6 +366,8 @@ export const modelPrices = pgTable('model_prices', {
   id: serial('id').primaryKey(),
   modelName: varchar('model_name').notNull(),
   priceData: jsonb('price_data').notNull(),
+  // 价格来源: 'litellm' = 从 LiteLLM 同步, 'manual' = 手动添加
+  source: varchar('source', { length: 20 }).notNull().default('litellm').$type<'litellm' | 'manual'>(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 }, (table) => ({
@@ -374,6 +376,8 @@ export const modelPrices = pgTable('model_prices', {
   // 基础索引
   modelPricesModelNameIdx: index('idx_model_prices_model_name').on(table.modelName),
   modelPricesCreatedAtIdx: index('idx_model_prices_created_at').on(table.createdAt.desc()),
+  // 按来源过滤的索引
+  modelPricesSourceIdx: index('idx_model_prices_source').on(table.source),
 }));
 
 // Error Rules table
