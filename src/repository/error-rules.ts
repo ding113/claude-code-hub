@@ -640,6 +640,23 @@ const DEFAULT_ERROR_RULES = [
       },
     },
   },
+  // Issue #571: Total media count (document pages + images) exceeds limit
+  {
+    pattern: "Too much media",
+    category: "media_limit",
+    description: "Total media count (document pages + images) exceeds API limit",
+    matchType: "contains" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 79,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "media_limit",
+        message: "媒体数量超过限制（文档页数 + 图片数量 > 100），请减少图片或文档页数后重试",
+      },
+    },
+  },
   {
     pattern:
       "thinking.*format.*invalid|Expected.*thinking.*but found|clear_thinking.*requires.*thinking.*enabled",
