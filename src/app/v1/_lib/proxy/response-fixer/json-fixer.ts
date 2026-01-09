@@ -1,5 +1,7 @@
 import type { FixResult } from "./types";
 
+const UTF8_DECODER = new TextDecoder();
+
 function isWhitespace(byte: number): boolean {
   return byte === 0x20 || byte === 0x09 || byte === 0x0a || byte === 0x0d;
 }
@@ -51,7 +53,7 @@ export class JsonFixer {
 
   fix(data: Uint8Array): FixResult<Uint8Array> {
     if (data.length > this.maxSize) {
-      return { data, applied: false, details: "exceeded max size" };
+      return { data, applied: false, details: "exceeded_max_size" };
     }
 
     if (!this.canFix(data)) {
@@ -60,7 +62,7 @@ export class JsonFixer {
 
     // 快速路径：有效 JSON 直接返回
     try {
-      JSON.parse(new TextDecoder().decode(data));
+      JSON.parse(UTF8_DECODER.decode(data));
       return { data, applied: false };
     } catch {
       // fallthrough
@@ -69,14 +71,14 @@ export class JsonFixer {
     // 慢速路径：修复并验证
     const repaired = this.repair(data);
     if (!repaired) {
-      return { data, applied: false, details: "repair failed" };
+      return { data, applied: false, details: "repair_failed" };
     }
 
     try {
-      JSON.parse(new TextDecoder().decode(repaired));
+      JSON.parse(UTF8_DECODER.decode(repaired));
       return { data: repaired, applied: true };
     } catch {
-      return { data, applied: false, details: "could not validate repaired json" };
+      return { data, applied: false, details: "validate_repaired_failed" };
     }
   }
 

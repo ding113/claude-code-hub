@@ -1,5 +1,9 @@
 import type { FixResult } from "./types";
 
+const UTF8_FATAL_DECODER = new TextDecoder("utf-8", { fatal: true });
+const UTF8_LENIENT_DECODER = new TextDecoder("utf-8", { fatal: false });
+const UTF8_ENCODER = new TextEncoder();
+
 function hasUtf8Bom(data: Uint8Array): boolean {
   return data.length >= 3 && data[0] === 0xef && data[1] === 0xbb && data[2] === 0xbf;
 }
@@ -11,10 +15,10 @@ function hasUtf16Bom(data: Uint8Array): boolean {
 
 function stripBom(data: Uint8Array): { data: Uint8Array; stripped: boolean; details?: string } {
   if (hasUtf8Bom(data)) {
-    return { data: data.subarray(3), stripped: true, details: "removed utf-8 bom" };
+    return { data: data.subarray(3), stripped: true, details: "removed_utf8_bom" };
   }
   if (hasUtf16Bom(data)) {
-    return { data: data.subarray(2), stripped: true, details: "removed utf-16 bom" };
+    return { data: data.subarray(2), stripped: true, details: "removed_utf16_bom" };
   }
   return { data, stripped: false };
 }
@@ -24,18 +28,31 @@ function stripNullBytes(data: Uint8Array): { data: Uint8Array; stripped: boolean
   if (firstNullIdx < 0) {
     return { data, stripped: false };
   }
-  const out: number[] = [];
-  out.length = 0;
-  for (const b of data) {
-    if (b !== 0) out.push(b);
+
+  let nullCount = 1;
+  for (let i = firstNullIdx + 1; i < data.length; i += 1) {
+    if (data[i] === 0) nullCount += 1;
   }
-  return { data: Uint8Array.from(out), stripped: true };
+
+  const out = new Uint8Array(data.length - nullCount);
+  out.set(data.subarray(0, firstNullIdx), 0);
+
+  let offset = firstNullIdx;
+  for (let i = firstNullIdx + 1; i < data.length; i += 1) {
+    const b = data[i];
+    if (b !== 0) {
+      out[offset] = b;
+      offset += 1;
+    }
+  }
+
+  return { data: out, stripped: true };
 }
 
 function isValidUtf8(data: Uint8Array): boolean {
   try {
     // fatal=true 会在无效 UTF-8 时抛错
-    new TextDecoder("utf-8", { fatal: true }).decode(data);
+    UTF8_FATAL_DECODER.decode(data);
     return true;
   } catch {
     return false;
@@ -62,16 +79,17 @@ export class EncodingFixer {
 
     // 经过 BOM/空字节清理后已经是有效 UTF-8
     if (isValidUtf8(intermediate)) {
+      const details = bom.details ?? (nul.stripped ? "removed_null_bytes" : undefined);
       return {
         data: intermediate,
         applied: changedByStrip,
-        details: bom.details,
+        details,
       };
     }
 
     // 有损修复：用替换字符替代无效序列，再重新编码，确保输出一定是有效 UTF-8
-    const lossyText = new TextDecoder("utf-8", { fatal: false }).decode(intermediate);
-    const encoded = new TextEncoder().encode(lossyText);
-    return { data: encoded, applied: true, details: "lossy utf-8 decode/encode" };
+    const lossyText = UTF8_LENIENT_DECODER.decode(intermediate);
+    const encoded = UTF8_ENCODER.encode(lossyText);
+    return { data: encoded, applied: true, details: "lossy_utf8_decode_encode" };
   }
 }

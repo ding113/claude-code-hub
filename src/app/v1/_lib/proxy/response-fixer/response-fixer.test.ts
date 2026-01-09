@@ -106,8 +106,78 @@ describe("ResponseFixer", () => {
     const fixed = await ResponseFixer.process(session, response);
     const text = await fixed.text();
 
-    expect(fixed.headers.get("x-cch-response-fixer")).toBe("applied");
+    expect(fixed.headers.get("x-cch-response-fixer")).toBe("processed");
     expect(text).toBe('data: {"key":null}\n\n');
     expect(session.getSpecialSettings()).not.toBeNull();
+  });
+
+  test("流式 SSE：有效 SSE 不应写入 specialSettings", async () => {
+    const { ResponseFixer } = await import("./index");
+
+    const session = createSession();
+    const encoder = new TextEncoder();
+
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode('data: {"a":1}\n\n'));
+        controller.close();
+      },
+    });
+
+    const response = new Response(stream, {
+      headers: { "content-type": "text/event-stream" },
+    });
+
+    const fixed = await ResponseFixer.process(session, response);
+    expect(await fixed.text()).toBe('data: {"a":1}\n\n');
+    expect(session.getSpecialSettings()).toBeNull();
+  });
+
+  test("流式 SSE：无换行且超过 maxFixSize 时应降级输出，避免无限缓冲", async () => {
+    const { ResponseFixer } = await import("./index");
+
+    mocks.getCachedSystemSettings.mockResolvedValueOnce({
+      enableResponseFixer: true,
+      responseFixerConfig: {
+        fixTruncatedJson: true,
+        fixSseFormat: true,
+        fixEncoding: true,
+        maxJsonDepth: 200,
+        maxFixSize: 12,
+      },
+    });
+
+    const session = createSession();
+    const encoder = new TextEncoder();
+
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode('data: {"k":'));
+        controller.enqueue(encoder.encode('"v"'));
+        // 保持流不关闭：如果没有降级策略，这里会一直缓冲直到 flush（潜在无界增长）
+      },
+    });
+
+    const response = new Response(stream, {
+      headers: { "content-type": "text/event-stream" },
+    });
+
+    const fixed = await ResponseFixer.process(session, response);
+    const reader = fixed.body?.getReader();
+    expect(reader).toBeDefined();
+    if (!reader) return;
+
+    const readPromise = reader.read();
+    const raced = await Promise.race([
+      readPromise,
+      new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 50)),
+    ]);
+
+    // 清理：避免悬挂流导致用例卡死
+    await reader.cancel();
+    await readPromise.catch(() => {});
+
+    expect(raced).not.toBe("timeout");
+    expect(session.getSpecialSettings()).toBeNull();
   });
 });

@@ -45,27 +45,138 @@ function cleanResponseHeaders(headers: Headers): Headers {
   return cleaned;
 }
 
-function concatBytes(a: Uint8Array, b: Uint8Array): Uint8Array {
-  if (a.length === 0) return b.slice();
-  if (b.length === 0) return a.slice();
-  const out = new Uint8Array(a.length + b.length);
-  out.set(a, 0);
-  out.set(b, a.length);
+const LF_BYTE = 0x0a;
+const CR_BYTE = 0x0d;
+
+const SSE_DATA_PREFIX = [0x64, 0x61, 0x74, 0x61, 0x3a] as const; // data:
+const SSE_DATA_PREFIX_WITH_SPACE = new Uint8Array([0x64, 0x61, 0x74, 0x61, 0x3a, 0x20]); // data:␠
+const LF_BYTES = new Uint8Array([LF_BYTE]);
+
+function concatUint8Chunks(chunks: Uint8Array[]): Uint8Array {
+  let total = 0;
+  for (const chunk of chunks) total += chunk.length;
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.length;
+  }
   return out;
 }
 
-function findProcessableEnd(buffer: Uint8Array): number {
-  // 从尾部向前找换行符，保证不在 CRLF 中间切分
-  for (let i = buffer.length - 1; i >= 0; i -= 1) {
-    const b = buffer[i];
-    if (b === 0x0a /* LF */) return i + 1;
-    if (b === 0x0d /* CR */) {
-      if (i === buffer.length - 1) return 0; // 末尾 CR，等待下一块是否为 CRLF
-      if (buffer[i + 1] === 0x0a) return i + 2;
-      return i + 1;
+class ChunkBuffer {
+  private readonly chunks: Uint8Array[] = [];
+  private head = 0;
+  private headOffset = 0;
+  private total = 0;
+  private processableEnd = 0;
+  private pendingCR = false;
+
+  get length(): number {
+    return this.total;
+  }
+
+  push(chunk: Uint8Array): void {
+    if (chunk.length === 0) return;
+    const prevTotal = this.total;
+    this.chunks.push(chunk);
+    this.total += chunk.length;
+
+    // 解决跨 chunk 的 CRLF：如果上一块以 CR 结尾，需要看本块的首字节是否为 LF
+    if (this.pendingCR) {
+      this.processableEnd = chunk[0] === LF_BYTE ? prevTotal + 1 : prevTotal;
+      this.pendingCR = false;
+    }
+
+    // 仅扫描新增 chunk，增量维护“可处理末尾”索引，避免每次全量回扫导致 O(n^2)
+    for (let i = 0; i < chunk.length; i += 1) {
+      const b = chunk[i];
+      if (b === LF_BYTE) {
+        this.processableEnd = prevTotal + i + 1;
+        continue;
+      }
+      if (b !== CR_BYTE) continue;
+
+      if (i + 1 < chunk.length) {
+        if (chunk[i + 1] !== LF_BYTE) {
+          this.processableEnd = prevTotal + i + 1;
+        }
+        continue;
+      }
+
+      // chunk 尾部 CR：等待下一块是否为 CRLF
+      this.pendingCR = true;
     }
   }
-  return 0;
+
+  clear(): void {
+    this.chunks.length = 0;
+    this.head = 0;
+    this.headOffset = 0;
+    this.total = 0;
+    this.processableEnd = 0;
+    this.pendingCR = false;
+  }
+
+  flushTo(controller: TransformStreamDefaultController<Uint8Array>): void {
+    for (let i = this.head; i < this.chunks.length; i += 1) {
+      const chunk = this.chunks[i];
+      if (i === this.head && this.headOffset > 0) {
+        const view = chunk.subarray(this.headOffset);
+        if (view.length > 0) controller.enqueue(view);
+        continue;
+      }
+      controller.enqueue(chunk);
+    }
+    this.clear();
+  }
+
+  findProcessableEnd(): number {
+    if (this.total === 0) return 0;
+    // 保持历史行为：末尾 CR 时不切分，等待下一块确认是否为 CRLF
+    if (this.pendingCR) return 0;
+    return this.processableEnd;
+  }
+
+  take(size: number): Uint8Array {
+    if (size <= 0) return new Uint8Array(0);
+    if (size > this.total) {
+      throw new Error("ChunkBuffer.take size exceeds buffered length");
+    }
+
+    const out = new Uint8Array(size);
+    let outOffset = 0;
+
+    while (outOffset < size) {
+      const chunk = this.chunks[this.head];
+      const available = chunk.length - this.headOffset;
+      const toCopy = Math.min(available, size - outOffset);
+      out.set(chunk.subarray(this.headOffset, this.headOffset + toCopy), outOffset);
+
+      outOffset += toCopy;
+      this.headOffset += toCopy;
+      this.total -= toCopy;
+
+      if (this.headOffset >= chunk.length) {
+        this.head += 1;
+        this.headOffset = 0;
+      }
+    }
+
+    if (this.head > 64) {
+      this.chunks.splice(0, this.head);
+      this.head = 0;
+    }
+
+    this.processableEnd = Math.max(0, this.processableEnd - size);
+    return out;
+  }
+
+  drain(): Uint8Array {
+    const out = this.take(this.total);
+    this.clear();
+    return out;
+  }
 }
 
 function persistSpecialSettings(session: ProxySession): void {
@@ -174,7 +285,7 @@ export class ResponseFixer {
     }
 
     const headers = cleanResponseHeaders(response.headers);
-    headers.set("x-cch-response-fixer", "applied");
+    headers.set("x-cch-response-fixer", audit.hit ? "applied" : "not-applied");
 
     return new Response(toArrayBufferUint8Array(data), {
       status: response.status,
@@ -210,20 +321,41 @@ export class ResponseFixer {
       ? new JsonFixer({ maxDepth: config.maxJsonDepth, maxSize: config.maxFixSize })
       : null;
 
-    let buffer: Uint8Array = new Uint8Array(0);
+    const buffer = new ChunkBuffer();
+    let passthrough = false;
+    const maxBufferBytes = config.maxFixSize;
+
+    const headers = cleanResponseHeaders(response.headers);
+    // 流式响应无法在返回 Response 时准确判断是否发生了“实际修复”（需要读完整流）。
+    // 这里使用“processed”表示已启用并参与处理；真实命中情况以 specialSettings 审计为准。
+    headers.set("x-cch-response-fixer", "processed");
 
     const transform = new TransformStream<Uint8Array, Uint8Array>({
       transform(chunk, controller) {
         audit.totalBytesProcessed += chunk.length;
-        buffer = concatBytes(buffer, chunk);
 
-        const end = findProcessableEnd(buffer);
+        if (passthrough) {
+          controller.enqueue(chunk);
+          return;
+        }
+
+        // 安全保护：如果上游长时间不输出换行，buffer 会持续增长，可能导致内存无界增长。
+        // 达到上限后降级为透传（不再进行 SSE/JSON 修复），避免 DoS 风险。
+        if (buffer.length + chunk.length > maxBufferBytes) {
+          passthrough = true;
+          buffer.flushTo(controller);
+          controller.enqueue(chunk);
+          return;
+        }
+
+        buffer.push(chunk);
+
+        const end = buffer.findProcessableEnd();
         if (end <= 0) {
           return;
         }
 
-        const toProcess = buffer.slice(0, end);
-        buffer = buffer.slice(end);
+        const toProcess = buffer.take(end);
 
         let data: Uint8Array = toProcess;
 
@@ -258,8 +390,7 @@ export class ResponseFixer {
       },
       flush(controller) {
         if (buffer.length > 0) {
-          let data: Uint8Array = buffer;
-          buffer = new Uint8Array(0);
+          let data: Uint8Array = buffer.drain();
 
           if (encodingFixer) {
             const res = encodingFixer.fix(data);
@@ -302,9 +433,6 @@ export class ResponseFixer {
       },
     });
 
-    const headers = cleanResponseHeaders(response.headers);
-    headers.set("x-cch-response-fixer", "applied");
-
     return new Response(response.body?.pipeThrough(transform), {
       status: response.status,
       statusText: response.statusText,
@@ -342,18 +470,34 @@ export class ResponseFixer {
     jsonFixer: JsonFixer
   ): { data: Uint8Array; applied: boolean; details?: string } {
     // 仅处理 LF 分隔的行（SseFixer 输出已统一为 LF）
-    const out: number[] = [];
+    let chunks: Uint8Array[] | null = null;
     let applied = false;
+    let cursor = 0;
 
     let lineStart = 0;
     for (let i = 0; i < data.length; i += 1) {
-      if (data[i] !== 0x0a /* LF */) continue;
+      if (data[i] !== LF_BYTE) continue;
 
       const line = data.subarray(lineStart, i);
       const fixed = ResponseFixer.fixMaybeDataJsonLine(line, jsonFixer);
-      if (fixed.applied) applied = true;
-      out.push(...fixed.line, 0x0a);
 
+      if (!fixed.applied) {
+        if (chunks) {
+          chunks.push(data.subarray(cursor, i + 1));
+          cursor = i + 1;
+        }
+        lineStart = i + 1;
+        continue;
+      }
+
+      applied = true;
+      chunks ??= [];
+      if (cursor < lineStart) {
+        chunks.push(data.subarray(cursor, lineStart));
+      }
+      chunks.push(fixed.line);
+      chunks.push(LF_BYTES);
+      cursor = i + 1;
       lineStart = i + 1;
     }
 
@@ -361,28 +505,41 @@ export class ResponseFixer {
     if (lineStart < data.length) {
       const line = data.subarray(lineStart);
       const fixed = ResponseFixer.fixMaybeDataJsonLine(line, jsonFixer);
-      if (fixed.applied) applied = true;
-      out.push(...fixed.line);
+
+      if (!fixed.applied) {
+        if (chunks) {
+          chunks.push(data.subarray(cursor));
+        }
+      } else {
+        applied = true;
+        chunks ??= [];
+        if (cursor < lineStart) {
+          chunks.push(data.subarray(cursor, lineStart));
+        }
+        chunks.push(fixed.line);
+      }
     }
 
-    return { data: Uint8Array.from(out), applied };
+    if (!chunks) {
+      return { data, applied: false };
+    }
+
+    return { data: concatUint8Chunks(chunks), applied };
   }
 
   private static fixMaybeDataJsonLine(
     line: Uint8Array,
     jsonFixer: JsonFixer
   ): { line: Uint8Array; applied: boolean } {
-    const dataPrefix = [0x64, 0x61, 0x74, 0x61, 0x3a]; // data:
+    if (line.length < SSE_DATA_PREFIX.length) return { line, applied: false };
 
-    if (line.length < dataPrefix.length) return { line, applied: false };
-
-    for (let i = 0; i < dataPrefix.length; i += 1) {
-      if (line[i] !== dataPrefix[i]) {
+    for (let i = 0; i < SSE_DATA_PREFIX.length; i += 1) {
+      if (line[i] !== SSE_DATA_PREFIX[i]) {
         return { line, applied: false };
       }
     }
 
-    let payloadStart = dataPrefix.length;
+    let payloadStart = SSE_DATA_PREFIX.length;
     if (payloadStart < line.length && line[payloadStart] === 0x20 /* space */) {
       payloadStart += 1;
     }
@@ -393,9 +550,9 @@ export class ResponseFixer {
       return { line, applied: false };
     }
 
-    const out = new Uint8Array(6 + res.data.length);
-    out.set([0x64, 0x61, 0x74, 0x61, 0x3a, 0x20], 0); // data:␠
-    out.set(res.data, 6);
+    const out = new Uint8Array(SSE_DATA_PREFIX_WITH_SPACE.length + res.data.length);
+    out.set(SSE_DATA_PREFIX_WITH_SPACE, 0);
+    out.set(res.data, SSE_DATA_PREFIX_WITH_SPACE.length);
     return { line: out, applied: true };
   }
 }

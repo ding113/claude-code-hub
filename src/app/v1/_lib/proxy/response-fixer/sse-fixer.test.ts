@@ -14,8 +14,25 @@ describe("SseFixer", () => {
     expect(fix('data: {"test": true}\n')).toBe('data: {"test": true}\n');
   });
 
+  test("有效 SSE 不应产生额外字节拷贝（applied=false 时复用输入）", () => {
+    const fixer = new SseFixer();
+    const encoder = new TextEncoder();
+    const input = encoder.encode('data: {"test": true}\n');
+
+    const res = fixer.fix(input);
+    expect(res.applied).toBe(false);
+    expect(res.data).toBe(input);
+  });
+
   test("data: 后缺失空格应补齐", () => {
     expect(fix('data:{"test": true}\n')).toBe('data: {"test": true}\n');
+  });
+
+  test("超长 data 行应可处理（避免参数过多导致异常）", () => {
+    const payload = "a".repeat(100_000);
+    const input = `data:${payload}\n`;
+    const output = fix(input);
+    expect(output).toBe(`data: ${payload}\n`);
   });
 
   test("缺失 data: 前缀的 JSON 行应被包装", () => {

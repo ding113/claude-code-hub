@@ -17,6 +17,40 @@ function toLowerAscii(byte: number): number {
   return byte;
 }
 
+const LF_BYTE = 0x0a;
+const CR_BYTE = 0x0d;
+const DATA_COLON = [0x64, 0x61, 0x74, 0x61, 0x3a] as const; // data:
+const LF_BYTES = new Uint8Array([LF_BYTE]);
+
+function concatUint8Chunks(chunks: Uint8Array[]): Uint8Array {
+  let total = 0;
+  for (const chunk of chunks) total += chunk.length;
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return out;
+}
+
+function includesDataColon(data: Uint8Array): boolean {
+  // 仅用于启用判断：在 byte 层做最小子串搜索，避免 decode/字符串分配
+  if (data.length < DATA_COLON.length) return false;
+  for (let i = 0; i <= data.length - DATA_COLON.length; i += 1) {
+    if (
+      data[i] === DATA_COLON[0] &&
+      data[i + 1] === DATA_COLON[1] &&
+      data[i + 2] === DATA_COLON[2] &&
+      data[i + 3] === DATA_COLON[3] &&
+      data[i + 4] === DATA_COLON[4]
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function looksLikeJsonLine(line: Uint8Array): boolean {
   let i = 0;
   while (i < line.length && isAsciiWhitespace(line[i])) i += 1;
@@ -159,12 +193,8 @@ export class SseFixer {
 
     if (looksLikeJsonLine(data)) return true;
 
-    // 简单包含判断：避免实现 memmem，使用 decode 后 includes（仅用于启用判断）
-    try {
-      return new TextDecoder().decode(data).includes("data:");
-    } catch {
-      return false;
-    }
+    // 简单包含判断（仅用于启用判断）
+    return includesDataColon(data);
   }
 
   fix(input: Uint8Array): FixResult<Uint8Array> {
@@ -172,47 +202,75 @@ export class SseFixer {
       return { data: input, applied: false };
     }
 
-    const out: number[] = [];
+    let out: Uint8Array[] | null = null;
+    let cursor = 0;
     let changed = false;
     let lastWasEmpty = false;
 
     let pos = 0;
     while (pos < input.length) {
       const start = pos;
-      let end = start;
+      let scan = start;
+      let lineEnd = input.length;
       let nextPos = input.length;
+      let newlineNormalized = false;
 
-      while (end < input.length) {
-        const b = input[end];
-        if (b === 0x0a /* LF */) {
-          nextPos = end + 1;
-          // CRLF：去掉 CR
-          if (end > start && input[end - 1] === 0x0d) {
-            end -= 1;
-            changed = true;
-          }
+      while (scan < input.length) {
+        const b = input[scan];
+        if (b === LF_BYTE) {
+          lineEnd = scan;
+          nextPos = scan + 1;
           break;
         }
-        if (b === 0x0d /* CR */) {
-          nextPos = end + 1;
-          // 跳过后续 LF
-          if (nextPos < input.length && input[nextPos] === 0x0a) {
+        if (b === CR_BYTE) {
+          lineEnd = scan;
+          nextPos = scan + 1;
+          if (nextPos < input.length && input[nextPos] === LF_BYTE) {
             nextPos += 1;
           }
-          changed = true;
+          newlineNormalized = true;
           break;
         }
-        end += 1;
+        scan += 1;
+      }
+
+      // 末尾无换行：历史行为会补一个 LF，这里显式标记为变更（避免 applied=false 但数据不同）
+      if (nextPos === input.length && lineEnd === input.length) {
+        newlineNormalized = true;
       }
 
       pos = nextPos;
-      const line = input.subarray(start, end);
+      const line = input.subarray(start, lineEnd);
 
       if (line.length === 0) {
-        if (!lastWasEmpty) {
-          out.push(0x0a);
-        } else {
+        if (lastWasEmpty) {
           changed = true;
+          if (!out) {
+            out = [];
+            if (start > 0) out.push(input.subarray(0, start));
+            cursor = start;
+          } else if (cursor < start) {
+            out.push(input.subarray(cursor, start));
+            cursor = start;
+          }
+          // 连续空行：跳过当前行（不输出任何内容）
+          cursor = pos;
+        } else if (newlineNormalized) {
+          changed = true;
+          if (!out) {
+            out = [];
+            if (start > 0) out.push(input.subarray(0, start));
+            cursor = start;
+          } else if (cursor < start) {
+            out.push(input.subarray(cursor, start));
+            cursor = start;
+          }
+          out.push(LF_BYTES);
+          cursor = pos;
+        } else if (out) {
+          // 已经发生过变更：把原始段落（包含 LF）原样拷贝进输出
+          out.push(input.subarray(cursor, pos));
+          cursor = pos;
         }
         lastWasEmpty = true;
         continue;
@@ -220,13 +278,36 @@ export class SseFixer {
       lastWasEmpty = false;
 
       const fixed = this.fixLine(line);
-      if (fixed.applied) changed = true;
-      out.push(...fixed.line);
-      out.push(0x0a);
+      const segmentChanged = fixed.applied || newlineNormalized;
+      if (segmentChanged) changed = true;
+
+      if (segmentChanged) {
+        if (!out) {
+          out = [];
+          if (start > 0) out.push(input.subarray(0, start));
+          cursor = start;
+        } else if (cursor < start) {
+          out.push(input.subarray(cursor, start));
+          cursor = start;
+        }
+        out.push(fixed.applied ? fixed.line : line);
+        out.push(LF_BYTES);
+        cursor = pos;
+      } else if (out) {
+        out.push(input.subarray(cursor, pos));
+        cursor = pos;
+      }
     }
 
-    const result = Uint8Array.from(out);
-    return { data: result, applied: changed };
+    if (!out) {
+      return { data: input, applied: false };
+    }
+
+    if (cursor < input.length) {
+      out.push(input.subarray(cursor));
+    }
+
+    return { data: concatUint8Chunks(out), applied: changed };
   }
 
   private fixLine(line: Uint8Array): { line: Uint8Array; applied: boolean } {

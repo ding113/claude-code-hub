@@ -25,6 +25,17 @@ describe("EncodingFixer", () => {
     expect(new TextDecoder().decode(data)).toBe("Hello");
   });
 
+  test("应移除 UTF-16 BOM", () => {
+    // UTF-16LE BOM + "A"（0x41 0x00）
+    const input = new Uint8Array([0xff, 0xfe, 0x41, 0x00]);
+
+    const fixer = new EncodingFixer();
+    const { data, applied } = fixer.fix(input);
+
+    expect(applied).toBe(true);
+    expect(new TextDecoder().decode(data)).toBe("A");
+  });
+
   test("应移除空字节", () => {
     const input = new Uint8Array([0x48, 0x65, 0x00, 0x6c, 0x6c, 0x6f]); // He\0llo
 
