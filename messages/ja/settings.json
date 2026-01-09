@@ -102,6 +102,8 @@
       "verboseProviderErrorDesc": "有効にすると、すべてのプロバイダーが利用不可の場合に詳細なエラーメッセージ（プロバイダー数、レート制限の理由など）を返します。無効の場合は簡潔なエラーコードのみを返します。",
       "interceptAnthropicWarmupRequests": "Warmup リクエストを遮断（Anthropic）",
       "interceptAnthropicWarmupRequestsDesc": "有効にすると、Claude Code の Warmup プローブ要求は CCH が直接短い応答を返し、上流プロバイダーへのリクエストを回避します。ログには残りますが、課金/レート制限/統計には含まれません。",
+      "enableThinkingSignatureRectifier": "thinking 署名整流を有効化",
+      "enableThinkingSignatureRectifierDesc": "Anthropic プロバイダーで thinking 署名の不整合や不正なリクエストエラーが発生した場合、thinking 関連ブロックを削除して同一プロバイダーへ1回だけ再試行します（既定で有効）。",
       "enableResponseFixer": "レスポンス整流を有効化",
       "enableResponseFixerDesc": "上流応答の一般的な形式問題（エンコーディング、SSE、途切れた JSON）を自動修復します（既定で有効）。",
       "responseFixerFixEncoding": "エンコーディングを修復",

@@ -10,7 +10,7 @@ import {
   recordSuccess,
 } from "@/lib/circuit-breaker";
 import { applyCodexProviderOverridesWithAudit } from "@/lib/codex/provider-overrides";
-import { isHttp2Enabled } from "@/lib/config";
+import { getCachedSystemSettings, isHttp2Enabled } from "@/lib/config";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { PROVIDER_DEFAULTS, PROVIDER_LIMITS } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
@@ -41,6 +41,10 @@ import { mapClientFormatToTransformer, mapProviderTypeToTransformer } from "./fo
 import { ModelRedirector } from "./model-redirector";
 import { ProxyProviderResolver } from "./provider-selector";
 import type { ProxySession } from "./session";
+import {
+  detectThinkingSignatureRectifierTrigger,
+  rectifyAnthropicRequestMessage,
+} from "./thinking-signature-rectifier";
 
 const STANDARD_ENDPOINTS = [
   "/v1/messages",
@@ -201,10 +205,11 @@ export class ProxyForwarder {
       totalProvidersAttempted++;
       let attemptCount = 0; // 当前供应商的尝试次数
 
-      const maxAttemptsPerProvider = resolveMaxAttemptsForProvider(
+      let maxAttemptsPerProvider = resolveMaxAttemptsForProvider(
         currentProvider,
         envDefaultMaxAttempts
       );
+      let thinkingSignatureRectifierRetried = false;
 
       logger.info("ProxyForwarder: Trying provider", {
         providerId: currentProvider.id,
@@ -374,7 +379,7 @@ export class ProxyForwarder {
 
           // ⭐ 1. 分类错误（供应商错误 vs 系统错误 vs 客户端中断）
           // 使用异步版本确保错误规则已加载
-          const errorCategory = await categorizeErrorAsync(lastError);
+          let errorCategory = await categorizeErrorAsync(lastError);
           const errorMessage =
             lastError instanceof ProxyError
               ? lastError.getDetailedErrorMessage()
@@ -409,6 +414,132 @@ export class ProxyForwarder {
 
             // 立即抛出错误，不重试
             throw lastError;
+          }
+
+          // ⭐ 2.5 Thinking signature 整流器：命中后对同供应商“整流 + 重试一次”
+          // 目标：解决 Anthropic 与非 Anthropic 渠道切换导致的 thinking 签名不兼容问题
+          // 约束：
+          // - 仅对 Anthropic 类型供应商生效
+          // - 不依赖 error rules 开关（用户可能关闭规则，但仍希望整流生效）
+          // - 不计入熔断器、不触发供应商切换
+          const isAnthropicProvider =
+            currentProvider.providerType === "claude" ||
+            currentProvider.providerType === "claude-auth";
+          const rectifierTrigger = isAnthropicProvider
+            ? detectThinkingSignatureRectifierTrigger(errorMessage)
+            : null;
+
+          if (rectifierTrigger) {
+            const settings = await getCachedSystemSettings();
+            const enabled = settings.enableThinkingSignatureRectifier ?? true;
+
+            if (enabled) {
+              // 已重试过仍失败：强制按“不可重试的客户端错误”处理，避免污染熔断器/触发供应商切换
+              if (thinkingSignatureRectifierRetried) {
+                errorCategory = ErrorCategory.NON_RETRYABLE_CLIENT_ERROR;
+              } else {
+                thinkingSignatureRectifierRetried = true;
+
+                // 记录失败的第一次请求（以 retry_failed 体现“发生过一次重试”）
+                if (lastError instanceof ProxyError) {
+                  session.addProviderToChain(currentProvider, {
+                    reason: "retry_failed",
+                    circuitState: getCircuitState(currentProvider.id),
+                    attemptNumber: attemptCount,
+                    errorMessage,
+                    statusCode: lastError.statusCode,
+                    errorDetails: {
+                      provider: {
+                        id: currentProvider.id,
+                        name: currentProvider.name,
+                        statusCode: lastError.statusCode,
+                        statusText: lastError.message,
+                        upstreamBody: lastError.upstreamError?.body,
+                        upstreamParsed: lastError.upstreamError?.parsed,
+                      },
+                      request: buildRequestDetails(session),
+                    },
+                  });
+                } else {
+                  session.addProviderToChain(currentProvider, {
+                    reason: "retry_failed",
+                    circuitState: getCircuitState(currentProvider.id),
+                    attemptNumber: attemptCount,
+                    errorMessage,
+                    errorDetails: {
+                      system: {
+                        errorType: lastError.constructor.name,
+                        errorName: lastError.name,
+                        errorMessage: lastError.message || lastError.name || "Unknown error",
+                        errorStack: lastError.stack?.split("\n").slice(0, 3).join("\n"),
+                      },
+                      request: buildRequestDetails(session),
+                    },
+                  });
+                }
+
+                // 整流请求体（原地修改 session.request.message）
+                const rectified = rectifyAnthropicRequestMessage(
+                  session.request.message as Record<string, unknown>
+                );
+
+                // 写入审计字段（specialSettings）
+                session.addSpecialSetting({
+                  type: "thinking_signature_rectifier",
+                  scope: "request",
+                  hit: rectified.applied,
+                  providerId: currentProvider.id,
+                  providerName: currentProvider.name,
+                  trigger: rectifierTrigger,
+                  attemptNumber: attemptCount,
+                  retryAttemptNumber: attemptCount + 1,
+                  removedThinkingBlocks: rectified.removedThinkingBlocks,
+                  removedRedactedThinkingBlocks: rectified.removedRedactedThinkingBlocks,
+                  removedSignatureFields: rectified.removedSignatureFields,
+                });
+
+                const specialSettings = session.getSpecialSettings();
+                if (specialSettings && session.sessionId) {
+                  try {
+                    await SessionManager.storeSessionSpecialSettings(
+                      session.sessionId,
+                      specialSettings,
+                      session.requestSequence
+                    );
+                  } catch (persistError) {
+                    logger.error("[ProxyForwarder] Failed to store special settings", {
+                      error: persistError,
+                      sessionId: session.sessionId,
+                    });
+                  }
+                }
+
+                if (specialSettings && session.messageContext?.id) {
+                  try {
+                    await updateMessageRequestDetails(session.messageContext.id, {
+                      specialSettings,
+                    });
+                  } catch (persistError) {
+                    logger.error("[ProxyForwarder] Failed to persist special settings", {
+                      error: persistError,
+                      messageRequestId: session.messageContext.id,
+                    });
+                  }
+                }
+
+                logger.info("ProxyForwarder: Thinking signature rectifier applied, retrying", {
+                  providerId: currentProvider.id,
+                  providerName: currentProvider.name,
+                  trigger: rectifierTrigger,
+                  attemptNumber: attemptCount,
+                  willRetryAttemptNumber: attemptCount + 1,
+                });
+
+                // 确保即使 maxAttemptsPerProvider=1 也能完成一次额外重试
+                maxAttemptsPerProvider = Math.max(maxAttemptsPerProvider, attemptCount + 1);
+                continue;
+              }
+            }
           }
 
           // ⭐ 3. 不可重试的客户端输入错误处理（不计入熔断器，不重试，立即返回）

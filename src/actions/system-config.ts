@@ -38,6 +38,7 @@ export async function saveSystemSettings(formData: {
   verboseProviderError?: boolean;
   enableHttp2?: boolean;
   interceptAnthropicWarmupRequests?: boolean;
+  enableThinkingSignatureRectifier?: boolean;
   enableResponseFixer?: boolean;
   responseFixerConfig?: Partial<ResponseFixerConfig>;
 }): Promise<ActionResult<SystemSettings>> {
@@ -61,6 +62,7 @@ export async function saveSystemSettings(formData: {
       verboseProviderError: validated.verboseProviderError,
       enableHttp2: validated.enableHttp2,
       interceptAnthropicWarmupRequests: validated.interceptAnthropicWarmupRequests,
+      enableThinkingSignatureRectifier: validated.enableThinkingSignatureRectifier,
       enableResponseFixer: validated.enableResponseFixer,
       responseFixerConfig: validated.responseFixerConfig,
     });

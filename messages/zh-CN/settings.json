@@ -85,6 +85,8 @@
       "enableHttp2Desc": "启用后，代理请求将优先使用 HTTP/2 协议。如果 HTTP/2 失败，将自动降级到 HTTP/1.1。",
       "interceptAnthropicWarmupRequests": "拦截 Warmup 请求（Anthropic）",
       "interceptAnthropicWarmupRequestsDesc": "开启后，识别到 Claude Code 的 Warmup 探测请求将由 CCH 直接抢答短响应，避免访问上游供应商；该请求会记录在日志中，但不计费、不限流、不计入统计。",
+      "enableThinkingSignatureRectifier": "启用 thinking 签名整流器",
+      "enableThinkingSignatureRectifierDesc": "当 Anthropic 类型供应商返回 thinking 签名不兼容或非法请求等错误时，自动移除不兼容的 thinking 相关块并对同一供应商重试一次（默认开启）。",
       "enableResponseFixer": "启用响应整流",
       "enableResponseFixerDesc": "自动修复上游响应中常见的编码、SSE 与 JSON 格式问题（默认开启）。",
       "responseFixerFixEncoding": "修复编码问题",

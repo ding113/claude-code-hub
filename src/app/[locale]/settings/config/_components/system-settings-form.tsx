@@ -30,6 +30,7 @@ interface SystemSettingsFormProps {
     | "verboseProviderError"
     | "enableHttp2"
     | "interceptAnthropicWarmupRequests"
+    | "enableThinkingSignatureRectifier"
     | "enableResponseFixer"
     | "responseFixerConfig"
   >;
@@ -56,6 +57,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   const [interceptAnthropicWarmupRequests, setInterceptAnthropicWarmupRequests] = useState(
     initialSettings.interceptAnthropicWarmupRequests
   );
+  const [enableThinkingSignatureRectifier, setEnableThinkingSignatureRectifier] = useState(
+    initialSettings.enableThinkingSignatureRectifier
+  );
   const [enableResponseFixer, setEnableResponseFixer] = useState(
     initialSettings.enableResponseFixer
   );
@@ -81,6 +85,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         verboseProviderError,
         enableHttp2,
         interceptAnthropicWarmupRequests,
+        enableThinkingSignatureRectifier,
         enableResponseFixer,
         responseFixerConfig,
       });
@@ -98,6 +103,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setVerboseProviderError(result.data.verboseProviderError);
         setEnableHttp2(result.data.enableHttp2);
         setInterceptAnthropicWarmupRequests(result.data.interceptAnthropicWarmupRequests);
+        setEnableThinkingSignatureRectifier(result.data.enableThinkingSignatureRectifier);
         setEnableResponseFixer(result.data.enableResponseFixer);
         setResponseFixerConfig(result.data.responseFixerConfig);
       }
@@ -223,6 +229,23 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
           id="intercept-anthropic-warmup"
           checked={interceptAnthropicWarmupRequests}
           onCheckedChange={(checked) => setInterceptAnthropicWarmupRequests(checked)}
+          disabled={isPending}
+        />
+      </div>
+
+      <div className="flex items-start justify-between gap-4 rounded-lg border border-dashed border-border px-4 py-3">
+        <div>
+          <Label htmlFor="enable-thinking-signature-rectifier" className="text-sm font-medium">
+            {t("enableThinkingSignatureRectifier")}
+          </Label>
+          <p className="text-xs text-muted-foreground mt-1">
+            {t("enableThinkingSignatureRectifierDesc")}
+          </p>
+        </div>
+        <Switch
+          id="enable-thinking-signature-rectifier"
+          checked={enableThinkingSignatureRectifier}
+          onCheckedChange={(checked) => setEnableThinkingSignatureRectifier(checked)}
           disabled={isPending}
         />
       </div>

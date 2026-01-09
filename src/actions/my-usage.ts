@@ -541,12 +541,12 @@ export async function getMyStatsSummary(
     const settings = await getSystemSettings();
     const currencyCode = settings.currencyDisplay;
 
+    // 日期字符串来自前端的 YYYY-MM-DD（目前使用 toISOString().split("T")[0] 生成），因此按 UTC 解析更一致。
+    // 注意：new Date("YYYY-MM-DDT00:00:00") 会按本地时区解析，可能导致跨时区边界偏移。
     const parsedStart = filters.startDate
-      ? new Date(`${filters.startDate}T00:00:00`).getTime()
+      ? Date.parse(`${filters.startDate}T00:00:00.000Z`)
       : Number.NaN;
-    const parsedEnd = filters.endDate
-      ? new Date(`${filters.endDate}T00:00:00`).getTime()
-      : Number.NaN;
+    const parsedEnd = filters.endDate ? Date.parse(`${filters.endDate}T00:00:00.000Z`) : Number.NaN;
 
     const startTime = Number.isFinite(parsedStart) ? parsedStart : undefined;
     // endTime 使用“次日零点”作为排他上界（created_at < endTime），避免 23:59:59.999 的边界问题

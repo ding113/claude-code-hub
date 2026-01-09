@@ -485,6 +485,12 @@ export const systemSettings = pgTable('system_settings', {
     .notNull()
     .default(false),
 
+  // thinking signature 整流器（默认开启）
+  // 开启后：当 Anthropic 类型供应商出现 thinking 签名不兼容/非法请求等 400 错误时，自动整流并重试一次
+  enableThinkingSignatureRectifier: boolean('enable_thinking_signature_rectifier')
+    .notNull()
+    .default(true),
+
   // 响应整流（默认开启）
   enableResponseFixer: boolean('enable_response_fixer').notNull().default(true),
   responseFixerConfig: jsonb('response_fixer_config')
