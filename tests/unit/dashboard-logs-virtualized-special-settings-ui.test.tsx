@@ -145,7 +145,7 @@ async function waitForText(container: HTMLElement, text: string, timeoutMs = 200
 }
 
 describe("VirtualizedLogsTable - specialSettings display", () => {
-  test("should display Special badge when log.specialSettings exists", async () => {
+  test("should not display specialSettings badge in the logs list row", async () => {
     const { container, unmount } = renderWithIntl(
       <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
     );
@@ -155,7 +155,7 @@ describe("VirtualizedLogsTable - specialSettings display", () => {
     // Wait for initial data to render (avoid assertion stuck in Loading state).
     await waitForText(container, "Loaded 1 records");
 
-    expect(container.textContent).toContain("Special");
+    expect(container.textContent).not.toContain(dashboardMessages.logs.table.specialSettings);
 
     unmount();
   });
