@@ -9,6 +9,7 @@ import {
 } from "@/lib/cache/session-cache";
 import { logger } from "@/lib/logger";
 import { normalizeRequestSequence } from "@/lib/utils/request-sequence";
+import { buildUnifiedSpecialSettings } from "@/lib/utils/special-settings";
 import type { ActiveSessionInfo } from "@/types/session";
 import type { SpecialSetting } from "@/types/special-settings";
 import { summarizeTerminateSessionsBatch } from "./active-sessions-utils";
@@ -588,6 +589,8 @@ export async function getSessionDetails(
     const normalizedSequence = normalizeRequestSequence(requestSequence);
     const effectiveSequence = normalizedSequence ?? (requestCount > 0 ? requestCount : undefined);
 
+    const { findMessageRequestAuditBySessionIdAndSequence } = await import("@/repository/message");
+
     const { findAdjacentRequestSequences } = await import("@/repository/message");
     const adjacent =
       effectiveSequence == null
@@ -618,7 +621,8 @@ export async function getSessionDetails(
       clientReqMeta,
       upstreamReqMeta,
       upstreamResMeta,
-      specialSettings,
+      redisSpecialSettings,
+      requestAudit,
     ] = await Promise.all([
       SessionManager.getSessionRequestBody(sessionId, effectiveSequence),
       SessionManager.getSessionMessages(sessionId, effectiveSequence),
@@ -629,6 +633,9 @@ export async function getSessionDetails(
       SessionManager.getSessionUpstreamRequestMeta(sessionId, effectiveSequence),
       SessionManager.getSessionUpstreamResponseMeta(sessionId, effectiveSequence),
       SessionManager.getSessionSpecialSettings(sessionId, effectiveSequence),
+      effectiveSequence
+        ? findMessageRequestAuditBySessionIdAndSequence(sessionId, effectiveSequence)
+        : Promise.resolve(null),
     ]);
 
     // 兼容：历史/异常数据可能是 JSON 字符串（前端需要根级对象/数组）
@@ -646,6 +653,23 @@ export async function getSessionDetails(
       statusCode: upstreamResMeta?.statusCode ?? null,
     };
 
+    const existingSpecialSettings: SpecialSetting[] | null = (() => {
+      const merged = [
+        ...(Array.isArray(redisSpecialSettings) ? redisSpecialSettings : []),
+        ...(Array.isArray(requestAudit?.specialSettings) ? requestAudit.specialSettings : []),
+      ];
+      return merged.length > 0 ? merged : null;
+    })();
+
+    const unifiedSpecialSettings = buildUnifiedSpecialSettings({
+      existing: existingSpecialSettings,
+      blockedBy: requestAudit?.blockedBy ?? null,
+      blockedReason: requestAudit?.blockedReason ?? null,
+      statusCode: requestAudit?.statusCode ?? null,
+      cacheTtlApplied: requestAudit?.cacheTtlApplied ?? null,
+      context1mApplied: requestAudit?.context1mApplied ?? null,
+    });
+
     return {
       ok: true,
       data: {
@@ -656,7 +680,7 @@ export async function getSessionDetails(
         responseHeaders,
         requestMeta,
         responseMeta,
-        specialSettings,
+        specialSettings: unifiedSpecialSettings,
         sessionStats,
         currentSequence: effectiveSequence ?? null,
         prevSequence: adjacent.prevSequence,

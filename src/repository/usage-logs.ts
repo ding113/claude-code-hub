@@ -3,6 +3,7 @@
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest, providers, users } from "@/drizzle/schema";
+import { buildUnifiedSpecialSettings } from "@/lib/utils/special-settings";
 import type { ProviderChainItem } from "@/types/message";
 import type { SpecialSetting } from "@/types/special-settings";
 import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
@@ -241,6 +242,15 @@ export async function findUsageLogsBatch(
       (row.cacheCreationInputTokens ?? 0) +
       (row.cacheReadInputTokens ?? 0);
 
+    const unifiedSpecialSettings = buildUnifiedSpecialSettings({
+      existing: row.specialSettings as SpecialSetting[] | null,
+      blockedBy: row.blockedBy,
+      blockedReason: row.blockedReason,
+      statusCode: row.statusCode,
+      cacheTtlApplied: row.cacheTtlApplied,
+      context1mApplied: row.context1mApplied,
+    });
+
     return {
       ...row,
       requestSequence: row.requestSequence ?? null,
@@ -251,6 +261,7 @@ export async function findUsageLogsBatch(
       costUsd: row.costUsd?.toString() ?? null,
       providerChain: row.providerChain as ProviderChainItem[] | null,
       endpoint: row.endpoint,
+      specialSettings: unifiedSpecialSettings,
     };
   });
 
@@ -447,6 +458,15 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       (row.cacheCreationInputTokens ?? 0) +
       (row.cacheReadInputTokens ?? 0);
 
+    const unifiedSpecialSettings = buildUnifiedSpecialSettings({
+      existing: row.specialSettings as SpecialSetting[] | null,
+      blockedBy: row.blockedBy,
+      blockedReason: row.blockedReason,
+      statusCode: row.statusCode,
+      cacheTtlApplied: row.cacheTtlApplied,
+      context1mApplied: row.context1mApplied,
+    });
+
     return {
       ...row,
       requestSequence: row.requestSequence ?? null,
@@ -457,6 +477,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       costUsd: row.costUsd?.toString() ?? null,
       providerChain: row.providerChain as ProviderChainItem[] | null,
       endpoint: row.endpoint,
+      specialSettings: unifiedSpecialSettings,
     };
   });
 
