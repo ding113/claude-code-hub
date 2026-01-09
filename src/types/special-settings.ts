@@ -5,7 +5,7 @@
  * 便于在请求记录与请求详情中展示，支持后续扩展更多类型。
  */
 
-export type SpecialSetting = ProviderParameterOverrideSpecialSetting;
+export type SpecialSetting = ProviderParameterOverrideSpecialSetting | ResponseFixerSpecialSetting;
 
 export type SpecialSettingChangeValue = string | number | boolean | null;
 
@@ -23,4 +23,17 @@ export type ProviderParameterOverrideSpecialSetting = {
     after: SpecialSettingChangeValue;
     changed: boolean;
   }>;
+};
+
+export type ResponseFixerSpecialSetting = {
+  type: "response_fixer";
+  scope: "response";
+  hit: boolean;
+  fixersApplied: Array<{
+    fixer: "json" | "sse" | "encoding";
+    applied: boolean;
+    details?: string;
+  }>;
+  totalBytesProcessed: number;
+  processingTimeMs: number;
 };

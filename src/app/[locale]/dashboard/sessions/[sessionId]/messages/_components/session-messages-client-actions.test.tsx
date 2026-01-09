@@ -75,7 +75,21 @@ vi.mock("./request-list-sidebar", () => {
 
 vi.mock("./session-details-tabs", () => {
   return {
-    SessionMessagesDetailsTabs: () => <div data-testid="mock-session-details-tabs" />,
+    SessionMessagesDetailsTabs: (props: {
+      response: string | null;
+      onCopyResponse?: () => void;
+      isResponseCopied?: boolean;
+    }) => {
+      return (
+        <div data-testid="mock-session-details-tabs">
+          {props.response && props.onCopyResponse ? (
+            <button type="button" onClick={props.onCopyResponse}>
+              {props.isResponseCopied ? "actions.copied" : "actions.copyResponse"}
+            </button>
+          ) : null}
+        </div>
+      );
+    },
   };
 });
 

@@ -21,6 +21,7 @@ const messages = {
         responseBody: "Response Body",
         noHeaders: "No data",
         noData: "No Data",
+        storageTip: "Storage Tip",
       },
       codeDisplay: {
         raw: "Raw",
@@ -187,13 +188,13 @@ describe("SessionMessagesDetailsTabs", () => {
       />
     );
 
-    expect(container.textContent).toContain("No Data");
+    expect(container.textContent).toContain("Storage Tip");
 
     const requestHeadersTrigger = container.querySelector(
       "[data-testid='session-tab-trigger-request-headers']"
     ) as HTMLElement;
     click(requestHeadersTrigger);
-    expect(container.textContent).toContain("No data");
+    expect(container.textContent).toContain("Storage Tip");
 
     const specialSettingsTrigger = container.querySelector(
       "[data-testid='session-tab-trigger-special-settings']"

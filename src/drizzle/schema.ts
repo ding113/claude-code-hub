@@ -14,6 +14,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
 import type { SpecialSetting } from '@/types/special-settings';
+import type { ResponseFixerConfig } from '@/types/system-config';
 
 // Enums
 export const dailyResetModeEnum = pgEnum('daily_reset_mode', ['fixed', 'rolling']);
@@ -483,6 +484,18 @@ export const systemSettings = pgTable('system_settings', {
   interceptAnthropicWarmupRequests: boolean('intercept_anthropic_warmup_requests')
     .notNull()
     .default(false),
+
+  // 响应整流（默认开启）
+  enableResponseFixer: boolean('enable_response_fixer').notNull().default(true),
+  responseFixerConfig: jsonb('response_fixer_config')
+    .$type<ResponseFixerConfig>()
+    .default({
+      fixTruncatedJson: true,
+      fixSseFormat: true,
+      fixEncoding: true,
+      maxJsonDepth: 200,
+      maxFixSize: 1024 * 1024,
+    }),
 
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),

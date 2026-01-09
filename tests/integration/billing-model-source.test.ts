@@ -100,6 +100,14 @@ function makeSystemSettings(
     verboseProviderError: false,
     enableHttp2: false,
     interceptAnthropicWarmupRequests: false,
+    enableResponseFixer: true,
+    responseFixerConfig: {
+      fixTruncatedJson: true,
+      fixSseFormat: true,
+      fixEncoding: true,
+      maxJsonDepth: 200,
+      maxFixSize: 1024 * 1024,
+    },
     createdAt: now,
     updatedAt: now,
   };

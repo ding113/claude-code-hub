@@ -148,6 +148,14 @@ function createFallbackSettings(): SystemSettings {
     verboseProviderError: false,
     enableHttp2: false,
     interceptAnthropicWarmupRequests: false,
+    enableResponseFixer: true,
+    responseFixerConfig: {
+      fixTruncatedJson: true,
+      fixSseFormat: true,
+      fixEncoding: true,
+      maxJsonDepth: 200,
+      maxFixSize: 1024 * 1024,
+    },
     createdAt: now,
     updatedAt: now,
   };
@@ -172,6 +180,8 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       verboseProviderError: systemSettings.verboseProviderError,
       enableHttp2: systemSettings.enableHttp2,
       interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
+      enableResponseFixer: systemSettings.enableResponseFixer,
+      responseFixerConfig: systemSettings.responseFixerConfig,
       createdAt: systemSettings.createdAt,
       updatedAt: systemSettings.updatedAt,
     };
@@ -302,6 +312,18 @@ export async function updateSystemSettings(
       updates.interceptAnthropicWarmupRequests = payload.interceptAnthropicWarmupRequests;
     }
 
+    // 响应整流开关（如果提供）
+    if (payload.enableResponseFixer !== undefined) {
+      updates.enableResponseFixer = payload.enableResponseFixer;
+    }
+
+    if (payload.responseFixerConfig !== undefined) {
+      updates.responseFixerConfig = {
+        ...current.responseFixerConfig,
+        ...payload.responseFixerConfig,
+      };
+    }
+
     const [updated] = await db
       .update(systemSettings)
       .set(updates)
@@ -320,6 +342,8 @@ export async function updateSystemSettings(
         verboseProviderError: systemSettings.verboseProviderError,
         enableHttp2: systemSettings.enableHttp2,
         interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
+        enableResponseFixer: systemSettings.enableResponseFixer,
+        responseFixerConfig: systemSettings.responseFixerConfig,
         createdAt: systemSettings.createdAt,
         updatedAt: systemSettings.updatedAt,
       });

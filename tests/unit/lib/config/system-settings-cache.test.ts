@@ -38,6 +38,14 @@ function createSettings(overrides: Partial<SystemSettings> = {}): SystemSettings
     verboseProviderError: false,
     enableHttp2: false,
     interceptAnthropicWarmupRequests: false,
+    enableResponseFixer: true,
+    responseFixerConfig: {
+      fixTruncatedJson: true,
+      fixSseFormat: true,
+      fixEncoding: true,
+      maxJsonDepth: 200,
+      maxFixSize: 1024 * 1024,
+    },
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     updatedAt: new Date("2026-01-01T00:00:00.000Z"),
   };

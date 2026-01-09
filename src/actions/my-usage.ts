@@ -395,12 +395,21 @@ export async function getMyUsageLogs(
     const pageSize = Math.min(rawPageSize, 100);
     const page = filters.page && filters.page > 0 ? filters.page : 1;
 
+    const parsedStart = filters.startDate
+      ? new Date(`${filters.startDate}T00:00:00`).getTime()
+      : Number.NaN;
+    const parsedEnd = filters.endDate
+      ? new Date(`${filters.endDate}T00:00:00`).getTime()
+      : Number.NaN;
+
+    const startTime = Number.isFinite(parsedStart) ? parsedStart : undefined;
+    // endTime 使用“次日零点”作为排他上界（created_at < endTime），避免 23:59:59.999 的边界问题
+    const endTime = Number.isFinite(parsedEnd) ? parsedEnd + 24 * 60 * 60 * 1000 : undefined;
+
     const usageFilters: UsageLogFilters = {
       keyId: session.key.id,
-      startTime: filters.startDate
-        ? new Date(`${filters.startDate}T00:00:00`).getTime()
-        : undefined,
-      endTime: filters.endDate ? new Date(`${filters.endDate}T23:59:59.999`).getTime() : undefined,
+      startTime,
+      endTime,
       model: filters.model,
       statusCode: filters.statusCode,
       excludeStatusCode200: filters.excludeStatusCode200,
@@ -532,12 +541,16 @@ export async function getMyStatsSummary(
     const settings = await getSystemSettings();
     const currencyCode = settings.currencyDisplay;
 
-    const startTime = filters.startDate
+    const parsedStart = filters.startDate
       ? new Date(`${filters.startDate}T00:00:00`).getTime()
-      : undefined;
-    const endTime = filters.endDate
-      ? new Date(`${filters.endDate}T23:59:59.999`).getTime()
-      : undefined;
+      : Number.NaN;
+    const parsedEnd = filters.endDate
+      ? new Date(`${filters.endDate}T00:00:00`).getTime()
+      : Number.NaN;
+
+    const startTime = Number.isFinite(parsedStart) ? parsedStart : undefined;
+    // endTime 使用“次日零点”作为排他上界（created_at < endTime），避免 23:59:59.999 的边界问题
+    const endTime = Number.isFinite(parsedEnd) ? parsedEnd + 24 * 60 * 60 * 1000 : undefined;
 
     // Get aggregated stats using existing repository function
     const stats = await findUsageLogsStats({

@@ -3,7 +3,7 @@ import type { Key } from "@/types/key";
 import type { MessageRequest } from "@/types/message";
 import type { ModelPrice } from "@/types/model-price";
 import type { Provider } from "@/types/provider";
-import type { SystemSettings } from "@/types/system-config";
+import type { ResponseFixerConfig, SystemSettings } from "@/types/system-config";
 import type { User } from "@/types/user";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -148,6 +148,14 @@ export function toModelPrice(dbPrice: any): ModelPrice {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function toSystemSettings(dbSettings: any): SystemSettings {
+  const defaultResponseFixerConfig: ResponseFixerConfig = {
+    fixTruncatedJson: true,
+    fixSseFormat: true,
+    fixEncoding: true,
+    maxJsonDepth: 200,
+    maxFixSize: 1024 * 1024,
+  };
+
   return {
     id: dbSettings?.id ?? 0,
     siteTitle: dbSettings?.siteTitle ?? "Claude Code Hub",
@@ -162,6 +170,11 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     verboseProviderError: dbSettings?.verboseProviderError ?? false,
     enableHttp2: dbSettings?.enableHttp2 ?? false,
     interceptAnthropicWarmupRequests: dbSettings?.interceptAnthropicWarmupRequests ?? false,
+    enableResponseFixer: dbSettings?.enableResponseFixer ?? true,
+    responseFixerConfig: {
+      ...defaultResponseFixerConfig,
+      ...(dbSettings?.responseFixerConfig ?? {}),
+    },
     createdAt: dbSettings?.createdAt ? new Date(dbSettings.createdAt) : new Date(),
     updatedAt: dbSettings?.updatedAt ? new Date(dbSettings.updatedAt) : new Date(),
   };

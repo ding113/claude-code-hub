@@ -24,9 +24,20 @@ let cachedSettings: SystemSettings | null = null;
 let cachedAt: number = 0;
 
 /** Default settings used when cache fetch fails */
-const DEFAULT_SETTINGS: Pick<SystemSettings, "enableHttp2" | "interceptAnthropicWarmupRequests"> = {
+const DEFAULT_SETTINGS: Pick<
+  SystemSettings,
+  "enableHttp2" | "interceptAnthropicWarmupRequests" | "enableResponseFixer" | "responseFixerConfig"
+> = {
   enableHttp2: false,
   interceptAnthropicWarmupRequests: false,
+  enableResponseFixer: true,
+  responseFixerConfig: {
+    fixTruncatedJson: true,
+    fixSseFormat: true,
+    fixEncoding: true,
+    maxJsonDepth: 200,
+    maxFixSize: 1024 * 1024,
+  },
 };
 
 /**
@@ -86,6 +97,8 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       enableClientVersionCheck: false,
       enableHttp2: DEFAULT_SETTINGS.enableHttp2,
       interceptAnthropicWarmupRequests: DEFAULT_SETTINGS.interceptAnthropicWarmupRequests,
+      enableResponseFixer: DEFAULT_SETTINGS.enableResponseFixer,
+      responseFixerConfig: DEFAULT_SETTINGS.responseFixerConfig,
       createdAt: new Date(),
       updatedAt: new Date(),
     } satisfies SystemSettings;
