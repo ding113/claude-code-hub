@@ -144,4 +144,28 @@ describe("buildUnifiedSpecialSettings", () => {
     expect(settings).not.toBeNull();
     expect(settings?.filter((s) => s.type === "guard_intercept").length).toBe(1);
   });
+
+  test("guard_intercept 去重时不应受 reason 差异影响", () => {
+    const existing: SpecialSetting[] = [
+      {
+        type: "guard_intercept",
+        scope: "guard",
+        hit: true,
+        guard: "warmup",
+        action: "intercept_response",
+        statusCode: 200,
+        reason: JSON.stringify({ reason: "a" }),
+      },
+    ];
+
+    const settings = buildUnifiedSpecialSettings({
+      existing,
+      blockedBy: "warmup",
+      blockedReason: JSON.stringify({ reason: "b" }),
+      statusCode: 200,
+    });
+
+    expect(settings).not.toBeNull();
+    expect(settings?.filter((s) => s.type === "guard_intercept").length).toBe(1);
+  });
 });

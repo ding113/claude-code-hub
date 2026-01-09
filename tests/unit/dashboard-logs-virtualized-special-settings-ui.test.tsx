@@ -13,8 +13,8 @@ import { describe, expect, test, vi } from "vitest";
 import { VirtualizedLogsTable } from "@/app/[locale]/dashboard/logs/_components/virtualized-logs-table";
 import type { UsageLogRow } from "@/repository/usage-logs";
 
-// 说明：虚拟列表依赖元素测量与 ResizeObserver；在 happy-dom 下行可能不渲染。
-// 这里把 useVirtualizer 固定为“只渲染首行”，确保 UI 断言稳定。
+// Note: The virtualized table relies on element measurements and ResizeObserver; happy-dom may not render rows.
+// Stub useVirtualizer to "render only the first row" to keep UI assertions stable.
 vi.mock("@/hooks/use-virtualizer", () => ({
   useVirtualizer: () => ({
     getVirtualItems: () => [{ index: 0, size: 52, start: 0 }],
@@ -78,7 +78,7 @@ vi.mock("@/actions/usage-logs", () => ({
   })),
 }));
 
-// 测试环境不加载 next-intl/navigation -> next/navigation 的真实实现（避免 Next.js 运行时依赖）
+// Avoid importing the real next-intl navigation implementation in tests (it depends on Next.js runtime).
 vi.mock("@/i18n/routing", () => ({
   Link: ({ children }: { children: ReactNode }) => children,
 }));
@@ -141,18 +141,18 @@ async function waitForText(container: HTMLElement, text: string, timeoutMs = 200
       await new Promise((resolve) => setTimeout(resolve, 20));
     });
   }
-  throw new Error(`等待文本超时: ${text}`);
+  throw new Error(`Timeout waiting for text: ${text}`);
 }
 
-describe("VirtualizedLogsTable - specialSettings 展示", () => {
-  test("当 log.specialSettings 存在时应显示 Special 标记", async () => {
+describe("VirtualizedLogsTable - specialSettings display", () => {
+  test("should display Special badge when log.specialSettings exists", async () => {
     const { container, unmount } = renderWithIntl(
       <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
     );
 
     await flushMicrotasks();
 
-    // 等待首屏数据渲染完成（避免断言停留在 Loading 状态）
+    // Wait for initial data to render (avoid assertion stuck in Loading state).
     await waitForText(container, "Loaded 1 records");
 
     expect(container.textContent).toContain("Special");

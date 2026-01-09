@@ -589,9 +589,8 @@ export async function getSessionDetails(
     const normalizedSequence = normalizeRequestSequence(requestSequence);
     const effectiveSequence = normalizedSequence ?? (requestCount > 0 ? requestCount : undefined);
 
-    const { findMessageRequestAuditBySessionIdAndSequence } = await import("@/repository/message");
-
-    const { findAdjacentRequestSequences } = await import("@/repository/message");
+    const { findAdjacentRequestSequences, findMessageRequestAuditBySessionIdAndSequence } =
+      await import("@/repository/message");
     const adjacent =
       effectiveSequence == null
         ? { prevSequence: null, nextSequence: null }
@@ -653,13 +652,13 @@ export async function getSessionDetails(
       statusCode: upstreamResMeta?.statusCode ?? null,
     };
 
-    const existingSpecialSettings: SpecialSetting[] | null = (() => {
-      const merged = [
-        ...(Array.isArray(redisSpecialSettings) ? redisSpecialSettings : []),
-        ...(Array.isArray(requestAudit?.specialSettings) ? requestAudit.specialSettings : []),
-      ];
-      return merged.length > 0 ? merged : null;
-    })();
+    const mergedSpecialSettings: SpecialSetting[] = [
+      ...(Array.isArray(redisSpecialSettings) ? (redisSpecialSettings as SpecialSetting[]) : []),
+      ...(Array.isArray(requestAudit?.specialSettings)
+        ? (requestAudit.specialSettings as SpecialSetting[])
+        : []),
+    ];
+    const existingSpecialSettings = mergedSpecialSettings.length > 0 ? mergedSpecialSettings : null;
 
     const unifiedSpecialSettings = buildUnifiedSpecialSettings({
       existing: existingSpecialSettings,

@@ -31,34 +31,30 @@ type BuildUnifiedSpecialSettingsParams = {
 function buildSettingKey(setting: SpecialSetting): string {
   switch (setting.type) {
     case "provider_parameter_override":
-      return [
+      return JSON.stringify([
         setting.type,
-        setting.providerId ?? "null",
-        setting.providerType ?? "null",
-        setting.hit ? "1" : "0",
-        setting.changed ? "1" : "0",
-      ].join(":");
+        setting.providerId ?? null,
+        setting.providerType ?? null,
+        setting.hit,
+        setting.changed,
+        [...setting.changes]
+          .map((change) => [change.path, change.before, change.after, change.changed] as const)
+          .sort((a, b) => a[0].localeCompare(b[0])),
+      ]);
     case "response_fixer":
-      return [
+      return JSON.stringify([
         setting.type,
-        setting.hit ? "1" : "0",
-        setting.fixersApplied
-          .map((f) => `${f.fixer}=${f.applied ? "1" : "0"}`)
-          .sort()
-          .join(","),
-      ].join(":");
+        setting.hit,
+        [...setting.fixersApplied]
+          .map((fixer) => [fixer.fixer, fixer.applied] as const)
+          .sort((a, b) => a[0].localeCompare(b[0])),
+      ]);
     case "guard_intercept":
-      return [
-        setting.type,
-        setting.guard,
-        setting.action,
-        setting.statusCode ?? "null",
-        setting.reason ?? "null",
-      ].join(":");
+      return JSON.stringify([setting.type, setting.guard, setting.action, setting.statusCode]);
     case "anthropic_cache_ttl_header_override":
-      return [setting.type, setting.ttl].join(":");
+      return JSON.stringify([setting.type, setting.ttl]);
     case "anthropic_context_1m_header_override":
-      return [setting.type, setting.flag].join(":");
+      return JSON.stringify([setting.type, setting.header, setting.flag]);
     default: {
       // 兜底：保证即使未来扩展类型也不会导致运行时崩溃
       const _exhaustive: never = setting;
@@ -103,7 +99,7 @@ export function buildUnifiedSpecialSettings(
     });
   }
 
-  if (params.context1mApplied) {
+  if (params.context1mApplied === true) {
     derived.push({
       type: "anthropic_context_1m_header_override",
       scope: "request_header",

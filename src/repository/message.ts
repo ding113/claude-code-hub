@@ -311,7 +311,9 @@ export async function findMessageRequestAuditBySessionIdAndSequence(
     blockedReason: row.blockedReason,
     cacheTtlApplied: row.cacheTtlApplied,
     context1mApplied: row.context1mApplied,
-    specialSettings: row.specialSettings as SpecialSetting[] | null,
+    specialSettings: Array.isArray(row.specialSettings)
+      ? (row.specialSettings as SpecialSetting[])
+      : null,
   };
 }
 

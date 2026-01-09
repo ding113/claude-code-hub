@@ -242,8 +242,12 @@ export async function findUsageLogsBatch(
       (row.cacheCreationInputTokens ?? 0) +
       (row.cacheReadInputTokens ?? 0);
 
+    const existingSpecialSettings = Array.isArray(row.specialSettings)
+      ? (row.specialSettings as SpecialSetting[])
+      : null;
+
     const unifiedSpecialSettings = buildUnifiedSpecialSettings({
-      existing: row.specialSettings as SpecialSetting[] | null,
+      existing: existingSpecialSettings,
       blockedBy: row.blockedBy,
       blockedReason: row.blockedReason,
       statusCode: row.statusCode,
@@ -458,8 +462,12 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       (row.cacheCreationInputTokens ?? 0) +
       (row.cacheReadInputTokens ?? 0);
 
+    const existingSpecialSettings = Array.isArray(row.specialSettings)
+      ? (row.specialSettings as SpecialSetting[])
+      : null;
+
     const unifiedSpecialSettings = buildUnifiedSpecialSettings({
-      existing: row.specialSettings as SpecialSetting[] | null,
+      existing: existingSpecialSettings,
       blockedBy: row.blockedBy,
       blockedReason: row.blockedReason,
       statusCode: row.statusCode,
