@@ -578,6 +578,7 @@ export function VirtualizedLogsTable({
                       messagesCount={log.messagesCount}
                       endpoint={log.endpoint}
                       billingModelSource={billingModelSource}
+                      specialSettings={log.specialSettings}
                       inputTokens={log.inputTokens}
                       outputTokens={log.outputTokens}
                       cacheCreationInputTokens={log.cacheCreationInputTokens}
