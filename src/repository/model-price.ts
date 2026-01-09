@@ -239,11 +239,22 @@ export async function upsertModelPrice(
   modelName: string,
   priceData: ModelPriceData
 ): Promise<ModelPrice> {
-  // 先删除该模型的所有旧记录
-  await db.delete(modelPrices).where(eq(modelPrices.modelName, modelName));
+  // 使用事务确保删除和插入的原子性
+  return await db.transaction(async (tx) => {
+    // 先删除该模型的所有旧记录
+    await tx.delete(modelPrices).where(eq(modelPrices.modelName, modelName));
 
-  // 插入新记录，source 固定为 'manual'
-  return createModelPrice(modelName, priceData, "manual");
+    // 插入新记录，source 固定为 'manual'
+    const [price] = await tx
+      .insert(modelPrices)
+      .values({
+        modelName: modelName,
+        priceData: priceData,
+        source: "manual",
+      })
+      .returning();
+    return toModelPrice(price);
+  });
 }
 
 /**
