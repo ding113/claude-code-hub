@@ -1,5 +1,3 @@
-"use strict";
-
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ModelPrice, ModelPriceData } from "@/types/model-price";
 
@@ -105,12 +103,15 @@ describe("Model Price Actions", () => {
 
       expect(result.ok).toBe(true);
       expect(result.data?.modelName).toBe("gpt-5.2-codex");
-      expect(upsertModelPriceMock).toHaveBeenCalledWith("gpt-5.2-codex", expect.objectContaining({
-        mode: "chat",
-        litellm_provider: "openai",
-        input_cost_per_token: 0.000015,
-        output_cost_per_token: 0.00006,
-      }));
+      expect(upsertModelPriceMock).toHaveBeenCalledWith(
+        "gpt-5.2-codex",
+        expect.objectContaining({
+          mode: "chat",
+          litellm_provider: "openai",
+          input_cost_per_token: 0.000015,
+          output_cost_per_token: 0.00006,
+        })
+      );
     });
 
     it("should reject empty model name", async () => {
@@ -155,10 +156,13 @@ describe("Model Price Actions", () => {
       });
 
       expect(result.ok).toBe(true);
-      expect(upsertModelPriceMock).toHaveBeenCalledWith("dall-e-3", expect.objectContaining({
-        mode: "image_generation",
-        output_cost_per_image: 0.04,
-      }));
+      expect(upsertModelPriceMock).toHaveBeenCalledWith(
+        "dall-e-3",
+        expect.objectContaining({
+          mode: "image_generation",
+          output_cost_per_image: 0.04,
+        })
+      );
     });
 
     it("should handle repository errors gracefully", async () => {
@@ -220,9 +224,11 @@ describe("Model Price Actions", () => {
   describe("checkLiteLLMSyncConflicts", () => {
     it("should return no conflicts when no manual prices exist", async () => {
       findAllManualPricesMock.mockResolvedValue(new Map());
-      getPriceTableJsonMock.mockResolvedValue(JSON.stringify({
-        "claude-3-opus": { mode: "chat", input_cost_per_token: 0.000015 },
-      }));
+      getPriceTableJsonMock.mockResolvedValue(
+        JSON.stringify({
+          "claude-3-opus": { mode: "chat", input_cost_per_token: 0.000015 },
+        })
+      );
 
       const { checkLiteLLMSyncConflicts } = await import("@/actions/model-prices");
       const result = await checkLiteLLMSyncConflicts();
@@ -239,17 +245,17 @@ describe("Model Price Actions", () => {
         output_cost_per_token: 0.00002,
       });
 
-      findAllManualPricesMock.mockResolvedValue(new Map([
-        ["claude-3-opus", manualPrice],
-      ]));
+      findAllManualPricesMock.mockResolvedValue(new Map([["claude-3-opus", manualPrice]]));
 
-      getPriceTableJsonMock.mockResolvedValue(JSON.stringify({
-        "claude-3-opus": {
-          mode: "chat",
-          input_cost_per_token: 0.000015,
-          output_cost_per_token: 0.00006,
-        },
-      }));
+      getPriceTableJsonMock.mockResolvedValue(
+        JSON.stringify({
+          "claude-3-opus": {
+            mode: "chat",
+            input_cost_per_token: 0.000015,
+            output_cost_per_token: 0.00006,
+          },
+        })
+      );
 
       const { checkLiteLLMSyncConflicts } = await import("@/actions/model-prices");
       const result = await checkLiteLLMSyncConflicts();
@@ -266,13 +272,13 @@ describe("Model Price Actions", () => {
         input_cost_per_token: 0.00001,
       });
 
-      findAllManualPricesMock.mockResolvedValue(new Map([
-        ["custom-model", manualPrice],
-      ]));
+      findAllManualPricesMock.mockResolvedValue(new Map([["custom-model", manualPrice]]));
 
-      getPriceTableJsonMock.mockResolvedValue(JSON.stringify({
-        "claude-3-opus": { mode: "chat", input_cost_per_token: 0.000015 },
-      }));
+      getPriceTableJsonMock.mockResolvedValue(
+        JSON.stringify({
+          "claude-3-opus": { mode: "chat", input_cost_per_token: 0.000015 },
+        })
+      );
 
       const { checkLiteLLMSyncConflicts } = await import("@/actions/model-prices");
       const result = await checkLiteLLMSyncConflicts();
@@ -322,18 +328,18 @@ describe("Model Price Actions", () => {
         input_cost_per_token: 0.00001,
       });
 
-      findAllManualPricesMock.mockResolvedValue(new Map([
-        ["custom-model", manualPrice],
-      ]));
+      findAllManualPricesMock.mockResolvedValue(new Map([["custom-model", manualPrice]]));
       findLatestPriceByModelMock.mockResolvedValue(manualPrice);
 
       const { processPriceTableInternal } = await import("@/actions/model-prices");
-      const result = await processPriceTableInternal(JSON.stringify({
-        "custom-model": {
-          mode: "chat",
-          input_cost_per_token: 0.000015,
-        },
-      }));
+      const result = await processPriceTableInternal(
+        JSON.stringify({
+          "custom-model": {
+            mode: "chat",
+            input_cost_per_token: 0.000015,
+          },
+        })
+      );
 
       expect(result.ok).toBe(true);
       expect(result.data?.skippedConflicts).toContain("custom-model");
@@ -347,15 +353,19 @@ describe("Model Price Actions", () => {
         input_cost_per_token: 0.00001,
       });
 
-      findAllManualPricesMock.mockResolvedValue(new Map([
-        ["custom-model", manualPrice],
-      ]));
+      findAllManualPricesMock.mockResolvedValue(new Map([["custom-model", manualPrice]]));
       findLatestPriceByModelMock.mockResolvedValue(manualPrice);
       deleteModelPriceByNameMock.mockResolvedValue(undefined);
-      createModelPriceMock.mockResolvedValue(makeMockPrice("custom-model", {
-        mode: "chat",
-        input_cost_per_token: 0.000015,
-      }, "litellm"));
+      createModelPriceMock.mockResolvedValue(
+        makeMockPrice(
+          "custom-model",
+          {
+            mode: "chat",
+            input_cost_per_token: 0.000015,
+          },
+          "litellm"
+        )
+      );
 
       const { processPriceTableInternal } = await import("@/actions/model-prices");
       const result = await processPriceTableInternal(
@@ -377,25 +387,29 @@ describe("Model Price Actions", () => {
     it("should add new models with litellm source", async () => {
       findAllManualPricesMock.mockResolvedValue(new Map());
       findLatestPriceByModelMock.mockResolvedValue(null);
-      createModelPriceMock.mockResolvedValue(makeMockPrice("new-model", {
-        mode: "chat",
-      }, "litellm"));
+      createModelPriceMock.mockResolvedValue(
+        makeMockPrice(
+          "new-model",
+          {
+            mode: "chat",
+          },
+          "litellm"
+        )
+      );
 
       const { processPriceTableInternal } = await import("@/actions/model-prices");
-      const result = await processPriceTableInternal(JSON.stringify({
-        "new-model": {
-          mode: "chat",
-          input_cost_per_token: 0.000001,
-        },
-      }));
+      const result = await processPriceTableInternal(
+        JSON.stringify({
+          "new-model": {
+            mode: "chat",
+            input_cost_per_token: 0.000001,
+          },
+        })
+      );
 
       expect(result.ok).toBe(true);
       expect(result.data?.added).toContain("new-model");
-      expect(createModelPriceMock).toHaveBeenCalledWith(
-        "new-model",
-        expect.any(Object),
-        "litellm"
-      );
+      expect(createModelPriceMock).toHaveBeenCalledWith("new-model", expect.any(Object), "litellm");
     });
 
     it("should skip metadata fields like sample_spec", async () => {
@@ -403,10 +417,12 @@ describe("Model Price Actions", () => {
       findLatestPriceByModelMock.mockResolvedValue(null);
 
       const { processPriceTableInternal } = await import("@/actions/model-prices");
-      const result = await processPriceTableInternal(JSON.stringify({
-        "sample_spec": { "description": "This is metadata" },
-        "real-model": { mode: "chat", input_cost_per_token: 0.000001 },
-      }));
+      const result = await processPriceTableInternal(
+        JSON.stringify({
+          sample_spec: { description: "This is metadata" },
+          "real-model": { mode: "chat", input_cost_per_token: 0.000001 },
+        })
+      );
 
       expect(result.ok).toBe(true);
       expect(result.data?.total).toBe(1); // Only real-model
@@ -418,10 +434,12 @@ describe("Model Price Actions", () => {
       findLatestPriceByModelMock.mockResolvedValue(null);
 
       const { processPriceTableInternal } = await import("@/actions/model-prices");
-      const result = await processPriceTableInternal(JSON.stringify({
-        "invalid-model": { input_cost_per_token: 0.000001 }, // No mode
-        "valid-model": { mode: "chat", input_cost_per_token: 0.000001 },
-      }));
+      const result = await processPriceTableInternal(
+        JSON.stringify({
+          "invalid-model": { input_cost_per_token: 0.000001 }, // No mode
+          "valid-model": { mode: "chat", input_cost_per_token: 0.000001 },
+        })
+      );
 
       expect(result.ok).toBe(true);
       expect(result.data?.failed).toContain("invalid-model");

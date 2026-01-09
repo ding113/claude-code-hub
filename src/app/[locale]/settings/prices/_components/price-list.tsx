@@ -71,17 +71,6 @@ export function PriceList({
   // 计算总页数
   const totalPages = Math.ceil(total / pageSize);
 
-  // 监听价格数据变化事件（由其他组件触发）
-  useEffect(() => {
-    const handlePriceUpdate = () => {
-      fetchPrices(page, pageSize, debouncedSearchTerm);
-    };
-
-    window.addEventListener("price-data-updated", handlePriceUpdate);
-    return () => window.removeEventListener("price-data-updated", handlePriceUpdate);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pageSize, debouncedSearchTerm]);
-
   // 从 URL 搜索参数中读取初始状态（仅在挂载时执行一次）
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -139,6 +128,16 @@ export function PriceList({
     },
     []
   );
+
+  // 监听价格数据变化事件（由其他组件触发）
+  useEffect(() => {
+    const handlePriceUpdate = () => {
+      fetchPrices(page, pageSize, debouncedSearchTerm);
+    };
+
+    window.addEventListener("price-data-updated", handlePriceUpdate);
+    return () => window.removeEventListener("price-data-updated", handlePriceUpdate);
+  }, [page, pageSize, debouncedSearchTerm, fetchPrices]);
 
   // 当防抖后的搜索词变化时，触发搜索（重置到第一页）
   useEffect(() => {

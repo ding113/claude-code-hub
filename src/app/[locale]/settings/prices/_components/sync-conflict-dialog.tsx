@@ -15,11 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Table,
   TableBody,
@@ -214,12 +210,9 @@ export function SyncConflictDialog({
   }, [filteredConflicts, page]);
 
   // 全选/取消全选（仅当前页）
-  const allCurrentPageSelected = paginatedConflicts.every((c) =>
-    selectedModels.has(c.modelName)
-  );
+  const allCurrentPageSelected = paginatedConflicts.every((c) => selectedModels.has(c.modelName));
   const someCurrentPageSelected =
-    paginatedConflicts.some((c) => selectedModels.has(c.modelName)) &&
-    !allCurrentPageSelected;
+    paginatedConflicts.some((c) => selectedModels.has(c.modelName)) && !allCurrentPageSelected;
 
   const handleSelectAll = (checked: boolean) => {
     const newSelected = new Set(selectedModels);
@@ -314,9 +307,7 @@ export function SyncConflictDialog({
                           }
                         />
                       </TableCell>
-                      <TableCell className="font-mono text-sm">
-                        {conflict.modelName}
-                      </TableCell>
+                      <TableCell className="font-mono text-sm">{conflict.modelName}</TableCell>
                       <TableCell className="text-sm">
                         <Badge variant="outline" className="font-mono">
                           {formatPrice(conflict.manualPrice.input_cost_per_token)}

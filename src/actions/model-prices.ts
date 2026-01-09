@@ -19,7 +19,6 @@ import {
 import type {
   ModelPrice,
   ModelPriceData,
-  ModelPriceSource,
   PriceTableJson,
   PriceUpdateResult,
   SyncConflict,
@@ -408,6 +407,26 @@ export async function upsertSingleModelPrice(
     // 验证输入
     if (!input.modelName?.trim()) {
       return { ok: false, error: "模型名称不能为空" };
+    }
+
+    // 验证价格非负
+    if (
+      input.inputCostPerToken !== undefined &&
+      (input.inputCostPerToken < 0 || !Number.isFinite(input.inputCostPerToken))
+    ) {
+      return { ok: false, error: "输入价格必须为非负数" };
+    }
+    if (
+      input.outputCostPerToken !== undefined &&
+      (input.outputCostPerToken < 0 || !Number.isFinite(input.outputCostPerToken))
+    ) {
+      return { ok: false, error: "输出价格必须为非负数" };
+    }
+    if (
+      input.outputCostPerImage !== undefined &&
+      (input.outputCostPerImage < 0 || !Number.isFinite(input.outputCostPerImage))
+    ) {
+      return { ok: false, error: "图片价格必须为非负数" };
     }
 
     // 构建价格数据
