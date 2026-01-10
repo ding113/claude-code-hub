@@ -14,7 +14,7 @@ type User struct {
 	ID          int      `bun:"id,pk,autoincrement" json:"id"`
 	Name        string   `bun:"name,notnull" json:"name"`
 	Description *string  `bun:"description" json:"description"`
-	Role        string   `bun:"role,notnull,default:'user'" json:"role"` // admin, user
+	Role        string   `bun:"role,default:'user'" json:"role"` // admin, user
 	Tags        []string `bun:"tags,type:jsonb" json:"tags"`
 
 	// 供应商组

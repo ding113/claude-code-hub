@@ -14,7 +14,6 @@ import (
 	"github.com/ding113/claude-code-hub/internal/pkg/logger"
 	"github.com/ding113/claude-code-hub/internal/pkg/validator"
 	"github.com/gin-gonic/gin"
-	"github.com/redis/go-redis/v9"
 	"github.com/uptrace/bun"
 )
 
@@ -96,7 +95,7 @@ func main() {
 }
 
 // setupRouter 设置路由
-func setupRouter(db *bun.DB, rdb *redis.Client) *gin.Engine {
+func setupRouter(db *bun.DB, rdb *database.RedisClient) *gin.Engine {
 	router := gin.New()
 
 	// 添加中间件
@@ -164,7 +163,7 @@ func requestLogger() gin.HandlerFunc {
 }
 
 // healthCheck 健康检查处理器
-func healthCheck(db *bun.DB, rdb *redis.Client) gin.HandlerFunc {
+func healthCheck(db *bun.DB, rdb *database.RedisClient) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
 
@@ -179,20 +178,24 @@ func healthCheck(db *bun.DB, rdb *redis.Client) gin.HandlerFunc {
 		}
 
 		// 检查 Redis 连接
-		if err := rdb.Ping(ctx).Err(); err != nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"status":   "unhealthy",
-				"redis":    "disconnected",
-				"database": "connected",
-				"error":    err.Error(),
-			})
-			return
+		redisStatus := "disabled"
+		if rdb != nil {
+			if err := rdb.Ping(ctx).Err(); err != nil {
+				c.JSON(http.StatusServiceUnavailable, gin.H{
+					"status":   "unhealthy",
+					"redis":    "disconnected",
+					"database": "connected",
+					"error":    err.Error(),
+				})
+				return
+			}
+			redisStatus = "connected"
 		}
 
 		c.JSON(http.StatusOK, gin.H{
 			"status":   "healthy",
 			"database": "connected",
-			"redis":    "connected",
+			"redis":    redisStatus,
 		})
 	}
 }

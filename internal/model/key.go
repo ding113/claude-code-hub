@@ -39,7 +39,7 @@ type Key struct {
 	// 权限
 	CanLoginWebUi bool `bun:"can_login_web_ui,default:false" json:"canLoginWebUi"`
 
-	IsEnabled bool       `bun:"is_enabled,notnull,default:true" json:"isEnabled"`
+	IsEnabled bool       `bun:"is_enabled,default:true" json:"isEnabled"`
 	ExpiresAt *time.Time `bun:"expires_at" json:"expiresAt"`
 
 	CreatedAt time.Time  `bun:"created_at,notnull,default:current_timestamp" json:"createdAt"`
