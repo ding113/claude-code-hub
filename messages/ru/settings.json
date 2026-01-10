@@ -534,8 +534,32 @@
       "description": "Управление ценами AI моделей"
     },
     "searchPlaceholder": "Поиск по названию модели...",
+    "filters": {
+      "all": "Все",
+      "local": "Локальные",
+      "anthropic": "Anthropic",
+      "openai": "OpenAI",
+      "vertex": "Vertex"
+    },
+    "badges": {
+      "local": "Локальная"
+    },
+    "capabilities": {
+      "assistantPrefill": "Предзаполнение ассистента",
+      "computerUse": "Использование компьютера",
+      "functionCalling": "Вызов функций",
+      "pdfInput": "Ввод PDF",
+      "promptCaching": "Кэширование промпта",
+      "reasoning": "Рассуждение",
+      "responseSchema": "Схема ответа",
+      "toolChoice": "Выбор инструментов",
+      "vision": "Зрение",
+      "statusSupported": "Поддерживается",
+      "statusUnsupported": "Не поддерживается",
+      "tooltip": "{label}: {status}"
+    },
     "sync": {
-      "button": "Синхронизировать цены LiteLLM",
+      "button": "Синхронизировать облачный прайс-лист",
       "syncing": "Синхронизация...",
       "checking": "Проверка конфликтов...",
       "successWithChanges": "Обновление прайс-листа: добавлено {added}, обновлено {updated}, без изменений {unchanged}",
@@ -545,6 +569,7 @@
       "failedNoResult": "Прайс-лист обновлен но результат не возвращен",
       "noModels": "Цены моделей не найдены",
       "partialFailure": "Частичное обновление выполнено, но {failed} моделей не удалось обновить",
+      "failedModels": "Не удалось обновить модели: {models}",
       "skippedConflicts": "Пропущено {count} ручных моделей"
     },
     "conflict": {
@@ -580,8 +605,8 @@
     },
     "table": {
       "modelName": "Название модели",
-      "type": "Тип",
       "provider": "Поставщик",
+      "capabilities": "Возможности",
       "inputPrice": "Цена ввода ($/M)",
       "outputPrice": "Цена вывода ($/M)",
       "updatedAt": "Обновлено",
@@ -599,6 +624,7 @@
       "showing": "Показано {from}-{to} из {total}",
       "previous": "Назад",
       "next": "Вперёд",
+      "perPageLabel": "На странице",
       "perPage": "{size} на странице"
     },
     "stats": {
@@ -608,22 +634,22 @@
     },
     "dialog": {
       "title": "Обновить прайс-лист",
-      "description": "Выберите и загрузите JSON файл с данными о ценах моделей",
-      "selectFile": "Нажмите для выбора JSON или перетащите сюда",
+      "description": "Выберите и загрузите JSON или TOML файл с данными о ценах моделей",
+      "selectFile": "Нажмите для выбора JSON/TOML или перетащите сюда",
       "fileSizeLimit": "Размер файла не может превышать 10MB",
       "fileSizeLimitSmall": "Размер файла не превышает 10MB",
-      "invalidFileType": "Пожалуйста, выберите файл в формате JSON",
+      "invalidFileType": "Пожалуйста, выберите файл JSON или TOML",
       "fileTooLarge": "Размер файла превышает лимит 10MB",
       "upload": "Загрузить и обновить",
       "uploading": "Загрузка...",
       "updatePriceTable": "Обновить прайс-лист",
       "updating": "Обновление...",
-      "selectJson": "Выбрать JSON файл",
+      "selectJson": "Выбрать файл",
       "updateSuccess": "Прайс-лист успешно обновлён, {count} моделей обновлено",
       "updateFailed": "Ошибка обновления",
       "systemHasBuiltIn": "Система имеет встроенный прайс-лист",
       "manualDownload": "Вы также можете скачать вручную",
-      "latestPriceTable": "последний прайс-лист",
+      "latestPriceTable": "облачный прайс-лист",
       "andUploadViaButton": ", и загрузить через кнопку выше",
       "supportedModels": "Поддерживается {count} моделей",
       "results": {
@@ -632,6 +658,7 @@
         "success": "Успешно: {success}",
         "failed": "Ошибок: {failed}",
         "skipped": "Пропущено: {skipped}",
+        "more": " (+{count})",
         "details": "Подробности",
         "viewDetails": "Просмотреть подробный журнал"
       }
@@ -655,6 +682,7 @@
     },
     "actions": {
       "edit": "Редактировать",
+      "more": "Больше действий",
       "delete": "Удалить"
     },
     "toast": {

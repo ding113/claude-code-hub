@@ -7,13 +7,14 @@ const revalidatePathMock = vi.fn();
 
 // Repository mocks
 const findLatestPriceByModelMock = vi.fn();
+const findAllLatestPricesMock = vi.fn();
 const createModelPriceMock = vi.fn();
 const upsertModelPriceMock = vi.fn();
 const deleteModelPriceByNameMock = vi.fn();
 const findAllManualPricesMock = vi.fn();
 
 // Price sync mock
-const getPriceTableJsonMock = vi.fn();
+const fetchCloudPriceTableTomlMock = vi.fn();
 
 vi.mock("@/lib/auth", () => ({
   getSession: () => getSessionMock(),
@@ -39,7 +40,7 @@ vi.mock("@/repository/model-price", () => ({
   upsertModelPrice: (...args: unknown[]) => upsertModelPriceMock(...args),
   deleteModelPriceByName: (...args: unknown[]) => deleteModelPriceByNameMock(...args),
   findAllManualPrices: () => findAllManualPricesMock(),
-  findAllLatestPrices: vi.fn(async () => []),
+  findAllLatestPrices: () => findAllLatestPricesMock(),
   findAllLatestPricesPaginated: vi.fn(async () => ({
     data: [],
     total: 0,
@@ -50,9 +51,13 @@ vi.mock("@/repository/model-price", () => ({
   hasAnyPriceRecords: vi.fn(async () => false),
 }));
 
-vi.mock("@/lib/price-sync", () => ({
-  getPriceTableJson: () => getPriceTableJsonMock(),
-}));
+vi.mock("@/lib/price-sync/cloud-price-table", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/price-sync/cloud-price-table")>();
+  return {
+    ...actual,
+    fetchCloudPriceTableToml: (...args: unknown[]) => fetchCloudPriceTableTomlMock(...args),
+  };
+});
 
 // Helper to create mock ModelPrice
 function makeMockPrice(
@@ -81,6 +86,7 @@ describe("Model Price Actions", () => {
     vi.clearAllMocks();
     // Default: admin session
     getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
+    findAllLatestPricesMock.mockResolvedValue([]);
   });
 
   describe("upsertSingleModelPrice", () => {
@@ -224,11 +230,12 @@ describe("Model Price Actions", () => {
   describe("checkLiteLLMSyncConflicts", () => {
     it("should return no conflicts when no manual prices exist", async () => {
       findAllManualPricesMock.mockResolvedValue(new Map());
-      getPriceTableJsonMock.mockResolvedValue(
-        JSON.stringify({
-          "claude-3-opus": { mode: "chat", input_cost_per_token: 0.000015 },
-        })
-      );
+      fetchCloudPriceTableTomlMock.mockResolvedValue({
+        ok: true,
+        data: ['[models."claude-3-opus"]', 'mode = "chat"', "input_cost_per_token = 0.000015"].join(
+          "\n"
+        ),
+      });
 
       const { checkLiteLLMSyncConflicts } = await import("@/actions/model-prices");
       const result = await checkLiteLLMSyncConflicts();
@@ -247,15 +254,15 @@ describe("Model Price Actions", () => {
 
       findAllManualPricesMock.mockResolvedValue(new Map([["claude-3-opus", manualPrice]]));
 
-      getPriceTableJsonMock.mockResolvedValue(
-        JSON.stringify({
-          "claude-3-opus": {
-            mode: "chat",
-            input_cost_per_token: 0.000015,
-            output_cost_per_token: 0.00006,
-          },
-        })
-      );
+      fetchCloudPriceTableTomlMock.mockResolvedValue({
+        ok: true,
+        data: [
+          '[models."claude-3-opus"]',
+          'mode = "chat"',
+          "input_cost_per_token = 0.000015",
+          "output_cost_per_token = 0.00006",
+        ].join("\n"),
+      });
 
       const { checkLiteLLMSyncConflicts } = await import("@/actions/model-prices");
       const result = await checkLiteLLMSyncConflicts();
@@ -274,11 +281,12 @@ describe("Model Price Actions", () => {
 
       findAllManualPricesMock.mockResolvedValue(new Map([["custom-model", manualPrice]]));
 
-      getPriceTableJsonMock.mockResolvedValue(
-        JSON.stringify({
-          "claude-3-opus": { mode: "chat", input_cost_per_token: 0.000015 },
-        })
-      );
+      fetchCloudPriceTableTomlMock.mockResolvedValue({
+        ok: true,
+        data: ['[models."claude-3-opus"]', 'mode = "chat"', "input_cost_per_token = 0.000015"].join(
+          "\n"
+        ),
+      });
 
       const { checkLiteLLMSyncConflicts } = await import("@/actions/model-prices");
       const result = await checkLiteLLMSyncConflicts();
@@ -300,24 +308,30 @@ describe("Model Price Actions", () => {
 
     it("should handle network errors gracefully", async () => {
       findAllManualPricesMock.mockResolvedValue(new Map());
-      getPriceTableJsonMock.mockResolvedValue(null);
+      fetchCloudPriceTableTomlMock.mockResolvedValue({
+        ok: false,
+        error: "云端价格表拉取失败：mock",
+      });
 
       const { checkLiteLLMSyncConflicts } = await import("@/actions/model-prices");
       const result = await checkLiteLLMSyncConflicts();
 
       expect(result.ok).toBe(false);
-      expect(result.error).toContain("CDN");
+      expect(result.error).toContain("云端");
     });
 
-    it("should handle invalid JSON gracefully", async () => {
+    it("should handle invalid TOML gracefully", async () => {
       findAllManualPricesMock.mockResolvedValue(new Map());
-      getPriceTableJsonMock.mockResolvedValue("invalid json {");
+      fetchCloudPriceTableTomlMock.mockResolvedValue({
+        ok: true,
+        data: "[models\ninvalid = true",
+      });
 
       const { checkLiteLLMSyncConflicts } = await import("@/actions/model-prices");
       const result = await checkLiteLLMSyncConflicts();
 
       expect(result.ok).toBe(false);
-      expect(result.error).toContain("JSON");
+      expect(result.error).toContain("TOML");
     });
   });
 
@@ -329,7 +343,7 @@ describe("Model Price Actions", () => {
       });
 
       findAllManualPricesMock.mockResolvedValue(new Map([["custom-model", manualPrice]]));
-      findLatestPriceByModelMock.mockResolvedValue(manualPrice);
+      findAllLatestPricesMock.mockResolvedValue([manualPrice]);
 
       const { processPriceTableInternal } = await import("@/actions/model-prices");
       const result = await processPriceTableInternal(
@@ -354,7 +368,7 @@ describe("Model Price Actions", () => {
       });
 
       findAllManualPricesMock.mockResolvedValue(new Map([["custom-model", manualPrice]]));
-      findLatestPriceByModelMock.mockResolvedValue(manualPrice);
+      findAllLatestPricesMock.mockResolvedValue([manualPrice]);
       deleteModelPriceByNameMock.mockResolvedValue(undefined);
       createModelPriceMock.mockResolvedValue(
         makeMockPrice(
@@ -386,7 +400,7 @@ describe("Model Price Actions", () => {
 
     it("should add new models with litellm source", async () => {
       findAllManualPricesMock.mockResolvedValue(new Map());
-      findLatestPriceByModelMock.mockResolvedValue(null);
+      findAllLatestPricesMock.mockResolvedValue([]);
       createModelPriceMock.mockResolvedValue(
         makeMockPrice(
           "new-model",
@@ -414,7 +428,7 @@ describe("Model Price Actions", () => {
 
     it("should skip metadata fields like sample_spec", async () => {
       findAllManualPricesMock.mockResolvedValue(new Map());
-      findLatestPriceByModelMock.mockResolvedValue(null);
+      findAllLatestPricesMock.mockResolvedValue([]);
 
       const { processPriceTableInternal } = await import("@/actions/model-prices");
       const result = await processPriceTableInternal(
@@ -431,7 +445,7 @@ describe("Model Price Actions", () => {
 
     it("should skip entries without mode field", async () => {
       findAllManualPricesMock.mockResolvedValue(new Map());
-      findLatestPriceByModelMock.mockResolvedValue(null);
+      findAllLatestPricesMock.mockResolvedValue([]);
 
       const { processPriceTableInternal } = await import("@/actions/model-prices");
       const result = await processPriceTableInternal(

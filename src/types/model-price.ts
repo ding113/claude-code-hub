@@ -28,7 +28,9 @@ export interface ModelPriceData {
   };
 
   // 模型能力信息
+  display_name?: string;
   litellm_provider?: string;
+  providers?: string[];
   max_input_tokens?: number;
   max_output_tokens?: number;
   max_tokens?: number;

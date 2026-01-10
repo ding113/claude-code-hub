@@ -10,6 +10,8 @@ import type { PaginationParams } from "@/repository/model-price";
  * - page: 页码 (默认: 1)
  * - pageSize: 每页大小 (默认: 50)
  * - search: 搜索关键词 (可选)
+ * - source: 价格来源过滤 (可选: manual|litellm)
+ * - litellmProvider: 云端提供商过滤 (可选，如 anthropic/openai/vertex_ai-language-models)
  */
 export async function GET(request: NextRequest) {
   try {
@@ -25,6 +27,8 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get("page") || "1", 10);
     const pageSize = parseInt(searchParams.get("pageSize") || searchParams.get("size") || "50", 10);
     const search = searchParams.get("search") || "";
+    const source = searchParams.get("source") || "";
+    const litellmProvider = searchParams.get("litellmProvider") || "";
 
     // 参数验证
     if (page < 1) {
@@ -35,11 +39,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "每页大小必须在1-200之间" }, { status: 400 });
     }
 
+    if (source && source !== "manual" && source !== "litellm") {
+      return NextResponse.json({ ok: false, error: "source 参数无效" }, { status: 400 });
+    }
+
     // 构建分页参数
     const paginationParams: PaginationParams = {
       page,
       pageSize,
       search: search || undefined, // 传递搜索关键词给后端
+      source: source ? (source as PaginationParams["source"]) : undefined,
+      litellmProvider: litellmProvider || undefined,
     };
 
     // 获取分页数据（搜索在 SQL 层面执行）

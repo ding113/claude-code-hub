@@ -543,8 +543,32 @@
       "description": "Manage AI model pricing configuration"
     },
     "searchPlaceholder": "Search model name...",
+    "filters": {
+      "all": "All",
+      "local": "Local",
+      "anthropic": "Anthropic",
+      "openai": "OpenAI",
+      "vertex": "Vertex"
+    },
+    "badges": {
+      "local": "Local"
+    },
+    "capabilities": {
+      "assistantPrefill": "Assistant prefill",
+      "computerUse": "Computer use",
+      "functionCalling": "Function calling",
+      "pdfInput": "PDF input",
+      "promptCaching": "Prompt caching",
+      "reasoning": "Reasoning",
+      "responseSchema": "Response schema",
+      "toolChoice": "Tool choice",
+      "vision": "Vision",
+      "statusSupported": "Supported",
+      "statusUnsupported": "Not supported",
+      "tooltip": "{label}: {status}"
+    },
     "sync": {
-      "button": "Sync LiteLLM Prices",
+      "button": "Sync Cloud Price Table",
       "syncing": "Syncing...",
       "checking": "Checking conflicts...",
       "successWithChanges": "Price table updated: {added} added, {updated} updated, {unchanged} unchanged",
@@ -554,6 +578,7 @@
       "failedNoResult": "Price table updated but no result returned",
       "noModels": "No model prices found",
       "partialFailure": "Partial update succeeded, but {failed} models failed",
+      "failedModels": "Failed models: {models}",
       "skippedConflicts": "Skipped {count} manual models"
     },
     "conflict": {
@@ -589,8 +614,8 @@
     },
     "table": {
       "modelName": "Model Name",
-      "type": "Type",
       "provider": "Provider",
+      "capabilities": "Capabilities",
       "inputPrice": "Input Price ($/M)",
       "outputPrice": "Output Price ($/M)",
       "updatedAt": "Updated At",
@@ -608,6 +633,7 @@
       "showing": "Showing {from}-{to} of {total}",
       "previous": "Previous",
       "next": "Next",
+      "perPageLabel": "Per page",
       "perPage": "{size} per page"
     },
     "stats": {
@@ -617,22 +643,22 @@
     },
     "dialog": {
       "title": "Update Model Price Table",
-      "description": "Select and upload JSON file containing model pricing data",
-      "selectFile": "Click to select JSON file or drag and drop here",
+      "description": "Select and upload JSON or TOML file containing model pricing data",
+      "selectFile": "Click to select JSON/TOML file or drag and drop here",
       "fileSizeLimit": "File size cannot exceed 10MB",
       "fileSizeLimitSmall": "File size not exceeding 10MB",
-      "invalidFileType": "Please select a JSON format file",
+      "invalidFileType": "Please select a JSON or TOML file",
       "fileTooLarge": "File size exceeds 10MB limit",
       "upload": "Upload and Update",
       "uploading": "Uploading...",
       "updatePriceTable": "Update Price Table",
       "updating": "Updating...",
-      "selectJson": "Select JSON File",
+      "selectJson": "Select File",
       "updateSuccess": "Price table updated successfully, {count} models updated",
       "updateFailed": "Update failed",
       "systemHasBuiltIn": "System has built-in price table",
       "manualDownload": "You can also manually download",
-      "latestPriceTable": "latest price table",
+      "latestPriceTable": "cloud price table",
       "andUploadViaButton": ", and upload via button above",
       "supportedModels": "Currently supports {count} models",
       "results": {
@@ -641,6 +667,7 @@
         "success": "Success: {success}",
         "failed": "Failed: {failed}",
         "skipped": "Skipped: {skipped}",
+        "more": " (+{count})",
         "details": "Details",
         "viewDetails": "View detailed logs"
       }
@@ -664,6 +691,7 @@
     },
     "actions": {
       "edit": "Edit",
+      "more": "More actions",
       "delete": "Delete"
     },
     "toast": {
