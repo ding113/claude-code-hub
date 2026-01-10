@@ -47,7 +47,7 @@ export async function ensurePriceTable(): Promise<void> {
   } catch (error) {
     // 不阻塞应用启动，用户仍可通过手动同步/更新来添加价格表
     logger.error("[PriceSync] Failed to ensure price table", {
-      error: error instanceof Error ? error.message : String(error),
+      error: error
     });
   }
 }
