@@ -1,2 +1,2 @@
-ALTER TABLE "message_request" ADD COLUMN "error_stack" text;--> statement-breakpoint
-ALTER TABLE "message_request" ADD COLUMN "error_cause" text;
+ALTER TABLE "message_request" ADD COLUMN IF NOT EXISTS "error_stack" text;--> statement-breakpoint
+ALTER TABLE "message_request" ADD COLUMN IF NOT EXISTS "error_cause" text;

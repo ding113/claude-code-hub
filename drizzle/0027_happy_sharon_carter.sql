@@ -1,1 +1,1 @@
-ALTER TABLE "providers" ADD COLUMN "max_retry_attempts" integer;
+ALTER TABLE "providers" ADD COLUMN IF NOT EXISTS "max_retry_attempts" integer;

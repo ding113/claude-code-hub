@@ -1,1 +1,1 @@
-ALTER TABLE "users" ADD COLUMN "tags" jsonb DEFAULT '[]'::jsonb;
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "tags" jsonb DEFAULT '[]'::jsonb;

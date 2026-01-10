@@ -1,1 +1,1 @@
-ALTER TABLE "message_request" ADD COLUMN "ttfb_ms" integer;
+ALTER TABLE "message_request" ADD COLUMN IF NOT EXISTS "ttfb_ms" integer;

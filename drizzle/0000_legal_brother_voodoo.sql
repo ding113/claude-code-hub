@@ -1,4 +1,4 @@
-CREATE TABLE "keys" (
+CREATE TABLE IF NOT EXISTS "keys" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" integer NOT NULL,
 	"key" varchar NOT NULL,
@@ -14,7 +14,7 @@ CREATE TABLE "keys" (
 	"deleted_at" timestamp with time zone
 );
 --> statement-breakpoint
-CREATE TABLE "message_request" (
+CREATE TABLE IF NOT EXISTS "message_request" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"provider_id" integer NOT NULL,
 	"user_id" integer NOT NULL,
@@ -35,7 +35,7 @@ CREATE TABLE "message_request" (
 	"deleted_at" timestamp with time zone
 );
 --> statement-breakpoint
-CREATE TABLE "model_prices" (
+CREATE TABLE IF NOT EXISTS "model_prices" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"model_name" varchar NOT NULL,
 	"price_data" jsonb NOT NULL,
@@ -43,7 +43,7 @@ CREATE TABLE "model_prices" (
 	"updated_at" timestamp with time zone DEFAULT now()
 );
 --> statement-breakpoint
-CREATE TABLE "providers" (
+CREATE TABLE IF NOT EXISTS "providers" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"name" varchar NOT NULL,
 	"description" text,
@@ -69,7 +69,7 @@ CREATE TABLE "providers" (
 	"deleted_at" timestamp with time zone
 );
 --> statement-breakpoint
-CREATE TABLE "system_settings" (
+CREATE TABLE IF NOT EXISTS "system_settings" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"site_title" varchar(128) DEFAULT 'Claude Code Hub' NOT NULL,
 	"allow_global_usage_view" boolean DEFAULT true NOT NULL,
@@ -77,7 +77,7 @@ CREATE TABLE "system_settings" (
 	"updated_at" timestamp with time zone DEFAULT now()
 );
 --> statement-breakpoint
-CREATE TABLE "users" (
+CREATE TABLE IF NOT EXISTS "users" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"name" varchar NOT NULL,
 	"description" text,
@@ -90,23 +90,23 @@ CREATE TABLE "users" (
 	"deleted_at" timestamp with time zone
 );
 --> statement-breakpoint
-CREATE INDEX "idx_keys_user_id" ON "keys" USING btree ("user_id");--> statement-breakpoint
-CREATE INDEX "idx_keys_created_at" ON "keys" USING btree ("created_at");--> statement-breakpoint
-CREATE INDEX "idx_keys_deleted_at" ON "keys" USING btree ("deleted_at");--> statement-breakpoint
-CREATE INDEX "idx_message_request_user_date_cost" ON "message_request" USING btree ("user_id","created_at","cost_usd") WHERE "message_request"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX "idx_message_request_user_query" ON "message_request" USING btree ("user_id","created_at") WHERE "message_request"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX "idx_message_request_provider_id" ON "message_request" USING btree ("provider_id");--> statement-breakpoint
-CREATE INDEX "idx_message_request_user_id" ON "message_request" USING btree ("user_id");--> statement-breakpoint
-CREATE INDEX "idx_message_request_key" ON "message_request" USING btree ("key");--> statement-breakpoint
-CREATE INDEX "idx_message_request_created_at" ON "message_request" USING btree ("created_at");--> statement-breakpoint
-CREATE INDEX "idx_message_request_deleted_at" ON "message_request" USING btree ("deleted_at");--> statement-breakpoint
-CREATE INDEX "idx_model_prices_latest" ON "model_prices" USING btree ("model_name","created_at" DESC NULLS LAST);--> statement-breakpoint
-CREATE INDEX "idx_model_prices_model_name" ON "model_prices" USING btree ("model_name");--> statement-breakpoint
-CREATE INDEX "idx_model_prices_created_at" ON "model_prices" USING btree ("created_at" DESC NULLS LAST);--> statement-breakpoint
-CREATE INDEX "idx_providers_enabled_priority" ON "providers" USING btree ("is_enabled","priority","weight") WHERE "providers"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX "idx_providers_group" ON "providers" USING btree ("group_tag") WHERE "providers"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX "idx_providers_created_at" ON "providers" USING btree ("created_at");--> statement-breakpoint
-CREATE INDEX "idx_providers_deleted_at" ON "providers" USING btree ("deleted_at");--> statement-breakpoint
-CREATE INDEX "idx_users_active_role_sort" ON "users" USING btree ("deleted_at","role","id") WHERE "users"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX "idx_users_created_at" ON "users" USING btree ("created_at");--> statement-breakpoint
-CREATE INDEX "idx_users_deleted_at" ON "users" USING btree ("deleted_at");
+CREATE INDEX IF NOT EXISTS "idx_keys_user_id" ON "keys" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_keys_created_at" ON "keys" USING btree ("created_at");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_keys_deleted_at" ON "keys" USING btree ("deleted_at");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_message_request_user_date_cost" ON "message_request" USING btree ("user_id","created_at","cost_usd") WHERE "message_request"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_message_request_user_query" ON "message_request" USING btree ("user_id","created_at") WHERE "message_request"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_message_request_provider_id" ON "message_request" USING btree ("provider_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_message_request_user_id" ON "message_request" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_message_request_key" ON "message_request" USING btree ("key");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_message_request_created_at" ON "message_request" USING btree ("created_at");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_message_request_deleted_at" ON "message_request" USING btree ("deleted_at");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_model_prices_latest" ON "model_prices" USING btree ("model_name","created_at" DESC NULLS LAST);--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_model_prices_model_name" ON "model_prices" USING btree ("model_name");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_model_prices_created_at" ON "model_prices" USING btree ("created_at" DESC NULLS LAST);--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_providers_enabled_priority" ON "providers" USING btree ("is_enabled","priority","weight") WHERE "providers"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_providers_group" ON "providers" USING btree ("group_tag") WHERE "providers"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_providers_created_at" ON "providers" USING btree ("created_at");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_providers_deleted_at" ON "providers" USING btree ("deleted_at");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_users_active_role_sort" ON "users" USING btree ("deleted_at","role","id") WHERE "users"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_users_created_at" ON "users" USING btree ("created_at");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_users_deleted_at" ON "users" USING btree ("deleted_at");

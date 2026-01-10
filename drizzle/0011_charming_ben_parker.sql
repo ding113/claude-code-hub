@@ -1,1 +1,1 @@
-ALTER TABLE "providers" ADD COLUMN "join_claude_pool" boolean DEFAULT false;
+ALTER TABLE "providers" ADD COLUMN IF NOT EXISTS "join_claude_pool" boolean DEFAULT false;

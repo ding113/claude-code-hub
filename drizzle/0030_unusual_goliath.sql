@@ -1,1 +1,1 @@
-ALTER TABLE "keys" ADD COLUMN "provider_group" varchar(50);
+ALTER TABLE "keys" ADD COLUMN IF NOT EXISTS "provider_group" varchar(50);
