@@ -152,7 +152,9 @@ describe("scripts/audit-settings-placeholders.js", () => {
       ]);
       expect(out.exitCode).toBe(0);
       expect(out.lines[0]).toBe("locale\trelFile\tkey\tvalue\treason");
-      expect(out.lines).toContain("en\tdashboard.json\tdashboard.hero.title\t仪表盘\tsame_as_zh-CN");
+      expect(out.lines).toContain(
+        "en\tdashboard.json\tdashboard.hero.title\t仪表盘\tsame_as_zh-CN"
+      );
     } finally {
       fs.rmSync(tmpRoot, { recursive: true, force: true });
     }
