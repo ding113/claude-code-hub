@@ -13,6 +13,9 @@ This repository splits `messages/<locale>/settings.json` into smaller JSON chunk
 Runtime composition happens in `messages/<locale>/settings/index.ts` and is imported by `messages/<locale>/index.ts`.
 
 ## Verification
+- Translation quality rules and audit commands:
+  - `docs/i18n-translation-quality.md`
+
 - Sync keys across locales (canonical: zh-CN):
   - `node scripts/sync-settings-keys.js`
 
