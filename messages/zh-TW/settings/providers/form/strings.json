@@ -52,7 +52,7 @@
   "failureThreshold": "失败阈值（次）",
   "failureThresholdDesc": "连续失败多少次后触发熔断",
   "failureThresholdPlaceholder": "5",
-  "filterAllProviders": "全部供应商",
+  "filterAllProviders": "全部供應商",
   "filterByType": "篩選供應商類型",
   "filterProvider": "筛选供应商类型",
   "group": "分組",
