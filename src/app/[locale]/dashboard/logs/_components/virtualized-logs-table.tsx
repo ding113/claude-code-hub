@@ -295,7 +295,7 @@ export function VirtualizedLogsTable({
                       </span>
                     ) : (
                       <div className="flex flex-col items-start gap-0.5 min-w-0">
-                        <div className="flex items-center gap-1 min-w-0">
+                        <div className="flex items-center gap-1 min-w-0 w-full overflow-hidden">
                           {(() => {
                             // 计算倍率，用于判断是否显示 Badge
                             const successfulProvider =
@@ -316,17 +316,19 @@ export function VirtualizedLogsTable({
 
                             return (
                               <>
-                                <ProviderChainPopover
-                                  chain={log.providerChain ?? []}
-                                  finalProvider={
-                                    (log.providerChain && log.providerChain.length > 0
-                                      ? log.providerChain[log.providerChain.length - 1].name
-                                      : null) ||
-                                    log.providerName ||
-                                    tChain("circuit.unknown")
-                                  }
-                                  hasCostBadge={hasCostBadge}
-                                />
+                                <div className="flex-1 min-w-0 overflow-hidden">
+                                  <ProviderChainPopover
+                                    chain={log.providerChain ?? []}
+                                    finalProvider={
+                                      (log.providerChain && log.providerChain.length > 0
+                                        ? log.providerChain[log.providerChain.length - 1].name
+                                        : null) ||
+                                      log.providerName ||
+                                      tChain("circuit.unknown")
+                                    }
+                                    hasCostBadge={hasCostBadge}
+                                  />
+                                </div>
                                 {/* Cost multiplier badge */}
                                 {hasCostBadge && (
                                   <Badge
