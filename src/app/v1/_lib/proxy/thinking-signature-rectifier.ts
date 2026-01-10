@@ -155,11 +155,6 @@ export function rectifyAnthropicRequestMessage(
     }
 
     if (lastAssistantContent && lastAssistantContent.length > 0) {
-      const hasToolUse = lastAssistantContent.some((block) => {
-        if (!block || typeof block !== "object") return false;
-        return (block as Record<string, unknown>).type === "tool_use";
-      });
-
       const firstBlock = lastAssistantContent[0];
       const firstBlockType =
         firstBlock && typeof firstBlock === "object"
@@ -169,9 +164,17 @@ export function rectifyAnthropicRequestMessage(
       const missingThinkingPrefix =
         firstBlockType !== "thinking" && firstBlockType !== "redacted_thinking";
 
-      if (hasToolUse && missingThinkingPrefix && "thinking" in message) {
-        delete (message as any).thinking;
-        applied = true;
+      // 仅在缺少 thinking 前缀时才需要进一步检查是否存在 tool_use
+      if (missingThinkingPrefix) {
+        const hasToolUse = lastAssistantContent.some((block) => {
+          if (!block || typeof block !== "object") return false;
+          return (block as Record<string, unknown>).type === "tool_use";
+        });
+
+        if (hasToolUse) {
+          delete (message as any).thinking;
+          applied = true;
+        }
       }
     }
   }
