@@ -266,9 +266,9 @@ describe("PriceList: 交互与数据刷新", () => {
       </NextIntlClientProvider>
     );
 
-    const trigger = document.querySelector("[data-slot='select-trigger']") as
-      | HTMLButtonElement
-      | null;
+    const trigger = document.querySelector(
+      "[data-slot='select-trigger']"
+    ) as HTMLButtonElement | null;
     expect(trigger).toBeTruthy();
 
     await act(async () => {
