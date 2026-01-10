@@ -121,4 +121,40 @@ describe("scripts/audit-settings-placeholders.js", () => {
       fs.rmSync(tmpRoot, { recursive: true, force: true });
     }
   });
+
+  test("CLI supports --scope and --format=tsv for stable machine parsing", () => {
+    const tmpRoot = path.join(
+      process.cwd(),
+      "tests",
+      ".tmp-audit-settings-placeholders-cli",
+      `tsv-${Date.now()}`
+    );
+    const messagesDir = path.join(tmpRoot, "messages");
+
+    const writeJson = (p: string, data: unknown) => {
+      fs.mkdirSync(path.dirname(p), { recursive: true });
+      fs.writeFileSync(p, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+    };
+
+    try {
+      writeJson(path.join(messagesDir, "zh-CN", "dashboard.json"), {
+        hero: { title: "仪表盘" },
+      });
+      writeJson(path.join(messagesDir, "en", "dashboard.json"), {
+        hero: { title: "仪表盘" },
+      });
+
+      const out = audit.run([
+        `--messagesDir=${messagesDir}`,
+        "--scope=dashboard",
+        "--locales=en",
+        "--format=tsv",
+      ]);
+      expect(out.exitCode).toBe(0);
+      expect(out.lines[0]).toBe("locale\trelFile\tkey\tvalue\treason");
+      expect(out.lines).toContain("en\tdashboard.json\tdashboard.hero.title\t仪表盘\tsame_as_zh-CN");
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
 });
