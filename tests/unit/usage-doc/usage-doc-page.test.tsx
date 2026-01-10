@@ -62,7 +62,10 @@ describe("UsageDocPage - 目录/快速链接交互", () => {
       writable: true,
     });
 
-    document.cookie = "auth-token=test-token";
+    Object.defineProperty(document, "cookie", {
+      configurable: true,
+      get: () => "auth-token=test-token",
+    });
 
     const { unmount } = await renderWithIntl("en", <UsageDocPage />);
 
@@ -73,6 +76,8 @@ describe("UsageDocPage - 目录/快速链接交互", () => {
     expect(dashboardLink).not.toBeNull();
 
     await unmount();
+
+    Reflect.deleteProperty(document, "cookie");
   });
 
   test("目录项点击后应触发平滑滚动", async () => {

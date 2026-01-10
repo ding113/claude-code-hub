@@ -507,7 +507,8 @@
 
       "npm": {
         "title": "Option 3: npm",
-        "description": "Install globally via npm:"
+        "description": "Install globally via npm:",
+        "note": "Note: Avoid installing opencode-ai via npm mirror registries. Mirror registries may cause missing dependencies; use the official npm registry if you hit issues."
       },
 
       "bun": {
