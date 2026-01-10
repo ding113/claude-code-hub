@@ -117,13 +117,17 @@ func (r *keyRepository) GetByID(ctx context.Context, id int) (*model.Key, error)
 	return key, nil
 }
 
-// GetByKey 根据 Key 字符串获取（用于认证）
+// GetByKey 根据 Key 字符串获取活跃的 Key（用于认证）
+// 只返回启用且未过期的 Key
 func (r *keyRepository) GetByKey(ctx context.Context, keyStr string) (*model.Key, error) {
+	now := time.Now()
 	key := new(model.Key)
 	err := r.db.NewSelect().
 		Model(key).
 		Where("key = ?", keyStr).
 		Where("deleted_at IS NULL").
+		Where("is_enabled = ?", true).
+		Where("(expires_at IS NULL OR expires_at > ?)", now).
 		Scan(ctx)
 
 	if err != nil {
@@ -136,14 +140,20 @@ func (r *keyRepository) GetByKey(ctx context.Context, keyStr string) (*model.Key
 	return key, nil
 }
 
-// GetByKeyWithUser 根据 Key 字符串获取（包含关联的 User）
+// GetByKeyWithUser 根据 Key 字符串获取活跃的 Key（包含关联的 User）
+// 只返回启用且未过期的 Key，且关联的 User 未删除
 func (r *keyRepository) GetByKeyWithUser(ctx context.Context, keyStr string) (*model.Key, error) {
+	now := time.Now()
 	key := new(model.Key)
 	err := r.db.NewSelect().
 		Model(key).
-		Relation("User").
+		Relation("User", func(q *bun.SelectQuery) *bun.SelectQuery {
+			return q.Where("deleted_at IS NULL")
+		}).
 		Where("k.key = ?", keyStr).
 		Where("k.deleted_at IS NULL").
+		Where("k.is_enabled = ?", true).
+		Where("(k.expires_at IS NULL OR k.expires_at > ?)", now).
 		Scan(ctx)
 
 	if err != nil {
@@ -301,11 +311,12 @@ func (r *keyRepository) Count(ctx context.Context, includeDeleted bool) (int, er
 	return count, nil
 }
 
-// CountByUserID 统计用户的 Key 数量
+// CountByUserID 统计用户的活跃 Key 数量（仅统计启用的 Key）
 func (r *keyRepository) CountByUserID(ctx context.Context, userID int) (int, error) {
 	count, err := r.db.NewSelect().
 		Model((*model.Key)(nil)).
 		Where("user_id = ?", userID).
+		Where("is_enabled = ?", true).
 		Where("deleted_at IS NULL").
 		Count(ctx)
 

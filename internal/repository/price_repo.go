@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"time"
 
 	"github.com/ding113/claude-code-hub/internal/model"
@@ -168,6 +169,9 @@ func (r *modelPriceRepository) ListAllLatestPricesPaginated(ctx context.Context,
 		pageSize = 20
 	}
 	offset := (page - 1) * pageSize
+
+	// 处理搜索参数
+	search = strings.TrimSpace(search)
 
 	// 使用参数化查询防止 SQL 注入
 	var countResult struct {

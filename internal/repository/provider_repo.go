@@ -3,6 +3,8 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/ding113/claude-code-hub/internal/model"
@@ -362,7 +364,7 @@ func (r *providerRepository) GetClaudePoolProviders(ctx context.Context) ([]*mod
 	return providers, nil
 }
 
-// GetAllGroupTags 获取所有供应商的 GroupTag（去重）
+// GetAllGroupTags 获取所有供应商的 GroupTag（去重，支持逗号分隔）
 func (r *providerRepository) GetAllGroupTags(ctx context.Context) ([]string, error) {
 	var results []struct {
 		GroupTag string `bun:"group_tag"`
@@ -370,7 +372,7 @@ func (r *providerRepository) GetAllGroupTags(ctx context.Context) ([]string, err
 
 	err := r.db.NewSelect().
 		Model((*model.Provider)(nil)).
-		ColumnExpr("DISTINCT group_tag").
+		Column("group_tag").
 		Where("deleted_at IS NULL").
 		Where("group_tag IS NOT NULL").
 		Where("group_tag != ''").
@@ -380,10 +382,23 @@ func (r *providerRepository) GetAllGroupTags(ctx context.Context) ([]string, err
 		return nil, errors.NewDatabaseError(err)
 	}
 
-	tags := make([]string, 0, len(results))
+	// 处理逗号分隔的多值并去重
+	tagSet := make(map[string]struct{})
 	for _, row := range results {
-		tags = append(tags, row.GroupTag)
+		parts := strings.Split(row.GroupTag, ",")
+		for _, part := range parts {
+			trimmed := strings.TrimSpace(part)
+			if trimmed != "" {
+				tagSet[trimmed] = struct{}{}
+			}
+		}
 	}
+
+	tags := make([]string, 0, len(tagSet))
+	for tag := range tagSet {
+		tags = append(tags, tag)
+	}
+	sort.Strings(tags)
 
 	return tags, nil
 }

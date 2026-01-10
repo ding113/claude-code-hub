@@ -52,6 +52,18 @@ type MixedStatistics struct {
 	OthersAggregate []*UserStatRow
 }
 
+// ActiveUserItem 活跃用户项（用于下拉选择）
+type ActiveUserItem struct {
+	ID   int    `bun:"id" json:"id"`
+	Name string `bun:"name" json:"name"`
+}
+
+// ActiveKeyItem 活跃密钥项（用于下拉选择）
+type ActiveKeyItem struct {
+	ID   int    `bun:"id" json:"id"`
+	Name string `bun:"name" json:"name"`
+}
+
 // StatisticsRepository 统计数据访问接口
 type StatisticsRepository interface {
 	Repository
@@ -83,6 +95,9 @@ type StatisticsRepository interface {
 	// SumKeyTotalCost 查询 Key 历史总消费
 	SumKeyTotalCost(ctx context.Context, keyStr string, maxAgeDays int) (udecimal.Decimal, error)
 
+	// SumKeyTotalCostByID 通过 Key ID 查询历史总消费
+	SumKeyTotalCostByID(ctx context.Context, keyID int, maxAgeDays int) (udecimal.Decimal, error)
+
 	// SumProviderTotalCost 查询供应商历史总消费（从 resetAt 开始累计）
 	SumProviderTotalCost(ctx context.Context, providerID int, resetAt *time.Time) (udecimal.Decimal, error)
 
@@ -94,6 +109,12 @@ type StatisticsRepository interface {
 
 	// FindProviderCostEntriesInTimeRange 查询供应商消费明细
 	FindProviderCostEntriesInTimeRange(ctx context.Context, providerID int, startTime, endTime time.Time) ([]*CostEntry, error)
+
+	// GetActiveUsers 获取所有活跃用户列表（用于统计下拉选择）
+	GetActiveUsers(ctx context.Context) ([]*ActiveUserItem, error)
+
+	// GetActiveKeysForUser 获取指定用户的有效密钥列表（用于统计下拉选择）
+	GetActiveKeysForUser(ctx context.Context, userID int) ([]*ActiveKeyItem, error)
 }
 
 // statisticsRepository StatisticsRepository 实现
@@ -829,4 +850,63 @@ func (r *statisticsRepository) FindProviderCostEntriesInTimeRange(ctx context.Co
 	}
 
 	return entries, nil
+}
+
+// SumKeyTotalCostByID 通过 Key ID 查询历史总消费
+func (r *statisticsRepository) SumKeyTotalCostByID(ctx context.Context, keyID int, maxAgeDays int) (udecimal.Decimal, error) {
+	// 先查询 key 字符串
+	var keyRecord struct {
+		Key string `bun:"key"`
+	}
+	err := r.db.NewSelect().
+		Model((*model.Key)(nil)).
+		Column("key").
+		Where("id = ?", keyID).
+		Scan(ctx, &keyRecord)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return udecimal.Zero, nil
+		}
+		return udecimal.Zero, errors.NewDatabaseError(err)
+	}
+
+	return r.SumKeyTotalCost(ctx, keyRecord.Key, maxAgeDays)
+}
+
+// GetActiveUsers 获取所有活跃用户列表（用于统计下拉选择）
+func (r *statisticsRepository) GetActiveUsers(ctx context.Context) ([]*ActiveUserItem, error) {
+	var users []*ActiveUserItem
+
+	err := r.db.NewSelect().
+		Model((*model.User)(nil)).
+		Column("id", "name").
+		Where("deleted_at IS NULL").
+		Order("name ASC").
+		Scan(ctx, &users)
+
+	if err != nil {
+		return nil, errors.NewDatabaseError(err)
+	}
+
+	return users, nil
+}
+
+// GetActiveKeysForUser 获取指定用户的有效密钥列表（用于统计下拉选择）
+func (r *statisticsRepository) GetActiveKeysForUser(ctx context.Context, userID int) ([]*ActiveKeyItem, error) {
+	var keys []*ActiveKeyItem
+
+	err := r.db.NewSelect().
+		Model((*model.Key)(nil)).
+		Column("id", "name").
+		Where("user_id = ?", userID).
+		Where("deleted_at IS NULL").
+		Order("name ASC").
+		Scan(ctx, &keys)
+
+	if err != nil {
+		return nil, errors.NewDatabaseError(err)
+	}
+
+	return keys, nil
 }
