@@ -4,6 +4,49 @@
 
 ---
 
+## [v0.3.42](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.42) - 2026-01-07
+
+### 新增
+
+- Session 详情页重设计，改进布局和用户体验 (f52a2651)
+- 供应商级别参数覆写审计功能，支持 Codex reasoning/text/parallel_tool_calls 覆写 (#557, #536)
+- 供应商查询缓存功能，支持缓存开关配置，默认启用 (#554, #556) [@hank9999](https://github.com/hank9999)
+- Gemini 非流式错误规则 (#547) [@Kevin Cui](https://github.com/kevin-cui-tw)
+- Anthropic Warmup 请求拦截功能 (#525)
+- tool_use missing tool_result 错误规则 (#550, #551)
+- Codex reasoning effort mismatch 错误规则 (#544)
+
+### 优化
+
+- 供应商保存异步架构重构，提升保存性能 (54bada89)
+- 拆分 unified-edit-dialog 为专用对话框组件，改善代码结构 (#539) [@NieiR](https://github.com/NieiR)
+- Session Messages 提升内容阈值并支持导出完整请求 (#537)
+- 管理后台 UI 改进 (#538) [@miraserver](https://github.com/miraserver)
+
+### 修复
+
+- 修复 SessionStats 组件日期类型问题 (57ac4d6d)
+- 修复 CodeDisplay 组件缺少 className prop (c622705b)
+- 修复 /v1/responses 和 /v1/chat/completions 未使用 GuardPipeline 的问题 (#552)
+- 修复添加新供应商后列表未刷新的问题 (#546) [@NieiR](https://github.com/NieiR)
+- 补齐 system_settings 缺失列 (17014402)
+- 修复供应商总限额编辑、生效和重置逻辑 (#535)
+- 修复 Key 清除到期时间使用空字符串传参问题 (#534)
+- 修复 my-usage 今日统计与只读 API 自助查询 (#532)
+- 修复清除用户/Key 到期时间后保存不生效的问题 (#533)
+- 修复用户限额未设置时 Key 限额仍生效的问题 (#531)
+- 修复供应商搜索框重复清除按钮 (af17948d)
+- 修复 CodeRabbit webhook 反馈问题 (#527)
+
+### 其他
+
+- 为 available-models 工具函数添加单元测试 (#528) [@NieiR](https://github.com/NieiR)
+- 更新使用文档中 Codex 模型配置 (#545)
+- 更新 AGENT 指导文档 (cc32b47b)
+- 重新生成 blocked_by 索引迁移 (3250f210)
+
+---
+
 ## [v0.3.41](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.41) - 2026-01-03
 
 ### 新增
