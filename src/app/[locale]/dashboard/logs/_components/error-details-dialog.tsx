@@ -536,16 +536,20 @@ export function ErrorDetailsDialog({
                             </div>
                           </div>
                         )}
-                        {costMultiplier && parseFloat(String(costMultiplier)) !== 1.0 && (
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">
-                              {t("logs.billingDetails.multiplier")}:
-                            </span>
-                            <span className="font-mono">
-                              {parseFloat(String(costMultiplier)).toFixed(2)}x
-                            </span>
-                          </div>
-                        )}
+                        {(() => {
+                          if (costMultiplier === "" || costMultiplier == null) return null;
+                          const multiplier = Number(costMultiplier);
+                          if (!Number.isFinite(multiplier) || multiplier === 1) return null;
+
+                          return (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">
+                                {t("logs.billingDetails.multiplier")}:
+                              </span>
+                              <span className="font-mono">{multiplier.toFixed(2)}x</span>
+                            </div>
+                          );
+                        })()}
                       </div>
                       <div className="mt-3 pt-3 border-t flex justify-between items-center">
                         <span className="font-medium">{t("logs.billingDetails.totalCost")}:</span>
