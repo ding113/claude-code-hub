@@ -310,9 +310,8 @@ export function VirtualizedLogsTable({
                                 : null;
                             const actualCostMultiplier =
                               successfulProvider?.costMultiplier ?? log.costMultiplier;
-                            const hasCostBadge =
-                              !!actualCostMultiplier &&
-                              parseFloat(String(actualCostMultiplier)) !== 1.0;
+                            const multiplier = Number(actualCostMultiplier);
+                            const hasCostBadge = Number.isFinite(multiplier) && multiplier !== 1;
 
                             return (
                               <>
@@ -332,12 +331,12 @@ export function VirtualizedLogsTable({
                                   <Badge
                                     variant="outline"
                                     className={
-                                      parseFloat(String(actualCostMultiplier)) > 1.0
+                                      multiplier > 1
                                         ? "text-xs bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800 shrink-0"
                                         : "text-xs bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-300 dark:border-green-800 shrink-0"
                                     }
                                   >
-                                    x{parseFloat(String(actualCostMultiplier)).toFixed(2)}
+                                    x{multiplier.toFixed(2)}
                                   </Badge>
                                 )}
                               </>
@@ -346,26 +345,34 @@ export function VirtualizedLogsTable({
                         </div>
                         {log.providerChain &&
                           log.providerChain.length > 0 &&
-                          formatProviderSummary(log.providerChain, tChain) && (
-                            <TooltipProvider>
-                              <Tooltip delayDuration={300}>
-                                <TooltipTrigger asChild>
-                                  <span className="text-xs text-muted-foreground cursor-help truncate max-w-[180px] block text-left">
-                                    {formatProviderSummary(log.providerChain, tChain)}
-                                  </span>
-                                </TooltipTrigger>
-                                <TooltipContent
-                                  side="bottom"
-                                  align="start"
-                                  className="max-w-[500px]"
-                                >
-                                  <p className="text-xs whitespace-normal break-words font-mono">
-                                    {formatProviderSummary(log.providerChain, tChain)}
-                                  </p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          )}
+                          (() => {
+                            const providerSummary = formatProviderSummary(
+                              log.providerChain,
+                              tChain
+                            );
+                            if (!providerSummary) return null;
+
+                            return (
+                              <TooltipProvider>
+                                <Tooltip delayDuration={300}>
+                                  <TooltipTrigger asChild>
+                                    <span className="text-xs text-muted-foreground cursor-help truncate max-w-[180px] block text-left">
+                                      {providerSummary}
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent
+                                    side="bottom"
+                                    align="start"
+                                    className="max-w-[500px]"
+                                  >
+                                    <p className="text-xs whitespace-normal break-words font-mono">
+                                      {providerSummary}
+                                    </p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            );
+                          })()}
                       </div>
                     )}
                   </div>
