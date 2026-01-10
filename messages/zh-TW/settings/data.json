@@ -2,8 +2,8 @@
   "cleanup": {
     "backupRecommendation": "建議：在清理前先匯出資料庫備份，以防需要還原資料。",
     "button": "清理日誌",
-    "cancel": "取消",
-    "cleaning": "正在清理...",
+    "cancel": "關閉",
+    "cleaning": "清理中...",
     "confirm": "確認清理",
     "confirmTitle": "確認清理日誌",
     "confirmWarning": "此操作將永久刪除 {range}的所有日誌記錄，且無法復原。",
@@ -25,7 +25,7 @@
       "30days": "一個月前",
       "7days": "一週前",
       "90days": "三個月前",
-      "default": "{days} 天前"
+      "default": "約 {days} 天前"
     },
     "rangeLabel": "清理範圍",
     "statisticsRetained": "✓ 統計資料將被保留（用於趨勢分析）",
@@ -74,7 +74,7 @@
     "backupFile": "備份檔案：",
     "backupRecommendation": "建議在執行此操作前，先匯出目前資料庫作為備份。",
     "button": "匯入資料庫",
-    "cancel": "取消",
+    "cancel": "關閉",
     "cleanFirstDescription": "匯入前刪除所有現有資料，確保資料庫與備份檔案完全一致。如果不勾選，將嘗試合併資料，但可能因主鍵衝突而失敗。",
     "cleanFirstLabel": "清除現有資料（覆蓋模式）",
     "confirm": "確認匯入",

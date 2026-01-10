@@ -20,7 +20,7 @@
     "matchTypeExact": "完全一致 - 完全に一致する場合のみブロック",
     "matchTypeLabel": "マッチタイプ *",
     "matchTypeRegex": "正規表現 - 複雑なパターンマッチングをサポート",
-    "saving": "保存中...",
+    "saving": "保存しています...",
     "wordLabel": "センシティブワード *",
     "wordPlaceholder": "センシティブワードを入力...",
     "wordRequired": "センシティブワードを入力してください"
@@ -39,7 +39,7 @@
     "title": "センシティブワードリスト"
   },
   "table": {
-    "actions": "操作",
+    "actions": "アクション",
     "createdAt": "作成日時",
     "description": "説明",
     "matchType": "マッチタイプ",

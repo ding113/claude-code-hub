@@ -54,7 +54,7 @@
       "force": "強制官方",
       "keep": "原樣透傳"
     },
-    "title": "Codex Instructions 策略"
+    "title": "Codex Instructions 策略設定"
   },
   "mcpPassthrough": {
     "desc": "啟用後，將 MCP 工具調用透傳到指定的 AI 服務商（如 minimax 的圖片識別、聯網搜索）",
@@ -80,7 +80,7 @@
       "placeholder": "選擇透傳類型"
     },
     "summary": {
-      "custom": "自定義 (預留)",
+      "custom": "自定義（預留）",
       "glm": "智譜 GLM",
       "minimax": "Minimax",
       "none": "不啟用"
@@ -120,17 +120,17 @@
         "fixed": "每天固定時間點重置額度",
         "rolling": "從首次呼叫開始計算，24 小時後重置"
       },
-      "label": "每日重置模式",
+      "label": "每日重設模式",
       "options": {
         "fixed": "固定時間重置",
         "rolling": "滾動視窗（24 小時）"
       }
     },
     "dailyResetTime": {
-      "label": "每日重置時間 (HH:mm)"
+      "label": "每日重設時間（HH:mm）"
     },
     "limit5h": {
-      "label": "5 小時消費上限 (USD)",
+      "label": "5 小時消費上限（USD）",
       "placeholder": "留空表示無限制"
     },
     "limitConcurrent": {
@@ -138,19 +138,19 @@
       "placeholder": "0 表示無限制"
     },
     "limitDaily": {
-      "label": "每日消費上限 (USD)",
+      "label": "每日消費上限（USD）",
       "placeholder": "留空表示無限制"
     },
     "limitMonthly": {
-      "label": "月消費上限 (USD)",
+      "label": "月消費上限（USD）",
       "placeholder": "留空表示無限制"
     },
     "limitTotal": {
-      "label": "總消費上限 (USD)",
+      "label": "總消費上限（USD）",
       "placeholder": "留空表示無限制"
     },
     "limitWeekly": {
-      "label": "週消費上限 (USD)",
+      "label": "週消費上限（USD）",
       "placeholder": "留空表示無限制"
     },
     "summary": {
@@ -192,7 +192,7 @@
           "inherit": "不覆寫（跟隨客戶端）",
           "low": "low",
           "medium": "medium（預設）",
-          "minimal": "minimal（更省、更快）",
+          "minimal": "minimal（更省資源、更快）",
           "none": "none（僅 GPT-5.1）",
           "xhigh": "xhigh（僅 GPT-5.1-Codex-Max）"
         }
@@ -239,7 +239,7 @@
       "allowAll": "✓ 允許所有模型（建議）",
       "desc": "限制此供應商可處理的模型。預設可處理該類型下的所有模型。",
       "label": "允許的模型",
-      "moreModels": "+{count} 更多",
+      "moreModels": "+{count} 個以上",
       "optional": "（選填）",
       "selectedOnly": "僅允許所選的 {count} 個模型。其他模型將不會被路由到此供應商。",
       "title": "模型允許清單"
@@ -258,8 +258,8 @@
     "providerTypeDisabledNote": "註：OpenAI Compatible 類型開發中，暫不可用",
     "scheduleParams": {
       "costMultiplier": {
-        "desc": "成本計算倍率。官方供應商=1.0，便宜 20%=0.8，貴 20%=1.2（最多 4 位小數）",
-        "label": "成本倍率",
+        "desc": "成本計算倍數。官方供應商=1.0，便宜 20%=0.8，貴 20%=1.2（最多 4 位小數）",
+        "label": "成本倍數",
         "placeholder": "1.0"
       },
       "group": {

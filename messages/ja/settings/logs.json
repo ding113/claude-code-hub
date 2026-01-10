@@ -14,7 +14,7 @@
     "levelGuideTrace": "Trace: 非常に詳細なトレース情報、すべての詳細を含む",
     "levelGuideWarn": "Warn: 警告（レート制限、サーキットブレーカー開放など）+ エラーを含む",
     "save": "設定を保存",
-    "saving": "保存中...",
+    "saving": "保存しています...",
     "selectLevel": "ログレベルを選択",
     "success": "ログレベルを設定しました: {level}"
   },

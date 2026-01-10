@@ -65,7 +65,7 @@
     "patternPlaceholder": "正規表現を入力...",
     "patternRequired": "正規表現パターンを入力してください",
     "regexTester": "正規表現テスター",
-    "saving": "保存中...",
+    "saving": "保存しています...",
     "testMessageLabel": "テストメッセージ",
     "testMessagePlaceholder": "テストするエラーメッセージを入力...",
     "useTemplate": "Claude Error テンプレート",
@@ -113,7 +113,7 @@
     "title": "エラールールリスト"
   },
   "table": {
-    "actions": "操作",
+    "actions": "アクション",
     "category": "ルールカテゴリ",
     "createdAt": "作成日時",
     "default": "デフォルト",

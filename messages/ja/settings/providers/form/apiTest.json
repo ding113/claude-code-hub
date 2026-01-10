@@ -19,7 +19,7 @@
     "confirmConfig": "プロバイダーURL、APIキー、モデル設定を確認してください",
     "realRequest": "テストはプロバイダーに実際のリクエストを送信し、少量のクォータを消費する可能性があります",
     "resultReference": "プロバイダーによって結果が異なる場合があり、参考用です",
-    "title": "注意"
+    "title": "注意事項"
   },
   "error": "エラーメッセージ",
   "failed": "失敗",
@@ -63,7 +63,7 @@
       "title": "エラー詳細",
       "type": "エラータイプ"
     },
-    "judgment": "判定",
+    "judgment": "判定結果",
     "labels": {
       "content": "コンテンツ",
       "error": "エラー",
@@ -113,7 +113,7 @@
       "failed": "失敗",
       "http": {
         "failed": "4xx/5xx 失敗",
-        "passed": "2xx/3xx 成功",
+        "passed": "2xx/3xx OK",
         "statusCode": "ステータスコード",
         "title": "Tier 1: HTTPステータス"
       },
@@ -133,7 +133,7 @@
   "streamFormat": "ストリーム形式",
   "streamInfo": "ストリーム応答情報",
   "streamResponse": "ストリーム応答",
-  "success": "成功",
+  "success": "成功しました",
   "successContains": "成功検出キーワード",
   "successContainsDesc": "成功と見なすには、レスポンスにこのキーワードが含まれている必要があります",
   "successContainsPlaceholder": "pong",

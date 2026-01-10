@@ -1,6 +1,6 @@
 {
   "claude": {
-    "description": "Anthropic 官方 API",
+    "description": "Anthropic 官方 API（原生）",
     "label": "Claude"
   },
   "claudeAuth": {

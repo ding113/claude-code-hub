@@ -4,7 +4,7 @@
   "costMultiplierLabel": "コスト倍率",
   "priorityInvalid": "0 以上の整数を入力してください",
   "priorityLabel": "優先度",
-  "save": "保存",
+  "save": "保存する",
   "saveFailed": "保存に失敗しました",
   "saveSuccess": "保存に成功しました",
   "weightInvalid": "1〜100 の整数を入力してください",

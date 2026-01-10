@@ -1,7 +1,7 @@
 {
   "circuitBroken": "熔斷",
   "groups": {
-    "all": "全部",
+    "all": "所有",
     "default": "default",
     "label": "分組:"
   },
