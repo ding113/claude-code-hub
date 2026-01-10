@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -47,9 +48,10 @@ import {
 } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDebounce } from "@/lib/hooks/use-debounce";
+import { copyToClipboard } from "@/lib/utils/clipboard";
 import type { ModelPrice, ModelPriceSource } from "@/types/model-price";
 import { DeleteModelDialog } from "./delete-model-dialog";
-import { ModelPriceDialog } from "./model-price-dialog";
+import { ModelPriceDrawer } from "./model-price-drawer";
 
 interface PriceListProps {
   initialPrices: ModelPrice[];
@@ -74,6 +76,7 @@ export function PriceList({
   initialLitellmProviderFilter,
 }: PriceListProps) {
   const t = useTranslations("settings.prices");
+  const tCommon = useTranslations("common");
   const locale = useLocale();
   const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
   const [sourceFilter, setSourceFilter] = useState<ModelPriceSource | "">(initialSourceFilter);
@@ -244,20 +247,47 @@ export function PriceList({
   };
 
   /**
-   * 获取模型类型标签
+   * 格式化标量价格（用于 /img、/req 等）
    */
-  const getModeBadge = (mode?: string) => {
-    switch (mode) {
-      case "chat":
-        return null;
-      case "image_generation":
-        return <Badge variant="secondary">{t("table.typeImage")}</Badge>;
-      case "completion":
-        return <Badge variant="outline">{t("table.typeCompletion")}</Badge>;
-      default:
-        return <Badge variant="outline">{t("table.typeUnknown")}</Badge>;
+  const formatScalarPrice = (value?: number): string => {
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+      return "-";
     }
+    if (value < 0.01) return value.toFixed(4);
+    if (value < 1) return value.toFixed(3);
+    if (value < 100) return value.toFixed(2);
+    return value.toFixed(0);
   };
+
+  const formatPerMillionTokenPriceLabel = (value?: number): string => {
+    const formatted = formatPrice(value);
+    if (formatted === "-") return "-";
+    return `$${formatted}/M`;
+  };
+
+  const formatPerImagePriceLabel = (value?: number): string => {
+    const formatted = formatScalarPrice(value);
+    if (formatted === "-") return "-";
+    return `$${formatted}/img`;
+  };
+
+  const formatPerRequestPriceLabel = (value?: number): string => {
+    const formatted = formatScalarPrice(value);
+    if (formatted === "-") return "-";
+    return `$${formatted}/req`;
+  };
+
+  const handleCopyModelId = useCallback(
+    async (modelId: string) => {
+      const ok = await copyToClipboard(modelId);
+      if (ok) {
+        toast.success(tCommon("copySuccess"));
+        return;
+      }
+      toast.error(tCommon("copyFailed"));
+    },
+    [tCommon]
+  );
 
   const capabilityItems: Array<{
     key:
@@ -410,10 +440,16 @@ export function PriceList({
           <TableHeader>
             <TableRow>
               <TableHead className="w-72 whitespace-normal">{t("table.modelName")}</TableHead>
-              <TableHead className="w-40 whitespace-normal">{t("table.provider")}</TableHead>
               <TableHead className="w-40 whitespace-normal">{t("table.capabilities")}</TableHead>
-              <TableHead className="w-32 text-right">{t("table.inputPrice")}</TableHead>
-              <TableHead className="w-32 text-right">{t("table.outputPrice")}</TableHead>
+              <TableHead className="w-48 whitespace-normal text-right">
+                {t("table.price")}
+              </TableHead>
+              <TableHead className="w-36 whitespace-normal text-right">
+                {t("table.cacheReadPrice")}
+              </TableHead>
+              <TableHead className="w-44 whitespace-normal text-right">
+                {t("table.cacheCreationPrice")}
+              </TableHead>
               <TableHead className="w-32">{t("table.updatedAt")}</TableHead>
               <TableHead className="w-20">{t("table.actions")}</TableHead>
             </TableRow>
@@ -436,24 +472,30 @@ export function PriceList({
                       <span className="font-medium">
                         {price.priceData.display_name?.trim() || price.modelName}
                       </span>
+                      {price.priceData.litellm_provider ? (
+                        <Badge variant="secondary" className="font-mono text-xs">
+                          {price.priceData.litellm_provider}
+                        </Badge>
+                      ) : null}
                       {price.source === "manual" && (
                         <Badge variant="outline">{t("badges.local")}</Badge>
                       )}
-                      {price.priceData.mode ? getModeBadge(price.priceData.mode) : null}
                     </div>
-                    {price.priceData.display_name?.trim() &&
-                    price.priceData.display_name.trim() !== price.modelName ? (
-                      <div className="mt-1 font-mono text-xs text-muted-foreground">
-                        {price.modelName}
-                      </div>
-                    ) : null}
-                  </TableCell>
-                  <TableCell className="whitespace-normal break-words">
-                    {price.priceData.litellm_provider ? (
-                      <span className="font-mono text-xs">{price.priceData.litellm_provider}</span>
-                    ) : (
-                      <span className="text-muted-foreground">-</span>
-                    )}
+                    <div className="mt-1">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label={t("table.copyModelId")}
+                            className="font-mono text-xs text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                            onClick={() => handleCopyModelId(price.modelName)}
+                          >
+                            {price.modelName}
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent sideOffset={4}>{t("table.copyModelId")}</TooltipContent>
+                      </Tooltip>
+                    </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
@@ -485,23 +527,77 @@ export function PriceList({
                     </div>
                   </TableCell>
                   <TableCell className="font-mono text-sm text-right">
-                    {price.priceData.mode === "image_generation" ? (
-                      "-"
-                    ) : (
-                      <span className="text-muted-foreground">
-                        ${formatPrice(price.priceData.input_cost_per_token)}/M
-                      </span>
-                    )}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-end gap-2">
+                        <span className="text-xs text-muted-foreground">
+                          {t("table.priceInput")}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {price.priceData.mode === "image_generation"
+                            ? "-"
+                            : formatPerMillionTokenPriceLabel(price.priceData.input_cost_per_token)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-end gap-2">
+                        <span className="text-xs text-muted-foreground">
+                          {t("table.priceOutput")}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {price.priceData.mode === "image_generation"
+                            ? formatPerImagePriceLabel(price.priceData.output_cost_per_image)
+                            : formatPerMillionTokenPriceLabel(
+                                price.priceData.output_cost_per_token
+                              )}
+                        </span>
+                      </div>
+                      {formatPerRequestPriceLabel(price.priceData.input_cost_per_request) !==
+                      "-" ? (
+                        <div className="flex items-center justify-end gap-2">
+                          <span className="text-xs text-muted-foreground">
+                            {t("table.pricePerRequest")}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {formatPerRequestPriceLabel(price.priceData.input_cost_per_request)}
+                          </span>
+                        </div>
+                      ) : null}
+                    </div>
                   </TableCell>
                   <TableCell className="font-mono text-sm text-right">
-                    {price.priceData.mode === "image_generation" ? (
-                      <span className="text-muted-foreground">
-                        ${formatPrice(price.priceData.output_cost_per_image)}/img
-                      </span>
+                    <span className="text-muted-foreground">
+                      {price.priceData.supports_prompt_caching === true
+                        ? formatPerMillionTokenPriceLabel(
+                            price.priceData.cache_read_input_token_cost
+                          )
+                        : "-"}
+                    </span>
+                  </TableCell>
+                  <TableCell className="font-mono text-sm text-right">
+                    {price.priceData.supports_prompt_caching === true ? (
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-end gap-2">
+                          <span className="text-xs text-muted-foreground">
+                            {t("table.cache5m")}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {formatPerMillionTokenPriceLabel(
+                              price.priceData.cache_creation_input_token_cost
+                            )}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-end gap-2">
+                          <span className="text-xs text-muted-foreground">
+                            {t("table.cache1h")}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {formatPerMillionTokenPriceLabel(
+                              price.priceData.cache_creation_input_token_cost_above_1hr
+                            )}
+                          </span>
+                        </div>
+                      </div>
                     ) : (
-                      <span className="text-muted-foreground">
-                        ${formatPrice(price.priceData.output_cost_per_token)}/M
-                      </span>
+                      <span className="text-muted-foreground">-</span>
                     )}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
@@ -520,7 +616,7 @@ export function PriceList({
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <ModelPriceDialog
+                        <ModelPriceDrawer
                           mode="edit"
                           initialData={price}
                           onSuccess={() =>

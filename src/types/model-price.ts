@@ -5,6 +5,7 @@ export interface ModelPriceData {
   // 基础价格信息
   input_cost_per_token?: number;
   output_cost_per_token?: number;
+  input_cost_per_request?: number; // 按次调用固定费用（与 token 费用叠加）
 
   // 缓存相关价格
   cache_creation_input_token_cost?: number;

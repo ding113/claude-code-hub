@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { getModelPrices, getModelPricesPaginated } from "@/actions/model-prices";
 import { Section } from "@/components/section";
 import { SettingsPageHeader } from "../_components/settings-page-header";
-import { ModelPriceDialog } from "./_components/model-price-dialog";
+import { ModelPriceDrawer } from "./_components/model-price-drawer";
 import { PriceList } from "./_components/price-list";
 import { PricesSkeleton } from "./_components/prices-skeleton";
 import { SyncLiteLLMButton } from "./_components/sync-litellm-button";
@@ -86,7 +86,7 @@ async function SettingsPricesContent({ searchParams }: SettingsPricesPageProps) 
       description={t("prices.section.description")}
       actions={
         <div className="flex gap-2">
-          <ModelPriceDialog mode="create" />
+          <ModelPriceDrawer mode="create" />
           <SyncLiteLLMButton />
           <UploadPriceDialog defaultOpen={isRequired && isEmpty} isRequired={isRequired} />
         </div>
