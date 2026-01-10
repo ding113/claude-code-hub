@@ -6,3 +6,20 @@
 
 # Claude local settings
 .claude/
+
+# Go build artifacts
+bin/
+tmp/
+build-errors.log
+
+# Configuration files (may contain secrets)
+config.yaml
+config.yml
+.env
+
+# Test coverage
+coverage.out
+coverage.html
+
+# Vendor directory (if not using go modules)
+# vendor/

@@ -1,0 +1,40 @@
+# Server configuration
+server:
+  port: 8080
+  host: "0.0.0.0"
+  read_timeout: 30s
+  write_timeout: 120s
+  shutdown_timeout: 30s
+
+# Database configuration
+database:
+  host: localhost
+  port: 5432
+  user: postgres
+  password: ""
+  dbname: claude_code_hub
+  sslmode: disable
+  max_open_conns: 20
+  max_idle_conns: 5
+  conn_lifetime: 30m
+
+# Redis configuration
+redis:
+  host: localhost
+  port: 6379
+  password: ""
+  db: 0
+  pool_size: 10
+  min_idle_conns: 2
+  dial_timeout: 5s
+  read_timeout: 3s
+  write_timeout: 3s
+
+# Log configuration
+log:
+  level: info  # debug, info, warn, error
+  format: json  # json, text
+
+# Auth configuration
+auth:
+  admin_api_key: ""
