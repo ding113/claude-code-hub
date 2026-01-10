@@ -64,6 +64,47 @@ function hasHanChars(s) {
   return /[\u4E00-\u9FFF]/.test(s);
 }
 
+function loadAllowlist(allowlistPath) {
+  if (!allowlistPath) return null;
+  if (!fs.existsSync(allowlistPath)) return null;
+  const data = loadJson(allowlistPath);
+  const entries = Array.isArray(data?.entries) ? data.entries : [];
+  const glossary = Array.isArray(data?.glossary) ? data.glossary : [];
+  return { entries, glossary };
+}
+
+function isAllowedByAllowlist(row, allowlist) {
+  if (!allowlist) return { allowed: false, allowReason: null };
+
+  for (const term of allowlist.glossary || []) {
+    if (typeof term === "string" && term.length > 0 && row.value.includes(term)) {
+      return { allowed: true, allowReason: `glossary:${term}` };
+    }
+  }
+
+  for (const entry of allowlist.entries || []) {
+    if (!entry || typeof entry !== "object") continue;
+    const reason = typeof entry.reason === "string" && entry.reason ? entry.reason : "allowlisted";
+
+    if (typeof entry.key === "string" && entry.key === row.key) {
+      return { allowed: true, allowReason: `key:${reason}` };
+    }
+    if (typeof entry.keyPrefix === "string" && row.key.startsWith(entry.keyPrefix)) {
+      return { allowed: true, allowReason: `keyPrefix:${reason}` };
+    }
+    if (typeof entry.keyRegex === "string") {
+      const re = new RegExp(entry.keyRegex);
+      if (re.test(row.key)) return { allowed: true, allowReason: `keyRegex:${reason}` };
+    }
+    if (typeof entry.valueRegex === "string") {
+      const re = new RegExp(entry.valueRegex);
+      if (re.test(row.value)) return { allowed: true, allowReason: `valueRegex:${reason}` };
+    }
+  }
+
+  return { allowed: false, allowReason: null };
+}
+
 function normalizeScopes(scopes) {
   if (typeof scopes === "string") return normalizeScopes([scopes]);
   if (!scopes || scopes.length === 0) return ["settings"];
@@ -106,10 +147,12 @@ function listCanonicalFilesForScope(messagesRoot, scope) {
   return [{ relFile: file, canonicalPath, keyPrefix: scope }];
 }
 
-function findSettingsPlaceholders({ messagesDir, locales, scopes }) {
+function findSettingsPlaceholders({ messagesDir, locales, scopes, allowlistPath }) {
   const root = messagesDir || path.join(process.cwd(), "messages");
   const targets = normalizeLocales(locales);
   const scopeList = normalizeScopes(scopes);
+  const allowlist = loadAllowlist(allowlistPath);
+  let allowlistedCount = 0;
 
   const rows = [];
   for (const locale of targets) {
@@ -151,7 +194,24 @@ function findSettingsPlaceholders({ messagesDir, locales, scopes }) {
     }
   }
 
-  return { rows, byLocaleCount: rows.reduce((acc, r) => ((acc[r.locale] = (acc[r.locale] || 0) + 1), acc), {}) };
+  const filtered = [];
+  for (const row of rows) {
+    const res = isAllowedByAllowlist(row, allowlist);
+    if (res.allowed) {
+      allowlistedCount += 1;
+      continue;
+    }
+    filtered.push(row);
+  }
+
+  return {
+    rows: filtered,
+    allowlistedCount,
+    byLocaleCount: filtered.reduce(
+      (acc, r) => ((acc[r.locale] = (acc[r.locale] || 0) + 1), acc),
+      {}
+    ),
+  };
 }
 
 function run(argv) {
@@ -164,8 +224,10 @@ function run(argv) {
   const scopes = scopeArg ? scopeArg.split("=", 2)[1] : undefined;
   const formatArg = argv.find((a) => a.startsWith("--format="));
   const format = formatArg ? formatArg.split("=", 2)[1] : "text";
+  const allowlistArg = argv.find((a) => a.startsWith("--allowlist="));
+  const allowlistPath = allowlistArg ? allowlistArg.split("=", 2)[1] : path.join(process.cwd(), "scripts", "audit-settings-placeholders.allowlist.json");
 
-  const report = findSettingsPlaceholders({ messagesDir, locales, scopes });
+  const report = findSettingsPlaceholders({ messagesDir, locales, scopes, allowlistPath });
   const total = report.rows.length;
 
   if (total === 0) {

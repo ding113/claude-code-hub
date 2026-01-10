@@ -157,4 +157,69 @@ describe("scripts/audit-settings-placeholders.js", () => {
       fs.rmSync(tmpRoot, { recursive: true, force: true });
     }
   });
+
+  test("allowlist filters false positives (exact/keyPrefix/keyRegex/valueRegex/glossary)", () => {
+    const tmpRoot = path.join(
+      process.cwd(),
+      "tests",
+      ".tmp-audit-settings-placeholders-allowlist",
+      `allowlist-${Date.now()}`
+    );
+    const messagesDir = path.join(tmpRoot, "messages");
+    const allowlistPath = path.join(tmpRoot, "allowlist.json");
+
+    const writeJson = (p: string, data: unknown) => {
+      fs.mkdirSync(path.dirname(p), { recursive: true });
+      fs.writeFileSync(p, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+    };
+
+    try {
+      writeJson(allowlistPath, {
+        entries: [
+          { key: "config.form.exactKey", reason: "test-exact" },
+          { keyPrefix: "config.form.prefix.", reason: "test-prefix" },
+          { keyRegex: "^config\\.form\\.re\\.", reason: "test-key-regex" },
+          { valueRegex: "KEEP_AS_CN$", reason: "test-value-regex" },
+        ],
+        glossary: ["GLOSSARY_TERM"],
+      });
+
+      writeJson(path.join(messagesDir, "zh-CN", "settings", "config.json"), {
+        form: {
+          exactKey: "精确豁免",
+          prefix: {
+            a: "前缀豁免",
+          },
+          re: {
+            b: "正则豁免",
+          },
+          value: "触发 KEEP_AS_CN",
+          glossary: "包含 GLOSSARY_TERM 的句子",
+        },
+      });
+      writeJson(path.join(messagesDir, "en", "settings", "config.json"), {
+        form: {
+          exactKey: "精确豁免",
+          prefix: {
+            a: "前缀豁免",
+          },
+          re: {
+            b: "正则豁免",
+          },
+          value: "触发 KEEP_AS_CN",
+          glossary: "包含 GLOSSARY_TERM 的句子",
+        },
+      });
+
+      const report = audit.findSettingsPlaceholders({
+        messagesDir,
+        locales: ["en"],
+        scopes: ["settings"],
+        allowlistPath,
+      });
+      expect(report.rows).toEqual([]);
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
 });
