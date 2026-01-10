@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import type { Context } from "hono";
 import { logger } from "@/lib/logger";
 import { clientRequestsContext1m as clientRequestsContext1mHelper } from "@/lib/special-attributes";
+import { hasValidPriceData } from "@/lib/utils/price-data";
 import { findLatestPriceByModel } from "@/repository/model-price";
 import { findAllProviders } from "@/repository/provider";
 import type { CacheTtlResolved } from "@/types/cache";
@@ -768,45 +769,6 @@ export class ProxySession {
     this.cachedBillingPriceData = priceData;
     return this.cachedBillingPriceData;
   }
-}
-
-/**
- * 判断价格数据是否包含至少一个可用于计费的价格字段。
- * 避免把数据库中的 `{}` 或仅包含元信息的记录当成有效价格。
- */
-function hasValidPriceData(priceData: ModelPriceData): boolean {
-  const numericCosts = [
-    priceData.input_cost_per_token,
-    priceData.output_cost_per_token,
-    priceData.cache_creation_input_token_cost,
-    priceData.cache_creation_input_token_cost_above_1hr,
-    priceData.cache_read_input_token_cost,
-    priceData.input_cost_per_token_above_200k_tokens,
-    priceData.output_cost_per_token_above_200k_tokens,
-    priceData.cache_creation_input_token_cost_above_200k_tokens,
-    priceData.cache_read_input_token_cost_above_200k_tokens,
-    priceData.output_cost_per_image,
-  ];
-
-  if (
-    numericCosts.some((value) => typeof value === "number" && Number.isFinite(value) && value >= 0)
-  ) {
-    return true;
-  }
-
-  const searchCosts = priceData.search_context_cost_per_query;
-  if (searchCosts) {
-    const searchCostFields = [
-      searchCosts.search_context_size_high,
-      searchCosts.search_context_size_low,
-      searchCosts.search_context_size_medium,
-    ];
-    return searchCostFields.some(
-      (value) => typeof value === "number" && Number.isFinite(value) && value >= 0
-    );
-  }
-
-  return false;
 }
 
 function formatHeadersForLog(headers: Headers): string {

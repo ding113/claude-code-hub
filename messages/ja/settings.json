@@ -534,8 +534,32 @@
       "description": "AIモデルの価格設定を管理します"
     },
     "searchPlaceholder": "モデル名を検索...",
+    "filters": {
+      "all": "すべて",
+      "local": "ローカル",
+      "anthropic": "Anthropic",
+      "openai": "OpenAI",
+      "vertex": "Vertex"
+    },
+    "badges": {
+      "local": "ローカル"
+    },
+    "capabilities": {
+      "assistantPrefill": "アシスタント事前入力",
+      "computerUse": "コンピューター利用",
+      "functionCalling": "関数呼び出し",
+      "pdfInput": "PDF入力",
+      "promptCaching": "プロンプトキャッシュ",
+      "reasoning": "推論",
+      "responseSchema": "レスポンススキーマ",
+      "toolChoice": "ツール選択",
+      "vision": "ビジョン",
+      "statusSupported": "対応",
+      "statusUnsupported": "未対応",
+      "tooltip": "{label}: {status}"
+    },
     "sync": {
-      "button": "LiteLLM価格を同期",
+      "button": "クラウド価格表を同期",
       "syncing": "同期中...",
       "checking": "競合を確認中...",
       "successWithChanges": "価格表を更新: {added}件追加、{updated}件更新、{unchanged}件変化なし",
@@ -545,6 +569,7 @@
       "failedNoResult": "価格表は更新されましたが結果が返されていません",
       "noModels": "モデル価格が見つかりません",
       "partialFailure": "一部更新が成功しましたが、{failed}件のモデルが失敗しました",
+      "failedModels": "失敗モデル: {models}",
       "skippedConflicts": "{count}件の手動モデルをスキップしました"
     },
     "conflict": {
@@ -580,8 +605,8 @@
     },
     "table": {
       "modelName": "モデル名",
-      "type": "タイプ",
       "provider": "プロバイダー",
+      "capabilities": "機能",
       "inputPrice": "入力価格 ($/M)",
       "outputPrice": "出力価格 ($/M)",
       "updatedAt": "更新日時",
@@ -599,6 +624,7 @@
       "showing": "{from}〜{to}件を表示（全{total}件）",
       "previous": "前へ",
       "next": "次へ",
+      "perPageLabel": "1ページあたり",
       "perPage": "1ページあたり{size}件"
     },
     "stats": {
@@ -608,22 +634,22 @@
     },
     "dialog": {
       "title": "モデル価格表を更新",
-      "description": "モデル価格データを含むJSONファイルを選択してアップロード",
-      "selectFile": "JSONファイルをクリックして選択、またはドラッグしてください",
+      "description": "モデル価格データを含むJSONまたはTOMLファイルを選択してアップロード",
+      "selectFile": "JSON/TOMLファイルをクリックして選択、またはドラッグしてください",
       "fileSizeLimit": "ファイルサイズは10MBを超えることはできません",
       "fileSizeLimitSmall": "ファイルサイズは10MB以下です",
-      "invalidFileType": "JSON形式のファイルを選択してください",
+      "invalidFileType": "JSONまたはTOML形式のファイルを選択してください",
       "fileTooLarge": "ファイルサイズが10MBを超えています",
       "upload": "アップロードして更新",
       "uploading": "アップロード中...",
       "updatePriceTable": "価格表を更新",
       "updating": "更新中...",
-      "selectJson": "JSONファイルを選択",
+      "selectJson": "ファイルを選択",
       "updateSuccess": "価格表が正常に更新されました。{count}個のモデルを更新しました",
       "updateFailed": "更新に失敗しました",
       "systemHasBuiltIn": "システムは組み込み価格表を持っています",
       "manualDownload": "手動でダウンロードすることもできます",
-      "latestPriceTable": "最新価格表",
+      "latestPriceTable": "クラウド価格表",
       "andUploadViaButton": "、上のボタンでアップロードしてください",
       "supportedModels": "現在{count}個のモデルをサポート",
       "results": {
@@ -632,6 +658,7 @@
         "success": "成功: {success}",
         "failed": "失敗: {failed}",
         "skipped": "スキップ: {skipped}",
+        "more": " (+{count})",
         "details": "詳細",
         "viewDetails": "詳細ログを表示"
       }
@@ -655,6 +682,7 @@
     },
     "actions": {
       "edit": "編集",
+      "more": "その他の操作",
       "delete": "削除"
     },
     "toast": {

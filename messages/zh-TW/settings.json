@@ -534,8 +534,32 @@
       "description": "管理 AI 模型的價格設定"
     },
     "searchPlaceholder": "搜尋模型名稱...",
+    "filters": {
+      "all": "全部",
+      "local": "本地",
+      "anthropic": "Anthropic",
+      "openai": "OpenAI",
+      "vertex": "Vertex"
+    },
+    "badges": {
+      "local": "本地"
+    },
+    "capabilities": {
+      "assistantPrefill": "助手預填充",
+      "computerUse": "電腦使用",
+      "functionCalling": "函數呼叫",
+      "pdfInput": "PDF 輸入",
+      "promptCaching": "Prompt 快取",
+      "reasoning": "推理",
+      "responseSchema": "回應 Schema",
+      "toolChoice": "工具選擇",
+      "vision": "視覺",
+      "statusSupported": "支援",
+      "statusUnsupported": "不支援",
+      "tooltip": "{label}: {status}"
+    },
     "sync": {
-      "button": "同步 LiteLLM 價格",
+      "button": "同步雲端價格表",
       "syncing": "同步中...",
       "checking": "檢查衝突...",
       "successWithChanges": "價格表更新: 新增 {added} 個，更新 {updated} 個，未變化 {unchanged} 個",
@@ -545,6 +569,7 @@
       "failedNoResult": "價格表更新成功但未返回處理結果",
       "noModels": "未找到支援的模型價格",
       "partialFailure": "部分更新成功，但有 {failed} 個模型失敗",
+      "failedModels": "失敗模型: {models}",
       "skippedConflicts": "跳過 {count} 個手動模型"
     },
     "conflict": {
@@ -580,8 +605,8 @@
     },
     "table": {
       "modelName": "模型名稱",
-      "type": "類型",
       "provider": "提供商",
+      "capabilities": "能力",
       "inputPrice": "輸入價格 ($/M)",
       "outputPrice": "輸出價格 ($/M)",
       "updatedAt": "更新時間",
@@ -599,6 +624,7 @@
       "showing": "顯示 {from}-{to} 條，共 {total} 條",
       "previous": "上一頁",
       "next": "下一頁",
+      "perPageLabel": "每頁",
       "perPage": "每頁 {size} 條"
     },
     "stats": {
@@ -608,22 +634,22 @@
     },
     "dialog": {
       "title": "更新模型價格表",
-      "description": "選擇包含模型價格資料的 JSON 檔案並上傳",
-      "selectFile": "點擊選擇 JSON 檔案或拖曳到此處",
+      "description": "選擇包含模型價格資料的 JSON 或 TOML 檔案並上傳",
+      "selectFile": "點擊選擇 JSON/TOML 檔案或拖曳到此處",
       "fileSizeLimit": "檔案大小不能超過 10MB",
       "fileSizeLimitSmall": "檔案大小不超過 10MB",
-      "invalidFileType": "請選擇 JSON 格式的檔案",
+      "invalidFileType": "請選擇 JSON 或 TOML 格式的檔案",
       "fileTooLarge": "檔案大小超過 10MB 限制",
       "upload": "上傳並更新",
       "uploading": "上傳中...",
       "updatePriceTable": "更新價格表",
       "updating": "更新中...",
-      "selectJson": "選擇 JSON 檔案",
+      "selectJson": "選擇檔案",
       "updateSuccess": "價格表更新成功，共更新 {count} 個模型",
       "updateFailed": "更新失敗",
       "systemHasBuiltIn": "系統已內置價格表",
       "manualDownload": "你也可以手動下載",
-      "latestPriceTable": "最新價格表",
+      "latestPriceTable": "雲端價格表",
       "andUploadViaButton": "，並透過上方按鈕上傳",
       "supportedModels": "目前支援 {count} 個模型",
       "results": {
@@ -632,6 +658,7 @@
         "success": "成功: {success}",
         "failed": "失敗: {failed}",
         "skipped": "跳過: {skipped}",
+        "more": " (+{count})",
         "details": "詳細資訊",
         "viewDetails": "檢視詳細記錄"
       }
@@ -655,6 +682,7 @@
     },
     "actions": {
       "edit": "編輯",
+      "more": "更多操作",
       "delete": "刪除"
     },
     "toast": {

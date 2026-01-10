@@ -21,6 +21,13 @@ describe("thinking-signature-rectifier", () => {
       expect(trigger).toBe("invalid_signature_in_thinking_block");
     });
 
+    test("应命中：thinking 启用但 assistant 首块为 tool_use（需关闭 thinking 兜底）", () => {
+      const trigger = detectThinkingSignatureRectifierTrigger(
+        "messages.69.content.0.type: Expected `thinking` or `redacted_thinking`, but found `tool_use`. When `thinking` is enabled, a final `assistant` message must start with a thinking block (preceeding the lastmost set of `tool_use` and `tool_result` blocks). To avoid this requirement, disable `thinking`."
+      );
+      expect(trigger).toBe("assistant_message_must_start_with_thinking");
+    });
+
     test("应命中：非法请求/illegal request/invalid request", () => {
       expect(detectThinkingSignatureRectifierTrigger("非法请求")).toBe("invalid_request");
       expect(detectThinkingSignatureRectifierTrigger("illegal request format")).toBe(
@@ -83,6 +90,37 @@ describe("thinking-signature-rectifier", () => {
       expect(result.removedThinkingBlocks).toBe(0);
       expect(result.removedRedactedThinkingBlocks).toBe(0);
       expect(result.removedSignatureFields).toBe(0);
+    });
+
+    test("thinking 启用且 tool_use 续写缺少 thinking 前缀时，应删除顶层 thinking 字段", () => {
+      const message: Record<string, unknown> = {
+        model: "claude-test",
+        thinking: {
+          type: "enabled",
+          budget_tokens: 1024,
+        },
+        messages: [
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "toolu_1",
+                name: "WebSearch",
+                input: { query: "q" },
+              },
+            ],
+          },
+          {
+            role: "user",
+            content: [{ type: "tool_result", tool_use_id: "toolu_1", content: "ok" }],
+          },
+        ],
+      };
+
+      const result = rectifyAnthropicRequestMessage(message);
+      expect(result.applied).toBe(true);
+      expect((message as any).thinking).toBeUndefined();
     });
   });
 });

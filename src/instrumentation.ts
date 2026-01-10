@@ -3,14 +3,18 @@
  * 在服务器启动时自动执行数据库迁移
  */
 
+// instrumentation 需要 Node.js runtime（依赖数据库与 Redis 等 Node 能力）
+export const runtime = "nodejs";
+
 import { startCacheCleanup, stopCacheCleanup } from "@/lib/cache/session-cache";
 import { logger } from "@/lib/logger";
-import { closeRedis } from "@/lib/redis";
 
 const instrumentationState = globalThis as unknown as {
   __CCH_CACHE_CLEANUP_STARTED__?: boolean;
   __CCH_SHUTDOWN_HOOKS_REGISTERED__?: boolean;
   __CCH_SHUTDOWN_IN_PROGRESS__?: boolean;
+  __CCH_CLOUD_PRICE_SYNC_STARTED__?: boolean;
+  __CCH_CLOUD_PRICE_SYNC_INTERVAL_ID__?: ReturnType<typeof setInterval>;
 };
 
 /**
@@ -36,6 +40,46 @@ async function syncErrorRulesAndInitializeDetector(): Promise<void> {
   const { errorRuleDetector } = await import("@/lib/error-rule-detector");
   await errorRuleDetector.reload();
   logger.info("Error rule detector cache loaded successfully");
+}
+
+/**
+ * 启动云端价格表定时同步（每 30 分钟一次）。
+ *
+ * 约束：
+ * - 使用 globalThis 状态去重，避免开发环境热重载重复注册
+ * - 失败不阻塞启动，仅记录日志
+ */
+async function startCloudPriceSyncScheduler(): Promise<void> {
+  if (instrumentationState.__CCH_CLOUD_PRICE_SYNC_STARTED__) {
+    return;
+  }
+
+  try {
+    const { requestCloudPriceTableSync } = await import("@/lib/price-sync/cloud-price-updater");
+    const intervalMs = 30 * 60 * 1000;
+
+    // 启动后立即触发一次（避免首次 30 分钟空窗期）
+    requestCloudPriceTableSync({ reason: "scheduled", throttleMs: 0 });
+
+    instrumentationState.__CCH_CLOUD_PRICE_SYNC_INTERVAL_ID__ = setInterval(() => {
+      try {
+        requestCloudPriceTableSync({ reason: "scheduled", throttleMs: 0 });
+      } catch (error) {
+        logger.warn("[Instrumentation] Cloud price sync scheduler tick failed", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }, intervalMs);
+
+    instrumentationState.__CCH_CLOUD_PRICE_SYNC_STARTED__ = true;
+    logger.info("[Instrumentation] Cloud price sync scheduler started", {
+      intervalSeconds: intervalMs / 1000,
+    });
+  } catch (error) {
+    logger.warn("[Instrumentation] Cloud price sync scheduler init failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 export async function register() {
@@ -78,6 +122,7 @@ export async function register() {
         }
 
         try {
+          const { closeRedis } = await import("@/lib/redis");
           await closeRedis();
         } catch (error) {
           logger.warn("[Instrumentation] Failed to close Redis connection", {
@@ -93,6 +138,18 @@ export async function register() {
           await stopMessageRequestWriteBuffer();
         } catch (error) {
           logger.warn("[Instrumentation] Failed to stop message request write buffer", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+
+        try {
+          if (instrumentationState.__CCH_CLOUD_PRICE_SYNC_INTERVAL_ID__) {
+            clearInterval(instrumentationState.__CCH_CLOUD_PRICE_SYNC_INTERVAL_ID__);
+            instrumentationState.__CCH_CLOUD_PRICE_SYNC_INTERVAL_ID__ = undefined;
+            instrumentationState.__CCH_CLOUD_PRICE_SYNC_STARTED__ = false;
+          }
+        } catch (error) {
+          logger.warn("[Instrumentation] Failed to stop cloud price sync scheduler", {
             error: error instanceof Error ? error.message : String(error),
           });
         }
@@ -126,6 +183,9 @@ export async function register() {
       // 初始化价格表（如果数据库为空）
       const { ensurePriceTable } = await import("@/lib/price-sync/seed-initializer");
       await ensurePriceTable();
+
+      // 启动云端价格表定时同步
+      await startCloudPriceSyncScheduler();
 
       // 同步错误规则并初始化检测器（非关键功能,允许优雅降级）
       try {
@@ -173,6 +233,11 @@ export async function register() {
       // 初始化价格表（如果数据库为空）
       const { ensurePriceTable } = await import("@/lib/price-sync/seed-initializer");
       await ensurePriceTable();
+
+      // 启动云端价格表定时同步（仅在数据库可用时启用，避免本地无 DB 时反复报错）
+      if (isConnected) {
+        await startCloudPriceSyncScheduler();
+      }
 
       // 同步错误规则并初始化检测器（非关键功能,允许优雅降级）
       try {
