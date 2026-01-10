@@ -512,7 +512,7 @@
         "scoop": {
           "title": "方法2：Scoop",
           "description": "Scoop でインストール：",
-          "command": "scoop bucket add extras\\nscoop install extras/opencode"
+          "command": "scoop bucket add extras\nscoop install extras/opencode"
         }
       }
     },

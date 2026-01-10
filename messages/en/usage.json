@@ -512,7 +512,7 @@
         "scoop": {
           "title": "Option 2: Scoop",
           "description": "Install via Scoop:",
-          "command": "scoop bucket add extras\\nscoop install extras/opencode"
+          "command": "scoop bucket add extras\nscoop install extras/opencode"
         }
       }
     },

@@ -999,7 +999,7 @@ gemini`}
       );
     }
 
-    const lang = os === "macos" ? "bash" : "bash";
+    const lang = "bash";
 
     return (
       <div className="space-y-4">
@@ -1047,31 +1047,33 @@ gemini`}
         ? "%USERPROFILE%\\.config\\opencode\\opencode.json"
         : "~/.config/opencode/opencode.json";
 
-    const opencodeConfigJson = `{
-  "$schema": "https://opencode.ai/config.json",
-  "theme": "opencode",
-  "autoupdate": false,
-  "provider": {
-    "cch": {
-      "npm": "@ai-sdk/openai-compatible",
-      "name": "Claude Code Hub (cch)",
-      "options": {
-        "baseURL": "${resolvedOrigin}/v1",
-        "apiKey": "{env:CCH_API_KEY}"
+    const opencodeConfigJson = JSON.stringify(
+      {
+        $schema: "https://opencode.ai/config.json",
+        theme: "opencode",
+        autoupdate: false,
+        provider: {
+          cch: {
+            npm: "@ai-sdk/openai-compatible",
+            name: "Claude Code Hub (cch)",
+            options: {
+              baseURL: `${resolvedOrigin}/v1`,
+              apiKey: "{env:CCH_API_KEY}",
+            },
+            models: {
+              "claude-haiku-4-5-20251001": { name: "Claude Haiku 4.5" },
+              "claude-sonnet-4-5-20250929": { name: "Claude Sonnet 4.5" },
+              "claude-opus-4-5-20251101": { name: "Claude Opus 4.5" },
+              "gpt-5.2": { name: "GPT-5.2" },
+              "gemini-3-pro-preview": { name: "Gemini 3 Pro Preview" },
+              "gemini-3-flash-preview": { name: "Gemini 3 Flash Preview" },
+            },
+          },
+        },
       },
-      "models": {
-        "claude-haiku-4-5-20251001": { "name": "Claude Haiku 4.5" },
-        "claude-sonnet-4-5-20250929": { "name": "Claude Sonnet 4.5" },
-        "claude-opus-4-5-20251101": { "name": "Claude Opus 4.5" },
-
-        "gpt-5.2": { "name": "GPT-5.2" },
-
-        "gemini-3-pro-preview": { "name": "Gemini 3 Pro Preview" },
-        "gemini-3-flash-preview": { "name": "Gemini 3 Flash Preview" }
-      }
-    }
-  }
-}`;
+      null,
+      2
+    );
 
     return (
       <div className="space-y-4">
@@ -1325,6 +1327,9 @@ ${cli.cliName}`}
    */
   const renderCommonIssues = (cli: CLIConfig, os: OS) => {
     const lang = os === "windows" ? "powershell" : "bash";
+    const envKeyName = ["codex", "opencode"].includes(cli.id)
+      ? "CCH_API_KEY"
+      : "ANTHROPIC_AUTH_TOKEN";
     const titleKey =
       cli.id === "claude-code"
         ? "claudeCode.commonIssues.title"
@@ -1425,7 +1430,7 @@ source ~/.${os === "macos" ? "zshrc" : "bashrc"}`}
               <CodeBlock
                 language="powershell"
                 code={`# 检查环境变量
-echo $env:${cli.id === "codex" || cli.id === "opencode" ? "CCH_API_KEY" : "ANTHROPIC_AUTH_TOKEN"}
+echo $env:${envKeyName}
 
 # 测试网络连接
 Test-NetConnection -ComputerName ${resolvedOrigin.replace("https://", "").replace("http://", "")} -Port 443`}
@@ -1434,7 +1439,7 @@ Test-NetConnection -ComputerName ${resolvedOrigin.replace("https://", "").replac
               <CodeBlock
                 language="bash"
                 code={`# 检查环境变量
-echo $${cli.id === "codex" || cli.id === "opencode" ? "CCH_API_KEY" : "ANTHROPIC_AUTH_TOKEN"}
+echo $${envKeyName}
 
 # 测试网络连接
 curl -I ${resolvedOrigin}`}

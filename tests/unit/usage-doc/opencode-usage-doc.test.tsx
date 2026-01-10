@@ -10,6 +10,7 @@ import { createRoot } from "react-dom/client";
 import { NextIntlClientProvider } from "next-intl";
 import { describe, expect, test, vi } from "vitest";
 import { UsageDocContent } from "@/app/[locale]/usage-doc/page";
+import { locales } from "@/i18n/config";
 
 // 测试环境不加载 next-intl/navigation -> next/navigation 的真实实现（避免 Next.js 运行时依赖）
 vi.mock("@/i18n/routing", () => ({
@@ -80,7 +81,7 @@ describe("UsageDoc - OpenCode 配置教程", () => {
   });
 
   test("5 语言 messages/ 需包含 OpenCode 段落的关键翻译键", () => {
-    for (const locale of ["zh-CN", "zh-TW", "en", "ja", "ru"]) {
+    for (const locale of locales) {
       const usageMessages = loadUsageMessages(locale);
 
       expect(usageMessages).toHaveProperty("opencode.title");

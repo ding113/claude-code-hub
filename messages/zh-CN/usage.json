@@ -508,7 +508,7 @@
         "scoop": {
           "title": "方式二：Scoop",
           "description": "使用 Scoop 安装：",
-          "command": "scoop bucket add extras\\nscoop install extras/opencode"
+          "command": "scoop bucket add extras\nscoop install extras/opencode"
         }
       }
     },
