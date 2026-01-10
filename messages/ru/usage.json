@@ -489,7 +489,15 @@
       },
 
       "linux": {
-        "description": "В Linux установите OpenCode одним из следующих способов:"
+        "description": "В Linux установите OpenCode одним из следующих способов:",
+        "homebrew": {
+          "title": "Способ 2: Homebrew",
+          "description": "Установка через Homebrew:"
+        },
+        "paru": {
+          "title": "Способ 5: Paru (Arch Linux)",
+          "description": "Для Arch Linux можно установить через paru (AUR):"
+        }
       },
 
       "script": {
@@ -500,6 +508,11 @@
       "npm": {
         "title": "Способ 3: npm",
         "description": "Глобальная установка через npm:"
+      },
+
+      "bun": {
+        "title": "Способ 4: Bun",
+        "description": "Глобальная установка через Bun:"
       },
 
       "windows": {
@@ -513,7 +526,8 @@
           "title": "Способ 2: Scoop",
           "description": "Установка через Scoop:",
           "command": "scoop bucket add extras\nscoop install extras/opencode"
-        }
+        },
+        "note": "Примечание: поддержка установки через Bun в Windows пока в процессе. Используйте Chocolatey/Scoop/npm или скачайте бинарник из GitHub Releases."
       }
     },
 
@@ -528,8 +542,8 @@
         "important": "Важно",
         "importantPoints": [
           "Создайте API key в панели cch и задайте переменную окружения CCH_API_KEY",
-          "baseURL использует ${resolvedOrigin}/v1 (базовый URL cch v1 API)",
-          "ID модели можно указывать как имена моделей Claude / GPT / Gemini — cch маршрутизирует автоматически"
+          "Все provider используют ${resolvedOrigin}/v1 как baseURL (базовый URL cch v1 API)",
+          "При выборе модели используйте provider_id/model_id (например, cchClaude/claude-sonnet-4-5-20250929)"
         ]
       },
 

@@ -995,6 +995,8 @@ gemini`}
             <p>{t("opencode.installation.npm.description")}</p>
             <CodeBlock language="powershell" code={`npm install -g opencode-ai`} />
           </div>
+
+          <p className="text-sm text-muted-foreground">{t("opencode.installation.windows.note")}</p>
         </div>
       );
     }
@@ -1019,21 +1021,45 @@ gemini`}
           <CodeBlock language={lang} code={`curl -fsSL https://opencode.ai/install | bash`} />
         </div>
 
-        {os === "macos" && (
-          <div className="space-y-3">
-            <h5 className="font-semibold text-foreground">
-              {t("opencode.installation.macos.homebrew.title")}
-            </h5>
-            <p>{t("opencode.installation.macos.homebrew.description")}</p>
-            <CodeBlock language="bash" code={`brew install anomalyco/tap/opencode`} />
-          </div>
-        )}
+        <div className="space-y-3">
+          <h5 className="font-semibold text-foreground">
+            {t(
+              os === "macos"
+                ? "opencode.installation.macos.homebrew.title"
+                : "opencode.installation.linux.homebrew.title"
+            )}
+          </h5>
+          <p>
+            {t(
+              os === "macos"
+                ? "opencode.installation.macos.homebrew.description"
+                : "opencode.installation.linux.homebrew.description"
+            )}
+          </p>
+          <CodeBlock language="bash" code={`brew install anomalyco/tap/opencode`} />
+        </div>
 
         <div className="space-y-3">
           <h5 className="font-semibold text-foreground">{t("opencode.installation.npm.title")}</h5>
           <p>{t("opencode.installation.npm.description")}</p>
           <CodeBlock language="bash" code={`npm install -g opencode-ai`} />
         </div>
+
+        <div className="space-y-3">
+          <h5 className="font-semibold text-foreground">{t("opencode.installation.bun.title")}</h5>
+          <p>{t("opencode.installation.bun.description")}</p>
+          <CodeBlock language="bash" code={`bun add -g opencode-ai`} />
+        </div>
+
+        {os === "linux" && (
+          <div className="space-y-3">
+            <h5 className="font-semibold text-foreground">
+              {t("opencode.installation.linux.paru.title")}
+            </h5>
+            <p>{t("opencode.installation.linux.paru.description")}</p>
+            <CodeBlock language="bash" code={`paru -S opencode-bin`} />
+          </div>
+        )}
       </div>
     );
   };
@@ -1053,9 +1079,9 @@ gemini`}
         theme: "opencode",
         autoupdate: false,
         provider: {
-          cch: {
-            npm: "@ai-sdk/openai-compatible",
-            name: "Claude Code Hub (cch)",
+          cchClaude: {
+            npm: "@ai-sdk/anthropic",
+            name: "Claude via cch",
             options: {
               baseURL: `${resolvedOrigin}/v1`,
               apiKey: "{env:CCH_API_KEY}",
@@ -1064,7 +1090,27 @@ gemini`}
               "claude-haiku-4-5-20251001": { name: "Claude Haiku 4.5" },
               "claude-sonnet-4-5-20250929": { name: "Claude Sonnet 4.5" },
               "claude-opus-4-5-20251101": { name: "Claude Opus 4.5" },
+            },
+          },
+          cchGPT: {
+            npm: "@ai-sdk/openai",
+            name: "GPT via cch",
+            options: {
+              baseURL: `${resolvedOrigin}/v1`,
+              apiKey: "{env:CCH_API_KEY}",
+            },
+            models: {
               "gpt-5.2": { name: "GPT-5.2" },
+            },
+          },
+          cchGemini: {
+            npm: "@ai-sdk/google",
+            name: "Gemini via cch",
+            options: {
+              baseURL: `${resolvedOrigin}/v1`,
+              apiKey: "{env:CCH_API_KEY}",
+            },
+            models: {
               "gemini-3-pro-preview": { name: "Gemini 3 Pro Preview" },
               "gemini-3-flash-preview": { name: "Gemini 3 Flash Preview" },
             },

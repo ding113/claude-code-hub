@@ -485,7 +485,15 @@
       },
 
       "linux": {
-        "description": "在 Linux 上可以选择以下任一种方式安装 OpenCode："
+        "description": "在 Linux 上可以选择以下任一种方式安装 OpenCode：",
+        "homebrew": {
+          "title": "方式二：Homebrew",
+          "description": "也可以使用 Homebrew 安装："
+        },
+        "paru": {
+          "title": "方式五：Paru（Arch Linux）",
+          "description": "如果你使用 Arch Linux，也可以通过 paru（AUR）安装："
+        }
       },
 
       "script": {
@@ -496,6 +504,11 @@
       "npm": {
         "title": "方式三：npm",
         "description": "也可以通过 npm 全局安装："
+      },
+
+      "bun": {
+        "title": "方式四：Bun",
+        "description": "如果你使用 Bun，也可以全局安装："
       },
 
       "windows": {
@@ -509,7 +522,8 @@
           "title": "方式二：Scoop",
           "description": "使用 Scoop 安装：",
           "command": "scoop bucket add extras\nscoop install extras/opencode"
-        }
+        },
+        "note": "提示：官方说明 Windows 上通过 Bun 安装仍在推进。建议使用 Chocolatey/Scoop/npm，或从 GitHub Releases 下载二进制。"
       }
     },
 
@@ -524,8 +538,8 @@
         "important": "重要说明",
         "importantPoints": [
           "请先在 cch 后台创建 API Key，并设置环境变量 CCH_API_KEY",
-          "baseURL 使用 ${resolvedOrigin}/v1（cch v1 API 地址）",
-          "模型 ID 直接填写 claude / gpt / gemini 的模型名即可，cch 会自动路由到对应上游"
+          "三个 provider 的 baseURL 都使用 ${resolvedOrigin}/v1（cch v1 API 地址）",
+          "模型选择时使用 provider_id/model_id 格式（例如 cchClaude/claude-sonnet-4-5-20250929）"
         ]
       },
 

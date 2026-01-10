@@ -68,6 +68,11 @@ describe("UsageDoc - OpenCode 配置教程", () => {
     expect(text).toContain('"$schema": "https://opencode.ai/config.json"');
     expect(text).toContain('"baseURL": "http://localhost:23000/v1"');
 
+    expect(text).toContain('"npm": "@ai-sdk/anthropic"');
+    expect(text).toContain('"npm": "@ai-sdk/openai"');
+    expect(text).toContain('"npm": "@ai-sdk/google"');
+    expect(text).not.toContain("@ai-sdk/openai-compatible");
+
     expect(text).toContain("claude-haiku-4-5-20251001");
     expect(text).toContain("claude-sonnet-4-5-20250929");
     expect(text).toContain("claude-opus-4-5-20251101");
@@ -80,6 +85,24 @@ describe("UsageDoc - OpenCode 配置教程", () => {
     unmount();
   });
 
+  test("应包含官方安装方式示例（curl/npm/bun/brew/paru，以及 Windows 包管理器）", () => {
+    const { unmount } = renderWithIntl("en", <UsageDocContent origin="http://localhost:23000" />);
+
+    const text = document.body.textContent || "";
+
+    expect(text).toContain("curl -fsSL https://opencode.ai/install | bash");
+    expect(text).toContain("npm install -g opencode-ai");
+    expect(text).toContain("bun add -g opencode-ai");
+    expect(text).toContain("brew install anomalyco/tap/opencode");
+    expect(text).toContain("paru -S opencode-bin");
+
+    expect(text).toContain("choco install opencode");
+    expect(text).toContain("scoop bucket add extras");
+    expect(text).toContain("scoop install extras/opencode");
+
+    unmount();
+  });
+
   test("5 语言 messages/ 需包含 OpenCode 段落的关键翻译键", () => {
     for (const locale of locales) {
       const usageMessages = loadUsageMessages(locale);
@@ -87,6 +110,13 @@ describe("UsageDoc - OpenCode 配置教程", () => {
       expect(usageMessages).toHaveProperty("opencode.title");
       expect(usageMessages).toHaveProperty("opencode.description");
       expect(usageMessages).toHaveProperty("opencode.installation.title");
+      expect(usageMessages).toHaveProperty("opencode.installation.script.title");
+      expect(usageMessages).toHaveProperty("opencode.installation.npm.title");
+      expect(usageMessages).toHaveProperty("opencode.installation.bun.title");
+      expect(usageMessages).toHaveProperty("opencode.installation.macos.homebrew.title");
+      expect(usageMessages).toHaveProperty("opencode.installation.linux.homebrew.title");
+      expect(usageMessages).toHaveProperty("opencode.installation.linux.paru.title");
+      expect(usageMessages).toHaveProperty("opencode.installation.windows.note");
       expect(usageMessages).toHaveProperty("opencode.configuration.title");
       expect(usageMessages).toHaveProperty("opencode.startup.title");
       expect(usageMessages).toHaveProperty("opencode.commonIssues.title");

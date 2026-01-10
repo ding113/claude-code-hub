@@ -489,7 +489,15 @@
       },
 
       "linux": {
-        "description": "On Linux, install OpenCode using one of the following methods:"
+        "description": "On Linux, install OpenCode using one of the following methods:",
+        "homebrew": {
+          "title": "Option 2: Homebrew",
+          "description": "Install via Homebrew:"
+        },
+        "paru": {
+          "title": "Option 5: Paru (Arch Linux)",
+          "description": "Install via paru (AUR):"
+        }
       },
 
       "script": {
@@ -500,6 +508,11 @@
       "npm": {
         "title": "Option 3: npm",
         "description": "Install globally via npm:"
+      },
+
+      "bun": {
+        "title": "Option 4: Bun",
+        "description": "Install globally via Bun:"
       },
 
       "windows": {
@@ -513,7 +526,8 @@
           "title": "Option 2: Scoop",
           "description": "Install via Scoop:",
           "command": "scoop bucket add extras\nscoop install extras/opencode"
-        }
+        },
+        "note": "Note: Bun on Windows is still in progress. Use Chocolatey/Scoop/npm, or download a binary from GitHub Releases."
       }
     },
 
@@ -528,8 +542,8 @@
         "important": "Important",
         "importantPoints": [
           "Create an API key in the cch console and set the CCH_API_KEY environment variable",
-          "baseURL uses ${resolvedOrigin}/v1 (cch v1 API base URL)",
-          "Model IDs can be Claude/GPT/Gemini model names; cch routes automatically"
+          "All providers use ${resolvedOrigin}/v1 as baseURL (cch v1 API base URL)",
+          "When selecting models, use provider_id/model_id (e.g. cchClaude/claude-sonnet-4-5-20250929)"
         ]
       },
 
