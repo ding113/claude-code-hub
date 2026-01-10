@@ -310,9 +310,12 @@ export function VirtualizedLogsTable({
                                 : null;
                             const actualCostMultiplier =
                               successfulProvider?.costMultiplier ?? log.costMultiplier;
+                            const multiplier = Number(actualCostMultiplier);
                             const hasCostBadge =
-                              !!actualCostMultiplier &&
-                              parseFloat(String(actualCostMultiplier)) !== 1.0;
+                              actualCostMultiplier !== "" &&
+                              actualCostMultiplier != null &&
+                              Number.isFinite(multiplier) &&
+                              multiplier !== 1;
 
                             return (
                               <>
@@ -334,12 +337,12 @@ export function VirtualizedLogsTable({
                                   <Badge
                                     variant="outline"
                                     className={
-                                      parseFloat(String(actualCostMultiplier)) > 1.0
+                                      multiplier > 1
                                         ? "text-xs bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800 shrink-0"
                                         : "text-xs bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-300 dark:border-green-800 shrink-0"
                                     }
                                   >
-                                    x{parseFloat(String(actualCostMultiplier)).toFixed(2)}
+                                    x{multiplier.toFixed(2)}
                                   </Badge>
                                 )}
                               </>
