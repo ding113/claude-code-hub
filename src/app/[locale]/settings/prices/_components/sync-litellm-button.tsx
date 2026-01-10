@@ -11,7 +11,7 @@ import type { SyncConflict } from "@/types/model-price";
 import { SyncConflictDialog } from "./sync-conflict-dialog";
 
 /**
- * LiteLLM 价格同步按钮组件
+ * 云端价格表同步按钮组件
  */
 export function SyncLiteLLMButton() {
   const t = useTranslations("settings");
@@ -33,7 +33,8 @@ export function SyncLiteLLMButton() {
       const response = await syncLiteLLMPrices(overwriteManual);
 
       if (!response.ok) {
-        toast.error(response.error || t("prices.sync.failed"));
+        console.error("云端价格表同步失败:", response.error);
+        toast.error(t("prices.sync.failed"));
         return;
       }
 
@@ -48,7 +49,9 @@ export function SyncLiteLLMButton() {
       if (failed.length > 0) {
         toast.error(
           t("prices.sync.partialFailure", { failed: failed.length }) +
-            (failed.length <= 5 ? `\n失败模型: ${failed.join(", ")}` : ""),
+            (failed.length <= 5
+              ? `\n${t("prices.sync.failedModels", { models: failed.join(", ") })}`
+              : ""),
           {
             duration: 5000, // 失败消息显示更长时间
           }
@@ -77,8 +80,8 @@ export function SyncLiteLLMButton() {
       router.refresh();
       window.dispatchEvent(new Event("price-data-updated"));
     } catch (error) {
-      console.error("同步失败:", error);
-      toast.error(t("prices.sync.failedError"));
+      console.error("云端价格表同步失败:", error);
+      toast.error(t("prices.sync.failed"));
     } finally {
       setSyncing(false);
     }
@@ -95,7 +98,8 @@ export function SyncLiteLLMButton() {
       const checkResult = await checkLiteLLMSyncConflicts();
 
       if (!checkResult.ok) {
-        toast.error(checkResult.error || t("prices.sync.failed"));
+        console.error("云端价格表冲突检查失败:", checkResult.error);
+        toast.error(t("prices.sync.failed"));
         return;
       }
 
@@ -108,8 +112,8 @@ export function SyncLiteLLMButton() {
         await doSync();
       }
     } catch (error) {
-      console.error("检查冲突失败:", error);
-      toast.error(t("prices.sync.failedError"));
+      console.error("云端价格表冲突检查失败:", error);
+      toast.error(t("prices.sync.failed"));
     } finally {
       setChecking(false);
     }

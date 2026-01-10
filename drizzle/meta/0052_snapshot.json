@@ -1,5 +1,5 @@
 {
-  "id": "e7a58fbf-6e7a-4c5f-a0ac-255fcf6439d7",
+  "id": "313bc169-3d11-418a-a91a-89d7a10a5d1f",
   "prevId": "c7b01fc8-2ed8-4359-a233-9fa3a2f7e8ec",
   "version": "7",
   "dialect": "postgresql",
@@ -796,6 +796,13 @@
           "primaryKey": false,
           "notNull": true
         },
+        "source": {
+          "name": "source",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'litellm'"
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -809,13 +816,6 @@
           "primaryKey": false,
           "notNull": false,
           "default": "now()"
-        },
-        "source": {
-          "name": "source",
-          "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'litellm'"
         }
       },
       "indexes": {
@@ -1941,6 +1941,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
+        },
+        "enable_thinking_signature_rectifier": {
+          "name": "enable_thinking_signature_rectifier",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
         },
         "enable_response_fixer": {
           "name": "enable_response_fixer",

@@ -1,8 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ModelPrice, ModelPriceData } from "@/types/model-price";
 import type { SystemSettings } from "@/types/system-config";
 
 const asyncTasks: Promise<void>[] = [];
+const cloudPriceSyncRequests: Array<{ reason: string }> = [];
 
 vi.mock("@/lib/async-task-manager", () => ({
   AsyncTaskManager: {
@@ -22,6 +23,12 @@ vi.mock("@/lib/logger", () => ({
     warn: () => {},
     error: () => {},
     trace: () => {},
+  },
+}));
+
+vi.mock("@/lib/price-sync/cloud-price-updater", () => ({
+  requestCloudPriceTableSync: (payload: { reason: string }) => {
+    cloudPriceSyncRequests.push(payload);
   },
 }));
 
@@ -81,6 +88,10 @@ import {
 } from "@/repository/message";
 import { findLatestPriceByModel } from "@/repository/model-price";
 import { getSystemSettings } from "@/repository/system-config";
+
+beforeEach(() => {
+  cloudPriceSyncRequests.splice(0, cloudPriceSyncRequests.length);
+});
 
 function makeSystemSettings(
   billingModelSource: SystemSettings["billingModelSource"]
@@ -356,5 +367,79 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     expect(original.sessionCostUsd).toBe("5");
     expect(redirected.sessionCostUsd).toBe("50");
     expect(original.sessionCostUsd).not.toBe(redirected.sessionCostUsd);
+  });
+});
+
+describe("价格表缺失/查询失败：不计费放行", () => {
+  async function runNoPriceScenario(options: {
+    billingModelSource: SystemSettings["billingModelSource"];
+    isStream: boolean;
+    priceLookup: "none" | "throws";
+  }): Promise<{ dbCostCalls: number; rateLimitCalls: number }> {
+    const usage = { input_tokens: 2, output_tokens: 3 };
+    const originalModel = "original-model";
+    const redirectedModel = "redirected-model";
+
+    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings(options.billingModelSource));
+    if (options.priceLookup === "none") {
+      vi.mocked(findLatestPriceByModel).mockResolvedValue(null);
+    } else {
+      vi.mocked(findLatestPriceByModel).mockImplementation(async () => {
+        throw new Error("db query failed");
+      });
+    }
+
+    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
+    vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
+    vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
+    vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
+
+    vi.mocked(updateMessageRequestCost).mockResolvedValue(undefined);
+    vi.mocked(RateLimitService.trackCost).mockResolvedValue(undefined);
+    vi.mocked(SessionManager.updateSessionUsage).mockResolvedValue(undefined);
+
+    const session = createSession({
+      originalModel,
+      redirectedModel,
+      sessionId: `sess-no-price-${options.billingModelSource}-${options.isStream ? "s" : "n"}`,
+      messageId: options.isStream ? 3001 : 3000,
+    });
+
+    const response = options.isStream
+      ? createStreamResponse(usage)
+      : createNonStreamResponse(usage);
+    const clientResponse = await ProxyResponseHandler.dispatch(session, response);
+    await clientResponse.text();
+
+    await drainAsyncTasks();
+
+    return {
+      dbCostCalls: vi.mocked(updateMessageRequestCost).mock.calls.length,
+      rateLimitCalls: vi.mocked(RateLimitService.trackCost).mock.calls.length,
+    };
+  }
+
+  it("无价格：不写入 DB cost，不追踪限流 cost，并触发一次异步同步", async () => {
+    const result = await runNoPriceScenario({
+      billingModelSource: "redirected",
+      isStream: false,
+      priceLookup: "none",
+    });
+
+    expect(result.dbCostCalls).toBe(0);
+    expect(result.rateLimitCalls).toBe(0);
+    expect(cloudPriceSyncRequests).toEqual([{ reason: "missing-model" }]);
+  });
+
+  it("价格查询抛错：不应影响响应，不写入 DB cost，不追踪限流 cost", async () => {
+    const result = await runNoPriceScenario({
+      billingModelSource: "original",
+      isStream: true,
+      priceLookup: "throws",
+    });
+
+    expect(result.dbCostCalls).toBe(0);
+    expect(result.rateLimitCalls).toBe(0);
   });
 });
