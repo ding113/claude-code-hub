@@ -40,6 +40,10 @@ export interface SystemSettings {
   // 可选拦截 Anthropic Warmup 请求（默认关闭）
   interceptAnthropicWarmupRequests: boolean;
 
+  // thinking signature 整流器（默认开启）
+  // 目标：当 Anthropic 类型供应商出现 thinking 签名不兼容导致的 400 错误时，自动整流并重试一次
+  enableThinkingSignatureRectifier: boolean;
+
   // 响应整流（默认开启）
   enableResponseFixer: boolean;
   responseFixerConfig: ResponseFixerConfig;
@@ -76,6 +80,9 @@ export interface UpdateSystemSettingsInput {
 
   // 可选拦截 Anthropic Warmup 请求（可选）
   interceptAnthropicWarmupRequests?: boolean;
+
+  // thinking signature 整流器（可选）
+  enableThinkingSignatureRectifier?: boolean;
 
   // 响应整流（可选）
   enableResponseFixer?: boolean;

@@ -148,6 +148,7 @@ function createFallbackSettings(): SystemSettings {
     verboseProviderError: false,
     enableHttp2: false,
     interceptAnthropicWarmupRequests: false,
+    enableThinkingSignatureRectifier: true,
     enableResponseFixer: true,
     responseFixerConfig: {
       fixTruncatedJson: true,
@@ -180,6 +181,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       verboseProviderError: systemSettings.verboseProviderError,
       enableHttp2: systemSettings.enableHttp2,
       interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
+      enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
       enableResponseFixer: systemSettings.enableResponseFixer,
       responseFixerConfig: systemSettings.responseFixerConfig,
       createdAt: systemSettings.createdAt,
@@ -312,6 +314,11 @@ export async function updateSystemSettings(
       updates.interceptAnthropicWarmupRequests = payload.interceptAnthropicWarmupRequests;
     }
 
+    // thinking signature 整流器开关（如果提供）
+    if (payload.enableThinkingSignatureRectifier !== undefined) {
+      updates.enableThinkingSignatureRectifier = payload.enableThinkingSignatureRectifier;
+    }
+
     // 响应整流开关（如果提供）
     if (payload.enableResponseFixer !== undefined) {
       updates.enableResponseFixer = payload.enableResponseFixer;
@@ -342,6 +349,7 @@ export async function updateSystemSettings(
         verboseProviderError: systemSettings.verboseProviderError,
         enableHttp2: systemSettings.enableHttp2,
         interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
+        enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
         enableResponseFixer: systemSettings.enableResponseFixer,
         responseFixerConfig: systemSettings.responseFixerConfig,
         createdAt: systemSettings.createdAt,

@@ -741,6 +741,8 @@ export const UpdateSystemSettingsSchema = z.object({
   enableHttp2: z.boolean().optional(),
   // 可选拦截 Anthropic Warmup 请求（可选）
   interceptAnthropicWarmupRequests: z.boolean().optional(),
+  // thinking signature 整流器（可选）
+  enableThinkingSignatureRectifier: z.boolean().optional(),
   // 响应整流（可选）
   enableResponseFixer: z.boolean().optional(),
   responseFixerConfig: z

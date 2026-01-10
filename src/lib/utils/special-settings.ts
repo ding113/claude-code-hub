@@ -55,6 +55,18 @@ function buildSettingKey(setting: SpecialSetting): string {
       return JSON.stringify([setting.type, setting.ttl]);
     case "anthropic_context_1m_header_override":
       return JSON.stringify([setting.type, setting.header, setting.flag]);
+    case "thinking_signature_rectifier":
+      return JSON.stringify([
+        setting.type,
+        setting.hit,
+        setting.providerId ?? null,
+        setting.trigger,
+        setting.attemptNumber,
+        setting.retryAttemptNumber,
+        setting.removedThinkingBlocks,
+        setting.removedRedactedThinkingBlocks,
+        setting.removedSignatureFields,
+      ]);
     default: {
       // 兜底：保证即使未来扩展类型也不会导致运行时崩溃
       const _exhaustive: never = setting;

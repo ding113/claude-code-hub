@@ -9,6 +9,7 @@ export type SpecialSetting =
   | ProviderParameterOverrideSpecialSetting
   | ResponseFixerSpecialSetting
   | GuardInterceptSpecialSetting
+  | ThinkingSignatureRectifierSpecialSetting
   | AnthropicCacheTtlHeaderOverrideSpecialSetting
   | AnthropicContext1mHeaderOverrideSpecialSetting;
 
@@ -84,4 +85,25 @@ export type AnthropicContext1mHeaderOverrideSpecialSetting = {
   hit: boolean;
   header: "anthropic-beta";
   flag: string;
+};
+
+/**
+ * Thinking signature 整流器审计
+ *
+ * 用于记录：当 Anthropic 类型供应商遇到 thinking 签名不兼容/非法请求等 400 错误时，
+ * 代理对请求体进行最小整流（移除 thinking/redacted_thinking 与遗留 signature 字段）
+ * 并对同供应商自动重试一次的行为，便于在请求日志中审计与回溯。
+ */
+export type ThinkingSignatureRectifierSpecialSetting = {
+  type: "thinking_signature_rectifier";
+  scope: "request";
+  hit: boolean;
+  providerId: number | null;
+  providerName: string | null;
+  trigger: "invalid_signature_in_thinking_block" | "invalid_request";
+  attemptNumber: number;
+  retryAttemptNumber: number;
+  removedThinkingBlocks: number;
+  removedRedactedThinkingBlocks: number;
+  removedSignatureFields: number;
 };

@@ -170,6 +170,7 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     verboseProviderError: dbSettings?.verboseProviderError ?? false,
     enableHttp2: dbSettings?.enableHttp2 ?? false,
     interceptAnthropicWarmupRequests: dbSettings?.interceptAnthropicWarmupRequests ?? false,
+    enableThinkingSignatureRectifier: dbSettings?.enableThinkingSignatureRectifier ?? true,
     enableResponseFixer: dbSettings?.enableResponseFixer ?? true,
     responseFixerConfig: {
       ...defaultResponseFixerConfig,
