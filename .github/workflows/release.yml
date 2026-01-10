@@ -4,6 +4,23 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Release type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - beta
+          - rc
+      prerelease_number:
+        description: 'Beta/RC number (only for beta/rc types)'
+        required: false
+        default: '1'
 
 permissions:
   contents: write
@@ -12,8 +29,10 @@ permissions:
 jobs:
   release-pipeline:
     runs-on: ubuntu-latest
-    # 跳过由GitHub Actions创建的提交,避免死循环
-    if: github.event.pusher.name != 'github-actions[bot]' && !contains(github.event.head_commit.message, '[skip ci]')
+    # 跳过由GitHub Actions创建的提交,避免死循环 (仅对push事件生效)
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pusher.name != 'github-actions[bot]' && !contains(github.event.head_commit.message, '[skip ci]'))
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -77,7 +96,7 @@ jobs:
           fi
 
       - name: Get current version
-        if: steps.check.outputs.needs_bump == 'true'
+        if: steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch'
         id: get_version
         run: |
           # 获取最新的tag版本
@@ -104,48 +123,83 @@ jobs:
           echo "current_version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Calculate next version
-        if: steps.check.outputs.needs_bump == 'true'
+        if: steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch'
         id: next_version
+        env:
+          VERSION_TYPE: ${{ github.event.inputs.version_type || 'patch' }}
+          PRERELEASE_NUM: ${{ github.event.inputs.prerelease_number || '1' }}
         run: |
           VERSION="${{ steps.get_version.outputs.current_version }}"
 
+          # 移除可能存在的 prerelease 后缀以获取基础版本
+          BASE_VERSION=$(echo "$VERSION" | sed 's/-.*$//')
+
           # 分割版本号
-          IFS='.' read -r -a version_parts <<< "$VERSION"
+          IFS='.' read -r -a version_parts <<< "$BASE_VERSION"
           MAJOR="${version_parts[0]:-0}"
           MINOR="${version_parts[1]:-0}"
           PATCH="${version_parts[2]:-0}"
 
-          # 默认递增patch版本
-          NEW_PATCH=$((PATCH + 1))
-          NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+          echo "Base version: $MAJOR.$MINOR.$PATCH"
+          echo "Version type: $VERSION_TYPE"
+
+          case "$VERSION_TYPE" in
+            major)
+              NEW_VERSION="$((MAJOR + 1)).0.0"
+              IS_PRERELEASE=false
+              ;;
+            minor)
+              NEW_VERSION="${MAJOR}.$((MINOR + 1)).0"
+              IS_PRERELEASE=false
+              ;;
+            patch)
+              NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
+              IS_PRERELEASE=false
+              ;;
+            beta)
+              NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))-beta.${PRERELEASE_NUM}"
+              IS_PRERELEASE=true
+              ;;
+            rc)
+              NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))-rc.${PRERELEASE_NUM}"
+              IS_PRERELEASE=true
+              ;;
+            *)
+              # 默认 patch
+              NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
+              IS_PRERELEASE=false
+              ;;
+          esac
 
           echo "New version: $NEW_VERSION"
+          echo "Is prerelease: $IS_PRERELEASE"
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "new_tag=v$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "is_prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
 
       - name: Update VERSION file
-        if: steps.check.outputs.needs_bump == 'true'
+        if: (steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch') && steps.next_version.outputs.is_prerelease != 'true'
         run: |
           echo "${{ steps.next_version.outputs.new_version }}" > VERSION
 
       - name: Setup Node.js for formatting
-        if: steps.check.outputs.needs_bump == 'true'
+        if: steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch'
         uses: actions/setup-node@v4
         with:
           node-version: "20"
 
       - name: Setup Bun
-        if: steps.check.outputs.needs_bump == 'true'
+        if: steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch'
         uses: oven-sh/setup-bun@v2
 
       - name: Install dependencies and format code
-        if: steps.check.outputs.needs_bump == 'true'
+        if: steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           bun install
           bun run format
 
       - name: Update seed price table
-        if: steps.check.outputs.needs_bump == 'true'
+        if: steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch'
         continue-on-error: true
         run: |
           echo "📦 正在下载最新的 LiteLLM 价格表..."
@@ -174,7 +228,7 @@ jobs:
           fi
 
       - name: Commit VERSION and formatted code
-        if: steps.check.outputs.needs_bump == 'true'
+        if: steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           # 配置git
           git config user.name "github-actions[bot]"
@@ -195,7 +249,7 @@ jobs:
           fi
 
       - name: Create and push tag
-        if: steps.check.outputs.needs_bump == 'true'
+        if: steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           NEW_TAG="${{ steps.next_version.outputs.new_tag }}"
           git tag -a "$NEW_TAG" -m "Release $NEW_TAG"
@@ -203,36 +257,36 @@ jobs:
 
       - name: Prepare image names
         id: image_names
-        if: steps.check.outputs.needs_bump == 'true'
+        if: steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           GHCR_IMAGE=$(echo "ghcr.io/${{ github.repository_owner }}/claude-code-hub" | tr '[:upper:]' '[:lower:]')
 
           echo "ghcr_image=${GHCR_IMAGE}" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
-        if: steps.check.outputs.needs_bump == 'true'
+        if: steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.next_version.outputs.new_tag }}
           name: Release ${{ steps.next_version.outputs.new_version }}
           body: |
-            ## 🐳 Docker 镜像
+            ## Docker
 
             ```bash
             docker pull ${{ steps.image_names.outputs.ghcr_image }}:${{ steps.next_version.outputs.new_tag }}
-            docker pull ${{ steps.image_names.outputs.ghcr_image }}:latest
+            ${{ steps.next_version.outputs.is_prerelease != 'true' && format('docker pull {0}:latest', steps.image_names.outputs.ghcr_image) || '' }}
             ```
 
             ---
 
-            📝 详细更新日志将由 Claude 自动生成...
+            Release notes will be auto-generated...
           draft: false
-          prerelease: false
+          prerelease: ${{ steps.next_version.outputs.is_prerelease == 'true' }}
           generate_release_notes: false
 
-      # 自动清理旧的tags和releases(保持最近50个)
+      # 自清理旧的tags和releases(保持最近50个) - 仅清理正式版本
       - name: Cleanup old tags and releases
-        if: steps.check.outputs.needs_bump == 'true'
+        if: (steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch') && steps.next_version.outputs.is_prerelease != 'true'
         continue-on-error: true
         env:
           TAGS_TO_KEEP: 50
@@ -333,15 +387,15 @@ jobs:
 
       # Docker构建步骤
       - name: Set up QEMU
-        if: steps.check.outputs.needs_bump == 'true'
+        if: steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch'
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
-        if: steps.check.outputs.needs_bump == 'true'
+        if: steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch'
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry
-        if: steps.check.outputs.needs_bump == 'true'
+        if: steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -349,7 +403,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Docker image
-        if: steps.check.outputs.needs_bump == 'true'
+        if: steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -360,7 +414,7 @@ jobs:
             APP_VERSION=${{ steps.next_version.outputs.new_version }}
           tags: |
             ${{ steps.image_names.outputs.ghcr_image }}:${{ steps.next_version.outputs.new_tag }}
-            ${{ steps.image_names.outputs.ghcr_image }}:latest
+            ${{ steps.next_version.outputs.is_prerelease != 'true' && format('{0}:latest', steps.image_names.outputs.ghcr_image) || '' }}
             ${{ steps.image_names.outputs.ghcr_image }}:${{ steps.next_version.outputs.new_version }}
           labels: |
             org.opencontainers.image.version=${{ steps.next_version.outputs.new_version }}
@@ -369,9 +423,9 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # 同步 main 分支到 dev 分支 (rebase dev onto main)
+      # 同步 main 分支到 dev 分支 (rebase dev onto main) - 仅正式版本触发
       - name: Sync main to dev branch
-        if: steps.check.outputs.needs_bump == 'true'
+        if: (steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch') && steps.next_version.outputs.is_prerelease != 'true'
         id: sync_dev
         continue-on-error: true
         env:
@@ -449,7 +503,7 @@ jobs:
 
       # 如果同步失败(冲突)，触发 autofix workflow
       - name: Trigger autofix for sync conflicts
-        if: steps.check.outputs.needs_bump == 'true' && steps.sync_dev.outputs.sync_status == 'conflict'
+        if: (steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch') && steps.sync_dev.outputs.sync_status == 'conflict'
         env:
           GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
         run: |
@@ -468,9 +522,9 @@ jobs:
             exit 1
           fi
 
-      # 同步结果汇总
+      # 同步结果汇总 - 仅正式版本显示
       - name: Sync summary
-        if: steps.check.outputs.needs_bump == 'true' && always()
+        if: (steps.check.outputs.needs_bump == 'true' || github.event_name == 'workflow_dispatch') && steps.next_version.outputs.is_prerelease != 'true' && always()
         run: |
           echo "=========================================="
           echo "Dev Branch Sync Summary"
