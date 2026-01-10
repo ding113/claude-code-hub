@@ -475,7 +475,7 @@
 
   "opencode": {
     "title": "OpenCode 利用ガイド",
-    "description": "OpenCode はターミナルで動作する CLI + TUI の AI コーディングエージェントで、IDE 連携も提供します。cch を単一の OpenAI 互換エンドポイントとして設定することで、Claude / GPT / Gemini の各モデルを利用できます。",
+    "description": "OpenCode はターミナルで動作する CLI + TUI の AI コーディングエージェントで、IDE 連携も提供します。OpenCode の接続先を cch に設定することで、Claude / GPT / Gemini の各モデルを利用できます。",
 
     "installation": {
       "title": "インストール",
@@ -528,7 +528,7 @@
         "important": "重要",
         "importantPoints": [
           "cch の管理画面で API Key を作成し、環境変数 CCH_API_KEY を設定してください",
-          "baseURL は ${resolvedOrigin}/v1（OpenAI 互換エンドポイント。/v1 が必要）",
+          "baseURL は ${resolvedOrigin}/v1（cch の v1 API ベース URL）",
           "モデル ID は claude / gpt / gemini のモデル名をそのまま指定できます（cch が自動的にルーティングします）"
         ]
       },

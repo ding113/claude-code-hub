@@ -475,7 +475,7 @@
 
   "opencode": {
     "title": "OpenCode Usage Guide",
-    "description": "OpenCode is a CLI + TUI AI coding agent that runs in your terminal and also provides IDE integrations. You can use cch as a single OpenAI-compatible endpoint to access Claude, GPT, and Gemini models.",
+    "description": "OpenCode is a CLI + TUI AI coding agent that runs in your terminal and also provides IDE integrations. You can point OpenCode to cch as a single entry to access Claude, GPT, and Gemini models.",
 
     "installation": {
       "title": "Install",
@@ -528,7 +528,7 @@
         "important": "Important",
         "importantPoints": [
           "Create an API key in the cch console and set the CCH_API_KEY environment variable",
-          "baseURL uses ${resolvedOrigin}/v1 (OpenAI-compatible endpoint; includes /v1)",
+          "baseURL uses ${resolvedOrigin}/v1 (cch v1 API base URL)",
           "Model IDs can be Claude/GPT/Gemini model names; cch routes automatically"
         ]
       },

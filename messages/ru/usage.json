@@ -475,7 +475,7 @@
 
   "opencode": {
     "title": "Руководство по OpenCode",
-    "description": "OpenCode — это CLI + TUI агент для программирования в терминале, также есть интеграции для IDE. Вы можете использовать cch как единый OpenAI-совместимый эндпоинт для доступа к моделям Claude, GPT и Gemini.",
+    "description": "OpenCode — это CLI + TUI агент для программирования в терминале, также есть интеграции для IDE. Вы можете настроить OpenCode на cch как единый вход для доступа к моделям Claude, GPT и Gemini.",
 
     "installation": {
       "title": "Установка",
@@ -528,7 +528,7 @@
         "important": "Важно",
         "importantPoints": [
           "Создайте API key в панели cch и задайте переменную окружения CCH_API_KEY",
-          "baseURL использует ${resolvedOrigin}/v1 (OpenAI-совместимый эндпоинт, нужен /v1)",
+          "baseURL использует ${resolvedOrigin}/v1 (базовый URL cch v1 API)",
           "ID модели можно указывать как имена моделей Claude / GPT / Gemini — cch маршрутизирует автоматически"
         ]
       },

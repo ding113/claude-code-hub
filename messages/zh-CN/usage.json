@@ -471,7 +471,7 @@
 
   "opencode": {
     "title": "OpenCode 使用指南",
-    "description": "OpenCode 是一款在终端中运行的 CLI + TUI AI 编程代理工具，也提供 IDE 插件集成。你可以将 cch 作为统一的 OpenAI Compatible 端点接入 Claude、GPT 与 Gemini 等模型。",
+    "description": "OpenCode 是一款在终端中运行的 CLI + TUI AI 编程代理工具，也提供 IDE 插件集成。你可以将 OpenCode 指向 cch 作为统一入口来接入 Claude、GPT 与 Gemini 等模型。",
 
     "installation": {
       "title": "安装",
@@ -524,7 +524,7 @@
         "important": "重要说明",
         "importantPoints": [
           "请先在 cch 后台创建 API Key，并设置环境变量 CCH_API_KEY",
-          "baseURL 使用 ${resolvedOrigin}/v1（OpenAI Compatible 端点，需要 /v1）",
+          "baseURL 使用 ${resolvedOrigin}/v1（cch v1 API 地址）",
           "模型 ID 直接填写 claude / gpt / gemini 的模型名即可，cch 会自动路由到对应上游"
         ]
       },
