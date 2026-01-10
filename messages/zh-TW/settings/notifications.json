@@ -9,7 +9,7 @@
     "enabledCount": "已啟用：{count}",
     "noTargets": "尚無可用推送目標",
     "scheduleCron": "Cron 表達式",
-    "scheduleCronPlaceholder": "例如：0 9 * * *",
+    "scheduleCronPlaceholder": "例如：0 9 * * *（每天 09:00）",
     "scheduleTimezone": "時區",
     "templateOverride": "模板覆蓋",
     "templateOverrideTitle": "編輯模板覆蓋",
@@ -82,7 +82,7 @@
     "editTitle": "編輯推送目標",
     "enable": "啟用",
     "errors": {
-      "headersInvalidJson": "Headers 不是有效 JSON",
+      "headersInvalidJson": "Headers 不是有效的 JSON",
       "headersMustBeObject": "Headers 必須是 JSON 物件",
       "headersValueMustBeString": "Headers 的值必須為字串"
     },
@@ -97,9 +97,9 @@
     },
     "selectType": "請選擇平台類型",
     "telegramBotToken": "Telegram Bot Token",
-    "telegramBotTokenPlaceholder": "例如：123456:ABCDEF...",
+    "telegramBotTokenPlaceholder": "例如：123456:ABCDEF…",
     "telegramChatId": "Telegram Chat ID",
-    "telegramChatIdPlaceholder": "例如：-1001234567890",
+    "telegramChatIdPlaceholder": "例如：-1001234567890（群組）",
     "type": "平台類型",
     "types": {
       "custom": "自訂 Webhook",
@@ -136,11 +136,11 @@
     "updated": "目標已更新"
   },
   "templateEditor": {
-    "insert": "插入",
+    "insert": "插入內容",
     "jsonInvalid": "JSON 格式不正確",
     "placeholder": "請輸入 JSON 模板...",
     "placeholders": "佔位符",
-    "title": "模板（JSON）"
+    "title": "範本（JSON）"
   },
   "title": "訊息推送"
 }

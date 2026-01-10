@@ -1,6 +1,6 @@
 {
-  "cancel": "取消",
-  "completed": "完成",
+  "cancel": "關閉",
+  "completed": "已完成",
   "confirm": "確認",
   "copied": "金鑰已複製到剪貼簿",
   "copy": "複製",
@@ -17,15 +17,15 @@
   "loading": "載入中...",
   "none": "無（暫無使用者使用此版本）",
   "refresh": "重新整理",
-  "reset": "重置",
-  "save": "保存",
-  "saving": "保存中...",
-  "submit": "提交",
-  "success": "成功",
+  "reset": "重設",
+  "save": "儲存",
+  "saving": "儲存中...",
+  "submit": "送出",
+  "success": "成功！",
   "test": "測試",
   "testing": "測試中...",
   "unlimited": "無限",
   "unlimited_desc": "無限制",
-  "update": "更新",
-  "updating": "更新中..."
+  "update": "變更",
+  "updating": "變更中..."
 }

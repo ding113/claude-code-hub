@@ -28,10 +28,10 @@
     "searchPlaceholder": "搜尋模型...",
     "selectedCount": "已選擇 {count}/{total} 個模型",
     "table": {
-      "action": "操作",
+      "action": "動作",
       "litellmPrice": "LiteLLM 價格",
       "manualPrice": "手動價格",
-      "modelName": "模型"
+      "modelName": "模型名稱"
     },
     "title": "選擇要覆蓋的衝突項",
     "viewDiff": "查看差異"
@@ -52,7 +52,7 @@
       "details": "詳細資訊",
       "failed": "失敗: {failed}",
       "skipped": "跳過: {skipped}",
-      "success": "成功: {success}",
+      "success": "成功：{success}",
       "title": "更新結果",
       "total": "總計: {total} 個模型",
       "viewDetails": "檢視詳細記錄"
@@ -65,21 +65,21 @@
     "updateFailed": "更新失敗",
     "updatePriceTable": "更新價格表",
     "updateSuccess": "價格表更新成功，共更新 {count} 個模型",
-    "updating": "更新中...",
+    "updating": "更新處理中...",
     "upload": "上傳並更新",
     "uploading": "上傳中..."
   },
   "editModel": "編輯模型",
   "editModelDescription": "編輯模型的價格設定",
   "form": {
-    "inputPrice": "輸入價格 ($/M tokens)",
+    "inputPrice": "輸入價格（$/M tokens）",
     "modelName": "模型名稱",
-    "modelNamePlaceholder": "例如: gpt-5.2-codex",
+    "modelNamePlaceholder": "例如：gpt-5.2-codex",
     "modelNameRequired": "模型名稱為必填",
-    "outputPrice": "輸出價格 ($/M tokens)",
-    "outputPriceImage": "輸出價格 ($/張圖)",
-    "provider": "提供商",
-    "providerPlaceholder": "例如: openai",
+    "outputPrice": "輸出價格（$/M tokens）",
+    "outputPriceImage": "輸出價格（$/張圖）",
+    "provider": "供應商",
+    "providerPlaceholder": "例如：openai",
     "type": "類型"
   },
   "pagination": {
@@ -109,23 +109,23 @@
     "skippedConflicts": "跳過 {count} 個手動模型",
     "successNoChanges": "價格表已是最新，無需更新",
     "successWithChanges": "價格表更新: 新增 {added} 個，更新 {updated} 個，未變化 {unchanged} 個",
-    "syncing": "同步中..."
+    "syncing": "同步處理中..."
   },
   "table": {
-    "actions": "操作",
-    "inputPrice": "輸入價格 ($/M)",
+    "actions": "動作",
+    "inputPrice": "輸入價格（$/M）",
     "loading": "載入中...",
     "modelName": "模型名稱",
     "noDataHint": "系統已內置價格表，請透過上方按鈕同步或更新",
     "noDataTitle": "暫無價格資料",
     "noMatch": "未找到符合的模型",
-    "outputPrice": "輸出價格 ($/M)",
-    "provider": "提供商",
+    "outputPrice": "輸出價格（$/M）",
+    "provider": "供應商",
     "type": "類型",
     "typeChat": "對話",
     "typeCompletion": "補全",
     "typeImage": "圖像生成",
-    "typeUnknown": "未知",
+    "typeUnknown": "不明",
     "updatedAt": "更新時間"
   },
   "title": "價格表",
@@ -134,6 +134,6 @@
     "deleteFailed": "刪除失敗",
     "deleteSuccess": "模型已刪除",
     "saveFailed": "儲存失敗",
-    "updateSuccess": "模型已更新"
+    "updateSuccess": "模型更新完成"
   }
 }

@@ -5,7 +5,7 @@
     "edit": "編輯",
     "messages": {
       "error": "操作失敗",
-      "success": "操作成功"
+      "success": "操作完成"
     },
     "refresh": "重新整理",
     "test": "測試"
@@ -59,7 +59,7 @@
     "overrideResponsePlaceholder": "{\n  \"type\": \"error\",\n  \"error\": {\n    \"type\": \"invalid_request_error\",\n    \"message\": \"您的自訂訊息\"\n  }\n}",
     "overrideStatusCodeHint": "留空則使用上游狀態碼。範圍：400-599。",
     "overrideStatusCodeLabel": "覆寫狀態碼（選填）",
-    "overrideStatusCodePlaceholder": "例如 400",
+    "overrideStatusCodePlaceholder": "例如：400",
     "patternHint": "支援 JavaScript 正則表達式語法，例如：prompt is too long|invalid.*request",
     "patternLabel": "正則表達式模式 *",
     "patternPlaceholder": "輸入正則表達式...",
@@ -93,7 +93,7 @@
     "placeholders": {
       "category": "選擇類別",
       "description": "選填：新增說明...",
-      "pattern": "例如: prompt is too long"
+      "pattern": "例如：prompt is too long"
     }
   },
   "nav": "錯誤規則",
@@ -102,8 +102,8 @@
   "refreshCacheSuccess": "規則同步成功，已載入 {count} 個錯誤規則",
   "regexTester": {
     "matchResult": "匹配結果",
-    "matched": "匹配成功",
-    "notMatched": "未匹配",
+    "matched": "比對成功",
+    "notMatched": "不符合",
     "test": "測試",
     "testMessage": "測試訊息",
     "testMessagePlaceholder": "輸入要測試的錯誤訊息...",
@@ -113,7 +113,7 @@
     "title": "錯誤規則列表"
   },
   "table": {
-    "actions": "操作",
+    "actions": "動作",
     "category": "規則類別",
     "createdAt": "建立時間",
     "default": "預設",
@@ -135,7 +135,7 @@
     "noRule": "沒有匹配到任何規則",
     "notMatched": "未命中任何規則",
     "overrideStatusCode": "覆寫狀態碼",
-    "pattern": "匹配模式",
+    "pattern": "比對模式",
     "ruleInfo": "匹配的規則",
     "statusCodeOnlyOverride": "僅覆寫狀態碼，回應內容將使用上游錯誤訊息",
     "testButton": "開始測試",
