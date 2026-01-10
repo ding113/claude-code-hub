@@ -76,7 +76,11 @@ export async function fetchCloudPriceTableToml(
     if (expectedUrl && typeof response.url === "string" && response.url) {
       try {
         const finalUrl = new URL(response.url);
-        if (finalUrl.protocol !== expectedUrl.protocol || finalUrl.host !== expectedUrl.host) {
+        if (
+          finalUrl.protocol !== expectedUrl.protocol ||
+          finalUrl.host !== expectedUrl.host ||
+          finalUrl.pathname !== expectedUrl.pathname
+        ) {
           return { ok: false, error: "云端价格表拉取失败：重定向到非预期地址" };
         }
       } catch {

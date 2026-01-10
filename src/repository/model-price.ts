@@ -1,6 +1,6 @@
 "use server";
 
-import { and, desc, eq, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { modelPrices } from "@/drizzle/schema";
 import { logger } from "@/lib/logger";
@@ -43,22 +43,16 @@ export async function findLatestPriceByModel(modelName: string): Promise<ModelPr
       updatedAt: modelPrices.updatedAt,
     };
 
-    // 本地手动配置优先（哪怕云端数据更新得更晚）
-    const [manual] = await db
-      .select(selection)
-      .from(modelPrices)
-      .where(and(eq(modelPrices.modelName, modelName), eq(modelPrices.source, "manual")))
-      .orderBy(sql`${modelPrices.createdAt} DESC NULLS LAST`, desc(modelPrices.id))
-      .limit(1);
-
-    if (manual) return toModelPrice(manual);
-
-    // 兜底：任意来源取最新
     const [price] = await db
       .select(selection)
       .from(modelPrices)
       .where(eq(modelPrices.modelName, modelName))
-      .orderBy(sql`${modelPrices.createdAt} DESC NULLS LAST`, desc(modelPrices.id))
+      .orderBy(
+        // 本地手动配置优先（哪怕云端数据更新得更晚）
+        sql`(${modelPrices.source} = 'manual') DESC`,
+        sql`${modelPrices.createdAt} DESC NULLS LAST`,
+        desc(modelPrices.id)
+      )
       .limit(1);
 
     if (!price) return null;

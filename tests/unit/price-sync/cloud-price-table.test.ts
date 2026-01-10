@@ -148,6 +148,21 @@ describe("fetchCloudPriceTableToml", () => {
     expect(result.ok).toBe(false);
   });
 
+  it("returns ok=false when response url redirects to unexpected pathname", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        url: "https://example.test/evil.toml",
+        text: async () => "toml content",
+      }))
+    );
+
+    const result = await fetchCloudPriceTableToml("https://example.test/prices.toml");
+    expect(result.ok).toBe(false);
+  });
+
   it("returns ok=false when url is invalid and fetch throws", async () => {
     vi.stubGlobal(
       "fetch",

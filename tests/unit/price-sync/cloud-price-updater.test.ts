@@ -189,14 +189,15 @@ describe("requestCloudPriceTableSync", () => {
     expect(AsyncTaskManager.register).not.toHaveBeenCalled();
   });
 
-  it("registers a task and runs sync in background", async () => {
+  it("registers a task and updates throttle timestamp after completion", async () => {
+    let resolveFetch: (value: unknown) => void;
+    const fetchPromise = new Promise((resolve) => {
+      resolveFetch = resolve;
+    });
+
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => ({
-        ok: true,
-        status: 200,
-        text: async () => ['[models."m1"]', "input_cost_per_token = 0.000001"].join("\n"),
-      }))
+      vi.fn(async () => await fetchPromise)
     );
 
     vi.mocked(processPriceTableInternal).mockResolvedValue({
@@ -214,10 +215,20 @@ describe("requestCloudPriceTableSync", () => {
 
     expect(AsyncTaskManager.register).toHaveBeenCalledTimes(1);
 
+    const g = globalThis as unknown as { __CCH_CLOUD_PRICE_SYNC_LAST_AT__?: number };
+    expect(g.__CCH_CLOUD_PRICE_SYNC_LAST_AT__).toBeUndefined();
+
+    resolveFetch!({
+      ok: true,
+      status: 200,
+      text: async () => ['[models."m1"]', "input_cost_per_token = 0.000001"].join("\n"),
+    });
+
     await Promise.all(asyncTasks.splice(0, asyncTasks.length));
 
     expect(processPriceTableInternal).toHaveBeenCalledTimes(1);
     expect(vi.mocked(logger.info)).toHaveBeenCalled();
+    expect(typeof g.__CCH_CLOUD_PRICE_SYNC_LAST_AT__).toBe("number");
   });
 
   it("logs warn when sync task fails", async () => {

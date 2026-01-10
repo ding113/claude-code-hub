@@ -49,8 +49,12 @@ function isPriceDataEqual(data1: ModelPriceData, data2: ModelPriceData): boolean
       }
 
       const obj = node as Record<string, unknown>;
-      const result: Record<string, unknown> = {};
+      const result: Record<string, unknown> = Object.create(null);
       for (const key of Object.keys(obj).sort()) {
+        // 防御：避免 __proto__/constructor/prototype 触发原型链污染
+        if (key === "__proto__" || key === "constructor" || key === "prototype") {
+          continue;
+        }
         result[key] = canonicalize(obj[key]);
       }
       return result;

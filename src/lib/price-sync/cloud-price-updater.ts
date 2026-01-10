@@ -74,27 +74,30 @@ export function requestCloudPriceTableSync(options: {
   if (now - lastAt < throttleMs) {
     return;
   }
-  g.__CCH_CLOUD_PRICE_SYNC_LAST_AT__ = now;
 
   AsyncTaskManager.register(
     taskId,
     (async () => {
-      const result = await syncCloudPriceTableToDatabase();
-      if (!result.ok) {
-        logger.warn("[PriceSync] Cloud price sync task failed", {
-          reason: options.reason,
-          error: result.error,
-        });
-        return;
-      }
+      try {
+        const result = await syncCloudPriceTableToDatabase();
+        if (!result.ok) {
+          logger.warn("[PriceSync] Cloud price sync task failed", {
+            reason: options.reason,
+            error: result.error,
+          });
+          return;
+        }
 
-      logger.info("[PriceSync] Cloud price sync task completed", {
-        reason: options.reason,
-        added: result.data.added.length,
-        updated: result.data.updated.length,
-        skippedConflicts: result.data.skippedConflicts?.length ?? 0,
-        total: result.data.total,
-      });
+        logger.info("[PriceSync] Cloud price sync task completed", {
+          reason: options.reason,
+          added: result.data.added.length,
+          updated: result.data.updated.length,
+          skippedConflicts: result.data.skippedConflicts?.length ?? 0,
+          total: result.data.total,
+        });
+      } finally {
+        g.__CCH_CLOUD_PRICE_SYNC_LAST_AT__ = Date.now();
+      }
     })(),
     "cloud_price_table_sync"
   );

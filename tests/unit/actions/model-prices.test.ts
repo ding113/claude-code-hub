@@ -458,5 +458,36 @@ describe("Model Price Actions", () => {
       expect(result.ok).toBe(true);
       expect(result.data?.failed).toContain("invalid-model");
     });
+
+    it("should ignore dangerous keys when comparing price data", async () => {
+      const existing = makeMockPrice(
+        "safe-model",
+        {
+          mode: "chat",
+          input_cost_per_token: 0.000001,
+          output_cost_per_token: 0.000002,
+        },
+        "litellm"
+      );
+
+      findAllManualPricesMock.mockResolvedValue(new Map());
+      findAllLatestPricesMock.mockResolvedValue([existing]);
+
+      const { processPriceTableInternal } = await import("@/actions/model-prices");
+      const result = await processPriceTableInternal(
+        JSON.stringify({
+          "safe-model": {
+            mode: "chat",
+            input_cost_per_token: 0.000001,
+            output_cost_per_token: 0.000002,
+            constructor: { prototype: { polluted: true } },
+          },
+        })
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.data?.unchanged).toContain("safe-model");
+      expect(createModelPriceMock).not.toHaveBeenCalled();
+    });
   });
 });

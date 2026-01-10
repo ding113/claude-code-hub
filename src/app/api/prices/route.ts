@@ -24,18 +24,21 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
 
     // 解析查询参数
-    const page = parseInt(searchParams.get("page") || "1", 10);
-    const pageSize = parseInt(searchParams.get("pageSize") || searchParams.get("size") || "50", 10);
+    const page = Number.parseInt(searchParams.get("page") || "1", 10);
+    const pageSize = Number.parseInt(
+      searchParams.get("pageSize") || searchParams.get("size") || "50",
+      10
+    );
     const search = searchParams.get("search") || "";
     const source = searchParams.get("source") || "";
     const litellmProvider = searchParams.get("litellmProvider") || "";
 
     // 参数验证
-    if (page < 1) {
+    if (!Number.isFinite(page) || page < 1) {
       return NextResponse.json({ ok: false, error: "页码必须大于0" }, { status: 400 });
     }
 
-    if (pageSize < 1 || pageSize > 200) {
+    if (!Number.isFinite(pageSize) || pageSize < 1 || pageSize > 200) {
       return NextResponse.json({ ok: false, error: "每页大小必须在1-200之间" }, { status: 400 });
     }
 

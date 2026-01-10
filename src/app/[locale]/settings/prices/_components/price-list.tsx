@@ -112,8 +112,10 @@ export function PriceList({
         url.searchParams.delete("page");
       }
       if (newPageSize !== 50) {
-        url.searchParams.set("size", newPageSize.toString());
+        url.searchParams.set("pageSize", newPageSize.toString());
+        url.searchParams.delete("size");
       } else {
+        url.searchParams.delete("pageSize");
         url.searchParams.delete("size");
       }
 
@@ -226,7 +228,7 @@ export function PriceList({
    * 格式化价格显示为每百万token的价格
    */
   const formatPrice = (value?: number): string => {
-    if (!value) return "-";
+    if (value === undefined || value === null) return "-";
     // 将每token的价格转换为每百万token的价格
     const pricePerMillion = value * 1000000;
     // 格式化为合适的小数位数
