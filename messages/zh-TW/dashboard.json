@@ -1348,6 +1348,10 @@
       "threeMonths": "三個月後",
       "oneYear": "一年後"
     },
+    "providerGroupSelect": {
+      "providersSuffix": "個供應商",
+      "loadFailed": "載入供應商分組失敗"
+    },
     "providerGroup": {
       "label": "供應商分組",
       "placeholder": "選擇供應商分組",

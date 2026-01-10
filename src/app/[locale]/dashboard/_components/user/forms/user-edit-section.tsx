@@ -14,7 +14,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -23,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { AccessRestrictionsSection } from "./access-restrictions-section";
 import { type DailyResetMode, LimitRulePicker, type LimitType } from "./limit-rule-picker";
 import { type LimitRuleDisplayItem, LimitRulesDisplay } from "./limit-rules-display";
+import { ProviderGroupSelect } from "./provider-group-select";
 import { QuickExpirePicker } from "./quick-expire-picker";
 
 export interface UserEditSectionProps {
@@ -69,6 +69,17 @@ export interface UserEditSectionProps {
       providerGroup?: {
         label: string;
         placeholder: string;
+        providersSuffix?: string;
+        tagInputErrors?: {
+          empty?: string;
+          duplicate?: string;
+          too_long?: string;
+          invalid_format?: string;
+          max_tags?: string;
+        };
+        errors?: {
+          loadFailed?: string;
+        };
       };
       enableStatus?: {
         label: string;
@@ -411,20 +422,12 @@ export function UserEditSection({
             />
 
             {showProviderGroup && translations.fields.providerGroup && (
-              <div className="space-y-2">
-                <Label>{translations.fields.providerGroup.label}</Label>
-                <div className="flex flex-wrap gap-1 p-2 border rounded-md bg-muted/50">
-                  {(user.providerGroup || PROVIDER_GROUP.DEFAULT)
-                    .split(",")
-                    .map((g) => g.trim())
-                    .filter(Boolean)
-                    .map((group) => (
-                      <Badge key={group} variant="secondary" className="text-xs">
-                        {group}
-                      </Badge>
-                    ))}
-                </div>
-              </div>
+              <ProviderGroupSelect
+                value={user.providerGroup || PROVIDER_GROUP.DEFAULT}
+                onChange={(val) => emitChange("providerGroup", val)}
+                disabled={false}
+                translations={translations.fields.providerGroup}
+              />
             )}
           </div>
         </div>

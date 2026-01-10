@@ -537,13 +537,46 @@
     "sync": {
       "button": "Синхронизировать цены LiteLLM",
       "syncing": "Синхронизация...",
+      "checking": "Проверка конфликтов...",
       "successWithChanges": "Обновление прайс-листа: добавлено {added}, обновлено {updated}, без изменений {unchanged}",
       "successNoChanges": "Прайс-лист актуален, обновление не требуется",
       "failed": "Ошибка синхронизации",
       "failedError": "Ошибка синхронизации: {error}",
       "failedNoResult": "Прайс-лист обновлен но результат не возвращен",
       "noModels": "Цены моделей не найдены",
-      "partialFailure": "Частичное обновление выполнено, но {failed} моделей не удалось обновить"
+      "partialFailure": "Частичное обновление выполнено, но {failed} моделей не удалось обновить",
+      "skippedConflicts": "Пропущено {count} ручных моделей"
+    },
+    "conflict": {
+      "title": "Выберите элементы для перезаписи",
+      "description": "Следующие модели имеют ручные цены. Отмеченные будут перезаписаны ценами LiteLLM, неотмеченные останутся без изменений",
+      "searchPlaceholder": "Поиск моделей...",
+      "table": {
+        "modelName": "Модель",
+        "manualPrice": "Ручная цена",
+        "litellmPrice": "Цена LiteLLM",
+        "action": "Действие"
+      },
+      "viewDiff": "Показать различия",
+      "diffTitle": "Различия цен",
+      "diff": {
+        "field": "Поле",
+        "manual": "Ручное",
+        "litellm": "LiteLLM",
+        "inputPrice": "Цена ввода",
+        "outputPrice": "Цена вывода",
+        "imagePrice": "Цена изображения",
+        "provider": "Поставщик",
+        "mode": "Тип"
+      },
+      "pagination": {
+        "showing": "Показано {from}-{to} из {total}"
+      },
+      "selectedCount": "Выбрано {count}/{total} моделей",
+      "noMatch": "Модели не найдены",
+      "noConflicts": "Конфликтов нет",
+      "applyOverwrite": "Применить перезапись",
+      "applying": "Применение..."
     },
     "table": {
       "modelName": "Название модели",
@@ -552,6 +585,7 @@
       "inputPrice": "Цена ввода ($/M)",
       "outputPrice": "Цена вывода ($/M)",
       "updatedAt": "Обновлено",
+      "actions": "Действия",
       "typeChat": "Чат",
       "typeImage": "Генерация изображений",
       "typeCompletion": "Дополнение",
@@ -601,6 +635,34 @@
         "details": "Подробности",
         "viewDetails": "Просмотреть подробный журнал"
       }
+    },
+    "addModel": "Добавить модель",
+    "editModel": "Редактировать модель",
+    "deleteModel": "Удалить модель",
+    "addModelDescription": "Вручную добавить новую цену модели",
+    "editModelDescription": "Редактировать цену модели",
+    "deleteConfirm": "Удалить модель {name}? Это действие необратимо.",
+    "form": {
+      "modelName": "Название модели",
+      "modelNamePlaceholder": "например: gpt-5.2-codex",
+      "modelNameRequired": "Название модели обязательно",
+      "type": "Тип",
+      "provider": "Поставщик",
+      "providerPlaceholder": "например: openai",
+      "inputPrice": "Цена ввода ($/M токенов)",
+      "outputPrice": "Цена вывода ($/M токенов)",
+      "outputPriceImage": "Цена вывода ($/изображение)"
+    },
+    "actions": {
+      "edit": "Редактировать",
+      "delete": "Удалить"
+    },
+    "toast": {
+      "createSuccess": "Модель добавлена",
+      "updateSuccess": "Модель обновлена",
+      "deleteSuccess": "Модель удалена",
+      "saveFailed": "Ошибка сохранения",
+      "deleteFailed": "Ошибка удаления"
     }
   },
   "providers": {

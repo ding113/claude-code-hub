@@ -1265,13 +1265,46 @@
     "sync": {
       "button": "同步 LiteLLM 价格",
       "syncing": "同步中...",
+      "checking": "检查冲突...",
       "successWithChanges": "价格表更新: 新增 {added} 个，更新 {updated} 个，未变化 {unchanged} 个",
       "successNoChanges": "价格表已是最新，无需更新",
       "failed": "同步失败",
       "failedError": "同步失败: {error}",
       "failedNoResult": "价格表更新成功但未返回处理结果",
       "noModels": "未找到支持的模型价格",
-      "partialFailure": "部分更新成功，但有 {failed} 个模型失败"
+      "partialFailure": "部分更新成功，但有 {failed} 个模型失败",
+      "skippedConflicts": "跳过 {count} 个手动模型"
+    },
+    "conflict": {
+      "title": "选择要覆盖的冲突项",
+      "description": "以下模型存在手动维护的价格，勾选后将用 LiteLLM 价格覆盖，未勾选的保持本地不变",
+      "searchPlaceholder": "搜索模型...",
+      "table": {
+        "modelName": "模型",
+        "manualPrice": "手动价格",
+        "litellmPrice": "LiteLLM 价格",
+        "action": "操作"
+      },
+      "viewDiff": "查看差异",
+      "diffTitle": "价格差异对比",
+      "diff": {
+        "field": "字段",
+        "manual": "手动",
+        "litellm": "LiteLLM",
+        "inputPrice": "输入价格",
+        "outputPrice": "输出价格",
+        "imagePrice": "图片价格",
+        "provider": "供应商",
+        "mode": "类型"
+      },
+      "pagination": {
+        "showing": "显示 {from}-{to} 条，共 {total} 条"
+      },
+      "selectedCount": "已选择 {count}/{total} 个模型",
+      "noMatch": "未找到匹配的模型",
+      "noConflicts": "无冲突项",
+      "applyOverwrite": "应用覆盖",
+      "applying": "应用中..."
     },
     "table": {
       "modelName": "模型名称",
@@ -1280,6 +1313,7 @@
       "inputPrice": "输入价格 ($/M)",
       "outputPrice": "输出价格 ($/M)",
       "updatedAt": "更新时间",
+      "actions": "操作",
       "typeChat": "对话",
       "typeImage": "图像生成",
       "typeCompletion": "补全",
@@ -1329,6 +1363,34 @@
         "details": "详细信息",
         "viewDetails": "查看详细日志"
       }
+    },
+    "addModel": "添加模型",
+    "editModel": "编辑模型",
+    "deleteModel": "删除模型",
+    "addModelDescription": "手动添加新的模型价格配置",
+    "editModelDescription": "编辑模型的价格配置",
+    "deleteConfirm": "确定要删除模型 {name} 吗？此操作不可撤销。",
+    "form": {
+      "modelName": "模型名称",
+      "modelNamePlaceholder": "例如: gpt-5.2-codex",
+      "modelNameRequired": "模型名称不能为空",
+      "type": "类型",
+      "provider": "供应商",
+      "providerPlaceholder": "例如: openai",
+      "inputPrice": "输入价格 ($/M tokens)",
+      "outputPrice": "输出价格 ($/M tokens)",
+      "outputPriceImage": "输出价格 ($/image)"
+    },
+    "actions": {
+      "edit": "编辑",
+      "delete": "删除"
+    },
+    "toast": {
+      "createSuccess": "模型已添加",
+      "updateSuccess": "模型已更新",
+      "deleteSuccess": "模型已删除",
+      "saveFailed": "保存失败",
+      "deleteFailed": "删除失败"
     }
   },
   "sensitiveWords": {

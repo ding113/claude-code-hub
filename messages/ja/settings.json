@@ -537,13 +537,46 @@
     "sync": {
       "button": "LiteLLM価格を同期",
       "syncing": "同期中...",
+      "checking": "競合を確認中...",
       "successWithChanges": "価格表を更新: {added}件追加、{updated}件更新、{unchanged}件変化なし",
       "successNoChanges": "価格表は最新です。更新の必要はありません",
       "failed": "同期に失敗しました",
       "failedError": "同期に失敗しました: {error}",
       "failedNoResult": "価格表は更新されましたが結果が返されていません",
       "noModels": "モデル価格が見つかりません",
-      "partialFailure": "一部更新が成功しましたが、{failed}件のモデルが失敗しました"
+      "partialFailure": "一部更新が成功しましたが、{failed}件のモデルが失敗しました",
+      "skippedConflicts": "{count}件の手動モデルをスキップしました"
+    },
+    "conflict": {
+      "title": "上書きする項目を選択",
+      "description": "以下のモデルには手動で設定された価格があります。チェックした項目はLiteLLM価格で上書きされ、チェックしない項目は現在のままです",
+      "searchPlaceholder": "モデルを検索...",
+      "table": {
+        "modelName": "モデル",
+        "manualPrice": "手動価格",
+        "litellmPrice": "LiteLLM価格",
+        "action": "操作"
+      },
+      "viewDiff": "差異を表示",
+      "diffTitle": "価格差異",
+      "diff": {
+        "field": "フィールド",
+        "manual": "手動",
+        "litellm": "LiteLLM",
+        "inputPrice": "入力価格",
+        "outputPrice": "出力価格",
+        "imagePrice": "画像価格",
+        "provider": "プロバイダー",
+        "mode": "タイプ"
+      },
+      "pagination": {
+        "showing": "{from}〜{to}件を表示（全{total}件）"
+      },
+      "selectedCount": "{count}/{total}件のモデルを選択",
+      "noMatch": "一致するモデルが見つかりません",
+      "noConflicts": "競合なし",
+      "applyOverwrite": "上書きを適用",
+      "applying": "適用中..."
     },
     "table": {
       "modelName": "モデル名",
@@ -552,6 +585,7 @@
       "inputPrice": "入力価格 ($/M)",
       "outputPrice": "出力価格 ($/M)",
       "updatedAt": "更新日時",
+      "actions": "操作",
       "typeChat": "チャット",
       "typeImage": "画像生成",
       "typeCompletion": "補完",
@@ -601,6 +635,34 @@
         "details": "詳細",
         "viewDetails": "詳細ログを表示"
       }
+    },
+    "addModel": "モデルを追加",
+    "editModel": "モデルを編集",
+    "deleteModel": "モデルを削除",
+    "addModelDescription": "新しいモデル価格設定を手動で追加します",
+    "editModelDescription": "モデルの価格設定を編集します",
+    "deleteConfirm": "モデル {name} を削除してもよろしいですか？この操作は元に戻せません。",
+    "form": {
+      "modelName": "モデル名",
+      "modelNamePlaceholder": "例: gpt-5.2-codex",
+      "modelNameRequired": "モデル名は必須です",
+      "type": "タイプ",
+      "provider": "プロバイダー",
+      "providerPlaceholder": "例: openai",
+      "inputPrice": "入力価格 ($/M tokens)",
+      "outputPrice": "出力価格 ($/M tokens)",
+      "outputPriceImage": "出力価格 ($/image)"
+    },
+    "actions": {
+      "edit": "編集",
+      "delete": "削除"
+    },
+    "toast": {
+      "createSuccess": "モデルを追加しました",
+      "updateSuccess": "モデルを更新しました",
+      "deleteSuccess": "モデルを削除しました",
+      "saveFailed": "保存に失敗しました",
+      "deleteFailed": "削除に失敗しました"
     }
   },
   "providers": {

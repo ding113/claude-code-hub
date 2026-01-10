@@ -546,13 +546,46 @@
     "sync": {
       "button": "Sync LiteLLM Prices",
       "syncing": "Syncing...",
+      "checking": "Checking conflicts...",
       "successWithChanges": "Price table updated: {added} added, {updated} updated, {unchanged} unchanged",
       "successNoChanges": "Price table is up to date, no updates needed",
       "failed": "Sync failed",
       "failedError": "Sync failed: {error}",
       "failedNoResult": "Price table updated but no result returned",
       "noModels": "No model prices found",
-      "partialFailure": "Partial update succeeded, but {failed} models failed"
+      "partialFailure": "Partial update succeeded, but {failed} models failed",
+      "skippedConflicts": "Skipped {count} manual models"
+    },
+    "conflict": {
+      "title": "Select Items to Overwrite",
+      "description": "The following models have manual prices. Check the ones to overwrite with LiteLLM prices, unchecked ones will be kept unchanged",
+      "searchPlaceholder": "Search models...",
+      "table": {
+        "modelName": "Model",
+        "manualPrice": "Manual Price",
+        "litellmPrice": "LiteLLM Price",
+        "action": "Action"
+      },
+      "viewDiff": "View Diff",
+      "diffTitle": "Price Difference",
+      "diff": {
+        "field": "Field",
+        "manual": "Manual",
+        "litellm": "LiteLLM",
+        "inputPrice": "Input Price",
+        "outputPrice": "Output Price",
+        "imagePrice": "Image Price",
+        "provider": "Provider",
+        "mode": "Type"
+      },
+      "pagination": {
+        "showing": "Showing {from}-{to} of {total}"
+      },
+      "selectedCount": "Selected {count}/{total} models",
+      "noMatch": "No matching models found",
+      "noConflicts": "No conflicts",
+      "applyOverwrite": "Apply Overwrite",
+      "applying": "Applying..."
     },
     "table": {
       "modelName": "Model Name",
@@ -561,6 +594,7 @@
       "inputPrice": "Input Price ($/M)",
       "outputPrice": "Output Price ($/M)",
       "updatedAt": "Updated At",
+      "actions": "Actions",
       "typeChat": "Chat",
       "typeImage": "Image",
       "typeCompletion": "Completion",
@@ -610,6 +644,34 @@
         "details": "Details",
         "viewDetails": "View detailed logs"
       }
+    },
+    "addModel": "Add Model",
+    "editModel": "Edit Model",
+    "deleteModel": "Delete Model",
+    "addModelDescription": "Manually add a new model price configuration",
+    "editModelDescription": "Edit the model price configuration",
+    "deleteConfirm": "Are you sure you want to delete model {name}? This action cannot be undone.",
+    "form": {
+      "modelName": "Model Name",
+      "modelNamePlaceholder": "e.g., gpt-5.2-codex",
+      "modelNameRequired": "Model name is required",
+      "type": "Type",
+      "provider": "Provider",
+      "providerPlaceholder": "e.g., openai",
+      "inputPrice": "Input Price ($/M tokens)",
+      "outputPrice": "Output Price ($/M tokens)",
+      "outputPriceImage": "Output Price ($/image)"
+    },
+    "actions": {
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "toast": {
+      "createSuccess": "Model added",
+      "updateSuccess": "Model updated",
+      "deleteSuccess": "Model deleted",
+      "saveFailed": "Failed to save",
+      "deleteFailed": "Failed to delete"
     }
   },
   "providers": {

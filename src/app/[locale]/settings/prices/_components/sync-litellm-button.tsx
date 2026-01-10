@@ -5,8 +5,10 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
-import { syncLiteLLMPrices } from "@/actions/model-prices";
+import { checkLiteLLMSyncConflicts, syncLiteLLMPrices } from "@/actions/model-prices";
 import { Button } from "@/components/ui/button";
+import type { SyncConflict } from "@/types/model-price";
+import { SyncConflictDialog } from "./sync-conflict-dialog";
 
 /**
  * LiteLLM 价格同步按钮组件
@@ -15,12 +17,20 @@ export function SyncLiteLLMButton() {
   const t = useTranslations("settings");
   const router = useRouter();
   const [syncing, setSyncing] = useState(false);
+  const [checking, setChecking] = useState(false);
 
-  const handleSync = async () => {
+  // 冲突弹窗状态
+  const [conflictDialogOpen, setConflictDialogOpen] = useState(false);
+  const [conflicts, setConflicts] = useState<SyncConflict[]>([]);
+
+  /**
+   * 执行同步（可选覆盖列表）
+   */
+  const doSync = async (overwriteManual?: string[]) => {
     setSyncing(true);
 
     try {
-      const response = await syncLiteLLMPrices();
+      const response = await syncLiteLLMPrices(overwriteManual);
 
       if (!response.ok) {
         toast.error(response.error || t("prices.sync.failed"));
@@ -32,7 +42,7 @@ export function SyncLiteLLMButton() {
         return;
       }
 
-      const { added, updated, unchanged, failed } = response.data;
+      const { added, updated, unchanged, failed, skippedConflicts } = response.data;
 
       // 优先显示失败信息（更明显）
       if (failed.length > 0) {
@@ -47,13 +57,16 @@ export function SyncLiteLLMButton() {
 
       // 显示成功信息
       if (added.length > 0 || updated.length > 0) {
-        toast.success(
-          t("prices.sync.successWithChanges", {
-            added: added.length,
-            updated: updated.length,
-            unchanged: unchanged.length,
-          })
-        );
+        let message = t("prices.sync.successWithChanges", {
+          added: added.length,
+          updated: updated.length,
+          unchanged: unchanged.length,
+        });
+        // 如果有跳过的冲突，追加提示
+        if (skippedConflicts && skippedConflicts.length > 0) {
+          message += ` (${t("prices.sync.skippedConflicts", { count: skippedConflicts.length })})`;
+        }
+        toast.success(message);
       } else if (unchanged.length > 0) {
         toast.info(t("prices.sync.successNoChanges", { unchanged: unchanged.length }));
       } else if (failed.length === 0) {
@@ -62,6 +75,7 @@ export function SyncLiteLLMButton() {
 
       // 刷新页面数据
       router.refresh();
+      window.dispatchEvent(new Event("price-data-updated"));
     } catch (error) {
       console.error("同步失败:", error);
       toast.error(t("prices.sync.failedError"));
@@ -70,10 +84,66 @@ export function SyncLiteLLMButton() {
     }
   };
 
+  /**
+   * 处理同步按钮点击 - 先检查冲突
+   */
+  const handleSync = async () => {
+    setChecking(true);
+
+    try {
+      // 先检查是否有冲突
+      const checkResult = await checkLiteLLMSyncConflicts();
+
+      if (!checkResult.ok) {
+        toast.error(checkResult.error || t("prices.sync.failed"));
+        return;
+      }
+
+      if (checkResult.data?.hasConflicts && checkResult.data.conflicts.length > 0) {
+        // 有冲突，显示弹窗
+        setConflicts(checkResult.data.conflicts);
+        setConflictDialogOpen(true);
+      } else {
+        // 无冲突，直接同步
+        await doSync();
+      }
+    } catch (error) {
+      console.error("检查冲突失败:", error);
+      toast.error(t("prices.sync.failedError"));
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  /**
+   * 处理冲突弹窗确认
+   */
+  const handleConflictConfirm = async (selectedModels: string[]) => {
+    setConflictDialogOpen(false);
+    // 执行同步，传入要覆盖的模型列表
+    await doSync(selectedModels);
+  };
+
+  const isLoading = syncing || checking;
+
   return (
-    <Button variant="outline" size="sm" onClick={handleSync} disabled={syncing}>
-      <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
-      {syncing ? t("prices.sync.syncing") : t("prices.sync.button")}
-    </Button>
+    <>
+      <Button variant="outline" size="sm" onClick={handleSync} disabled={isLoading}>
+        <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+        {checking
+          ? t("prices.sync.checking")
+          : syncing
+            ? t("prices.sync.syncing")
+            : t("prices.sync.button")}
+      </Button>
+
+      <SyncConflictDialog
+        open={conflictDialogOpen}
+        onOpenChange={setConflictDialogOpen}
+        conflicts={conflicts}
+        onConfirm={handleConflictConfirm}
+        isLoading={syncing}
+      />
+    </>
   );
 }
