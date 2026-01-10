@@ -300,15 +300,15 @@ claude-code-hub/
 
 ---
 
-### Phase 2：数据访问层 (Week 2)
+### Phase 2：数据访问层 (Week 2) ✅ 已完成
 
 | 序号 | 任务 | 对应 Node.js | 状态 |
 |-----|------|-------------|------|
-| 2.1 | repository/user_repo.go | repository/user.ts | 待开始 |
-| 2.2 | repository/key_repo.go | repository/key.ts | 待开始 |
-| 2.3 | repository/provider_repo.go | repository/provider.ts | 待开始 |
-| 2.4 | repository/statistics_repo.go | repository/statistics.ts | 待开始 |
-| 2.5 | repository/price_repo.go | actions/model-prices.ts | 待开始 |
+| 2.1 | repository/user_repo.go | repository/user.ts | ✅ 已完成 |
+| 2.2 | repository/key_repo.go | repository/key.ts | ✅ 已完成 |
+| 2.3 | repository/provider_repo.go | repository/provider.ts | ✅ 已完成 |
+| 2.4 | repository/statistics_repo.go | repository/statistics.ts | ✅ 已完成 |
+| 2.5 | repository/price_repo.go | actions/model-prices.ts | ✅ 已完成 |
 
 **交付物**: 完整的 CRUD 操作层
 
