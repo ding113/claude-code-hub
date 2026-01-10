@@ -233,7 +233,7 @@
     },
     "statusCodes": {
       "not200": "非 200（エラー／ブロック）",
-      "200": "200 (成功)",
+      "200": "200（成功）",
       "400": "400 (不正なリクエスト)",
       "401": "401 (未認証)",
       "429": "429 (レート制限)",
@@ -270,7 +270,7 @@
       "providerRanking": "プロバイダーランキング",
       "providerCacheHitRateRanking": "プロバイダーキャッシュ命中率",
       "modelRanking": "モデルランキング",
-      "dailyRanking": "今日",
+      "dailyRanking": "本日",
       "weeklyRanking": "今週",
       "monthlyRanking": "今月",
       "allTimeRanking": "全期間"
@@ -301,7 +301,7 @@
       "totalTokens": "総トークン数",
       "cacheCreationConsumedAmount": "キャッシュ作成消費額",
       "totalConsumedAmount": "総消費額",
-      "successRate": "成功率",
+      "successRate": "成功率（%）",
       "avgResponseTime": "平均応答時間",
       "avgTtfbMs": "平均TTFB",
       "avgTokensPerSecond": "平均トークン/秒"
@@ -377,7 +377,7 @@
       "totalInput": "総入力",
       "totalOutput": "総出力",
       "cacheCreation": "キャッシュ作成",
-      "cacheTtlMixed": "混合",
+      "cacheTtlMixed": "混在",
       "cacheRead": "キャッシュ読み取り",
       "total": "合計",
       "totalFee": "総費用",
@@ -589,7 +589,7 @@
       "todayCalls": "今日の呼び出し",
       "todayCost": "今日の消費",
       "lastUsed": "最終使用",
-      "actions": "操作"
+      "actions": "アクション"
     },
     "detailsButton": "詳細情報",
     "modelStats": "モデル統計",
@@ -605,7 +605,7 @@
     "copyFailed": "コピーに失敗しました:",
     "timesUnit": "回",
     "provider": "プロバイダー",
-    "neverUsed": "未使用",
+    "neverUsed": "未使用（未利用）",
     "viewLogsTooltip": "詳細なログを表示",
     "logsButton": "ログ",
     "emptyState": {
@@ -789,7 +789,7 @@
     },
     "loadingText": {
       "add": "作成中...",
-      "edit": "保存中..."
+      "edit": "保存しています..."
     },
     "username": {
       "label": "ユーザー名",
@@ -890,7 +890,7 @@
     "description": "プロバイダーの可用性とパフォーマンス指標をリアルタイムで監視",
     "nav": "可用性モニター",
     "status": {
-      "green": "正常",
+      "green": "正常（OK）",
       "red": "異常",
       "unknown": "不明"
     },
@@ -902,7 +902,7 @@
     "metrics": {
       "systemAvailability": "システム可用性",
       "totalRequests": "総リクエスト数",
-      "successRate": "成功率",
+      "successRate": "成功率（%）",
       "avgLatency": "平均遅延",
       "p50Latency": "P50 遅延",
       "p95Latency": "P95 遅延",
@@ -926,7 +926,7 @@
     },
     "sort": {
       "label": "並び替え",
-      "availability": "可用性",
+      "availability": "可用性（稼働率）",
       "name": "名前",
       "requests": "リクエスト数"
     },
@@ -934,12 +934,12 @@
       "provider": "プロバイダー",
       "type": "タイプ",
       "status": "ステータス",
-      "availability": "可用性",
+      "availability": "可用性（稼働率）",
       "requests": "リクエスト",
-      "successRate": "成功率",
+      "successRate": "成功率（%）",
       "avgLatency": "平均遅延",
       "lastRequest": "最終リクエスト",
-      "actions": "操作"
+      "actions": "アクション"
     },
     "chart": {
       "title": "可用性トレンド",
@@ -973,8 +973,8 @@
     },
     "legend": {
       "green": "優秀 (可用性 95%+)",
-      "lime": "良好 (可用性 80-95%)",
-      "orange": "警告 (可用性 50-80%)",
+      "lime": "良好（可用性 80-95%）",
+      "orange": "警告（可用性 50-80%）",
       "red": "異常 (可用性 <50%)",
       "noData": "データなし"
     },
@@ -1003,7 +1003,7 @@
     "loading": "読み込み中...",
     "error": "読み込み失敗",
     "totalEvents": "総イベント数",
-    "avgUsage": "平均使用率",
+    "avgUsage": "平均利用率",
     "affectedUsers": "影響を受けたユーザー数",
     "noData": "データなし",
     "noDataHint": "選択した時間範囲にはレート制限イベントがありません",
@@ -1118,7 +1118,7 @@
         "todayUsage": "本日の使用量",
         "todayCost": "本日の消費",
         "lastUsed": "最終使用",
-        "actions": "操作",
+        "actions": "アクション",
         "quotaButton": "クォータ使用状況を表示",
         "fields": {
           "callsLabel": "呼び出し",
@@ -1182,7 +1182,7 @@
         "7days": "7 日",
         "30days": "30 日",
         "90days": "90 日",
-        "1year": "1 年"
+        "1year": "1年"
       },
       "customDate": "カスタム日付",
       "enableOnRenew": "同時にユーザーを有効化",
@@ -1208,7 +1208,7 @@
       "userEnabled": "ユーザーが有効化されました",
       "deleteFailed": "ユーザーの削除に失敗しました",
       "userDeleted": "ユーザーが削除されました",
-      "saving": "保存中..."
+      "saving": "保存しています..."
     },
     "batchEdit": {
       "enterMode": "一括編集",
@@ -1232,7 +1232,7 @@
         "keyFields": "キーフィールド",
         "goBack": "戻って修正",
         "update": "更新を確定",
-        "updating": "更新中..."
+        "updating": "更新しています..."
       },
       "toast": {
         "usersUpdated": "{count} ユーザーを更新しました",
@@ -1416,7 +1416,7 @@
     "keyStatus": {
       "enabled": "有効",
       "disabled": "無効",
-      "active": "正常",
+      "active": "正常（アクティブ）",
       "expired": "期限切れ",
       "expiringSoon": "まもなく期限切れ",
       "keyEnabled": "キーが有効になりました",
@@ -1430,7 +1430,7 @@
     "userStatus": {
       "enabled": "有効",
       "disabled": "無効",
-      "active": "正常",
+      "active": "正常（アクティブ）",
       "expired": "期限切れ",
       "expiringSoon": "まもなく期限切れ",
       "userEnabled": "ユーザーが有効になりました",

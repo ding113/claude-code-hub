@@ -45,13 +45,13 @@
   "stats": {
     "title": "統計",
     "requests": "請求",
-    "cost": "成本",
+    "cost": "費用",
     "tokens": "Tokens",
     "period": {
       "hour": "最近1小時",
-      "day": "今天",
+      "day": "今日",
       "week": "本週",
-      "month": "本月"
+      "month": "當月"
     }
   },
   "logs": {
@@ -84,8 +84,8 @@
       "minRetryCountPlaceholder": "輸入次數（0 表示不限）",
       "apply": "套用篩選",
       "reset": "重設",
-      "last7days": "近7天",
-      "last30days": "近30天",
+      "last7days": "近 7 天",
+      "last30days": "近 30 天",
       "customRange": "自訂範圍",
       "export": "匯出",
       "exporting": "匯出中...",
@@ -105,7 +105,7 @@
       "cacheWrite": "快取寫入",
       "cacheRead": "快取讀取",
       "cache": "快取",
-      "cost": "成本",
+      "cost": "費用",
       "duration": "耗時",
       "performance": "效能",
       "status": "狀態"
@@ -114,7 +114,7 @@
       "title": "統計匯總",
       "description": "點擊展開查看當前篩選條件下的彙總統計",
       "expand": "展開",
-      "collapse": "收起",
+      "collapse": "收合",
       "totalAmount": "總消耗金額",
       "totalTokens": "總 Token 數",
       "cacheTokens": "快取 Token",
@@ -134,7 +134,7 @@
       "nonBilling": "非計費",
       "skipped": "已跳過",
       "specialSettings": "特殊設定",
-      "times": "次",
+      "times": "次數",
       "loadedCount": "已載入 {count} 筆記錄",
       "loadingMore": "載入更多中...",
       "noMoreData": "已載入全部記錄",
@@ -155,7 +155,7 @@
       "title": "請求詳情",
       "statusTitle": "請求詳情 - 狀態碼 {status}",
       "inProgress": "請求中",
-      "unknown": "未知",
+      "unknown": "未知狀態",
       "success": "請求成功完成",
       "error": "請求失敗，以下是詳細的錯誤訊息和供應商決策鏈",
       "processing": "請求正在進行中，尚未完成",
@@ -174,7 +174,7 @@
         "sensitiveWord": "敏感詞攔截",
         "word": "敏感詞",
         "matchType": "匹配類型",
-        "matchTypeContains": "包含匹配",
+        "matchTypeContains": "包含比對",
         "matchTypeExact": "精確匹配",
         "matchTypeRegex": "正規表達式",
         "matchedText": "匹配內容"
@@ -192,7 +192,7 @@
         "billingDescription": "系統優先使用請求模型（{original}）的價格計費。如果價格表中不存在該模型，則使用實際呼叫模型（{current}）的價格。",
         "billingModel": "計費模型",
         "actualModelTooltip": "實際模型: {model}",
-        "originalModelTooltip": "原始模型: {model}",
+        "originalModelTooltip": "原始模型：{model}",
         "billingDescription_original": "目前計費模式：使用重新導向前的原始模型（{original}）計費",
         "billingDescription_redirected": "目前計費模式：使用重新導向後的實際模型（{current}）計費",
         "billingOriginal": "計費: 原始",
@@ -234,10 +234,10 @@
     },
     "statusCodes": {
       "not200": "非 200（所有非成功請求）",
-      "200": "200 (成功)",
+      "200": "200（成功）",
       "400": "400 (錯誤請求)",
       "401": "401 (未授權)",
-      "429": "429 (限流)",
+      "429": "429（限流）",
       "500": "500 (服務器錯誤)"
     },
     "billingDetails": {
@@ -254,7 +254,7 @@
     }
   },
   "leaderboard": {
-    "title": "成本排行榜",
+    "title": "費用排行榜",
     "description": "查看用戶和密鑰的成本統計排名",
     "todayTitle": "今日排行榜",
     "viewAll": "查看全部",
@@ -273,7 +273,7 @@
       "modelRanking": "模型排名",
       "dailyRanking": "今日",
       "weeklyRanking": "本週",
-      "monthlyRanking": "本月",
+      "monthlyRanking": "當月",
       "allTimeRanking": "全部"
     },
     "dateRange": {
@@ -283,11 +283,11 @@
       "customRange": "自訂日期範圍"
     },
     "columns": {
-      "rank": "排名",
+      "rank": "名次",
       "name": "名稱",
       "totalCost": "總成本",
       "totalRequests": "總請求數",
-      "avgCost": "平均成本",
+      "avgCost": "平均費用",
       "lastActive": "最後活躍時間",
       "user": "使用者",
       "requests": "請求數",
@@ -295,7 +295,7 @@
       "consumedAmount": "消耗金額",
       "provider": "供應商",
       "model": "模型",
-      "cost": "成本",
+      "cost": "費用",
       "cacheHitRequests": "快取命中請求數（納入快取命中率計算的請求總數）",
       "cacheHitRate": "快取命中率",
       "cacheReadTokens": "快取讀取 Token 數",
@@ -366,7 +366,7 @@
       "overview": "Session 概覽",
       "overviewDescription": "彙總統計資訊",
       "providersAndModels": "供應商與模型",
-      "providersAndModelsDescription": "使用的提供商和模型",
+      "providersAndModelsDescription": "使用的供應商與模型",
       "tokenUsage": "Token 使用（總量）",
       "tokenUsageDescription": "所有請求的累計統計",
       "costInfo": "成本資訊（總計）",
@@ -1530,14 +1530,14 @@
           "descriptionEnabled": "啟用後，此金鑰在登入時將進入獨立的個人用量頁面。但不可修改自己金鑰的供應商分組。",
           "descriptionDisabled": "關閉後，使用者將無法進入個人獨立用量頁面 UI，而是進入受限的 Web UI。"
         },
-      "providerGroup": {
-        "label": "供應商分組",
-        "placeholder": "預設：default",
-        "selectHint": "選擇此 Key 可使用的供應商分組",
-        "editHint": "已有密鑰的分組不可修改",
-        "allGroups": "使用全部群組",
-        "noGroupHint": "default 分組包含所有未設定 groupTag 的供應商"
-      },
+        "providerGroup": {
+          "label": "供應商分組",
+          "placeholder": "預設：default",
+          "selectHint": "選擇此 Key 可使用的供應商分組",
+          "editHint": "已有密鑰的分組不可修改",
+          "allGroups": "使用全部群組",
+          "noGroupHint": "default 分組包含所有未設定 groupTag 的供應商"
+        },
         "cacheTtl": {
           "label": "Cache TTL 覆寫",
           "description": "強制為包含 cache_control 的請求設定 Anthropic prompt cache TTL。",
