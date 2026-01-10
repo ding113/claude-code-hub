@@ -235,16 +235,16 @@
     "statusCodes": {
       "not200": "非 200（所有非成功請求）",
       "200": "200（成功）",
-      "400": "400 (錯誤請求)",
-      "401": "401 (未授權)",
+      "400": "400（錯誤請求）",
+      "401": "401（未授權）",
       "429": "429（限流）",
-      "500": "500 (服務器錯誤)"
+      "500": "500（服務器錯誤）"
     },
     "billingDetails": {
       "input": "輸入",
       "output": "輸出",
-      "cacheWrite5m": "快取寫入 (5m)",
-      "cacheWrite1h": "快取寫入 (1h)",
+      "cacheWrite5m": "快取寫入（5m）",
+      "cacheWrite1h": "快取寫入（1h）",
       "cacheRead": "快取讀取",
       "cacheTtl": "快取 TTL",
       "multiplier": "供應商倍率",
@@ -351,7 +351,7 @@
       "count": "共 {count} 個{type} 會話",
       "active": "活躍",
       "inactive": "非活躍",
-      "notCountedInConcurrency": "(不計入並發數)",
+      "notCountedInConcurrency": "（不計入並發數）",
       "refreshing": "重新整理中...",
       "noActiveSessions": "暫無活躍 Session"
     },
@@ -715,12 +715,12 @@
       "description": "關閉後，此金鑰僅可用於 API 呼叫，無法登入管理後台"
     },
     "limit5hUsd": {
-      "label": "5小時消費上限 (USD)",
+      "label": "5小時消費上限（USD）",
       "placeholder": "留空表示無限制",
       "description": "5小時內最大消費金額"
     },
     "limitDailyUsd": {
-      "label": "每日消費上限 (USD)",
+      "label": "每日消費上限（USD）",
       "placeholder": "留空表示無限制",
       "description": "每日最大消費金額"
     },
@@ -741,12 +741,12 @@
       "description": "每日限額的重設時間（使用系統時區）"
     },
     "limitWeeklyUsd": {
-      "label": "週消費上限 (USD)",
+      "label": "週消費上限（USD）",
       "placeholder": "留空表示無限制",
       "description": "每週最大消費金額"
     },
     "limitMonthlyUsd": {
-      "label": "月消費上限 (USD)",
+      "label": "月消費上限（USD）",
       "placeholder": "留空表示無限制",
       "description": "每月最大消費金額"
     },
@@ -822,17 +822,17 @@
       "description": "預設值：${default}，範圍：$0.01-$1000"
     },
     "limit5hUsd": {
-      "label": "5小時消費上限 (USD)",
+      "label": "5小時消費上限（USD）",
       "placeholder": "留空表示無限制",
       "description": "5小時內最大消費金額"
     },
     "limitWeeklyUsd": {
-      "label": "週消費上限 (USD)",
+      "label": "週消費上限（USD）",
       "placeholder": "留空表示無限制",
       "description": "每週最大消費金額"
     },
     "limitMonthlyUsd": {
-      "label": "月消費上限 (USD)",
+      "label": "月消費上限（USD）",
       "placeholder": "留空表示無限制",
       "description": "每月最大消費金額"
     },
@@ -972,10 +972,10 @@
       "fetchFailed": "取得可用性資料失敗"
     },
     "legend": {
-      "green": "優秀 (可用性 95%+)",
-      "lime": "良好 (可用性 80-95%)",
-      "orange": "警告 (可用性 50-80%)",
-      "red": "異常 (可用性 <50%)",
+      "green": "優秀（可用性 95%+）",
+      "lime": "良好（可用性 80-95%）",
+      "orange": "警告（可用性 50-80%）",
+      "red": "異常（可用性 <50%）",
       "noData": "無資料"
     },
     "summary": {
@@ -1109,11 +1109,11 @@
         "expiresAt": "到期時間",
         "expiresAtHint": "點擊快速續期",
         "limitRpm": "RPM 限制",
-        "limit5h": "5h 限額 (USD)",
-        "limitDaily": "每日限額 (USD)",
-        "limitWeekly": "週限額 (USD)",
-        "limitMonthly": "月限額 (USD)",
-        "limitTotal": "總限額 (USD)",
+        "limit5h": "5h 限額（USD）",
+        "limitDaily": "每日限額（USD）",
+        "limitWeekly": "週限額（USD）",
+        "limitMonthly": "月限額（USD）",
+        "limitTotal": "總限額（USD）",
         "limitSessions": "並發"
       },
       "keyRow": {
@@ -1266,10 +1266,10 @@
           "note": "備註",
           "tags": "標籤",
           "rpm": "RPM 限制",
-          "limit5h": "5h 限額 (USD)",
-          "limitDaily": "每日限額 (USD)",
-          "limitWeekly": "週限額 (USD)",
-          "limitMonthly": "月限額 (USD)"
+          "limit5h": "5h 限額（USD）",
+          "limitDaily": "每日限額（USD）",
+          "limitWeekly": "週限額（USD）",
+          "limitMonthly": "月限額（USD）"
         },
         "placeholders": {
           "emptyToClear": "留空表示清空",
@@ -1281,11 +1281,11 @@
         "title": "金鑰設定",
         "affected": "將影響 {count} 個金鑰",
         "fields": {
-          "providerGroup": "分組 (providerGroup)",
-          "limit5h": "5h 限額 (USD)",
-          "limitDaily": "每日限額 (USD)",
-          "limitWeekly": "週限額 (USD)",
-          "limitMonthly": "月限額 (USD)",
+          "providerGroup": "分組（providerGroup）",
+          "limit5h": "5h 限額（USD）",
+          "limitDaily": "每日限額（USD）",
+          "limitWeekly": "週限額（USD）",
+          "limitMonthly": "月限額（USD）",
           "canLoginWebUi": "允許登入 Web UI",
           "keyEnabled": "Key 啟用狀態"
         },
