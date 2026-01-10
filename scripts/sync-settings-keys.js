@@ -1,17 +1,26 @@
 /*
- * Synchronize keys of settings.json across locales using zh-CN as canonical.
- * - Ensures every locale has exactly the same set of nested keys
+ * Synchronize keys of settings messages across locales using zh-CN as canonical.
+ *
+ * Supports both layouts:
+ * - legacy: messages/<locale>/settings.json
+ * - split:  messages/<locale>/settings/ (recursive .json files, assembled by messages/<locale>/settings/index.ts)
+ *
+ * Behavior:
+ * - Ensures every locale has exactly the same set of nested keys as canonical (zh-CN)
  * - Keeps existing translations where keys exist
  * - Fills missing keys with zh-CN text as placeholder
- * - Drops extra keys not present in zh-CN (notably for en, but applies consistently)
+ * - Drops extra keys not present in zh-CN (applies consistently to all locales)
  */
 const fs = require("node:fs");
 const path = require("node:path");
 
-const ROOT = process.cwd();
-const MESSAGES_DIR = path.join(ROOT, "messages");
 const LOCALES = ["en", "ja", "ru", "zh-TW"];
 const CANONICAL = "zh-CN";
+const DEFAULT_MESSAGES_DIR = path.join(process.cwd(), "messages");
+
+function getMessagesDir(messagesDir) {
+  return messagesDir || DEFAULT_MESSAGES_DIR;
+}
 
 function isObject(v) {
   return v && typeof v === "object" && !Array.isArray(v);
@@ -64,12 +73,115 @@ function saveJSON(p, data) {
   fs.writeFileSync(p, `${JSON.stringify(data, null, 2)}\n`, "utf8");
 }
 
-function ensureSettings(locale) {
-  const cnPath = path.join(MESSAGES_DIR, CANONICAL, "settings.json");
-  const targetPath = path.join(MESSAGES_DIR, locale, "settings.json");
+function listJsonFiles(dir) {
+  const out = [];
+  const walk = (d) => {
+    for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
+      const full = path.join(d, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+        continue;
+      }
+      if (entry.isFile() && entry.name.endsWith(".json")) out.push(full);
+    }
+  };
+  if (fs.existsSync(dir)) walk(dir);
+  return out;
+}
 
-  const cn = loadJSON(cnPath);
-  const t = loadJSON(targetPath);
+function getPath(obj, segments) {
+  let cur = obj;
+  for (const s of segments) {
+    if (!isObject(cur) || !Object.hasOwn(cur, s)) return undefined;
+    cur = cur[s];
+  }
+  return cur;
+}
+
+function loadSplitSettings(locale, messagesDir) {
+  const settingsDir = path.join(getMessagesDir(messagesDir), locale, "settings");
+  if (!fs.existsSync(settingsDir)) return null;
+
+  const top = {};
+  for (const file of fs.readdirSync(settingsDir, { withFileTypes: true })) {
+    if (file.isDirectory()) continue;
+    if (!file.name.endsWith(".json")) continue;
+    const name = file.name.replace(/\.json$/, "");
+    const v = loadJSON(path.join(settingsDir, file.name));
+    if (name === "strings") Object.assign(top, v);
+    else top[name] = v;
+  }
+
+  const providersDir = path.join(settingsDir, "providers");
+  const providers = {};
+  if (fs.existsSync(providersDir)) {
+    for (const file of fs.readdirSync(providersDir, { withFileTypes: true })) {
+      if (file.isDirectory()) continue;
+      if (!file.name.endsWith(".json")) continue;
+      const name = file.name.replace(/\.json$/, "");
+      const v = loadJSON(path.join(providersDir, file.name));
+      if (name === "strings") Object.assign(providers, v);
+      else providers[name] = v;
+    }
+
+    const formDir = path.join(providersDir, "form");
+    const form = {};
+    if (fs.existsSync(formDir)) {
+      for (const file of fs.readdirSync(formDir, { withFileTypes: true })) {
+        if (file.isDirectory()) continue;
+        if (!file.name.endsWith(".json")) continue;
+        const name = file.name.replace(/\.json$/, "");
+        const v = loadJSON(path.join(formDir, file.name));
+        if (name === "strings") Object.assign(form, v);
+        else form[name] = v;
+      }
+    }
+    providers.form = form;
+  }
+
+  top.providers = providers;
+  return top;
+}
+
+function saveSplitSettingsFromCanonical(locale, merged, messagesDir) {
+  const root = getMessagesDir(messagesDir);
+  const cnSettingsDir = path.join(root, CANONICAL, "settings");
+  const targetSettingsDir = path.join(root, locale, "settings");
+
+  const cnFiles = listJsonFiles(cnSettingsDir).map((p) => path.relative(cnSettingsDir, p));
+  for (const rel of cnFiles) {
+    const cnPath = path.join(cnSettingsDir, rel);
+    const targetPath = path.join(targetSettingsDir, rel);
+    const segs = rel.replace(/\.json$/, "").split(path.sep);
+
+    // special: strings.json means "spread into parent object"
+    if (segs[segs.length - 1] === "strings") {
+      const tmpl = loadJSON(cnPath);
+      const parentSegs = segs.slice(0, -1);
+      const parent = parentSegs.length ? getPath(merged, parentSegs) : merged;
+      const out = {};
+      for (const k of Object.keys(tmpl)) out[k] = parent?.[k];
+      fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+      saveJSON(targetPath, sortKeysDeep(out));
+      continue;
+    }
+
+    const v = getPath(merged, segs);
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    saveJSON(targetPath, sortKeysDeep(v));
+  }
+}
+
+function ensureSettings(locale, messagesDir) {
+  const root = getMessagesDir(messagesDir);
+  const cnSplit = loadSplitSettings(CANONICAL, root);
+  const useSplit = Boolean(cnSplit);
+  const cnPath = path.join(root, CANONICAL, "settings.json");
+  const targetPath = path.join(root, locale, "settings.json");
+
+  const cn = useSplit ? cnSplit : loadJSON(cnPath);
+  const tSplit = loadSplitSettings(locale, root);
+  const t = useSplit ? (tSplit ?? {}) : loadJSON(targetPath);
 
   const merged = mergeWithCanonical(cn, t);
   // Drop extras implicitly by not copying unknown keys; merged contains only canonical keys
@@ -85,11 +197,15 @@ function ensureSettings(locale) {
   const missingAfter = cnKeys.filter((k) => !mergedKeys.includes(k));
   const extraAfter = mergedKeys.filter((k) => !cnKeys.includes(k));
 
-  saveJSON(targetPath, sorted);
+  if (useSplit) {
+    saveSplitSettingsFromCanonical(locale, sorted, root);
+  } else {
+    saveJSON(targetPath, sorted);
+  }
 
   return {
     locale,
-    targetPath,
+    targetPath: useSplit ? path.join(root, locale, "settings") : targetPath,
     cnCount: cnKeys.length,
     before: { count: tKeys.length, missing: missingBefore.length, extra: extraBefore.length },
     after: { count: mergedKeys.length, missing: missingAfter.length, extra: extraAfter.length },
@@ -99,12 +215,13 @@ function ensureSettings(locale) {
 function main() {
   const reports = [];
   for (const loc of LOCALES) {
-    const p = path.join(MESSAGES_DIR, loc, "settings.json");
-    if (!fs.existsSync(p)) {
-      console.error(`[skip] ${loc} has no settings.json`);
+    const legacy = path.join(DEFAULT_MESSAGES_DIR, loc, "settings.json");
+    const split = path.join(DEFAULT_MESSAGES_DIR, loc, "settings");
+    if (!fs.existsSync(legacy) && !fs.existsSync(split)) {
+      console.error(`[skip] ${loc} has no settings messages`);
       continue;
     }
-    reports.push(ensureSettings(loc));
+    reports.push(ensureSettings(loc, DEFAULT_MESSAGES_DIR));
   }
 
   // Print summary
@@ -114,6 +231,14 @@ function main() {
     );
   }
 }
+
+module.exports = {
+  ensureSettings,
+  flatten,
+  loadSplitSettings,
+  mergeWithCanonical,
+  sortKeysDeep,
+};
 
 if (require.main === module) {
   main();
