@@ -16,8 +16,10 @@ export default getRequestConfig(async ({ requestLocale }) => {
     locale = routing.defaultLocale;
   }
 
-  // Dynamically import all translation files for the current locale
-  const messages = await import(`../../messages/${locale}`).then((module) => module.default);
+	// Dynamically import all translation files for the current locale
+	// NOTE: This import expects each `messages/<locale>/index.ts` to default-export the full messages object.
+	// The `settings` namespace is composed by `messages/<locale>/settings/index.ts` so key paths stay stable.
+	const messages = await import(`../../messages/${locale}`).then((module) => module.default);
 
   return {
     locale,
