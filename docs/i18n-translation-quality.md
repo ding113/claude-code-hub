@@ -19,8 +19,9 @@ For any non-canonical locale:
 - Placeholder candidates should be **fixed** (translated), or **explicitly allowlisted** with a documented reason.
 
 Executable check:
-- `node scripts/audit-settings-placeholders.js --scope=settings,dashboard,myUsage --format=tsv`
+- `bun run i18n:audit-placeholders`
 - To fail the command on any findings: add `--fail`.
+  - `bun run i18n:audit-placeholders:fail`
 
 Allowlist (auditable, minimal):
 - `scripts/audit-settings-placeholders.allowlist.json`

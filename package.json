@@ -28,7 +28,9 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "validate:migrations": "node scripts/validate-migrations.js"
+    "validate:migrations": "node scripts/validate-migrations.js",
+    "i18n:audit-placeholders": "node scripts/audit-settings-placeholders.js --scope=settings,dashboard,myUsage --format=tsv",
+    "i18n:audit-placeholders:fail": "node scripts/audit-settings-placeholders.js --scope=settings,dashboard,myUsage --format=tsv --fail"
   },
   "dependencies": {
     "@bull-board/api": "^6",
