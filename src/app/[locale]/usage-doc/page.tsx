@@ -48,6 +48,12 @@ interface CLIConfig {
   id: string;
   cliName: string;
   packageName?: string;
+  /**
+   * 是否需要 Node.js 环境
+   * - true：在安装步骤前展示 Node.js 环境准备
+   * - false：不展示 Node.js 环境准备（例如二进制安装、或 Node.js 非必需）
+   */
+  requiresNodeJs?: boolean;
   officialInstallUrl?: { macos: string; windows: string };
   requiresOfficialLogin?: boolean;
   vsCodeExtension?: {
@@ -70,6 +76,7 @@ function getCLIConfigs(t: (key: string) => string): Record<string, CLIConfig> {
       id: "claude-code",
       cliName: "claude",
       packageName: "@anthropic-ai/claude-code",
+      requiresNodeJs: true,
       vsCodeExtension: {
         name: "Claude Code for VS Code",
         configFile: "config.json",
@@ -85,6 +92,7 @@ function getCLIConfigs(t: (key: string) => string): Record<string, CLIConfig> {
       id: "codex",
       cliName: "codex",
       packageName: "@openai/codex",
+      requiresNodeJs: true,
       vsCodeExtension: {
         name: "Codex – OpenAI's coding agent",
         configFile: "config.toml 和 auth.json",
@@ -100,11 +108,20 @@ function getCLIConfigs(t: (key: string) => string): Record<string, CLIConfig> {
       id: "gemini",
       cliName: "gemini",
       packageName: "@google/gemini-cli",
+      requiresNodeJs: true,
+    },
+    opencode: {
+      title: t("opencode.title"),
+      id: "opencode",
+      cliName: "opencode",
+      packageName: "opencode-ai",
+      requiresNodeJs: false,
     },
     droid: {
       title: t("droid.title"),
       id: "droid",
       cliName: "droid",
+      requiresNodeJs: false,
       officialInstallUrl: {
         macos: "https://app.factory.ai/cli",
         windows: "https://app.factory.ai/cli/windows",
@@ -118,7 +135,7 @@ interface UsageDocContentProps {
   origin: string;
 }
 
-function UsageDocContent({ origin }: UsageDocContentProps) {
+export function UsageDocContent({ origin }: UsageDocContentProps) {
   const t = useTranslations("usage");
   const resolvedOrigin = origin || t("ui.currentSiteAddress");
   const CLI_CONFIGS = getCLIConfigs(t);
@@ -941,6 +958,203 @@ gemini`}
   };
 
   /**
+   * 渲染 OpenCode 安装
+   */
+  const renderOpenCodeInstallation = (os: OS) => {
+    if (os === "windows") {
+      return (
+        <div className="space-y-4">
+          <p>{t("opencode.installation.windows.description")}</p>
+
+          <div className="space-y-3">
+            <h5 className="font-semibold text-foreground">
+              {t("opencode.installation.windows.choco.title")}
+            </h5>
+            <p>{t("opencode.installation.windows.choco.description")}</p>
+            <CodeBlock
+              language="powershell"
+              code={t("opencode.installation.windows.choco.command")}
+            />
+          </div>
+
+          <div className="space-y-3">
+            <h5 className="font-semibold text-foreground">
+              {t("opencode.installation.windows.scoop.title")}
+            </h5>
+            <p>{t("opencode.installation.windows.scoop.description")}</p>
+            <CodeBlock
+              language="powershell"
+              code={t("opencode.installation.windows.scoop.command")}
+            />
+          </div>
+
+          <div className="space-y-3">
+            <h5 className="font-semibold text-foreground">
+              {t("opencode.installation.npm.title")}
+            </h5>
+            <p>{t("opencode.installation.npm.description")}</p>
+            <CodeBlock language="powershell" code={`npm install -g opencode-ai`} />
+          </div>
+
+          <p className="text-sm text-muted-foreground">{t("opencode.installation.windows.note")}</p>
+        </div>
+      );
+    }
+
+    const lang = "bash";
+
+    return (
+      <div className="space-y-4">
+        <p>
+          {t(
+            os === "macos"
+              ? "opencode.installation.macos.description"
+              : "opencode.installation.linux.description"
+          )}
+        </p>
+
+        <div className="space-y-3">
+          <h5 className="font-semibold text-foreground">
+            {t("opencode.installation.script.title")}
+          </h5>
+          <p>{t("opencode.installation.script.description")}</p>
+          <CodeBlock language={lang} code={`curl -fsSL https://opencode.ai/install | bash`} />
+        </div>
+
+        <div className="space-y-3">
+          <h5 className="font-semibold text-foreground">
+            {t(
+              os === "macos"
+                ? "opencode.installation.macos.homebrew.title"
+                : "opencode.installation.linux.homebrew.title"
+            )}
+          </h5>
+          <p>
+            {t(
+              os === "macos"
+                ? "opencode.installation.macos.homebrew.description"
+                : "opencode.installation.linux.homebrew.description"
+            )}
+          </p>
+          <CodeBlock language="bash" code={`brew install anomalyco/tap/opencode`} />
+        </div>
+
+        <div className="space-y-3">
+          <h5 className="font-semibold text-foreground">{t("opencode.installation.npm.title")}</h5>
+          <p>{t("opencode.installation.npm.description")}</p>
+          <CodeBlock language="bash" code={`npm install -g opencode-ai`} />
+        </div>
+
+        <div className="space-y-3">
+          <h5 className="font-semibold text-foreground">{t("opencode.installation.bun.title")}</h5>
+          <p>{t("opencode.installation.bun.description")}</p>
+          <CodeBlock language="bash" code={`bun add -g opencode-ai`} />
+        </div>
+
+        {os === "linux" && (
+          <div className="space-y-3">
+            <h5 className="font-semibold text-foreground">
+              {t("opencode.installation.linux.paru.title")}
+            </h5>
+            <p>{t("opencode.installation.linux.paru.description")}</p>
+            <CodeBlock language="bash" code={`paru -S opencode-bin`} />
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  /**
+   * 渲染 OpenCode 配置
+   */
+  const renderOpenCodeConfiguration = (os: OS) => {
+    const configPath =
+      os === "windows"
+        ? "%USERPROFILE%\\.config\\opencode\\opencode.json"
+        : "~/.config/opencode/opencode.json";
+
+    const opencodeConfigJson = JSON.stringify(
+      {
+        $schema: "https://opencode.ai/config.json",
+        theme: "opencode",
+        autoupdate: false,
+        provider: {
+          cchClaude: {
+            npm: "@ai-sdk/anthropic",
+            name: "Claude via cch",
+            options: {
+              baseURL: `${resolvedOrigin}/v1`,
+              apiKey: "{env:CCH_API_KEY}",
+            },
+            models: {
+              "claude-haiku-4-5-20251001": { name: "Claude Haiku 4.5" },
+              "claude-sonnet-4-5-20250929": { name: "Claude Sonnet 4.5" },
+              "claude-opus-4-5-20251101": { name: "Claude Opus 4.5" },
+            },
+          },
+          cchGPT: {
+            npm: "@ai-sdk/openai",
+            name: "GPT via cch",
+            options: {
+              baseURL: `${resolvedOrigin}/v1`,
+              apiKey: "{env:CCH_API_KEY}",
+            },
+            models: {
+              "gpt-5.2": { name: "GPT-5.2" },
+            },
+          },
+          cchGemini: {
+            npm: "@ai-sdk/google",
+            name: "Gemini via cch",
+            options: {
+              baseURL: `${resolvedOrigin}/v1`,
+              apiKey: "{env:CCH_API_KEY}",
+            },
+            models: {
+              "gemini-3-pro-preview": { name: "Gemini 3 Pro Preview" },
+              "gemini-3-flash-preview": { name: "Gemini 3 Flash Preview" },
+            },
+          },
+        },
+      },
+      null,
+      2
+    );
+
+    return (
+      <div className="space-y-4">
+        <h4 className={headingClasses.h4}>{t("opencode.configuration.configFile.title")}</h4>
+
+        <div className="space-y-3">
+          <p>{t("opencode.configuration.configFile.path")}</p>
+          <CodeBlock language={os === "windows" ? "powershell" : "bash"} code={configPath} />
+          <p>{t("opencode.configuration.configFile.instruction")}</p>
+          <CodeBlock language="json" code={opencodeConfigJson} />
+
+          <blockquote className="space-y-2 rounded-lg border-l-2 border-primary/50 bg-muted/40 px-4 py-3">
+            <p className="font-semibold text-foreground">
+              {t("opencode.configuration.configFile.important")}
+            </p>
+            <ul className="list-disc space-y-2 pl-4">
+              {(t.raw("opencode.configuration.configFile.importantPoints") as string[]).map(
+                (point: string, i: number) => (
+                  <li key={i}>{point.replace("${resolvedOrigin}", resolvedOrigin)}</li>
+                )
+              )}
+            </ul>
+          </blockquote>
+        </div>
+
+        <h4 className={headingClasses.h4}>{t("opencode.configuration.modelSelection.title")}</h4>
+        <div className="space-y-3">
+          <p>{t("opencode.configuration.modelSelection.description")}</p>
+          <CodeBlock language="text" code={t("opencode.configuration.modelSelection.command")} />
+        </div>
+      </div>
+    );
+  };
+
+  /**
    * 渲染 Droid 安装
    */
   const renderDroidInstallation = (os: OS) => {
@@ -1120,19 +1334,25 @@ gemini`}
         ? "claudeCode.startup.title"
         : cli.id === "codex"
           ? "codex.startup.title"
-          : "droid.startup.title";
+          : cli.id === "opencode"
+            ? "opencode.startup.title"
+            : "droid.startup.title";
     const descKey =
       cli.id === "claude-code"
         ? "claudeCode.startup.description"
         : cli.id === "codex"
           ? "codex.startup.description"
-          : "droid.startup.description";
+          : cli.id === "opencode"
+            ? "opencode.startup.description"
+            : "droid.startup.description";
     const initKey =
       cli.id === "claude-code"
         ? "claudeCode.startup.initNote"
         : cli.id === "codex"
           ? "codex.startup.initNote"
-          : "droid.startup.initNote";
+          : cli.id === "opencode"
+            ? "opencode.startup.initNote"
+            : "droid.startup.initNote";
 
     return (
       <div className="space-y-3">
@@ -1153,6 +1373,9 @@ ${cli.cliName}`}
    */
   const renderCommonIssues = (cli: CLIConfig, os: OS) => {
     const lang = os === "windows" ? "powershell" : "bash";
+    const envKeyName = ["codex", "opencode"].includes(cli.id)
+      ? "CCH_API_KEY"
+      : "ANTHROPIC_AUTH_TOKEN";
     const titleKey =
       cli.id === "claude-code"
         ? "claudeCode.commonIssues.title"
@@ -1160,7 +1383,9 @@ ${cli.cliName}`}
           ? "codex.commonIssues.title"
           : cli.id === "gemini"
             ? "gemini.commonIssues.title"
-            : "droid.commonIssues.title";
+            : cli.id === "opencode"
+              ? "opencode.commonIssues.title"
+              : "droid.commonIssues.title";
     const cmdNotFoundKey =
       cli.id === "claude-code"
         ? "claudeCode.commonIssues.commandNotFound"
@@ -1168,7 +1393,9 @@ ${cli.cliName}`}
           ? "codex.commonIssues.commandNotFound"
           : cli.id === "gemini"
             ? "gemini.commonIssues.commandNotFound"
-            : "droid.commonIssues.commandNotFound";
+            : cli.id === "opencode"
+              ? "opencode.commonIssues.commandNotFound"
+              : "droid.commonIssues.commandNotFound";
     const cmdNotFoundWinKey =
       cli.id === "claude-code"
         ? "claudeCode.commonIssues.commandNotFoundWindows"
@@ -1176,7 +1403,9 @@ ${cli.cliName}`}
           ? "codex.commonIssues.commandNotFoundWindows"
           : cli.id === "gemini"
             ? "gemini.commonIssues.commandNotFoundWindows"
-            : "droid.commonIssues.commandNotFoundWindows";
+            : cli.id === "opencode"
+              ? "opencode.commonIssues.commandNotFoundWindows"
+              : "droid.commonIssues.commandNotFoundWindows";
     const cmdNotFoundUnixKey =
       cli.id === "claude-code"
         ? "claudeCode.commonIssues.commandNotFoundUnix"
@@ -1184,13 +1413,17 @@ ${cli.cliName}`}
           ? "codex.commonIssues.commandNotFoundUnix"
           : cli.id === "gemini"
             ? "gemini.commonIssues.commandNotFoundUnix"
-            : "droid.commonIssues.commandNotFoundUnix";
+            : cli.id === "opencode"
+              ? "opencode.commonIssues.commandNotFoundUnix"
+              : "droid.commonIssues.commandNotFoundUnix";
     const connFailedKey =
       cli.id === "claude-code"
         ? "claudeCode.commonIssues.connectionFailed"
         : cli.id === "gemini"
           ? "gemini.commonIssues.connectionFailed"
-          : "codex.commonIssues.connectionFailed";
+          : cli.id === "opencode"
+            ? "opencode.commonIssues.connectionFailed"
+            : "codex.commonIssues.connectionFailed";
     const updateKey =
       cli.id === "claude-code"
         ? "claudeCode.commonIssues.updateCli"
@@ -1198,7 +1431,9 @@ ${cli.cliName}`}
           ? "codex.commonIssues.updateCli"
           : cli.id === "gemini"
             ? "gemini.commonIssues.updateCli"
-            : "droid.commonIssues.updateCli";
+            : cli.id === "opencode"
+              ? "opencode.commonIssues.updateCli"
+              : "droid.commonIssues.updateCli";
 
     return (
       <div className="space-y-4">
@@ -1241,7 +1476,7 @@ source ~/.${os === "macos" ? "zshrc" : "bashrc"}`}
               <CodeBlock
                 language="powershell"
                 code={`# 检查环境变量
-echo $env:${cli.id === "codex" ? "CCH_API_KEY" : "ANTHROPIC_AUTH_TOKEN"}
+echo $env:${envKeyName}
 
 # 测试网络连接
 Test-NetConnection -ComputerName ${resolvedOrigin.replace("https://", "").replace("http://", "")} -Port 443`}
@@ -1250,7 +1485,7 @@ Test-NetConnection -ComputerName ${resolvedOrigin.replace("https://", "").replac
               <CodeBlock
                 language="bash"
                 code={`# 检查环境变量
-echo $${cli.id === "codex" ? "CCH_API_KEY" : "ANTHROPIC_AUTH_TOKEN"}
+echo $${envKeyName}
 
 # 测试网络连接
 curl -I ${resolvedOrigin}`}
@@ -1294,7 +1529,7 @@ curl -I ${resolvedOrigin}`}
         </h3>
 
         {/* 环境准备 */}
-        {cli.packageName && (
+        {cli.requiresNodeJs && (
           <div className="space-y-3">
             <h4 className={headingClasses.h4}>{t("claudeCode.environmentSetup.title")}</h4>
             <p>{t("claudeCode.environmentSetup.description")}</p>
@@ -1312,12 +1547,15 @@ curl -I ${resolvedOrigin}`}
                 ? t("codex.installation.title")
                 : cli.id === "gemini"
                   ? t("gemini.installation.title")
-                  : t("droid.installation.title")}{" "}
+                  : cli.id === "opencode"
+                    ? t("opencode.installation.title")
+                    : t("droid.installation.title")}{" "}
             {cli.cliName}
           </h4>
           {cli.id === "claude-code" && renderClaudeCodeInstallation(os)}
           {cli.id === "codex" && renderCodexInstallation(os)}
           {cli.id === "gemini" && renderGeminiInstallation(os)}
+          {cli.id === "opencode" && renderOpenCodeInstallation(os)}
           {cli.id === "droid" && renderDroidInstallation(os)}
         </div>
 
@@ -1330,11 +1568,14 @@ curl -I ${resolvedOrigin}`}
                 ? t("codex.configuration.title")
                 : cli.id === "gemini"
                   ? t("gemini.configuration.title")
-                  : t("droid.configuration.title")}
+                  : cli.id === "opencode"
+                    ? t("opencode.configuration.title")
+                    : t("droid.configuration.title")}
           </h4>
           {cli.id === "claude-code" && renderClaudeCodeConfiguration(os)}
           {cli.id === "codex" && renderCodexConfiguration(os)}
           {cli.id === "gemini" && renderGeminiConfiguration(os)}
+          {cli.id === "opencode" && renderOpenCodeConfiguration(os)}
           {cli.id === "droid" && renderDroidConfiguration(os)}
         </div>
 
@@ -1358,7 +1599,7 @@ curl -I ${resolvedOrigin}`}
       {/* Claude Code 使用指南 */}
       <section className="space-y-6">
         <h2 id={CLI_CONFIGS.claudeCode.id} className={headingClasses.h2}>
-          📚 {CLI_CONFIGS.claudeCode.title}
+          {CLI_CONFIGS.claudeCode.title}
         </h2>
         <p>{t("claudeCode.description")}</p>
         {(["macos", "windows", "linux"] as OS[]).map((os) =>
@@ -1371,7 +1612,7 @@ curl -I ${resolvedOrigin}`}
       {/* Codex CLI 使用指南 */}
       <section className="space-y-6">
         <h2 id={CLI_CONFIGS.codex.id} className={headingClasses.h2}>
-          📚 {CLI_CONFIGS.codex.title}
+          {CLI_CONFIGS.codex.title}
         </h2>
         <p>{t("codex.description")}</p>
         {(["macos", "windows", "linux"] as OS[]).map((os) =>
@@ -1384,7 +1625,7 @@ curl -I ${resolvedOrigin}`}
       {/* Gemini CLI 使用指南 */}
       <section className="space-y-6">
         <h2 id={CLI_CONFIGS.gemini.id} className={headingClasses.h2}>
-          📚 {CLI_CONFIGS.gemini.title}
+          {CLI_CONFIGS.gemini.title}
         </h2>
         <p>{t("gemini.description")}</p>
         {(["macos", "windows", "linux"] as OS[]).map((os) =>
@@ -1394,10 +1635,23 @@ curl -I ${resolvedOrigin}`}
 
       <hr className="border-border/60" />
 
+      {/* OpenCode 使用指南 */}
+      <section className="space-y-6">
+        <h2 id={CLI_CONFIGS.opencode.id} className={headingClasses.h2}>
+          {CLI_CONFIGS.opencode.title}
+        </h2>
+        <p>{t("opencode.description")}</p>
+        {(["macos", "windows", "linux"] as OS[]).map((os) =>
+          renderPlatformGuide(CLI_CONFIGS.opencode, os)
+        )}
+      </section>
+
+      <hr className="border-border/60" />
+
       {/* Droid CLI 使用指南 */}
       <section className="space-y-6">
         <h2 id={CLI_CONFIGS.droid.id} className={headingClasses.h2}>
-          📚 {CLI_CONFIGS.droid.title}
+          {CLI_CONFIGS.droid.title}
         </h2>
         <p>{t("droid.description")}</p>
         {(["macos", "windows", "linux"] as OS[]).map((os) =>
@@ -1410,7 +1664,7 @@ curl -I ${resolvedOrigin}`}
       {/* 常用命令 */}
       <section className="space-y-4">
         <h2 id="common-commands" className={headingClasses.h2}>
-          📚 {t("commonCommands.title")}
+          {t("commonCommands.title")}
         </h2>
         <p>{t("commonCommands.description")}</p>
         <ul className="list-disc space-y-2 pl-6">
@@ -1441,7 +1695,7 @@ curl -I ${resolvedOrigin}`}
       {/* 通用故障排查 */}
       <section className="space-y-4">
         <h2 id="troubleshooting" className={headingClasses.h2}>
-          🔍 {t("troubleshooting.title")}
+          {t("troubleshooting.title")}
         </h2>
 
         <div className="space-y-3">
