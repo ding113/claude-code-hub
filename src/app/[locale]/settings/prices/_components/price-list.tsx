@@ -90,6 +90,7 @@ export function PriceList({
   // 使用防抖，避免频繁请求
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
   const lastDebouncedSearchTerm = useRef(debouncedSearchTerm);
+  const pendingRefreshPage = useRef<number | null>(null);
 
   // 计算总页数
   const totalPages = Math.ceil(total / pageSize);
@@ -182,6 +183,13 @@ export function PriceList({
   // 监听价格数据变化事件（由其他组件触发）
   useEffect(() => {
     const handlePriceUpdate = () => {
+      const forcedPage = pendingRefreshPage.current;
+      if (typeof forcedPage === "number") {
+        pendingRefreshPage.current = null;
+        fetchPrices(forcedPage, pageSize, debouncedSearchTerm, sourceFilter, litellmProviderFilter);
+        return;
+      }
+
       fetchPrices(page, pageSize, debouncedSearchTerm, sourceFilter, litellmProviderFilter);
     };
 
@@ -619,15 +627,6 @@ export function PriceList({
                         <ModelPriceDrawer
                           mode="edit"
                           initialData={price}
-                          onSuccess={() =>
-                            fetchPrices(
-                              page,
-                              pageSize,
-                              debouncedSearchTerm,
-                              sourceFilter,
-                              litellmProviderFilter
-                            )
-                          }
                           trigger={
                             <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
                               <Pencil className="h-4 w-4 mr-2" />
@@ -637,15 +636,21 @@ export function PriceList({
                         />
                         <DeleteModelDialog
                           modelName={price.modelName}
-                          onSuccess={() =>
-                            fetchPrices(
-                              page,
-                              pageSize,
-                              debouncedSearchTerm,
-                              sourceFilter,
-                              litellmProviderFilter
-                            )
-                          }
+                          onSuccess={() => {
+                            const willBeEmpty = filteredPrices.length <= 1 && page > 1;
+                            const targetPage = willBeEmpty ? page - 1 : page;
+                            if (targetPage !== page) {
+                              pendingRefreshPage.current = targetPage;
+                              setPage(targetPage);
+                              updateURL(
+                                debouncedSearchTerm,
+                                targetPage,
+                                pageSize,
+                                sourceFilter,
+                                litellmProviderFilter
+                              );
+                            }
+                          }}
                           trigger={
                             <DropdownMenuItem
                               onSelect={(e) => e.preventDefault()}

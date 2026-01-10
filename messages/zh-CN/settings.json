@@ -1423,7 +1423,7 @@
       "outputPriceImage": "输出价格 ($/image)",
       "cacheReadPrice": "缓存读取价格 ($/M tokens)",
       "cacheCreationPrice5m": "缓存创建价格（5m，$/M tokens）",
-      "cacheCreationPrice1h": "缓存创建价格（1h，$/M tokens）"
+      "cacheCreationPrice1h": "缓存创建价格（1h+，$/M tokens）"
     },
     "drawer": {
       "prefillLabel": "搜索现有模型并预填充",

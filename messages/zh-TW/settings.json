@@ -695,7 +695,7 @@
       "outputPriceImage": "輸出價格 ($/張圖)",
       "cacheReadPrice": "快取讀取價格 ($/M tokens)",
       "cacheCreationPrice5m": "快取建立價格（5m，$/M tokens）",
-      "cacheCreationPrice1h": "快取建立價格（1h，$/M tokens）"
+      "cacheCreationPrice1h": "快取建立價格（1h+，$/M tokens）"
     },
     "drawer": {
       "prefillLabel": "搜尋現有模型並預填充",

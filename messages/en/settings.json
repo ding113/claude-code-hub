@@ -704,7 +704,7 @@
       "outputPriceImage": "Output Price ($/image)",
       "cacheReadPrice": "Cache Read Price ($/M tokens)",
       "cacheCreationPrice5m": "Cache Creation Price (5m, $/M tokens)",
-      "cacheCreationPrice1h": "Cache Creation Price (1h, $/M tokens)"
+      "cacheCreationPrice1h": "Cache Creation Price (1h+, $/M tokens)"
     },
     "drawer": {
       "prefillLabel": "Search existing models to prefill",

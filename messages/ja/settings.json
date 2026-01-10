@@ -695,7 +695,7 @@
       "outputPriceImage": "出力価格 ($/image)",
       "cacheReadPrice": "キャッシュ読み取り価格 ($/M tokens)",
       "cacheCreationPrice5m": "キャッシュ作成価格（5m，$/M tokens）",
-      "cacheCreationPrice1h": "キャッシュ作成価格（1h，$/M tokens）"
+      "cacheCreationPrice1h": "キャッシュ作成価格（1h+，$/M tokens）"
     },
     "drawer": {
       "prefillLabel": "既存モデルを検索してプリフィル",

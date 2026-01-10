@@ -695,7 +695,7 @@
       "outputPriceImage": "Цена вывода ($/изображение)",
       "cacheReadPrice": "Цена чтения кэша ($/M токенов)",
       "cacheCreationPrice5m": "Цена создания кэша (5m, $/M токенов)",
-      "cacheCreationPrice1h": "Цена создания кэша (1h, $/M токенов)"
+      "cacheCreationPrice1h": "Цена создания кэша (1h+, $/M токенов)"
     },
     "drawer": {
       "prefillLabel": "Поиск существующих моделей для автозаполнения",

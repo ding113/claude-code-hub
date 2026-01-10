@@ -8,7 +8,7 @@ import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { NextIntlClientProvider } from "next-intl";
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { ModelPriceDrawer } from "@/app/[locale]/settings/prices/_components/model-price-drawer";
 import type { ModelPrice } from "@/types/model-price";
 
@@ -59,6 +59,11 @@ async function flushPromises() {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+async function flushMicrotasks() {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 function setReactInputValue(input: HTMLInputElement, value: string) {
   const prototype = Object.getPrototypeOf(input) as HTMLInputElement;
   const descriptor = Object.getOwnPropertyDescriptor(prototype, "value");
@@ -73,7 +78,12 @@ describe("ModelPriceDrawer: 预填充与提交", () => {
     document.body.innerHTML = "";
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   test("create 模式应支持搜索现有模型并预填充字段", async () => {
+    vi.useFakeTimers();
     const messages = loadMessages();
     const originalFetch = globalThis.fetch;
 
@@ -121,8 +131,11 @@ describe("ModelPriceDrawer: 预填充与提交", () => {
     });
 
     await act(async () => {
-      await flushPromises();
-      await flushPromises();
+      vi.advanceTimersByTime(350);
+    });
+
+    await act(async () => {
+      await flushMicrotasks();
     });
 
     expect(fetchMock).toHaveBeenCalled();
@@ -135,7 +148,7 @@ describe("ModelPriceDrawer: 预填充与提交", () => {
 
     await act(async () => {
       resultItem?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await flushPromises();
+      await flushMicrotasks();
     });
 
     const modelIdInput = document.getElementById("modelName") as HTMLInputElement | null;
@@ -145,6 +158,51 @@ describe("ModelPriceDrawer: 预填充与提交", () => {
     expect(modelIdInput?.value).toBe("openai/gpt-test");
     expect(displayNameInput?.value).toBe("GPT Test");
     expect(providerInput?.value).toBe("openai");
+
+    globalThis.fetch = originalFetch;
+    unmount();
+  });
+
+  test("预填充搜索应防抖：快速输入只触发一次请求", async () => {
+    vi.useFakeTimers();
+    const messages = loadMessages();
+    const originalFetch = globalThis.fetch;
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({
+        ok: true,
+        data: { data: [], total: 0, page: 1, pageSize: 10, totalPages: 0 },
+      }),
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    globalThis.fetch = fetchMock as any;
+
+    const { unmount } = render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <ModelPriceDrawer mode="create" defaultOpen />
+      </NextIntlClientProvider>
+    );
+
+    const searchInput = document.getElementById("prefill-search") as HTMLInputElement | null;
+    expect(searchInput).toBeTruthy();
+
+    await act(async () => {
+      setReactInputValue(searchInput!, "g");
+      setReactInputValue(searchInput!, "gp");
+      setReactInputValue(searchInput!, "gpt");
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(350);
+    });
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const url = fetchMock.mock.calls[0][0] as string;
+    expect(url).toContain("search=gpt");
 
     globalThis.fetch = originalFetch;
     unmount();

@@ -33,6 +33,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
+import { useDebounce } from "@/lib/hooks/use-debounce";
 import type { ModelPrice } from "@/types/model-price";
 
 interface ModelPriceDrawerProps {
@@ -103,6 +104,7 @@ export function ModelPriceDrawer({
   const [prefillQuery, setPrefillQuery] = useState("");
   const [prefillStatus, setPrefillStatus] = useState<PrefillStatus>("idle");
   const [prefillResults, setPrefillResults] = useState<ModelPrice[]>([]);
+  const debouncedPrefillQuery = useDebounce(prefillQuery, 300);
 
   const resetForm = useCallback(() => {
     setModelName("");
@@ -175,10 +177,19 @@ export function ModelPriceDrawer({
       return;
     }
 
-    const query = prefillQuery.trim();
-    if (!query) {
+    if (!prefillQuery.trim()) {
       setPrefillResults([]);
       setPrefillStatus("idle");
+    }
+  }, [mode, open, prefillQuery]);
+
+  useEffect(() => {
+    if (!open || mode !== "create") {
+      return;
+    }
+
+    const query = debouncedPrefillQuery.trim();
+    if (!query) {
       return;
     }
 
@@ -216,7 +227,7 @@ export function ModelPriceDrawer({
     return () => {
       cancelled = true;
     };
-  }, [mode, open, prefillQuery]);
+  }, [mode, open, debouncedPrefillQuery]);
 
   const handleSubmit = async () => {
     if (!modelName.trim()) {
