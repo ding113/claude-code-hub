@@ -234,14 +234,6 @@ export function UsageLogsTable({
                                   setDialogState({ logId: log.id, scrollToRedirect: true })
                                 }
                               />
-                              {log.specialSettings && log.specialSettings.length > 0 ? (
-                                <Badge
-                                  variant="outline"
-                                  className="text-[10px] leading-tight px-1 shrink-0"
-                                >
-                                  {t("logs.table.specialSettings")}
-                                </Badge>
-                              ) : null}
                             </div>
                           </TooltipTrigger>
                           <TooltipContent>

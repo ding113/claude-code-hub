@@ -1,3 +1,4 @@
+import { ResponseFixer } from "@/app/v1/_lib/proxy/response-fixer";
 import { AsyncTaskManager } from "@/lib/async-task-manager";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
@@ -57,14 +58,30 @@ function cleanResponseHeaders(headers: Headers): Headers {
 
 export class ProxyResponseHandler {
   static async dispatch(session: ProxySession, response: Response): Promise<Response> {
-    const contentType = response.headers.get("content-type") || "";
+    let fixedResponse = response;
+    try {
+      fixedResponse = await ResponseFixer.process(session, response);
+    } catch (error) {
+      logger.error(
+        "[ResponseHandler] ResponseFixer failed (getCachedSystemSettings/processNonStream)",
+        {
+          error: error instanceof Error ? error.message : String(error),
+          sessionId: session.sessionId ?? null,
+          messageRequestId: session.messageContext?.id ?? null,
+          requestSequence: session.requestSequence ?? null,
+        }
+      );
+      fixedResponse = response;
+    }
+
+    const contentType = fixedResponse.headers.get("content-type") || "";
     const isSSE = contentType.includes("text/event-stream");
 
     if (!isSSE) {
-      return await ProxyResponseHandler.handleNonStream(session, response);
+      return await ProxyResponseHandler.handleNonStream(session, fixedResponse);
     }
 
-    return await ProxyResponseHandler.handleStream(session, response);
+    return await ProxyResponseHandler.handleStream(session, fixedResponse);
   }
 
   private static async handleNonStream(

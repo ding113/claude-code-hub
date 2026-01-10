@@ -374,12 +374,14 @@ export function SessionMessagesClient() {
                           className="h-8 w-8"
                           aria-label={t("actions.copyMessages")}
                           onClick={handleCopyRequest}
+                          aria-label={t("actions.copyMessages")}
                         >
                           {copiedRequest ? (
                             <Check className="h-4 w-4 text-green-500" />
                           ) : (
                             <Copy className="h-4 w-4" />
                           )}
+                          <span className="sr-only">{t("actions.copyMessages")}</span>
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>{t("actions.copyMessages")}</TooltipContent>
@@ -395,8 +397,10 @@ export function SessionMessagesClient() {
                           className="h-8 w-8"
                           aria-label={t("actions.downloadMessages")}
                           onClick={handleDownloadRequest}
+                          aria-label={t("actions.downloadMessages")}
                         >
                           <Download className="h-4 w-4" />
+                          <span className="sr-only">{t("actions.downloadMessages")}</span>
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>{t("actions.downloadMessages")}</TooltipContent>

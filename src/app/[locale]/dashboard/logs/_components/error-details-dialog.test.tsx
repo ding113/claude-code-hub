@@ -70,6 +70,9 @@ const messages = {
         processing: "Processing",
         success: "Success",
         error: "Error",
+        specialSettings: {
+          title: "Special settings",
+        },
         billingDetails: {
           title: "Billing details",
         },
@@ -121,6 +124,33 @@ function getBillingAndPerformanceGrid(document: ReturnType<typeof parseHtml>) {
 }
 
 describe("error-details-dialog layout", () => {
+  test("renders special settings section when specialSettings exists", () => {
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        providerChain={null}
+        sessionId={null}
+        specialSettings={[
+          {
+            type: "provider_parameter_override",
+            scope: "provider",
+            providerId: 1,
+            providerName: "p",
+            providerType: "codex",
+            hit: true,
+            changed: true,
+            changes: [{ path: "temperature", before: 1, after: 0.2, changed: true }],
+          },
+        ]}
+      />
+    );
+
+    expect(html).toContain("Special settings");
+    expect(html).toContain("provider_parameter_override");
+  });
+
   test("renders billing + performance as two-column grid on md when both present", () => {
     const html = renderWithIntl(
       <ErrorDetailsDialog
