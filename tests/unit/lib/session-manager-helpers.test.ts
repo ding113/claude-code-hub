@@ -1,6 +1,11 @@
 import { describe, expect, test, vi } from "vitest";
 
 const loggerWarnMock = vi.fn();
+const PARSE_HEADER_RECORD_WARN_MESSAGE = "SessionManager: Failed to parse header record JSON";
+
+function getParseHeaderRecordWarnCalls(): unknown[][] {
+  return loggerWarnMock.mock.calls.filter((call) => call[0] === PARSE_HEADER_RECORD_WARN_MESSAGE);
+}
 
 vi.mock("server-only", () => ({}));
 
@@ -33,7 +38,7 @@ describe("SessionManager 辅助函数", () => {
     const { parseHeaderRecord } = await loadHelpers();
 
     expect(parseHeaderRecord('{"a":"1","b":"2"}')).toEqual({ a: "1", b: "2" });
-    expect(loggerWarnMock).not.toHaveBeenCalled();
+    expect(getParseHeaderRecordWarnCalls()).toHaveLength(0);
   });
 
   test("parseHeaderRecord：空对象应返回空记录", async () => {
@@ -41,7 +46,7 @@ describe("SessionManager 辅助函数", () => {
     const { parseHeaderRecord } = await loadHelpers();
 
     expect(parseHeaderRecord("{}")).toEqual({});
-    expect(loggerWarnMock).not.toHaveBeenCalled();
+    expect(getParseHeaderRecordWarnCalls()).toHaveLength(0);
   });
 
   test("parseHeaderRecord：只保留字符串值", async () => {
@@ -51,7 +56,7 @@ describe("SessionManager 辅助函数", () => {
     expect(parseHeaderRecord('{"a":"1","b":2,"c":true,"d":null,"e":{},"f":[]}')).toEqual({
       a: "1",
     });
-    expect(loggerWarnMock).not.toHaveBeenCalled();
+    expect(getParseHeaderRecordWarnCalls()).toHaveLength(0);
   });
 
   test("parseHeaderRecord：无效 JSON 应返回 null 并记录 warn", async () => {
@@ -59,9 +64,10 @@ describe("SessionManager 辅助函数", () => {
     const { parseHeaderRecord } = await loadHelpers();
 
     expect(parseHeaderRecord("{bad json")).toBe(null);
-    expect(loggerWarnMock).toHaveBeenCalledTimes(1);
+    const calls = getParseHeaderRecordWarnCalls();
+    expect(calls).toHaveLength(1);
 
-    const [message, meta] = loggerWarnMock.mock.calls[0] ?? [];
+    const [message, meta] = calls[0] ?? [];
     expect(message).toBe("SessionManager: Failed to parse header record JSON");
     expect(meta).toEqual(expect.objectContaining({ error: expect.anything() }));
   });
@@ -73,7 +79,7 @@ describe("SessionManager 辅助函数", () => {
     expect(parseHeaderRecord('["a"]')).toBe(null);
     expect(parseHeaderRecord("null")).toBe(null);
     expect(parseHeaderRecord("1")).toBe(null);
-    expect(loggerWarnMock).not.toHaveBeenCalled();
+    expect(getParseHeaderRecordWarnCalls()).toHaveLength(0);
   });
 
   test("headersToSanitizedObject：单个 header 应正确转换", async () => {

@@ -1,5 +1,6 @@
 export type ThinkingSignatureRectifierTrigger =
   | "invalid_signature_in_thinking_block"
+  | "assistant_message_must_start_with_thinking"
   | "invalid_request";
 
 export type ThinkingSignatureRectifierResult = {
@@ -20,6 +21,23 @@ export function detectThinkingSignatureRectifierTrigger(
   if (!errorMessage) return null;
 
   const lower = errorMessage.toLowerCase();
+
+  // Claude 官方错误提示：thinking 启用时，工具调用链路中的最后一条 assistant 消息必须以 thinking 开头
+  // 典型信息：
+  // - Expected `thinking` or `redacted_thinking`, but found `tool_use`
+  // - a final `assistant` message must start with a thinking block
+  //
+  // 该场景通常发生在工具调用回合中途“切换 thinking 模式”或遗失 thinking block 时，
+  // 最安全的兜底是：在整流重试前关闭本次请求的顶层 thinking（避免继续触发 400）。
+  const looksLikeThinkingEnabledButMissingThinkingPrefix =
+    lower.includes("must start with a thinking block") ||
+    /expected\s*`?thinking`?\s*or\s*`?redacted_thinking`?.*found\s*`?tool_use`?/i.test(
+      errorMessage
+    );
+
+  if (looksLikeThinkingEnabledButMissingThinkingPrefix) {
+    return "assistant_message_must_start_with_thinking";
+  }
 
   // 兼容带/不带反引号、不同大小写的变体
   const looksLikeInvalidSignatureInThinkingBlock =
@@ -111,6 +129,50 @@ export function rectifyAnthropicRequestMessage(
     if (contentWasModified) {
       applied = true;
       msgObj.content = newContent;
+    }
+  }
+
+  // 兜底：thinking 启用 + 工具调用链路中最后一条 assistant 消息未以 thinking/redacted_thinking 开头
+  // 该组合会触发 Anthropic 400（Expected thinking..., but found tool_use）。
+  // 为避免继续失败，整流阶段直接删除顶层 thinking 字段（只影响本次重试）。
+  const thinking = (message as Record<string, unknown>).thinking;
+  const thinkingEnabled =
+    thinking &&
+    typeof thinking === "object" &&
+    (thinking as Record<string, unknown>).type === "enabled";
+
+  if (thinkingEnabled) {
+    let lastAssistantContent: unknown[] | null = null;
+
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (!msg || typeof msg !== "object") continue;
+      const msgObj = msg as Record<string, unknown>;
+      if (msgObj.role !== "assistant") continue;
+      if (!Array.isArray(msgObj.content)) continue;
+      lastAssistantContent = msgObj.content;
+      break;
+    }
+
+    if (lastAssistantContent && lastAssistantContent.length > 0) {
+      const hasToolUse = lastAssistantContent.some((block) => {
+        if (!block || typeof block !== "object") return false;
+        return (block as Record<string, unknown>).type === "tool_use";
+      });
+
+      const firstBlock = lastAssistantContent[0];
+      const firstBlockType =
+        firstBlock && typeof firstBlock === "object"
+          ? (firstBlock as Record<string, unknown>).type
+          : null;
+
+      const missingThinkingPrefix =
+        firstBlockType !== "thinking" && firstBlockType !== "redacted_thinking";
+
+      if (hasToolUse && missingThinkingPrefix && "thinking" in message) {
+        delete (message as any).thinking;
+        applied = true;
+      }
     }
   }
 

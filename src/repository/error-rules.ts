@@ -657,6 +657,27 @@ const DEFAULT_ERROR_RULES = [
       },
     },
   },
+  // Thinking enabled but tool_use is the first block (tool loop + thinking toggle / missing thinking block)
+  {
+    pattern: "must start with a thinking block",
+    category: "thinking_error",
+    description:
+      "Thinking enabled but the last assistant tool_use message does not start with thinking/redacted_thinking",
+    matchType: "contains" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 69,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "thinking_error",
+        message:
+          "thinking 已启用，但工具调用续写的 assistant 消息未以 thinking/redacted_thinking 块开头。" +
+          "请在 tool_result 续写请求中原样回传上一轮 assistant 的 thinking/redacted_thinking 块（含 signature/data），" +
+          "或关闭 thinking 后重试。",
+      },
+    },
+  },
   {
     pattern:
       "thinking.*format.*invalid|Expected.*thinking.*but found|clear_thinking.*requires.*thinking.*enabled",
