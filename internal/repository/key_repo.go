@@ -7,8 +7,31 @@ import (
 
 	"github.com/ding113/claude-code-hub/internal/model"
 	"github.com/ding113/claude-code-hub/internal/pkg/errors"
+	"github.com/quagmt/udecimal"
 	"github.com/uptrace/bun"
 )
+
+// KeyUsageToday Key 今日用量统计
+type KeyUsageToday struct {
+	KeyID     int              `bun:"key_id"`
+	TotalCost udecimal.Decimal `bun:"total_cost"`
+}
+
+// KeyModelStat Key 模型统计
+type KeyModelStat struct {
+	Model     string           `bun:"model"`
+	CallCount int              `bun:"call_count"`
+	TotalCost udecimal.Decimal `bun:"total_cost"`
+}
+
+// KeyStatistics Key 统计信息
+type KeyStatistics struct {
+	KeyID            int             `bun:"key_id"`
+	TodayCallCount   int             `bun:"today_call_count"`
+	LastUsedAt       *time.Time      `bun:"last_used_at"`
+	LastProviderName *string         `bun:"last_provider_name"`
+	ModelStats       []*KeyModelStat // 模型统计（需要单独查询）
+}
 
 // KeyRepository Key 数据访问接口
 type KeyRepository interface {
@@ -67,6 +90,21 @@ type KeyRepository interface {
 
 	// MarkKeyExpired 标记 Key 过期（将 is_enabled 设为 false）
 	MarkKeyExpired(ctx context.Context, keyID int) (bool, error)
+
+	// FindActiveKeyByUserIDAndName 根据用户ID和名称查找活跃Key（防止重复）
+	FindActiveKeyByUserIDAndName(ctx context.Context, userID int, name string) (*model.Key, error)
+
+	// FindKeyUsageToday 获取用户下所有Key的今日费用统计（用于限流检查）
+	FindKeyUsageToday(ctx context.Context, userID int, timezone string) ([]*KeyUsageToday, error)
+
+	// FindKeyUsageTodayBatch 批量获取多个用户的Key今日用量（性能优化）
+	FindKeyUsageTodayBatch(ctx context.Context, userIDs []int, timezone string) (map[int][]*KeyUsageToday, error)
+
+	// FindKeysWithStatistics 获取Key的详细统计信息（管理后台展示）
+	FindKeysWithStatistics(ctx context.Context, userID int, timezone string) ([]*KeyStatistics, error)
+
+	// FindKeysWithStatisticsBatch 批量获取多个用户的Key统计（性能优化）
+	FindKeysWithStatisticsBatch(ctx context.Context, userIDs []int, timezone string) (map[int][]*KeyStatistics, error)
 }
 
 // keyRepository KeyRepository 实现
@@ -456,4 +494,392 @@ func (r *keyRepository) MarkKeyExpired(ctx context.Context, keyID int) (bool, er
 
 	rowsAffected, _ := result.RowsAffected()
 	return rowsAffected > 0, nil
+}
+
+// FindActiveKeyByUserIDAndName 根据用户ID和名称查找活跃Key（防止重复）
+func (r *keyRepository) FindActiveKeyByUserIDAndName(ctx context.Context, userID int, name string) (*model.Key, error) {
+	now := time.Now()
+	key := new(model.Key)
+	err := r.db.NewSelect().
+		Model(key).
+		Where("user_id = ?", userID).
+		Where("name = ?", name).
+		Where("deleted_at IS NULL").
+		Where("is_enabled = ?", true).
+		Where("(expires_at IS NULL OR expires_at > ?)", now).
+		Scan(ctx)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil // 未找到返回 nil，不是错误
+		}
+		return nil, errors.NewDatabaseError(err)
+	}
+
+	return key, nil
+}
+
+// excludeWarmupConditionKey 排除 warmup 请求的条件（与 statistics_repo 保持一致）
+const excludeWarmupConditionKey = "(blocked_by IS NULL OR blocked_by <> 'warmup')"
+
+// FindKeyUsageToday 获取用户下所有Key的今日费用统计（用于限流检查）
+func (r *keyRepository) FindKeyUsageToday(ctx context.Context, userID int, timezone string) ([]*KeyUsageToday, error) {
+	query := `
+		SELECT
+			k.id AS key_id,
+			COALESCE(SUM(mr.cost_usd), 0) AS total_cost
+		FROM keys k
+		LEFT JOIN message_request mr ON mr.key = k.key
+			AND mr.deleted_at IS NULL
+			AND ` + excludeWarmupConditionKey + `
+			AND (mr.created_at AT TIME ZONE $1)::date = (CURRENT_TIMESTAMP AT TIME ZONE $1)::date
+		WHERE k.user_id = $2
+			AND k.deleted_at IS NULL
+		GROUP BY k.id
+	`
+
+	var results []*KeyUsageToday
+	_, err := r.db.NewRaw(query, timezone, userID).Exec(ctx, &results)
+	if err != nil {
+		return nil, errors.NewDatabaseError(err)
+	}
+
+	return results, nil
+}
+
+// FindKeyUsageTodayBatch 批量获取多个用户的Key今日用量（性能优化）
+func (r *keyRepository) FindKeyUsageTodayBatch(ctx context.Context, userIDs []int, timezone string) (map[int][]*KeyUsageToday, error) {
+	if len(userIDs) == 0 {
+		return make(map[int][]*KeyUsageToday), nil
+	}
+
+	query := `
+		SELECT
+			k.user_id,
+			k.id AS key_id,
+			COALESCE(SUM(mr.cost_usd), 0) AS total_cost
+		FROM keys k
+		LEFT JOIN message_request mr ON mr.key = k.key
+			AND mr.deleted_at IS NULL
+			AND ` + excludeWarmupConditionKey + `
+			AND (mr.created_at AT TIME ZONE $1)::date = (CURRENT_TIMESTAMP AT TIME ZONE $1)::date
+		WHERE k.user_id = ANY($2)
+			AND k.deleted_at IS NULL
+		GROUP BY k.user_id, k.id
+		ORDER BY k.user_id, k.id
+	`
+
+	var rows []struct {
+		UserID    int              `bun:"user_id"`
+		KeyID     int              `bun:"key_id"`
+		TotalCost udecimal.Decimal `bun:"total_cost"`
+	}
+	_, err := r.db.NewRaw(query, timezone, bun.In(userIDs)).Exec(ctx, &rows)
+	if err != nil {
+		return nil, errors.NewDatabaseError(err)
+	}
+
+	// 按 userID 分组
+	result := make(map[int][]*KeyUsageToday)
+	for _, userID := range userIDs {
+		result[userID] = []*KeyUsageToday{}
+	}
+	for _, row := range rows {
+		result[row.UserID] = append(result[row.UserID], &KeyUsageToday{
+			KeyID:     row.KeyID,
+			TotalCost: row.TotalCost,
+		})
+	}
+
+	return result, nil
+}
+
+// FindKeysWithStatistics 获取Key的详细统计信息（管理后台展示）
+func (r *keyRepository) FindKeysWithStatistics(ctx context.Context, userID int, timezone string) ([]*KeyStatistics, error) {
+	// 1. 获取用户的所有 keys
+	keys, err := r.ListByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(keys) == 0 {
+		return []*KeyStatistics{}, nil
+	}
+
+	// 收集所有 key 字符串
+	keyStrings := make([]string, len(keys))
+	keyIDMap := make(map[string]int)
+	for i, k := range keys {
+		keyStrings[i] = k.Key
+		keyIDMap[k.Key] = k.ID
+	}
+
+	// 2. 查询今日调用次数
+	todayCountQuery := `
+		SELECT
+			mr.key,
+			COUNT(*) AS count
+		FROM message_request mr
+		WHERE mr.key = ANY($1)
+			AND mr.deleted_at IS NULL
+			AND ` + excludeWarmupConditionKey + `
+			AND (mr.created_at AT TIME ZONE $2)::date = (CURRENT_TIMESTAMP AT TIME ZONE $2)::date
+		GROUP BY mr.key
+	`
+	var todayCountRows []struct {
+		Key   string `bun:"key"`
+		Count int    `bun:"count"`
+	}
+	_, err = r.db.NewRaw(todayCountQuery, bun.In(keyStrings), timezone).Exec(ctx, &todayCountRows)
+	if err != nil {
+		return nil, errors.NewDatabaseError(err)
+	}
+	todayCountMap := make(map[string]int)
+	for _, row := range todayCountRows {
+		todayCountMap[row.Key] = row.Count
+	}
+
+	// 3. 查询最后使用时间和供应商（使用 DISTINCT ON）
+	lastUsageQuery := `
+		SELECT DISTINCT ON (mr.key)
+			mr.key,
+			mr.created_at AS last_used_at,
+			p.name AS last_provider_name
+		FROM message_request mr
+		INNER JOIN providers p ON mr.provider_id = p.id
+		WHERE mr.key = ANY($1)
+			AND mr.deleted_at IS NULL
+			AND ` + excludeWarmupConditionKey + `
+		ORDER BY mr.key, mr.created_at DESC
+	`
+	var lastUsageRows []struct {
+		Key              string     `bun:"key"`
+		LastUsedAt       *time.Time `bun:"last_used_at"`
+		LastProviderName *string    `bun:"last_provider_name"`
+	}
+	_, err = r.db.NewRaw(lastUsageQuery, bun.In(keyStrings)).Exec(ctx, &lastUsageRows)
+	if err != nil {
+		return nil, errors.NewDatabaseError(err)
+	}
+	lastUsageMap := make(map[string]struct {
+		LastUsedAt       *time.Time
+		LastProviderName *string
+	})
+	for _, row := range lastUsageRows {
+		lastUsageMap[row.Key] = struct {
+			LastUsedAt       *time.Time
+			LastProviderName *string
+		}{
+			LastUsedAt:       row.LastUsedAt,
+			LastProviderName: row.LastProviderName,
+		}
+	}
+
+	// 4. 查询模型统计（今日）
+	modelStatsQuery := `
+		SELECT
+			mr.key,
+			mr.model,
+			COUNT(*) AS call_count,
+			COALESCE(SUM(mr.cost_usd), 0) AS total_cost
+		FROM message_request mr
+		WHERE mr.key = ANY($1)
+			AND mr.deleted_at IS NULL
+			AND ` + excludeWarmupConditionKey + `
+			AND (mr.created_at AT TIME ZONE $2)::date = (CURRENT_TIMESTAMP AT TIME ZONE $2)::date
+			AND mr.model IS NOT NULL
+		GROUP BY mr.key, mr.model
+		ORDER BY mr.key, COUNT(*) DESC
+	`
+	var modelStatsRows []struct {
+		Key       string           `bun:"key"`
+		Model     string           `bun:"model"`
+		CallCount int              `bun:"call_count"`
+		TotalCost udecimal.Decimal `bun:"total_cost"`
+	}
+	_, err = r.db.NewRaw(modelStatsQuery, bun.In(keyStrings), timezone).Exec(ctx, &modelStatsRows)
+	if err != nil {
+		return nil, errors.NewDatabaseError(err)
+	}
+	modelStatsMap := make(map[string][]*KeyModelStat)
+	for _, row := range modelStatsRows {
+		modelStatsMap[row.Key] = append(modelStatsMap[row.Key], &KeyModelStat{
+			Model:     row.Model,
+			CallCount: row.CallCount,
+			TotalCost: row.TotalCost,
+		})
+	}
+
+	// 5. 组装结果
+	results := make([]*KeyStatistics, len(keys))
+	for i, k := range keys {
+		lastUsage := lastUsageMap[k.Key]
+		results[i] = &KeyStatistics{
+			KeyID:            k.ID,
+			TodayCallCount:   todayCountMap[k.Key],
+			LastUsedAt:       lastUsage.LastUsedAt,
+			LastProviderName: lastUsage.LastProviderName,
+			ModelStats:       modelStatsMap[k.Key],
+		}
+		if results[i].ModelStats == nil {
+			results[i].ModelStats = []*KeyModelStat{}
+		}
+	}
+
+	return results, nil
+}
+
+// FindKeysWithStatisticsBatch 批量获取多个用户的Key统计（性能优化）
+func (r *keyRepository) FindKeysWithStatisticsBatch(ctx context.Context, userIDs []int, timezone string) (map[int][]*KeyStatistics, error) {
+	if len(userIDs) == 0 {
+		return make(map[int][]*KeyStatistics), nil
+	}
+
+	// 1. 批量获取所有用户的 keys
+	keysMap, err := r.ListByUserIDs(ctx, userIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	// 收集所有 key 字符串
+	var allKeyStrings []string
+	keyStringToUserID := make(map[string]int)
+	keyStringToKeyID := make(map[string]int)
+	for userID, userKeys := range keysMap {
+		for _, k := range userKeys {
+			allKeyStrings = append(allKeyStrings, k.Key)
+			keyStringToUserID[k.Key] = userID
+			keyStringToKeyID[k.Key] = k.ID
+		}
+	}
+
+	if len(allKeyStrings) == 0 {
+		result := make(map[int][]*KeyStatistics)
+		for _, userID := range userIDs {
+			result[userID] = []*KeyStatistics{}
+		}
+		return result, nil
+	}
+
+	// 2. 查询今日调用次数
+	todayCountQuery := `
+		SELECT
+			mr.key,
+			COUNT(*) AS count
+		FROM message_request mr
+		WHERE mr.key = ANY($1)
+			AND mr.deleted_at IS NULL
+			AND ` + excludeWarmupConditionKey + `
+			AND (mr.created_at AT TIME ZONE $2)::date = (CURRENT_TIMESTAMP AT TIME ZONE $2)::date
+		GROUP BY mr.key
+	`
+	var todayCountRows []struct {
+		Key   string `bun:"key"`
+		Count int    `bun:"count"`
+	}
+	_, err = r.db.NewRaw(todayCountQuery, bun.In(allKeyStrings), timezone).Exec(ctx, &todayCountRows)
+	if err != nil {
+		return nil, errors.NewDatabaseError(err)
+	}
+	todayCountMap := make(map[string]int)
+	for _, row := range todayCountRows {
+		todayCountMap[row.Key] = row.Count
+	}
+
+	// 3. 查询最后使用时间和供应商
+	lastUsageQuery := `
+		SELECT DISTINCT ON (mr.key)
+			mr.key,
+			mr.created_at AS last_used_at,
+			p.name AS last_provider_name
+		FROM message_request mr
+		INNER JOIN providers p ON mr.provider_id = p.id
+		WHERE mr.key = ANY($1)
+			AND mr.deleted_at IS NULL
+			AND ` + excludeWarmupConditionKey + `
+		ORDER BY mr.key, mr.created_at DESC
+	`
+	var lastUsageRows []struct {
+		Key              string     `bun:"key"`
+		LastUsedAt       *time.Time `bun:"last_used_at"`
+		LastProviderName *string    `bun:"last_provider_name"`
+	}
+	_, err = r.db.NewRaw(lastUsageQuery, bun.In(allKeyStrings)).Exec(ctx, &lastUsageRows)
+	if err != nil {
+		return nil, errors.NewDatabaseError(err)
+	}
+	lastUsageMap := make(map[string]struct {
+		LastUsedAt       *time.Time
+		LastProviderName *string
+	})
+	for _, row := range lastUsageRows {
+		lastUsageMap[row.Key] = struct {
+			LastUsedAt       *time.Time
+			LastProviderName *string
+		}{
+			LastUsedAt:       row.LastUsedAt,
+			LastProviderName: row.LastProviderName,
+		}
+	}
+
+	// 4. 查询模型统计
+	modelStatsQuery := `
+		SELECT
+			mr.key,
+			mr.model,
+			COUNT(*) AS call_count,
+			COALESCE(SUM(mr.cost_usd), 0) AS total_cost
+		FROM message_request mr
+		WHERE mr.key = ANY($1)
+			AND mr.deleted_at IS NULL
+			AND ` + excludeWarmupConditionKey + `
+			AND (mr.created_at AT TIME ZONE $2)::date = (CURRENT_TIMESTAMP AT TIME ZONE $2)::date
+			AND mr.model IS NOT NULL
+		GROUP BY mr.key, mr.model
+		ORDER BY mr.key, COUNT(*) DESC
+	`
+	var modelStatsRows []struct {
+		Key       string           `bun:"key"`
+		Model     string           `bun:"model"`
+		CallCount int              `bun:"call_count"`
+		TotalCost udecimal.Decimal `bun:"total_cost"`
+	}
+	_, err = r.db.NewRaw(modelStatsQuery, bun.In(allKeyStrings), timezone).Exec(ctx, &modelStatsRows)
+	if err != nil {
+		return nil, errors.NewDatabaseError(err)
+	}
+	modelStatsMap := make(map[string][]*KeyModelStat)
+	for _, row := range modelStatsRows {
+		modelStatsMap[row.Key] = append(modelStatsMap[row.Key], &KeyModelStat{
+			Model:     row.Model,
+			CallCount: row.CallCount,
+			TotalCost: row.TotalCost,
+		})
+	}
+
+	// 5. 按用户分组组装结果
+	result := make(map[int][]*KeyStatistics)
+	for _, userID := range userIDs {
+		result[userID] = []*KeyStatistics{}
+	}
+
+	for _, userID := range userIDs {
+		userKeys := keysMap[userID]
+		for _, k := range userKeys {
+			lastUsage := lastUsageMap[k.Key]
+			stats := &KeyStatistics{
+				KeyID:            k.ID,
+				TodayCallCount:   todayCountMap[k.Key],
+				LastUsedAt:       lastUsage.LastUsedAt,
+				LastProviderName: lastUsage.LastProviderName,
+				ModelStats:       modelStatsMap[k.Key],
+			}
+			if stats.ModelStats == nil {
+				stats.ModelStats = []*KeyModelStat{}
+			}
+			result[userID] = append(result[userID], stats)
+		}
+	}
+
+	return result, nil
 }

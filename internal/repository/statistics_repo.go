@@ -64,6 +64,32 @@ type ActiveKeyItem struct {
 	Name string `bun:"name" json:"name"`
 }
 
+// RateLimitEventFilters 限流事件过滤条件
+type RateLimitEventFilters struct {
+	UserID     *int       // 用户ID过滤
+	ProviderID *int       // 供应商ID过滤
+	LimitType  *string    // 限流类型过滤
+	StartTime  *time.Time // 开始时间
+	EndTime    *time.Time // 结束时间
+	KeyID      *int       // Key ID过滤
+}
+
+// RateLimitEventStats 限流事件统计结果
+type RateLimitEventStats struct {
+	TotalEvents      int              `json:"total_events"`
+	EventsByType     map[string]int   `json:"events_by_type"`
+	EventsByUser     map[int]int      `json:"events_by_user"`
+	EventsByProvider map[int]int      `json:"events_by_provider"`
+	EventsTimeline   []TimelineEntry  `json:"events_timeline"`
+	AvgCurrentUsage  udecimal.Decimal `json:"avg_current_usage"`
+}
+
+// TimelineEntry 时间线条目
+type TimelineEntry struct {
+	Hour  string `json:"hour"`
+	Count int    `json:"count"`
+}
+
 // StatisticsRepository 统计数据访问接口
 type StatisticsRepository interface {
 	Repository
@@ -115,6 +141,9 @@ type StatisticsRepository interface {
 
 	// GetActiveKeysForUser 获取指定用户的有效密钥列表（用于统计下拉选择）
 	GetActiveKeysForUser(ctx context.Context, userID int) ([]*ActiveKeyItem, error)
+
+	// GetRateLimitEventStats 获取限流事件统计数据
+	GetRateLimitEventStats(ctx context.Context, filters *RateLimitEventFilters, timezone string) (*RateLimitEventStats, error)
 }
 
 // statisticsRepository StatisticsRepository 实现
@@ -457,12 +486,8 @@ func (r *statisticsRepository) GetKeyStatistics(ctx context.Context, userID int,
 }
 
 // GetMixedStatistics 获取混合统计（自己密钥明细+其他用户汇总）
+// 性能优化：使用 goroutine 并行执行两个查询
 func (r *statisticsRepository) GetMixedStatistics(ctx context.Context, userID int, timeRange TimeRange, timezone string) (*MixedStatistics, error) {
-	ownKeys, err := r.GetKeyStatistics(ctx, userID, timeRange, timezone)
-	if err != nil {
-		return nil, err
-	}
-
 	var othersQuery string
 
 	switch timeRange {
@@ -586,15 +611,51 @@ func (r *statisticsRepository) GetMixedStatistics(ctx context.Context, userID in
 		return nil, errors.NewInvalidRequest("Unsupported time range: " + string(timeRange))
 	}
 
-	var othersAggregate []*UserStatRow
-	_, err = r.db.NewRaw(othersQuery, timezone, userID).Exec(ctx, &othersAggregate)
-	if err != nil {
-		return nil, errors.NewDatabaseError(err)
+	// 使用 channel 进行并行查询
+	type keyStatsResult struct {
+		data []*KeyStatRow
+		err  error
+	}
+	type othersResult struct {
+		data []*UserStatRow
+		err  error
+	}
+
+	keyStatsCh := make(chan keyStatsResult, 1)
+	othersCh := make(chan othersResult, 1)
+
+	// 并行查询自己的密钥统计
+	go func() {
+		ownKeys, err := r.GetKeyStatistics(ctx, userID, timeRange, timezone)
+		keyStatsCh <- keyStatsResult{data: ownKeys, err: err}
+	}()
+
+	// 并行查询其他用户汇总
+	go func() {
+		var othersAggregate []*UserStatRow
+		_, err := r.db.NewRaw(othersQuery, timezone, userID).Exec(ctx, &othersAggregate)
+		if err != nil {
+			othersCh <- othersResult{err: errors.NewDatabaseError(err)}
+			return
+		}
+		othersCh <- othersResult{data: othersAggregate}
+	}()
+
+	// 等待两个查询完成
+	keyStatsRes := <-keyStatsCh
+	othersRes := <-othersCh
+
+	// 检查错误
+	if keyStatsRes.err != nil {
+		return nil, keyStatsRes.err
+	}
+	if othersRes.err != nil {
+		return nil, othersRes.err
 	}
 
 	return &MixedStatistics{
-		OwnKeys:         ownKeys,
-		OthersAggregate: othersAggregate,
+		OwnKeys:         keyStatsRes.data,
+		OthersAggregate: othersRes.data,
 	}, nil
 }
 
@@ -909,4 +970,293 @@ func (r *statisticsRepository) GetActiveKeysForUser(ctx context.Context, userID 
 	}
 
 	return keys, nil
+}
+
+// GetRateLimitEventStats 获取限流事件统计数据
+// 查询 message_request 表中包含 rate_limit_metadata 的错误记录
+func (r *statisticsRepository) GetRateLimitEventStats(ctx context.Context, filters *RateLimitEventFilters, timezone string) (*RateLimitEventStats, error) {
+	if filters == nil {
+		filters = &RateLimitEventFilters{}
+	}
+
+	// 如果指定了 KeyID，先查询 key 字符串
+	var keyString *string
+	if filters.KeyID != nil {
+		var keyRecord struct {
+			Key string `bun:"key"`
+		}
+		err := r.db.NewSelect().
+			Model((*model.Key)(nil)).
+			Column("key").
+			Where("id = ?", *filters.KeyID).
+			Scan(ctx, &keyRecord)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				// Key 不存在，返回空统计
+				return &RateLimitEventStats{
+					TotalEvents:      0,
+					EventsByType:     make(map[string]int),
+					EventsByUser:     make(map[int]int),
+					EventsByProvider: make(map[int]int),
+					EventsTimeline:   []TimelineEntry{},
+					AvgCurrentUsage:  udecimal.Zero,
+				}, nil
+			}
+			return nil, errors.NewDatabaseError(err)
+		}
+		keyString = &keyRecord.Key
+	}
+
+	// 构建查询
+	query := r.db.NewSelect().
+		Model((*model.MessageRequest)(nil)).
+		Column("id", "user_id", "provider_id", "error_message").
+		ColumnExpr("DATE_TRUNC('hour', created_at AT TIME ZONE ?) AS hour", timezone).
+		Where("error_message LIKE '%rate_limit_metadata%'").
+		Where("deleted_at IS NULL").
+		Order("created_at ASC")
+
+	if filters.UserID != nil {
+		query = query.Where("user_id = ?", *filters.UserID)
+	}
+	if filters.ProviderID != nil {
+		query = query.Where("provider_id = ?", *filters.ProviderID)
+	}
+	if filters.StartTime != nil {
+		query = query.Where("created_at >= ?", *filters.StartTime)
+	}
+	if filters.EndTime != nil {
+		query = query.Where("created_at <= ?", *filters.EndTime)
+	}
+	if keyString != nil {
+		query = query.Where("key = ?", *keyString)
+	}
+
+	var rows []struct {
+		ID           int       `bun:"id"`
+		UserID       int       `bun:"user_id"`
+		ProviderID   int       `bun:"provider_id"`
+		ErrorMessage *string   `bun:"error_message"`
+		Hour         time.Time `bun:"hour"`
+	}
+	err := query.Scan(ctx, &rows)
+	if err != nil {
+		return nil, errors.NewDatabaseError(err)
+	}
+
+	// 初始化聚合数据
+	eventsByType := make(map[string]int)
+	eventsByUser := make(map[int]int)
+	eventsByProvider := make(map[int]int)
+	eventsByHour := make(map[string]int)
+	var totalCurrentUsage udecimal.Decimal
+	usageCount := 0
+	validEventCount := 0
+
+	// 处理每条记录
+	for _, row := range rows {
+		if row.ErrorMessage == nil {
+			continue
+		}
+
+		// 解析 rate_limit_metadata JSON
+		metadata, err := parseRateLimitMetadata(*row.ErrorMessage)
+		if err != nil || metadata == nil {
+			continue
+		}
+
+		// 如果指定了 limit_type 过滤，跳过不匹配的记录
+		if filters.LimitType != nil && metadata.LimitType != *filters.LimitType {
+			continue
+		}
+
+		validEventCount++
+
+		// 按类型统计
+		if metadata.LimitType != "" {
+			eventsByType[metadata.LimitType]++
+		}
+
+		// 按用户统计
+		eventsByUser[row.UserID]++
+
+		// 按供应商统计
+		eventsByProvider[row.ProviderID]++
+
+		// 按小时统计
+		hourKey := row.Hour.Format(time.RFC3339)
+		eventsByHour[hourKey]++
+
+		// 累计当前使用量
+		if !metadata.Current.IsZero() {
+			totalCurrentUsage = totalCurrentUsage.Add(metadata.Current)
+			usageCount++
+		}
+	}
+
+	// 计算平均当前使用量
+	var avgCurrentUsage udecimal.Decimal
+	if usageCount > 0 {
+		divisor, _ := udecimal.NewFromInt64(int64(usageCount), 0)
+		avgCurrentUsage, _ = totalCurrentUsage.Div(divisor)
+	}
+
+	// 构建时间线数组（按时间排序）
+	eventsTimeline := make([]TimelineEntry, 0, len(eventsByHour))
+	for hour, count := range eventsByHour {
+		eventsTimeline = append(eventsTimeline, TimelineEntry{
+			Hour:  hour,
+			Count: count,
+		})
+	}
+	// 按时间排序
+	sortTimelineEntries(eventsTimeline)
+
+	return &RateLimitEventStats{
+		TotalEvents:      validEventCount,
+		EventsByType:     eventsByType,
+		EventsByUser:     eventsByUser,
+		EventsByProvider: eventsByProvider,
+		EventsTimeline:   eventsTimeline,
+		AvgCurrentUsage:  avgCurrentUsage,
+	}, nil
+}
+
+// rateLimitMetadata 解析后的限流元数据
+type rateLimitMetadata struct {
+	LimitType string           `json:"limit_type"`
+	Current   udecimal.Decimal `json:"current"`
+}
+
+// parseRateLimitMetadata 从错误消息中解析限流元数据
+func parseRateLimitMetadata(errorMessage string) (*rateLimitMetadata, error) {
+	// 查找 rate_limit_metadata: { ... } 格式
+	const prefix = "rate_limit_metadata:"
+	idx := findSubstring(errorMessage, prefix)
+	if idx == -1 {
+		return nil, nil
+	}
+
+	// 找到 { 的位置
+	start := idx + len(prefix)
+	for start < len(errorMessage) && errorMessage[start] != '{' {
+		start++
+	}
+	if start >= len(errorMessage) {
+		return nil, nil
+	}
+
+	// 找到匹配的 }
+	end := start + 1
+	braceCount := 1
+	for end < len(errorMessage) && braceCount > 0 {
+		if errorMessage[end] == '{' {
+			braceCount++
+		} else if errorMessage[end] == '}' {
+			braceCount--
+		}
+		end++
+	}
+	if braceCount != 0 {
+		return nil, nil
+	}
+
+	// 解析 JSON
+	jsonStr := errorMessage[start:end]
+	var metadata rateLimitMetadata
+	// 简单解析，不使用完整 JSON 库以避免额外依赖
+	// 解析 limit_type
+	if typeIdx := findSubstring(jsonStr, `"limit_type"`); typeIdx != -1 {
+		metadata.LimitType = extractStringValue(jsonStr[typeIdx:])
+	}
+	// 解析 current
+	if currentIdx := findSubstring(jsonStr, `"current"`); currentIdx != -1 {
+		currentVal := extractNumberValue(jsonStr[currentIdx:])
+		if currentVal != "" {
+			if d, err := udecimal.Parse(currentVal); err == nil {
+				metadata.Current = d
+			}
+		}
+	}
+
+	return &metadata, nil
+}
+
+// findSubstring 查找子串位置
+func findSubstring(s, substr string) int {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return i
+		}
+	}
+	return -1
+}
+
+// extractStringValue 从 "key": "value" 格式中提取值
+func extractStringValue(s string) string {
+	// 跳过 key 和冒号
+	colonIdx := findSubstring(s, ":")
+	if colonIdx == -1 {
+		return ""
+	}
+	s = s[colonIdx+1:]
+
+	// 跳过空白
+	for len(s) > 0 && (s[0] == ' ' || s[0] == '\t') {
+		s = s[1:]
+	}
+
+	// 检查引号
+	if len(s) == 0 || s[0] != '"' {
+		return ""
+	}
+	s = s[1:]
+
+	// 找到结束引号
+	endIdx := 0
+	for endIdx < len(s) && s[endIdx] != '"' {
+		endIdx++
+	}
+	if endIdx >= len(s) {
+		return ""
+	}
+
+	return s[:endIdx]
+}
+
+// extractNumberValue 从 "key": number 格式中提取数值
+func extractNumberValue(s string) string {
+	// 跳过 key 和冒号
+	colonIdx := findSubstring(s, ":")
+	if colonIdx == -1 {
+		return ""
+	}
+	s = s[colonIdx+1:]
+
+	// 跳过空白
+	for len(s) > 0 && (s[0] == ' ' || s[0] == '\t') {
+		s = s[1:]
+	}
+
+	// 提取数字
+	endIdx := 0
+	for endIdx < len(s) && (s[endIdx] >= '0' && s[endIdx] <= '9' || s[endIdx] == '.' || s[endIdx] == '-') {
+		endIdx++
+	}
+	if endIdx == 0 {
+		return ""
+	}
+
+	return s[:endIdx]
+}
+
+// sortTimelineEntries 按时间排序时间线条目
+func sortTimelineEntries(entries []TimelineEntry) {
+	for i := 0; i < len(entries)-1; i++ {
+		for j := i + 1; j < len(entries); j++ {
+			if entries[i].Hour > entries[j].Hour {
+				entries[i], entries[j] = entries[j], entries[i]
+			}
+		}
+	}
 }
