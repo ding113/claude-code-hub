@@ -563,6 +563,42 @@ describe("error-details-dialog layout", () => {
 });
 
 describe("error-details-dialog multiplier", () => {
+  test("does not render multiplier row when costMultiplier is empty string", () => {
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={500}
+        errorMessage={null}
+        providerChain={null}
+        sessionId={null}
+        costUsd={"0.000001"}
+        costMultiplier={""}
+        inputTokens={100}
+        outputTokens={80}
+      />
+    );
+
+    expect(html).not.toContain("Multiplier");
+  });
+
+  test("does not render multiplier row when costMultiplier is undefined", () => {
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={500}
+        errorMessage={null}
+        providerChain={null}
+        sessionId={null}
+        costUsd={"0.000001"}
+        costMultiplier={undefined}
+        inputTokens={100}
+        outputTokens={80}
+      />
+    );
+
+    expect(html).not.toContain("Multiplier");
+  });
+
   test("does not render multiplier row when costMultiplier is NaN", () => {
     const html = renderWithIntl(
       <ErrorDetailsDialog

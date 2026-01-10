@@ -79,8 +79,8 @@ function makeLog(overrides: Partial<UsageLogRow>): UsageLogRow {
 }
 
 describe("usage-logs-table multiplier badge", () => {
-  test("does not render multiplier badge for null/NaN/Infinity", () => {
-    for (const costMultiplier of [null, "NaN", "Infinity"] as const) {
+  test("does not render multiplier badge for null/undefined/empty/NaN/Infinity", () => {
+    for (const costMultiplier of [null, undefined, "", "NaN", "Infinity"] as const) {
       const html = renderToStaticMarkup(
         <UsageLogsTable
           logs={[makeLog({ id: 1, costMultiplier })]}

@@ -161,14 +161,14 @@ describe("virtualized-logs-table multiplier badge", () => {
     ).toContain("logs.table.noData");
   });
 
-  test("does not render cost multiplier badge for null/NaN/Infinity", () => {
+  test("does not render cost multiplier badge for null/undefined/empty/NaN/Infinity", () => {
     mockIsLoading = false;
     mockIsError = false;
     mockError = null;
     mockHasNextPage = false;
     mockIsFetchingNextPage = false;
 
-    for (const costMultiplier of [null, "NaN", "Infinity"] as const) {
+    for (const costMultiplier of [null, undefined, "", "NaN", "Infinity"] as const) {
       mockLogs = [makeLog({ id: 1, costMultiplier })];
       const html = renderToStaticMarkup(
         <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
