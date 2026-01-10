@@ -162,6 +162,12 @@ func NewStatisticsRepository(db *bun.DB) StatisticsRepository {
 const excludeWarmupCondition = "(blocked_by IS NULL OR blocked_by <> 'warmup')"
 
 // GetUserStatistics 根据时间范围获取用户消费和API调用统计
+//
+// 注意：此方法保留原始 SQL，原因如下：
+// 1. 使用 PostgreSQL 特有的 generate_series 函数生成时间序列
+// 2. 涉及复杂的时区转换（AT TIME ZONE）
+// 3. 使用 CROSS JOIN 填充零值时间点
+// 4. 这些功能在 Bun 查询构建器中难以表达
 func (r *statisticsRepository) GetUserStatistics(ctx context.Context, timeRange TimeRange, timezone string) ([]*UserStatRow, error) {
 	var query string
 
@@ -312,6 +318,8 @@ func (r *statisticsRepository) GetUserStatistics(ctx context.Context, timeRange 
 }
 
 // GetKeyStatistics 获取指定用户的密钥使用统计
+//
+// 注意：此方法保留原始 SQL，原因同 GetUserStatistics
 func (r *statisticsRepository) GetKeyStatistics(ctx context.Context, userID int, timeRange TimeRange, timezone string) ([]*KeyStatRow, error) {
 	var query string
 
@@ -487,6 +495,8 @@ func (r *statisticsRepository) GetKeyStatistics(ctx context.Context, userID int,
 
 // GetMixedStatistics 获取混合统计（自己密钥明细+其他用户汇总）
 // 性能优化：使用 goroutine 并行执行两个查询
+//
+// 注意：此方法保留原始 SQL，原因同 GetUserStatistics
 func (r *statisticsRepository) GetMixedStatistics(ctx context.Context, userID int, timeRange TimeRange, timezone string) (*MixedStatistics, error) {
 	var othersQuery string
 

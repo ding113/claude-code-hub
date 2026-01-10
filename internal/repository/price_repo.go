@@ -118,41 +118,31 @@ func (r *modelPriceRepository) GetLatestByModelName(ctx context.Context, modelNa
 
 // ListAllLatestPrices 获取所有模型的最新价格
 func (r *modelPriceRepository) ListAllLatestPrices(ctx context.Context) ([]*model.ModelPrice, error) {
-	// 使用窗口函数获取每个模型的最新价格
-	query := `
-		WITH latest_prices AS (
-			SELECT
-				model_name,
-				MAX(created_at) as max_created_at
-			FROM model_prices
-			GROUP BY model_name
-		),
-		latest_records AS (
-			SELECT
-				mp.id,
-				mp.model_name,
-				mp.price_data,
-				mp.created_at,
-				mp.updated_at,
-				ROW_NUMBER() OVER (PARTITION BY mp.model_name ORDER BY mp.id DESC) as rn
-			FROM model_prices mp
-			INNER JOIN latest_prices lp
-				ON mp.model_name = lp.model_name
-				AND mp.created_at = lp.max_created_at
-		)
-		SELECT
-			id,
-			model_name,
-			price_data,
-			created_at,
-			updated_at
-		FROM latest_records
-		WHERE rn = 1
-		ORDER BY model_name
-	`
+	// CTE 1: 获取每个模型的最新创建时间
+	latestPrices := r.db.NewSelect().
+		Model((*model.ModelPrice)(nil)).
+		Column("model_name").
+		ColumnExpr("MAX(created_at) AS max_created_at").
+		Group("model_name")
 
+	// CTE 2: 获取最新记录（处理同一时间多条记录的情况）
+	latestRecords := r.db.NewSelect().
+		ColumnExpr("mp.id, mp.model_name, mp.price_data, mp.created_at, mp.updated_at").
+		ColumnExpr("ROW_NUMBER() OVER (PARTITION BY mp.model_name ORDER BY mp.id DESC) AS rn").
+		TableExpr("model_prices AS mp").
+		Join("INNER JOIN (?) AS lp ON mp.model_name = lp.model_name AND mp.created_at = lp.max_created_at", latestPrices)
+
+	// 主查询：筛选每个模型的第一条记录
 	var prices []*model.ModelPrice
-	_, err := r.db.NewRaw(query).Exec(ctx, &prices)
+	err := r.db.NewSelect().
+		With("latest_prices", latestPrices).
+		With("latest_records", latestRecords).
+		ColumnExpr("id, model_name, price_data, created_at, updated_at").
+		TableExpr("latest_records").
+		Where("rn = 1").
+		Order("model_name ASC").
+		Scan(ctx, &prices)
+
 	if err != nil {
 		return nil, errors.NewDatabaseError(err)
 	}
@@ -173,144 +163,62 @@ func (r *modelPriceRepository) ListAllLatestPricesPaginated(ctx context.Context,
 	// 处理搜索参数
 	search = strings.TrimSpace(search)
 
-	// 使用参数化查询防止 SQL 注入
+	// 构建基础查询的公共部分
+	buildLatestPricesQuery := func() *bun.SelectQuery {
+		q := r.db.NewSelect().
+			Model((*model.ModelPrice)(nil)).
+			Column("model_name").
+			ColumnExpr("MAX(created_at) AS max_created_at").
+			Group("model_name")
+		if search != "" {
+			q = q.Where("model_name ILIKE ?", "%"+search+"%")
+		}
+		return q
+	}
+
+	buildLatestRecordsQuery := func(latestPrices *bun.SelectQuery) *bun.SelectQuery {
+		return r.db.NewSelect().
+			ColumnExpr("mp.id, mp.model_name, mp.price_data, mp.created_at, mp.updated_at").
+			ColumnExpr("ROW_NUMBER() OVER (PARTITION BY mp.model_name ORDER BY mp.id DESC) AS rn").
+			TableExpr("model_prices AS mp").
+			Join("INNER JOIN (?) AS lp ON mp.model_name = lp.model_name AND mp.created_at = lp.max_created_at", latestPrices)
+	}
+
+	// 1. 查询总数
+	latestPricesForCount := buildLatestPricesQuery()
+	latestRecordsForCount := buildLatestRecordsQuery(latestPricesForCount)
+
 	var countResult struct {
 		Total int `bun:"total"`
 	}
+	err := r.db.NewSelect().
+		With("latest_prices", latestPricesForCount).
+		With("latest_records", latestRecordsForCount).
+		ColumnExpr("COUNT(*) AS total").
+		TableExpr("latest_records").
+		Where("rn = 1").
+		Scan(ctx, &countResult)
+	if err != nil {
+		return nil, errors.NewDatabaseError(err)
+	}
+
+	// 2. 查询数据
+	latestPricesForData := buildLatestPricesQuery()
+	latestRecordsForData := buildLatestRecordsQuery(latestPricesForData)
+
 	var prices []*model.ModelPrice
-
-	if search != "" {
-		// 带搜索条件的查询（使用参数化查询）
-		searchPattern := "%" + search + "%"
-
-		countQuery := `
-			WITH latest_prices AS (
-				SELECT
-					model_name,
-					MAX(created_at) as max_created_at
-				FROM model_prices
-				WHERE model_name ILIKE ?
-				GROUP BY model_name
-			),
-			latest_records AS (
-				SELECT
-					mp.id,
-					ROW_NUMBER() OVER (PARTITION BY mp.model_name ORDER BY mp.id DESC) as rn
-				FROM model_prices mp
-				INNER JOIN latest_prices lp
-					ON mp.model_name = lp.model_name
-					AND mp.created_at = lp.max_created_at
-			)
-			SELECT COUNT(*) as total
-			FROM latest_records
-			WHERE rn = 1
-		`
-		_, err := r.db.NewRaw(countQuery, searchPattern).Exec(ctx, &countResult)
-		if err != nil {
-			return nil, errors.NewDatabaseError(err)
-		}
-
-		dataQuery := `
-			WITH latest_prices AS (
-				SELECT
-					model_name,
-					MAX(created_at) as max_created_at
-				FROM model_prices
-				WHERE model_name ILIKE ?
-				GROUP BY model_name
-			),
-			latest_records AS (
-				SELECT
-					mp.id,
-					mp.model_name,
-					mp.price_data,
-					mp.created_at,
-					mp.updated_at,
-					ROW_NUMBER() OVER (PARTITION BY mp.model_name ORDER BY mp.id DESC) as rn
-				FROM model_prices mp
-				INNER JOIN latest_prices lp
-					ON mp.model_name = lp.model_name
-					AND mp.created_at = lp.max_created_at
-			)
-			SELECT
-				id,
-				model_name,
-				price_data,
-				created_at,
-				updated_at
-			FROM latest_records
-			WHERE rn = 1
-			ORDER BY model_name
-			LIMIT ? OFFSET ?
-		`
-		_, err = r.db.NewRaw(dataQuery, searchPattern, pageSize, offset).Exec(ctx, &prices)
-		if err != nil {
-			return nil, errors.NewDatabaseError(err)
-		}
-	} else {
-		// 无搜索条件的查询
-		countQuery := `
-			WITH latest_prices AS (
-				SELECT
-					model_name,
-					MAX(created_at) as max_created_at
-				FROM model_prices
-				GROUP BY model_name
-			),
-			latest_records AS (
-				SELECT
-					mp.id,
-					ROW_NUMBER() OVER (PARTITION BY mp.model_name ORDER BY mp.id DESC) as rn
-				FROM model_prices mp
-				INNER JOIN latest_prices lp
-					ON mp.model_name = lp.model_name
-					AND mp.created_at = lp.max_created_at
-			)
-			SELECT COUNT(*) as total
-			FROM latest_records
-			WHERE rn = 1
-		`
-		_, err := r.db.NewRaw(countQuery).Exec(ctx, &countResult)
-		if err != nil {
-			return nil, errors.NewDatabaseError(err)
-		}
-
-		dataQuery := `
-			WITH latest_prices AS (
-				SELECT
-					model_name,
-					MAX(created_at) as max_created_at
-				FROM model_prices
-				GROUP BY model_name
-			),
-			latest_records AS (
-				SELECT
-					mp.id,
-					mp.model_name,
-					mp.price_data,
-					mp.created_at,
-					mp.updated_at,
-					ROW_NUMBER() OVER (PARTITION BY mp.model_name ORDER BY mp.id DESC) as rn
-				FROM model_prices mp
-				INNER JOIN latest_prices lp
-					ON mp.model_name = lp.model_name
-					AND mp.created_at = lp.max_created_at
-			)
-			SELECT
-				id,
-				model_name,
-				price_data,
-				created_at,
-				updated_at
-			FROM latest_records
-			WHERE rn = 1
-			ORDER BY model_name
-			LIMIT ? OFFSET ?
-		`
-		_, err = r.db.NewRaw(dataQuery, pageSize, offset).Exec(ctx, &prices)
-		if err != nil {
-			return nil, errors.NewDatabaseError(err)
-		}
+	err = r.db.NewSelect().
+		With("latest_prices", latestPricesForData).
+		With("latest_records", latestRecordsForData).
+		ColumnExpr("id, model_name, price_data, created_at, updated_at").
+		TableExpr("latest_records").
+		Where("rn = 1").
+		Order("model_name ASC").
+		Limit(pageSize).
+		Offset(offset).
+		Scan(ctx, &prices)
+	if err != nil {
+		return nil, errors.NewDatabaseError(err)
 	}
 
 	totalPages := countResult.Total / pageSize

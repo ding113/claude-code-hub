@@ -465,6 +465,12 @@ const excludeWarmupConditionProvider = "(blocked_by IS NULL OR blocked_by <> 'wa
 
 // GetProviderStatistics 获取所有供应商的统计信息
 // 使用 providerChain 最后一项的 providerId 来确定最终供应商（兼容重试切换）
+//
+// 注意：此方法保留原始 SQL，原因如下：
+// 1. 涉及 PostgreSQL 特有的 JSONB 操作（provider_chain->-1->>'id'）
+// 2. 使用 DISTINCT ON 子句（PostgreSQL 扩展语法）
+// 3. 复杂的条件聚合和多个 CTE
+// 4. 使用 Bun 查询构建器会使代码更复杂且难以维护
 func (r *providerRepository) GetProviderStatistics(ctx context.Context, timezone string) ([]*ProviderStatistics, error) {
 	query := `
 		WITH provider_stats AS (

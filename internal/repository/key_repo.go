@@ -524,22 +524,27 @@ const excludeWarmupConditionKey = "(blocked_by IS NULL OR blocked_by <> 'warmup'
 
 // FindKeyUsageToday 获取用户下所有Key的今日费用统计（用于限流检查）
 func (r *keyRepository) FindKeyUsageToday(ctx context.Context, userID int, timezone string) ([]*KeyUsageToday, error) {
-	query := `
-		SELECT
-			k.id AS key_id,
-			COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-		FROM keys k
-		LEFT JOIN message_request mr ON mr.key = k.key
-			AND mr.deleted_at IS NULL
-			AND ` + excludeWarmupConditionKey + `
-			AND (mr.created_at AT TIME ZONE $1)::date = (CURRENT_TIMESTAMP AT TIME ZONE $1)::date
-		WHERE k.user_id = $2
-			AND k.deleted_at IS NULL
-		GROUP BY k.id
-	`
+	// 构建消息请求子查询：今日的费用按 key 聚合
+	mrSubquery := r.db.NewSelect().
+		Model((*model.MessageRequest)(nil)).
+		Column("key").
+		ColumnExpr("COALESCE(SUM(cost_usd), 0) AS total_cost").
+		Where("deleted_at IS NULL").
+		Where(excludeWarmupConditionKey).
+		Where("(created_at AT TIME ZONE ?)::date = (CURRENT_TIMESTAMP AT TIME ZONE ?)::date", timezone, timezone).
+		Group("key")
 
+	// 主查询：将 keys 与费用统计 LEFT JOIN
 	var results []*KeyUsageToday
-	_, err := r.db.NewRaw(query, timezone, userID).Exec(ctx, &results)
+	err := r.db.NewSelect().
+		Model((*model.Key)(nil)).
+		ColumnExpr("k.id AS key_id").
+		ColumnExpr("COALESCE(mr.total_cost, 0) AS total_cost").
+		Join("LEFT JOIN (?) AS mr ON mr.key = k.key", mrSubquery).
+		Where("k.user_id = ?", userID).
+		Where("k.deleted_at IS NULL").
+		Scan(ctx, &results)
+
 	if err != nil {
 		return nil, errors.NewDatabaseError(err)
 	}
@@ -553,28 +558,33 @@ func (r *keyRepository) FindKeyUsageTodayBatch(ctx context.Context, userIDs []in
 		return make(map[int][]*KeyUsageToday), nil
 	}
 
-	query := `
-		SELECT
-			k.user_id,
-			k.id AS key_id,
-			COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-		FROM keys k
-		LEFT JOIN message_request mr ON mr.key = k.key
-			AND mr.deleted_at IS NULL
-			AND ` + excludeWarmupConditionKey + `
-			AND (mr.created_at AT TIME ZONE $1)::date = (CURRENT_TIMESTAMP AT TIME ZONE $1)::date
-		WHERE k.user_id = ANY($2)
-			AND k.deleted_at IS NULL
-		GROUP BY k.user_id, k.id
-		ORDER BY k.user_id, k.id
-	`
+	// 构建消息请求子查询：今日的费用按 key 聚合
+	mrSubquery := r.db.NewSelect().
+		Model((*model.MessageRequest)(nil)).
+		Column("key").
+		ColumnExpr("COALESCE(SUM(cost_usd), 0) AS total_cost").
+		Where("deleted_at IS NULL").
+		Where(excludeWarmupConditionKey).
+		Where("(created_at AT TIME ZONE ?)::date = (CURRENT_TIMESTAMP AT TIME ZONE ?)::date", timezone, timezone).
+		Group("key")
 
+	// 主查询：将 keys 与费用统计 LEFT JOIN
 	var rows []struct {
 		UserID    int              `bun:"user_id"`
 		KeyID     int              `bun:"key_id"`
 		TotalCost udecimal.Decimal `bun:"total_cost"`
 	}
-	_, err := r.db.NewRaw(query, timezone, bun.In(userIDs)).Exec(ctx, &rows)
+	err := r.db.NewSelect().
+		Model((*model.Key)(nil)).
+		ColumnExpr("k.user_id").
+		ColumnExpr("k.id AS key_id").
+		ColumnExpr("COALESCE(mr.total_cost, 0) AS total_cost").
+		Join("LEFT JOIN (?) AS mr ON mr.key = k.key", mrSubquery).
+		Where("k.user_id IN (?)", bun.In(userIDs)).
+		Where("k.deleted_at IS NULL").
+		Order("k.user_id ASC", "k.id ASC").
+		Scan(ctx, &rows)
+
 	if err != nil {
 		return nil, errors.NewDatabaseError(err)
 	}
@@ -615,22 +625,20 @@ func (r *keyRepository) FindKeysWithStatistics(ctx context.Context, userID int, 
 	}
 
 	// 2. 查询今日调用次数
-	todayCountQuery := `
-		SELECT
-			mr.key,
-			COUNT(*) AS count
-		FROM message_request mr
-		WHERE mr.key = ANY($1)
-			AND mr.deleted_at IS NULL
-			AND ` + excludeWarmupConditionKey + `
-			AND (mr.created_at AT TIME ZONE $2)::date = (CURRENT_TIMESTAMP AT TIME ZONE $2)::date
-		GROUP BY mr.key
-	`
 	var todayCountRows []struct {
 		Key   string `bun:"key"`
 		Count int    `bun:"count"`
 	}
-	_, err = r.db.NewRaw(todayCountQuery, bun.In(keyStrings), timezone).Exec(ctx, &todayCountRows)
+	err = r.db.NewSelect().
+		Model((*model.MessageRequest)(nil)).
+		Column("key").
+		ColumnExpr("COUNT(*) AS count").
+		Where("key IN (?)", bun.In(keyStrings)).
+		Where("deleted_at IS NULL").
+		Where(excludeWarmupConditionKey).
+		Where("(created_at AT TIME ZONE ?)::date = (CURRENT_TIMESTAMP AT TIME ZONE ?)::date", timezone, timezone).
+		Group("key").
+		Scan(ctx, &todayCountRows)
 	if err != nil {
 		return nil, errors.NewDatabaseError(err)
 	}
@@ -640,24 +648,23 @@ func (r *keyRepository) FindKeysWithStatistics(ctx context.Context, userID int, 
 	}
 
 	// 3. 查询最后使用时间和供应商（使用 DISTINCT ON）
-	lastUsageQuery := `
-		SELECT DISTINCT ON (mr.key)
-			mr.key,
-			mr.created_at AS last_used_at,
-			p.name AS last_provider_name
-		FROM message_request mr
-		INNER JOIN providers p ON mr.provider_id = p.id
-		WHERE mr.key = ANY($1)
-			AND mr.deleted_at IS NULL
-			AND ` + excludeWarmupConditionKey + `
-		ORDER BY mr.key, mr.created_at DESC
-	`
+	// 注意：DISTINCT ON 是 PostgreSQL 特有语法，需要使用 ColumnExpr
 	var lastUsageRows []struct {
 		Key              string     `bun:"key"`
 		LastUsedAt       *time.Time `bun:"last_used_at"`
 		LastProviderName *string    `bun:"last_provider_name"`
 	}
-	_, err = r.db.NewRaw(lastUsageQuery, bun.In(keyStrings)).Exec(ctx, &lastUsageRows)
+	err = r.db.NewSelect().
+		ColumnExpr("DISTINCT ON (mr.key) mr.key").
+		ColumnExpr("mr.created_at AS last_used_at").
+		ColumnExpr("p.name AS last_provider_name").
+		TableExpr("message_request AS mr").
+		Join("INNER JOIN providers AS p ON mr.provider_id = p.id").
+		Where("mr.key IN (?)", bun.In(keyStrings)).
+		Where("mr.deleted_at IS NULL").
+		Where(excludeWarmupConditionKey).
+		OrderExpr("mr.key, mr.created_at DESC").
+		Scan(ctx, &lastUsageRows)
 	if err != nil {
 		return nil, errors.NewDatabaseError(err)
 	}
@@ -676,28 +683,25 @@ func (r *keyRepository) FindKeysWithStatistics(ctx context.Context, userID int, 
 	}
 
 	// 4. 查询模型统计（今日）
-	modelStatsQuery := `
-		SELECT
-			mr.key,
-			mr.model,
-			COUNT(*) AS call_count,
-			COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-		FROM message_request mr
-		WHERE mr.key = ANY($1)
-			AND mr.deleted_at IS NULL
-			AND ` + excludeWarmupConditionKey + `
-			AND (mr.created_at AT TIME ZONE $2)::date = (CURRENT_TIMESTAMP AT TIME ZONE $2)::date
-			AND mr.model IS NOT NULL
-		GROUP BY mr.key, mr.model
-		ORDER BY mr.key, COUNT(*) DESC
-	`
 	var modelStatsRows []struct {
 		Key       string           `bun:"key"`
 		Model     string           `bun:"model"`
 		CallCount int              `bun:"call_count"`
 		TotalCost udecimal.Decimal `bun:"total_cost"`
 	}
-	_, err = r.db.NewRaw(modelStatsQuery, bun.In(keyStrings), timezone).Exec(ctx, &modelStatsRows)
+	err = r.db.NewSelect().
+		Model((*model.MessageRequest)(nil)).
+		Column("key", "model").
+		ColumnExpr("COUNT(*) AS call_count").
+		ColumnExpr("COALESCE(SUM(cost_usd), 0) AS total_cost").
+		Where("key IN (?)", bun.In(keyStrings)).
+		Where("deleted_at IS NULL").
+		Where(excludeWarmupConditionKey).
+		Where("(created_at AT TIME ZONE ?)::date = (CURRENT_TIMESTAMP AT TIME ZONE ?)::date", timezone, timezone).
+		Where("model IS NOT NULL").
+		Group("key", "model").
+		OrderExpr("key, COUNT(*) DESC").
+		Scan(ctx, &modelStatsRows)
 	if err != nil {
 		return nil, errors.NewDatabaseError(err)
 	}
@@ -762,22 +766,20 @@ func (r *keyRepository) FindKeysWithStatisticsBatch(ctx context.Context, userIDs
 	}
 
 	// 2. 查询今日调用次数
-	todayCountQuery := `
-		SELECT
-			mr.key,
-			COUNT(*) AS count
-		FROM message_request mr
-		WHERE mr.key = ANY($1)
-			AND mr.deleted_at IS NULL
-			AND ` + excludeWarmupConditionKey + `
-			AND (mr.created_at AT TIME ZONE $2)::date = (CURRENT_TIMESTAMP AT TIME ZONE $2)::date
-		GROUP BY mr.key
-	`
 	var todayCountRows []struct {
 		Key   string `bun:"key"`
 		Count int    `bun:"count"`
 	}
-	_, err = r.db.NewRaw(todayCountQuery, bun.In(allKeyStrings), timezone).Exec(ctx, &todayCountRows)
+	err = r.db.NewSelect().
+		Model((*model.MessageRequest)(nil)).
+		Column("key").
+		ColumnExpr("COUNT(*) AS count").
+		Where("key IN (?)", bun.In(allKeyStrings)).
+		Where("deleted_at IS NULL").
+		Where(excludeWarmupConditionKey).
+		Where("(created_at AT TIME ZONE ?)::date = (CURRENT_TIMESTAMP AT TIME ZONE ?)::date", timezone, timezone).
+		Group("key").
+		Scan(ctx, &todayCountRows)
 	if err != nil {
 		return nil, errors.NewDatabaseError(err)
 	}
@@ -787,24 +789,22 @@ func (r *keyRepository) FindKeysWithStatisticsBatch(ctx context.Context, userIDs
 	}
 
 	// 3. 查询最后使用时间和供应商
-	lastUsageQuery := `
-		SELECT DISTINCT ON (mr.key)
-			mr.key,
-			mr.created_at AS last_used_at,
-			p.name AS last_provider_name
-		FROM message_request mr
-		INNER JOIN providers p ON mr.provider_id = p.id
-		WHERE mr.key = ANY($1)
-			AND mr.deleted_at IS NULL
-			AND ` + excludeWarmupConditionKey + `
-		ORDER BY mr.key, mr.created_at DESC
-	`
 	var lastUsageRows []struct {
 		Key              string     `bun:"key"`
 		LastUsedAt       *time.Time `bun:"last_used_at"`
 		LastProviderName *string    `bun:"last_provider_name"`
 	}
-	_, err = r.db.NewRaw(lastUsageQuery, bun.In(allKeyStrings)).Exec(ctx, &lastUsageRows)
+	err = r.db.NewSelect().
+		ColumnExpr("DISTINCT ON (mr.key) mr.key").
+		ColumnExpr("mr.created_at AS last_used_at").
+		ColumnExpr("p.name AS last_provider_name").
+		TableExpr("message_request AS mr").
+		Join("INNER JOIN providers AS p ON mr.provider_id = p.id").
+		Where("mr.key IN (?)", bun.In(allKeyStrings)).
+		Where("mr.deleted_at IS NULL").
+		Where(excludeWarmupConditionKey).
+		OrderExpr("mr.key, mr.created_at DESC").
+		Scan(ctx, &lastUsageRows)
 	if err != nil {
 		return nil, errors.NewDatabaseError(err)
 	}
@@ -823,28 +823,25 @@ func (r *keyRepository) FindKeysWithStatisticsBatch(ctx context.Context, userIDs
 	}
 
 	// 4. 查询模型统计
-	modelStatsQuery := `
-		SELECT
-			mr.key,
-			mr.model,
-			COUNT(*) AS call_count,
-			COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-		FROM message_request mr
-		WHERE mr.key = ANY($1)
-			AND mr.deleted_at IS NULL
-			AND ` + excludeWarmupConditionKey + `
-			AND (mr.created_at AT TIME ZONE $2)::date = (CURRENT_TIMESTAMP AT TIME ZONE $2)::date
-			AND mr.model IS NOT NULL
-		GROUP BY mr.key, mr.model
-		ORDER BY mr.key, COUNT(*) DESC
-	`
 	var modelStatsRows []struct {
 		Key       string           `bun:"key"`
 		Model     string           `bun:"model"`
 		CallCount int              `bun:"call_count"`
 		TotalCost udecimal.Decimal `bun:"total_cost"`
 	}
-	_, err = r.db.NewRaw(modelStatsQuery, bun.In(allKeyStrings), timezone).Exec(ctx, &modelStatsRows)
+	err = r.db.NewSelect().
+		Model((*model.MessageRequest)(nil)).
+		Column("key", "model").
+		ColumnExpr("COUNT(*) AS call_count").
+		ColumnExpr("COALESCE(SUM(cost_usd), 0) AS total_cost").
+		Where("key IN (?)", bun.In(allKeyStrings)).
+		Where("deleted_at IS NULL").
+		Where(excludeWarmupConditionKey).
+		Where("(created_at AT TIME ZONE ?)::date = (CURRENT_TIMESTAMP AT TIME ZONE ?)::date", timezone, timezone).
+		Where("model IS NOT NULL").
+		Group("key", "model").
+		OrderExpr("key, COUNT(*) DESC").
+		Scan(ctx, &modelStatsRows)
 	if err != nil {
 		return nil, errors.NewDatabaseError(err)
 	}
