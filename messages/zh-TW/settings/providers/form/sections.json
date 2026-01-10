@@ -117,17 +117,17 @@
   "rateLimit": {
     "dailyResetMode": {
       "desc": {
-        "fixed": "每天固定时间点重置配额",
-        "rolling": "从首次调用开始计算，24小时后重置"
+        "fixed": "每天固定時間點重置額度",
+        "rolling": "從首次呼叫開始計算，24 小時後重置"
       },
       "label": "每日重置模式",
       "options": {
-        "fixed": "固定时间重置",
-        "rolling": "滚动窗口（24小时）"
+        "fixed": "固定時間重置",
+        "rolling": "滾動視窗（24 小時）"
       }
     },
     "dailyResetTime": {
-      "label": "每日重置时间 (HH:mm)"
+      "label": "每日重置時間 (HH:mm)"
     },
     "limit5h": {
       "label": "5 小時消費上限 (USD)",
@@ -138,8 +138,8 @@
       "placeholder": "0 表示無限制"
     },
     "limitDaily": {
-      "label": "每日消费上限 (USD)",
-      "placeholder": "留空表示无限制"
+      "label": "每日消費上限 (USD)",
+      "placeholder": "留空表示無限制"
     },
     "limitMonthly": {
       "label": "月消費上限 (USD)",
@@ -155,7 +155,7 @@
     },
     "summary": {
       "concurrent": "並發：{count}",
-      "daily": "日: {amount} (重置 {resetTime})",
+      "daily": "日: {amount}（重置 {resetTime}）",
       "fiveHour": "5h：${amount}",
       "monthly": "月：${amount}",
       "none": "無限制",

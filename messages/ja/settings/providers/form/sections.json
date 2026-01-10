@@ -1,9 +1,9 @@
 {
   "apiTest": {
-    "desc": "测试供应商模型是否可用，默认与路由配置中选择的供应商类型保持一致。",
-    "summary": "验证供应商与模型连通性",
-    "testLabel": "供应商模型测试",
-    "title": "供应商模型测试"
+    "desc": "プロバイダーのモデルが利用可能かをテストします。既定ではルーティング設定で選択したプロバイダー種別に従います。",
+    "summary": "プロバイダーとモデルの接続性を確認",
+    "testLabel": "プロバイダーモデルをテスト",
+    "title": "プロバイダーモデルテスト"
   },
   "circuitBreaker": {
     "desc": "連続失敗時に自動的にブレークして全体の品質を保護します",
@@ -117,17 +117,17 @@
   "rateLimit": {
     "dailyResetMode": {
       "desc": {
-        "fixed": "每天固定时间点重置配额",
-        "rolling": "从首次调用开始计算，24小时后重置"
+        "fixed": "毎日決まった時刻にクォータをリセット",
+        "rolling": "初回呼び出しから24時間後にリセット"
       },
-      "label": "每日重置模式",
+      "label": "日次リセットモード",
       "options": {
-        "fixed": "固定时间重置",
-        "rolling": "滚动窗口（24小时）"
+        "fixed": "固定時刻リセット",
+        "rolling": "ローリング（24時間）"
       }
     },
     "dailyResetTime": {
-      "label": "每日重置时间 (HH:mm)"
+      "label": "日次リセット時刻 (HH:mm)"
     },
     "limit5h": {
       "label": "5時間の上限 (USD)",
@@ -138,8 +138,8 @@
       "placeholder": "0 は無制限"
     },
     "limitDaily": {
-      "label": "每日消费上限 (USD)",
-      "placeholder": "留空表示无限制"
+      "label": "1日の支出上限 (USD)",
+      "placeholder": "空欄は無制限"
     },
     "limitMonthly": {
       "label": "月の上限 (USD)",
@@ -155,7 +155,7 @@
     },
     "summary": {
       "concurrent": "同時: {count}",
-      "daily": "日: {amount} (重置 {resetTime})",
+      "daily": "日: {amount}（{resetTime}にリセット）",
       "fiveHour": "5h: ${amount}",
       "monthly": "月: ${amount}",
       "none": "無制限",

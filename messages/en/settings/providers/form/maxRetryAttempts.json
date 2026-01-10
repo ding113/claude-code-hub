@@ -1,5 +1,5 @@
 {
-  "desc": "包含首次调用在内，单个供应商最多尝试几次后切换。留空使用系统默认值。",
-  "label": "单供应商最大尝试次数",
+  "desc": "Including the first call, the maximum number of attempts for a single provider before switching. Leave empty to use the system default.",
+  "label": "Max attempts per provider",
   "placeholder": "2"
 }
