@@ -1345,6 +1345,10 @@
       "threeMonths": "Через 3 месяца",
       "oneYear": "Через год"
     },
+    "providerGroupSelect": {
+      "providersSuffix": "провайдеров",
+      "loadFailed": "Не удалось загрузить группы провайдеров"
+    },
     "providerGroup": {
       "label": "Группа провайдеров",
       "placeholder": "Выберите группу провайдеров",
