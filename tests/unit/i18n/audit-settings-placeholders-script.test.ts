@@ -21,30 +21,41 @@ describe("scripts/audit-settings-placeholders.js", () => {
     try {
       // canonical (zh-CN)
       writeJson(path.join(messagesDir, "zh-CN", "settings", "config.json"), {
-        form: { enableHttp2: "启用 HTTP/2", enableHttp2Desc: "启用后，代理请求将优先使用 HTTP/2 协议。" },
+        form: {
+          enableHttp2: "启用 HTTP/2",
+          enableHttp2Desc: "启用后，代理请求将优先使用 HTTP/2 协议。",
+        },
       });
       writeJson(
         path.join(messagesDir, "zh-CN", "settings", "providers", "form", "maxRetryAttempts.json"),
-        { label: "单供应商最大尝试次数", desc: "包含首次调用在内，单个供应商最多尝试几次后切换。", placeholder: "2" }
+        {
+          label: "单供应商最大尝试次数",
+          desc: "包含首次调用在内，单个供应商最多尝试几次后切换。",
+          placeholder: "2",
+        }
       );
 
       // target (en) has one placeholder leaf copied from zh-CN, and one translated value
       writeJson(path.join(messagesDir, "en", "settings", "config.json"), {
-        form: { enableHttp2: "Enable HTTP/2", enableHttp2Desc: "启用后，代理请求将优先使用 HTTP/2 协议。" },
+        form: {
+          enableHttp2: "Enable HTTP/2",
+          enableHttp2Desc: "启用后，代理请求将优先使用 HTTP/2 协议。",
+        },
       });
       writeJson(
         path.join(messagesDir, "en", "settings", "providers", "form", "maxRetryAttempts.json"),
-        { label: "single provider max retry attempts", desc: "包含首次调用在内，单个供应商最多尝试几次后切换。", placeholder: "2" }
+        {
+          label: "single provider max retry attempts",
+          desc: "包含首次调用在内，单个供应商最多尝试几次后切换。",
+          placeholder: "2",
+        }
       );
 
       const report = audit.findSettingsPlaceholders({ messagesDir, locales: ["en"] });
       expect(report.rows.length).toBe(2);
 
       const keys = report.rows.map((r: { key: string }) => r.key).sort();
-      expect(keys).toEqual([
-        "config.form.enableHttp2Desc",
-        "providers.form.maxRetryAttempts.desc",
-      ]);
+      expect(keys).toEqual(["config.form.enableHttp2Desc", "providers.form.maxRetryAttempts.desc"]);
     } finally {
       fs.rmSync(tmpRoot, { recursive: true, force: true });
     }
