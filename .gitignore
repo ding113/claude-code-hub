@@ -55,6 +55,7 @@ next-env.d.ts
 # tooling & logs
 .cursor/
 .claude/
+.codex/
 .serena/
 !src/app/dashboard/logs/
 !src/app/settings/logs/

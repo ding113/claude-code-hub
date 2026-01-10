@@ -1,1 +1,1 @@
-ALTER TABLE "message_request" ADD COLUMN "special_settings" jsonb;
+ALTER TABLE "message_request" ADD COLUMN IF NOT EXISTS "special_settings" jsonb;
