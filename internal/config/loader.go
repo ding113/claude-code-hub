@@ -99,7 +99,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("redis.read_timeout", 3*time.Second)
 	v.SetDefault("redis.write_timeout", 3*time.Second)
 	v.SetDefault("redis.tls_reject_unauthorized", true) // 与 Node.js 版本一致
-	v.SetDefault("redis.max_retries", 3)
+	v.SetDefault("redis.max_retries", 5)                // 与 Node.js 版本一致：最多重试 5 次
 	v.SetDefault("redis.min_retry_backoff", 200*time.Millisecond)
 	v.SetDefault("redis.max_retry_backoff", 2*time.Second)
 	v.SetDefault("redis.enabled", true)
@@ -112,10 +112,10 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("auth.admin_token", "")
 
 	// MessageRequest defaults - 与 Node.js 版本一致
-	v.SetDefault("message_request.write_mode", "async")           // 默认异步写入
-	v.SetDefault("message_request.async_flush_interval_ms", 1000) // 1秒刷新间隔
-	v.SetDefault("message_request.async_batch_size", 100)         // 批量大小
-	v.SetDefault("message_request.async_max_pending", 10000)      // 最大待处理数
+	v.SetDefault("message_request.write_mode", "async")          // 默认异步写入
+	v.SetDefault("message_request.async_flush_interval_ms", 250) // 与 Node.js 版本一致：250ms 刷新间隔
+	v.SetDefault("message_request.async_batch_size", 200)        // 与 Node.js 版本一致：批量大小 200
+	v.SetDefault("message_request.async_max_pending", 10000)     // 最大待处理数
 
 	// Features defaults - 与 Node.js 版本一致
 	v.SetDefault("features.enable_rate_limit", true)
@@ -140,7 +140,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("smart_probing.timeout_ms", 5000)   // 5秒
 
 	// APITest defaults - 与 Node.js 版本一致
-	v.SetDefault("api_test.timeout_ms", 15000) // 15秒
+	v.SetDefault("api_test.timeout_ms", 15000) // 与 Node.js 版本一致：15秒
 
 	// App defaults
 	v.SetDefault("app.url", "")

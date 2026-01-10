@@ -3,6 +3,7 @@ package errors
 import (
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 // ErrorType 错误类型
@@ -520,23 +521,45 @@ func AsEmptyResponseError(err error) (*EmptyResponseError, bool) {
 // 错误分类函数 - 与 Node.js 版本 categorizeErrorAsync 对齐
 // ============================================================================
 
-// CategorizeError 判断错误类型
+// ErrorRuleChecker 错误规则检测器接口
+// 用于检测错误是否匹配不可重试的客户端输入错误规则
+type ErrorRuleChecker interface {
+	// IsNonRetryableClientError 检查错误是否为不可重试的客户端输入错误
+	// 返回 true 表示该错误匹配了错误规则，应该直接返回给客户端而不重试
+	IsNonRetryableClientError(err error) bool
+}
+
+// CategorizeError 判断错误类型（简化版本，不检测客户端输入错误规则）
 // 分类规则（优先级从高到低）：
 // 1. 客户端主动中断 → CategoryClientAbort
-// 2. 不可重试的客户端输入错误 → CategoryNonRetryableClientError
+// 2. ProxyError 404 → CategoryResourceNotFound
+// 3. ProxyError 其他 → CategoryProviderError
+// 4. EmptyResponseError → CategoryProviderError
+// 5. 其他 → CategorySystemError
+//
+// 注意：如果需要检测不可重试的客户端输入错误，请使用 CategorizeErrorWithRuleChecker
+func CategorizeError(err error) ErrorCategory {
+	return CategorizeErrorWithRuleChecker(err, nil)
+}
+
+// CategorizeErrorWithRuleChecker 判断错误类型（完整版本，支持错误规则检测）
+// 分类规则（优先级从高到低）：
+// 1. 客户端主动中断 → CategoryClientAbort
+// 2. 不可重试的客户端输入错误（通过 ruleChecker 检测）→ CategoryNonRetryableClientError
 // 3. ProxyError 404 → CategoryResourceNotFound
 // 4. ProxyError 其他 → CategoryProviderError
 // 5. EmptyResponseError → CategoryProviderError
 // 6. 其他 → CategorySystemError
-func CategorizeError(err error) ErrorCategory {
+func CategorizeErrorWithRuleChecker(err error, ruleChecker ErrorRuleChecker) ErrorCategory {
 	// 优先级 1: 客户端中断检测
 	if IsClientAbortError(err) {
 		return CategoryClientAbort
 	}
 
 	// 优先级 2: 不可重试的客户端输入错误（需要配合错误规则检测器）
-	// 注意：这里需要外部调用者提供规则检测结果
-	// Go 版本中可以通过 context 或者单独的检测函数实现
+	if ruleChecker != nil && ruleChecker.IsNonRetryableClientError(err) {
+		return CategoryNonRetryableClientError
+	}
 
 	// 优先级 3: ProxyError
 	if proxyErr, ok := AsProxyError(err); ok {
@@ -589,17 +612,5 @@ func IsClientAbortError(err error) bool {
 
 // contains 检查字符串是否包含子串（不区分大小写）
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) &&
-		(s == substr ||
-			len(s) > len(substr) && findSubstring(s, substr))
-}
-
-// findSubstring 简单的子串查找
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
+	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
 }

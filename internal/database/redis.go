@@ -16,7 +16,7 @@ import (
 
 // 默认配置常量（与 Node.js 版本对齐）
 const (
-	defaultMaxRetries      = 3
+	defaultMaxRetries      = 5 // 与 Node.js 版本一致：最多重试 5 次
 	defaultMinRetryBackoff = 200 * time.Millisecond
 	defaultMaxRetryBackoff = 2 * time.Second
 	defaultPoolSize        = 10
