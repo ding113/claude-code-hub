@@ -126,7 +126,7 @@ Key components:
 - **Path alias**: `@/` maps to `./src/`
 - **Formatting**: Biome (double quotes, trailing commas, 2-space indent, 100 char width)
 - **Exports**: Prefer named exports over default exports
-- **i18n**: Use `next-intl` for internationalization (5 languages: zh-CN, en, ja, ko, de)
+- **i18n**: Use `next-intl` for internationalization (5 languages: zh-CN, zh-TW, en, ja, ru)
 - **Testing**: Unit tests in `tests/unit/`, integration in `tests/integration/`, source-adjacent tests in `src/**/*.test.ts`
 
 ## Environment Variables

@@ -194,9 +194,8 @@ describe("SessionMessagesClient (request export actions)", () => {
     const { container, unmount } = renderClient(<SessionMessagesClient />);
     await flushEffects();
 
-    const buttons = Array.from(container.querySelectorAll("button"));
-    const downloadBtn = buttons.find((b) => b.textContent?.includes("actions.downloadMessages"));
-    expect(downloadBtn).not.toBeUndefined();
+    const downloadBtn = container.querySelector('button[aria-label="actions.downloadMessages"]');
+    expect(downloadBtn).not.toBeNull();
     click(downloadBtn as HTMLButtonElement);
 
     expect(createObjectURLSpy).toHaveBeenCalledTimes(1);
@@ -282,9 +281,8 @@ describe("SessionMessagesClient (request export actions)", () => {
       2
     );
 
-    const buttons = Array.from(container.querySelectorAll("button"));
-    const copyBtn = buttons.find((b) => b.textContent?.includes("actions.copyMessages"));
-    expect(copyBtn).not.toBeUndefined();
+    const copyBtn = container.querySelector('button[aria-label="actions.copyMessages"]');
+    expect(copyBtn).not.toBeNull();
     await clickAsync(copyBtn as HTMLButtonElement);
     expect(clipboardWriteText).toHaveBeenCalledWith(expectedJson);
     act(() => {
@@ -292,8 +290,8 @@ describe("SessionMessagesClient (request export actions)", () => {
     });
     vi.useRealTimers();
 
-    const downloadBtn = buttons.find((b) => b.textContent?.includes("actions.downloadMessages"));
-    expect(downloadBtn).not.toBeUndefined();
+    const downloadBtn = container.querySelector('button[aria-label="actions.downloadMessages"]');
+    expect(downloadBtn).not.toBeNull();
     click(downloadBtn as HTMLButtonElement);
 
     expect(createObjectURLSpy).toHaveBeenCalledTimes(1);
@@ -335,8 +333,8 @@ describe("SessionMessagesClient (request export actions)", () => {
     const { container, unmount } = renderClient(<SessionMessagesClient />);
     await flushEffects();
 
-    expect(container.textContent).not.toContain("actions.copyMessages");
-    expect(container.textContent).not.toContain("actions.downloadMessages");
+    expect(container.querySelector('button[aria-label="actions.copyMessages"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="actions.downloadMessages"]')).toBeNull();
 
     unmount();
   });
@@ -366,8 +364,8 @@ describe("SessionMessagesClient (request export actions)", () => {
     const { container, unmount } = renderClient(<SessionMessagesClient />);
     await flushEffects();
 
-    expect(container.textContent).not.toContain("actions.copyMessages");
-    expect(container.textContent).not.toContain("actions.downloadMessages");
+    expect(container.querySelector('button[aria-label="actions.copyMessages"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="actions.downloadMessages"]')).toBeNull();
 
     unmount();
   });

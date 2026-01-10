@@ -372,8 +372,8 @@ export function SessionMessagesClient() {
                           variant="outline"
                           size="icon"
                           className="h-8 w-8"
-                          onClick={handleCopyRequest}
                           aria-label={t("actions.copyMessages")}
+                          onClick={handleCopyRequest}
                         >
                           {copiedRequest ? (
                             <Check className="h-4 w-4 text-green-500" />
@@ -394,8 +394,8 @@ export function SessionMessagesClient() {
                           variant="outline"
                           size="icon"
                           className="h-8 w-8"
-                          onClick={handleDownloadRequest}
                           aria-label={t("actions.downloadMessages")}
+                          onClick={handleDownloadRequest}
                         >
                           <Download className="h-4 w-4" />
                           <span className="sr-only">{t("actions.downloadMessages")}</span>
@@ -562,10 +562,12 @@ export function SessionMessagesClient() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{t("actions.terminateSessionTitle")}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("actions.terminateSessionDescription")}
-              <div className="mt-2 p-2 bg-muted rounded font-mono text-xs break-all">
-                {sessionId}
+            <AlertDialogDescription asChild>
+              <div>
+                {t("actions.terminateSessionDescription")}
+                <div className="mt-2 p-2 bg-muted rounded font-mono text-xs break-all">
+                  {sessionId}
+                </div>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>

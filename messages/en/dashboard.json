@@ -1,4 +1,9 @@
 {
+  "actions": {
+    "copy": "Copy",
+    "download": "Download",
+    "copied": "Copied"
+  },
   "title": {
     "costRanking": "Cost Leaderboard",
     "costRankingDescription": "View user cost rankings, data updates every 5 minutes",
