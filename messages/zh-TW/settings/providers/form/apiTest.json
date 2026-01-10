@@ -19,21 +19,21 @@
     "confirmConfig": "請確認供應商 URL、API 金鑰及模型設定正確",
     "realRequest": "測試將向供應商發送真實請求，可能消耗少量額度",
     "resultReference": "【重要】因各家供應商情況不同，測試結果僅供參考，不代表實際呼叫效果",
-    "title": "注意"
+    "title": "注意事項"
   },
   "error": "錯誤訊息",
   "failed": "失敗",
   "fillKeyFirst": "請先填寫 API 金鑰",
   "fillUrlFirst": "請先填寫供應商 URL",
-  "formatAnthropicMessages": "Claude (Anthropic Messages API)",
+  "formatAnthropicMessages": "Claude（Anthropic Messages API）",
   "formatOpenAIChat": "OpenAI Compatible",
-  "formatOpenAIResponses": "Codex (Response API)",
+  "formatOpenAIResponses": "Codex（Response API）",
   "geminiAuthFallback": {
     "desc": "實際代理轉發僅使用 Header 認證，可能導致請求失敗",
     "warning": "Header 認證失敗，使用了 URL 參數認證"
   },
   "invalidUrl": "供應商 URL 無效，僅支援 http/https",
-  "model": "模型",
+  "model": "Model",
   "noResult": "測試成功但未返回結果",
   "presetConfig": "預置配置",
   "presetDesc": "預置範本包含真實 CLI 請求特徵，用於通過中轉服務驗證",
@@ -51,11 +51,11 @@
       "latency": "延遲",
       "latencyCheck": "延遲檢查",
       "message": "訊息",
-      "model": "模型",
+      "model": "Model",
       "response": "回應",
       "status": "狀態",
       "testedAt": "測試時間",
-      "usage": "用量",
+      "usage": "使用量",
       "validationDetails": "驗證詳情"
     },
     "dialogTitle": "供應商測試詳情",
@@ -63,14 +63,14 @@
       "title": "錯誤詳情",
       "type": "錯誤類型"
     },
-    "judgment": "判定",
+    "judgment": "判定結果",
     "labels": {
       "content": "內容",
       "error": "錯誤",
       "firstByte": "首位元組",
       "http": "HTTP",
       "latency": "延遲",
-      "model": "模型",
+      "model": "Model",
       "responsePreview": "回應預覽",
       "totalLatency": "總延遲"
     },
@@ -79,16 +79,16 @@
       "title": "完整回應內容"
     },
     "status": {
-      "green": "可用",
-      "red": "不可用",
+      "green": "可用中",
+      "red": "不可用中",
       "yellow": "波動"
     },
     "streamInfo": {
       "chunksCount": "資料區塊數",
       "isStreaming": "串流回應",
-      "no": "否",
+      "no": "不是",
       "title": "串流回應資訊",
-      "yes": "是"
+      "yes": "是的"
     },
     "timing": {
       "firstByte": "首位元組",
@@ -101,7 +101,7 @@
       "cacheRead": "快取讀取",
       "input": "輸入",
       "output": "輸出",
-      "title": "Token 用量"
+      "title": "Token 使用量"
     },
     "validation": {
       "content": {
@@ -113,7 +113,7 @@
       "failed": "失敗",
       "http": {
         "failed": "4xx/5xx 失敗",
-        "passed": "2xx/3xx 成功",
+        "passed": "2xx/3xx 通過",
         "statusCode": "狀態碼",
         "title": "Tier 1: HTTP 狀態"
       },
@@ -133,7 +133,7 @@
   "streamFormat": "串流格式",
   "streamInfo": "串流響應資訊",
   "streamResponse": "串流響應",
-  "success": "成功",
+  "success": "成功！",
   "successContains": "成功檢測詞",
   "successContainsDesc": "回應需包含此內容才算測試成功",
   "successContainsPlaceholder": "pong",
@@ -151,7 +151,7 @@
   },
   "truncatedBrief": "顯示前 {length} 個字元，點擊「查看詳情」以查看更多",
   "truncatedPreview": "顯示前 {length} 個字元，複製可查看完整內容",
-  "unknown": "未知",
-  "usage": "Token 用量",
+  "unknown": "不明",
+  "usage": "Token 使用量",
   "viewDetails": "檢視詳情"
 }
