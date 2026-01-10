@@ -23,12 +23,12 @@
     "noConflicts": "競合なし",
     "noMatch": "一致するモデルが見つかりません",
     "pagination": {
-      "showing": "{from}〜{to}件を表示（全{total}件）"
+      "showing": "{from}〜{to}件を表示(全{total}件)"
     },
     "searchPlaceholder": "モデルを検索...",
     "selectedCount": "{count}/{total}件のモデルを選択",
     "table": {
-      "action": "操作",
+      "action": "アクション",
       "litellmPrice": "LiteLLM価格",
       "manualPrice": "手動価格",
       "modelName": "モデル"
@@ -52,7 +52,7 @@
       "details": "詳細",
       "failed": "失敗: {failed}",
       "skipped": "スキップ: {skipped}",
-      "success": "成功: {success}",
+      "success": "成功: {success}件",
       "title": "更新結果",
       "total": "合計: {total}個のモデル",
       "viewDetails": "詳細ログを表示"
@@ -65,7 +65,7 @@
     "updateFailed": "更新に失敗しました",
     "updatePriceTable": "価格表を更新",
     "updateSuccess": "価格表が正常に更新されました。{count}個のモデルを更新しました",
-    "updating": "更新中...",
+    "updating": "更新しています...",
     "upload": "アップロードして更新",
     "uploading": "アップロード中..."
   },
@@ -86,7 +86,7 @@
     "next": "次へ",
     "perPage": "1ページあたり{size}件",
     "previous": "前へ",
-    "showing": "{from}〜{to}件を表示（全{total}件）"
+    "showing": "{from}〜{to}件を表示(全{total}件)"
   },
   "searchPlaceholder": "モデル名を検索...",
   "section": {
@@ -112,7 +112,7 @@
     "syncing": "同期中..."
   },
   "table": {
-    "actions": "操作",
+    "actions": "アクション",
     "inputPrice": "入力価格 ($/M)",
     "loading": "読み込み中...",
     "modelName": "モデル名",
