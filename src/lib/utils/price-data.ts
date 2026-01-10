@@ -8,6 +8,7 @@ export function hasValidPriceData(priceData: ModelPriceData): boolean {
   const numericCosts = [
     priceData.input_cost_per_token,
     priceData.output_cost_per_token,
+    priceData.input_cost_per_request,
     priceData.cache_creation_input_token_cost,
     priceData.cache_creation_input_token_cost_above_1hr,
     priceData.cache_read_input_token_cost,

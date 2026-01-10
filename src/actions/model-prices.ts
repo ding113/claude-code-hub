@@ -452,11 +452,17 @@ export async function syncLiteLLMPrices(
  */
 export interface SingleModelPriceInput {
   modelName: string;
+  displayName?: string;
   mode: "chat" | "image_generation" | "completion";
   litellmProvider?: string;
+  supportsPromptCaching?: boolean;
   inputCostPerToken?: number;
   outputCostPerToken?: number;
   outputCostPerImage?: number;
+  inputCostPerRequest?: number;
+  cacheReadInputTokenCost?: number;
+  cacheCreationInputTokenCost?: number;
+  cacheCreationInputTokenCostAbove1hr?: number;
 }
 
 /**
@@ -496,14 +502,45 @@ export async function upsertSingleModelPrice(
     ) {
       return { ok: false, error: "图片价格必须为非负数" };
     }
+    if (
+      input.inputCostPerRequest !== undefined &&
+      (input.inputCostPerRequest < 0 || !Number.isFinite(input.inputCostPerRequest))
+    ) {
+      return { ok: false, error: "按次调用价格必须为非负数" };
+    }
+    if (
+      input.cacheReadInputTokenCost !== undefined &&
+      (input.cacheReadInputTokenCost < 0 || !Number.isFinite(input.cacheReadInputTokenCost))
+    ) {
+      return { ok: false, error: "缓存读取价格必须为非负数" };
+    }
+    if (
+      input.cacheCreationInputTokenCost !== undefined &&
+      (input.cacheCreationInputTokenCost < 0 || !Number.isFinite(input.cacheCreationInputTokenCost))
+    ) {
+      return { ok: false, error: "缓存创建价格必须为非负数" };
+    }
+    if (
+      input.cacheCreationInputTokenCostAbove1hr !== undefined &&
+      (input.cacheCreationInputTokenCostAbove1hr < 0 ||
+        !Number.isFinite(input.cacheCreationInputTokenCostAbove1hr))
+    ) {
+      return { ok: false, error: "缓存创建(1h)价格必须为非负数" };
+    }
 
     // 构建价格数据
     const priceData: ModelPriceData = {
       mode: input.mode,
+      display_name: input.displayName?.trim() || undefined,
       litellm_provider: input.litellmProvider || undefined,
+      supports_prompt_caching: input.supportsPromptCaching,
       input_cost_per_token: input.inputCostPerToken,
       output_cost_per_token: input.outputCostPerToken,
       output_cost_per_image: input.outputCostPerImage,
+      input_cost_per_request: input.inputCostPerRequest,
+      cache_read_input_token_cost: input.cacheReadInputTokenCost,
+      cache_creation_input_token_cost: input.cacheCreationInputTokenCost,
+      cache_creation_input_token_cost_above_1hr: input.cacheCreationInputTokenCostAbove1hr,
     };
 
     // 执行更新

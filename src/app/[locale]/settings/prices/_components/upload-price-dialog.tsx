@@ -63,6 +63,10 @@ export function UploadPriceDialog({
   const [open, setOpen] = useState(defaultOpen);
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<PriceUpdateResult | null>(null);
+  const [cloudModelCount, setCloudModelCount] = useState<number | null>(null);
+  const [cloudModelCountStatus, setCloudModelCountStatus] = useState<
+    "idle" | "loading" | "loaded" | "error"
+  >("idle");
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen && uploading) {
@@ -75,6 +79,41 @@ export function UploadPriceDialog({
 
     setOpen(nextOpen);
   };
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    let cancelled = false;
+    const fetchCloudModelCount = async () => {
+      setCloudModelCountStatus("loading");
+      try {
+        const response = await fetch("/api/prices/cloud-model-count", { cache: "no-store" });
+        const payload = await response.json();
+        if (!payload?.ok) {
+          throw new Error(payload?.error || "unknown error");
+        }
+
+        if (!cancelled) {
+          setCloudModelCount(Number(payload.data?.count) || 0);
+          setCloudModelCountStatus("loaded");
+        }
+      } catch (error) {
+        console.error("获取云端模型数量失败:", error);
+        if (!cancelled) {
+          setCloudModelCount(null);
+          setCloudModelCountStatus("error");
+        }
+      }
+    };
+
+    fetchCloudModelCount();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   /**
    * 处理文件选择
@@ -218,7 +257,16 @@ export function UploadPriceDialog({
                   </a>{" "}
                   {t("dialog.andUploadViaButton")}
                 </p>
-                <p>• {t("dialog.supportedModels", { count: "Claude + OpenAI" })}</p>
+                <p>
+                  •{" "}
+                  {cloudModelCountStatus === "loading"
+                    ? t("dialog.cloudModelCountLoading")
+                    : cloudModelCountStatus === "loaded"
+                      ? t("dialog.supportedModels", { count: cloudModelCount ?? 0 })
+                      : cloudModelCountStatus === "error"
+                        ? t("dialog.cloudModelCountFailed")
+                        : t("dialog.supportedModels", { count: "-" })}
+                </p>
               </div>
             </div>
           ) : (
