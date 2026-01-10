@@ -11,7 +11,7 @@ package model
 import (
     "time"
     "github.com/uptrace/bun"
-    "github.com/shopspring/decimal"
+    "github.com/quagmt/udecimal"
 )
 
 type User struct {
@@ -24,11 +24,11 @@ type User struct {
 
     // 配额限制
     RPMLimit        *int            `bun:"rpm_limit" json:"rpmLimit"`
-    DailyLimitUSD   decimal.Decimal `bun:"daily_limit_usd,type:numeric(10,4)" json:"dailyLimitUsd"`
-    Limit5hUSD      decimal.Decimal `bun:"limit_5h_usd,type:numeric(10,4)" json:"limit5hUsd"`
-    LimitWeeklyUSD  decimal.Decimal `bun:"limit_weekly_usd,type:numeric(10,4)" json:"limitWeeklyUsd"`
-    LimitMonthlyUSD decimal.Decimal `bun:"limit_monthly_usd,type:numeric(10,4)" json:"limitMonthlyUsd"`
-    LimitTotalUSD   decimal.Decimal `bun:"limit_total_usd,type:numeric(10,4)" json:"limitTotalUsd"`
+    DailyLimitUSD   udecimal.Decimal `bun:"daily_limit_usd,type:numeric(10,4)" json:"dailyLimitUsd"`
+    Limit5hUSD      udecimal.Decimal `bun:"limit_5h_usd,type:numeric(10,4)" json:"limit5hUsd"`
+    LimitWeeklyUSD  udecimal.Decimal `bun:"limit_weekly_usd,type:numeric(10,4)" json:"limitWeeklyUsd"`
+    LimitMonthlyUSD udecimal.Decimal `bun:"limit_monthly_usd,type:numeric(10,4)" json:"limitMonthlyUsd"`
+    LimitTotalUSD   udecimal.Decimal `bun:"limit_total_usd,type:numeric(10,4)" json:"limitTotalUsd"`
 
     // 权限
     AllowedClients  []string        `bun:"allowed_clients,array" json:"allowedClients"`
@@ -62,10 +62,10 @@ type Key struct {
 
     // 配额 (继承或覆盖 User)
     RPMLimit        *int            `bun:"rpm_limit" json:"rpmLimit"`
-    DailyLimitUSD   decimal.Decimal `bun:"daily_limit_usd,type:numeric(10,4)" json:"dailyLimitUsd"`
-    Limit5hUSD      decimal.Decimal `bun:"limit_5h_usd,type:numeric(10,4)" json:"limit5hUsd"`
-    LimitWeeklyUSD  decimal.Decimal `bun:"limit_weekly_usd,type:numeric(10,4)" json:"limitWeeklyUsd"`
-    LimitMonthlyUSD decimal.Decimal `bun:"limit_monthly_usd,type:numeric(10,4)" json:"limitMonthlyUsd"`
+    DailyLimitUSD   udecimal.Decimal `bun:"daily_limit_usd,type:numeric(10,4)" json:"dailyLimitUsd"`
+    Limit5hUSD      udecimal.Decimal `bun:"limit_5h_usd,type:numeric(10,4)" json:"limit5hUsd"`
+    LimitWeeklyUSD  udecimal.Decimal `bun:"limit_weekly_usd,type:numeric(10,4)" json:"limitWeeklyUsd"`
+    LimitMonthlyUSD udecimal.Decimal `bun:"limit_monthly_usd,type:numeric(10,4)" json:"limitMonthlyUsd"`
 
     // 权限
     AllowedClients  []string        `bun:"allowed_clients,array" json:"allowedClients"`
@@ -98,11 +98,11 @@ type Provider struct {
     IsEnabled       bool            `bun:"is_enabled,notnull,default:true" json:"isEnabled"`
     Weight          int             `bun:"weight,notnull,default:1" json:"weight"`
     Priority        int             `bun:"priority,notnull,default:0" json:"priority"`
-    CostMultiplier  decimal.Decimal `bun:"cost_multiplier,type:numeric(5,2),default:1.00" json:"costMultiplier"`
+    CostMultiplier  udecimal.Decimal `bun:"cost_multiplier,type:numeric(5,2),default:1.00" json:"costMultiplier"`
     GroupTag        *string         `bun:"group_tag" json:"groupTag"`
 
     // 限流
-    DailyLimitUSD   decimal.Decimal `bun:"daily_limit_usd,type:numeric(10,4)" json:"dailyLimitUsd"`
+    DailyLimitUSD   udecimal.Decimal `bun:"daily_limit_usd,type:numeric(10,4)" json:"dailyLimitUsd"`
     SessionLimit    *int            `bun:"session_limit" json:"sessionLimit"`
 
     // 熔断配置
@@ -137,7 +137,7 @@ type MessageRequest struct {
     CacheReadTokens int             `bun:"cache_read_tokens" json:"cacheReadTokens"`
     CacheWriteTokens int            `bun:"cache_write_tokens" json:"cacheWriteTokens"`
 
-    CostUSD         decimal.Decimal `bun:"cost_usd,type:numeric(12,6)" json:"costUsd"`
+    CostUSD         udecimal.Decimal `bun:"cost_usd,type:numeric(12,6)" json:"costUsd"`
     StatusCode      int             `bun:"status_code" json:"statusCode"`
     LatencyMs       int             `bun:"latency_ms" json:"latencyMs"`
     ErrorMessage    *string         `bun:"error_message" json:"errorMessage"`
@@ -162,10 +162,10 @@ type ModelPrice struct {
 
     ID                  int             `bun:"id,pk,autoincrement" json:"id"`
     Model               string          `bun:"model,notnull,unique" json:"model"`
-    InputPricePerMToken decimal.Decimal `bun:"input_price_per_m_token,type:numeric(10,6)" json:"inputPricePerMToken"`
-    OutputPricePerMToken decimal.Decimal `bun:"output_price_per_m_token,type:numeric(10,6)" json:"outputPricePerMToken"`
-    CacheReadPricePerMToken decimal.Decimal `bun:"cache_read_price_per_m_token,type:numeric(10,6)" json:"cacheReadPricePerMToken"`
-    CacheWritePricePerMToken decimal.Decimal `bun:"cache_write_price_per_m_token,type:numeric(10,6)" json:"cacheWritePricePerMToken"`
+    InputPricePerMToken udecimal.Decimal `bun:"input_price_per_m_token,type:numeric(10,6)" json:"inputPricePerMToken"`
+    OutputPricePerMToken udecimal.Decimal `bun:"output_price_per_m_token,type:numeric(10,6)" json:"outputPricePerMToken"`
+    CacheReadPricePerMToken udecimal.Decimal `bun:"cache_read_price_per_m_token,type:numeric(10,6)" json:"cacheReadPricePerMToken"`
+    CacheWritePricePerMToken udecimal.Decimal `bun:"cache_write_price_per_m_token,type:numeric(10,6)" json:"cacheWritePricePerMToken"`
 
     CreatedAt           time.Time       `bun:"created_at,notnull,default:current_timestamp" json:"createdAt"`
     UpdatedAt           time.Time       `bun:"updated_at,notnull,default:current_timestamp" json:"updatedAt"`
@@ -583,7 +583,7 @@ type Session struct {
 
     // 统计
     RequestCount int             `json:"requestCount"`
-    TotalCost    decimal.Decimal `json:"totalCost"`
+    TotalCost    udecimal.Decimal `json:"totalCost"`
 }
 ```
 
@@ -673,10 +673,10 @@ type UserFilter struct {
 // internal/service/ratelimit/service.go
 type RateLimitService interface {
     // 检查是否允许请求
-    Check(ctx context.Context, keyID int, userID int, cost decimal.Decimal) (*RateLimitResult, error)
+    Check(ctx context.Context, keyID int, userID int, cost udecimal.Decimal) (*RateLimitResult, error)
 
     // 记录使用量
-    Record(ctx context.Context, keyID int, userID int, cost decimal.Decimal) error
+    Record(ctx context.Context, keyID int, userID int, cost udecimal.Decimal) error
 
     // 获取当前使用量
     GetUsage(ctx context.Context, keyID int, userID int) (*UsageInfo, error)
@@ -685,8 +685,8 @@ type RateLimitService interface {
 type RateLimitResult struct {
     Allowed     bool
     LimitType   string // rpm, daily, weekly, etc.
-    CurrentUsed decimal.Decimal
-    Limit       decimal.Decimal
+    CurrentUsed udecimal.Decimal
+    Limit       udecimal.Decimal
     ResetAt     *time.Time
 }
 ```

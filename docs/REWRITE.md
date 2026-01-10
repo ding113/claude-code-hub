@@ -39,7 +39,7 @@
 | 配置 | viper | 环境变量 + 配置文件 |
 | 验证 | validator/v10 | 请求参数验证 |
 | HTTP 客户端 | resty/v2 | 代理上游请求 |
-| 金额计算 | shopspring/decimal | 精确金额计算 |
+| 金额计算 | quagmt/udecimal | 高性能、零分配精确金额计算 |
 | 并发控制 | golang.org/x/sync | errgroup 等 |
 
 ### 2.2 Go 模块依赖
@@ -74,7 +74,7 @@ require (
 
     // 工具
     github.com/google/uuid v1.6+
-    github.com/shopspring/decimal v1.4+
+    github.com/quagmt/udecimal v1.3+
     golang.org/x/sync v0.10+
 )
 ```
