@@ -416,7 +416,7 @@ export class ProxyForwarder {
             throw lastError;
           }
 
-          // ⭐ 2.5 Thinking signature 整流器：命中后对同供应商“整流 + 重试一次”
+          // 2.5 Thinking signature 整流器：命中后对同供应商“整流 + 重试一次”
           // 目标：解决 Anthropic 与非 Anthropic 渠道切换导致的 thinking 签名不兼容问题
           // 约束：
           // - 仅对 Anthropic 类型供应商生效
@@ -438,45 +438,7 @@ export class ProxyForwarder {
               if (thinkingSignatureRectifierRetried) {
                 errorCategory = ErrorCategory.NON_RETRYABLE_CLIENT_ERROR;
               } else {
-                thinkingSignatureRectifierRetried = true;
-
-                // 记录失败的第一次请求（以 retry_failed 体现“发生过一次重试”）
-                if (lastError instanceof ProxyError) {
-                  session.addProviderToChain(currentProvider, {
-                    reason: "retry_failed",
-                    circuitState: getCircuitState(currentProvider.id),
-                    attemptNumber: attemptCount,
-                    errorMessage,
-                    statusCode: lastError.statusCode,
-                    errorDetails: {
-                      provider: {
-                        id: currentProvider.id,
-                        name: currentProvider.name,
-                        statusCode: lastError.statusCode,
-                        statusText: lastError.message,
-                        upstreamBody: lastError.upstreamError?.body,
-                        upstreamParsed: lastError.upstreamError?.parsed,
-                      },
-                      request: buildRequestDetails(session),
-                    },
-                  });
-                } else {
-                  session.addProviderToChain(currentProvider, {
-                    reason: "retry_failed",
-                    circuitState: getCircuitState(currentProvider.id),
-                    attemptNumber: attemptCount,
-                    errorMessage,
-                    errorDetails: {
-                      system: {
-                        errorType: lastError.constructor.name,
-                        errorName: lastError.name,
-                        errorMessage: lastError.message || lastError.name || "Unknown error",
-                        errorStack: lastError.stack?.split("\n").slice(0, 3).join("\n"),
-                      },
-                      request: buildRequestDetails(session),
-                    },
-                  });
-                }
+                const requestDetailsBeforeRectify = buildRequestDetails(session);
 
                 // 整流请求体（原地修改 session.request.message）
                 const rectified = rectifyAnthropicRequestMessage(
@@ -527,17 +489,71 @@ export class ProxyForwarder {
                   }
                 }
 
-                logger.info("ProxyForwarder: Thinking signature rectifier applied, retrying", {
-                  providerId: currentProvider.id,
-                  providerName: currentProvider.name,
-                  trigger: rectifierTrigger,
-                  attemptNumber: attemptCount,
-                  willRetryAttemptNumber: attemptCount + 1,
-                });
+                // 无任何可整流内容：不做无意义重试，直接走既有“不可重试客户端错误”分支
+                if (!rectified.applied) {
+                  logger.info(
+                    "ProxyForwarder: Thinking signature rectifier not applicable, skipping retry",
+                    {
+                      providerId: currentProvider.id,
+                      providerName: currentProvider.name,
+                      trigger: rectifierTrigger,
+                      attemptNumber: attemptCount,
+                    }
+                  );
+                  errorCategory = ErrorCategory.NON_RETRYABLE_CLIENT_ERROR;
+                } else {
+                  logger.info("ProxyForwarder: Thinking signature rectifier applied, retrying", {
+                    providerId: currentProvider.id,
+                    providerName: currentProvider.name,
+                    trigger: rectifierTrigger,
+                    attemptNumber: attemptCount,
+                    willRetryAttemptNumber: attemptCount + 1,
+                  });
 
-                // 确保即使 maxAttemptsPerProvider=1 也能完成一次额外重试
-                maxAttemptsPerProvider = Math.max(maxAttemptsPerProvider, attemptCount + 1);
-                continue;
+                  thinkingSignatureRectifierRetried = true;
+
+                  // 记录失败的第一次请求（以 retry_failed 体现“发生过一次重试”）
+                  if (lastError instanceof ProxyError) {
+                    session.addProviderToChain(currentProvider, {
+                      reason: "retry_failed",
+                      circuitState: getCircuitState(currentProvider.id),
+                      attemptNumber: attemptCount,
+                      errorMessage,
+                      statusCode: lastError.statusCode,
+                      errorDetails: {
+                        provider: {
+                          id: currentProvider.id,
+                          name: currentProvider.name,
+                          statusCode: lastError.statusCode,
+                          statusText: lastError.message,
+                          upstreamBody: lastError.upstreamError?.body,
+                          upstreamParsed: lastError.upstreamError?.parsed,
+                        },
+                        request: requestDetailsBeforeRectify,
+                      },
+                    });
+                  } else {
+                    session.addProviderToChain(currentProvider, {
+                      reason: "retry_failed",
+                      circuitState: getCircuitState(currentProvider.id),
+                      attemptNumber: attemptCount,
+                      errorMessage,
+                      errorDetails: {
+                        system: {
+                          errorType: lastError.constructor.name,
+                          errorName: lastError.name,
+                          errorMessage: lastError.message || lastError.name || "Unknown error",
+                          errorStack: lastError.stack?.split("\n").slice(0, 3).join("\n"),
+                        },
+                        request: requestDetailsBeforeRectify,
+                      },
+                    });
+                  }
+
+                  // 确保即使 maxAttemptsPerProvider=1 也能完成一次额外重试
+                  maxAttemptsPerProvider = Math.max(maxAttemptsPerProvider, attemptCount + 1);
+                  continue;
+                }
               }
             }
           }

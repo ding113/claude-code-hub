@@ -74,6 +74,7 @@ export function rectifyAnthropicRequestMessage(
     if (!Array.isArray(content)) continue;
 
     const newContent: unknown[] = [];
+    let contentWasModified = false;
 
     for (const block of content) {
       if (!block || typeof block !== "object") {
@@ -86,20 +87,20 @@ export function rectifyAnthropicRequestMessage(
 
       if (type === "thinking") {
         removedThinkingBlocks += 1;
-        applied = true;
+        contentWasModified = true;
         continue;
       }
 
       if (type === "redacted_thinking") {
         removedRedactedThinkingBlocks += 1;
-        applied = true;
+        contentWasModified = true;
         continue;
       }
 
       if ("signature" in blockObj) {
         const { signature: _signature, ...rest } = blockObj as any;
         removedSignatureFields += 1;
-        applied = true;
+        contentWasModified = true;
         newContent.push(rest);
         continue;
       }
@@ -107,10 +108,8 @@ export function rectifyAnthropicRequestMessage(
       newContent.push(blockObj);
     }
 
-    if (newContent.length !== content.length) {
-      msgObj.content = newContent;
-    } else if (removedSignatureFields > 0) {
-      // 即使长度不变，只要移除了 signature，也需要落盘替换后的对象
+    if (contentWasModified) {
+      applied = true;
       msgObj.content = newContent;
     }
   }

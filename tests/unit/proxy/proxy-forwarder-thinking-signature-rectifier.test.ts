@@ -205,6 +205,35 @@ describe("ProxyForwarder - thinking signature rectifier", () => {
     expect(mocks.updateMessageRequestDetails).toHaveBeenCalledTimes(1);
   });
 
+  test("匹配触发但无可整流内容时不应做无意义重试", async () => {
+    const session = createSession();
+    session.setProvider(createAnthropicProvider());
+
+    const msg = session.request.message as any;
+    msg.messages[0].content = [{ type: "text", text: "hello" }];
+
+    const doForward = vi.spyOn(ProxyForwarder as any, "doForward");
+
+    doForward.mockImplementationOnce(async () => {
+      throw new ProxyError("Invalid `signature` in `thinking` block", 400, {
+        body: "",
+        providerId: 1,
+        providerName: "anthropic-1",
+      });
+    });
+
+    await expect(ProxyForwarder.send(session)).rejects.toBeInstanceOf(ProxyError);
+    expect(doForward).toHaveBeenCalledTimes(1);
+
+    // 仍应写入一次审计字段，但不应触发第二次 doForward 调用
+    expect(mocks.updateMessageRequestDetails).toHaveBeenCalledTimes(1);
+
+    const special = (session.getSpecialSettings() ?? []) as any[];
+    const rectifier = special.find((s) => s.type === "thinking_signature_rectifier");
+    expect(rectifier).toBeTruthy();
+    expect(rectifier.hit).toBe(false);
+  });
+
   test("重试后仍失败时应停止继续重试/切换，并按最终错误抛出", async () => {
     const session = createSession();
     session.setProvider(createAnthropicProvider());
