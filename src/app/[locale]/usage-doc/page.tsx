@@ -996,6 +996,7 @@ gemini`}
             <CodeBlock language="powershell" code={`npm install -g opencode-ai`} />
           </div>
 
+          <p className="text-sm text-muted-foreground">{t("opencode.installation.npm.note")}</p>
           <p className="text-sm text-muted-foreground">{t("opencode.installation.windows.note")}</p>
         </div>
       );
@@ -1045,6 +1046,7 @@ gemini`}
           <CodeBlock language="bash" code={`npm install -g opencode-ai`} />
         </div>
 
+        <p className="text-sm text-muted-foreground">{t("opencode.installation.npm.note")}</p>
         <div className="space-y-3">
           <h5 className="font-semibold text-foreground">{t("opencode.installation.bun.title")}</h5>
           <p>{t("opencode.installation.bun.description")}</p>

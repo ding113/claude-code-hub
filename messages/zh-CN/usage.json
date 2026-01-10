@@ -503,7 +503,8 @@
 
       "npm": {
         "title": "方式三：npm",
-        "description": "也可以通过 npm 全局安装："
+        "description": "也可以通过 npm 全局安装：",
+        "note": "提示：不建议通过 npm 镜像源/第三方 registry 安装 opencode-ai，可能会导致依赖缺失；如遇问题请改用官方 npm registry。"
       },
 
       "bun": {

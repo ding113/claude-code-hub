@@ -507,7 +507,8 @@
 
       "npm": {
         "title": "方法3：npm",
-        "description": "npm でグローバルにインストール："
+        "description": "npm でグローバルにインストール：",
+        "note": "注: opencode-ai を npm のミラー（サードパーティ registry）経由でインストールするのは推奨しません。依存関係が欠ける場合があるため、問題が出たら公式 npm registry を使用してください。"
       },
 
       "bun": {

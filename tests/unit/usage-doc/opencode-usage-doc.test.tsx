@@ -92,6 +92,7 @@ describe("UsageDoc - OpenCode 配置教程", () => {
 
     expect(text).toContain("curl -fsSL https://opencode.ai/install | bash");
     expect(text).toContain("npm install -g opencode-ai");
+    expect(text).toContain("npm mirror registries");
     expect(text).toContain("bun add -g opencode-ai");
     expect(text).toContain("brew install anomalyco/tap/opencode");
     expect(text).toContain("paru -S opencode-bin");
@@ -112,6 +113,7 @@ describe("UsageDoc - OpenCode 配置教程", () => {
       expect(usageMessages).toHaveProperty("opencode.installation.title");
       expect(usageMessages).toHaveProperty("opencode.installation.script.title");
       expect(usageMessages).toHaveProperty("opencode.installation.npm.title");
+      expect(usageMessages).toHaveProperty("opencode.installation.npm.note");
       expect(usageMessages).toHaveProperty("opencode.installation.bun.title");
       expect(usageMessages).toHaveProperty("opencode.installation.macos.homebrew.title");
       expect(usageMessages).toHaveProperty("opencode.installation.linux.homebrew.title");
