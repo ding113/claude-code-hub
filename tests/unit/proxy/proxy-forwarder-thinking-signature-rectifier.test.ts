@@ -205,6 +205,116 @@ describe("ProxyForwarder - thinking signature rectifier", () => {
     expect(mocks.updateMessageRequestDetails).toHaveBeenCalledTimes(1);
   });
 
+  test("thinking 启用但 assistant 首块为 tool_use 的 400 错误时，应关闭 thinking 并对同供应商重试一次", async () => {
+    const session = createSession();
+    session.setProvider(createAnthropicProvider());
+
+    const msg = session.request.message as any;
+    msg.thinking = { type: "enabled", budget_tokens: 1024 };
+    msg.messages = [
+      { role: "user", content: [{ type: "text", text: "hi" }] },
+      {
+        role: "assistant",
+        content: [{ type: "tool_use", id: "toolu_1", name: "WebSearch", input: { query: "q" } }],
+      },
+      { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_1", content: "ok" }] },
+    ];
+
+    const doForward = vi.spyOn(ProxyForwarder as any, "doForward");
+
+    doForward.mockImplementationOnce(async () => {
+      throw new ProxyError(
+        "messages.69.content.0.type: Expected `thinking` or `redacted_thinking`, but found `tool_use`. When `thinking` is enabled, a final `assistant` message must start with a thinking block (preceeding the lastmost set of `tool_use` and `tool_result` blocks). To avoid this requirement, disable `thinking`.",
+        400,
+        {
+          body: "",
+          providerId: 1,
+          providerName: "anthropic-1",
+        }
+      );
+    });
+
+    doForward.mockImplementationOnce(async (s: ProxySession) => {
+      const bodyMsg = s.request.message as any;
+      expect(bodyMsg.thinking).toBeUndefined();
+
+      const body = JSON.stringify({
+        type: "message",
+        content: [{ type: "text", text: "ok" }],
+      });
+
+      return new Response(body, {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "content-length": String(body.length),
+        },
+      });
+    });
+
+    const response = await ProxyForwarder.send(session);
+
+    expect(response.status).toBe(200);
+    expect(doForward).toHaveBeenCalledTimes(2);
+    expect(mocks.updateMessageRequestDetails).toHaveBeenCalledTimes(1);
+  });
+
+  test("移除 thinking block 后若 tool_use 置顶且 thinking 仍启用，应同时关闭 thinking 再重试", async () => {
+    const session = createSession();
+    session.setProvider(createAnthropicProvider());
+
+    const msg = session.request.message as any;
+    msg.thinking = { type: "enabled", budget_tokens: 1024 };
+    msg.messages = [
+      {
+        role: "assistant",
+        content: [
+          { type: "thinking", thinking: "t", signature: "sig_thinking" },
+          { type: "tool_use", id: "toolu_1", name: "WebSearch", input: { query: "q" } },
+        ],
+      },
+      { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_1", content: "ok" }] },
+    ];
+
+    const doForward = vi.spyOn(ProxyForwarder as any, "doForward");
+
+    doForward.mockImplementationOnce(async () => {
+      throw new ProxyError("Invalid `signature` in `thinking` block", 400, {
+        body: "",
+        providerId: 1,
+        providerName: "anthropic-1",
+      });
+    });
+
+    doForward.mockImplementationOnce(async (s: ProxySession) => {
+      const bodyMsg = s.request.message as any;
+      const blocks = bodyMsg.messages[0].content as any[];
+
+      expect(blocks.some((b) => b.type === "thinking")).toBe(false);
+      expect(blocks.some((b) => b.type === "redacted_thinking")).toBe(false);
+      expect(bodyMsg.thinking).toBeUndefined();
+
+      const body = JSON.stringify({
+        type: "message",
+        content: [{ type: "text", text: "ok" }],
+      });
+
+      return new Response(body, {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "content-length": String(body.length),
+        },
+      });
+    });
+
+    const response = await ProxyForwarder.send(session);
+
+    expect(response.status).toBe(200);
+    expect(doForward).toHaveBeenCalledTimes(2);
+    expect(mocks.updateMessageRequestDetails).toHaveBeenCalledTimes(1);
+  });
+
   test("匹配触发但无可整流内容时不应做无意义重试", async () => {
     const session = createSession();
     session.setProvider(createAnthropicProvider());

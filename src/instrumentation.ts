@@ -3,9 +3,11 @@
  * 在服务器启动时自动执行数据库迁移
  */
 
+// instrumentation 需要 Node.js runtime（依赖数据库与 Redis 等 Node 能力）
+export const runtime = "nodejs";
+
 import { startCacheCleanup, stopCacheCleanup } from "@/lib/cache/session-cache";
 import { logger } from "@/lib/logger";
-import { closeRedis } from "@/lib/redis";
 
 const instrumentationState = globalThis as unknown as {
   __CCH_CACHE_CLEANUP_STARTED__?: boolean;
@@ -78,6 +80,7 @@ export async function register() {
         }
 
         try {
+          const { closeRedis } = await import("@/lib/redis");
           await closeRedis();
         } catch (error) {
           logger.warn("[Instrumentation] Failed to close Redis connection", {

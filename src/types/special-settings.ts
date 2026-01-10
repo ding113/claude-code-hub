@@ -100,7 +100,10 @@ export type ThinkingSignatureRectifierSpecialSetting = {
   hit: boolean;
   providerId: number | null;
   providerName: string | null;
-  trigger: "invalid_signature_in_thinking_block" | "invalid_request";
+  trigger:
+    | "invalid_signature_in_thinking_block"
+    | "assistant_message_must_start_with_thinking"
+    | "invalid_request";
   attemptNumber: number;
   retryAttemptNumber: number;
   removedThinkingBlocks: number;
