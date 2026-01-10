@@ -1,0 +1,10 @@
+{
+  "claude": "Claude (Anthropic Messages API)",
+  "claudeAuth": "Claude (Anthropic Auth Token)",
+  "codex": "Codex (Response API)",
+  "gemini": "Gemini (Google Gemini API)",
+  "geminiCli": "Gemini CLI",
+  "geminiCliDisabled": "",
+  "openaiCompatible": "OpenAI Compatible",
+  "openaiCompatibleDisabled": " - в разработке"
+}

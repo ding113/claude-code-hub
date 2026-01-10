@@ -1,0 +1,7 @@
+{
+  "clear": "Clear search",
+  "found": "Found {count} matching provider(s)",
+  "notFound": "No matching providers found",
+  "placeholder": "Search provider name, URL, notes...",
+  "showing": "Showing {filtered} / {total} providers"
+}

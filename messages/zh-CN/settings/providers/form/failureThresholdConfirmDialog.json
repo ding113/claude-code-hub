@@ -1,0 +1,13 @@
+{
+  "title": "确认特殊配置",
+  "descriptionDisabledPrefix": "您将熔断失败阈值设置为 ",
+  "descriptionDisabledValue": "0",
+  "descriptionDisabledMiddle": "，这表示",
+  "descriptionDisabledAction": "禁用熔断器",
+  "descriptionDisabledSuffix": "，供应商将不会因为连续失败而被熔断。",
+  "descriptionHighValuePrefix": "您将熔断失败阈值设置为 ",
+  "descriptionHighValueSuffix": "，这是一个较高的值，可能会导致供应商在大量失败后才被熔断。",
+  "confirmQuestion": "是否确认保存此配置？",
+  "cancel": "取消",
+  "confirm": "确认保存"
+}

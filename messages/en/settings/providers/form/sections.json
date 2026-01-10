@@ -1,0 +1,313 @@
+{
+  "apiTest": {
+    "desc": "Validate whether the selected provider type and model respond correctly. Defaults to the routing configuration unless overridden.",
+    "summary": "Verify provider & model connectivity",
+    "testLabel": "Provider Model Test",
+    "title": "Provider Model Test"
+  },
+  "circuitBreaker": {
+    "desc": "Automatically break on consecutive failures to protect overall service quality",
+    "failureThreshold": {
+      "desc": "Number of consecutive failures to trigger break",
+      "label": "Failure Threshold",
+      "placeholder": "5"
+    },
+    "maxRetryAttempts": {
+      "desc": "Total tries (including the first call) before switching providers. Leave empty to use the system default.",
+      "label": "Max Attempts Per Provider",
+      "placeholder": "2"
+    },
+    "openDuration": {
+      "desc": "Time before switching to half-open",
+      "label": "Break Duration (minutes)",
+      "placeholder": "30"
+    },
+    "successThreshold": {
+      "desc": "Number of successes in half-open to fully recover",
+      "label": "Recovery Threshold",
+      "placeholder": "2"
+    },
+    "summary": "{failureThreshold} failures / {openDuration} min break / {successThreshold} successes to recover / {maxRetryAttempts} attempts per provider",
+    "title": "Circuit Breaker"
+  },
+  "codexStrategy": {
+    "desc": "Control how to handle the instructions field in Codex requests; affects gateway compatibility",
+    "hint": "Hint: Some strict Codex gateways (e.g. 88code, foxcode) require official instructions. Choose \"Auto\" or \"Force official\".",
+    "select": {
+      "auto": {
+        "desc": "Pass through client instructions; on 400 error, retry with official prompt",
+        "label": "Auto (recommended)"
+      },
+      "force": {
+        "desc": "Always use official Codex CLI instructions (~4000+ chars)",
+        "label": "Force official"
+      },
+      "keep": {
+        "desc": "Always pass through client instructions, no auto retry (for permissive gateways)",
+        "label": "Pass-through"
+      },
+      "label": "Strategy",
+      "placeholder": "Select a strategy"
+    },
+    "summary": {
+      "auto": "Auto (recommended)",
+      "force": "Force official",
+      "keep": "Pass-through"
+    },
+    "title": "Codex Instructions Policy"
+  },
+  "mcpPassthrough": {
+    "desc": "When enabled, pass through MCP tool calls to specified AI provider (e.g. minimax for image recognition, web search)",
+    "hint": "Hint: MCP passthrough allows Claude Code client to use tool capabilities provided by third-party AI providers (e.g. image recognition, web search)",
+    "select": {
+      "custom": {
+        "desc": "Pass through to custom MCP service (reserved, not implemented yet)",
+        "label": "Custom"
+      },
+      "glm": {
+        "desc": "Pass through to GLM MCP service (supports image analysis, video analysis, etc.)",
+        "label": "GLM"
+      },
+      "label": "Passthrough Type",
+      "minimax": {
+        "desc": "Pass through to minimax MCP service (supports image recognition, web search, etc.)",
+        "label": "Minimax"
+      },
+      "none": {
+        "desc": "Do not enable MCP passthrough (default)",
+        "label": "Disabled"
+      },
+      "placeholder": "Select passthrough type"
+    },
+    "summary": {
+      "custom": "Custom (Reserved)",
+      "glm": "GLM",
+      "minimax": "Minimax",
+      "none": "Disabled"
+    },
+    "title": "MCP Passthrough Configuration",
+    "urlAuto": "Auto-extracted: {url}",
+    "urlDesc": "MCP service base URL. Leave empty to auto-extract from provider URL",
+    "urlLabel": "MCP Passthrough URL",
+    "urlPlaceholder": "https://api.minimaxi.com"
+  },
+  "proxy": {
+    "desc": "Configure a proxy to improve connectivity (HTTP, HTTPS, SOCKS4, SOCKS5 supported)",
+    "fallback": {
+      "desc": "When enabled, will try direct connection if proxy fails",
+      "label": "Fallback to direct on proxy failure"
+    },
+    "summary": {
+      "configured": "Proxy configured",
+      "fallback": " (fallback enabled)",
+      "none": "Not configured"
+    },
+    "test": {
+      "desc": "Test accessing provider URL via proxy (HEAD request, no credits consumed)",
+      "label": "Connectivity Test"
+    },
+    "title": "Proxy",
+    "url": {
+      "formats": "Supported formats:",
+      "label": "Proxy URL",
+      "optional": "(optional)",
+      "placeholder": "e.g. http://proxy.example.com:8080 or socks5://127.0.0.1:1080"
+    }
+  },
+  "rateLimit": {
+    "dailyResetMode": {
+      "desc": {
+        "fixed": "Reset quota at a fixed time each day",
+        "rolling": "Reset 24 hours after first API call"
+      },
+      "label": "Daily Reset Mode",
+      "options": {
+        "fixed": "Fixed Time Reset",
+        "rolling": "Rolling Window (24h)"
+      }
+    },
+    "dailyResetTime": {
+      "label": "Daily Reset Time (HH:mm)"
+    },
+    "limit5h": {
+      "label": "5h Spend Limit (USD)",
+      "placeholder": "Leave empty for unlimited"
+    },
+    "limitConcurrent": {
+      "label": "Concurrent Sessions Limit",
+      "placeholder": "0 means unlimited"
+    },
+    "limitDaily": {
+      "label": "Daily Spend Limit (USD)",
+      "placeholder": "Leave empty for unlimited"
+    },
+    "limitMonthly": {
+      "label": "Monthly Spend Limit (USD)",
+      "placeholder": "Leave empty for unlimited"
+    },
+    "limitTotal": {
+      "label": "Total Spend Limit (USD)",
+      "placeholder": "Leave empty for unlimited"
+    },
+    "limitWeekly": {
+      "label": "Weekly Spend Limit (USD)",
+      "placeholder": "Leave empty for unlimited"
+    },
+    "summary": {
+      "concurrent": "Concurrent: {count}",
+      "daily": "Day: ${amount} (reset ${resetTime})",
+      "fiveHour": "5h: ${amount}",
+      "monthly": "Month: ${amount}",
+      "none": "Unlimited",
+      "total": "Total: ${amount}",
+      "weekly": "Week: ${amount}"
+    },
+    "title": "Rate Limit"
+  },
+  "routing": {
+    "cacheTtl": {
+      "desc": "Force prompt cache TTL; only affects requests with cache_control.",
+      "label": "Cache TTL Override",
+      "options": {
+        "1h": "1 hour",
+        "5m": "5 minutes",
+        "inherit": "No override (follow client)"
+      }
+    },
+    "codexOverrides": {
+      "parallelToolCalls": {
+        "help": "Controls whether parallel tool calls are allowed. \"inherit\" follows the client request. Disabling may reduce tool-call concurrency.",
+        "label": "Parallel Tool Calls Override",
+        "options": {
+          "false": "Force disable",
+          "inherit": "No override (follow client)",
+          "true": "Force enable"
+        }
+      },
+      "reasoningEffort": {
+        "help": "Controls how much reasoning effort the model uses before answering. \"inherit\" follows the client request; other values force override reasoning.effort. Note: \"none\" is only supported on GPT-5.1 models; \"xhigh\" is only supported on GPT-5.1-Codex-Max. Using an unsupported value will cause an upstream error.",
+        "label": "Reasoning Effort Override",
+        "options": {
+          "high": "high",
+          "inherit": "No override (follow client)",
+          "low": "low",
+          "medium": "medium (default)",
+          "minimal": "minimal",
+          "none": "none (GPT-5.1 only)",
+          "xhigh": "xhigh (GPT-5.1-Codex-Max only)"
+        }
+      },
+      "reasoningSummary": {
+        "help": "Controls whether the Responses API returns reasoning summaries. \"auto\" returns a condensed summary, \"detailed\" returns a more comprehensive one. \"inherit\" follows the client request.",
+        "label": "Reasoning Summary Override",
+        "options": {
+          "auto": "auto",
+          "detailed": "detailed",
+          "inherit": "No override (follow client)"
+        }
+      },
+      "textVerbosity": {
+        "help": "Controls how verbose the model output is. \"low\" is concise, \"high\" is verbose. \"inherit\" follows the client request.",
+        "label": "Text Verbosity Override",
+        "options": {
+          "high": "high",
+          "inherit": "No override (follow client)",
+          "low": "low",
+          "medium": "medium (default)"
+        }
+      }
+    },
+    "context1m": {
+      "desc": "Configure 1M context window support. Only affects Sonnet models (claude-sonnet-4-5, claude-sonnet-4). Tiered pricing applies when enabled.",
+      "label": "1M Context Window",
+      "options": {
+        "disabled": "Disabled",
+        "forceEnable": "Force Enable (for supported models)",
+        "inherit": "Inherit (follow client request)"
+      }
+    },
+    "joinClaudePool": {
+      "desc": "When enabled, this provider will participate in load balancing with Claude-type providers",
+      "help": "Available only when there is a redirect mapping to claude-* models. When users request claude-* models, this provider also joins scheduling.",
+      "label": "Join Claude Routing Pool"
+    },
+    "modelRedirects": {
+      "label": "Model Redirects",
+      "optional": "(optional)"
+    },
+    "modelWhitelist": {
+      "allowAll": "✓ Allow all models (recommended)",
+      "desc": "Restrict which models this provider can serve. By default, a provider can serve all models of its type.",
+      "label": "Allowed Models",
+      "moreModels": "+{count} more",
+      "optional": "(optional)",
+      "selectedOnly": "Only the selected {count} models are allowed. Other models will not be routed to this provider.",
+      "title": "Model Allowlist"
+    },
+    "preserveClientIp": {
+      "desc": "Pass x-forwarded-for / x-real-ip to upstream providers (may expose real client IP)",
+      "help": "Keep off by default for privacy. Enable only when upstream must see the end-user IP.",
+      "label": "Forward client IP"
+    },
+    "providerType": {
+      "desc": "(determines scheduling policy)",
+      "label": "Provider Type",
+      "placeholder": "Select provider type"
+    },
+    "providerTypeDesc": "Choose the API format type of the provider.",
+    "providerTypeDisabledNote": "Note: OpenAI Compatible is under development and currently unavailable",
+    "scheduleParams": {
+      "costMultiplier": {
+        "desc": "Cost multiplier. Official provider = 1.0, 20% cheaper = 0.8, 20% more expensive = 1.2 (up to 4 decimals)",
+        "label": "Cost Multiplier",
+        "placeholder": "1.0"
+      },
+      "group": {
+        "desc": "Group tag. Only users whose providerGroup matches can use this provider. Example: set to \"premium\" to serve users with providerGroup=\"premium\" only",
+        "label": "Provider Group",
+        "placeholder": "e.g. premium, economy"
+      },
+      "priority": {
+        "desc": "Lower value = higher priority (0 is highest). The system only chooses from the highest priority tier. Suggested: primary=0, standby=1, emergency=2",
+        "label": "Priority",
+        "placeholder": "0"
+      },
+      "title": "Scheduling",
+      "weight": {
+        "desc": "Weighted random. Within the same priority, higher weight increases selection probability. Example 1:2:3 ≈ 16%:33%:50%",
+        "label": "Weight",
+        "placeholder": "1"
+      }
+    },
+    "summary": {
+      "models": "{count} whitelisted models",
+      "none": "Not configured",
+      "redirects": "{count} redirects"
+    },
+    "title": "Routing"
+  },
+  "timeout": {
+    "desc": "Configure request timeout duration, 0 means disable timeout",
+    "disableHint": "Set to 0 to disable the timeout (for canary rollback scenarios only, not recommended)",
+    "nonStreamingTotal": {
+      "core": "true",
+      "desc": "Non-streaming request total timeout, range 60-1200 seconds, default 600 seconds (10 minutes)",
+      "label": "Non-streaming Total Timeout (seconds)",
+      "placeholder": "600"
+    },
+    "streamingFirstByte": {
+      "core": "true",
+      "desc": "Streaming request first byte timeout, range 1-120 seconds, default 30 seconds",
+      "label": "Streaming First Byte Timeout (seconds)",
+      "placeholder": "30"
+    },
+    "streamingIdle": {
+      "core": "true",
+      "desc": "Streaming request idle timeout, range 60-600 seconds, enter 0 to disable (prevent mid-stream stalling)",
+      "label": "Streaming Idle Timeout (seconds)",
+      "placeholder": "60"
+    },
+    "summary": "First byte: {streaming}s | Stream interval: {idle}s | Non-streaming: {nonStreaming}s",
+    "title": "Timeout Configuration"
+  }
+}

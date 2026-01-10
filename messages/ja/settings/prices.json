@@ -1,0 +1,139 @@
+{
+  "actions": {
+    "delete": "削除",
+    "edit": "編集"
+  },
+  "addModel": "モデルを追加",
+  "addModelDescription": "新しいモデル価格設定を手動で追加します",
+  "conflict": {
+    "applyOverwrite": "上書きを適用",
+    "applying": "適用中...",
+    "description": "以下のモデルには手動で設定された価格があります。チェックした項目はLiteLLM価格で上書きされ、チェックしない項目は現在のままです",
+    "diff": {
+      "field": "フィールド",
+      "imagePrice": "画像価格",
+      "inputPrice": "入力価格",
+      "litellm": "LiteLLM",
+      "manual": "手動",
+      "mode": "タイプ",
+      "outputPrice": "出力価格",
+      "provider": "プロバイダー"
+    },
+    "diffTitle": "価格差異",
+    "noConflicts": "競合なし",
+    "noMatch": "一致するモデルが見つかりません",
+    "pagination": {
+      "showing": "{from}〜{to}件を表示（全{total}件）"
+    },
+    "searchPlaceholder": "モデルを検索...",
+    "selectedCount": "{count}/{total}件のモデルを選択",
+    "table": {
+      "action": "操作",
+      "litellmPrice": "LiteLLM価格",
+      "manualPrice": "手動価格",
+      "modelName": "モデル"
+    },
+    "title": "上書きする項目を選択",
+    "viewDiff": "差異を表示"
+  },
+  "deleteConfirm": "モデル {name} を削除してもよろしいですか？この操作は元に戻せません。",
+  "deleteModel": "モデルを削除",
+  "description": "プラットフォーム基本設定とモデル価格を管理します",
+  "dialog": {
+    "andUploadViaButton": "、上のボタンでアップロードしてください",
+    "description": "モデル価格データを含むJSONファイルを選択してアップロード",
+    "fileSizeLimit": "ファイルサイズは10MBを超えることはできません",
+    "fileSizeLimitSmall": "ファイルサイズは10MB以下です",
+    "fileTooLarge": "ファイルサイズが10MBを超えています",
+    "invalidFileType": "JSON形式のファイルを選択してください",
+    "latestPriceTable": "最新価格表",
+    "manualDownload": "手動でダウンロードすることもできます",
+    "results": {
+      "details": "詳細",
+      "failed": "失敗: {failed}",
+      "skipped": "スキップ: {skipped}",
+      "success": "成功: {success}",
+      "title": "更新結果",
+      "total": "合計: {total}個のモデル",
+      "viewDetails": "詳細ログを表示"
+    },
+    "selectFile": "JSONファイルをクリックして選択、またはドラッグしてください",
+    "selectJson": "JSONファイルを選択",
+    "supportedModels": "現在{count}個のモデルをサポート",
+    "systemHasBuiltIn": "システムは組み込み価格表を持っています",
+    "title": "モデル価格表を更新",
+    "updateFailed": "更新に失敗しました",
+    "updatePriceTable": "価格表を更新",
+    "updateSuccess": "価格表が正常に更新されました。{count}個のモデルを更新しました",
+    "updating": "更新中...",
+    "upload": "アップロードして更新",
+    "uploading": "アップロード中..."
+  },
+  "editModel": "モデルを編集",
+  "editModelDescription": "モデルの価格設定を編集します",
+  "form": {
+    "inputPrice": "入力価格 ($/M tokens)",
+    "modelName": "モデル名",
+    "modelNamePlaceholder": "例: gpt-5.2-codex",
+    "modelNameRequired": "モデル名は必須です",
+    "outputPrice": "出力価格 ($/M tokens)",
+    "outputPriceImage": "出力価格 ($/image)",
+    "provider": "プロバイダー",
+    "providerPlaceholder": "例: openai",
+    "type": "タイプ"
+  },
+  "pagination": {
+    "next": "次へ",
+    "perPage": "1ページあたり{size}件",
+    "previous": "前へ",
+    "showing": "{from}〜{to}件を表示（全{total}件）"
+  },
+  "searchPlaceholder": "モデル名を検索...",
+  "section": {
+    "description": "AIモデルの価格設定を管理します",
+    "title": "モデル価格"
+  },
+  "stats": {
+    "lastUpdated": "最終更新: {time}",
+    "searchResults": "{count}件の検索結果",
+    "totalModels": "合計{count}個のモデル"
+  },
+  "sync": {
+    "button": "LiteLLM価格を同期",
+    "checking": "競合を確認中...",
+    "failed": "同期に失敗しました",
+    "failedError": "同期に失敗しました: {error}",
+    "failedNoResult": "価格表は更新されましたが結果が返されていません",
+    "noModels": "モデル価格が見つかりません",
+    "partialFailure": "一部更新が成功しましたが、{failed}件のモデルが失敗しました",
+    "skippedConflicts": "{count}件の手動モデルをスキップしました",
+    "successNoChanges": "価格表は最新です。更新の必要はありません",
+    "successWithChanges": "価格表を更新: {added}件追加、{updated}件更新、{unchanged}件変化なし",
+    "syncing": "同期中..."
+  },
+  "table": {
+    "actions": "操作",
+    "inputPrice": "入力価格 ($/M)",
+    "loading": "読み込み中...",
+    "modelName": "モデル名",
+    "noDataHint": "システムは組み込み価格表を持っています。上のボタンを使用して同期または更新してください。",
+    "noDataTitle": "価格データがありません",
+    "noMatch": "一致するモデルが見つかりません",
+    "outputPrice": "出力価格 ($/M)",
+    "provider": "プロバイダー",
+    "type": "タイプ",
+    "typeChat": "チャット",
+    "typeCompletion": "補完",
+    "typeImage": "画像生成",
+    "typeUnknown": "不明",
+    "updatedAt": "更新日時"
+  },
+  "title": "価格表",
+  "toast": {
+    "createSuccess": "モデルを追加しました",
+    "deleteFailed": "削除に失敗しました",
+    "deleteSuccess": "モデルを削除しました",
+    "saveFailed": "保存に失敗しました",
+    "updateSuccess": "モデルを更新しました"
+  }
+}

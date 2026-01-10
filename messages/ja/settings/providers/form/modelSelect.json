@@ -1,0 +1,20 @@
+{
+  "allowAllModels": "すべての {type} モデルを許可",
+  "claude": "Claude",
+  "clear": "クリア",
+  "gemini": "Gemini",
+  "loading": "読み込み中...",
+  "manualAdd": "手動でモデルを追加",
+  "manualDesc": "任意のモデル名を追加できます（価格表のモデルに限定されません）",
+  "manualPlaceholder": "モデル名を入力（例：gpt-5-turbo）",
+  "notFound": "モデルが見つかりません",
+  "openai": "OpenAI",
+  "refresh": "モデルリストを更新",
+  "searchPlaceholder": "モデル名を検索...",
+  "selectAll": "すべて選択 ({count})",
+  "selectedCount": "{count} 個のモデルを選択済み",
+  "sourceFallback": "ローカル",
+  "sourceFallbackDesc": "ローカル価格表のモデルリストを使用（上流が利用不可または未対応）",
+  "sourceUpstream": "上流",
+  "sourceUpstreamDesc": "モデルリストは上流プロバイダーAPIから取得"
+}

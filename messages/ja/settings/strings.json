@@ -1,0 +1,22 @@
+{
+  "mcpPassthroughConfig": "MCP パススルー設定",
+  "mcpPassthroughConfigCustom": "カスタム (予約)",
+  "mcpPassthroughConfigGlm": "GLM",
+  "mcpPassthroughConfigMinimax": "Minimax",
+  "mcpPassthroughConfigNone": "無効",
+  "mcpPassthroughCustomDesc": "カスタム MCP サービスにパススルー（予約、未実装）",
+  "mcpPassthroughCustomLabel": "カスタム",
+  "mcpPassthroughDesc": "有効にすると、MCP ツール呼び出しを指定された AI プロバイダにパススルーします（例：minimax の画像認識、Web 検索）",
+  "mcpPassthroughGlmDesc": "GLM MCP サービスにパススルー（画像分析、動画分析などをサポート）",
+  "mcpPassthroughGlmLabel": "GLM",
+  "mcpPassthroughHint": "ヒント: MCP パススルーにより、Claude Code クライアントは第三者の AI プロバイダ提供的ツール機能（画像認識、Web 検索など）を使用できます",
+  "mcpPassthroughMinimaxDesc": "minimax MCP サービスにパススルー（画像認識、Web 検索などをサポート）",
+  "mcpPassthroughMinimaxLabel": "Minimax",
+  "mcpPassthroughNoneDesc": "MCP パススルーを有効にしません（デフォルト）",
+  "mcpPassthroughNoneLabel": "無効",
+  "mcpPassthroughSelect": "パススルータイプ",
+  "mcpPassthroughUrlAuto": "自動抽出: {url}",
+  "mcpPassthroughUrlDesc": "MCP サービスベース URL。空のままにすると、プロバイダ URL から自動的に抽出されます",
+  "mcpPassthroughUrlLabel": "MCP パススルー URL",
+  "mcpPassthroughUrlPlaceholder": "https://api.minimaxi.com"
+}

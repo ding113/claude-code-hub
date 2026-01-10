@@ -1,0 +1,13 @@
+{
+  "circuitBroken": "サーキットブレーカー",
+  "groups": {
+    "all": "すべて",
+    "default": "default",
+    "label": "グループ:"
+  },
+  "status": {
+    "active": "有効",
+    "all": "すべてのステータス",
+    "inactive": "無効"
+  }
+}

@@ -1,0 +1,139 @@
+{
+  "actions": {
+    "delete": "Удалить",
+    "edit": "Редактировать"
+  },
+  "addModel": "Добавить модель",
+  "addModelDescription": "Вручную добавить новую цену модели",
+  "conflict": {
+    "applyOverwrite": "Применить перезапись",
+    "applying": "Применение...",
+    "description": "Следующие модели имеют ручные цены. Отмеченные будут перезаписаны ценами LiteLLM, неотмеченные останутся без изменений",
+    "diff": {
+      "field": "Поле",
+      "imagePrice": "Цена изображения",
+      "inputPrice": "Цена ввода",
+      "litellm": "LiteLLM",
+      "manual": "Ручное",
+      "mode": "Тип",
+      "outputPrice": "Цена вывода",
+      "provider": "Поставщик"
+    },
+    "diffTitle": "Различия цен",
+    "noConflicts": "Конфликтов нет",
+    "noMatch": "Модели не найдены",
+    "pagination": {
+      "showing": "Показано {from}-{to} из {total}"
+    },
+    "searchPlaceholder": "Поиск моделей...",
+    "selectedCount": "Выбрано {count}/{total} моделей",
+    "table": {
+      "action": "Действие",
+      "litellmPrice": "Цена LiteLLM",
+      "manualPrice": "Ручная цена",
+      "modelName": "Модель"
+    },
+    "title": "Выберите элементы для перезаписи",
+    "viewDiff": "Показать различия"
+  },
+  "deleteConfirm": "Удалить модель {name}? Это действие необратимо.",
+  "deleteModel": "Удалить модель",
+  "description": "Управление конфигурацией платформы и ценами моделей",
+  "dialog": {
+    "andUploadViaButton": ", и загрузить через кнопку выше",
+    "description": "Выберите и загрузите JSON файл с данными о ценах моделей",
+    "fileSizeLimit": "Размер файла не может превышать 10MB",
+    "fileSizeLimitSmall": "Размер файла не превышает 10MB",
+    "fileTooLarge": "Размер файла превышает лимит 10MB",
+    "invalidFileType": "Пожалуйста, выберите файл в формате JSON",
+    "latestPriceTable": "последний прайс-лист",
+    "manualDownload": "Вы также можете скачать вручную",
+    "results": {
+      "details": "Подробности",
+      "failed": "Ошибок: {failed}",
+      "skipped": "Пропущено: {skipped}",
+      "success": "Успешно: {success}",
+      "title": "Результаты обновления",
+      "total": "Всего: {total} моделей",
+      "viewDetails": "Просмотреть подробный журнал"
+    },
+    "selectFile": "Нажмите для выбора JSON или перетащите сюда",
+    "selectJson": "Выбрать JSON файл",
+    "supportedModels": "Поддерживается {count} моделей",
+    "systemHasBuiltIn": "Система имеет встроенный прайс-лист",
+    "title": "Обновить прайс-лист",
+    "updateFailed": "Ошибка обновления",
+    "updatePriceTable": "Обновить прайс-лист",
+    "updateSuccess": "Прайс-лист успешно обновлён, {count} моделей обновлено",
+    "updating": "Обновление...",
+    "upload": "Загрузить и обновить",
+    "uploading": "Загрузка..."
+  },
+  "editModel": "Редактировать модель",
+  "editModelDescription": "Редактировать цену модели",
+  "form": {
+    "inputPrice": "Цена ввода ($/M токенов)",
+    "modelName": "Название модели",
+    "modelNamePlaceholder": "например: gpt-5.2-codex",
+    "modelNameRequired": "Название модели обязательно",
+    "outputPrice": "Цена вывода ($/M токенов)",
+    "outputPriceImage": "Цена вывода ($/изображение)",
+    "provider": "Поставщик",
+    "providerPlaceholder": "например: openai",
+    "type": "Тип"
+  },
+  "pagination": {
+    "next": "Вперёд",
+    "perPage": "{size} на странице",
+    "previous": "Назад",
+    "showing": "Показано {from}-{to} из {total}"
+  },
+  "searchPlaceholder": "Поиск по названию модели...",
+  "section": {
+    "description": "Управление ценами AI моделей",
+    "title": "Цены моделей"
+  },
+  "stats": {
+    "lastUpdated": "Последнее обновление: {time}",
+    "searchResults": "Результатов поиска: {count}",
+    "totalModels": "Всего моделей: {count}"
+  },
+  "sync": {
+    "button": "Синхронизировать цены LiteLLM",
+    "checking": "Проверка конфликтов...",
+    "failed": "Ошибка синхронизации",
+    "failedError": "Ошибка синхронизации: {error}",
+    "failedNoResult": "Прайс-лист обновлен но результат не возвращен",
+    "noModels": "Цены моделей не найдены",
+    "partialFailure": "Частичное обновление выполнено, но {failed} моделей не удалось обновить",
+    "skippedConflicts": "Пропущено {count} ручных моделей",
+    "successNoChanges": "Прайс-лист актуален, обновление не требуется",
+    "successWithChanges": "Обновление прайс-листа: добавлено {added}, обновлено {updated}, без изменений {unchanged}",
+    "syncing": "Синхронизация..."
+  },
+  "table": {
+    "actions": "Действия",
+    "inputPrice": "Цена ввода ($/M)",
+    "loading": "Загрузка...",
+    "modelName": "Название модели",
+    "noDataHint": "Система имеет встроенный прайс-лист. Используйте кнопки выше для синхронизации.",
+    "noDataTitle": "Данные о ценах отсутствуют",
+    "noMatch": "Соответствующие модели не найдены",
+    "outputPrice": "Цена вывода ($/M)",
+    "provider": "Поставщик",
+    "type": "Тип",
+    "typeChat": "Чат",
+    "typeCompletion": "Дополнение",
+    "typeImage": "Генерация изображений",
+    "typeUnknown": "Неизвестно",
+    "updatedAt": "Обновлено"
+  },
+  "title": "Прайс-лист",
+  "toast": {
+    "createSuccess": "Модель добавлена",
+    "deleteFailed": "Ошибка удаления",
+    "deleteSuccess": "Модель удалена",
+    "saveFailed": "Ошибка сохранения",
+    "updateSuccess": "Модель обновлена"
+  }
+}

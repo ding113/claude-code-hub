@@ -1,0 +1,139 @@
+{
+  "actions": {
+    "delete": "刪除",
+    "edit": "編輯"
+  },
+  "addModel": "新增模型",
+  "addModelDescription": "手動新增模型價格設定",
+  "conflict": {
+    "applyOverwrite": "套用覆蓋",
+    "applying": "套用中...",
+    "description": "以下模型存在手動維護的價格，勾選後將用 LiteLLM 價格覆蓋，未勾選的保持本地不變",
+    "diff": {
+      "field": "欄位",
+      "imagePrice": "圖片價格",
+      "inputPrice": "輸入價格",
+      "litellm": "LiteLLM",
+      "manual": "手動",
+      "mode": "類型",
+      "outputPrice": "輸出價格",
+      "provider": "供應商"
+    },
+    "diffTitle": "價格差異對比",
+    "noConflicts": "無衝突項",
+    "noMatch": "未找到符合的模型",
+    "pagination": {
+      "showing": "顯示 {from}-{to} 條，共 {total} 條"
+    },
+    "searchPlaceholder": "搜尋模型...",
+    "selectedCount": "已選擇 {count}/{total} 個模型",
+    "table": {
+      "action": "操作",
+      "litellmPrice": "LiteLLM 價格",
+      "manualPrice": "手動價格",
+      "modelName": "模型"
+    },
+    "title": "選擇要覆蓋的衝突項",
+    "viewDiff": "查看差異"
+  },
+  "deleteConfirm": "確定要刪除模型 {name} 嗎？此操作無法復原。",
+  "deleteModel": "刪除模型",
+  "description": "管理平台基礎設定與模型價格",
+  "dialog": {
+    "andUploadViaButton": "，並透過上方按鈕上傳",
+    "description": "選擇包含模型價格資料的 JSON 檔案並上傳",
+    "fileSizeLimit": "檔案大小不能超過 10MB",
+    "fileSizeLimitSmall": "檔案大小不超過 10MB",
+    "fileTooLarge": "檔案大小超過 10MB 限制",
+    "invalidFileType": "請選擇 JSON 格式的檔案",
+    "latestPriceTable": "最新價格表",
+    "manualDownload": "你也可以手動下載",
+    "results": {
+      "details": "詳細資訊",
+      "failed": "失敗: {failed}",
+      "skipped": "跳過: {skipped}",
+      "success": "成功: {success}",
+      "title": "更新結果",
+      "total": "總計: {total} 個模型",
+      "viewDetails": "檢視詳細記錄"
+    },
+    "selectFile": "點擊選擇 JSON 檔案或拖曳到此處",
+    "selectJson": "選擇 JSON 檔案",
+    "supportedModels": "目前支援 {count} 個模型",
+    "systemHasBuiltIn": "系統已內置價格表",
+    "title": "更新模型價格表",
+    "updateFailed": "更新失敗",
+    "updatePriceTable": "更新價格表",
+    "updateSuccess": "價格表更新成功，共更新 {count} 個模型",
+    "updating": "更新中...",
+    "upload": "上傳並更新",
+    "uploading": "上傳中..."
+  },
+  "editModel": "編輯模型",
+  "editModelDescription": "編輯模型的價格設定",
+  "form": {
+    "inputPrice": "輸入價格 ($/M tokens)",
+    "modelName": "模型名稱",
+    "modelNamePlaceholder": "例如: gpt-5.2-codex",
+    "modelNameRequired": "模型名稱為必填",
+    "outputPrice": "輸出價格 ($/M tokens)",
+    "outputPriceImage": "輸出價格 ($/張圖)",
+    "provider": "提供商",
+    "providerPlaceholder": "例如: openai",
+    "type": "類型"
+  },
+  "pagination": {
+    "next": "下一頁",
+    "perPage": "每頁 {size} 條",
+    "previous": "上一頁",
+    "showing": "顯示 {from}-{to} 條，共 {total} 條"
+  },
+  "searchPlaceholder": "搜尋模型名稱...",
+  "section": {
+    "description": "管理 AI 模型的價格設定",
+    "title": "模型價格"
+  },
+  "stats": {
+    "lastUpdated": "最後更新: {time}",
+    "searchResults": "搜尋到 {count} 個結果",
+    "totalModels": "共 {count} 個模型"
+  },
+  "sync": {
+    "button": "同步 LiteLLM 價格",
+    "checking": "檢查衝突...",
+    "failed": "同步失敗",
+    "failedError": "同步失敗: {error}",
+    "failedNoResult": "價格表更新成功但未返回處理結果",
+    "noModels": "未找到支援的模型價格",
+    "partialFailure": "部分更新成功，但有 {failed} 個模型失敗",
+    "skippedConflicts": "跳過 {count} 個手動模型",
+    "successNoChanges": "價格表已是最新，無需更新",
+    "successWithChanges": "價格表更新: 新增 {added} 個，更新 {updated} 個，未變化 {unchanged} 個",
+    "syncing": "同步中..."
+  },
+  "table": {
+    "actions": "操作",
+    "inputPrice": "輸入價格 ($/M)",
+    "loading": "載入中...",
+    "modelName": "模型名稱",
+    "noDataHint": "系統已內置價格表，請透過上方按鈕同步或更新",
+    "noDataTitle": "暫無價格資料",
+    "noMatch": "未找到符合的模型",
+    "outputPrice": "輸出價格 ($/M)",
+    "provider": "提供商",
+    "type": "類型",
+    "typeChat": "對話",
+    "typeCompletion": "補全",
+    "typeImage": "圖像生成",
+    "typeUnknown": "未知",
+    "updatedAt": "更新時間"
+  },
+  "title": "價格表",
+  "toast": {
+    "createSuccess": "模型已新增",
+    "deleteFailed": "刪除失敗",
+    "deleteSuccess": "模型已刪除",
+    "saveFailed": "儲存失敗",
+    "updateSuccess": "模型已更新"
+  }
+}

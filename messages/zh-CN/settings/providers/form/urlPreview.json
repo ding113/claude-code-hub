@@ -1,0 +1,9 @@
+{
+  "title": "URL 拼接预览",
+  "invalidUrl": "无效的 URL 格式",
+  "invalidUrlDesc": "请输入有效的 HTTP/HTTPS 地址",
+  "duplicatePath": "检测到重复路径",
+  "copy": "复制",
+  "copySuccess": "已复制 {name} 到剪贴板",
+  "copyFailed": "复制失败"
+}

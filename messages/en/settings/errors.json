@@ -1,0 +1,17 @@
+{
+  "addFailed": "Failed to add provider",
+  "addSuccess": "Add succeeded",
+  "deleteFailed": "Failed to delete provider",
+  "deleteSuccess": "Delete succeeded",
+  "editFailed": "Failed to update provider",
+  "editSuccess": "Update succeeded",
+  "loadFailed": "Failed to load notification settings",
+  "saveFailed": "Save failed",
+  "saveFailed_error": "Failed to save settings",
+  "saveSuccess": "Save succeeded",
+  "syncFailed": "Sync failed",
+  "syncSuccess": "Sync succeeded",
+  "testFailed": "Test failed",
+  "testFailedRetry": "Test failed, please retry",
+  "unknownError": "An exception occurred during the operation"
+}

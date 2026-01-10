@@ -1,0 +1,9 @@
+{
+  "after": "過濾後：",
+  "before": "過濾前：",
+  "decision": "決策：",
+  "description": "了解系統如何智慧選擇上游供應商，確保高可用性和成本優化",
+  "step": "步驟",
+  "title": "供應商調度規則說明",
+  "triggerButton": "調度規則說明"
+}

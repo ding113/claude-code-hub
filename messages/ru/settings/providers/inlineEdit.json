@@ -1,0 +1,12 @@
+{
+  "cancel": "Отмена",
+  "costMultiplierInvalid": "Введите число не меньше 0",
+  "costMultiplierLabel": "Коэф цены",
+  "priorityInvalid": "Введите целое число >= 0",
+  "priorityLabel": "Приоритет",
+  "save": "Сохранить",
+  "saveFailed": "Не удалось сохранить",
+  "saveSuccess": "Успешно сохранено",
+  "weightInvalid": "Введите целое число от 1 до 100",
+  "weightLabel": "Вес"
+}

@@ -1,0 +1,139 @@
+{
+  "actions": {
+    "delete": "Delete",
+    "edit": "Edit"
+  },
+  "addModel": "Add Model",
+  "addModelDescription": "Manually add a new model price configuration",
+  "conflict": {
+    "applyOverwrite": "Apply Overwrite",
+    "applying": "Applying...",
+    "description": "The following models have manual prices. Check the ones to overwrite with LiteLLM prices, unchecked ones will be kept unchanged",
+    "diff": {
+      "field": "Field",
+      "imagePrice": "Image Price",
+      "inputPrice": "Input Price",
+      "litellm": "LiteLLM",
+      "manual": "Manual",
+      "mode": "Type",
+      "outputPrice": "Output Price",
+      "provider": "Provider"
+    },
+    "diffTitle": "Price Difference",
+    "noConflicts": "No conflicts",
+    "noMatch": "No matching models found",
+    "pagination": {
+      "showing": "Showing {from}-{to} of {total}"
+    },
+    "searchPlaceholder": "Search models...",
+    "selectedCount": "Selected {count}/{total} models",
+    "table": {
+      "action": "Action",
+      "litellmPrice": "LiteLLM Price",
+      "manualPrice": "Manual Price",
+      "modelName": "Model"
+    },
+    "title": "Select Items to Overwrite",
+    "viewDiff": "View Diff"
+  },
+  "deleteConfirm": "Are you sure you want to delete model {name}? This action cannot be undone.",
+  "deleteModel": "Delete Model",
+  "description": "Manage platform basic configuration and model pricing",
+  "dialog": {
+    "andUploadViaButton": ", and upload via button above",
+    "description": "Select and upload JSON file containing model pricing data",
+    "fileSizeLimit": "File size cannot exceed 10MB",
+    "fileSizeLimitSmall": "File size not exceeding 10MB",
+    "fileTooLarge": "File size exceeds 10MB limit",
+    "invalidFileType": "Please select a JSON format file",
+    "latestPriceTable": "latest price table",
+    "manualDownload": "You can also manually download",
+    "results": {
+      "details": "Details",
+      "failed": "Failed: {failed}",
+      "skipped": "Skipped: {skipped}",
+      "success": "Success: {success}",
+      "title": "Update Results",
+      "total": "Total: {total} models",
+      "viewDetails": "View detailed logs"
+    },
+    "selectFile": "Click to select JSON file or drag and drop here",
+    "selectJson": "Select JSON File",
+    "supportedModels": "Currently supports {count} models",
+    "systemHasBuiltIn": "System has built-in price table",
+    "title": "Update Model Price Table",
+    "updateFailed": "Update failed",
+    "updatePriceTable": "Update Price Table",
+    "updateSuccess": "Price table updated successfully, {count} models updated",
+    "updating": "Updating...",
+    "upload": "Upload and Update",
+    "uploading": "Uploading..."
+  },
+  "editModel": "Edit Model",
+  "editModelDescription": "Edit the model price configuration",
+  "form": {
+    "inputPrice": "Input Price ($/M tokens)",
+    "modelName": "Model Name",
+    "modelNamePlaceholder": "e.g., gpt-5.2-codex",
+    "modelNameRequired": "Model name is required",
+    "outputPrice": "Output Price ($/M tokens)",
+    "outputPriceImage": "Output Price ($/image)",
+    "provider": "Provider",
+    "providerPlaceholder": "e.g., openai",
+    "type": "Type"
+  },
+  "pagination": {
+    "next": "Next",
+    "perPage": "{size} per page",
+    "previous": "Previous",
+    "showing": "Showing {from}-{to} of {total}"
+  },
+  "searchPlaceholder": "Search model name...",
+  "section": {
+    "description": "Manage AI model pricing configuration",
+    "title": "Model Pricing"
+  },
+  "stats": {
+    "lastUpdated": "Last updated: {time}",
+    "searchResults": "{count} search results",
+    "totalModels": "{count} models total"
+  },
+  "sync": {
+    "button": "Sync LiteLLM Prices",
+    "checking": "Checking conflicts...",
+    "failed": "Sync failed",
+    "failedError": "Sync failed: {error}",
+    "failedNoResult": "Price table updated but no result returned",
+    "noModels": "No model prices found",
+    "partialFailure": "Partial update succeeded, but {failed} models failed",
+    "skippedConflicts": "Skipped {count} manual models",
+    "successNoChanges": "Price table is up to date, no updates needed",
+    "successWithChanges": "Price table updated: {added} added, {updated} updated, {unchanged} unchanged",
+    "syncing": "Syncing..."
+  },
+  "table": {
+    "actions": "Actions",
+    "inputPrice": "Input Price ($/M)",
+    "loading": "Loading...",
+    "modelName": "Model Name",
+    "noDataHint": "System has built-in price table. Use buttons above to sync or update.",
+    "noDataTitle": "No price data available",
+    "noMatch": "No matching models found",
+    "outputPrice": "Output Price ($/M)",
+    "provider": "Provider",
+    "type": "Type",
+    "typeChat": "Chat",
+    "typeCompletion": "Completion",
+    "typeImage": "Image",
+    "typeUnknown": "Unknown",
+    "updatedAt": "Updated At"
+  },
+  "title": "Pricing",
+  "toast": {
+    "createSuccess": "Model added",
+    "deleteFailed": "Failed to delete",
+    "deleteSuccess": "Model deleted",
+    "saveFailed": "Failed to save",
+    "updateSuccess": "Model updated"
+  }
+}

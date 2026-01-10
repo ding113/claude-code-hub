@@ -1,0 +1,21 @@
+{
+  "connectionFailed": "接続失敗",
+  "connectionMethod": "接続方式:",
+  "connectionSuccess": "接続成功",
+  "direct": "直接接続",
+  "errorType": "エラータイプ:",
+  "fillUrlFirst": "まずプロバイダーURLを入力してください",
+  "networkError": "ネットワークエラー:",
+  "noResult": "テスト成功ですが結果が返されませんでした",
+  "proxy": "プロキシ",
+  "proxyError": "プロキシエラー:",
+  "responseTime": "応答時間:",
+  "statusCode": "ステータスコード:",
+  "testConnection": "接続テスト",
+  "testFailed": "テスト失敗",
+  "testFailedRetry": "テストに失敗しました。再試行してください",
+  "testing": "テスト中...",
+  "timeoutError": "接続タイムアウト（5秒）。以下を確認してください：\n1. プロキシサーバーにアクセスできるか\n2. プロキシアドレスとポートが正しいか\n3. プロキシ認証情報が正しいか",
+  "viaDirect": "（直接接続）",
+  "viaProxy": "（プロキシ経由）"
+}

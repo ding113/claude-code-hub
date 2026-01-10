@@ -1,0 +1,16 @@
+{
+  "button": "自动排序优先级",
+  "dialogTitle": "自动排序供应商优先级",
+  "dialogDescription": "根据成本倍率自动分配优先级（低成本 = 高优先级）",
+  "changeCount": "{count} 个供应商将被更新",
+  "noChanges": "无需更改（已排序）",
+  "costMultiplierHeader": "成本倍率",
+  "priorityHeader": "优先级",
+  "providersHeader": "供应商",
+  "changesTitle": "变更详情",
+  "providerHeader": "供应商",
+  "priorityChangeHeader": "优先级变更",
+  "confirm": "应用变更",
+  "success": "已更新 {count} 个供应商的优先级",
+  "error": "更新优先级失败"
+}

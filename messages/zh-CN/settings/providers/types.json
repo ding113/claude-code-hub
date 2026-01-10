@@ -1,0 +1,26 @@
+{
+  "claude": {
+    "label": "Claude",
+    "description": "Anthropic 官方 API"
+  },
+  "claudeAuth": {
+    "label": "Claude Auth",
+    "description": "Claude 中转服务"
+  },
+  "codex": {
+    "label": "Codex",
+    "description": "Codex CLI API"
+  },
+  "gemini": {
+    "label": "Gemini",
+    "description": "Google Gemini API"
+  },
+  "geminiCli": {
+    "label": "Gemini CLI",
+    "description": "Gemini CLI API"
+  },
+  "openaiCompatible": {
+    "label": "OpenAI Compatible",
+    "description": "OpenAI 兼容 API"
+  }
+}

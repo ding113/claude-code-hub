@@ -1,0 +1,15 @@
+{
+  "apiDocs": "API Docs",
+  "clientVersions": "Updates",
+  "config": "Config",
+  "data": "Data",
+  "docs": "Documentation",
+  "errorRules": "Errors",
+  "feedback": "Feedback",
+  "logs": "Logs",
+  "notifications": "Notifications",
+  "prices": "Pricing",
+  "providers": "Providers",
+  "requestFilters": "Requests",
+  "sensitiveWords": "Filters"
+}

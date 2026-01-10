@@ -1,0 +1,157 @@
+{
+  "apiFormat": "Provider type",
+  "apiFormatDesc": "Defaults to the routing configuration unless manually changed",
+  "chunksCount": "Received {count} chunks ({format})",
+  "chunksReceived": "Chunks received",
+  "close": "Close",
+  "copyFailed": "Failed to copy",
+  "copyFormat": {
+    "errorDetails": "Error details",
+    "message": "Message",
+    "testResult": "Test result"
+  },
+  "copyResult": "Copy Result",
+  "copySuccess": "Copied to clipboard",
+  "customConfig": "Custom",
+  "customPayloadDesc": "Enter custom JSON payload to override default request body",
+  "customPayloadPlaceholder": "{\"model\": \"...\", \"messages\": [...]}",
+  "disclaimer": {
+    "confirmConfig": "Please verify provider URL, API key, and model configuration",
+    "realRequest": "This test sends a real request to the provider and may consume a small quota",
+    "resultReference": "[IMPORTANT] Results may vary by provider and are for reference only",
+    "title": "Notice"
+  },
+  "error": "Error message",
+  "failed": "Failed",
+  "fillKeyFirst": "Please fill in API key first",
+  "fillUrlFirst": "Please fill in provider URL first",
+  "formatAnthropicMessages": "Claude (Anthropic Messages API)",
+  "formatOpenAIChat": "OpenAI Compatible",
+  "formatOpenAIResponses": "Codex (Response API)",
+  "geminiAuthFallback": {
+    "desc": "Actual proxy forwarding only uses header auth, may cause request failures",
+    "warning": "Header auth failed, using URL parameter auth"
+  },
+  "invalidUrl": "Provider URL is invalid (http/https only)",
+  "model": "Model",
+  "noResult": "Test succeeded but no result returned",
+  "presetConfig": "Preset",
+  "presetDesc": "Preset templates contain authentic CLI request patterns for relay service verification",
+  "requestConfig": "Request Configuration",
+  "response": "Response preview",
+  "responseModel": "Response model",
+  "responseTime": "Response time",
+  "resultCard": {
+    "copyText": {
+      "contentCheck": "Content Check",
+      "error": "Error",
+      "httpCheck": "HTTP Check",
+      "httpStatus": "HTTP Status",
+      "inputOutput": "Input {input} / Output {output} tokens",
+      "latency": "Latency",
+      "latencyCheck": "Latency Check",
+      "message": "Message",
+      "model": "Model",
+      "response": "Response",
+      "status": "Status",
+      "testedAt": "Tested At",
+      "usage": "Usage",
+      "validationDetails": "Validation Details"
+    },
+    "dialogTitle": "Provider Test Details",
+    "errorDetails": {
+      "title": "Error Details",
+      "type": "Error Type"
+    },
+    "judgment": "Judgment",
+    "labels": {
+      "content": "Content",
+      "error": "Error",
+      "firstByte": "First Byte",
+      "http": "HTTP",
+      "latency": "Latency",
+      "model": "Model",
+      "responsePreview": "Response Preview",
+      "totalLatency": "Total Latency"
+    },
+    "rawResponse": {
+      "hint": "This shows the raw response content. You can check if the keyword exists in the response here.",
+      "title": "Raw Response Body"
+    },
+    "status": {
+      "green": "Available",
+      "red": "Unavailable",
+      "yellow": "Degraded"
+    },
+    "streamInfo": {
+      "chunksCount": "Chunks Count",
+      "isStreaming": "Streaming",
+      "no": "No",
+      "title": "Stream Response Info",
+      "yes": "Yes"
+    },
+    "timing": {
+      "firstByte": "First Byte",
+      "testedAt": "Tested At",
+      "title": "Timing Info",
+      "totalLatency": "Total Latency"
+    },
+    "tokenUsage": {
+      "cacheCreation": "Cache Creation",
+      "cacheRead": "Cache Read",
+      "input": "Input",
+      "output": "Output",
+      "title": "Token Usage"
+    },
+    "validation": {
+      "content": {
+        "failed": "Target not found",
+        "passed": "Contains target string",
+        "target": "Target",
+        "title": "Tier 3: Content Validation"
+      },
+      "failed": "Failed",
+      "http": {
+        "failed": "4xx/5xx Failed",
+        "passed": "2xx/3xx Success",
+        "statusCode": "Status Code",
+        "title": "Tier 1: HTTP Status"
+      },
+      "latency": {
+        "actual": "Actual Latency",
+        "failed": "Exceeded threshold",
+        "passed": "Within threshold",
+        "title": "Tier 2: Latency Threshold"
+      },
+      "passed": "Passed",
+      "timeout": "Timeout",
+      "title": "Three-tier Validation Details"
+    }
+  },
+  "selectApiFormat": "Select provider type to test",
+  "selectPreset": "Select preset template",
+  "streamFormat": "Stream format",
+  "streamInfo": "Stream response info",
+  "streamResponse": "Stream response",
+  "success": "Success",
+  "successContains": "Success Keyword",
+  "successContainsDesc": "Response must contain this keyword to be considered successful",
+  "successContainsPlaceholder": "pong",
+  "testApi": "Provider Model Test",
+  "testFailed": "Test failed",
+  "testFailedRetry": "Test failed, please retry",
+  "testModel": "Test model",
+  "testModelDesc": "Leave empty to use the default model or type one manually",
+  "testSuccess": "Model test succeeded",
+  "testing": "Testing...",
+  "timeout": {
+    "desc": "Max wait time for test request (5-120 sec)",
+    "geminiHint": ", Gemini Thinking models recommend 60+ sec",
+    "label": "Timeout (seconds)"
+  },
+  "truncatedBrief": "Showing first {length} characters, click \"View Details\" for more",
+  "truncatedPreview": "Showing first {length} characters, copy to see full content",
+  "unknown": "Unknown",
+  "usage": "Token usage",
+  "viewDetails": "View Details"
+}

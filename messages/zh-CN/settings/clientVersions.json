@@ -1,0 +1,51 @@
+{
+  "title": "客户端升级提醒",
+  "description": "管理客户端版本要求，确保用户使用最新的稳定版本。VSCode 插件和 CLI 作为独立客户端分别管理版本。",
+  "section": {
+    "settings": {
+      "title": "升级提醒设置",
+      "description": "启用后，系统将自动检测客户端版本并拦截旧版本用户的请求。"
+    },
+    "distribution": {
+      "title": "客户端版本分布",
+      "description": "显示过去 7 天内活跃用户的客户端版本信息。每种客户端类型独立统计 GA 版本。"
+    }
+  },
+  "empty": {
+    "title": "暂无客户端数据",
+    "description": "过去 7 天内没有活跃用户使用可识别的客户端"
+  },
+  "toggle": {
+    "enable": "启用升级提醒",
+    "description": "启用后，系统将拦截使用旧版本客户端的请求",
+    "enableSuccess": "已启用客户端版本检查",
+    "disableSuccess": "已关闭客户端版本检查",
+    "toggleFailed": "更新失败"
+  },
+  "features": {
+    "title": "功能说明",
+    "whatHappens": "启用后会发生什么：",
+    "autoDetect": "系统会自动检测每种客户端的最新稳定版本（GA 版本）",
+    "gaRule": "判定规则：",
+    "gaRuleDesc": "当某个版本被 1 个以上用户使用时，视为 GA 版本",
+    "activeWindow": "活跃窗口：",
+    "activeWindowDesc": "仅统计过去 7 天内有请求的用户",
+    "blockOldVersion": "使用旧版本的用户将收到 HTTP 400 错误，无法继续使用服务",
+    "errorMessage": "错误提示中包含当前版本和需要升级的版本号",
+    "recommendation": "推荐做法：",
+    "recommendationDesc": "先观察下方的版本分布，确认新版本稳定后再启用。"
+  },
+  "table": {
+    "internalType": "内部类型：",
+    "currentGA": "当前 GA 版本：",
+    "usersCount": "{count} 位用户",
+    "user": "用户",
+    "version": "当前版本",
+    "lastActive": "最后活跃时间",
+    "status": "状态",
+    "noUsers": "暂无用户数据",
+    "latest": "最新",
+    "needsUpgrade": "需升级",
+    "unknown": "未知"
+  }
+}

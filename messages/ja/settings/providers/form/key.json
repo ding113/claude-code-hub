@@ -1,0 +1,7 @@
+{
+  "currentKey": "現在のキー: {key}",
+  "label": "API キー",
+  "leaveEmpty": "（空欄のままにすると変更しません）",
+  "leaveEmptyDesc": "空欄のままにすると既存のキーを保持します",
+  "placeholder": "API キーを入力"
+}
