@@ -11,22 +11,31 @@ import (
 type User struct {
 	bun.BaseModel `bun:"table:users,alias:u"`
 
-	ID   int      `bun:"id,pk,autoincrement" json:"id"`
-	Name string   `bun:"name,notnull" json:"name"`
-	Role string   `bun:"role,notnull,default:'user'" json:"role"` // admin, user
-	Tags []string `bun:"tags,array" json:"tags"`
+	ID          int      `bun:"id,pk,autoincrement" json:"id"`
+	Name        string   `bun:"name,notnull" json:"name"`
+	Description *string  `bun:"description" json:"description"`
+	Role        string   `bun:"role,notnull,default:'user'" json:"role"` // admin, user
+	Tags        []string `bun:"tags,type:jsonb" json:"tags"`
+
+	// 供应商组
+	ProviderGroup string `bun:"provider_group,default:'default'" json:"providerGroup"`
 
 	// 配额限制
-	RPMLimit        *int             `bun:"rpm_limit" json:"rpmLimit"`
-	DailyLimitUSD   udecimal.Decimal `bun:"daily_limit_usd,type:numeric(10,4)" json:"dailyLimitUsd"`
-	Limit5hUSD      udecimal.Decimal `bun:"limit_5h_usd,type:numeric(10,4)" json:"limit5hUsd"`
-	LimitWeeklyUSD  udecimal.Decimal `bun:"limit_weekly_usd,type:numeric(10,4)" json:"limitWeeklyUsd"`
-	LimitMonthlyUSD udecimal.Decimal `bun:"limit_monthly_usd,type:numeric(10,4)" json:"limitMonthlyUsd"`
-	LimitTotalUSD   udecimal.Decimal `bun:"limit_total_usd,type:numeric(10,4)" json:"limitTotalUsd"`
+	RPMLimit                *int             `bun:"rpm_limit" json:"rpmLimit"`
+	LimitConcurrentSessions *int             `bun:"limit_concurrent_sessions" json:"limitConcurrentSessions"`
+	DailyLimitUSD           udecimal.Decimal `bun:"daily_limit_usd,type:numeric(10,2)" json:"dailyLimitUsd"`
+	Limit5hUSD              udecimal.Decimal `bun:"limit_5h_usd,type:numeric(10,2)" json:"limit5hUsd"`
+	LimitWeeklyUSD          udecimal.Decimal `bun:"limit_weekly_usd,type:numeric(10,2)" json:"limitWeeklyUsd"`
+	LimitMonthlyUSD         udecimal.Decimal `bun:"limit_monthly_usd,type:numeric(10,2)" json:"limitMonthlyUsd"`
+	LimitTotalUSD           udecimal.Decimal `bun:"limit_total_usd,type:numeric(10,2)" json:"limitTotalUsd"`
+
+	// 日配额重置设置
+	DailyResetMode string `bun:"daily_reset_mode,notnull,default:'fixed'" json:"dailyResetMode"` // fixed, rolling
+	DailyResetTime string `bun:"daily_reset_time,notnull,default:'00:00'" json:"dailyResetTime"` // HH:mm 格式
 
 	// 权限
-	AllowedClients []string `bun:"allowed_clients,array" json:"allowedClients"`
-	AllowedModels  []string `bun:"allowed_models,array" json:"allowedModels"`
+	AllowedClients []string `bun:"allowed_clients,type:jsonb" json:"allowedClients"`
+	AllowedModels  []string `bun:"allowed_models,type:jsonb" json:"allowedModels"`
 
 	// 状态
 	IsEnabled bool       `bun:"is_enabled,notnull,default:true" json:"isEnabled"`
