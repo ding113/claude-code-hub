@@ -85,6 +85,8 @@
       "enableHttp2Desc": "启用后，代理请求将优先使用 HTTP/2 协议。如果 HTTP/2 失败，将自动降级到 HTTP/1.1。",
       "interceptAnthropicWarmupRequests": "拦截 Warmup 请求（Anthropic）",
       "interceptAnthropicWarmupRequestsDesc": "开启后，识别到 Claude Code 的 Warmup 探测请求将由 CCH 直接抢答短响应，避免访问上游供应商；该请求会记录在日志中，但不计费、不限流、不计入统计。",
+      "enableThinkingSignatureRectifier": "启用 thinking 签名整流器",
+      "enableThinkingSignatureRectifierDesc": "当 Anthropic 类型供应商返回 thinking 签名不兼容或非法请求等错误时，自动移除不兼容的 thinking 相关块并对同一供应商重试一次（默认开启）。",
       "enableResponseFixer": "启用响应整流",
       "enableResponseFixerDesc": "自动修复上游响应中常见的编码、SSE 与 JSON 格式问题（默认开启）。",
       "responseFixerFixEncoding": "修复编码问题",
@@ -138,6 +140,22 @@
     "subtitle": "服务商管理",
     "subtitleDesc": "配置上游服务商的金额限流和并发限制，留空表示无限制。",
     "add": "添加供应商",
+    "autoSort": {
+      "button": "自动排序优先级",
+      "dialogTitle": "自动排序供应商优先级",
+      "dialogDescription": "根据成本倍率自动分配优先级（低成本 = 高优先级）",
+      "changeCount": "{count} 个供应商将被更新",
+      "noChanges": "无需更改（已排序）",
+      "costMultiplierHeader": "成本倍率",
+      "priorityHeader": "优先级",
+      "providersHeader": "供应商",
+      "changesTitle": "变更详情",
+      "providerHeader": "供应商",
+      "priorityChangeHeader": "优先级变更",
+      "confirm": "应用变更",
+      "success": "已更新 {count} 个供应商的优先级",
+      "error": "更新优先级失败"
+    },
     "types": {
       "claude": {
         "label": "Claude",

@@ -6,6 +6,7 @@ import { keys as keysTable, messageRequest, providers, users } from "@/drizzle/s
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { formatCostForStorage } from "@/lib/utils/currency";
 import type { CreateMessageRequestData, MessageRequest } from "@/types/message";
+import type { SpecialSetting } from "@/types/special-settings";
 import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
 import { toMessageRequest } from "./_shared/transformers";
 import { enqueueMessageRequestUpdate } from "./message-write-buffer";
@@ -268,6 +269,52 @@ export async function findMessageRequestBySessionId(
 
   if (!result) return null;
   return toMessageRequest(result);
+}
+
+/**
+ * 按 (sessionId, requestSequence) 获取请求的审计字段（用于 Session 详情页补齐特殊设置展示）
+ */
+export async function findMessageRequestAuditBySessionIdAndSequence(
+  sessionId: string,
+  requestSequence: number
+): Promise<{
+  statusCode: number | null;
+  blockedBy: string | null;
+  blockedReason: string | null;
+  cacheTtlApplied: string | null;
+  context1mApplied: boolean | null;
+  specialSettings: SpecialSetting[] | null;
+} | null> {
+  const [row] = await db
+    .select({
+      statusCode: messageRequest.statusCode,
+      blockedBy: messageRequest.blockedBy,
+      blockedReason: messageRequest.blockedReason,
+      cacheTtlApplied: messageRequest.cacheTtlApplied,
+      context1mApplied: messageRequest.context1mApplied,
+      specialSettings: messageRequest.specialSettings,
+    })
+    .from(messageRequest)
+    .where(
+      and(
+        eq(messageRequest.sessionId, sessionId),
+        eq(messageRequest.requestSequence, requestSequence),
+        isNull(messageRequest.deletedAt)
+      )
+    )
+    .limit(1);
+
+  if (!row) return null;
+  return {
+    statusCode: row.statusCode,
+    blockedBy: row.blockedBy,
+    blockedReason: row.blockedReason,
+    cacheTtlApplied: row.cacheTtlApplied,
+    context1mApplied: row.context1mApplied,
+    specialSettings: Array.isArray(row.specialSettings)
+      ? (row.specialSettings as SpecialSetting[])
+      : null,
+  };
 }
 
 /**

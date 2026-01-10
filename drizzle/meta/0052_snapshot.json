@@ -1,6 +1,6 @@
 {
-  "id": "c7b01fc8-2ed8-4359-a233-9fa3a2f7e8ec",
-  "prevId": "708bddf0-5d35-4367-ab3f-a50a84d57c5d",
+  "id": "e7a58fbf-6e7a-4c5f-a0ac-255fcf6439d7",
+  "prevId": "c7b01fc8-2ed8-4359-a233-9fa3a2f7e8ec",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -809,6 +809,13 @@
           "primaryKey": false,
           "notNull": false,
           "default": "now()"
+        },
+        "source": {
+          "name": "source",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'litellm'"
         }
       },
       "indexes": {
@@ -855,6 +862,21 @@
               "expression": "created_at",
               "isExpression": false,
               "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_model_prices_source": {
+          "name": "idx_model_prices_source",
+          "columns": [
+            {
+              "expression": "source",
+              "isExpression": false,
+              "asc": true,
               "nulls": "last"
             }
           ],
@@ -1919,13 +1941,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
-        },
-        "enable_thinking_signature_rectifier": {
-          "name": "enable_thinking_signature_rectifier",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
         },
         "enable_response_fixer": {
           "name": "enable_response_fixer",

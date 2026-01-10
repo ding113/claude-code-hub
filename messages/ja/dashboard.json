@@ -1,4 +1,9 @@
 {
+  "actions": {
+    "copy": "コピー",
+    "download": "ダウンロード",
+    "copied": "コピーしました"
+  },
   "title": {
     "costRanking": "コスト ランキング",
     "costRankingDescription": "ユーザーコスト ランキングを表示します。データは 5 分ごとに更新されます",

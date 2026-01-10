@@ -16,12 +16,17 @@ export default defineConfig({
     hookTimeout: 20000,
     maxConcurrency: 5,
     pool: "threads",
-    // 仅运行少量“需要数据库”的集成测试（避免把所有重依赖测试默认跑进 CI）
-    // 说明：仓库中存在其它“需要完整运行时/外部依赖”的集成测试，默认仍由主配置排除。
+    // 仅运行"需要数据库"的集成测试（避免把所有重依赖测试默认跑进 CI）
+    // 说明：包括 tests/integration/ 目录和从主配置排除的需要 DB 的 API 测试
     include: [
       "tests/integration/webhook-targets-crud.test.ts",
       "tests/integration/notification-bindings.test.ts",
       "tests/integration/auth.test.ts",
+      // 需要 DB 的 API 测试（从主配置排除，在此运行）
+      "tests/api/users-actions.test.ts",
+      "tests/api/providers-actions.test.ts",
+      "tests/api/keys-actions.test.ts",
+      "tests/api/my-usage-readonly.test.ts",
     ],
     exclude: ["node_modules", ".next", "dist", "build", "coverage", "**/*.d.ts"],
     reporters: ["verbose"],
