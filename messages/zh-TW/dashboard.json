@@ -1,4 +1,9 @@
 {
+  "actions": {
+    "copy": "複製",
+    "download": "下載",
+    "copied": "已複製"
+  },
   "title": {
     "costRanking": "消耗排行榜",
     "costRankingDescription": "查看用戶消耗排名，資料每 5 分鐘更新一次",

@@ -1,6 +1,6 @@
 "use client";
 
-import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   getProviderStatisticsAsync,
   getProviders,
@@ -22,15 +22,6 @@ type ProviderHealthStatus = Record<
     recoveryMinutes: number | null;
   }
 >;
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      staleTime: 30000,
-    },
-  },
-});
 
 async function fetchSystemSettings(): Promise<{ currencyDisplay: CurrencyCode }> {
   const response = await fetch("/api/system-settings");
@@ -56,6 +47,8 @@ function ProviderManagerLoaderContent({
   } = useQuery<ProviderDisplay[]>({
     queryKey: ["providers"],
     queryFn: getProviders,
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
   });
 
   const {
@@ -65,6 +58,8 @@ function ProviderManagerLoaderContent({
   } = useQuery<ProviderHealthStatus>({
     queryKey: ["providers-health"],
     queryFn: getProvidersHealthStatus,
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
   });
 
   // Statistics loaded independently with longer cache
@@ -72,6 +67,7 @@ function ProviderManagerLoaderContent({
     useQuery<ProviderStatisticsMap>({
       queryKey: ["providers-statistics"],
       queryFn: getProviderStatisticsAsync,
+      refetchOnWindowFocus: false,
       staleTime: 30_000,
       refetchInterval: 60_000,
     });
@@ -83,6 +79,8 @@ function ProviderManagerLoaderContent({
   } = useQuery<{ currencyDisplay: CurrencyCode }>({
     queryKey: ["system-settings"],
     queryFn: fetchSystemSettings,
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
   });
 
   const loading = isProvidersLoading || isHealthLoading || isSettingsLoading;
@@ -106,9 +104,5 @@ function ProviderManagerLoaderContent({
 }
 
 export function ProviderManagerLoader(props: ProviderManagerLoaderProps) {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <ProviderManagerLoaderContent {...props} />
-    </QueryClientProvider>
-  );
+  return <ProviderManagerLoaderContent {...props} />;
 }

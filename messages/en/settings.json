@@ -104,6 +104,8 @@
       "enableHttp2Desc": "When enabled, proxy requests will prefer HTTP/2 protocol. Automatically falls back to HTTP/1.1 on failure.",
       "interceptAnthropicWarmupRequests": "Intercept Warmup Requests (Anthropic)",
       "interceptAnthropicWarmupRequestsDesc": "When enabled, Claude Code warmup probe requests will be answered by CCH directly to avoid upstream provider calls; the request is logged for audit but is not billed, not rate-limited, and excluded from statistics.",
+      "enableThinkingSignatureRectifier": "Enable Thinking Signature Rectifier",
+      "enableThinkingSignatureRectifierDesc": "When Anthropic providers return thinking signature incompatibility or invalid request errors, automatically removes incompatible thinking blocks and retries once against the same provider (enabled by default).",
       "enableResponseFixer": "Enable Response Fixer",
       "enableResponseFixerDesc": "Automatically repairs common upstream response issues (encoding, SSE, truncated JSON). Enabled by default.",
       "responseFixerFixEncoding": "Fix encoding issues",
@@ -677,6 +679,22 @@
     "addFailed": "Failed to add provider",
     "addProvider": "Add Provider",
     "addSuccess": "Provider added successfully",
+    "autoSort": {
+      "button": "Auto Sort Priority",
+      "dialogTitle": "Auto Sort Provider Priority",
+      "dialogDescription": "Automatically assign priority based on cost multiplier (lower cost = higher priority)",
+      "changeCount": "{count} providers will be updated",
+      "noChanges": "No changes needed (already sorted)",
+      "costMultiplierHeader": "Cost Multiplier",
+      "priorityHeader": "Priority",
+      "providersHeader": "Providers",
+      "changesTitle": "Change Details",
+      "providerHeader": "Provider",
+      "priorityChangeHeader": "Priority Change",
+      "confirm": "Apply Changes",
+      "success": "Updated priority for {count} providers",
+      "error": "Failed to update priorities"
+    },
     "types": {
       "claude": {
         "label": "Claude",

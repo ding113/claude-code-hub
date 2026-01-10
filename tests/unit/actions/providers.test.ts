@@ -7,6 +7,7 @@ const getProviderStatisticsMock = vi.fn();
 const createProviderMock = vi.fn();
 const updateProviderMock = vi.fn();
 const deleteProviderMock = vi.fn();
+const updateProviderPrioritiesBatchMock = vi.fn();
 
 const publishProviderCacheInvalidationMock = vi.fn();
 const saveProviderCircuitConfigMock = vi.fn();
@@ -29,6 +30,7 @@ vi.mock("@/repository/provider", () => ({
   getProviderStatistics: getProviderStatisticsMock,
   resetProviderTotalCostResetAt: vi.fn(async () => {}),
   updateProvider: updateProviderMock,
+  updateProviderPrioritiesBatch: updateProviderPrioritiesBatchMock,
 }));
 
 vi.mock("@/lib/cache/provider-cache", () => ({
@@ -161,6 +163,7 @@ describe("Provider Actions - Async Optimization", () => {
     saveProviderCircuitConfigMock.mockResolvedValue(undefined);
     deleteProviderCircuitConfigMock.mockResolvedValue(undefined);
     clearProviderStateMock.mockResolvedValue(undefined);
+    updateProviderPrioritiesBatchMock.mockResolvedValue(0);
   });
 
   describe("getProviders", () => {
@@ -185,6 +188,209 @@ describe("Provider Actions - Async Optimization", () => {
 
       expect(result).toHaveLength(1);
       expect(elapsed).toBeLessThan(500);
+    });
+  });
+
+  describe("autoSortProviderPriority", () => {
+    it("should return preview only when confirm is false", async () => {
+      findAllProvidersFreshMock.mockResolvedValue([
+        { id: 1, name: "a", costMultiplier: "2.0", priority: 0 } as any,
+        { id: 2, name: "b", costMultiplier: "1.0", priority: 1 } as any,
+        { id: 3, name: "c", costMultiplier: "1.0", priority: 9 } as any,
+      ]);
+
+      const { autoSortProviderPriority } = await import("@/actions/providers");
+      const result = await autoSortProviderPriority({ confirm: false });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.data.applied).toBe(false);
+      expect(result.data.summary.groupCount).toBe(2);
+      expect(result.data.summary.totalProviders).toBe(3);
+      expect(result.data.summary.changedCount).toBe(3);
+      expect(result.data.groups).toEqual([
+        {
+          costMultiplier: 1,
+          priority: 0,
+          providers: [
+            { id: 2, name: "b" },
+            { id: 3, name: "c" },
+          ],
+        },
+        {
+          costMultiplier: 2,
+          priority: 1,
+          providers: [{ id: 1, name: "a" }],
+        },
+      ]);
+
+      expect(updateProviderPrioritiesBatchMock).not.toHaveBeenCalled();
+      expect(publishProviderCacheInvalidationMock).not.toHaveBeenCalled();
+    });
+
+    it("should handle invalid costMultiplier values gracefully", async () => {
+      findAllProvidersFreshMock.mockResolvedValue([
+        { id: 1, name: "bad", costMultiplier: undefined, priority: 5 } as any,
+        { id: 2, name: "good", costMultiplier: "1.0", priority: 0 } as any,
+      ]);
+
+      const { autoSortProviderPriority } = await import("@/actions/providers");
+      const result = await autoSortProviderPriority({ confirm: false });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.data.summary.groupCount).toBe(2);
+      expect(result.data.groups).toEqual([
+        {
+          costMultiplier: 0,
+          priority: 0,
+          providers: [{ id: 1, name: "bad" }],
+        },
+        {
+          costMultiplier: 1,
+          priority: 1,
+          providers: [{ id: 2, name: "good" }],
+        },
+      ]);
+    });
+
+    it("should apply changes when confirm is true", async () => {
+      findAllProvidersFreshMock.mockResolvedValue([
+        { id: 10, name: "x", costMultiplier: "2.0", priority: 0 } as any,
+        { id: 20, name: "y", costMultiplier: "1.0", priority: 0 } as any,
+      ]);
+
+      const { autoSortProviderPriority } = await import("@/actions/providers");
+      const result = await autoSortProviderPriority({ confirm: true });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.data.applied).toBe(true);
+      expect(result.data.summary.changedCount).toBe(1);
+
+      expect(updateProviderPrioritiesBatchMock).toHaveBeenCalledTimes(1);
+      expect(updateProviderPrioritiesBatchMock).toHaveBeenCalledWith([{ id: 10, priority: 1 }]);
+      expect(publishProviderCacheInvalidationMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("should work with a single provider", async () => {
+      findAllProvidersFreshMock.mockResolvedValue([
+        { id: 1, name: "only", costMultiplier: "1.0", priority: 9 } as any,
+      ]);
+
+      const { autoSortProviderPriority } = await import("@/actions/providers");
+      const result = await autoSortProviderPriority({ confirm: true });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.data.applied).toBe(true);
+      expect(result.data.summary.groupCount).toBe(1);
+      expect(result.data.summary.changedCount).toBe(1);
+      expect(updateProviderPrioritiesBatchMock).toHaveBeenCalledWith([{ id: 1, priority: 0 }]);
+      expect(publishProviderCacheInvalidationMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("should set priority 0 for all providers when costMultiplier is the same", async () => {
+      findAllProvidersFreshMock.mockResolvedValue([
+        { id: 1, name: "a", costMultiplier: "1.0", priority: 5 } as any,
+        { id: 2, name: "b", costMultiplier: "1.0", priority: 6 } as any,
+        { id: 3, name: "c", costMultiplier: "1.0", priority: 7 } as any,
+      ]);
+
+      const { autoSortProviderPriority } = await import("@/actions/providers");
+      const result = await autoSortProviderPriority({ confirm: true });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.data.groups).toEqual([
+        {
+          costMultiplier: 1,
+          priority: 0,
+          providers: [
+            { id: 1, name: "a" },
+            { id: 2, name: "b" },
+            { id: 3, name: "c" },
+          ],
+        },
+      ]);
+      expect(updateProviderPrioritiesBatchMock).toHaveBeenCalledWith([
+        { id: 1, priority: 0 },
+        { id: 2, priority: 0 },
+        { id: 3, priority: 0 },
+      ]);
+      expect(publishProviderCacheInvalidationMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("should reject non-admin users", async () => {
+      getSessionMock.mockResolvedValueOnce({ user: { id: 2, role: "user" } });
+
+      const { autoSortProviderPriority } = await import("@/actions/providers");
+      const result = await autoSortProviderPriority({ confirm: true });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+
+      expect(result.error).toBe("无权限执行此操作");
+      expect(updateProviderPrioritiesBatchMock).not.toHaveBeenCalled();
+      expect(publishProviderCacheInvalidationMock).not.toHaveBeenCalled();
+    });
+
+    it("should not fail when cache invalidation publish throws", async () => {
+      publishProviderCacheInvalidationMock.mockRejectedValueOnce(new Error("boom"));
+      findAllProvidersFreshMock.mockResolvedValue([
+        { id: 10, name: "x", costMultiplier: "2.0", priority: 0 } as any,
+        { id: 20, name: "y", costMultiplier: "1.0", priority: 0 } as any,
+      ]);
+
+      const { autoSortProviderPriority } = await import("@/actions/providers");
+      const result = await autoSortProviderPriority({ confirm: true });
+
+      expect(result.ok).toBe(true);
+      expect(updateProviderPrioritiesBatchMock).toHaveBeenCalledTimes(1);
+      expect(publishProviderCacheInvalidationMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("should not write or invalidate cache when already sorted", async () => {
+      findAllProvidersFreshMock.mockResolvedValue([
+        { id: 10, name: "x", costMultiplier: "1.0", priority: 0 } as any,
+        { id: 20, name: "y", costMultiplier: "2.0", priority: 1 } as any,
+      ]);
+
+      const { autoSortProviderPriority } = await import("@/actions/providers");
+      const result = await autoSortProviderPriority({ confirm: true });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.data.applied).toBe(true);
+      expect(result.data.changes).toEqual([]);
+      expect(updateProviderPrioritiesBatchMock).not.toHaveBeenCalled();
+      expect(publishProviderCacheInvalidationMock).not.toHaveBeenCalled();
+    });
+
+    it("should handle empty providers list", async () => {
+      findAllProvidersFreshMock.mockResolvedValue([]);
+
+      const { autoSortProviderPriority } = await import("@/actions/providers");
+      const preview = await autoSortProviderPriority({ confirm: false });
+      const applied = await autoSortProviderPriority({ confirm: true });
+
+      expect(preview.ok).toBe(true);
+      if (preview.ok) {
+        expect(preview.data.summary.totalProviders).toBe(0);
+        expect(preview.data.applied).toBe(false);
+      }
+
+      expect(applied.ok).toBe(true);
+      if (applied.ok) {
+        expect(applied.data.summary.totalProviders).toBe(0);
+        expect(applied.data.applied).toBe(true);
+      }
     });
   });
 

@@ -41,6 +41,7 @@ import {
   getProviderStatistics,
   resetProviderTotalCostResetAt,
   updateProvider,
+  updateProviderPrioritiesBatch,
 } from "@/repository/provider";
 import type { CacheTtlPreference } from "@/types/cache";
 import type {
@@ -53,6 +54,27 @@ import type {
   ProviderType,
 } from "@/types/provider";
 import type { ActionResult } from "./types";
+
+type AutoSortResult = {
+  groups: Array<{
+    costMultiplier: number;
+    priority: number;
+    providers: Array<{ id: number; name: string }>;
+  }>;
+  changes: Array<{
+    providerId: number;
+    name: string;
+    oldPriority: number;
+    newPriority: number;
+    costMultiplier: number;
+  }>;
+  summary: {
+    totalProviders: number;
+    changedCount: number;
+    groupCount: number;
+  };
+  applied: boolean;
+};
 
 const API_TEST_TIMEOUT_LIMITS = {
   DEFAULT: 15000,
@@ -736,6 +758,132 @@ export async function removeProvider(providerId: number): Promise<ActionResult> 
   } catch (error) {
     logger.error("删除服务商失败:", error);
     const message = error instanceof Error ? error.message : "删除服务商失败";
+    return { ok: false, error: message };
+  }
+}
+
+export async function autoSortProviderPriority(args: {
+  confirm: boolean;
+}): Promise<ActionResult<AutoSortResult>> {
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return { ok: false, error: "无权限执行此操作" };
+    }
+
+    const providers = await findAllProvidersFresh();
+    if (providers.length === 0) {
+      return {
+        ok: true,
+        data: {
+          groups: [],
+          changes: [],
+          summary: {
+            totalProviders: 0,
+            changedCount: 0,
+            groupCount: 0,
+          },
+          applied: args.confirm,
+        },
+      };
+    }
+
+    const groupsByCostMultiplier = new Map<number, typeof providers>();
+    for (const provider of providers) {
+      const rawCostMultiplier = Number(provider.costMultiplier);
+      const costMultiplier = Number.isFinite(rawCostMultiplier) ? rawCostMultiplier : 0;
+
+      if (!Number.isFinite(rawCostMultiplier)) {
+        logger.warn("autoSortProviderPriority:invalid_cost_multiplier", {
+          providerId: provider.id,
+          providerName: provider.name,
+          costMultiplier: provider.costMultiplier,
+          fallback: costMultiplier,
+        });
+      }
+
+      const bucket = groupsByCostMultiplier.get(costMultiplier);
+      if (bucket) {
+        bucket.push(provider);
+      } else {
+        groupsByCostMultiplier.set(costMultiplier, [provider]);
+      }
+    }
+
+    const sortedCostMultipliers = Array.from(groupsByCostMultiplier.keys()).sort((a, b) => a - b);
+    const groups: AutoSortResult["groups"] = [];
+    const changes: AutoSortResult["changes"] = [];
+
+    for (const [priority, costMultiplier] of sortedCostMultipliers.entries()) {
+      const groupProviders = groupsByCostMultiplier.get(costMultiplier) ?? [];
+      groups.push({
+        costMultiplier,
+        priority,
+        providers: groupProviders
+          .slice()
+          .sort((a, b) => a.id - b.id)
+          .map((provider) => ({ id: provider.id, name: provider.name })),
+      });
+
+      for (const provider of groupProviders) {
+        const oldPriority = provider.priority ?? 0;
+        const newPriority = priority;
+        if (oldPriority !== newPriority) {
+          changes.push({
+            providerId: provider.id,
+            name: provider.name,
+            oldPriority,
+            newPriority,
+            costMultiplier,
+          });
+        }
+      }
+    }
+
+    const summary: AutoSortResult["summary"] = {
+      totalProviders: providers.length,
+      changedCount: changes.length,
+      groupCount: groups.length,
+    };
+
+    if (!args.confirm) {
+      return {
+        ok: true,
+        data: {
+          groups,
+          changes,
+          summary,
+          applied: false,
+        },
+      };
+    }
+
+    if (changes.length > 0) {
+      await updateProviderPrioritiesBatch(
+        changes.map((change) => ({ id: change.providerId, priority: change.newPriority }))
+      );
+      try {
+        await publishProviderCacheInvalidation();
+      } catch (error) {
+        logger.warn("autoSortProviderPriority:cache_invalidation_failed", {
+          changedCount: changes.length,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    return {
+      ok: true,
+      data: {
+        groups,
+        changes,
+        summary,
+        applied: true,
+      },
+    };
+  } catch (error) {
+    logger.error("autoSortProviderPriority:error", error);
+    const message = error instanceof Error ? error.message : "自动排序供应商优先级失败";
     return { ok: false, error: message };
   }
 }
