@@ -17,7 +17,6 @@ vi.mock("@/app/v1/_lib/proxy/errors", () => ({
 describe.sequential("AsyncTaskManager edge runtime", () => {
   const prevRuntime = process.env.NEXT_RUNTIME;
   const prevCi = process.env.CI;
-  const prevPhase = process.env.NEXT_PHASE;
 
   beforeEach(() => {
     vi.resetModules();
@@ -27,7 +26,6 @@ describe.sequential("AsyncTaskManager edge runtime", () => {
     delete (globalThis as unknown as { __ASYNC_TASK_MANAGER__?: unknown }).__ASYNC_TASK_MANAGER__;
 
     delete process.env.CI;
-    delete process.env.NEXT_PHASE;
   });
 
   afterEach(() => {
@@ -36,11 +34,6 @@ describe.sequential("AsyncTaskManager edge runtime", () => {
       delete process.env.CI;
     } else {
       process.env.CI = prevCi;
-    }
-    if (prevPhase === undefined) {
-      delete process.env.NEXT_PHASE;
-    } else {
-      process.env.NEXT_PHASE = prevPhase;
     }
 
     delete (globalThis as unknown as { __ASYNC_TASK_MANAGER__?: unknown }).__ASYNC_TASK_MANAGER__;
@@ -64,7 +57,8 @@ describe.sequential("AsyncTaskManager edge runtime", () => {
     const processOnceSpy = vi.spyOn(process, "once");
     process.env.NEXT_RUNTIME = "nodejs";
 
-    await import("@/lib/async-task-manager");
+    const { AsyncTaskManager } = await import("@/lib/async-task-manager");
+    AsyncTaskManager.register("t1", Promise.resolve());
 
     expect(processOnceSpy).toHaveBeenCalledTimes(3);
     expect(processOnceSpy).toHaveBeenNthCalledWith(1, "SIGTERM", expect.any(Function));
@@ -115,6 +109,7 @@ describe.sequential("AsyncTaskManager edge runtime", () => {
       "cleanupCompletedTasks"
     );
 
+    AsyncTaskManager.register("t1", new Promise<void>(() => {}));
     vi.advanceTimersByTime(60_000);
 
     expect(cleanupSpy).toHaveBeenCalledTimes(1);
