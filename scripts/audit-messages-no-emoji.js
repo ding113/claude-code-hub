@@ -2,7 +2,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 const emojiAudit = require("./audit-messages-emoji.js");
 
-const EMOJI_RE = /\p{Extended_Pictographic}/gu;
+const EMOJI_RE =
+  /(\p{Extended_Pictographic}|\p{Regional_Indicator}{2}|[0-9#*]\uFE0F?\u20E3)/gu;
 
 function loadJson(p) {
   return JSON.parse(fs.readFileSync(p, "utf8"));
@@ -33,8 +34,12 @@ function listEmojiCodepoints(value) {
   EMOJI_RE.lastIndex = 0;
   const out = [];
   for (const m of value.matchAll(EMOJI_RE)) {
-    const cp = m[0].codePointAt(0);
-    if (typeof cp === "number") out.push(toCodepoint(cp));
+    const seq = Array.from(m[0])
+      .map((ch) => ch.codePointAt(0))
+      .filter((cp) => typeof cp === "number")
+      .map((cp) => toCodepoint(cp))
+      .join("+");
+    if (seq) out.push(seq);
   }
   return out;
 }

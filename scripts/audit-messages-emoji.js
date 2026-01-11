@@ -1,7 +1,8 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-const EMOJI_RE = /\p{Extended_Pictographic}/gu;
+const EMOJI_RE =
+  /(\p{Extended_Pictographic}|\p{Regional_Indicator}{2}|[0-9#*]\uFE0F?\u20E3)/gu;
 
 function isObject(v) {
   return v && typeof v === "object" && !Array.isArray(v);

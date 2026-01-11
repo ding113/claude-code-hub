@@ -61,6 +61,38 @@ describe("scripts/audit-messages-no-emoji.js", () => {
     }
   });
 
+  test("regression: detects keycap and flag emoji sequences", () => {
+    const tmpRoot = path.join(
+      process.cwd(),
+      "tests",
+      ".tmp-audit-messages-no-emoji-cli",
+      `sequences-${Date.now()}`
+    );
+    const messagesDir = path.join(tmpRoot, "messages");
+    const keycap = "1\uFE0F\u20E3";
+    const flag = String.fromCodePoint(0x1f1fa, 0x1f1f8);
+
+    const writeJson = (p: string, data: unknown) => {
+      fs.mkdirSync(path.dirname(p), { recursive: true });
+      fs.writeFileSync(p, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+    };
+
+    try {
+      writeJson(path.join(messagesDir, "en", "provider-chain.json"), {
+        timeline: { circuitTriggered: `Warning ${keycap} ${flag}` },
+      });
+
+      const out = audit.run([`--messagesDir=${messagesDir}`, "--format=tsv", "--fail"]);
+      expect(out.exitCode).toBe(1);
+      expect(out.lines.join("\n")).toContain("U+0031+U+FE0F+U+20E3");
+      expect(out.lines.join("\n")).toContain("U+1F1FA+U+1F1F8");
+      expect(out.lines.join("\n")).not.toContain(keycap);
+      expect(out.lines.join("\n")).not.toContain(flag);
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
   test("helpers format codepoints and list emoji codepoints in order", () => {
     expect(audit.toCodepoint(0x1f600)).toBe("U+1F600");
     expect(audit.toCodepoint(0x2639)).toBe("U+2639");
@@ -71,6 +103,13 @@ describe("scripts/audit-messages-no-emoji.js", () => {
       "U+1F600",
       "U+1F680",
       "U+1F600",
+    ]);
+
+    const keycap = "1\uFE0F\u20E3";
+    const flag = String.fromCodePoint(0x1f1fa, 0x1f1f8);
+    expect(audit.listEmojiCodepoints(`a${keycap}b${flag}c`)).toEqual([
+      "U+0031+U+FE0F+U+20E3",
+      "U+1F1FA+U+1F1F8",
     ]);
   });
 

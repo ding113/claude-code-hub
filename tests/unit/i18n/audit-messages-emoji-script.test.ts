@@ -22,6 +22,16 @@ describe("scripts/audit-messages-emoji.js", () => {
     expect(keys).toEqual(["a.0", "a.1.b"]);
   });
 
+  test("countEmojiCodepoints()/maskEmoji() include keycap and flag sequences", () => {
+    const keycap = "1\uFE0F\u20E3";
+    const flag = String.fromCodePoint(0x1f1fa, 0x1f1f8);
+    const emoji = String.fromCodePoint(0x1f600);
+
+    const input = `a${keycap}b${flag}c${emoji}d`;
+    expect(audit.countEmojiCodepoints(input)).toBe(3);
+    expect(audit.maskEmoji(input)).toBe("a<emoji>b<emoji>c<emoji>d");
+  });
+
   test("findMessagesEmoji() reports leaf strings that contain emoji (stable key paths)", () => {
     const tmpRoot = path.join(
       process.cwd(),
