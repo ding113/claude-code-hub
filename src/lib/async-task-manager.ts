@@ -36,7 +36,7 @@ class AsyncTaskManagerClass {
     this.initialized = true;
 
     // Skip initialization in Edge/CI environments to avoid Node-only APIs and side effects.
-    if (process.env.NEXT_RUNTIME === "edge" || process.env.CI === "true") {
+    if (process.env.NEXT_RUNTIME === "edge" || process.env.CI === "true" || process.env.NEXT_PHASE === "phase-production-build") {
       logger.debug("[AsyncTaskManager] Skipping initialization in edge/CI environment", {
         nextRuntime: process.env.NEXT_RUNTIME,
         ci: process.env.CI,
