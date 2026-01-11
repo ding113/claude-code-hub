@@ -50,8 +50,9 @@ function findMessagesEmojiMatches({ messagesDir, locales }) {
 
     const files = emojiAudit.listJsonFiles(localeDir);
     for (const file of files) {
-      const relFile = path.relative(localeDir, file).replaceAll(path.sep, "/");
-      const keyPrefix = emojiAudit.fileToKeyPrefix(relFile);
+      const relFileNative = path.relative(localeDir, file);
+      const relFilePosix = relFileNative.replaceAll(path.sep, "/");
+      const keyPrefix = emojiAudit.fileToKeyPrefix(relFileNative);
       const obj = loadJson(file);
 
       for (const leaf of emojiAudit.flattenLeafStrings(obj)) {
@@ -70,7 +71,7 @@ function findMessagesEmojiMatches({ messagesDir, locales }) {
         );
 
         rows.push({
-          file: path.posix.join("messages", locale, relFile),
+          file: path.posix.join("messages", locale, relFilePosix),
           key: fullKey,
           emojiCount,
           codepoints,
