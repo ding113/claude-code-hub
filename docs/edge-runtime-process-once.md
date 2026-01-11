@@ -4,6 +4,18 @@
 
 `next build` 过程中出现 Edge Runtime 不支持 Node API 的告警：`process.once`。
 
+### 复现基线（修复前）
+
+在修复前的提交 `820b519b` 上运行 `bun run build` 可稳定看到 3 条告警（分别指向 `process.once` 的 47/48/49 行），其 import trace 包含：
+
+```text
+A Node.js API is used (process.once at line: 47) which is not supported in the Edge Runtime.
+Import traces:
+  ./src/lib/async-task-manager.ts
+  ./src/lib/price-sync/cloud-price-updater.ts
+  ./src/instrumentation.ts
+```
+
 相关导入链路（import trace）包含：
 
 - `src/lib/async-task-manager.ts`
@@ -36,7 +48,10 @@
 - `fix: avoid static async task manager import`（`56a01255`）
 - `test: cover edge runtime task scheduling`（`1152cdad`）
 
+## 备选方案（若回归）
+
+如果未来 Next/Turbopack 的静态分析行为变化导致告警回归，可将 Node-only 的 signal hooks 拆分到 `*.node.ts`（例如 `async-task-manager.node.ts`），并仅在 `NEXT_RUNTIME !== "edge"` 的分支里动态引入。
+
 ## 备注
 
 `.codex/plan/` 与 `.codex/issues/` 属于本地任务落盘目录，不应提交到 Git。
-
