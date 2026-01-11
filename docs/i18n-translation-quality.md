@@ -48,6 +48,16 @@ Initial glossary (expand as needed, but keep it minimal and reviewed):
 - Provider / Model / API / HTTP/2
 - Claude / OpenAI / Codex (names should not be translated)
 
+## Rule R4: No emoji in messages JSON
+
+`messages/**/*.json` must not contain emoji characters.
+
+Executable check:
+- `node scripts/audit-messages-no-emoji.js --format=tsv --fail`
+
+Notes:
+- The audit output prints file path + key path + Unicode codepoints (without printing emoji characters).
+
 ## Notes
 
 - Prefer fixing translations over expanding allowlists.

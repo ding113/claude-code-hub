@@ -48,6 +48,16 @@ Allowlist（可审计、保持最小）：
 - Provider / Model / API / HTTP/2
 - Claude / OpenAI / Codex（名称不翻译）
 
+## Rule R4：messages JSON 禁止 Emoji
+
+`messages/**/*.json` 中不允许出现 Emoji 字符。
+
+可执行检查：
+- `node scripts/audit-messages-no-emoji.js --format=tsv --fail`
+
+说明：
+- 审计输出包含文件路径 + key path + Unicode codepoints（不会直接打印 Emoji 字符本身）。
+
 ## Notes
 
 - 优先修复翻译，而不是扩展 allowlists。

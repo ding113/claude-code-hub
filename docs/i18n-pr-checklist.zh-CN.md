@@ -10,6 +10,8 @@
   - `bun run i18n:audit-placeholders`
 - [ ] 若该 PR 目标是清零 placeholders，确保 fail 模式无命中：
   - `bun run i18n:audit-placeholders:fail`
+- [ ] 运行 messages no-emoji 审计（fail 模式）：
+  - `node scripts/audit-messages-no-emoji.js --format=tsv --fail`
 - [ ] 运行与 i18n/settings split 相关的单元测试：
   - `bunx vitest run tests/unit/i18n/settings-split-guards.test.ts`
   - `bunx vitest run tests/unit/i18n/settings-index-modules-load.test.ts`
