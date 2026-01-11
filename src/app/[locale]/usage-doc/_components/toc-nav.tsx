@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -24,8 +25,10 @@ interface TocNavProps {
  * 支持桌面端和移动端复用
  */
 export function TocNav({ tocItems, activeId, tocReady, onItemClick }: TocNavProps) {
+  const t = useTranslations("usage");
+
   return (
-    <nav aria-label="文档目录" className="space-y-1">
+    <nav aria-label={t("navigation.tableOfContents")} className="space-y-1">
       {!tocReady && (
         <div className="space-y-2">
           {Array.from({ length: 5 }).map((_, index) => (
@@ -34,7 +37,7 @@ export function TocNav({ tocItems, activeId, tocReady, onItemClick }: TocNavProp
         </div>
       )}
       {tocReady && tocItems.length === 0 && (
-        <p className="text-xs text-muted-foreground">本页暂无可用章节</p>
+        <p className="text-xs text-muted-foreground">{t("navigation.tableOfContentsEmpty")}</p>
       )}
       {tocReady &&
         tocItems.length > 0 &&

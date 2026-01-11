@@ -295,7 +295,7 @@ export function VirtualizedLogsTable({
                       </span>
                     ) : (
                       <div className="flex flex-col items-start gap-0.5 min-w-0">
-                        <div className="flex items-center gap-1 min-w-0">
+                        <div className="flex items-center gap-1 min-w-0 w-full overflow-hidden">
                           {(() => {
                             // 计算倍率，用于判断是否显示 Badge
                             const successfulProvider =
@@ -310,34 +310,39 @@ export function VirtualizedLogsTable({
                                 : null;
                             const actualCostMultiplier =
                               successfulProvider?.costMultiplier ?? log.costMultiplier;
+                            const multiplier = Number(actualCostMultiplier);
                             const hasCostBadge =
-                              !!actualCostMultiplier &&
-                              parseFloat(String(actualCostMultiplier)) !== 1.0;
+                              actualCostMultiplier !== "" &&
+                              actualCostMultiplier != null &&
+                              Number.isFinite(multiplier) &&
+                              multiplier !== 1;
 
                             return (
                               <>
-                                <ProviderChainPopover
-                                  chain={log.providerChain ?? []}
-                                  finalProvider={
-                                    (log.providerChain && log.providerChain.length > 0
-                                      ? log.providerChain[log.providerChain.length - 1].name
-                                      : null) ||
-                                    log.providerName ||
-                                    tChain("circuit.unknown")
-                                  }
-                                  hasCostBadge={hasCostBadge}
-                                />
+                                <div className="flex-1 min-w-0 overflow-hidden">
+                                  <ProviderChainPopover
+                                    chain={log.providerChain ?? []}
+                                    finalProvider={
+                                      (log.providerChain && log.providerChain.length > 0
+                                        ? log.providerChain[log.providerChain.length - 1].name
+                                        : null) ||
+                                      log.providerName ||
+                                      tChain("circuit.unknown")
+                                    }
+                                    hasCostBadge={hasCostBadge}
+                                  />
+                                </div>
                                 {/* Cost multiplier badge */}
                                 {hasCostBadge && (
                                   <Badge
                                     variant="outline"
                                     className={
-                                      parseFloat(String(actualCostMultiplier)) > 1.0
+                                      multiplier > 1
                                         ? "text-xs bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800 shrink-0"
                                         : "text-xs bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-300 dark:border-green-800 shrink-0"
                                     }
                                   >
-                                    x{parseFloat(String(actualCostMultiplier)).toFixed(2)}
+                                    x{multiplier.toFixed(2)}
                                   </Badge>
                                 )}
                               </>

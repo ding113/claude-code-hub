@@ -473,6 +473,109 @@
     }
   },
 
+  "opencode": {
+    "title": "OpenCode Usage Guide",
+    "description": "OpenCode is a CLI + TUI AI coding agent that runs in your terminal and also provides IDE integrations. You can point OpenCode to cch as a single entry to access Claude, GPT, and Gemini models.",
+
+    "installation": {
+      "title": "Install",
+
+      "macos": {
+        "description": "On macOS, install OpenCode using one of the following methods:",
+        "homebrew": {
+          "title": "Option 2: Homebrew",
+          "description": "Install via Homebrew:"
+        }
+      },
+
+      "linux": {
+        "description": "On Linux, install OpenCode using one of the following methods:",
+        "homebrew": {
+          "title": "Option 2: Homebrew",
+          "description": "Install via Homebrew:"
+        },
+        "paru": {
+          "title": "Option 5: Paru (Arch Linux)",
+          "description": "Install via paru (AUR):"
+        }
+      },
+
+      "script": {
+        "title": "Option 1: Official install script",
+        "description": "Run the following command to install the latest version:"
+      },
+
+      "npm": {
+        "title": "Option 3: npm",
+        "description": "Install globally via npm:",
+        "note": "Note: Avoid installing opencode-ai via npm mirror registries. Mirror registries may cause missing dependencies; use the official npm registry if you hit issues."
+      },
+
+      "bun": {
+        "title": "Option 4: Bun",
+        "description": "Install globally via Bun:"
+      },
+
+      "windows": {
+        "description": "On Windows, we recommend a package manager (Chocolatey/Scoop); npm also works:",
+        "choco": {
+          "title": "Option 1: Chocolatey",
+          "description": "Install via Chocolatey:",
+          "command": "choco install opencode"
+        },
+        "scoop": {
+          "title": "Option 2: Scoop",
+          "description": "Install via Scoop:",
+          "command": "scoop bucket add extras\nscoop install extras/opencode"
+        },
+        "note": "Note: Bun on Windows is still in progress. Use Chocolatey/Scoop/npm, or download a binary from GitHub Releases."
+      }
+    },
+
+    "configuration": {
+      "title": "Connect to cch service",
+
+      "configFile": {
+        "title": "Configure opencode.json",
+        "path": "Config file path:",
+        "instruction": "Edit the file and add the following content (one file covers all models):",
+
+        "important": "Important",
+        "importantPoints": [
+          "Create an API key in the cch console and set the CCH_API_KEY environment variable",
+          "All providers use ${resolvedOrigin}/v1 as baseURL (cch v1 API base URL)",
+          "When selecting models, use provider_id/model_id (e.g. cchClaude/claude-sonnet-4-5-20250929)"
+        ]
+      },
+
+      "modelSelection": {
+        "title": "Select a model",
+        "description": "After starting OpenCode, use the following command in the TUI to view/select models:",
+        "command": "/models"
+      }
+    },
+
+    "startup": {
+      "title": "Start opencode",
+      "description": "Run in your project directory:",
+      "initNote": "On first launch, opencode loads the config and creates a session."
+    },
+
+    "commonIssues": {
+      "title": "Common issues",
+
+      "commandNotFound": "1. Command not found",
+      "commandNotFoundWindows": [
+        "If installed via npm, make sure your global npm bin directory is on PATH",
+        "Open a new terminal and try again"
+      ],
+      "commandNotFoundUnix": "Check the install location and add it to PATH (e.g. ~/.local/bin or npm global bin)",
+
+      "connectionFailed": "2. API connection failed",
+      "updateCli": "3. Update opencode"
+    }
+  },
+
   "droid": {
     "title": "Droid CLI Usage Guide",
     "description": "Droid is an interactive terminal AI programming assistant developed by Factory AI that supports integration through the cch proxy service. You must register and log in to your Droid official account before use.",

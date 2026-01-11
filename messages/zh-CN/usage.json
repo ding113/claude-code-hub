@@ -469,6 +469,109 @@
     }
   },
 
+  "opencode": {
+    "title": "OpenCode 使用指南",
+    "description": "OpenCode 是一款在终端中运行的 CLI + TUI AI 编程代理工具，也提供 IDE 插件集成。你可以将 OpenCode 指向 cch 作为统一入口来接入 Claude、GPT 与 Gemini 等模型。",
+
+    "installation": {
+      "title": "安装",
+
+      "macos": {
+        "description": "在 macOS 上可以选择以下任一种方式安装 OpenCode：",
+        "homebrew": {
+          "title": "方式二：Homebrew",
+          "description": "也可以使用 Homebrew 安装："
+        }
+      },
+
+      "linux": {
+        "description": "在 Linux 上可以选择以下任一种方式安装 OpenCode：",
+        "homebrew": {
+          "title": "方式二：Homebrew",
+          "description": "也可以使用 Homebrew 安装："
+        },
+        "paru": {
+          "title": "方式五：Paru（Arch Linux）",
+          "description": "如果你使用 Arch Linux，也可以通过 paru（AUR）安装："
+        }
+      },
+
+      "script": {
+        "title": "方式一：官方安装脚本",
+        "description": "执行以下命令安装最新版："
+      },
+
+      "npm": {
+        "title": "方式三：npm",
+        "description": "也可以通过 npm 全局安装：",
+        "note": "提示：不建议通过 npm 镜像源/第三方 registry 安装 opencode-ai，可能会导致依赖缺失；如遇问题请改用官方 npm registry。"
+      },
+
+      "bun": {
+        "title": "方式四：Bun",
+        "description": "如果你使用 Bun，也可以全局安装："
+      },
+
+      "windows": {
+        "description": "Windows 推荐使用包管理器（Chocolatey/Scoop），也可以使用 npm：",
+        "choco": {
+          "title": "方式一：Chocolatey",
+          "description": "使用 Chocolatey 安装：",
+          "command": "choco install opencode"
+        },
+        "scoop": {
+          "title": "方式二：Scoop",
+          "description": "使用 Scoop 安装：",
+          "command": "scoop bucket add extras\nscoop install extras/opencode"
+        },
+        "note": "提示：官方说明 Windows 上通过 Bun 安装仍在推进。建议使用 Chocolatey/Scoop/npm，或从 GitHub Releases 下载二进制。"
+      }
+    },
+
+    "configuration": {
+      "title": "连接 cch 服务",
+
+      "configFile": {
+        "title": "配置 opencode.json",
+        "path": "配置文件路径：",
+        "instruction": "编辑配置文件，写入以下内容（只需一份配置文件即可覆盖全部模型）：",
+
+        "important": "重要说明",
+        "importantPoints": [
+          "请先在 cch 后台创建 API Key，并设置环境变量 CCH_API_KEY",
+          "三个 provider 的 baseURL 都使用 ${resolvedOrigin}/v1（cch v1 API 地址）",
+          "模型选择时使用 provider_id/model_id 格式（例如 cchClaude/claude-sonnet-4-5-20250929）"
+        ]
+      },
+
+      "modelSelection": {
+        "title": "选择模型",
+        "description": "启动 OpenCode 后，在 TUI 中输入以下命令查看/选择模型：",
+        "command": "/models"
+      }
+    },
+
+    "startup": {
+      "title": "启动 opencode",
+      "description": "在项目目录下运行：",
+      "initNote": "首次启动时，opencode 会加载配置并创建会话。"
+    },
+
+    "commonIssues": {
+      "title": "常见问题",
+
+      "commandNotFound": "1. 命令未找到",
+      "commandNotFoundWindows": [
+        "如果使用 npm 安装，请确保 npm 全局路径已添加到系统 PATH",
+        "重新打开终端窗口后再试"
+      ],
+      "commandNotFoundUnix": "检查安装路径并添加到 PATH（例如 ~/.local/bin 或 npm 全局目录）",
+
+      "connectionFailed": "2. API 连接失败",
+      "updateCli": "3. 更新 opencode"
+    }
+  },
+
   "droid": {
     "title": "Droid CLI 使用指南",
     "description": "Droid 是 Factory AI 开发的交互式终端 AI 编程助手，支持通过 cch 代理服务使用。使用前必须先注册并登录 Droid 官方账号。",

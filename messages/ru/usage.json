@@ -473,6 +473,109 @@
     }
   },
 
+  "opencode": {
+    "title": "Руководство по OpenCode",
+    "description": "OpenCode — это CLI + TUI агент для программирования в терминале, также есть интеграции для IDE. Вы можете настроить OpenCode на cch как единый вход для доступа к моделям Claude, GPT и Gemini.",
+
+    "installation": {
+      "title": "Установка",
+
+      "macos": {
+        "description": "В macOS установите OpenCode одним из следующих способов:",
+        "homebrew": {
+          "title": "Способ 2: Homebrew",
+          "description": "Установка через Homebrew:"
+        }
+      },
+
+      "linux": {
+        "description": "В Linux установите OpenCode одним из следующих способов:",
+        "homebrew": {
+          "title": "Способ 2: Homebrew",
+          "description": "Установка через Homebrew:"
+        },
+        "paru": {
+          "title": "Способ 5: Paru (Arch Linux)",
+          "description": "Для Arch Linux можно установить через paru (AUR):"
+        }
+      },
+
+      "script": {
+        "title": "Способ 1: Официальный install-скрипт",
+        "description": "Выполните команду для установки последней версии:"
+      },
+
+      "npm": {
+        "title": "Способ 3: npm",
+        "description": "Глобальная установка через npm:",
+        "note": "Примечание: не рекомендуем устанавливать opencode-ai через npm-зеркала (сторонние registry). В зеркалах могут отсутствовать зависимости; при проблемах используйте официальный npm registry."
+      },
+
+      "bun": {
+        "title": "Способ 4: Bun",
+        "description": "Глобальная установка через Bun:"
+      },
+
+      "windows": {
+        "description": "В Windows рекомендуем использовать пакетный менеджер (Chocolatey/Scoop), либо npm:",
+        "choco": {
+          "title": "Способ 1: Chocolatey",
+          "description": "Установка через Chocolatey:",
+          "command": "choco install opencode"
+        },
+        "scoop": {
+          "title": "Способ 2: Scoop",
+          "description": "Установка через Scoop:",
+          "command": "scoop bucket add extras\nscoop install extras/opencode"
+        },
+        "note": "Примечание: поддержка установки через Bun в Windows пока в процессе. Используйте Chocolatey/Scoop/npm или скачайте бинарник из GitHub Releases."
+      }
+    },
+
+    "configuration": {
+      "title": "Подключение к cch",
+
+      "configFile": {
+        "title": "Настройка opencode.json",
+        "path": "Путь к конфигурационному файлу:",
+        "instruction": "Отредактируйте файл и добавьте следующий контент (один файл покрывает все модели):",
+
+        "important": "Важно",
+        "importantPoints": [
+          "Создайте API key в панели cch и задайте переменную окружения CCH_API_KEY",
+          "Все provider используют ${resolvedOrigin}/v1 как baseURL (базовый URL cch v1 API)",
+          "При выборе модели используйте provider_id/model_id (например, cchClaude/claude-sonnet-4-5-20250929)"
+        ]
+      },
+
+      "modelSelection": {
+        "title": "Выбор модели",
+        "description": "После запуска OpenCode в TUI выполните команду для просмотра/выбора моделей:",
+        "command": "/models"
+      }
+    },
+
+    "startup": {
+      "title": "Запуск opencode",
+      "description": "В каталоге проекта выполните:",
+      "initNote": "При первом запуске opencode загрузит конфигурацию и создаст сессию."
+    },
+
+    "commonIssues": {
+      "title": "Типичные проблемы",
+
+      "commandNotFound": "1. Команда не найдена",
+      "commandNotFoundWindows": [
+        "Если установили через npm, убедитесь, что глобальный npm bin добавлен в PATH",
+        "Откройте новый терминал и повторите"
+      ],
+      "commandNotFoundUnix": "Проверьте путь установки и добавьте его в PATH (например, ~/.local/bin или глобальный npm bin)",
+
+      "connectionFailed": "2. Сбой подключения API",
+      "updateCli": "3. Обновление opencode"
+    }
+  },
+
   "droid": {
     "title": "Руководство по использованию Droid CLI",
     "description": "Droid - это интерактивный помощник программирования на основе ИИ, разработанный Factory AI, поддерживающий интеграцию через прокси-сервис cch. Перед использованием вы должны зарегистрировать и войти в свой официальный аккаунт Droid.",

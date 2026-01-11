@@ -113,6 +113,18 @@ export function calculateRequestCost(
 
   const inputCostPerToken = priceData.input_cost_per_token;
   const outputCostPerToken = priceData.output_cost_per_token;
+  const inputCostPerRequest = priceData.input_cost_per_request;
+
+  if (
+    typeof inputCostPerRequest === "number" &&
+    Number.isFinite(inputCostPerRequest) &&
+    inputCostPerRequest >= 0
+  ) {
+    const requestCost = toDecimal(inputCostPerRequest);
+    if (requestCost) {
+      segments.push(requestCost);
+    }
+  }
 
   const cacheCreation5mCost =
     priceData.cache_creation_input_token_cost ??
