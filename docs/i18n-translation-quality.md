@@ -1,5 +1,7 @@
 # i18n translation quality rules (R1/R2/R3)
 
+> 中文对照版: [i18n-translation-quality.zh-CN.md](i18n-translation-quality.zh-CN.md)
+
 This document defines the **scope** and **executable rules** for i18n translation quality in this repo.
 Downstream scripts and review checklists should follow this document as the source of truth.
 

@@ -1,5 +1,7 @@
 # i18n settings split
 
+> 中文对照版: [i18n-settings-split.zh-CN.md](i18n-settings-split.zh-CN.md)
+
 This repository splits `messages/<locale>/settings.json` into smaller JSON chunks under `messages/<locale>/settings/`.
 
 ## Layout

@@ -1,5 +1,7 @@
 # i18n PR checklist
 
+> 中文对照版: [i18n-pr-checklist.zh-CN.md](i18n-pr-checklist.zh-CN.md)
+
 This checklist is for changes that affect i18n messages, especially `settings`, `dashboard`, and `myUsage`.
 
 ## Required (automation)
