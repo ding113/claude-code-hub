@@ -1,0 +1,313 @@
+{
+  "apiTest": {
+    "desc": "測試供應商模型是否可用，預設與路由設定中選擇的供應商類型保持一致。",
+    "summary": "驗證供應商與模型連通性",
+    "testLabel": "供應商模型測試",
+    "title": "供應商模型測試"
+  },
+  "circuitBreaker": {
+    "desc": "連續失敗時自動熔斷，避免影響整體服務品質",
+    "failureThreshold": {
+      "desc": "連續失敗多少次後觸發熔斷",
+      "label": "失敗閾值（次）",
+      "placeholder": "5"
+    },
+    "maxRetryAttempts": {
+      "desc": "包含首次呼叫在內，單一供應商最多嘗試次數，超過即切換。留空使用系統預設值。",
+      "label": "單供應商最大嘗試次數",
+      "placeholder": "2"
+    },
+    "openDuration": {
+      "desc": "熔斷後多久自動進入半開狀態",
+      "label": "熔斷時長（分鐘）",
+      "placeholder": "30"
+    },
+    "successThreshold": {
+      "desc": "半開狀態下成功多少次後完全恢復",
+      "label": "恢復閾值（次）",
+      "placeholder": "2"
+    },
+    "summary": "{failureThreshold} 次失敗 / {openDuration} 分鐘熔斷 / {successThreshold} 次成功恢復 / 每個供應商最多 {maxRetryAttempts} 次嘗試",
+    "title": "斷路器設定"
+  },
+  "codexStrategy": {
+    "desc": "控制如何處理 Codex 請求的 instructions 欄位，影響與上游中轉站的相容性",
+    "hint": "提示：部分嚴格的 Codex 中轉站（如 88code、foxcode）需要官方 instructions，請選擇「自動」或「強制官方」策略",
+    "select": {
+      "auto": {
+        "desc": "透傳客戶端 instructions，400 錯誤時自動重試官方 prompt",
+        "label": "自動（建議）"
+      },
+      "force": {
+        "desc": "始終使用官方 Codex CLI instructions（約 4000+ 字）",
+        "label": "強制官方"
+      },
+      "keep": {
+        "desc": "始終透傳客戶端 instructions，不自動重試（適用於寬鬆中轉站）",
+        "label": "原樣透傳"
+      },
+      "label": "策略選擇",
+      "placeholder": "選擇策略"
+    },
+    "summary": {
+      "auto": "自動（建議）",
+      "force": "強制官方",
+      "keep": "原樣透傳"
+    },
+    "title": "Codex Instructions 策略設定"
+  },
+  "mcpPassthrough": {
+    "desc": "啟用後，將 MCP 工具調用透傳到指定的 AI 服務商（如 minimax 的圖片識別、聯網搜索）",
+    "hint": "提示: MCP 透傳功能允許 Claude Code 客戶端使用第三方 AI 服務商提供的工具能力（如圖片識別、聯網搜索）",
+    "select": {
+      "custom": {
+        "desc": "透傳到自定義 MCP 服務（預留，暫未實現）",
+        "label": "自定義"
+      },
+      "glm": {
+        "desc": "透傳到智譜 GLM MCP 服務（支持圖片分析、視頻分析等工具）",
+        "label": "智譜 GLM"
+      },
+      "label": "透傳類型",
+      "minimax": {
+        "desc": "透傳到 minimax MCP 服務（支持圖片識別、聯網搜索等工具）",
+        "label": "Minimax"
+      },
+      "none": {
+        "desc": "不啟用 MCP 透傳功能（默認）",
+        "label": "不啟用"
+      },
+      "placeholder": "選擇透傳類型"
+    },
+    "summary": {
+      "custom": "自定義（預留）",
+      "glm": "智譜 GLM",
+      "minimax": "Minimax",
+      "none": "不啟用"
+    },
+    "title": "MCP 透傳配置",
+    "urlAuto": "自動提取: {url}",
+    "urlDesc": "MCP 服務的基礎 URL。留空則自動從提供商 URL 提取基礎域名",
+    "urlLabel": "MCP 透傳 URL",
+    "urlPlaceholder": "https://api.minimaxi.com"
+  },
+  "proxy": {
+    "desc": "設定代理伺服器以改善連線（支援 HTTP、HTTPS、SOCKS4、SOCKS5）",
+    "fallback": {
+      "desc": "啟用後，代理連線失敗時自動嘗試直接連線供應商",
+      "label": "代理失敗時降級為直連"
+    },
+    "summary": {
+      "configured": "已設定代理",
+      "fallback": "（啟用降級）",
+      "none": "未設定"
+    },
+    "test": {
+      "desc": "透過代理測試訪問供應商 URL（HEAD 請求，不消耗額度）",
+      "label": "連線測試"
+    },
+    "title": "代理設定",
+    "url": {
+      "formats": "支援格式：",
+      "label": "代理位址",
+      "optional": "（選填）",
+      "placeholder": "例如：http://proxy.example.com:8080 或 socks5://127.0.0.1:1080"
+    }
+  },
+  "rateLimit": {
+    "dailyResetMode": {
+      "desc": {
+        "fixed": "每天固定時間點重置額度",
+        "rolling": "從首次呼叫開始計算，24 小時後重置"
+      },
+      "label": "每日重設模式",
+      "options": {
+        "fixed": "固定時間重置",
+        "rolling": "滾動視窗（24 小時）"
+      }
+    },
+    "dailyResetTime": {
+      "label": "每日重設時間（HH:mm）"
+    },
+    "limit5h": {
+      "label": "5 小時消費上限（USD）",
+      "placeholder": "留空表示無限制"
+    },
+    "limitConcurrent": {
+      "label": "並發 Session 上限",
+      "placeholder": "0 表示無限制"
+    },
+    "limitDaily": {
+      "label": "每日消費上限（USD）",
+      "placeholder": "留空表示無限制"
+    },
+    "limitMonthly": {
+      "label": "月消費上限（USD）",
+      "placeholder": "留空表示無限制"
+    },
+    "limitTotal": {
+      "label": "總消費上限（USD）",
+      "placeholder": "留空表示無限制"
+    },
+    "limitWeekly": {
+      "label": "週消費上限（USD）",
+      "placeholder": "留空表示無限制"
+    },
+    "summary": {
+      "concurrent": "並發：{count}",
+      "daily": "日: {amount}（重置 {resetTime}）",
+      "fiveHour": "5h：${amount}",
+      "monthly": "月：${amount}",
+      "none": "無限制",
+      "total": "總：${amount}",
+      "weekly": "週：${amount}"
+    },
+    "title": "流量限制"
+  },
+  "routing": {
+    "cacheTtl": {
+      "desc": "強制設定 prompt cache TTL；僅影響包含 cache_control 的請求。",
+      "label": "Cache TTL 覆寫",
+      "options": {
+        "1h": "1 小時",
+        "5m": "5 分鐘",
+        "inherit": "不覆寫（跟隨客戶端）"
+      }
+    },
+    "codexOverrides": {
+      "parallelToolCalls": {
+        "help": "控制是否允許並行 tool calls。關閉可能降低工具呼叫並發能力；「跟隨客戶端」不改寫 parallel_tool_calls。",
+        "label": "並行工具呼叫覆寫",
+        "options": {
+          "false": "強制關閉",
+          "inherit": "不覆寫（跟隨客戶端）",
+          "true": "強制開啟"
+        }
+      },
+      "reasoningEffort": {
+        "help": "控制模型在輸出前用於推理的強度（推理 token 數量）。選擇「跟隨客戶端」表示不改寫請求；選擇其他值則強制覆寫 reasoning.effort。注意：none 僅 GPT-5.1 系列支援；xhigh 僅 GPT-5.1-Codex-Max 支援，模型不支援會返回錯誤。",
+        "label": "推理等級覆寫",
+        "options": {
+          "high": "high（更強推理）",
+          "inherit": "不覆寫（跟隨客戶端）",
+          "low": "low",
+          "medium": "medium（預設）",
+          "minimal": "minimal（更省資源、更快）",
+          "none": "none（僅 GPT-5.1）",
+          "xhigh": "xhigh（僅 GPT-5.1-Codex-Max）"
+        }
+      },
+      "reasoningSummary": {
+        "help": "控制是否回傳推理摘要。auto 回傳精簡摘要，detailed 回傳更詳細摘要；「跟隨客戶端」不改寫 reasoning.summary。",
+        "label": "推理摘要覆寫",
+        "options": {
+          "auto": "auto（精簡）",
+          "detailed": "detailed（更詳細）",
+          "inherit": "不覆寫（跟隨客戶端）"
+        }
+      },
+      "textVerbosity": {
+        "help": "控制模型輸出的詳細程度。low 較精簡，high 較詳細；「跟隨客戶端」不改寫 text.verbosity。",
+        "label": "輸出冗長度覆寫",
+        "options": {
+          "high": "high（更詳細）",
+          "inherit": "不覆寫（跟隨客戶端）",
+          "low": "low（精簡）",
+          "medium": "medium（預設）"
+        }
+      }
+    },
+    "context1m": {
+      "desc": "設定 1M 上下文視窗支援。僅對 Sonnet 模型生效（claude-sonnet-4-5、claude-sonnet-4）。啟用後將套用階梯定價。",
+      "label": "1M 上下文視窗",
+      "options": {
+        "disabled": "停用",
+        "forceEnable": "強制啟用",
+        "inherit": "跟隨客戶端"
+      }
+    },
+    "joinClaudePool": {
+      "desc": "啟用後，此供應商將與 Claude 類型供應商共同參與負載均衡",
+      "help": "僅當存在映射至 claude-* 的規則時可用。當用戶請求 claude-* 模型時，此供應商也會被納入調度。",
+      "label": "加入 Claude 調度池"
+    },
+    "modelRedirects": {
+      "label": "模型重定向設定",
+      "optional": "（選填）"
+    },
+    "modelWhitelist": {
+      "allowAll": "✓ 允許所有模型（建議）",
+      "desc": "限制此供應商可處理的模型。預設可處理該類型下的所有模型。",
+      "label": "允許的模型",
+      "moreModels": "+{count} 個以上",
+      "optional": "（選填）",
+      "selectedOnly": "僅允許所選的 {count} 個模型。其他模型將不會被路由到此供應商。",
+      "title": "模型允許清單"
+    },
+    "preserveClientIp": {
+      "desc": "向上游轉發 x-forwarded-for / x-real-ip，可能暴露真實來源 IP",
+      "help": "預設關閉以保護隱私；僅在需要上游感知終端 IP 時開啟。",
+      "label": "透傳客戶端 IP"
+    },
+    "providerType": {
+      "desc": "（決定調度策略）",
+      "label": "供應商類型",
+      "placeholder": "選擇供應商類型"
+    },
+    "providerTypeDesc": "選擇供應商的 API 格式類型。",
+    "providerTypeDisabledNote": "註：OpenAI Compatible 類型開發中，暫不可用",
+    "scheduleParams": {
+      "costMultiplier": {
+        "desc": "成本計算倍數。官方供應商=1.0，便宜 20%=0.8，貴 20%=1.2（最多 4 位小數）",
+        "label": "成本倍數",
+        "placeholder": "1.0"
+      },
+      "group": {
+        "desc": "分組標籤。僅供 providerGroup 與此值相符的用戶使用。例：設為「premium」表示僅供 providerGroup=\"premium\" 的用戶使用",
+        "label": "供應商分組",
+        "placeholder": "例如：premium, economy"
+      },
+      "priority": {
+        "desc": "數值越小，優先級越高（0 最高）。系統只會從最高優先級的供應商中選擇。建議：主力=0，備用=1，緊急備援=2",
+        "label": "優先級",
+        "placeholder": "0"
+      },
+      "title": "調度參數",
+      "weight": {
+        "desc": "加權隨機。同一優先級內，權重越高被選中機率越大。例如 1:2:3 約為 16%:33%:50%",
+        "label": "權重",
+        "placeholder": "1"
+      }
+    },
+    "summary": {
+      "models": "{count} 個允許模型",
+      "none": "未設定",
+      "redirects": "{count} 個重定向"
+    },
+    "title": "路由設定"
+  },
+  "timeout": {
+    "desc": "設定請求超時時間，0 表示禁用超時",
+    "disableHint": "設為 0 表示禁用該超時（僅用於灰度回退場景，不推薦）",
+    "nonStreamingTotal": {
+      "core": "true",
+      "desc": "非串流請求總超時，範圍 60-1200 秒，預設 600 秒（10 分鐘）",
+      "label": "非串流總超時（秒）",
+      "placeholder": "600"
+    },
+    "streamingFirstByte": {
+      "core": "true",
+      "desc": "串流請求首字節超時，範圍 1-120 秒，預設 30 秒",
+      "label": "串流首字節超時（秒）",
+      "placeholder": "30"
+    },
+    "streamingIdle": {
+      "core": "true",
+      "desc": "串流請求靜默期超時，範圍 60-600 秒，填 0 禁用（防止中途卡住）",
+      "label": "串流靜默期超時（秒）",
+      "placeholder": "60"
+    },
+    "summary": "首字: {streaming}s | 串流間隔: {idle}s | 非串流: {nonStreaming}s",
+    "title": "超時配置"
+  }
+}

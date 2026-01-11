@@ -1,0 +1,313 @@
+{
+  "routing": {
+    "title": "路由配置",
+    "summary": {
+      "models": "{count} 个模型白名单",
+      "redirects": "{count} 个重定向",
+      "none": "未配置"
+    },
+    "providerType": {
+      "label": "供应商类型",
+      "desc": "(决定调度策略)",
+      "placeholder": "选择供应商类型"
+    },
+    "providerTypeDesc": "选择供应商的 API 格式类型。",
+    "providerTypeDisabledNote": "注：Gemini CLI 和 OpenAI Compatible 类型功能正在开发中，暂不可用",
+    "modelRedirects": {
+      "label": "模型重定向配置",
+      "optional": "(可选)"
+    },
+    "joinClaudePool": {
+      "label": "加入 Claude 调度池",
+      "desc": "启用后，此供应商将与 Claude 类型供应商一起参与负载均衡调度",
+      "help": "仅当模型重定向配置中存在映射到 claude-* 模型时可用。启用后，当用户请求 claude-* 模型时，此供应商也会参与调度选择。"
+    },
+    "preserveClientIp": {
+      "label": "透传客户端 IP",
+      "desc": "向上游转发 x-forwarded-for / x-real-ip，可能暴露真实来源 IP",
+      "help": "默认关闭以保护隐私；仅在需要上游感知终端 IP 时开启。"
+    },
+    "modelWhitelist": {
+      "title": "模型白名单",
+      "desc": "限制此供应商可以处理的模型。默认情况下，供应商可以处理该类型下的所有模型。",
+      "label": "允许的模型",
+      "optional": "(可选)",
+      "allowAll": "✓ 允许所有模型（推荐）",
+      "selectedOnly": "仅允许选中的 {count} 个模型。其他模型的请求不会调度到此供应商。",
+      "moreModels": "+{count} 更多"
+    },
+    "scheduleParams": {
+      "title": "调度参数",
+      "priority": {
+        "label": "优先级",
+        "placeholder": "0",
+        "desc": "数值越小优先级越高（0 最高）。系统只从最高优先级的供应商中选择。建议：主力=0，备用=1，紧急备份=2"
+      },
+      "weight": {
+        "label": "权重",
+        "placeholder": "1",
+        "desc": "加权随机概率。同优先级内，权重越高被选中概率越大。例如权重 1:2:3 的概率为 16%:33%:50%"
+      },
+      "costMultiplier": {
+        "label": "成本倍率",
+        "placeholder": "1.0",
+        "desc": "成本计算倍数。官方供应商=1.0，便宜 20%=0.8，贵 20%=1.2（支持最多 4 位小数）"
+      },
+      "group": {
+        "label": "供应商分组",
+        "placeholder": "输入分组标签",
+        "desc": "供应商分组标签（支持多个，逗号分隔）。只有用户的 providerGroup 与此值匹配时，该用户才能使用此供应商。留空=对所有用户开放"
+      }
+    },
+    "cacheTtl": {
+      "label": "Cache TTL 覆写",
+      "options": {
+        "inherit": "不覆写（跟随客户端）",
+        "5m": "5 分钟",
+        "1h": "1 小时"
+      },
+      "desc": "强制设置 prompt cache TTL；仅影响包含 cache_control 的请求。"
+    },
+    "context1m": {
+      "label": "1M 上下文窗口",
+      "options": {
+        "inherit": "跟随客户端",
+        "forceEnable": "强制启用",
+        "disabled": "禁用"
+      },
+      "desc": "配置 1M 上下文窗口支持。仅对 Sonnet 模型生效（claude-sonnet-4-5、claude-sonnet-4）。启用后将应用阶梯定价。"
+    },
+    "codexOverrides": {
+      "reasoningEffort": {
+        "label": "推理等级覆写",
+        "help": "控制模型在输出前用于推理的强度（推理 token 数量）。选择“跟随客户端”表示不改写请求；选择其他值则强制覆写 reasoning.effort。注意：none 仅 GPT-5.1 系列支持；xhigh 仅 GPT-5.1-Codex-Max 支持，模型不支持会返回错误。",
+        "options": {
+          "inherit": "不覆写（跟随客户端）",
+          "minimal": "minimal（更省、更快）",
+          "low": "low",
+          "medium": "medium（默认）",
+          "high": "high（更强推理）",
+          "xhigh": "xhigh（仅 GPT-5.1-Codex-Max）",
+          "none": "none（仅 GPT-5.1）"
+        }
+      },
+      "reasoningSummary": {
+        "label": "推理摘要覆写",
+        "help": "控制是否返回推理摘要。auto 返回精简摘要，detailed 返回更详细摘要；“跟随客户端”不改写 reasoning.summary。",
+        "options": {
+          "inherit": "不覆写（跟随客户端）",
+          "auto": "auto（精简）",
+          "detailed": "detailed（更详细）"
+        }
+      },
+      "textVerbosity": {
+        "label": "输出冗长度覆写",
+        "help": "控制模型输出的详细程度。low 更简洁，high 更详细；“跟随客户端”不改写 text.verbosity。",
+        "options": {
+          "inherit": "不覆写（跟随客户端）",
+          "low": "low（简洁）",
+          "medium": "medium（默认）",
+          "high": "high（更详细）"
+        }
+      },
+      "parallelToolCalls": {
+        "label": "并行工具调用覆写",
+        "help": "控制是否允许并行 tool calls。关闭可能降低工具调用并发能力；“跟随客户端”不改写 parallel_tool_calls。",
+        "options": {
+          "inherit": "不覆写（跟随客户端）",
+          "true": "强制开启",
+          "false": "强制关闭"
+        }
+      }
+    }
+  },
+  "rateLimit": {
+    "title": "限流配置",
+    "summary": {
+      "fiveHour": "5h: {amount}",
+      "daily": "日: {amount} (重置 {resetTime})",
+      "weekly": "周: {amount}",
+      "monthly": "月: {amount}",
+      "total": "总: {amount}",
+      "concurrent": "并发: {count}",
+      "none": "无限制"
+    },
+    "limit5h": {
+      "label": "5小时消费上限 (USD)",
+      "placeholder": "留空表示无限制"
+    },
+    "limitDaily": {
+      "label": "每日消费上限 (USD)",
+      "placeholder": "留空表示无限制"
+    },
+    "dailyResetMode": {
+      "label": "每日重置模式",
+      "options": {
+        "fixed": "固定时间重置",
+        "rolling": "滚动窗口（24小时）"
+      },
+      "desc": {
+        "fixed": "每天固定时间点重置配额",
+        "rolling": "从首次调用开始计算，24小时后重置"
+      }
+    },
+    "dailyResetTime": {
+      "label": "每日重置时间 (HH:mm)"
+    },
+    "limitWeekly": {
+      "label": "周消费上限 (USD)",
+      "placeholder": "留空表示无限制"
+    },
+    "limitMonthly": {
+      "label": "月消费上限 (USD)",
+      "placeholder": "留空表示无限制"
+    },
+    "limitTotal": {
+      "label": "总消费上限 (USD)",
+      "placeholder": "留空表示无限制"
+    },
+    "limitConcurrent": {
+      "label": "并发 Session 上限",
+      "placeholder": "0 表示无限制"
+    }
+  },
+  "circuitBreaker": {
+    "title": "熔断器配置",
+    "summary": "{failureThreshold} 次失败 / {openDuration} 分钟熔断 / {successThreshold} 次成功恢复 / 每个供应商最多 {maxRetryAttempts} 次尝试",
+    "desc": "供应商连续失败时自动熔断，避免影响整体服务质量",
+    "failureThreshold": {
+      "label": "失败阈值（次）",
+      "placeholder": "5",
+      "desc": "连续失败多少次后触发熔断"
+    },
+    "openDuration": {
+      "label": "熔断时长（分钟）",
+      "placeholder": "30",
+      "desc": "熔断后多久自动进入半开状态"
+    },
+    "successThreshold": {
+      "label": "恢复阈值（次）",
+      "placeholder": "2",
+      "desc": "半开状态下成功多少次后完全恢复"
+    },
+    "maxRetryAttempts": {
+      "label": "单供应商最大尝试次数",
+      "placeholder": "2",
+      "desc": "包含首次调用在内，单个供应商最多尝试次数，超过后切换其他供应商。留空使用系统默认值。"
+    }
+  },
+  "proxy": {
+    "title": "代理配置",
+    "summary": {
+      "configured": "已配置代理",
+      "fallback": " (启用降级)",
+      "none": "未配置"
+    },
+    "desc": "配置代理服务器以改善供应商连接性（支持 HTTP、HTTPS、SOCKS4、SOCKS5）",
+    "url": {
+      "label": "代理地址",
+      "optional": "(可选)",
+      "placeholder": "例如: http://proxy.example.com:8080 或 socks5://127.0.0.1:1080",
+      "formats": "支持格式:"
+    },
+    "fallback": {
+      "label": "代理失败时降级到直连",
+      "desc": "启用后，代理连接失败时自动尝试直接连接供应商"
+    },
+    "test": {
+      "label": "连接测试",
+      "desc": "测试通过配置的代理访问供应商 URL（使用 HEAD 请求，不消耗额度）"
+    }
+  },
+  "timeout": {
+    "title": "超时配置",
+    "summary": "首字: {streaming}s | 流式间隔: {idle}s | 非流式: {nonStreaming}s",
+    "desc": "配置请求超时时间，0 表示禁用超时",
+    "streamingFirstByte": {
+      "label": "流式首字节超时（秒）",
+      "placeholder": "30",
+      "desc": "流式请求首字节超时，范围 1-120 秒，默认 30 秒",
+      "core": "true"
+    },
+    "streamingIdle": {
+      "label": "流式静默期超时（秒）",
+      "placeholder": "60",
+      "desc": "流式请求静默期超时，范围 60-600 秒，填 0 禁用（防止中途卡住）",
+      "core": "true"
+    },
+    "nonStreamingTotal": {
+      "label": "非流式总超时（秒）",
+      "placeholder": "600",
+      "desc": "非流式请求总超时，范围 60-1200 秒，默认 600 秒（10 分钟）",
+      "core": "true"
+    },
+    "disableHint": "设为 0 表示禁用该超时（仅用于灰度回退场景，不推荐）"
+  },
+  "apiTest": {
+    "title": "供应商模型测试",
+    "summary": "验证供应商与模型连通性",
+    "desc": "测试供应商模型是否可用，默认与路由配置中选择的供应商类型保持一致。",
+    "testLabel": "供应商模型测试"
+  },
+  "codexStrategy": {
+    "title": "Codex Instructions 策略",
+    "summary": {
+      "auto": "自动 (推荐)",
+      "force": "强制官方",
+      "keep": "透传原样"
+    },
+    "desc": "控制如何处理 Codex 请求的 instructions 字段，影响与上游中转站的兼容性",
+    "select": {
+      "label": "策略选择",
+      "auto": {
+        "label": "自动 (推荐)",
+        "desc": "透传客户端 instructions，400 错误时自动重试官方 prompt"
+      },
+      "force": {
+        "label": "强制官方",
+        "desc": "始终使用官方 Codex CLI instructions（约 4000+ 字）"
+      },
+      "keep": {
+        "label": "透传原样",
+        "desc": "始终透传客户端 instructions，不自动重试（适用于宽松中转站）"
+      },
+      "placeholder": "选择策略"
+    },
+    "hint": "提示: 部分严格的 Codex 中转站（如 88code、foxcode）需要官方 instructions，选择\"自动\"或\"强制官方\"策略"
+  },
+  "mcpPassthrough": {
+    "title": "MCP 透传配置",
+    "summary": {
+      "none": "不启用",
+      "minimax": "Minimax",
+      "glm": "智谱 GLM",
+      "custom": "自定义 (预留)"
+    },
+    "desc": "启用后，将 MCP 工具调用透传到指定的 AI 服务商（如 minimax 的图片识别、联网搜索）",
+    "select": {
+      "label": "透传类型",
+      "none": {
+        "label": "不启用",
+        "desc": "不启用 MCP 透传功能（默认）"
+      },
+      "minimax": {
+        "label": "Minimax",
+        "desc": "透传到 minimax MCP 服务（支持图片识别、联网搜索等工具）"
+      },
+      "glm": {
+        "label": "智谱 GLM",
+        "desc": "透传到智谱 MCP 服务（支持图片分析、视频分析等工具）"
+      },
+      "custom": {
+        "label": "自定义",
+        "desc": "透传到自定义 MCP 服务（预留，暂未实现）"
+      },
+      "placeholder": "选择透传类型"
+    },
+    "hint": "提示: MCP 透传功能允许 Claude Code 客户端使用第三方 AI 服务商提供的工具能力（如图片识别、联网搜索）",
+    "urlLabel": "MCP 透传 URL",
+    "urlPlaceholder": "https://api.minimaxi.com",
+    "urlDesc": "MCP 服务的基础 URL。留空则自动从提供商 URL 提取基础域名",
+    "urlAuto": "自动提取: {url}"
+  }
+}

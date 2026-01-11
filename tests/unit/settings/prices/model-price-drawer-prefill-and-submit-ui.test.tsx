@@ -2,8 +2,6 @@
  * @vitest-environment happy-dom
  */
 
-import fs from "node:fs";
-import path from "node:path";
 import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -11,6 +9,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { ModelPriceDrawer } from "@/app/[locale]/settings/prices/_components/model-price-drawer";
 import type { ModelPrice } from "@/types/model-price";
+import { loadMessages } from "./test-messages";
 
 const modelPricesActionMocks = vi.hoisted(() => ({
   upsertSingleModelPrice: vi.fn(async () => ({ ok: true, data: null })),
@@ -24,19 +23,6 @@ const sonnerMocks = vi.hoisted(() => ({
   },
 }));
 vi.mock("sonner", () => sonnerMocks);
-
-function loadMessages() {
-  const base = path.join(process.cwd(), "messages/en");
-  const read = (name: string) => JSON.parse(fs.readFileSync(path.join(base, name), "utf8"));
-
-  return {
-    common: read("common.json"),
-    errors: read("errors.json"),
-    ui: read("ui.json"),
-    forms: read("forms.json"),
-    settings: read("settings.json"),
-  };
-}
 
 function render(node: ReactNode) {
   const container = document.createElement("div");

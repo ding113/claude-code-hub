@@ -1,0 +1,9 @@
+{
+  "copy": "コピー",
+  "copyFailed": "コピーに失敗しました",
+  "copySuccess": "{name} をクリップボードにコピーしました",
+  "duplicatePath": "重複パス検出",
+  "invalidUrl": "無効なURL形式",
+  "invalidUrlDesc": "有効なHTTP/HTTPSアドレスを入力してください",
+  "title": "URL結合プレビュー"
+}

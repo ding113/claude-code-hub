@@ -1,0 +1,13 @@
+{
+  "circuitBroken": "Circuit Broken",
+  "groups": {
+    "all": "All",
+    "default": "default",
+    "label": "Groups:"
+  },
+  "status": {
+    "active": "Active",
+    "all": "Any status",
+    "inactive": "Inactive"
+  }
+}

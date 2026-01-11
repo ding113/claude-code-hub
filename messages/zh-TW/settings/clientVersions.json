@@ -1,0 +1,51 @@
+{
+  "description": "管理用戶端版本要求，確保使用者使用最新的穩定版本。VSCode 外掛和 CLI 作為獨立用戶端分別管理版本。",
+  "empty": {
+    "description": "過去 7 天內沒有活躍用戶使用可識別的用戶端",
+    "title": "暫無用戶端資料"
+  },
+  "features": {
+    "activeWindow": "活躍視窗：",
+    "activeWindowDesc": "僅統計過去 7 天內有請求的用戶",
+    "autoDetect": "系統會自動偵測每種用戶端的最新穩定版本（GA 版本）",
+    "blockOldVersion": "使用舊版本的用戶將收到 HTTP 400 錯誤，無法繼續使用服務",
+    "errorMessage": "錯誤提示中包含目前版本與需升級的版本號",
+    "gaRule": "判定規則：",
+    "gaRuleDesc": "當某個版本被 1 位以上用戶使用時，視為 GA 版本",
+    "recommendation": "建議作法：",
+    "recommendationDesc": "先觀察下方的版本分佈，確認新版本穩定後再啟用。",
+    "title": "功能說明",
+    "whatHappens": "啟用後會發生什麼："
+  },
+  "section": {
+    "distribution": {
+      "description": "顯示過去 7 天內活躍用戶的用戶端版本資訊。每種用戶端類型獨立統計 GA 版本。",
+      "title": "用戶端版本分佈"
+    },
+    "settings": {
+      "description": "啟用後，系統將自動偵測用戶端版本並攔截舊版本用戶的請求。",
+      "title": "升級提醒設定"
+    }
+  },
+  "table": {
+    "currentGA": "目前 GA 版本：",
+    "internalType": "內部類型：",
+    "lastActive": "最後活躍時間",
+    "latest": "最新版",
+    "needsUpgrade": "需升級",
+    "noUsers": "暫無用戶資料",
+    "status": "狀態",
+    "unknown": "不明",
+    "user": "用戶",
+    "usersCount": "{count} 位用戶",
+    "version": "目前版本"
+  },
+  "title": "用戶端升級提醒",
+  "toggle": {
+    "description": "啟用後，系統將自動偵測用戶端版本並攔截舊版本使用者的請求。",
+    "disableSuccess": "已關閉用戶端版本檢查",
+    "enable": "啟用用戶端版本檢查",
+    "enableSuccess": "已啟用用戶端版本檢查",
+    "toggleFailed": "狀態切換失敗"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "button": "Auto Sort Priority",
+  "changeCount": "{count} providers will be updated",
+  "changesTitle": "Change Details",
+  "confirm": "Apply Changes",
+  "costMultiplierHeader": "Cost Multiplier",
+  "dialogDescription": "Automatically assign priority based on cost multiplier (lower cost = higher priority)",
+  "dialogTitle": "Auto Sort Provider Priority",
+  "error": "Failed to update priorities",
+  "noChanges": "No changes needed (already sorted)",
+  "priorityChangeHeader": "Priority Change",
+  "priorityHeader": "Priority",
+  "providerHeader": "Provider",
+  "providersHeader": "Providers",
+  "success": "Updated priority for {count} providers"
+}

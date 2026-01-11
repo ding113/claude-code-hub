@@ -1,0 +1,133 @@
+{
+  "cleanup": {
+    "backupRecommendation": "Recommendation: Export database backup before cleanup in case recovery is needed.",
+    "button": "Clean Logs",
+    "cancel": "Cancel",
+    "cleaning": "Cleaning...",
+    "confirm": "Confirm Cleanup",
+    "confirmTitle": "Confirm Log Cleanup",
+    "confirmWarning": "This operation will permanently delete all log records from {range} and cannot be recovered.",
+    "descriptionWarning": "Clean up historical log data to free up database storage. Note: Statistics data will be retained, but log details will be permanently deleted.",
+    "error": "Failed to clean logs",
+    "failed": "Cleanup failed",
+    "logsDeleted": "✗ Log details will be deleted (request/response content, error info, etc.)",
+    "previewCount": "Will delete {count} log records",
+    "previewError": "Unable to get preview",
+    "previewLoading": "Counting...",
+    "range": {
+      "180days": "Logs older than 6 months (180 days)",
+      "30days": "Logs older than 1 month (30 days)",
+      "7days": "Logs older than 1 week (7 days)",
+      "90days": "Logs older than 3 months (90 days)"
+    },
+    "rangeDescription": {
+      "180days": "6 months ago",
+      "30days": "1 month ago",
+      "7days": "1 week ago",
+      "90days": "3 months ago",
+      "default": "{days} days ago"
+    },
+    "rangeLabel": "Cleanup Range",
+    "statisticsRetained": "✓ Statistics data will be retained (for trend analysis)",
+    "successMessage": "Successfully cleaned {count} log records ({batches} batches, took {duration}s)",
+    "willClean": "Will clean all log records from {range}"
+  },
+  "description": "Manage database backup and recovery with full data import/export and log cleanup.",
+  "export": {
+    "button": "Export Database",
+    "descriptionFull": "Export complete database backup file (.dump format) for data migration or recovery. Backup uses PostgreSQL custom format, auto-compressed and compatible with different database versions.",
+    "error": "Failed to export database",
+    "exporting": "Exporting...",
+    "failed": "Export failed",
+    "successMessage": "Database exported successfully!"
+  },
+  "guide": {
+    "items": {
+      "cleanup": {
+        "description": "Physically delete historical log data (irreversible). Statistics table will be retained. Recommend exporting database backup before cleanup.",
+        "title": "Log Cleanup"
+      },
+      "environment": {
+        "description": "This feature requires Docker Compose deployment. Local development may not support it.",
+        "title": "Environment Requirements"
+      },
+      "format": {
+        "description": "Uses PostgreSQL custom format (.dump), auto-compressed and compatible with different database versions.",
+        "title": "Backup Format"
+      },
+      "merge": {
+        "description": "Retains existing data and attempts to insert backup data. Primary key conflicts may cause import failure.",
+        "title": "Merge Mode"
+      },
+      "overwrite": {
+        "description": "Deletes all existing data before importing, ensuring database matches backup exactly. Best for complete recovery.",
+        "title": "Overwrite Mode"
+      },
+      "safety": {
+        "description": "Before importing, recommend exporting current database as backup to avoid data loss.",
+        "title": "Security Recommendation"
+      }
+    },
+    "title": "Usage Instructions and Precautions"
+  },
+  "import": {
+    "backupFile": "Backup file:",
+    "backupRecommendation": "Recommend exporting current database as backup before proceeding.",
+    "button": "Import Database",
+    "cancel": "Cancel",
+    "cleanFirstDescription": "Delete all existing data before importing to ensure database matches backup exactly. If unchecked, will attempt to merge data but may fail due to primary key conflicts.",
+    "cleanFirstLabel": "Clear existing data (overwrite mode)",
+    "confirm": "Confirm Import",
+    "confirmMerge": "You selected 'Merge Mode', which will attempt to import backup while keeping existing data.",
+    "confirmOverwrite": "You selected 'Overwrite Mode', which will delete all existing data before importing backup.",
+    "confirmTitle": "Confirm Database Import",
+    "descriptionFull": "Restore database from backup file. Supports PostgreSQL custom format (.dump) backup files.",
+    "error": "Failed to import database",
+    "errorUnknown": "Unknown error",
+    "failedMessage": "Data import failed",
+    "fileError": "Please select .dump format backup file",
+    "fileSelected": "Selected: {name} ({size} MB)",
+    "importing": "Importing...",
+    "noFileSelected": "Please select backup file first",
+    "parseError": "Failed to parse response data",
+    "progressTitle": "Import Progress",
+    "selectFileLabel": "Select Backup File",
+    "streamError": "Cannot read response stream",
+    "streamInterrupted": "Data stream unexpectedly interrupted",
+    "streamInterruptedDesc": "Import progress did not complete normally. Please check the logs and verify data integrity. Re-import if needed.",
+    "successCleanModeDesc": "All data has been successfully restored. Refresh your browser if the page displays incorrectly.",
+    "successMergeModeDesc": "Data has been successfully imported and merged. Refresh your browser if the page displays incorrectly.",
+    "successMessage": "Data import completed!",
+    "successWithWarnings": "Data import completed (with warnings)",
+    "successWithWarningsDesc": "Data has been successfully imported, but some existing objects were skipped. Refresh your browser or restart the application if the page displays incorrectly.",
+    "warningMerge": "Note: Import may fail if primary key conflicts exist.",
+    "warningOverwrite": "Warning: This action is irreversible, all current data will be permanently deleted!"
+  },
+  "section": {
+    "cleanup": {
+      "description": "Clean up historical log data to free up database storage. Note: Statistics data will be retained, but log details will be permanently deleted.",
+      "title": "Log Cleanup"
+    },
+    "export": {
+      "description": "Export complete database backup file (.dump format) for data migration or recovery.",
+      "title": "Data Export"
+    },
+    "import": {
+      "description": "Restore database from backup file. Supports PostgreSQL custom format (.dump) backup files.",
+      "title": "Data Import"
+    },
+    "status": {
+      "description": "View current database connection status and basic information.",
+      "title": "Database Status"
+    }
+  },
+  "status": {
+    "connected": "Database connected",
+    "error": "Failed to get database status",
+    "loading": "Loading...",
+    "retry": "Retry",
+    "tables": "{count} tables",
+    "unavailable": "Database unavailable"
+  },
+  "title": "Data Management"
+}

@@ -1,0 +1,17 @@
+{
+  "addFailed": "プロバイダーの追加に失敗しました",
+  "addSuccess": "追加に成功しました",
+  "deleteFailed": "プロバイダーの削除に失敗しました",
+  "deleteSuccess": "削除に成功しました",
+  "editFailed": "プロバイダーの更新に失敗しました",
+  "editSuccess": "更新に成功しました",
+  "loadFailed": "通知設定の読み込みに失敗しました",
+  "saveFailed": "保存に失敗しました",
+  "saveFailed_error": "設定の保存に失敗しました",
+  "saveSuccess": "保存に成功しました",
+  "syncFailed": "同期に失敗しました",
+  "syncSuccess": "同期に成功しました",
+  "testFailed": "テストに失敗しました",
+  "testFailedRetry": "テストに失敗しました。再試行してください",
+  "unknownError": "操作中に例外が発生しました"
+}

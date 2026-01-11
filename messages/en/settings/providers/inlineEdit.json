@@ -1,0 +1,12 @@
+{
+  "cancel": "Cancel",
+  "costMultiplierInvalid": "Please enter a non-negative number",
+  "costMultiplierLabel": "Cost Multiplier",
+  "priorityInvalid": "Please enter an integer >= 0",
+  "priorityLabel": "Priority",
+  "save": "Save",
+  "saveFailed": "Save failed",
+  "saveSuccess": "Saved successfully",
+  "weightInvalid": "Please enter an integer between 1 and 100",
+  "weightLabel": "Weight"
+}

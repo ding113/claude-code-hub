@@ -1,0 +1,191 @@
+{
+  "title": "Pricing",
+  "description": "Manage platform basic configuration and model pricing",
+  "section": {
+    "title": "Model Pricing",
+    "description": "Manage AI model pricing configuration"
+  },
+  "searchPlaceholder": "Search model name...",
+  "filters": {
+    "all": "All",
+    "local": "Local",
+    "anthropic": "Anthropic",
+    "openai": "OpenAI",
+    "vertex": "Vertex"
+  },
+  "badges": {
+    "local": "Local"
+  },
+  "capabilities": {
+    "assistantPrefill": "Assistant prefill",
+    "computerUse": "Computer use",
+    "functionCalling": "Function calling",
+    "pdfInput": "PDF input",
+    "promptCaching": "Prompt caching",
+    "reasoning": "Reasoning",
+    "responseSchema": "Response schema",
+    "toolChoice": "Tool choice",
+    "vision": "Vision",
+    "statusSupported": "Supported",
+    "statusUnsupported": "Not supported",
+    "tooltip": "{label}: {status}"
+  },
+  "sync": {
+    "button": "Sync Cloud Price Table",
+    "syncing": "Syncing...",
+    "checking": "Checking conflicts...",
+    "successWithChanges": "Price table updated: {added} added, {updated} updated, {unchanged} unchanged",
+    "successNoChanges": "Price table is up to date, no updates needed",
+    "failed": "Sync failed",
+    "failedError": "Sync failed: {error}",
+    "failedNoResult": "Price table updated but no result returned",
+    "noModels": "No model prices found",
+    "partialFailure": "Partial update succeeded, but {failed} models failed",
+    "failedModels": "Failed models: {models}",
+    "skippedConflicts": "Skipped {count} manual models"
+  },
+  "conflict": {
+    "title": "Select Items to Overwrite",
+    "description": "The following models have manual prices. Check the ones to overwrite with LiteLLM prices, unchecked ones will be kept unchanged",
+    "searchPlaceholder": "Search models...",
+    "table": {
+      "modelName": "Model",
+      "manualPrice": "Manual Price",
+      "litellmPrice": "LiteLLM Price",
+      "action": "Action"
+    },
+    "viewDiff": "View Diff",
+    "diffTitle": "Price Difference",
+    "diff": {
+      "field": "Field",
+      "manual": "Manual",
+      "litellm": "LiteLLM",
+      "inputPrice": "Input Price",
+      "outputPrice": "Output Price",
+      "imagePrice": "Image Price",
+      "provider": "Provider",
+      "mode": "Type"
+    },
+    "pagination": {
+      "showing": "Showing {from}-{to} of {total}"
+    },
+    "selectedCount": "Selected {count}/{total} models",
+    "noMatch": "No matching models found",
+    "noConflicts": "No conflicts",
+    "applyOverwrite": "Apply Overwrite",
+    "applying": "Applying..."
+  },
+  "table": {
+    "modelName": "Model Name",
+    "provider": "Provider",
+    "capabilities": "Capabilities",
+    "price": "Price",
+    "inputPrice": "Input Price ($/M)",
+    "outputPrice": "Output Price ($/M)",
+    "priceInput": "In",
+    "priceOutput": "Out",
+    "pricePerRequest": "Req",
+    "cacheReadPrice": "Cache Read ($/M)",
+    "cacheCreationPrice": "Cache Create ($/M)",
+    "cache5m": "5m",
+    "cache1h": "1h+",
+    "copyModelId": "Copy model ID",
+    "updatedAt": "Updated At",
+    "actions": "Actions",
+    "typeChat": "Chat",
+    "typeImage": "Image",
+    "typeCompletion": "Completion",
+    "typeUnknown": "Unknown",
+    "loading": "Loading...",
+    "noMatch": "No matching models found",
+    "noDataTitle": "No price data available",
+    "noDataHint": "System has built-in price table. Use buttons above to sync or update."
+  },
+  "pagination": {
+    "showing": "Showing {from}-{to} of {total}",
+    "previous": "Previous",
+    "next": "Next",
+    "perPageLabel": "Per page",
+    "perPage": "{size} per page"
+  },
+  "stats": {
+    "totalModels": "{count} models total",
+    "searchResults": "{count} search results",
+    "lastUpdated": "Last updated: {time}"
+  },
+  "dialog": {
+    "title": "Update Model Price Table",
+    "description": "Select and upload JSON or TOML file containing model pricing data",
+    "selectFile": "Click to select JSON/TOML file or drag and drop here",
+    "fileSizeLimit": "File size cannot exceed 10MB",
+    "fileSizeLimitSmall": "File size not exceeding 10MB",
+    "invalidFileType": "Please select a JSON or TOML file",
+    "fileTooLarge": "File size exceeds 10MB limit",
+    "upload": "Upload and Update",
+    "uploading": "Uploading...",
+    "updatePriceTable": "Update Price Table",
+    "updating": "Updating...",
+    "selectJson": "Select File",
+    "updateSuccess": "Price table updated successfully, {count} models updated",
+    "updateFailed": "Update failed",
+    "systemHasBuiltIn": "System has built-in price table",
+    "manualDownload": "You can also manually download",
+    "latestPriceTable": "cloud price table",
+    "andUploadViaButton": ", and upload via button above",
+    "cloudModelCountLoading": "Loading cloud model count...",
+    "cloudModelCountFailed": "Failed to load cloud model count",
+    "supportedModels": "Currently supports {count} models",
+    "results": {
+      "title": "Update Results",
+      "total": "Total: {total} models",
+      "success": "Success: {success}",
+      "failed": "Failed: {failed}",
+      "skipped": "Skipped: {skipped}",
+      "more": " (+{count})",
+      "details": "Details",
+      "viewDetails": "View detailed logs"
+    }
+  },
+  "addModel": "Add Model",
+  "editModel": "Edit Model",
+  "deleteModel": "Delete Model",
+  "addModelDescription": "Manually add a new model price configuration",
+  "editModelDescription": "Edit the model price configuration",
+  "deleteConfirm": "Are you sure you want to delete model {name}? This action cannot be undone.",
+  "form": {
+    "modelName": "Model ID",
+    "modelNamePlaceholder": "e.g., gpt-5.2-codex",
+    "modelNameRequired": "Model ID is required",
+    "displayName": "Display Name (Optional)",
+    "displayNamePlaceholder": "e.g., GPT-5.2 Codex",
+    "type": "Type",
+    "provider": "Provider",
+    "providerPlaceholder": "e.g., openai",
+    "requestPrice": "Per-call Price ($/request)",
+    "inputPrice": "Input Price ($/M tokens)",
+    "outputPrice": "Output Price ($/M tokens)",
+    "outputPriceImage": "Output Price ($/image)",
+    "cacheReadPrice": "Cache Read Price ($/M tokens)",
+    "cacheCreationPrice5m": "Cache Creation Price (5m, $/M tokens)",
+    "cacheCreationPrice1h": "Cache Creation Price (1h+, $/M tokens)"
+  },
+  "drawer": {
+    "prefillLabel": "Search existing models to prefill",
+    "prefillEmpty": "No matching models found",
+    "prefillFailed": "Search failed",
+    "promptCachingHint": "Enable if the model supports prompt caching",
+    "cachePricingTitle": "Cache Pricing"
+  },
+  "actions": {
+    "edit": "Edit",
+    "more": "More actions",
+    "delete": "Delete"
+  },
+  "toast": {
+    "createSuccess": "Model added",
+    "updateSuccess": "Model updated",
+    "deleteSuccess": "Model deleted",
+    "saveFailed": "Failed to save",
+    "deleteFailed": "Failed to delete"
+  }
+}

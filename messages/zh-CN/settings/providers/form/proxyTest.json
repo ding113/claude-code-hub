@@ -1,0 +1,21 @@
+{
+  "fillUrlFirst": "请先填写供应商 URL",
+  "testFailed": "测试失败",
+  "testFailedRetry": "测试失败，请重试",
+  "noResult": "测试成功但未返回结果",
+  "connectionSuccess": "连接成功",
+  "connectionFailed": "连接失败",
+  "viaProxy": "（通过代理）",
+  "viaDirect": "（直连）",
+  "responseTime": "响应时间:",
+  "statusCode": "状态码:",
+  "connectionMethod": "连接方式:",
+  "proxy": "代理",
+  "direct": "直连",
+  "errorType": "错误类型:",
+  "testing": "测试中...",
+  "testConnection": "测试连接",
+  "timeoutError": "连接超时（5秒）。请检查：\n1. 代理服务器是否可访问\n2. 代理地址和端口是否正确\n3. 代理认证信息是否正确",
+  "proxyError": "代理错误:",
+  "networkError": "网络错误:"
+}

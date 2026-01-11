@@ -1,0 +1,191 @@
+{
+  "title": "Прайс-лист",
+  "description": "Управление конфигурацией платформы и ценами моделей",
+  "section": {
+    "title": "Цены моделей",
+    "description": "Управление ценами AI моделей"
+  },
+  "searchPlaceholder": "Поиск по названию модели...",
+  "filters": {
+    "all": "Все",
+    "local": "Локальные",
+    "anthropic": "Anthropic",
+    "openai": "OpenAI",
+    "vertex": "Vertex"
+  },
+  "badges": {
+    "local": "Локальная"
+  },
+  "capabilities": {
+    "assistantPrefill": "Предзаполнение ассистента",
+    "computerUse": "Использование компьютера",
+    "functionCalling": "Вызов функций",
+    "pdfInput": "Ввод PDF",
+    "promptCaching": "Кэширование промпта",
+    "reasoning": "Рассуждение",
+    "responseSchema": "Схема ответа",
+    "toolChoice": "Выбор инструментов",
+    "vision": "Зрение",
+    "statusSupported": "Поддерживается",
+    "statusUnsupported": "Не поддерживается",
+    "tooltip": "{label}: {status}"
+  },
+  "sync": {
+    "button": "Синхронизировать облачный прайс-лист",
+    "syncing": "Синхронизация...",
+    "checking": "Проверка конфликтов...",
+    "successWithChanges": "Обновление прайс-листа: добавлено {added}, обновлено {updated}, без изменений {unchanged}",
+    "successNoChanges": "Прайс-лист актуален, обновление не требуется",
+    "failed": "Ошибка синхронизации",
+    "failedError": "Ошибка синхронизации: {error}",
+    "failedNoResult": "Прайс-лист обновлен но результат не возвращен",
+    "noModels": "Цены моделей не найдены",
+    "partialFailure": "Частичное обновление выполнено, но {failed} моделей не удалось обновить",
+    "failedModels": "Не удалось обновить модели: {models}",
+    "skippedConflicts": "Пропущено {count} ручных моделей"
+  },
+  "conflict": {
+    "title": "Выберите элементы для перезаписи",
+    "description": "Следующие модели имеют ручные цены. Отмеченные будут перезаписаны ценами LiteLLM, неотмеченные останутся без изменений",
+    "searchPlaceholder": "Поиск моделей...",
+    "table": {
+      "modelName": "Модель",
+      "manualPrice": "Ручная цена",
+      "litellmPrice": "Цена LiteLLM",
+      "action": "Действие"
+    },
+    "viewDiff": "Показать различия",
+    "diffTitle": "Различия цен",
+    "diff": {
+      "field": "Поле",
+      "manual": "Ручное",
+      "litellm": "LiteLLM",
+      "inputPrice": "Цена ввода",
+      "outputPrice": "Цена вывода",
+      "imagePrice": "Цена изображения",
+      "provider": "Поставщик",
+      "mode": "Тип"
+    },
+    "pagination": {
+      "showing": "Показано {from}-{to} из {total}"
+    },
+    "selectedCount": "Выбрано {count}/{total} моделей",
+    "noMatch": "Модели не найдены",
+    "noConflicts": "Конфликтов нет",
+    "applyOverwrite": "Применить перезапись",
+    "applying": "Применение..."
+  },
+  "table": {
+    "modelName": "Название модели",
+    "provider": "Поставщик",
+    "capabilities": "Возможности",
+    "price": "Цена",
+    "inputPrice": "Цена ввода ($/M)",
+    "outputPrice": "Цена вывода ($/M)",
+    "priceInput": "Ввод",
+    "priceOutput": "Вывод",
+    "pricePerRequest": "Запрос",
+    "cacheReadPrice": "Чтение кэша ($/M)",
+    "cacheCreationPrice": "Создание кэша ($/M)",
+    "cache5m": "5m",
+    "cache1h": "1h+",
+    "copyModelId": "Скопировать ID модели",
+    "updatedAt": "Обновлено",
+    "actions": "Действия",
+    "typeChat": "Чат",
+    "typeImage": "Генерация изображений",
+    "typeCompletion": "Дополнение",
+    "typeUnknown": "Неизвестно",
+    "loading": "Загрузка...",
+    "noMatch": "Соответствующие модели не найдены",
+    "noDataTitle": "Данные о ценах отсутствуют",
+    "noDataHint": "Система имеет встроенный прайс-лист. Используйте кнопки выше для синхронизации."
+  },
+  "pagination": {
+    "showing": "Показано {from}-{to} из {total}",
+    "previous": "Назад",
+    "next": "Вперёд",
+    "perPageLabel": "На странице",
+    "perPage": "{size} на странице"
+  },
+  "stats": {
+    "totalModels": "Всего моделей: {count}",
+    "searchResults": "Результатов поиска: {count}",
+    "lastUpdated": "Последнее обновление: {time}"
+  },
+  "dialog": {
+    "title": "Обновить прайс-лист",
+    "description": "Выберите и загрузите JSON или TOML файл с данными о ценах моделей",
+    "selectFile": "Нажмите для выбора JSON/TOML или перетащите сюда",
+    "fileSizeLimit": "Размер файла не может превышать 10MB",
+    "fileSizeLimitSmall": "Размер файла не превышает 10MB",
+    "invalidFileType": "Пожалуйста, выберите файл JSON или TOML",
+    "fileTooLarge": "Размер файла превышает лимит 10MB",
+    "upload": "Загрузить и обновить",
+    "uploading": "Загрузка...",
+    "updatePriceTable": "Обновить прайс-лист",
+    "updating": "Обновление...",
+    "selectJson": "Выбрать файл",
+    "updateSuccess": "Прайс-лист успешно обновлён, {count} моделей обновлено",
+    "updateFailed": "Ошибка обновления",
+    "systemHasBuiltIn": "Система имеет встроенный прайс-лист",
+    "manualDownload": "Вы также можете скачать вручную",
+    "latestPriceTable": "облачный прайс-лист",
+    "andUploadViaButton": ", и загрузить через кнопку выше",
+    "cloudModelCountLoading": "Загрузка количества моделей из облака...",
+    "cloudModelCountFailed": "Не удалось загрузить количество моделей из облака",
+    "supportedModels": "Поддерживается {count} моделей",
+    "results": {
+      "title": "Результаты обновления",
+      "total": "Всего: {total} моделей",
+      "success": "Успешно: {success}",
+      "failed": "Ошибок: {failed}",
+      "skipped": "Пропущено: {skipped}",
+      "more": " (+{count})",
+      "details": "Подробности",
+      "viewDetails": "Просмотреть подробный журнал"
+    }
+  },
+  "addModel": "Добавить модель",
+  "editModel": "Редактировать модель",
+  "deleteModel": "Удалить модель",
+  "addModelDescription": "Вручную добавить новую цену модели",
+  "editModelDescription": "Редактировать цену модели",
+  "deleteConfirm": "Удалить модель {name}? Это действие необратимо.",
+  "form": {
+    "modelName": "ID модели",
+    "modelNamePlaceholder": "например: gpt-5.2-codex",
+    "modelNameRequired": "ID модели обязателен",
+    "displayName": "Отображаемое имя (необязательно)",
+    "displayNamePlaceholder": "например: GPT-5.2 Codex",
+    "type": "Тип",
+    "provider": "Поставщик",
+    "providerPlaceholder": "например: openai",
+    "requestPrice": "Цена за вызов ($/request)",
+    "inputPrice": "Цена ввода ($/M токенов)",
+    "outputPrice": "Цена вывода ($/M токенов)",
+    "outputPriceImage": "Цена вывода ($/изображение)",
+    "cacheReadPrice": "Цена чтения кэша ($/M токенов)",
+    "cacheCreationPrice5m": "Цена создания кэша (5m, $/M токенов)",
+    "cacheCreationPrice1h": "Цена создания кэша (1h+, $/M токенов)"
+  },
+  "drawer": {
+    "prefillLabel": "Поиск существующих моделей для автозаполнения",
+    "prefillEmpty": "Модели не найдены",
+    "prefillFailed": "Ошибка поиска",
+    "promptCachingHint": "Включайте только если модель поддерживает кэширование, и задайте цены кэша ниже",
+    "cachePricingTitle": "Цены кэша"
+  },
+  "actions": {
+    "edit": "Редактировать",
+    "more": "Больше действий",
+    "delete": "Удалить"
+  },
+  "toast": {
+    "createSuccess": "Модель добавлена",
+    "updateSuccess": "Модель обновлена",
+    "deleteSuccess": "Модель удалена",
+    "saveFailed": "Ошибка сохранения",
+    "deleteFailed": "Ошибка удаления"
+  }
+}

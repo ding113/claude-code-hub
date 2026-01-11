@@ -1,0 +1,13 @@
+{
+  "cancel": "Cancel",
+  "confirm": "Confirm Save",
+  "confirmQuestion": "Are you sure you want to save this configuration?",
+  "descriptionDisabledAction": "disabling the circuit breaker",
+  "descriptionDisabledMiddle": ", which means ",
+  "descriptionDisabledPrefix": "You are setting the circuit breaker failure threshold to ",
+  "descriptionDisabledSuffix": ". The provider will not be circuit-broken due to consecutive failures.",
+  "descriptionDisabledValue": "0",
+  "descriptionHighValuePrefix": "You are setting the circuit breaker failure threshold to ",
+  "descriptionHighValueSuffix": ", which is a high value and may cause the provider to be circuit-broken only after many failures.",
+  "title": "Confirm Special Configuration"
+}

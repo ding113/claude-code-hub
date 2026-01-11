@@ -1,0 +1,157 @@
+{
+  "apiFormat": "供應商類型",
+  "apiFormatDesc": "預設與路由設定同步，除非手動修改",
+  "chunksCount": "已接收 {count} 個區塊（{format}）",
+  "chunksReceived": "已接收區塊",
+  "close": "關閉",
+  "copyFailed": "複製失敗",
+  "copyFormat": {
+    "errorDetails": "錯誤詳情",
+    "message": "訊息",
+    "testResult": "測試結果"
+  },
+  "copyResult": "複製結果",
+  "copySuccess": "已複製到剪貼簿",
+  "customConfig": "自訂",
+  "customPayloadDesc": "輸入自訂 JSON payload，將覆蓋預設請求主體",
+  "customPayloadPlaceholder": "{\"model\": \"...\", \"messages\": [...]}",
+  "disclaimer": {
+    "confirmConfig": "請確認供應商 URL、API 金鑰及模型設定正確",
+    "realRequest": "測試將向供應商發送真實請求，可能消耗少量額度",
+    "resultReference": "【重要】因各家供應商情況不同，測試結果僅供參考，不代表實際呼叫效果",
+    "title": "注意事項"
+  },
+  "error": "錯誤訊息",
+  "failed": "失敗",
+  "fillKeyFirst": "請先填寫 API 金鑰",
+  "fillUrlFirst": "請先填寫供應商 URL",
+  "formatAnthropicMessages": "Claude（Anthropic Messages API）",
+  "formatOpenAIChat": "OpenAI Compatible",
+  "formatOpenAIResponses": "Codex（Response API）",
+  "geminiAuthFallback": {
+    "desc": "實際代理轉發僅使用 Header 認證，可能導致請求失敗",
+    "warning": "Header 認證失敗，使用了 URL 參數認證"
+  },
+  "invalidUrl": "供應商 URL 無效，僅支援 http/https",
+  "model": "Model",
+  "noResult": "測試成功但未返回結果",
+  "presetConfig": "預置配置",
+  "presetDesc": "預置範本包含真實 CLI 請求特徵，用於通過中轉服務驗證",
+  "requestConfig": "請求配置",
+  "response": "回應內容",
+  "responseModel": "回應模型",
+  "responseTime": "回應時間",
+  "resultCard": {
+    "copyText": {
+      "contentCheck": "內容驗證",
+      "error": "錯誤",
+      "httpCheck": "HTTP 檢查",
+      "httpStatus": "HTTP 狀態",
+      "inputOutput": "輸入 {input} / 輸出 {output} tokens",
+      "latency": "延遲",
+      "latencyCheck": "延遲檢查",
+      "message": "訊息",
+      "model": "Model",
+      "response": "回應",
+      "status": "狀態",
+      "testedAt": "測試時間",
+      "usage": "使用量",
+      "validationDetails": "驗證詳情"
+    },
+    "dialogTitle": "供應商測試詳情",
+    "errorDetails": {
+      "title": "錯誤詳情",
+      "type": "錯誤類型"
+    },
+    "judgment": "判定結果",
+    "labels": {
+      "content": "內容",
+      "error": "錯誤",
+      "firstByte": "首位元組",
+      "http": "HTTP",
+      "latency": "延遲",
+      "model": "Model",
+      "responsePreview": "回應預覽",
+      "totalLatency": "總延遲"
+    },
+    "rawResponse": {
+      "hint": "此處顯示原始回應內容，您可以在此檢查關鍵字是否存在於回應中",
+      "title": "完整回應內容"
+    },
+    "status": {
+      "green": "可用中",
+      "red": "不可用中",
+      "yellow": "波動"
+    },
+    "streamInfo": {
+      "chunksCount": "資料區塊數",
+      "isStreaming": "串流回應",
+      "no": "不是",
+      "title": "串流回應資訊",
+      "yes": "是的"
+    },
+    "timing": {
+      "firstByte": "首位元組",
+      "testedAt": "測試時間",
+      "title": "時間資訊",
+      "totalLatency": "總延遲"
+    },
+    "tokenUsage": {
+      "cacheCreation": "快取建立",
+      "cacheRead": "快取讀取",
+      "input": "輸入",
+      "output": "輸出",
+      "title": "Token 使用量"
+    },
+    "validation": {
+      "content": {
+        "failed": "未找到目標",
+        "passed": "包含目標字串",
+        "target": "目標",
+        "title": "Tier 3: 內容驗證"
+      },
+      "failed": "失敗",
+      "http": {
+        "failed": "4xx/5xx 失敗",
+        "passed": "2xx/3xx 通過",
+        "statusCode": "狀態碼",
+        "title": "Tier 1: HTTP 狀態"
+      },
+      "latency": {
+        "actual": "實際延遲",
+        "failed": "超過閾值",
+        "passed": "在閾值內",
+        "title": "Tier 2: 延遲閾值"
+      },
+      "passed": "通過",
+      "timeout": "逾時",
+      "title": "三層驗證詳情"
+    }
+  },
+  "selectApiFormat": "選擇要測試的供應商類型",
+  "selectPreset": "選擇預置範本",
+  "streamFormat": "串流格式",
+  "streamInfo": "串流響應資訊",
+  "streamResponse": "串流響應",
+  "success": "成功！",
+  "successContains": "成功檢測詞",
+  "successContainsDesc": "回應需包含此內容才算測試成功",
+  "successContainsPlaceholder": "pong",
+  "testApi": "供應商模型測試",
+  "testFailed": "測試失敗",
+  "testFailedRetry": "測試失敗，請重試",
+  "testModel": "測試模型",
+  "testModelDesc": "可手動輸入，留空則使用預設模型",
+  "testSuccess": "模型測試成功",
+  "testing": "測試中...",
+  "timeout": {
+    "desc": "測試請求的最大等待時間（5-120 秒）",
+    "geminiHint": "，Gemini Thinking 模型建議 60 秒以上",
+    "label": "逾時時間（秒）"
+  },
+  "truncatedBrief": "顯示前 {length} 個字元，點擊「查看詳情」以查看更多",
+  "truncatedPreview": "顯示前 {length} 個字元，複製可查看完整內容",
+  "unknown": "不明",
+  "usage": "Token 使用量",
+  "viewDetails": "檢視詳情"
+}

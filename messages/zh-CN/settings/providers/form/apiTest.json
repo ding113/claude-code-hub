@@ -1,0 +1,157 @@
+{
+  "fillUrlFirst": "请先填写供应商 URL",
+  "invalidUrl": "供应商 URL 无效，仅支持 http/https",
+  "fillKeyFirst": "请先填写 API 密钥",
+  "testFailed": "测试失败",
+  "testFailedRetry": "测试失败，请重试",
+  "noResult": "测试成功但未返回结果",
+  "testSuccess": "模型测试成功",
+  "testApi": "供应商模型测试",
+  "testing": "测试中...",
+  "apiFormat": "供应商类型",
+  "selectApiFormat": "选择要测试的供应商类型",
+  "apiFormatDesc": "默认同步路由配置中的供应商类型，除非手动修改",
+  "formatAnthropicMessages": "Claude (Anthropic Messages API)",
+  "formatOpenAIChat": "OpenAI Compatible",
+  "formatOpenAIResponses": "Codex (Response API)",
+  "testModel": "测试模型",
+  "testModelDesc": "可手动输入，不填写则使用默认模型",
+  "requestConfig": "请求配置",
+  "presetConfig": "预置配置",
+  "customConfig": "自定义",
+  "selectPreset": "选择预置模板",
+  "presetDesc": "预置模板包含真实 CLI 请求特征，用于通过中转服务验证",
+  "customPayloadPlaceholder": "{\"model\": \"...\", \"messages\": [...]}",
+  "customPayloadDesc": "输入自定义 JSON payload，将覆盖默认请求体",
+  "successContains": "成功检测词",
+  "successContainsPlaceholder": "pong",
+  "successContainsDesc": "响应需包含此内容才算测试成功",
+  "model": "模型",
+  "responseModel": "响应模型",
+  "responseTime": "响应时间",
+  "usage": "Token 用量",
+  "response": "响应内容",
+  "error": "错误信息",
+  "unknown": "未知",
+  "viewDetails": "查看详情",
+  "copySuccess": "已复制到剪贴板",
+  "copyFailed": "复制失败",
+  "copyResult": "复制结果",
+  "close": "关闭",
+  "success": "成功",
+  "failed": "失败",
+  "streamInfo": "流式响应信息",
+  "chunksReceived": "接收到的数据块",
+  "streamFormat": "流式格式",
+  "streamResponse": "流式响应",
+  "chunksCount": "接收 {count} 个数据块 ({format})",
+  "truncatedPreview": "显示前 {length} 字符，完整内容请复制查看",
+  "truncatedBrief": "显示前 {length} 字符，完整内容请点击「查看详情」",
+  "timeout": {
+    "label": "超时时间（秒）",
+    "desc": "测试请求的最大等待时间（5-120 秒）",
+    "geminiHint": "，Gemini Thinking 模型建议 60 秒以上"
+  },
+  "geminiAuthFallback": {
+    "warning": "Header 认证失败，使用了 URL 参数认证",
+    "desc": "实际代理转发仅使用 Header 认证，可能导致请求失败"
+  },
+  "copyFormat": {
+    "testResult": "测试结果",
+    "message": "消息",
+    "errorDetails": "错误详情"
+  },
+  "disclaimer": {
+    "title": "注意",
+    "resultReference": "【重要】因各家供应商情况不同，测试结果仅供参考，不代表实际调用效果",
+    "realRequest": "测试将向供应商发送真实请求，可能消耗少量额度",
+    "confirmConfig": "请确认供应商 URL、API 密钥及模型配置正确"
+  },
+  "resultCard": {
+    "status": {
+      "green": "可用",
+      "yellow": "波动",
+      "red": "不可用"
+    },
+    "dialogTitle": "供应商测试详情",
+    "validation": {
+      "title": "三层验证详情",
+      "http": {
+        "title": "Tier 1: HTTP 状态",
+        "statusCode": "状态码",
+        "passed": "2xx/3xx 成功",
+        "failed": "4xx/5xx 失败"
+      },
+      "latency": {
+        "title": "Tier 2: 延迟阈值",
+        "actual": "实际延迟",
+        "passed": "在阈值内",
+        "failed": "超过阈值"
+      },
+      "content": {
+        "title": "Tier 3: 内容验证",
+        "target": "目标",
+        "passed": "包含目标字符串",
+        "failed": "未找到目标"
+      },
+      "passed": "通过",
+      "failed": "失败",
+      "timeout": "超时"
+    },
+    "labels": {
+      "http": "HTTP",
+      "latency": "延迟",
+      "content": "内容",
+      "model": "模型",
+      "firstByte": "首字节",
+      "totalLatency": "总延迟",
+      "error": "错误",
+      "responsePreview": "响应预览"
+    },
+    "timing": {
+      "title": "时间信息",
+      "totalLatency": "总延迟",
+      "firstByte": "首字节",
+      "testedAt": "测试时间"
+    },
+    "tokenUsage": {
+      "title": "Token 用量",
+      "input": "输入",
+      "output": "输出",
+      "cacheCreation": "缓存创建",
+      "cacheRead": "缓存读取"
+    },
+    "streamInfo": {
+      "title": "流式响应信息",
+      "isStreaming": "流式响应",
+      "chunksCount": "数据块数",
+      "yes": "是",
+      "no": "否"
+    },
+    "rawResponse": {
+      "title": "完整响应体",
+      "hint": "此处显示原始响应内容，您可以在此检查关键词是否存在于响应中"
+    },
+    "errorDetails": {
+      "title": "错误详情",
+      "type": "错误类型"
+    },
+    "copyText": {
+      "status": "状态",
+      "message": "消息",
+      "latency": "延迟",
+      "httpStatus": "HTTP 状态",
+      "model": "模型",
+      "usage": "用量",
+      "inputOutput": "输入 {input} / 输出 {output} tokens",
+      "response": "响应",
+      "error": "错误",
+      "testedAt": "测试时间",
+      "validationDetails": "验证详情",
+      "httpCheck": "HTTP 检查",
+      "latencyCheck": "延迟检查",
+      "contentCheck": "内容验证"
+    },
+    "judgment": "判定"
+  }
+}

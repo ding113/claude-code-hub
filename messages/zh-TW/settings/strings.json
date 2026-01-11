@@ -1,0 +1,22 @@
+{
+  "mcpPassthroughConfig": "MCP 透傳配置",
+  "mcpPassthroughConfigCustom": "自定義 (預留)",
+  "mcpPassthroughConfigGlm": "智譜 GLM",
+  "mcpPassthroughConfigMinimax": "Minimax",
+  "mcpPassthroughConfigNone": "不啟用",
+  "mcpPassthroughCustomDesc": "透傳到自定義 MCP 服務（預留，暫未實現）",
+  "mcpPassthroughCustomLabel": "自定義",
+  "mcpPassthroughDesc": "啟用後，將 MCP 工具調用透傳到指定的 AI 服務商（如 minimax 的圖片識別、聯網搜索）",
+  "mcpPassthroughGlmDesc": "透傳到智譜 GLM MCP 服務（支持圖片分析、視頻分析等工具）",
+  "mcpPassthroughGlmLabel": "智譜 GLM",
+  "mcpPassthroughHint": "提示: MCP 透傳功能允許 Claude Code 客戶端使用第三方 AI 服務商提供的工具能力（如圖片識別、聯網搜索）",
+  "mcpPassthroughMinimaxDesc": "透傳到 minimax MCP 服務（支持圖片識別、聯網搜索等工具）",
+  "mcpPassthroughMinimaxLabel": "Minimax",
+  "mcpPassthroughNoneDesc": "不啟用 MCP 透傳功能（默認）",
+  "mcpPassthroughNoneLabel": "不啟用",
+  "mcpPassthroughSelect": "透傳類型",
+  "mcpPassthroughUrlAuto": "自動提取: {url}",
+  "mcpPassthroughUrlDesc": "MCP 服務的基礎 URL。留空則自動從提供商 URL 提取基礎域名",
+  "mcpPassthroughUrlLabel": "MCP 透傳 URL",
+  "mcpPassthroughUrlPlaceholder": "https://api.minimaxi.com"
+}

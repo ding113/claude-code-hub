@@ -1,0 +1,41 @@
+{
+  "entries": [
+    {
+      "key": "providers.form.codexInstructions",
+      "reason": "zh-cn==zh-tw title term"
+    },
+    {
+      "key": "providers.form.codexInstructionsKeep",
+      "reason": "zh-cn==zh-tw common ui term"
+    },
+    {
+      "key": "providers.form.codexStrategyConfig",
+      "reason": "zh-cn==zh-tw title term"
+    },
+    {
+      "key": "providers.form.costMultiplierLabel",
+      "reason": "zh-cn==zh-tw common ui term"
+    },
+    {
+      "key": "providers.form.modelWhitelistClear",
+      "reason": "zh-cn==zh-tw common ui term"
+    },
+    {
+      "key": "providers.form.modelWhitelistNotFound",
+      "reason": "zh-cn==zh-tw common ui term"
+    },
+    {
+      "key": "providers.form.proxy",
+      "reason": "zh-cn==zh-tw common ui term"
+    },
+    {
+      "key": "providers.form.proxyTestResultConnectionMethodProxy",
+      "reason": "zh-cn==zh-tw common ui term"
+    },
+    {
+      "key": "providers.form.sortByCost",
+      "reason": "zh-cn==zh-tw common ui term"
+    }
+  ],
+  "glossary": []
+}

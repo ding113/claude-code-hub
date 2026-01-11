@@ -1,0 +1,8 @@
+{
+  "addFailed": "Failed to add provider",
+  "deleteFailed": "Failed to delete provider",
+  "groupTagTooLong": "Provider group tags are too long (max {max} chars total)",
+  "invalidUrl": "Please enter a valid API address",
+  "invalidWebsiteUrl": "Please enter a valid provider website URL",
+  "updateFailed": "Failed to update provider"
+}

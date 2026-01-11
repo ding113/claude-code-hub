@@ -1,6 +1,6 @@
 {
   "header": {
-    "title": "我的用量",
+    "title": "我的使用量",
     "welcome": "歡迎，{name}",
     "logout": "登出",
     "keyLabel": "金鑰",
@@ -12,7 +12,7 @@
   "quotaDialog": {
     "trigger": "查看配額",
     "title": "配額使用詳情",
-    "refresh": "刷新",
+    "refresh": "重新整理",
     "lastUpdated": "更新於 {time}",
     "loadFailed": "配額載入失敗",
     "close": "關閉"
@@ -26,7 +26,7 @@
     "concurrent": "並發會話",
     "keyLevel": "金鑰",
     "userLevel": "使用者",
-    "unlimited": "不限",
+    "unlimited": "不限制",
     "empty": "暫無額度資料"
   },
   "logs": {
@@ -35,18 +35,18 @@
     "filters": {
       "startDate": "開始日期",
       "endDate": "結束日期",
-      "model": "模型",
+      "model": "模型（Model）",
       "status": "狀態碼",
-      "allModels": "全部模型",
+      "allModels": "所有模型",
       "allStatus": "全部狀態",
       "apply": "套用",
-      "reset": "重置"
+      "reset": "重設"
     },
     "loadFailed": "載入日誌失敗",
     "table": {
       "time": "時間",
-      "model": "模型",
-      "tokens": "Tokens (入/出)",
+      "model": "模型（Model）",
+      "tokens": "Tokens（入/出）",
       "cacheWrite": "快取寫入",
       "cacheRead": "快取讀取",
       "cost": "花費",
@@ -57,14 +57,14 @@
     "prev": "上一頁",
     "next": "下一頁",
     "noLogs": "暫無日誌",
-    "unknownModel": "未知模型",
+    "unknownModel": "未知的模型",
     "billingModel": "計費：{model}"
   },
   "expiration": {
     "title": "到期時間",
     "keyExpires": "金鑰到期",
     "userExpires": "使用者到期",
-    "rpmLimit": "RPM限制",
+    "rpmLimit": "RPM 限制",
     "neverExpires": "永不過期",
     "expired": "已過期",
     "expiresIn": "剩餘 {time}",
@@ -88,27 +88,27 @@
     "output": "輸出",
     "write": "寫入",
     "read": "讀取",
-    "modelBreakdown": "按模型",
+    "modelBreakdown": "依模型",
     "keyStats": "金鑰",
     "userStats": "使用者",
     "noData": "所選時段無資料",
-    "unknownModel": "未知"
+    "unknownModel": "不明"
   },
   "accessRestrictions": {
     "title": "存取限制",
-    "models": "模型",
+    "models": "模型（Model）",
     "clients": "客戶端",
     "noRestrictions": "無限制"
   },
   "quotaCollapsible": {
     "title": "配額使用",
-    "daily": "日",
-    "monthly": "月",
+    "daily": "每日",
+    "monthly": "每月",
     "total": "總計"
   },
   "logsCollapsible": {
     "title": "使用記錄",
-    "lastStatus": "最近: {code} ({time})",
+    "lastStatus": "最近：{code}（{time}）",
     "successRate": "{rate}%",
     "noData": "無資料"
   }

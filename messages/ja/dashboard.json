@@ -81,7 +81,7 @@
       "apiKey": "API キー",
       "statusCode": "ステータスコード",
       "minRetryCount": "リトライ回数≥",
-      "minRetryCountPlaceholder": "回数を入力（0 で制限なし）",
+      "minRetryCountPlaceholder": "回数を入力(0 で制限なし)",
       "apply": "フィルターを適用",
       "reset": "リセット",
       "last7days": "7日",
@@ -165,7 +165,7 @@
       "skipped": {
         "title": "スキップ情報",
         "reason": "理由",
-        "warmup": "Warmup 即時応答（CCH）",
+        "warmup": "Warmup 即時応答(CCH)",
         "desc": "このリクエストは Warmup プローブとして識別され、CCH が上流プロバイダーへ転送せずに直接応答しました。課金/レート制限/統計には含まれません。"
       },
       "blocked": {
@@ -189,12 +189,12 @@
         "requestModel": "リクエストモデル",
         "actualModel": "実際の呼び出し",
         "billing": "課金説明",
-        "billingDescription": "システムはリクエストモデル（{original}）の価格を優先して課金します。価格表にそのモデルが存在しない場合、実際の呼び出しモデル（{current}）の価格を使用します。",
+        "billingDescription": "システムはリクエストモデル({original})の価格を優先して課金します。価格表にそのモデルが存在しない場合、実際の呼び出しモデル({current})の価格を使用します。",
         "billingModel": "課金モデル",
         "actualModelTooltip": "実際のモデル: {model}",
         "originalModelTooltip": "元のモデル: {model}",
-        "billingDescription_original": "現在の課金モード：リダイレクト前の元のモデル（{original}）で課金",
-        "billingDescription_redirected": "現在の課金モード：リダイレクト後の実際のモデル（{current}）で課金",
+        "billingDescription_original": "現在の課金モード：リダイレクト前の元のモデル({original})で課金",
+        "billingDescription_redirected": "現在の課金モード：リダイレクト後の実際のモデル({current})で課金",
         "billingOriginal": "課金: 元",
         "billingRedirected": "課金: 実際"
       },
@@ -232,8 +232,8 @@
       "targetModel": "ターゲットモデル"
     },
     "statusCodes": {
-      "not200": "非 200（エラー／ブロック）",
-      "200": "200 (成功)",
+      "not200": "非 200(エラー／ブロック)",
+      "200": "200(成功)",
       "400": "400 (不正なリクエスト)",
       "401": "401 (未認証)",
       "429": "429 (レート制限)",
@@ -270,7 +270,7 @@
       "providerRanking": "プロバイダーランキング",
       "providerCacheHitRateRanking": "プロバイダーキャッシュ命中率",
       "modelRanking": "モデルランキング",
-      "dailyRanking": "今日",
+      "dailyRanking": "本日",
       "weeklyRanking": "今週",
       "monthlyRanking": "今月",
       "allTimeRanking": "全期間"
@@ -295,13 +295,13 @@
       "provider": "プロバイダー",
       "model": "モデル",
       "cost": "コスト",
-      "cacheHitRequests": "キャッシュ対象リクエスト数（命中率計算対象）",
+      "cacheHitRequests": "キャッシュ対象リクエスト数(命中率計算対象)",
       "cacheHitRate": "キャッシュ命中率",
       "cacheReadTokens": "キャッシュ読取トークン数",
       "totalTokens": "総トークン数",
       "cacheCreationConsumedAmount": "キャッシュ作成消費額",
       "totalConsumedAmount": "総消費額",
-      "successRate": "成功率",
+      "successRate": "成功率(%)",
       "avgResponseTime": "平均応答時間",
       "avgTtfbMs": "平均TTFB",
       "avgTokensPerSecond": "平均トークン/秒"
@@ -377,7 +377,7 @@
       "totalInput": "総入力",
       "totalOutput": "総出力",
       "cacheCreation": "キャッシュ作成",
-      "cacheTtlMixed": "混合",
+      "cacheTtlMixed": "混在",
       "cacheRead": "キャッシュ読み取り",
       "total": "合計",
       "totalFee": "総費用",
@@ -474,8 +474,8 @@
       "unknownError": "不明なエラー",
       "prev": "前へ",
       "next": "次へ",
-      "orderAsc": "昇順に切り替え（古い順）",
-      "orderDesc": "降順に切り替え（新しい順）"
+      "orderAsc": "昇順に切り替え(古い順)",
+      "orderDesc": "降順に切り替え(新しい順)"
     },
     "back": "戻る",
     "loadingError": "読み込み失敗"
@@ -589,7 +589,7 @@
       "todayCalls": "今日の呼び出し",
       "todayCost": "今日の消費",
       "lastUsed": "最終使用",
-      "actions": "操作"
+      "actions": "アクション"
     },
     "detailsButton": "詳細情報",
     "modelStats": "モデル統計",
@@ -605,7 +605,7 @@
     "copyFailed": "コピーに失敗しました:",
     "timesUnit": "回",
     "provider": "プロバイダー",
-    "neverUsed": "未使用",
+    "neverUsed": "未使用(未利用)",
     "viewLogsTooltip": "詳細なログを表示",
     "logsButton": "ログ",
     "emptyState": {
@@ -631,7 +631,7 @@
       "renew90d": "90日間更新",
       "renew1y": "1年間更新",
       "renewCustom": "カスタム...",
-      "customPrompt": "新しい有効期限を入力してください（YYYY-MM-DD）。キャンセルするには空のままにしてください。",
+      "customPrompt": "新しい有効期限を入力してください(YYYY-MM-DD)。キャンセルするには空のままにしてください。",
       "invalidDate": "有効な日付を入力してください",
       "enable": "有効化",
       "disable": "無効化",
@@ -758,15 +758,15 @@
     "providerGroup": {
       "label": "プロバイダーグループ",
       "placeholder": "プロバイダーグループタグを入力し、Enterで追加",
-      "description": "このキーのプロバイダーグループ（既定: default）",
+      "description": "このキーのプロバイダーグループ(既定: default)",
       "defaultDescription": "default は groupTag 未設定のプロバイダーを含みます",
-      "descriptionWithUserGroup": "このキーのプロバイダーグループ（ユーザーのグループ: {group}、既定: default）"
+      "descriptionWithUserGroup": "このキーのプロバイダーグループ(ユーザーのグループ: {group}、既定: default)"
     },
     "successTitle": "キーが正常に作成されました",
     "successDescription": "APIキーが正常に作成されました。",
     "generatedKey": {
       "label": "生成されたキー",
-      "hint": "このキーはキー一覧で管理できます（有効/無効、上限設定など）。ただし完全なキーは一度しか表示されません。今すぐコピーして安全に保管してください。"
+      "hint": "このキーはキー一覧で管理できます(有効/無効、上限設定など)。ただし完全なキーは一度しか表示されません。今すぐコピーして安全に保管してください。"
     },
     "errors": {
       "userIdMissing": "ユーザーIDが存在しません",
@@ -789,7 +789,7 @@
     },
     "loadingText": {
       "add": "作成中...",
-      "edit": "保存中..."
+      "edit": "保存しています..."
     },
     "username": {
       "label": "ユーザー名",
@@ -797,18 +797,18 @@
     },
     "note": {
       "label": "備考",
-      "placeholder": "備考を入力してください（オプション）",
+      "placeholder": "備考を入力してください(オプション)",
       "description": "ユーザーの用途や備考情報を説明するために使用されます"
     },
     "providerGroup": {
       "label": "プロバイダーグループ",
       "placeholder": "例: default または premium,economy",
-      "description": "ユーザーのプロバイダーグループ（既定: default）。groupTag が未設定のプロバイダーは default に属します。"
+      "description": "ユーザーのプロバイダーグループ(既定: default)。groupTag が未設定のプロバイダーは default に属します。"
     },
     "tags": {
       "label": "ユーザータグ",
-      "placeholder": "タグを入力（Enterで追加）",
-      "description": "分類とフィルタリングのためにタグを追加します（最大20個、各32文字まで）"
+      "placeholder": "タグを入力(Enterで追加)",
+      "description": "分類とフィルタリングのためにタグを追加します(最大20個、各32文字まで)"
     },
     "rpm": {
       "label": "RPM制限",
@@ -854,12 +854,12 @@
       "label": "許可されたクライアント",
       "description": "このアカウントを使用できるCLI/IDEクライアントを制限します。空の場合は制限なし。",
       "customLabel": "カスタムクライアントパターン",
-      "customPlaceholder": "カスタムパターンを入力（例：'xcode', 'my-ide'）"
+      "customPlaceholder": "カスタムパターンを入力(例：'xcode', 'my-ide')"
     },
     "allowedModels": {
       "label": "許可モデル",
-      "placeholder": "モデル名を入力（Enterで追加）",
-      "description": "ユーザーを特定のAIモデルに制限します。空白の場合は制限なし（最大50モデル、各64文字）"
+      "placeholder": "モデル名を入力(Enterで追加)",
+      "description": "ユーザーを特定のAIモデルに制限します。空白の場合は制限なし(最大50モデル、各64文字)"
     }
   },
   "deleteKeyConfirm": {
@@ -890,7 +890,7 @@
     "description": "プロバイダーの可用性とパフォーマンス指標をリアルタイムで監視",
     "nav": "可用性モニター",
     "status": {
-      "green": "正常",
+      "green": "正常(OK)",
       "red": "異常",
       "unknown": "不明"
     },
@@ -902,7 +902,7 @@
     "metrics": {
       "systemAvailability": "システム可用性",
       "totalRequests": "総リクエスト数",
-      "successRate": "成功率",
+      "successRate": "成功率(%)",
       "avgLatency": "平均遅延",
       "p50Latency": "P50 遅延",
       "p95Latency": "P95 遅延",
@@ -926,7 +926,7 @@
     },
     "sort": {
       "label": "並び替え",
-      "availability": "可用性",
+      "availability": "可用性(稼働率)",
       "name": "名前",
       "requests": "リクエスト数"
     },
@@ -934,12 +934,12 @@
       "provider": "プロバイダー",
       "type": "タイプ",
       "status": "ステータス",
-      "availability": "可用性",
+      "availability": "可用性(稼働率)",
       "requests": "リクエスト",
-      "successRate": "成功率",
+      "successRate": "成功率(%)",
       "avgLatency": "平均遅延",
       "lastRequest": "最終リクエスト",
-      "actions": "操作"
+      "actions": "アクション"
     },
     "chart": {
       "title": "可用性トレンド",
@@ -973,8 +973,8 @@
     },
     "legend": {
       "green": "優秀 (可用性 95%+)",
-      "lime": "良好 (可用性 80-95%)",
-      "orange": "警告 (可用性 50-80%)",
+      "lime": "良好(可用性 80-95%)",
+      "orange": "警告(可用性 50-80%)",
       "red": "異常 (可用性 <50%)",
       "noData": "データなし"
     },
@@ -1003,7 +1003,7 @@
     "loading": "読み込み中...",
     "error": "読み込み失敗",
     "totalEvents": "総イベント数",
-    "avgUsage": "平均使用率",
+    "avgUsage": "平均利用率",
     "affectedUsers": "影響を受けたユーザー数",
     "noData": "データなし",
     "noDataHint": "選択した時間範囲にはレート制限イベントがありません",
@@ -1118,7 +1118,7 @@
         "todayUsage": "本日の使用量",
         "todayCost": "本日の消費",
         "lastUsed": "最終使用",
-        "actions": "操作",
+        "actions": "アクション",
         "quotaButton": "クォータ使用状況を表示",
         "fields": {
           "callsLabel": "呼び出し",
@@ -1182,7 +1182,7 @@
         "7days": "7 日",
         "30days": "30 日",
         "90days": "90 日",
-        "1year": "1 年"
+        "1year": "1年"
       },
       "customDate": "カスタム日付",
       "enableOnRenew": "同時にユーザーを有効化",
@@ -1208,7 +1208,7 @@
       "userEnabled": "ユーザーが有効化されました",
       "deleteFailed": "ユーザーの削除に失敗しました",
       "userDeleted": "ユーザーが削除されました",
-      "saving": "保存中..."
+      "saving": "保存しています..."
     },
     "batchEdit": {
       "enterMode": "一括編集",
@@ -1232,7 +1232,7 @@
         "keyFields": "キーフィールド",
         "goBack": "戻って修正",
         "update": "更新を確定",
-        "updating": "更新中..."
+        "updating": "更新しています..."
       },
       "toast": {
         "usersUpdated": "{count} ユーザーを更新しました",
@@ -1292,12 +1292,12 @@
       "description": "新規ユーザーを作成し、APIキーを設定",
       "saveFailed": "ユーザーの作成に失敗しました",
       "keyCreateFailed": "キーの作成に失敗しました",
-      "rollbackFailed": "ロールバックに失敗しました。ユーザーのみが作成され、キーが作成されていない可能性があります。手動でユーザーを削除してください（userId: {userId}）。",
+      "rollbackFailed": "ロールバックに失敗しました。ユーザーのみが作成され、キーが作成されていない可能性があります。手動でユーザーを削除してください(userId: {userId})。",
       "createSuccess": "ユーザーが作成されました",
       "successTitle": "作成完了",
       "successDescription": "ユーザーとキーが作成されました",
       "generatedKey": "生成されたキー",
-      "keyHint": "このキーはユーザー管理ページで管理できます（有効/無効、上限設定など）。ただし完全なキーは一度しか表示されません。今すぐコピーして安全に保管してください。",
+      "keyHint": "このキーはユーザー管理ページで管理できます(有効/無効、上限設定など)。ただし完全なキーは一度しか表示されません。今すぐコピーして安全に保管してください。",
       "keysSection": "キー",
       "addKey": "キーを追加",
       "removeKey": "キーを削除",
@@ -1320,7 +1320,7 @@
       },
       "dailyMode": {
         "fixed": "固定時刻でリセット",
-        "rolling": "ローリングウィンドウ（24時間）"
+        "rolling": "ローリングウィンドウ(24時間)"
       },
       "quickValues": {
         "unlimited": "無制限",
@@ -1346,7 +1346,7 @@
     "providerGroup": {
       "label": "プロバイダーグループ",
       "placeholder": "プロバイダーグループを選択",
-      "noRestriction": "制限なし（すべてのプロバイダー）",
+      "noRestriction": "制限なし(すべてのプロバイダー)",
       "providerCount": "{count} 件のプロバイダー"
     },
     "dangerZone": {
@@ -1398,7 +1398,7 @@
       },
       "cacheTtlOverride": {
         "label": "Cache TTL の上書き",
-        "inherit": "上書きしない（プロバイダー/クライアントに従う）",
+        "inherit": "上書きしない(プロバイダー/クライアントに従う)",
         "5m": "5分",
         "1h": "1時間"
       }
@@ -1416,7 +1416,7 @@
     "keyStatus": {
       "enabled": "有効",
       "disabled": "無効",
-      "active": "正常",
+      "active": "正常(アクティブ)",
       "expired": "期限切れ",
       "expiringSoon": "まもなく期限切れ",
       "keyEnabled": "キーが有効になりました",
@@ -1430,7 +1430,7 @@
     "userStatus": {
       "enabled": "有効",
       "disabled": "無効",
-      "active": "正常",
+      "active": "正常(アクティブ)",
       "expired": "期限切れ",
       "expiringSoon": "まもなく期限切れ",
       "userEnabled": "ユーザーが有効になりました",
@@ -1456,11 +1456,11 @@
         },
         "description": {
           "label": "メモ",
-          "placeholder": "メモを入力（任意）"
+          "placeholder": "メモを入力(任意)"
         },
         "tags": {
           "label": "ユーザータグ",
-          "placeholder": "タグを入力（Enterで追加）"
+          "placeholder": "タグを入力(Enterで追加)"
         },
         "providerGroup": {
           "label": "プロバイダーグループ",
@@ -1470,7 +1470,7 @@
           "label": "クライアント制限",
           "description": "このアカウントを使用できるCLI/IDEクライアントを制限します。空欄は制限なし。",
           "customLabel": "カスタムクライアントパターン",
-          "customPlaceholder": "パターンを入力（例：'xcode', 'my-ide'）"
+          "customPlaceholder": "パターンを入力(例：'xcode', 'my-ide')"
         },
         "allowedModels": {
           "label": "モデル制限",
@@ -1533,7 +1533,7 @@
           "label": "Cache TTL上書き",
           "description": "cache_controlを含むリクエストに対してAnthropic prompt cache TTLを強制します。",
           "options": {
-            "inherit": "上書きしない（プロバイダー/クライアントに従う）",
+            "inherit": "上書きしない(プロバイダー/クライアントに従う)",
             "5m": "5m",
             "1h": "1h"
           }
@@ -1548,7 +1548,7 @@
         "daily": {
           "mode": {
             "fixed": "固定時間リセット",
-            "rolling": "ローリングウィンドウ（24時間）"
+            "rolling": "ローリングウィンドウ(24時間)"
           }
         },
         "overwriteHint": "このタイプは既に存在します。保存すると既存の値が上書きされます"

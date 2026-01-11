@@ -1,0 +1,20 @@
+{
+  "allowAllModels": "Allow all {type} models",
+  "claude": "Claude",
+  "clear": "Clear",
+  "gemini": "Gemini",
+  "loading": "Loading...",
+  "manualAdd": "Manually Add Model",
+  "manualDesc": "Support adding any model name (not limited to price table)",
+  "manualPlaceholder": "Enter model name (e.g. gpt-5-turbo)",
+  "notFound": "Model not found",
+  "openai": "OpenAI",
+  "refresh": "Refresh model list",
+  "searchPlaceholder": "Search model name...",
+  "selectAll": "Select All ({count})",
+  "selectedCount": "Selected {count} models",
+  "sourceFallback": "Local",
+  "sourceFallbackDesc": "Using local price list (upstream unavailable or unsupported)",
+  "sourceUpstream": "Upstream",
+  "sourceUpstreamDesc": "Model list from upstream provider API"
+}

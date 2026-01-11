@@ -1,0 +1,5 @@
+{
+  "desc": "Including the first call, the maximum number of attempts for a single provider before switching. Leave empty to use the system default.",
+  "label": "Max attempts per provider",
+  "placeholder": "2"
+}

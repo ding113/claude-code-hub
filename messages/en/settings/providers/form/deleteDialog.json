@@ -1,0 +1,6 @@
+{
+  "cancel": "Cancel",
+  "confirm": "Confirm Delete",
+  "description": "Are you sure you want to delete provider \"{name}\"? This action cannot be undone.",
+  "title": "Delete Provider"
+}
