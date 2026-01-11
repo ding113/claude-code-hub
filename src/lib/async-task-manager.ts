@@ -26,11 +26,8 @@ interface TaskInfo {
 class AsyncTaskManagerClass {
   private tasks: Map<string, TaskInfo> = new Map();
   private cleanupInterval: NodeJS.Timeout | null = null;
+  // Lazily initialize Node-only hooks on first use to avoid side effects at import time.
   private initialized = false;
-
-  constructor() {
-    // Intentionally empty: initialization is lazy to avoid side effects at import time.
-  }
 
   private initializeIfNeeded(): void {
     if (this.initialized) {
