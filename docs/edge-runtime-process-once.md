@@ -42,11 +42,19 @@ Import traces:
 
 ## 回滚
 
-如需回滚，优先按提交粒度回退（示例 commit hash）：
+如需回滚，优先按提交粒度回退（以 commit message 为准）：
 
-- `fix: skip async task manager init on edge`（`9b54b107`）
-- `fix: avoid static async task manager import`（`56a01255`）
-- `test: cover edge runtime task scheduling`（`1152cdad`）
+- `fix: skip async task manager init on edge`
+- `fix: avoid static async task manager import`
+- `test: cover edge runtime task scheduling`
+
+定位对应提交（示例）：
+
+```bash
+git log --oneline --grep "fix: skip async task manager init on edge"
+git log --oneline --grep "fix: avoid static async task manager import"
+git log --oneline --grep "test: cover edge runtime task scheduling"
+```
 
 ## 备选方案（若回归）
 
