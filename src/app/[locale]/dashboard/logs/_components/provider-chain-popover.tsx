@@ -55,7 +55,7 @@ export function ProviderChainPopover({
   // 如果只有一次请求，不显示 popover，只显示带 Tooltip 的名称
   if (requestCount <= 1) {
     return (
-      <div className={`${maxWidthClass} min-w-0`}>
+      <div className={`${maxWidthClass} min-w-0 w-full`}>
         <TooltipProvider>
           <Tooltip delayDuration={300}>
             <TooltipTrigger asChild>
@@ -78,11 +78,11 @@ export function ProviderChainPopover({
         <Button
           type="button"
           variant="ghost"
-          className="h-auto p-0 font-normal hover:bg-transparent max-w-full shrink min-w-0"
+          className="h-auto p-0 font-normal hover:bg-transparent w-full min-w-0"
           aria-label={`${displayName} - ${requestCount}${t("logs.table.times")}`}
         >
-          <span className="flex items-center gap-1 min-w-0">
-            <div className={`${maxWidthClass} min-w-0`}>
+          <span className="flex w-full items-center gap-1 min-w-0">
+            <div className={`${maxWidthClass} min-w-0 flex-1`}>
               <TooltipProvider>
                 <Tooltip delayDuration={300}>
                   <TooltipTrigger asChild>

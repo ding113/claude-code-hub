@@ -63,6 +63,10 @@ export function UploadPriceDialog({
   const [open, setOpen] = useState(defaultOpen);
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<PriceUpdateResult | null>(null);
+  const [cloudModelCount, setCloudModelCount] = useState<number | null>(null);
+  const [cloudModelCountStatus, setCloudModelCountStatus] = useState<
+    "idle" | "loading" | "loaded" | "error"
+  >("idle");
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen && uploading) {
@@ -76,6 +80,41 @@ export function UploadPriceDialog({
     setOpen(nextOpen);
   };
 
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    let cancelled = false;
+    const fetchCloudModelCount = async () => {
+      setCloudModelCountStatus("loading");
+      try {
+        const response = await fetch("/api/prices/cloud-model-count", { cache: "no-store" });
+        const payload = await response.json();
+        if (!payload?.ok) {
+          throw new Error(payload?.error || "unknown error");
+        }
+
+        if (!cancelled) {
+          setCloudModelCount(Number(payload.data?.count) || 0);
+          setCloudModelCountStatus("loaded");
+        }
+      } catch (error) {
+        console.error("获取云端模型数量失败:", error);
+        if (!cancelled) {
+          setCloudModelCount(null);
+          setCloudModelCountStatus("error");
+        }
+      }
+    };
+
+    fetchCloudModelCount();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
   /**
    * 处理文件选择
    */
@@ -84,7 +123,8 @@ export function UploadPriceDialog({
     if (!file) return;
 
     // 验证文件类型
-    if (!file.name.endsWith(".json")) {
+    const lowerName = file.name.toLowerCase();
+    if (!lowerName.endsWith(".json") && !lowerName.endsWith(".toml")) {
       toast.error(t("dialog.invalidFileType"));
       return;
     }
@@ -106,7 +146,8 @@ export function UploadPriceDialog({
       const response = await uploadPriceTable(text);
 
       if (!response.ok) {
-        toast.error(response.error);
+        console.error("价格表上传失败:", response.error);
+        toast.error(t("dialog.updateFailed"));
         return;
       }
 
@@ -194,7 +235,7 @@ export function UploadPriceDialog({
                   <input
                     id="price-file-input"
                     type="file"
-                    accept=".json"
+                    accept=".json,.toml"
                     className="hidden"
                     onChange={handleFileSelect}
                     disabled={uploading}
@@ -208,7 +249,7 @@ export function UploadPriceDialog({
                   • {t("dialog.manualDownload")}{" "}
                   <a
                     className="text-blue-500 underline"
-                    href="https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
+                    href="https://claude-code-hub.app/config/prices-base.toml"
                     target="_blank"
                     rel="noopener noreferrer"
                   >
@@ -216,7 +257,16 @@ export function UploadPriceDialog({
                   </a>{" "}
                   {t("dialog.andUploadViaButton")}
                 </p>
-                <p>• {t("dialog.supportedModels", { count: "Claude + OpenAI" })}</p>
+                <p>
+                  •{" "}
+                  {cloudModelCountStatus === "loading"
+                    ? t("dialog.cloudModelCountLoading")
+                    : cloudModelCountStatus === "loaded"
+                      ? t("dialog.supportedModels", { count: cloudModelCount ?? 0 })
+                      : cloudModelCountStatus === "error"
+                        ? t("dialog.cloudModelCountFailed")
+                        : t("dialog.supportedModels", { count: "-" })}
+                </p>
               </div>
             </div>
           ) : (
@@ -237,7 +287,8 @@ export function UploadPriceDialog({
                     </div>
                     <div className="text-xs text-muted-foreground ml-6">
                       {result.added.slice(0, 3).join(", ")}
-                      {result.added.length > 3 && ` (+${result.added.length - 3})`}
+                      {result.added.length > 3 &&
+                        t("dialog.results.more", { count: result.added.length - 3 })}
                     </div>
                   </div>
                 )}
@@ -252,7 +303,8 @@ export function UploadPriceDialog({
                     </div>
                     <div className="text-xs text-muted-foreground ml-6">
                       {result.updated.slice(0, 3).join(", ")}
-                      {result.updated.length > 3 && ` (+${result.updated.length - 3})`}
+                      {result.updated.length > 3 &&
+                        t("dialog.results.more", { count: result.updated.length - 3 })}
                     </div>
                   </div>
                 )}
@@ -277,7 +329,8 @@ export function UploadPriceDialog({
                     </div>
                     <div className="text-xs text-muted-foreground ml-6">
                       {result.failed.slice(0, 3).join(", ")}
-                      {result.failed.length > 3 && ` (+${result.failed.length - 3})`}
+                      {result.failed.length > 3 &&
+                        t("dialog.results.more", { count: result.failed.length - 3 })}
                     </div>
                   </div>
                 )}

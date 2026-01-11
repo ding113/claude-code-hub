@@ -93,6 +93,26 @@ export function UsageLogsTable({
                 const isWarmupSkipped = log.blockedBy === "warmup";
                 const isMutedRow = isNonBilling || isWarmupSkipped;
 
+                // 计算倍率（用于 Provider 列 Badge 和成本明细）
+                const successfulProvider =
+                  log.providerChain && log.providerChain.length > 0
+                    ? [...log.providerChain]
+                        .reverse()
+                        .find(
+                          (item) =>
+                            item.reason === "request_success" || item.reason === "retry_success"
+                        )
+                    : null;
+
+                const actualCostMultiplier =
+                  successfulProvider?.costMultiplier ?? log.costMultiplier;
+                const multiplier =
+                  actualCostMultiplier === "" || actualCostMultiplier == null
+                    ? null
+                    : Number(actualCostMultiplier);
+                const hasCostBadge =
+                  multiplier != null && Number.isFinite(multiplier) && multiplier !== 1;
+
                 return (
                   <TableRow
                     key={log.id}
@@ -125,99 +145,58 @@ export function UsageLogsTable({
                       ) : (
                         <div className="flex items-start gap-2">
                           <div className="flex flex-col items-start gap-0.5 min-w-0 flex-1">
-                            {(() => {
-                              // 计算倍率，用于判断是否显示 Badge
-                              const successfulProvider =
-                                log.providerChain && log.providerChain.length > 0
-                                  ? [...log.providerChain]
-                                      .reverse()
-                                      .find(
-                                        (item) =>
-                                          item.reason === "request_success" ||
-                                          item.reason === "retry_success"
-                                      )
-                                  : null;
-                              const actualCostMultiplier =
-                                successfulProvider?.costMultiplier ?? log.costMultiplier;
-                              const hasCostBadge =
-                                !!actualCostMultiplier &&
-                                parseFloat(String(actualCostMultiplier)) !== 1.0;
-
-                              return (
-                                <>
-                                  <div className="w-full">
-                                    <ProviderChainPopover
-                                      chain={log.providerChain ?? []}
-                                      finalProvider={
-                                        (log.providerChain && log.providerChain.length > 0
-                                          ? log.providerChain[log.providerChain.length - 1].name
-                                          : null) ||
-                                        log.providerName ||
-                                        tChain("circuit.unknown")
-                                      }
-                                      hasCostBadge={hasCostBadge}
-                                    />
-                                  </div>
-                                  {/* 摘要文字（第二行显示，左对齐） */}
-                                  {log.providerChain &&
-                                    log.providerChain.length > 0 &&
-                                    formatProviderSummary(log.providerChain, tChain) && (
-                                      <div className="w-full">
-                                        <TooltipProvider>
-                                          <Tooltip delayDuration={300}>
-                                            <TooltipTrigger asChild>
-                                              <span className="text-xs text-muted-foreground cursor-help truncate max-w-[200px] block text-left">
-                                                {formatProviderSummary(log.providerChain, tChain)}
-                                              </span>
-                                            </TooltipTrigger>
-                                            <TooltipContent
-                                              side="bottom"
-                                              align="start"
-                                              className="max-w-[500px]"
-                                            >
-                                              <p className="text-xs whitespace-normal break-words font-mono">
-                                                {formatProviderSummary(log.providerChain, tChain)}
-                                              </p>
-                                            </TooltipContent>
-                                          </Tooltip>
-                                        </TooltipProvider>
-                                      </div>
-                                    )}
-                                </>
-                              );
-                            })()}
+                            <div className="w-full">
+                              <ProviderChainPopover
+                                chain={log.providerChain ?? []}
+                                finalProvider={
+                                  (log.providerChain && log.providerChain.length > 0
+                                    ? log.providerChain[log.providerChain.length - 1].name
+                                    : null) ||
+                                  log.providerName ||
+                                  tChain("circuit.unknown")
+                                }
+                                hasCostBadge={hasCostBadge}
+                              />
+                            </div>
+                            {/* 摘要文字（第二行显示，左对齐） */}
+                            {log.providerChain &&
+                              log.providerChain.length > 0 &&
+                              formatProviderSummary(log.providerChain, tChain) && (
+                                <div className="w-full">
+                                  <TooltipProvider>
+                                    <Tooltip delayDuration={300}>
+                                      <TooltipTrigger asChild>
+                                        <span className="text-xs text-muted-foreground cursor-help truncate max-w-[200px] block text-left">
+                                          {formatProviderSummary(log.providerChain, tChain)}
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent
+                                        side="bottom"
+                                        align="start"
+                                        className="max-w-[500px]"
+                                      >
+                                        <p className="text-xs whitespace-normal break-words font-mono">
+                                          {formatProviderSummary(log.providerChain, tChain)}
+                                        </p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                </div>
+                              )}
                           </div>
                           {/* 显示供应商倍率 Badge（不为 1.0 时） */}
-                          {(() => {
-                            // 从决策链中找到最后一个成功的供应商，使用它的倍率
-                            const successfulProvider =
-                              log.providerChain && log.providerChain.length > 0
-                                ? [...log.providerChain]
-                                    .reverse()
-                                    .find(
-                                      (item) =>
-                                        item.reason === "request_success" ||
-                                        item.reason === "retry_success"
-                                    )
-                                : null;
-
-                            const actualCostMultiplier =
-                              successfulProvider?.costMultiplier ?? log.costMultiplier;
-
-                            return actualCostMultiplier &&
-                              parseFloat(String(actualCostMultiplier)) !== 1.0 ? (
-                              <Badge
-                                variant="outline"
-                                className={
-                                  parseFloat(String(actualCostMultiplier)) > 1.0
-                                    ? "text-xs bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800 shrink-0"
-                                    : "text-xs bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-300 dark:border-green-800 shrink-0"
-                                }
-                              >
-                                ×{parseFloat(String(actualCostMultiplier)).toFixed(2)}
-                              </Badge>
-                            ) : null;
-                          })()}
+                          {hasCostBadge && multiplier != null ? (
+                            <Badge
+                              variant="outline"
+                              className={
+                                multiplier > 1
+                                  ? "text-xs bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800 shrink-0"
+                                  : "text-xs bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-300 dark:border-green-800 shrink-0"
+                              }
+                            >
+                              ×{multiplier.toFixed(2)}
+                            </Badge>
+                          ) : null}
                         </div>
                       )}
                     </TableCell>
@@ -391,27 +370,11 @@ export function UsageLogsTable({
                                   {formatTokenAmount(log.cacheReadInputTokens)} tokens (0.1x)
                                 </div>
                               )}
-                              {(() => {
-                                const successfulProvider =
-                                  log.providerChain && log.providerChain.length > 0
-                                    ? [...log.providerChain]
-                                        .reverse()
-                                        .find(
-                                          (item) =>
-                                            item.reason === "request_success" ||
-                                            item.reason === "retry_success"
-                                        )
-                                    : null;
-                                const actualCostMultiplier =
-                                  successfulProvider?.costMultiplier ?? log.costMultiplier;
-                                return actualCostMultiplier &&
-                                  parseFloat(String(actualCostMultiplier)) !== 1.0 ? (
-                                  <div>
-                                    {t("logs.billingDetails.multiplier")}:{" "}
-                                    {parseFloat(String(actualCostMultiplier)).toFixed(2)}x
-                                  </div>
-                                ) : null;
-                              })()}
+                              {hasCostBadge && multiplier != null ? (
+                                <div>
+                                  {t("logs.billingDetails.multiplier")}: {multiplier.toFixed(2)}x
+                                </div>
+                              ) : null}
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>

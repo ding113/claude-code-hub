@@ -473,6 +473,109 @@
     }
   },
 
+  "opencode": {
+    "title": "OpenCode 利用ガイド",
+    "description": "OpenCode はターミナルで動作する CLI + TUI の AI コーディングエージェントで、IDE 連携も提供します。OpenCode の接続先を cch に設定することで、Claude / GPT / Gemini の各モデルを利用できます。",
+
+    "installation": {
+      "title": "インストール",
+
+      "macos": {
+        "description": "macOS では以下のいずれかの方法で OpenCode をインストールできます：",
+        "homebrew": {
+          "title": "方法2：Homebrew",
+          "description": "Homebrew でインストール："
+        }
+      },
+
+      "linux": {
+        "description": "Linux では以下のいずれかの方法で OpenCode をインストールできます：",
+        "homebrew": {
+          "title": "方法2：Homebrew",
+          "description": "Homebrew でインストール："
+        },
+        "paru": {
+          "title": "方法5：Paru（Arch Linux）",
+          "description": "Arch Linux の場合、paru（AUR）でインストール："
+        }
+      },
+
+      "script": {
+        "title": "方法1：公式インストールスクリプト",
+        "description": "最新版をインストールするには次のコマンドを実行します："
+      },
+
+      "npm": {
+        "title": "方法3：npm",
+        "description": "npm でグローバルにインストール：",
+        "note": "注: opencode-ai を npm のミラー（サードパーティ registry）経由でインストールするのは推奨しません。依存関係が欠ける場合があるため、問題が出たら公式 npm registry を使用してください。"
+      },
+
+      "bun": {
+        "title": "方法4：Bun",
+        "description": "Bun でグローバルにインストール："
+      },
+
+      "windows": {
+        "description": "Windows ではパッケージマネージャ（Chocolatey/Scoop）を推奨します。npm でもインストールできます：",
+        "choco": {
+          "title": "方法1：Chocolatey",
+          "description": "Chocolatey でインストール：",
+          "command": "choco install opencode"
+        },
+        "scoop": {
+          "title": "方法2：Scoop",
+          "description": "Scoop でインストール：",
+          "command": "scoop bucket add extras\nscoop install extras/opencode"
+        },
+        "note": "注: Windows での Bun インストールは現在対応中です。Chocolatey/Scoop/npm を使用するか、GitHub Releases からバイナリを取得してください。"
+      }
+    },
+
+    "configuration": {
+      "title": "cch サービスに接続",
+
+      "configFile": {
+        "title": "opencode.json を設定",
+        "path": "設定ファイルのパス：",
+        "instruction": "設定ファイルを編集し、以下を追加します（1 つの設定ファイルで全モデルをカバーします）：",
+
+        "important": "重要",
+        "importantPoints": [
+          "cch の管理画面で API Key を作成し、環境変数 CCH_API_KEY を設定してください",
+          "3 つの provider すべてで baseURL は ${resolvedOrigin}/v1（cch の v1 API ベース URL）",
+          "モデル選択は provider_id/model_id 形式（例：cchClaude/claude-sonnet-4-5-20250929）"
+        ]
+      },
+
+      "modelSelection": {
+        "title": "モデルを選択",
+        "description": "OpenCode を起動したら、TUI で次のコマンドを入力してモデルを表示/選択します：",
+        "command": "/models"
+      }
+    },
+
+    "startup": {
+      "title": "opencode を起動",
+      "description": "プロジェクトディレクトリで次を実行します：",
+      "initNote": "初回起動時に、opencode は設定を読み込み、セッションを作成します。"
+    },
+
+    "commonIssues": {
+      "title": "よくある問題",
+
+      "commandNotFound": "1. コマンドが見つからない",
+      "commandNotFoundWindows": [
+        "npm でインストールした場合、npm のグローバル bin パスが PATH に含まれているか確認してください",
+        "新しいターミナルを開いて再試行してください"
+      ],
+      "commandNotFoundUnix": "インストール先を確認し、PATH に追加してください（例：~/.local/bin または npm のグローバル bin）",
+
+      "connectionFailed": "2. API 接続に失敗",
+      "updateCli": "3. opencode を更新"
+    }
+  },
+
   "droid": {
     "title": "Droid CLI 使用ガイド",
     "description": "Droid は Factory AI が開発したインタラクティブターミナル AI プログラミングアシスタントで、cch プロキシサービスを通じた統合をサポートしています。使用する前に、Droid 公式アカウントに登録してログインする必要があります。",

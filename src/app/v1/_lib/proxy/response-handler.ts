@@ -2,11 +2,13 @@ import { ResponseFixer } from "@/app/v1/_lib/proxy/response-fixer";
 import { AsyncTaskManager } from "@/lib/async-task-manager";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
+import { requestCloudPriceTableSync } from "@/lib/price-sync/cloud-price-updater";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { RateLimitService } from "@/lib/rate-limit";
 import { SessionManager } from "@/lib/session-manager";
 import { SessionTracker } from "@/lib/session-tracker";
 import { calculateRequestCost } from "@/lib/utils/cost-calculation";
+import { hasValidPriceData } from "@/lib/utils/price-data";
 import { parseSSEData } from "@/lib/utils/sse";
 import {
   updateMessageRequestCost,
@@ -360,19 +362,25 @@ export class ProxyResponseHandler {
         if (session.sessionId && usageMetrics) {
           // 计算成本（复用相同逻辑）
           let costUsdStr: string | undefined;
-          if (session.request.model) {
-            const priceData = await session.getCachedPriceDataByBillingSource();
-            if (priceData) {
-              const cost = calculateRequestCost(
-                usageMetrics,
-                priceData,
-                provider.costMultiplier,
-                session.getContext1mApplied()
-              );
-              if (cost.gt(0)) {
-                costUsdStr = cost.toString();
+          try {
+            if (session.request.model) {
+              const priceData = await session.getCachedPriceDataByBillingSource();
+              if (priceData) {
+                const cost = calculateRequestCost(
+                  usageMetrics,
+                  priceData,
+                  provider.costMultiplier,
+                  session.getContext1mApplied()
+                );
+                if (cost.gt(0)) {
+                  costUsdStr = cost.toString();
+                }
               }
             }
+          } catch (error) {
+            logger.error("[ResponseHandler] Failed to calculate session cost, skipping", {
+              error: error instanceof Error ? error.message : String(error),
+            });
           }
 
           void SessionManager.updateSessionUsage(session.sessionId, {
@@ -922,19 +930,25 @@ export class ProxyResponseHandler {
         // 更新 session 使用量到 Redis（用于实时监控）
         if (session.sessionId && usageForCost) {
           let costUsdStr: string | undefined;
-          if (session.request.model) {
-            const priceData = await session.getCachedPriceDataByBillingSource();
-            if (priceData) {
-              const cost = calculateRequestCost(
-                usageForCost,
-                priceData,
-                provider.costMultiplier,
-                session.getContext1mApplied()
-              );
-              if (cost.gt(0)) {
-                costUsdStr = cost.toString();
+          try {
+            if (session.request.model) {
+              const priceData = await session.getCachedPriceDataByBillingSource();
+              if (priceData) {
+                const cost = calculateRequestCost(
+                  usageForCost,
+                  priceData,
+                  provider.costMultiplier,
+                  session.getContext1mApplied()
+                );
+                if (cost.gt(0)) {
+                  costUsdStr = cost.toString();
+                }
               }
             }
+          } catch (error) {
+            logger.error("[ResponseHandler] Failed to calculate session cost (stream), skipping", {
+              error: error instanceof Error ? error.message : String(error),
+            });
           }
 
           void SessionManager.updateSessionUsage(session.sessionId, {
@@ -1640,97 +1654,116 @@ async function updateRequestCostFromUsage(
     return;
   }
 
-  // 获取系统设置中的计费模型来源配置
-  const systemSettings = await getSystemSettings();
-  const billingModelSource = systemSettings.billingModelSource;
+  try {
+    // 获取系统设置中的计费模型来源配置
+    const systemSettings = await getSystemSettings();
+    const billingModelSource = systemSettings.billingModelSource;
 
-  // 根据配置决定计费模型优先级
-  let primaryModel: string | null;
-  let fallbackModel: string | null;
+    // 根据配置决定计费模型优先级
+    let primaryModel: string | null;
+    let fallbackModel: string | null;
 
-  if (billingModelSource === "original") {
-    // 优先使用重定向前的原始模型
-    primaryModel = originalModel;
-    fallbackModel = redirectedModel;
-  } else {
-    // 优先使用重定向后的实际模型
-    primaryModel = redirectedModel;
-    fallbackModel = originalModel;
-  }
-
-  logger.debug("[CostCalculation] Billing model source config", {
-    messageId,
-    billingModelSource,
-    primaryModel,
-    fallbackModel,
-  });
-
-  // Fallback 逻辑：优先主要模型，找不到则用备选模型
-  let priceData = null;
-  let usedModelForPricing = null;
-
-  // Step 1: 尝试主要模型
-  if (primaryModel) {
-    priceData = await findLatestPriceByModel(primaryModel);
-    if (priceData?.priceData) {
-      usedModelForPricing = primaryModel;
-      logger.debug("[CostCalculation] Using primary model for pricing", {
-        messageId,
-        model: primaryModel,
-        billingModelSource,
-      });
+    if (billingModelSource === "original") {
+      // 优先使用重定向前的原始模型
+      primaryModel = originalModel;
+      fallbackModel = redirectedModel;
+    } else {
+      // 优先使用重定向后的实际模型
+      primaryModel = redirectedModel;
+      fallbackModel = originalModel;
     }
-  }
 
-  // Step 2: Fallback 到备选模型
-  if (!priceData && fallbackModel && fallbackModel !== primaryModel) {
-    priceData = await findLatestPriceByModel(fallbackModel);
-    if (priceData?.priceData) {
-      usedModelForPricing = fallbackModel;
-      logger.warn("[CostCalculation] Primary model price not found, using fallback model", {
-        messageId,
-        primaryModel,
-        fallbackModel,
-        billingModelSource,
-      });
-    }
-  }
-
-  // Step 3: 完全失败
-  if (!priceData?.priceData) {
-    logger.error("[CostCalculation] No price data found for any model", {
+    logger.debug("[CostCalculation] Billing model source config", {
       messageId,
-      originalModel,
-      redirectedModel,
       billingModelSource,
-      note: "Cost will be $0. Please check price table or model name.",
+      primaryModel,
+      fallbackModel,
     });
-    return;
-  }
 
-  // 计算费用
-  const cost = calculateRequestCost(usage, priceData.priceData, costMultiplier, context1mApplied);
+    // Fallback 逻辑：优先主要模型，找不到则用备选模型
+    let priceData = null;
+    let usedModelForPricing = null;
 
-  logger.info("[CostCalculation] Cost calculated successfully", {
-    messageId,
-    usedModelForPricing,
-    billingModelSource,
-    costUsd: cost.toString(),
-    costMultiplier,
-    usage,
-  });
+    const resolveValidPriceData = async (modelName: string) => {
+      const record = await findLatestPriceByModel(modelName);
+      const data = record?.priceData;
+      if (!data || !hasValidPriceData(data)) {
+        return null;
+      }
+      return record;
+    };
 
-  if (cost.gt(0)) {
-    await updateMessageRequestCost(messageId, cost);
-  } else {
-    logger.warn("[CostCalculation] Calculated cost is zero or negative", {
+    // Step 1: 尝试主要模型
+    if (primaryModel) {
+      const resolved = await resolveValidPriceData(primaryModel);
+      if (resolved) {
+        priceData = resolved;
+        usedModelForPricing = primaryModel;
+        logger.debug("[CostCalculation] Using primary model for pricing", {
+          messageId,
+          model: primaryModel,
+          billingModelSource,
+        });
+      }
+    }
+
+    // Step 2: Fallback 到备选模型
+    if (!priceData && fallbackModel && fallbackModel !== primaryModel) {
+      const resolved = await resolveValidPriceData(fallbackModel);
+      if (resolved) {
+        priceData = resolved;
+        usedModelForPricing = fallbackModel;
+        logger.warn("[CostCalculation] Primary model price not found, using fallback model", {
+          messageId,
+          primaryModel,
+          fallbackModel,
+          billingModelSource,
+        });
+      }
+    }
+
+    // Step 3: 完全失败（无价格或价格表暂不可用）：不计费放行，并异步触发一次同步
+    if (!priceData?.priceData) {
+      logger.warn("[CostCalculation] No price data found, skipping billing", {
+        messageId,
+        originalModel,
+        redirectedModel,
+        billingModelSource,
+      });
+
+      requestCloudPriceTableSync({ reason: "missing-model" });
+      return;
+    }
+
+    // 计算费用
+    const cost = calculateRequestCost(usage, priceData.priceData, costMultiplier, context1mApplied);
+
+    logger.info("[CostCalculation] Cost calculated successfully", {
       messageId,
       usedModelForPricing,
+      billingModelSource,
       costUsd: cost.toString(),
-      priceData: {
-        inputCost: priceData.priceData.input_cost_per_token,
-        outputCost: priceData.priceData.output_cost_per_token,
-      },
+      costMultiplier,
+      usage,
+    });
+
+    if (cost.gt(0)) {
+      await updateMessageRequestCost(messageId, cost);
+    } else {
+      logger.warn("[CostCalculation] Calculated cost is zero or negative", {
+        messageId,
+        usedModelForPricing,
+        costUsd: cost.toString(),
+        priceData: {
+          inputCost: priceData.priceData.input_cost_per_token,
+          outputCost: priceData.priceData.output_cost_per_token,
+        },
+      });
+    }
+  } catch (error) {
+    logger.error("[CostCalculation] Failed to update request cost, skipping billing", {
+      messageId,
+      error: error instanceof Error ? error.message : String(error),
     });
   }
 }
@@ -1739,7 +1772,7 @@ async function updateRequestCostFromUsage(
  * 统一的请求统计处理方法
  * 用于消除 Gemini 透传、普通非流式、普通流式之间的重复统计逻辑
  */
-async function finalizeRequestStats(
+export async function finalizeRequestStats(
   session: ProxySession,
   responseText: string,
   statusCode: number,
@@ -1806,19 +1839,25 @@ async function finalizeRequestStats(
   // 6. 更新 session usage
   if (session.sessionId) {
     let costUsdStr: string | undefined;
-    if (session.request.model) {
-      const priceData = await session.getCachedPriceDataByBillingSource();
-      if (priceData) {
-        const cost = calculateRequestCost(
-          normalizedUsage,
-          priceData,
-          provider.costMultiplier,
-          session.getContext1mApplied()
-        );
-        if (cost.gt(0)) {
-          costUsdStr = cost.toString();
+    try {
+      if (session.request.model) {
+        const priceData = await session.getCachedPriceDataByBillingSource();
+        if (priceData) {
+          const cost = calculateRequestCost(
+            normalizedUsage,
+            priceData,
+            provider.costMultiplier,
+            session.getContext1mApplied()
+          );
+          if (cost.gt(0)) {
+            costUsdStr = cost.toString();
+          }
         }
       }
+    } catch (error) {
+      logger.error("[ResponseHandler] Failed to calculate session cost (finalize), skipping", {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
 
     void SessionManager.updateSessionUsage(session.sessionId, {
@@ -1858,62 +1897,68 @@ async function finalizeRequestStats(
 async function trackCostToRedis(session: ProxySession, usage: UsageMetrics | null): Promise<void> {
   if (!usage || !session.sessionId) return;
 
-  const messageContext = session.messageContext;
-  const provider = session.provider;
-  const key = session.authState?.key;
-  const user = session.authState?.user;
+  try {
+    const messageContext = session.messageContext;
+    const provider = session.provider;
+    const key = session.authState?.key;
+    const user = session.authState?.user;
 
-  if (!messageContext || !provider || !key || !user) return;
+    if (!messageContext || !provider || !key || !user) return;
 
-  const modelName = session.request.model;
-  if (!modelName) return;
+    const modelName = session.request.model;
+    if (!modelName) return;
 
-  // 计算成本（应用倍率）- 使用 session 缓存避免重复查询
-  const priceData = await session.getCachedPriceDataByBillingSource();
-  if (!priceData) return;
+    // 计算成本（应用倍率）- 使用 session 缓存避免重复查询
+    const priceData = await session.getCachedPriceDataByBillingSource();
+    if (!priceData) return;
 
-  const cost = calculateRequestCost(
-    usage,
-    priceData,
-    provider.costMultiplier,
-    session.getContext1mApplied()
-  );
-  if (cost.lte(0)) return;
+    const cost = calculateRequestCost(
+      usage,
+      priceData,
+      provider.costMultiplier,
+      session.getContext1mApplied()
+    );
+    if (cost.lte(0)) return;
 
-  const costFloat = parseFloat(cost.toString());
+    const costFloat = parseFloat(cost.toString());
 
-  // 追踪到 Redis（使用 session.sessionId）
-  await RateLimitService.trackCost(
-    key.id,
-    provider.id,
-    session.sessionId, // 直接使用 session.sessionId
-    costFloat,
-    {
-      keyResetTime: key.dailyResetTime,
-      keyResetMode: key.dailyResetMode,
-      providerResetTime: provider.dailyResetTime,
-      providerResetMode: provider.dailyResetMode,
-      requestId: messageContext.id,
-      createdAtMs: messageContext.createdAt.getTime(),
-    }
-  );
+    // 追踪到 Redis（使用 session.sessionId）
+    await RateLimitService.trackCost(
+      key.id,
+      provider.id,
+      session.sessionId, // 直接使用 session.sessionId
+      costFloat,
+      {
+        keyResetTime: key.dailyResetTime,
+        keyResetMode: key.dailyResetMode,
+        providerResetTime: provider.dailyResetTime,
+        providerResetMode: provider.dailyResetMode,
+        requestId: messageContext.id,
+        createdAtMs: messageContext.createdAt.getTime(),
+      }
+    );
 
-  // 新增：追踪用户层每日消费
-  await RateLimitService.trackUserDailyCost(
-    user.id,
-    costFloat,
-    user.dailyResetTime,
-    user.dailyResetMode,
-    {
-      requestId: messageContext.id,
-      createdAtMs: messageContext.createdAt.getTime(),
-    }
-  );
+    // 新增：追踪用户层每日消费
+    await RateLimitService.trackUserDailyCost(
+      user.id,
+      costFloat,
+      user.dailyResetTime,
+      user.dailyResetMode,
+      {
+        requestId: messageContext.id,
+        createdAtMs: messageContext.createdAt.getTime(),
+      }
+    );
 
-  // 刷新 session 时间戳（滑动窗口）
-  void SessionTracker.refreshSession(session.sessionId, key.id, provider.id).catch((error) => {
-    logger.error("[ResponseHandler] Failed to refresh session tracker:", error);
-  });
+    // 刷新 session 时间戳（滑动窗口）
+    void SessionTracker.refreshSession(session.sessionId, key.id, provider.id).catch((error) => {
+      logger.error("[ResponseHandler] Failed to refresh session tracker:", error);
+    });
+  } catch (error) {
+    logger.error("[ResponseHandler] Failed to track cost to Redis, skipping", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 /**

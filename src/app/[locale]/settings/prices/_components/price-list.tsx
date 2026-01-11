@@ -1,17 +1,27 @@
 "use client";
 
+import { Claude, Gemini, OpenAI } from "@lobehub/icons";
 import {
+  Braces,
   ChevronLeft,
   ChevronRight,
+  Code2,
+  Database,
   DollarSign,
+  Eye,
+  FileText,
+  Monitor,
   MoreHorizontal,
   Package,
   Pencil,
   Search,
+  Sparkles,
+  Terminal,
   Trash2,
 } from "lucide-react";
-import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,16 +46,21 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDebounce } from "@/lib/hooks/use-debounce";
-import type { ModelPrice } from "@/types/model-price";
+import { copyToClipboard } from "@/lib/utils/clipboard";
+import type { ModelPrice, ModelPriceSource } from "@/types/model-price";
 import { DeleteModelDialog } from "./delete-model-dialog";
-import { ModelPriceDialog } from "./model-price-dialog";
+import { ModelPriceDrawer } from "./model-price-drawer";
 
 interface PriceListProps {
   initialPrices: ModelPrice[];
   initialTotal: number;
   initialPage: number;
   initialPageSize: number;
+  initialSearchTerm: string;
+  initialSourceFilter: ModelPriceSource | "";
+  initialLitellmProviderFilter: string;
 }
 
 /**
@@ -56,9 +71,16 @@ export function PriceList({
   initialTotal,
   initialPage,
   initialPageSize,
+  initialSearchTerm,
+  initialSourceFilter,
+  initialLitellmProviderFilter,
 }: PriceListProps) {
   const t = useTranslations("settings.prices");
-  const [searchTerm, setSearchTerm] = useState("");
+  const tCommon = useTranslations("common");
+  const locale = useLocale();
+  const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
+  const [sourceFilter, setSourceFilter] = useState<ModelPriceSource | "">(initialSourceFilter);
+  const [litellmProviderFilter, setLitellmProviderFilter] = useState(initialLitellmProviderFilter);
   const [prices, setPrices] = useState<ModelPrice[]>(initialPrices);
   const [total, setTotal] = useState(initialTotal);
   const [page, setPage] = useState(initialPage);
@@ -67,51 +89,80 @@ export function PriceList({
 
   // 使用防抖，避免频繁请求
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
+  const lastDebouncedSearchTerm = useRef(debouncedSearchTerm);
+  const pendingRefreshPage = useRef<number | null>(null);
 
   // 计算总页数
   const totalPages = Math.ceil(total / pageSize);
 
-  // 从 URL 搜索参数中读取初始状态（仅在挂载时执行一次）
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const searchParam = urlParams.get("search");
-    const pageParam = urlParams.get("page");
-    const sizeParam = urlParams.get("size");
-
-    if (searchParam) setSearchTerm(searchParam);
-    if (pageParam) setPage(parseInt(pageParam, 10));
-    if (sizeParam) setPageSize(parseInt(sizeParam, 10));
-  }, []); // 空依赖数组，仅在挂载时执行一次
-
   // 更新 URL 搜索参数
-  const updateURL = useCallback((newSearchTerm: string, newPage: number, newPageSize: number) => {
-    const url = new URL(window.location.href);
-    if (newSearchTerm) {
-      url.searchParams.set("search", newSearchTerm);
-    } else {
-      url.searchParams.delete("search");
-    }
-    if (newPage > 1) {
-      url.searchParams.set("page", newPage.toString());
-    } else {
-      url.searchParams.delete("page");
-    }
-    if (newPageSize !== 50) {
-      url.searchParams.set("size", newPageSize.toString());
-    } else {
-      url.searchParams.delete("size");
-    }
-    window.history.replaceState({}, "", url.toString());
-  }, []);
+  const updateURL = useCallback(
+    (
+      newSearchTerm: string,
+      newPage: number,
+      newPageSize: number,
+      newSourceFilter: ModelPriceSource | "",
+      newLitellmProviderFilter: string
+    ) => {
+      const url = new URL(window.location.href);
+      if (newSearchTerm) {
+        url.searchParams.set("search", newSearchTerm);
+      } else {
+        url.searchParams.delete("search");
+      }
+      if (newPage > 1) {
+        url.searchParams.set("page", newPage.toString());
+      } else {
+        url.searchParams.delete("page");
+      }
+      if (newPageSize !== 50) {
+        url.searchParams.set("pageSize", newPageSize.toString());
+        url.searchParams.delete("size");
+      } else {
+        url.searchParams.delete("pageSize");
+        url.searchParams.delete("size");
+      }
+
+      if (newSourceFilter) {
+        url.searchParams.set("source", newSourceFilter);
+      } else {
+        url.searchParams.delete("source");
+      }
+
+      if (newLitellmProviderFilter) {
+        url.searchParams.set("litellmProvider", newLitellmProviderFilter);
+      } else {
+        url.searchParams.delete("litellmProvider");
+      }
+      window.history.replaceState({}, "", url.toString());
+    },
+    []
+  );
 
   // 获取价格数据
   const fetchPrices = useCallback(
-    async (newPage: number, newPageSize: number, newSearchTerm: string) => {
+    async (
+      newPage: number,
+      newPageSize: number,
+      newSearchTerm: string,
+      newSourceFilter: ModelPriceSource | "",
+      newLitellmProviderFilter: string
+    ) => {
       setIsLoading(true);
       try {
-        const response = await fetch(
-          `/api/prices?page=${newPage}&pageSize=${newPageSize}&search=${encodeURIComponent(newSearchTerm)}`
-        );
+        const url = new URL("/api/prices", window.location.origin);
+        url.searchParams.set("page", newPage.toString());
+        url.searchParams.set("pageSize", newPageSize.toString());
+        url.searchParams.set("search", newSearchTerm);
+
+        if (newSourceFilter) {
+          url.searchParams.set("source", newSourceFilter);
+        }
+        if (newLitellmProviderFilter) {
+          url.searchParams.set("litellmProvider", newLitellmProviderFilter);
+        }
+
+        const response = await fetch(url.toString());
         const result = await response.json();
 
         if (result.ok) {
@@ -132,24 +183,32 @@ export function PriceList({
   // 监听价格数据变化事件（由其他组件触发）
   useEffect(() => {
     const handlePriceUpdate = () => {
-      fetchPrices(page, pageSize, debouncedSearchTerm);
+      const forcedPage = pendingRefreshPage.current;
+      if (typeof forcedPage === "number") {
+        pendingRefreshPage.current = null;
+        fetchPrices(forcedPage, pageSize, debouncedSearchTerm, sourceFilter, litellmProviderFilter);
+        return;
+      }
+
+      fetchPrices(page, pageSize, debouncedSearchTerm, sourceFilter, litellmProviderFilter);
     };
 
     window.addEventListener("price-data-updated", handlePriceUpdate);
     return () => window.removeEventListener("price-data-updated", handlePriceUpdate);
-  }, [page, pageSize, debouncedSearchTerm, fetchPrices]);
+  }, [page, pageSize, debouncedSearchTerm, fetchPrices, sourceFilter, litellmProviderFilter]);
 
   // 当防抖后的搜索词变化时，触发搜索（重置到第一页）
   useEffect(() => {
-    // 跳过初始渲染（当 debouncedSearchTerm 等于初始 searchTerm 时）
-    if (debouncedSearchTerm !== searchTerm) return;
+    if (debouncedSearchTerm === lastDebouncedSearchTerm.current) {
+      return;
+    }
+    lastDebouncedSearchTerm.current = debouncedSearchTerm;
 
     const newPage = 1; // 搜索时重置到第一页
     setPage(newPage);
-    updateURL(debouncedSearchTerm, newPage, pageSize);
-    fetchPrices(newPage, pageSize, debouncedSearchTerm);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearchTerm, fetchPrices, pageSize, searchTerm, updateURL]); // 仅依赖 debouncedSearchTerm
+    updateURL(debouncedSearchTerm, newPage, pageSize, sourceFilter, litellmProviderFilter);
+    fetchPrices(newPage, pageSize, debouncedSearchTerm, sourceFilter, litellmProviderFilter);
+  }, [debouncedSearchTerm, fetchPrices, litellmProviderFilter, pageSize, sourceFilter, updateURL]);
 
   // 搜索输入处理（只更新状态，不触发请求）
   const handleSearchChange = (value: string) => {
@@ -161,16 +220,16 @@ export function PriceList({
     const newPage = Math.max(1, Math.min(page, Math.ceil(total / newPageSize)));
     setPageSize(newPageSize);
     setPage(newPage);
-    updateURL(debouncedSearchTerm, newPage, newPageSize);
-    fetchPrices(newPage, newPageSize, debouncedSearchTerm);
+    updateURL(debouncedSearchTerm, newPage, newPageSize, sourceFilter, litellmProviderFilter);
+    fetchPrices(newPage, newPageSize, debouncedSearchTerm, sourceFilter, litellmProviderFilter);
   };
 
   // 页面跳转处理
   const handlePageChange = (newPage: number) => {
     if (newPage < 1 || newPage > totalPages) return;
     setPage(newPage);
-    updateURL(debouncedSearchTerm, newPage, pageSize);
-    fetchPrices(newPage, pageSize, debouncedSearchTerm);
+    updateURL(debouncedSearchTerm, newPage, pageSize, sourceFilter, litellmProviderFilter);
+    fetchPrices(newPage, pageSize, debouncedSearchTerm, sourceFilter, litellmProviderFilter);
   };
 
   // 移除客户端过滤逻辑（现在由后端处理）
@@ -180,7 +239,7 @@ export function PriceList({
    * 格式化价格显示为每百万token的价格
    */
   const formatPrice = (value?: number): string => {
-    if (!value) return "-";
+    if (value === undefined || value === null) return "-";
     // 将每token的价格转换为每百万token的价格
     const pricePerMillion = value * 1000000;
     // 格式化为合适的小数位数
@@ -196,23 +255,163 @@ export function PriceList({
   };
 
   /**
-   * 获取模型类型标签
+   * 格式化标量价格（用于 /img、/req 等）
    */
-  const getModeLabel = (mode?: string) => {
-    switch (mode) {
-      case "chat":
-        return <Badge variant="default">{t("table.typeChat")}</Badge>;
-      case "image_generation":
-        return <Badge variant="secondary">{t("table.typeImage")}</Badge>;
-      case "completion":
-        return <Badge variant="outline">{t("table.typeCompletion")}</Badge>;
-      default:
-        return <Badge variant="outline">{t("table.typeUnknown")}</Badge>;
+  const formatScalarPrice = (value?: number): string => {
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+      return "-";
     }
+    if (value < 0.01) return value.toFixed(4);
+    if (value < 1) return value.toFixed(3);
+    if (value < 100) return value.toFixed(2);
+    return value.toFixed(0);
   };
+
+  const formatPerMillionTokenPriceLabel = (value?: number): string => {
+    const formatted = formatPrice(value);
+    if (formatted === "-") return "-";
+    return `$${formatted}/M`;
+  };
+
+  const formatPerImagePriceLabel = (value?: number): string => {
+    const formatted = formatScalarPrice(value);
+    if (formatted === "-") return "-";
+    return `$${formatted}/img`;
+  };
+
+  const formatPerRequestPriceLabel = (value?: number): string => {
+    const formatted = formatScalarPrice(value);
+    if (formatted === "-") return "-";
+    return `$${formatted}/req`;
+  };
+
+  const handleCopyModelId = useCallback(
+    async (modelId: string) => {
+      const ok = await copyToClipboard(modelId);
+      if (ok) {
+        toast.success(tCommon("copySuccess"));
+        return;
+      }
+      toast.error(tCommon("copyFailed"));
+    },
+    [tCommon]
+  );
+
+  const capabilityItems: Array<{
+    key:
+      | "supports_assistant_prefill"
+      | "supports_computer_use"
+      | "supports_function_calling"
+      | "supports_pdf_input"
+      | "supports_prompt_caching"
+      | "supports_reasoning"
+      | "supports_response_schema"
+      | "supports_tool_choice"
+      | "supports_vision";
+    icon: React.ComponentType<{ className?: string }>;
+    label: string;
+  }> = [
+    { key: "supports_function_calling", icon: Code2, label: t("capabilities.functionCalling") },
+    { key: "supports_tool_choice", icon: Terminal, label: t("capabilities.toolChoice") },
+    { key: "supports_response_schema", icon: Braces, label: t("capabilities.responseSchema") },
+    { key: "supports_prompt_caching", icon: Database, label: t("capabilities.promptCaching") },
+    { key: "supports_vision", icon: Eye, label: t("capabilities.vision") },
+    { key: "supports_pdf_input", icon: FileText, label: t("capabilities.pdfInput") },
+    { key: "supports_reasoning", icon: Sparkles, label: t("capabilities.reasoning") },
+    { key: "supports_computer_use", icon: Monitor, label: t("capabilities.computerUse") },
+    { key: "supports_assistant_prefill", icon: Pencil, label: t("capabilities.assistantPrefill") },
+  ];
+
+  const applyFilters = useCallback(
+    (next: { source: ModelPriceSource | ""; litellmProvider: string }) => {
+      setSourceFilter(next.source);
+      setLitellmProviderFilter(next.litellmProvider);
+
+      const newPage = 1;
+      setPage(newPage);
+      updateURL(debouncedSearchTerm, newPage, pageSize, next.source, next.litellmProvider);
+      fetchPrices(newPage, pageSize, debouncedSearchTerm, next.source, next.litellmProvider);
+    },
+    [debouncedSearchTerm, fetchPrices, pageSize, updateURL]
+  );
 
   return (
     <div className="space-y-4">
+      {/* 快捷筛选 */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant={!sourceFilter && !litellmProviderFilter ? "default" : "outline"}
+          size="sm"
+          onClick={() => applyFilters({ source: "", litellmProvider: "" })}
+        >
+          {t("filters.all")}
+        </Button>
+
+        <Button
+          type="button"
+          variant={sourceFilter === "manual" ? "default" : "outline"}
+          size="sm"
+          onClick={() =>
+            applyFilters({
+              source: sourceFilter === "manual" ? "" : "manual",
+              litellmProvider: "",
+            })
+          }
+        >
+          <Package className="h-4 w-4 mr-2" />
+          {t("filters.local")}
+        </Button>
+
+        <Button
+          type="button"
+          variant={litellmProviderFilter === "anthropic" ? "default" : "outline"}
+          size="sm"
+          onClick={() =>
+            applyFilters({
+              source: "",
+              litellmProvider: litellmProviderFilter === "anthropic" ? "" : "anthropic",
+            })
+          }
+        >
+          <Claude.Color className="h-4 w-4 mr-2" />
+          {t("filters.anthropic")}
+        </Button>
+
+        <Button
+          type="button"
+          variant={litellmProviderFilter === "openai" ? "default" : "outline"}
+          size="sm"
+          onClick={() =>
+            applyFilters({
+              source: "",
+              litellmProvider: litellmProviderFilter === "openai" ? "" : "openai",
+            })
+          }
+        >
+          <OpenAI className="h-4 w-4 mr-2" />
+          {t("filters.openai")}
+        </Button>
+
+        <Button
+          type="button"
+          variant={litellmProviderFilter === "vertex_ai-language-models" ? "default" : "outline"}
+          size="sm"
+          onClick={() =>
+            applyFilters({
+              source: "",
+              litellmProvider:
+                litellmProviderFilter === "vertex_ai-language-models"
+                  ? ""
+                  : "vertex_ai-language-models",
+            })
+          }
+        >
+          <Gemini.Color className="h-4 w-4 mr-2" />
+          {t("filters.vertex")}
+        </Button>
+      </div>
+
       {/* 搜索和页面大小控制 */}
       <div className="flex items-center gap-4">
         <div className="relative flex-1">
@@ -225,9 +424,7 @@ export function PriceList({
           />
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">
-            {t("pagination.perPage", { size: "" }).replace(/\d+/, "")}
-          </span>
+          <span className="text-sm text-muted-foreground">{t("pagination.perPageLabel")}</span>
           <Select
             value={pageSize.toString()}
             onValueChange={(value) => handlePageSizeChange(parseInt(value, 10))}
@@ -250,11 +447,17 @@ export function PriceList({
         <Table className="table-fixed">
           <TableHeader>
             <TableRow>
-              <TableHead className="w-48 whitespace-normal">{t("table.modelName")}</TableHead>
-              <TableHead className="w-24">{t("table.type")}</TableHead>
-              <TableHead className="w-32 whitespace-normal">{t("table.provider")}</TableHead>
-              <TableHead className="w-32 text-right">{t("table.inputPrice")}</TableHead>
-              <TableHead className="w-32 text-right">{t("table.outputPrice")}</TableHead>
+              <TableHead className="w-72 whitespace-normal">{t("table.modelName")}</TableHead>
+              <TableHead className="w-40 whitespace-normal">{t("table.capabilities")}</TableHead>
+              <TableHead className="w-48 whitespace-normal text-right">
+                {t("table.price")}
+              </TableHead>
+              <TableHead className="w-36 whitespace-normal text-right">
+                {t("table.cacheReadPrice")}
+              </TableHead>
+              <TableHead className="w-44 whitespace-normal text-right">
+                {t("table.cacheCreationPrice")}
+              </TableHead>
               <TableHead className="w-32">{t("table.updatedAt")}</TableHead>
               <TableHead className="w-20">{t("table.actions")}</TableHead>
             </TableRow>
@@ -272,48 +475,158 @@ export function PriceList({
             ) : filteredPrices.length > 0 ? (
               filteredPrices.map((price) => (
                 <TableRow key={price.id}>
-                  <TableCell className="font-mono text-sm whitespace-normal break-words">
-                    {price.modelName}
-                  </TableCell>
-                  <TableCell>{getModeLabel(price.priceData.mode)}</TableCell>
                   <TableCell className="whitespace-normal break-words">
-                    {price.priceData.litellm_provider || "-"}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">
+                        {price.priceData.display_name?.trim() || price.modelName}
+                      </span>
+                      {price.priceData.litellm_provider ? (
+                        <Badge variant="secondary" className="font-mono text-xs">
+                          {price.priceData.litellm_provider}
+                        </Badge>
+                      ) : null}
+                      {price.source === "manual" && (
+                        <Badge variant="outline">{t("badges.local")}</Badge>
+                      )}
+                    </div>
+                    <div className="mt-1">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label={t("table.copyModelId")}
+                            className="font-mono text-xs text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                            onClick={() => handleCopyModelId(price.modelName)}
+                          >
+                            {price.modelName}
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent sideOffset={4}>{t("table.copyModelId")}</TooltipContent>
+                      </Tooltip>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {capabilityItems.map(({ key, icon: Icon, label }) => {
+                        const enabled = price.priceData[key] === true;
+                        const status = enabled
+                          ? t("capabilities.statusSupported")
+                          : t("capabilities.statusUnsupported");
+                        const tooltipText = t("capabilities.tooltip", { label, status });
+                        return (
+                          <Tooltip key={key}>
+                            <TooltipTrigger asChild>
+                              <button
+                                type="button"
+                                aria-label={tooltipText}
+                                className={`inline-flex h-7 w-7 items-center justify-center rounded-md border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                                  enabled
+                                    ? "bg-primary/10 text-primary border-primary/20"
+                                    : "bg-muted/30 text-muted-foreground/40 border-transparent"
+                                }`}
+                              >
+                                <Icon className="h-4 w-4" aria-hidden="true" />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent sideOffset={4}>{tooltipText}</TooltipContent>
+                          </Tooltip>
+                        );
+                      })}
+                    </div>
                   </TableCell>
                   <TableCell className="font-mono text-sm text-right">
-                    {price.priceData.mode === "image_generation" ? (
-                      "-"
-                    ) : (
-                      <span className="text-muted-foreground">
-                        ${formatPrice(price.priceData.input_cost_per_token)}/M
-                      </span>
-                    )}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-end gap-2">
+                        <span className="text-xs text-muted-foreground">
+                          {t("table.priceInput")}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {price.priceData.mode === "image_generation"
+                            ? "-"
+                            : formatPerMillionTokenPriceLabel(price.priceData.input_cost_per_token)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-end gap-2">
+                        <span className="text-xs text-muted-foreground">
+                          {t("table.priceOutput")}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {price.priceData.mode === "image_generation"
+                            ? formatPerImagePriceLabel(price.priceData.output_cost_per_image)
+                            : formatPerMillionTokenPriceLabel(
+                                price.priceData.output_cost_per_token
+                              )}
+                        </span>
+                      </div>
+                      {formatPerRequestPriceLabel(price.priceData.input_cost_per_request) !==
+                      "-" ? (
+                        <div className="flex items-center justify-end gap-2">
+                          <span className="text-xs text-muted-foreground">
+                            {t("table.pricePerRequest")}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {formatPerRequestPriceLabel(price.priceData.input_cost_per_request)}
+                          </span>
+                        </div>
+                      ) : null}
+                    </div>
                   </TableCell>
                   <TableCell className="font-mono text-sm text-right">
-                    {price.priceData.mode === "image_generation" ? (
-                      <span className="text-muted-foreground">
-                        ${formatPrice(price.priceData.output_cost_per_image)}/img
-                      </span>
+                    <span className="text-muted-foreground">
+                      {price.priceData.supports_prompt_caching === true
+                        ? formatPerMillionTokenPriceLabel(
+                            price.priceData.cache_read_input_token_cost
+                          )
+                        : "-"}
+                    </span>
+                  </TableCell>
+                  <TableCell className="font-mono text-sm text-right">
+                    {price.priceData.supports_prompt_caching === true ? (
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-end gap-2">
+                          <span className="text-xs text-muted-foreground">
+                            {t("table.cache5m")}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {formatPerMillionTokenPriceLabel(
+                              price.priceData.cache_creation_input_token_cost
+                            )}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-end gap-2">
+                          <span className="text-xs text-muted-foreground">
+                            {t("table.cache1h")}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {formatPerMillionTokenPriceLabel(
+                              price.priceData.cache_creation_input_token_cost_above_1hr
+                            )}
+                          </span>
+                        </div>
+                      </div>
                     ) : (
-                      <span className="text-muted-foreground">
-                        ${formatPrice(price.priceData.output_cost_per_token)}/M
-                      </span>
+                      <span className="text-muted-foreground">-</span>
                     )}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {new Date(price.createdAt).toLocaleDateString("zh-CN")}
+                    {new Date(price.updatedAt ?? price.createdAt).toLocaleDateString(locale)}
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          aria-label={t("actions.more")}
+                        >
                           <MoreHorizontal className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <ModelPriceDialog
+                        <ModelPriceDrawer
                           mode="edit"
                           initialData={price}
-                          onSuccess={() => fetchPrices(page, pageSize, debouncedSearchTerm)}
                           trigger={
                             <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
                               <Pencil className="h-4 w-4 mr-2" />
@@ -323,7 +636,21 @@ export function PriceList({
                         />
                         <DeleteModelDialog
                           modelName={price.modelName}
-                          onSuccess={() => fetchPrices(page, pageSize, debouncedSearchTerm)}
+                          onSuccess={() => {
+                            const willBeEmpty = filteredPrices.length <= 1 && page > 1;
+                            const targetPage = willBeEmpty ? page - 1 : page;
+                            if (targetPage !== page) {
+                              pendingRefreshPage.current = targetPage;
+                              setPage(targetPage);
+                              updateURL(
+                                debouncedSearchTerm,
+                                targetPage,
+                                pageSize,
+                                sourceFilter,
+                                litellmProviderFilter
+                              );
+                            }
+                          }}
                           trigger={
                             <DropdownMenuItem
                               onSelect={(e) => e.preventDefault()}
@@ -442,8 +769,8 @@ export function PriceList({
             time:
               prices.length > 0
                 ? new Date(
-                    Math.max(...prices.map((p) => new Date(p.createdAt).getTime()))
-                  ).toLocaleDateString()
+                    Math.max(...prices.map((p) => new Date(p.updatedAt ?? p.createdAt).getTime()))
+                  ).toLocaleDateString(locale)
                 : "-",
           })}
         </div>

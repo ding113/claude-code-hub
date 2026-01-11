@@ -1,6 +1,6 @@
 {
   "name": "claude-code-hub",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "scripts": {
     "dev": "next dev --port 13500",
@@ -40,6 +40,7 @@
     "@hono/swagger-ui": "^0.5",
     "@hono/zod-openapi": "^1",
     "@hookform/resolvers": "^5",
+    "@iarna/toml": "^2.2.5",
     "@lobehub/icons": "^2",
     "@radix-ui/react-alert-dialog": "^1",
     "@radix-ui/react-avatar": "^1",

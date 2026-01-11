@@ -1,89 +1,22 @@
 /**
- * 价格表种子数据初始化服务
+ * 价格表初始化服务（云端优先）
  *
  * 核心功能：
- * 1. 从本地种子文件读取价格表
- * 2. 在应用启动时自动初始化价格表（如果数据库为空）
- * 3. 降级策略：种子文件读取失败时记录警告但不阻塞启动
+ * 1. 在应用启动时自动确保价格表存在（如果数据库为空）
+ * 2. 数据库为空时从云端价格表拉取并写入数据库
+ * 3. 降级策略：拉取/写入失败时记录警告但不阻塞启动
  */
 
-import fs from "node:fs/promises";
-import path from "node:path";
 import { logger } from "@/lib/logger";
+import { syncCloudPriceTableToDatabase } from "@/lib/price-sync/cloud-price-updater";
 import { hasAnyPriceRecords } from "@/repository/model-price";
-
-const SEED_PRICE_FILE_PATH = path.join(process.cwd(), "public", "seed", "litellm-prices.json");
-
-/**
- * 从本地种子文件读取价格表
- * @returns JSON 字符串或 null（文件不存在或损坏）
- */
-export async function readSeedPriceTable(): Promise<string | null> {
-  try {
-    const seedData = await fs.readFile(SEED_PRICE_FILE_PATH, "utf-8");
-
-    // 验证 JSON 格式
-    JSON.parse(seedData);
-
-    logger.info("📦 Successfully read seed price table");
-    return seedData;
-  } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-      logger.warn("⚠️  Seed price table not found at:", { path: SEED_PRICE_FILE_PATH });
-    } else {
-      logger.error("❌ Failed to read seed price table:", error);
-    }
-    return null;
-  }
-}
-
-/**
- * 从种子文件初始化价格表到数据库
- * @returns 是否成功初始化
- */
-export async function initializePriceTableFromSeed(): Promise<boolean> {
-  try {
-    logger.info("🌱 Initializing price table from seed data...");
-
-    // 读取种子文件
-    const seedJson = await readSeedPriceTable();
-
-    if (!seedJson) {
-      logger.warn("⚠️  Seed price table unavailable, skipping initialization");
-      return false;
-    }
-
-    // 动态导入以避免循环依赖
-    // 直接调用内部函数，无需权限检查（系统启动时的自动初始化）
-    const { processPriceTableInternal } = await import("@/actions/model-prices");
-
-    const result = await processPriceTableInternal(seedJson);
-
-    if (!result.ok) {
-      logger.error("❌ Failed to initialize price table from seed:", { error: result.error });
-      return false;
-    }
-
-    if (result.data) {
-      logger.info("Price table initialized from seed", {
-        added: result.data.added.length,
-        total: result.data.total,
-      });
-    }
-
-    return true;
-  } catch (error) {
-    logger.error("❌ Failed to initialize price table from seed:", error);
-    return false;
-  }
-}
 
 /**
  * 确保价格表存在（主入口函数）
  *
  * 策略：
  * 1. 检查数据库是否有价格数据
- * 2. 如果为空，从种子文件导入
+ * 2. 如果为空，从云端价格表拉取并写入数据库
  * 3. 失败时记录警告但不阻塞应用启动
  */
 export async function ensurePriceTable(): Promise<void> {
@@ -92,16 +25,29 @@ export async function ensurePriceTable(): Promise<void> {
     const hasPrices = await hasAnyPriceRecords();
 
     if (hasPrices) {
-      logger.info("✓ Price table already exists, skipping seed initialization");
+      logger.info("[PriceSync] Price table already exists, skipping initialization");
       return;
     }
 
-    logger.info("ℹ️  No price data found in database, initializing from seed...");
+    logger.info("[PriceSync] No price data found in database, syncing from cloud price table...");
 
-    // 从种子文件初始化
-    await initializePriceTableFromSeed();
+    const result = await syncCloudPriceTableToDatabase();
+    if (!result.ok) {
+      logger.warn("[PriceSync] Failed to sync cloud price table for initialization", {
+        error: result.error,
+      });
+      return;
+    }
+
+    logger.info("[PriceSync] Cloud price table synced for initialization", {
+      added: result.data.added.length,
+      updated: result.data.updated.length,
+      total: result.data.total,
+    });
   } catch (error) {
     // 不阻塞应用启动，用户仍可通过手动同步/更新来添加价格表
-    logger.error("❌ Failed to ensure price table:", error);
+    logger.error("[PriceSync] Failed to ensure price table", {
+      error: error,
+    });
   }
 }

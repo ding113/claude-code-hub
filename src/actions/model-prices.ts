@@ -3,14 +3,16 @@
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
-import { getPriceTableJson } from "@/lib/price-sync";
+import {
+  fetchCloudPriceTableToml,
+  parseCloudPriceTableToml,
+} from "@/lib/price-sync/cloud-price-table";
 import {
   createModelPrice,
   deleteModelPriceByName,
   findAllLatestPrices,
   findAllLatestPricesPaginated,
   findAllManualPrices,
-  findLatestPriceByModel,
   hasAnyPriceRecords,
   type PaginatedResult,
   type PaginationParams,
@@ -30,8 +32,38 @@ import type { ActionResult } from "./types";
  * 检查价格数据是否相同
  */
 function isPriceDataEqual(data1: ModelPriceData, data2: ModelPriceData): boolean {
-  // 深度比较两个价格对象
-  return JSON.stringify(data1) === JSON.stringify(data2);
+  const stableStringify = (value: unknown): string => {
+    const seen = new WeakSet<object>();
+
+    const canonicalize = (node: unknown): unknown => {
+      if (node === null || node === undefined) return node;
+      if (typeof node !== "object") return node;
+
+      if (seen.has(node as object)) {
+        return null;
+      }
+      seen.add(node as object);
+
+      if (Array.isArray(node)) {
+        return node.map(canonicalize);
+      }
+
+      const obj = node as Record<string, unknown>;
+      const result: Record<string, unknown> = Object.create(null);
+      for (const key of Object.keys(obj).sort()) {
+        // 防御：避免 __proto__/constructor/prototype 触发原型链污染
+        if (key === "__proto__" || key === "constructor" || key === "prototype") {
+          continue;
+        }
+        result[key] = canonicalize(obj[key]);
+      }
+      return result;
+    };
+
+    return JSON.stringify(canonicalize(value));
+  };
+
+  return stableStringify(data1) === stableStringify(data2);
 }
 
 /**
@@ -77,6 +109,13 @@ export async function processPriceTableInternal(
     // 获取所有手动添加的模型（用于冲突检测）
     const manualPrices = await findAllManualPrices();
 
+    // 批量获取数据库中“每个模型的最新价格”，避免 N+1 查询
+    const existingLatestPrices = await findAllLatestPrices();
+    const existingByModelName = new Map<string, ModelPrice>();
+    for (const price of existingLatestPrices) {
+      existingByModelName.set(price.modelName, price);
+    }
+
     const result: PriceUpdateResult = {
       added: [],
       updated: [],
@@ -113,8 +152,7 @@ export async function processPriceTableInternal(
           continue;
         }
 
-        // 查找该模型的最新价格
-        const existingPrice = await findLatestPriceByModel(modelName);
+        const existingPrice = existingByModelName.get(modelName) ?? null;
 
         if (!existingPrice) {
           // 模型不存在，新增记录
@@ -139,7 +177,14 @@ export async function processPriceTableInternal(
     }
 
     // 刷新页面数据
-    revalidatePath("/settings/prices");
+    try {
+      revalidatePath("/settings/prices");
+    } catch (error) {
+      // 在后台任务/启动阶段可能没有 Next.js 的请求上下文，此处允许降级
+      logger.debug("[ModelPrices] revalidatePath skipped", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
 
     return { ok: true, data: result };
   } catch (error) {
@@ -151,10 +196,14 @@ export async function processPriceTableInternal(
 
 /**
  * 上传并更新模型价格表（Web UI 入口，包含权限检查）
+ *
+ * 支持格式：
+ * - JSON：PriceTableJson（内部入库格式）
+ * - TOML：云端价格表格式（会提取 models 表后再入库）
  * @param overwriteManual - 可选，要覆盖的手动添加模型名称列表
  */
 export async function uploadPriceTable(
-  jsonContent: string,
+  content: string,
   overwriteManual?: string[]
 ): Promise<ActionResult<PriceUpdateResult>> {
   // 权限检查：只有管理员可以上传价格表
@@ -163,7 +212,18 @@ export async function uploadPriceTable(
     return { ok: false, error: "无权限执行此操作" };
   }
 
-  // 调用核心逻辑
+  // 先尝试 JSON；失败则按 TOML 解析（用于云端价格表文件直接上传）
+  let jsonContent = content;
+  try {
+    JSON.parse(content);
+  } catch {
+    const parseResult = parseCloudPriceTableToml(content);
+    if (!parseResult.ok) {
+      return { ok: false, error: parseResult.error };
+    }
+    jsonContent = JSON.stringify(parseResult.data.models);
+  }
+
   return processPriceTableInternal(jsonContent, overwriteManual);
 }
 
@@ -284,22 +344,21 @@ export async function checkLiteLLMSyncConflicts(): Promise<ActionResult<SyncConf
       return { ok: false, error: "无权限执行此操作" };
     }
 
-    // 获取价格表 JSON
-    const jsonContent = await getPriceTableJson();
-    if (!jsonContent) {
+    // 拉取并解析云端 TOML 价格表
+    const tomlResult = await fetchCloudPriceTableToml();
+    if (!tomlResult.ok) {
       return {
         ok: false,
-        error: "无法从 CDN 或缓存获取价格表，请检查网络连接或稍后重试",
+        error: tomlResult.error,
       };
     }
 
-    // 解析 JSON
-    let priceTable: PriceTableJson;
-    try {
-      priceTable = JSON.parse(jsonContent);
-    } catch {
-      return { ok: false, error: "JSON格式不正确" };
+    const parseResult = parseCloudPriceTableToml(tomlResult.data);
+    if (!parseResult.ok) {
+      return { ok: false, error: parseResult.error };
     }
+
+    const priceTable: PriceTableJson = parseResult.data.models;
 
     // 获取数据库中所有 manual 价格
     const manualPrices = await findAllManualPrices();
@@ -349,31 +408,40 @@ export async function syncLiteLLMPrices(
       return { ok: false, error: "无权限执行此操作" };
     }
 
-    logger.info("🔄 Starting LiteLLM price sync...");
+    logger.info("[PriceSync] Starting cloud price sync...");
 
-    // 获取价格表 JSON（优先 CDN，降级缓存）
-    const jsonContent = await getPriceTableJson();
-
-    if (!jsonContent) {
-      logger.error("❌ Failed to get price table from both CDN and cache");
-      return {
-        ok: false,
-        error: "无法从 CDN 或缓存获取价格表，请检查网络连接或稍后重试",
-      };
+    // 拉取并解析云端 TOML 价格表
+    const tomlResult = await fetchCloudPriceTableToml();
+    if (!tomlResult.ok) {
+      logger.error("[PriceSync] Failed to fetch cloud price table", { error: tomlResult.error });
+      return { ok: false, error: tomlResult.error };
     }
 
-    // 调用现有的上传逻辑（已包含权限检查，但这里直接处理以避免重复检查）
-    const result = await uploadPriceTable(jsonContent, overwriteManual);
+    const parseResult = parseCloudPriceTableToml(tomlResult.data);
+    if (!parseResult.ok) {
+      logger.error("[PriceSync] Failed to parse cloud price table", { error: parseResult.error });
+      return { ok: false, error: parseResult.error };
+    }
+
+    const jsonContent = JSON.stringify(parseResult.data.models);
+    const result = await processPriceTableInternal(jsonContent, overwriteManual);
 
     if (result.ok) {
-      logger.info("LiteLLM price sync completed", { result: result.data });
+      logger.info("[PriceSync] Cloud price sync completed", {
+        added: result.data.added.length,
+        updated: result.data.updated.length,
+        unchanged: result.data.unchanged.length,
+        failed: result.data.failed.length,
+        skippedConflicts: result.data.skippedConflicts?.length ?? 0,
+        total: result.data.total,
+      });
     } else {
-      logger.error("❌ LiteLLM price sync failed:", { context: result.error });
+      logger.error("[PriceSync] Cloud price sync failed", { error: result.error });
     }
 
     return result;
   } catch (error) {
-    logger.error("❌ Sync LiteLLM prices failed:", error);
+    logger.error("[PriceSync] Cloud price sync failed", error);
     const message = error instanceof Error ? error.message : "同步失败，请稍后重试";
     return { ok: false, error: message };
   }
@@ -384,11 +452,17 @@ export async function syncLiteLLMPrices(
  */
 export interface SingleModelPriceInput {
   modelName: string;
+  displayName?: string;
   mode: "chat" | "image_generation" | "completion";
   litellmProvider?: string;
+  supportsPromptCaching?: boolean;
   inputCostPerToken?: number;
   outputCostPerToken?: number;
   outputCostPerImage?: number;
+  inputCostPerRequest?: number;
+  cacheReadInputTokenCost?: number;
+  cacheCreationInputTokenCost?: number;
+  cacheCreationInputTokenCostAbove1hr?: number;
 }
 
 /**
@@ -428,21 +502,59 @@ export async function upsertSingleModelPrice(
     ) {
       return { ok: false, error: "图片价格必须为非负数" };
     }
+    if (
+      input.inputCostPerRequest !== undefined &&
+      (input.inputCostPerRequest < 0 || !Number.isFinite(input.inputCostPerRequest))
+    ) {
+      return { ok: false, error: "按次调用价格必须为非负数" };
+    }
+    if (
+      input.cacheReadInputTokenCost !== undefined &&
+      (input.cacheReadInputTokenCost < 0 || !Number.isFinite(input.cacheReadInputTokenCost))
+    ) {
+      return { ok: false, error: "缓存读取价格必须为非负数" };
+    }
+    if (
+      input.cacheCreationInputTokenCost !== undefined &&
+      (input.cacheCreationInputTokenCost < 0 || !Number.isFinite(input.cacheCreationInputTokenCost))
+    ) {
+      return { ok: false, error: "缓存创建价格必须为非负数" };
+    }
+    if (
+      input.cacheCreationInputTokenCostAbove1hr !== undefined &&
+      (input.cacheCreationInputTokenCostAbove1hr < 0 ||
+        !Number.isFinite(input.cacheCreationInputTokenCostAbove1hr))
+    ) {
+      return { ok: false, error: "缓存创建(1h)价格必须为非负数" };
+    }
 
     // 构建价格数据
     const priceData: ModelPriceData = {
       mode: input.mode,
+      display_name: input.displayName?.trim() || undefined,
       litellm_provider: input.litellmProvider || undefined,
+      supports_prompt_caching: input.supportsPromptCaching,
       input_cost_per_token: input.inputCostPerToken,
       output_cost_per_token: input.outputCostPerToken,
       output_cost_per_image: input.outputCostPerImage,
+      input_cost_per_request: input.inputCostPerRequest,
+      cache_read_input_token_cost: input.cacheReadInputTokenCost,
+      cache_creation_input_token_cost: input.cacheCreationInputTokenCost,
+      cache_creation_input_token_cost_above_1hr: input.cacheCreationInputTokenCostAbove1hr,
     };
 
     // 执行更新
     const result = await upsertModelPrice(input.modelName.trim(), priceData);
 
     // 刷新页面数据
-    revalidatePath("/settings/prices");
+    try {
+      revalidatePath("/settings/prices");
+    } catch (error) {
+      // 在后台任务/启动阶段可能没有 Next.js 的请求上下文，此处允许降级
+      logger.debug("[ModelPrices] revalidatePath skipped", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
 
     return { ok: true, data: result };
   } catch (error) {
@@ -472,7 +584,14 @@ export async function deleteSingleModelPrice(modelName: string): Promise<ActionR
     await deleteModelPriceByName(modelName.trim());
 
     // 刷新页面数据
-    revalidatePath("/settings/prices");
+    try {
+      revalidatePath("/settings/prices");
+    } catch (error) {
+      // 在后台任务/启动阶段可能没有 Next.js 的请求上下文，此处允许降级
+      logger.debug("[ModelPrices] revalidatePath skipped", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
 
     return { ok: true, data: undefined };
   } catch (error) {
