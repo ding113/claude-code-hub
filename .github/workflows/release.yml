@@ -17,6 +17,7 @@ on:
           - major
           - beta
           - rc
+          - release
       prerelease_number:
         description: 'Beta/RC number (only for beta/rc types)'
         required: false
@@ -163,6 +164,11 @@ jobs:
             rc)
               NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))-rc.${PRERELEASE_NUM}"
               IS_PRERELEASE=true
+              ;;
+            release)
+              # Convert prerelease to stable release (e.g., 0.4.1-rc.1 -> 0.4.1)
+              NEW_VERSION="${BASE_VERSION}"
+              IS_PRERELEASE=false
               ;;
             *)
               # 默认 patch
