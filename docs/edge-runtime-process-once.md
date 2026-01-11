@@ -6,10 +6,10 @@
 
 ### 复现基线（修复前）
 
-在修复前的提交 `820b519b` 上运行 `bun run build` 可稳定看到 3 条告警（分别指向 `process.once` 的 47/48/49 行），其 import trace 包含：
+在修复前的版本（例如 tag `v0.4.1`）上运行 `bun run build` 可看到 Edge Runtime 不支持 Node API 的告警，其 import trace 包含：
 
 ```text
-A Node.js API is used (process.once at line: 47) which is not supported in the Edge Runtime.
+A Node.js API is used (process.once) which is not supported in the Edge Runtime.
 Import traces:
   ./src/lib/async-task-manager.ts
   ./src/lib/price-sync/cloud-price-updater.ts
