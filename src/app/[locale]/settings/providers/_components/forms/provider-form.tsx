@@ -363,7 +363,7 @@ export function ProviderForm({
     }
 
     // group_tag 在 DB/schema 中限制为 varchar(50)，并且后端按整串校验 max(50)
-    // 这里限制逗号拼接后的总长度，避免“UI 看似可选多标签，但保存必失败”的体验
+    // 这里限制逗号拼接后的总长度，避免"UI 看似可选多标签，但保存必失败"的体验
     const serializedGroupTag = groupTag.join(",");
     if (serializedGroupTag.length > GROUP_TAG_MAX_TOTAL_LENGTH) {
       toast.error(t("errors.groupTagTooLong", { max: GROUP_TAG_MAX_TOTAL_LENGTH }));
