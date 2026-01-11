@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CloudPriceTableResult } from "@/lib/price-sync/cloud-price-table";
 
 const asyncTasks: Promise<void>[] = [];
@@ -241,6 +241,8 @@ describe("syncCloudPriceTableToDatabase", () => {
 });
 
 describe("requestCloudPriceTableSync", () => {
+  const prevRuntime = process.env.NEXT_RUNTIME;
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
@@ -251,6 +253,16 @@ describe("requestCloudPriceTableSync", () => {
       .__CCH_CLOUD_PRICE_SYNC_LAST_AT__;
     delete (globalThis as unknown as { __CCH_CLOUD_PRICE_SYNC_SCHEDULING__?: boolean })
       .__CCH_CLOUD_PRICE_SYNC_SCHEDULING__;
+
+    process.env.NEXT_RUNTIME = "nodejs";
+  });
+
+  afterEach(() => {
+    if (prevRuntime === undefined) {
+      delete process.env.NEXT_RUNTIME;
+      return;
+    }
+    process.env.NEXT_RUNTIME = prevRuntime;
   });
 
   it("no-ops in Edge runtime (does not load AsyncTaskManager)", async () => {
