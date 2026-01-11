@@ -17,11 +17,11 @@ type Key struct {
 	Name   string `bun:"name,notnull" json:"name"`
 
 	// 金额限流配置
-	Limit5hUSD      udecimal.Decimal `bun:"limit_5h_usd,type:numeric(10,2)" json:"limit5hUsd"`
-	LimitDailyUSD   udecimal.Decimal `bun:"limit_daily_usd,type:numeric(10,2)" json:"limitDailyUsd"`
-	LimitWeeklyUSD  udecimal.Decimal `bun:"limit_weekly_usd,type:numeric(10,2)" json:"limitWeeklyUsd"`
-	LimitMonthlyUSD udecimal.Decimal `bun:"limit_monthly_usd,type:numeric(10,2)" json:"limitMonthlyUsd"`
-	LimitTotalUSD   udecimal.Decimal `bun:"limit_total_usd,type:numeric(10,2)" json:"limitTotalUsd"`
+	Limit5hUSD      *udecimal.Decimal `bun:"limit_5h_usd,type:numeric(10,2)" json:"limit5hUsd"`
+	LimitDailyUSD   *udecimal.Decimal `bun:"limit_daily_usd,type:numeric(10,2)" json:"limitDailyUsd"`
+	LimitWeeklyUSD  *udecimal.Decimal `bun:"limit_weekly_usd,type:numeric(10,2)" json:"limitWeeklyUsd"`
+	LimitMonthlyUSD *udecimal.Decimal `bun:"limit_monthly_usd,type:numeric(10,2)" json:"limitMonthlyUsd"`
+	LimitTotalUSD   *udecimal.Decimal `bun:"limit_total_usd,type:numeric(10,2)" json:"limitTotalUsd"`
 
 	// 并发控制
 	LimitConcurrentSessions *int `bun:"limit_concurrent_sessions,default:0" json:"limitConcurrentSessions"`
@@ -31,15 +31,15 @@ type Key struct {
 	DailyResetTime string `bun:"daily_reset_time,notnull,default:'00:00'" json:"dailyResetTime"` // HH:mm 格式
 
 	// Provider 配置
-	ProviderGroup string `bun:"provider_group,default:'default'" json:"providerGroup"`
+	ProviderGroup *string `bun:"provider_group" json:"providerGroup"`
 
 	// 缓存配置
 	CacheTtlPreference *string `bun:"cache_ttl_preference" json:"cacheTtlPreference"`
 
 	// 权限
-	CanLoginWebUi bool `bun:"can_login_web_ui,default:false" json:"canLoginWebUi"`
+	CanLoginWebUi *bool `bun:"can_login_web_ui,default:false" json:"canLoginWebUi"`
 
-	IsEnabled bool       `bun:"is_enabled,default:true" json:"isEnabled"`
+	IsEnabled *bool      `bun:"is_enabled,default:true" json:"isEnabled"`
 	ExpiresAt *time.Time `bun:"expires_at" json:"expiresAt"`
 
 	CreatedAt time.Time  `bun:"created_at,notnull,default:current_timestamp" json:"createdAt"`
@@ -60,16 +60,20 @@ func (k *Key) IsExpired() bool {
 
 // IsActive 检查 Key 是否处于活跃状态
 func (k *Key) IsActive() bool {
-	return k.IsEnabled && !k.IsExpired() && k.DeletedAt == nil
+	enabled := true
+	if k.IsEnabled != nil {
+		enabled = *k.IsEnabled
+	}
+	return enabled && !k.IsExpired() && k.DeletedAt == nil
 }
 
 // GetEffectiveDailyLimit 获取有效的日限额
 func (k *Key) GetEffectiveDailyLimit(user *User) udecimal.Decimal {
-	if !k.LimitDailyUSD.IsZero() {
-		return k.LimitDailyUSD
+	if k.LimitDailyUSD != nil {
+		return *k.LimitDailyUSD
 	}
-	if user != nil {
-		return user.DailyLimitUSD
+	if user != nil && user.DailyLimitUSD != nil {
+		return *user.DailyLimitUSD
 	}
 	return udecimal.Zero
 }

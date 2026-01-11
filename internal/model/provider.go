@@ -16,13 +16,14 @@ type Provider struct {
 	Description *string `bun:"description" json:"description"`
 	URL         string  `bun:"url,notnull" json:"url"`
 	Key         string  `bun:"key,notnull" json:"-"` // 不序列化
-	IsEnabled   bool    `bun:"is_enabled,notnull,default:true" json:"isEnabled"`
-	Weight      int     `bun:"weight,notnull,default:1" json:"weight"`
+	IsEnabled   *bool   `bun:"is_enabled,notnull,default:true" json:"isEnabled"`
+	Weight      *int    `bun:"weight,notnull,default:1" json:"weight"`
 
 	// 优先级和分组配置
-	Priority       int              `bun:"priority,notnull,default:0" json:"priority"`
-	CostMultiplier udecimal.Decimal `bun:"cost_multiplier,type:numeric(10,4),default:1.0" json:"costMultiplier"`
-	GroupTag       *string          `bun:"group_tag" json:"groupTag"`
+	Priority       *int              `bun:"priority,notnull,default:0" json:"priority"`
+	CostMultiplier *udecimal.Decimal `bun:"cost_multiplier,type:numeric(10,4),default:1.0" json:"costMultiplier"`
+
+	GroupTag *string `bun:"group_tag" json:"groupTag"`
 
 	// 供应商类型
 	ProviderType     string `bun:"provider_type,notnull,default:'claude'" json:"providerType"` // claude, claude-auth, codex, gemini-cli, gemini, openai-compatible
@@ -41,30 +42,30 @@ type Provider struct {
 	McpPassthroughUrl  *string `bun:"mcp_passthrough_url" json:"mcpPassthroughUrl"`
 
 	// 金额限流配置
-	Limit5hUSD              udecimal.Decimal `bun:"limit_5h_usd,type:numeric(10,2)" json:"limit5hUsd"`
-	LimitDailyUSD           udecimal.Decimal `bun:"limit_daily_usd,type:numeric(10,2)" json:"limitDailyUsd"`
-	DailyResetMode          string           `bun:"daily_reset_mode,notnull,default:'fixed'" json:"dailyResetMode"` // fixed, rolling
-	DailyResetTime          string           `bun:"daily_reset_time,notnull,default:'00:00'" json:"dailyResetTime"` // HH:mm 格式
-	LimitWeeklyUSD          udecimal.Decimal `bun:"limit_weekly_usd,type:numeric(10,2)" json:"limitWeeklyUsd"`
-	LimitMonthlyUSD         udecimal.Decimal `bun:"limit_monthly_usd,type:numeric(10,2)" json:"limitMonthlyUsd"`
-	LimitTotalUSD           udecimal.Decimal `bun:"limit_total_usd,type:numeric(10,2)" json:"limitTotalUsd"`
-	TotalCostResetAt        *time.Time       `bun:"total_cost_reset_at" json:"totalCostResetAt"`
-	LimitConcurrentSessions *int             `bun:"limit_concurrent_sessions,default:0" json:"limitConcurrentSessions"`
+	Limit5hUSD              *udecimal.Decimal `bun:"limit_5h_usd,type:numeric(10,2)" json:"limit5hUsd"`
+	LimitDailyUSD           *udecimal.Decimal `bun:"limit_daily_usd,type:numeric(10,2)" json:"limitDailyUsd"`
+	DailyResetMode          string            `bun:"daily_reset_mode,notnull,default:'fixed'" json:"dailyResetMode"` // fixed, rolling
+	DailyResetTime          string            `bun:"daily_reset_time,notnull,default:'00:00'" json:"dailyResetTime"` // HH:mm 格式
+	LimitWeeklyUSD          *udecimal.Decimal `bun:"limit_weekly_usd,type:numeric(10,2)" json:"limitWeeklyUsd"`
+	LimitMonthlyUSD         *udecimal.Decimal `bun:"limit_monthly_usd,type:numeric(10,2)" json:"limitMonthlyUsd"`
+	LimitTotalUSD           *udecimal.Decimal `bun:"limit_total_usd,type:numeric(10,2)" json:"limitTotalUsd"`
+	TotalCostResetAt        *time.Time        `bun:"total_cost_reset_at" json:"totalCostResetAt"`
+	LimitConcurrentSessions *int              `bun:"limit_concurrent_sessions,default:0" json:"limitConcurrentSessions"`
 
 	// 熔断器配置
 	MaxRetryAttempts                       *int `bun:"max_retry_attempts" json:"maxRetryAttempts"`
-	CircuitBreakerFailureThreshold         int  `bun:"circuit_breaker_failure_threshold,default:5" json:"circuitBreakerFailureThreshold"`
-	CircuitBreakerOpenDuration             int  `bun:"circuit_breaker_open_duration,default:1800000" json:"circuitBreakerOpenDuration"` // ms (30分钟)
-	CircuitBreakerHalfOpenSuccessThreshold int  `bun:"circuit_breaker_half_open_success_threshold,default:2" json:"circuitBreakerHalfOpenSuccessThreshold"`
+	CircuitBreakerFailureThreshold         *int `bun:"circuit_breaker_failure_threshold,default:5" json:"circuitBreakerFailureThreshold"`
+	CircuitBreakerOpenDuration             *int `bun:"circuit_breaker_open_duration,default:1800000" json:"circuitBreakerOpenDuration"` // ms (30分钟)
+	CircuitBreakerHalfOpenSuccessThreshold *int `bun:"circuit_breaker_half_open_success_threshold,default:2" json:"circuitBreakerHalfOpenSuccessThreshold"`
 
 	// 代理配置
 	ProxyUrl              *string `bun:"proxy_url" json:"proxyUrl"`
 	ProxyFallbackToDirect bool    `bun:"proxy_fallback_to_direct,default:false" json:"proxyFallbackToDirect"`
 
 	// 超时配置（毫秒）
-	FirstByteTimeoutStreamingMs  int `bun:"first_byte_timeout_streaming_ms,notnull,default:0" json:"firstByteTimeoutStreamingMs"`
-	StreamingIdleTimeoutMs       int `bun:"streaming_idle_timeout_ms,notnull,default:0" json:"streamingIdleTimeoutMs"`
-	RequestTimeoutNonStreamingMs int `bun:"request_timeout_non_streaming_ms,notnull,default:0" json:"requestTimeoutNonStreamingMs"`
+	FirstByteTimeoutStreamingMs  *int `bun:"first_byte_timeout_streaming_ms,notnull,default:0" json:"firstByteTimeoutStreamingMs"`
+	StreamingIdleTimeoutMs       *int `bun:"streaming_idle_timeout_ms,notnull,default:0" json:"streamingIdleTimeoutMs"`
+	RequestTimeoutNonStreamingMs *int `bun:"request_timeout_non_streaming_ms,notnull,default:0" json:"requestTimeoutNonStreamingMs"`
 
 	// 供应商官网
 	WebsiteUrl *string `bun:"website_url" json:"websiteUrl"`
@@ -83,10 +84,10 @@ type Provider struct {
 	CodexParallelToolCallsPreference *string `bun:"codex_parallel_tool_calls_preference" json:"codexParallelToolCallsPreference"`
 
 	// 废弃字段（保留向后兼容）
-	Tpm int `bun:"tpm,default:0" json:"tpm"`
-	Rpm int `bun:"rpm,default:0" json:"rpm"`
-	Rpd int `bun:"rpd,default:0" json:"rpd"`
-	Cc  int `bun:"cc,default:0" json:"cc"`
+	Tpm *int `bun:"tpm,default:0" json:"tpm"`
+	Rpm *int `bun:"rpm,default:0" json:"rpm"`
+	Rpd *int `bun:"rpd,default:0" json:"rpd"`
+	Cc  *int `bun:"cc,default:0" json:"cc"`
 
 	CreatedAt time.Time  `bun:"created_at,notnull,default:current_timestamp" json:"createdAt"`
 	UpdatedAt time.Time  `bun:"updated_at,notnull,default:current_timestamp" json:"updatedAt"`
@@ -119,5 +120,9 @@ func (p *Provider) GetRedirectedModel(model string) string {
 
 // IsActive 检查供应商是否处于活跃状态
 func (p *Provider) IsActive() bool {
-	return p.IsEnabled && p.DeletedAt == nil
+	enabled := true
+	if p.IsEnabled != nil {
+		enabled = *p.IsEnabled
+	}
+	return enabled && p.DeletedAt == nil
 }

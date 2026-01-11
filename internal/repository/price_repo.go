@@ -152,12 +152,6 @@ func (r *modelPriceRepository) ListAllLatestPrices(ctx context.Context) ([]*mode
 
 // ListAllLatestPricesPaginated 分页获取所有模型的最新价格
 func (r *modelPriceRepository) ListAllLatestPricesPaginated(ctx context.Context, page, pageSize int, search string) (*PaginatedPrices, error) {
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 {
-		pageSize = 20
-	}
 	offset := (page - 1) * pageSize
 
 	// 处理搜索参数

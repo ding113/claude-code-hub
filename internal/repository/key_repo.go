@@ -122,6 +122,20 @@ func NewKeyRepository(db *bun.DB) KeyRepository {
 // Create 创建 API Key
 func (r *keyRepository) Create(ctx context.Context, key *model.Key) error {
 	now := time.Now()
+	if key.DailyResetMode == "" {
+		key.DailyResetMode = "fixed"
+	}
+	if key.DailyResetTime == "" {
+		key.DailyResetTime = "00:00"
+	}
+	if key.IsEnabled == nil {
+		enabled := true
+		key.IsEnabled = &enabled
+	}
+	if key.CanLoginWebUi == nil {
+		canLogin := true
+		key.CanLoginWebUi = &canLogin
+	}
 	key.CreatedAt = now
 	key.UpdatedAt = now
 
@@ -232,7 +246,6 @@ func (r *keyRepository) Delete(ctx context.Context, id int) error {
 	result, err := r.db.NewUpdate().
 		Model((*model.Key)(nil)).
 		Set("deleted_at = ?", now).
-		Set("updated_at = ?", now).
 		Where("id = ?", id).
 		Where("deleted_at IS NULL").
 		Exec(ctx)
@@ -524,6 +537,17 @@ const excludeWarmupConditionKey = "(blocked_by IS NULL OR blocked_by <> 'warmup'
 
 // FindKeyUsageToday 获取用户下所有Key的今日费用统计（用于限流检查）
 func (r *keyRepository) FindKeyUsageToday(ctx context.Context, userID int, timezone string) ([]*KeyUsageToday, error) {
+	location := time.Local
+	if timezone != "" {
+		if loc, err := time.LoadLocation(timezone); err == nil {
+			location = loc
+		}
+	}
+
+	now := time.Now().In(location)
+	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, location)
+	endOfDay := startOfDay.AddDate(0, 0, 1)
+
 	// 构建消息请求子查询：今日的费用按 key 聚合
 	mrSubquery := r.db.NewSelect().
 		Model((*model.MessageRequest)(nil)).
@@ -531,7 +555,8 @@ func (r *keyRepository) FindKeyUsageToday(ctx context.Context, userID int, timez
 		ColumnExpr("COALESCE(SUM(cost_usd), 0) AS total_cost").
 		Where("deleted_at IS NULL").
 		Where(excludeWarmupConditionKey).
-		Where("(created_at AT TIME ZONE ?)::date = (CURRENT_TIMESTAMP AT TIME ZONE ?)::date", timezone, timezone).
+		Where("created_at >= ?", startOfDay).
+		Where("created_at < ?", endOfDay).
 		Group("key")
 
 	// 主查询：将 keys 与费用统计 LEFT JOIN
@@ -549,6 +574,10 @@ func (r *keyRepository) FindKeyUsageToday(ctx context.Context, userID int, timez
 		return nil, errors.NewDatabaseError(err)
 	}
 
+	for _, result := range results {
+		result.TotalCost = result.TotalCost.RoundHAZ(6)
+	}
+
 	return results, nil
 }
 
@@ -558,6 +587,17 @@ func (r *keyRepository) FindKeyUsageTodayBatch(ctx context.Context, userIDs []in
 		return make(map[int][]*KeyUsageToday), nil
 	}
 
+	location := time.Local
+	if timezone != "" {
+		if loc, err := time.LoadLocation(timezone); err == nil {
+			location = loc
+		}
+	}
+
+	now := time.Now().In(location)
+	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, location)
+	endOfDay := startOfDay.AddDate(0, 0, 1)
+
 	// 构建消息请求子查询：今日的费用按 key 聚合
 	mrSubquery := r.db.NewSelect().
 		Model((*model.MessageRequest)(nil)).
@@ -565,7 +605,8 @@ func (r *keyRepository) FindKeyUsageTodayBatch(ctx context.Context, userIDs []in
 		ColumnExpr("COALESCE(SUM(cost_usd), 0) AS total_cost").
 		Where("deleted_at IS NULL").
 		Where(excludeWarmupConditionKey).
-		Where("(created_at AT TIME ZONE ?)::date = (CURRENT_TIMESTAMP AT TIME ZONE ?)::date", timezone, timezone).
+		Where("created_at >= ?", startOfDay).
+		Where("created_at < ?", endOfDay).
 		Group("key")
 
 	// 主查询：将 keys 与费用统计 LEFT JOIN
@@ -597,7 +638,7 @@ func (r *keyRepository) FindKeyUsageTodayBatch(ctx context.Context, userIDs []in
 	for _, row := range rows {
 		result[row.UserID] = append(result[row.UserID], &KeyUsageToday{
 			KeyID:     row.KeyID,
-			TotalCost: row.TotalCost,
+			TotalCost: row.TotalCost.RoundHAZ(6),
 		})
 	}
 

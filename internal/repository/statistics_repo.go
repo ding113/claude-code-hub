@@ -3,6 +3,8 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"regexp"
 	"time"
 
 	"github.com/ding113/claude-code-hub/internal/model"
@@ -1054,6 +1056,8 @@ func (r *statisticsRepository) GetRateLimitEventStats(ctx context.Context, filte
 		return nil, errors.NewDatabaseError(err)
 	}
 
+	totalEvents := len(rows)
+
 	// 初始化聚合数据
 	eventsByType := make(map[string]int)
 	eventsByUser := make(map[int]int)
@@ -1061,7 +1065,6 @@ func (r *statisticsRepository) GetRateLimitEventStats(ctx context.Context, filte
 	eventsByHour := make(map[string]int)
 	var totalCurrentUsage udecimal.Decimal
 	usageCount := 0
-	validEventCount := 0
 
 	// 处理每条记录
 	for _, row := range rows {
@@ -1080,8 +1083,6 @@ func (r *statisticsRepository) GetRateLimitEventStats(ctx context.Context, filte
 			continue
 		}
 
-		validEventCount++
-
 		// 按类型统计
 		if metadata.LimitType != "" {
 			eventsByType[metadata.LimitType]++
@@ -1094,12 +1095,12 @@ func (r *statisticsRepository) GetRateLimitEventStats(ctx context.Context, filte
 		eventsByProvider[row.ProviderID]++
 
 		// 按小时统计
-		hourKey := row.Hour.Format(time.RFC3339)
+		hourKey := row.Hour.UTC().Format(time.RFC3339)
 		eventsByHour[hourKey]++
 
 		// 累计当前使用量
-		if !metadata.Current.IsZero() {
-			totalCurrentUsage = totalCurrentUsage.Add(metadata.Current)
+		if metadata.Current != nil {
+			totalCurrentUsage = totalCurrentUsage.Add(*metadata.Current)
 			usageCount++
 		}
 	}
@@ -1109,6 +1110,7 @@ func (r *statisticsRepository) GetRateLimitEventStats(ctx context.Context, filte
 	if usageCount > 0 {
 		divisor, _ := udecimal.NewFromInt64(int64(usageCount), 0)
 		avgCurrentUsage, _ = totalCurrentUsage.Div(divisor)
+		avgCurrentUsage = avgCurrentUsage.RoundHAZ(2)
 	}
 
 	// 构建时间线数组（按时间排序）
@@ -1123,7 +1125,7 @@ func (r *statisticsRepository) GetRateLimitEventStats(ctx context.Context, filte
 	sortTimelineEntries(eventsTimeline)
 
 	return &RateLimitEventStats{
-		TotalEvents:      validEventCount,
+		TotalEvents:      totalEvents,
 		EventsByType:     eventsByType,
 		EventsByUser:     eventsByUser,
 		EventsByProvider: eventsByProvider,
@@ -1134,62 +1136,35 @@ func (r *statisticsRepository) GetRateLimitEventStats(ctx context.Context, filte
 
 // rateLimitMetadata 解析后的限流元数据
 type rateLimitMetadata struct {
-	LimitType string           `json:"limit_type"`
-	Current   udecimal.Decimal `json:"current"`
+	LimitType string            `json:"limit_type"`
+	Current   *udecimal.Decimal `json:"current"`
 }
+
+var rateLimitMetadataRegexp = regexp.MustCompile(`rate_limit_metadata:\s*(\{[^}]+\})`)
 
 // parseRateLimitMetadata 从错误消息中解析限流元数据
 func parseRateLimitMetadata(errorMessage string) (*rateLimitMetadata, error) {
-	// 查找 rate_limit_metadata: { ... } 格式
-	const prefix = "rate_limit_metadata:"
-	idx := findSubstring(errorMessage, prefix)
-	if idx == -1 {
+	matches := rateLimitMetadataRegexp.FindStringSubmatch(errorMessage)
+	if len(matches) < 2 {
 		return nil, nil
 	}
 
-	// 找到 { 的位置
-	start := idx + len(prefix)
-	for start < len(errorMessage) && errorMessage[start] != '{' {
-		start++
+	var payload struct {
+		LimitType string      `json:"limit_type"`
+		Current   json.Number `json:"current"`
 	}
-	if start >= len(errorMessage) {
+	if err := json.Unmarshal([]byte(matches[1]), &payload); err != nil {
 		return nil, nil
 	}
 
-	// 找到匹配的 }
-	end := start + 1
-	braceCount := 1
-	for end < len(errorMessage) && braceCount > 0 {
-		if errorMessage[end] == '{' {
-			braceCount++
-		} else if errorMessage[end] == '}' {
-			braceCount--
-		}
-		end++
-	}
-	if braceCount != 0 {
-		return nil, nil
-	}
-
-	// 解析 JSON
-	jsonStr := errorMessage[start:end]
-	var metadata rateLimitMetadata
-	// 简单解析，不使用完整 JSON 库以避免额外依赖
-	// 解析 limit_type
-	if typeIdx := findSubstring(jsonStr, `"limit_type"`); typeIdx != -1 {
-		metadata.LimitType = extractStringValue(jsonStr[typeIdx:])
-	}
-	// 解析 current
-	if currentIdx := findSubstring(jsonStr, `"current"`); currentIdx != -1 {
-		currentVal := extractNumberValue(jsonStr[currentIdx:])
-		if currentVal != "" {
-			if d, err := udecimal.Parse(currentVal); err == nil {
-				metadata.Current = d
-			}
+	metadata := &rateLimitMetadata{LimitType: payload.LimitType}
+	if payload.Current != "" {
+		if d, err := udecimal.Parse(payload.Current.String()); err == nil {
+			metadata.Current = &d
 		}
 	}
 
-	return &metadata, nil
+	return metadata, nil
 }
 
 // findSubstring 查找子串位置

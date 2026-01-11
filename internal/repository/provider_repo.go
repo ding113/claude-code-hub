@@ -78,7 +78,7 @@ type ProviderRepository interface {
 	IncrementTotalCost(ctx context.Context, id int, amount udecimal.Decimal) error
 
 	// ResetTotalCostResetAt 重置供应商的费用重置时间
-	ResetTotalCostResetAt(ctx context.Context, id int) error
+	ResetTotalCostResetAt(ctx context.Context, id int, resetAt time.Time) error
 
 	// GetProviderStatistics 获取所有供应商的统计信息（今日费用、调用次数、最近调用等）
 	GetProviderStatistics(ctx context.Context, timezone string) ([]*ProviderStatistics, error)
@@ -99,6 +99,62 @@ func NewProviderRepository(db *bun.DB) ProviderRepository {
 // Create 创建供应商
 func (r *providerRepository) Create(ctx context.Context, provider *model.Provider) error {
 	now := time.Now()
+	if provider.IsEnabled == nil {
+		enabled := true
+		provider.IsEnabled = &enabled
+	}
+	if provider.Weight == nil {
+		defaultWeight := 1
+		provider.Weight = &defaultWeight
+	}
+	if provider.Priority == nil {
+		defaultPriority := 0
+		provider.Priority = &defaultPriority
+	}
+	if provider.CostMultiplier == nil {
+		defaultCost := udecimal.MustFromInt64(1, 0)
+		provider.CostMultiplier = &defaultCost
+	}
+	if provider.ProviderType == "" {
+		provider.ProviderType = "claude"
+	}
+	if provider.CodexInstructionsStrategy == nil {
+		defaultStrategy := "auto"
+		provider.CodexInstructionsStrategy = &defaultStrategy
+	}
+	if provider.McpPassthroughType == "" {
+		provider.McpPassthroughType = "none"
+	}
+	if provider.DailyResetMode == "" {
+		provider.DailyResetMode = "fixed"
+	}
+	if provider.DailyResetTime == "" {
+		provider.DailyResetTime = "00:00"
+	}
+	if provider.CircuitBreakerFailureThreshold == nil {
+		defaultFailureThreshold := 5
+		provider.CircuitBreakerFailureThreshold = &defaultFailureThreshold
+	}
+	if provider.CircuitBreakerOpenDuration == nil {
+		defaultOpenDuration := 1800000
+		provider.CircuitBreakerOpenDuration = &defaultOpenDuration
+	}
+	if provider.CircuitBreakerHalfOpenSuccessThreshold == nil {
+		defaultHalfOpenThreshold := 2
+		provider.CircuitBreakerHalfOpenSuccessThreshold = &defaultHalfOpenThreshold
+	}
+	if provider.FirstByteTimeoutStreamingMs == nil {
+		defaultFirstByteTimeout := 30000
+		provider.FirstByteTimeoutStreamingMs = &defaultFirstByteTimeout
+	}
+	if provider.StreamingIdleTimeoutMs == nil {
+		defaultStreamingIdleTimeout := 10000
+		provider.StreamingIdleTimeoutMs = &defaultStreamingIdleTimeout
+	}
+	if provider.RequestTimeoutNonStreamingMs == nil {
+		defaultRequestTimeout := 600000
+		provider.RequestTimeoutNonStreamingMs = &defaultRequestTimeout
+	}
 	provider.CreatedAt = now
 	provider.UpdatedAt = now
 
@@ -160,7 +216,6 @@ func (r *providerRepository) Delete(ctx context.Context, id int) error {
 	result, err := r.db.NewUpdate().
 		Model((*model.Provider)(nil)).
 		Set("deleted_at = ?", now).
-		Set("updated_at = ?", now).
 		Where("id = ?", id).
 		Where("deleted_at IS NULL").
 		Exec(ctx)
@@ -181,6 +236,9 @@ func (r *providerRepository) Delete(ctx context.Context, id int) error {
 func (r *providerRepository) List(ctx context.Context, opts *ListOptions) ([]*model.Provider, error) {
 	if opts == nil {
 		opts = NewListOptions()
+		if opts.Pagination != nil {
+			opts.Pagination.PageSize = 50
+		}
 	}
 
 	query := r.db.NewSelect().Model((*model.Provider)(nil))
@@ -438,11 +496,11 @@ func (r *providerRepository) IncrementTotalCost(ctx context.Context, id int, amo
 }
 
 // ResetTotalCostResetAt 重置供应商的费用重置时间
-func (r *providerRepository) ResetTotalCostResetAt(ctx context.Context, id int) error {
+func (r *providerRepository) ResetTotalCostResetAt(ctx context.Context, id int, resetAt time.Time) error {
 	now := time.Now()
 	result, err := r.db.NewUpdate().
 		Model((*model.Provider)(nil)).
-		Set("total_cost_reset_at = ?", now).
+		Set("total_cost_reset_at = ?", resetAt).
 		Set("updated_at = ?", now).
 		Where("id = ?", id).
 		Where("deleted_at IS NULL").

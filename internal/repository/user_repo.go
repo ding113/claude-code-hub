@@ -111,6 +111,28 @@ func NewUserRepository(db *bun.DB) UserRepository {
 // Create 创建用户
 func (r *userRepository) Create(ctx context.Context, user *model.User) error {
 	now := time.Now()
+	if user.Role == "" {
+		user.Role = "user"
+	}
+	if user.Tags == nil {
+		user.Tags = []string{}
+	}
+	if user.DailyResetMode == "" {
+		user.DailyResetMode = "fixed"
+	}
+	if user.DailyResetTime == "" {
+		user.DailyResetTime = "00:00"
+	}
+	if user.AllowedClients == nil {
+		user.AllowedClients = []string{}
+	}
+	if user.AllowedModels == nil {
+		user.AllowedModels = []string{}
+	}
+	if user.IsEnabled == nil {
+		enabled := true
+		user.IsEnabled = &enabled
+	}
 	user.CreatedAt = now
 	user.UpdatedAt = now
 
@@ -194,7 +216,6 @@ func (r *userRepository) Delete(ctx context.Context, id int) error {
 	result, err := r.db.NewUpdate().
 		Model((*model.User)(nil)).
 		Set("deleted_at = ?", now).
-		Set("updated_at = ?", now).
 		Where("id = ?", id).
 		Where("deleted_at IS NULL").
 		Exec(ctx)
@@ -215,6 +236,9 @@ func (r *userRepository) Delete(ctx context.Context, id int) error {
 func (r *userRepository) List(ctx context.Context, opts *ListOptions) ([]*model.User, error) {
 	if opts == nil {
 		opts = NewListOptions()
+		if opts.Pagination != nil {
+			opts.Pagination.PageSize = 50
+		}
 	}
 
 	query := r.db.NewSelect().Model((*model.User)(nil))
