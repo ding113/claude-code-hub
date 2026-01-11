@@ -218,14 +218,14 @@ describe("syncCloudPriceTableToDatabase", () => {
   });
 
   it("returns ok=false when write throws non-Error value", async () => {
-	    vi.stubGlobal(
-	      "fetch",
-	      vi.fn(async () => ({
-	        ok: true,
-	        status: 200,
-	        text: async () => ['[models."m1"]', "input_cost_per_token = 0.000001"].join("\n"),
-	      }))
-	    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        text: async () => ['[models."m1"]', "input_cost_per_token = 0.000001"].join("\n"),
+      }))
+    );
 
     const { processPriceTableInternal } = await import("@/actions/model-prices");
     vi.mocked(processPriceTableInternal).mockImplementationOnce(async () => {
@@ -249,9 +249,8 @@ describe("requestCloudPriceTableSync", () => {
     asyncTaskManagerLoaded = false;
     delete (globalThis as unknown as { __CCH_CLOUD_PRICE_SYNC_LAST_AT__?: number })
       .__CCH_CLOUD_PRICE_SYNC_LAST_AT__;
-    delete (
-      globalThis as unknown as { __CCH_CLOUD_PRICE_SYNC_SCHEDULING__?: boolean }
-    ).__CCH_CLOUD_PRICE_SYNC_SCHEDULING__;
+    delete (globalThis as unknown as { __CCH_CLOUD_PRICE_SYNC_SCHEDULING__?: boolean })
+      .__CCH_CLOUD_PRICE_SYNC_SCHEDULING__;
   });
 
   it("no-ops in Edge runtime (does not load AsyncTaskManager)", async () => {

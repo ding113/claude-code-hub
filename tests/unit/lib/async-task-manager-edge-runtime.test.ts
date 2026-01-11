@@ -110,7 +110,10 @@ describe.sequential("AsyncTaskManager edge runtime", () => {
     process.env.NEXT_RUNTIME = "nodejs";
 
     const { AsyncTaskManager } = await import("@/lib/async-task-manager");
-    const cleanupSpy = vi.spyOn(AsyncTaskManager as unknown as { cleanupCompletedTasks: () => void }, "cleanupCompletedTasks");
+    const cleanupSpy = vi.spyOn(
+      AsyncTaskManager as unknown as { cleanupCompletedTasks: () => void },
+      "cleanupCompletedTasks"
+    );
 
     vi.advanceTimersByTime(60_000);
 
