@@ -46,7 +46,8 @@ describe.sequential("AsyncTaskManager edge runtime", () => {
     const processOnceSpy = vi.spyOn(process, "once");
     process.env.NEXT_RUNTIME = "edge";
 
-    await import("@/lib/async-task-manager");
+    const { AsyncTaskManager } = await import("@/lib/async-task-manager");
+    AsyncTaskManager.register("t1", Promise.resolve());
 
     expect(processOnceSpy).not.toHaveBeenCalled();
   });
