@@ -11,7 +11,7 @@ This checklist is for changes that affect i18n messages, especially `settings`, 
 - [ ] If the PR is meant to eliminate placeholders, ensure fail mode is clean:
   - `bun run i18n:audit-placeholders:fail`
 - [ ] Run messages no-emoji audit (fail mode):
-  - `node scripts/audit-messages-no-emoji.js --format=tsv --fail`
+  - `bun run i18n:audit-messages-no-emoji:fail`
 - [ ] Run unit tests relevant to i18n/settings split:
   - `bunx vitest run tests/unit/i18n/settings-split-guards.test.ts`
   - `bunx vitest run tests/unit/i18n/settings-index-modules-load.test.ts`

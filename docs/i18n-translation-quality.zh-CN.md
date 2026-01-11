@@ -53,7 +53,7 @@ Allowlist（可审计、保持最小）：
 `messages/**/*.json` 中不允许出现 Emoji 字符。
 
 可执行检查：
-- `node scripts/audit-messages-no-emoji.js --format=tsv --fail`
+- `bun run i18n:audit-messages-no-emoji:fail`
 
 说明：
 - 审计输出包含文件路径 + key path + Unicode codepoints（不会直接打印 Emoji 字符本身）。

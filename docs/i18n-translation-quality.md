@@ -53,7 +53,7 @@ Initial glossary (expand as needed, but keep it minimal and reviewed):
 `messages/**/*.json` must not contain emoji characters.
 
 Executable check:
-- `node scripts/audit-messages-no-emoji.js --format=tsv --fail`
+- `bun run i18n:audit-messages-no-emoji:fail`
 
 Notes:
 - The audit output prints file path + key path + Unicode codepoints (without printing emoji characters).

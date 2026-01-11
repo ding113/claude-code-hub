@@ -35,7 +35,7 @@ Commands:
 ## No-emoji gate (R4)
 
 - Script (codepoints only, no emoji printing):
-  - `node scripts/audit-messages-no-emoji.js --format=tsv --fail`
+  - `bun run i18n:audit-messages-no-emoji:fail`
 - Regression test (part of `bun run test`):
   - `tests/unit/i18n/audit-messages-no-emoji-script.test.ts`
 
