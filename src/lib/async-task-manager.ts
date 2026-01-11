@@ -28,9 +28,17 @@ class AsyncTaskManagerClass {
   private cleanupInterval: NodeJS.Timeout | null = null;
 
   constructor() {
-    // Skip initialization during CI/build phase to avoid unnecessary logs and side effects
-    if (process.env.CI === "true" || process.env.NEXT_PHASE === "phase-production-build") {
-      logger.debug("[AsyncTaskManager] Skipping initialization in CI/build environment");
+    // Skip initialization in non-Node runtimes / build phases to avoid Node-only APIs and side effects.
+    if (
+      process.env.NEXT_RUNTIME === "edge" ||
+      process.env.CI === "true" ||
+      process.env.NEXT_PHASE === "phase-production-build"
+    ) {
+      logger.debug("[AsyncTaskManager] Skipping initialization in edge/CI/build environment", {
+        nextRuntime: process.env.NEXT_RUNTIME,
+        nextPhase: process.env.NEXT_PHASE,
+        ci: process.env.CI,
+      });
       return;
     }
 
