@@ -41,4 +41,3 @@ describe("ja settings small modules", () => {
     }
   });
 });
-
