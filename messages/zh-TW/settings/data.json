@@ -100,8 +100,8 @@
     "successMessage": "資料匯入完成！",
     "successWithWarnings": "資料匯入完成（有警告）",
     "successWithWarningsDesc": "資料已成功匯入，但略過了一些已存在的物件。如果頁面顯示異常，請重新整理瀏覽器或重新啟動應用。",
-    "warningMerge": "⚠️ 注意：如果存在主鍵衝突，匯入可能會失敗。",
-    "warningOverwrite": "⚠️ 警告：此操作不可逆，所有目前資料將被永久刪除！"
+    "warningMerge": "注意：如果存在主鍵衝突，匯入可能會失敗。",
+    "warningOverwrite": "警告：此操作不可逆，所有目前資料將被永久刪除！"
   },
   "section": {
     "cleanup": {
