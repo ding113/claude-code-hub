@@ -60,6 +60,14 @@ git log --oneline --grep "test: cover edge runtime task scheduling"
 
 如果未来 Next/Turbopack 的静态分析行为变化导致告警回归，可将 Node-only 的 signal hooks 拆分到 `*.node.ts`（例如 `async-task-manager.node.ts`），并仅在 `NEXT_RUNTIME !== "edge"` 的分支里动态引入。
 
+## 快速定位（避免文档漂移）
+
+```bash
+rg -n "process\\.once" src/lib/async-task-manager.ts
+rg -n "NEXT_RUNTIME|NEXT_PHASE" src/lib tests
+rg -n "requestCloudPriceTableSync" src/lib/price-sync/cloud-price-updater.ts tests/unit/price-sync/cloud-price-updater.test.ts
+```
+
 ## 备注
 
 `.codex/plan/` 与 `.codex/issues/` 属于本地任务落盘目录，不应提交到 Git。
