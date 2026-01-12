@@ -210,7 +210,7 @@ export async function getUsers(): Promise<UserDisplay[]> {
         const usageRecords = usageMap.get(user.id) || [];
         const keyStatistics = statisticsMap.get(user.id) || [];
 
-        const usageLookup = new Map(usageRecords.map((item) => [item.keyId, item.totalCost ?? 0]));
+        const usageLookup = new Map(usageRecords.map((item) => [item.keyId, { totalCost: item.totalCost ?? 0, totalTokens: item.totalTokens ?? 0 }]));
         const statisticsLookup = new Map(keyStatistics.map((stat) => [stat.keyId, stat]));
 
         return {
@@ -256,7 +256,8 @@ export async function getUsers(): Promise<UserDisplay[]> {
                 minute: "2-digit",
                 second: "2-digit",
               }),
-              todayUsage: usageLookup.get(key.id) ?? 0,
+              todayUsage: usageLookup.get(key.id)?.totalCost ?? 0,
+              todayTokens: usageLookup.get(key.id)?.totalTokens ?? 0,
               todayCallCount: stats?.todayCallCount ?? 0,
               lastUsedAt: stats?.lastUsedAt ?? null,
               lastProviderName: stats?.lastProviderName ?? null,
@@ -473,7 +474,7 @@ export async function getUsersBatch(
         const usageRecords = usageMap.get(user.id) || [];
         const keyStatistics = statisticsMap.get(user.id) || [];
 
-        const usageLookup = new Map(usageRecords.map((item) => [item.keyId, item.totalCost ?? 0]));
+        const usageLookup = new Map(usageRecords.map((item) => [item.keyId, { totalCost: item.totalCost ?? 0, totalTokens: item.totalTokens ?? 0 }]));
         const statisticsLookup = new Map(keyStatistics.map((stat) => [stat.keyId, stat]));
 
         return {
@@ -517,7 +518,8 @@ export async function getUsersBatch(
                 minute: "2-digit",
                 second: "2-digit",
               }),
-              todayUsage: usageLookup.get(key.id) ?? 0,
+              todayUsage: usageLookup.get(key.id)?.totalCost ?? 0,
+              todayTokens: usageLookup.get(key.id)?.totalTokens ?? 0,
               todayCallCount: stats?.todayCallCount ?? 0,
               lastUsedAt: stats?.lastUsedAt ?? null,
               lastProviderName: stats?.lastProviderName ?? null,

@@ -7,7 +7,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { Loader2, Plus, Search } from "lucide-react";
+import { Layers, Loader2, Plus, Search, ShieldCheck } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getAllUserKeyGroups, getAllUserTags, getUsers, getUsersBatch } from "@/actions/users";
@@ -67,6 +67,8 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
   const tUserMgmt = useTranslations("dashboard.userManagement");
   const tKeyList = useTranslations("dashboard.keyList");
   const tCommon = useTranslations("common");
+  const tProviderGroup = useTranslations("myUsage.providerGroup");
+  const tRestrictions = useTranslations("myUsage.accessRestrictions");
   const queryClient = useQueryClient();
   const isAdmin = currentUser.role === "admin";
   const [searchTerm, setSearchTerm] = useState("");
@@ -138,6 +140,7 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
     isFetching,
     isError,
     error,
+    refetch,
   } = useInfiniteQuery({
     queryKey,
     queryFn: async ({ pageParam }) => {
@@ -434,9 +437,11 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
             group: tUserMgmt("table.keyRow.group"),
             todayUsage: tUserMgmt("table.keyRow.todayUsage"),
             todayCost: tUserMgmt("table.keyRow.todayCost"),
+            todayTokens: tUserMgmt("table.keyRow.todayTokens"),
             lastUsed: tUserMgmt("table.keyRow.lastUsed"),
             actions: tUserMgmt("table.keyRow.actions"),
             callsLabel: tUserMgmt("table.keyRow.fields.callsLabel"),
+            tokensLabel: tUserMgmt("table.keyRow.fields.tokensLabel"),
             costLabel: tUserMgmt("table.keyRow.fields.costLabel"),
           },
           actions: {
@@ -503,6 +508,49 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
           </Button>
         )}
       </div>
+
+      {/* Provider Group & Access Restrictions block (non-admin users only) */}
+      {!isAdmin && selfUser && (
+        <div className="grid grid-cols-1 gap-4 rounded-lg border bg-muted/40 p-4 sm:grid-cols-2">
+          {/* Provider Groups */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-base font-semibold">
+              <Layers className="h-4 w-4" />
+              <span>{tProviderGroup("title")}</span>
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-xs text-muted-foreground">{tProviderGroup("userGroup")}:</span>
+                <span className="text-sm font-semibold text-foreground">
+                  {selfUser.providerGroup || tProviderGroup("allProviders")}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Access Restrictions */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-base font-semibold">
+              <ShieldCheck className="h-4 w-4" />
+              <span>{tRestrictions("title")}</span>
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-xs text-muted-foreground">{tRestrictions("models")}:</span>
+                <span className="text-sm font-semibold text-foreground">
+                  {selfUser.allowedModels?.length ? selfUser.allowedModels.join(", ") : tRestrictions("noRestrictions")}
+                </span>
+              </div>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-xs text-muted-foreground">{tRestrictions("clients")}:</span>
+                <span className="text-sm font-semibold text-foreground">
+                  {selfUser.allowedClients?.length ? selfUser.allowedClients.join(", ") : tRestrictions("noRestrictions")}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toolbar with search and filters */}
       <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center">
@@ -628,7 +676,6 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
         </div>
       ) : (
         <div className="space-y-3">
-          <div>{isRefreshing ? <InlineLoading label={tCommon("loading")} /> : null}</div>
           <UserManagementTable
             users={visibleUsers}
             hasNextPage={hasNextPage}
@@ -651,6 +698,8 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
             onSelectKey={handleSelectKey}
             onOpenBatchEdit={handleOpenBatchEdit}
             translations={tableTranslations}
+            onRefresh={() => refetch()}
+            isRefreshing={isRefreshing}
           />
         </div>
       )}

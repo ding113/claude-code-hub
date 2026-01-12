@@ -1,6 +1,6 @@
 "use client";
 
-import { BarChart3, Copy, Eye, FileText, Info, Pencil, Trash2 } from "lucide-react";
+import { Activity, BarChart3, Coins, Copy, Eye, FileText, Info, Pencil, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
@@ -25,6 +25,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 import { CURRENCY_CONFIG, type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
 import { formatDate } from "@/lib/utils/date-format";
+import { formatTokenAmount } from "@/lib/utils/token";
 import { type QuickRenewKey, QuickRenewKeyDialog } from "./forms/quick-renew-key-dialog";
 import { KeyFullDisplayDialog } from "./key-full-display-dialog";
 import { KeyQuotaUsageDialog } from "./key-quota-usage-dialog";
@@ -40,6 +41,7 @@ export interface KeyRowItemProps {
     providerGroup?: string | null;
     todayUsage: number;
     todayCallCount: number;
+    todayTokens: number;
     lastUsedAt: Date | null;
     expiresAt: string;
     status: "enabled" | "disabled";
@@ -67,9 +69,11 @@ export interface KeyRowItemProps {
       group: string;
       todayUsage: string;
       todayCost: string;
+      todayTokens: string;
       lastUsed: string;
       actions: string;
       callsLabel: string;
+      tokensLabel: string;
       costLabel: string;
     };
     actions: {
@@ -302,8 +306,8 @@ export function KeyRowItem({
       className={cn(
         "grid items-center gap-3 px-3 py-2 text-sm border-b last:border-b-0 hover:bg-muted/40 transition-colors",
         isMultiSelectMode
-          ? "grid-cols-[24px_2fr_3fr_3fr_1fr_2fr_1.5fr_1.5fr_1.5fr]"
-          : "grid-cols-[2fr_3fr_2.5fr_1fr_2fr_1.5fr_1.5fr_1.5fr]",
+          ? "grid-cols-[24px_2fr_3fr_2.5fr_1.2fr_1.2fr_1.2fr_1.2fr_1.2fr_1.5fr]"
+          : "grid-cols-[2fr_3fr_2.5fr_1.2fr_1.2fr_1.2fr_1.2fr_1.2fr_1.5fr]",
         highlight && "bg-primary/10 ring-1 ring-primary/30"
       )}
     >
@@ -398,7 +402,6 @@ export function KeyRowItem({
                         key={group}
                         variant="outline"
                         className="text-xs font-mono max-w-[120px] truncate"
-                        title={group}
                       >
                         {group}
                       </Badge>
@@ -407,7 +410,6 @@ export function KeyRowItem({
                       <Badge
                         variant="outline"
                         className="text-xs font-mono shrink-0"
-                        title={effectiveGroupText}
                       >
                         +{remainingGroups}
                       </Badge>
@@ -421,9 +423,11 @@ export function KeyRowItem({
               </div>
             </TooltipTrigger>
             <TooltipContent side="bottom" align="start" className="max-w-[420px]">
-              <p className="text-xs whitespace-normal break-words font-mono">
-                {effectiveGroupText}
-              </p>
+              <ul className="text-xs space-y-1 font-mono">
+                {effectiveGroups.map((group) => (
+                  <li key={group}>{group}</li>
+                ))}
+              </ul>
             </TooltipContent>
           </Tooltip>
         </div>
@@ -434,23 +438,31 @@ export function KeyRowItem({
         className="text-right tabular-nums flex items-center justify-end gap-1"
         title={translations.fields.todayUsage}
       >
-        <span className="text-xs text-muted-foreground">{translations.fields.callsLabel}:</span>
+        <Activity className="h-3 w-3 text-muted-foreground" />
         <span>{Number(keyData.todayCallCount || 0).toLocaleString()}</span>
+      </div>
+
+      {/* 今日Token数 */}
+      <div
+        className="text-right tabular-nums flex items-center justify-end gap-1"
+        title={translations.fields.todayTokens}
+      >
+        <Coins className="h-3 w-3 text-muted-foreground" />
+        <span>{formatTokenAmount(keyData.todayTokens || 0)}</span>
       </div>
 
       {/* 今日消耗（成本） */}
       <div
-        className="text-right font-mono tabular-nums flex items-center justify-end gap-1"
+        className="text-right font-mono tabular-nums"
         title={translations.fields.todayCost}
       >
-        <span className="text-xs text-muted-foreground">{translations.fields.costLabel}:</span>
-        <span>{formatCurrency(keyData.todayUsage || 0, resolvedCurrencyCode)}</span>
+        {formatCurrency(keyData.todayUsage || 0, resolvedCurrencyCode)}
       </div>
 
       {/* 最后使用 */}
       <div className="min-w-0" title={translations.fields.lastUsed}>
         {keyData.lastUsedAt ? (
-          <RelativeTime date={keyData.lastUsedAt} autoUpdate={false} />
+          <RelativeTime date={keyData.lastUsedAt} autoUpdate={false} format="short" />
         ) : (
           <span className="text-muted-foreground">-</span>
         )}

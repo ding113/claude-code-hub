@@ -110,6 +110,8 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
           onSuccess?.();
           onOpenChange(false);
           queryClient.invalidateQueries({ queryKey: ["users"] });
+          queryClient.invalidateQueries({ queryKey: ["userKeyGroups"] });
+          queryClient.invalidateQueries({ queryKey: ["userTags"] });
           router.refresh();
         } catch (error) {
           console.error("[EditUserDialog] submit failed", error);
@@ -161,6 +163,8 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
       toast.success(t("editDialog.userDisabled"));
       onSuccess?.();
       queryClient.invalidateQueries({ queryKey: ["users"] });
+      queryClient.invalidateQueries({ queryKey: ["userKeyGroups"] });
+      queryClient.invalidateQueries({ queryKey: ["userTags"] });
       router.refresh();
     } catch (error) {
       console.error("[EditUserDialog] disable user failed", error);
@@ -178,6 +182,8 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
       toast.success(t("editDialog.userEnabled"));
       onSuccess?.();
       queryClient.invalidateQueries({ queryKey: ["users"] });
+      queryClient.invalidateQueries({ queryKey: ["userKeyGroups"] });
+      queryClient.invalidateQueries({ queryKey: ["userTags"] });
       router.refresh();
     } catch (error) {
       console.error("[EditUserDialog] enable user failed", error);
@@ -194,6 +200,8 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
     onSuccess?.();
     onOpenChange(false);
     queryClient.invalidateQueries({ queryKey: ["users"] });
+    queryClient.invalidateQueries({ queryKey: ["userKeyGroups"] });
+    queryClient.invalidateQueries({ queryKey: ["userTags"] });
     router.refresh();
   };
 
