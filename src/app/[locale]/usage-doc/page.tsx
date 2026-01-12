@@ -454,7 +454,7 @@ npm --version`}
       os === "windows"
         ? `C:\\Users\\${windowsUserName}\\.claude\\settings.json`
         : "~/.claude/settings.json";
-    const shellConfigFile = os === "linux" ? "~/.bashrc" : os === "macos" ? "~/.zshrc" : "";
+    const shellConfigFile = os === "linux" ? t("placeholders.shellConfig.linux") : os === "macos" ? t("placeholders.shellConfig.macos") : "";
     const shellConfig =
       os === "linux"
         ? t("placeholders.shellConfig.linux")
