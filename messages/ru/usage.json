@@ -701,8 +701,8 @@
   "placeholders": {
     "windowsUserName": "your-username",
     "shellConfig": {
-      "linux": "~/.bashrc или ~/.zshrc",
-      "macos": "~/.zshrc или ~/.bash_profile"
+      "linux": "~/.bashrc",
+      "macos": "~/.zshrc"
     },
     "codexVsCodeConfigFiles": "config.toml и auth.json"
   },
@@ -714,9 +714,8 @@
       "usingChocolatey": "# Используя Chocolatey",
       "orUsingScoop": "# Или через Scoop",
       "addNodeSourceRepo": "# Добавить репозиторий NodeSource",
-      "installStableDefault": "# Установить стабильную версию (по умолчанию)",
-      "installLatest": "# Установить последнюю версию",
-      "installSpecificVersion": "# Установить указанную версию",
+      "ubuntuDebian": "# Ubuntu/Debian",
+      "centosRhelFedora": "# CentOS/RHEL/Fedora",
       "addToPathIfMissing": "# Добавить в PATH (если отсутствует)",
       "checkEnvVar": "# Проверить переменную окружения",
       "testNetworkConnection": "# Проверить сетевое подключение"

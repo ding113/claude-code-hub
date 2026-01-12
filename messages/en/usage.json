@@ -701,8 +701,8 @@
   "placeholders": {
     "windowsUserName": "your-username",
     "shellConfig": {
-      "linux": "~/.bashrc or ~/.zshrc",
-      "macos": "~/.zshrc or ~/.bash_profile"
+      "linux": "~/.bashrc",
+      "macos": "~/.zshrc"
     },
     "codexVsCodeConfigFiles": "config.toml and auth.json"
   },
@@ -714,9 +714,8 @@
       "usingChocolatey": "# Using Chocolatey",
       "orUsingScoop": "# Or using Scoop",
       "addNodeSourceRepo": "# Add NodeSource repository",
-      "installStableDefault": "# Install stable (default)",
-      "installLatest": "# Install latest",
-      "installSpecificVersion": "# Install specific version",
+      "ubuntuDebian": "# Ubuntu/Debian",
+      "centosRhelFedora": "# CentOS/RHEL/Fedora",
       "addToPathIfMissing": "# Add to PATH (if missing)",
       "checkEnvVar": "# Check environment variable",
       "testNetworkConnection": "# Test network connection"

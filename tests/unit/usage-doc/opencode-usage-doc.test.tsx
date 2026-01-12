@@ -131,11 +131,12 @@ describe("UsageDoc - OpenCode 配置教程", () => {
       expect(usageMessages).toHaveProperty("placeholders.shellConfig.macos");
       expect(usageMessages).toHaveProperty("placeholders.codexVsCodeConfigFiles");
 
+      expect(usageMessages).toHaveProperty("claudeCode.installation.nativeInstall.macos.curls");
+
       expect(usageMessages).toHaveProperty("snippets.comments.updateHomebrew");
       expect(usageMessages).toHaveProperty("snippets.comments.installNodeJs");
-      expect(usageMessages).toHaveProperty("snippets.comments.installStableDefault");
-      expect(usageMessages).toHaveProperty("snippets.comments.installLatest");
-      expect(usageMessages).toHaveProperty("snippets.comments.installSpecificVersion");
+      expect(usageMessages).toHaveProperty("snippets.comments.ubuntuDebian");
+      expect(usageMessages).toHaveProperty("snippets.comments.centosRhelFedora");
       expect(usageMessages).toHaveProperty("snippets.comments.addToPathIfMissing");
       expect(usageMessages).toHaveProperty("snippets.comments.checkEnvVar");
       expect(usageMessages).toHaveProperty("snippets.comments.testNetworkConnection");

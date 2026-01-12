@@ -701,8 +701,8 @@
   "placeholders": {
     "windowsUserName": "your-username",
     "shellConfig": {
-      "linux": "~/.bashrc または ~/.zshrc",
-      "macos": "~/.zshrc または ~/.bash_profile"
+      "linux": "~/.bashrc",
+      "macos": "~/.zshrc"
     },
     "codexVsCodeConfigFiles": "config.toml と auth.json"
   },
@@ -714,9 +714,8 @@
       "usingChocolatey": "# Chocolatey を使用",
       "orUsingScoop": "# または Scoop を使用",
       "addNodeSourceRepo": "# NodeSource リポジトリを追加",
-      "installStableDefault": "# 安定版をインストール（デフォルト）",
-      "installLatest": "# 最新版をインストール",
-      "installSpecificVersion": "# 指定バージョンをインストール",
+      "ubuntuDebian": "# Ubuntu/Debian",
+      "centosRhelFedora": "# CentOS/RHEL/Fedora",
       "addToPathIfMissing": "# PATH に追加（未設定の場合）",
       "checkEnvVar": "# 環境変数を確認",
       "testNetworkConnection": "# ネットワーク接続を確認"

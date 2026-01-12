@@ -228,11 +228,11 @@ sudo apt-get install -y nodejs`}
           </h4>
           <CodeBlock
             language="bash"
-            code={`# Ubuntu/Debian
+            code={`${t("snippets.comments.ubuntuDebian")}
 sudo apt update
 sudo apt install nodejs npm
 
-# CentOS/RHEL/Fedora
+${t("snippets.comments.centosRhelFedora")}
 sudo dnf install nodejs npm`}
           />
         </div>
@@ -308,14 +308,9 @@ npm --version`}
                 </p>
                 <CodeBlock
                   language="bash"
-                  code={`${t("snippets.comments.installStableDefault")}
-curl -fsSL https://claude.ai/install.sh | bash
-
-${t("snippets.comments.installLatest")}
-curl -fsSL https://claude.ai/install.sh | bash -s latest
-
-${t("snippets.comments.installSpecificVersion")}
-curl -fsSL https://claude.ai/install.sh | bash -s 1.0.58`}
+                  code={(
+                    t.raw("claudeCode.installation.nativeInstall.macos.curls") as string[]
+                  ).join("\n")}
                 />
               </div>
             </div>

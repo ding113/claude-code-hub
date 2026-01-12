@@ -1,16 +1,21 @@
 import { Book, LogIn } from "lucide-react";
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
+import { cache } from "react";
 import { Link } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
 import { DashboardHeader } from "../dashboard/_components/dashboard-header";
+
+const getUsageTranslations = cache((locale: string) =>
+  getTranslations({ locale, namespace: "usage" })
+);
 
 export async function generateMetadata({
   params,
 }: {
   params: { locale: string };
 }): Promise<Metadata> {
-  const t = await getTranslations({ locale: params.locale, namespace: "usage" });
+  const t = await getUsageTranslations(params.locale);
   return {
     title: t("pageTitle"),
     description: t("pageDescription"),
@@ -29,8 +34,7 @@ export default async function UsageDocLayout({
   children: React.ReactNode;
   params: { locale: string };
 }) {
-  const session = await getSession();
-  const t = await getTranslations({ locale: params.locale, namespace: "usage" });
+  const [session, t] = await Promise.all([getSession(), getUsageTranslations(params.locale)]);
 
   return (
     <div className="min-h-screen bg-background">
