@@ -1080,6 +1080,8 @@ gemini`}
         $schema: "https://opencode.ai/config.json",
         theme: "opencode",
         autoupdate: false,
+        model: "openai/gpt-5.2",
+        small_model: "openai/gpt-5.2-small",
         provider: {
           cchClaude: {
             npm: "@ai-sdk/anthropic",
@@ -1100,16 +1102,34 @@ gemini`}
             options: {
               baseURL: `${resolvedOrigin}/v1`,
               apiKey: "{env:CCH_API_KEY}",
+              store: false,
+              setCacheKey: true,
             },
             models: {
-              "gpt-5.2": { name: "GPT-5.2" },
+              "gpt-5.2": {
+                name: "GPT-5.2",
+                options: {
+                  reasoningEffort: "xhigh",
+                  store: false,
+                  include: ["reasoning.encrypted_content"],
+                },
+              },
+              "gpt-5.2-small": {
+                id: "gpt-5.2",
+                name: "GPT-5.2 Small",
+                options: {
+                  reasoningEffort: "medium",
+                  store: false,
+                  include: ["reasoning.encrypted_content"],
+                },
+              },
             },
           },
           cchGemini: {
             npm: "@ai-sdk/google",
             name: "Gemini via cch",
             options: {
-              baseURL: `${resolvedOrigin}/v1`,
+              baseURL: `${resolvedOrigin}/v1beta`,
               apiKey: "{env:CCH_API_KEY}",
             },
             models: {
