@@ -1,0 +1,54 @@
+{
+  "description": "動態調整系統日誌級別，即時控制日誌輸出詳細程度。",
+  "form": {
+    "changeNotice": "目前級別為 {current}，點選儲存後將切換到 {selected}",
+    "currentLevel": "目前日誌級別",
+    "effectiveImmediately": "調整日誌級別後立即生效，無需重新啟動服務。",
+    "failed": "設定失敗",
+    "failedError": "設定日誌級別失敗",
+    "fetchFailed": "取得日誌級別失敗",
+    "levelGuideDebug": "Debug（推薦開發環境）: 包含詳細除錯資訊，適合排查問題時使用",
+    "levelGuideFatal": "Fatal/Error: 僅顯示錯誤，日誌最少，適合高負載生產環境",
+    "levelGuideInfo": "Info（推薦生產環境）: 顯示關鍵業務事件（供應商選擇、Session 復用、價格同步）+ 警告 + 錯誤",
+    "levelGuideTitle": "日誌級別說明",
+    "levelGuideTrace": "Trace: 極詳細的追蹤資訊，包含所有細節",
+    "levelGuideWarn": "Warn: 包含警告（限流觸發、熔斷器開啟等）+ 錯誤",
+    "save": "儲存設定",
+    "saving": "儲存中...",
+    "selectLevel": "選擇日誌級別",
+    "success": "日誌級別已設定為: {level}"
+  },
+  "levels": {
+    "debug": {
+      "description": "除錯資訊 + 所有級別（推薦開發環境）",
+      "label": "Debug"
+    },
+    "error": {
+      "description": "錯誤訊息",
+      "label": "Error"
+    },
+    "fatal": {
+      "description": "僅致命錯誤",
+      "label": "Fatal"
+    },
+    "info": {
+      "description": "關鍵業務事件 + 警告 + 錯誤（推薦生產環境）",
+      "label": "Info"
+    },
+    "trace": {
+      "description": "極詳細追蹤 + 所有級別",
+      "label": "Trace"
+    },
+    "warn": {
+      "description": "警告 + 錯誤",
+      "label": "Warn"
+    }
+  },
+  "section": {
+    "description": "調整後立即生效，無需重新啟動服務。",
+    "title": "日誌級別控制"
+  },
+  "subtitle": "日誌級別控制",
+  "subtitleDesc": "調整後立即生效，無需重新啟動服務。適合生產環境排查問題時使用。",
+  "title": "日誌管理"
+}

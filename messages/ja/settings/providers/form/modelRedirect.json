@@ -1,0 +1,14 @@
+{
+  "add": "追加",
+  "addNewRule": "新規ルールを追加",
+  "alreadyExists": "モデル \"{model}\" のリダイレクトルールは既に存在します",
+  "currentRules": "現在のルール ({count})",
+  "description": "Claude Code クライアントがリクエストするモデル（例：claude-sonnet-4.5）を、上流プロバイダーが実際にサポートするモデル（例：glm-4.6、gemini-pro）にリダイレクトします。コスト最適化やサードパーティAIサービスへの接続に使用します。",
+  "emptyState": "リダイレクトルールがありません。ルールを追加すると、システムは自動的にリクエスト内のモデル名を書き換えます。",
+  "sourceEmpty": "ソースモデル名を入力してください",
+  "sourceModel": "ユーザーがリクエストするモデル",
+  "sourcePlaceholder": "例：claude-sonnet-4-5-20250929",
+  "targetEmpty": "ターゲットモデル名を入力してください",
+  "targetModel": "実際に転送されるモデル",
+  "targetPlaceholder": "例：glm-4.6"
+}

@@ -1,0 +1,17 @@
+{
+  "saveSuccess": "保存成功",
+  "saveFailed": "保存失败",
+  "saveFailed_error": "保存设置失败",
+  "addSuccess": "添加成功",
+  "addFailed": "添加服务商失败",
+  "editSuccess": "更新成功",
+  "editFailed": "更新服务商失败",
+  "deleteSuccess": "删除成功",
+  "deleteFailed": "删除供应商失败",
+  "syncSuccess": "同步成功",
+  "syncFailed": "同步失败",
+  "testFailed": "测试失败",
+  "testFailedRetry": "测试失败，请重试",
+  "loadFailed": "加载通知设置失败",
+  "unknownError": "操作过程中出现异常"
+}

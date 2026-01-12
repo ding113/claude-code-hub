@@ -18,6 +18,7 @@
     "test:e2e": "vitest run --config vitest.e2e.config.ts --reporter=verbose",
     "test:integration": "vitest run --config vitest.integration.config.ts --reporter=verbose",
     "test:coverage": "vitest run --coverage",
+    "test:coverage:codex-session-id-completer": "vitest run --config vitest.codex-session-id-completer.config.ts --coverage",
     "test:coverage:thinking-signature-rectifier": "vitest run --config vitest.thinking-signature-rectifier.config.ts --coverage",
     "test:coverage:quota": "vitest run --config vitest.quota.config.ts --coverage",
     "test:coverage:my-usage": "vitest run --config vitest.my-usage.config.ts --coverage",
@@ -28,7 +29,11 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "validate:migrations": "node scripts/validate-migrations.js"
+    "validate:migrations": "node scripts/validate-migrations.js",
+    "i18n:audit-placeholders": "node scripts/audit-settings-placeholders.js --scope=settings,dashboard,myUsage --format=tsv",
+    "i18n:audit-placeholders:fail": "node scripts/audit-settings-placeholders.js --scope=settings,dashboard,myUsage --format=tsv --fail",
+    "i18n:audit-messages-no-emoji": "node scripts/audit-messages-no-emoji.js --format=tsv",
+    "i18n:audit-messages-no-emoji:fail": "node scripts/audit-messages-no-emoji.js --format=tsv --fail"
   },
   "dependencies": {
     "@bull-board/api": "^6",

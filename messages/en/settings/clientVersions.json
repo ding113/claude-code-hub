@@ -1,0 +1,51 @@
+{
+  "description": "Manage client version requirements to ensure users use latest stable version. VSCode plugin and CLI are managed separately.",
+  "empty": {
+    "description": "No active users using recognizable clients in past 7 days",
+    "title": "No client data available"
+  },
+  "features": {
+    "activeWindow": "Active Window: ",
+    "activeWindowDesc": "Only counts users with requests in the past 7 days",
+    "autoDetect": "System automatically detects the latest stable version (GA version) for each client type",
+    "blockOldVersion": "Users with old versions will receive HTTP 400 error and cannot continue using the service",
+    "errorMessage": "Error message includes current version and required upgrade version",
+    "gaRule": "GA Rule: ",
+    "gaRuleDesc": "A version is considered GA when used by more than 1 user",
+    "recommendation": "Recommendation: ",
+    "recommendationDesc": "Monitor the version distribution below and confirm new version stability before enabling.",
+    "title": "Feature Description",
+    "whatHappens": "What happens when enabled:"
+  },
+  "section": {
+    "distribution": {
+      "description": "Shows client version info for active users in past 7 days. Each client type independently tracks GA versions.",
+      "title": "Client Version Distribution"
+    },
+    "settings": {
+      "description": "When enabled, system automatically detects client version and blocks old version users.",
+      "title": "Update Reminder Settings"
+    }
+  },
+  "table": {
+    "currentGA": "Current GA Version: ",
+    "internalType": "Internal Type: ",
+    "lastActive": "Last Active",
+    "latest": "Latest",
+    "needsUpgrade": "Needs Upgrade",
+    "noUsers": "No user data available",
+    "status": "Status",
+    "unknown": "Unknown",
+    "user": "User",
+    "usersCount": "{count} users",
+    "version": "Current Version"
+  },
+  "title": "Client Update Reminder",
+  "toggle": {
+    "description": "When enabled, system will block requests from old version clients",
+    "disableSuccess": "Client version check disabled",
+    "enable": "Enable Update Reminder",
+    "enableSuccess": "Client version check enabled",
+    "toggleFailed": "Update failed"
+  }
+}

@@ -69,18 +69,28 @@ describe("UsageDoc - OpenCode 配置教程", () => {
     expect(text).toContain('"baseURL": "http://localhost:23000/v1"');
 
     expect(text).toContain('"npm": "@ai-sdk/anthropic"');
-    expect(text).toContain('"npm": "@ai-sdk/openai"');
     expect(text).toContain('"npm": "@ai-sdk/google"');
+    expect(text).toContain('"npm": "@ai-sdk/openai"');
     expect(text).not.toContain("@ai-sdk/openai-compatible");
 
     expect(text).toContain("claude-haiku-4-5-20251001");
     expect(text).toContain("claude-sonnet-4-5-20250929");
     expect(text).toContain("claude-opus-4-5-20251101");
 
+    expect(text).toContain('"model": "openai/gpt-5.2"');
+    expect(text).toContain('"small_model": "openai/gpt-5.2-small"');
+
     expect(text).toContain("gpt-5.2");
+    expect(text).toContain("gpt-5.2-small");
+    expect(text).toContain('"reasoningEffort": "xhigh"');
+    expect(text).toContain('"reasoningEffort": "medium"');
+    expect(text).toContain('"store": false');
+    expect(text).toContain('"setCacheKey": true');
+    expect(text).toContain("reasoning.encrypted_content");
 
     expect(text).toContain("gemini-3-pro-preview");
     expect(text).toContain("gemini-3-flash-preview");
+    expect(text).toContain('"baseURL": "http://localhost:23000/v1beta"');
 
     unmount();
   });

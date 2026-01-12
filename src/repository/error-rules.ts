@@ -735,6 +735,27 @@ const DEFAULT_ERROR_RULES = [
       },
     },
   },
+  // Issue #xxx: Missing signature field in thinking block
+  {
+    pattern: "signature.*Field required",
+    category: "thinking_error",
+    description: "Missing signature field in thinking block (cross-channel format incompatibility)",
+    matchType: "regex" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 72,
+    overrideResponse: {
+      type: "error",
+      error: {
+        type: "thinking_error",
+        message:
+          "thinking block 缺少必需的 signature 字段。" +
+          "该问题通常发生在从非 Anthropic 渠道切换到 Anthropic 渠道时。" +
+          "请确保 tool_result 续写请求中原样回传上一轮 assistant 的 thinking/redacted_thinking 块（含 signature/data），" +
+          "或关闭 thinking 后重试。",
+      },
+    },
+  },
   {
     pattern: "Missing required parameter|Extra inputs.*not permitted",
     category: "parameter_error",

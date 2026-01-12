@@ -1,0 +1,7 @@
+{
+  "placeholder": "搜索供应商名称、URL、备注...",
+  "clear": "清除搜索",
+  "found": "找到 {count} 个匹配的供应商",
+  "notFound": "未找到匹配的供应商",
+  "showing": "显示 {filtered} / {total} 个供应商"
+}

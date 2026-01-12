@@ -1,0 +1,21 @@
+{
+  "connectionFailed": "Connection failed",
+  "connectionMethod": "Connection method:",
+  "connectionSuccess": "Connection successful",
+  "direct": "Direct",
+  "errorType": "Error type:",
+  "fillUrlFirst": "Please fill in provider URL first",
+  "networkError": "Network error:",
+  "noResult": "Test succeeded but no result returned",
+  "proxy": "Proxy",
+  "proxyError": "Proxy error:",
+  "responseTime": "Response time:",
+  "statusCode": "Status code:",
+  "testConnection": "Test Connection",
+  "testFailed": "Test failed",
+  "testFailedRetry": "Test failed, please retry",
+  "testing": "Testing...",
+  "timeoutError": "Connection timeout (5s). Please check:\n1. Is proxy server accessible\n2. Are proxy address and port correct\n3. Are proxy credentials correct",
+  "viaDirect": "(direct)",
+  "viaProxy": "(via proxy)"
+}

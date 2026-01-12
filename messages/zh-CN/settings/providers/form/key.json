@@ -1,0 +1,7 @@
+{
+  "label": "API 密钥",
+  "leaveEmpty": "（留空不更改）",
+  "placeholder": "输入 API 密钥",
+  "leaveEmptyDesc": "留空则不更改密钥",
+  "currentKey": "当前密钥: {key}"
+}

@@ -1,0 +1,1 @@
+ALTER TABLE "system_settings" ADD COLUMN "enable_codex_session_id_completion" boolean DEFAULT true NOT NULL;

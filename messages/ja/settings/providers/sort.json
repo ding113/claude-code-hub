@@ -1,0 +1,8 @@
+{
+  "byActualPriority": "実際の選択優先順",
+  "byCreatedAt": "作成日時順 (新-旧)",
+  "byName": "名前順 (A-Z)",
+  "byPriority": "優先度順 (高-低)",
+  "byWeight": "重み順 (高-低)",
+  "placeholder": "プロバイダーを並べ替え"
+}

@@ -212,7 +212,7 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
 
       <TagInputField
         label={t("providerGroup.label")}
-        maxTagLength={50}
+        maxTagLength={200}
         placeholder={t("providerGroup.placeholder")}
         description={
           user?.providerGroup
@@ -226,7 +226,7 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
           const messages: Record<string, string> = {
             empty: tUI("emptyTag"),
             duplicate: tUI("duplicateTag"),
-            too_long: tUI("tooLong", { max: 50 }),
+            too_long: tUI("tooLong", { max: 200 }),
             invalid_format: tUI("invalidFormat"),
             max_tags: tUI("maxTags"),
           };

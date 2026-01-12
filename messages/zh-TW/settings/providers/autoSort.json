@@ -1,0 +1,16 @@
+{
+  "button": "自動排序優先級",
+  "changeCount": "{count} 個供應商將被更新",
+  "changesTitle": "變更詳情",
+  "confirm": "應用變更",
+  "costMultiplierHeader": "成本倍數",
+  "dialogDescription": "根據成本倍數自動分配優先級（低成本 = 高優先級）",
+  "dialogTitle": "自動排序供應商優先級",
+  "error": "更新優先級失敗",
+  "noChanges": "無需更改（已排序）",
+  "priorityChangeHeader": "優先級變更",
+  "priorityHeader": "優先級",
+  "providerHeader": "供應商",
+  "providersHeader": "供應商",
+  "success": "已更新 {count} 個供應商的優先級"
+}

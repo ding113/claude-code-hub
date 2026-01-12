@@ -1,0 +1,20 @@
+{
+  "allowAllModels": "允许所有 {type} 模型",
+  "selectedCount": "已选择 {count} 个模型",
+  "searchPlaceholder": "搜索模型名称...",
+  "loading": "加载中...",
+  "notFound": "未找到模型",
+  "selectAll": "全选 ({count})",
+  "clear": "清空",
+  "manualAdd": "手动添加模型",
+  "manualPlaceholder": "输入模型名称（如 gpt-5-turbo）",
+  "manualDesc": "支持添加任意模型名称（不限于价格表中的模型）",
+  "claude": "Claude",
+  "openai": "OpenAI",
+  "gemini": "Gemini",
+  "sourceUpstream": "上游",
+  "sourceUpstreamDesc": "模型列表来自上游服务商 API",
+  "sourceFallback": "本地",
+  "sourceFallbackDesc": "使用本地价格表中的模型列表（上游获取失败或不支持）",
+  "refresh": "刷新模型列表"
+}

@@ -1,0 +1,13 @@
+{
+  "status": {
+    "all": "全部状态",
+    "active": "已启用",
+    "inactive": "已禁用"
+  },
+  "groups": {
+    "label": "分组:",
+    "all": "全部",
+    "default": "default"
+  },
+  "circuitBroken": "熔断"
+}

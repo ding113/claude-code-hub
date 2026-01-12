@@ -1,0 +1,13 @@
+{
+  "cancel": "關閉",
+  "confirm": "確認儲存",
+  "confirmQuestion": "是否確認儲存此設定？",
+  "descriptionDisabledAction": "停用熔斷器",
+  "descriptionDisabledMiddle": "，這表示",
+  "descriptionDisabledPrefix": "您將熔斷失敗閾值設定為 ",
+  "descriptionDisabledSuffix": "，供應商將不會因為連續失敗而被熔斷。",
+  "descriptionDisabledValue": "0",
+  "descriptionHighValuePrefix": "您將熔斷失敗閾值設定為 ",
+  "descriptionHighValueSuffix": "，這是一個較高的值，可能會導致供應商在大量失敗後才被熔斷。",
+  "title": "確認特殊設定"
+}

@@ -1,0 +1,9 @@
+{
+  "title": "供应商调度规则说明",
+  "description": "了解系统如何智能选择上游供应商，确保高可用性和成本优化",
+  "triggerButton": "调度规则说明",
+  "step": "步骤",
+  "before": "过滤前：",
+  "after": "过滤后：",
+  "decision": "决策："
+}

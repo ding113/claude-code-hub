@@ -1,0 +1,13 @@
+{
+  "circuitBroken": "Сбой соединения",
+  "groups": {
+    "all": "Все",
+    "default": "default",
+    "label": "Группы:"
+  },
+  "status": {
+    "active": "Активные",
+    "all": "Все статусы",
+    "inactive": "Неактивные"
+  }
+}

@@ -1,0 +1,157 @@
+{
+  "actions": {
+    "add": "追加",
+    "delete": "削除",
+    "edit": "編集",
+    "messages": {
+      "error": "操作が失敗しました",
+      "success": "操作が成功しました"
+    },
+    "refresh": "更新",
+    "test": "テスト"
+  },
+  "add": "エラールールを追加",
+  "addFailed": "エラールールの作成に失敗しました",
+  "addSuccess": "エラールールが正常に作成されました",
+  "cacheStats": "キャッシュ: {totalCount}件のルール",
+  "categories": {
+    "cache_limit": "キャッシュ制御制限",
+    "content_filter": "コンテンツフィルター",
+    "invalid_request": "無効なリクエスト",
+    "parameter_error": "パラメータ検証失敗",
+    "pdf_limit": "PDF ページ制限",
+    "prompt_limit": "プロンプト長制限",
+    "thinking_error": "Thinking フォーマットエラー"
+  },
+  "confirmDelete": "エラールール \"{pattern}\" を削除してもよろしいですか？",
+  "defaultRules": {
+    "cannotDelete": "デフォルトルールは削除できません",
+    "cannotDisable": "デフォルトルールは有効のままにすることをお勧めします"
+  },
+  "delete": "エラールールを削除",
+  "deleteFailed": "削除に失敗しました",
+  "deleteSuccess": "エラールールが正常に削除されました",
+  "description": "自動再試行を行わないクライアントエラールールを管理します。設定後、ルールに一致するエラーは再試行せずユーザーに直接返され、プロバイダーのサーキットブレーカーにもカウントされません。",
+  "dialog": {
+    "addDescription": "エラーメッセージの正規表現パターンを設定します。マッチしたエラーはリトライ不可能なクライアントエラーとして識別されます。",
+    "addTitle": "エラールールを追加",
+    "categoryHint": "分類管理と統計のためのエラーカテゴリを選択",
+    "categoryLabel": "ルールカテゴリ *",
+    "categoryPlaceholder": "ルールカテゴリを選択",
+    "categoryRequired": "ルールカテゴリを選択してください",
+    "creating": "作成中...",
+    "defaultRuleHint": "デフォルトルールのパターンは変更できません",
+    "descriptionLabel": "説明",
+    "descriptionPlaceholder": "オプション: 説明を追加...",
+    "editDescription": "エラールール設定を変更します。変更後、キャッシュが自動的に更新されます。",
+    "editTitle": "エラールールを編集",
+    "enableOverride": "エラーオーバーライドを有効にする",
+    "enableOverrideHint": "有効にすると、クライアントに返すエラーレスポンスとステータスコードをカスタマイズできます。元のエラーはデータベースに記録されます。現在、Claude APIエラー形式のみサポートしています。",
+    "invalidJson": "JSON形式が無効です",
+    "invalidPattern": "無効な正規表現",
+    "invalidRegex": "正規表現の構文エラー",
+    "invalidStatusCode": "ステータスコードは400-599の範囲内でなければなりません",
+    "matchFailed": "マッチなし",
+    "matchSuccess": "マッチ成功",
+    "matchedText": "マッチしたテキスト",
+    "overrideResponseHint": "空白のままにするとステータスコードのみオーバーライドします。",
+    "overrideResponseLabel": "オーバーライドレスポンス（JSON形式）",
+    "overrideResponsePlaceholder": "{\n  \"type\": \"error\",\n  \"error\": {\n    \"type\": \"invalid_request_error\",\n    \"message\": \"カスタムメッセージ\"\n  }\n}",
+    "overrideStatusCodeHint": "空白のままにするとアップストリームのステータスコードを使用します。範囲: 400-599。",
+    "overrideStatusCodeLabel": "オーバーライドステータスコード（オプション）",
+    "overrideStatusCodePlaceholder": "例: 400",
+    "patternHint": "JavaScript正規表現構文をサポート、例：prompt is too long|invalid.*request",
+    "patternLabel": "正規表現パターン *",
+    "patternPlaceholder": "正規表現を入力...",
+    "patternRequired": "正規表現パターンを入力してください",
+    "regexTester": "正規表現テスター",
+    "saving": "保存しています...",
+    "testMessageLabel": "テストメッセージ",
+    "testMessagePlaceholder": "テストするエラーメッセージを入力...",
+    "useTemplate": "Claude Error テンプレート",
+    "useTemplateConfirm": "入力済みの内容をテンプレートで上書きしますか？",
+    "validJson": "JSON 形式は有効です"
+  },
+  "disable": "エラールールが無効になりました",
+  "edit": "エラールールを編集",
+  "editFailed": "エラールールの更新に失敗しました",
+  "editSuccess": "エラールールが正常に更新されました",
+  "emptyState": "エラールールがまだありません。右上の「エラールールを追加」をクリックして設定を開始してください。",
+  "enable": "エラールールが有効になりました",
+  "form": {
+    "fields": {
+      "category": "ルールカテゴリ",
+      "description": "説明",
+      "pattern": "正規表現パターン"
+    },
+    "labels": {
+      "category": "ルールカテゴリ *",
+      "description": "説明",
+      "isEnabled": "有効状態",
+      "pattern": "正規表現パターン *"
+    },
+    "placeholders": {
+      "category": "カテゴリを選択",
+      "description": "オプション: 説明を追加...",
+      "pattern": "例: prompt is too long"
+    }
+  },
+  "nav": "エラールール",
+  "refreshCache": "ルールを同期",
+  "refreshCacheFailed": "ルールの同期に失敗しました",
+  "refreshCacheSuccess": "ルールが正常に同期され、{count} 個のエラールールがロードされました",
+  "regexTester": {
+    "matchResult": "マッチ結果",
+    "matched": "マッチしました",
+    "notMatched": "マッチしませんでした",
+    "test": "テスト",
+    "testMessage": "テストメッセージ",
+    "testMessagePlaceholder": "テストするエラーメッセージを入力...",
+    "title": "正規表現テスター"
+  },
+  "section": {
+    "title": "エラールールリスト"
+  },
+  "table": {
+    "actions": "アクション",
+    "category": "ルールカテゴリ",
+    "createdAt": "作成日時",
+    "default": "デフォルト",
+    "description": "説明",
+    "isDefault": "デフォルトルール",
+    "isEnabled": "有効状態",
+    "pattern": "正規表現パターン",
+    "status": "ステータス"
+  },
+  "tester": {
+    "category": "カテゴリ",
+    "description": "エラーメッセージを入力して、設定済みルールに一致するかと最終的な返却内容を確認します。",
+    "finalResponse": "オーバーライドレスポンス",
+    "inputLabel": "テストするエラーメッセージ",
+    "inputPlaceholder": "検証したいエラーメッセージを入力...",
+    "matchType": "マッチタイプ",
+    "matched": "エラールールに一致しました",
+    "messageRequired": "テストするエラーメッセージを入力してください",
+    "noRule": "一致したルールはありません",
+    "notMatched": "一致するルールなし",
+    "overrideStatusCode": "オーバーライドステータスコード",
+    "pattern": "パターン",
+    "ruleInfo": "一致したルール",
+    "statusCodeOnlyOverride": "ステータスコードのみオーバーライドされ、レスポンスボディはアップストリームのエラーが使用されます",
+    "testButton": "テストを実行",
+    "testFailed": "テストに失敗しました。再度お試しください",
+    "testing": "テスト中...",
+    "title": "エラールールテスト",
+    "warnings": "設定の警告"
+  },
+  "title": "エラールール管理",
+  "toggleFailed": "切り替えに失敗しました",
+  "toggleFailedError": "切り替えに失敗しました:",
+  "validation": {
+    "categoryRequired": "ルールカテゴリを選択してください",
+    "patternInvalid": "正規表現の構文エラー",
+    "patternRequired": "正規表現パターンを入力してください",
+    "patternTooComplex": "正規表現が複雑すぎます",
+    "redosRisk": "正規表現に ReDoS リスクがあります。パターンを簡略化してください"
+  }
+}

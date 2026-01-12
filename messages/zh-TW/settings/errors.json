@@ -1,0 +1,17 @@
+{
+  "addFailed": "新增服務商失敗",
+  "addSuccess": "新增成功",
+  "deleteFailed": "刪除供應商失敗",
+  "deleteSuccess": "刪除成功",
+  "editFailed": "更新服務商失敗",
+  "editSuccess": "更新完成",
+  "loadFailed": "載入通知設定失敗",
+  "saveFailed": "儲存失敗",
+  "saveFailed_error": "儲存設定失敗",
+  "saveSuccess": "儲存成功",
+  "syncFailed": "同步失敗",
+  "syncSuccess": "同步完成",
+  "testFailed": "測試失敗",
+  "testFailedRetry": "測試失敗，請重試",
+  "unknownError": "操作過程中出現異常"
+}

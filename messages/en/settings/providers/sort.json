@@ -1,0 +1,8 @@
+{
+  "byActualPriority": "By Actual Selection Priority",
+  "byCreatedAt": "By Created Time (New-Old)",
+  "byName": "By Name (A-Z)",
+  "byPriority": "By Priority (High-Low)",
+  "byWeight": "By Weight (High-Low)",
+  "placeholder": "Sort Providers"
+}

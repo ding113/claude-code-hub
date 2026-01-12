@@ -1,0 +1,157 @@
+{
+  "actions": {
+    "add": "新增",
+    "delete": "刪除",
+    "edit": "編輯",
+    "messages": {
+      "error": "操作失敗",
+      "success": "操作完成"
+    },
+    "refresh": "重新整理",
+    "test": "測試"
+  },
+  "add": "新增錯誤規則",
+  "addFailed": "建立錯誤規則失敗",
+  "addSuccess": "錯誤規則建立成功",
+  "cacheStats": "快取: 共 {totalCount} 條規則",
+  "categories": {
+    "cache_limit": "快取控制限制",
+    "content_filter": "內容過濾",
+    "invalid_request": "非法請求",
+    "parameter_error": "參數驗證失敗",
+    "pdf_limit": "PDF 頁數限制",
+    "prompt_limit": "Prompt 長度限制",
+    "thinking_error": "Thinking 格式錯誤"
+  },
+  "confirmDelete": "確定要刪除錯誤規則「{pattern}」嗎？",
+  "defaultRules": {
+    "cannotDelete": "預設規則無法刪除",
+    "cannotDisable": "建議保留預設規則啟用狀態"
+  },
+  "delete": "刪除錯誤規則",
+  "deleteFailed": "刪除失敗",
+  "deleteSuccess": "錯誤規則刪除成功",
+  "description": "管理不需要自動重試的客戶端錯誤規則。配置後，命中規則的報錯將直接返回給用戶，不會觸發重試，也不會計入供應商熔斷。",
+  "dialog": {
+    "addDescription": "設定錯誤訊息正則表達式模式，符合的錯誤將被識別為不可重試的客戶端錯誤。",
+    "addTitle": "新增錯誤規則",
+    "categoryHint": "選擇規則所屬的錯誤類別，用於分類管理和統計",
+    "categoryLabel": "規則類別 *",
+    "categoryPlaceholder": "選擇規則類別",
+    "categoryRequired": "請選擇規則類別",
+    "creating": "建立中...",
+    "defaultRuleHint": "預設規則的模式無法修改",
+    "descriptionLabel": "說明",
+    "descriptionPlaceholder": "選填：新增說明...",
+    "editDescription": "修改錯誤規則設定，更改後將自動重新整理快取。",
+    "editTitle": "編輯錯誤規則",
+    "enableOverride": "啟用錯誤覆寫",
+    "enableOverrideHint": "啟用後可自訂返回給客戶端的錯誤回應和狀態碼，原始錯誤仍會記錄到資料庫。當前僅支援 Claude API 錯誤格式。",
+    "invalidJson": "JSON 格式無效",
+    "invalidPattern": "無效的正則表達式",
+    "invalidRegex": "正則表達式語法錯誤",
+    "invalidStatusCode": "狀態碼必須在 400-599 範圍內",
+    "matchFailed": "未符合",
+    "matchSuccess": "符合成功",
+    "matchedText": "符合內容",
+    "overrideResponseHint": "留空則僅覆寫狀態碼。",
+    "overrideResponseLabel": "覆寫回應（JSON 格式）",
+    "overrideResponsePlaceholder": "{\n  \"type\": \"error\",\n  \"error\": {\n    \"type\": \"invalid_request_error\",\n    \"message\": \"您的自訂訊息\"\n  }\n}",
+    "overrideStatusCodeHint": "留空則使用上游狀態碼。範圍：400-599。",
+    "overrideStatusCodeLabel": "覆寫狀態碼（選填）",
+    "overrideStatusCodePlaceholder": "例如：400",
+    "patternHint": "支援 JavaScript 正則表達式語法，例如：prompt is too long|invalid.*request",
+    "patternLabel": "正則表達式模式 *",
+    "patternPlaceholder": "輸入正則表達式...",
+    "patternRequired": "請輸入正則表達式模式",
+    "regexTester": "正則表達式測試器",
+    "saving": "儲存中...",
+    "testMessageLabel": "測試訊息",
+    "testMessagePlaceholder": "輸入要測試的錯誤訊息...",
+    "useTemplate": "Claude Error 範本",
+    "useTemplateConfirm": "輸入框已有內容，確定以範本覆蓋？",
+    "validJson": "JSON 格式正確"
+  },
+  "disable": "錯誤規則已停用",
+  "edit": "編輯錯誤規則",
+  "editFailed": "更新錯誤規則失敗",
+  "editSuccess": "錯誤規則更新成功",
+  "emptyState": "目前沒有錯誤規則，點擊右上角「新增錯誤規則」開始設定。",
+  "enable": "錯誤規則已啟用",
+  "form": {
+    "fields": {
+      "category": "規則類別",
+      "description": "說明",
+      "pattern": "正則表達式模式"
+    },
+    "labels": {
+      "category": "規則類別 *",
+      "description": "說明",
+      "isEnabled": "啟用狀態",
+      "pattern": "正則表達式模式 *"
+    },
+    "placeholders": {
+      "category": "選擇類別",
+      "description": "選填：新增說明...",
+      "pattern": "例如：prompt is too long"
+    }
+  },
+  "nav": "錯誤規則",
+  "refreshCache": "同步規則",
+  "refreshCacheFailed": "同步規則失敗",
+  "refreshCacheSuccess": "規則同步成功，已載入 {count} 個錯誤規則",
+  "regexTester": {
+    "matchResult": "匹配結果",
+    "matched": "比對成功",
+    "notMatched": "不符合",
+    "test": "測試",
+    "testMessage": "測試訊息",
+    "testMessagePlaceholder": "輸入要測試的錯誤訊息...",
+    "title": "正則表達式測試器"
+  },
+  "section": {
+    "title": "錯誤規則列表"
+  },
+  "table": {
+    "actions": "動作",
+    "category": "規則類別",
+    "createdAt": "建立時間",
+    "default": "預設",
+    "description": "說明",
+    "isDefault": "預設規則",
+    "isEnabled": "啟用狀態",
+    "pattern": "正則表達式模式",
+    "status": "狀態"
+  },
+  "tester": {
+    "category": "規則類別",
+    "description": "輸入錯誤訊息，檢查是否命中已設定的規則以及最終返回的內容。",
+    "finalResponse": "覆寫回應",
+    "inputLabel": "測試錯誤訊息",
+    "inputPlaceholder": "輸入要檢測的錯誤訊息...",
+    "matchType": "匹配類型",
+    "matched": "已命中錯誤規則",
+    "messageRequired": "請輸入要測試的錯誤訊息",
+    "noRule": "沒有匹配到任何規則",
+    "notMatched": "未命中任何規則",
+    "overrideStatusCode": "覆寫狀態碼",
+    "pattern": "比對模式",
+    "ruleInfo": "匹配的規則",
+    "statusCodeOnlyOverride": "僅覆寫狀態碼，回應內容將使用上游錯誤訊息",
+    "testButton": "開始測試",
+    "testFailed": "測試失敗，請稍後重試",
+    "testing": "測試中...",
+    "title": "錯誤規則測試",
+    "warnings": "設定警告"
+  },
+  "title": "錯誤規則管理",
+  "toggleFailed": "狀態切換失敗",
+  "toggleFailedError": "狀態切換失敗:",
+  "validation": {
+    "categoryRequired": "請選擇規則類別",
+    "patternInvalid": "正則表達式語法錯誤",
+    "patternRequired": "請輸入正則表達式模式",
+    "patternTooComplex": "正則表達式過於複雜",
+    "redosRisk": "正則表達式存在 ReDoS 風險，請簡化模式"
+  }
+}

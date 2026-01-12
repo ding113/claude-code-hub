@@ -1,0 +1,191 @@
+{
+  "title": "价格表",
+  "description": "管理平台基础配置与模型价格",
+  "section": {
+    "title": "模型价格",
+    "description": "管理 AI 模型的价格配置"
+  },
+  "searchPlaceholder": "搜索模型名称...",
+  "filters": {
+    "all": "全部",
+    "local": "本地",
+    "anthropic": "Anthropic",
+    "openai": "OpenAI",
+    "vertex": "Vertex"
+  },
+  "badges": {
+    "local": "本地"
+  },
+  "capabilities": {
+    "assistantPrefill": "助手预填充",
+    "computerUse": "电脑使用",
+    "functionCalling": "函数调用",
+    "pdfInput": "PDF 输入",
+    "promptCaching": "Prompt 缓存",
+    "reasoning": "推理",
+    "responseSchema": "响应 Schema",
+    "toolChoice": "工具选择",
+    "vision": "视觉",
+    "statusSupported": "支持",
+    "statusUnsupported": "不支持",
+    "tooltip": "{label}: {status}"
+  },
+  "sync": {
+    "button": "同步云端价格表",
+    "syncing": "同步中...",
+    "checking": "检查冲突...",
+    "successWithChanges": "价格表更新: 新增 {added} 个，更新 {updated} 个，未变化 {unchanged} 个",
+    "successNoChanges": "价格表已是最新，无需更新",
+    "failed": "同步失败",
+    "failedError": "同步失败: {error}",
+    "failedNoResult": "价格表更新成功但未返回处理结果",
+    "noModels": "未找到支持的模型价格",
+    "partialFailure": "部分更新成功，但有 {failed} 个模型失败",
+    "failedModels": "失败模型: {models}",
+    "skippedConflicts": "跳过 {count} 个手动模型"
+  },
+  "conflict": {
+    "title": "选择要覆盖的冲突项",
+    "description": "以下模型存在手动维护的价格，勾选后将用 LiteLLM 价格覆盖，未勾选的保持本地不变",
+    "searchPlaceholder": "搜索模型...",
+    "table": {
+      "modelName": "模型",
+      "manualPrice": "手动价格",
+      "litellmPrice": "LiteLLM 价格",
+      "action": "操作"
+    },
+    "viewDiff": "查看差异",
+    "diffTitle": "价格差异对比",
+    "diff": {
+      "field": "字段",
+      "manual": "手动",
+      "litellm": "LiteLLM",
+      "inputPrice": "输入价格",
+      "outputPrice": "输出价格",
+      "imagePrice": "图片价格",
+      "provider": "供应商",
+      "mode": "类型"
+    },
+    "pagination": {
+      "showing": "显示 {from}-{to} 条，共 {total} 条"
+    },
+    "selectedCount": "已选择 {count}/{total} 个模型",
+    "noMatch": "未找到匹配的模型",
+    "noConflicts": "无冲突项",
+    "applyOverwrite": "应用覆盖",
+    "applying": "应用中..."
+  },
+  "table": {
+    "modelName": "模型名称",
+    "provider": "提供商",
+    "capabilities": "能力",
+    "price": "价格",
+    "inputPrice": "输入价格 ($/M)",
+    "outputPrice": "输出价格 ($/M)",
+    "priceInput": "输入",
+    "priceOutput": "输出",
+    "pricePerRequest": "按次",
+    "cacheReadPrice": "缓存读取 ($/M)",
+    "cacheCreationPrice": "缓存创建 ($/M)",
+    "cache5m": "5m",
+    "cache1h": "1h+",
+    "copyModelId": "复制模型 ID",
+    "updatedAt": "更新时间",
+    "actions": "操作",
+    "typeChat": "对话",
+    "typeImage": "图像生成",
+    "typeCompletion": "补全",
+    "typeUnknown": "未知",
+    "loading": "加载中...",
+    "noMatch": "未找到匹配的模型",
+    "noDataTitle": "暂无价格数据",
+    "noDataHint": "系统已内置价格表，请通过上方按钮同步或更新"
+  },
+  "pagination": {
+    "showing": "显示 {from}-{to} 条，共 {total} 条",
+    "previous": "上一页",
+    "next": "下一页",
+    "perPageLabel": "每页",
+    "perPage": "每页 {size} 条"
+  },
+  "stats": {
+    "totalModels": "共 {count} 个模型",
+    "searchResults": "搜索到 {count} 个结果",
+    "lastUpdated": "最后更新: {time}"
+  },
+  "dialog": {
+    "title": "更新模型价格表",
+    "description": "选择包含模型价格数据的 JSON 或 TOML 文件并上传",
+    "selectFile": "点击选择 JSON/TOML 文件或拖拽到此处",
+    "fileSizeLimit": "文件大小不能超过 10MB",
+    "fileSizeLimitSmall": "文件大小不超过 10MB",
+    "invalidFileType": "请选择 JSON 或 TOML 格式的文件",
+    "fileTooLarge": "文件大小超过 10MB 限制",
+    "upload": "上传并更新",
+    "uploading": "上传中...",
+    "updatePriceTable": "更新价格表",
+    "updating": "更新中...",
+    "selectJson": "选择文件",
+    "updateSuccess": "价格表更新成功，共更新 {count} 个模型",
+    "updateFailed": "更新失败",
+    "systemHasBuiltIn": "系统已内置价格表",
+    "manualDownload": "你也可以手动下载",
+    "latestPriceTable": "云端价格表",
+    "andUploadViaButton": "，并通过上方按钮上传",
+    "cloudModelCountLoading": "云端模型数量加载中...",
+    "cloudModelCountFailed": "云端模型数量加载失败",
+    "supportedModels": "当前支持 {count} 个模型",
+    "results": {
+      "title": "更新结果",
+      "total": "总计: {total} 个模型",
+      "success": "成功: {success}",
+      "failed": "失败: {failed}",
+      "skipped": "跳过: {skipped}",
+      "more": " (+{count})",
+      "details": "详细信息",
+      "viewDetails": "查看详细日志"
+    }
+  },
+  "addModel": "添加模型",
+  "editModel": "编辑模型",
+  "deleteModel": "删除模型",
+  "addModelDescription": "手动添加新的模型价格配置",
+  "editModelDescription": "编辑模型的价格配置",
+  "deleteConfirm": "确定要删除模型 {name} 吗？此操作不可撤销。",
+  "form": {
+    "modelName": "模型 ID",
+    "modelNamePlaceholder": "例如: gpt-5.2-codex",
+    "modelNameRequired": "模型 ID 不能为空",
+    "displayName": "展示名称（可选）",
+    "displayNamePlaceholder": "例如: GPT-5.2 Codex",
+    "type": "类型",
+    "provider": "供应商",
+    "providerPlaceholder": "例如: openai",
+    "requestPrice": "按次调用价格 ($/request)",
+    "inputPrice": "输入价格 ($/M tokens)",
+    "outputPrice": "输出价格 ($/M tokens)",
+    "outputPriceImage": "输出价格 ($/image)",
+    "cacheReadPrice": "缓存读取价格 ($/M tokens)",
+    "cacheCreationPrice5m": "缓存创建价格（5m，$/M tokens）",
+    "cacheCreationPrice1h": "缓存创建价格（1h+，$/M tokens）"
+  },
+  "drawer": {
+    "prefillLabel": "搜索现有模型并预填充",
+    "prefillEmpty": "未找到匹配的模型",
+    "prefillFailed": "搜索失败",
+    "promptCachingHint": "仅当模型支持缓存时开启，并配置下方缓存价格",
+    "cachePricingTitle": "缓存价格"
+  },
+  "actions": {
+    "edit": "编辑",
+    "more": "更多操作",
+    "delete": "删除"
+  },
+  "toast": {
+    "createSuccess": "模型已添加",
+    "updateSuccess": "模型已更新",
+    "deleteSuccess": "模型已删除",
+    "saveFailed": "保存失败",
+    "deleteFailed": "删除失败"
+  }
+}

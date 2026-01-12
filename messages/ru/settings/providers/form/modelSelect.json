@@ -1,0 +1,20 @@
+{
+  "allowAllModels": "Разрешить все модели {type}",
+  "claude": "Claude",
+  "clear": "Очистить",
+  "gemini": "Gemini",
+  "loading": "Загрузка...",
+  "manualAdd": "Добавить модель вручную",
+  "manualDesc": "Поддержка добавления любого названия модели (не ограничено прайс-листом)",
+  "manualPlaceholder": "Введите название модели (например, gpt-5-turbo)",
+  "notFound": "Модели не найдены",
+  "openai": "OpenAI",
+  "refresh": "Обновить список моделей",
+  "searchPlaceholder": "Поиск по названию модели...",
+  "selectAll": "Выбрать все ({count})",
+  "selectedCount": "Выбрано моделей: {count}",
+  "sourceFallback": "Локально",
+  "sourceFallbackDesc": "Используется локальный прайс-лист (upstream недоступен или не поддерживается)",
+  "sourceUpstream": "Upstream",
+  "sourceUpstreamDesc": "Список моделей из API провайдера"
+}

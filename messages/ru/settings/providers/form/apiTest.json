@@ -1,0 +1,157 @@
+{
+  "apiFormat": "Тип провайдера",
+  "apiFormatDesc": "По умолчанию синхронизируется с типом провайдера в конфигурации маршрутизации",
+  "chunksCount": "Получено {count} чанков ({format})",
+  "chunksReceived": "Полученные чанки",
+  "close": "Закрыть",
+  "copyFailed": "Не удалось скопировать",
+  "copyFormat": {
+    "errorDetails": "Детали ошибки",
+    "message": "Сообщение",
+    "testResult": "Результат теста"
+  },
+  "copyResult": "Копировать результат",
+  "copySuccess": "Скопировано в буфер обмена",
+  "customConfig": "Пользовательский",
+  "customPayloadDesc": "Введите пользовательский JSON payload для замены тела запроса по умолчанию",
+  "customPayloadPlaceholder": "{\"model\": \"...\", \"messages\": [...]}",
+  "disclaimer": {
+    "confirmConfig": "Пожалуйста, проверьте URL провайдера, API ключ и конфигурацию модели",
+    "realRequest": "Этот тест отправляет реальный запрос провайдеру и может потреблять небольшую квоту",
+    "resultReference": "Результаты могут варьироваться в зависимости от провайдера и служат только для справки",
+    "title": "Внимание"
+  },
+  "error": "Сообщение об ошибке",
+  "failed": "Не удалось",
+  "fillKeyFirst": "Пожалуйста, сначала заполните API ключ",
+  "fillUrlFirst": "Пожалуйста, сначала заполните URL провайдера",
+  "formatAnthropicMessages": "Claude (Anthropic Messages API)",
+  "formatOpenAIChat": "OpenAI Compatible",
+  "formatOpenAIResponses": "Codex (Response API)",
+  "geminiAuthFallback": {
+    "desc": "Реальный прокси использует только аутентификацию через заголовок, что может вызвать ошибки",
+    "warning": "Ошибка аутентификации через заголовок, использована URL-аутентификация"
+  },
+  "invalidUrl": "URL провайдера недействителен (только http/https)",
+  "model": "Модель",
+  "noResult": "Тест успешен, но результат не возвращен",
+  "presetConfig": "Пресет",
+  "presetDesc": "Шаблоны пресетов содержат аутентичные паттерны CLI-запросов для верификации релейного сервиса",
+  "requestConfig": "Конфигурация запроса",
+  "response": "Предварительный просмотр ответа",
+  "responseModel": "Модель ответа",
+  "responseTime": "Время ответа",
+  "resultCard": {
+    "copyText": {
+      "contentCheck": "Проверка контента",
+      "error": "Ошибка",
+      "httpCheck": "Проверка HTTP",
+      "httpStatus": "HTTP статус",
+      "inputOutput": "Ввод {input} / Вывод {output} токенов",
+      "latency": "Задержка",
+      "latencyCheck": "Проверка задержки",
+      "message": "Сообщение",
+      "model": "Модель",
+      "response": "Ответ",
+      "status": "Статус",
+      "testedAt": "Время теста",
+      "usage": "Использование",
+      "validationDetails": "Детали валидации"
+    },
+    "dialogTitle": "Детали теста провайдера",
+    "errorDetails": {
+      "title": "Детали ошибки",
+      "type": "Тип ошибки"
+    },
+    "judgment": "Решение",
+    "labels": {
+      "content": "Контент",
+      "error": "Ошибка",
+      "firstByte": "1 байт",
+      "http": "HTTP",
+      "latency": "Задержка",
+      "model": "Модель",
+      "responsePreview": "Предпросмотр ответа",
+      "totalLatency": "Общая задержка"
+    },
+    "rawResponse": {
+      "hint": "Здесь отображается необработанное содержимое ответа. Вы можете проверить, содержит ли ответ ключевое слово.",
+      "title": "Тело ответа"
+    },
+    "status": {
+      "green": "Доступен",
+      "red": "Недоступен",
+      "yellow": "Нестабильно"
+    },
+    "streamInfo": {
+      "chunksCount": "Количество чанков",
+      "isStreaming": "Потоковая передача",
+      "no": "Нет",
+      "title": "Информация о потоковом ответе",
+      "yes": "Да"
+    },
+    "timing": {
+      "firstByte": "1 байт",
+      "testedAt": "Время теста",
+      "title": "Информация о времени",
+      "totalLatency": "Общая задержка"
+    },
+    "tokenUsage": {
+      "cacheCreation": "Создание кэша",
+      "cacheRead": "Чтение кэша",
+      "input": "Ввод",
+      "output": "Вывод",
+      "title": "Использование токенов"
+    },
+    "validation": {
+      "content": {
+        "failed": "Цель не найдена",
+        "passed": "Содержит целевую строку",
+        "target": "Цель",
+        "title": "Уровень 3: Валидация контента"
+      },
+      "failed": "Не пройдено",
+      "http": {
+        "failed": "4xx/5xx ошибка",
+        "passed": "2xx/3xx успех",
+        "statusCode": "Код статуса",
+        "title": "Уровень 1: HTTP статус"
+      },
+      "latency": {
+        "actual": "Фактическая задержка",
+        "failed": "Превышен порог",
+        "passed": "В пределах порога",
+        "title": "Уровень 2: Порог задержки"
+      },
+      "passed": "Пройдено",
+      "timeout": "Тайм-аут",
+      "title": "Детали трехуровневой валидации"
+    }
+  },
+  "selectApiFormat": "Выберите тип провайдера для тестирования",
+  "selectPreset": "Выберите шаблон пресета",
+  "streamFormat": "Формат потока",
+  "streamInfo": "Информация о потоковом ответе",
+  "streamResponse": "Потоковый ответ",
+  "success": "Успешно",
+  "successContains": "Ключевое слово успеха",
+  "successContainsDesc": "Ответ должен содержать это ключевое слово для признания успешным",
+  "successContainsPlaceholder": "pong",
+  "testApi": "Тест модели провайдера",
+  "testFailed": "Тест не пройден",
+  "testFailedRetry": "Тест не пройден, попробуйте снова",
+  "testModel": "Тестовая модель",
+  "testModelDesc": "Оставьте пустым для использования модели по умолчанию или введите вручную",
+  "testSuccess": "Тест модели успешен",
+  "testing": "Тестирование...",
+  "timeout": {
+    "desc": "Максимальное время ожидания тестового запроса (5-120 сек)",
+    "geminiHint": ", для моделей Gemini Thinking рекомендуется 60+ сек",
+    "label": "Таймаут (секунды)"
+  },
+  "truncatedBrief": "Показаны первые {length} символов, нажмите «Подробнее» для полного просмотра",
+  "truncatedPreview": "Показаны первые {length} символов, скопируйте для просмотра полного текста",
+  "unknown": "Неизвестно",
+  "usage": "Использование токенов",
+  "viewDetails": "Подробнее"
+}

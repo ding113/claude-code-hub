@@ -31,6 +31,7 @@ interface SystemSettingsFormProps {
     | "enableHttp2"
     | "interceptAnthropicWarmupRequests"
     | "enableThinkingSignatureRectifier"
+    | "enableCodexSessionIdCompletion"
     | "enableResponseFixer"
     | "responseFixerConfig"
   >;
@@ -60,6 +61,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   const [enableThinkingSignatureRectifier, setEnableThinkingSignatureRectifier] = useState(
     initialSettings.enableThinkingSignatureRectifier
   );
+  const [enableCodexSessionIdCompletion, setEnableCodexSessionIdCompletion] = useState(
+    initialSettings.enableCodexSessionIdCompletion
+  );
   const [enableResponseFixer, setEnableResponseFixer] = useState(
     initialSettings.enableResponseFixer
   );
@@ -86,6 +90,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         enableHttp2,
         interceptAnthropicWarmupRequests,
         enableThinkingSignatureRectifier,
+        enableCodexSessionIdCompletion,
         enableResponseFixer,
         responseFixerConfig,
       });
@@ -104,6 +109,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setEnableHttp2(result.data.enableHttp2);
         setInterceptAnthropicWarmupRequests(result.data.interceptAnthropicWarmupRequests);
         setEnableThinkingSignatureRectifier(result.data.enableThinkingSignatureRectifier);
+        setEnableCodexSessionIdCompletion(result.data.enableCodexSessionIdCompletion);
         setEnableResponseFixer(result.data.enableResponseFixer);
         setResponseFixerConfig(result.data.responseFixerConfig);
       }
@@ -246,6 +252,23 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
           id="enable-thinking-signature-rectifier"
           checked={enableThinkingSignatureRectifier}
           onCheckedChange={(checked) => setEnableThinkingSignatureRectifier(checked)}
+          disabled={isPending}
+        />
+      </div>
+
+      <div className="flex items-start justify-between gap-4 rounded-lg border border-dashed border-border px-4 py-3">
+        <div>
+          <Label htmlFor="enable-codex-session-id-completion" className="text-sm font-medium">
+            {t("enableCodexSessionIdCompletion")}
+          </Label>
+          <p className="text-xs text-muted-foreground mt-1">
+            {t("enableCodexSessionIdCompletionDesc")}
+          </p>
+        </div>
+        <Switch
+          id="enable-codex-session-id-completion"
+          checked={enableCodexSessionIdCompletion}
+          onCheckedChange={(checked) => setEnableCodexSessionIdCompletion(checked)}
           disabled={isPending}
         />
       </div>

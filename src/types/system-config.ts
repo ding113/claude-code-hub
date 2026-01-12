@@ -44,6 +44,10 @@ export interface SystemSettings {
   // 目标：当 Anthropic 类型供应商出现 thinking 签名不兼容导致的 400 错误时，自动整流并重试一次
   enableThinkingSignatureRectifier: boolean;
 
+  // Codex Session ID 补全（默认开启）
+  // 目标：当 Codex 请求缺少 session_id / prompt_cache_key 时，自动补全或生成稳定的会话标识
+  enableCodexSessionIdCompletion: boolean;
+
   // 响应整流（默认开启）
   enableResponseFixer: boolean;
   responseFixerConfig: ResponseFixerConfig;
@@ -83,6 +87,9 @@ export interface UpdateSystemSettingsInput {
 
   // thinking signature 整流器（可选）
   enableThinkingSignatureRectifier?: boolean;
+
+  // Codex Session ID 补全（可选）
+  enableCodexSessionIdCompletion?: boolean;
 
   // 响应整流（可选）
   enableResponseFixer?: boolean;

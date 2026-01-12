@@ -112,6 +112,12 @@ bun run typecheck
 # 如果更改影响运行逻辑，执行端到端验证或 bun run test
 ```
 
+### i18n 变更（翻译质量/抽查）
+
+如果 PR 涉及 i18n 文案（尤其是 `settings` / `dashboard` / `myUsage`），请遵循：
+- 规则说明：`docs/i18n-translation-quality.md`
+- PR Checklist：`docs/i18n-pr-checklist.md`
+
 CI 会在 PR 上运行 `Docker Build Test`（见 `.github/CI_CD_SETUP.md`）。如需验证容器构建，可本地执行：
 
 ```bash

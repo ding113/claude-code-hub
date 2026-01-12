@@ -40,7 +40,7 @@ export interface CreateUserDialogProps {
 
 const CreateUserSchema = UpdateUserSchema.extend({
   name: z.string().min(1).max(64),
-  providerGroup: z.string().max(50).nullable().optional(),
+  providerGroup: z.string().max(200).nullable().optional(),
   allowedClients: z.array(z.string().max(64)).max(50).optional().default([]),
   allowedModels: z.array(z.string().max(64)).max(50).optional().default([]),
   dailyQuota: z.number().nullable().optional(),

@@ -127,7 +127,7 @@ export function ProviderGroupSelect({
       label={getTranslation(translations, "label", "供应商分组")}
       placeholder={getTranslation(translations, "placeholder", "输入分组并回车")}
       description={description}
-      maxTagLength={50}
+      maxTagLength={200}
       maxTags={20}
       suggestions={suggestions}
       disabled={disabled}

@@ -1,0 +1,14 @@
+{
+  "add": "新增",
+  "addNewRule": "新增規則",
+  "alreadyExists": "模型「{model}」已存在重新導向規則",
+  "currentRules": "目前規則 ({count})",
+  "description": "將 Claude Code 客戶端請求的模型（如 claude-sonnet-4.5）重新導向到上游供應商實際支援的模型（如 glm-4.6、gemini-pro）。用於成本最佳化或接入第三方 AI 服務。",
+  "emptyState": "目前無重新導向規則。新增規則後，系統將自動重寫請求中的模型名稱。",
+  "sourceEmpty": "來源模型名稱不能為空",
+  "sourceModel": "使用者請求的模型",
+  "sourcePlaceholder": "例如：claude-sonnet-4-5-20250929",
+  "targetEmpty": "目標模型名稱不能為空",
+  "targetModel": "實際轉發的模型",
+  "targetPlaceholder": "例如：glm-4.6"
+}

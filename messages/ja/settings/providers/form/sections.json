@@ -1,0 +1,313 @@
+{
+  "apiTest": {
+    "desc": "プロバイダーのモデルが利用可能かをテストします。既定ではルーティング設定で選択したプロバイダー種別に従います。",
+    "summary": "プロバイダーとモデルの接続性を確認",
+    "testLabel": "プロバイダーモデルをテスト",
+    "title": "プロバイダーモデルテスト"
+  },
+  "circuitBreaker": {
+    "desc": "連続失敗時に自動的にブレークして全体の品質を保護します",
+    "failureThreshold": {
+      "desc": "何回連続失敗でブレークするか",
+      "label": "失敗しきい値（回）",
+      "placeholder": "5"
+    },
+    "maxRetryAttempts": {
+      "desc": "初回呼び出しを含め、同一プロバイダーで試行する上限。超えると他のプロバイダーへ切り替えます。未入力の場合はデフォルト値を使用。",
+      "label": "プロバイダーごとの最大試行回数",
+      "placeholder": "2"
+    },
+    "openDuration": {
+      "desc": "ブレーク後、半開に移行するまでの時間",
+      "label": "ブレーク時間（分）",
+      "placeholder": "30"
+    },
+    "successThreshold": {
+      "desc": "半開状態で何回成功したら完全回復するか",
+      "label": "回復しきい値（回）",
+      "placeholder": "2"
+    },
+    "summary": "{failureThreshold} 回失敗 / {openDuration} 分間ブレーク / {successThreshold} 回成功で回復 / 各プロバイダー最大 {maxRetryAttempts} 回試行",
+    "title": "サーキットブレーカー設定"
+  },
+  "codexStrategy": {
+    "desc": "Codex リクエストの instructions フィールドの扱いを制御します。上流ゲートウェイとの互換性に影響します。",
+    "hint": "ヒント: 88code や foxcode など一部の厳格な Codex 中継では公式 instructions が必要です。「自動」または「公式を強制」を選択してください。",
+    "select": {
+      "auto": {
+        "desc": "クライアントの instructions を透過し、400 エラー時は公式プロンプトで自動再試行",
+        "label": "自動（推奨）"
+      },
+      "force": {
+        "desc": "常に公式の Codex CLI instructions を使用（約 4000+ 文字）",
+        "label": "公式を強制"
+      },
+      "keep": {
+        "desc": "常にクライアントの instructions を透過し、自動再試行しない（緩い中継向け）",
+        "label": "そのまま透過"
+      },
+      "label": "ポリシー選択",
+      "placeholder": "戦略を選択"
+    },
+    "summary": {
+      "auto": "自動（推奨）",
+      "force": "公式を強制",
+      "keep": "そのまま透過"
+    },
+    "title": "Codex Instructions ポリシー"
+  },
+  "mcpPassthrough": {
+    "desc": "有効にすると、MCP ツール呼び出しを指定された AI プロバイダにパススルーします（例：minimax の画像認識、Web 検索）",
+    "hint": "ヒント: MCP パススルーにより、Claude Code クライアントは第三者の AI プロバイダー提供のツール機能（画像認識、Web 検索など）を使用できます",
+    "select": {
+      "custom": {
+        "desc": "カスタム MCP サービスにパススルー（予約、未実装）",
+        "label": "カスタム"
+      },
+      "glm": {
+        "desc": "GLM MCP サービスにパススルー（画像分析、動画分析などをサポート）",
+        "label": "GLM"
+      },
+      "label": "パススルータイプ",
+      "minimax": {
+        "desc": "minimax MCP サービスにパススルー（画像認識、Web 検索などをサポート）",
+        "label": "Minimax"
+      },
+      "none": {
+        "desc": "MCP パススルーを有効にしません（デフォルト）",
+        "label": "無効"
+      },
+      "placeholder": "パススルータイプを選択"
+    },
+    "summary": {
+      "custom": "カスタム (予約)",
+      "glm": "GLM",
+      "minimax": "Minimax",
+      "none": "無効"
+    },
+    "title": "MCP パススルー設定",
+    "urlAuto": "自動抽出: {url}",
+    "urlDesc": "MCP サービスベース URL。空のままにすると、プロバイダー URL から自動的に抽出されます",
+    "urlLabel": "MCP パススルー URL",
+    "urlPlaceholder": "https://api.minimaxi.com"
+  },
+  "proxy": {
+    "desc": "プロキシを設定して接続性を改善します（HTTP、HTTPS、SOCKS4、SOCKS5）",
+    "fallback": {
+      "desc": "有効にすると、プロキシ接続が失敗した場合に直接接続を試行します",
+      "label": "プロキシ失敗時は直接接続にフォールバック"
+    },
+    "summary": {
+      "configured": "プロキシ設定済み",
+      "fallback": "（フォールバック有効）",
+      "none": "未設定"
+    },
+    "test": {
+      "desc": "設定したプロキシ経由でプロバイダー URL への接続をテストします（HEAD リクエスト、課金なし）",
+      "label": "接続テスト"
+    },
+    "title": "プロキシ設定",
+    "url": {
+      "formats": "対応フォーマット:",
+      "label": "プロキシ URL",
+      "optional": "（任意）",
+      "placeholder": "例: http://proxy.example.com:8080 または socks5://127.0.0.1:1080"
+    }
+  },
+  "rateLimit": {
+    "dailyResetMode": {
+      "desc": {
+        "fixed": "毎日決まった時刻にクォータをリセット",
+        "rolling": "初回呼び出しから24時間後にリセット"
+      },
+      "label": "日次リセットモード",
+      "options": {
+        "fixed": "固定時刻リセット",
+        "rolling": "ローリング（24時間）"
+      }
+    },
+    "dailyResetTime": {
+      "label": "日次リセット時刻 (HH:mm)"
+    },
+    "limit5h": {
+      "label": "5時間の上限 (USD)",
+      "placeholder": "空欄で無制限"
+    },
+    "limitConcurrent": {
+      "label": "同時セッション上限",
+      "placeholder": "0 は無制限"
+    },
+    "limitDaily": {
+      "label": "1日の支出上限 (USD)",
+      "placeholder": "空欄は無制限"
+    },
+    "limitMonthly": {
+      "label": "月の上限 (USD)",
+      "placeholder": "空欄で無制限"
+    },
+    "limitTotal": {
+      "label": "総消費上限 (USD)",
+      "placeholder": "空欄で無制限"
+    },
+    "limitWeekly": {
+      "label": "週の上限 (USD)",
+      "placeholder": "空欄で無制限"
+    },
+    "summary": {
+      "concurrent": "同時: {count}",
+      "daily": "日: {amount}（{resetTime}にリセット）",
+      "fiveHour": "5h: ${amount}",
+      "monthly": "月: ${amount}",
+      "none": "無制限",
+      "total": "総: ${amount}",
+      "weekly": "週: ${amount}"
+    },
+    "title": "レート制限"
+  },
+  "routing": {
+    "cacheTtl": {
+      "desc": "プロンプトキャッシュのTTLを強制設定。cache_controlを含むリクエストにのみ適用されます。",
+      "label": "キャッシュTTLオーバーライド",
+      "options": {
+        "1h": "1時間",
+        "5m": "5分",
+        "inherit": "オーバーライドしない（クライアントに従う）"
+      }
+    },
+    "codexOverrides": {
+      "parallelToolCalls": {
+        "help": "並列の tool calls を許可するかどうかを制御します。「クライアントに従う」は parallel_tool_calls を変更しません。無効化すると並列度が下がる可能性があります。",
+        "label": "並列ツール呼び出しオーバーライド",
+        "options": {
+          "false": "強制無効",
+          "inherit": "オーバーライドしない（クライアントに従う）",
+          "true": "強制有効"
+        }
+      },
+      "reasoningEffort": {
+        "help": "回答前にモデルが使う推論の強度（推論トークン量）を制御します。「クライアントに従う」はリクエストを変更しません。その他の値は reasoning.effort を強制します。注意: none は GPT-5.1 のみ、xhigh は GPT-5.1-Codex-Max のみ対応で、未対応モデルではエラーになります。",
+        "label": "推論強度オーバーライド",
+        "options": {
+          "high": "high",
+          "inherit": "オーバーライドしない（クライアントに従う）",
+          "low": "low",
+          "medium": "medium（デフォルト）",
+          "minimal": "minimal",
+          "none": "none（GPT-5.1 のみ）",
+          "xhigh": "xhigh（GPT-5.1-Codex-Max のみ）"
+        }
+      },
+      "reasoningSummary": {
+        "help": "推論サマリーを返すかどうかを制御します。auto は簡潔、detailed は詳細です。「クライアントに従う」は reasoning.summary を変更しません。",
+        "label": "推論サマリーオーバーライド",
+        "options": {
+          "auto": "auto",
+          "detailed": "detailed",
+          "inherit": "オーバーライドしない（クライアントに従う）"
+        }
+      },
+      "textVerbosity": {
+        "help": "モデル出力の冗長さを制御します。low は簡潔、high は詳細です。「クライアントに従う」は text.verbosity を変更しません。",
+        "label": "出力の詳細度オーバーライド",
+        "options": {
+          "high": "high",
+          "inherit": "オーバーライドしない（クライアントに従う）",
+          "low": "low",
+          "medium": "medium（デフォルト）"
+        }
+      }
+    },
+    "context1m": {
+      "desc": "1M コンテキストウィンドウのサポートを設定します。Sonnet モデル（claude-sonnet-4-5、claude-sonnet-4）にのみ適用されます。有効時は段階的料金が適用されます。",
+      "label": "1M コンテキストウィンドウ",
+      "options": {
+        "disabled": "無効",
+        "forceEnable": "強制有効化",
+        "inherit": "継承（クライアントに従う）"
+      }
+    },
+    "joinClaudePool": {
+      "desc": "有効にすると、Claude 系のプロバイダーと共に負荷分散に参加します",
+      "help": "claude-* へのリダイレクトがある場合のみ利用できます。ユーザーが claude-* モデルを要求した際に本プロバイダーも選択対象になります。",
+      "label": "Claude ルーティングプールに参加"
+    },
+    "modelRedirects": {
+      "label": "モデルリダイレクト設定",
+      "optional": "（任意）"
+    },
+    "modelWhitelist": {
+      "allowAll": "✓ すべてのモデルを許可（推奨）",
+      "desc": "このプロバイダーが処理できるモデルを制限します。既定では同タイプのすべてのモデルを処理できます。",
+      "label": "許可するモデル",
+      "moreModels": "+{count} 件 さらに表示",
+      "optional": "（任意）",
+      "selectedOnly": "選択した {count} 件のモデルのみ許可します。他のモデルはこのプロバイダーにルーティングされません。",
+      "title": "モデル許可リスト"
+    },
+    "preserveClientIp": {
+      "desc": "x-forwarded-for / x-real-ip を上流に渡します（実際の IP が露出する可能性）",
+      "help": "プライバシー保護のためデフォルトはオフ。上流側で端末 IP が必要な場合のみ有効化してください。",
+      "label": "クライアント IP を転送"
+    },
+    "providerType": {
+      "desc": "（スケジューリングに影響）",
+      "label": "プロバイダー種別",
+      "placeholder": "プロバイダー種別を選択"
+    },
+    "providerTypeDesc": "プロバイダーの API 形式を選択します。",
+    "providerTypeDisabledNote": "注: OpenAI Compatible は開発中のため、現在は使用できません",
+    "scheduleParams": {
+      "costMultiplier": {
+        "desc": "コスト計算の倍率。公式=1.0、20% 安い=0.8、20% 高い=1.2（小数4桁まで）",
+        "label": "コスト倍率",
+        "placeholder": "1.0"
+      },
+      "group": {
+        "desc": "グループタグ。ユーザーの providerGroup が一致する場合のみ利用可能。例: \"premium\" に設定すると providerGroup=\"premium\" のユーザーのみ対象",
+        "label": "プロバイダーグループ",
+        "placeholder": "例: premium, economy"
+      },
+      "priority": {
+        "desc": "値が小さいほど優先度が高くなります（0 が最も高い）。システムは最も高い優先度のプロバイダーのみから選択します。推奨: メイン=0、予備=1、緊急=2",
+        "label": "優先度",
+        "placeholder": "0"
+      },
+      "title": "スケジューリング設定",
+      "weight": {
+        "desc": "重み付きランダム。同一優先度内では重みが高いほど選ばれる確率が上がります。例 1:2:3 ≈ 16%:33%:50%",
+        "label": "重み",
+        "placeholder": "1"
+      }
+    },
+    "summary": {
+      "models": "許可モデル {count} 件",
+      "none": "未設定",
+      "redirects": "リダイレクト {count} 件"
+    },
+    "title": "ルーティング"
+  },
+  "timeout": {
+    "desc": "リクエストのタイムアウト時間を設定します。0 は無効を意味します",
+    "disableHint": "0に設定するとタイムアウトを無効にします（カナリアロールバックシナリオのみ、非推奨）",
+    "nonStreamingTotal": {
+      "core": "true",
+      "desc": "非ストリーミングリクエストの総タイムアウト、範囲60～1200秒、デフォルト600秒（10分）",
+      "label": "非ストリーミング総タイムアウト（秒）",
+      "placeholder": "600"
+    },
+    "streamingFirstByte": {
+      "core": "true",
+      "desc": "ストリーミングリクエストの初バイトタイムアウト、範囲1～120秒、デフォルト30秒",
+      "label": "ストリーミング初バイトタイムアウト（秒）",
+      "placeholder": "30"
+    },
+    "streamingIdle": {
+      "core": "true",
+      "desc": "ストリーミングリクエストのアイドルタイムアウト、範囲60～600秒、0で無効化（途中停止防止）",
+      "label": "ストリーミングアイドルタイムアウト（秒）",
+      "placeholder": "60"
+    },
+    "summary": "初回バイト: {streaming}s | ストリーム間隔: {idle}s | 非ストリーミング: {nonStreaming}s",
+    "title": "タイムアウト設定"
+  }
+}

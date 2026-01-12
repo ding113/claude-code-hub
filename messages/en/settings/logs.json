@@ -1,0 +1,54 @@
+{
+  "description": "Dynamically adjust system log level to control logging verbosity in real-time.",
+  "form": {
+    "changeNotice": "Current level is {current}, will switch to {selected} after saving",
+    "currentLevel": "Current Log Level",
+    "effectiveImmediately": "Log level changes take effect immediately without service restart.",
+    "failed": "Failed to set",
+    "failedError": "Failed to set log level",
+    "fetchFailed": "Failed to fetch log level",
+    "levelGuideDebug": "Debug (Recommended for Development): Includes detailed debug info, suitable for troubleshooting",
+    "levelGuideFatal": "Fatal/Error: Only errors shown, minimal logging, suitable for high-load production",
+    "levelGuideInfo": "Info (Recommended for Production): Shows key business events (provider selection, Session reuse, price sync) + Warnings + Errors",
+    "levelGuideTitle": "Log Level Guide",
+    "levelGuideTrace": "Trace: Extremely detailed trace information, includes all details",
+    "levelGuideWarn": "Warn: Includes warnings (rate limiting, circuit breaker opening, etc.) + Errors",
+    "save": "Save Settings",
+    "saving": "Saving...",
+    "selectLevel": "Select Log Level",
+    "success": "Log level set to: {level}"
+  },
+  "levels": {
+    "debug": {
+      "description": "Debug info + All levels (Recommended for Development)",
+      "label": "Debug"
+    },
+    "error": {
+      "description": "Error messages",
+      "label": "Error"
+    },
+    "fatal": {
+      "description": "Fatal errors only",
+      "label": "Fatal"
+    },
+    "info": {
+      "description": "Key business events + Warnings + Errors (Recommended for Production)",
+      "label": "Info"
+    },
+    "trace": {
+      "description": "Extremely detailed tracing + All levels",
+      "label": "Trace"
+    },
+    "warn": {
+      "description": "Warnings + Errors",
+      "label": "Warn"
+    }
+  },
+  "section": {
+    "description": "Changes take effect immediately without service restart.",
+    "title": "Log Level Control"
+  },
+  "subtitle": "Log Level Control",
+  "subtitleDesc": "Changes take effect immediately without restart. Useful for troubleshooting in production.",
+  "title": "Log Management"
+}
