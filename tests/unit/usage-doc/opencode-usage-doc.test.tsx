@@ -70,7 +70,7 @@ describe("UsageDoc - OpenCode 配置教程", () => {
 
     expect(text).toContain('"npm": "@ai-sdk/anthropic"');
     expect(text).toContain('"npm": "@ai-sdk/google"');
-    expect(text).not.toContain('"npm": "@ai-sdk/openai"');
+    expect(text).toContain('"npm": "@ai-sdk/openai"');
     expect(text).not.toContain("@ai-sdk/openai-compatible");
 
     expect(text).toContain("claude-haiku-4-5-20251001");

@@ -495,6 +495,12 @@ export const systemSettings = pgTable('system_settings', {
     .notNull()
     .default(true),
 
+  // Codex Session ID 补全（默认开启）
+  // 开启后：当 Codex 请求缺少 session_id / prompt_cache_key 时，自动补全或生成稳定的会话标识
+  enableCodexSessionIdCompletion: boolean('enable_codex_session_id_completion')
+    .notNull()
+    .default(true),
+
   // 响应整流（默认开启）
   enableResponseFixer: boolean('enable_response_fixer').notNull().default(true),
   responseFixerConfig: jsonb('response_fixer_config')

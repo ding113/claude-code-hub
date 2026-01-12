@@ -2,14 +2,13 @@
  * @vitest-environment happy-dom
  */
 
-import fs from "node:fs";
-import path from "node:path";
 import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { ModelMultiSelect } from "@/app/[locale]/settings/providers/_components/model-multi-select";
+import { loadMessages as loadTestMessages } from "../prices/test-messages";
 
 const modelPricesActionMocks = vi.hoisted(() => ({
   getAvailableModelsByProviderType: vi.fn(async () => ["remote-model-1"]),
@@ -21,19 +20,6 @@ const providersActionMocks = vi.hoisted(() => ({
   getUnmaskedProviderKey: vi.fn(async () => ({ ok: false })),
 }));
 vi.mock("@/actions/providers", () => providersActionMocks);
-
-function loadMessages() {
-  const base = path.join(process.cwd(), "messages/en");
-  const read = (name: string) => JSON.parse(fs.readFileSync(path.join(base, name), "utf8"));
-
-  return {
-    common: read("common.json"),
-    errors: read("errors.json"),
-    ui: read("ui.json"),
-    forms: read("forms.json"),
-    settings: read("settings.json"),
-  };
-}
 
 function render(node: ReactNode) {
   const container = document.createElement("div");
@@ -66,7 +52,7 @@ describe("ModelMultiSelect: 自定义白名单模型应可在列表中取消选�
   });
 
   test("已选中但不在 availableModels 的模型应出现在列表中，并可取消选中删除", async () => {
-    const messages = loadMessages();
+    const messages = loadTestMessages("en");
     const onChange = vi.fn();
 
     const { unmount } = render(
