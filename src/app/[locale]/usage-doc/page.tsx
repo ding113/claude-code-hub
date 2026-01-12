@@ -622,7 +622,7 @@ sk_xxxxxxxxxxxxxxxxxx`}
   const renderCodexConfiguration = (os: OS) => {
     const windowsUserName = t("placeholders.windowsUserName");
     const configPath = os === "windows" ? `C:\\Users\\${windowsUserName}\\.codex` : "~/.codex";
-    const shellConfigFile = os === "linux" ? "~/.bashrc" : os === "macos" ? "~/.zshrc" : "";
+    const shellConfigFile = os === "linux" ? t("placeholders.shellConfig.linux") : os === "macos" ? t("placeholders.shellConfig.macos") : "";
 
     return (
       <div className="space-y-4">
