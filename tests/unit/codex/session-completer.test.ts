@@ -88,6 +88,7 @@ describe("Codex session completer", () => {
     expect(result.applied).toBe(true);
     expect(result.sessionId).toBe(sessionId);
     expect(body.prompt_cache_key).toBe(sessionId);
+    expect(body.metadata).toBeUndefined();
     expect(headers.get("session_id")).toBe(sessionId);
   });
 
@@ -111,6 +112,7 @@ describe("Codex session completer", () => {
     expect(result.sessionId).toBe(promptCacheKey);
     expect(headers.get("session_id")).toBe(promptCacheKey);
     expect(body.prompt_cache_key).toBe(promptCacheKey);
+    expect(body.metadata).toBeUndefined();
   });
 
   test("no-op when both session_id and prompt_cache_key already exist", async () => {
@@ -155,6 +157,7 @@ describe("Codex session completer", () => {
     expect(result.sessionId).toMatch(UUID_V7_PATTERN);
     expect(headers.get("session_id")).toBe(result.sessionId);
     expect(body.prompt_cache_key).toBe(result.sessionId);
+    expect(body.metadata).toBeUndefined();
   });
 
   test("reuses the same generated session id for the same fingerprint when Redis is available", async () => {
@@ -211,6 +214,7 @@ describe("Codex session completer", () => {
     expect(headers.get("session_id")).toBe(xSessionId);
     expect(headers.get("x-session-id")).toBe(xSessionId);
     expect(body.prompt_cache_key).toBe(xSessionId);
+    expect(body.metadata).toBeUndefined();
   });
 
   test("completes canonical session_id when x-session-id and prompt_cache_key are provided", async () => {
@@ -235,17 +239,19 @@ describe("Codex session completer", () => {
     expect(headers.get("session_id")).toBe(xSessionId);
     expect(headers.get("x-session-id")).toBe(xSessionId);
     expect(body.prompt_cache_key).toBe(xSessionId);
+    expect(body.metadata).toBeUndefined();
   });
 
-  test("updates metadata.session_id in-place when metadata exists", async () => {
+  test("does not mutate metadata when metadata exists (metadata is not allowed for Codex upstream)", async () => {
     const { completeCodexSessionIdentifiers } = await import(
       "@/app/v1/_lib/codex/session-completer"
     );
 
     const sessionId = "sess_123456789012345678903";
     const headers = new Headers({ session_id: sessionId });
+    const metadata = { session_id: "sess_aaaaaaaaaaaaaaaaaaaaa", other: "value" };
     const body = makeCodexRequestBody({
-      metadata: { session_id: "sess_aaaaaaaaaaaaaaaaaaaaa", other: "value" },
+      metadata,
     });
 
     const result = await completeCodexSessionIdentifiers({
@@ -257,8 +263,7 @@ describe("Codex session completer", () => {
 
     expect(result.applied).toBe(true);
     expect(result.action).toBe("completed_missing_fields");
-    expect((body.metadata as any).session_id).toBe(sessionId);
-    expect((body.metadata as any).other).toBe("value");
+    expect(body.metadata).toEqual(metadata);
   });
 
   test("uses x-real-ip when x-forwarded-for is absent (fingerprint stability)", async () => {
@@ -369,6 +374,142 @@ describe("Codex session completer", () => {
 
     expect(result.action).toBe("reused_fingerprint_cache");
     expect(result.sessionId).toBe(existing);
+  });
+
+  test("fingerprint treats empty input as unknown and still reuses stable session id", async () => {
+    const { completeCodexSessionIdentifiers } = await import(
+      "@/app/v1/_lib/codex/session-completer"
+    );
+
+    const { client: fakeRedis } = makeFakeRedis();
+    redisClientRef = fakeRedis;
+
+    const headers = new Headers({
+      "x-forwarded-for": "203.0.113.77",
+      "user-agent": "codex_cli_rs/0.50.0",
+    });
+
+    const first = await completeCodexSessionIdentifiers({
+      keyId: 42,
+      headers: new Headers(headers),
+      requestBody: makeCodexRequestBody({ input: [] }),
+      userAgent: "codex_cli_rs/0.50.0",
+    });
+
+    const second = await completeCodexSessionIdentifiers({
+      keyId: 42,
+      headers: new Headers(headers),
+      requestBody: makeCodexRequestBody({ input: [] }),
+      userAgent: "codex_cli_rs/0.50.0",
+    });
+
+    expect(first.action).toBe("generated_uuid_v7");
+    expect(second.action).toBe("reused_fingerprint_cache");
+    expect(first.sessionId).toBe(second.sessionId);
+  });
+
+  test("fingerprint only uses first 3 message texts (extra messages do not affect reuse)", async () => {
+    const { completeCodexSessionIdentifiers } = await import(
+      "@/app/v1/_lib/codex/session-completer"
+    );
+
+    const { client: fakeRedis } = makeFakeRedis();
+    redisClientRef = fakeRedis;
+
+    const headers = new Headers({
+      "x-forwarded-for": "203.0.113.88",
+      "user-agent": "codex_cli_rs/0.50.0",
+    });
+
+    const firstBody = makeCodexRequestBody({
+      input: [
+        { type: "message", role: "user", content: "m1" },
+        { type: "message", role: "user", content: "m2" },
+        { type: "message", role: "user", content: "m3" },
+        { type: "message", role: "user", content: "m4-first" },
+      ],
+    });
+
+    const secondBody = makeCodexRequestBody({
+      input: [
+        { type: "message", role: "user", content: "m1" },
+        { type: "message", role: "user", content: "m2" },
+        { type: "message", role: "user", content: "m3" },
+        { type: "message", role: "user", content: "m4-changed" },
+      ],
+    });
+
+    const first = await completeCodexSessionIdentifiers({
+      keyId: 43,
+      headers: new Headers(headers),
+      requestBody: firstBody,
+      userAgent: "codex_cli_rs/0.50.0",
+    });
+
+    const second = await completeCodexSessionIdentifiers({
+      keyId: 43,
+      headers: new Headers(headers),
+      requestBody: secondBody,
+      userAgent: "codex_cli_rs/0.50.0",
+    });
+
+    expect(first.action).toBe("generated_uuid_v7");
+    expect(second.action).toBe("reused_fingerprint_cache");
+    expect(first.sessionId).toBe(second.sessionId);
+  });
+
+  test("handles Redis NX fallback by setting without NX when second read is still missing", async () => {
+    const { completeCodexSessionIdentifiers } = await import(
+      "@/app/v1/_lib/codex/session-completer"
+    );
+
+    redisClientRef = {
+      status: "ready",
+      get: vi.fn(async () => null),
+      set: vi.fn(async (_key: string, _value: string, _ex: string, _ttl: number, nx?: string) => {
+        if (nx === "NX") return null;
+        return "OK";
+      }),
+    };
+
+    const result = await completeCodexSessionIdentifiers({
+      keyId: 1,
+      headers: new Headers({ "x-forwarded-for": "203.0.113.10" }),
+      requestBody: makeCodexRequestBody(),
+      userAgent: "codex_cli_rs/0.50.0",
+    });
+
+    expect(result.action).toBe("generated_uuid_v7");
+    expect(result.sessionId).toMatch(UUID_V7_PATTERN);
+    expect(redisClientRef.set).toHaveBeenCalledTimes(2);
+    expect(redisClientRef.set.mock.calls[0]?.[4]).toBe("NX");
+    expect(redisClientRef.set.mock.calls[1]?.[4]).toBeUndefined();
+  });
+
+  test("falls back to UUID v7 when Redis throws", async () => {
+    const { completeCodexSessionIdentifiers } = await import(
+      "@/app/v1/_lib/codex/session-completer"
+    );
+    const { logger } = await import("@/lib/logger");
+
+    redisClientRef = {
+      status: "ready",
+      get: vi.fn(async () => {
+        throw new Error("boom");
+      }),
+      set: vi.fn(async () => "OK"),
+    };
+
+    const result = await completeCodexSessionIdentifiers({
+      keyId: 1,
+      headers: new Headers({ "x-forwarded-for": "203.0.113.10" }),
+      requestBody: makeCodexRequestBody(),
+      userAgent: "codex_cli_rs/0.50.0",
+    });
+
+    expect(result.action).toBe("generated_uuid_v7");
+    expect(result.sessionId).toMatch(UUID_V7_PATTERN);
+    expect(logger.warn).toHaveBeenCalled();
   });
 
   test("uses SESSION_TTL when it is a valid integer", async () => {
