@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"sort"
 	"strings"
 	"time"
 
@@ -16,7 +17,7 @@ type ModelPriceRepository interface {
 	Repository
 
 	// Create 创建模型价格记录
-	Create(ctx context.Context, price *model.ModelPrice) error
+	Create(ctx context.Context, price *model.ModelPrice) (*model.ModelPrice, error)
 
 	// GetByID 根据 ID 获取价格记录
 	GetByID(ctx context.Context, id int) (*model.ModelPrice, error)
@@ -62,20 +63,21 @@ func NewModelPriceRepository(db *bun.DB) ModelPriceRepository {
 }
 
 // Create 创建模型价格记录
-func (r *modelPriceRepository) Create(ctx context.Context, price *model.ModelPrice) error {
+func (r *modelPriceRepository) Create(ctx context.Context, price *model.ModelPrice) (*model.ModelPrice, error) {
 	now := time.Now()
 	price.CreatedAt = now
 	price.UpdatedAt = now
 
 	_, err := r.db.NewInsert().
 		Model(price).
+		Returning("*").
 		Exec(ctx)
 
 	if err != nil {
-		return errors.NewDatabaseError(err)
+		return nil, errors.NewDatabaseError(err)
 	}
 
-	return nil
+	return price, nil
 }
 
 // GetByID 根据 ID 获取价格记录
@@ -282,6 +284,9 @@ func (r *modelPriceRepository) GetChatModelNames(ctx context.Context) ([]string,
 			names = append(names, price.ModelName)
 		}
 	}
+
+	// 按字母顺序排序
+	sort.Strings(names)
 
 	return names, nil
 }

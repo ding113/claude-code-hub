@@ -38,7 +38,7 @@ type KeyRepository interface {
 	Repository
 
 	// Create 创建 API Key
-	Create(ctx context.Context, key *model.Key) error
+	Create(ctx context.Context, key *model.Key) (*model.Key, error)
 
 	// GetByID 根据 ID 获取 Key
 	GetByID(ctx context.Context, id int) (*model.Key, error)
@@ -50,7 +50,7 @@ type KeyRepository interface {
 	GetByKeyWithUser(ctx context.Context, key string) (*model.Key, error)
 
 	// Update 更新 Key
-	Update(ctx context.Context, key *model.Key) error
+	Update(ctx context.Context, key *model.Key) (*model.Key, error)
 
 	// Delete 删除 Key（软删除）
 	Delete(ctx context.Context, id int) error
@@ -120,7 +120,7 @@ func NewKeyRepository(db *bun.DB) KeyRepository {
 }
 
 // Create 创建 API Key
-func (r *keyRepository) Create(ctx context.Context, key *model.Key) error {
+func (r *keyRepository) Create(ctx context.Context, key *model.Key) (*model.Key, error) {
 	now := time.Now()
 	if key.DailyResetMode == "" {
 		key.DailyResetMode = "fixed"
@@ -141,13 +141,14 @@ func (r *keyRepository) Create(ctx context.Context, key *model.Key) error {
 
 	_, err := r.db.NewInsert().
 		Model(key).
+		Returning("*").
 		Exec(ctx)
 
 	if err != nil {
-		return errors.NewDatabaseError(err)
+		return nil, errors.NewDatabaseError(err)
 	}
 
-	return nil
+	return key, nil
 }
 
 // GetByID 根据 ID 获取 Key
@@ -218,26 +219,28 @@ func (r *keyRepository) GetByKeyWithUser(ctx context.Context, keyStr string) (*m
 	return key, nil
 }
 
-// Update 更新 Key
-func (r *keyRepository) Update(ctx context.Context, key *model.Key) error {
+// Update 更新 Key（部分更新，忽略零值字段）
+func (r *keyRepository) Update(ctx context.Context, key *model.Key) (*model.Key, error) {
 	key.UpdatedAt = time.Now()
 
 	result, err := r.db.NewUpdate().
 		Model(key).
 		WherePK().
+		OmitZero().
 		Where("deleted_at IS NULL").
+		Returning("*").
 		Exec(ctx)
 
 	if err != nil {
-		return errors.NewDatabaseError(err)
+		return nil, errors.NewDatabaseError(err)
 	}
 
 	rowsAffected, _ := result.RowsAffected()
 	if rowsAffected == 0 {
-		return errors.NewNotFoundError("Key")
+		return nil, errors.NewNotFoundError("Key")
 	}
 
-	return nil
+	return key, nil
 }
 
 // Delete 删除 Key（软删除）
@@ -537,12 +540,8 @@ const excludeWarmupConditionKey = "(blocked_by IS NULL OR blocked_by <> 'warmup'
 
 // FindKeyUsageToday 获取用户下所有Key的今日费用统计（用于限流检查）
 func (r *keyRepository) FindKeyUsageToday(ctx context.Context, userID int, timezone string) ([]*KeyUsageToday, error) {
-	location := time.Local
-	if timezone != "" {
-		if loc, err := time.LoadLocation(timezone); err == nil {
-			location = loc
-		}
-	}
+	timezone = ValidateTimezone(timezone)
+	location, _ := time.LoadLocation(timezone)
 
 	now := time.Now().In(location)
 	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, location)
@@ -587,12 +586,8 @@ func (r *keyRepository) FindKeyUsageTodayBatch(ctx context.Context, userIDs []in
 		return make(map[int][]*KeyUsageToday), nil
 	}
 
-	location := time.Local
-	if timezone != "" {
-		if loc, err := time.LoadLocation(timezone); err == nil {
-			location = loc
-		}
-	}
+	timezone = ValidateTimezone(timezone)
+	location, _ := time.LoadLocation(timezone)
 
 	now := time.Now().In(location)
 	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, location)
@@ -647,6 +642,8 @@ func (r *keyRepository) FindKeyUsageTodayBatch(ctx context.Context, userIDs []in
 
 // FindKeysWithStatistics 获取Key的详细统计信息（管理后台展示）
 func (r *keyRepository) FindKeysWithStatistics(ctx context.Context, userID int, timezone string) ([]*KeyStatistics, error) {
+	timezone = ValidateTimezone(timezone)
+
 	// 1. 获取用户的所有 keys
 	keys, err := r.ListByUserID(ctx, userID)
 	if err != nil {
@@ -779,6 +776,8 @@ func (r *keyRepository) FindKeysWithStatisticsBatch(ctx context.Context, userIDs
 	if len(userIDs) == 0 {
 		return make(map[int][]*KeyStatistics), nil
 	}
+
+	timezone = ValidateTimezone(timezone)
 
 	// 1. 批量获取所有用户的 keys
 	keysMap, err := r.ListByUserIDs(ctx, userIDs)

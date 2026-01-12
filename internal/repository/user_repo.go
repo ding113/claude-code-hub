@@ -17,7 +17,7 @@ type UserRepository interface {
 	Repository
 
 	// Create 创建用户
-	Create(ctx context.Context, user *model.User) error
+	Create(ctx context.Context, user *model.User) (*model.User, error)
 
 	// GetByID 根据 ID 获取用户
 	GetByID(ctx context.Context, id int) (*model.User, error)
@@ -26,7 +26,7 @@ type UserRepository interface {
 	GetByIDWithKeys(ctx context.Context, id int) (*model.User, error)
 
 	// Update 更新用户
-	Update(ctx context.Context, user *model.User) error
+	Update(ctx context.Context, user *model.User) (*model.User, error)
 
 	// Delete 删除用户（软删除）
 	Delete(ctx context.Context, id int) error
@@ -109,7 +109,7 @@ func NewUserRepository(db *bun.DB) UserRepository {
 }
 
 // Create 创建用户
-func (r *userRepository) Create(ctx context.Context, user *model.User) error {
+func (r *userRepository) Create(ctx context.Context, user *model.User) (*model.User, error) {
 	now := time.Now()
 	if user.Role == "" {
 		user.Role = "user"
@@ -138,13 +138,14 @@ func (r *userRepository) Create(ctx context.Context, user *model.User) error {
 
 	_, err := r.db.NewInsert().
 		Model(user).
+		Returning("*").
 		Exec(ctx)
 
 	if err != nil {
-		return errors.NewDatabaseError(err)
+		return nil, errors.NewDatabaseError(err)
 	}
 
-	return nil
+	return user, nil
 }
 
 // GetByID 根据 ID 获取用户
@@ -188,26 +189,28 @@ func (r *userRepository) GetByIDWithKeys(ctx context.Context, id int) (*model.Us
 	return user, nil
 }
 
-// Update 更新用户
-func (r *userRepository) Update(ctx context.Context, user *model.User) error {
+// Update 更新用户（部分更新，忽略零值字段）
+func (r *userRepository) Update(ctx context.Context, user *model.User) (*model.User, error) {
 	user.UpdatedAt = time.Now()
 
 	result, err := r.db.NewUpdate().
 		Model(user).
 		WherePK().
+		OmitZero().
 		Where("deleted_at IS NULL").
+		Returning("*").
 		Exec(ctx)
 
 	if err != nil {
-		return errors.NewDatabaseError(err)
+		return nil, errors.NewDatabaseError(err)
 	}
 
 	rowsAffected, _ := result.RowsAffected()
 	if rowsAffected == 0 {
-		return errors.NewNotFoundError("User")
+		return nil, errors.NewNotFoundError("User")
 	}
 
-	return nil
+	return user, nil
 }
 
 // Delete 删除用户（软删除）
@@ -588,7 +591,7 @@ func (r *userRepository) FindUserListBatch(ctx context.Context, filters *UserLis
 			) OR
 			EXISTS (
 				SELECT 1 FROM keys
-				WHERE keys.user_id = "user".id
+				WHERE keys.user_id = users.id
 					AND keys.deleted_at IS NULL
 					AND (
 						keys.name ILIKE ? OR

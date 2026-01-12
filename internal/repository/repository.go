@@ -3,6 +3,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/uptrace/bun"
 )
@@ -45,7 +46,7 @@ func (p *Pagination) GetOffset() int {
 // GetLimit 获取限制数量
 func (p *Pagination) GetLimit() int {
 	if p.PageSize < 1 {
-		p.PageSize = 20 // 默认每页 20 条
+		p.PageSize = 50 // 默认每页 50 条（与 Node 对齐）
 	}
 	if p.PageSize > 100 {
 		p.PageSize = 100 // 最大 100 条
@@ -82,7 +83,7 @@ func NewListOptions() *ListOptions {
 	return &ListOptions{
 		Pagination: &Pagination{
 			Page:     1,
-			PageSize: 20,
+			PageSize: 50, // 与 Node 对齐
 		},
 		OrderBy:        "created_at DESC",
 		IncludeDeleted: false,
@@ -133,4 +134,20 @@ func RunInTransaction(ctx context.Context, db *bun.DB, fn TxFunc) error {
 	}
 
 	return tx.Commit()
+}
+
+// DefaultTimezone 默认时区
+const DefaultTimezone = "Asia/Shanghai"
+
+// ValidateTimezone 校验并返回有效的时区字符串
+// 如果传入空字符串或无效时区，返回默认时区
+func ValidateTimezone(tz string) string {
+	if tz == "" {
+		return DefaultTimezone
+	}
+	// 验证时区是否有效
+	if _, err := time.LoadLocation(tz); err != nil {
+		return DefaultTimezone
+	}
+	return tz
 }

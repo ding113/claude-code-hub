@@ -27,13 +27,13 @@ type ProviderRepository interface {
 	Repository
 
 	// Create 创建供应商
-	Create(ctx context.Context, provider *model.Provider) error
+	Create(ctx context.Context, provider *model.Provider) (*model.Provider, error)
 
 	// GetByID 根据 ID 获取供应商
 	GetByID(ctx context.Context, id int) (*model.Provider, error)
 
 	// Update 更新供应商
-	Update(ctx context.Context, provider *model.Provider) error
+	Update(ctx context.Context, provider *model.Provider) (*model.Provider, error)
 
 	// Delete 删除供应商（软删除）
 	Delete(ctx context.Context, id int) error
@@ -97,7 +97,7 @@ func NewProviderRepository(db *bun.DB) ProviderRepository {
 }
 
 // Create 创建供应商
-func (r *providerRepository) Create(ctx context.Context, provider *model.Provider) error {
+func (r *providerRepository) Create(ctx context.Context, provider *model.Provider) (*model.Provider, error) {
 	now := time.Now()
 	if provider.IsEnabled == nil {
 		enabled := true
@@ -160,13 +160,14 @@ func (r *providerRepository) Create(ctx context.Context, provider *model.Provide
 
 	_, err := r.db.NewInsert().
 		Model(provider).
+		Returning("*").
 		Exec(ctx)
 
 	if err != nil {
-		return errors.NewDatabaseError(err)
+		return nil, errors.NewDatabaseError(err)
 	}
 
-	return nil
+	return provider, nil
 }
 
 // GetByID 根据 ID 获取供应商
@@ -188,26 +189,28 @@ func (r *providerRepository) GetByID(ctx context.Context, id int) (*model.Provid
 	return provider, nil
 }
 
-// Update 更新供应商
-func (r *providerRepository) Update(ctx context.Context, provider *model.Provider) error {
+// Update 更新供应商（部分更新，忽略零值字段）
+func (r *providerRepository) Update(ctx context.Context, provider *model.Provider) (*model.Provider, error) {
 	provider.UpdatedAt = time.Now()
 
 	result, err := r.db.NewUpdate().
 		Model(provider).
 		WherePK().
+		OmitZero().
 		Where("deleted_at IS NULL").
+		Returning("*").
 		Exec(ctx)
 
 	if err != nil {
-		return errors.NewDatabaseError(err)
+		return nil, errors.NewDatabaseError(err)
 	}
 
 	rowsAffected, _ := result.RowsAffected()
 	if rowsAffected == 0 {
-		return errors.NewNotFoundError("Provider")
+		return nil, errors.NewNotFoundError("Provider")
 	}
 
-	return nil
+	return provider, nil
 }
 
 // Delete 删除供应商（软删除）
@@ -530,6 +533,8 @@ const excludeWarmupConditionProvider = "(blocked_by IS NULL OR blocked_by <> 'wa
 // 3. 复杂的条件聚合和多个 CTE
 // 4. 使用 Bun 查询构建器会使代码更复杂且难以维护
 func (r *providerRepository) GetProviderStatistics(ctx context.Context, timezone string) ([]*ProviderStatistics, error) {
+	timezone = ValidateTimezone(timezone)
+
 	query := `
 		WITH provider_stats AS (
 			SELECT

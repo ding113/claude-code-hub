@@ -171,6 +171,8 @@ const excludeWarmupCondition = "(blocked_by IS NULL OR blocked_by <> 'warmup')"
 // 3. 使用 CROSS JOIN 填充零值时间点
 // 4. 这些功能在 Bun 查询构建器中难以表达
 func (r *statisticsRepository) GetUserStatistics(ctx context.Context, timeRange TimeRange, timezone string) ([]*UserStatRow, error) {
+	timezone = ValidateTimezone(timezone)
+
 	var query string
 
 	switch timeRange {
@@ -323,6 +325,8 @@ func (r *statisticsRepository) GetUserStatistics(ctx context.Context, timeRange 
 //
 // 注意：此方法保留原始 SQL，原因同 GetUserStatistics
 func (r *statisticsRepository) GetKeyStatistics(ctx context.Context, userID int, timeRange TimeRange, timezone string) ([]*KeyStatRow, error) {
+	timezone = ValidateTimezone(timezone)
+
 	var query string
 
 	switch timeRange {
@@ -500,6 +504,8 @@ func (r *statisticsRepository) GetKeyStatistics(ctx context.Context, userID int,
 //
 // 注意：此方法保留原始 SQL，原因同 GetUserStatistics
 func (r *statisticsRepository) GetMixedStatistics(ctx context.Context, userID int, timeRange TimeRange, timezone string) (*MixedStatistics, error) {
+	timezone = ValidateTimezone(timezone)
+
 	var othersQuery string
 
 	switch timeRange {
@@ -987,6 +993,8 @@ func (r *statisticsRepository) GetActiveKeysForUser(ctx context.Context, userID 
 // GetRateLimitEventStats 获取限流事件统计数据
 // 查询 message_request 表中包含 rate_limit_metadata 的错误记录
 func (r *statisticsRepository) GetRateLimitEventStats(ctx context.Context, filters *RateLimitEventFilters, timezone string) (*RateLimitEventStats, error) {
+	timezone = ValidateTimezone(timezone)
+
 	if filters == nil {
 		filters = &RateLimitEventFilters{}
 	}
@@ -1095,7 +1103,8 @@ func (r *statisticsRepository) GetRateLimitEventStats(ctx context.Context, filte
 		eventsByProvider[row.ProviderID]++
 
 		// 按小时统计
-		hourKey := row.Hour.UTC().Format(time.RFC3339)
+		// 使用带毫秒的 ISO8601 格式，与 Node.js toISOString() 对齐
+		hourKey := row.Hour.UTC().Format("2006-01-02T15:04:05.000Z")
 		eventsByHour[hourKey]++
 
 		// 累计当前使用量
@@ -1165,74 +1174,6 @@ func parseRateLimitMetadata(errorMessage string) (*rateLimitMetadata, error) {
 	}
 
 	return metadata, nil
-}
-
-// findSubstring 查找子串位置
-func findSubstring(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
-}
-
-// extractStringValue 从 "key": "value" 格式中提取值
-func extractStringValue(s string) string {
-	// 跳过 key 和冒号
-	colonIdx := findSubstring(s, ":")
-	if colonIdx == -1 {
-		return ""
-	}
-	s = s[colonIdx+1:]
-
-	// 跳过空白
-	for len(s) > 0 && (s[0] == ' ' || s[0] == '\t') {
-		s = s[1:]
-	}
-
-	// 检查引号
-	if len(s) == 0 || s[0] != '"' {
-		return ""
-	}
-	s = s[1:]
-
-	// 找到结束引号
-	endIdx := 0
-	for endIdx < len(s) && s[endIdx] != '"' {
-		endIdx++
-	}
-	if endIdx >= len(s) {
-		return ""
-	}
-
-	return s[:endIdx]
-}
-
-// extractNumberValue 从 "key": number 格式中提取数值
-func extractNumberValue(s string) string {
-	// 跳过 key 和冒号
-	colonIdx := findSubstring(s, ":")
-	if colonIdx == -1 {
-		return ""
-	}
-	s = s[colonIdx+1:]
-
-	// 跳过空白
-	for len(s) > 0 && (s[0] == ' ' || s[0] == '\t') {
-		s = s[1:]
-	}
-
-	// 提取数字
-	endIdx := 0
-	for endIdx < len(s) && (s[endIdx] >= '0' && s[endIdx] <= '9' || s[endIdx] == '.' || s[endIdx] == '-') {
-		endIdx++
-	}
-	if endIdx == 0 {
-		return ""
-	}
-
-	return s[:endIdx]
 }
 
 // sortTimelineEntries 按时间排序时间线条目
