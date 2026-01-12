@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/quagmt/udecimal"
@@ -59,8 +60,97 @@ type PriceData struct {
 	// 其他字段
 	ToolUseSystemPromptTokens *int `json:"tool_use_system_prompt_tokens,omitempty"`
 
-	// 额外字段（支持 [key: string]: unknown）
-	Extra map[string]interface{} `json:"-" bun:"-"`
+	// 额外字段（支持 [key: string]: unknown，与 Node.js 版本对齐）
+	Extra map[string]interface{} `bun:"-"`
+}
+
+// knownPriceDataKeys 已知的 PriceData 字段名（用于分离额外字段）
+var knownPriceDataKeys = map[string]bool{
+	"input_cost_per_token":                              true,
+	"output_cost_per_token":                             true,
+	"cache_creation_input_token_cost":                   true,
+	"cache_creation_input_token_cost_above_1hr":         true,
+	"cache_read_input_token_cost":                       true,
+	"input_cost_per_token_above_200k_tokens":            true,
+	"output_cost_per_token_above_200k_tokens":           true,
+	"cache_creation_input_token_cost_above_200k_tokens": true,
+	"cache_read_input_token_cost_above_200k_tokens":     true,
+	"output_cost_per_image":                             true,
+	"search_context_cost_per_query":                     true,
+	"litellm_provider":                                  true,
+	"max_input_tokens":                                  true,
+	"max_output_tokens":                                 true,
+	"max_tokens":                                        true,
+	"mode":                                              true,
+	"supports_assistant_prefill":                        true,
+	"supports_computer_use":                             true,
+	"supports_function_calling":                         true,
+	"supports_pdf_input":                                true,
+	"supports_prompt_caching":                           true,
+	"supports_reasoning":                                true,
+	"supports_response_schema":                          true,
+	"supports_tool_choice":                              true,
+	"supports_vision":                                   true,
+	"tool_use_system_prompt_tokens":                     true,
+}
+
+// UnmarshalJSON 自定义 JSON 反序列化，保留额外字段
+func (p *PriceData) UnmarshalJSON(data []byte) error {
+	// 使用别名避免递归调用
+	type PriceDataAlias PriceData
+	alias := (*PriceDataAlias)(p)
+
+	// 先解析已知字段
+	if err := json.Unmarshal(data, alias); err != nil {
+		return err
+	}
+
+	// 解析所有字段到 map
+	var allFields map[string]interface{}
+	if err := json.Unmarshal(data, &allFields); err != nil {
+		return err
+	}
+
+	// 提取额外字段
+	p.Extra = make(map[string]interface{})
+	for key, value := range allFields {
+		if !knownPriceDataKeys[key] {
+			p.Extra[key] = value
+		}
+	}
+
+	return nil
+}
+
+// MarshalJSON 自定义 JSON 序列化，包含额外字段
+func (p PriceData) MarshalJSON() ([]byte, error) {
+	// 使用别名避免递归调用
+	type PriceDataAlias PriceData
+	alias := PriceDataAlias(p)
+
+	// 先序列化已知字段
+	knownData, err := json.Marshal(alias)
+	if err != nil {
+		return nil, err
+	}
+
+	// 如果没有额外字段，直接返回
+	if len(p.Extra) == 0 {
+		return knownData, nil
+	}
+
+	// 解析已知字段为 map
+	var result map[string]interface{}
+	if err := json.Unmarshal(knownData, &result); err != nil {
+		return nil, err
+	}
+
+	// 合并额外字段
+	for key, value := range p.Extra {
+		result[key] = value
+	}
+
+	return json.Marshal(result)
 }
 
 // GetInputCostPerToken 获取输入价格（每 token）

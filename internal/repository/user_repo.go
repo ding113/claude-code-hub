@@ -372,7 +372,7 @@ func (r *userRepository) GetExpiredUsers(ctx context.Context) ([]*model.User, er
 	err := r.db.NewSelect().
 		Model(&users).
 		Where("expires_at IS NOT NULL").
-		Where("expires_at <= ?", now).
+		Where("expires_at < ?", now).
 		Where("deleted_at IS NULL").
 		Scan(ctx)
 

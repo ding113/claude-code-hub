@@ -397,6 +397,7 @@ func (r *providerRepository) GetByProviderType(ctx context.Context, providerType
 }
 
 // GetEnabledProvidersByGroupTag 获取指定组的启用供应商（按优先级和权重排序）
+// 注意：priority 值越小优先级越高（与 Node.js 版本对齐）
 func (r *providerRepository) GetEnabledProvidersByGroupTag(ctx context.Context, groupTag string) ([]*model.Provider, error) {
 	var providers []*model.Provider
 
@@ -404,7 +405,7 @@ func (r *providerRepository) GetEnabledProvidersByGroupTag(ctx context.Context, 
 		Model(&providers).
 		Where("is_enabled = ?", true).
 		Where("deleted_at IS NULL").
-		Order("priority DESC", "weight DESC")
+		Order("priority ASC", "weight DESC")
 
 	// groupTag 为空或 "default" 时，查询 group_tag 为空或 "default" 的供应商
 	if groupTag == "" || groupTag == "default" {
