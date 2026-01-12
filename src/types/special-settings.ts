@@ -10,6 +10,7 @@ export type SpecialSetting =
   | ResponseFixerSpecialSetting
   | GuardInterceptSpecialSetting
   | ThinkingSignatureRectifierSpecialSetting
+  | CodexSessionIdCompletionSpecialSetting
   | AnthropicCacheTtlHeaderOverrideSpecialSetting
   | AnthropicContext1mHeaderOverrideSpecialSetting;
 
@@ -109,4 +110,25 @@ export type ThinkingSignatureRectifierSpecialSetting = {
   removedThinkingBlocks: number;
   removedRedactedThinkingBlocks: number;
   removedSignatureFields: number;
+};
+
+/**
+ * Codex Session ID 补全审计
+ *
+ * 用于记录：当 Codex 请求缺少 session_id / prompt_cache_key 时，
+ * 系统自动补全或生成会话标识，提升供应商复用与会话粘性稳定性。
+ */
+export type CodexSessionIdCompletionSpecialSetting = {
+  type: "codex_session_id_completion";
+  scope: "request";
+  hit: boolean;
+  action: "completed_missing_fields" | "generated_uuid_v7" | "reused_fingerprint_cache";
+  source:
+    | "header_session_id"
+    | "header_x_session_id"
+    | "body_prompt_cache_key"
+    | "body_metadata_session_id"
+    | "fingerprint_cache"
+    | "generated_uuid_v7";
+  sessionId: string;
 };

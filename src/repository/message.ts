@@ -32,6 +32,7 @@ export async function createMessageRequest(
     userAgent: data.user_agent, // User-Agent
     endpoint: data.endpoint, // 请求端点（可为空）
     messagesCount: data.messages_count, // Messages 数量
+    specialSettings: data.special_settings ?? undefined, // 特殊设置（审计/展示）
     cacheTtlApplied: data.cache_ttl_applied,
     cacheCreationInputTokens: data.cache_creation_input_tokens,
     cacheCreation5mInputTokens: data.cache_creation_5m_input_tokens,
@@ -59,6 +60,7 @@ export async function createMessageRequest(
     cacheCreation5mInputTokens: messageRequest.cacheCreation5mInputTokens,
     cacheCreation1hInputTokens: messageRequest.cacheCreation1hInputTokens,
     cacheReadInputTokens: messageRequest.cacheReadInputTokens,
+    specialSettings: messageRequest.specialSettings,
     createdAt: messageRequest.createdAt,
     updatedAt: messageRequest.updatedAt,
     deletedAt: messageRequest.deletedAt,
