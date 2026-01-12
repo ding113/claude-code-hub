@@ -4,6 +4,27 @@
 
 ---
 
+## [v0.4.2](https://github.com/ding113/claude-code-hub/releases/tag/v0.4.2) - 2026-01-12
+
+### 新增
+
+- Codex 会话标识符自动补全功能，提升会话管理效率 (#599)
+- 供应商分组字段长度扩展至 200 字符，支持更复杂的分组配置 (#591) [@Hwwwww-dev](https://github.com/Hwwwww-dev)
+
+### 优化
+
+- i18n 设置模块拆分优化，引入翻译质量门禁机制 (#588) [@YangQing-Lin](https://github.com/YangQing-Lin)
+- OpenCode 使用文档更新，添加 GPT-5.2 和 Gemini v1beta 配置示例 (#597)
+
+### 修复
+
+- 修复 Codex 会话完成响应中错误注入元数据的问题 (#601)
+- 修复供应商自定义模型白名单无法移除的问题 (#592, #593)
+- 修复 Edge Runtime 下 AsyncTaskManager 导致的 process.once 构建警告 (#589) [@YangQing-Lin](https://github.com/YangQing-Lin)
+- 修复 Thinking 签名整流器对 "signature: Field required" 错误的检测和触发逻辑 (#594)
+
+---
+
 ## [v0.4.1](https://github.com/ding113/claude-code-hub/releases/tag/v0.4.1) - 2026-01-11
 
 ### 新增
