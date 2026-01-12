@@ -2,14 +2,17 @@
  * @vitest-environment happy-dom
  */
 
-import fs from "node:fs";
-import path from "node:path";
 import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { ModelMultiSelect } from "@/app/[locale]/settings/providers/_components/model-multi-select";
+import commonMessages from "../../../../messages/en/common.json";
+import errorsMessages from "../../../../messages/en/errors.json";
+import formsMessages from "../../../../messages/en/forms.json";
+import settingsMessages from "../../../../messages/en/settings";
+import uiMessages from "../../../../messages/en/ui.json";
 
 const modelPricesActionMocks = vi.hoisted(() => ({
   getAvailableModelsByProviderType: vi.fn(async () => ["remote-model-1"]),
@@ -23,15 +26,12 @@ const providersActionMocks = vi.hoisted(() => ({
 vi.mock("@/actions/providers", () => providersActionMocks);
 
 function loadMessages() {
-  const base = path.join(process.cwd(), "messages/en");
-  const read = (name: string) => JSON.parse(fs.readFileSync(path.join(base, name), "utf8"));
-
   return {
-    common: read("common.json"),
-    errors: read("errors.json"),
-    ui: read("ui.json"),
-    forms: read("forms.json"),
-    settings: read("settings.json"),
+    common: commonMessages,
+    errors: errorsMessages,
+    ui: uiMessages,
+    forms: formsMessages,
+    settings: settingsMessages,
   };
 }
 
