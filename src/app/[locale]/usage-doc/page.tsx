@@ -454,7 +454,12 @@ npm --version`}
       os === "windows"
         ? `C:\\Users\\${windowsUserName}\\.claude\\settings.json`
         : "~/.claude/settings.json";
-    const shellConfigFile = os === "linux" ? t("placeholders.shellConfig.linux") : os === "macos" ? t("placeholders.shellConfig.macos") : "";
+    const shellConfigFile =
+      os === "linux"
+        ? t("placeholders.shellConfig.linux")
+        : os === "macos"
+          ? t("placeholders.shellConfig.macos")
+          : "";
     const shellConfig =
       os === "linux"
         ? t("placeholders.shellConfig.linux")
@@ -622,7 +627,12 @@ sk_xxxxxxxxxxxxxxxxxx`}
   const renderCodexConfiguration = (os: OS) => {
     const windowsUserName = t("placeholders.windowsUserName");
     const configPath = os === "windows" ? `C:\\Users\\${windowsUserName}\\.codex` : "~/.codex";
-    const shellConfigFile = os === "linux" ? t("placeholders.shellConfig.linux") : os === "macos" ? t("placeholders.shellConfig.macos") : "";
+    const shellConfigFile =
+      os === "linux"
+        ? t("placeholders.shellConfig.linux")
+        : os === "macos"
+          ? t("placeholders.shellConfig.macos")
+          : "";
 
     return (
       <div className="space-y-4">
