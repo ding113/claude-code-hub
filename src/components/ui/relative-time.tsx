@@ -4,7 +4,7 @@ import { format as formatDate } from "date-fns";
 import { useLocale } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { formatDateDistance } from "@/lib/utils/date-format";
+import { formatDateDistanceShort } from "@/lib/utils/date-format";
 
 interface RelativeTimeProps {
   date: string | Date | null;
@@ -56,7 +56,7 @@ export function RelativeTime({
     // 计算相对时间
     const updateTime = () => {
       const dateObj = typeof date === "string" ? new Date(date) : date;
-      setTimeAgo(formatDateDistance(dateObj, new Date(), locale));
+      setTimeAgo(formatDateDistanceShort(dateObj, new Date(), locale));
     };
 
     updateTime();
