@@ -15,7 +15,6 @@ export type CodexSessionCompletionSource =
   | "header_session_id"
   | "header_x_session_id"
   | "body_prompt_cache_key"
-  | "body_metadata_session_id"
   | "fingerprint_cache"
   | "generated_uuid_v7";
 
@@ -32,14 +31,6 @@ type CompleteArgs = {
   requestBody: Record<string, unknown>;
   userAgent: string | null;
 };
-
-type CodexMetadata = Record<string, unknown>;
-
-function parseMetadata(requestBody: Record<string, unknown>): CodexMetadata | null {
-  const metadata = requestBody.metadata;
-  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
-  return metadata as CodexMetadata;
-}
 
 function getSessionTtlSeconds(): number {
   const raw = process.env.SESSION_TTL;
@@ -213,20 +204,6 @@ async function getOrCreateSessionIdFromFingerprint(
   }
 }
 
-function ensureMetadataSessionId(requestBody: Record<string, unknown>, sessionId: string): void {
-  const metadata = parseMetadata(requestBody);
-  if (metadata) {
-    metadata.session_id = sessionId;
-    requestBody.metadata = metadata;
-    return;
-  }
-
-  // Only create metadata when the current value is missing.
-  if (requestBody.metadata === undefined) {
-    requestBody.metadata = { session_id: sessionId } satisfies CodexMetadata;
-  }
-}
-
 /**
  * Ensure Codex session identifiers exist in both:
  * - Header: `session_id` (+ `x-session-id` for compatibility)
@@ -242,8 +219,6 @@ export async function completeCodexSessionIdentifiers(
   const headerSessionId = normalizeCodexSessionId(args.headers.get("session_id"));
   const headerXSessionId = normalizeCodexSessionId(args.headers.get("x-session-id"));
   const bodyPromptCacheKey = normalizeCodexSessionId(args.requestBody.prompt_cache_key);
-  const metadata = parseMetadata(args.requestBody);
-  const bodyMetadataSessionId = metadata ? normalizeCodexSessionId(metadata.session_id) : null;
 
   const missingHeader = !headerSessionId && !headerXSessionId;
   const missingBody = !bodyPromptCacheKey;
@@ -255,9 +230,7 @@ export async function completeCodexSessionIdentifiers(
         ? { sessionId: headerXSessionId, source: "header_x_session_id" }
         : bodyPromptCacheKey
           ? { sessionId: bodyPromptCacheKey, source: "body_prompt_cache_key" }
-          : bodyMetadataSessionId
-            ? { sessionId: bodyMetadataSessionId, source: "body_metadata_session_id" }
-            : null;
+          : null;
 
   // Both required fields present: keep as-is (idempotent)
   // Note: x-session-id is treated as a compatibility header and does not satisfy the requirement
@@ -309,12 +282,6 @@ export async function completeCodexSessionIdentifiers(
     args.requestBody.prompt_cache_key = sessionId;
     applied = true;
     changedHeaderOrBody = true;
-  }
-
-  // Only touch metadata when we have applied completion/generation.
-  if (applied && (!bodyMetadataSessionId || bodyMetadataSessionId !== sessionId)) {
-    ensureMetadataSessionId(args.requestBody, sessionId);
-    applied = true;
   }
 
   if (existing) {
