@@ -41,6 +41,31 @@ describe("thinking-signature-rectifier", () => {
     test("不应命中：无关错误", () => {
       expect(detectThinkingSignatureRectifierTrigger("Request timeout")).toBeNull();
     });
+
+    test("应命中：signature: Field required（signature 字段缺失）", () => {
+      // Claude API 在 thinking block 缺少 signature 字段时返回此错误
+      const trigger = detectThinkingSignatureRectifierTrigger(
+        "***.***.***.***.***.signature: Field required"
+      );
+      expect(trigger).toBe("invalid_signature_in_thinking_block");
+    });
+
+    test("应命中：各种 signature Field required 格式变体", () => {
+      // 数组索引格式
+      expect(detectThinkingSignatureRectifierTrigger("content[0].signature: Field required")).toBe(
+        "invalid_signature_in_thinking_block"
+      );
+
+      // 点号分隔格式
+      expect(
+        detectThinkingSignatureRectifierTrigger("messages.1.content.0.signature: Field required")
+      ).toBe("invalid_signature_in_thinking_block");
+
+      // 大小写混合
+      expect(detectThinkingSignatureRectifierTrigger("Signature: field required")).toBe(
+        "invalid_signature_in_thinking_block"
+      );
+    });
   });
 
   describe("rectifyAnthropicRequestMessage", () => {
@@ -120,6 +145,51 @@ describe("thinking-signature-rectifier", () => {
 
       const result = rectifyAnthropicRequestMessage(message);
       expect(result.applied).toBe(true);
+      expect((message as any).thinking).toBeUndefined();
+    });
+
+    test("signature: Field required 场景：thinking block（无 signature）+ thinking 启用 + tool_use 时，应移除 thinking blocks 并删除顶层 thinking", () => {
+      // 模拟从非 Anthropic 渠道切换到 Anthropic 渠道的场景：
+      // thinking block 存在但缺少 signature 字段，导致 Claude API 报错 "signature: Field required"
+      const message: Record<string, unknown> = {
+        model: "claude-3-5-sonnet-20241022",
+        thinking: {
+          type: "enabled",
+          budget_tokens: 10000,
+        },
+        messages: [
+          {
+            role: "assistant",
+            content: [
+              // thinking block 缺少 signature 字段（从非 Anthropic 渠道返回）
+              { type: "thinking", thinking: "Let me analyze this..." },
+              {
+                type: "tool_use",
+                id: "toolu_01",
+                name: "WebSearch",
+                input: { query: "test" },
+              },
+            ],
+          },
+          {
+            role: "user",
+            content: [{ type: "tool_result", tool_use_id: "toolu_01", content: "search result" }],
+          },
+        ],
+      };
+
+      const result = rectifyAnthropicRequestMessage(message);
+
+      // 验证整流结果
+      expect(result.applied).toBe(true);
+      expect(result.removedThinkingBlocks).toBe(1);
+
+      // 验证 thinking block 被移除
+      const messages = message.messages as any[];
+      const content = messages[0].content as any[];
+      expect(content.map((b: any) => b.type)).toEqual(["tool_use"]);
+
+      // 验证顶层 thinking 字段被删除（因为最后一条 assistant 消息现在以 tool_use 开头）
       expect((message as any).thinking).toBeUndefined();
     });
   });

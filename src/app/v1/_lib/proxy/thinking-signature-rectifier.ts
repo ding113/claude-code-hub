@@ -50,6 +50,16 @@ export function detectThinkingSignatureRectifierTrigger(
     return "invalid_signature_in_thinking_block";
   }
 
+  // 检测：signature 字段缺失（Claude API 返回 "xxx.signature: Field required"）
+  // 场景：请求体中存在 thinking block 但缺少 signature 字段
+  // 常见于从非 Anthropic 渠道切换到 Anthropic 渠道时，历史 thinking block 未包含 signature
+  const looksLikeMissingSignatureField =
+    lower.includes("signature") && lower.includes("field required");
+
+  if (looksLikeMissingSignatureField) {
+    return "invalid_signature_in_thinking_block"; // 复用现有触发类型，整流逻辑相同
+  }
+
   // 与默认错误规则保持一致（Issue #432 / Rule 6）
   if (/非法请求|illegal request|invalid request/i.test(errorMessage)) {
     return "invalid_request";
