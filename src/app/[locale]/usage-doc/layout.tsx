@@ -6,6 +6,8 @@ import { Link } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
 import { DashboardHeader } from "../dashboard/_components/dashboard-header";
 
+type UsageDocParams = { locale: string };
+
 const getUsageTranslations = cache((locale: string) =>
   getTranslations({ locale, namespace: "usage" })
 );
@@ -13,9 +15,10 @@ const getUsageTranslations = cache((locale: string) =>
 export async function generateMetadata({
   params,
 }: {
-  params: { locale: string };
+  params: Promise<UsageDocParams> | UsageDocParams;
 }): Promise<Metadata> {
-  const t = await getUsageTranslations(params.locale);
+  const { locale } = await params;
+  const t = await getUsageTranslations(locale);
   return {
     title: t("pageTitle"),
     description: t("pageDescription"),
@@ -32,9 +35,10 @@ export default async function UsageDocLayout({
   params,
 }: {
   children: React.ReactNode;
-  params: { locale: string };
+  params: Promise<UsageDocParams> | UsageDocParams;
 }) {
-  const [session, t] = await Promise.all([getSession(), getUsageTranslations(params.locale)]);
+  const { locale } = await params;
+  const [session, t] = await Promise.all([getSession(), getUsageTranslations(locale)]);
 
   return (
     <div className="min-h-screen bg-background">
