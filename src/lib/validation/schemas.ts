@@ -30,7 +30,12 @@ const CODEX_PARALLEL_TOOL_CALLS_PREFERENCE = z.enum(["inherit", "true", "false"]
 export const CreateUserSchema = z.object({
   name: z.string().min(1, "用户名不能为空").max(64, "用户名不能超过64个字符"),
   note: z.string().max(200, "备注不能超过200个字符").optional().default(""),
-  providerGroup: z.string().max(50, "供应商分组不能超过50个字符").nullable().optional().default(""),
+  providerGroup: z
+    .string()
+    .max(200, "供应商分组不能超过200个字符")
+    .nullable()
+    .optional()
+    .default(""),
   tags: z
     .array(z.string().max(32, "标签长度不能超过32个字符"))
     .max(20, "标签数量不能超过20个")
@@ -161,7 +166,7 @@ export const CreateUserSchema = z.object({
 export const UpdateUserSchema = z.object({
   name: z.string().min(1, "用户名不能为空").max(64, "用户名不能超过64个字符").optional(),
   note: z.string().max(200, "备注不能超过200个字符").optional(),
-  providerGroup: z.string().max(50, "供应商分组不能超过50个字符").nullable().optional(),
+  providerGroup: z.string().max(200, "供应商分组不能超过200个字符").nullable().optional(),
   tags: z
     .array(z.string().max(32, "标签长度不能超过32个字符"))
     .max(20, "标签数量不能超过20个")
@@ -334,7 +339,12 @@ export const KeyFormSchema = z.object({
     .max(1000, "并发Session上限不能超过1000")
     .optional()
     .default(0),
-  providerGroup: z.string().max(50, "供应商分组不能超过50个字符").nullable().optional().default(""),
+  providerGroup: z
+    .string()
+    .max(200, "供应商分组不能超过200个字符")
+    .nullable()
+    .optional()
+    .default(""),
   cacheTtlPreference: CACHE_TTL_PREFERENCE.optional().default("inherit"),
 });
 

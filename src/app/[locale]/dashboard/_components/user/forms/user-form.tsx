@@ -208,7 +208,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
 
       <TagInputField
         label={tForm("providerGroup.label")}
-        maxTagLength={50}
+        maxTagLength={200}
         placeholder={tForm("providerGroup.placeholder")}
         description={tForm("providerGroup.description")}
         suggestions={providerGroupSuggestions}
@@ -216,7 +216,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
           const messages: Record<string, string> = {
             empty: tUI("emptyTag"),
             duplicate: tUI("duplicateTag"),
-            too_long: tUI("tooLong", { max: 50 }),
+            too_long: tUI("tooLong", { max: 200 }),
             invalid_format: tUI("invalidFormat"),
             max_tags: tUI("maxTags"),
           };
