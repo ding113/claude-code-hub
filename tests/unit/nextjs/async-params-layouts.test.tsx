@@ -32,13 +32,15 @@ const intlServerMocks = vi.hoisted(() => ({
 vi.mock("next-intl/server", () => intlServerMocks);
 
 function makeAsyncParams(locale: string) {
-  const value = { locale };
-  return {
-    then: (resolve: (params: { locale: string }) => void) => resolve(value),
-    get locale() {
+  const promise = Promise.resolve({ locale });
+
+  Object.defineProperty(promise, "locale", {
+    get() {
       throw new Error("sync access to params.locale is not allowed");
     },
-  };
+  });
+
+  return promise as Promise<{ locale: string }> & { locale: string };
 }
 
 describe("Next.js async params compatibility", () => {
@@ -80,7 +82,9 @@ describe("Next.js async params compatibility", () => {
   });
 
   test("big-screen generateMetadata awaits params before reading locale", async () => {
-    const BigScreenLayoutModule = await import("@/app/[locale]/internal/dashboard/big-screen/layout");
+    const BigScreenLayoutModule = await import(
+      "@/app/[locale]/internal/dashboard/big-screen/layout"
+    );
 
     const metadata = await BigScreenLayoutModule.generateMetadata({
       params: makeAsyncParams("en") as unknown as Promise<{ locale: string }>,
