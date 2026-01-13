@@ -7,6 +7,7 @@ import { ProviderTypeFilter } from "@/app/[locale]/settings/providers/_component
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TagInput } from "@/components/ui/tag-input";
 import { formatTokenAmount } from "@/lib/utils";
 import type {
   DateRangeParams,
@@ -51,6 +52,8 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
   const [period, setPeriod] = useState<LeaderboardPeriod>(initialPeriod);
   const [dateRange, setDateRange] = useState<DateRangeParams | undefined>(undefined);
   const [providerTypeFilter, setProviderTypeFilter] = useState<ProviderType | "all">("all");
+  const [userTagFilters, setUserTagFilters] = useState<string[]>([]);
+  const [userGroupFilters, setUserGroupFilters] = useState<string[]>([]);
   const [data, setData] = useState<AnyEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -96,6 +99,14 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
         ) {
           url += `&providerType=${encodeURIComponent(providerTypeFilter)}`;
         }
+        if (scope === "user") {
+          if (userTagFilters.length > 0) {
+            url += `&userTags=${encodeURIComponent(userTagFilters.join(","))}`;
+          }
+          if (userGroupFilters.length > 0) {
+            url += `&userGroups=${encodeURIComponent(userGroupFilters.join(","))}`;
+          }
+        }
         const res = await fetch(url);
 
         if (!res.ok) {
@@ -120,7 +131,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     return () => {
       cancelled = true;
     };
-  }, [scope, period, dateRange, providerTypeFilter, t]);
+  }, [scope, period, dateRange, providerTypeFilter, userTagFilters, userGroupFilters, t]);
 
   const handlePeriodChange = useCallback(
     (newPeriod: LeaderboardPeriod, newDateRange?: DateRangeParams) => {
@@ -368,6 +379,31 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
           />
         ) : null}
       </div>
+
+      {scope === "user" && isAdmin && (
+        <div className="flex flex-wrap gap-4 mb-4">
+          <div className="flex-1 min-w-[200px] max-w-[300px]">
+            <TagInput
+              value={userTagFilters}
+              onChange={setUserTagFilters}
+              placeholder={t("filters.userTagsPlaceholder")}
+              disabled={loading}
+              maxTags={20}
+              clearable
+            />
+          </div>
+          <div className="flex-1 min-w-[200px] max-w-[300px]">
+            <TagInput
+              value={userGroupFilters}
+              onChange={setUserGroupFilters}
+              placeholder={t("filters.userGroupsPlaceholder")}
+              disabled={loading}
+              maxTags={20}
+              clearable
+            />
+          </div>
+        </div>
+      )}
 
       {/* Date range picker with quick period buttons */}
       <div className="mb-6">
