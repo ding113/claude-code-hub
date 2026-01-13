@@ -149,6 +149,7 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
 
 - ⚠️ 请妥善保存脚本输出的**管理员令牌**（Admin Token），这是登录后台的唯一凭证！
 - ⚠️ Windows 用户：如果未安装 Docker Desktop，脚本会自动打开下载页面
+- ⚠️ 软件更新：请参考 `Docker Compose 启动章节`，deploy脚本仅用于首次部署，并不用于更新软件 (环境限制，目前仅暂在 Linux 安装脚本确保了部署幂等性，未覆盖 Powershell 脚本)
 
 ### 三步启动（Docker Compose）
 
