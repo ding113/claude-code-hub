@@ -51,6 +51,9 @@ export interface Provider {
   costMultiplier: number;
   groupTag: string | null;
 
+  // 供应商聚合 ID（为空表示尚未归类）
+  vendorId: number | null;
+
   // 供应商类型：扩展支持 4 种类型
   providerType: ProviderType;
   // 是否透传客户端 IP
@@ -153,6 +156,8 @@ export interface ProviderDisplay {
   priority: number;
   costMultiplier: number;
   groupTag: string | null;
+  // 供应商聚合 ID（为空表示尚未归类）
+  vendorId: number | null;
   // 供应商类型
   providerType: ProviderType;
   // 是否透传客户端 IP
@@ -242,6 +247,9 @@ export interface CreateProviderData {
   cost_multiplier?: number;
   group_tag?: string | null;
 
+  // 供应商聚合 ID（由服务端根据 website_url.host 计算并写入）
+  vendor_id?: number | null;
+
   // 供应商类型和模型配置
   provider_type?: ProviderType;
   preserve_client_ip?: boolean;
@@ -312,6 +320,9 @@ export interface UpdateProviderData {
   cost_multiplier?: number;
   group_tag?: string | null;
 
+  // 供应商聚合 ID（由服务端根据 website_url.host 计算并写入）
+  vendor_id?: number | null;
+
   // 供应商类型和模型配置
   provider_type?: ProviderType;
   preserve_client_ip?: boolean;
@@ -366,4 +377,46 @@ export interface UpdateProviderData {
   rpd?: number | null;
   // CC (Concurrent Connections/Requests): 同一时刻能同时处理的请求数量
   cc?: number | null;
+}
+
+export interface ProviderVendor {
+  id: number;
+  vendorKey: string;
+  displayName: string;
+  websiteUrl: string | null;
+  faviconUrl: string | null;
+  isEnabled: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  deletedAt?: Date;
+}
+
+export interface ProviderEndpoint {
+  id: number;
+  vendorId: number;
+  providerType: ProviderType;
+  baseUrl: string;
+  isEnabled: boolean;
+  priority: number;
+  weight: number;
+  createdAt: Date;
+  updatedAt: Date;
+  deletedAt?: Date;
+}
+
+export type ProviderEndpointProbeSource = "active_probe" | "passive_traffic";
+
+export type ProviderEndpointProbeResult = "success" | "fail";
+
+export interface ProviderEndpointProbeEvent {
+  id: number;
+  endpointId: number;
+  source: ProviderEndpointProbeSource;
+  result: ProviderEndpointProbeResult;
+  statusCode: number | null;
+  latencyMs: number | null;
+  errorType: string | null;
+  errorMessage: string | null;
+  checkedAt: Date | null;
+  createdAt: Date;
 }

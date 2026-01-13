@@ -13,6 +13,7 @@ import { applyCodexProviderOverridesWithAudit } from "@/lib/codex/provider-overr
 import { getCachedSystemSettings, isHttp2Enabled } from "@/lib/config";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { PROVIDER_DEFAULTS, PROVIDER_LIMITS } from "@/lib/constants/provider.constants";
+import { recordEndpointFailure } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
 import { createProxyAgentForProvider } from "@/lib/proxy-agent";
 import { SessionManager } from "@/lib/session-manager";
@@ -26,6 +27,7 @@ import { GeminiAuth } from "../gemini/auth";
 import { GEMINI_PROTOCOL } from "../gemini/protocol";
 import { HeaderProcessor } from "../headers";
 import { buildProxyUrl } from "../url";
+import { EndpointResolutionError, EndpointResolver } from "./endpoint-resolver";
 import {
   buildRequestDetails,
   categorizeErrorAsync,
@@ -199,6 +201,14 @@ export class ProxyForwarder {
     let currentProvider = session.provider;
     const failedProviderIds: number[] = []; // 记录已失败的供应商ID
     let totalProvidersAttempted = 0; // 已尝试的供应商数量（用于日志）
+
+    const recordEndpointFailureIfNeeded = (error: Error) => {
+      if (session.isProbeRequest()) return;
+      const endpoint = session.getProviderEndpoint();
+      if (endpoint) {
+        recordEndpointFailure(endpoint.id, error);
+      }
+    };
 
     // ========== 外层循环：供应商切换（最多 MAX_PROVIDER_SWITCHES 次）==========
     while (totalProvidersAttempted < MAX_PROVIDER_SWITCHES) {
@@ -376,6 +386,37 @@ export class ProxyForwarder {
           return response; // ⭐ 成功：立即返回，结束所有循环
         } catch (error) {
           lastError = error as Error;
+
+          if (lastError instanceof EndpointResolutionError) {
+            logger.warn("ProxyForwarder: Endpoint resolution failed, switching provider", {
+              providerId: currentProvider.id,
+              providerName: currentProvider.name,
+              attemptNumber: attemptCount,
+              totalProvidersAttempted,
+              vendorId: lastError.vendorId,
+              providerType: lastError.providerType,
+            });
+
+            session.addProviderToChain(currentProvider, {
+              reason: "system_error",
+              circuitState: getCircuitState(currentProvider.id),
+              attemptNumber: attemptCount,
+              errorMessage: lastError.message,
+              errorDetails: {
+                system: {
+                  errorType: "EndpointResolutionError",
+                  errorName: lastError.name,
+                  errorMessage: lastError.message,
+                  errorStack: lastError.stack?.split("\n").slice(0, 3).join("\n"),
+                },
+                request: buildRequestDetails(session),
+              },
+            });
+
+            recordEndpointFailureIfNeeded(lastError);
+            failedProviderIds.push(currentProvider.id);
+            break;
+          }
 
           // ⭐ 1. 分类错误（供应商错误 vs 系统错误 vs 客户端中断）
           // 使用异步版本确保错误规则已加载
@@ -671,6 +712,7 @@ export class ProxyForwarder {
             const env = getEnvConfig();
 
             // 无论是否计入熔断器，都要加入 failedProviderIds（避免重复选择同一供应商）
+            recordEndpointFailureIfNeeded(lastError);
             failedProviderIds.push(currentProvider.id);
 
             if (env.ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS) {
@@ -743,6 +785,7 @@ export class ProxyForwarder {
             }
 
             // 重试耗尽：加入失败列表并切换供应商
+            recordEndpointFailureIfNeeded(lastError);
             failedProviderIds.push(currentProvider.id);
             break; // ⭐ 跳出内层循环，进入供应商切换逻辑
           }
@@ -798,6 +841,7 @@ export class ProxyForwarder {
                 await recordFailure(currentProvider.id, lastError);
               }
 
+              recordEndpointFailureIfNeeded(lastError);
               failedProviderIds.push(currentProvider.id);
               break; // 跳出内层循环，进入供应商切换逻辑
             }
@@ -875,6 +919,7 @@ export class ProxyForwarder {
             }
 
             // 加入失败列表并切换供应商
+            recordEndpointFailureIfNeeded(lastError);
             failedProviderIds.push(currentProvider.id);
             break; // ⭐ 跳出内层循环，进入供应商切换逻辑
           }
@@ -968,6 +1013,8 @@ export class ProxyForwarder {
       });
     }
 
+    const resolvedBaseUrl = await EndpointResolver.resolve(session, provider);
+
     let proxyUrl: string;
     let processedHeaders: Headers;
     let requestBody: BodyInit | undefined;
@@ -999,7 +1046,7 @@ export class ProxyForwarder {
 
       // 3. 直接透传：使用 buildProxyUrl() 拼接原始路径和查询参数
       const baseUrl =
-        provider.url ||
+        resolvedBaseUrl ||
         (provider.providerType === "gemini"
           ? GEMINI_PROTOCOL.OFFICIAL_ENDPOINT
           : GEMINI_PROTOCOL.CLI_ENDPOINT);
@@ -1193,26 +1240,8 @@ export class ProxyForwarder {
         }
       }
 
-      processedHeaders = ProxyForwarder.buildHeaders(session, provider);
-
-      if (session.sessionId) {
-        void SessionManager.storeSessionRequestHeaders(
-          session.sessionId,
-          processedHeaders,
-          session.requestSequence
-        ).catch((err) => logger.error("Failed to store request headers:", err));
-      }
-
-      if (process.env.NODE_ENV === "development") {
-        logger.trace("ProxyForwarder: Final request headers", {
-          provider: provider.name,
-          providerType: provider.providerType,
-          headers: Object.fromEntries(processedHeaders.entries()),
-        });
-      }
-
       // ⭐ MCP 透传处理：检测是否为 MCP 请求，并使用相应的 URL
-      let effectiveBaseUrl = provider.url;
+      let effectiveBaseUrl = resolvedBaseUrl;
 
       // 检测是否为 MCP 请求（非标准 Claude/Codex/OpenAI 端点）
       const requestPath = session.requestUrl.pathname;
@@ -1233,23 +1262,21 @@ export class ProxyForwarder {
             requestPath,
           });
         } else {
-          // 自动从 provider.url 提取基础域名（去掉路径部分）
-          // 例如：https://api.minimaxi.com/anthropic -> https://api.minimaxi.com
           try {
-            const baseUrlObj = new URL(provider.url);
+            const baseUrlObj = new URL(resolvedBaseUrl);
             effectiveBaseUrl = `${baseUrlObj.protocol}//${baseUrlObj.host}`;
             logger.debug("ProxyForwarder: Extracted base domain for MCP passthrough", {
               providerId: provider.id,
               providerName: provider.name,
               mcpType: provider.mcpPassthroughType,
-              originalUrl: provider.url,
+              originalUrl: resolvedBaseUrl,
               extractedBaseDomain: effectiveBaseUrl,
               requestPath,
             });
           } catch (error) {
             logger.error("ProxyForwarder: Invalid provider URL for MCP passthrough", {
               providerId: provider.id,
-              providerUrl: provider.url,
+              providerUrl: resolvedBaseUrl,
               error,
             });
             throw new ProxyError("Internal configuration error", 500);
@@ -1268,6 +1295,24 @@ export class ProxyForwarder {
             requestPath,
           }
         );
+      }
+
+      processedHeaders = ProxyForwarder.buildHeaders(session, provider, effectiveBaseUrl);
+
+      if (session.sessionId) {
+        void SessionManager.storeSessionRequestHeaders(
+          session.sessionId,
+          processedHeaders,
+          session.requestSequence
+        ).catch((err) => logger.error("Failed to store request headers:", err));
+      }
+
+      if (process.env.NODE_ENV === "development") {
+        logger.trace("ProxyForwarder: Final request headers", {
+          provider: provider.name,
+          providerType: provider.providerType,
+          headers: Object.fromEntries(processedHeaders.entries()),
+        });
       }
 
       // ⭐ 直接使用原始请求路径，让 buildProxyUrl() 智能处理路径拼接
@@ -1885,7 +1930,8 @@ export class ProxyForwarder {
 
   private static buildHeaders(
     session: ProxySession,
-    provider: NonNullable<typeof session.provider>
+    provider: NonNullable<typeof session.provider>,
+    baseUrl: string
   ): Headers {
     const outboundKey = provider.key;
     const preserveClientIp = provider.preserveClientIp ?? false;
@@ -1893,7 +1939,7 @@ export class ProxyForwarder {
 
     // 构建请求头覆盖规则
     const overrides: Record<string, string> = {
-      host: HeaderProcessor.extractHost(provider.url),
+      host: HeaderProcessor.extractHost(baseUrl),
       authorization: `Bearer ${outboundKey}`,
       "x-api-key": outboundKey,
       "content-type": "application/json", // 确保 Content-Type

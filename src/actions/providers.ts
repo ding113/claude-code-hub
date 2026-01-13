@@ -30,6 +30,7 @@ import {
 } from "@/lib/redis/circuit-breaker-config";
 import type { Context1mPreference } from "@/lib/special-attributes";
 import { maskKey } from "@/lib/utils/validation";
+import { normalizeVendorKeyFromUrl } from "@/lib/utils/vendor-key";
 import { validateProviderUrlForConnectivity } from "@/lib/validation/provider-url";
 import { CreateProviderSchema, UpdateProviderSchema } from "@/lib/validation/schemas";
 import {
@@ -43,6 +44,8 @@ import {
   updateProvider,
   updateProviderPrioritiesBatch,
 } from "@/repository/provider";
+import { ensureProviderEndpoint } from "@/repository/provider-endpoint";
+import { ensureProviderVendor } from "@/repository/provider-vendor";
 import type { CacheTtlPreference } from "@/types/cache";
 import type {
   CodexParallelToolCallsPreference,
@@ -235,6 +238,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         priority: provider.priority,
         costMultiplier: provider.costMultiplier,
         groupTag: provider.groupTag,
+        vendorId: provider.vendorId,
         providerType: provider.providerType,
         preserveClientIp: provider.preserveClientIp,
         modelRedirects: provider.modelRedirects,
@@ -513,8 +517,18 @@ export async function addProvider(data: {
       }
     }
 
+    const vendorKey = normalizeVendorKeyFromUrl(validated.website_url || validated.url);
+    const vendor = vendorKey
+      ? await ensureProviderVendor({
+          vendorKey,
+          websiteUrl: validated.website_url ?? null,
+          faviconUrl,
+        })
+      : null;
+
     const payload = {
       ...validated,
+      vendor_id: vendor?.id ?? null,
       limit_5h_usd: validated.limit_5h_usd ?? null,
       limit_daily_usd: validated.limit_daily_usd ?? null,
       daily_reset_mode: validated.daily_reset_mode ?? "fixed",
@@ -554,6 +568,15 @@ export async function addProvider(data: {
     };
 
     const provider = await createProvider(payload);
+
+    if (provider.vendorId) {
+      await ensureProviderEndpoint({
+        vendorId: provider.vendorId,
+        providerType: provider.providerType,
+        baseUrl: provider.url,
+      });
+    }
+
     logger.trace("addProvider:created_success", {
       name: validated.name,
       providerId: provider.id,
@@ -656,6 +679,11 @@ export async function editProvider(
 
     const validated = UpdateProviderSchema.parse(data);
 
+    const currentProvider = await findProviderById(providerId);
+    if (!currentProvider) {
+      return { ok: false, error: "供应商不存在" };
+    }
+
     // 如果 website_url 被更新，重新生成 favicon URL
     let faviconUrl: string | null | undefined; // undefined 表示不更新
     if (validated.website_url !== undefined) {
@@ -680,15 +708,36 @@ export async function editProvider(
       }
     }
 
+    const effectiveWebsiteUrl =
+      validated.website_url !== undefined ? validated.website_url : currentProvider.websiteUrl;
+    const effectiveProviderUrl = validated.url !== undefined ? validated.url : currentProvider.url;
+    const vendorKey = normalizeVendorKeyFromUrl(effectiveWebsiteUrl || effectiveProviderUrl);
+    const vendor = vendorKey
+      ? await ensureProviderVendor({
+          vendorKey,
+          websiteUrl: effectiveWebsiteUrl ?? null,
+          faviconUrl: faviconUrl !== undefined ? faviconUrl : currentProvider.faviconUrl,
+        })
+      : null;
+
     const payload = {
       ...validated,
       ...(faviconUrl !== undefined && { favicon_url: faviconUrl }),
+      ...(vendor ? { vendor_id: vendor.id } : {}),
     };
 
     const provider = await updateProvider(providerId, payload);
 
     if (!provider) {
       return { ok: false, error: "供应商不存在" };
+    }
+
+    if (provider.vendorId) {
+      await ensureProviderEndpoint({
+        vendorId: provider.vendorId,
+        providerType: provider.providerType,
+        baseUrl: provider.url,
+      });
     }
 
     // 同步熔断器配置到 Redis（如果配置有变化）

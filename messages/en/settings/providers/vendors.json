@@ -1,0 +1,53 @@
+{
+  "title": "Vendors",
+  "description": "Manage AI model vendors and their API endpoints",
+  "searchPlaceholder": "Search vendors...",
+  "empty": {
+    "title": "No vendors found",
+    "description": "Try adjusting your search terms"
+  },
+  "stats": {
+    "providers": "Providers",
+    "endpoints": "Endpoints"
+  },
+  "actions": {
+    "configure": "Configure",
+    "updated": "Vendor updated successfully",
+    "saving": "Saving...",
+    "save": "Save Changes"
+  },
+  "edit": {
+    "title": "Edit Vendor",
+    "description": "Update vendor details and manage API endpoints"
+  },
+  "fields": {
+    "name": "Display Name",
+    "website": "Website URL",
+    "enabled": "Enabled"
+  },
+  "endpoints": {
+    "title": "API Endpoints",
+    "count": "Total endpoints",
+    "add": "Add Endpoint",
+    "empty": "No endpoints configured",
+    "baseUrl": "Base URL",
+    "priority": "Priority",
+    "weight": "Weight",
+    "createSuccess": "Endpoint created successfully",
+    "addTitle": "Add Endpoint",
+    "addDescription": "Add a new API endpoint for this vendor",
+    "fields": {
+      "type": "Provider Type",
+      "baseUrl": "Base URL",
+      "priority": "Priority",
+      "weight": "Weight"
+    },
+    "actions": {
+      "create": "Create"
+    },
+    "errors": {
+      "conflict": "Endpoint already exists",
+      "createFailed": "Failed to create endpoint"
+    }
+  }
+}

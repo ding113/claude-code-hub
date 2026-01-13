@@ -122,6 +122,15 @@ export async function register() {
         }
 
         try {
+          const { stopEndpointProbeScheduler } = await import("@/lib/endpoint-probe-scheduler");
+          stopEndpointProbeScheduler();
+        } catch (error) {
+          logger.warn("[Instrumentation] Failed to stop endpoint probe scheduler", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+
+        try {
           const { closeRedis } = await import("@/lib/redis");
           await closeRedis();
         } catch (error) {
@@ -215,6 +224,15 @@ export async function register() {
         logger.info("Smart probing scheduler started");
       }
 
+      // 初始化端点测活调度器（如果启用）
+      const { startEndpointProbeScheduler, isEndpointProbingEnabled } = await import(
+        "@/lib/endpoint-probe-scheduler"
+      );
+      if (isEndpointProbingEnabled()) {
+        startEndpointProbeScheduler();
+        logger.info("Endpoint probing scheduler started");
+      }
+
       logger.info("Application ready");
     }
     // 开发环境: 执行迁移 + 初始化价格表（禁用 Bull Queue 避免 Turbopack 冲突）
@@ -264,6 +282,15 @@ export async function register() {
       if (isSmartProbingEnabled()) {
         startProbeScheduler();
         logger.info("Smart probing scheduler started (development mode)");
+      }
+
+      // 初始化端点测活调度器（开发环境也支持）
+      const { startEndpointProbeScheduler, isEndpointProbingEnabled } = await import(
+        "@/lib/endpoint-probe-scheduler"
+      );
+      if (isEndpointProbingEnabled()) {
+        startEndpointProbeScheduler();
+        logger.info("Endpoint probing scheduler started (development mode)");
       }
 
       logger.info("Development environment ready");

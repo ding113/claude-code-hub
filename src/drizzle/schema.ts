@@ -142,6 +142,9 @@ export const providers = pgTable('providers', {
   costMultiplier: numeric('cost_multiplier', { precision: 10, scale: 4 }).default('1.0'),
   groupTag: varchar('group_tag', { length: 50 }),
 
+  // 供应商聚合 ID（基于 websiteUrl.host 归一化后的 vendorKey）
+  vendorId: integer('vendor_id'),
+
   // 供应商类型：扩展支持 5 种类型
   // - claude: Anthropic 提供商（标准认证）
   // - claude-auth: Claude 中转服务（仅 Bearer 认证，不发送 x-api-key）
@@ -267,9 +270,86 @@ export const providers = pgTable('providers', {
   providersEnabledPriorityIdx: index('idx_providers_enabled_priority').on(table.isEnabled, table.priority, table.weight).where(sql`${table.deletedAt} IS NULL`),
   // 分组查询优化
   providersGroupIdx: index('idx_providers_group').on(table.groupTag).where(sql`${table.deletedAt} IS NULL`),
+  // 供应商聚合查询优化
+  providersVendorIdx: index('idx_providers_vendor').on(table.vendorId).where(sql`${table.deletedAt} IS NULL`),
   // 基础索引
   providersCreatedAtIdx: index('idx_providers_created_at').on(table.createdAt),
   providersDeletedAtIdx: index('idx_providers_deleted_at').on(table.deletedAt),
+}));
+
+// Provider Vendors table
+export const providerVendors = pgTable('provider_vendors', {
+  id: serial('id').primaryKey(),
+
+  // 归一化后的 host（lowercase，去掉 www.），作为聚合 key
+  vendorKey: varchar('vendor_key', { length: 255 }).notNull(),
+
+  // 展示名称（可由用户调整）
+  displayName: varchar('display_name', { length: 100 }).notNull(),
+
+  // 供应商官网与图标（用于 UI 展示）
+  websiteUrl: text('website_url'),
+  faviconUrl: text('favicon_url'),
+
+  isEnabled: boolean('is_enabled').notNull().default(true),
+
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+}, (table) => ({
+  providerVendorsVendorKeyUniqueIdx: uniqueIndex('uniq_provider_vendors_vendor_key').on(table.vendorKey),
+  providerVendorsCreatedAtIdx: index('idx_provider_vendors_created_at').on(table.createdAt),
+  providerVendorsDeletedAtIdx: index('idx_provider_vendors_deleted_at').on(table.deletedAt),
+}));
+
+// Provider Endpoints table
+export const providerEndpoints = pgTable('provider_endpoints', {
+  id: serial('id').primaryKey(),
+  vendorId: integer('vendor_id').notNull(),
+
+  providerType: varchar('provider_type', { length: 20 })
+    .notNull()
+    .$type<'claude' | 'claude-auth' | 'codex' | 'gemini-cli' | 'gemini' | 'openai-compatible'>(),
+
+  baseUrl: varchar('base_url', { length: 512 }).notNull(),
+
+  isEnabled: boolean('is_enabled').notNull().default(true),
+  priority: integer('priority').notNull().default(0),
+  weight: integer('weight').notNull().default(1),
+
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+}, (table) => ({
+  providerEndpointsVendorTypeIdx: index('idx_provider_endpoints_vendor_type').on(table.vendorId, table.providerType).where(sql`${table.deletedAt} IS NULL`),
+  providerEndpointsEnabledPriorityIdx: index('idx_provider_endpoints_enabled_priority').on(table.isEnabled, table.vendorId, table.providerType, table.priority, table.weight).where(sql`${table.deletedAt} IS NULL`),
+  providerEndpointsVendorTypeBaseUrlUniqueIdx: uniqueIndex('uniq_provider_endpoints_vendor_type_base_url').on(table.vendorId, table.providerType, table.baseUrl),
+  providerEndpointsCreatedAtIdx: index('idx_provider_endpoints_created_at').on(table.createdAt),
+  providerEndpointsDeletedAtIdx: index('idx_provider_endpoints_deleted_at').on(table.deletedAt),
+}));
+
+// Provider Endpoint Probe Events table
+export const providerEndpointProbeEvents = pgTable('provider_endpoint_probe_events', {
+  id: serial('id').primaryKey(),
+  endpointId: integer('endpoint_id').notNull(),
+
+  // active_probe: 定时探测；passive_traffic: 被动流量观测
+  source: varchar('source', { length: 20 })
+    .notNull()
+    .default('active_probe')
+    .$type<'active_probe' | 'passive_traffic'>(),
+
+  result: varchar('result', { length: 10 }).notNull().$type<'success' | 'fail'>(),
+  statusCode: integer('status_code'),
+  latencyMs: integer('latency_ms'),
+  errorType: varchar('error_type', { length: 50 }),
+  errorMessage: text('error_message'),
+
+  checkedAt: timestamp('checked_at', { withTimezone: true }).defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  probeEventsEndpointTimeIdx: index('idx_probe_events_endpoint_time').on(table.endpointId, table.checkedAt.desc()),
+  probeEventsCheckedAtIdx: index('idx_probe_events_checked_at').on(table.checkedAt.desc()),
 }));
 
 // Message Request table
@@ -627,7 +707,31 @@ export const keysRelations = relations(keys, ({ one, many }) => ({
   messageRequests: many(messageRequest),
 }));
 
-export const providersRelations = relations(providers, ({ many }) => ({
+export const providerVendorsRelations = relations(providerVendors, ({ many }) => ({
+  providers: many(providers),
+  endpoints: many(providerEndpoints),
+}));
+
+export const providerEndpointsRelations = relations(providerEndpoints, ({ one, many }) => ({
+  vendor: one(providerVendors, {
+    fields: [providerEndpoints.vendorId],
+    references: [providerVendors.id],
+  }),
+  probeEvents: many(providerEndpointProbeEvents),
+}));
+
+export const providerEndpointProbeEventsRelations = relations(providerEndpointProbeEvents, ({ one }) => ({
+  endpoint: one(providerEndpoints, {
+    fields: [providerEndpointProbeEvents.endpointId],
+    references: [providerEndpoints.id],
+  }),
+}));
+
+export const providersRelations = relations(providers, ({ one, many }) => ({
+  vendor: one(providerVendors, {
+    fields: [providers.vendorId],
+    references: [providerVendors.id],
+  }),
   messageRequests: many(messageRequest),
 }));
 

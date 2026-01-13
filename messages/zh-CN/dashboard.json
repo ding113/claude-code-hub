@@ -1119,7 +1119,9 @@
       "minutes": "分钟",
       "requests": "请求",
       "noData": "无数据",
-      "noRequests": "无请求"
+      "noRequests": "无请求",
+      "probes": "探测",
+      "noProbes": "无探测"
     },
     "toast": {
       "refreshSuccess": "可用性数据已刷新",
@@ -1197,7 +1199,7 @@
         "limit5h": "5 小时",
         "limitDaily": "每日",
         "limitWeekly": "每周",
-        "limitMonthly": "每月",
+        "limitMonthly": "月",
         "limitTotal": "总计",
         "limitSessions": "并发"
       }

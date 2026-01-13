@@ -3,11 +3,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const getSessionMock = vi.fn();
 
 const findAllProvidersFreshMock = vi.fn();
+const findProviderByIdMock = vi.fn();
 const getProviderStatisticsMock = vi.fn();
 const createProviderMock = vi.fn();
 const updateProviderMock = vi.fn();
 const deleteProviderMock = vi.fn();
 const updateProviderPrioritiesBatchMock = vi.fn();
+
+const ensureProviderVendorMock = vi.fn();
+const ensureProviderEndpointMock = vi.fn();
+const normalizeVendorKeyFromUrlMock = vi.fn();
 
 const publishProviderCacheInvalidationMock = vi.fn();
 const saveProviderCircuitConfigMock = vi.fn();
@@ -21,12 +26,24 @@ vi.mock("@/lib/auth", () => ({
   getSession: getSessionMock,
 }));
 
+vi.mock("@/lib/utils/vendor-key", () => ({
+  normalizeVendorKeyFromUrl: normalizeVendorKeyFromUrlMock,
+}));
+
+vi.mock("@/repository/provider-vendor", () => ({
+  ensureProviderVendor: ensureProviderVendorMock,
+}));
+
+vi.mock("@/repository/provider-endpoint", () => ({
+  ensureProviderEndpoint: ensureProviderEndpointMock,
+}));
+
 vi.mock("@/repository/provider", () => ({
   createProvider: createProviderMock,
   deleteProvider: deleteProviderMock,
   findAllProviders: vi.fn(async () => []),
   findAllProvidersFresh: findAllProvidersFreshMock,
-  findProviderById: vi.fn(async () => null),
+  findProviderById: findProviderByIdMock,
   getProviderStatistics: getProviderStatisticsMock,
   resetProviderTotalCostResetAt: vi.fn(async () => {}),
   updateProvider: updateProviderMock,
@@ -89,6 +106,62 @@ describe("Provider Actions - Async Optimization", () => {
 
     getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
 
+    normalizeVendorKeyFromUrlMock.mockReturnValue("api.example.com");
+    ensureProviderVendorMock.mockResolvedValue({ id: 99 });
+    ensureProviderEndpointMock.mockResolvedValue(undefined);
+
+    findProviderByIdMock.mockResolvedValue({
+      id: 1,
+      name: "p1",
+      url: "https://api.example.com",
+      key: "sk-test-1234567890",
+      isEnabled: true,
+      weight: 1,
+      priority: 0,
+      costMultiplier: 1,
+      groupTag: "default",
+      vendorId: 99,
+      providerType: "claude",
+      preserveClientIp: false,
+      modelRedirects: null,
+      allowedModels: null,
+      joinClaudePool: false,
+      codexInstructionsStrategy: "inherit",
+      mcpPassthroughType: "none",
+      mcpPassthroughUrl: null,
+      limit5hUsd: null,
+      limitDailyUsd: null,
+      dailyResetMode: "fixed",
+      dailyResetTime: "00:00",
+      limitWeeklyUsd: null,
+      limitMonthlyUsd: null,
+      limitTotalUsd: null,
+      limitConcurrentSessions: 0,
+      maxRetryAttempts: null,
+      circuitBreakerFailureThreshold: 5,
+      circuitBreakerOpenDuration: 1800000,
+      circuitBreakerHalfOpenSuccessThreshold: 2,
+      proxyUrl: null,
+      proxyFallbackToDirect: false,
+      firstByteTimeoutStreamingMs: null,
+      streamingIdleTimeoutMs: null,
+      requestTimeoutNonStreamingMs: null,
+      websiteUrl: null,
+      faviconUrl: null,
+      cacheTtlPreference: "inherit",
+      context1mPreference: "inherit",
+      codexReasoningEffortPreference: "inherit",
+      codexReasoningSummaryPreference: "inherit",
+      codexTextVerbosityPreference: "inherit",
+      codexParallelToolCallsPreference: "inherit",
+      tpm: null,
+      rpm: null,
+      rpd: null,
+      cc: null,
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    });
+
     findAllProvidersFreshMock.mockResolvedValue([
       {
         id: 1,
@@ -100,6 +173,7 @@ describe("Provider Actions - Async Optimization", () => {
         priority: 0,
         costMultiplier: 1,
         groupTag: "default",
+        vendorId: 99,
         providerType: "claude",
         preserveClientIp: false,
         modelRedirects: null,
@@ -146,6 +220,9 @@ describe("Provider Actions - Async Optimization", () => {
 
     createProviderMock.mockResolvedValue({
       id: 123,
+      vendorId: 99,
+      providerType: "claude",
+      url: "https://api.example.com",
       circuitBreakerFailureThreshold: 5,
       circuitBreakerOpenDuration: 1800000,
       circuitBreakerHalfOpenSuccessThreshold: 2,
@@ -153,6 +230,9 @@ describe("Provider Actions - Async Optimization", () => {
 
     updateProviderMock.mockResolvedValue({
       id: 1,
+      vendorId: 99,
+      providerType: "claude",
+      url: "https://api.example.com",
       circuitBreakerFailureThreshold: 5,
       circuitBreakerOpenDuration: 1800000,
       circuitBreakerHalfOpenSuccessThreshold: 2,

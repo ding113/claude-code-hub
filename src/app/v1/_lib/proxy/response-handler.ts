@@ -1,6 +1,7 @@
 import { ResponseFixer } from "@/app/v1/_lib/proxy/response-fixer";
 import { AsyncTaskManager } from "@/lib/async-task-manager";
 import { getEnvConfig } from "@/lib/config/env.schema";
+import { recordEndpointFailure, recordEndpointSuccess } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
 import { requestCloudPriceTableSync } from "@/lib/price-sync/cloud-price-updater";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
@@ -56,6 +57,22 @@ function cleanResponseHeaders(headers: Headers): Headers {
   cleaned.delete("content-length"); // body 改变后长度无效，Response API 会重新计算
 
   return cleaned;
+}
+
+function recordEndpointSuccessIfPresent(session: ProxySession): void {
+  if (session.isProbeRequest()) return;
+  const endpoint = session.getProviderEndpoint();
+  if (endpoint) {
+    recordEndpointSuccess(endpoint.id);
+  }
+}
+
+function recordEndpointFailureIfPresent(session: ProxySession, error: Error): void {
+  if (session.isProbeRequest()) return;
+  const endpoint = session.getProviderEndpoint();
+  if (endpoint) {
+    recordEndpointFailure(endpoint.id, error);
+  }
 }
 
 export class ProxyResponseHandler {
@@ -307,6 +324,9 @@ export class ProxyResponseHandler {
         if (sessionWithCleanup.clearResponseTimeout) {
           sessionWithCleanup.clearResponseTimeout();
         }
+
+        recordEndpointSuccessIfPresent(session);
+
         let usageRecord: Record<string, unknown> | null = null;
         let usageMetrics: UsageMetrics | null = null;
 
@@ -464,6 +484,8 @@ export class ProxyResponseHandler {
                 error: cbError,
               });
             }
+
+            recordEndpointFailureIfPresent(session, err);
 
             // 注意：无法重试，因为客户端已收到 HTTP 200
             // 错误已记录，熔断器已更新，不抛出异常（避免影响后台任务）
@@ -1034,6 +1056,9 @@ export class ProxyResponseHandler {
         // ⭐ 流式读取完成：清除静默期计时器
         clearIdleTimer();
         const allContent = flushAndJoin();
+
+        recordEndpointSuccessIfPresent(session);
+
         await finalizeStream(allContent);
       } catch (error) {
         // 检测 AbortError 的来源：响应超时 vs 静默期超时 vs 客户端/上游中断
@@ -1074,6 +1099,8 @@ export class ProxyResponseHandler {
                 error: cbError,
               });
             }
+
+            recordEndpointFailureIfPresent(session, err);
 
             // 注意：无法重试，因为客户端已收到 HTTP 200
             // 错误已记录，熔断器已更新，不抛出异常（避免影响后台任务）

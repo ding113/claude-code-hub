@@ -1,0 +1,53 @@
+{
+  "title": "厂商管理",
+  "description": "管理 AI 模型厂商及其 API 端点配置",
+  "searchPlaceholder": "搜索厂商...",
+  "empty": {
+    "title": "未找到厂商",
+    "description": "请尝试调整搜索关键词"
+  },
+  "stats": {
+    "providers": "个供应商",
+    "endpoints": "个端点"
+  },
+  "actions": {
+    "configure": "配置",
+    "updated": "厂商更新成功",
+    "saving": "保存中...",
+    "save": "保存更改"
+  },
+  "edit": {
+    "title": "编辑厂商",
+    "description": "更新厂商详情并管理 API 端点"
+  },
+  "fields": {
+    "name": "显示名称",
+    "website": "官网链接",
+    "enabled": "启用"
+  },
+  "endpoints": {
+    "title": "API 端点",
+    "count": "个端点",
+    "add": "添加端点",
+    "empty": "暂无配置端点",
+    "baseUrl": "基础 URL",
+    "priority": "优先级",
+    "weight": "权重",
+    "createSuccess": "端点创建成功",
+    "addTitle": "添加端点",
+    "addDescription": "为此厂商添加新的 API 端点",
+    "fields": {
+      "type": "供应商类型",
+      "baseUrl": "基础 URL",
+      "priority": "优先级",
+      "weight": "权重"
+    },
+    "actions": {
+      "create": "创建"
+    },
+    "errors": {
+      "conflict": "端点已存在",
+      "createFailed": "创建端点失败"
+    }
+  }
+}

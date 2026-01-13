@@ -2,7 +2,12 @@ import { formatCostForStorage } from "@/lib/utils/currency";
 import type { Key } from "@/types/key";
 import type { MessageRequest } from "@/types/message";
 import type { ModelPrice } from "@/types/model-price";
-import type { Provider } from "@/types/provider";
+import type {
+  Provider,
+  ProviderEndpoint,
+  ProviderEndpointProbeEvent,
+  ProviderVendor,
+} from "@/types/provider";
 import type { ResponseFixerConfig, SystemSettings } from "@/types/system-config";
 import type { User } from "@/types/user";
 
@@ -71,6 +76,7 @@ export function toProvider(dbProvider: any): Provider {
     priority: dbProvider?.priority ?? 0,
     costMultiplier: dbProvider?.costMultiplier ? parseFloat(dbProvider.costMultiplier) : 1.0,
     groupTag: dbProvider?.groupTag ?? null,
+    vendorId: dbProvider?.vendorId ?? null,
     providerType: dbProvider?.providerType ?? "claude",
     preserveClientIp: dbProvider?.preserveClientIp ?? false,
     modelRedirects: dbProvider?.modelRedirects ?? null,
@@ -114,6 +120,53 @@ export function toProvider(dbProvider: any): Provider {
     cc: dbProvider?.cc ?? null,
     createdAt: dbProvider?.createdAt ? new Date(dbProvider.createdAt) : new Date(),
     updatedAt: dbProvider?.updatedAt ? new Date(dbProvider.updatedAt) : new Date(),
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function toProviderVendor(dbVendor: any): ProviderVendor {
+  return {
+    ...dbVendor,
+    vendorKey: dbVendor?.vendorKey ?? "",
+    displayName: dbVendor?.displayName ?? dbVendor?.vendorKey ?? "",
+    websiteUrl: dbVendor?.websiteUrl ?? null,
+    faviconUrl: dbVendor?.faviconUrl ?? null,
+    isEnabled: dbVendor?.isEnabled ?? true,
+    createdAt: dbVendor?.createdAt ? new Date(dbVendor.createdAt) : new Date(),
+    updatedAt: dbVendor?.updatedAt ? new Date(dbVendor.updatedAt) : new Date(),
+    deletedAt: dbVendor?.deletedAt ? new Date(dbVendor.deletedAt) : undefined,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function toProviderEndpoint(dbEndpoint: any): ProviderEndpoint {
+  return {
+    ...dbEndpoint,
+    vendorId: dbEndpoint?.vendorId ?? 0,
+    providerType: dbEndpoint?.providerType ?? "claude",
+    baseUrl: dbEndpoint?.baseUrl ?? "",
+    isEnabled: dbEndpoint?.isEnabled ?? true,
+    priority: dbEndpoint?.priority ?? 0,
+    weight: dbEndpoint?.weight ?? 1,
+    createdAt: dbEndpoint?.createdAt ? new Date(dbEndpoint.createdAt) : new Date(),
+    updatedAt: dbEndpoint?.updatedAt ? new Date(dbEndpoint.updatedAt) : new Date(),
+    deletedAt: dbEndpoint?.deletedAt ? new Date(dbEndpoint.deletedAt) : undefined,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function toProviderEndpointProbeEvent(dbEvent: any): ProviderEndpointProbeEvent {
+  return {
+    ...dbEvent,
+    endpointId: dbEvent?.endpointId ?? 0,
+    source: dbEvent?.source ?? "active_probe",
+    result: dbEvent?.result ?? "fail",
+    statusCode: dbEvent?.statusCode ?? null,
+    latencyMs: dbEvent?.latencyMs ?? null,
+    errorType: dbEvent?.errorType ?? null,
+    errorMessage: dbEvent?.errorMessage ?? null,
+    checkedAt: dbEvent?.checkedAt ? new Date(dbEvent.checkedAt) : null,
+    createdAt: dbEvent?.createdAt ? new Date(dbEvent.createdAt) : new Date(),
   };
 }
 

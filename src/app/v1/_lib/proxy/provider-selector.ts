@@ -1,5 +1,6 @@
 import { getCircuitState, isCircuitOpen } from "@/lib/circuit-breaker";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
+import { isVendorTypeFuseOpen } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit";
 import { SessionManager } from "@/lib/session-manager";
@@ -528,6 +529,17 @@ export class ProxyProviderResolver {
       return null;
     }
 
+    // vendor+type 保险栓：同一供应商聚合下所有端点不可用时，短时间内拒绝复用
+    if (provider.vendorId && isVendorTypeFuseOpen(provider.vendorId, provider.providerType)) {
+      logger.debug("ProviderSelector: Session provider blocked by vendor+type fuse", {
+        sessionId: session.sessionId,
+        providerId: provider.id,
+        vendorId: provider.vendorId,
+        providerType: provider.providerType,
+      });
+      return null;
+    }
+
     // 检查熔断器状态（TC-055 修复）
     if (await isCircuitOpen(provider.id)) {
       logger.debug("ProviderSelector: Session provider circuit is open", {
@@ -936,6 +948,15 @@ export class ProxyProviderResolver {
   private static async filterByLimits(providers: Provider[]): Promise<Provider[]> {
     const results = await Promise.all(
       providers.map(async (p) => {
+        if (p.vendorId && isVendorTypeFuseOpen(p.vendorId, p.providerType)) {
+          logger.debug("ProviderSelector: Provider blocked by vendor+type fuse", {
+            providerId: p.id,
+            vendorId: p.vendorId,
+            providerType: p.providerType,
+          });
+          return null;
+        }
+
         // 0. 检查熔断器状态
         if (await isCircuitOpen(p.id)) {
           logger.debug("ProviderSelector: Provider circuit breaker is open", {

@@ -16,16 +16,15 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type {
-  AvailabilityQueryResult,
-  ProviderAvailabilitySummary,
-  TimeBucketMetrics,
-} from "@/lib/availability";
+  EndpointAvailabilityQueryResult,
+  EndpointAvailabilitySummary,
+  EndpointTimeBucketMetrics,
+} from "@/lib/endpoint-availability";
 import { cn } from "@/lib/utils";
 
 type TimeRangeOption = "15min" | "1h" | "6h" | "24h" | "7d";
-type SortOption = "availability" | "name" | "requests";
+type SortOption = "availability" | "name" | "probes";
 
-// Target number of buckets to fill the heatmap width consistently
 const TARGET_BUCKETS = 60;
 
 const TIME_RANGE_MAP: Record<TimeRangeOption, number> = {
@@ -36,40 +35,26 @@ const TIME_RANGE_MAP: Record<TimeRangeOption, number> = {
   "7d": 7 * 24 * 60 * 60 * 1000,
 };
 
-/**
- * Calculate bucket size to achieve target bucket count
- */
 function calculateBucketSize(timeRangeMs: number): number {
   const bucketSizeMs = timeRangeMs / TARGET_BUCKETS;
   const bucketSizeMinutes = bucketSizeMs / (60 * 1000);
-  // Round to reasonable precision (0.25 min = 15 seconds minimum)
   return Math.max(0.25, Math.round(bucketSizeMinutes * 4) / 4);
 }
 
-/**
- * Get color class based on availability score
- * Simple gradient: gray(no data) -> red -> green
- */
 function getAvailabilityColor(score: number, hasData: boolean): string {
-  if (!hasData) return "bg-slate-300 dark:bg-slate-600"; // Gray = no data
-
+  if (!hasData) return "bg-slate-300 dark:bg-slate-600";
   if (score < 0.5) return "bg-red-500";
   if (score < 0.8) return "bg-orange-500";
   if (score < 0.95) return "bg-lime-500";
   return "bg-green-500";
 }
 
-/**
- * Format bucket time for display in tooltip
- */
 function formatBucketTime(isoString: string, bucketSizeMinutes: number): string {
   const date = new Date(isoString);
   if (bucketSizeMinutes >= 1440) {
-    // Daily buckets: show date
     return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
   }
   if (bucketSizeMinutes >= 60) {
-    // Hourly buckets: show date + hour
     return date.toLocaleString(undefined, {
       month: "short",
       day: "numeric",
@@ -77,7 +62,6 @@ function formatBucketTime(isoString: string, bucketSizeMinutes: number): string 
       minute: "2-digit",
     });
   }
-  // Sub-hour buckets: show full time with seconds for precision
   if (bucketSizeMinutes < 1) {
     return date.toLocaleTimeString(undefined, {
       hour: "2-digit",
@@ -85,28 +69,12 @@ function formatBucketTime(isoString: string, bucketSizeMinutes: number): string 
       second: "2-digit",
     });
   }
-  // Minute buckets: show time
   return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 }
 
-/**
- * Format bucket size for display
- */
-function _formatBucketSizeDisplay(minutes: number): string {
-  if (minutes >= 60) {
-    const hours = minutes / 60;
-    return hours === 1 ? "1 hour" : `${Number(hours).toFixed(1)} hours`;
-  }
-  if (minutes >= 1) {
-    return `${Math.round(minutes)} min`;
-  }
-  const seconds = Math.round(minutes * 60);
-  return `${seconds} sec`;
-}
-
-export function AvailabilityView() {
+export function AvailabilityEndpointsView() {
   const t = useTranslations("dashboard.availability");
-  const [data, setData] = useState<AvailabilityQueryResult | null>(null);
+  const [data, setData] = useState<EndpointAvailabilityQueryResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<TimeRangeOption>("24h");
@@ -128,16 +96,16 @@ export function AvailabilityView() {
         maxBuckets: TARGET_BUCKETS.toString(),
       });
 
-      const res = await fetch(`/api/availability?${params}`);
+      const res = await fetch(`/api/availability/endpoints?${params}`);
       if (!res.ok) {
         throw new Error(t("states.fetchFailed"));
       }
 
-      const result: AvailabilityQueryResult = await res.json();
+      const result: EndpointAvailabilityQueryResult = await res.json();
       setData(result);
       setError(null);
     } catch (err) {
-      console.error("Failed to fetch availability data:", err);
+      console.error("Failed to fetch endpoint availability data:", err);
       setError(err instanceof Error ? err.message : t("states.fetchFailed"));
     } finally {
       setLoading(false);
@@ -149,7 +117,6 @@ export function AvailabilityView() {
     fetchData();
   }, [fetchData]);
 
-  // Generate unified time buckets for all providers
   const unifiedBuckets = useMemo(() => {
     if (!data) return [];
 
@@ -168,28 +135,27 @@ export function AvailabilityView() {
     return buckets;
   }, [data]);
 
-  // Sort providers based on selected option
-  const sortedProviders = useMemo(() => {
-    if (!data?.providers) return [];
+  const sortedEndpoints = useMemo(() => {
+    if (!data?.endpoints) return [];
 
-    return [...data.providers].sort((a, b) => {
+    return [...data.endpoints].sort((a, b) => {
       switch (sortBy) {
         case "availability":
-          // Unknown status (no data) goes to the end
           if (a.currentStatus === "unknown" && b.currentStatus !== "unknown") return 1;
           if (b.currentStatus === "unknown" && a.currentStatus !== "unknown") return -1;
-          // Sort by availability descending (best first)
           return b.currentAvailability - a.currentAvailability;
-        case "name":
-          return a.providerName.localeCompare(b.providerName);
-        case "requests":
-          // Sort by requests descending (most active first)
-          return b.totalRequests - a.totalRequests;
+        case "name": {
+          const vendorCompare = a.vendorName.localeCompare(b.vendorName);
+          if (vendorCompare !== 0) return vendorCompare;
+          return a.endpointId - b.endpointId;
+        }
+        case "probes":
+          return b.totalProbes - a.totalProbes;
         default:
           return 0;
       }
     });
-  }, [data?.providers, sortBy]);
+  }, [data?.endpoints, sortBy]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -206,18 +172,13 @@ export function AvailabilityView() {
 
   const getStatusBadge = (status: string) => {
     const statusKey = status as "green" | "red" | "unknown";
-
-    // 采用与请求日志相同的配色方案
     const getStatusClassName = () => {
       switch (status) {
         case "green":
-          // 成功 - 绿色
           return "bg-green-100 text-green-700 border-green-300 dark:bg-green-900/30 dark:text-green-400 dark:border-green-700";
         case "red":
-          // 错误 - 红色
           return "bg-red-100 text-red-700 border-red-300 dark:bg-red-900/30 dark:text-red-400 dark:border-red-700";
         default:
-          // 未知 - 灰色
           return "bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600";
       }
     };
@@ -237,25 +198,23 @@ export function AvailabilityView() {
 
   const formatPercentage = (value: number) => `${(Number(value) * 100).toFixed(1)}%`;
 
-  // Summary counts
   const getSummaryCounts = () => {
-    if (!data?.providers) return { healthy: 0, unhealthy: 0, unknown: 0, total: 0 };
+    if (!data?.endpoints) return { healthy: 0, unhealthy: 0, unknown: 0, total: 0 };
     return {
-      healthy: data.providers.filter((p) => p.currentStatus === "green").length,
-      unhealthy: data.providers.filter((p) => p.currentStatus === "red").length,
-      unknown: data.providers.filter((p) => p.currentStatus === "unknown").length,
-      total: data.providers.length,
+      healthy: data.endpoints.filter((e) => e.currentStatus === "green").length,
+      unhealthy: data.endpoints.filter((e) => e.currentStatus === "red").length,
+      unknown: data.endpoints.filter((e) => e.currentStatus === "unknown").length,
+      total: data.endpoints.length,
     };
   };
 
   const summary = getSummaryCounts();
 
-  // Get bucket data for a provider at a specific time
   const getBucketData = (
-    provider: ProviderAvailabilitySummary,
+    endpoint: EndpointAvailabilitySummary,
     bucketStart: string
-  ): TimeBucketMetrics | null => {
-    return provider.timeBuckets.find((b) => b.bucketStart === bucketStart) || null;
+  ): EndpointTimeBucketMetrics | null => {
+    return endpoint.timeBuckets.find((b) => b.bucketStart === bucketStart) || null;
   };
 
   if (loading) {
@@ -295,7 +254,6 @@ export function AvailabilityView() {
   return (
     <TooltipProvider>
       <div className="space-y-6">
-        {/* Summary Cards */}
         <div className="grid gap-4 md:grid-cols-4">
           <Card>
             <CardHeader className="pb-2">
@@ -313,7 +271,7 @@ export function AvailabilityView() {
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-green-600 flex items-center gap-1">
                 <CheckCircle2 className="h-4 w-4" />
-                {t("summary.healthyProviders")}
+                {t("summary.healthyEndpoints")}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -324,7 +282,7 @@ export function AvailabilityView() {
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-red-600 flex items-center gap-1">
                 <XCircle className="h-4 w-4" />
-                {t("summary.unhealthyProviders")}
+                {t("summary.unhealthyEndpoints")}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -335,7 +293,7 @@ export function AvailabilityView() {
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-slate-500 flex items-center gap-1">
                 <HelpCircle className="h-4 w-4" />
-                {t("summary.unknownProviders")}
+                {t("summary.unknownEndpoints")}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -344,7 +302,6 @@ export function AvailabilityView() {
           </Card>
         </div>
 
-        {/* Controls */}
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full sm:w-auto">
             <Select value={timeRange} onValueChange={(v) => setTimeRange(v as TimeRangeOption)}>
@@ -366,7 +323,7 @@ export function AvailabilityView() {
               <SelectContent>
                 <SelectItem value="availability">{t("sort.availability")}</SelectItem>
                 <SelectItem value="name">{t("sort.name")}</SelectItem>
-                <SelectItem value="requests">{t("sort.requests")}</SelectItem>
+                <SelectItem value="probes">{t("sort.probes")}</SelectItem>
               </SelectContent>
             </Select>
             {data && (
@@ -387,58 +344,64 @@ export function AvailabilityView() {
           </Button>
         </div>
 
-        {/* Heatmap */}
         <Card>
           <CardHeader>
-            <CardTitle>{t("chart.title")}</CardTitle>
-            <CardDescription>{t("chart.description")}</CardDescription>
+            <CardTitle>{t("chart.endpointsTitle")}</CardTitle>
+            <CardDescription>{t("chart.endpointsDescription")}</CardDescription>
           </CardHeader>
           <CardContent>
-            {!sortedProviders.length ? (
+            {!sortedEndpoints.length ? (
               <div className="text-center text-muted-foreground py-8">
-                {t("states.noProviders")}
+                {t("states.noEndpoints")}
               </div>
             ) : (
               <div className="space-y-3">
-                {/* Provider rows with heatmap */}
-                {sortedProviders.map((provider) => (
+                {sortedEndpoints.map((endpoint) => (
                   <div
-                    key={provider.providerId}
+                    key={endpoint.endpointId}
                     className="flex flex-col sm:flex-row sm:items-center gap-3"
                   >
-                    {/* Provider name and summary - on same row for mobile */}
                     <div className="flex items-center justify-between sm:contents">
-                      <div className="w-auto sm:w-32 md:w-40 shrink-0 flex items-center gap-2">
-                        <span
-                          className="font-medium truncate text-sm"
-                          title={provider.providerName}
+                      <div className="w-auto sm:w-48 md:w-64 shrink-0 flex flex-col justify-center overflow-hidden">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="font-medium truncate text-sm"
+                            title={`${endpoint.vendorName} - ${endpoint.baseUrl}`}
+                          >
+                            {endpoint.vendorName}
+                          </span>
+                          {getStatusBadge(endpoint.currentStatus)}
+                        </div>
+                        <div
+                          className="text-xs text-muted-foreground truncate"
+                          title={endpoint.baseUrl}
                         >
-                          {provider.providerName}
-                        </span>
-                        {getStatusBadge(provider.currentStatus)}
+                          {endpoint.baseUrl}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">
+                          {endpoint.providerType}
+                        </div>
                       </div>
 
-                      {/* Summary stats - shown on right for mobile, at end for desktop */}
                       <div className="w-auto sm:w-20 md:w-24 lg:w-28 shrink-0 text-right text-sm sm:order-last">
                         <div className="font-mono">
-                          {provider.currentStatus === "unknown"
+                          {endpoint.currentStatus === "unknown"
                             ? t("heatmap.noData")
-                            : formatPercentage(provider.currentAvailability)}
+                            : formatPercentage(endpoint.currentAvailability)}
                         </div>
                         <div className="text-muted-foreground text-xs">
-                          {provider.totalRequests > 0
-                            ? `${provider.totalRequests.toLocaleString()} ${t("heatmap.requests")}`
-                            : t("heatmap.noRequests")}
+                          {endpoint.totalProbes > 0
+                            ? `${endpoint.totalProbes.toLocaleString()} ${t("heatmap.probes")}`
+                            : t("heatmap.noProbes")}
                         </div>
                       </div>
                     </div>
 
-                    {/* Heatmap cells - wrappable grid with auto-fill */}
                     <div className="w-full sm:flex-1 sm:min-w-0">
                       <div className="grid gap-1 grid-cols-[repeat(auto-fill,minmax(12px,1fr))] sm:gap-px">
                         {unifiedBuckets.map((bucketStart) => {
-                          const bucket = getBucketData(provider, bucketStart);
-                          const hasData = bucket !== null && bucket.totalRequests > 0;
+                          const bucket = getBucketData(endpoint, bucketStart);
+                          const hasData = bucket !== null && bucket.totalProbes > 0;
                           const score = hasData ? bucket.availabilityScore : 0;
 
                           return (
@@ -459,7 +422,7 @@ export function AvailabilityView() {
                                   {hasData && bucket ? (
                                     <>
                                       <div>
-                                        {t("heatmap.requests")}: {bucket.totalRequests}
+                                        {t("heatmap.probes")}: {bucket.totalProbes}
                                       </div>
                                       <div>
                                         {t("columns.availability")}:{" "}
@@ -497,7 +460,6 @@ export function AvailabilityView() {
           </CardContent>
         </Card>
 
-        {/* Legend */}
         <Card>
           <CardContent className="pt-6">
             <div className="flex flex-wrap gap-3 sm:gap-4 md:gap-6 text-sm">

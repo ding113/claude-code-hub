@@ -1014,7 +1014,9 @@
       "minutes": "min",
       "requests": "requests",
       "noData": "No Data",
-      "noRequests": "No Requests"
+      "noRequests": "No Requests",
+      "probes": "probes",
+      "noProbes": "No Probes"
     },
     "toast": {
       "refreshSuccess": "Availability data refreshed",

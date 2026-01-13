@@ -9,7 +9,7 @@ import type { CacheTtlResolved } from "@/types/cache";
 import type { Key } from "@/types/key";
 import type { ProviderChainItem } from "@/types/message";
 import type { ModelPriceData } from "@/types/model-price";
-import type { Provider, ProviderType } from "@/types/provider";
+import type { Provider, ProviderEndpoint, ProviderType } from "@/types/provider";
 import type { SpecialSetting } from "@/types/special-settings";
 import type { User } from "@/types/user";
 import { ProxyError } from "./errors";
@@ -63,6 +63,7 @@ export class ProxySession {
   userName: string;
   authState: AuthState | null;
   provider: Provider | null;
+  providerEndpoint: ProviderEndpoint | null;
   messageContext: MessageContext | null;
 
   // Time To First Byte (ms). Streaming: first chunk. Non-stream: equals durationMs.
@@ -146,6 +147,7 @@ export class ProxySession {
     this.userName = "unknown";
     this.authState = null;
     this.provider = null;
+    this.providerEndpoint = null;
     this.messageContext = null;
     this.sessionId = null;
     this.providerChain = [];
@@ -248,9 +250,18 @@ export class ProxySession {
 
   setProvider(provider: Provider | null): void {
     this.provider = provider;
+    this.providerEndpoint = null;
     if (provider) {
       this.providerType = provider.providerType as ProviderType;
     }
+  }
+
+  setProviderEndpoint(endpoint: ProviderEndpoint | null): void {
+    this.providerEndpoint = endpoint;
+  }
+
+  getProviderEndpoint(): ProviderEndpoint | null {
+    return this.providerEndpoint;
   }
 
   setCacheTtlResolved(ttl: CacheTtlResolved | null): void {
