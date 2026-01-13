@@ -19,7 +19,7 @@
   },
 
   "codeExamples": {
-    "label": "Пример кода - ${language}",
+    "label": "Пример кода - {language}",
     "description": "Нажмите на блок кода для копирования в буфер обмена"
   },
 
@@ -206,7 +206,7 @@
         "unix": {
           "temporary": "Временная настройка (текущий сеанс):",
           "permanent": "Постоянная настройка:",
-          "permanentNote": "Добавьте в файл конфигурации оболочки (${shellConfig}):"
+          "permanentNote": "Добавьте в файл конфигурации оболочки ({shellConfig}):"
         }
       },
 
@@ -696,6 +696,35 @@
     "macos": "macOS",
     "windows": "Windows",
     "linux": "Linux"
+  },
+
+  "placeholders": {
+    "windowsUserName": "your-username",
+    "shellConfig": {
+      "linux": "~/.bashrc",
+      "macos": "~/.zshrc"
+    },
+    "codexVsCodeConfigFiles": "config.toml и auth.json"
+  },
+
+  "snippets": {
+    "comments": {
+      "updateHomebrew": "# Обновить Homebrew",
+      "installNodeJs": "# Установить Node.js",
+      "usingChocolatey": "# Используя Chocolatey",
+      "orUsingScoop": "# Или через Scoop",
+      "addNodeSourceRepo": "# Добавить репозиторий NodeSource",
+      "ubuntuDebian": "# Ubuntu/Debian",
+      "centosRhelFedora": "# CentOS/RHEL/Fedora",
+      "addToPathIfMissing": "# Добавить в PATH (если отсутствует)",
+      "checkEnvVar": "# Проверить переменную окружения",
+      "testNetworkConnection": "# Проверить сетевое подключение"
+    }
+  },
+
+  "layout": {
+    "headerTitle": "Документация",
+    "loginConsole": "Войти в консоль"
   },
 
   "ui": {

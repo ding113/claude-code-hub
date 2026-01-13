@@ -1,4 +1,6 @@
 {
+  "pageTitle": "リアルタイム大画面 - Claude Code Hub",
+  "pageDescription": "Claude Code Hub のリアルタイム監視ダッシュボード",
   "title": "CLAUDE CODE HUB",
   "subtitle": "リアルタイムデータモニター",
   "metrics": {

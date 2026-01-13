@@ -19,7 +19,7 @@
   },
 
   "codeExamples": {
-    "label": "コード例 - ${language}",
+    "label": "コード例 - {language}",
     "description": "コードブロックをクリックしてクリップボードにコピー"
   },
 
@@ -206,7 +206,7 @@
         "unix": {
           "temporary": "一時設定 (現在のセッション):",
           "permanent": "永続設定:",
-          "permanentNote": "シェル設定ファイル (${shellConfig}) に追加:"
+          "permanentNote": "シェル設定ファイル ({shellConfig}) に追加:"
         }
       },
 
@@ -696,6 +696,35 @@
     "macos": "macOS",
     "windows": "Windows",
     "linux": "Linux"
+  },
+
+  "placeholders": {
+    "windowsUserName": "your-username",
+    "shellConfig": {
+      "linux": "~/.bashrc",
+      "macos": "~/.zshrc"
+    },
+    "codexVsCodeConfigFiles": "config.toml と auth.json"
+  },
+
+  "snippets": {
+    "comments": {
+      "updateHomebrew": "# Homebrew を更新",
+      "installNodeJs": "# Node.js をインストール",
+      "usingChocolatey": "# Chocolatey を使用",
+      "orUsingScoop": "# または Scoop を使用",
+      "addNodeSourceRepo": "# NodeSource リポジトリを追加",
+      "ubuntuDebian": "# Ubuntu/Debian",
+      "centosRhelFedora": "# CentOS/RHEL/Fedora",
+      "addToPathIfMissing": "# PATH に追加（未設定の場合）",
+      "checkEnvVar": "# 環境変数を確認",
+      "testNetworkConnection": "# ネットワーク接続を確認"
+    }
+  },
+
+  "layout": {
+    "headerTitle": "利用ドキュメント",
+    "loginConsole": "コンソールにログイン"
   },
 
   "ui": {
